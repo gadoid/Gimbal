@@ -276,41 +276,37 @@ class ScenarioPreprocessor:
         return resolved
 
     def _resolve_step(self, step: "Step", root: dict, idx: int) -> "Step":
-        """展开单个 Step 的所有模板字段，返回新 Step 实例。"""
+        """展开单个 Step 的所有模板字段，返回新 Step 实例。
+
+        api 与 call 只传其一：api 糖步骤只传 api（新 Step 校验期自动归一化
+        出 http call）；显式多协议 call（api 为 None）才传 call。
+        """
         from gimbal.schema.step import Step
 
         resolved = Step(
             kind=step.kind,
             description=step.description,
-            api=self._resolve_api(step.api, root),
-            request=self._resolve_request(step.request, root),
+            call=self._resolve_call(step.call, root),
+            request=self._resolve_request(step.request, root) if step.request is not None else None,
             strategy=[self._resolve_strategy(s, root) for s in step.strategy],
         )
         logger.debug("[Preprocessor] step[{}] 展开完成", idx)
         return resolved
 
-    def _resolve_api(self, api, root: dict):
-        """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符。
+    def _resolve_call(self, call, root: dict):
+        """展开协议中立 Call 的模板字段（自定义协议的开放字段递归展开）。
 
-        任一模板变量缺失由 _resolve_value 内部 fail-fast 抛 ValueError（与 body/strategy 一致）。
-        因此不再做"先收集所有缺失再统一报错"的 B5 逻辑——单点失败直接上抛。
+        http 糖步骤的 call 是归一化派生物（api 优先传递，call 为 None 走
+        _resolve_api 路径），本方法只处理**显式声明**的多协议 call。
         """
-        from gimbal.schema.api import Api
+        from gimbal.schema.call import Call
 
-        resolved_headers = {
-            k: self._resolve_value(v, root)
-            for k, v in (api.headers or {}).items()
+        extra = call.extra_fields() if call is not None else {}
+        resolved_extra = {
+            k: self._resolve_nested(v, root) if isinstance(v, (dict, list)) else self._resolve_value(v, root)
+            for k, v in extra.items()
         }
-        resolved_path = self._resolve_value(api.path, root)
-
-        return Api(
-            kind=api.kind,
-            service=api.service,
-            method=api.method,
-            path=resolved_path,
-            headers=resolved_headers,
-            timeout=api.timeout,
-        )
+        return Call(protocol=call.protocol, **resolved_extra)
 
     def _resolve_request(self, request, root: dict):
         """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例。"""
@@ -488,11 +484,13 @@ class ScenarioPreprocessor:
             logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")
             return ""
 
-        # 收集 step 实际引用的 service key
+        # 收集 step 实际引用的 service key（http 糖步骤才有 service 概念；
+        # 多协议 call 的路由由各协议执行器自理解，不参与 base_url 推导）
         referenced: set[str] = set()
         for step_union in self._schema.steps:
-            if hasattr(step_union, "api") and hasattr(step_union.api, "service"):
-                ref = step_union.api.service
+            call = getattr(step_union, "call", None)
+            if call is not None:
+                ref = getattr(call, "service", None)
                 if ref in sd:
                     referenced.add(ref)
                 elif ref:

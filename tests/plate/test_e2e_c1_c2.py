@@ -55,7 +55,7 @@ def test_end_to_end_c1_c2() -> None:
     assert len(steps) == 3
     for i, step in enumerate(steps, start=1):
         assert step["kind"] == "step"
-        assert step["api"]["kind"] == "api"
+        assert step["call"]["kind"] == "call"
         assert step["request"]["kind"] == "request"
         assert step["request"]["body"]["order_no"] == f"R-{i:03d}"
         assert step["request"]["body"]["amount"] == i * 10.0

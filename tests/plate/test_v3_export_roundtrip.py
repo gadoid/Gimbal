@@ -94,13 +94,13 @@ class TestPlatformDictRoundTrip:
         # 与原始 gimbal 导出对齐
         gimbal_original = GimbalScenarioExporter(sc).to_dict()
         for gs, ge in zip(gimbal_dict["steps"], gimbal_original["steps"]):
-            assert gs["api"]["method"] == ge["api"]["method"]
-            assert gs["api"]["path"] == ge["api"]["path"]
+            assert gs["call"]["method"] == ge["call"]["method"]   # v2.1 批次 F：call 形态
+            assert gs["call"]["path"] == ge["call"]["path"]
             # 新设计:body 按 endpoint 已声明面补全,所以 gs.body ⊇ ge.body 的
             # **已声明子集**;语料未声明的键(旧场景残留,如 entrust 的
             # order_id)按设计不物化,不再要求往返保真
             declared = _declared_body_keys(
-                _EP_BY_KEY.get((gs["api"]["method"], gs["api"]["path"])))
+                _EP_BY_KEY.get((gs["call"]["method"], gs["call"]["path"])))
             for k, v in ge["request"]["body"].items():
                 if declared is not None and k not in declared:
                     continue
@@ -138,7 +138,7 @@ class TestPlatformEditPropagatesToGimbal:
             "${auth.codfish.token}.EDITED_BY_PLATFORM"
         )
         sc, gd = _roundtrip(pv)
-        assert gd["steps"][0]["api"]["headers"]["Authorization"] == (
+        assert gd["steps"][0]["call"]["headers"]["Authorization"] == (
             "${auth.codfish.token}.EDITED_BY_PLATFORM"
         )
         # Scenario 内部也同步
@@ -199,7 +199,7 @@ class TestPlatformEditPropagatesToGimbal:
         pv["steps"][0]["api"]["headers"]["X-Test-1"] = "P1"
         pv["steps"][1]["request"]["body"]["bl_no"] = "P2-BODY"
         _sc, gd = _roundtrip(pv)
-        assert gd["steps"][0]["api"]["headers"]["X-Test-1"] == "P1"
+        assert gd["steps"][0]["call"]["headers"]["X-Test-1"] == "P1"
         assert gd["steps"][1]["request"]["body"]["bl_no"] == "P2-BODY"
 
     @pytest.mark.parametrize(
@@ -226,7 +226,7 @@ class TestPlatformEditPropagatesToGimbal:
             })
         sc, gd = _roundtrip(pv)
         if mutator == "header":
-            assert gd["steps"][0]["api"]["headers"]["Authorization"] == expected
+            assert gd["steps"][0]["call"]["headers"]["Authorization"] == expected
         elif mutator == "body":
             assert gd["steps"][0]["request"]["body"]["bl_no"] == expected
         elif mutator == "strategy_add":

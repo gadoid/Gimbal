@@ -2,6 +2,29 @@
 
 状态机只负责维护当前状态、校验跃迁合法性，不持有业务逻辑。
 业务逻辑全部在 engine.py 的驱动循环里。
+
+协议中立化（2026-09-27）：执行阶段状态新增协议中立名（PREPARE/INVOKING/
+EXTRACTING），历史名（BEFORE_REQUEST/CALLING/AFTER_REQUEST）保留为**同值
+别名** —— 枚举 value 全部不变，事件、报告、状态序列化零回归。
+
+流转（中立名 / 历史名）：
+  PENDING
+    └─→ PREPARE / BEFORE_REQUEST   执行前置策略（Assign 等，协议无关）
+          ├─→ INVOKING / CALLING     前置策略全部通过
+          └─→ TEARDOWN               hard-fail，跳过协议调用
+    INVOKING / CALLING             发出协议调用（由 ProtocolRegistry 分派）
+          ├─→ EXTRACTING / AFTER_REQUEST  调用成功
+          └─→ TEARDOWN               调用失败
+    EXTRACTING / AFTER_REQUEST     执行后置策略（Extract 提取字段）
+          ├─→ VERIFYING              策略全部通过
+          └─→ TEARDOWN               hard-fail
+    VERIFYING                      执行 Assertion
+          ├─→ PASSED                 无 teardown 且全部通过
+          ├─→ FAILED                 无 teardown 且有失败
+          └─→ TEARDOWN               有 teardown 策略（无论结果）
+    TEARDOWN                       执行清理策略
+          ├─→ PASSED
+          └─→ FAILED
 """
 from __future__ import annotations
 
@@ -9,17 +32,24 @@ from enum import Enum
 
 
 class StepState(str, Enum):
-    """Step 生命周期状态。"""
+    """Step 生命周期状态。
+
+    同一 value 两个名字（先中立名后历史名，后者为枚举别名）：
+    ``StepState.CALLING is StepState.INVOKING`` 恒成立，二者可互换。
+    """
 
     # ── 等待/就绪 ──────────────────────────────
     PENDING = "pending"          # 创建但尚未调度
 
-    # ── 执行阶段（对应 StrategyPhase）──────────
-    BEFORE_REQUEST = "before_request"   # Assign / SQL 注入
-    CALLING = "calling"                 # HTTP 发出、等待响应
-    AFTER_REQUEST = "after_request"     # Extract 提取字段
-    VERIFYING = "verifying"             # Assertion / DBChecker
-    TEARDOWN = "teardown"               # SQL 清理 / Chaos 恢复
+    # ── 执行阶段（对应 StrategyPhase，协议无关）──
+    PREPARE = "before_request"         # 协议前置准备（Assign / SQL 注入）
+    BEFORE_REQUEST = PREPARE           # 历史名（别名）
+    INVOKING = "calling"               # 协议调用发出、等待结果
+    CALLING = INVOKING                 # 历史名（别名）
+    EXTRACTING = "after_request"       # 调用结果后处理（Extract 提取字段）
+    AFTER_REQUEST = EXTRACTING         # 历史名（别名）
+    VERIFYING = "verifying"            # Assertion / DBChecker
+    TEARDOWN = "teardown"              # SQL 清理 / Chaos 恢复
 
     # ── 终态 ───────────────────────────────────
     PASSED = "passed"
@@ -44,33 +74,34 @@ _TERMINAL_STATES = frozenset({
 })
 
 _RUNNING_STATES = frozenset({
-    StepState.BEFORE_REQUEST,
-    StepState.CALLING,
-    StepState.AFTER_REQUEST,
+    StepState.PREPARE,
+    StepState.INVOKING,
+    StepState.EXTRACTING,
     StepState.VERIFYING,
     StepState.TEARDOWN,
 })
 
 # ── 合法跃迁表 ────────────────────────────────────────────────────────────────
 # key: 当前状态   value: 允许跃迁到的目标状态集合
+# （键用中立名；别名与中立名是同一成员，查表互通）
 VALID_TRANSITIONS: dict[StepState, frozenset[StepState]] = {
     StepState.PENDING: frozenset({
-        StepState.BEFORE_REQUEST,
+        StepState.PREPARE,
         StepState.SKIPPED,
     }),
-    StepState.BEFORE_REQUEST: frozenset({
-        StepState.CALLING,
-        StepState.FAILED,   # 前置策略失败 → 直接 FAILED（跳过 HTTP 调用）
+    StepState.PREPARE: frozenset({
+        StepState.INVOKING,
+        StepState.FAILED,   # 前置策略失败 → 直接 FAILED（跳过协议调用）
         StepState.TEARDOWN, # 前置失败且有 teardown 时
         StepState.ERROR,
     }),
-    StepState.CALLING: frozenset({
-        StepState.AFTER_REQUEST,
+    StepState.INVOKING: frozenset({
+        StepState.EXTRACTING,
         StepState.FAILED,
         StepState.TEARDOWN,
         StepState.ERROR,
     }),
-    StepState.AFTER_REQUEST: frozenset({
+    StepState.EXTRACTING: frozenset({
         StepState.VERIFYING,
         StepState.TEARDOWN,
         StepState.FAILED,

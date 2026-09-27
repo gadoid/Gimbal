@@ -49,10 +49,6 @@
   "steps": [
     {
       "kind": "step",
-      "api": {
-        "kind": "api_ref",
-        "ref": "settlement/api-orderadd"
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -177,7 +173,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询结算单详情应返回200",
@@ -190,7 +186,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "request_body",
           "required": true,
           "default": null
@@ -202,25 +198,20 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_1",
           "required": true,
           "default": null
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "ref": "settlement/api-orderadd"
+      }
     },
     {
       "kind": "step",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "Authorization": "${auth.codfish.token}"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -358,25 +349,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_2",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderPage",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -412,7 +404,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_id",
+          "expression": "$.call.response.body.data.data[0].order_id",
           "target": "order_id",
           "required": true,
           "default": null,
@@ -425,25 +417,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_3",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderEntrust/orderPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -472,7 +465,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -482,17 +475,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_4",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
@@ -500,7 +491,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -529,7 +523,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -539,7 +533,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.supplier[0].order_supplier_id",
+          "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
           "target": "order_supplier_1_id",
           "required": true,
           "default": null,
@@ -552,7 +546,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_no",
+          "expression": "$.call.response.body.data.order_no",
           "target": "order_no",
           "required": true,
           "default": null,
@@ -565,25 +559,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_5",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -875,7 +870,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -886,7 +881,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -897,7 +892,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_1_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -908,7 +903,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -918,17 +913,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_6",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -936,7 +929,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -1228,7 +1224,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1239,7 +1235,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1250,7 +1246,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_1_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1261,7 +1257,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1271,25 +1267,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_7",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderAdd",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -1581,7 +1578,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1592,7 +1589,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1603,7 +1600,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_1_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1614,7 +1611,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1624,25 +1621,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_8",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderBook",
+        "path": "/api/order/order/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -1934,7 +1932,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1945,7 +1943,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1956,7 +1954,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_1_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1967,7 +1965,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1977,7 +1975,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_9",
           "required": true,
           "default": null
@@ -1989,26 +1987,27 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data",
+          "expression": "$.call.response.body.data",
           "target": "customer_file_list",
           "required": true,
           "default": null,
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderAdd",
+        "path": "/api/order/order/orderBook",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2300,7 +2299,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2311,7 +2310,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -2322,7 +2321,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_1_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -2333,7 +2332,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -2344,7 +2343,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.customer_file_list",
-          "target": "$.request_body.customer_file_list",
+          "target": "$.call.request.body.customer_file_list",
           "scope": "scenario"
         },
         {
@@ -2354,25 +2353,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_10",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/bookRealAmountEdit",
+        "path": "/api/order/order/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2465,7 +2465,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2475,17 +2475,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_11",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
@@ -2493,7 +2491,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2586,7 +2587,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2596,25 +2597,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_12",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/checkGenerateOrderSub",
+        "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2643,7 +2645,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2653,25 +2655,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_13",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/generateOrderSub",
+        "path": "/api/order/order/checkGenerateOrderSub",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2700,7 +2703,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2710,25 +2713,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_14",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
+        "path": "/api/order/order/generateOrderSub",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2757,7 +2761,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2767,7 +2771,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+          "expression": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
           "target": "order_fee_real_id",
           "required": true,
           "default": null,
@@ -2780,25 +2784,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_15",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2831,7 +2836,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2842,7 +2847,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -2852,17 +2857,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_16",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -2870,7 +2873,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2903,7 +2909,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2914,7 +2920,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -2924,25 +2930,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_17",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -2971,7 +2978,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2981,7 +2988,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_sub[0].order_sub_no",
+          "expression": "$.call.response.body.data.order_sub[0].order_sub_no",
           "target": "order_sub_no",
           "required": true,
           "default": null,
@@ -2994,25 +3001,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_18",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3058,7 +3066,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3069,7 +3077,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3080,7 +3088,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_no",
-          "target": "$.request_body.audit_msg.code",
+          "target": "$.call.request.body.audit_msg.code",
           "scope": "scenario"
         },
         {
@@ -3090,25 +3098,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_19",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditRecord",
+        "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3138,7 +3147,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.relation_id",
+          "target": "$.call.request.body.relation_id",
           "scope": "scenario"
         },
         {
@@ -3148,7 +3157,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[0].audit_id",
+          "expression": "$.call.response.body.data[0].audit_id",
           "target": "audit_id_1",
           "required": true,
           "default": null,
@@ -3161,25 +3170,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_20",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditDetail",
+        "path": "/api/home/audit/auditRecord",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3208,7 +3218,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.audit_id_1",
-          "target": "$.request_body.audit_id",
+          "target": "$.call.request.body.audit_id",
           "scope": "scenario"
         },
         {
@@ -3218,25 +3228,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_21",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/home/audit/auditDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3269,7 +3280,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.audit_id_1",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3279,25 +3290,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_22",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderConfirmAccount",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3327,7 +3339,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3337,7 +3349,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.customer_currency_finance.USD[0].customer_finance_id",
+          "expression": "$.call.response.body.data.customer_currency_finance.USD[0].customer_finance_id",
           "target": "finance_id_usd",
           "required": true,
           "default": null,
@@ -3350,7 +3362,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.main_currency_bank.USD[0].main_bank_id",
+          "expression": "$.call.response.body.data.main_currency_bank.USD[0].main_bank_id",
           "target": "bank_id_usd",
           "required": true,
           "default": null,
@@ -3363,7 +3375,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.main_currency_bank.CNY[0].main_bank_id",
+          "expression": "$.call.response.body.data.main_currency_bank.CNY[0].main_bank_id",
           "target": "bank_id_cny",
           "required": true,
           "default": null,
@@ -3376,17 +3388,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_23",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderConfirmAccount",
@@ -3394,7 +3404,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3432,7 +3445,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3442,25 +3455,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_24",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/changeInvoiceApply",
+        "path": "/api/order/order/orderConfirmAccount",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3500,7 +3514,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3510,17 +3524,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_25",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/changeInvoiceApply",
@@ -3528,7 +3540,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3568,7 +3583,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3578,17 +3593,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_26",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/changeInvoiceApply",
@@ -3596,7 +3609,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3642,7 +3658,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3652,25 +3668,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_27",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditRecord",
+        "path": "/api/order/order/changeInvoiceApply",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3700,7 +3717,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.relation_id",
+          "target": "$.call.request.body.relation_id",
           "scope": "scenario"
         },
         {
@@ -3710,7 +3727,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[?(@.audit_type=='addLoanBeforeInvoiceApply')].audit_id",
+          "expression": "$.call.response.body.data[?(@.audit_type=='addLoanBeforeInvoiceApply')].audit_id",
           "target": "loan_invoice_audit_id",
           "required": true,
           "default": null,
@@ -3723,25 +3740,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_28",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/home/audit/auditRecord",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3774,7 +3792,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.loan_invoice_audit_id",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3784,25 +3802,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_29",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/accountFee/financePutList",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -3843,7 +3862,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].amount_list[0].order_fee_real_id",
+          "expression": "$.call.response.body.data.data[0].amount_list[0].order_fee_real_id",
           "target": "order_fee_real_id_pen",
           "required": true,
           "default": null,
@@ -3856,7 +3875,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_sub_id",
+          "expression": "$.call.response.body.data.data[0].order_sub_id",
           "target": "order_sub_id_pen",
           "required": true,
           "default": null,
@@ -3869,139 +3888,140 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_30",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+        "path": "/api/finance/accountFee/financePutList",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
-            "account_simple_name": null,
-            "account_type": "1",
-            "customer_id": [
-                "16"
-            ],
-            "put_settle_object_id": "37",
-            "main_id": "31",
-            "pay_settle_object_id": null,
-            "selection_time": 1781073932,
-            "action": "check",
-            "operate_type": 1,
-            "receive_account_id": null,
-            "main_name": "青岛易汇智供应链管理有限公司",
-            "put_settle_object": "兰森玻璃（青岛）有限公司",
-            "pay_settle_object": null,
-            "select_list": [
+          "account_simple_name": null,
+          "account_type": "1",
+          "customer_id": [
+            "16"
+          ],
+          "put_settle_object_id": "37",
+          "main_id": "31",
+          "pay_settle_object_id": null,
+          "selection_time": 1781073932,
+          "action": "check",
+          "operate_type": 1,
+          "receive_account_id": null,
+          "main_name": "青岛易汇智供应链管理有限公司",
+          "put_settle_object": "兰森玻璃（青岛）有限公司",
+          "pay_settle_object": null,
+          "select_list": [
+            {
+              "order_id": "322933109106409472",
+              "order_no": "YWDD20260610106678",
+              "bl_no": "codfishe2e1",
+              "customer_id": "16",
+              "customer_name": "兰森玻璃（青岛）有限公司",
+              "customer_main_id": "31",
+              "customer_main_name": "青岛易汇智供应链管理有限公司",
+              "business_main_id": "1",
+              "business_main_name": "青岛易航道物流科技有限公司",
+              "policy_type": "JSZX",
+              "trade_term": "CIF",
+              "customer_period": "60",
+              "customer_put_date": "1786291200",
+              "atd": "1781020800",
+              "etd": "1781020800",
+              "create_time": "1781060453",
+              "finance_date": "1781020800",
+              "fund_name": "青岛海发商业保理有限公司",
+              "ship_name": "codfishe2e1",
+              "voy": "codfishe2e1",
+              "status": "2",
+              "is_special_pay": "0",
+              "pay_status": "0",
+              "is_loan_before_invoice": "1",
+              "customer_order_sn": "codfishe2e1",
+              "order_sub_id": "322978240647921664",
+              "order_sub_no": "ZDD20260610015029",
+              "main_id": "31",
+              "main_name": "青岛易汇智供应链管理有限公司",
+              "service_project": "booking_space",
+              "currency": "USD",
+              "amount_total": "100.00",
+              "pay_settle_object_type": "0",
+              "put_settle_object_id": "37",
+              "put_settle_object": "兰森玻璃（青岛）有限公司",
+              "pay_settle_object": "青岛易航道物流科技有限公司",
+              "book_supplier_period": "30",
+              "book_supplier_pay_date": "1784476800",
+              "book_supplier_name": "上海华运船务有限公司青岛分公司",
+              "operable_amount": "100.00",
+              "un_operable_amount": "0.00",
+              "operable_flag": "all",
+              "policy_type_name": "结算业务",
+              "order_sub_currency": "USD322978240647921664",
+              "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
+              "order_error_messages": [],
+              "order_error_message": "",
+              "order_error_flag": false,
+              "amount_list": [
                 {
-                    "order_id": "322933109106409472",
-                    "order_no": "YWDD20260610106678",
-                    "bl_no": "codfishe2e1",
-                    "customer_id": "16",
-                    "customer_name": "兰森玻璃（青岛）有限公司",
-                    "customer_main_id": "31",
-                    "customer_main_name": "青岛易汇智供应链管理有限公司",
-                    "business_main_id": "1",
-                    "business_main_name": "青岛易航道物流科技有限公司",
-                    "policy_type": "JSZX",
-                    "trade_term": "CIF",
-                    "customer_period": "60",
-                    "customer_put_date": "1786291200",
-                    "atd": "1781020800",
-                    "etd": "1781020800",
-                    "create_time": "1781060453",
-                    "finance_date": "1781020800",
-                    "fund_name": "青岛海发商业保理有限公司",
-                    "ship_name": "codfishe2e1",
-                    "voy": "codfishe2e1",
-                    "status": "2",
-                    "is_special_pay": "0",
-                    "pay_status": "0",
-                    "is_loan_before_invoice": "1",
-                    "customer_order_sn": "codfishe2e1",
-                    "order_sub_id": "322978240647921664",
-                    "order_sub_no": "ZDD20260610015029",
-                    "main_id": "31",
-                    "main_name": "青岛易汇智供应链管理有限公司",
-                    "service_project": "booking_space",
-                    "currency": "USD",
-                    "amount_total": "100.00",
-                    "pay_settle_object_type": "0",
-                    "put_settle_object_id": "37",
-                    "put_settle_object": "兰森玻璃（青岛）有限公司",
-                    "pay_settle_object": "青岛易航道物流科技有限公司",
-                    "book_supplier_period": "30",
-                    "book_supplier_pay_date": "1784476800",
-                    "book_supplier_name": "上海华运船务有限公司青岛分公司",
-                    "operable_amount": "100.00",
-                    "un_operable_amount": "0.00",
-                    "operable_flag": "all",
-                    "policy_type_name": "结算业务",
-                    "order_sub_currency": "USD322978240647921664",
-                    "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
-                    "order_error_messages": [],
-                    "order_error_message": "",
-                    "order_error_flag": false,
-                    "amount_list": [
-                        {
-                            "order_id": "322933109106409472",
-                            "order_no": "YWDD20260610106678",
-                            "customer_name": "兰森玻璃（青岛）有限公司",
-                            "bl_no": "codfishe2e1",
-                            "main_name": "青岛易汇智供应链管理有限公司",
-                            "order_sub_no": "ZDD20260610015029",
-                            "order_sub_id": "322978240647921664",
-                            "order_fee_real_id": "322978255550285824",
-                            "fee_real_no": "FY202606101285504",
-                            "fee_type": "0",
-                            "service_project": "booking_space",
-                            "fee_real_name": "海运费",
-                            "currency": "USD",
-                            "symbol": "1",
-                            "real_amount": "100.00",
-                            "supplier_id": null,
-                            "cost_no": "0001",
-                            "fee_status": "1",
-                            "account_no": "",
-                            "pay_account_no": "",
-                            "account_status": "0",
-                            "pay_account_status": "0",
-                            "invoice_status": "0",
-                            "receive_invoice_batch_no": null,
-                            "pay_invoice_batch_no": null,
-                            "receive_invoice_apply_no": null,
-                            "pay_invoice_apply_no": null,
-                            "put_settle_object_id": "37",
-                            "put_settle_object": "兰森玻璃（青岛）有限公司",
-                            "pay_settle_object_id": "1",
-                            "pay_settle_object": "青岛易航道物流科技有限公司",
-                            "writeoff_status": "1",
-                            "un_writeoff_amount": "100.00",
-                            "use_writeoff_amount": "0.00",
-                            "writeoff_nos": "",
-                            "pay_form_no": "",
-                            "pay_demand_no": "",
-                            "amount_error_messages": [],
-                            "amount_error_message": "",
-                            "amount_error_flag": false
-                        }
-                    ]
+                  "order_id": "322933109106409472",
+                  "order_no": "YWDD20260610106678",
+                  "customer_name": "兰森玻璃（青岛）有限公司",
+                  "bl_no": "codfishe2e1",
+                  "main_name": "青岛易汇智供应链管理有限公司",
+                  "order_sub_no": "ZDD20260610015029",
+                  "order_sub_id": "322978240647921664",
+                  "order_fee_real_id": "322978255550285824",
+                  "fee_real_no": "FY202606101285504",
+                  "fee_type": "0",
+                  "service_project": "booking_space",
+                  "fee_real_name": "海运费",
+                  "currency": "USD",
+                  "symbol": "1",
+                  "real_amount": "100.00",
+                  "supplier_id": null,
+                  "cost_no": "0001",
+                  "fee_status": "1",
+                  "account_no": "",
+                  "pay_account_no": "",
+                  "account_status": "0",
+                  "pay_account_status": "0",
+                  "invoice_status": "0",
+                  "receive_invoice_batch_no": null,
+                  "pay_invoice_batch_no": null,
+                  "receive_invoice_apply_no": null,
+                  "pay_invoice_apply_no": null,
+                  "put_settle_object_id": "37",
+                  "put_settle_object": "兰森玻璃（青岛）有限公司",
+                  "pay_settle_object_id": "1",
+                  "pay_settle_object": "青岛易航道物流科技有限公司",
+                  "writeoff_status": "1",
+                  "un_writeoff_amount": "100.00",
+                  "use_writeoff_amount": "0.00",
+                  "writeoff_nos": "",
+                  "pay_form_no": "",
+                  "pay_demand_no": "",
+                  "amount_error_messages": [],
+                  "amount_error_message": "",
+                  "amount_error_flag": false
                 }
-            ]
+              ]
+            }
+          ]
         }
       },
       "strategy": [
@@ -4026,7 +4046,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4037,7 +4057,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.select_list[0].order_no",
+          "target": "$.call.request.body.select_list[0].order_no",
           "scope": "scenario"
         },
         {
@@ -4048,7 +4068,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].amount_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4059,7 +4079,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.select_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4070,7 +4090,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.select_list[0].amount_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4081,7 +4101,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -4091,17 +4111,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_31",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
@@ -4109,121 +4127,124 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
-            "account_simple_name": null,
-            "account_type": "1",
-            "customer_id": [
-                "16"
-            ],
-            "put_settle_object_id": "37",
-            "main_id": "31",
-            "pay_settle_object_id": null,
-            "selection_time": 1781073932,
-            "action": "check",
-            "operate_type": 1,
-            "receive_account_id": null,
-            "main_name": "青岛易汇智供应链管理有限公司",
-            "put_settle_object": "兰森玻璃（青岛）有限公司",
-            "pay_settle_object": null,
-            "select_list": [
+          "account_simple_name": null,
+          "account_type": "1",
+          "customer_id": [
+            "16"
+          ],
+          "put_settle_object_id": "37",
+          "main_id": "31",
+          "pay_settle_object_id": null,
+          "selection_time": 1781073932,
+          "action": "check",
+          "operate_type": 1,
+          "receive_account_id": null,
+          "main_name": "青岛易汇智供应链管理有限公司",
+          "put_settle_object": "兰森玻璃（青岛）有限公司",
+          "pay_settle_object": null,
+          "select_list": [
+            {
+              "order_id": "322933109106409472",
+              "order_no": "YWDD20260610106678",
+              "bl_no": "codfishe2e1",
+              "customer_id": "16",
+              "customer_name": "兰森玻璃（青岛）有限公司",
+              "customer_main_id": "31",
+              "customer_main_name": "青岛易汇智供应链管理有限公司",
+              "business_main_id": "1",
+              "business_main_name": "青岛易航道物流科技有限公司",
+              "policy_type": "JSZX",
+              "trade_term": "CIF",
+              "customer_period": "60",
+              "customer_put_date": "1786291200",
+              "atd": "1781020800",
+              "etd": "1781020800",
+              "create_time": "1781060453",
+              "finance_date": "1781020800",
+              "fund_name": "青岛海发商业保理有限公司",
+              "ship_name": "codfishe2e1",
+              "voy": "codfishe2e1",
+              "status": "2",
+              "is_special_pay": "0",
+              "pay_status": "0",
+              "is_loan_before_invoice": "1",
+              "customer_order_sn": "codfishe2e1",
+              "order_sub_id": "322978240647921664",
+              "order_sub_no": "ZDD20260610015029",
+              "main_id": "31",
+              "main_name": "青岛易汇智供应链管理有限公司",
+              "service_project": "booking_space",
+              "currency": "USD",
+              "amount_total": "100.00",
+              "pay_settle_object_type": "0",
+              "put_settle_object_id": "37",
+              "put_settle_object": "兰森玻璃（青岛）有限公司",
+              "pay_settle_object": "青岛易航道物流科技有限公司",
+              "book_supplier_period": "30",
+              "book_supplier_pay_date": "1784476800",
+              "book_supplier_name": "上海华运船务有限公司青岛分公司",
+              "operable_amount": "100.00",
+              "un_operable_amount": "0.00",
+              "operable_flag": "all",
+              "policy_type_name": "结算业务",
+              "order_sub_currency": "USD322978240647921664",
+              "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
+              "order_error_messages": [],
+              "order_error_message": "",
+              "order_error_flag": false,
+              "amount_list": [
                 {
-                    "order_id": "322933109106409472",
-                    "order_no": "YWDD20260610106678",
-                    "bl_no": "codfishe2e1",
-                    "customer_id": "16",
-                    "customer_name": "兰森玻璃（青岛）有限公司",
-                    "customer_main_id": "31",
-                    "customer_main_name": "青岛易汇智供应链管理有限公司",
-                    "business_main_id": "1",
-                    "business_main_name": "青岛易航道物流科技有限公司",
-                    "policy_type": "JSZX",
-                    "trade_term": "CIF",
-                    "customer_period": "60",
-                    "customer_put_date": "1786291200",
-                    "atd": "1781020800",
-                    "etd": "1781020800",
-                    "create_time": "1781060453",
-                    "finance_date": "1781020800",
-                    "fund_name": "青岛海发商业保理有限公司",
-                    "ship_name": "codfishe2e1",
-                    "voy": "codfishe2e1",
-                    "status": "2",
-                    "is_special_pay": "0",
-                    "pay_status": "0",
-                    "is_loan_before_invoice": "1",
-                    "customer_order_sn": "codfishe2e1",
-                    "order_sub_id": "322978240647921664",
-                    "order_sub_no": "ZDD20260610015029",
-                    "main_id": "31",
-                    "main_name": "青岛易汇智供应链管理有限公司",
-                    "service_project": "booking_space",
-                    "currency": "USD",
-                    "amount_total": "100.00",
-                    "pay_settle_object_type": "0",
-                    "put_settle_object_id": "37",
-                    "put_settle_object": "兰森玻璃（青岛）有限公司",
-                    "pay_settle_object": "青岛易航道物流科技有限公司",
-                    "book_supplier_period": "30",
-                    "book_supplier_pay_date": "1784476800",
-                    "book_supplier_name": "上海华运船务有限公司青岛分公司",
-                    "operable_amount": "100.00",
-                    "un_operable_amount": "0.00",
-                    "operable_flag": "all",
-                    "policy_type_name": "结算业务",
-                    "order_sub_currency": "USD322978240647921664",
-                    "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
-                    "order_error_messages": [],
-                    "order_error_message": "",
-                    "order_error_flag": false,
-                    "amount_list": [
-                        {
-                            "order_id": "322933109106409472",
-                            "order_no": "YWDD20260610106678",
-                            "customer_name": "兰森玻璃（青岛）有限公司",
-                            "bl_no": "codfishe2e1",
-                            "main_name": "青岛易汇智供应链管理有限公司",
-                            "order_sub_no": "ZDD20260610015029",
-                            "order_sub_id": "322978240647921664",
-                            "order_fee_real_id": "322978255550285824",
-                            "fee_real_no": "FY202606101285504",
-                            "fee_type": "0",
-                            "service_project": "booking_space",
-                            "fee_real_name": "海运费",
-                            "currency": "USD",
-                            "symbol": "1",
-                            "real_amount": "100.00",
-                            "supplier_id": null,
-                            "cost_no": "0001",
-                            "fee_status": "1",
-                            "account_no": "",
-                            "pay_account_no": "",
-                            "account_status": "0",
-                            "pay_account_status": "0",
-                            "invoice_status": "0",
-                            "receive_invoice_batch_no": null,
-                            "pay_invoice_batch_no": null,
-                            "receive_invoice_apply_no": null,
-                            "pay_invoice_apply_no": null,
-                            "put_settle_object_id": "37",
-                            "put_settle_object": "兰森玻璃（青岛）有限公司",
-                            "pay_settle_object_id": "1",
-                            "pay_settle_object": "青岛易航道物流科技有限公司",
-                            "writeoff_status": "1",
-                            "un_writeoff_amount": "100.00",
-                            "use_writeoff_amount": "0.00",
-                            "writeoff_nos": "",
-                            "pay_form_no": "",
-                            "pay_demand_no": "",
-                            "amount_error_messages": [],
-                            "amount_error_message": "",
-                            "amount_error_flag": false
-                        }
-                    ]
+                  "order_id": "322933109106409472",
+                  "order_no": "YWDD20260610106678",
+                  "customer_name": "兰森玻璃（青岛）有限公司",
+                  "bl_no": "codfishe2e1",
+                  "main_name": "青岛易汇智供应链管理有限公司",
+                  "order_sub_no": "ZDD20260610015029",
+                  "order_sub_id": "322978240647921664",
+                  "order_fee_real_id": "322978255550285824",
+                  "fee_real_no": "FY202606101285504",
+                  "fee_type": "0",
+                  "service_project": "booking_space",
+                  "fee_real_name": "海运费",
+                  "currency": "USD",
+                  "symbol": "1",
+                  "real_amount": "100.00",
+                  "supplier_id": null,
+                  "cost_no": "0001",
+                  "fee_status": "1",
+                  "account_no": "",
+                  "pay_account_no": "",
+                  "account_status": "0",
+                  "pay_account_status": "0",
+                  "invoice_status": "0",
+                  "receive_invoice_batch_no": null,
+                  "pay_invoice_batch_no": null,
+                  "receive_invoice_apply_no": null,
+                  "pay_invoice_apply_no": null,
+                  "put_settle_object_id": "37",
+                  "put_settle_object": "兰森玻璃（青岛）有限公司",
+                  "pay_settle_object_id": "1",
+                  "pay_settle_object": "青岛易航道物流科技有限公司",
+                  "writeoff_status": "1",
+                  "un_writeoff_amount": "100.00",
+                  "use_writeoff_amount": "0.00",
+                  "writeoff_nos": "",
+                  "pay_form_no": "",
+                  "pay_demand_no": "",
+                  "amount_error_messages": [],
+                  "amount_error_message": "",
+                  "amount_error_flag": false
                 }
-            ]
+              ]
+            }
+          ]
         }
       },
       "strategy": [
@@ -4248,7 +4269,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.select_list[0].order_no",
+          "target": "$.call.request.body.select_list[0].order_no",
           "scope": "scenario"
         },
         {
@@ -4259,7 +4280,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4270,7 +4291,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].amount_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4281,7 +4302,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.select_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4292,7 +4313,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.select_list[0].amount_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4303,7 +4324,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -4313,7 +4334,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.receive_account_id",
+          "expression": "$.call.response.body.data.receive_account_id",
           "target": "receive_account_id",
           "required": true,
           "default": null,
@@ -4326,25 +4347,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_32",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4373,7 +4395,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_account_id",
-          "target": "$.request_body.receive_account_id",
+          "target": "$.call.request.body.receive_account_id",
           "scope": "scenario"
         },
         {
@@ -4383,25 +4405,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_33",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "/api/finance/receiveAccount/receiveAccountDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4432,7 +4455,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_account_id",
-          "target": "$.request_body.receive_account_id",
+          "target": "$.call.request.body.receive_account_id",
           "scope": "scenario"
         },
         {
@@ -4442,7 +4465,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data",
+          "expression": "$.call.response.body.data",
           "target": "confirm_list",
           "required": true,
           "default": null,
@@ -4455,25 +4478,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_34",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/accountConfirm",
+        "path": "/api/finance/receiveAccount/receiveConfirmList",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4504,7 +4528,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_account_id",
-          "target": "$.request_body.receive_account_id",
+          "target": "$.call.request.body.receive_account_id",
           "scope": "scenario"
         },
         {
@@ -4515,7 +4539,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.confirm_list",
-          "target": "$.request_body.confirm_list",
+          "target": "$.call.request.body.confirm_list",
           "scope": "scenario"
         },
         {
@@ -4525,25 +4549,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_35",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/accountFee/financePutList",
+        "path": "/api/finance/receiveAccount/accountConfirm",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4583,25 +4608,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_36",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep1",
+        "path": "/api/finance/accountFee/financePutList",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4675,7 +4701,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -4686,7 +4712,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -4696,25 +4722,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_37",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep2",
+        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep1",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4818,7 +4845,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -4829,7 +4856,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -4839,25 +4866,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_38",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep2",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -4964,7 +4992,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -4975,7 +5003,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -4986,7 +5014,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4996,17 +5024,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_39",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
@@ -5014,7 +5040,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5121,7 +5150,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -5132,7 +5161,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -5143,7 +5172,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -5153,17 +5182,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_40",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
@@ -5171,7 +5198,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5286,7 +5316,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -5297,7 +5327,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -5308,7 +5338,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_pen",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -5318,28 +5348,44 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_41",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditPage",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
-        "kind" :"request",
-        "body" : {"page_no":1,"page_size":20,"audit_status":["1"],"audit_no":"","expedite_status":"","create_id":"","bl_nos":[],"executor_id":[],"active_tab":"examine_send","sort_field":"create_time","sort_order":"desc","params":{}}
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "audit_status": [
+            "1"
+          ],
+          "audit_no": "",
+          "expedite_status": "",
+          "create_id": "",
+          "bl_nos": [],
+          "executor_id": [],
+          "active_tab": "examine_send",
+          "sort_field": "create_time",
+          "sort_order": "desc",
+          "params": {}
+        }
       },
       "strategy": [
         {
@@ -5349,7 +5395,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询审批记录应返回200",
@@ -5362,7 +5408,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
+          "expression": "$.call.response.body.data.data[0].audit_id",
           "target": "audit_id_2",
           "required": true,
           "default": null,
@@ -5375,23 +5421,24 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_55",
           "required": true,
           "default": null
-        },{
+        },
+        {
           "kind": "extract",
           "name": "extract_response_body_step_55",
           "phase": "after_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "request_body_step_55",
           "required": true,
           "default": null
-        }
-        ,{
+        },
+        {
           "kind": "assign",
           "name": "assign_relation_id",
           "phase": "before_request",
@@ -5399,23 +5446,24 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.relation_id",
+          "target": "$.call.request.body.relation_id",
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/home/audit/auditPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5432,7 +5480,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "批准审批应返回200",
@@ -5445,11 +5493,12 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_56",
           "required": true,
           "default": null
-        },{
+        },
+        {
           "kind": "assign",
           "name": "assign_audit_id",
           "phase": "before_request",
@@ -5457,23 +5506,24 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.audit_id_2",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5516,7 +5566,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].receive_invoice_batch_id",
+          "expression": "$.call.response.body.data.data[0].receive_invoice_batch_id",
           "target": "receive_invoice_batch_id",
           "required": true,
           "default": null,
@@ -5529,25 +5579,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_42",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/batchDetail",
+        "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5576,7 +5627,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_batch_id",
-          "target": "$.request_body.receive_invoice_batch_id",
+          "target": "$.call.request.body.receive_invoice_batch_id",
           "scope": "scenario"
         },
         {
@@ -5586,7 +5637,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.usd_require.receive_invoice_apply_id",
+          "expression": "$.call.response.body.data.usd_require.receive_invoice_apply_id",
           "target": "receive_invoice_apply_id",
           "required": true,
           "default": null,
@@ -5599,25 +5650,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_43",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/applyDetail",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5646,7 +5698,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_apply_id",
-          "target": "$.request_body.receive_invoice_apply_id",
+          "target": "$.call.request.body.receive_invoice_apply_id",
           "scope": "scenario"
         },
         {
@@ -5656,25 +5708,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_44",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+        "path": "/api/Finance/ReceiveInvoiceBatch/applyDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5728,25 +5781,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_45",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveInvoice/invoiceAdd",
+        "path": "/api/finance/receiveInvoice/invoiceAddCheck",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5798,7 +5852,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[0].receive_invoice_id",
+          "expression": "$.call.response.body.data[0].receive_invoice_id",
           "target": "receive_invoice_id",
           "required": true,
           "default": null,
@@ -5811,25 +5865,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_46",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceFee",
+        "path": "/api/finance/receiveInvoice/invoiceAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5865,7 +5920,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_apply_id",
-          "target": "$.request_body.receive_invoice_apply_id",
+          "target": "$.call.request.body.receive_invoice_apply_id",
           "scope": "scenario"
         },
         {
@@ -5876,7 +5931,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "target": "$.call.request.body.invoice_arr[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -5886,17 +5941,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_47",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceFee",
@@ -5904,7 +5957,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -5940,7 +5996,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_apply_id",
-          "target": "$.request_body.receive_invoice_apply_id",
+          "target": "$.call.request.body.receive_invoice_apply_id",
           "scope": "scenario"
         },
         {
@@ -5951,7 +6007,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "target": "$.call.request.body.invoice_arr[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -5961,25 +6017,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_48",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/putOrderItem",
+        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceFee",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6025,25 +6082,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_49",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveWriteoff/feeWriteoffCheck",
+        "path": "/api/order/orderFee/putOrderItem",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6074,7 +6132,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -6084,25 +6142,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_50",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveWriteoff/orderFeePage",
+        "path": "/api/finance/receiveWriteoff/feeWriteoffCheck",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6133,7 +6192,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -6143,25 +6202,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_51",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveWriteoff/writeoffBatch",
+        "path": "/api/finance/receiveWriteoff/orderFeePage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6227,7 +6287,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.writeoff_object[0].order_fee_real_id",
+          "target": "$.call.request.body.writeoff_object[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -6237,17 +6297,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_52",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/finance/receiveWriteoff/writeoffBatch",
@@ -6255,7 +6313,10 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6321,7 +6382,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id_pen",
-          "target": "$.request_body.writeoff_object[0].order_fee_real_id",
+          "target": "$.call.request.body.writeoff_object[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -6331,25 +6392,26 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_53",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveWriteoff/writeoffPage",
+        "path": "/api/finance/receiveWriteoff/writeoffBatch",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
       "request": {
         "kind": "request",
         "body": {
@@ -6392,12 +6454,23 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_54",
           "required": true,
           "default": null
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/writeoffPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

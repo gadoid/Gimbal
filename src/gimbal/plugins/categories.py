@@ -13,6 +13,7 @@ from enum import Enum
 class PluginCategory(str, Enum):
     """插件类别枚举。"""
     STRATEGY = "strategy"                       # 注入 strategy 实现的插件
+    PROTOCOL = "protocol"                       # 协议执行器插件（http 外的调用协议：grpc/sql/mqtt/...）
     REPORTER = "reporter"                       # 报告/可视化插件（HTML/JUnit/Allure）
     RESOURCE_PROVIDER = "resource_provider"     # 提供 resource 后端的插件（DB/HTTP/...）
     AUTH = "auth"                               # 认证策略插件（OAuth/API-Key/...）
@@ -25,6 +26,7 @@ class PluginCategory(str, Enum):
 
 # 字符串常量（向后兼容）
 STRATEGY = PluginCategory.STRATEGY.value
+PROTOCOL = PluginCategory.PROTOCOL.value
 REPORTER = PluginCategory.REPORTER.value
 RESOURCE_PROVIDER = PluginCategory.RESOURCE_PROVIDER.value
 AI_PROVIDER = PluginCategory.AI_PROVIDER.value

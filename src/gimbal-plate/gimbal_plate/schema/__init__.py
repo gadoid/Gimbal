@@ -66,7 +66,7 @@ from gimbal_plate.schema.scenario import (
     Meta,
     RunUnion,
     Scenario,
-    Suite,
+
 )
 
 
@@ -118,5 +118,5 @@ __all__ = [
     "Meta",
     "RunUnion",
     "Scenario",
-    "Suite",
+    
 ]

@@ -53,16 +53,6 @@
     {
       "kind": "step",
       "description": "委托订舱下单",
-      "api": {
-        "kind": "api",
-        "service": "fin-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "Authorization": "${auth.codfish.token}"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -208,7 +198,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -220,7 +210,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step1",
           "scope": "scenario",
           "required": true
@@ -231,18 +221,15 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step1",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "委托订舱下单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -250,7 +237,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "委托订舱下单",
       "request": {
         "kind": "request",
         "body": {
@@ -396,7 +387,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -408,7 +399,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step2",
           "scope": "scenario",
           "required": true
@@ -419,26 +410,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step2",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "分页查询委托订单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderPage",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "分页查询委托订单",
       "request": {
         "kind": "request",
         "body": {
@@ -458,7 +450,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -470,7 +462,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body.data.data[0].order_id",
+          "expression": "$.call.response.body.data.data[0].order_id",
           "target": "order_id",
           "scope": "scenario",
           "required": true
@@ -481,7 +473,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step3",
           "scope": "scenario",
           "required": true
@@ -492,26 +484,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step3",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "订单-查询订单详情",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderEntrust/orderPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "订单-查询订单详情",
       "request": {
         "kind": "request",
         "body": {
@@ -525,7 +518,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -538,7 +531,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -548,7 +541,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body.data.supplier[0].order_supplier_id",
+          "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
           "target": "order_supplier_id",
           "scope": "scenario",
           "required": true
@@ -559,7 +552,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body.data.order_no",
+          "expression": "$.call.response.body.data.order_no",
           "target": "order_no",
           "scope": "scenario",
           "required": true
@@ -570,7 +563,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body.data.container[0].order_container_id",
+          "expression": "$.call.response.body.data.container[0].order_container_id",
           "target": "order_container_id",
           "scope": "scenario",
           "required": true
@@ -581,7 +574,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step4",
           "scope": "scenario",
           "required": true
@@ -592,26 +585,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step4",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "委托订单分发",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "委托订单分发",
       "request": {
         "kind": "request",
         "body": {
@@ -911,7 +905,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -924,7 +918,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario",
           "required": true
         },
@@ -935,7 +929,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario",
           "required": true
         },
@@ -946,7 +940,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario",
           "required": true
         },
@@ -957,7 +951,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -967,7 +961,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step5",
           "scope": "scenario",
           "required": true
@@ -978,18 +972,15 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step5",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "委托订单分发",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -997,7 +988,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "委托订单分发",
       "request": {
         "kind": "request",
         "body": {
@@ -1297,7 +1292,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -1310,7 +1305,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario",
           "required": true
         },
@@ -1321,7 +1316,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario",
           "required": true
         },
@@ -1332,7 +1327,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario",
           "required": true
         },
@@ -1343,7 +1338,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -1353,7 +1348,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "$.resp",
           "scope": "step",
           "required": true
@@ -1364,7 +1359,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step6",
           "scope": "scenario",
           "required": true
@@ -1375,18 +1370,15 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step6",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "委托订单确认",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -1394,7 +1386,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "委托订单确认",
       "request": {
         "kind": "request",
         "body": {
@@ -1680,7 +1676,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -1693,7 +1689,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -1704,7 +1700,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario",
           "required": true
         },
@@ -1715,7 +1711,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario",
           "required": true
         },
@@ -1726,7 +1722,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario",
           "required": true
         },
@@ -1737,7 +1733,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
+          "target": "$.call.request.body.container[0].order_container_id",
           "scope": "scenario",
           "required": true
         },
@@ -1747,7 +1743,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step7",
           "scope": "scenario",
           "required": true
@@ -1758,26 +1754,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step7",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "检查订舱信息",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "检查订舱信息",
       "request": {
         "kind": "request",
         "body": {
@@ -1807,7 +1804,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -1820,7 +1817,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -1831,7 +1828,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
+          "target": "$.call.request.body.container[0].order_container_id",
           "scope": "scenario",
           "required": true
         },
@@ -1841,7 +1838,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step8",
           "scope": "scenario",
           "required": true
@@ -1852,26 +1849,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step8",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "由 Scenario_Test_14 提取: 提交订舱文件",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/order/orderBook",
+        "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "由 Scenario_Test_14 提取: 提交订舱文件",
       "request": {
         "kind": "request",
         "body": {
@@ -2172,7 +2170,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -2185,7 +2183,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario",
           "required": true
         },
@@ -2196,7 +2194,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario",
           "required": true
         },
@@ -2207,7 +2205,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -2218,7 +2216,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario",
           "required": true
         },
@@ -2229,7 +2227,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
+          "target": "$.call.request.body.container[0].order_container_id",
           "scope": "scenario",
           "required": true
         },
@@ -2239,7 +2237,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body.data[0]",
+          "expression": "$.call.response.body.data[0]",
           "target": "data",
           "scope": "scenario",
           "required": true
@@ -2250,7 +2248,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step9",
           "scope": "scenario",
           "required": true
@@ -2261,26 +2259,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step9",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "委托订单确认",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
+        "path": "/api/order/order/orderBook",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "委托订单确认",
       "request": {
         "kind": "request",
         "body": {
@@ -2566,7 +2565,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -2579,7 +2578,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario",
           "required": true
         },
@@ -2590,7 +2589,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -2601,7 +2600,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario",
           "required": true
         },
@@ -2612,7 +2611,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario",
           "required": true
         },
@@ -2623,7 +2622,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
+          "target": "$.call.request.body.container[0].order_container_id",
           "scope": "scenario",
           "required": true
         },
@@ -2634,7 +2633,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.data",
-          "target": "$.request_body.customer_file_list",
+          "target": "$.call.request.body.customer_file_list",
           "scope": "scenario",
           "required": true
         },
@@ -2644,7 +2643,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step10",
           "scope": "scenario",
           "required": true
@@ -2655,26 +2654,27 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step10",
           "scope": "scenario",
           "required": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "生成子订单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "fin-service",
         "method": "POST",
-        "path": "/api/order/order/generateOrderSub",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "生成子订单",
       "request": {
         "kind": "request",
         "body": {
@@ -2688,7 +2688,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "assertion",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "",
@@ -2701,7 +2701,7 @@
           "tags": [],
           "kind": "assign",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario",
           "required": true
         },
@@ -2711,7 +2711,7 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "resp_step11",
           "scope": "scenario",
           "required": true
@@ -2722,12 +2722,23 @@
           "onFailure": "abort",
           "tags": [],
           "kind": "extract",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "req_step11",
           "scope": "scenario",
           "required": true
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "fin-service",
+        "method": "POST",
+        "path": "/api/order/order/generateOrderSub",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

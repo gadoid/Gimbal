@@ -264,9 +264,9 @@ def _make_scenario_run_result(scenario_id: str, step_count: int = 2) -> Scenario
     )
 
 
-@test("#45.1 _run_suite details include steps field")
+@test("#45.1 graph aggregate details include steps field")
 def _():
-    from gimbal.schema.scenario import Suite, Scenario, Meta, Config
+    from gimbal.schema.scenario import SuiteGraph, UnitDecl, Scenario, Meta, Config
 
     sc = Scenario(
         scenarioId="sc-1",
@@ -279,7 +279,8 @@ def _():
         resource={},
         steps=[],
     )
-    suite = Suite(suite=[sc])
+    graph = SuiteGraph(kind="graph", mode="aggregate",
+                       units=[UnitDecl(ref="sc-1", scenario=sc)])
 
     # Mock framework_ctx
     framework_ctx = MagicMock()
@@ -289,7 +290,6 @@ def _():
     suite_ctx = MagicMock(suite_id="s1")
     framework_ctx.ctx_manager.derive_suite_context.return_value = suite_ctx
 
-    # Mock ScenarioRunner.run to return 3 steps
     mock_result = _make_scenario_run_result("sc-1", step_count=3)
 
     with patch("gimbal.core.scenario_runner.ScenarioRunner") as MockRunner:
@@ -300,8 +300,11 @@ def _():
         engine._ictx.hook_registry = MagicMock()
         engine._ictx.event_bus = None
         engine._ictx.auth_registry = MagicMock()
+        engine._ictx.protocols = MagicMock()
 
-        result = engine._run_suite(suite, framework_ctx)
+        from gimbal.compiler.pipeline import compile_target
+        plan = compile_target(graph)
+        result = engine._run_plan(plan, framework_ctx)
 
     assert len(result.details) == 1
     assert "steps" in result.details[0], (
@@ -318,19 +321,18 @@ def _():
 # ════════════════════════════════════════════════════════════════════
 print("\n[6b] service_url 兜底删除 (#6)")
 
-from gimbal.schema.api import Api
+from gimbal.schema.call import Call
 from gimbal.schema.request import Request
 from gimbal.schema.step import Step as StepSchema
 
 
-def _make_sm_with_api(service: str, base_url: str, api: Api = None):
-    """Build StepStateMachine with a real Step schema containing an Api."""
+def _make_sm_with_api(service: str, base_url: str, call: Call = None):
+    """Build StepStateMachine with a real Step schema containing a Call."""
     bus = _FakeBus()
     sm = sm_engine.StepStateMachine.__new__(sm_engine.StepStateMachine)
     sm._step_id = "s1"
-    if api is None:
-        api = Api(
-            kind="api",
+    if call is None:
+        call = Call(protocol="http",
             service=service,
             method="GET",
             path="/api/test",
@@ -340,7 +342,7 @@ def _make_sm_with_api(service: str, base_url: str, api: Api = None):
     request = Request(kind="request", body={})
     sm._step_schema = StepSchema(
         kind="step",
-        api=api,
+        call=call,
         request=request,
         strategy=[],
     )
@@ -615,6 +617,13 @@ def _build_sm_for_soft_failure(
     step_schema.api.headers = {}
     step_schema.api.timeout = 30.0
     step_schema.request.body = {}
+    # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
+    # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
+    from gimbal.schema.call import Call as _RealCall
+    step_schema.call = _RealCall(
+        protocol="http", service="test-svc", method="GET",
+        path="/x", headers={}, timeout=30.0,
+    )
 
     sm = sm_engine.StepStateMachine.__new__(sm_engine.StepStateMachine)
     sm._step_id = "soft-test"
@@ -1348,7 +1357,7 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
     from types import SimpleNamespace
 
     bus = _FakeBus()
-    api = Api(kind="api", service="test-svc", method="GET", path="/x",
+    api = Call(protocol="http", service="test-svc", method="GET", path="/x",
               headers={}, timeout=30.0)
     request = Request(kind="request", body={})
     strategies = [
@@ -1373,6 +1382,13 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
     step_schema.api.headers = {}
     step_schema.api.timeout = 30.0
     step_schema.request.body = {}
+    # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
+    # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
+    from gimbal.schema.call import Call as _RealCall
+    step_schema.call = _RealCall(
+        protocol="http", service="test-svc", method="GET",
+        path="/x", headers={}, timeout=30.0,
+    )
 
     sm = sm_engine.StepStateMachine.__new__(sm_engine.StepStateMachine)
     sm._step_id = "error-attr-test"
@@ -2125,14 +2141,14 @@ print("\n[26] Business flow: multi-service base_url (B1)")
 def _make_step_with_service(service_name: str):
     """Build a Step with given api.service key."""
     from gimbal.schema.step import Step
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
     from gimbal.schema.strategy import Assertion, AssertOperator
 
     return Step(
         kind="step",
-        api=Api(
-            kind="api", service=service_name, method="GET", path="/x",
+        call=Call(protocol="http",
+            service=service_name, method="GET", path="/x",
             headers={}, timeout=30.0,
         ),
         request=Request(kind="request", body={}),
@@ -2271,16 +2287,27 @@ def _():
         verifying_results=[_make_strategy_result("passed")],
     )
 
-    # Make dispatcher capture the call_spec
+    # 批次 A 后 scratch request_body 优先语义在适配器 send 内；
+    # 捕获缝迁移：dispatch 直接驱动真实执行器模板（假 send），从 send 侧捕获 body
     captured_spec = {}
-    original_dispatch = sm._dispatcher.dispatch
+    from gimbal.strategy.builtin.call import CallExecutor as _HttpEx
+    from gimbal.protocols.result import CallResult as _CR
+    _ex = _HttpEx()
+
+    def _fake_send(spec, view):
+        captured_spec['url'] = spec.url
+        captured_spec['body'] = view.read_scratch("request_body") or spec.body
+        return _CR.build(
+            protocol="http",
+            request={"method": spec.method, "url": spec.url,
+                     "headers": spec.headers, "body": captured_spec['body'],
+                     "timeout": spec.timeout},
+            status=200, body={},
+        )
+    _ex.send = _fake_send
 
     def capturing_dispatch(call_spec, view):
-        captured_spec['url'] = call_spec.url
-        captured_spec['body'] = dict(call_spec.body) if call_spec.body else {}
-        return StrategyResult(
-            status=StrategyStatus.PASSED, message="ok", duration_ms=0.0,
-        )
+        return _ex.execute(call_spec, view)
     sm._dispatcher.dispatch = capturing_dispatch
 
     # Simulate that BEFORE_REQUEST Assign wrote to scratch.request_body
@@ -2328,11 +2355,11 @@ def _build_scenario_with_timeout(steps, timeout_seconds=None):
 
 def _make_step_with_api():
     from gimbal.schema.step import Step
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
     return Step(
         kind="step",
-        api=Api(kind="api", service="test", method="GET", path="/x",
+        call=Call(protocol="http", service="test", method="GET", path="/x",
                 headers={}, timeout=30.0),
         request=Request(kind="request", body={}),
         strategy=[],
@@ -2371,7 +2398,7 @@ def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
     from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
     from gimbal.schema.step import Step
     from gimbal.schema.strategy import Assertion, AssertOperator, StrategyPhase, FailurePolicy
@@ -2382,8 +2409,8 @@ def _():
     # step header 引用 ${auth.admin.token}
     step = Step(
         kind="step",
-        api=Api(
-            kind="api", service="test", method="GET", path="/x",
+        call=Call(protocol="http",
+            service="test", method="GET", path="/x",
             headers={"Authorization": "Bearer ${auth.admin.token}"},
             timeout=30.0,
         ),
@@ -2494,17 +2521,17 @@ def _():
     )
 
 
-@test("#B5.2 _resolve_api raises when header template is missing")
+@test("#B5.2 _resolve_call raises when header template is missing")
 def _():
     """Critical B5: header missing template should NOT silently drop — must raise."""
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.config.models import BootstrapConfig
     from gimbal.auth.registry import AuthRegistry
 
-    api = Api(
-        kind="api", service="test", method="GET", path="/x",
+    call = Call(protocol="http",
+        service="test", method="GET", path="/x",
         headers={"Authorization": "Bearer ${var.no_such_token}"},
         timeout=30.0,
     )
@@ -2512,7 +2539,7 @@ def _():
     root = {"var": {}}
 
     try:
-        pre._resolve_api(api, root)
+        pre._resolve_call(call, root)
         assert False, (
             "should have raised ValueError due to missing header template"
         )
@@ -2523,16 +2550,13 @@ def _():
         )
 
 
-@test("#B5.3 _resolve_api raises when path template is missing")
+@test("#B5.3 _resolve_call raises when path template is missing")
 def _():
-    from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.api import Api
-    from gimbal.config.models import BootstrapConfig
-    from gimbal.auth.registry import AuthRegistry
+    from gimbal.schema.call import Call
 
-    api = Api(
-        kind="api", service="test", method="GET", path="/users/${var.user_id}",
+    call = Call(protocol="http",
+        service="test", method="GET", path="/users/${var.user_id}",
         headers={},
         timeout=30.0,
     )
@@ -2540,29 +2564,26 @@ def _():
     root = {"var": {}}
 
     try:
-        pre._resolve_api(api, root)
+        pre._resolve_call(call, root)
         assert False, "should have raised for missing path template"
     except ValueError as e:
-        assert "path" in str(e).lower() or "api.path" in str(e)
+        assert "path" in str(e).lower() or "user_id" in str(e)
 
 
-@test("#B5.4 _resolve_api succeeds with all templates resolved")
+@test("#B5.4 _resolve_call succeeds with all templates resolved")
 def _():
-    from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.api import Api
-    from gimbal.config.models import BootstrapConfig
-    from gimbal.auth.registry import AuthRegistry
+    from gimbal.schema.call import Call
 
-    api = Api(
-        kind="api", service="test", method="GET", path="/users/${var.user_id}",
+    call = Call(protocol="http",
+        service="test", method="GET", path="/users/${var.user_id}",
         headers={"Authorization": "Bearer ${var.token}"},
         timeout=30.0,
     )
     pre = ScenarioPreprocessor.__new__(ScenarioPreprocessor)
     root = {"var": {"user_id": 42, "token": "abc123"}}
 
-    resolved = pre._resolve_api(api, root)
+    resolved = pre._resolve_call(call, root)
     assert resolved.path == "/users/42"
     assert resolved.headers["Authorization"] == "Bearer abc123"
 
@@ -3011,14 +3032,14 @@ def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.auth.registry import AuthRegistry
     from gimbal.schema.step import Step
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
 
     schema = MagicMock()
     schema.steps = [
         Step(
             step_id="s1",
-            api=Api(kind="api", service="svc", method="POST", path="/x", timeout=10.0),
+            call=Call(protocol="http", service="svc", method="POST", path="/x", timeout=10.0),
             request=Request(body={"data": {"k": "${auth.nested_user.token}"}}),
             strategy=[],
         )
@@ -3065,14 +3086,14 @@ def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.auth.registry import AuthRegistry
     from gimbal.schema.step import Step
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
 
     schema = MagicMock()
     schema.steps = [
         Step(
             step_id="s1",
-            api=Api(kind="api", service="svc", method="POST", path="/x", timeout=10.0),
+            call=Call(protocol="http", service="svc", method="POST", path="/x", timeout=10.0),
             request=Request(body={"only_this": "${auth.referenced.tag}"}),
             strategy=[],
         )

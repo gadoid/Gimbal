@@ -44,6 +44,7 @@ LogLevel = LogLevelEnum
 class OutputFormat(str, Enum):
     console = "console"
     json = "json"
+    jsonl = "jsonl"   # v2.1 批次 F-2c：stdout 逐行事件流（末线 run.finished）
 
 
 class ServerMode(str, Enum):
@@ -312,6 +313,26 @@ def _publish_run_meta(configuration: Any) -> None:
         )
 
 
+def attach_jsonl_sink(event_bus) -> str:
+    """订阅全部事件，逐行 JSON 打印到 stdout（v2.1 批次 F-2c：E2 v2 契约）。
+
+    返回 subscription_id（调用方 shutdown 前 unsubscribe，避免终端行
+    与 reporter 输出交叉）。事件已带 seq（总线锁内分配），平台按行消费
+    或换 SSE。
+    """
+    import json as _json
+    import sys as _sys
+
+    def _sink(event) -> None:
+        try:
+            line = _json.dumps(event.model_dump(mode="json"), ensure_ascii=False, default=str)
+        except Exception:  # noqa: BLE001
+            line = _json.dumps({"event_type": getattr(event, "event_type", "?")})
+        print(line, file=_sys.stdout, flush=True)   # Windows 子进程逐行 flush
+
+    return event_bus.subscribe(_sink)
+
+
 def _print_run_report(result: Any, fmt: "OutputFormat", artifacts: list | None = None) -> None:
     """按 OutputFormat 打印 RunResult：json 时 dump payload，console 时按通过/失败着色并附 artifacts 列表。"""
     """统一格式化输出 RunResult。
@@ -334,6 +355,26 @@ def _print_run_report(result: Any, fmt: "OutputFormat", artifacts: list | None =
 
     if fmt == OutputFormat.json:
         _typer.echo(_json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        return
+
+    if fmt == OutputFormat.jsonl:
+        # v2 §5：stdout 只输出事件；调用方读最后一行 run.finished 即得结果。
+        # 事件本体由 jsonl sink 在运行中逐行打印（见 attach_jsonl_sink），
+        # 这里只打终线（RunFinishedEvent 形状）。
+        finished = {
+            "event_type": "run.finished",
+            "exit_code": result.exit_code,
+            "total": result.total,
+            "passed": result.passed,
+            "failed": result.failed,
+            "error": result.error,
+            "skipped": result.skipped,
+            "halted": getattr(result, "halted", 0),
+            "blocked": getattr(result, "blocked", 0),
+            "repaired": getattr(result, "repaired", 0),
+            "details": result.details,
+        }
+        _typer.echo(_json.dumps(finished, ensure_ascii=False, default=str))
         return
 
     # console：分组显示通过/失败/错误

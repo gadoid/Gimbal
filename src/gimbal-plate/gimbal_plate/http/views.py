@@ -149,6 +149,7 @@ class EndpointView(BaseModel):
     service: str
     name: str
     description: str = ""
+    protocol: str = "http"
     method: str
     path: str
     module: str = ""
@@ -166,6 +167,7 @@ class EndpointView(BaseModel):
             service=ep.service,
             name=ep.name,
             description=ep.description,
+            protocol=api.protocol,
             method=api.method,
             path=api.path,
             module=ep.metadata.module or "",

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from gimbal.schema.api import Api
+from gimbal.schema.call import Call
 from gimbal.schema.request import Request
 from gimbal.schema.step import Step
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
@@ -24,7 +24,7 @@ def _make_sm(service: str, base_url: str, services: dict | None = None):
     sm._step_id = "s1"
     sm._step_schema = Step(
         kind="step",
-        api=Api(kind="api", service=service, method="GET", path="/x",
+        call=Call(protocol="http", service=service, method="GET", path="/x",
                 headers={}, timeout=30.0),
         request=Request(kind="request", body={}),
         strategy=[],
@@ -115,7 +115,7 @@ def test_preprocessor_run_returns_declared_services():
     def _step(service_name: str):
         return Step(
             kind="step",
-            api=Api(kind="api", service=service_name, method="GET", path="/x",
+            call=Call(protocol="http", service=service_name, method="GET", path="/x",
                     headers={}, timeout=30.0),
             request=Request(kind="request", body={}),
             strategy=[],

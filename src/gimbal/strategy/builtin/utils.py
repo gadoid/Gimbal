@@ -53,7 +53,7 @@ def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> An
     """解析 Assign.source：
     - scope=STEP: 先从 scratch JSONPath 查询，查不到再去场景上下文
     - scope=SCENARIO: 直接从场景上下文查询
-    - "$.jsonpath" -> 从 scratch 读取（如 "$.response_body.data.order_no"）
+    - "$.jsonpath" -> 从 scratch 读取（如 "$.call.response.body.data.order_no"）
     - "${varname}" -> 从 context 读取（如 "${order_no}"）
     - 字面量 -> 直接返回
     """

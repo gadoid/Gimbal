@@ -85,8 +85,9 @@ def fake_dispatcher_and_ctx_factory():
     from gimbal.statemachine.engine import StepRunResult as SmStepRunResult
 
     class FakeStep:
-        def __init__(self, idx: int, api: object = None):
-            self.api = api if api is not None else object()
+        def __init__(self, idx: int, call: object = None):
+            # v2.1 批次 F：call 是唯一调用声明（api 糖已退役）
+            self.call = call if call is not None else object()
             self.idx = idx
             self.request = type("R", (), {"body": {}})()
             self.strategy: list = []
@@ -183,7 +184,8 @@ def test_runtime_control_halt_at_triggers_halt(fake_dispatcher_and_ctx_factory):
     fake_pre_mod.ScenarioPreprocessor = _CatchedPreprocessor
     sys.modules["gimbal.preprocessor.scenario_preprocessor"] = fake_pre_mod
 
-    # 替换 StepRunner 为 fake
+    # 替换 StepRunner 为 fake（finally 恢复：同进程内后续测试会复用真 StepRunner）
+    _real_step_runner = sr_module.StepRunner
     sr_module.StepRunner = F["FakeStepRunner"]
 
     try:
@@ -241,7 +243,8 @@ def test_runtime_control_halt_at_triggers_halt(fake_dispatcher_and_ctx_factory):
         assert [s.step_id for s in real_steps] == ["step-000", "step-001"]
     finally:
         sys.modules.pop("gimbal.preprocessor.scenario_preprocessor", None)
-        # 恢复 StepRunner 不必要（test process 不复用）
+        sr_module.StepRunner = _real_step_runner   # 恢复（后续测试同进程复用）
+        sr_module.StepRunner = _real_step_runner   # 恢复（后续测试同进程复用）
 
 
 def test_runtime_control_none_halt_at_skips_halt(fake_dispatcher_and_ctx_factory):
@@ -254,6 +257,7 @@ def test_runtime_control_none_halt_at_skips_halt(fake_dispatcher_and_ctx_factory
     sys.modules["gimbal.preprocessor.scenario_preprocessor"] = fake_pre_mod
 
     import gimbal.core.scenario_runner as sr_module
+    _real_step_runner = sr_module.StepRunner
     sr_module.StepRunner = F["FakeStepRunner"]
 
     try:
@@ -283,6 +287,7 @@ def test_runtime_control_none_halt_at_skips_halt(fake_dispatcher_and_ctx_factory
         assert result2.halted is False
     finally:
         sys.modules.pop("gimbal.preprocessor.scenario_preprocessor", None)
+        sr_module.StepRunner = _real_step_runner   # 恢复（后续测试同进程复用）
 
 
 def test_runtime_control_halt_at_beyond_step_count_does_not_trigger(fake_dispatcher_and_ctx_factory):
@@ -295,6 +300,7 @@ def test_runtime_control_halt_at_beyond_step_count_does_not_trigger(fake_dispatc
     sys.modules["gimbal.preprocessor.scenario_preprocessor"] = fake_pre_mod
 
     import gimbal.core.scenario_runner as sr_module
+    _real_step_runner = sr_module.StepRunner
     sr_module.StepRunner = F["FakeStepRunner"]
 
     try:
@@ -318,3 +324,4 @@ def test_runtime_control_halt_at_beyond_step_count_does_not_trigger(fake_dispatc
         assert len(result.step_results) == 5
     finally:
         sys.modules.pop("gimbal.preprocessor.scenario_preprocessor", None)
+        sr_module.StepRunner = _real_step_runner   # 恢复（后续测试同进程复用）

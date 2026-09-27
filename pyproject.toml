@@ -75,6 +75,13 @@ testpaths = [
     "tests/unit/scenario",   # 已 pytest 化(无需 ignore)
     "tests/unit/engine",     # D7 per-step base_url(spec 2026-08-27)
     "tests/unit/runtime_control",  # 阶段 1: RuntimeControl (step-control 最小子集)
+    "tests/unit/protocols",  # 协议中立化: 注册表/多协议状态机/插件通道 (2026-09-27)
+    "tests/unit/scheduler",  # 多线程分派: SuiteScheduler/并行 suite (2026-09-27)
+    "tests/unit/compiler",   # v2.1 批次 B: Plan 编译管线/单路径对账 (2026-09-27)
+    "tests/unit/debugger",   # v2.1 批次 E: Decision 通道/debugger/server 调试 (2026-09-27)
+    "tests/unit/characterization",  # 批次 F 前置: 特征化安全绳 + 迁移脚本 (2026-09-27)
+    "tests/unit/events",      # v2.1 批次 F-2c: Event seq + jsonl 事件流 (2026-09-27)
+    "tests/unit/platform_compat",  # v2.1 F-2c: 平台侧双读 + call 形态物化 (2026-09-27)
 ]
 # 已 pytest 化的子目录:collector 默认行为,无需 collect_ignore
 # print+assert 脚本风格文件:由 tests/{unit,integration}/conftest.py

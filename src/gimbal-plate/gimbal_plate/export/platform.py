@@ -626,7 +626,7 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 1. 按 (method, path) 聚合每个 endpoint 引用过的 step body
         bodies_by_ep: dict[str, list[dict[str, Any]]] = {}
         for s in sc.steps:
-            ep = keys.get((s.api.method, s.api.path))
+            ep = keys.get((s.view_api.method, s.view_api.path))
             if ep is None:
                 continue
             body = s.request.body
@@ -642,8 +642,8 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 3. 构造 step 视图(注入 view_hints / source_kind / field_count / field_names / view_note)
         step_views: list[PlatformStepView] = []
         for s in sc.steps:
-            ep = keys.get((s.api.method, s.api.path))
-            api_dict = _render_api_view(s.api, ep)
+            ep = keys.get((s.view_api.method, s.view_api.path))
+            api_dict = _render_api_view(s.view_api, ep)
             request_dict = _render_request_view(s.request, ep, s.field_states)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
             step_views.append(PlatformStepView(

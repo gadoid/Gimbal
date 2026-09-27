@@ -300,6 +300,7 @@ import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { useRunAssembly } from '@/composables/useRunAssembly'
 import type { ScenarioView, StepView } from '@/types/plate'
+import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 
 const STEPS = [
   { key: 'meta',     label: '基本信息',    hint: 'scenarioId / name / system / owner' },
@@ -726,7 +727,7 @@ function checkSystemMismatch() {
   const declared = new Set(scenario.value.meta.system || [])
   const actual = new Set<string>()
   for (const s of scenario.value.steps as any[]) {
-    const system = deriveSystem(s?.api, catalogNames.value, systemByService.value)
+    const system = deriveSystem(stepCall(s) as any, catalogNames.value, systemByService.value)
     if (system) actual.add(system)
   }
   const missing = [...actual].filter(s => !declared.has(s) && s !== 'common')

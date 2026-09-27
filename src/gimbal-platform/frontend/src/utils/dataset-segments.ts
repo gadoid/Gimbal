@@ -10,6 +10,7 @@
  * 与 dataset-palette 的 deriveBaselineColumns(traversal 有 endpoint_id 纪律,
  * 服务直填列基线显示)互不依赖:引用扫描与端点契约无关,不设 endpoint_id 门。
  */
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 export const TPL_RE = /\$\{var\.([A-Za-z0-9_.]+)\}/g
 export const TPL_FULL_RE = /^\$\{var\.([A-Za-z0-9_.]+)\}$/
 
@@ -86,7 +87,7 @@ export function deriveSegments(
       if (!seen.has(c.varName)) { seen.add(c.varName); inputs.push(c) }   // 同步去重(首引用位)
     }
     scanValue(step?.request?.body, 'body', '', stepIndex, push, v)
-    const headers = step?.api?.headers
+    const headers = stepHeaders(step)
     if (headers && typeof headers === 'object') {
       for (const [k, val] of Object.entries(headers)) {
         if (typeof val === 'string') {
@@ -181,7 +182,7 @@ export function fieldPathsOf(step: SegmentStepShape | null | undefined): FieldLe
     out.push(leafOf('body', path || '$', v))
   }
   walk(step?.request?.body, '')
-  for (const [k, val] of Object.entries(step?.api?.headers ?? {})) {
+  for (const [k, val] of Object.entries(stepHeaders(step) ?? {})) {
     if (val === undefined) continue   // JSON 不产 undefined;与 walk 的 undefined 守卫对称
     out.push(leafOf('headers', `$.${k}`, val))
   }

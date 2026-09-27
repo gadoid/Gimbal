@@ -232,6 +232,7 @@ import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { assertablePaths } from '@/utils/declarations'
 import { toScratchPath } from '@/utils/scratch-path'
 import type { FieldState } from '@/types/plate'
+import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 import { getEndpointFull } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
@@ -472,7 +473,7 @@ function stateOfPendingPath(path: string): FieldState | undefined {
  *  容器即建立响应依赖,契约落定后本 computed 自动重算)。 */
 const targetCandidates = computed<string[]>(() => {
   const step = steps.value[pendingAssert.value.stepIndex] as any
-  const eid = step?.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(step)
   if (!eid) return []
   const full = getEndpointFull(eid)
   return assertablePaths(full?.responses?.['200']?.declarations).map(toScratchPath)

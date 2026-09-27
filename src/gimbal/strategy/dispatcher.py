@@ -40,6 +40,9 @@ class StrategyDispatcher:
         """初始化 dispatcher：空 executor 注册表，可选 hook_registry 用于 STRATEGY_BEFORE/AFTER 埋点。"""
         self._registry: dict[str, StrategyExecutor] = {}
         self._hooks = hook_registry
+        # 协议注册表（protocol → executor，与 _registry 的 kind 表联动）；
+        # 由 build_default_dispatcher 装配，Engine/ScenarioRunner/状态机经此透传
+        self.protocols: Any = None
 
     def register(self, executor: StrategyExecutor) -> None:
         """注册一个 executor，以其 kind 为键。"""
@@ -47,6 +50,17 @@ class StrategyDispatcher:
             raise StrategyError(f"{type(executor).__name__} must declare a non-empty `kind`")
         self._registry[executor.kind] = executor
         logger.debug("[StrategyDispatcher] Executor registered: kind={} executor={}", executor.kind, type(executor).__name__)
+
+    def unregister(self, kind: str) -> bool:
+        """按 kind 注销 executor（插件热卸载路径）。返回是否原本存在。"""
+        existed = self._registry.pop(kind, None) is not None
+        if existed:
+            logger.debug("[StrategyDispatcher] Executor unregistered: kind={}", kind)
+        return existed
+
+    def kinds(self) -> list[str]:
+        """已注册的 executor kind 列表（快照）。"""
+        return sorted(self._registry.keys())
 
     def dispatch(
         self,
@@ -178,15 +192,20 @@ class StrategyDispatcher:
 
 
 def build_default_dispatcher(hook_registry: Optional[Any] = None) -> StrategyDispatcher:
-    """构造并注册内置所有 executor 的 dispatcher。"""
+    """构造并注册内置所有 executor 的 dispatcher。
+
+    2026-09-27 协议中立化：CallExecutor 以 http 协议执行器身份进 ProtocolRegistry
+    （第一员），kind="_call" 的 dispatcher 注册由注册表联动完成；
+    dispatcher.protocols 即本 dispatcher 配套的协议注册表（bootstrap 透传用）。
+    """
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
-    from gimbal.strategy.builtin.call import CallExecutor
+    from gimbal.protocols.registry import build_default_protocol_registry
 
     d = StrategyDispatcher(hook_registry=hook_registry)
+    d.protocols = build_default_protocol_registry(dispatcher=d)   # 注册 http（kind="_call"）
     d.register(ExtractExecutor())
     d.register(AssignExecutor())
     d.register(AssertionExecutor())
-    d.register(CallExecutor())
     return d

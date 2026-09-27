@@ -30,19 +30,6 @@ def server(
             dir_okay=False,
         ),
     ] = None,
-    # ========== 并发与队列 ==========
-    workers: Annotated[
-        int,
-        typer.Option("--workers", min=1, max=256, help="worker 进程数。", rich_help_panel="并发与队列"),
-    ] = 4,
-    max_concurrent: Annotated[
-        int,
-        typer.Option("--max-concurrent", min=1, max=10000, help="同时执行的任务上限。", rich_help_panel="并发与队列"),
-    ] = 10,
-    queue_size: Annotated[
-        int,
-        typer.Option("--queue-size", min=1, max=100000, help="任务队列容量。", rich_help_panel="并发与队列"),
-    ] = 100,
     # ========== 协议与认证 ==========
     mode: Annotated[
         ServerMode,
@@ -66,31 +53,15 @@ def server(
         typer.Option("--allow-origin", help="CORS 允许的 origin，可重复。", rich_help_panel="协议与认证"),
     ] = None,
     # ========== 集群与可观测 ==========
-    register_to: Annotated[
-        str | None,
-        typer.Option("--register-to", help="注册到调度中心地址。", rich_help_panel="集群与可观测"),
-    ] = None,
-    heartbeat_interval: Annotated[
-        int,
-        typer.Option("--heartbeat-interval", min=1, max=3600, help="心跳间隔（秒）。", rich_help_panel="集群与可观测"),
-    ] = 30,
     health_port: Annotated[
         int | None,
         typer.Option("--health-port", min=1, max=65535, help="健康检查独立端口。", rich_help_panel="集群与可观测"),
-    ] = None,
-    metrics_port: Annotated[
-        int | None,
-        typer.Option("--metrics-port", min=1, max=65535, help="Prometheus metrics 端口。", rich_help_panel="集群与可观测"),
     ] = None,
     # ========== 生命周期 ==========
     graceful_timeout: Annotated[
         int,
         typer.Option("--graceful-timeout", min=0, max=3600, help="优雅关闭等待时间（秒）。", rich_help_panel="生命周期"),
     ] = 30,
-    pidfile: Annotated[
-        str | None,
-        typer.Option("--pidfile", help="PID 文件路径，systemd 友好。", rich_help_panel="生命周期", dir_okay=False),
-    ] = None,
 ) -> None:
     """Typer 命令：构造 ServerConfig 后阻塞调用 start_server 启动常驻服务，Ctrl-C 触发优雅关闭。"""
     """作为服务监听端口，接收任务并执行。
@@ -98,9 +69,9 @@ def server(
     [bold]示例：[/bold]
 
       gimbal run server --port=8765
-      gimbal run server --host=0.0.0.0 --workers=8 --max-concurrent=20
-      gimbal run server --health-port=8080 --metrics-port=9090
-      gimbal run server --register-to=https://scheduler --auth=token --token-file=/etc/gimbal/token
+      gimbal run server --host=0.0.0.0
+      gimbal run server --health-port=8080
+      gimbal run server --auth=token --token-file=/etc/gimbal/token
     """
     cli_ctx: CLIContext = ctx.obj
 
@@ -111,19 +82,12 @@ def server(
         host=host,
         port=port,
         unix_socket=unix_socket,
-        workers=workers,
-        max_concurrent=max_concurrent,
-        queue_size=queue_size,
         mode=mode.value,
         auth=auth.value,
         token_file=token_file,
         allow_origins=allow_origin or [],
-        register_to=register_to,
-        heartbeat_interval=heartbeat_interval,
         health_port=health_port,
-        metrics_port=metrics_port,
         graceful_timeout=graceful_timeout,
-        pidfile=pidfile,
     )
 
     try:

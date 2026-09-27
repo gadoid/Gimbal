@@ -176,7 +176,7 @@ def self_check(ctx: typer.Context) -> None:
                      True, f"count={len(event_types)}")
 
         # ── C. 注册 3 个 hook（用 HookPoint 枚举，与 EventType 对称）──
-        for point in (HookPoint.HTTP_BEFORE_SEND, HookPoint.HTTP_AFTER_RECV, HookPoint.STEP_START):
+        for point in (HookPoint.CALL_BEFORE_SEND, HookPoint.CALL_AFTER_RECV, HookPoint.STEP_START):
             hook_registry.register(point, _make_hook(sc_ctx, point.value), priority=10,
                                    plugin_name=OWNER,
                                    description="self_check: trace")
@@ -194,9 +194,9 @@ def self_check(ctx: typer.Context) -> None:
                      any(ev_type == "RUN_START" for ev_type, _ in sc_ctx.events_received))
 
         # ── F. 试触发一个 hook，验证 handler 被调用 ──
-        hook_registry.trigger(HookPoint.HTTP_BEFORE_SEND, {"url": "http://self-check", "headers": {}})
+        hook_registry.trigger(HookPoint.CALL_BEFORE_SEND, {"protocol": "http", "request": {}})
         sc_ctx.check("hook trigger works",
-                     any(point == "http.before_send" for point, _ in sc_ctx.hooks_invoked))
+                     any(point == "call.before_send" for point, _ in sc_ctx.hooks_invoked))
 
     finally:
         # 1. 显式清理 OWNER 名下的所有订阅 / hook（精确路径）

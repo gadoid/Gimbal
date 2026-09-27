@@ -79,8 +79,9 @@ class TestExportGimbalFunctional:
         step = exporter.to_gimbal_step(case)
         assert step["kind"] == "step"
         assert step["description"] == "first case"
-        assert step["api"]["service"] == "settlement"
-        assert step["api"]["method"] == "POST"
+        assert step["call"]["protocol"] == "http"   # v2.1 批次 F：call 形态
+        assert step["call"]["service"] == "settlement"
+        assert step["call"]["method"] == "POST"
         assert step["request"]["kind"] == "request"
         # model 退役:body 原样(插值后)透传
         assert step["request"]["body"]["order_id"] == "o-1"
@@ -161,9 +162,9 @@ class TestGimbalScenarioExporter:
         sc = _load_scenario()
         d = GimbalScenarioExporter(sc).to_dict()
         s0 = d["steps"][0]
-        assert s0["api"]["method"] == "POST"
-        assert s0["api"]["path"] == "/api/order/orderEntrust/orderAdd"
-        assert "Authorization" in s0["api"]["headers"]
+        assert s0["call"]["method"] == "POST"
+        assert s0["call"]["path"] == "/api/order/orderEntrust/orderAdd"
+        assert "Authorization" in s0["call"]["headers"]
 
     def test_request_body_passthrough(self) -> None:
         sc = _load_scenario()
@@ -201,4 +202,4 @@ class TestGimbalScenarioExporter:
             assert "field_states" not in s
         # 其余 step 键不受累(api/request/strategy 照旧)
         s0 = d["steps"][0]
-        assert {"kind", "api", "request", "strategy"} <= set(s0.keys())
+        assert {"kind", "call", "request", "strategy"} <= set(s0.keys())

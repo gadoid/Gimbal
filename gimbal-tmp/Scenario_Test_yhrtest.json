@@ -42,20 +42,9 @@
     {
       "kind": "step",
       "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "yhr-test-service",
-        "method": "GET",
-        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
-        "headers": {
-          "Cookie": "${auth.yhxjsx.token}",
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        "timeout": 30
-      },
       "request": {
-          "kind": "request",
-          "body": {          
+        "kind": "request",
+        "body": {
           "page": 1,
           "port": "",
           "wd": "",
@@ -136,24 +125,38 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
-        }, {
+        },
+        {
           "kind": "extract",
           "name": "extract_response_body",
           "phase": "after_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.list[0]",
+          "expression": "$.call.response.body.list[0]",
           "target": "response_body",
           "required": true,
           "default": null,
           "scope": "scenario"
         }
-      ]
-    }]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      }
+    }
+  ]
 }

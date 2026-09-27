@@ -10,6 +10,7 @@ from gimbal.cli.commands.run_match import match
 from gimbal.cli.commands.run_server import server
 from gimbal.cli.commands.run_launch import launch
 from gimbal.cli.commands.run_show import show
+from gimbal.cli.commands.run_target import scenario, suite
 
 
 run_app = typer.Typer(
@@ -31,3 +32,5 @@ run_app.command("match")(match)
 run_app.command("server")(server)
 run_app.command("launch")(launch)
 run_app.command("show")(show)
+run_app.command("scenario")(scenario)   # v2.1 批次 B：隐式 aggregate Plan 单路径
+run_app.command("suite")(suite)         # v2.1 批次 B：aggregate Plan（并行策略生效）

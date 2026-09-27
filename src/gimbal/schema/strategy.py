@@ -28,8 +28,15 @@ class AssertOperator(str, Enum):
     # MATCHES = "matches"
 
 class StrategyPhase(str, Enum):
-    BEFORE_REQUEST = "before_request"   # SQL 注入数据、Assign 准备入参
-    AFTER_REQUEST = "after_request"     # Extract 提取字段
+    """策略执行阶段（与 StepState 执行阶段一一对应，协议无关）。
+
+    协议中立化（2026-09-27）：新增中立名别名（PREPARE/EXTRACTING），
+    历史 value 全部不变 —— 存量场景 JSON / plate 导出零迁移。
+    """
+    PREPARE = "before_request"          # SQL 注入数据、Assign 准备入参
+    BEFORE_REQUEST = PREPARE            # 历史名（别名）
+    EXTRACTING = "after_request"        # Extract 提取字段
+    AFTER_REQUEST = EXTRACTING          # 历史名（别名）
     VERIFYING = "verifying"             # Assertion、DBChecker
     TEARDOWN = "teardown"               # SQL 清理、Chaos 恢复
 

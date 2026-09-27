@@ -93,13 +93,13 @@ def build_argv(
 ) -> list[str]:
     """组装 ``gimbal run launch`` 命令行。
 
-    * ``-o json`` — stdout 输出机器可读 RunResult
-      (引擎 console sink 走 stderr,stdout 不受日志污染)。
+    * ``-o jsonl`` — stdout 逐行事件流,末行 run.finished 携带判定
+      (v2.1 F-2c 迁移切换;parse_run_result 双读,旧 `-o json` 输出仍兼容)。
     * ``--step-to`` — 0-based 含端点,与平台 RunRequest.stepTo 同语义,
       直接透传引擎 RuntimeControl.halt_at。
     * ``--report-dir`` — 引擎原生报告目录(逐 case 隔离,防并发互踩)。
     """
-    argv = [*_base_argv(), "run", "launch", str(case_path), "-o", "json"]
+    argv = [*_base_argv(), "run", "launch", str(case_path), "-o", "jsonl"]
     if step_to is not None:
         argv += ["--step-to", str(step_to)]
     if report_dir is not None:
@@ -108,19 +108,52 @@ def build_argv(
 
 
 # ─── stdout parsing ───────────────────────────────────────────────
-def parse_run_result(stdout: str) -> dict[str, Any] | None:
-    """解析 ``-o json`` 的 stdout 为计数 dict;失败返回 None。
+def _parse_run_finished_line(lines: list[str]) -> dict[str, Any] | None:
+    """v2.1 批次 F-2c 双读①:jsonl 流末行 run.finished(v2 E2 契约)。
 
-    引擎 typer.echo 把 JSON 写在 stdout 末尾;正常情况 stdout 就是
-    单个 JSON 对象。防御性策略:整段解析失败时,从每个行首 ``{`` 起
-    尝试后缀解析(兼容 stdout 前部混入噪声行的情况),取最后一个能
-    解析出 ``exit_code`` 键的对象。
+    从 stdout 尾部向上找第一条含 ``"event_type": "run.finished"`` 的
+    JSON 行。找到则提取与旧终态 JSON 同键的计数 dict(平台零改动消费)。
+    """
+    for line in reversed(lines[-10:]):   # 只看末尾 10 行,避免整流扫描
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("event_type") == "run.finished":
+            return {
+                "exit_code": int(data.get("exit_code") or 0),
+                "total": int(data.get("total") or 0),
+                "passed": int(data.get("passed") or 0),
+                "failed": int(data.get("failed") or 0),
+                "skipped": int(data.get("skipped") or 0),
+                "details": [d for d in (data.get("details") or []) if isinstance(d, dict)],
+            }
+    return None
+
+
+def parse_run_result(stdout: str) -> dict[str, Any] | None:
+    """解析 gimbal stdout 为计数 dict;失败返回 None。双读(v2.1 §4.1):
+
+    ① **jsonl 事件流末行 run.finished**(``-o jsonl``,v2 E2 契约)——
+       平台批次 6 切换的目标形态,优先识别;
+    ② **旧终态 JSON**(``-o json``,现状)——整段或后缀解析,取最后一个
+       含 ``exit_code`` 键的对象(兼容 stdout 前部混入噪声行)。
     """
     text = stdout.strip()
     if not text:
         return None
-    candidates: list[str] = [text]
     lines = text.splitlines()
+
+    # ① jsonl 末行 run.finished
+    finished = _parse_run_finished_line(lines)
+    if finished is not None:
+        return finished
+
+    # ② 旧终态 JSON 后缀解析
+    candidates: list[str] = [text]
     for i, line in enumerate(lines):
         if line.strip() == "{":
             candidates.append("\n".join(lines[i:]))

@@ -44,17 +44,6 @@
       "kind": "step",
       "stepNo": 1,
       "description": "查询[订单号/提单号]wd=YHD20260709034960",
-      "api": {
-        "kind": "api",
-        "service": "yhr-test-service",
-        "method": "GET",
-        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
-        "headers": {
-          "Cookie": "${auth.yhxjsx.token}",
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -138,7 +127,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[订单号/提单号]wd=YHD20260709034960 应返回200",
@@ -151,7 +140,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_no",
+          "target": "$.call.response.body.list[*].order_no",
           "operator": "contains",
           "expected": "YHD20260709034960",
           "message": "响应order_no应包含 YHD20260709034960",
@@ -164,20 +153,16 @@
           "order": 2,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].bl_no",
+          "target": "$.call.response.body.list[*].bl_no",
           "operator": "contains",
           "expected": "YHD20260709034960",
           "message": "响应bl_no应包含 YHD20260709034960",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 2,
-      "description": "查询[客户单号]work_no=GF50262800099",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -186,7 +171,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 2,
+      "description": "查询[客户单号]work_no=GF50262800099",
       "request": {
         "kind": "request",
         "body": {
@@ -270,7 +260,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[客户单号]work_no=GF50262800099 应返回200",
@@ -283,20 +273,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].work_no",
+          "target": "$.call.response.body.list[*].work_no",
           "operator": "contains",
           "expected": "GF50262800099",
           "message": "响应work_no应包含 GF50262800099",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 3,
-      "description": "查询[实际客户名称]order_customer_real=山东佳农国际贸易有限公司",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -305,7 +291,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 3,
+      "description": "查询[实际客户名称]order_customer_real=山东佳农国际贸易有限公司",
       "request": {
         "kind": "request",
         "body": {
@@ -389,7 +380,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[实际客户名称]order_customer_real=山东佳农国际贸易有限公司 应返回200",
@@ -402,20 +393,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_customer_real",
+          "target": "$.call.response.body.list[*].order_customer_real",
           "operator": "contains",
           "expected": "山东佳农国际贸易有限公司",
           "message": "响应order_customer_real应包含 山东佳农国际贸易有限公司",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 4,
-      "description": "查询[供应商名称]booking_agent_bp=青岛经汉物流服务有限公司",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -424,7 +411,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 4,
+      "description": "查询[供应商名称]booking_agent_bp=青岛经汉物流服务有限公司",
       "request": {
         "kind": "request",
         "body": {
@@ -508,7 +500,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[供应商名称]booking_agent_bp=青岛经汉物流服务有限公司 应返回200",
@@ -521,20 +513,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].booking_agent_bp",
+          "target": "$.call.response.body.list[*].booking_agent_bp",
           "operator": "contains",
           "expected": "青岛经汉物流服务有限公司",
           "message": "响应booking_agent_bp应包含 青岛经汉物流服务有限公司",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 5,
-      "description": "查询[实际供应商名称]booking_agent_bp_real=青岛经汉物流服务有限公司",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -543,7 +531,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 5,
+      "description": "查询[实际供应商名称]booking_agent_bp_real=青岛经汉物流服务有限公司",
       "request": {
         "kind": "request",
         "body": {
@@ -627,7 +620,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[实际供应商名称]booking_agent_bp_real=青岛经汉物流服务有限公司 应返回200",
@@ -640,20 +633,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].booking_agent_bp_real",
+          "target": "$.call.response.body.list[*].booking_agent_bp_real",
           "operator": "contains",
           "expected": "青岛经汉物流服务有限公司",
           "message": "响应booking_agent_bp_real应包含 青岛经汉物流服务有限公司",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 6,
-      "description": "查询[业务订单号]order_business_no=YWDD20260709108277",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -662,7 +651,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 6,
+      "description": "查询[业务订单号]order_business_no=YWDD20260709108277",
       "request": {
         "kind": "request",
         "body": {
@@ -746,7 +740,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[业务订单号]order_business_no=YWDD20260709108277 应返回200",
@@ -759,20 +753,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_business_no",
+          "target": "$.call.response.body.list[*].order_business_no",
           "operator": "contains",
           "expected": "YWDD20260709108277",
           "message": "响应order_business_no应包含 YWDD20260709108277",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 7,
-      "description": "查询[承运人]ship_company=CMA",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -781,7 +771,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 7,
+      "description": "查询[承运人]ship_company=CMA",
       "request": {
         "kind": "request",
         "body": {
@@ -865,7 +860,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[承运人]ship_company=CMA 应返回200",
@@ -878,20 +873,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].schedule_carrier",
+          "target": "$.call.response.body.list[*].schedule_carrier",
           "operator": "contains",
           "expected": "CMA",
           "message": "响应schedule_carrier应包含 CMA",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 8,
-      "description": "查询[直客拓展]sale=王欣宇",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -900,7 +891,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 8,
+      "description": "查询[直客拓展]sale=王欣宇",
       "request": {
         "kind": "request",
         "body": {
@@ -984,7 +980,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[直客拓展]sale=王欣宇 应返回200",
@@ -997,20 +993,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_opt_sales",
+          "target": "$.call.response.body.list[*].order_opt_sales",
           "operator": "contains",
           "expected": "王欣宇",
           "message": "响应order_opt_sales应包含 王欣宇",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 9,
-      "description": "查询[销售运营]client=李明丹tidb",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1019,7 +1011,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 9,
+      "description": "查询[销售运营]client=李明丹tidb",
       "request": {
         "kind": "request",
         "body": {
@@ -1103,7 +1100,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[销售运营]client=李明丹tidb 应返回200",
@@ -1116,20 +1113,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_opt_client",
+          "target": "$.call.response.body.list[*].order_opt_client",
           "operator": "contains",
           "expected": "李明丹tidb",
           "message": "响应order_opt_client应包含 李明丹tidb",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 10,
-      "description": "查询[操作人]operator=宋为",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1138,7 +1131,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 10,
+      "description": "查询[操作人]operator=宋为",
       "request": {
         "kind": "request",
         "body": {
@@ -1222,7 +1220,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[操作人]operator=宋为 应返回200",
@@ -1235,20 +1233,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_opt_operation",
+          "target": "$.call.response.body.list[*].order_opt_operation",
           "operator": "contains",
           "expected": "宋为",
           "message": "响应order_opt_operation应包含 宋为",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 11,
-      "description": "查询[服务类型]service_types=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1257,7 +1251,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 11,
+      "description": "查询[服务类型]service_types=1",
       "request": {
         "kind": "request",
         "body": {
@@ -1342,7 +1341,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[服务类型]service_types=1 应返回200",
@@ -1355,20 +1354,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_service_types",
+          "target": "$.call.response.body.list[*].order_service_types",
           "operator": "contains",
           "expected": "订舱",
           "message": "响应order_service_types应包含 订舱",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 12,
-      "description": "查询[订单备注]order_remarks=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1377,7 +1372,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 12,
+      "description": "查询[订单备注]order_remarks=1",
       "request": {
         "kind": "request",
         "body": {
@@ -1461,7 +1461,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[订单备注]order_remarks=1 应返回200",
@@ -1474,20 +1474,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_remarks",
+          "target": "$.call.response.body.list[*].order_remarks",
           "operator": "contains",
           "expected": "结算业务",
           "message": "响应order_remarks应包含 结算业务",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 13,
-      "description": "查询[应付日期]search_time[charge_pay_date]=2026-09-20",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1496,7 +1492,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 13,
+      "description": "查询[应付日期]search_time[charge_pay_date]=2026-09-20",
       "request": {
         "kind": "request",
         "body": {
@@ -1580,7 +1581,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[应付日期]search_time[charge_pay_date]=2026-09-20 应返回200",
@@ -1593,20 +1594,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].charge_pay_date",
+          "target": "$.call.response.body.list[*].charge_pay_date",
           "operator": "contains",
           "expected": "2026-09-20",
           "message": "响应charge_pay_date应包含 2026-09-20",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 14,
-      "description": "查询[应收日期]search_time[charge_rec_date]=2026-11-03",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1615,7 +1612,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 14,
+      "description": "查询[应收日期]search_time[charge_rec_date]=2026-11-03",
       "request": {
         "kind": "request",
         "body": {
@@ -1699,7 +1701,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[应收日期]search_time[charge_rec_date]=2026-11-03 应返回200",
@@ -1712,20 +1714,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].charge_rec_date",
+          "target": "$.call.response.body.list[*].charge_rec_date",
           "operator": "contains",
           "expected": "2026-11-03",
           "message": "响应charge_rec_date应包含 2026-11-03",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 15,
-      "description": "查询[退关状态]order_terminated_shutout_status=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1734,7 +1732,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 15,
+      "description": "查询[退关状态]order_terminated_shutout_status=1",
       "request": {
         "kind": "request",
         "body": {
@@ -1818,7 +1821,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[退关状态]order_terminated_shutout_status=1 应返回200",
@@ -1831,20 +1834,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].order_terminated_shutout_status",
+          "target": "$.call.response.body.list[*].order_terminated_shutout_status",
           "operator": "contains",
           "expected": "1",
           "message": "响应order_terminated_shutout_status应包含 1",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 16,
-      "description": "查询[开航状态]delivery_status=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1853,7 +1852,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 16,
+      "description": "查询[开航状态]delivery_status=1",
       "request": {
         "kind": "request",
         "body": {
@@ -1937,7 +1941,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[开航状态]delivery_status=1 应返回200",
@@ -1950,20 +1954,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].delivery_status",
+          "target": "$.call.response.body.list[*].delivery_status",
           "operator": "exists",
           "expected": true,
           "message": "响应delivery_status字段应存在",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 17,
-      "description": "查询[资产校验]asset_verify_status=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -1972,7 +1972,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 17,
+      "description": "查询[资产校验]asset_verify_status=1",
       "request": {
         "kind": "request",
         "body": {
@@ -2056,7 +2061,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[资产校验]asset_verify_status=1 应返回200",
@@ -2069,20 +2074,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].asset_verify_status",
+          "target": "$.call.response.body.list[*].asset_verify_status",
           "operator": "exists",
           "expected": true,
           "message": "响应asset_verify_status字段应存在",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 18,
-      "description": "查询[倒找业务]is_backtrack=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -2091,7 +2092,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 18,
+      "description": "查询[倒找业务]is_backtrack=1",
       "request": {
         "kind": "request",
         "body": {
@@ -2175,7 +2181,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[倒找业务]is_backtrack=1 应返回200",
@@ -2188,20 +2194,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].is_backtrack",
+          "target": "$.call.response.body.list[*].is_backtrack",
           "operator": "exists",
           "expected": true,
           "message": "响应is_backtrack字段应存在",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 19,
-      "description": "查询[是否超融]is_exceed=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -2210,7 +2212,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 19,
+      "description": "查询[是否超融]is_exceed=1",
       "request": {
         "kind": "request",
         "body": {
@@ -2294,7 +2301,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[是否超融]is_exceed=1 应返回200",
@@ -2307,20 +2314,16 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].is_exceed",
+          "target": "$.call.response.body.list[*].is_exceed",
           "operator": "exists",
           "expected": true,
           "message": "响应is_exceed字段应存在",
           "soft": true
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "stepNo": 20,
-      "description": "查询[超融回购]need_buy_back=1",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "yhr-test-service",
         "method": "GET",
         "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
@@ -2329,7 +2332,12 @@
           "Content-Type": "application/x-www-form-urlencoded"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "stepNo": 20,
+      "description": "查询[超融回购]need_buy_back=1",
       "request": {
         "kind": "request",
         "body": {
@@ -2413,7 +2421,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询[超融回购]need_buy_back=1 应返回200",
@@ -2426,13 +2434,25 @@
           "order": 1,
           "enabled": true,
           "onFailure": "continue",
-          "target": "$.response_body.list[*].need_buy_back",
+          "target": "$.call.response.body.list[*].need_buy_back",
           "operator": "exists",
           "expected": true,
           "message": "响应need_buy_back字段应存在",
           "soft": true
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

@@ -45,23 +45,6 @@
     {
       "kind": "step",
       "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -172,19 +155,16 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -199,7 +179,11 @@
           "Sec-Fetch-Dest": "empty"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb",
       "request": {
         "kind": "request",
         "body": {
@@ -310,22 +294,19 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderPage",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -337,7 +318,11 @@
           "Sec-Fetch-Dest": "empty"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): order_id",
       "request": {
         "kind": "request",
         "body": {
@@ -356,7 +341,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderPage 应返回200",
@@ -369,22 +354,19 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_id",
+          "expression": "$.call.response.body.data.data[0].order_id",
           "target": "order_id",
           "required": true,
           "default": null,
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id, order_no, order_supplier_id",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/order/orderPage",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -396,7 +378,11 @@
           "Sec-Fetch-Dest": "empty"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): order_id, order_no, order_supplier_id",
       "request": {
         "kind": "request",
         "body": {
@@ -411,7 +397,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
@@ -424,7 +410,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.supplier[0].order_supplier_id",
+          "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
           "target": "order_supplier_id",
           "required": true,
           "default": null,
@@ -437,7 +423,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_id",
+          "expression": "$.call.response.body.data.order_id",
           "target": "order_id_2",
           "required": true,
           "default": null,
@@ -450,7 +436,7 @@
           "order": 2,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_no",
+          "expression": "$.call.response.body.data.order_no",
           "target": "order_no",
           "required": true,
           "default": null,
@@ -464,19 +450,16 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderAdd",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -488,7 +471,11 @@
           "Sec-Fetch-Dest": "empty"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb",
       "request": {
         "kind": "request",
         "body": {
@@ -777,7 +764,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderAdd 应返回200",
@@ -791,7 +778,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -802,7 +789,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id_2",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -813,7 +800,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id_2",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -824,10 +811,28 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderAdd",
+        "headers": {
+          "sec-ch-ua-platform": "\"Windows\"",
+          "Authorization": "${auth.codfish.token}",
+          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+          "Content-Type": "application/json;charset=UTF-8",
+          "sec-ch-ua-mobile": "?0",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

@@ -173,16 +173,24 @@ def launch(
     # ========== 步骤级控制（阶段 1 最小子集）==========
     step_from: Annotated[
         int | None,
-        typer.Option("--step-from", help="从指定 step 开始执行（阶段 2 引入 StepResolver 后生效；当前仅提示警告）。", rich_help_panel="步骤控制"),
+        typer.Option("--step-from", help="从指定 step 开始执行（0-based，区间外跳过；v2.1 批次 E 生效）。", rich_help_panel="步骤控制"),
     ] = None,
     step_to: Annotated[
         int | None,
         typer.Option("--step-to", help="执行到指定 step 停止（0-based）。", rich_help_panel="步骤控制"),
     ] = None,
     breakpoint_at: Annotated[
-        list[int] | None,
-        typer.Option("--breakpoint", help="在指定 step 暂停（暂以首个为准；交互模式在阶段 2 完整支持）。", rich_help_panel="步骤控制"),
+        list[str] | None,
+        typer.Option("--breakpoint", help="step 暂停：纯数字=halt_at（历史语义）；地址形式 'step-001:call_before' = debugger 断点（v2.1 批次 E）。", rich_help_panel="步骤控制"),
     ] = None,
+    debug: Annotated[
+        bool,
+        typer.Option("--debug", help="装载 debugger（仅单单元且 n_runs=1；批次 E）", rich_help_panel="调试"),
+    ] = False,
+    pause: Annotated[
+        str,
+        typer.Option("--pause", help="暂停策略: none | on_failure | every_step", rich_help_panel="调试"),
+    ] = "on_failure",
     dry_run: DryRunOpt = False,
     plugins : PluginsOpt = [],
     # ========== 报告与输出 ==========
@@ -218,7 +226,7 @@ def launch(
 
     # 1. 将传入参数 注入到 ctx上下文中
     cli_ctx : CLIContext = ctx.obj
-    # cli_ctx.extras["fail_fast"] = fail_fast
+    cli_ctx.extras["fail_fast"] = fail_fast   # v2.1 批次 F：接线（loader bool_fields 已支持）
     # cli_ctx.extras["report_dir"] = report_dir
     # cli_ctx.extras["env"] = env
     # cli_ctx.extras["mode"] = mode
@@ -250,39 +258,95 @@ def launch(
         raise typer.Exit(code=0)
 
     #7. schema + 资产有效性检查，对数据类进行格式检查，对资产进行有效性检查
+    #    按 kind 分派：suite 走 Engine._run_suite（支持 execution.parallel 并行分派），
+    #    scenario 走单场景路径；runtime_control 仅对 scenario 有意义。
+    from pydantic import TypeAdapter
+    from gimbal.schema.scenario import RunUnion
     try:
-        scenario = Scenario.model_validate(payload)
+        target = TypeAdapter(RunUnion).validate_python(payload)
     except Exception as exc:
         typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
+    scenario = target
+
+    # 7.4 断点入参分流：纯数字 = halt_at（历史语义）；含 ':' 的地址 = debugger 断点
+    halt_breakpoints: list[int] = []
+    debug_breakpoints: list[str] = []
+    for bp in (breakpoint_at or []):
+        as_str = str(bp)
+        if ":" in as_str:
+            debug_breakpoints.append(as_str)
+        else:
+            try:
+                halt_breakpoints.append(int(as_str))
+            except ValueError:
+                typer.secho(f"无法解析 --breakpoint={bp!r}", fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+    breakpoint_at = halt_breakpoints or None
 
     # 7.5 构造 RuntimeControl（与 run_scenario 同一套优先级）
     from gimbal.core.scenario_runner import RuntimeControl
 
     runtime_control: RuntimeControl | None = None
-    if step_to is not None:
+    if step_to is not None or step_from is not None or (breakpoint_at and breakpoint_at):
         runtime_control = RuntimeControl(
-            halt_at=step_to,
-            halt_reason=f"cli --step-to={step_to}",
+            halt_at=step_to if step_to is not None else (
+                breakpoint_at[0] if breakpoint_at else None),
+            halt_reason=(
+                f"cli --step-to={step_to}" if step_to is not None
+                else (f"cli --breakpoint={breakpoint_at[0]}" if breakpoint_at else "user-requested")
+            ),
+            step_from=step_from,
         )
-    elif breakpoint_at is not None and breakpoint_at:
-        runtime_control = RuntimeControl(
-            halt_at=breakpoint_at[0],
-            halt_reason=f"cli --breakpoint={breakpoint_at[0]}",
+    # v2.1 批次 E：step_from 生效（区间外 step 跳过，所需输入由 vars/inputs 提供）
+
+    # 7.6 debugger 装载（v2.1 批次 E）：仅单单元且 n_runs=1；调试挂起不计超时
+    debugger = None
+    if debug:
+        from gimbal.schema.scenario import SuiteGraph as _Graph
+        unit_count = 1
+        if isinstance(scenario, _Graph):
+            unit_count = len(scenario.units) + len(scenario.before) + len(scenario.after)
+        if unit_count != 1:
+            typer.secho(
+                f"--debug 仅支持单单元目标（当前 {unit_count} 个）；suite 级调试明确不做",
+                fg=typer.colors.RED, err=True,
+            )
+            shutdown(configuration)
+            raise typer.Exit(code=2)
+        from gimbal.core.debugger import DebuggerPlugin
+        debugger = DebuggerPlugin(
+            pause=pause,
+            breakpoints=debug_breakpoints,
+            event_bus=configuration.event_bus,
         )
-    if step_from is not None:
-        # 当前 ScenarioRunner 未实现 step_from；显示警告，不静默吞掉
-        typer.secho(
-            f"[warn] --step-from={step_from} 当前版本暂未生效（将在阶段 2 引入 StepResolver 后支持）。\n"
-            f"       当前阶段 1 仅支持 --step-to 与 --breakpoint。",
-            fg=typer.colors.YELLOW, err=True,
-        )
+        debugger.activate(configuration.hook_registry)
+        # 引擎让步：调试档位下挂起不计超时（并入 runtime_control）
+        from gimbal.core.scenario_runner import RuntimeControl as _RC
+        if runtime_control is None:
+            runtime_control = _RC(debug_mode=True)
+        else:
+            runtime_control.debug_mode = True
+
+    # 7.7 jsonl 事件流（v2.1 批次 F-2c）：订阅全部事件逐行打 stdout，
+    #     终线 run.finished 由 _print_run_report 在 engine.run 返回后打印
+    jsonl_sub = None
+    if output == OutputFormat.jsonl:
+        from gimbal.cli.common import attach_jsonl_sink
+        jsonl_sub = attach_jsonl_sink(configuration.event_bus)
 
     #8. 数据类有效，执行器启动
     engine = Engine(configuration)
     try:
         result = engine.run(scenario, runtime_control=runtime_control)
     finally:
+        if debugger is not None:
+            debugger.deactivate(configuration.hook_registry)
+        if jsonl_sub is not None:
+            try:
+                configuration.event_bus.unsubscribe(jsonl_sub)
+            except Exception:  # noqa: BLE001
+                pass
         # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)

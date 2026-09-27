@@ -8,7 +8,10 @@
     "priority": 1,
     "author": "codfish",
     "owner": "codfish",
-    "tags": ["smoke", "settlement"],
+    "tags": [
+      "smoke",
+      "settlement"
+    ],
     "version": "1.0.0",
     "createTime": "2026-06-23T10:00:00",
     "expire": false,
@@ -30,7 +33,9 @@
         "token_type": "Authorization"
       }
     },
-    "timePolicy": { "kind": "record" },
+    "timePolicy": {
+      "kind": "record"
+    },
     "retry": null,
     "vars": {
       "bl_no": {
@@ -51,17 +56,6 @@
     {
       "kind": "step",
       "description": "校验新建委托订舱单（验价）",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "Authorization": "${auth.codfish.token}",
-          "Content-Type": "application/json;charset=UTF-8"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -91,7 +85,9 @@
           "deposit_type_name": "有",
           "period_delay_type": "1",
           "period_delay_type_name": "延长",
-          "service_items": ["booking_space"],
+          "service_items": [
+            "booking_space"
+          ],
           "business_type": "1",
           "trade_term": "CIF",
           "carrier": "COSCO",
@@ -179,13 +175,25 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

@@ -79,6 +79,7 @@ const scenarioCache = new Map<string, Scenario>()
 import { computed, onMounted, ref } from 'vue'
 import type { OpOut } from '@/api/adaptations'
 import { getScenario } from '@/api/scenario-composer'
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 
 const props = defineProps<{ op: OpOut }>()
 
@@ -125,7 +126,7 @@ const fragmentText = computed(() => {
   }
   const containers: Record<string, Record<string, unknown>> = {
     body: st.request?.body ?? {},
-    headers: st.api?.headers ?? {},
+    headers: stepHeaders(st) ?? {},
   }
   const field = fieldLabel.value
   const hit = Object.values(containers).find((c) => field in c)

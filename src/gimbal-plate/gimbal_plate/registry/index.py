@@ -39,7 +39,11 @@ class _Index:
         self.by_service.setdefault(ep.service, set()).add(ep.id)
         for tag in ep.metadata.tags:
             self.by_tag.setdefault(tag, set()).add(ep.id)
-        self.by_route[(ep.api.service, ep.api.method, ep.api.path)] = ep.id
+        # by-protocol 分派纪律（2026-09-27）：by_route 的 (service, method,
+        # path) 三元组是 http 协议自己的坐标形状，仅对 http 端点建索引；
+        # 非 http 协议端点将来各自定义 route 键（阶段 7 ApiSpec 变体）。
+        if getattr(ep.api, "is_http", True):
+            self.by_route[(ep.api.service, ep.api.method, ep.api.path)] = ep.id
 
     def remove(self, endpoint_id: str) -> EndpointSpec | None:
         ep = self.by_id.pop(endpoint_id, None)
@@ -48,7 +52,8 @@ class _Index:
         self.by_service.get(ep.service, set()).discard(endpoint_id)
         for tag in ep.metadata.tags:
             self.by_tag.get(tag, set()).discard(endpoint_id)
-        self.by_route.pop((ep.api.service, ep.api.method, ep.api.path), None)
+        if getattr(ep.api, "is_http", True):
+            self.by_route.pop((ep.api.service, ep.api.method, ep.api.path), None)
         return ep
 
     def clear(self) -> None:

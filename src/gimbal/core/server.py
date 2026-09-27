@@ -25,22 +25,18 @@ logger = get_logger(__name__)
 
 @dataclass
 class ServerConfig:
+    """v2.1 批次 F：舰队参数（workers/queue_size/register_to/heartbeat/
+    metrics_port/pidfile/max_concurrent）已删除——server 收窄为
+    单 run + 调试会话端点；舰队管理属否决项（总案 X 清单）。"""
     host: str = "127.0.0.1"
     port: int = 8766
     unix_socket: str | None = None
-    workers: int = 4
-    max_concurrent: int = 10
-    queue_size: int = 100
     mode: str = "http"
     auth: str = "none"
     token_file: str | None = None
     allow_origins: list[str] = field(default_factory=list)
-    register_to: str | None = None
-    heartbeat_interval: int = 30
     health_port: int | None = None
-    metrics_port: int | None = None
     graceful_timeout: int = 30
-    pidfile: str | None = None
 
 
 # ─── 请求/响应模型(模块级:FastAPI 签名解析不支持函数内局部类) ──
@@ -70,12 +66,37 @@ def _define_models() -> tuple[type, type]:
         details: list[dict] = Field(default_factory=list)
         runId: str = Field("", description="引擎生成的 run_id")
 
-    return RunRequest, RunResponse
+    class DebugSpec(BaseModel):
+        """POST /runs 的调试段（v2.1 批次 E）。"""
+        pause: str = Field("on_failure", description="none | on_failure | every_step")
+        breakpoints: list[str] = Field(default_factory=list, description="断点地址表")
+        wait_timeout: float | None = Field(None, description="暂停等待上限（秒），超时按 abort")
+
+    class RunsRequest(BaseModel):
+        """POST /runs：异步启动 run（立即返回 runId，可调试/订阅事件）。"""
+        target: dict = Field(..., description="Scenario/Suite/Graph dict（按 kind 分派）")
+        debug: DebugSpec | None = Field(None, description="调试装载（单单元且 n_runs=1）")
+        halt_at: int | None = Field(None)
+        step_from: int | None = Field(None)
+
+    class RunsCreated(BaseModel):
+        runId: str
+        debugEnabled: bool = False
+
+    class DebugCommandRequest(BaseModel):
+        command: str = Field(..., description="continue/step/retry/skip/abort/read")
+
+    class DebugCommandResponse(BaseModel):
+        accepted: bool
+        output: list[str] = Field(default_factory=list)
+
+    return (RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
+            DebugCommandRequest, DebugCommandResponse)
 
 
 _MODELS = _define_models()
-RunRequest = _MODELS[0]
-RunResponse = _MODELS[1]
+(RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
+ DebugCommandRequest, DebugCommandResponse) = _MODELS
 
 
 # ─── app 工厂 ─────────────────────────────────────────────────────
@@ -131,6 +152,12 @@ def create_app(cli_ctx: CLIContext) -> "FastAPI":
             details=result.details,
             runId="",
         )
+
+    # ── v2.1 批次 E：异步 run + 调试会话 + SSE（独立模块，同 app 挂载）──
+    from gimbal.core.server_debug import register_debug_endpoints
+    register_debug_endpoints(app, cli_ctx, (
+        RunsRequest, RunsCreated, DebugCommandRequest, DebugCommandResponse,
+    ))
 
     @app.get("/healthz")
     async def healthz() -> dict:

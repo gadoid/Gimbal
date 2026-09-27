@@ -125,5 +125,5 @@ class TestCaseExporterImportable:
         case = EndpointCase(name="baseline-case", parameters={"order_id": "x"})
         step_dict = exporter.to_gimbal_step(case)
         assert step_dict["kind"] == "step"
-        assert step_dict["api"]["path"] == "/baseline/sample"
+        assert step_dict["call"]["path"] == "/baseline/sample"
         assert step_dict["request"]["kind"] == "request"

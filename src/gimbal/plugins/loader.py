@@ -263,11 +263,15 @@ class PluginLoader:
         user_configs: Optional[dict[str, dict[str, Any]]] = None,
         plugin_registry: Optional[PluginRegistry] = None,
         auth_registry: Any = None,
+        dispatcher: Any = None,
+        protocol_registry: Any = None,
     ) -> list[Plugin]:
         """激活所有已加载的插件。
 
         user_configs: {plugin_name: {key: value}} 合并 default_config 后传给插件。
         plugin_registry: 框架级的 plugin registry（默认使用 loader 内部 registry）。
+        dispatcher / protocol_registry: 策略/协议注册通道（PluginContext 的
+        register_strategy / register_protocol 用；不传则插件无法注册这两类）。
 
         返回成功激活的插件列表（失败的已被跳过）。
         """
@@ -284,6 +288,8 @@ class PluginLoader:
                 hook_registry=hook_registry,
                 plugin_registry=registry,
                 auth_registry=auth_registry,
+                dispatcher=dispatcher,
+                protocol_registry=protocol_registry,
             )
             try:
                 plugin.activate(ctx)
@@ -352,7 +358,7 @@ class PluginLoader:
             except Exception as e:  # noqa: BLE001
                 errors.append(f"on_deactivate: {type(e).__name__}: {e}")
 
-            # 5b. event/hook 注册清理（即使 5a 失败也要尝试）
+            # 5b. event/hook/协议/策略注册清理（即使 5a 失败也要尝试）
             if plugin.ctx is not None:
                 try:
                     if plugin.ctx.event_bus is not None:
@@ -364,6 +370,20 @@ class PluginLoader:
                         plugin.ctx.hook_registry.unregister_plugin(plugin.name)
                 except Exception as e:  # noqa: BLE001
                     errors.append(f"unregister_hook: {type(e).__name__}: {e}")
+                # 协议执行器：按插件名批量注销（含 dispatcher kind 联动）
+                try:
+                    if plugin.ctx.protocol_registry is not None:
+                        plugin.ctx.protocol_registry.unregister_plugin(plugin.name)
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"unregister_protocol: {type(e).__name__}: {e}")
+                # 策略执行器：按本插件记账的 kind 逐个注销
+                try:
+                    if plugin.ctx.dispatcher is not None:
+                        for kind in list(plugin.ctx.registered_strategy_kinds):
+                            plugin.ctx.dispatcher.unregister(kind)
+                        plugin.ctx.registered_strategy_kinds.clear()
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"unregister_strategy: {type(e).__name__}: {e}")
 
             # 5c. 框架级 plugin registry 注销
             try:

@@ -48,9 +48,14 @@ class RuntimeControl:
         halt_reason:   halt 触发原因，写入标记 step 的 error 字段，便于日志/UI 区分。
                        默认 "user-requested"；CLI 通过 --step-to/--breakpoint 触发时使用默认；
                        编程式调用（如插件通过 EventBus 探测外部信号）应自定义 reason。
+        step_from:     0-based；跳过 [0, step_from) 的 step（v2.1 批次 E 生效；
+                       被跳过步骤所需输入由 inputs/--var 提供）。
+        debug_mode:    调试档位（引擎让步）：挂起等待不计 scenario 超时。
     """
     halt_at: Optional[int] = None
     halt_reason: str = "user-requested"
+    step_from: Optional[int] = None
+    debug_mode: bool = False
 
 
 # ── ScenarioRunResult ─────────────────────────────────────────────────────────
@@ -68,6 +73,14 @@ class ScenarioRunResult:
     # 触发 halt 的具体原因（来自 RuntimeControl.halt_reason），便于审计。
     # 仅在 halted=True 时有值。
     halt_reason: Optional[str] = None
+    # 单元输出（v2.1 批次 C）：scenario 作用域提升变量的快照
+    # （extract scope=SCENARIO 的目标等），调度器据此喂下游单元。
+    outputs: dict = field(default_factory=dict)
+    # 三种乘法（v2.1 批次 D）：
+    # run_index = n_runs 中的第几次（1-based；n_runs=1 恒为 1）
+    run_index: int = 1
+    # 每次 n_runs run 的简况 [{run, status, passed, retries}]；由调度器聚合写入
+    attempts: list = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -105,8 +118,10 @@ class StepRunner:
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
         services: Optional[dict] = None,
+        protocol_registry: Optional[Any] = None,
+        auth_registry: Optional[Any] = None,
     ) -> None:
-        """初始化 StepRunner，保存 strategy dispatcher、ctx_manager、service_base_url/services 以及可选的 hook_registry 与 event_bus。"""
+        """初始化 StepRunner，保存 strategy dispatcher、ctx_manager、service_base_url/services、可选的 hook_registry/event_bus/protocol_registry/auth_registry。"""
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
@@ -114,6 +129,10 @@ class StepRunner:
         self._services = services or {}
         self._hooks = hook_registry
         self._bus = event_bus
+        # 协议注册表（多协议分派）；None 时状态机兜底默认表（仅 http）
+        self._protocols = protocol_registry
+        # 认证注册表（v2.1 批次 D：auth_expired 单飞刷新通道）
+        self._auth_registry = auth_registry
         logger.debug("[StepRunner] 初始化: service_base_url={} services={}",
                      service_base_url, sorted(self._services))
 
@@ -159,6 +178,8 @@ class StepRunner:
             hook_registry=self._hooks,
             event_bus=self._bus,
             services=self._services,
+            protocol_registry=self._protocols,
+            auth_registry=self._auth_registry,
         )
         logger.debug("[StepRunner] StepStateMachine 构造完成: step_id={}", step_id)
 
@@ -198,12 +219,14 @@ class ScenarioRunner:
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
         auth_registry: Optional[Any] = None,
+        protocol_registry: Optional[Any] = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._hooks = hook_registry
         self._bus = event_bus
         self._auth_registry = auth_registry
+        self._protocols = protocol_registry
         logger.debug("[ScenarioRunner] 初始化完成")
 
     def run(
@@ -260,7 +283,7 @@ class ScenarioRunner:
         #    step_count 用"实际会执行的 step 数"（不含不可执行条目），
         #    reporter 拿到的数字与最终执行结果一致。
         executable_count = sum(
-            1 for s in resolved_steps if hasattr(s, "api")
+            1 for s in resolved_steps if getattr(s, "call", None) is not None
         )
         self._emit_scenario_start(scenario_schema, sid, executable_count)
 
@@ -272,6 +295,8 @@ class ScenarioRunner:
             hook_registry=self._hooks,
             event_bus=self._bus,
             services=services,
+            protocol_registry=self._protocols,
+            auth_registry=self._auth_registry,
         )
 
         step_results: list[StepRunResult] = []
@@ -336,8 +361,16 @@ class ScenarioRunner:
                     status="halted",
                 )
                 break
-            # 修复 B3：检查 scenario timeout
-            if cfg_timeout is not None:
+            # v2.1 批次 E：step_from —— 区间外（idx < step_from）的 step 跳过
+            if runtime_control is not None and runtime_control.step_from is not None                     and idx < runtime_control.step_from:
+                logger.debug("[ScenarioRunner] step[{}] < step_from={}，跳过",
+                             idx, runtime_control.step_from)
+                continue
+
+            # 修复 B3：检查 scenario timeout（debug_mode 豁免：挂起等待不计超时）
+            if cfg_timeout is not None and not (
+                runtime_control is not None and runtime_control.debug_mode
+            ):
                 elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
                 if elapsed > cfg_timeout:
                     logger.warning(
@@ -365,8 +398,8 @@ class ScenarioRunner:
                 overall_status = "error"
                 break
 
-            if not hasattr(step_union, "api"):
-                logger.warning("[ScenarioRunner] step[{}] 缺少 api 字段，跳过", idx)
+            if getattr(step_union, "call", None) is None:
+                logger.warning("[ScenarioRunner] step[{}] 缺少 call 声明，跳过", idx)
                 continue
 
             logger.debug(
@@ -374,21 +407,61 @@ class ScenarioRunner:
                 idx + 1, len(resolved_steps), sid,
             )
             result = step_runner.run(step_union, scenario_ctx, idx)
-            step_results.append(result)
 
+            if not result.passed:
+                # 拦截决策点 STEP_FAILED（批次 E）：CONTINUE（记失败中断，默认）/
+                # RETRY（整步重跑，人工=human 标 repaired）/ SKIP（跳过本步继续）/
+                # ABORT（中断）
+                from gimbal.core.decisions import ask_decision
+                from gimbal.core.hooks import HookPoint
+                decision = ask_decision(self._hooks, HookPoint.STEP_FAILED, {
+                    "step_id": result.step_id,
+                    "result": result,
+                    "ctx": scenario_ctx,
+                })
+                if decision.action == "retry":
+                    logger.info(
+                        "[ScenarioRunner] STEP_FAILED 决策 retry：整步重跑 step_id={}（source={}）",
+                        result.step_id, decision.source,
+                    )
+                    rerun = step_runner.run(step_union, scenario_ctx, idx)
+                    if rerun.passed and decision.is_human:
+                        rerun.repaired = True   # 人工修复标记（extract→promote 幂等覆盖）
+                    result = rerun
+                elif decision.action == "skip":
+                    logger.info(
+                        "[ScenarioRunner] STEP_FAILED 决策 skip：跳过 step_id={}，继续后续 step",
+                        result.step_id,
+                    )
+                    result = StepRunResult(
+                        step_id=result.step_id, status="skipped",
+                        error=f"skipped by decision: {decision.note or 'step.failed'}",
+                        duration_ms=0.0,
+                    )
+
+            step_results.append(result)
             logger.info(
                 "[ScenarioRunner] Step 完成: step_id={} status={} duration_ms={:.2f} ({}/{})",
                 result.step_id, result.status, result.duration_ms,
                 idx + 1, len(resolved_steps),
             )
 
+            if result.status == "skipped":
+                continue          # 决策 skip：不中断场景，继续后续 step
             if not result.passed:
+                # continue / abort / retry 后仍失败：现有语义（失败中断）
                 overall_status = result.status
                 logger.warning(
                     "[ScenarioRunner] Scenario 中断: step_id={} 失败，后续 step 不再执行",
                     result.step_id,
                 )
                 break
+
+        # 4.5 收集单元输出（finalize 前快照；调度器喂下游用）
+        try:
+            outputs = dict(scenario_ctx.channels.variables_snapshot())
+        except Exception:  # noqa: BLE001
+            outputs = {}
 
         # 5. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
@@ -408,6 +481,7 @@ class ScenarioRunner:
             ended_at=datetime.now(timezone.utc),
             halted=halted,
             halt_reason=halt_reason_out,
+            outputs=outputs,
         )
 
     # ── 埋点辅助 ──

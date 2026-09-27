@@ -48,6 +48,22 @@ def _load_scenario() -> ScenarioModel:
     return ScenarioModel.model_validate(raw)
 
 
+
+
+def _to_api_form(sc):
+    """v2.1 批次 F：语料已迁移为 call 形态；view_hints 注入类用例换回 api 形态。"""
+    from gimbal_plate.schema.step import Step
+    s0 = sc.steps[0]
+    if s0.api is None and s0.call is not None:
+        sc.steps[0] = Step.model_validate(
+            {"kind": "step",
+             "api": {"kind": "api", **{k: v for k, v in (s0.call.model_extra or {}).items()}},
+             "request": s0.request.model_dump(),
+             "strategy": [st.model_dump() for st in s0.strategy]},
+        )
+    return sc
+
+
 def _platform_view() -> dict:
     sc = _load_scenario()
     return PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_dict()
@@ -188,13 +204,13 @@ class TestDeserializationContract:
             gimbal_from_platform["steps"], gimbal_native["steps"]
         ):
             # api / request.kind / request.body 子集 / strategy 完全一致
-            assert s_from["api"] == s_native["api"]
+            assert s_from["call"] == s_native["call"]   # v2.1 批次 F：gimbal 形态为 call
             assert s_from["request"]["kind"] == s_native["request"]["kind"]
             # body 是 superset 关系(platform 补全);73cc71b 语料重构后旧场景
             # body 可能携带端点已不再声明的键(如 entrust 的 order_id),
             # 补全只覆盖已声明面 — 未声明键按设计丢弃,不再要求往返保真
             declared = _declared_body_keys(
-                _EP_BY_KEY.get((s_from["api"]["method"], s_from["api"]["path"])))
+                _EP_BY_KEY.get((s_from["call"]["method"], s_from["call"]["path"])))
             for k, v in s_native["request"]["body"].items():
                 if declared is not None and k not in declared:
                     continue
@@ -257,11 +273,13 @@ class TestGimbalDictExcludesPlatformFields:
         assert "config_summary" not in gd
 
     def test_gimbal_dict_no_view_hints_in_api(self) -> None:
-        sc = _load_scenario()
+        sc = _to_api_form(_load_scenario())
         # 直接通过 scenario 注入
         sc.steps[0].api.view_hints = {"endpoint_id": "fin.x"}
         gd = GimbalScenarioExporter(sc).to_dict()
-        assert "view_hints" not in gd["steps"][0]["api"]
+        # v2.1 批次 F：api 整键不再出现在 gimbal 导出（call 形态），view_hints 无处可挂
+        assert "api" not in gd["steps"][0]
+        assert "view_hints" not in gd["steps"][0].get("call", {})
 
     def test_gimbal_dict_no_fields_meta_in_request(self) -> None:
         sc = _load_scenario()
@@ -327,7 +345,7 @@ class TestRejectedApproachesAreAbsent:
         不递归进入业务数据 body —— 业务数据(如 customer_file_list[*]._XID)由用户控制,
         与平台视图扩展无关。
         """
-        sc = _load_scenario()
+        sc = _to_api_form(_load_scenario())
         sc.steps[0].request.fields_meta = {"x": {"name": "x"}}
         sc.steps[0].api.view_hints = {"endpoint_id": "fin.x"}
         sc.steps[0].strategy[0].view_note = "test"

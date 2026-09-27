@@ -53,6 +53,15 @@ def _step_summary(step: object) -> dict:
                 "method":  method,
                 "path":    path,
             }
+    else:
+        # 多协议步骤（无 api 糖）：展示协议名 + 协议自有坐标字段
+        call = getattr(step, "call", None)
+        if call is not None:
+            out["call"] = {
+                "protocol": getattr(call, "protocol", ""),
+                "service":  getattr(call, "service", "") or "",
+                "method":   getattr(call, "method", "") or "",
+            }
     # Strategy summary（仅 kinds，不打印完整表达式）
     strategies = getattr(step, "strategy", None)
     if strategies:

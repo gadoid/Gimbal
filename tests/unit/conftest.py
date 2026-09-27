@@ -12,7 +12,6 @@
   - test_defect_fixes.py            ← 含 sys.exit(1) 是核心问题
   - test_plugin_event_integration.py
   - test_resolver_list_body.py
-  - test_response_body_extract_plugin.py
 """
 from __future__ import annotations
 
@@ -24,7 +23,6 @@ collect_ignore_glob = [
     "test_defect_fixes.py",
     "test_plugin_event_integration.py",
     "test_resolver_list_body.py",
-    "test_response_body_extract_plugin.py",
 ]
 
 # 已 pytest 化的子目录默认走 collector,不需要 collect_ignore

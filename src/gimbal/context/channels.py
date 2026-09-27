@@ -1,4 +1,5 @@
 from __future__ import annotations
+import threading
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Optional
 from pydantic import BaseModel, ConfigDict, Field
@@ -115,6 +116,9 @@ class Channels:
         self._artifacts: dict[str, ArtifactRef] = {}
         self._promotions: list[Promotion] = []
         self._listeners: list[PromotionListener] = []
+        # 2026-09-27 多线程分派：promote 的"policy 检查 + 写入"是复合操作，
+        # 并行 scenario 向 SUITE 层提升时必须原子；快照读同步保护。
+        self._lock = threading.RLock()
     
     # ── 监听器:ContextManager 注册,用于把 Promotion 转事件 ──
     def add_listener(self, listener: PromotionListener) -> None:
@@ -124,15 +128,17 @@ class Channels:
     # ── 只读访问 ─────────────────────────────────────────
     def get_variable(self, key: str, default: Any = None) -> Any:
         """获取指定 key 的变量值;若 key 以 '$.' 开头则按 JSONPath 解析,否则按普通 dict key 查找;未命中时返回 default。"""
-        if key.startswith("$."):
-            return self._jsonpath_get(key, default)
-        return self._variables.get(key, default)
+        with self._lock:
+            if key.startswith("$."):
+                return self._jsonpath_get(key, default)
+            return self._variables.get(key, default)
 
     def has_variable(self, key: str) -> bool:
         """判断指定 key 或 JSONPath 路径是否有对应的变量值;存在返回 True,否则 False。"""
-        if key.startswith("$."):
-            return self._jsonpath_get(key, default=...) is not ...
-        return key in self._variables
+        with self._lock:
+            if key.startswith("$."):
+                return self._jsonpath_get(key, default=...) is not ...
+            return key in self._variables
 
     def _jsonpath_get(self, path: str, default: Any = None) -> Any:
         """支持 JSONPath 在 flat dict 上的查询。
@@ -157,7 +163,8 @@ class Channels:
 
     def variables_snapshot(self) -> dict[str, Any]:
         """返回防御性拷贝。外部修改不会影响内部状态。"""
-        return dict(self._variables)
+        with self._lock:
+            return dict(self._variables)
 
     def get_metadata(self, key: str, default: Any = None) -> Any:
         """按 key 读取 metadata 中的值,未命中返回 default。"""
@@ -203,32 +210,35 @@ class Channels:
         allow_overwrite: bool = False,
     ) -> Promotion:
         """接受下层向本层提升一个变量。
-        
+
         allow_overwrite: 调用方显式声明"我知道这会覆盖"。
           policy 中也必须把这个 key 列入 overwritable_keys 才会真正放行。
+
+        线程安全：policy 检查 + 写入 + 审计记录在同一把锁内（复合操作原子）。
         """
-        self._check_policy(
-            key=key,
-            from_layer=from_layer,
-            reason=reason,
-            allow_overwrite=allow_overwrite,
-        )
-        
-        overwrote = key in self._variables
-        record = Promotion(
-            key=key,
-            value=value,
-            from_layer=from_layer,
-            to_layer=self._owner_layer,
-            by_step_id=by_step_id,
-            by_scenario_id=by_scenario_id,
-            at=datetime.now(timezone.utc),
-            reason=reason,
-            overwrote_previous=overwrote,
-        )
-        self._variables[key] = value
-        self._promotions.append(record)
-        self._notify(record)
+        with self._lock:
+            self._check_policy(
+                key=key,
+                from_layer=from_layer,
+                reason=reason,
+                allow_overwrite=allow_overwrite,
+            )
+
+            overwrote = key in self._variables
+            record = Promotion(
+                key=key,
+                value=value,
+                from_layer=from_layer,
+                to_layer=self._owner_layer,
+                by_step_id=by_step_id,
+                by_scenario_id=by_scenario_id,
+                at=datetime.now(timezone.utc),
+                reason=reason,
+                overwrote_previous=overwrote,
+            )
+            self._variables[key] = value
+            self._promotions.append(record)
+            self._notify(record)
         logger.debug(
             "[Channels] Variable promoted: key={} from_layer={} to_layer={} by_step={} overwrote={}",
             key, from_layer.value, self._owner_layer.value, by_step_id, overwrote,

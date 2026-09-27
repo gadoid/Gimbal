@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from gimbal.schema.scenario import Scenario, Suite
+from gimbal.schema.scenario import Scenario
 from gimbal.context.manager import ContextManager,FrameworkContext
 
 from .bootstrap import Configuration
@@ -48,6 +48,10 @@ class RunResult:
     # 阶段 1 最小子集：被 runtime halt 触发的 scenario 数。
     # 与 failed/error 区分（halted 算作"未通过"但有独立标记，便于 reporter 渲染）。
     halted: int = 0
+    # v2.1 批次 C：上游失败导致下游未执行的单元数（编排判定状态之一）。
+    blocked: int = 0
+    # v2.1 批次 E：人工修复（debugger retry 后通过）的步骤数——不计正常通过率。
+    repaired: int = 0
     details: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -80,7 +84,7 @@ class Engine:
         """
         return list(self._artifacts)
 
-    def run(self, target: Scenario | Suite, runtime_control: Any = None) -> RunResult:
+    def run(self, target: Any, runtime_control: Any = None) -> RunResult:
         """执行入口。
 
         在此方法内创建本次执行的层级 context：
@@ -119,15 +123,14 @@ class Engine:
             except Exception:  # noqa: BLE001
                 logger.exception("[Engine] reporter_runtime.begin_all 失败（已隔离）")
 
-        # 3. 执行
+        # 3. 执行：编译为 Plan → 单路径执行（v2.1 批次 B；scenario=隐式 aggregate）
         try:
-            if isinstance(target, Scenario):
-                result = self._run_scenario(target, framework_ctx, runtime_control=runtime_control)
-            elif isinstance(target, Suite):
-                result = self._run_suite(target, framework_ctx, runtime_control=runtime_control)
-            else:
-                logger.error("[Engine] 收到无法识别的执行目标类型: {}", type(target).__name__)
-                result = RunResult(exit_code=3, error=1)
+            from gimbal.compiler.pipeline import compile_target, CompileError
+            plan = compile_target(target)
+            result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
+        except CompileError as e:
+            logger.error("[Engine] 编译失败: {}", e)
+            result = RunResult(exit_code=2, error=1)
         except Exception as e:  # noqa: BLE001
             logger.exception("[Engine] 执行异常: {}", e)
             result = RunResult(exit_code=2, error=1)
@@ -192,106 +195,36 @@ class Engine:
 
     # ── 内部分发 ─────────────────────────────────────────────────────────────
 
-    def _run_scenario(
+    def _run_plan(
         self,
-        scenario: Scenario,
+        plan: Any,
         framework_ctx: FrameworkContext,
         runtime_control: Any = None,
     ) -> RunResult:
-        """执行单个 Scenario：派生 __default__ SuiteContext 并调用 ScenarioRunner。
+        """执行一个 Plan（唯一执行路径，v2.1 批次 B）。
+
+        单元执行 = ScenarioRunner（生效副本 + inputs 注入）；调度 =
+        PlanScheduler（before → units → after；串行/并行 + fail-fast）。
+        结果映射保持两套历史口径：隐式 Plan（单场景）沿用单场景计数口径，
+        聚合 Plan 沿用 Suite 计数口径 —— 对账与报告零回归。
 
         入参:
-            scenario:         已展开的 Scenario 数据对象。
-            framework_ctx:    本次 run 的 framework 上下文。
-            runtime_control:  可选 RuntimeControl（透传给 ScenarioRunner）。
-        返回:
-            包装后的 RunResult（含 exit_code、统计与 details；halted 不计入 exit_code=1，
-            而是单独走 halted=1，让外部能区分"业务失败"与"被中止"）。
+            plan:            compile_target 产出的 Plan。
+            framework_ctx:   本次 run 的 framework 上下文。
+            runtime_control: 可选 RuntimeControl（透传给每个单元）。
         """
         from gimbal.core.scenario_runner import ScenarioRunner
-
-        logger.info("[Engine] 开始执行 Scenario: scenario_id={}", scenario.scenarioId)
-
-        # 2. 为单 scenario 执行创建默认 SuiteContext
-        suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
-            framework_ctx,
-            suite_id="__default__",
-            suite_name="Default Suite",
-            tags=[],
-            plugins={},
-        )
-        logger.debug("[Engine] SuiteContext 创建完成: suite_id={}", suite_ctx.suite_id)
-
-        result = ScenarioRunner(
-            framework_ctx.dispatcher,
-            framework_ctx.ctx_manager,
-            hook_registry=self._ictx.hook_registry,
-            event_bus=self._ictx.event_bus,
-            auth_registry=self._ictx.auth_registry,
-        ).run(
-            scenario, suite_ctx, runtime_control=runtime_control,
-        )
+        from gimbal.scheduler.plan import PlanScheduler
 
         logger.info(
-            "[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f} halted={}",
-            scenario.scenarioId, result.status, result.duration_ms, result.halted,
+            "[Engine] 开始执行 Plan: suite_id={} mode={} units={} parallel={} implicit={}",
+            plan.suite_id, plan.mode, len(plan.units), plan.policy.parallel, plan.implicit,
         )
 
-        # 阶段 1 最小子集：halted 单独累加，不并入 failed（halted 算"未通过"但语义独立）。
-        return RunResult(
-            exit_code=0 if result.passed else 1,
-            total=1,
-            passed=1 if result.passed else 0,
-            failed=0 if result.passed else 1,
-            halted=1 if result.halted else 0,
-            details=[{
-                "scenario_id": result.scenario_id,
-                "status":      result.status,
-                "duration_ms": result.duration_ms,
-                "halted":      result.halted,
-                "halt_reason": result.halt_reason,
-                "steps": [
-                    {
-                        "step_id":     s.step_id,
-                        "status":      s.status,
-                        "duration_ms": s.duration_ms,
-                        "error":       s.error,
-                        "error_phase": s.error_phase,
-                    }
-                    for s in result.step_results
-                ],
-            }],
-        )
-
-    def _run_suite(
-        self,
-        suite: Suite,
-        framework_ctx: FrameworkContext,
-        runtime_control: Any = None,
-    ) -> RunResult:
-        """按序执行 Suite 内全部 Scenario，按 fail_fast 配置决定是否提前终止。
-
-        入参:
-            suite:            Suite 数据对象。
-            framework_ctx:    本次 run 的 framework 上下文。
-            runtime_control:  可选 RuntimeControl（透传给每个 ScenarioRunner）。
-                              注意：suite 级 runtime_control 对所有子 scenario 一视同仁，
-                              若需 per-scenario 控制请调用方拆分。
-        返回:
-            汇总后的 RunResult（含 halted 累加）。
-        """
-        from gimbal.core.scenario_runner import ScenarioRunner
-
-        suite_id = getattr(suite, "suiteId", "__suite__")
-        suite_name = getattr(suite, "name", "Suite")
-        logger.info("[Engine] 开始执行 Suite: suite_id={} suite_name={} scenario_count={}",
-                     suite_id, suite_name, len(suite.suite))
-
-        # 2. Suite 执行时用 Suite 自身信息创建 SuiteContext
         suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
             framework_ctx,
-            suite_id=suite_id,
-            suite_name=suite_name,
+            suite_id=plan.suite_id,
+            suite_name=plan.suite_name,
             tags=[],
             plugins={},
         )
@@ -303,16 +236,133 @@ class Engine:
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
             auth_registry=self._ictx.auth_registry,
+            protocol_registry=self._ictx.protocols,
         )
-        cfg = framework_ctx.config
-        total = passed = failed = error = halted = 0
+
+        def _run_unit(unit, inputs):
+            scenario = unit.scenario
+            if inputs:
+                # 统一输入注入原语：inputs 注入为 scenario vars（生效副本，不改源）；
+                # inputs 由调度器解析（字面量 ∪ 连线值）
+                merged = {**(scenario.config.vars or {}), **inputs}
+                scenario = scenario.model_copy(update={
+                    "config": scenario.config.model_copy(update={"vars": merged}),
+                })
+            logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
+            return runner.run(scenario, suite_ctx, runtime_control=runtime_control)
+
+        fail_fast = framework_ctx.config.fail_fast
+        if plan.policy.fail_fast is not None:
+            fail_fast = plan.policy.fail_fast
+
+        sched = PlanScheduler()
+        outcome = sched.run(plan, _run_unit, fail_fast=fail_fast)
+
+        # ── 判定：按计划清单对账（blocked / cancelled 由 outcome 呈现）──
+        if plan.implicit:
+            return self._assemble_implicit(plan, outcome.results)
+        return self._assemble_aggregate(plan, outcome)
+
+    # ── 判定（两套历史口径，零回归）────────────────────────────
+
+    @staticmethod
+    def _detail_row(result: Any) -> dict[str, Any]:
+        """ScenarioRunResult → details 行（历史形状）。"""
+        return {
+            "scenario_id": result.scenario_id,
+            "status":      result.status,
+            "duration_ms": result.duration_ms,
+            "halted":      result.halted,
+            "halt_reason": result.halt_reason,
+            "steps": [
+                {
+                    "step_id":     s.step_id,
+                    "status":      s.status,
+                    "duration_ms": s.duration_ms,
+                    "error":       s.error,
+                    "error_phase": s.error_phase,
+                    **({"repaired": True} if getattr(s, "repaired", False) else {}),
+                }
+                for s in result.step_results
+            ],
+        }
+
+    def _assemble_implicit(self, plan: Any, results: dict) -> RunResult:
+        """单场景历史计数口径：非通过一律计 failed（含 error 状态）。"""
+        unit = plan.units[0]
+        result = results.get(unit.id)
+        if result is None or isinstance(result, Exception):
+            logger.error("[Engine] 隐式 Plan 单元未产出结果: unit_id={}", unit.id)
+            return RunResult(exit_code=1, total=1, failed=1)
+        logger.info(
+            "[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f} halted={}",
+            result.scenario_id, result.status, result.duration_ms, result.halted,
+        )
+        repaired = sum(
+            1 for s in getattr(result, "step_results", []) or []
+            if getattr(s, "repaired", False)
+        )
+        return RunResult(
+            exit_code=0 if result.passed else 1,
+            total=len(getattr(result, "attempts", None) or [1]),
+            passed=1 if result.passed else 0,
+            failed=0 if result.passed else 1,
+            halted=1 if result.halted else 0,
+            repaired=repaired,
+            details=[self._detail_row(result)],
+        )
+
+    def _assemble_aggregate(self, plan: Any, outcome: Any) -> RunResult:
+        """Suite/Graph 历史计数口径：halted/passed/error/failed/blocked 分立；details 按提交序。"""
+        results = outcome.results
+        total = passed = failed = error = halted = blocked = 0
         details: list[dict[str, Any]] = []
 
-        for idx, scenario in enumerate(suite.suite):
-            logger.debug("[Engine] 开始执行 Suite 中第 {}/{} 个 Scenario: scenario_id={}",
-                         idx + 1, len(suite.suite), scenario.scenarioId)
-            result = runner.run(scenario, suite_ctx, runtime_control=runtime_control)
-            total += 1
+        # 括号单元行（不计 total；bracket 字段标识）
+        for bracket, units in (("before", plan.before), ("after", plan.after)):
+            for unit in units:
+                result = results.get(unit.id)
+                details.append(self._bracket_row(bracket, unit, result))
+
+        for idx, unit in enumerate(plan.units):
+            status = outcome.status_of(unit.id)
+            if status == "blocked":
+                blocked += 1
+                details.append({
+                    "scenario_id": unit.id,
+                    "status": "blocked",
+                    "duration_ms": 0.0,
+                    "halted": False,
+                    "halt_reason": "upstream failed",
+                    "steps": [],
+                })
+                continue
+            if status == "cancelled" or (result := results.get(unit.id)) is None:
+                # fail-fast 取消 / 中断后未执行的单元：不计数，只留占位
+                details.append({
+                    "scenario_id": unit.id,
+                    "status": "cancelled",
+                    "duration_ms": 0.0,
+                    "halted": False,
+                    "halt_reason": "cancelled by fail-fast",
+                    "steps": [],
+                })
+                continue
+            # 计划清单对账：n_runs>1 时每次 run 计一次（attempts 聚合）
+            total += len(getattr(result, "attempts", None) or [1])
+            if isinstance(result, Exception):
+                # 调度层兜底捕获的异常（runner 内部已隔离大部分，这里双保险）
+                error += 1
+                details.append({
+                    "scenario_id": unit.id,
+                    "status": "error",
+                    "duration_ms": 0.0,
+                    "halted": False,
+                    "halt_reason": None,
+                    "steps": [],
+                    "error": str(result),
+                })
+                continue
             if result.halted:
                 # 阶段 1：halted 单独计，不并入 failed/error；reporter 据此渲染。
                 halted += 1
@@ -322,41 +372,52 @@ class Engine:
                 error += 1
             else:
                 failed += 1
-            details.append({
-                "scenario_id": result.scenario_id,
-                "status":      result.status,
-                "duration_ms": result.duration_ms,
-                "halted":      result.halted,
-                "halt_reason": result.halt_reason,
-                "steps": [
-                    {
-                        "step_id":     s.step_id,
-                        "status":      s.status,
-                        "duration_ms": s.duration_ms,
-                        "error":       s.error,
-                        "error_phase": s.error_phase,
-                    }
-                    for s in result.step_results
-                ],
-            })
+            details.append(self._detail_row(result))
             logger.info(
                 "[Engine] Scenario 完成: scenario_id={} status={} duration_ms={:.2f} ({}/{}) halted={}",
                 result.scenario_id, result.status, result.duration_ms,
-                idx + 1, len(suite.suite), result.halted,
+                idx + 1, len(plan.units), result.halted,
             )
-            if cfg.fail_fast and not result.passed:
-                logger.warning("[Engine] fail_fast 触发：在 {} 后停止执行", result.scenario_id)
-                break
+        cancelled = sum(1 for d in details if d["status"] == "cancelled")
+        if cancelled:
+            logger.warning("[Engine] fail_fast：{} 个单元被取消未执行", cancelled)
+        if blocked:
+            logger.warning("[Engine] {} 个单元因上游失败被 blocked", blocked)
 
         logger.info(
-            "[Engine] Suite 执行完成: suite_id={} total={} passed={} failed={} error={} halted={} exit_code={}",
-            suite_id, total, passed, failed, error, halted, 0 if (failed + error) == 0 else 1,
+            "[Engine] Suite 执行完成: suite_id={} mode={} parallel={} total={} passed={} failed={} error={} halted={} blocked={} exit_code={}",
+            plan.suite_id, plan.mode, plan.policy.parallel > 1, total, passed, failed,
+            error, halted, blocked, 0 if (failed + error + blocked) == 0 else 1,
         )
-
+        repaired = sum(
+            1 for r in results.values()
+            if not isinstance(r, Exception)
+            for s in getattr(r, "step_results", []) or []
+            if getattr(s, "repaired", False)
+        )
         return RunResult(
-            exit_code=0 if (failed + error) == 0 else 1,
+            exit_code=0 if (failed + error + blocked) == 0 else 1,
             total=total, passed=passed,
-            failed=failed, error=error, halted=halted,
+            failed=failed, error=error, halted=halted, blocked=blocked,
+            repaired=repaired,
             details=details,
         )
+
+    @staticmethod
+    def _bracket_row(bracket: str, unit: Any, result: Any) -> dict[str, Any]:
+        """before/after 括号单元的 details 行（不计 total；异常也呈现）。"""
+        if result is None or isinstance(result, Exception):
+            return {
+                "scenario_id": unit.id,
+                "status": "error" if isinstance(result, Exception) else "skipped",
+                "duration_ms": 0.0,
+                "halted": False,
+                "halt_reason": None,
+                "steps": [],
+                "bracket": bracket,
+                "error": str(result) if isinstance(result, Exception) else None,
+            }
+        row = Engine._detail_row(result)
+        row["bracket"] = bracket
+        return row
 

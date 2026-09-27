@@ -97,12 +97,6 @@ class Scenario(BaseModel):
     )
 
 
-class Suite(BaseModel):
-    kind: Literal["suite"] = "suite"
-    suite: list[Scenario] = Field(..., description="scenario集合,暂时使用列表实现")
 
-
-RunUnion = Annotated[
-    Union[Scenario, Suite],
-    Field(discriminator="kind"),
-]
+# v2.1 F 收尾:plate 只承载 Scenario(嵌入式 Suite 已删除,编排走 gimbal 侧 SuiteGraph)
+RunUnion = Scenario

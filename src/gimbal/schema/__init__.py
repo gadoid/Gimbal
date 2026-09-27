@@ -1,7 +1,7 @@
 """静态描述层 - Pydantic 模型定义"""
 from .states import StepState
 from .resource import Resource, Mock, File, ResourceUnion
-from .api import Api, ApiUnion
+from .call import Call
 from .request import Request, RequestUnion
 from .step import Step, StepUnion
 from .strategy import (
@@ -16,13 +16,12 @@ from .teardown import Teardown, TeardownUnion
 from .auth import AuthSession
 
 __all__ = [
+    "Call",
     "StepState",
     "Resource",
     "Mock",
     "File",
     "ResourceUnion",
-    "Api",
-    "ApiUnion",
     "Request",
     "RequestUnion",
     "Step",

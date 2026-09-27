@@ -69,6 +69,18 @@ def materialize_run_copy(
     return out
 
 
+def _step_service(step: dict) -> str | None:
+    """step 的 service 键：call 形态优先(plate convert v2.1 批次 F 产出),
+    api 糖兜底(过渡期存量/外部直供)。两形态都无 → None。"""
+    call = step.get("call")
+    svc = call.get("service") if isinstance(call, dict) else None
+    if isinstance(svc, str) and svc:
+        return svc
+    api = step.get("api")
+    svc = api.get("service") if isinstance(api, dict) else None
+    return svc if isinstance(svc, str) and svc else None
+
+
 def referenced_services(steps: list) -> list[str]:
     """steps 里被引用的服务键(声明序去重)。公共函数 —— scenarios /
     run_precheck / run_dispatcher 三处跨模块消费(2026-09-23 评审:私有
@@ -78,8 +90,7 @@ def referenced_services(steps: list) -> list[str]:
     for step in steps:
         if not isinstance(step, dict):
             continue
-        api = step.get("api")
-        svc = api.get("service") if isinstance(api, dict) else None
+        svc = _step_service(step)
         if svc:
             seen.setdefault(svc, None)
     return list(seen)
@@ -201,9 +212,8 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
     for i, step in enumerate(out.get("steps") or []):
         if not isinstance(step, dict):
             continue
-        api = step.get("api")
-        svc = api.get("service") if isinstance(api, dict) else None
-        if not isinstance(svc, str) or not svc:
+        svc = _step_service(step)
+        if not svc:
             continue
         if svc in ctx.service_bindings and ctx.service_bindings[svc] is None:
             continue  # 服务名解析失败(dispatch 已黄警):整步跳过

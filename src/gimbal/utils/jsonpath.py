@@ -794,12 +794,18 @@ def find_template_var_refs(obj: Any, *, prefix: str | None = None) -> Iterator[s
             yield from find_template_var_refs(v, prefix=prefix)
         return
 
-    # Pydantic 模型：递归每个字段
+    # Pydantic 模型：递归每个字段 + extra 开放字段（v2.1 批次 F：Call 等
+    # 开放模型的协议自有字段挂在 model_extra，漏扫会导致 ${auth.*} 引用
+    # 检测不到 → 预认证跳过）
     try:
         from pydantic import BaseModel
         if isinstance(obj, BaseModel):
             for field_name in type(obj).model_fields:
                 yield from find_template_var_refs(getattr(obj, field_name), prefix=prefix)
+            extra = getattr(obj, "model_extra", None)
+            if isinstance(extra, dict):
+                for v in extra.values():
+                    yield from find_template_var_refs(v, prefix=prefix)
             return
     except ImportError:
         pass

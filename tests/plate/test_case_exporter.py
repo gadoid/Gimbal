@@ -25,12 +25,14 @@ class TestSingleStep:
         assert step["kind"] == "step"
         assert step["description"] == "正常下单"
         # api
-        api = step["api"]
-        assert api["kind"] == "api"
-        assert api["service"] == "settlement"
-        assert api["method"] == "POST"
-        assert api["path"] == "/api/v1/orders"
-        assert api["timeout"] == 30
+        call = step["call"]   # v2.1 批次 F：convert 产 call 形态
+        assert call["kind"] == "call"
+        assert call["protocol"] == "http"
+        assert call["service"] == "settlement"
+        assert call["method"] == "POST"
+        assert call["path"] == "/api/v1/orders"
+        assert call["timeout"] == 30
+        assert "api" not in step
         # request
         req = step["request"]
         assert req["kind"] == "request"

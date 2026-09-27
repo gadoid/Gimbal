@@ -45,6 +45,8 @@ class Configuration:
     plugins: tuple["Plugin", ...] = field(default_factory=tuple)
     # Reporter 调度器（Engine.run() 时通过 begin_all / finalize_all 驱动）
     reporter_runtime: Any = None
+    # 协议执行器注册表（dispatcher.protocols 的显式引用；Engine 透传给状态机）
+    protocols: Any = None
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -109,6 +111,8 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         hook_registry=hook_registry,
         plugin_registry=plugin_registry,
         auth_registry=auth_registry,
+        dispatcher=dispatcher,
+        protocol_registry=getattr(dispatcher, "protocols", None),
     )
     logger.info("[bootstrap] 插件加载完成: count={}", len(plugins))
 
@@ -146,6 +150,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         auth_registry=auth_registry,
         ctx_manager=ctx_manager,
         dispatcher=dispatcher,
+        protocols=getattr(dispatcher, "protocols", None),
         event_bus=event_bus,
         archive=archive,
         hook_registry=hook_registry,
@@ -162,6 +167,8 @@ def _load_plugins(
     hook_registry: Any,
     plugin_registry: Any,
     auth_registry: Any,
+    dispatcher: Any = None,
+    protocol_registry: Any = None,
 ) -> list["Plugin"]:
     """插件发现 → 解析依赖 → 加载 → 激活。
 
@@ -210,6 +217,8 @@ def _load_plugins(
         user_configs=cfg.plugin_configs or {},
         plugin_registry=plugin_registry,
         auth_registry=auth_registry,
+        dispatcher=dispatcher,
+        protocol_registry=protocol_registry,
     )
     return activated
 

@@ -284,6 +284,29 @@ export interface ApiView {
   view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
 }
 
+/**
+ * plate Call(step 内)。对齐 gimbal_plate/schema/call.py Call。
+ * v2.1 批次 F-2a:gimbal 侧唯一调用形态(protocol 必填,开放字段)。
+ * http 协议的 service/method/path/headers/timeout 与 ApiView 同名同型;
+ * 自定义协议字段(access=allow)不做 TS 穷举,运行时 duck-read。
+ */
+export interface CallView {
+  kind: 'call'
+  protocol: string
+  // http 常用字段(开放模型,非 http 协议可能没有)
+  service?: string
+  method?: string
+  path?: string
+  headers?: Record<string, string>
+  timeout?: number
+  /** 原生认证标签(v2.1 F-2b:call.user → token/timestamp 头注入) */
+  user?: string
+  /** 平台视图扩展(与 ApiView.view_hints 同构;字段设计渲染依赖 endpoint_id) */
+  view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
+  /** 协议自有字段(access=allow 存放于此) */
+  [key: string]: unknown
+}
+
 /** plate Request(step 内)。对齐 gimbal_plate/schema/request.py Request。 */
 export interface RequestView {
   kind: 'request'
@@ -340,8 +363,11 @@ export type StrategyView = ExtractView | AssignView | AssertionView
 export interface StepView {
   kind: 'step'
   description?: string
-  api: ApiView
-  request: RequestView
+  /** v2.1 F-2a:call 是 gimbal 唯一调用形态;api 为过渡期存量(最终删除) */
+  call?: CallView
+  /** @deprecated 过渡期存量读;新代码一律写 call,读经 stepCall() 双读 */
+  api?: ApiView
+  request?: RequestView
   strategy: StrategyView[]
   /**
    * 字段状态稀疏增量(§3.1):{归一化 path → state},与 api/request/strategy
@@ -434,4 +460,58 @@ export interface ScenarioView {
   endpoints?: unknown[]
   navigation?: unknown
   config_summary?: unknown
+}
+
+// ─── v2.1 F-2a: call/api 双读辅助(前端统一入口) ───
+
+type StepLike = StepView | Record<string, unknown> | unknown
+
+/**
+ * 从 step 双读调用信息:call 优先(新形态),api 兜底(存量)。
+ * 返回统一的 "视图调用" 形状(service/method/path/headers/timeout 可缺省)。
+ * 所有前端消费点一律经此函数,禁止直接读 step.api 或 step.call。
+ */
+export function stepCall(step: StepLike): CallView | ApiView | null {
+  if (!step || typeof step !== 'object') return null
+  const s = step as Record<string, unknown>
+  if (s.call && typeof s.call === 'object') return s.call as CallView
+  if (s.api && typeof s.api === 'object') return s.api as ApiView
+  return null
+}
+
+/** 从 step 读 view_hints.endpoint_id(仅 api 形态携带;call 形态无此字段,返回 undefined)。 */
+export function stepEndpointId(step: StepLike): string | undefined {
+  const s = step as Record<string, unknown> | null
+  if (!s || typeof s !== 'object') return undefined
+  // call 优先(新形态),api 兜底(存量)
+  if (s.call && typeof s.call === 'object') {
+    const c = s.call as CallView
+    if (c.view_hints?.endpoint_id) return c.view_hints.endpoint_id
+  }
+  if (s.api && typeof s.api === 'object') {
+    const a = s.api as ApiView
+    if (a.view_hints?.endpoint_id) return a.view_hints.endpoint_id
+  }
+  return undefined
+}
+
+/** 从 step 读 headers(call/api 双读;无调用信息返回空对象)。 */
+export function stepHeaders(step: StepLike): Record<string, string> {
+  const c = stepCall(step)
+  return (c?.headers as Record<string, string>) || {}
+}
+
+/** 从 step 读 service(call/api 双读)。 */
+export function stepService(step: StepLike): string {
+  return stepCall(step)?.service || ''
+}
+
+/** 从 step 读 method(call/api 双读)。 */
+export function stepMethod(step: StepLike): string {
+  return stepCall(step)?.method || ''
+}
+
+/** 从 step 读 path(call/api 双读)。 */
+export function stepPath(step: StepView | Record<string, unknown> | undefined | null): string {
+  return stepCall(step)?.path || ''
 }

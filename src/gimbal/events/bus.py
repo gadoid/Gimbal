@@ -33,10 +33,17 @@ class InMemoryEventBus:
         """初始化事件总线：创建订阅列表、批量队列参数以及用于 ASYNC 模式的固定大小线程池（_ASYNC_POOL_MAX_WORKERS=8）。无入参；副作用为初始化内部数据结构并创建 ThreadPoolExecutor。"""
         self._subscriptions: list[Subscription] = []
         self._batch_queue: list[tuple[Subscription, Any]] = []
+        # v2.1 批次 F-2c：事件全局序号，发布锁内单调分配（跨线程 = 发布序）
+        self._seq = 0
         self._batch_size = 100
         self._batch_interval = 1.0
         self._running = False
         self._batch_thread: Optional[threading.Thread] = None
+        # 2026-09-27 多线程分派：publish/subscribe/unsubscribe 共享 _subscriptions，
+        # 统一 RLock 保护。SYNC handler 在锁内派发 —— 跨线程事件**按发布顺序**
+        # 串行到达订阅者（reporter/collector 等插件因此线程就绪零改动）；
+        # RLock 允许 handler 内再 publish（同线程重入）不死锁。
+        self._lock = threading.RLock()
         # 修复 #8：用 ThreadPoolExecutor 替代裸线程列表
         self._async_executor: Optional[ThreadPoolExecutor] = ThreadPoolExecutor(
             max_workers=_ASYNC_POOL_MAX_WORKERS,
@@ -97,8 +104,9 @@ class InMemoryEventBus:
             plugin_name=plugin_name,
             priority=priority,
         )
-        self._subscriptions.append(sub)
-        self._subscriptions.sort(key=lambda s: s.priority)
+        with self._lock:
+            self._subscriptions.append(sub)
+            self._subscriptions.sort(key=lambda s: s.priority)
         logger.debug(
             "[EventBus] Subscribed: id={} type={} mode={} plugin={}",
             sub.subscription_id, filter.event_type, mode, plugin_name,
@@ -107,45 +115,59 @@ class InMemoryEventBus:
 
     def unsubscribe(self, subscription_id: str) -> bool:
         """按 subscription_id 取消单条订阅。参数 subscription_id 为要移除的订阅唯一标识；返回 True 表示找到并移除，False 表示未找到。"""
-        for i, sub in enumerate(self._subscriptions):
-            if sub.subscription_id == subscription_id:
-                self._subscriptions.pop(i)
-                return True
-        return False
+        with self._lock:
+            for i, sub in enumerate(self._subscriptions):
+                if sub.subscription_id == subscription_id:
+                    self._subscriptions.pop(i)
+                    return True
+            return False
 
     def unsubscribe_plugin(self, plugin_name: str) -> int:
         """按插件名批量取消其名下所有订阅（用于插件热卸载）。参数 plugin_name 为插件名；返回被移除的订阅数量。"""
-        before = len(self._subscriptions)
-        self._subscriptions = [
-            s for s in self._subscriptions if s.plugin_name != plugin_name
-        ]
-        removed = before - len(self._subscriptions)
+        with self._lock:
+            before = len(self._subscriptions)
+            self._subscriptions = [
+                s for s in self._subscriptions if s.plugin_name != plugin_name
+            ]
+            removed = before - len(self._subscriptions)
         if removed:
             logger.debug("[EventBus] Plugin unsubscribed: plugin={} removed={}", plugin_name, removed)
         return removed
 
     def list_subscriptions(self, plugin_name: Optional[str] = None) -> list[Subscription]:
         """列出当前所有订阅或按 plugin_name 过滤后的订阅快照。参数 plugin_name 可选，传入时仅返回该插件的订阅；返回 Subscription 列表（拷贝）。"""
-        if plugin_name:
-            return [s for s in self._subscriptions if s.plugin_name == plugin_name]
-        return list(self._subscriptions)
+        with self._lock:
+            if plugin_name:
+                return [s for s in self._subscriptions if s.plugin_name == plugin_name]
+            return list(self._subscriptions)
 
     # ── 发布 ──────────────────────────────────────
     def publish(self, event: Any) -> None:
-        """发布一个事件到总线，按订阅的 mode 派发（SYNC 同步调用、ASYNC 提交到线程池、BATCH 入队并在达到 batch_size 时刷新）。参数 event 为任意带 event_type 属性的对象；无返回值；副作用为触发匹配的 handler 或写入批量队列。"""
+        """发布一个事件到总线，按订阅的 mode 派发（SYNC 同步调用、ASYNC 提交到线程池、BATCH 入队并在达到 batch_size 时刷新）。
+
+        线程安全：整段在 RLock 内执行 —— 并行 scenario 发布的事件串行化
+        到各订阅者，且**按发布顺序**到达（SYNC 模式）。
+        """
         et = getattr(event, "event_type", type(event).__name__)
         logger.debug("[EventBus] Publishing: {} (subs={})", et, len(self._subscriptions))
-        for sub in self._subscriptions:
-            if not sub.event_filter.matches(event):
-                continue
-            if sub.mode == SubscriptionMode.SYNC:
-                self._safe_call(sub, event)
-            elif sub.mode == SubscriptionMode.ASYNC:
-                self._dispatch_async(sub, event)
-            elif sub.mode == SubscriptionMode.BATCH:
-                self._batch_queue.append((sub, event))
-                if len(self._batch_queue) >= self._batch_size:
-                    self._flush_batch()
+        with self._lock:
+            # seq 分配与派发同锁（v2 §5）：跨线程单调、与到达序一致
+            self._seq += 1
+            try:
+                object.__setattr__(event, "seq", self._seq)
+            except Exception:  # noqa: BLE001  # frozen 模型兜底
+                pass
+            for sub in self._subscriptions:
+                if not sub.event_filter.matches(event):
+                    continue
+                if sub.mode == SubscriptionMode.SYNC:
+                    self._safe_call(sub, event)
+                elif sub.mode == SubscriptionMode.ASYNC:
+                    self._dispatch_async(sub, event)
+                elif sub.mode == SubscriptionMode.BATCH:
+                    self._batch_queue.append((sub, event))
+                    if len(self._batch_queue) >= self._batch_size:
+                        self._flush_batch()
 
     def _safe_call(self, sub: Subscription, event: Any) -> None:
         """安全地调用 sub.handler(event)，handler 抛出的任何异常都会被 logger.exception 记录但不会向上传播，保证单个订阅出错不影响其他订阅。参数 sub 为目标订阅记录，event 为要分发的事件对象；无返回值。"""
@@ -169,9 +191,10 @@ class InMemoryEventBus:
 
     def _flush_batch(self) -> None:
         """将当前 _batch_queue 中的所有 (sub, event) 取出并逐个通过 _safe_call 同步派发，然后清空队列。空队列时直接返回；无入参；无返回值；副作用为消费批量队列。"""
-        if not self._batch_queue:
-            return
-        queue, self._batch_queue = self._batch_queue, []
+        with self._lock:
+            if not self._batch_queue:
+                return
+            queue, self._batch_queue = self._batch_queue, []
         for sub, event in queue:
             self._safe_call(sub, event)
 

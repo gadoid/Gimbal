@@ -8,7 +8,7 @@
 
     插件通过"注册回调"参与框架，而非直接调用框架代码：
         plugin.register_event(PluginActivatedEvent, handler)
-        plugin.register_hook(HookPoint.HTTP_BEFORE_SEND, handler)
+        plugin.register_hook(HookPoint.CALL_BEFORE_SEND, handler)
         plugin.register_strategy(StrategyImpl)
 
     框架在 activate() 时把回调挂到对应的 Registry / Dispatcher。
@@ -91,13 +91,21 @@ class PluginContext:
     hook_registry: HookRegistryProtocol
     plugin_registry: Any = None                            # 通用插件注册表（避开循环 import）
     auth_registry: Any = None                              # 运行时认证会话注册表
+    # 2026-09-27 协议中立化：策略/协议注册通道（模块文档早已承诺，本轮补齐）
+    dispatcher: Any = None                                 # StrategyDispatcher（register_strategy 用）
+    protocol_registry: Any = None                          # ProtocolRegistry（register_protocol 用）
 
-    # 计数器：仅用于 activate 日志打印"本插件注册了几个 event/hook"。
+    # 计数器：仅用于 activate 日志打印"本插件注册了几个 event/hook/strategy/protocol"。
     # 实际的清理走 name-based 路径（event_bus.unsubscribe_plugin(name) /
     # hook_registry.unregister_plugin(name)），不需要记 id。
     # 旧实现用 list 存 id 但从未被消费过，是死代码。Issue ② 已清理。
     event_count: int = 0
     hook_count: int = 0
+    strategy_count: int = 0
+    protocol_count: int = 0
+    # 本插件注册的 strategy kind 列表（卸载时逐 kind 注销；
+    # dispatcher 无 plugin 维度索引，需在此记账）
+    registered_strategy_kinds: list[str] = field(default_factory=list)
 
     def register_event(
         self,
@@ -142,6 +150,40 @@ class PluginContext:
         )
         self.hook_count += 1
         return hid
+
+    def register_strategy(self, executor: Any) -> None:
+        """注册策略执行器（StrategyExecutor）到 dispatcher。
+
+        以 executor.kind 为键；本插件卸载时按 registered_strategy_kinds
+        逐 kind 注销。注意：协议执行器（ProtocolExecutor）请走
+        register_protocol，不要用本方法。
+        """
+        if self.dispatcher is None:
+            raise RuntimeError(
+                f"[Plugin:{self.plugin_name}] dispatcher 未注入，无法注册策略执行器"
+            )
+        from gimbal.protocols.base import ProtocolExecutor
+        if isinstance(executor, ProtocolExecutor):
+            raise TypeError(
+                "协议执行器请使用 ctx.register_protocol(...)（含协议注册表联动）"
+            )
+        self.dispatcher.register(executor)
+        if executor.kind not in self.registered_strategy_kinds:
+            self.registered_strategy_kinds.append(executor.kind)
+        self.strategy_count += 1
+
+    def register_protocol(self, executor: Any) -> None:
+        """注册协议执行器（ProtocolExecutor）—— 多协议注册的正式入口。
+
+        同时登记 ProtocolRegistry（protocol 键）与 dispatcher
+        （kind 键，默认 ``_call:{protocol}``）；卸载时按插件名批量注销。
+        """
+        if self.protocol_registry is None:
+            raise RuntimeError(
+                f"[Plugin:{self.plugin_name}] protocol_registry 未注入，无法注册协议执行器"
+            )
+        self.protocol_registry.register(executor, plugin_name=self.plugin_name)
+        self.protocol_count += 1
 
     def emit(self, event: FrameworkEvent) -> None:
         """发布事件（插件也可以发事件给其它订阅者）。"""

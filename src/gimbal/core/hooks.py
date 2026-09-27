@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -57,9 +58,18 @@ class HookPoint(str, Enum):
     STEP_END = "step.end"
     STEP_FAILED = "step.failed"
 
-    # HTTP 调用前后
-    HTTP_BEFORE_SEND = "http.before_send"   # payload: {method, url, headers, body, ctx}
-    HTTP_AFTER_RECV = "http.after_recv"     # payload: {method, url, status, headers, body, duration_ms, ctx}
+    # v2.1 批次 F-2b：HTTP_BEFORE_SEND/AFTER_RECV 钩子已退役——
+    # 认证注入原生进 http 适配器（call.user），观察走 http.request/http.response 事件；
+    # 中立拦截点 CALL_BEFORE_SEND/CALL_AFTER_RECV（Decision 通道）保留。
+
+    # 协议调用前后（中立层，所有协议，由状态机 _do_call 触发；2026-09-27 协议中立化）
+    CALL_BEFORE_SEND = "call.before_send"   # payload: {protocol, step_id, spec, request, ctx}
+    CALL_AFTER_RECV = "call.after_recv"     # payload: {protocol, step_id, spec, result, ctx}
+
+    # 拦截决策点（v2 §拦截 hook，批次 E；经 Decision 通道返回决策）
+    STEP_BEFORE = "step.before"             # payload: {step_id, step_schema, ctx}
+    # STEP_FAILED（"step.failed"）已存在；批次 E 起在 ScenarioRunner 层
+    # 作为拦截决策点（CONTINUE/RETRY/SKIP/ABORT）触发
 
     # Strategy 调用前后
     STRATEGY_BEFORE = "strategy.before"     # payload: {strategy_name, phase, ctx}
@@ -81,7 +91,11 @@ class HookSignal:
 
 
 class _StopException(Exception):
-    """handler 抛出后中断主流程的信号。"""
+    """handler 抛出后中断主流程的信号。
+
+    携带的 reason 可以是字符串（兼容旧拦截者）或 Decision
+    （core/decisions.py，批次 E 拦截决策通道）。
+    """
 
 
 # 把 Stop 挂在 HookSignal 下，类型上是 Exception 的子类（可 raise）
@@ -116,7 +130,7 @@ class HookResult:
     - errors:         执行期间 handler 异常列表（仅记录，不抛出）
     """
     stopped: bool = False
-    stop_reason: str = ""
+    stop_reason: Any = ""     # str（旧拦截者）或 Decision（批次 E 决策通道）
     stop_plugin: Optional[str] = None
     modified: bool = False
     errors: list[dict[str, Any]] = field(default_factory=list)
@@ -129,11 +143,17 @@ class HookResult:
 # ── Hook Registry ────────────────────────────────────────────────
 
 class HookRegistry:
-    """Hook 注册表。"""
+    """Hook 注册表。
+
+    线程安全（2026-09-27 多线程分派）：register/sort 与 trigger 并发时
+    共享 _hooks 列表，统一用 RLock 保护；trigger 内联执行 handler 也在锁内
+    （干预型 hook 语义 = 串行裁决，并行 scenario 下天然按到达顺序生效）。
+    """
 
     def __init__(self) -> None:
-        """初始化一个空的 hook 注册表（_hooks 列表）。"""
+        """初始化一个空的 hook 注册表（_hooks 列表 + RLock）。"""
         self._hooks: list[Hook] = []
+        self._lock = threading.RLock()
 
     # ── 注册 ──
     def register(
@@ -160,9 +180,10 @@ class HookRegistry:
             plugin_name=plugin_name,
             description=description,
         )
-        self._hooks.append(h)
-        # 按 (point, priority) 排序，point 同组内 priority 升序
-        self._hooks.sort(key=lambda x: (x.point.value, x.priority))
+        with self._lock:
+            self._hooks.append(h)
+            # 按 (point, priority) 排序，point 同组内 priority 升序
+            self._hooks.sort(key=lambda x: (x.point.value, x.priority))
         logger.debug(
             "[HookRegistry] Registered: point=%s priority=%d plugin=%s",
             point.value, priority, plugin_name,
@@ -171,18 +192,20 @@ class HookRegistry:
 
     def unregister(self, hook_id: str) -> bool:
         """按 hook_id 注销单个 hook。返回是否成功（True = 找到并删除）。"""
-        for i, h in enumerate(self._hooks):
-            if h.hook_id == hook_id:
-                self._hooks.pop(i)
-                logger.debug("[HookRegistry] Unregistered: id=%s", hook_id)
-                return True
-        return False
+        with self._lock:
+            for i, h in enumerate(self._hooks):
+                if h.hook_id == hook_id:
+                    self._hooks.pop(i)
+                    logger.debug("[HookRegistry] Unregistered: id=%s", hook_id)
+                    return True
+            return False
 
     def unregister_plugin(self, plugin_name: str) -> int:
         """按插件名批量注销其注册的所有 hook。返回被移除的数量。"""
-        before = len(self._hooks)
-        self._hooks = [h for h in self._hooks if h.plugin_name != plugin_name]
-        removed = before - len(self._hooks)
+        with self._lock:
+            before = len(self._hooks)
+            self._hooks = [h for h in self._hooks if h.plugin_name != plugin_name]
+            removed = before - len(self._hooks)
         if removed:
             logger.info("[HookRegistry] Plugin hooks removed: plugin=%s removed=%d", plugin_name, removed)
         return removed
@@ -215,49 +238,52 @@ class HookRegistry:
         返回 HookResult，调用方根据 stopped 决定是否继续。
         """
         result = HookResult()
-        hooks = [h for h in self._hooks if h.point == point]
+        with self._lock:
+            hooks = [h for h in self._hooks if h.point == point]
 
-        if not hooks:
-            return result
+            if not hooks:
+                return result
 
-        logger.debug("[HookRegistry] Trigger %s: %d handler(s)", point.value, len(hooks))
+            logger.debug("[HookRegistry] Trigger %s: %d handler(s)", point.value, len(hooks))
 
-        for h in hooks:
-            try:
-                ret = h.handler(payload)
-                if ret is not None and payload is not None:
-                    # 如果 handler 返回了新对象，替换 payload
-                    payload = ret
-                    # 修复 #15：仅当 handler 实际返回新对象（替换 payload）时才标记 modified
-                    # 之前是"任何 handler 跑过就 modified=True"，误导消费者
-                    result.modified = True
-                # in-place 修改（如 dict["k"]=v）需 handler 显式 return payload 才被识别
-            except _StopException as sig:
-                result.stopped = True
-                result.stop_reason = str(sig)
-                result.stop_plugin = h.plugin_name
-                logger.info(
-                    "[HookRegistry] STOP signal at %s from plugin=%s reason=%s",
-                    point.value, h.plugin_name, sig,
-                )
-                break
-            except Exception as e:  # noqa: BLE001
-                logger.exception(
-                    "[HookRegistry] Handler error: point=%s plugin=%s handler=%s",
-                    point.value, h.plugin_name, getattr(h.handler, "__name__", repr(h.handler)),
-                )
-                result.errors.append({
-                    "point": point.value,
-                    "plugin": h.plugin_name,
-                    "handler": getattr(h.handler, "__name__", repr(h.handler)),
-                    "error": str(e),
-                })
-                # 继续执行其它 hook
+            for h in hooks:
+                try:
+                    ret = h.handler(payload)
+                    if ret is not None and payload is not None:
+                        # 如果 handler 返回了新对象，替换 payload
+                        payload = ret
+                        # 修复 #15：仅当 handler 实际返回新对象（替换 payload）时才标记 modified
+                        # 之前是"任何 handler 跑过就 modified=True"，误导消费者
+                        result.modified = True
+                    # in-place 修改（如 dict["k"]=v）需 handler 显式 return payload 才被识别
+                except _StopException as sig:
+                    result.stopped = True
+                    # reason 兼容 str 与 Decision（批次 E）
+                    result.stop_reason = sig.args[0] if sig.args else ""
+                    result.stop_plugin = h.plugin_name
+                    logger.info(
+                        "[HookRegistry] STOP signal at %s from plugin=%s reason=%s",
+                        point.value, h.plugin_name, result.stop_reason,
+                    )
+                    break
+                except Exception as e:  # noqa: BLE001
+                    logger.exception(
+                        "[HookRegistry] Handler error: point=%s plugin=%s handler=%s",
+                        point.value, h.plugin_name, getattr(h.handler, "__name__", repr(h.handler)),
+                    )
+                    result.errors.append({
+                        "point": point.value,
+                        "plugin": h.plugin_name,
+                        "handler": getattr(h.handler, "__name__", repr(h.handler)),
+                        "error": str(e),
+                    })
+                    # 继续执行其它 hook
         return result
 
     def clear(self) -> None:
         """清空所有已注册的 hook（用于 shutdown 兜底清理）。"""
-        self._hooks.clear()
+        with self._lock:
+            self._hooks.clear()
 
 
 # ── HookTriggerer：给主流程用的便利触发器 ──────────────────────
@@ -268,7 +294,7 @@ class HookTriggerer:
     用法：
         triggerer = HookTriggerer(registry)
         payload = {"request": req, "ctx": ctx}
-        result = triggerer.fire(HookPoint.HTTP_BEFORE_SEND, payload)
+        result = triggerer.fire(HookPoint.CALL_BEFORE_SEND, payload)
         if not result:
             return  # 被某个 hook 拦截
         # payload 已被 hook 改写，直接用

@@ -20,6 +20,7 @@ import {
   getEndpointFull,
 } from '@/composables/useEndpointFull'
 import { formBindings } from '@/utils/declarations'
+import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 
 export interface FieldDescriptionsApi {
   /** 渲染「字段说明」行时按 columnKey 查询。
@@ -39,7 +40,7 @@ export function useFieldDescriptions(
     const steps = draft.value?.definition?.steps ?? []
     const s = new Set<string>()
     for (const step of steps) {
-      const eid = step?.api?.view_hints?.endpoint_id
+      const eid = stepEndpointId(step)
       if (eid) s.add(eid)
     }
     return [...s]
@@ -71,7 +72,7 @@ export function useFieldDescriptions(
     const steps = draft.value?.definition?.steps ?? []
     for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
       const step = steps[stepIndex]
-      const eid = step?.api?.view_hints?.endpoint_id
+      const eid = stepEndpointId(step)
       if (!eid) continue
       const full = getEndpointFull(eid)
       if (!full?.request?.declarations) continue

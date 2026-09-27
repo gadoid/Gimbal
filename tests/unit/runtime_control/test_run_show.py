@@ -25,7 +25,7 @@ def _make_scenario():
     """构造一个完整合法的小型 scenario 用于测试。"""
     from gimbal.schema.scenario import Scenario, Meta, Config
     from gimbal.schema.step import Step
-    from gimbal.schema.api import Api
+    from gimbal.schema.call import Call
     from gimbal.schema.request import Request
     from gimbal.schema.strategy import (
         Extract, Assertion, StrategyPhase, Scope, AssertOperator,
@@ -51,7 +51,7 @@ def _make_scenario():
         steps=[
             Step(
                 description="登录获取 token",
-                api=Api(service="auth", method="POST", path="/login"),
+                call=Call(protocol="http", service="auth", method="POST", path="/login"),
                 request=Request(body={"u": "x"}),
                 strategy=[
                     Extract(
@@ -65,7 +65,7 @@ def _make_scenario():
             ),
             Step(
                 description="创建订单（金额=100）",
-                api=Api(service="order", method="POST", path="/orders"),
+                call=Call(protocol="http", service="order", method="POST", path="/orders"),
                 request=Request(body={"amount": 100}),
                 strategy=[
                     Assertion(
@@ -79,7 +79,7 @@ def _make_scenario():
             ),
             Step(
                 description="",  # 显式空 description：要让 fallback 工作
-                api=Api(service="order", method="GET", path="/orders/{id}"),
+                call=Call(protocol="http", service="order", method="GET", path="/orders/{id}"),
                 request=Request(body={}),
                 strategy=[],
             ),
@@ -99,7 +99,7 @@ def test_step_map_includes_all_steps_in_order():
     # 索引 0: 第一步是有 description + api 的 step
     assert payload["steps"][0]["index"] == 0
     assert payload["steps"][0]["description"] == "登录获取 token"
-    assert payload["steps"][0]["api"]["method"] == "POST"
+    assert payload["steps"][0]["call"]["method"] == "POST"
     # 索引 2: 空 description 应该 fallback 为 ""（不报错）
     assert payload["steps"][2]["description"] == ""
     # usage_hint 应该总是存在

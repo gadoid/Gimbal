@@ -46,19 +46,49 @@ class Scenario(BaseModel):
     resource : dict[str , ResourceUnion] = Field(description="存放用例需要执行的相关资源信息")
     steps : list[StepUnion] = Field(..., description="存放具体的执行过程")
 
-class Suite(BaseModel):
-    kind : Literal["suite"] = "suite"
-    suite : list[Scenario] = Field(..., description="scenario集合，暂时使用列表实现" )
+# v2.1 批次 F-2b：嵌入式 Suite（kind=suite 的 list[Scenario] 形态）已删除——
+# 编排统一走 SuiteGraph（kind=graph，四模式 desugar + PlanPolicy）。
+# 存量 suite 文件经 scripts/migrate_legacy_case.py 迁移为 graph aggregate。
+
+class Control(BaseModel):
+    """ 执行控制（v2 §shared 与 control；批次 C 落地 only + chain 切片）。 """
+    only : Optional[list[str]] = Field(default=None, description="只执行这些 ref 及其传递依赖闭包")
+    from_node : Optional[str] = Field(default=None, description="chain 起点（含）")
+    to_node : Optional[str] = Field(default=None, description="chain 终点（含）")
+
+class UnitDecl(BaseModel):
+    """ 编排套件中的单元声明（v2.1 批次 C）。 """
+    ref : str
+    scenario : Scenario
+    needs : list[str] = Field(default_factory=list)
+    shared : Optional[str] = Field(default=None, description="shared 去重键")
+    inputs : dict[str, Any] = Field(default_factory=dict, description="字面量注入（scenario vars）")
+    outputs : Optional[list[str]] = Field(default=None, description="显式输出；None=静态分析推导")
+    map : dict[str, str] = Field(default_factory=dict, description="连线改名: 上游输出名 → 本地输入名")
+    repeat : int = Field(default=1, ge=1, le=64, description="编译期展开份数（单元 id=ref#k；v2.1 批次 D）")
+    policy_kwargs : dict[str, Any] = Field(default_factory=dict, description="UnitPolicy 覆盖项(n_runs/retry/lock)")
+
+from .plan import PlanPolicy as PlanPolicyRef  # noqa: E402 — SuiteGraph 前置
+
+class SuiteGraph(BaseModel):
+    """ 编排套件（v2 §2 desugar 源形态；kind=graph，v2.1 F-2b 起唯一 suite 形态）。 """
+    kind : Literal["graph"] = "graph"
+    mode : Literal["aggregate","compose","fanout","chain"] = "compose"
+    before : list[UnitDecl] = Field(default_factory=list)
+    units : list[UnitDecl] = Field(..., min_length=1)
+    after : list[UnitDecl] = Field(default_factory=list)
+    control : Optional[Control] = None
+    policy : Optional[PlanPolicyRef] = None
 
 RunUnion = Annotated[
-    Union[Scenario,Suite],
+    Union[Scenario,SuiteGraph],
     Field(discriminator="kind")
 ]
 
 if __name__ == "__main__":
     from .resource import Mock
     from .step import Step
-    from .api import Api
+    from .call import Call
     from .request import Request
 
 

@@ -51,16 +51,6 @@
     {
       "kind": "step",
       "description": "第1步：创建订单委托（客户下单）",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "Authorization": "${auth.codfish.token}"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -236,7 +226,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -249,18 +239,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_1",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第2步：编辑订单委托（补全委托信息）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -268,7 +255,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第2步：编辑订单委托（补全委托信息）",
       "request": {
         "kind": "request",
         "body": {
@@ -444,7 +435,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -457,26 +448,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_2",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第3步：分页查询订单委托列表，获取订单 ID 与订单号",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderPage",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第3步：分页查询订单委托列表，获取订单 ID 与订单号",
       "request": {
         "kind": "request",
         "body": {
@@ -499,7 +491,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderPage 应返回200",
@@ -512,7 +504,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_id",
+          "expression": "$.call.response.body.data.data[0].order_id",
           "target": "order_id",
           "required": true,
           "default": null,
@@ -525,7 +517,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_no",
+          "expression": "$.call.response.body.data.data[0].order_no",
           "target": "order_no",
           "required": true,
           "default": null,
@@ -538,26 +530,27 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_3",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第4步：查询订单详情，验证订单 ID 有效性",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderEntrust/orderPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第4步：查询订单详情，验证订单 ID 有效性",
       "request": {
         "kind": "request",
         "body": {
@@ -573,7 +566,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -583,7 +576,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
@@ -596,7 +589,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.supplier[0].order_supplier_id",
+          "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
           "target": "order_supplier_id",
           "required": true,
           "default": null,
@@ -609,26 +602,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_4",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第5步：提交订单委托（含订舱供应商信息）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第5步：提交订单委托（含订舱供应商信息）",
       "request": {
         "kind": "request",
         "body": {
@@ -807,7 +801,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -818,7 +812,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -829,7 +823,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -840,7 +834,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -850,7 +844,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -863,18 +857,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_5",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第6步：再次编辑订单委托（确认提交前的最终修订）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
@@ -882,7 +873,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第6步：再次编辑订单委托（确认提交前的最终修订）",
       "request": {
         "kind": "request",
         "body": {
@@ -1061,7 +1056,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1072,7 +1067,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1083,7 +1078,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1094,7 +1089,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1104,7 +1099,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -1117,26 +1112,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_6",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第7步：创建主订单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderAdd",
+        "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第7步：创建主订单",
       "request": {
         "kind": "request",
         "body": {
@@ -1477,7 +1473,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1488,7 +1484,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1499,7 +1495,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1510,7 +1506,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1520,7 +1516,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderAdd 应返回200",
@@ -1533,26 +1529,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_7",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第8步：主订单订舱，上传附件并获取文件 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderBook",
+        "path": "/api/order/order/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第8步：主订单订舱，上传附件并获取文件 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -1855,7 +1852,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -1866,7 +1863,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -1877,7 +1874,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -1888,7 +1885,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -1898,7 +1895,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderBook 应返回200",
@@ -1911,7 +1908,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[0].file_id",
+          "expression": "$.call.response.body.data[0].file_id",
           "target": "file_id",
           "required": true,
           "default": null,
@@ -1924,26 +1921,27 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_8",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第9步：再次创建主订单（关联附件）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderAdd",
+        "path": "/api/order/order/orderBook",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第9步：再次创建主订单（关联附件）",
       "request": {
         "kind": "request",
         "body": {
@@ -2297,7 +2295,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.file_id",
-          "target": "$.request_body.customer_file_list[0].file_id",
+          "target": "$.call.request.body.customer_file_list[0].file_id",
           "scope": "scenario"
         },
         {
@@ -2308,7 +2306,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
+          "target": "$.call.request.body.supplier[0].order_supplier_id",
           "scope": "scenario"
         },
         {
@@ -2319,7 +2317,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
+          "target": "$.call.request.body.supplier[0].order_id",
           "scope": "scenario"
         },
         {
@@ -2330,7 +2328,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.order_no",
+          "target": "$.call.request.body.order_no",
           "scope": "scenario"
         },
         {
@@ -2341,7 +2339,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2351,7 +2349,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderAdd 应返回200",
@@ -2364,26 +2362,27 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_9",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第10步：查询订单详情，提取子单 ID 与子单号",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/order/orderAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第10步：查询订单详情，提取子单 ID 与子单号",
       "request": {
         "kind": "request",
         "body": {
@@ -2399,7 +2398,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2409,7 +2408,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
@@ -2422,7 +2421,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_sub[0].order_sub_id",
+          "expression": "$.call.response.body.data.order_sub[0].order_sub_id",
           "target": "order_sub_id",
           "required": true,
           "default": null,
@@ -2435,7 +2434,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_sub[0].order_sub_no",
+          "expression": "$.call.response.body.data.order_sub[0].order_sub_no",
           "target": "order_sub_no",
           "required": true,
           "default": null,
@@ -2448,26 +2447,27 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_10",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第11步：切换订单费用项的实际金额选择",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第11步：切换订单费用项的实际金额选择",
       "request": {
         "kind": "request",
         "body": {
@@ -2483,7 +2483,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2493,7 +2493,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -2506,26 +2506,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_11",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第12步：编辑订舱实际金额",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/bookRealAmountEdit",
+        "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第12步：编辑订舱实际金额",
       "request": {
         "kind": "request",
         "body": {
@@ -2605,7 +2606,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2615,7 +2616,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
@@ -2628,18 +2629,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_12",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第13步：保存订舱实际金额",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
@@ -2647,7 +2645,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第13步：保存订舱实际金额",
       "request": {
         "kind": "request",
         "body": {
@@ -2727,7 +2729,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2737,7 +2739,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
@@ -2750,26 +2752,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_13",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第14步：校验订单是否可生成子单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/checkGenerateOrderSub",
+        "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第14步：校验订单是否可生成子单",
       "request": {
         "kind": "request",
         "body": {
@@ -2785,7 +2788,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2795,7 +2798,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/checkGenerateOrderSub 应返回200",
@@ -2808,26 +2811,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_14",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第15步：生成订单子单",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/generateOrderSub",
+        "path": "/api/order/order/checkGenerateOrderSub",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第15步：生成订单子单",
       "request": {
         "kind": "request",
         "body": {
@@ -2843,7 +2847,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2853,7 +2857,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/generateOrderSub 应返回200",
@@ -2866,26 +2870,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_15",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第16步：查询订单详情，提取子单 ID（第二轮）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/order/generateOrderSub",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第16步：查询订单详情，提取子单 ID（第二轮）",
       "request": {
         "kind": "request",
         "body": {
@@ -2901,7 +2906,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2911,7 +2916,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
@@ -2924,7 +2929,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.order_sub[1].order_sub_id",
+          "expression": "$.call.response.body.data.order_sub[1].order_sub_id",
           "target": "order_sub_id_2",
           "required": true,
           "default": null,
@@ -2937,26 +2942,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_16",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第17步：切换费用项实际金额，提取费用项 ID 与费用单号",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第17步：切换费用项实际金额，提取费用项 ID 与费用单号",
       "request": {
         "kind": "request",
         "body": {
@@ -2972,7 +2978,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -2982,7 +2988,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -2995,7 +3001,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+          "expression": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
           "target": "order_fee_real_id",
           "required": true,
           "default": null,
@@ -3008,7 +3014,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+          "expression": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
           "target": "fee_real_no",
           "required": true,
           "default": null,
@@ -3021,26 +3027,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_17",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第18步：费用锁定提交（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第18步：费用锁定提交（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3060,7 +3067,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3071,7 +3078,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3081,7 +3088,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -3094,18 +3101,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_18",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第19步：费用锁定提交（第二次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -3113,7 +3117,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第19步：费用锁定提交（第二次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3133,7 +3141,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3144,7 +3152,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3154,7 +3162,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -3167,18 +3175,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_19",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第20步：费用锁定提交（第三次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -3186,7 +3191,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第20步：费用锁定提交（第三次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3219,7 +3228,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3230,7 +3239,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_ids[0]",
+          "target": "$.call.request.body.order_fee_real_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3241,7 +3250,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_no",
-          "target": "$.request_body.audit_msg.code",
+          "target": "$.call.request.body.audit_msg.code",
           "scope": "scenario"
         },
         {
@@ -3251,7 +3260,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -3264,26 +3273,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_20",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第21步：查询订单详情，提取费用锁定审核 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第21步：查询订单详情，提取费用锁定审核 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -3299,7 +3309,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3309,7 +3319,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
@@ -3322,7 +3332,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.audit[0].audit_id",
+          "expression": "$.call.response.body.data.audit[0].audit_id",
           "target": "fee_lock_audit_id",
           "required": true,
           "default": null,
@@ -3335,26 +3345,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_21",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第22步：执行费用锁定审核",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/order/order/orderDetail",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第22步：执行费用锁定审核",
       "request": {
         "kind": "request",
         "body": {
@@ -3374,7 +3385,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_lock_audit_id",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3384,7 +3395,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/home/audit/auditExecute 应返回200",
@@ -3397,26 +3408,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_22",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第23步：变更开票申请提交（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/changeInvoiceApply",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第23步：变更开票申请提交（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3443,7 +3455,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3453,7 +3465,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/changeInvoiceApply 应返回200",
@@ -3466,18 +3478,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_23",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第24步：变更开票申请提交（第二次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/changeInvoiceApply",
@@ -3485,7 +3494,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第24步：变更开票申请提交（第二次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3512,7 +3525,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3522,7 +3535,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/changeInvoiceApply 应返回200",
@@ -3535,18 +3548,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_24",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第25步：变更开票申请提交（第三次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/changeInvoiceApply",
@@ -3554,7 +3564,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第25步：变更开票申请提交（第三次）",
       "request": {
         "kind": "request",
         "body": {
@@ -3587,7 +3601,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_ids[0]",
+          "target": "$.call.request.body.order_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3597,7 +3611,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/changeInvoiceApply 应返回200",
@@ -3610,26 +3624,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_25",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第26步：审核分页查询，提取变更开票审核 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditPage",
+        "path": "/api/order/order/changeInvoiceApply",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第26步：审核分页查询，提取变更开票审核 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -3649,7 +3664,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/home/audit/auditPage 应返回200",
@@ -3662,7 +3677,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
+          "expression": "$.call.response.body.data.data[0].audit_id",
           "target": "invoice_apply_audit_id",
           "required": true,
           "default": null,
@@ -3675,26 +3690,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_26",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第27步：执行变更开票申请审核",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/home/audit/auditPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第27步：执行变更开票申请审核",
       "request": {
         "kind": "request",
         "body": {
@@ -3714,7 +3730,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.invoice_apply_audit_id",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         },
         {
@@ -3724,7 +3740,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/home/audit/auditExecute 应返回200",
@@ -3737,26 +3753,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_27",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第28步：订单收款账户确认，提取买卖方银行账号与纳税人识别号",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderConfirmAccount",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第28步：订单收款账户确认，提取买卖方银行账号与纳税人识别号",
       "request": {
         "kind": "request",
         "body": {
@@ -3773,7 +3790,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.order_id",
+          "target": "$.call.request.body.order_id",
           "scope": "scenario"
         },
         {
@@ -3783,7 +3800,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/order/orderConfirmAccount 应返回200",
@@ -3796,7 +3813,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.main_currency_bank.CNY[0].bank_account",
+          "expression": "$.call.response.body.data.main_currency_bank.CNY[0].bank_account",
           "target": "seller_bank_account",
           "required": true,
           "default": null,
@@ -3809,7 +3826,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.customer_currency_finance.USD[0].identifier_no",
+          "expression": "$.call.response.body.data.customer_currency_finance.USD[0].identifier_no",
           "target": "buyer_identifier_no",
           "required": true,
           "default": null,
@@ -3822,7 +3839,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.main_currency_bank.USD[0].identifier_no",
+          "expression": "$.call.response.body.data.main_currency_bank.USD[0].identifier_no",
           "target": "seller_identifier_no",
           "required": true,
           "default": null,
@@ -3835,26 +3852,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_28",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第29步：查询财务列表，提取子单币种",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/accountFee/financePutList",
+        "path": "/api/order/order/orderConfirmAccount",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第29步：查询财务列表，提取子单币种",
       "request": {
         "kind": "request",
         "body": {
@@ -3881,7 +3899,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/accountFee/financePutList 应返回200",
@@ -3894,7 +3912,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_sub_currency",
+          "expression": "$.call.response.body.data.data[0].order_sub_currency",
           "target": "order_sub_currency",
           "required": true,
           "default": null,
@@ -3907,26 +3925,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_29",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第30步：编辑订单收款账户（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+        "path": "/api/finance/accountFee/financePutList",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第30步：编辑订单收款账户（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -4054,7 +4073,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4065,7 +4084,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.select_list[0].order_no",
+          "target": "$.call.request.body.select_list[0].order_no",
           "scope": "scenario"
         },
         {
@@ -4076,7 +4095,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.select_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4087,7 +4106,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_no",
-          "target": "$.request_body.select_list[0].order_sub_no",
+          "target": "$.call.request.body.select_list[0].order_sub_no",
           "scope": "scenario"
         },
         {
@@ -4098,7 +4117,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_currency",
-          "target": "$.request_body.select_list[0].order_sub_currency",
+          "target": "$.call.request.body.select_list[0].order_sub_currency",
           "scope": "scenario"
         },
         {
@@ -4109,7 +4128,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -4120,7 +4139,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_real_no",
-          "target": "$.request_body.select_list[0].amount_list[0].fee_real_no",
+          "target": "$.call.request.body.select_list[0].amount_list[0].fee_real_no",
           "scope": "scenario"
         },
         {
@@ -4130,7 +4149,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveAccount/orderReceiveAccountEdit 应返回200",
@@ -4143,18 +4162,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_30",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第31步：编辑订单收款账户（第二次），提取收款账户 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
@@ -4162,7 +4178,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第31步：编辑订单收款账户（第二次），提取收款账户 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -4290,7 +4310,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.select_list[0].order_id",
+          "target": "$.call.request.body.select_list[0].order_id",
           "scope": "scenario"
         },
         {
@@ -4301,7 +4321,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
-          "target": "$.request_body.select_list[0].order_no",
+          "target": "$.call.request.body.select_list[0].order_no",
           "scope": "scenario"
         },
         {
@@ -4312,7 +4332,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.select_list[0].order_sub_id",
+          "target": "$.call.request.body.select_list[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4323,7 +4343,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_no",
-          "target": "$.request_body.select_list[0].order_sub_no",
+          "target": "$.call.request.body.select_list[0].order_sub_no",
           "scope": "scenario"
         },
         {
@@ -4334,7 +4354,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_currency",
-          "target": "$.request_body.select_list[0].order_sub_currency",
+          "target": "$.call.request.body.select_list[0].order_sub_currency",
           "scope": "scenario"
         },
         {
@@ -4345,7 +4365,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "target": "$.call.request.body.select_list[0].amount_list[0].order_fee_real_id",
           "scope": "scenario"
         },
         {
@@ -4356,7 +4376,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_real_no",
-          "target": "$.request_body.select_list[0].amount_list[0].fee_real_no",
+          "target": "$.call.request.body.select_list[0].amount_list[0].fee_real_no",
           "scope": "scenario"
         },
         {
@@ -4366,7 +4386,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveAccount/orderReceiveAccountEdit 应返回200",
@@ -4379,7 +4399,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.receive_account_id",
+          "expression": "$.call.response.body.data.receive_account_id",
           "target": "receive_account_id",
           "required": true,
           "default": null,
@@ -4392,26 +4412,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_31",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第32步：查询收款确认列表，提取实收金额 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第32步：查询收款确认列表，提取实收金额 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -4429,7 +4450,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_account_id",
-          "target": "$.request_body.receive_account_id",
+          "target": "$.call.request.body.receive_account_id",
           "scope": "scenario"
         },
         {
@@ -4439,7 +4460,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveAccount/receiveConfirmList 应返回200",
@@ -4452,7 +4473,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[0].real_amount_ids[0]",
+          "expression": "$.call.response.body.data[0].real_amount_ids[0]",
           "target": "real_amount_id",
           "required": true,
           "default": null,
@@ -4465,7 +4486,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data[1].real_amount_ids[0]",
+          "expression": "$.call.response.body.data[1].real_amount_ids[0]",
           "target": "real_amount_id_2",
           "required": true,
           "default": null,
@@ -4478,26 +4499,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_32",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第33步：提交账户确认（收款确认）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveAccount/accountConfirm",
+        "path": "/api/finance/receiveAccount/receiveConfirmList",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第33步：提交账户确认（收款确认）",
       "request": {
         "kind": "request",
         "body": {
@@ -4564,7 +4586,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_account_id",
-          "target": "$.request_body.receive_account_id",
+          "target": "$.call.request.body.receive_account_id",
           "scope": "scenario"
         },
         {
@@ -4575,7 +4597,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.confirm_list[0].order_ids",
+          "target": "$.call.request.body.confirm_list[0].order_ids",
           "scope": "scenario"
         },
         {
@@ -4586,7 +4608,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_id",
-          "target": "$.request_body.confirm_list[1].order_ids",
+          "target": "$.call.request.body.confirm_list[1].order_ids",
           "scope": "scenario"
         },
         {
@@ -4597,7 +4619,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id_2",
-          "target": "$.request_body.confirm_list[0].order_sub_ids",
+          "target": "$.call.request.body.confirm_list[0].order_sub_ids",
           "scope": "scenario"
         },
         {
@@ -4608,7 +4630,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.real_amount_id",
-          "target": "$.request_body.confirm_list[0].real_amount_ids[0]",
+          "target": "$.call.request.body.confirm_list[0].real_amount_ids[0]",
           "scope": "scenario"
         },
         {
@@ -4619,7 +4641,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.confirm_list[1].order_sub_ids",
+          "target": "$.call.request.body.confirm_list[1].order_sub_ids",
           "scope": "scenario"
         },
         {
@@ -4630,7 +4652,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.real_amount_id_2",
-          "target": "$.request_body.confirm_list[1].real_amount_ids[0]",
+          "target": "$.call.request.body.confirm_list[1].real_amount_ids[0]",
           "scope": "scenario"
         },
         {
@@ -4640,7 +4662,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveAccount/accountConfirm 应返回200",
@@ -4653,7 +4675,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_33",
           "required": true,
           "default": null
@@ -4665,26 +4687,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "request_body_step_33",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第34步：批次开票编辑（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+        "path": "/api/finance/receiveAccount/accountConfirm",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第34步：批次开票编辑（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -4837,7 +4860,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -4848,7 +4871,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -4859,7 +4882,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.seller_bank_account",
-          "target": "$.request_body.usd_require.seller_name",
+          "target": "$.call.request.body.usd_require.seller_name",
           "scope": "scenario"
         },
         {
@@ -4870,7 +4893,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_real_no",
-          "target": "$.request_body.usd_require.rate_list[0].fee_real_no",
+          "target": "$.call.request.body.usd_require.rate_list[0].fee_real_no",
           "scope": "scenario"
         },
         {
@@ -4881,7 +4904,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -4891,7 +4914,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit 应返回200",
@@ -4904,18 +4927,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_34",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第35步：批次开票编辑（第二次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
@@ -4923,7 +4943,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第35步：批次开票编辑（第二次）",
       "request": {
         "kind": "request",
         "body": {
@@ -5076,7 +5100,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -5087,7 +5111,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -5098,7 +5122,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.seller_bank_account",
-          "target": "$.request_body.usd_require.seller_name",
+          "target": "$.call.request.body.usd_require.seller_name",
           "scope": "scenario"
         },
         {
@@ -5109,7 +5133,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_real_no",
-          "target": "$.request_body.usd_require.rate_list[0].fee_real_no",
+          "target": "$.call.request.body.usd_require.rate_list[0].fee_real_no",
           "scope": "scenario"
         },
         {
@@ -5120,7 +5144,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -5130,7 +5154,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit 应返回200",
@@ -5143,18 +5167,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_35",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第36步：批次开票编辑（第三次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
@@ -5162,7 +5183,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第36步：批次开票编辑（第三次）",
       "request": {
         "kind": "request",
         "body": {
@@ -5323,7 +5348,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.order_fee_real_id[0]",
+          "target": "$.call.request.body.order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -5334,7 +5359,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.order_sub_id[0]",
+          "target": "$.call.request.body.order_sub_id[0]",
           "scope": "scenario"
         },
         {
@@ -5345,7 +5370,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.seller_bank_account",
-          "target": "$.request_body.usd_require.seller_name",
+          "target": "$.call.request.body.usd_require.seller_name",
           "scope": "scenario"
         },
         {
@@ -5356,7 +5381,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.fee_real_no",
-          "target": "$.request_body.usd_require.rate_list[0].fee_real_no",
+          "target": "$.call.request.body.usd_require.rate_list[0].fee_real_no",
           "scope": "scenario"
         },
         {
@@ -5367,7 +5392,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "target": "$.call.request.body.batch_order_remark[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -5377,7 +5402,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit 应返回200",
@@ -5390,26 +5415,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_36",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第37步：审核分页查询，提取批次开票审核 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditPage",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第37步：审核分页查询，提取批次开票审核 ID",
       "request": {
         "kind": "request",
         "body": {
@@ -5429,7 +5455,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/home/audit/auditPage 应返回200",
@@ -5442,7 +5468,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
+          "expression": "$.call.response.body.data.data[0].audit_id",
           "target": "batch_audit_id",
           "required": true,
           "default": null,
@@ -5455,26 +5481,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_37",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第38步：执行批次开票审核",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/home/audit/auditExecute",
+        "path": "/api/home/audit/auditPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第38步：执行批次开票审核",
       "request": {
         "kind": "request",
         "body": {
@@ -5494,7 +5521,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.batch_audit_id",
-          "target": "$.request_body.audit_ids[0]",
+          "target": "$.call.request.body.audit_ids[0]",
           "scope": "scenario"
         },
         {
@@ -5504,7 +5531,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/home/audit/auditExecute 应返回200",
@@ -5517,26 +5544,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_38",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第39步：查询批次开票申请，提取收票申请 ID、批次 ID 与申请号",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+        "path": "/api/home/audit/auditExecute",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第39步：查询批次开票申请，提取收票申请 ID、批次 ID 与申请号",
       "request": {
         "kind": "request",
         "body": {
@@ -5573,7 +5601,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/applyPage 应返回200",
@@ -5586,7 +5614,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].receive_invoice_apply_id",
+          "expression": "$.call.response.body.data.data[0].receive_invoice_apply_id",
           "target": "receive_invoice_apply_id",
           "required": true,
           "default": null,
@@ -5599,7 +5627,7 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].receive_invoice_batch_id",
+          "expression": "$.call.response.body.data.data[0].receive_invoice_batch_id",
           "target": "receive_invoice_batch_id",
           "required": true,
           "default": null,
@@ -5612,7 +5640,7 @@
           "order": 2,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].receive_invoice_apply_no",
+          "expression": "$.call.response.body.data.data[0].receive_invoice_apply_no",
           "target": "receive_invoice_apply_no",
           "required": true,
           "default": null,
@@ -5625,7 +5653,7 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "receive_invoice_apply_no_response",
           "required": true,
           "default": null,
@@ -5638,27 +5666,28 @@
           "order": -1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.request_body",
+          "expression": "$.call.request.body",
           "target": "receive_invoice_apply_no_request",
           "required": true,
           "default": null,
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第40步：发票添加前置校验",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+        "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第40步：发票添加前置校验",
       "request": {
         "kind": "request",
         "body": {
@@ -5700,7 +5729,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.buyer_identifier_no",
-          "target": "$.request_body.buyer_identifier_no",
+          "target": "$.call.request.body.buyer_identifier_no",
           "scope": "scenario"
         },
         {
@@ -5711,7 +5740,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.seller_identifier_no",
-          "target": "$.request_body.seller_identifier_no",
+          "target": "$.call.request.body.seller_identifier_no",
           "scope": "scenario"
         },
         {
@@ -5722,7 +5751,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.file_id",
-          "target": "$.request_body.invoice_original.file_id",
+          "target": "$.call.request.body.invoice_original.file_id",
           "scope": "scenario"
         },
         {
@@ -5732,7 +5761,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveInvoice/invoiceAddCheck 应返回200",
@@ -5745,26 +5774,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_39",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第41步：录入发票，提取收票 ID",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveInvoice/invoiceAdd",
+        "path": "/api/finance/receiveInvoice/invoiceAddCheck",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第41步：录入发票，提取收票 ID",
       "request": {
         "kind": "request",
         "body": [
@@ -5806,7 +5836,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.buyer_identifier_no",
-          "target": "$.request_body[0].buyer_identifier_no",
+          "target": "$.call.request.body[0].buyer_identifier_no",
           "scope": "scenario"
         },
         {
@@ -5817,7 +5847,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.seller_identifier_no",
-          "target": "$.request_body[0].seller_identifier_no",
+          "target": "$.call.request.body[0].seller_identifier_no",
           "scope": "scenario"
         },
         {
@@ -5827,7 +5857,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveInvoice/invoiceAdd 应返回200",
@@ -5840,7 +5870,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_40",
           "required": true,
           "default": null
@@ -5852,27 +5882,28 @@
           "order": 1,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data['${var.invoice_number}']",
+          "expression": "$.call.response.body.data['${var.invoice_number}']",
           "target": "receive_invoice_id",
           "required": true,
           "default": null,
           "scope": "scenario"
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第42步：发票分配订单（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+        "path": "/api/finance/receiveInvoice/invoiceAdd",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第42步：发票分配订单（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -5895,7 +5926,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_apply_id",
-          "target": "$.request_body.receive_invoice_apply_id",
+          "target": "$.call.request.body.receive_invoice_apply_id",
           "scope": "scenario"
         },
         {
@@ -5906,7 +5937,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.invoice_arr[0].order_sub_id",
+          "target": "$.call.request.body.invoice_arr[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -5917,7 +5948,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "target": "$.call.request.body.invoice_arr[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -5927,7 +5958,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder 应返回200",
@@ -5940,18 +5971,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_41",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第43步：发票分配订单（第二次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
@@ -5959,7 +5987,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第43步：发票分配订单（第二次）",
       "request": {
         "kind": "request",
         "body": {
@@ -5982,7 +6014,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_apply_id",
-          "target": "$.request_body.receive_invoice_apply_id",
+          "target": "$.call.request.body.receive_invoice_apply_id",
           "scope": "scenario"
         },
         {
@@ -5993,7 +6025,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_sub_id",
-          "target": "$.request_body.invoice_arr[0].order_sub_id",
+          "target": "$.call.request.body.invoice_arr[0].order_sub_id",
           "scope": "scenario"
         },
         {
@@ -6004,7 +6036,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "target": "$.call.request.body.invoice_arr[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -6014,7 +6046,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder 应返回200",
@@ -6027,26 +6059,27 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_42",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第44步：应收核销批次提交（第一次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/finance/receiveWriteoff/writeoffBatch",
+        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
         "headers": {
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第44步：应收核销批次提交（第一次）",
       "request": {
         "kind": "request",
         "body": {
@@ -6101,7 +6134,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.writeoff_object[0].order_fee_real_id[0]",
+          "target": "$.call.request.body.writeoff_object[0].order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -6112,7 +6145,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.writeoff_object[0].receive_invoice_id",
+          "target": "$.call.request.body.writeoff_object[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -6122,7 +6155,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveWriteoff/writeoffBatch 应返回200",
@@ -6135,18 +6168,15 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_43",
           "required": true,
           "default": null
         }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "第45步：应收核销批次提交（第二次）",
-      "api": {
-        "kind": "api",
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/finance/receiveWriteoff/writeoffBatch",
@@ -6154,7 +6184,11 @@
           "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
-      },
+      }
+    },
+    {
+      "kind": "step",
+      "description": "第45步：应收核销批次提交（第二次）",
       "request": {
         "kind": "request",
         "body": {
@@ -6209,7 +6243,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_fee_real_id",
-          "target": "$.request_body.writeoff_object[0].order_fee_real_id[0]",
+          "target": "$.call.request.body.writeoff_object[0].order_fee_real_id[0]",
           "scope": "scenario"
         },
         {
@@ -6220,7 +6254,7 @@
           "enabled": true,
           "onFailure": "abort",
           "source": "$.receive_invoice_id",
-          "target": "$.request_body.writeoff_object[0].receive_invoice_id",
+          "target": "$.call.request.body.writeoff_object[0].receive_invoice_id",
           "scope": "scenario"
         },
         {
@@ -6230,7 +6264,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/finance/receiveWriteoff/writeoffBatch 应返回200",
@@ -6243,12 +6277,23 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.call.response.body",
           "target": "response_body_step_44",
           "required": true,
           "default": null
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/writeoffBatch",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

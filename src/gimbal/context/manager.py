@@ -165,13 +165,16 @@ class ContextManager:
         # 把本 step 登记到 scenario 的 step_refs(scenario 此时未 seal,直接 append)
         ctx.parent.step_refs.append(ctx.step_id)
 
-        # 归档前快照 HTTP 数据（scratch clear 之前）
+        # 归档前快照协议证据数据（scratch clear 之前）；键空间化 (scenario_id, step_id)
         self._archive.save_step(ctx)
-        scratch_snapshot = ctx.scratch.as_dict()
-        if any(k in scratch_snapshot for k in (
-            "response_status", "response_body", "request_url"
-        )):
-            self._archive.save_exchange(scratch_snapshot, ctx.step_id)
+        # 浅拷贝快照：as_dict 返回内部 dict 引用，紧随其后的 scratch.clear()
+        # 会把按引用保存的 exchange 一并清空（历史 bug —— 归档的 exchange 恒空）
+        scratch_snapshot = dict(ctx.scratch.as_dict())
+        if "call" in scratch_snapshot:   # F 定稿：唯一证据键
+            self._archive.save_exchange(
+                scratch_snapshot, ctx.step_id,
+                scenario_id=getattr(ctx.parent, "scenario_id", None),
+            )
 
         # scratch 随 Step 生命周期结束
         ctx.scratch.clear()

@@ -52,12 +52,12 @@
                 <div class="step-body">
                   <div class="step-main">
                     <div class="step-idx">{{ i + 1 }}</div>
-                    <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
+                    <div class="step-name">{{ orch.steps[i]?.name || stepPath(s) || 'step' }}</div>
                     <Switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" class="scale-75" @click.stop />
                   </div>
                   <div class="step-meta">
-                    <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
-                    <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
+                    <span v-if="stepMethod(s)" class="method-badge" :class="`m-${stepMethod(s).toLowerCase()}`">{{ stepMethod(s) }}</span>
+                    <span v-if="stepService(s)" class="svc-tag">{{ stepService(s) }}</span>
                     <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
                          与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
                     <TooltipProvider :delay-duration="200">
@@ -73,7 +73,7 @@
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <div v-if="s.api?.path" class="ep-path">{{ s.api.path }}</div>
+                  <div v-if="stepPath(s)" class="ep-path">{{ stepPath(s) }}</div>
                   <div class="step-actions">
                     <button class="step-act step-copy" @click.stop="copyStep(i)" title="复制此步骤(插入到紧随其后)">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -117,9 +117,9 @@
             <!-- 接口事实只读缩略: method/service/path 来自接口目录 (plate), 是选定接口的属性,
                  不是用例配置项。要换接口 → 删 step 从目录重选。 -->
             <div class="api-summary">
-              <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
-              <span v-if="currentStep.api?.service" class="svc-tag">{{ currentStep.api.service }}</span>
-              <span v-if="currentStep.api?.path" class="ep-path">{{ currentStep.api.path }}</span>
+              <span v-if="stepMethod(currentStep)" class="method-badge" :class="`m-${stepMethod(currentStep).toLowerCase()}`">{{ stepMethod(currentStep) }}</span>
+              <span v-if="stepService(currentStep)" class="svc-tag">{{ stepService(currentStep) }}</span>
+              <span v-if="stepPath(currentStep)" class="ep-path">{{ stepPath(currentStep) }}</span>
             </div>
 
             <!-- 运行引用(别名消费点,spec §1.4 双显):目录事实只读,引用可切。
@@ -134,13 +134,13 @@
               >{{ svcSource.text }}</span>
               <select
                 class="svc-ref-select"
-                :value="currentStep.api?.service"
+                :value="stepService(currentStep)"
                 @change="onServiceRefChange(currentStep, ($event.target as HTMLSelectElement).value)"
               >
                 <option
-                  v-if="currentStep.api?.service && !serviceOptions.some(o => o.value === currentStep.api?.service)"
-                  :value="currentStep.api.service"
-                >{{ currentStep.api.service }}(未挂目录)</option>
+                  v-if="stepService(currentStep) && !serviceOptions.some(o => o.value === stepService(currentStep))"
+                  :value="stepService(currentStep)"
+                >{{ stepService(currentStep) }}(未挂目录)</option>
                 <option v-for="o in serviceOptions" :key="o.value" :value="o.value" :class="{ dim: o.dim }">{{ o.label }}</option>
                 <option value="__create__">+ 为此服务新建别名…</option>
               </select>
@@ -207,7 +207,7 @@
                  引用徽章提示悬空(alias 不在 /api/auths) -->
             <div v-if="activeIoTab === 'request'" class="cf-item"><span class="cf-label">headers (点 ⓘ 注入 ${auth.&lt;alias&gt;.&lt;field&gt;})</span>
               <div class="hdr-rows">
-                <div v-for="(value, key) in currentStep.api.headers" :key="String(key)" class="hdr-row">
+                <div v-for="(value, key) in stepHeaders(currentStep)" :key="String(key)" class="hdr-row">
                   <!-- key: 常用预设下拉 + allow-create 手输(规范大小写由预设带出) -->
                   <Input
                     :model-value="String(key)"
@@ -253,7 +253,7 @@
               <div class="field-form-wrap">
                 <FieldForm
                   :nodes="requestNodes"
-                  :body="currentStep.request.body || {}"
+                  :body="currentStep.request?.body || {}"
                   :field-actions="true"
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
@@ -264,7 +264,7 @@
                   :overlay="currentStep.field_states"
                   :query-badges="vsBadges"
                   @strategy-jump="onStrategyJump"
-                  @update:body="(v: unknown) => currentStep.request.body = v"
+                  @update:body="(v: unknown) => { if (currentStep.request) currentStep.request.body = v }"
                   @field-extract="(f) => onFieldExtract(f, 'request')"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
                   @field-assert="(f) => onFieldAssert(f, 'request')"
@@ -286,10 +286,10 @@
             </div>
             <div v-else-if="activeIoTab === 'request'" class="cf-item"><span class="cf-label">body (JSON)</span>
               <textarea
-                :value="JSON.stringify(currentStep.request.body || {}, null, 2)"
+                :value="JSON.stringify(currentStep.request?.body || {}, null, 2)"
                 rows="5"
                 class="code-input"
-                @input="(e) => currentStep.request.body = parseJson((e.target as HTMLTextAreaElement).value, {})"
+                @input="(e) => { if (currentStep.request) currentStep.request.body = parseJson((e.target as HTMLTextAreaElement).value, {}) }"
               ></textarea>
               <!-- 取数失败那一格由上方 SurfaceNotice 统一说明(含重试入口),
                    这里不再复述,免得同一页出现两处同义提示 -->
@@ -439,13 +439,13 @@
             <div class="info-block">
               <div class="info-k">HTTP</div>
               <div class="info-v">
-                <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
-                <code>{{ currentStep.api?.path || '—' }}</code>
+                <span v-if="stepMethod(currentStep)" class="method-badge" :class="`m-${stepMethod(currentStep).toLowerCase()}`">{{ stepMethod(currentStep) }}</span>
+                <code>{{ stepPath(currentStep) || '—' }}</code>
               </div>
             </div>
             <div class="info-block">
               <div class="info-k">service</div>
-              <div class="info-v"><code>{{ currentStep.api?.service || '—' }}</code></div>
+              <div class="info-v"><code>{{ stepService(currentStep) || '—' }}</code></div>
             </div>
             <div class="info-block">
               <div class="info-k">kind</div>
@@ -467,7 +467,7 @@
                 <div class="info-k">请求侧</div>
                 <div class="info-v">
                   <span class="badge">{{ fieldBindings(currentStep).length }} 字段</span>
-                  <span class="badge">{{ Object.keys(currentStep.api?.headers || {}).length }} headers</span>
+                  <span class="badge">{{ Object.keys(stepHeaders(currentStep) || {}).length }} headers</span>
                 </div>
               </div>
             </template>
@@ -604,6 +604,7 @@ import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import type { RegistryMark } from '@/types/assertion-registry'
 import { parseJson } from '../../utils/json'
@@ -648,16 +649,16 @@ const currentOrch = computed<StepOrchestration | undefined>(() => orch.steps[act
 
 /** plate Step 无顶层协议 kind;从 api 形状推断展示标签 (http/...) */
 function inferProtocol(step: StepView | undefined): string {
-  if (step?.api && step.api.method) return 'http'
+  if (stepMethod(step)) return (stepCall(step) as any)?.protocol ?? 'http'
   return 'step'
 }
 
 /** 当前 step 的请求目录(**纯缓存读**:目录按 endpoint_id 由本文件的预拉
- *  取回,不读持久化快照;step.request.fields_meta 不作数据源 — 退场记录见
+ *  取回,不读持久化快照;step.request?.fields_meta 不作数据源 — 退场记录见
  *  docs/adr/0003)。读缓存(getEndpointFull)即建立响应依赖:回填后树
  *  自动重算。 */
 function stepDecls(step: StepView | undefined) {
-  const eid = step?.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(step)
   if (!eid) return undefined
   return getEndpointFull(eid)?.request?.declarations
 }
@@ -682,7 +683,7 @@ const fieldSearchCorpus = computed(() =>
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
 function hasEndpointRef(step: StepView | undefined): boolean {
-  return !!step?.api?.view_hints?.endpoint_id
+  return !!stepEndpointId(step)
 }
 
 /** strategy 里提取 extract 变体 */
@@ -791,22 +792,22 @@ const authPickerStep = ref<StepView | null>(null)
 const authPickerBound = ref<BoundCredential | null>(null)
 
 function addHeader(step: StepView) {
-  const h = (step.api.headers ||= {})
+  const h = (stepCall(step) as any).headers = stepHeaders(step)
   let k = 'X-Header'
   while (k in h) k += '1'
   h[k] = ''
 }
 function removeHeader(step: StepView, key: string) {
-  delete step.api.headers?.[key]
+  delete (stepCall(step) as any)?.headers?.[key]
 }
 function updateHeaderKey(step: StepView, oldKey: string, newKey: string) {
-  if (oldKey === newKey || !step.api.headers) return
-  const v = step.api.headers[oldKey]
-  delete step.api.headers[oldKey]
-  step.api.headers[newKey] = v ?? ''
+  const _hdrs = stepHeaders(step); if (oldKey === newKey || !_hdrs) return
+  const v = _hdrs[oldKey]
+  delete _hdrs[oldKey]
+  _hdrs[newKey] = v ?? ''
 }
 function updateHeaderValue(step: StepView, key: string, value: string) {
-  if (step.api.headers) step.api.headers[key] = value
+  const _h2 = stepHeaders(step); if (_h2) _h2[key] = value
 }
 
 /**
@@ -840,7 +841,7 @@ function injectHeaderTpl(
 }
 
 function onAuthPicked(tpl: string) {
-  injectHeaderTpl(authPickerStep.value?.api?.headers, authPickerKey.value, authPickerVal.value, tpl)
+  injectHeaderTpl(stepHeaders(authPickerStep.value), authPickerKey.value, authPickerVal.value, tpl)
   authPickerKey.value = null
   authPickerVal.value = null
   authPickerStep.value = null
@@ -1075,7 +1076,7 @@ async function applyFieldStates(increments: Record<string, FieldState | null>) {
   }
   if (Object.keys(next).length) step.field_states = next
   else delete step.field_states
-  const eid = step.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(step)
   if (!eid) return
   try {
     const verdict = await validateEndpointFieldStates(eid, step.field_states ?? {})
@@ -1125,7 +1126,7 @@ function openVarPicker(key: string, value: string) {
   varPickerOpen.value = true
 }
 function onVarPicked(tpl: string) {
-  injectHeaderTpl(currentStep.value?.api?.headers, varPickerKey.value, varPickerVal.value, tpl)
+  injectHeaderTpl(stepHeaders(currentStep.value), varPickerKey.value, varPickerVal.value, tpl)
   varPickerKey.value = null
   varPickerVal.value = null
 }
@@ -1177,7 +1178,7 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
  * 视图 422 query_credential_required)。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
-  const svc = step.api?.service || ''
+  const svc = stepService(step)
   return {
     serviceUrl: declaredUrlOf(svc) || undefined,
     queryAlias: headerAuthTagOf(step) ?? queryAliasOf(svc),
@@ -1192,7 +1193,7 @@ function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias:
  *  凭证」(悬空另有徽章显形,不回退猜测)。无引用 → null → 域内首键
  *  fallback(修订 10 行为,单用户场景零变化)。 */
 function headerAuthTagOf(step: StepView): string | null {
-  for (const v of Object.values(step.api?.headers ?? {})) {
+  for (const v of Object.values(stepHeaders(step))) {
     const ref = parseTplRefs(String(v ?? '')).find(r => r.domain === 'auth' && r.alias)
     if (ref?.alias) return ref.alias
   }
@@ -1371,7 +1372,7 @@ function onVsSelect(row: Record<string, unknown>) {
   if (!g || !step) return
   const ctx = arrayContextOf(vsPicker.anchorPath)
   const arrTmpls = arrayContainerTemplates(step)
-  const body = JSON.parse(JSON.stringify(step.request.body ?? {}))
+  const body = JSON.parse(JSON.stringify(step.request?.body ?? {}))
   const filled: Array<{ path: string }> = []
   for (const f of g.fields) {
     const col = f.column || firstRowKeyLabel(row)      // column 空 = label 列(= 行首键)
@@ -1383,7 +1384,7 @@ function onVsSelect(row: Record<string, unknown>) {
     // FieldForm 叶子行按实例路径查 queryBadges,与写值同径才亮(修轮 2)
     filled.push({ path: writePath })
   }
-  step.request.body = body
+  if (step.request) step.request.body = body
   for (const { path } of filled) {
     vsBadges.value[path] = { view: g.view, fetchedAt: vsPicker.fetchedAt }
   }
@@ -1605,13 +1606,13 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
  *  失败记录 → failed(**优先**,即便缓存里还留着上一份面)/
  *  缓存命中 → '' / 其余(未回填)→ loading。 */
 const currentFullState = computed<'loading' | 'failed' | ''>(() => {
-  return endpointFullState(currentStep.value?.api?.view_hints?.endpoint_id)
+  return endpointFullState(stepEndpointId(currentStep.value))
 })
 
 /** 当前 step 的 /full 结构契约:**有缓存则照旧返回那份**(读口不看 TTL ——
  *  重取在飞与重取失败都仍供旧面),只有从未取回时才是 undefined。 */
 const currentFull = computed<EndpointFullView | undefined>(() => {
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(currentStep.value)
   if (!eid) return undefined
   return getEndpointFull(eid)
 })
@@ -1622,7 +1623,7 @@ const currentFull = computed<EndpointFullView | undefined>(() => {
  *  缓存 ⇒ 这一次重试两侧同时恢复。 */
 const fullRetrying = ref(false)
 async function retryCurrentFull(): Promise<void> {
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(currentStep.value)
   if (!eid || fullRetrying.value) return
   fullRetrying.value = true
   try { await ensureEndpointFull(eid, { force: true }) } finally { fullRetrying.value = false }
@@ -1632,7 +1633,7 @@ async function retryCurrentFull(): Promise<void> {
  *  即终值,点击卡片不再触发徽标补显(布局抖动根因)。同端点经会话缓存/
  *  in-flight 去重;这些请求原本在逐个点开时也要发,只是提前。 */
 const stepEndpointIds = computed(() =>
-  local.map((s) => s.api?.view_hints?.endpoint_id).filter((v): v is string => !!v))
+  local.map((s) => stepEndpointId(s)).filter((v): v is string => !!v))
 watch(stepEndpointIds, (ids) => {
   for (const id of ids) void ensureEndpointFull(id)
 }, { immediate: true })
@@ -1750,7 +1751,7 @@ interface BoundCredential { aliasName: string; credentialAlias: string }
 /** step 服务 → 绑定凭证:精确别名键 → derive_base 到 base(服务级默认行)。
  *  与运行时凭证链同构(显式绑定 > 别名表 > 无)。 */
 function boundCredentialFor(step: StepView | null): BoundCredential | null {
-  const raw = step?.api?.service || ''
+  const raw = stepService(step)
   if (!raw) return null
   const hit = (k: string): BoundCredential | null => {
     const c = aliasCredMap.value[k]
@@ -1764,7 +1765,7 @@ function boundCredentialFor(step: StepView | null): BoundCredential | null {
 const serviceAnchor = computed<string | null>(() => {
   const fromFull = currentFull.value?.service
   if (fromFull && catalogNames.value.has(fromFull)) return fromFull
-  return deriveBase(currentStep.value?.api?.service || '', catalogNames.value)
+  return deriveBase(stepService(currentStep.value), catalogNames.value)
 })
 
 // ── carry 只读提示(spec §5)───────────────────────────────────────
@@ -1783,11 +1784,11 @@ onMounted(async () => {
 /** step → 可注入的 carry 键清单(path → 来源);别名经 deriveBase 归锚点服务 */
 function carryInjectable(step: StepView): Map<string, CarrySource> {
   if (!carryValues.value) return new Map()
-  const eid = step.api?.view_hints?.endpoint_id
+  const eid = stepEndpointId(step)
   const full = eid ? getEndpointFull(eid) : undefined
   const face = carryPaths(full?.request?.declarations)
   if (!face.length) return new Map()
-  const base = deriveBase(step.api?.service || '', catalogNames.value)
+  const base = deriveBase(stepService(step), catalogNames.value)
   // base=null(未知服务)→ 运行时整步跳过注入(carry_injection derive_base
   // 失败短路),徽标不显示 — 与运行时行为对齐,不过度承诺
   if (!base) return new Map()
@@ -1839,7 +1840,7 @@ const serviceOptions = computed(() => {
 const svcSource = computed<
   { text: string; tone: 'sys' | 'cfg' | 'reg' | 'override' } | null
 >(() => {
-  const cur = currentStep.value?.api?.service || ''
+  const cur = stepService(currentStep.value)
   if (!cur) return null
   const isDeclared = cur in (props.services ?? {})
   const isRegistered = registeredByName.value.has(cur)
@@ -1853,7 +1854,7 @@ const svcSource = computed<
 /** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄 / 未声明红。
  *  F4:未声明但注册表 base_url 兜住的键不再报红(默认层生效)。 */
 const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(() => {
-  const cur = currentStep.value?.api?.service || ''
+  const cur = stepService(currentStep.value)
   if (!cur) return null
   const anchor = serviceAnchor.value
   if (!anchor || deriveBase(cur, catalogNames.value) === null)
@@ -1873,7 +1874,7 @@ const declaredUrlOf = (svc: string) => (props.services ?? {})[svc] || ''
 /** F4:URL 提示行 —— 声明值 > 注册表 base_url(标注「别名默认」)> 缺口。
  *  只展示,不写 payload(写了就成快照,默认层的动态性失效)。 */
 const svcUrlHint = computed(() => {
-  const cur = currentStep.value?.api?.service || ''
+  const cur = stepService(currentStep.value)
   const declared = (props.services ?? {})[cur]
   if (declared) return declared
   const baseUrl = registeredByName.value.get(cur)?.baseUrl
@@ -2017,14 +2018,15 @@ async function onAddEndpoint(ep: any) {
       kind: 'step',
       // plate 契约描述优先(/full → 目录行),name 仅最后兜底
       description: full?.description || ep.description || ep.name,
-      api: {
-        kind: 'api',
+      // v2.1 F-2a: 新建步骤产 call 形态(gimbal 唯一调用格式)
+      call: {
+        kind: 'call',
+        protocol: 'http',
         service: ep.service,
         method: ep.api?.method || 'GET',
         path: ep.api?.path || '',
         headers: ep.api?.headers || {},
-        // 接口身份持久化(#2):字段契约/断言/extract 候选懒拉 /full 的 key;
-        // view_hints 是平台视图扩展,GimbalScenarioExporter 导出时剥离
+        // 接口身份持久化(#2):字段设计渲染/断言候选/数据集绑定都依赖此 key
         view_hints: { endpoint_id: ep.id },
       },
       request: {
@@ -2058,7 +2060,7 @@ function removeStep(i: number) {
 function copyStep(i: number) {
   const clone = JSON.parse(JSON.stringify(local[i])) as StepView
   local.splice(i + 1, 0, clone)
-  const name = orch.steps[i]?.name || local[i].api?.path || 'step'
+  const name = orch.steps[i]?.name || stepPath(local[i]) || 'step'
   orch.steps.splice(i + 1, 0, {
     ...(orch.steps[i] ?? { enabled: true, name: '' }),
     name: `${name}(副本)`,

@@ -7,6 +7,7 @@
  * 无法区分合法列名与拼错的变量名,判了必误报。
  */
 import { assignVarRefs, deriveVarRegistry, varUsages } from './var-registry'
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 
 export function lintDraft(definition: {
   steps?: any[]
@@ -17,7 +18,7 @@ export function lintDraft(definition: {
 
   steps.forEach((s: any, i: number) => {
     // 无 api 的步骤同样算未索引(与后端 parse_refs 对齐)
-    if (!s.api?.view_hints?.endpoint_id) {
+    if (!stepEndpointId(s)) {
       warns.push(`步骤 ${i + 1} 未绑定接口目录(endpoint_id 缺失,不进反向索引)`)
     }
   })

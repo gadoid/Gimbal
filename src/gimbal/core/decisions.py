@@ -1,0 +1,79 @@
+"""core/decisions.py — 拦截决策（v2 §拦截 hook，v2.1 批次 E）。
+
+hook 是同步拦截点，返回**唯一**决策类型；不承担观察（观察走事件）。
+拦截者通过 ``raise HookSignal.STOP(Decision(...))`` 返回决策（STOP 信号
+天然表达"中断默认流程"；未抛 = continue）。
+
+五个拦截点（v2 表格；批次 E 接入四个，STRATEGY_BEFORE 复用现有
+dispatcher STOP→SKIP 语义）：
+
+  STEP_BEFORE     step 进入 BEFORE_REQUEST 前     CONTINUE / SKIP / ABORT
+  CALL_BEFORE     render 之后、send 之前          CONTINUE（可带 patch）/ ABORT
+  CALL_AFTER      send 之后、AFTER_REQUEST 前     CONTINUE / ABORT（RETRY 留后）
+  STRATEGY_BEFORE 单条策略执行前                  CONTINUE / SKIP（现状已支持）
+  STEP_FAILED     step 失败后（ScenarioRunner 层）CONTINUE / RETRY / SKIP / ABORT
+
+裁决记录（v2.1 §一 #2）：不设 ``by: human`` 字段语义负担——
+``source="human"`` 由 debugger 会话发出的决策自动标记；人工 RETRY 后通过
+记 **repaired**（不计正常通过率）。多个拦截者按注册顺序串行，第一个非
+continue 的决策生效（HookRegistry 的 STOP 即此语义）。
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class Decision:
+    """拦截决策。"""
+
+    action: str = "continue"                 # continue | retry | skip | abort
+    patch: Optional[dict] = None             # 仅 CALL_BEFORE：请求补丁
+    source: str = "auto"                     # auto | human（debugger 会话）
+    note: str = ""
+
+    @property
+    def is_human(self) -> bool:
+        return self.source == "human"
+
+
+def ask_decision(hook_registry: Any, point: Any, payload: dict) -> Decision:
+    """在拦截点询问决策：trigger hook；STOP 携带 Decision 即决策，STOP 携带
+    字符串按 abort（兼容旧拦截者）；未中断 = continue。
+
+    point 接受 HookPoint 枚举、枚举名（"CALL_BEFORE_SEND"）或 value
+    （"call.before_send"），自动归一化。
+    """
+    if hook_registry is None:
+        return Decision()
+    point = _normalize_point(point)
+    try:
+        result = hook_registry.trigger(point, payload)
+    except Exception:  # noqa: BLE001
+        logger.exception("[Decision] 拦截点触发异常，按 continue 处理: {}", point)
+        return Decision()
+    if not result.stopped:
+        return Decision()
+    reason = result.stop_reason
+    if isinstance(reason, Decision):
+        return reason
+    return Decision(action="abort", note=str(reason or "stopped by hook"))
+
+
+def _normalize_point(point: Any) -> Any:
+    """字符串 → HookPoint（先按枚举名，再按 value；失败原样返回）。"""
+    if not isinstance(point, str):
+        return point
+    try:
+        from gimbal.core.hooks import HookPoint
+        try:
+            return HookPoint[point]
+        except KeyError:
+            return HookPoint(point)
+    except (ValueError, ImportError):
+        return point

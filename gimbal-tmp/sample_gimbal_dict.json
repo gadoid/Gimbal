@@ -8,7 +8,10 @@
     "priority": 1,
     "author": "codfish",
     "owner": "codfish",
-    "tags": ["smoke", "settlement"],
+    "tags": [
+      "smoke",
+      "settlement"
+    ],
     "version": "1.0.0",
     "createTime": "2026-06-23T10:00:00",
     "expire": false,
@@ -50,17 +53,6 @@
     {
       "kind": "step",
       "description": "校验新建委托订舱单（验价）",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderAdd",
-        "headers": {
-          "Authorization": "${auth.codfish.token}",
-          "Content-Type": "application/json;charset=UTF-8"
-        },
-        "timeout": 30
-      },
       "request": {
         "kind": "request",
         "body": {
@@ -110,13 +102,25 @@
           "enabled": true,
           "onFailure": "abort",
           "tags": [],
-          "target": "$.response_status",
+          "target": "$.call.response.status",
           "operator": "eq",
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
         }
-      ]
+      ],
+      "call": {
+        "kind": "call",
+        "protocol": "http",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      }
     }
   ]
 }

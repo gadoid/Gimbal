@@ -82,9 +82,14 @@ class FrameworkEvent(BaseModel):
     子类必须显式声明 event_type 字面量，例如：
         class StepStartEvent(FrameworkEvent):
             event_type: Literal["step.start"] = "step.start"
+
+    v2.1 批次 F-2c：``seq`` 是事件全局序号，由总线在发布锁内单调分配
+    （v2 §5 信封：跨线程按 seq 排序 = 发布序）；SSE Last-Event-ID 与
+    stdout jsonl 事件的 id 都用它。未过总线直接构造的事件 seq=0。
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     event_type: str = ""
+    seq: int = 0
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     run_id: Optional[str] = None
 
@@ -226,6 +231,26 @@ class HttpResponseEvent(FrameworkEvent):
     response_body: Any = None
 
 
+# ── 协议调用级（中立信封，2026-09-27 协议中立化）────────────
+class CallExchangeEvent(FrameworkEvent):
+    """所有协议统一的调用证据信封（E1：调用证据带 protocol 字段）。
+
+    与协议自有事件（http.request / http.response）并存：本事件携带脱敏 +
+    截断后的完整 CallResult（统一证据形状，v2.1 批次 A），供台账/平台按
+    协议统一消费；`result` 为 None 时是批次 A 之前的旧发布方（兼容）。
+    """
+    event_type: Literal["call.exchange"] = "call.exchange"
+    step_id: str
+    protocol: str
+    status: str = ""            # StrategyStatus value（passed/failed/error/skipped）
+    message: str = ""
+    duration_ms: float = 0.0
+    evidence_keys: list[str] = Field(default_factory=list)   # extracted 键目录
+    # 统一证据形状（脱敏 + 截断后）：
+    # {protocol, request, response: {status, meta, body}, elapsed_ms, auth_expired}
+    result: Optional[dict] = None
+
+
 # ── Context 提升 ─────────────────────────────────────
 class VariablePromotedEvent(FrameworkEvent):
     """变量从一层 Context 提升到另一层时发布。
@@ -260,3 +285,35 @@ class PluginFailedEvent(FrameworkEvent):
 class PluginDeactivatedEvent(FrameworkEvent):
     event_type: Literal["plugin.deactivated"] = "plugin.deactivated"
     plugin_name: str
+
+
+# ── 运行终态（v2.1 批次 F-2c：stdout jsonl 末线判定契约，平台 E2 v2 消费面）──
+class RunFinishedEvent(FrameworkEvent):
+    """run 判定终态事件（stdout jsonl 最后一行；平台读此行即得结果）。
+
+    与 run.end（统计事件）并存：run.end 在 reporter 终结前发出；
+    run.finished 是 jsonl 流的**终线信号**（之后引擎不再发事件），
+    携带完整判定（计数 + blocked/repaired/halted + details 摘要）。
+    """
+    event_type: Literal["run.finished"] = "run.finished"
+    exit_code: int = 0
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    error: int = 0
+    skipped: int = 0
+    halted: int = 0
+    blocked: int = 0
+    repaired: int = 0
+    details: list[dict] = Field(default_factory=list)
+
+
+# ── 调试会话（v2.1 批次 E；命令与结果记事件，可整理为用例变体草稿）──
+class DebugSessionEvent(FrameworkEvent):
+    """debugger 会话的暂停/命令/恢复事件（kind: paused/command/resumed）。"""
+    event_type: Literal["debug.session"] = "debug.session"
+    kind: str = ""            # paused | command | resumed
+    point: str = ""           # step.before / call.before / step.failed
+    step_id: str = ""
+    decision: str = ""        # resume 时的决策（continue/retry/skip/abort）
+    data: dict = Field(default_factory=dict)

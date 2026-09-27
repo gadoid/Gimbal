@@ -1,0 +1,332 @@
+"""scheduler/plan.py — Plan 调度器（v2 §运行时；批次 B 建立、批次 C 拓扑化）。
+
+顺序：before 括号（串行先行）→ units 拓扑调度 → after 拓东（串行，**必达**：
+无论 units 失败/取消都执行）→ 判定交 Engine。
+
+拓扑调度（needs 依赖）：
+  - ready = needs 全部完成的单元；serial 按声明序、parallel 用线程池
+    （并发上限 = PlanPolicy.parallel）；
+  - **blocked 级联**：某依赖失败/被阻塞的单元记 blocked（传递）；
+  - fail-fast：取消尚未开始的单元（cancelled），在跑的不中断；
+  - **运行期 wiring 解析**：单元启动时 inputs = 字面量 ∪ 连线值
+    （连线值 = 上游 ScenarioRunResult.outputs[输出名]，按 Plan.wiring）。
+    上游异常/无输出 → 该输入缺失：注入时跳过并告警（bind 已在编译期
+    校验过存在性，运行期缺失只可能是上游失败路径，此时本单元多为 blocked）。
+
+三种乘法的组合语义（v2 §三种乘法；总案开工门槛要求成文）：
+
+  repeat   编译期展开为独立单元（id=ref#k），计入计划清单，事件/台账独立；
+  n_runs   运行期重复同一单元（同一 unit id，结果带 run_index/attempts）；
+           计划清单计数 = 单元数 × n_runs；某次失败即停止该单元后续
+           n_runs（稳定性语义：跑 N 次都过才算过）；
+  retry    同一次 run 内失败后自动重跑，至多 R 次，不计清单只记
+           retries_used；跑过即算过（不标 repaired——那是人工路径，批次 E）。
+
+  组合执行序：外层 n_runs，内层 retry —— 每 run 先跑，失败重试至通过或
+  次数用尽；run 结果（最终尝试）记入 attempts。lock 标签在"依赖满足、
+  即将运行"时获取、乘法全部完成后释放（不持锁等依赖 → 无死锁；单元
+  只持一把锁 → 无跨锁环）。
+"""
+from __future__ import annotations
+
+import threading
+from concurrent.futures import FIRST_COMPLETED, Future, wait
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from gimbal.log import get_logger
+from gimbal.schema.plan import Plan, Unit
+from gimbal.scheduler.concurrency import dispatch_parallel
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class PlanOutcome:
+    """一次 Plan 调度的结果（Engine 按计划清单对账）。"""
+    results: dict[str, Any] = field(default_factory=dict)   # unit_id → 执行产出（含异常对象）
+    blocked: set[str] = field(default_factory=set)          # 依赖失败级联
+    cancelled: set[str] = field(default_factory=set)        # fail-fast 取消
+
+    def status_of(self, unit_id: str) -> str:
+        if unit_id in self.results:
+            return "done"
+        if unit_id in self.blocked:
+            return "blocked"
+        if unit_id in self.cancelled:
+            return "cancelled"
+        return "pending"
+
+
+class PlanScheduler:
+    """跑一个 Plan：括号先行/必达 + units 拓扑调度 + 运行期连线解析。"""
+
+    def __init__(self) -> None:
+        # lock 标签 → 互斥锁（"依赖满足、即将运行"时获取，防死锁）
+        self._locks: dict[str, "threading.Lock"] = {}
+
+    def _lock_for(self, tag: str):
+        return self._locks.setdefault(tag, threading.Lock())
+
+    def run(
+        self,
+        plan: Plan,
+        run_unit: Callable[[Unit, dict], Any],
+        *,
+        fail_fast: bool = False,
+    ) -> PlanOutcome:
+        outcome = PlanOutcome()
+
+        # 1. before 括号（串行先行；失败记录但不阻断主体——业务语义由调用方判定）
+        for unit in plan.before:
+            outcome.results[unit.id] = self._run_one(run_unit, unit, self._resolve_inputs(plan, outcome, unit))
+
+        # 2. units 主体（拓扑）
+        if plan.policy.parallel > 1:
+            self._schedule_parallel(plan, run_unit, outcome, fail_fast)
+        else:
+            self._schedule_serial(plan, run_unit, outcome, fail_fast)
+
+        # 3. after 括号（串行，必达——units 失败/取消不影响其执行）
+        for unit in plan.after:
+            outcome.results[unit.id] = self._run_one(run_unit, unit, self._resolve_inputs(plan, outcome, unit))
+
+        return outcome
+
+    # ── 输入解析（字面量 ∪ 连线值）────────────────────────────
+
+    @staticmethod
+    def _resolve_inputs(plan: Plan, outcome: PlanOutcome, unit: Unit) -> dict:
+        inputs = dict(unit.inputs or {})
+        wires = plan.wiring.get(unit.id) or {}
+        for input_name, src in wires.items():
+            try:
+                src_unit, output_name = src.split(":", 1)
+            except ValueError:
+                logger.warning("[PlanScheduler] 非法连线地址: {}={!r}", input_name, src)
+                continue
+            upstream = outcome.results.get(src_unit)
+            outputs = getattr(upstream, "outputs", None) or {}
+            if output_name in outputs:
+                inputs[input_name] = outputs[output_name]
+            else:
+                logger.warning(
+                    "[PlanScheduler] 连线取值缺失: {} ← {}（上游无此输出或未成功），跳过注入",
+                    input_name, src,
+                )
+        return inputs
+
+    # ── 串行拓扑 ─────────────────────────────────────────────
+
+    def _schedule_serial(self, plan: Plan, run_unit, outcome: PlanOutcome, fail_fast: bool) -> None:
+        units = {u.id: u for u in plan.units}
+        needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
+        stop_scheduling = False
+
+        for unit in plan.units:
+            failed_or_blocked = [
+                n for n in needs_map[unit.id]
+                if self._upstream_bad(outcome, n)
+            ]
+            if failed_or_blocked:
+                outcome.blocked.add(unit.id)
+                continue
+            pending = [n for n in needs_map[unit.id] if outcome.status_of(n) != "done"]
+            if pending:
+                # 声明序遍历中上游尚未完成：正常情况不会发生（串行按序），
+                # 出现即前向依赖（needs 指向后面的单元）→ 下一轮补跑
+                continue
+            if stop_scheduling:
+                outcome.cancelled.add(unit.id)
+                continue
+            outcome.results[unit.id] = self._run_one(
+                run_unit, unit, self._resolve_inputs(plan, outcome, unit),
+            )
+            if fail_fast and self._result_failed(outcome.results[unit.id]):
+                stop_scheduling = True
+
+        # 前向依赖补跑轮（声明序不满足拓扑序时；循环已在编译期拒绝）
+        progress = True
+        while progress:
+            progress = False
+            for unit in plan.units:
+                if outcome.status_of(unit.id) != "pending":
+                    continue
+                if any(self._upstream_bad(outcome, n) for n in needs_map[unit.id]):
+                    outcome.blocked.add(unit.id)
+                    progress = True
+                    continue
+                if all(outcome.status_of(n) == "done" for n in needs_map[unit.id]):
+                    if stop_scheduling:
+                        outcome.cancelled.add(unit.id)
+                    else:
+                        outcome.results[unit.id] = self._run_one(
+                            run_unit, unit, self._resolve_inputs(plan, outcome, unit),
+                        )
+                        if fail_fast and self._result_failed(outcome.results[unit.id]):
+                            stop_scheduling = True
+                    progress = True
+
+        # 兜底：仍未决的（理论不可达，循环已被编译期拒绝）记 cancelled
+        for unit in plan.units:
+            if outcome.status_of(unit.id) == "pending":
+                outcome.cancelled.add(unit.id)
+
+    # ── 并行拓扑（ready-set 线程池）──────────────────────────
+
+    def _schedule_parallel(self, plan: Plan, run_unit, outcome: PlanOutcome, fail_fast: bool) -> None:
+        units = {u.id: u for u in plan.units}
+        needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
+        lock = threading.Lock()
+        stop_scheduling = False
+        futures: dict[Future, Unit] = {}
+
+        def ready_units() -> list[Unit]:
+            ready = []
+            for u in plan.units:
+                if outcome.status_of(u.id) != "pending":
+                    continue
+                if any(self._upstream_bad(outcome, n) for n in needs_map[u.id]):
+                    outcome.blocked.add(u.id)
+                    continue
+                if all(outcome.status_of(n) == "done" for n in needs_map[u.id]):
+                    ready.append(u)
+            return ready
+
+        def cascade_blocked() -> None:
+            """blocked 级联：依赖失败/阻塞者的传递闭包。"""
+            changed = True
+            while changed:
+                changed = False
+                for u in plan.units:
+                    if outcome.status_of(u.id) != "pending":
+                        continue
+                    if any(self._upstream_bad(outcome, n) for n in needs_map[u.id]):
+                        outcome.blocked.add(u.id)
+                        changed = True
+
+        import concurrent.futures as cf
+        with cf.ThreadPoolExecutor(max_workers=plan.policy.parallel,
+                                   thread_name_prefix="gimbal-unit") as pool:
+            with lock:
+                initial = ready_units()
+                for u in initial:
+                    futures[pool.submit(run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
+
+            while futures:
+                done, _ = wait(list(futures), return_when=FIRST_COMPLETED)
+                with lock:
+                    for fut in done:
+                        unit = futures.pop(fut)
+                        try:
+                            outcome.results[unit.id] = fut.result()
+                        except Exception as exc:  # noqa: BLE001
+                            outcome.results[unit.id] = exc
+                        if self._result_failed(outcome.results[unit.id]):
+                            cascade_blocked()
+                            if fail_fast:
+                                stop_scheduling = True
+                    if stop_scheduling:
+                        for u in plan.units:
+                            if outcome.status_of(u.id) == "pending":
+                                outcome.cancelled.add(u.id)
+                        continue
+                    for u in ready_units():
+                        if u.id not in {fu.id for fu in futures.values()}:
+                            futures[pool.submit(run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
+                # 空转保护：无在飞且无 ready 但仍有 pending（理论不可达）
+                if not futures:
+                    with lock:
+                        cascade_blocked()
+                        for u in plan.units:
+                            if outcome.status_of(u.id) == "pending":
+                                outcome.cancelled.add(u.id)
+                    break
+
+    # ── 判定辅助 ─────────────────────────────────────────────
+
+    @staticmethod
+    def _upstream_bad(outcome: PlanOutcome, need_id: str) -> bool:
+        """上游失败（结果未通过/异常）或被阻塞 → 下游应 blocked。"""
+        if need_id in outcome.blocked:
+            return True
+        result = outcome.results.get(need_id)
+        if result is None:
+            return False
+        if isinstance(result, Exception):
+            return True
+        return getattr(result, "passed", True) is False
+
+    @staticmethod
+    def _result_failed(result: Any) -> bool:
+        if isinstance(result, Exception):
+            return True
+        return getattr(result, "passed", True) is False
+
+    # ── 乘法执行核（n_runs × retry）+ lock ───────────────────
+
+    def _run_one(self, run_unit: Callable[[Unit, dict], Any], unit: Unit, inputs: dict) -> Any:
+        policy = unit.policy
+        lock = self._lock_for(policy.lock) if policy.lock else None
+        if lock is not None:
+            lock.acquire()   # 依赖已满足才到这里；阻塞等待同标签单元完成
+        try:
+            return self._run_multiplication(run_unit, unit, inputs, policy)
+        finally:
+            if lock is not None:
+                lock.release()
+
+    def _run_multiplication(self, run_unit, unit: Unit, inputs: dict, policy) -> Any:
+        """外层 n_runs × 内层 retry；聚合为单个结果（attempts/run_index）。"""
+        raw_results: list[Any] = []
+        for run_no in range(1, max(1, policy.n_runs) + 1):
+            result, retries_used = self._run_with_retry(run_unit, unit, inputs, policy.retry)
+            try:
+                result.run_index = run_no
+                result.retries_used = retries_used
+            except Exception:  # noqa: BLE001  # 非 ScenarioRunResult 的替身结果
+                pass
+            raw_results.append(result)
+            if self._result_failed(result):
+                break   # 稳定性语义：某次 run 失败即停止后续 n_runs
+        return self._aggregate_attempts(raw_results)
+
+    def _run_with_retry(self, run_unit, unit: Unit, inputs: dict, retry: int):
+        """单次 run：失败自动重跑至多 retry 次；返回 (最终结果, 重试次数)。"""
+        attempt = 0
+        while True:
+            result = self._safe_run(run_unit, unit, inputs)
+            if not self._result_failed(result) or attempt >= max(0, retry):
+                return result, attempt
+            attempt += 1
+            logger.info("[PlanScheduler] retry: unit_id={} 第 {} 次重跑（上限 {}）",
+                        unit.id, attempt, retry)
+
+    @staticmethod
+    def _safe_run(run_unit, unit: Unit, inputs: dict) -> Any:
+        try:
+            return run_unit(unit, inputs)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[PlanScheduler] 单元执行异常: unit_id={}", unit.id)
+            return exc
+
+    @staticmethod
+    def _aggregate_attempts(raw_results: list) -> Any:
+        """聚合 n_runs 的多次 run：以最后一次为基座，附 attempts 简况。"""
+        if not raw_results:
+            return None
+        base = raw_results[-1]
+        attempts = []
+        for r in raw_results:
+            attempts.append({
+                "run": getattr(r, "run_index", 0),
+                "status": getattr(r, "status", "error"),
+                "passed": bool(getattr(r, "passed", False)),
+                "retries": getattr(r, "retries_used", 0),
+                "outputs": getattr(r, "outputs", None) is not None,
+            })
+        try:
+            base.attempts = attempts
+        except Exception:  # noqa: BLE001
+            pass
+        return base

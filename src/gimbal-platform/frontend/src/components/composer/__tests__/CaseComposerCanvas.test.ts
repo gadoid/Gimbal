@@ -1025,7 +1025,7 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     // 改 key → 既有 value 保留,key 重命名(Input 的 update 管道)
     await input!.setValue('Authorization')
     await flush()
-    expect(step.api.headers).toEqual({ Authorization: 'v' })
+    expect((step.api ?? step.call ?? {} as any).headers).toEqual({ Authorization: 'v' })
     w.unmount()
   })
 
@@ -1035,7 +1035,7 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     expect(input).toBeTruthy()
     await input!.setValue('X-Custom-Trace')
     await flush()
-    expect(step.api.headers).toEqual({ 'X-Custom-Trace': 'v' })
+    expect((step.api ?? step.call ?? {} as any).headers).toEqual({ 'X-Custom-Trace': 'v' })
     w.unmount()
   })
 })
@@ -2326,13 +2326,13 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'query-qa',
     })
     await w.find('tr.vsp-row').trigger('click')      // 选第一行
-    expect(steps[0].request.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
+    expect(steps[0].request!.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
     await w.find('.vs-query-btn').trigger('click')   // 再查,选第二行(y 缺列)
     await flushPromises()
     await w.findAll('tr.vsp-row')[1].trigger('click')
-    expect(steps[0].request.body).toMatchObject({ a: 'only-x' })      // a 覆写
-    expect((steps[0].request.body as Record<string, unknown>).b).toBe('2')   // 缺列跳过保留原值
-    expect((steps[0].request.body as Record<string, unknown>).c).toBeUndefined()  // 未绑定恒不写
+    expect(steps[0].request!.body).toMatchObject({ a: 'only-x' })      // a 覆写
+    expect((steps[0].request!.body as Record<string, unknown>).b).toBe('2')   // 缺列跳过保留原值
+    expect((steps[0].request!.body as Record<string, unknown>).c).toBeUndefined()  // 未绑定恒不写
     w.unmount()
   })
 
@@ -2362,7 +2362,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       refresh: false, serviceUrl: undefined, queryAlias: null,
     })
     await w.find('tr.vsp-row').trigger('click')      // 选行 → 扇出
-    const body = steps[0].request.body as {
+    const body = steps[0].request!.body as {
       fees?: Array<{ cost_id?: string; note?: string }> & Record<string, unknown>
     }
     expect(body.fees).toHaveLength(1)                     // 未物化 dict 覆盖数组
@@ -2579,7 +2579,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 参数未确认 → 不盲拉行集(缺参 422 由后端兜底)
     expect(fetchQueryViewRows).not.toHaveBeenCalled()
     // §13.6 模板串留空:body.customer_id 换 ${var.x} 重开 → 预填空(手输)
-    ;(steps[0].request.body as Record<string, unknown>).customer_id = '${var.x}'
+    ;(steps[0].request!.body as Record<string, unknown>).customer_id = '${var.x}'
     await w.find('.vsp-close').trigger('click')
     await w.findAll('.vs-query-btn')[1].trigger('click')
     await flushPromises()
@@ -2622,7 +2622,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 单对象行点选 → 点列扇出(扁平键经 onVsSelect 既有通路直写 body)
     expect(w.find('tr.vsp-row').text()).toContain('庞燕')
     await w.find('tr.vsp-row').trigger('click')
-    expect(steps[0].request.body).toMatchObject({
+    expect(steps[0].request!.body).toMatchObject({
       client_expand_id: 'E1',
       client_expand_name: 'Expand',
     })

@@ -637,7 +637,12 @@ def definition_from_payload(payload: dict | None) -> dict:
 
 
 def steps_from_payload(payload: dict | None) -> list[dict]:
-    """Steps live inside the container's definition now (plate-shaped dicts)."""
+    """Steps live inside the container's definition now (plate-shaped dicts).
+
+    v2.1 F-2a 终态:call 形态直接返回(前端已支持 stepCall 双读);
+    api 形态(存量)也原样返回,前端 stepCall() 优先读 call、兜底读 api。
+    后端不再做归一化——前端是双读的,存储什么就返回什么。
+    """
     raw = definition_from_payload(payload).get("steps") or []
     return [s for s in raw if isinstance(s, dict)]
 

@@ -11,6 +11,7 @@
  * 草稿对象,后端零改动。
  */
 import { parseTplRefs, type TplRef } from './tpl-refs'
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 
 // ── 注册表 ────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ export interface StepLike {
 export function collectVarRefs(steps: StepLike[]): VarRefSite[] {
   const sites: VarRefSite[] = []
   steps.forEach((s, i) => {
-    for (const [k, v] of Object.entries(s.api?.headers || {})) {
+    for (const [k, v] of Object.entries(stepHeaders(s) || {})) {
       for (const r of parseTplRefs(String(v))) {
         if (r.domain === 'var' && r.alias) sites.push({ ref: r, stepIdx: i, where: 'headers', detail: k })
       }

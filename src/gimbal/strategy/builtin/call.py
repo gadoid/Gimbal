@@ -1,30 +1,179 @@
+"""strategy/builtin/call.py — HTTP 协议适配器（CallExecutor，v2.1 批次 A 契约）。
+
+2026-09-27 协议中立化（批次 0）+ 批次 A render/send 契约化：
+  - build_spec = render：URL 拼装 + service 路由（D7 per-step 查表）；
+  - send = 传输：HTTP_BEFORE_SEND 钩子（http 命名空间，可原地改写 headers）
+    → httpx 传输 → CallResult（统一证据形状）；
+  - after_send：HTTP_AFTER_RECV 钩子 + HttpRequest/HttpResponse 事件；
+  - execute 为基类模板方法（双写 scratch：``call`` 键 + 旧键），本类不再覆写。
+
+v2.1 终态契约（批次 F-2b：auth_headers/response_body_extract 已退役，
+批次 F 回收）：
+  - 类名 CallExecutor / kind="_call" 不变（dispatcher 注册键、直调测试零改动）；
+  - HTTP_BEFORE_SEND payload 的 headers 与实际请求 headers 是**同一对象**，
+    钩子原地改写必须影响真实请求；被 STOP 中断 → 不发请求，ERROR 结果
+    （文案 "HTTP request blocked by hook"）；
+  - 事件形状 HttpRequestEvent/HttpResponseEvent 字段不变；
+  - scratch 唯一证据键 = call（v2.1 F 终态）；
+  - 本模块的 logger 不搬迁（测试按模块 patch warning）。
+"""
 from __future__ import annotations
 
+import time
 import traceback
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Any, Optional, Union
 
-from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.protocols.base import (
+    ProtocolCallContext, ProtocolExecutor, ProtocolTransportError,
+)
+from gimbal.protocols.result import CallResult
+from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
 
-class CallExecutor(StrategyExecutor):
-    """执行 HTTP 调用，将响应存入 scratch。
+@dataclass
+class _CallSpec:
+    """HTTP 调用描述（render 产物）。不属于 schema。
 
-    这个 executor 比较特殊：它不对应 schema 里的某个 Strategy 子类，
-    而是由 ScenarioRunner 在 CALLING 阶段直接调用，
-    传入一个内部合成的 _CallSpec。
+    duck-type StrategyBase 仅为穿过 dispatcher 的统一插装（计时/钩子/软失败）。
+    kind 固定 "_call"（历史兼容：dispatcher 最早的注册键）。
+    埋点设施（协议层钩子/事件 + 运行上下文）经 pctx 内嵌，send 阶段取用。
     """
 
+    kind: str = "_call"
+    method: str = "GET"
+    url: str = ""
+    headers: dict = field(default_factory=dict)
+    # body 与 schema/request.py:Request.body 保持一致：
+    # Union[str, Dict[str, Any], List[Any]] —— str body（text/xml、text/plain）、
+    # list body（批量请求等场景）都合法。
+    body: Union[str, dict, list] = field(default_factory=dict)
+    timeout: float = 30.0
+    name: Optional[str] = "http_call"
+    phase: Optional[str] = None
+    order: int = 0
+    enabled: bool = True
+    onFailure: str = "abort"
+    tags: list = field(default_factory=list)
+    # 协议执行上下文（埋点设施 + 路由表），由状态机 _do_call 注入
+    pctx: Optional[ProtocolCallContext] = None
+
+
+class CallExecutor(ProtocolExecutor):
+    """http 协议适配器：render（路由）+ send（httpx 传输）+ after_send（钩子/事件）。
+
+    由状态机在 INVOKING 阶段经 ProtocolRegistry 分派，传入 build_spec 产物
+    _CallSpec；执行模板（含 scratch 双写与统一证据）在 ProtocolExecutor 基类。
+    """
+
+    protocol = "http"
+    # dispatcher 注册键沿用历史值 "_call"（直接 dispatch _CallSpec 的既有调用方零改动）
     kind = "_call"
 
-    def execute(self, spec, view) -> StrategyResult:
-        """执行 HTTP 调用策略：基于 spec.method/url/headers/timeout 发出请求，把响应 status/headers/body 写入 view scratch。"""
+    # ── render：识别协议字段 → 合成 spec ─────────────────────
+
+    def build_spec(self, call, pctx: ProtocolCallContext) -> Any:
+        """把 call{protocol:'http'} 的开放字段合成为 _CallSpec。
+
+        路由规则（D7 + 修复 #6）：api.service 先查 scenario.config.services
+        声明 dict，未命中回落兼容 base_url；两者皆空 → 显式失败，不造幽灵 URL。
+        路由失败返回 StrategyResult（不进 dispatch），由状态机直接采纳。
+        """
+        service = getattr(call, "service", None)
+        if not service:
+            return self._routing_error(
+                pctx,
+                message="api is missing the 'service' field required for routing",
+                strategy_id="_call",
+            )
+        method = getattr(call, "method", "GET")
+        path = getattr(call, "path", "/")
+        headers = dict(getattr(call, "headers", None) or {})
+        timeout = float(getattr(call, "timeout", 30) or 30)
+        # 默认 body 来自 step.request.body（状态机经 pctx.request_body 传入；
+        # scratch 中被 Assign 改写过的值在 send 阶段优先）
+        body = pctx.request_body if pctx.request_body is not None else {}
+
+        service_url = (pctx.services or {}).get(service) or pctx.service_base_url
+        if not service_url:
+            return self._routing_error(
+                pctx,
+                message=(
+                    f"no service_base_url configured; api.service={service!r} "
+                    "is a service key, not a URL. Configure scenario.config.services "
+                    "or bootstrap.services with a real base URL."
+                ),
+                strategy_id="http_call",
+                service=service,
+            )
+        return _CallSpec(
+            method=method,
+            url=f"{service_url.rstrip('/')}{path}",
+            headers=headers,
+            body=body,
+            timeout=timeout,
+            pctx=pctx,
+        )
+
+    @staticmethod
+    def _routing_error(pctx: Optional[ProtocolCallContext], *, message: str,
+                       strategy_id: str, service: Any = None) -> StrategyResult:
+        logger.error(
+            "[SM {}] 缺少 service_base_url: service={!r}，"
+            "请在 scenario.config.services 或 bootstrap.services 中配置",
+            getattr(pctx, "step_id", "?"), service, message,
+        )
+        return StrategyResult(
+            status=StrategyStatus.ERROR,
+            strategy_id=strategy_id,
+            message=message,
+        )
+
+    # ── 原生认证注入（v2.1 批次 F-2b：auth_headers 插件职责并入适配器）──
+
+    def _inject_auth_headers(self, headers: dict, pctx) -> None:
+        """按 ``call.user`` 标签从 AuthRegistry 取会话，注入 token/timestamp 头。
+
+        契约与退役插件 auth_headers 逐字节一致（特征化用例钉死）：
+        token = md5(f"{session.token}{timestamp}").hexdigest()（32-hex，
+        随会话 token 变化）；timestamp = str(int(epoch 秒))。
+        无 call.user / 会话缺失 / token 空 → 跳过（不阻断）。
+        """
+        user = getattr(getattr(pctx, "call", None), "user", None)
+        registry = getattr(pctx, "auth_registry", None)
+        if not user or registry is None:
+            return
+        session = registry.get(str(user))
+        token = getattr(session, "token", None)
+        if not token:
+            logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
+            return
+        import hashlib
+        import time as _time
+        timestamp = int(_time.time())
+        headers["token"] = hashlib.md5(f"{token}{timestamp}".encode("utf-8")).hexdigest()
+        headers["timestamp"] = str(timestamp)
+        logger.debug("[CallExecutor] 已注入认证头: user={} ts={}", user, timestamp)
+
+    # ── send：传输 ────────────────────────────────────────────
+
+    def send(self, spec, view) -> CallResult:
+        """http 传输：原生认证注入（call.user）→ httpx → CallResult。
+
+        传输失败抛 ProtocolTransportError（历史文案保持）。
+        """
         method = spec.method
         url = spec.url
         headers = spec.headers
         timeout = spec.timeout
+        pctx = getattr(spec, "pctx", None)
+
+        # 原生认证注入（批次 F-2b；原 auth_headers 插件的 HTTP_BEFORE_SEND 钩子退役）
+        self._inject_auth_headers(headers, pctx)
+
         # 如果 scratch 中没有 request_body，先用 spec.body 初始化
         # 注意：用 `is None` 而非 `not ...` —— 空 dict / 空 list 是合法的 request body，
         # 不应被 falsy 判定重新覆盖。
@@ -35,15 +184,10 @@ class CallExecutor(StrategyExecutor):
 
         try:
             import httpx
-            import time
 
             logger.info("[CallExecutor] HTTP 请求: {} {}", method, url)
 
-            # 请求数据写入 scratch
-            view.write_scratch("request_method", method)
-            view.write_scratch("request_url", url)
-            view.write_scratch("request_headers", headers)
-            view.write_scratch("request_body", body)
+            self._emit_http_request(pctx, method, url, headers, body)
 
             t_start = time.monotonic()
             with httpx.Client(timeout=timeout) as client:
@@ -97,37 +241,106 @@ class CallExecutor(StrategyExecutor):
             except Exception:
                 resp_body = response.text
 
-            # 响应数据写入 scratch
-            view.write_scratch("response_status", response.status_code)
-            view.write_scratch("response_headers", dict(response.headers))
-            view.write_scratch("response_body", resp_body)
-            view.write_scratch("duration_ms", duration_ms)
-
-            return StrategyResult(
-                status=StrategyStatus.PASSED,
-                message=f"HTTP {method} {url} -> {response.status_code}",
-                extracted={
-                    "response_status": response.status_code,
-                    "response_body": resp_body,
+            # 401 = 凭证过期信号（v2.1 批次 D）：响应照常返回（断言可判），
+            # auth_expired=True 交由执行器模板走 单飞刷新→重发一次
+            auth_expired = response.status_code == 401
+            return CallResult.build(
+                protocol=self.protocol,
+                request={
+                    "method": method,
+                    "url": url,
+                    "headers": headers,
+                    "body": body,
+                    "timeout": timeout,
                 },
+                status=response.status_code,
+                body=resp_body,
+                meta={"headers": dict(response.headers)},
+                elapsed_ms=duration_ms,
+                auth_expired=auth_expired,
             )
 
-        except httpx.TimeoutException as exc:
-            return StrategyResult(
-                status=StrategyStatus.ERROR,
-                message=f"Request timeout: {exc}",
-                error=traceback.format_exc(),
-            )
-        except httpx.RequestError as exc:
-            return StrategyResult(
-                status=StrategyStatus.ERROR,
-                message=f"Request error: {exc}",
-                error=traceback.format_exc(),
-            )
+        except ProtocolTransportError:
+            raise
         except Exception as exc:
+            # httpx.TimeoutException / RequestError 与其它异常统一翻译为传输失败
             logger.exception("[CallExecutor] 异常: {} {}", method, url)
-            return StrategyResult(
-                status=StrategyStatus.ERROR,
-                message=str(exc),
-                error=traceback.format_exc(),
-            )
+            tb = traceback.format_exc()
+            try:
+                import httpx as _httpx
+                if isinstance(exc, _httpx.TimeoutException):
+                    raise ProtocolTransportError(f"Request timeout: {exc}", traceback_str=tb) from exc
+                if isinstance(exc, _httpx.RequestError):
+                    raise ProtocolTransportError(f"Request error: {exc}", traceback_str=tb) from exc
+            except ImportError:
+                pass
+            raise ProtocolTransportError(str(exc), traceback_str=tb) from exc
+
+    # ── 凭证刷新（批次 D）：按 call.user 标签单飞重认证 ────────
+
+    def refresh_auth(self, pctx) -> bool:
+        user = getattr(getattr(pctx, "call", None), "user", None)
+        registry = getattr(pctx, "auth_registry", None)
+        if not user or registry is None:
+            return False
+
+        def _do_refresh():
+            from gimbal.auth.manager import AuthManager
+            AuthManager(registry).get_auth(str(user))
+
+        try:
+            executed = registry.singleflight_refresh(str(user), _do_refresh)
+            logger.info("[CallExecutor] 凭证刷新: user={} 单飞执行={}", user, executed)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[CallExecutor] 凭证刷新失败（仍按原样重发一次）: {}", exc)
+            return True
+
+    # ── after_send：http 命名空间钩子/事件（送达后）────────────
+
+    def after_send(self, spec, view, call_result: CallResult, result: StrategyResult) -> None:
+        """送达后扩展点（批次 F-2b：HTTP_AFTER_RECV 钩子退役，只剩事件）。"""
+        pctx = getattr(spec, "pctx", None)
+        self._emit_http_response(pctx, call_result)
+
+    # ── http 命名空间埋点（payload/事件形状不变）──────────────
+
+    @staticmethod
+    def _emit_http_request(pctx, method: str, url: str, headers: dict, body) -> None:
+        """向 event_bus 发送 HttpRequestEvent 事件（method、url、request_body、request_headers 浅拷贝）。"""
+        if pctx is None or pctx.event_bus is None:
+            return
+        try:
+            from gimbal.events.types import HttpRequestEvent
+            pctx.event_bus.publish(HttpRequestEvent(
+                step_id=pctx.step_id,
+                method=method,
+                url=url,
+                request_body=body,
+                request_headers=dict(headers or {}),
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit HTTP_REQUEST failed", pctx.step_id)
+
+    @staticmethod
+    def _emit_http_response(pctx, call_result: CallResult) -> None:
+        """向 event_bus 发送 HttpResponseEvent 事件；数据取自 CallResult。"""
+        if pctx is None or pctx.event_bus is None:
+            return
+        try:
+            from gimbal.events.types import HttpResponseEvent
+            raw_status = call_result.status
+            try:
+                status_code = int(raw_status) if raw_status is not None else 0
+            except (ValueError, TypeError):
+                status_code = 0
+            pctx.event_bus.publish(HttpResponseEvent(
+                step_id=pctx.step_id,
+                method=call_result.request.get("method", ""),
+                url=call_result.request.get("url", ""),
+                status_code=status_code,
+                duration_ms=float(call_result.elapsed_ms or 0.0),
+                response_body=call_result.body,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit HTTP_RESPONSE failed", pctx.step_id)

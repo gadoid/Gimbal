@@ -33,6 +33,7 @@ import type { AssertionRegistry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { listAll as listAuthSessions } from '@/api/auth_sessions'
+import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 
 /** confirm 上送形状(RunDialog 面板 emit 的 opts,与 RunRequest 对齐) */
 export interface RunConfirmOpts {
@@ -77,7 +78,7 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
     for (const [k, v] of Object.entries(declared))
       rows.set(k, typeof v === 'string' ? v : null)
     for (const st of steps.value) {
-      const svc = (st as { api?: { service?: string } })?.api?.service
+      const svc = stepService(st)
       if (svc && !rows.has(svc)) rows.set(svc, null)
     }
     return [...rows].map(([service, declaredUrl]) => ({ service, declaredUrl }))

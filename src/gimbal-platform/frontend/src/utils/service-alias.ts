@@ -35,11 +35,11 @@ interface ApiLike {
 
 /** step.api → 系统名;无 service 返回 null(调用方跳过该 step)。 */
 export function deriveSystem(
-  api: ApiLike | null | undefined,
+  api: ApiLike | null | null | undefined,
   catalogNames: ReadonlySet<string>,
   systemByService: ReadonlyMap<string, string>,
 ): string | null {
-  const svc = api?.service || ''
+  const svc = ((api?.service ?? '')) || ''
   if (!svc) return null
   // ① endpoint_id 首段 — step 自带,最权威(点语法 `{system}.{service}.{name}`)
   const eid = api?.view_hints?.endpoint_id

@@ -16,8 +16,6 @@ from .schema import (
     File,
     ResourceUnion,
     # API 模型
-    Api,
-    ApiUnion,
     # 请求模型
     Request,
     RequestUnion,
@@ -64,7 +62,6 @@ __all__ = [
     "ResourceUnion",
     # API 模型
     "Api",
-    "ApiUnion",
     # 请求模型
     "Request",
     "RequestUnion",

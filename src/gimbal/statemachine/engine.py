@@ -8,22 +8,31 @@
   - 状态机内部循环驱动，直到进入终态
   - 调用方只需要 sm.run()，不感知内部如何流转
 
-流转表：
+协议中立化（2026-09-27）：
+  - 状态机不再内置任何协议细节；INVOKING（历史名 CALLING）阶段的调用
+    经 `_do_call` 三段式分派：识别 protocol（ProtocolRegistry）→
+    build_spec（协议执行器合成传输描述）→ dispatcher 注册表分发。
+  - HTTP 的 URL 拼装/路由与 HTTP 命名空间钩子/事件已迁入
+    strategy/builtin/call.py 的 CallExecutor（http 协议执行器）。
+  - 状态机只触发**中立层**钩子（CALL_BEFORE_SEND/AFTER_RECV，所有协议）
+    与中立事件信封（CallExchangeEvent，E1 带 protocol 字段）。
+
+流转表（中立名 / 历史别名，value 不变）：
   PENDING
-    └─→ BEFORE_REQUEST   执行 Assign 等前置策略
-          ├─→ CALLING        策略全部通过
-          └─→ TEARDOWN       hard-fail，跳过 HTTP
-    CALLING               发出 HTTP 请求
-          ├─→ AFTER_REQUEST  请求成功
-          └─→ TEARDOWN       请求失败
-    AFTER_REQUEST         执行 Extract 等后置策略
-          ├─→ VERIFYING      策略全部通过
-          └─→ TEARDOWN       hard-fail
-    VERIFYING             执行 Assertion
-          ├─→ PASSED         无 teardown 且全部通过
-          ├─→ FAILED         无 teardown 且有失败
-          └─→ TEARDOWN       有 teardown 策略（无论结果）
-    TEARDOWN              执行清理策略
+    └─→ PREPARE(BEFORE_REQUEST)  执行 Assign 等前置策略
+          ├─→ INVOKING(CALLING)    策略全部通过
+          └─→ TEARDOWN             hard-fail，跳过协议调用
+    INVOKING(CALLING)           发出协议调用（ProtocolRegistry 分派）
+          ├─→ EXTRACTING(AFTER_REQUEST)  调用成功
+          └─→ TEARDOWN             调用失败
+    EXTRACTING(AFTER_REQUEST)   执行 Extract 等后置策略
+          ├─→ VERIFYING            策略全部通过
+          └─→ TEARDOWN             hard-fail
+    VERIFYING                   执行 Assertion
+          ├─→ PASSED               无 teardown 且全部通过
+          ├─→ FAILED               无 teardown 且有失败
+          └─→ TEARDOWN             有 teardown 策略（无论结果）
+    TEARDOWN                    执行清理策略
           ├─→ PASSED
           └─→ FAILED
 """
@@ -33,6 +42,7 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union, Dict, List
 
 from gimbal.statemachine.states import StepState, VALID_TRANSITIONS
@@ -44,33 +54,31 @@ if TYPE_CHECKING:
     from gimbal.schema.step import Step
     from gimbal.schema.strategy import StrategyPhase
     from gimbal.strategy.dispatcher import StrategyDispatcher
-    
+
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
 TransitionHook = Callable[[StepState, StepState, str], None]
 
 
-# ── 内部 _CallSpec ────────────────────────────────────────────────────────────
+# ── 历史兼容 re-export ────────────────────────────────────────────────────────
+# _CallSpec 的实现本体已随 http 协议执行器迁至 strategy/builtin/call.py；
+# 此处 re-export 维持 `from gimbal.statemachine.engine import _CallSpec` 可用。
+from gimbal.strategy.builtin.call import _CallSpec  # noqa: F401  (兼容导入)
 
-@dataclass
-class _CallSpec:
-    """HTTP 调用描述，由状态机在 CALLING 阶段合成。不属于 schema。"""
-    kind: str = "_call"
-    method: str = "GET"
-    url: str = ""
-    headers: dict = field(default_factory=dict)
-    # body 与 schema/request.py:Request.body 保持一致：
-    # Union[str, Dict[str, Any], List[Any]] —— str body（text/xml、text/plain）、
-    # list body（批量请求等场景）都合法。
-    body: Union[str, Dict[str, Any], List[Any]] = field(default_factory=dict)
-    timeout: float = 30.0
-    name: Optional[str] = "http_call"
-    phase: Optional[str] = None
-    order: int = 0
-    enabled: bool = True
-    onFailure: str = "abort"
-    tags: list = field(default_factory=list)
+from gimbal.protocols.base import ProtocolCallContext
+from gimbal.protocols.result import CallResult
+
+
+@lru_cache(maxsize=1)
+def _default_protocols():
+    """兜底协议注册表（仅 http）：给 __new__ 直填字段构造 / 未注入注册表的状态机用。
+
+    bootstrap 正常链路注入的是含插件协议的实例；本兜底与 ProtocolRegistry
+    默认表内容一致（http 第一员）。
+    """
+    from gimbal.protocols.registry import build_default_protocol_registry
+    return build_default_protocol_registry()
 
 
 # ── 执行结果 ──────────────────────────────────────────────────────────────────
@@ -83,8 +91,11 @@ class StepRunResult:
     error: Optional[str] = None
     duration_ms: float = 0.0
     # 修复 #5：标记 step 失败的阶段（"calling"/"verifying"/"teardown"/None）
-    # 方便 reporter 区分"网络失败"vs"断言失败"vs"清理失败"
+    # 方便 reporter 区分"调用失败"vs"断言失败"vs"清理失败"
+    # （value 保持 "calling" 不变——报告/台账的历史口径）
     error_phase: Optional[str] = None
+    # v2.1 批次 E：人工 retry（debugger 会话）后通过的标记——不计正常通过率
+    repaired: bool = False
 
     @property
     def passed(self) -> bool:
@@ -95,7 +106,7 @@ class StepRunResult:
 # ── 状态机 ────────────────────────────────────────────────────────────────────
 
 class StepStateMachine:
-    """Step 执行状态机。
+    """Step 执行状态机（协议中立）。
 
     持有执行所需的全部上下文，自己驱动整个流程。
 
@@ -124,6 +135,8 @@ class StepStateMachine:
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
         services: Optional[dict[str, str]] = None,
+        protocol_registry: Optional[Any] = None,
+        auth_registry: Optional[Any] = None,
     ) -> None:
         self._step_id = step_id
         self._step_schema = step_schema
@@ -136,6 +149,11 @@ class StepStateMachine:
         # 埋点设施：可选，不传则不触发（保持向后兼容）
         self._hooks = hook_registry
         self._bus = event_bus
+        # 协议注册表：INVOKING 阶段按 step.call.protocol 分派；
+        # None 时兜底默认表（仅 http，兼容直构造场景）
+        self._protocols = protocol_registry
+        # 认证注册表（批次 D：auth_expired 单飞刷新经 pctx 传给协议适配器）
+        self._auth_registry = auth_registry
 
         self._state: StepState = StepState.PENDING
         self._phase_results: list[PhaseResult] = []
@@ -143,12 +161,13 @@ class StepStateMachine:
         self._error_phase: Optional[str] = None  # 修复 #5
 
         # handler 表：状态 → 处理函数，返回下一个状态
+        # （键用中立名；历史别名是同一成员，查表互通）
         self._handlers: dict[StepState, Callable[[], StepState]] = {
-            StepState.BEFORE_REQUEST: self._handle_before_request,
-            StepState.CALLING:        self._handle_calling,
-            StepState.AFTER_REQUEST:  self._handle_after_request,
-            StepState.VERIFYING:      self._handle_verifying,
-            StepState.TEARDOWN:       self._handle_teardown,
+            StepState.PREPARE:     self._handle_prepare,
+            StepState.INVOKING:    self._handle_invoking,
+            StepState.EXTRACTING:  self._handle_extracting,
+            StepState.VERIFYING:   self._handle_verifying,
+            StepState.TEARDOWN:    self._handle_teardown,
         }
 
         logger.debug("[SM {}] StepStateMachine 初始化完成", self._step_id)
@@ -174,15 +193,43 @@ class StepStateMachine:
         self._emit_step_start()
 
         try:
+            # 拦截决策点 STEP_BEFORE（批次 E）：SKIP → 直接终态跳过；
+            # ABORT → 框架级中止；continue → 正常流转
+            from gimbal.core.decisions import ask_decision
+            from gimbal.core.hooks import HookPoint
+            pre = ask_decision(self._hooks, HookPoint.STEP_BEFORE, {
+                "step_id": self._step_id,
+                "step_schema": self._step_schema,
+                "ctx": self._view,
+            })
+            if pre.action == "skip":
+                logger.info("[SM {}] STEP_BEFORE 决策 skip，整步跳过", self._step_id)
+                self._try_advance(StepState.SKIPPED, reason="step.before skip")
+                duration_ms = (datetime.now(timezone.utc) - t_start).total_seconds() * 1000
+                self._emit_step_end(duration_ms)
+                return StepRunResult(
+                    step_id=self._step_id, status=self._state.value,
+                    duration_ms=duration_ms,
+                )
+            if pre.action == "abort":
+                self._error = f"[step.before] aborted: {pre.note or 'by interceptor'}"
+                self._try_advance(StepState.ERROR, reason="step.before abort")
+                duration_ms = (datetime.now(timezone.utc) - t_start).total_seconds() * 1000
+                self._emit_step_failed(self._error)
+                return StepRunResult(
+                    step_id=self._step_id, status=self._state.value,
+                    error=self._error, duration_ms=duration_ms,
+                )
+
             # 初始化 scratch.request_body（可能被 Assign 等策略修改）
             # body 现在可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，
             # 那样会把 list body 静默改成 dict。
-            request_body = getattr(self._step_schema.request, "body", None)
+            request_body = getattr(getattr(self._step_schema, "request", None), "body", None)
             if request_body:
                 self._view.write_scratch("request_body", request_body)
 
             # 从 PENDING 推进到第一个执行阶段
-            self._advance(StepState.BEFORE_REQUEST, reason="start")
+            self._advance(StepState.PREPARE, reason="start")
 
             # 内部循环：每次调用当前状态的 handler，handler 返回下一个状态
             while not self._state.is_terminal:
@@ -221,49 +268,49 @@ class StepStateMachine:
 
     # ── 各状态 handler ────────────────────────────────────────────────────────
 
-    def _handle_before_request(self) -> StepState:
-        """执行前置策略（Assign / SQL 注入等）。"""
+    def _handle_prepare(self) -> StepState:
+        """执行前置策略（Assign / SQL 注入等，协议无关）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM {}] 进入 BEFORE_REQUEST 阶段", self._step_id)
-        pr = self._run_phase(StrategyPhase.BEFORE_REQUEST)
+        logger.debug("[SM {}] 进入 PREPARE(BEFORE_REQUEST) 阶段", self._step_id)
+        pr = self._run_phase(StrategyPhase.PREPARE)
         self._phase_results.append(pr)
 
         if pr.hard_failed:
-            logger.warning("[SM {}] BEFORE_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
-            return StepState.TEARDOWN   # 跳过 HTTP，直接清理
-        logger.debug("[SM {}] BEFORE_REQUEST 阶段完成 all_passed={}，进入 CALLING", self._step_id, pr.all_passed)
-        return StepState.CALLING
+            logger.warning("[SM {}] PREPARE 阶段 hard_failed，进入 TEARDOWN", self._step_id)
+            return StepState.TEARDOWN   # 跳过协议调用，直接清理
+        logger.debug("[SM {}] PREPARE 阶段完成 all_passed={}，进入 INVOKING", self._step_id, pr.all_passed)
+        return StepState.INVOKING
 
-    def _handle_calling(self) -> StepState:
-        """发出 HTTP 请求，把响应写入 context。"""
-        logger.info("[SM {}] 开始 HTTP 请求", self._step_id)
-        result = self._do_http_call()
+    def _handle_invoking(self) -> StepState:
+        """发出协议调用（ProtocolRegistry 分派），把结果写入 context。"""
+        logger.info("[SM {}] 开始协议调用", self._step_id)
+        result = self._do_call()
         self._phase_results.append(PhaseResult(phase="calling", results=[result]))
 
         if result.failed:
             # 修复 #5：标记错误阶段为 "calling"，错误信息包含原始 message
-            # 避免 reporter 把 HTTP 失败错误归因到"断言失败"
+            # 避免 reporter 把调用失败错误归因到"断言失败"
             self._error_phase = "calling"
-            self._error = f"[calling] {result.message or 'HTTP request failed'}"
-            logger.warning("[SM {}] HTTP 请求失败: status={} message={}，进入 TEARDOWN",
+            self._error = f"[calling] {result.message or 'protocol call failed'}"
+            logger.warning("[SM {}] 协议调用失败: status={} message={}，进入 TEARDOWN",
                           self._step_id, result.status, result.message)
             return StepState.TEARDOWN
-        logger.info("[SM {}] HTTP 请求成功，进入 AFTER_REQUEST", self._step_id)
-        return StepState.AFTER_REQUEST
+        logger.info("[SM {}] 协议调用成功，进入 EXTRACTING", self._step_id)
+        return StepState.EXTRACTING
 
-    def _handle_after_request(self) -> StepState:
+    def _handle_extracting(self) -> StepState:
         """执行后置策略（Extract 提取字段等）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM {}] 进入 AFTER_REQUEST 阶段", self._step_id)
-        pr = self._run_phase(StrategyPhase.AFTER_REQUEST)
+        logger.debug("[SM {}] 进入 EXTRACTING(AFTER_REQUEST) 阶段", self._step_id)
+        pr = self._run_phase(StrategyPhase.EXTRACTING)
         self._phase_results.append(pr)
 
         if pr.hard_failed:
-            logger.warning("[SM {}] AFTER_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
+            logger.warning("[SM {}] EXTRACTING 阶段 hard_failed，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN
-        logger.debug("[SM {}] AFTER_REQUEST 阶段完成 all_passed={}，进入 VERIFYING", self._step_id, pr.all_passed)
+        logger.debug("[SM {}] EXTRACTING 阶段完成 all_passed={}，进入 VERIFYING", self._step_id, pr.all_passed)
         return StepState.VERIFYING
 
     def _handle_verifying(self) -> StepState:
@@ -303,7 +350,7 @@ class StepStateMachine:
         """执行清理策略，决定最终终态（修复 B6：teardown 失败不污染业务结果）。
 
         语义：
-          - 业务阶段（CALLING/VERIFYING）失败 → 终态 FAILED
+          - 业务阶段（INVOKING/VERIFYING）失败 → 终态 FAILED
           - 业务阶段全通过 + teardown 阶段失败 → 终态仍 PASSED
             （teardown 失败只记录到 error_phase="teardown"，不污染业务结果）
           - 业务阶段全通过 + teardown 阶段通过 → PASSED
@@ -377,94 +424,71 @@ class StepStateMachine:
             for s in self._step_schema.strategy
         )
 
-    def _do_http_call(self) -> StrategyResult:
-        """合成 _CallSpec 交给 CallExecutor 执行。"""
-       # from gimbal.context.base import ContextLayer
+    def _do_call(self) -> StrategyResult:
+        """协议调用三段式：识别 protocol → build_spec → dispatcher 分发。
 
-        api = self._step_schema.api
-        if not hasattr(api, "service"):
-            logger.error("[SM {}] API 缺少 service 字段，无法路由", self._step_id)
+        1. 识别：step.call.protocol（归一化后恒有值）→ ProtocolRegistry.resolve；
+        2. 合成：协议执行器把 call 开放字段合成为传输 spec（含路由），
+           路由期失败直接返回 StrategyResult（不进 dispatch）；
+        3. 分发：dispatcher.dispatch 走统一插装（计时/STRATEGY 钩子/软失败），
+           外层罩中立层 CALL_BEFORE_SEND/AFTER_RECV 钩子。
+        """
+        call = getattr(self._step_schema, "call", None)
+        if call is None:
+            logger.error("[SM {}] step 缺少 call/api 声明，无法调用", self._step_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
-                message="api is missing the 'service' field required for routing",
+                message="step has no call (or api sugar) declaration",
             )
 
-        # D7 per-step 路由 + 修复 #6:先查场景声明 dict(api.service 是
-        # config.services 的 key),未命中回落兼容 _service_base_url
-        # (_pick_base_url 兼容路径);两者皆空 → 显式失败,不造幽灵 URL。
-        service_url = self._services.get(api.service) or self._service_base_url
-        if not service_url:
+        # __new__ 直填字段构造的状态机没有 _protocols 属性，兜底默认表
+        protocols = getattr(self, "_protocols", None) or _default_protocols()
+        executor = protocols.resolve(call.protocol)
+        if executor is None:
             logger.error(
-                "[SM {}] 缺少 service_base_url: api.service={!r}，"
-                "请在 scenario.config.services 或 bootstrap.services 中配置",
-                self._step_id, api.service,
+                "[SM {}] 未注册的协议: protocol={!r}，已注册={}",
+                self._step_id, call.protocol, protocols.protocols(),
             )
             return StrategyResult(
                 status=StrategyStatus.ERROR,
-                strategy_id="http_call",
+                strategy_id=f"_call:{call.protocol}",
                 message=(
-                    f"no service_base_url configured; api.service={api.service!r} "
-                    "is a service key, not a URL. Configure scenario.config.services "
-                    "or bootstrap.services with a real base URL."
+                    f"No protocol executor registered for protocol={call.protocol!r}; "
+                    f"registered={protocols.protocols()}"
                 ),
             )
-        request = self._step_schema.request
-        # body 可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，会把 list 静默改成 dict。
-        original_body = getattr(request, "body", None)
 
-        # 修复 B2：BEFORE_REQUEST 阶段的 Assign 写到 view.scratch.request_body，
-        # 这里优先取 scratch 的值（被 Assign 修改后的），没有则用原 body
-        scratch_body = self._view.read_scratch("request_body")
-        if scratch_body is not None:
-            body = scratch_body
-        else:
-            body = original_body
-
-        call_spec = _CallSpec(
-            method=api.method,
-            url=f"{service_url.rstrip('/')}{api.path}",
-            headers=api.headers or {},
-            body=body,
-            timeout=api.timeout,
+        pctx = ProtocolCallContext(
+            call=call,
+            step_id=self._step_id,
+            services=self._services,
+            service_base_url=self._service_base_url,
+            request_body=getattr(getattr(self._step_schema, "request", None), "body", None),
+            hook_registry=self._hooks,
+            event_bus=self._bus,
+            auth_registry=getattr(self, "_auth_registry", None),
         )
-        logger.info("[SM {}] HTTP 请求: method={} url={} timeout={:.1f}s body_shape={}",
-                    self._step_id, api.method, call_spec.url, api.timeout,
-                    self._body_shape(body))
 
-        # 埋点：HTTP_REQUEST 事件 + HTTP_BEFORE_SEND hook（可改写 call_spec）
-        self._emit_http_request(call_spec)
-        if not self._fire_hook("HTTP_BEFORE_SEND", {
-            "method": call_spec.method,
-            "url": call_spec.url,
-            "headers": call_spec.headers,
-            "body": call_spec.body,
-            "timeout": call_spec.timeout,
-            "step_id": self._step_id,
-            "ctx": self._view,
-        }):
-            # hook 中断：返回错误结果
-            return StrategyResult(
-                status=StrategyStatus.ERROR,
-                message="HTTP request blocked by hook",
-            )
+        # 第一+二段：识别协议字段 → 合成 spec（路由失败在此返回）
+        spec = executor.build_spec(call, pctx)
+        if isinstance(spec, StrategyResult):
+            return spec
 
-        result = self._dispatcher.dispatch(call_spec, self._view)
-        logger.info("[SM {}] HTTP 响应: status={} duration_ms={:.2f}",
-                    self._step_id, result.status, result.duration_ms)
+        logger.info("[SM {}] 协议调用: protocol={} executor={} kind={}",
+                    self._step_id, call.protocol, type(executor).__name__,
+                    getattr(spec, "kind", "?"))
 
-        # 埋点：HTTP_RESPONSE 事件 + HTTP_AFTER_RECV hook（可改写 result）
-        self._emit_http_response(call_spec, result)
-        self._fire_hook("HTTP_AFTER_RECV", {
-            "method": call_spec.method,
-            "url": call_spec.url,
-            "status": result.status,
-            "headers": getattr(result, "headers", {}),
-            "body": getattr(result, "body", None),
-            "duration_ms": getattr(result, "duration_ms", 0.0),
-            "step_id": self._step_id,
-            "ctx": self._view,
-        })
+        # 第三段：注册表分发（dispatcher 统一插装）。执行器模板内部完成：
+        # 中立钩子 CALL_BEFORE_SEND（可补丁）→ send → scratch 双写（call 键 +
+        # 旧键）→ CALL_AFTER_RECV + CallExchangeEvent；协议命名空间钩子/事件
+        # 在适配器自己的 send/after_send 里（v2.1 批次 A 契约）。
+        result = self._dispatcher.dispatch(spec, self._view)
+        logger.info("[SM {}] 协议调用返回: protocol={} status={} duration_ms={:.2f}",
+                    self._step_id, call.protocol, result.status, result.duration_ms)
         return result
+
+    # 历史名兼容：既有调用方/测试直接调 _do_http_call
+    _do_http_call = _do_call
 
     def _advance(self, to: StepState, *, reason: str = "") -> None:
         """从当前状态合法地转换到 to：校验在 VALID_TRANSITIONS 白名单内，触发 on_transition 回调（日志告警吞错），更新 self._state；非法抛 InvalidTransitionError。
@@ -500,14 +524,14 @@ class StepStateMachine:
     def _fire_hook(self, point_name: str, payload: dict) -> bool:
         """触发 hook。返回 True 表示继续，False 表示被 STOP 中断。
 
-        point_name 可以是 HookPoint 枚举的名字（如 "HTTP_BEFORE_SEND"），
-        也可以是它的 value（如 "http.before_send"）。
+        point_name 可以是 HookPoint 枚举的名字（如 "CALL_BEFORE_SEND"），
+        也可以是它的 value（如 "call.before_send"）。
         """
         if self._hooks is None:
             return True
         try:
             from gimbal.core.hooks import HookPoint
-            # 优先按枚举名查（"HTTP_BEFORE_SEND"），再按 value 查（"http.before_send"）
+            # 优先按枚举名查（"CALL_BEFORE_SEND"），再按 value 查（"call.before_send"）
             try:
                 point = HookPoint[point_name]
             except KeyError:
@@ -516,6 +540,27 @@ class StepStateMachine:
             return True
         result = self._hooks.trigger(point, payload)
         return not result.stopped
+
+    # HTTP 事件兼容委托：职责在 http 协议适配器（CallExecutor._emit_http_*），
+    # 历史直调方（tests/unit/test_defect_fixes.py #34）经此薄委托保持可用。
+    def _emit_http_request(self, call_spec) -> None:
+        self._delegate_http("request", call_spec, None)
+
+    def _emit_http_response(self, call_spec, result: StrategyResult) -> None:
+        # 历史口径：HTTP 状态/响应体取自 result.extracted（response_status/body）
+        extracted = getattr(result, "extracted", None) or {}
+        cr = CallResult(
+            protocol="http",
+            request={"method": getattr(call_spec, "method", ""),
+                     "url": getattr(call_spec, "url", "")},
+            response={
+                "status": extracted.get("response_status"),
+                "meta": {"headers": {}},
+                "body": extracted.get("response_body"),
+            },
+            elapsed_ms=float(getattr(result, "duration_ms", 0.0) or 0.0),
+        )
+        self._delegate_http("response", call_spec, cr)
 
     def _emit_step_start(self) -> None:
         """向 event_bus 发送 StepStartEvent 事件（含 step_id / step_name / description）；无 bus 时静默 return，内部异常仅 debug 日志。"""
@@ -559,45 +604,32 @@ class StepStateMachine:
         except Exception:  # noqa: BLE001
             logger.debug("[SM {}] emit STEP_FAILED failed", self._step_id)
 
-    def _emit_http_request(self, call_spec: "_CallSpec") -> None:
-        """向 event_bus 发送 HttpRequestEvent 事件（method、url、request_body、request_headers 浅拷贝）；无 bus 静默 return，内部异常仅 debug 日志。"""
-        if self._bus is None:
-            return
-        try:
-            from gimbal.events.types import HttpRequestEvent
-            self._bus.publish(HttpRequestEvent(
-                step_id=self._step_id,
-                method=call_spec.method,
-                url=call_spec.url,
-                request_body=call_spec.body,
-                request_headers=dict(call_spec.headers or {}),
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_REQUEST failed", self._step_id)
+    # ── 历史兼容（直调方：tests/unit/test_defect_fixes.py 等；批次 F 回收）──
 
-    def _emit_http_response(self, call_spec: "_CallSpec", result: StrategyResult) -> None:
-        """向 event_bus 发送 HttpResponseEvent 事件（method、url、status_code 非数字安全 fallback 0、duration_ms、response_body）；无 bus 静默 return，内部异常仅 debug 日志。"""
+    def _delegate_http(self, kind: str, call_spec, call_result) -> None:
+        """HTTP 事件薄委托：职责在 http 适配器（CallExecutor._emit_http_*）。"""
+        from gimbal.strategy.builtin.call import CallExecutor
+
         if self._bus is None:
             return
-        try:
-            from gimbal.events.types import HttpResponseEvent
-            # HTTP 真实数据在 CallExecutor 的 StrategyResult.extracted 里
-            # （response_status / response_body）；result.status 是策略状态
-            # （PASSED/FAILED），不是 HTTP 状态码，result.body 字段不存在 ——
-            # 旧实现读这两处导致事件恒为 status_code=0 / response_body=None。
-            extracted = getattr(result, "extracted", None) or {}
-            raw_status = extracted.get("response_status")
-            try:
-                status_code = int(raw_status) if raw_status is not None else 0
-            except (ValueError, TypeError):
-                status_code = 0
-            self._bus.publish(HttpResponseEvent(
-                step_id=self._step_id,
-                method=call_spec.method,
-                url=call_spec.url,
-                status_code=status_code,
-                duration_ms=float(getattr(result, "duration_ms", 0.0) or 0.0),
-                response_body=extracted.get("response_body"),
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_RESPONSE failed", self._step_id)
+
+        class _BusPctx:
+            step_id: str
+            event_bus: Any
+
+        p = _BusPctx()
+        p.step_id = self._step_id
+        p.event_bus = self._bus
+        if kind == "request":
+            CallExecutor._emit_http_request(
+                p, getattr(call_spec, "method", ""), getattr(call_spec, "url", ""),
+                getattr(call_spec, "headers", {}) or {},
+                getattr(call_spec, "body", None),
+            )
+        else:
+            CallExecutor._emit_http_response(p, call_result)
+
+    # 历史方法名别名（与 StepState 中立名/历史名双名策略一致）
+    _handle_before_request = _handle_prepare
+    _handle_calling = _handle_invoking
+    _handle_after_request = _handle_extracting
