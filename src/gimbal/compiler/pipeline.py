@@ -139,10 +139,28 @@ def _expand_repeat(decls: list[UnitDecl]) -> list[UnitDecl]:
     return out
 
 
+def _effective_definition(decl: UnitDecl) -> dict:
+    """单元的生效定义：scenario 全量 dump + 影响执行的全部声明字段。
+
+    用于 shared 塌缩的一致性比较（review P0-6：此前只比 scenario，
+    inputs/policy_kwargs 等差异会被静默丢弃）。不含 ref（身份）、
+    needs（图结构，塌缩后重映射）、shared（塌缩键本身，按构造双方相等）。
+    """
+    return {
+        "scenario": decl.scenario.model_dump(),
+        "inputs": decl.inputs,
+        "outputs": decl.outputs,
+        "policy_kwargs": decl.policy_kwargs,
+        "map": decl.map,
+        "repeat": decl.repeat,
+    }
+
+
 def _collapse_shared(decls: list[UnitDecl], bracket: str) -> tuple[list[UnitDecl], dict[str, str]]:
     """shared 塌缩：同 key 的声明合并为一份（首个代表），needs 引用重映射。
 
-    一致性硬校验：同 key 的生效定义（scenario 全量 dump）必须完全一致。
+    一致性硬校验：同 key 的生效定义（scenario 全量 dump + inputs/outputs/
+    policy_kwargs/map/repeat）必须完全一致，首个差异字段计入报错。
     返回 (塌缩后的 decls, ref 重映射表 {被塌缩 ref → 代表 ref})。
     """
     remap: dict[str, str] = {}
@@ -157,9 +175,13 @@ def _collapse_shared(decls: list[UnitDecl], bracket: str) -> tuple[list[UnitDecl
             out.append(d)
             continue
         rep = by_key[d.shared]
-        if d.scenario.model_dump() != rep.scenario.model_dump():
+        rep_defn = _effective_definition(rep)
+        defn = _effective_definition(d)
+        if defn != rep_defn:
+            diff = next(k for k in defn if defn[k] != rep_defn[k])
             raise CompileError(
-                f"shared key={d.shared!r} 的生效定义不一致（{rep.ref!r} vs {d.ref!r}）；"
+                f"shared key={d.shared!r} 的生效定义不一致"
+                f"（{rep.ref!r} vs {d.ref!r}，差异字段 {diff!r}）；"
                 "同 key 的依赖条目要求生效定义完全一致"
             )
         remap[d.ref] = rep.ref

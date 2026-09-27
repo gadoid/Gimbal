@@ -146,6 +146,74 @@ class TestSharedAndControl:
                 UnitDecl(ref="b", scenario=s2, shared="k"),
             ]))
 
+    # ── P0-6：一致性比较覆盖 scenario 之外的全部生效字段 ──
+
+    def test_shared_different_inputs_rejected(self):
+        """同 key 仅 inputs 不同 → CompileError 指出差异字段（此前静默丢弃后者）。"""
+        s = _scenario("login", extract_to="token")
+        with pytest.raises(CompileError, match=r"差异字段 'inputs'"):
+            compile_target(SuiteGraph(mode="compose", units=[
+                UnitDecl(ref="a", scenario=s, shared="k", inputs={"user": "buyer"}),
+                UnitDecl(ref="b", scenario=s.model_copy(deep=True), shared="k",
+                         inputs={"user": "seller"}),
+            ]))
+
+    def test_shared_different_policy_kwargs_rejected(self):
+        s = _scenario("login", extract_to="token")
+        with pytest.raises(CompileError, match=r"差异字段 'policy_kwargs'"):
+            compile_target(SuiteGraph(mode="compose", units=[
+                UnitDecl(ref="a", scenario=s, shared="k", policy_kwargs={"n_runs": 2}),
+                UnitDecl(ref="b", scenario=s.model_copy(deep=True), shared="k",
+                         policy_kwargs={"n_runs": 3}),
+            ]))
+
+    def test_shared_different_map_rejected(self):
+        s = _scenario("login", extract_to="token")
+        with pytest.raises(CompileError, match=r"差异字段 'map'"):
+            compile_target(SuiteGraph(mode="compose", units=[
+                UnitDecl(ref="a", scenario=s, shared="k", map={"token": "tok_a"}),
+                UnitDecl(ref="b", scenario=s.model_copy(deep=True), shared="k",
+                         map={"token": "tok_b"}),
+            ]))
+
+    def test_shared_different_outputs_rejected(self):
+        s = _scenario("login", extract_to="token")
+        with pytest.raises(CompileError, match=r"差异字段 'outputs'"):
+            compile_target(SuiteGraph(mode="compose", units=[
+                UnitDecl(ref="a", scenario=s, shared="k", outputs=["token"]),
+                UnitDecl(ref="b", scenario=s.model_copy(deep=True), shared="k",
+                         outputs=["token", "extra"]),
+            ]))
+
+    def test_shared_different_repeat_rejected_in_bracket(self):
+        """repeat 在主体单元上先展开（变体均为 repeat=1），括号单元保留原值可校验。"""
+        s = _scenario("setup")
+        with pytest.raises(CompileError, match=r"差异字段 'repeat'"):
+            compile_target(SuiteGraph(mode="compose",
+                                      before=[
+                                          UnitDecl(ref="s1", scenario=s, shared="k",
+                                                   repeat=2),
+                                          UnitDecl(ref="s2",
+                                                   scenario=s.model_copy(deep=True),
+                                                   shared="k", repeat=1),
+                                      ],
+                                      units=[_producer("p")]))
+
+    def test_shared_identical_full_definition_still_collapses(self):
+        """同 key 且 inputs/policy_kwargs/map 全一致 → 仍塌缩为一份（回归守护）。"""
+        s = _scenario("login", extract_to="token")
+        graph = SuiteGraph(mode="compose", units=[
+            UnitDecl(ref="a", scenario=s, shared="k", inputs={"site": "app"},
+                     policy_kwargs={"n_runs": 2}, map={"token": "tok"}),
+            UnitDecl(ref="b", scenario=s.model_copy(deep=True), shared="k",
+                     inputs={"site": "app"}, policy_kwargs={"n_runs": 2},
+                     map={"token": "tok"}),
+        ])
+        plan = compile_target(graph)
+        shared_units = [u for u in plan.units if u.shared_key == "k"]
+        assert len(shared_units) == 1
+        assert shared_units[0].id == "a"
+
     def test_control_only_closure(self):
         """only = 目标 + 传递依赖闭包；闭包外整体排除。"""
         graph = SuiteGraph(
