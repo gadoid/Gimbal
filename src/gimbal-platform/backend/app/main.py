@@ -42,6 +42,7 @@ from .routers import (
     user_preferences,
     users,
 )
+from .routers.report_definitions import router as report_definitions_router  # noqa: E402
 
 
 @asynccontextmanager
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     # 场景库筛选分组(存 user_prefs,零迁移):命名的搜索/筛选条件入口
     app.include_router(scenario_filter_groups.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
+    app.include_router(report_definitions_router, prefix="/api")
 
     @app.get("/api/health")
     async def health() -> dict:

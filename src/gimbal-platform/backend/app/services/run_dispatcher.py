@@ -792,6 +792,7 @@ async def dispatch_run(
             # 配方时不带旧批(重跑是新的一次独立发起)。
             "batchId": req.batch_id,
             "nRuns": req.n_runs,
+            "reportDefinitionId": getattr(req, "report_definition_id", None),
             "parallel": req.parallel,
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
             # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);

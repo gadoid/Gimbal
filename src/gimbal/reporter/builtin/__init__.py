@@ -31,6 +31,7 @@ BUILTIN_NAMES = (
     "junit",
     "allure",
     "html",
+    "definition",
     "im_notifier",
 )
 
@@ -42,6 +43,7 @@ def register_builtin_reporters(registry: "ReporterRegistry") -> None:
     from gimbal.reporter.builtin.junit import factory as _junit
     from gimbal.reporter.builtin.allure_reporter import factory as _allure
     from gimbal.reporter.builtin.html_reporter import factory as _html
+    from gimbal.reporter.builtin.definition_reporter import factory as _def
     from gimbal.reporter.builtin.im_notifier import factory as _im
 
     for name, factory in (
@@ -50,6 +52,7 @@ def register_builtin_reporters(registry: "ReporterRegistry") -> None:
         ("junit", _junit),
         ("allure", _allure),
         ("html", _html),
+        ("definition", _def),
         ("im_notifier", _im),
     ):
         registry.register(name, factory, replace=True)

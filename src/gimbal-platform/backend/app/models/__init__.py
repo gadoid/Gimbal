@@ -43,3 +43,5 @@ __all__ = [
     "UserPref",
     "UserStar",
 ]
+
+from .report_definition import ReportDefinitionRow  # noqa: F401

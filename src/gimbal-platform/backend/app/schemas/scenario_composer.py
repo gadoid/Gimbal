@@ -339,6 +339,10 @@ class RunRequest(BaseModel):
     # C5(P3-05):suite 编排执行 —— 非空时走 graph 链(单元 = 平台场景),
     # 数据集/注入在单元粒度声明;graph 链忽略顶层 dataSetIds/selection。
     graph: "GraphSpec | None" = Field(default=None, description="编排执行规格(C5)")
+    # P3-07/C7:执行时选择报告定义 → 引擎 definition reporter 产出工件
+    report_definition_id: int | None = Field(
+        default=None, alias="reportDefinitionId",
+        description="报告定义 id(P3-07;None = 默认报告)")
     # ── M1 执行能力补齐(V1 executor 语义移植)────────────────────
     # 每行数据的重复执行次数;total_runs = Σ(rows) × nRuns。
     n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
