@@ -133,7 +133,7 @@ class StepRunner:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
-        # D7 per-step 查表:api.service → 场景声明 URL;空 dict 回落 base_url
+        # D7 per-step 查表:call.service → 场景声明 URL;空 dict 回落 base_url
         self._services = services or {}
         self._hooks = hook_registry
         self._bus = event_bus

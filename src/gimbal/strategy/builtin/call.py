@@ -78,7 +78,7 @@ class CallExecutor(ProtocolExecutor):
     def build_spec(self, call, pctx: ProtocolCallContext) -> Any:
         """把 call{protocol:'http'} 的开放字段合成为 _CallSpec。
 
-        路由规则（D7 + 修复 #6）：api.service 先查 scenario.config.services
+        路由规则（D7 + 修复 #6）：call.service 先查 scenario.config.services
         声明 dict，未命中回落兼容 base_url；两者皆空 → 显式失败，不造幽灵 URL。
         路由失败返回 StrategyResult（不进 dispatch），由状态机直接采纳。
         """
@@ -86,7 +86,7 @@ class CallExecutor(ProtocolExecutor):
         if not service:
             return self._routing_error(
                 pctx,
-                message="api is missing the 'service' field required for routing",
+                message="call is missing the 'service' field required for routing",
                 strategy_id="call",
             )
         method = getattr(call, "method", "GET")
@@ -102,7 +102,7 @@ class CallExecutor(ProtocolExecutor):
             return self._routing_error(
                 pctx,
                 message=(
-                    f"no service_base_url configured; api.service={service!r} "
+                    f"no service_base_url configured; call.service={service!r} "
                     "is a service key, not a URL. Configure scenario.config.services "
                     "or bootstrap.services with a real base URL."
                 ),
@@ -204,7 +204,7 @@ class CallExecutor(ProtocolExecutor):
             with httpx.Client(timeout=timeout) as client:
                 # body 形态分发（阶段 1：新增 str 形态支持）：
                 #   GET/HEAD  → params=  （向后兼容：dict/list/str 都走 query string）
-                #   str body  → content= （原始文本通道，Content-Type 由 api.headers 控制）
+                #   str body  → content= （原始文本通道，Content-Type 由 call.headers 控制）
                 #   dict/list  → json=    （Content-Type: application/json，httpx 兜底）
                 # 互斥传递：httpx 接受同时传 json= 和 content= 但后者会覆盖前者，
                 # 所以必须 if/elif/else 分发，不能传多个参数。
@@ -218,13 +218,13 @@ class CallExecutor(ProtocolExecutor):
                     )
                 elif isinstance(body, str):
                     # str body：原始文本通道
-                    # Content-Type 完全由调用方在 api.headers 显式声明；
+                    # Content-Type 完全由调用方在 call.headers 显式声明；
                     # 若未声明，httpx 默认 text/plain，建议显式。
                     if not headers or "Content-Type" not in headers:
                         logger.warning(
                             "[CallExecutor] str body 但 headers 缺少 Content-Type，"
                             "httpx 将使用 text/plain 兜底；"
-                            "建议在 api.headers 显式声明（如 text/xml、application/xml）"
+                            "建议在 call.headers 显式声明（如 text/xml、application/xml）"
                         )
                     response = client.request(
                         method=method,

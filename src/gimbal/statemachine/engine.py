@@ -143,7 +143,7 @@ class StepStateMachine:
         self._dispatcher = dispatcher
         self._view = view
         self._service_base_url = service_base_url
-        # D7 per-step 路由:api.service → 声明 URL 查表;空/未命中回落 base_url
+        # D7 per-step 路由:call.service → 声明 URL 查表;空/未命中回落 base_url
         self._services = services or {}
         self._on_transition = on_transition
         # 埋点设施：可选，不传则不触发（保持向后兼容）
@@ -438,10 +438,10 @@ class StepStateMachine:
         """
         call = getattr(self._step_schema, "call", None)
         if call is None:
-            logger.error("[SM {}] step 缺少 call/api 声明，无法调用", self._step_id)
+            logger.error("[SM {}] step 缺少 call 声明，无法调用", self._step_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
-                message="step has no call (or api sugar) declaration",
+                message="step has no call declaration",
             )
 
         # __new__ 直填字段构造的状态机没有 _protocols 属性，兜底默认表

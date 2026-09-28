@@ -1,9 +1,9 @@
-"""D7 per-step base_url:api.service 查 scenario.config.services 声明 dict,
+"""D7 per-step base_url:call.service 查 scenario.config.services 声明 dict,
 未命中回落兼容 base_url,双缺失显式报错(spec 2026-08-27 §4)。
 
 pytest 化子目录(testpaths 收录);手法与 tests/unit/test_defect_fixes.py
-的 _make_sm_with_api 一致:StepStateMachine.__new__ 直填字段,dispatcher
-用 MagicMock 捕获 call_spec.url。
+一致:StepStateMachine.__new__ 直填字段,execute 用 MagicMock 捕获
+call_spec.url。
 """
 import os
 import sys

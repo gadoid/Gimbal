@@ -1,8 +1,7 @@
 """schema/call.py — 协议中立调用描述。
 
-`step.call = {protocol: "http", ...协议自有字段}` 是所有协议统一的调用表达；
-`step.api` 是 HTTP 的永久语法糖（存量用例零迁移），在 Step 校验期归一化为
-call{protocol:"http"}（见 schema/step.py 的 model_validator）。
+`step.call = {protocol: "http", ...协议自有字段}` 是所有协议统一且唯一的
+调用表达（v2.1 批次 F：api 语法糖已随双读期结束退役）。
 
 设计要点：
   - 开放模型：`protocol` 之外的字段由各协议执行器自行解释校验
@@ -22,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class Call(BaseModel):
     """协议中立调用。
 
-    用法（HTTP 归一化产物 / 显式声明）::
+    用法（显式声明）::
 
         Call(protocol="http", service="fin", method="POST", path="/api/x")
         Call(protocol="grpc", service="user", method="GetUser")   # 自定义协议

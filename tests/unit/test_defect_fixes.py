@@ -326,7 +326,7 @@ from gimbal.schema.request import Request
 from gimbal.schema.step import Step as StepSchema
 
 
-def _make_sm_with_api(service: str, base_url: str, call: Call = None):
+def _make_sm_with_call(service: str, base_url: str, call: Call = None):
     """Build StepStateMachine with a real Step schema containing a Call."""
     bus = _FakeBus()
     sm = sm_engine.StepStateMachine.__new__(sm_engine.StepStateMachine)
@@ -369,7 +369,7 @@ def _make_sm_with_api(service: str, base_url: str, call: Call = None):
 
 @test("#6.1 empty service_base_url returns ERROR result")
 def _():
-    sm, bus = _make_sm_with_api(service="fin-tidb", base_url="")
+    sm, bus = _make_sm_with_call(service="fin-tidb", base_url="")
     result = sm._do_http_call()
     assert isinstance(result, StrategyResult)
     assert result.status == StrategyStatus.ERROR, (
@@ -389,7 +389,7 @@ def _():
 
 @test("#6.2 valid service_base_url proceeds to dispatcher")
 def _():
-    sm, bus = _make_sm_with_api(
+    sm, bus = _make_sm_with_call(
         service="fin-tidb",
         base_url="https://api.example.com",
     )
@@ -409,9 +409,9 @@ def _():
     )
 
 
-@test("#6.3 error message clarifies api.service is a key, not a URL")
+@test("#6.3 error message clarifies call.service is a key, not a URL")
 def _():
-    sm, bus = _make_sm_with_api(
+    sm, bus = _make_sm_with_call(
         service="some_service_key",
         base_url="",
     )
@@ -611,11 +611,6 @@ def _build_sm_for_soft_failure(
     # Use MagicMock for the schema to bypass Pydantic validation entirely
     step_schema = MagicMock()
     step_schema.strategy = strategies
-    step_schema.api.service = "test-svc"
-    step_schema.api.method = "GET"
-    step_schema.api.path = "/x"
-    step_schema.api.headers = {}
-    step_schema.api.timeout = 30.0
     step_schema.request.body = {}
     # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
     # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
@@ -1273,11 +1268,6 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
 
     step_schema = MagicMock()
     step_schema.strategy = strategies
-    step_schema.api.service = "test-svc"
-    step_schema.api.method = "GET"
-    step_schema.api.path = "/x"
-    step_schema.api.headers = {}
-    step_schema.api.timeout = 30.0
     step_schema.request.body = {}
     # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
     # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
@@ -2036,7 +2026,7 @@ print("\n[26] Business flow: multi-service base_url (B1)")
 
 
 def _make_step_with_service(service_name: str):
-    """Build a Step with given api.service key."""
+    """Build a Step with given call.service key."""
     from gimbal.schema.step import Step
     from gimbal.schema.call import Call
     from gimbal.schema.request import Request
@@ -2150,7 +2140,7 @@ def _():
     scenario_cfg = ScenarioConfig(
         services={"user-svc": "https://user.example.com"},
     )
-    # Step with api.service="" (empty/unset)
+    # Step with call.service="" (empty/unset)
     step = _make_step_with_service("")  # no service
     scenario = Scenario(
         scenarioId="sc1",

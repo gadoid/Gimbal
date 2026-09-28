@@ -262,8 +262,8 @@ def p_normalize(target: Union[Scenario, SuiteGraph],
                 strategies: "Any | None" = None) -> Union[Scenario, SuiteGraph]:
     """七阶段之二 normalize：不变量校验（协议字段 / 结构不变量）。
 
-    api→call 归一化在 Step 校验期（schema/step.py）完成、setup/teardown
-    展开在 LifecycleEntry（批次 B/P1-12）；本阶段收口协议自有字段的
+    call 是唯一调用形态（api 语法糖已退役）、setup/teardown 展开在
+    LifecycleEntry（批次 B/P1-12）；本阶段收口协议自有字段的
     合法性（S-1 编译期校验）。返回原 target（校验不通过抛 CompileError）。
     """
     _validate_call_fields(target, protocols)

@@ -41,27 +41,15 @@ def _step_summary(step: object) -> dict:
         "kind": _step_kind(step),
         "description": getattr(step, "description", None) or "",
     }
-    # Api 描述（method + path + service）
-    api = getattr(step, "api", None)
-    if api is not None and not isinstance(api, type(None)):
-        method = getattr(api, "method", None) or ""
-        path = getattr(api, "path", None) or ""
-        service = getattr(api, "service", None) or ""
-        if method or path or service:
-            out["api"] = {
-                "service": service,
-                "method":  method,
-                "path":    path,
-            }
-    else:
-        # 多协议步骤（无 api 糖）：展示协议名 + 协议自有坐标字段
-        call = getattr(step, "call", None)
-        if call is not None:
-            out["call"] = {
-                "protocol": getattr(call, "protocol", ""),
-                "service":  getattr(call, "service", "") or "",
-                "method":   getattr(call, "method", "") or "",
-            }
+    # Call 描述（协议名 + 协议自有坐标字段，如 http 的 service/method/path）
+    call = getattr(step, "call", None)
+    if call is not None:
+        out["call"] = {
+            "protocol": getattr(call, "protocol", ""),
+            "service":  getattr(call, "service", "") or "",
+            "method":   getattr(call, "method", "") or "",
+            "path":     getattr(call, "path", "") or "",
+        }
     # Strategy summary（仅 kinds，不打印完整表达式）
     strategies = getattr(step, "strategy", None)
     if strategies:
@@ -127,13 +115,13 @@ def _render_table(payload: dict, no_color: bool = False) -> None:
     for s in meta["steps"]:
         kind = s["kind"]
         desc = s["description"] or "(no description)"
-        api = s.get("api") or {}
-        api_str = ""
-        if api:
-            method = api.get("method") or "*"
-            path = api.get("path") or "*"
-            api_str = f"  [{method} {path}]"
-        rows.append((str(s["index"]), kind, desc + api_str))
+        call = s.get("call") or {}
+        call_str = ""
+        if call:
+            method = call.get("method") or "*"
+            path = call.get("path") or "*"
+            call_str = f"  [{method} {path}]"
+        rows.append((str(s["index"]), kind, desc + call_str))
 
     idx_w = max(len("idx"), max(len(r[0]) for r in rows))
     kind_w = max(len("kind"), max(len(r[1]) for r in rows))

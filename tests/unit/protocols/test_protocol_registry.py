@@ -384,7 +384,7 @@ class TestStepCallNormalization:
     def test_dump_explicit_call_serializes(self):
         step = Step(call=Call(protocol="echo", message="${var.x}"), strategy=[])
         d = step.model_dump()
-        assert d["api"] if False else d["call"]["protocol"] == "echo"
+        assert d["call"]["protocol"] == "echo"
         assert d["call"]["message"] == "${var.x}"
         step2 = Step.model_validate(d)
         assert step2.call_protocol == "echo"

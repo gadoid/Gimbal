@@ -7,7 +7,7 @@ from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
 from gimbal.schema.scenario import Scenario, Config
 from gimbal.schema.step import Step
 from gimbal.schema.request import Request
-from gimbal.schema.api import Api
+from gimbal.schema.call import Call
 from gimbal.generator import Generator, build_default_registry
 from gimbal.config.models import BootstrapConfig
 
@@ -21,9 +21,9 @@ def _make_scenario(body, *, vars=None):
         author="x", owner="x", tags=[], version="1.0.0",
         createTime="2026-01-01T00:00:00", expire=False, requirementRef=[],
     )
-    api = Api(kind="api", service="s", method="POST", path="/x", headers={}, timeout=30)
+    call = Call(protocol="http", service="s", method="POST", path="/x", headers={}, timeout=30)
     request = Request(kind="request", body=body)
-    step = Step(kind="step", api=api, request=request, strategy=[])
+    step = Step(kind="step", call=call, request=request, strategy=[])
     return Scenario(kind="scenario", scenarioId="t1", meta=meta, config=cfg,
                     resource={}, steps=[step])
 

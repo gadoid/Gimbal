@@ -14,7 +14,7 @@ Scenario 预处理器：在执行链进入 StepRunner 之前，完成所有准�
    - 不做 model_dump()，直接持有对象引用——AuthSession 刷新后 token 自动可见
 
 3. 批量展开 steps 中的模板字段
-   - 递归遍历 step.api / step.request / step.strategy 的所有字段
+   - 递归遍历 step.call / step.request / step.strategy 的所有字段
    - 将 "${auth.tag.token}"、"${service.name}" 等替换为实际值
    - 返回新的 step 列表，原始 schema 不变（immutable-safe）
 
@@ -282,11 +282,7 @@ class ScenarioPreprocessor:
         return resolved
 
     def _resolve_step(self, step: "Step", root: dict, idx: int) -> "Step":
-        """展开单个 Step 的所有模板字段，返回新 Step 实例。
-
-        api 与 call 只传其一：api 糖步骤只传 api（新 Step 校验期自动归一化
-        出 http call）；显式多协议 call（api 为 None）才传 call。
-        """
+        """展开单个 Step 的所有模板字段，返回新 Step 实例。"""
         from gimbal.schema.step import Step
 
         resolved = Step(
@@ -300,11 +296,7 @@ class ScenarioPreprocessor:
         return resolved
 
     def _resolve_call(self, call, root: dict):
-        """展开协议中立 Call 的模板字段（自定义协议的开放字段递归展开）。
-
-        http 糖步骤的 call 是归一化派生物（api 优先传递，call 为 None 走
-        _resolve_api 路径），本方法只处理**显式声明**的多协议 call。
-        """
+        """展开协议中立 Call 的模板字段（自定义协议的开放字段递归展开）。"""
         from gimbal.schema.call import Call
 
         extra = call.extra_fields() if call is not None else {}
@@ -331,8 +323,8 @@ class ScenarioPreprocessor:
     def _resolve_strategy(self, strategy, root: dict):
         """展开单条策略（Extract/Assign/Assertion）的模板字段，模板变量缺失时 fail-fast（避免 expected=None 误导），返回新的策略实例（未知类型原样返回）。
 
-        修复 #5：与 `_resolve_api` 一致——模板变量缺失时 fail-fast，
-        避免 expected=None 这类误导性断言失败信息。
+        修复 #5：模板变量缺失时 fail-fast，避免 expected=None
+        这类误导性断言失败信息。
         """
         from gimbal.schema.strategy import Extract, Assign, Assertion
 
@@ -387,7 +379,7 @@ class ScenarioPreprocessor:
     # ── 核心：单值模板解析（fail-fast 包装）─────────────────────────────────
 
     def _resolve_or_fail(self, value: Any, root: dict, *, owner: str, field: str) -> Any:
-        """解析模板值；缺失则抛 ValueError（fail-fast），与 `_resolve_api` 一致。
+        """解析模板值；缺失则抛 ValueError（fail-fast）。
 
         触发条件（必须同时满足）：
           - value 是字符串
@@ -490,8 +482,8 @@ class ScenarioPreprocessor:
             logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")
             return ""
 
-        # 收集 step 实际引用的 service key（http 糖步骤才有 service 概念；
-        # 多协议 call 的路由由各协议执行器自理解，不参与 base_url 推导）
+        # 收集 step 实际引用的 service key（http 协议的 call.service 路由；
+        # 其他协议 call 的路由由各协议执行器自理解，不参与 base_url 推导）
         referenced: set[str] = set()
         for step_union in self._schema.steps:
             call = getattr(step_union, "call", None)
@@ -502,7 +494,7 @@ class ScenarioPreprocessor:
                 elif ref:
                     # step 引用了 service，但不在 services dict 中
                     logger.warning(
-                        "[Preprocessor] step api.service={!r} 不在 services dict 中，"
+                        "[Preprocessor] step call.service={!r} 不在 services dict 中，"
                         "该 step 将发到空 base_url（触发 #6 修复的 error 报告）",
                         ref,
                     )

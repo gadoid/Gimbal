@@ -15,7 +15,6 @@ from .schema import (
     Mock,
     File,
     ResourceUnion,
-    # API 模型
     # 请求模型
     Request,
     RequestUnion,
@@ -60,8 +59,6 @@ __all__ = [
     "Mock",
     "File",
     "ResourceUnion",
-    # API 模型
-    "Api",
     # 请求模型
     "Request",
     "RequestUnion",
