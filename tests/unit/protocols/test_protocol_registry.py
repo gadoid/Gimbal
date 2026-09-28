@@ -78,8 +78,9 @@ class TestProtocolRegistry:
 
     def test_dispatcher_integration_default(self):
         d = build_default_dispatcher(hook_registry=HookRegistry())
-        # S-2 解耦：协议不进策略 kind 表；kinds 只含策略（按字母序）
-        assert d.kinds() == ["assertion", "assign", "extract"]
+        # S-2 解耦：协议不进策略 kind 表；kinds 只含策略（按字母序,
+        # 第三轮起含生命周期动作 sleep）
+        assert d.kinds() == ["assertion", "assign", "extract", "sleep"]
         assert d.protocols is not None and "http" in d.protocols.protocols()
 
     def test_register_custom_protocol_links_dispatcher(self):

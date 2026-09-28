@@ -37,6 +37,7 @@ __all__ = ["CompileError", "compile_target", "compile_plan", "validate_plan",
 def compile_target(
     target: Union[Scenario, SuiteGraph],
     protocols: "Any | None" = None,
+    strategies: "Any | None" = None,
 ) -> Plan:
     """把 Scenario / SuiteGraph 编译为 Plan。
 
@@ -50,6 +51,7 @@ def compile_target(
         已知协议的字段，插件协议不在内置表内、运行期由 Engine 路径收口。
     """
     _validate_call_fields(target, protocols)
+    _validate_lifecycle_entries(target, strategies)
     if isinstance(target, Scenario):
         return _implicit_plan(target)
     if isinstance(target, SuiteGraph):
@@ -86,6 +88,55 @@ def _relax_templates(params_model: "type", fields: dict) -> dict:
         if isinstance(value, str) and "${" in value and key in params_model.model_fields:
             out[key] = _dummy_for(params_model.model_fields[key].annotation)
     return out
+
+
+def _validate_lifecycle_entries(target: Union[Scenario, SuiteGraph],
+                                 strategies: "Any | None" = None) -> None:
+    """normalize 期生命周期校验（v2 §normalize,第三轮评审 #1）：
+    setup/teardown 条目的 kind 按 strategy 表查名,params 按该策略的
+    Params 模型校验（含 ${} 模板容忍）。
+
+    严格度与协议校验同一裁定：显式传入 strategies（Engine 运行时 /
+    CLI compile 带 bootstrap 表）→ 未注册 kind 即 CompileError;
+    缺省 → 只校验已知 kind 的参数,未知 kind 由 Engine 路径收口。
+    """
+    from pydantic import ValidationError
+
+    strict = strategies is not None
+    if strategies is None:
+        from gimbal.strategy.dispatcher import build_default_dispatcher
+        strategies = build_default_dispatcher()
+
+    scenarios: list[Scenario] = []
+    if isinstance(target, Scenario):
+        scenarios.append(target)
+    else:
+        for decl in [*target.before, *target.units, *target.after]:
+            if getattr(decl, "scenario", None) is not None:
+                scenarios.append(decl.scenario)
+
+    known = set(strategies.kinds())
+    for sc in scenarios:
+        for slot in ("setup", "teardown"):
+            for idx, entry in enumerate(getattr(sc.config, slot, None) or []):
+                kind = getattr(entry, "kind", None)
+                if kind not in known:
+                    if strict:
+                        raise CompileError(
+                            f"{slot}[{idx}] kind={kind!r} 未在 strategy 表注册"
+                            f"（已注册: {sorted(known)}）"
+                        )
+                    continue   # 非权威表：插件策略留给 Engine 收口
+                params_model = strategies.params_of(kind)
+                if params_model is None:
+                    continue
+                try:
+                    params_model.model_validate(
+                        _relax_templates(params_model, dict(entry.params or {})))
+                except ValidationError as exc:
+                    raise CompileError(
+                        f"{slot}[{idx}] kind={kind!r} 参数校验失败: {exc}"
+                    ) from exc
 
 
 def _validate_call_fields(
@@ -177,7 +228,8 @@ def p_load(raw: dict) -> Union[Scenario, SuiteGraph]:
 
 
 def p_normalize(target: Union[Scenario, SuiteGraph],
-                protocols: "Any | None" = None) -> Union[Scenario, SuiteGraph]:
+                protocols: "Any | None" = None,
+                strategies: "Any | None" = None) -> Union[Scenario, SuiteGraph]:
     """七阶段之二 normalize：不变量校验（协议字段 / 结构不变量）。
 
     api→call 归一化在 Step 校验期（schema/step.py）完成、setup/teardown
@@ -185,6 +237,7 @@ def p_normalize(target: Union[Scenario, SuiteGraph],
     合法性（S-1 编译期校验）。返回原 target（校验不通过抛 CompileError）。
     """
     _validate_call_fields(target, protocols)
+    _validate_lifecycle_entries(target, strategies)
     return target
 
 
@@ -214,6 +267,13 @@ def _merge_keyed_list(base: list, override: list) -> list:
 def p_patch(layers: list[dict]) -> dict:
     """七阶段之三 patch：五层合并代数（源 → suite 补丁 → 单元补丁 →
     调用参数 → 生效副本；标量后层覆盖前层）。
+
+    **挂起项声明（第三轮评审 #3）**：p_patch 当前在运行路径上是恒等变换
+    ——这是**有意的过渡状态**。其消费者是 D-04 五层补丁的 schema 层
+    （suite 补丁 / 调用参数补丁,批次 6 平台 RunScheme 调用参数层）,
+    该 schema 落地前无接线点;不把 vars 合并强接其上（vars 需要"整名
+    覆盖"语义,深合并会部分覆盖 dict 值,语义变坏）。合并代数经单测钉死,
+    schema 就位即接线。
 
     规则（纯函数,v2 §patch 对齐）：
       - dict 深合并（后层的键覆盖同名键，嵌套 dict 递归合并）；
@@ -245,7 +305,8 @@ def p_patch(layers: list[dict]) -> dict:
 
 
 def compile_plan(raw: Union[dict, Scenario, SuiteGraph],
-                 protocols: "Any | None" = None) -> Plan:
+                 protocols: "Any | None" = None,
+                 strategies: "Any | None" = None) -> Plan:
     """七阶段编排：load → normalize → patch → desugar → expand → bind → validate。
 
     raw 为 dict 时经 p_load 解析；已校验的模型直入 normalize。
@@ -253,8 +314,8 @@ def compile_plan(raw: Union[dict, Scenario, SuiteGraph],
     p_patch 单测钉死，供调用参数/编排补丁接线。）
     """
     target = p_load(raw) if isinstance(raw, dict) else raw
-    p_normalize(target, protocols)
-    plan = compile_target(target, protocols)
+    p_normalize(target, protocols, strategies)
+    plan = compile_target(target, protocols, strategies)
     errors = p_validate(plan)
     if errors:
         raise CompileError("; ".join(errors))

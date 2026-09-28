@@ -267,3 +267,16 @@ CLI 冒烟：`run launch -o jsonl` 末行 run.finished(seq)、`--halt-at` halted
 | tools/ab_dispatch_dump.py 语料路径漏改（测试靠本地残留文件才通过） | 改指 tests/plate/fixtures（一行） | 干净克隆可用 |
 
 第三轮验证：`pytest tests/` 1051 passed（+2 净增:污染/锁重叠两回归；边界停止测试为第二轮已有）。
+
+
+### 第四轮补充（2026-09-28 小项评估处理）
+
+| 项 | 处置 | 验证 |
+|---|---|---|
+| 生命周期条目编译期不校验 | p_normalize 增 `_validate_lifecycle_entries`：setup/teardown 按 strategy 表查 kind + Params 校验（含 \${} 容忍）；Engine/CLI compile 传权威表（严格），库直调缺省只校已知 kind | 未知 kind / 坏参数 → CompileError；sleep 合法编译 |
+| 生命周期无可跑动作 | 注册 **sleep** 为第一个内置生命周期动作（SleepParams: seconds 0-600）；StrategyUnion 仍封闭（sleep 消费面 = 生命周期槽位） | setup sleep 真实执行（耗时断言） |
+| `__import__` 内联取 StepStatus | 改常规导入 | — |
+| p_patch 未接线 | **不强行接线**（vars 需要"整名覆盖"，深合并会部分覆盖 dict 值，语义变坏）；docstring 显式声明挂起项：消费者 = D-04 五层补丁 schema（批次 6 调用参数层），代数经单测钉死 | 文档成文 |
+| 响应头 `-` 必须 bracket 形态 | 定性为 RFC 9535 规范行为非缺陷；解析器报错追加 bracket 形态引导提示 | 报错含引导；bracket 取值正常 |
+
+第四轮验证：`pytest tests/` 1056 passed。

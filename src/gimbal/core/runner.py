@@ -141,7 +141,8 @@ class Engine:
             # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）；
             # S-4 收尾：运行路径走 compile_plan（七阶段编排,含 p_validate 复查）
             protocols = self._ictx.protocols or getattr(self._ictx.dispatcher, "protocols", None)
-            plan = compile_plan(target, protocols=protocols)
+            plan = compile_plan(target, protocols=protocols,
+                                strategies=self._ictx.dispatcher)
             result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
         except CompileError as e:
             logger.error("[Engine] 编译失败: {}", e)

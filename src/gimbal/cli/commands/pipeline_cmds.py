@@ -59,7 +59,8 @@ def compile_cmd(
     """编译为 Plan 并打印（不执行）。"""
     try:
         target = _load_target(source, fmt)
-        plan = compile_target(target)
+        from gimbal.strategy.dispatcher import build_default_dispatcher as _bdd
+        plan = compile_target(target, strategies=_bdd())
     except Exception as exc:  # noqa: BLE001
         typer.secho(f"编译失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
@@ -85,7 +86,8 @@ def validate_cmd(
         typer.secho(f"schema 校验失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
     try:
-        plan = compile_target(target)
+        from gimbal.strategy.dispatcher import build_default_dispatcher as _bdd
+        plan = compile_target(target, strategies=_bdd())
     except CompileError as exc:
         typer.secho(f"编译失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
@@ -114,7 +116,8 @@ def resolve_cmd(
 
     try:
         target = _load_target(source, fmt)
-        plan = compile_target(target)
+        from gimbal.strategy.dispatcher import build_default_dispatcher as _bdd
+        plan = compile_target(target, strategies=_bdd())
     except Exception as exc:  # noqa: BLE001
         typer.secho(f"解析失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)

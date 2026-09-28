@@ -177,7 +177,13 @@ def _tokenize(path: str) -> list[Token]:
                 tokens.append(Token(TK.KEY, m.group()))
                 i = m.end()
             else:
-                raise JsonPathError(f"Unexpected character at position {i}: {path[i]!r}")
+                hint = ""
+                if path[i] == "-":
+                    # RFC 9535:点号只允许标识符字符;含 - 的键(header 名等)
+                    # 须用 bracket 记法——给用户可发现的引导而不是裸报错
+                    hint = "（键名含 '-' 应使用 bracket 形态,如 ['X-Auth-Token']）"
+                raise JsonPathError(
+                    f"Unexpected character at position {i}: {path[i]!r}{hint}")
 
     tokens.append(Token(TK.EOF))
     return tokens

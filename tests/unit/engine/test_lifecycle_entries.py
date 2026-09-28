@@ -1,6 +1,8 @@
 """上轮评审 #9：LifecycleEntry(setup/teardown)执行 + timePolicy 消费。"""
 import os
 import sys
+
+import pytest
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -108,3 +110,56 @@ class TestLifecycleEntries:
 
 class _ProbeDotted:   # 占位避免 lint 抱怨未用导入
     pass
+
+
+class TestLifecycleCompileValidation:
+    """第三轮评审 #1：setup/teardown 条目编译期校验（strategy 表查名 + Params）。"""
+
+    def _sc_with_setup(self, setup):
+        return _sc(setup=setup)
+
+    def test_unknown_kind_rejected_at_compile(self):
+        from gimbal.compiler.pipeline import CompileError, compile_target
+        from gimbal.strategy.dispatcher import build_default_dispatcher
+
+        sc = self._sc_with_setup([{"kind": "bogus", "key": "x"}])
+        with pytest.raises(CompileError, match="未在 strategy 表注册"):
+            compile_target(sc, strategies=build_default_dispatcher())
+
+    def test_known_kind_bad_params_rejected(self):
+        from gimbal.compiler.pipeline import CompileError, compile_target
+        from gimbal.strategy.dispatcher import build_default_dispatcher
+
+        sc = self._sc_with_setup(
+            [{"kind": "sleep", "params": {"seconds": "not-a-number"}}])
+        with pytest.raises(CompileError, match="参数校验失败"):
+            compile_target(sc, strategies=build_default_dispatcher())
+
+    def test_sleep_compiles_and_params_validated(self):
+        from gimbal.compiler.pipeline import compile_target
+        from gimbal.strategy.dispatcher import build_default_dispatcher
+
+        sc = self._sc_with_setup([{"kind": "sleep", "params": {"seconds": 0.01}}])
+        plan = compile_target(sc, strategies=build_default_dispatcher())
+        assert plan.units
+
+    def test_sleep_executes_in_setup(self):
+        """sleep 作为第一个内置生命周期动作真实执行。"""
+        import time as _t
+        RAN.clear()
+        engine = _make_engine()
+        sc = _sc(setup=[{"kind": "sleep", "key": "wait",
+                         "params": {"seconds": 0.05}}])
+        t0 = _t.monotonic()
+        engine.run(sc)
+        assert _t.monotonic() - t0 >= 0.05   # 真实 sleep 生效
+
+    def test_jsonpath_dash_hint(self):
+        """含 '-' 键的点号路径报错带 bracket 形态引导。"""
+        from gimbal.utils.jsonpath import JsonPathError, get
+
+        data = {"X-Auth-Token": "tok"}
+        with pytest.raises(JsonPathError, match=r"bracket 形态"):
+            get(data, "$.X-Auth-Token")
+        assert get(data, "$['X-Auth-Token']") == "tok"
+

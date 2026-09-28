@@ -637,13 +637,11 @@ class ScenarioRunner:
             })()
             result = self._dispatcher.dispatch(spec, step_ctx.view if step_ctx else _NullView())
             if step_ctx is not None:
+                from gimbal.statemachine.states import StepStatus
                 try:
                     self._ctx_manager.finalize_step(
                         step_ctx,
-                        __import__("gimbal.statemachine.states", fromlist=["StepState"])
-                        .StepStatus.PASSED if result.passed
-                        else __import__("gimbal.statemachine.states", fromlist=["StepStatus"])
-                        .StepStatus.FAILED)
+                        StepStatus.PASSED if result.passed else StepStatus.FAILED)
                 except Exception:  # noqa: BLE001
                     pass
             if result.failed:

@@ -230,6 +230,7 @@ def build_default_dispatcher(
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
+    from gimbal.strategy.builtin.sleep import SleepExecutor, SleepParams
     from gimbal.schema.strategy import Assign, Assertion, Extract
     from gimbal.protocols.registry import build_default_protocol_registry
 
@@ -240,4 +241,6 @@ def build_default_dispatcher(
     d.register(ExtractExecutor(), params=Extract)
     d.register(AssignExecutor(), params=Assign)
     d.register(AssertionExecutor(), params=Assertion)
+    # sleep：生命周期条目(setup/teardown)的第一个内置动作
+    d.register(SleepExecutor(), params=SleepParams)
     return d
