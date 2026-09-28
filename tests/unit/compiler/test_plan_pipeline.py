@@ -2,7 +2,7 @@
 
 覆盖验收门（v2.1 §三 批次 B）：
   - 单场景 → 隐式 aggregate Plan；嵌入式 Suite → aggregate Plan（策略映射）；
-  - validate_plan：重复 id（schema 层）、未支持乘法/编排项的明确报错；
+  - p_validate：重复 id（schema 层）、未支持乘法/编排项的明确报错；
   - Engine 单路径对账：scenario / suite（串行/并行/fail-fast）的 RunResult
     与历史口径一致（计数、details 形状与顺序、cancelled 占位）；
   - inputs 统一注入原语：注入为 scenario vars（模板 ${var.*} 可见）；
@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 import pytest
 
 from gimbal.auth.registry import AuthRegistry
-from gimbal.compiler.pipeline import CompileError, compile_target, validate_plan
+from gimbal.compiler.pipeline import CompileError, compile_target, p_validate
 from gimbal.config.models import BootstrapConfig
 from gimbal.context.archive import InMemoryArchive
 from gimbal.context.manager import ContextManager
@@ -117,7 +117,7 @@ class TestCompilePipeline:
         assert plan.units[0].scenario.scenarioId == "sc-1"
         assert plan.units[0].inputs == {} and plan.units[0].needs == []
         assert plan.policy.parallel == 1 and plan.policy.fail_fast is None
-        assert validate_plan(plan) == []
+        assert p_validate(plan) == []
 
     def test_graph_aggregate_compiles_with_policy(self):
         graph = SuiteGraph(
@@ -131,7 +131,7 @@ class TestCompilePipeline:
         assert [u.id for u in plan.units] == ["sc-a", "sc-b"]
         assert plan.policy.parallel == 3
         assert plan.policy.fail_fast is True
-        assert validate_plan(plan) == []
+        assert p_validate(plan) == []
 
     def test_graph_without_policy_defaults_serial(self):
         plan = compile_target(SuiteGraph(
@@ -149,7 +149,7 @@ class TestCompilePipeline:
             units=[Unit(id="u1", scenario=_make_scenario("u1"),
                         policy=UnitPolicy(n_runs=3, retry=2, lock="db"))],
         )
-        assert validate_plan(plan) == []
+        assert p_validate(plan) == []
 
     def test_invalid_multiplication_rejected_at_schema(self):
         """取值域由 UnitPolicy schema 保证（ge 约束）。"""
@@ -394,3 +394,97 @@ class TestSevenStages:
         from gimbal.compiler.pipeline import CompileError, p_load
         with pytest.raises(CompileError, match="kind"):
             p_load({"kind": "nope"})
+
+
+# ── P0-11：编译期校验补全（S1 users 标签 / S2 并发同名写）──────────
+
+class TestUsersTagValidation:
+    """S1：${auth.<tag>.*} 模板引用与 call.user 字段引用的标签须在
+    config.users 声明（定稿 D3/D-17 挂起项落地）。"""
+
+    def _scenario_with_user(self, tag: str, users: dict) -> Scenario:
+        from gimbal.schema.auth import AuthSession
+        sc = _make_scenario(f"u-{tag}")
+        sc.config = ScenarioConfig(users={k: AuthSession(token="t") for k in users})
+        sc.steps = [Step(
+            call=Call(protocol="echo", message="m",
+                      **{"user": tag}),   # 协议自有字段（extra=allow）
+            strategy=[],
+        )]
+        return sc
+
+    def _scenario_with_auth_template(self, tag: str) -> Scenario:
+        sc = _make_scenario(f"t-{tag}")
+        sc.steps = [Step(
+            call=Call(protocol="echo", message="${auth.%s.token}" % tag),
+            strategy=[],
+        )]
+        return sc
+
+    def test_call_user_tag_must_be_declared(self):
+        plan = compile_target(self._scenario_with_user("ghost", users={}))
+        errs = p_validate(plan)
+        assert any(e.startswith("USERS_TAG_UNKNOWN") for e in errs), errs
+        assert any("ghost" in e for e in errs)
+
+    def test_auth_template_tag_must_be_declared(self):
+        plan = compile_target(self._scenario_with_auth_template("ghost"))
+        errs = p_validate(plan)
+        assert any(e.startswith("USERS_TAG_UNKNOWN") for e in errs), errs
+
+    def test_declared_tag_passes(self):
+        plan = compile_target(self._scenario_with_user("buyer", users={"buyer": None}))
+        assert p_validate(plan) == []
+
+    def test_auth_tags_runtime_channel_passes(self):
+        """Engine 运行期：注册表已就位的标签视同已声明（插件/server 注入通道）。"""
+        plan = compile_target(self._scenario_with_user("ghost", users={}))
+        assert p_validate(plan, auth_tags={"ghost"}) == []
+
+
+class TestConcurrentSameOutput:
+    """S2：互无依赖路径的单元并发产出同名 suite 层变量 → CompileError。
+
+    豁免面：needs 先后（顺序写）、跨括号组（顺序固定）、同源 repeat 变体
+    （同一逻辑单元的乘法展开——batch D 设计语义）。
+    """
+
+    def _scenario_extracting(self, sid: str, target: str) -> Scenario:
+        from gimbal.schema.strategy import Extract, Scope
+        sc = _make_scenario(sid)
+        sc.steps = [Step(
+            call=Call(protocol="echo", message=sid),
+            strategy=[Extract(expression="$.call.response.body.message",
+                              target=target, scope=Scope.SCENARIO)],
+        )]
+        return sc
+
+    def test_independent_units_same_output_rejected(self):
+        graph = SuiteGraph(kind="graph", mode="compose", units=[
+            UnitDecl(ref="a", scenario=self._scenario_extracting("a", "v")),
+            UnitDecl(ref="b", scenario=self._scenario_extracting("b", "v")),
+        ])
+        with pytest.raises(CompileError) as ei:
+            compile_target(graph)
+        assert ei.value.code == "SUITE_VAR_CONFLICT"
+        assert "a" in str(ei.value) and "b" in str(ei.value) and "v" in str(ei.value)
+
+    def test_sequenced_units_same_output_allowed(self):
+        """b needs a → 先后顺序确立，顺序覆写是显式行为。"""
+        graph = SuiteGraph(kind="graph", mode="compose", units=[
+            UnitDecl(ref="a", scenario=self._scenario_extracting("a", "v")),
+            UnitDecl(ref="b", scenario=self._scenario_extracting("b", "v"),
+                     needs=["a"]),
+        ])
+        plan = compile_target(graph)
+        assert p_validate(plan) == []
+
+    def test_bracket_and_main_same_output_allowed(self):
+        """before 先行、主体后至：执行顺序由括号语义固定。"""
+        graph = SuiteGraph(kind="graph", mode="aggregate",
+                           before=[UnitDecl(ref="pre",
+                                            scenario=self._scenario_extracting("pre", "v"))],
+                           units=[UnitDecl(ref="m",
+                                           scenario=self._scenario_extracting("m", "v"))])
+        plan = compile_target(graph)
+        assert p_validate(plan) == []

@@ -16,20 +16,20 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union
 
 from gimbal.compiler.analysis import ScenarioAnalysis, analyze_scenario
-from gimbal.compiler.errors import CompileError
+from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, unit_policy_from
 from gimbal.schema.scenario import Control, Scenario, SuiteGraph, UnitDecl
 
 logger = get_logger(__name__)
 
-__all__ = ["CompileError", "compile_target", "compile_plan", "validate_plan",
+__all__ = ["CompileError", "compile_target", "compile_plan", "p_validate",
            "analyze_scenario", "p_load", "p_normalize", "p_patch", "p_desugar",
-           "p_expand", "p_bind", "p_validate"]
+           "p_expand", "p_bind"]
 
 
 # ── 入口 ─────────────────────────────────────────────────────
@@ -58,7 +58,8 @@ def compile_target(
         return _graph_plan(target)
     raise CompileError(
         f"无法编译的目标类型: {type(target).__name__}"
-        "（嵌入式 Suite 已删除，请用 graph 或经迁移脚本转换）"
+        "（嵌入式 Suite 已删除，请用 graph 或经迁移脚本转换）",
+        code=ErrCode.BAD_TARGET_TYPE,
     )
 
 
@@ -124,7 +125,9 @@ def _validate_lifecycle_entries(target: Union[Scenario, SuiteGraph],
                     if strict:
                         raise CompileError(
                             f"{slot}[{idx}] kind={kind!r} 未在 strategy 表注册"
-                            f"（已注册: {sorted(known)}）"
+                            f"（已注册: {sorted(known)}）",
+                            code=ErrCode.LIFECYCLE_KIND_UNKNOWN,
+                            location={"path": f"config.{slot}[{idx}]", "field": "kind"},
                         )
                     continue   # 非权威表：插件策略留给 Engine 收口
                 params_model = strategies.params_of(kind)
@@ -135,7 +138,9 @@ def _validate_lifecycle_entries(target: Union[Scenario, SuiteGraph],
                         _relax_templates(params_model, dict(entry.params or {})))
                 except ValidationError as exc:
                     raise CompileError(
-                        f"{slot}[{idx}] kind={kind!r} 参数校验失败: {exc}"
+                        f"{slot}[{idx}] kind={kind!r} 参数校验失败: {exc}",
+                        code=ErrCode.LIFECYCLE_PARAMS_INVALID,
+                        location={"path": f"config.{slot}[{idx}]", "field": "params"},
                     ) from exc
 
 
@@ -175,7 +180,9 @@ def _validate_call_fields(
                 if strict:
                     raise CompileError(
                         f"step[{idx}] call 引用未注册的协议: {proto!r}"
-                        f"（已注册: {protocols.protocols()}）"
+                        f"（已注册: {protocols.protocols()}）",
+                        code=ErrCode.UNKNOWN_PROTOCOL,
+                        location={"step": idx, "field": "protocol"},
                     )
                 continue  # 非权威注册表：插件协议留给运行期收口
             params_model = protocols.params_of(proto)
@@ -187,7 +194,9 @@ def _validate_call_fields(
             except ValidationError as exc:
                 raise CompileError(
                     f"step[{idx}] call 协议 {proto!r} 字段校验失败"
-                    f"（未知字段或类型不符）: {exc.error_count()} 处 —— {exc.errors()[0].get('loc')}"
+                    f"（未知字段或类型不符）: {exc.error_count()} 处 —— {exc.errors()[0].get('loc')}",
+                    code=ErrCode.CALL_FIELD_INVALID,
+                    location={"step": idx, "field": "call"},
                 ) from exc
 
 
@@ -223,7 +232,8 @@ def p_load(raw: dict) -> Union[Scenario, SuiteGraph]:
     if kind == "graph":
         return SuiteGraph.model_validate(raw)
     raise CompileError(
-        f"无法识别的目标 kind: {kind!r}（合法: scenario / graph）"
+        f"无法识别的目标 kind: {kind!r}（合法: scenario / graph）",
+        code=ErrCode.BAD_TARGET_KIND,
     )
 
 
@@ -306,17 +316,20 @@ def p_patch(layers: list[dict]) -> dict:
 
 def compile_plan(raw: Union[dict, Scenario, SuiteGraph],
                  protocols: "Any | None" = None,
-                 strategies: "Any | None" = None) -> Plan:
+                 strategies: "Any | None" = None,
+                 auth_tags: "set[str] | None" = None) -> Plan:
     """七阶段编排：load → normalize → patch → desugar → expand → bind → validate。
 
     raw 为 dict 时经 p_load 解析；已校验的模型直入 normalize。
     （patch 阶段的五层叠加在 schema 补丁层落地前为恒等——合并代数经
     p_patch 单测钉死，供调用参数/编排补丁接线。）
+    auth_tags：运行期已就位的认证标签（Engine 传注册表现存会话）——
+    users 标签校验（S1）对"已声明 ∪ 已注册"放行；CLI/dry-run 不传即严格。
     """
     target = p_load(raw) if isinstance(raw, dict) else raw
     p_normalize(target, protocols, strategies)
     plan = compile_target(target, protocols, strategies)
-    errors = p_validate(plan)
+    errors = p_validate(plan, auth_tags=auth_tags)
     if errors:
         raise CompileError("; ".join(errors))
     return plan
@@ -329,9 +342,12 @@ def _check_refs_unique(decls_by_bracket: dict[str, list[UnitDecl]]) -> None:
     for bracket, decls in decls_by_bracket.items():
         for d in decls:
             if not d.ref:
-                raise CompileError(f"{bracket} 中存在空 ref")
+                raise CompileError(f"{bracket} 中存在空 ref",
+                                   code=ErrCode.EMPTY_OR_DUP_REF)
             if d.ref in seen:
-                raise CompileError(f"ref 重复: {d.ref!r}")
+                raise CompileError(f"ref 重复: {d.ref!r}",
+                                   code=ErrCode.EMPTY_OR_DUP_REF,
+                                   location={"unit": d.ref})
             seen.add(d.ref)
 
 
@@ -363,7 +379,8 @@ def _control_closure(units: list[UnitDecl], control: Control | None,
         if ref in keep:
             continue
         if ref not in implied:
-            raise CompileError(f"control.only 引用了不存在的 ref: {ref!r}")
+            raise CompileError(f"control.only 引用了不存在的 ref: {ref!r}",
+                               code=ErrCode.CONTROL_REF_INVALID)
         keep.add(ref)
         stack.extend(implied[ref])
     kept = [d for d in units if d.ref in keep]
@@ -375,7 +392,8 @@ def _control_closure(units: list[UnitDecl], control: Control | None,
 _MAX_EXPANDED_UNITS = 4096
 
 
-def p_expand(decls: list[UnitDecl]) -> list[UnitDecl]:
+def p_expand(decls: list[UnitDecl], *,
+             variant_map: "dict[str, list[str]] | None" = None) -> list[UnitDecl]:
     """repeat 编译期展开：ref（repeat=N）→ ref#1..ref#N；上限闸 4096 单元。
 
     - 展开后 needs 引用原 ref 的单元 → 依赖其**全部变体**（fan-in）；
@@ -383,6 +401,8 @@ def p_expand(decls: list[UnitDecl]) -> list[UnitDecl]:
     - repeat=1 不展开（id 保持 ref，无后缀——与既有行为一致）。
     - 展开后总量（含未展开单元）超过 4096 → CompileError（计划清单上限闸，
       防数据集 × repeat × 注入变体的乘法爆炸）。
+    - variant_map：可选收集口——传出 base_ref → 变体 id 列表（p_desugar
+      用它构造同源变体组，供 bind 的并发同名检查豁免）。
     """
     expanded_ids: dict[str, list[str]] = {}
     out: list[UnitDecl] = []
@@ -397,7 +417,8 @@ def p_expand(decls: list[UnitDecl]) -> list[UnitDecl]:
     if len(out) > _MAX_EXPANDED_UNITS:
         raise CompileError(
             f"expand 展开 后单元数 {len(out)} 超上限 {_MAX_EXPANDED_UNITS}"
-            "（repeat × 变体乘法上限闸）"
+            "（repeat × 变体乘法上限闸）",
+            code=ErrCode.EXPAND_LIMIT,
         )
     if expanded_ids:
         for d in out:
@@ -406,6 +427,8 @@ def p_expand(decls: list[UnitDecl]) -> list[UnitDecl]:
                 for n in expanded_ids.get(need, [need])
             ]
         logger.info("[compiler] repeat 展开: {}", expanded_ids)
+    if variant_map is not None:
+        variant_map.update(expanded_ids)
     return out
 
 
@@ -456,7 +479,9 @@ def _collapse_shared(decls: list[UnitDecl], bracket: str) -> tuple[list[UnitDecl
             raise CompileError(
                 f"shared key={d.shared!r} 的生效定义不一致"
                 f"（{rep.ref!r} vs {d.ref!r}，差异字段 {diff!r}）；"
-                "同 key 的依赖条目要求生效定义完全一致"
+                "同 key 的依赖条目要求生效定义完全一致",
+                code=ErrCode.SHARED_MISMATCH,
+                location={"unit": d.ref},
             )
         remap[d.ref] = rep.ref
         logger.debug("[compiler] shared 塌缩: {} → {} (key={})", d.ref, rep.ref, d.shared)
@@ -472,9 +497,13 @@ def _validate_needs_refs(units: list[Unit], ref_pool: set[str]) -> None:
     for u in units:
         for n in u.needs:
             if n == u.id:
-                raise CompileError(f"单元 {u.id!r} 不能 needs 自己")
+                raise CompileError(f"单元 {u.id!r} 不能 needs 自己",
+                                   code=ErrCode.NEEDS_REF_INVALID,
+                                   location={"unit": u.id})
             if n not in ref_pool:
-                raise CompileError(f"单元 {u.id!r} 的 needs 引用了不存在的 ref: {n!r}")
+                raise CompileError(f"单元 {u.id!r} 的 needs 引用了不存在的 ref: {n!r}",
+                                   code=ErrCode.NEEDS_REF_INVALID,
+                                   location={"unit": u.id})
 
 
 def _ancestors(unit_id: str, needs_map: dict[str, list[str]]) -> set[str]:
@@ -511,7 +540,8 @@ def _check_acyclic(needs_map: dict[str, list[str]]) -> None:
     for n in needs_map:
         if color[n] == WHITE:
             if not visit(n):
-                raise CompileError(f"依赖存在循环: {' → '.join(reversed(cycle))}")
+                raise CompileError(f"依赖存在循环: {' → '.join(reversed(cycle))}",
+                                   code=ErrCode.CYCLE)
 
 
 def _graph_plan(graph: SuiteGraph) -> Plan:
@@ -525,11 +555,14 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
 
 @dataclass
 class _ExpandedDecls:
-    """p_desugar 的产物：三段声明（深拷贝、已展开/闭包/塌缩）+ 重映射表。"""
+    """p_desugar 的产物：三段声明（深拷贝、已展开/闭包/塌缩）+ 重映射表
+    + 同源变体组（repeat 展开出的 ref#k 们互为变体——S2 并发同名检查
+    对组内豁免：同一逻辑单元的乘法变体同输出名是设计语义）。"""
     before: list[UnitDecl]
     units: list[UnitDecl]
     after: list[UnitDecl]
     remap: dict[str, str]
+    variant_groups: list[frozenset[str]] = field(default_factory=list)
 
 
 
@@ -545,14 +578,17 @@ def p_desugar(graph: SuiteGraph) -> "_ExpandedDecls":
     for bracket in ("before", "after"):
         for d in getattr(graph, bracket):
             if d.needs:
-                raise CompileError(f"{bracket} 括号单元 {d.ref!r} 不允许声明 needs（按定义先行/必达）")
+                raise CompileError(f"{bracket} 括号单元 {d.ref!r} 不允许声明 needs（按定义先行/必达）",
+                                   code=ErrCode.BRACKET_NEEDS_FORBIDDEN,
+                                   location={"unit": d.ref})
 
     before = [d.model_copy(deep=True) for d in graph.before]
     after = [d.model_copy(deep=True) for d in graph.after]
     units_decl = [d.model_copy(deep=True) for d in graph.units]
 
     # repeat 编译期展开（批次 D 三种乘法之一；先于闭包，闭包按变体计算）
-    units_decl = p_expand(units_decl)
+    variant_map: dict[str, list[str]] = {}
+    units_decl = p_expand(units_decl, variant_map=variant_map)
 
     # control.only 闭包（只作用于主体单元；按模式隐含依赖）
     units_decl = _control_closure(units_decl, graph.control, graph.mode)
@@ -570,8 +606,15 @@ def p_desugar(graph: SuiteGraph) -> "_ExpandedDecls":
     units_decl = dict(collapsed)["units"]
     after = dict(collapsed)["after"]
     if not units_decl:
-        raise CompileError("control.only 闭包后主体单元为空")
-    return _ExpandedDecls(before=before, units=units_decl, after=after, remap=all_remap)
+        raise CompileError("control.only 闭包后主体单元为空",
+                           code=ErrCode.CONTROL_ONLY_EMPTY)
+    # 同源变体组（ref#k 经塌缩重映射后仍同源）：S2 并发同名检查的豁免面
+    variant_groups = [
+        frozenset(all_remap.get(vid, vid) for vid in ids)
+        for ids in variant_map.values()
+    ]
+    return _ExpandedDecls(before=before, units=units_decl, after=after, remap=all_remap,
+                          variant_groups=variant_groups)
 
 
 # ── 七阶段之六：bind —— mode 表 + 静态分析连线 ───────────────
@@ -588,7 +631,8 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
     try:
         _, desugar = mode_table.get(graph.mode)
     except KeyError as exc:
-        raise CompileError(str(exc)) from exc
+        raise CompileError(str(exc), code=ErrCode.UNKNOWN_MODE,
+                           location={"field": "mode"}) from exc
     main_units = desugar(units_decl, graph.control)
 
     # needs 引用存在性（可引用 before 与主体 ref）
@@ -597,7 +641,9 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
     for u in main_units:
         for dep in u.needs:
             if dep in {d.ref for d in after}:
-                raise CompileError(f"单元 {u.id!r} 不能依赖 after 括号单元 {dep!r}")
+                raise CompileError(f"单元 {u.id!r} 不能依赖 after 括号单元 {dep!r}",
+                                   code=ErrCode.NEEDS_REF_INVALID,
+                                   location={"unit": u.id})
     # P1-12：括号单元同样映射 scenario config.retry（场景自带的重试声明
     # 在任何执行位置生效；编排 policy_kwargs 不作用于括号——既有行为）
     after_units = [Unit(id=d.ref, scenario=d.scenario, inputs=dict(d.inputs),
@@ -621,6 +667,35 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
 
     needs_map: dict[str, list[str]] = {u.id: list(u.needs) for u in main_units + after_units}
     _check_acyclic(needs_map)
+
+    # S2（P0-11，定稿 D3 挂起项落地）：并发分支同名输出检查。
+    # 输出名 = suite 层连线命名空间；互无依赖路径的两个单元产出同名
+    # → 运行期并发写同一 suite 变量（竞态/相互覆盖）。有序对允许同名
+    # （先后关系经 needs 传递闭包或括号语义保证，顺序覆写是显式行为）；
+    # 冲突消解 = 消费侧 map 改名（与 D-05 同名歧义同一机制）。
+    producers: dict[str, list[str]] = {}
+    for unit in [*before_units, *main_units, *after_units]:
+        for out in sorted(outputs_map.get(unit.id, set())):
+            producers.setdefault(out, []).append(unit.id)
+    main_ids = {u.id for u in main_units}
+    same_origin = expanded.variant_groups
+    for out, ids in sorted(producers.items()):
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                a, b = ids[i], ids[j]
+                if (a in main_ids) != (b in main_ids):
+                    continue  # 跨括号组（before/main/after）：执行顺序由括号语义固定
+                if any(a in grp and b in grp for grp in same_origin):
+                    continue  # 同源 repeat 变体：同一逻辑单元的乘法展开（设计语义）
+                if b in _ancestors(a, needs_map) or a in _ancestors(b, needs_map):
+                    continue  # 同组内经 needs 建立了先后：顺序写合法
+                raise CompileError(
+                    f"单元 {a!r} 与 {b!r} 并发产出同名输出 {out!r}"
+                    "（互无依赖路径，运行期并发写 suite 层同名变量）；"
+                    "请用消费侧 map 改名，或经 needs 建立先后顺序",
+                    code=ErrCode.SUITE_VAR_CONFLICT,
+                    location={"unit": a, "path": out},
+                )
 
     after_ids = {u.id for u in after_units}
     wiring: dict[str, dict[str, str]] = {}
@@ -650,7 +725,9 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
             if len(candidates) > 1:
                 raise CompileError(
                     f"单元 {unit.id!r} 的输入 {name!r} 命中多个上游输出: "
-                    f"{[f'{a}.{o}' for a, o in candidates]}；请用 map 改名消除歧义"
+                    f"{[f'{a}.{o}' for a, o in candidates]}；请用 map 改名消除歧义",
+                    code=ErrCode.INPUT_AMBIGUOUS,
+                    location={"unit": unit.id, "field": name},
                 )
             if not candidates:
                 if name in hard:
@@ -662,7 +739,9 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
                     raise CompileError(
                         f"单元 {unit.id!r} 的输入 {name!r} 无上游供给（输入不满足）；"
                         "检查连线/needs，或经 inputs/--var 提供"
-                        "（chain from_node 切片时跳过的上游输出须显式提供）"
+                        "（chain from_node 切片时跳过的上游输出须显式提供）",
+                        code=ErrCode.INPUT_UNSATISFIED,
+                        location={"unit": unit.id, "field": name},
                     )
                 continue  # 软输入（config.vars 有默认）：允许无上游
             wires[name] = f"{candidates[0][0]}:{candidates[0][1]}"
@@ -691,51 +770,74 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
 
 # ── validate ─────────────────────────────────────────────────
 
-def p_validate(plan: Plan) -> list[str]:
-    """七阶段之七 validate：五项独立防线（返回错误清单,空 = 通过）。
+def p_validate(plan: Plan, *, auth_tags: "set[str] | None" = None) -> list[str]:
+    """七阶段之七 validate：独立防线（返回错误清单,空 = 通过）。
 
     1. mode 合法；2. 依赖无环（bind 期已抛,此处为独立复查）；
     3. needs 引用存在且无自环；4. unit id 唯一；5. wiring 目标格式合法
-    （unit_id:output 名；引用的 unit 存在）。
-    users 标签存在性属运行期预认证（C7）/dry-run 校验,不在此层。
+    （unit_id:output 名；引用的 unit 存在）；6. users 标签存在性
+    （P0-11 S1，定稿 D3/D-17 挂起项落地——``${auth.<tag>.*}`` 模板引用与
+    ``call.user`` 字段引用的标签必须在 config.users 声明；Engine 运行期
+    可经 auth_tags 放行注册表已就位的标签——插件/服务端注入通道）。
+    错误串以 ``"CODE: message"`` 前缀携带稳定错误码（CLI -o json 解析）。
     乘法组合语义见 scheduler/plan.py docstring（repeat × n_runs × retry）；
     n_runs/retry 取值域由 UnitPolicy schema（ge 约束）保证。
     """
     errors: list[str] = []
     # 1. mode
     if plan.mode not in ("aggregate", "compose", "fanout", "chain"):
-        errors.append(f"未知 mode: {plan.mode!r}")
+        errors.append(f"{ErrCode.UNKNOWN_MODE}: 未知 mode: {plan.mode!r}")
     all_units = [*plan.before, *plan.units, *plan.after]
     # 4. unit id 唯一
     ids = [u.id for u in all_units]
     if len(set(ids)) != len(ids):
         dup = sorted({i for i in ids if ids.count(i) > 1})
-        errors.append(f"unit id 重复: {dup}")
+        errors.append(f"{ErrCode.DUP_UNIT_ID}: unit id 重复: {dup}")
     by_id = {u.id: u for u in all_units}
     # 3. needs 引用存在 + 无自环
     for u in plan.units:
         for n in u.needs:
             if n == u.id:
-                errors.append(f"单元 {u.id!r} 不能 needs 自己")
+                errors.append(f"{ErrCode.NEEDS_REF_INVALID}: 单元 {u.id!r} 不能 needs 自己")
             elif n not in by_id:
-                errors.append(f"单元 {u.id!r} 的 needs 引用了不存在的 ref: {n!r}")
+                errors.append(
+                    f"{ErrCode.NEEDS_REF_INVALID}: 单元 {u.id!r} 的 needs 引用了不存在的 ref: {n!r}")
     # 2. 依赖无环（独立复查；bind 期 _check_acyclic 已保证）
     needs_map = {u.id: list(u.needs) for u in [*plan.units, *plan.after]}
     try:
         _check_acyclic(needs_map)
     except CompileError as exc:
-        errors.append(f"依赖存在循环: {exc}")
+        errors.append(f"{ErrCode.CYCLE}: 依赖存在循环: {exc}")
     # 5. wiring 目标格式与引用
     for uid, wires in (plan.wiring or {}).items():
         if uid not in by_id:
-            errors.append(f"wiring 引用了不存在的单元: {uid!r}")
+            errors.append(f"{ErrCode.WIRING_TARGET_INVALID}: wiring 引用了不存在的单元: {uid!r}")
         for name, target in wires.items():
             if ":" not in target or target.split(":", 1)[0] not in by_id:
                 errors.append(
-                    f"wiring {uid}.{name} 的目标 {target!r} 非法（应为 unit_id:output）"
+                    f"{ErrCode.WIRING_TARGET_INVALID}: wiring {uid}.{name} 的目标 {target!r} 非法（应为 unit_id:output）"
                 )
+    # 6. users 标签存在性（S1）：引用面 = 模板 ${auth.<tag>.*} + call.user 字段
+    from gimbal.utils.jsonpath import find_template_var_refs
+    for u in all_units:
+        sc = u.scenario
+        satisfied = set((getattr(sc.config, "users", None) or {}).keys())
+        if auth_tags:
+            satisfied |= set(auth_tags)
+        referenced: set[str] = set()
+        for step in sc.steps:
+            referenced.update(find_template_var_refs(step, prefix="auth"))
+            call = getattr(step, "call", None)
+            tag = getattr(call, "user", None) if call is not None else None
+            if isinstance(tag, str) and tag:
+                referenced.add(tag)
+        for slot in ("setup", "teardown"):
+            for entry in (getattr(sc.config, slot, None) or []):
+                referenced.update(find_template_var_refs(entry, prefix="auth"))
+        missing = referenced - satisfied
+        if missing:
+            errors.append(
+                f"{ErrCode.USERS_TAG_UNKNOWN}: 单元 {u.id!r} 引用了未在 config.users "
+                f"声明的标签: {sorted(missing)}"
+            )
     return errors
-
-
-# 历史入口别名（compile/validate/resolve CLI 用）
-validate_plan = p_validate

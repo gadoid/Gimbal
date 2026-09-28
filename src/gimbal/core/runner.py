@@ -141,8 +141,12 @@ class Engine:
             # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）；
             # S-4 收尾：运行路径走 compile_plan（七阶段编排,含 p_validate 复查）
             protocols = self._ictx.protocols or getattr(self._ictx.dispatcher, "protocols", None)
+            # S1（P0-11）：运行期已注册的认证标签视同已声明（插件/server 注入通道）
+            _auth_tags = set(self._ictx.auth_registry.tags()) \
+                if getattr(self._ictx, "auth_registry", None) is not None else None
             plan = compile_plan(target, protocols=protocols,
-                                strategies=self._ictx.dispatcher)
+                                strategies=self._ictx.dispatcher,
+                                auth_tags=_auth_tags)
             result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
         except CompileError as e:
             logger.error("[Engine] 编译失败: {}", e)
