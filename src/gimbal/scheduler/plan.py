@@ -76,6 +76,10 @@ class PlanOutcome:
         return "pending"
 
 
+# attempt 超时弃跑后 join 被弃线程的时限上限（对齐 http 默认请求超时）
+_ABANDON_JOIN_TIMEOUT_SEC = 30.0
+
+
 class PlanScheduler:
     """跑一个 Plan：括号先行/必达 + units 拓扑调度 + 运行期连线解析。"""
 
@@ -448,8 +452,21 @@ class PlanScheduler:
                 return fut.result(timeout=max(0.0, float(timeout)))
             except cf.TimeoutError:
                 cancel.set()   # 协作取消:被弃线程在 step 边界自行终止
-                logger.warning("[PlanScheduler] 单元超时(已置取消): unit_id={} timeout={}s",
+                logger.warning("[PlanScheduler] 单元超时(已置取消,join 被弃 attempt): unit_id={} timeout={}s",
                                unit.id, timeout)
+                # 在飞请求无法中断——**join 被弃 attempt 真正退出后**再重试/返回
+                # （锁在此内层,退出前锁不释放）:不等会造成新 attempt 与被弃请求
+                # 并发重复发送（重叠至多 retry+1）,以及弃请求跨锁释放继续跑。
+                # join 上限对齐协议侧默认请求超时(http 默认 30s;更长的协议
+                # 超时场景经 _ABANDON_JOIN_TIMEOUT_SEC 调整）
+                try:
+                    fut.result(timeout=_ABANDON_JOIN_TIMEOUT_SEC)
+                except cf.TimeoutError:
+                    logger.error(
+                        "[PlanScheduler] 被弃 attempt 超过 join 上限 {}s 仍未退出: unit_id={}",
+                        _ABANDON_JOIN_TIMEOUT_SEC, unit.id)
+                except Exception:  # noqa: BLE001 — 被弃 attempt 以异常收尾,正是退出
+                    pass
                 return self._timeout_result(unit, float(timeout))
         finally:
             pool.shutdown(wait=False, cancel_futures=True)

@@ -256,3 +256,14 @@ CLI 冒烟：`run launch -o jsonl` 末行 run.finished(seq)、`--halt-at` halted
 | protocols/base.py 文档过时 | 双读期/旧键表述清换为终态契约 | — |
 
 第二轮验证：`pytest tests/` 1049 passed；CLI 冒烟事件形态全部达标。
+
+
+### 第三轮补充（2026-09-28 复审）
+
+| 项 | 修复 | 验证 |
+|---|---|---|
+| 共享 RuntimeControl 被协作取消污染（上轮新引入） | _run_unit 改 dataclasses.replace 复制后挂事件（CLI --halt-at/--step-from/--debug 与 server halt/step_from 路径不再被首超时泄漏置位） | chain(a timeout/retry 首次慢 + b) 传共享 RC → exit=0 回归 |
+| 超时重复发送只修一半（弃请求与重试并发、跨锁释放继续跑） | _attempt 超时置取消后 **join 被弃 attempt 真正退出**再重试/返回（join 在锁内层,退出前不放锁;上限 _ABANDON_JOIN_TIMEOUT_SEC=30s 对齐 http 默认） | 0.5s 请求×timeout 0.2×retry 2×lock=db + 同锁单元:恰 4 次发送(3 attempt+b)、同锁并发峰值=1 |
+| tools/ab_dispatch_dump.py 语料路径漏改（测试靠本地残留文件才通过） | 改指 tests/plate/fixtures（一行） | 干净克隆可用 |
+
+第三轮验证：`pytest tests/` 1052 passed。

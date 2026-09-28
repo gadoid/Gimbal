@@ -71,7 +71,7 @@ def carry_value(path: str, ftype: str) -> str:
 def _load_real_scenario() -> dict:
     """Scenario_Test_14_copy.json(plate 既有测试同款预处理)。"""
     raw = json.loads(
-        (REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json").read_text(encoding="utf-8"))
+        (REPO / "tests" / "plate" / "fixtures" / "Scenario_Test_14_copy.json").read_text(encoding="utf-8"))
     raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"

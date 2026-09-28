@@ -294,12 +294,15 @@ class Engine:
             logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
             rc = runtime_control
             if cancel is not None:
-                # 调度器超时弃跑的协作取消（P1:RuntimeControl 运行期控制语义）
-                if rc is None:
-                    from gimbal.core.scenario_runner import RuntimeControl as _RC
-                    rc = _RC()
-                if rc.cancel_event is None:
-                    rc.cancel_event = cancel
+                # 调度器超时弃跑的协作取消——**复制后挂事件,不改共享对象**：
+                # runtime_control 由本次 run 的所有单元/所有 attempt 共用,
+                # 原地写入会把第一次超时的置位事件泄漏给后续全部执行
+                # （CLI --halt-at/--step-from/--debug、server halt/step_from 路径）
+                import dataclasses
+                from gimbal.core.scenario_runner import RuntimeControl as _RC
+                rc = (dataclasses.replace(runtime_control, cancel_event=cancel)
+                      if runtime_control is not None
+                      else _RC(cancel_event=cancel))
             return runner.run(scenario, suite_ctx, runtime_control=rc)
 
         fail_fast = framework_ctx.config.fail_fast
