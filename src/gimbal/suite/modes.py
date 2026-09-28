@@ -18,7 +18,7 @@ from typing import Callable
 from gimbal.compiler.errors import CompileError
 from gimbal.core.registry import Registry
 from gimbal.log import get_logger
-from gimbal.schema.plan import Unit, UnitPolicy
+from gimbal.schema.plan import Unit, unit_policy_from
 from gimbal.schema.scenario import Control, UnitDecl
 
 logger = get_logger(__name__)
@@ -27,7 +27,8 @@ DesugarFn = Callable[[list[UnitDecl], Control | None], list[Unit]]
 
 
 def _to_unit(decl: UnitDecl, needs: list[str]) -> Unit:
-    policy = UnitPolicy(**(decl.policy_kwargs or {}))
+    # P1-12：scenario config.retry → UnitPolicy 映射；policy_kwargs 显式覆盖
+    policy = unit_policy_from(decl.scenario, decl.policy_kwargs)
     return Unit(id=decl.ref, scenario=decl.scenario, inputs=dict(decl.inputs),
                 needs=needs, shared_key=decl.shared, policy=policy)
 

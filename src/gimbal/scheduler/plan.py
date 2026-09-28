@@ -21,8 +21,8 @@ before/units 失败/取消都执行）→ 判定交 Engine。
 
   repeat   编译期展开为独立单元（id=ref#k），计入计划清单，事件/台账独立；
   n_runs   运行期重复同一单元（同一 unit id，结果带 run_index/attempts）；
-           计划清单计数 = 单元数 × n_runs；某次失败即停止该单元后续
-           n_runs（稳定性语义：跑 N 次都过才算过）；
+           计划清单计数 = 单元数（P1-11 按单元口径）；某次失败即停止该
+           单元后续 n_runs（稳定性语义：跑 N 次都过才算过）；
   retry    同一次 run 内失败后自动重跑，至多 R 次，不计清单只记
            retries_used；跑过即算过（不标 repaired——那是人工路径，批次 E）。
 
@@ -30,10 +30,25 @@ before/units 失败/取消都执行）→ 判定交 Engine。
   次数用尽；run 结果（最终尝试）记入 attempts。lock 标签在"依赖满足、
   即将运行"时获取、乘法全部完成后释放（不持锁等依赖 → 无死锁；单元
   只持一把锁 → 无跨锁环）。
+
+P1-12 补充语义：
+
+  UnitPolicy.timeout   每次 attempt 用线程池 future.result(timeout=…) 包裹；
+                       超时 → 该 attempt 记失败（step 级 error_phase="timeout"
+                       留痕）并照常触发 retry。超时线程无法安全中止，弃跑
+                       弃结果（线程自行结束后回收）。
+  backoff_seconds      重试退避间隔；**退避期间不持 lock**（review Focus #5：
+                       放锁睡、醒后重取——同标签其他单元可趁窗口推进）。
+  retry_on             空 = 任何失败都重试；非空 = 失败签名子串命中才重试
+                       （无 error code 分类体系，签名 = step error 文本拼接 /
+                       异常字符串，简化口径见 `_error_signature`）。
+  PlanPolicy.timeout   Plan 全局 deadline：到点尚未启动的主体单元置
+                       cancelled（已启动的跑完照常计数；括号必达不受影响）。
 """
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -86,6 +101,12 @@ class PlanScheduler:
     ) -> PlanOutcome:
         outcome = PlanOutcome()
 
+        # P1-12：Plan 全局 deadline（PlanPolicy.timeout，单调钟）；
+        # 只作用于主体单元——括号必达语义（before 先行 / after 清理）不受影响
+        deadline = None
+        if plan.policy.timeout is not None:
+            deadline = time.monotonic() + float(plan.policy.timeout)
+
         # 1. before 括号（串行先行；P0-4：任一失败 → 判定门拦下主体）
         for unit in plan.before:
             outcome.results[unit.id] = self._run_one(run_unit, unit, self._resolve_inputs(plan, outcome, unit))
@@ -99,9 +120,9 @@ class PlanScheduler:
         else:
             # 2. units 主体（拓扑）
             if plan.policy.parallel > 1:
-                self._schedule_parallel(plan, run_unit, outcome, fail_fast)
+                self._schedule_parallel(plan, run_unit, outcome, fail_fast, deadline)
             else:
-                self._schedule_serial(plan, run_unit, outcome, fail_fast)
+                self._schedule_serial(plan, run_unit, outcome, fail_fast, deadline)
 
         # 3. after 括号（串行，必达——units 失败/取消不影响其执行）
         for unit in plan.after:
@@ -156,7 +177,8 @@ class PlanScheduler:
 
     # ── 串行拓扑 ─────────────────────────────────────────────
 
-    def _schedule_serial(self, plan: Plan, run_unit, outcome: PlanOutcome, fail_fast: bool) -> None:
+    def _schedule_serial(self, plan: Plan, run_unit, outcome: PlanOutcome,
+                         fail_fast: bool, deadline: float | None = None) -> None:
         units = {u.id: u for u in plan.units}
         needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
         stop_scheduling = False
@@ -174,7 +196,8 @@ class PlanScheduler:
                 # 声明序遍历中上游尚未完成：正常情况不会发生（串行按序），
                 # 出现即前向依赖（needs 指向后面的单元）→ 下一轮补跑
                 continue
-            if stop_scheduling:
+            if stop_scheduling or self._expired(deadline):
+                # P1-12：plan deadline 到点，未启动的单元置 cancelled
                 outcome.cancelled.add(unit.id)
                 continue
             outcome.results[unit.id] = self._run_one(
@@ -195,7 +218,7 @@ class PlanScheduler:
                     progress = True
                     continue
                 if all(outcome.status_of(n) == "done" for n in needs_map[unit.id]):
-                    if stop_scheduling:
+                    if stop_scheduling or self._expired(deadline):
                         outcome.cancelled.add(unit.id)
                     else:
                         outcome.results[unit.id] = self._run_one(
@@ -212,7 +235,8 @@ class PlanScheduler:
 
     # ── 并行拓扑（ready-set 线程池）──────────────────────────
 
-    def _schedule_parallel(self, plan: Plan, run_unit, outcome: PlanOutcome, fail_fast: bool) -> None:
+    def _schedule_parallel(self, plan: Plan, run_unit, outcome: PlanOutcome,
+                           fail_fast: bool, deadline: float | None = None) -> None:
         units = {u.id: u for u in plan.units}
         needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
         lock = threading.Lock()
@@ -230,6 +254,11 @@ class PlanScheduler:
                 if all(outcome.status_of(n) == "done" for n in needs_map[u.id]):
                     ready.append(u)
             return ready
+
+        def cancel_pending() -> None:
+            for u in plan.units:
+                if outcome.status_of(u.id) == "pending":
+                    outcome.cancelled.add(u.id)
 
         def cascade_blocked() -> None:
             """blocked 级联：依赖失败/阻塞者的传递闭包。"""
@@ -249,6 +278,10 @@ class PlanScheduler:
             with lock:
                 initial = ready_units()
                 for u in initial:
+                    if self._expired(deadline):
+                        # P1-12：deadline 已到，首批也不提交
+                        outcome.cancelled.add(u.id)
+                        continue
                     futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
 
             while futures:
@@ -264,22 +297,27 @@ class PlanScheduler:
                             cascade_blocked()
                             if fail_fast:
                                 stop_scheduling = True
-                    if stop_scheduling:
-                        for u in plan.units:
-                            if outcome.status_of(u.id) == "pending":
-                                outcome.cancelled.add(u.id)
+                    if stop_scheduling or self._expired(deadline):
+                        # P1-12：fail-fast / plan deadline → 未启动的置 cancelled；
+                        # 在飞的跑完照常计数（不抢占线程）
+                        cancel_pending()
                         continue
                     for u in ready_units():
                         if u.id not in {fu.id for fu in futures.values()}:
+                            if self._expired(deadline):
+                                outcome.cancelled.add(u.id)
+                                continue
                             futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
                 # 空转保护：无在飞且无 ready 但仍有 pending（理论不可达）
                 if not futures:
                     with lock:
                         cascade_blocked()
-                        for u in plan.units:
-                            if outcome.status_of(u.id) == "pending":
-                                outcome.cancelled.add(u.id)
+                        cancel_pending()
                     break
+
+        # P1-12 兜底：deadline 到点仍未提交的 pending（如首批即被拦）置 cancelled
+        if self._expired(deadline):
+            cancel_pending()
 
     # ── 判定辅助 ─────────────────────────────────────────────
 
@@ -313,24 +351,40 @@ class PlanScheduler:
             return True
         return getattr(result, "passed", True) is False
 
-    # ── 乘法执行核（n_runs × retry）+ lock ───────────────────
+    # ── 乘法执行核（n_runs × retry）+ lock + timeout ──────────
 
     def _run_one(self, run_unit: Callable[[Unit, dict], Any], unit: Unit, inputs: dict) -> Any:
         policy = unit.policy
         lock = self._lock_for(policy.lock) if policy.lock else None
-        if lock is not None:
-            lock.acquire()   # 依赖已满足才到这里；阻塞等待同标签单元完成
-        try:
+        if lock is None:
             return self._run_multiplication(run_unit, unit, inputs, policy)
-        finally:
-            if lock is not None:
-                lock.release()
 
-    def _run_multiplication(self, run_unit, unit: Unit, inputs: dict, policy) -> Any:
+        def _backoff(seconds: float) -> None:
+            # P1-12 Review Focus #5：退避期间不持 lock——放锁睡、醒后重取，
+            # 同标签其他单元可趁退避窗口推进（死锁面不变：仍单锁、不持锁等依赖）
+            if seconds <= 0:
+                return
+            lock.release()
+            try:
+                time.sleep(seconds)
+            finally:
+                lock.acquire()
+
+        lock.acquire()   # 依赖已满足才到这里；阻塞等待同标签单元完成
+        try:
+            return self._run_multiplication(run_unit, unit, inputs, policy,
+                                            backoff_hook=_backoff)
+        finally:
+            lock.release()
+
+    def _run_multiplication(self, run_unit, unit: Unit, inputs: dict, policy,
+                            backoff_hook: Callable[[float], None] | None = None) -> Any:
         """外层 n_runs × 内层 retry；聚合为单个结果（attempts/run_index）。"""
         raw_results: list[Any] = []
         for run_no in range(1, max(1, policy.n_runs) + 1):
-            result, retries_used = self._run_with_retry(run_unit, unit, inputs, policy.retry)
+            result, retries_used = self._run_with_retry(
+                run_unit, unit, inputs, policy, backoff_hook,
+            )
             try:
                 result.run_index = run_no
                 result.retries_used = retries_used
@@ -341,16 +395,110 @@ class PlanScheduler:
                 break   # 稳定性语义：某次 run 失败即停止后续 n_runs
         return self._aggregate_attempts(raw_results)
 
-    def _run_with_retry(self, run_unit, unit: Unit, inputs: dict, retry: int):
-        """单次 run：失败自动重跑至多 retry 次；返回 (最终结果, 重试次数)。"""
+    def _run_with_retry(self, run_unit, unit: Unit, inputs: dict, policy,
+                        backoff_hook: Callable[[float], None] | None = None):
+        """单次 run：失败自动重跑至多 policy.retry 次；返回 (最终结果, 重试次数)。
+
+        P1-12：
+          - 每次 attempt 受 policy.timeout 包裹（None = 不限时直跑）；
+          - retry_on 非空时仅失败签名命中才重试（空 = 任何失败都重试）；
+          - 重试间退避 policy.backoff_seconds；持锁单元经 backoff_hook
+            放锁睡醒重取（退避期间不持 lock）。
+        """
+        retry = max(0, policy.retry)
+        retry_on = [t for t in (getattr(policy, "retry_on", None) or []) if t]
+        timeout = getattr(policy, "timeout", None)
+        backoff = float(getattr(policy, "backoff_seconds", 0.0) or 0.0)
+        sleep_fn = backoff_hook or time.sleep
         attempt = 0
         while True:
-            result = self._safe_run(run_unit, unit, inputs)
-            if not self._result_failed(result) or attempt >= max(0, retry):
+            result = self._attempt(run_unit, unit, inputs, timeout)
+            if not self._result_failed(result) or attempt >= retry:
+                return result, attempt
+            if retry_on and not self._error_matches(result, retry_on):
+                logger.info(
+                    "[PlanScheduler] retry_on 未命中，不重试: unit_id={} tags={}",
+                    unit.id, retry_on,
+                )
                 return result, attempt
             attempt += 1
             logger.info("[PlanScheduler] retry: unit_id={} 第 {} 次重跑（上限 {}）",
                         unit.id, attempt, retry)
+            if backoff > 0:
+                sleep_fn(backoff)
+
+    def _attempt(self, run_unit, unit: Unit, inputs: dict, timeout: float | None) -> Any:
+        """单次 attempt：timeout=None 直跑（历史路径）；否则线程池包裹限时。
+
+        超时的执行线程无法安全中止——弃跑弃结果（线程自行结束后由池回收），
+        本 attempt 以 error_phase="timeout" 的失败结果收口并交由上层重试。
+        """
+        if timeout is None:
+            return self._safe_run(run_unit, unit, inputs)
+        import concurrent.futures as cf
+        # 注意：不用 with 语句——__exit__ 会 shutdown(wait=True) 等卡死任务，
+        # 使限时失效；此处 wait=False + cancel_futures 尽快脱身
+        pool = cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gimbal-attempt")
+        try:
+            fut = pool.submit(self._safe_run, run_unit, unit, inputs)
+            try:
+                return fut.result(timeout=max(0.0, float(timeout)))
+            except cf.TimeoutError:
+                logger.warning("[PlanScheduler] 单元超时: unit_id={} timeout={}s",
+                               unit.id, timeout)
+                return self._timeout_result(unit, float(timeout))
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    @staticmethod
+    def _timeout_result(unit: Unit, timeout: float) -> Any:
+        """超时 attempt 的收口结果：status=failed（计入 failed 口径），
+        step 级保留 error_phase="timeout" 留痕（reporter/平台可区分）。"""
+        from datetime import datetime, timezone
+
+        from gimbal.core.scenario_runner import ScenarioRunResult
+        from gimbal.statemachine.engine import StepRunResult
+        now = datetime.now(timezone.utc)
+        return ScenarioRunResult(
+            scenario_id=unit.id,
+            status="failed",
+            step_results=[StepRunResult(
+                step_id="__unit_timeout__",
+                status="failed",
+                error=f"unit timeout after {timeout}s (policy.timeout)",
+                error_phase="timeout",
+                duration_ms=timeout * 1000.0,
+            )],
+            started_at=now,
+            ended_at=now,
+        )
+
+    @staticmethod
+    def _error_signature(result: Any) -> str:
+        """失败签名（P1-12 简化口径）：step error 文本按序拼接；异常取 str。
+
+        当前体系没有 error code 分类学，retryOn 只能按标签子串匹配签名
+        （断言失败文本含实际值 / 协议错误文本含状态码，均可作为标签锚点）。
+        """
+        if isinstance(result, Exception):
+            return str(result)
+        parts = []
+        for s in getattr(result, "step_results", None) or []:
+            err = getattr(s, "error", None)
+            if err:
+                parts.append(str(err))
+        return "\n".join(parts)
+
+    @classmethod
+    def _error_matches(cls, result: Any, retry_on: list[str]) -> bool:
+        """retryOn 非空时：签名命中任一标签才允许重试。"""
+        signature = cls._error_signature(result)
+        return any(tag in signature for tag in retry_on)
+
+    @staticmethod
+    def _expired(deadline: float | None) -> bool:
+        """P1-12：plan deadline 是否已到（None = 无 deadline）。"""
+        return deadline is not None and time.monotonic() >= deadline
 
     @staticmethod
     def _safe_run(run_unit, unit: Unit, inputs: dict) -> Any:

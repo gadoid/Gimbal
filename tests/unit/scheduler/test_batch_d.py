@@ -159,7 +159,11 @@ class TestParallelRunsMultiplicationCore:
 class TestMultiplication:
 
     def test_n_runs_counts_every_run(self):
-        """n_runs=3：attempts 3 条、total 对账=3、全部通过才通过。"""
+        """n_runs=3：attempts=3（执行次数单列）、total 按单元口径=1、全部通过才通过。
+
+        P1-11：total/passed/failed 一律按单元计数，n_runs/retry 展开计入
+        RunResult.attempts（旧口径 total=3 已废弃）。
+        """
         ex = ProgrammableEchoExecutor(send_fn=lambda s, v: CallResult.build(
             protocol="echo", request={"msg": "ok"}, status=0, body={"msg": "ok"}))
         engine, _, _ = _make_engine_with(ex)
@@ -169,11 +173,12 @@ class TestMultiplication:
         ])
         result = engine.run(graph)
         assert result.passed == 1
-        assert result.total == 3, f"计划清单对账: {result.total} != 3"
+        assert result.total == 1, f"单元口径 total: {result.total} != 1"
+        assert result.attempts == 3, f"执行次数对账: {result.attempts} != 3"
         assert result.details[0]["status"] == "passed"
 
     def test_n_runs_failure_stops_remaining(self):
-        """n_runs=3 但第 2 次失败 → 停止第 3 次，attempts=2，单元失败。"""
+        """n_runs=3 但第 2 次失败 → 停止第 3 次，attempts=2，单元口径 total=1。"""
         counter = {"n": 0}
 
         def flaky(spec, view):
@@ -190,7 +195,8 @@ class TestMultiplication:
         ])
         result = engine.run(graph)
         assert result.failed == 1
-        assert result.total == 2          # 第 3 次未跑
+        assert result.total == 1          # P1-11 单元口径：失败单元恰计 1
+        assert result.attempts == 2       # 第 3 次未跑
         assert counter["n"] == 2
 
     def test_retry_recovers_transient_failure(self):

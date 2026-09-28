@@ -39,6 +39,16 @@ logger = get_logger(__name__)
 
 @dataclass
 class RunResult:
+    """执行结果计数。
+
+    计数口径（v2.1 review P1-11 成文）：
+      - ``total / passed / failed / error / halted / blocked`` 一律**按单元计数**
+        （一个 unit 恰计一次，与 details 行数对账；cancelled 不计数只留占位行）；
+      - n_runs / retry 的执行展开不计 total，单列 ``attempts`` = 总执行次数
+        （每次真实调用 run_unit 计 1：n_runs 各 run + 各 run 内的重试）。
+        旧口径 total 按 attempt 计、passed 按单元计，n_runs=3 全过会出现
+        total=3 / passed=1 的不一致（P1-11 修复对象）。
+    """
     exit_code: int = 0
     total: int = 0
     passed: int = 0
@@ -52,6 +62,8 @@ class RunResult:
     blocked: int = 0
     # v2.1 批次 E：人工修复（debugger retry 后通过）的步骤数——不计正常通过率。
     repaired: int = 0
+    # v2.1 review P1-11：总执行次数单列（n_runs/retry 展开计入，单元计数不计入）。
+    attempts: int = 0
     details: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -289,12 +301,16 @@ class Engine:
         }
 
     def _assemble_implicit(self, plan: Any, results: dict) -> RunResult:
-        """单场景历史计数口径：非通过一律计 failed（含 error 状态）。"""
+        """单场景历史计数口径：非通过一律计 failed（含 error 状态）。
+
+        P1-11：total/passed/failed/halted 按单元计数（恒 1 个单元），
+        执行次数（n_runs/retry 展开）单列 attempts。
+        """
         unit = plan.units[0]
         result = results.get(unit.id)
         if result is None or isinstance(result, Exception):
             logger.error("[Engine] 隐式 Plan 单元未产出结果: unit_id={}", unit.id)
-            return RunResult(exit_code=1, total=1, failed=1)
+            return RunResult(exit_code=1, total=1, failed=1, attempts=1)
         logger.info(
             "[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f} halted={}",
             result.scenario_id, result.status, result.duration_ms, result.halted,
@@ -305,13 +321,30 @@ class Engine:
         )
         return RunResult(
             exit_code=0 if result.passed else 1,
-            total=len(getattr(result, "attempts", None) or [1]),
+            total=1,
             passed=1 if result.passed else 0,
             failed=0 if result.passed else 1,
             halted=1 if result.halted else 0,
             repaired=repaired,
+            attempts=self._execution_count(result),
             details=[self._detail_row(result)],
         )
+
+    @staticmethod
+    def _execution_count(result: Any) -> int:
+        """P1-11：一个单元的总执行次数 = n_runs run 数 + 各 run 内重试数。
+
+        attempts 简况由调度器聚合写入（scheduler/plan.py `_aggregate_attempts`）；
+        缺失/非列表（异常替身等）按 1 次执行兜底。
+        """
+        attempts = getattr(result, "attempts", None)
+        if isinstance(attempts, list) and attempts:
+            retries = sum(
+                int(a.get("retries", 0) or 0)
+                for a in attempts if isinstance(a, dict)
+            )
+            return len(attempts) + retries
+        return 1
 
     def _assemble_aggregate(self, plan: Any, outcome: Any) -> RunResult:
         """Suite/Graph 计数口径：halted/passed/error/failed/blocked 分立；details 按提交序。
@@ -320,9 +353,14 @@ class Engine:
         total；before 失败计 failed 且主体已被调度器置 blocked（各占一行计入
         total）；after 失败计 failed（必达执行，不影响其他行）。
         exit_code = 0 iff failed == error == halted == blocked == 0。
+
+        v2.1 review P1-11：total/passed/failed/error/halted/blocked 一律按单元
+        计数（每单元恰一次，与 details 行数对账）；n_runs/retry 执行展开单列
+        attempts（`_execution_count`），不再灌入 total。
         """
         results = outcome.results
         total = passed = failed = error = halted = blocked = 0
+        attempts = 0
         details: list[dict[str, Any]] = []
 
         # 括号单元行（P0-4：计入 total 与 exit_code；bracket 字段标识）
@@ -332,8 +370,10 @@ class Engine:
                 if isinstance(result, Exception):
                     total += 1
                     error += 1
+                    attempts += 1
                 elif result is not None:
-                    total += len(getattr(result, "attempts", None) or [1])
+                    total += 1
+                    attempts += self._execution_count(result)
                     if result.halted:
                         halted += 1
                     elif result.passed:
@@ -361,21 +401,23 @@ class Engine:
                 })
                 continue
             if status == "cancelled" or (result := results.get(unit.id)) is None:
-                # fail-fast 取消 / 中断后未执行的单元：不计数，只留占位
+                # fail-fast / plan 超时取消 / 中断后未执行的单元：不计数，只留占位
                 details.append({
                     "scenario_id": unit.id,
                     "status": "cancelled",
                     "duration_ms": 0.0,
                     "halted": False,
-                    "halt_reason": "cancelled by fail-fast",
+                    "halt_reason": "cancelled by fail-fast or plan-timeout",
                     "steps": [],
                 })
                 continue
-            # 计划清单对账：n_runs>1 时每次 run 计一次（attempts 聚合）
-            total += len(getattr(result, "attempts", None) or [1])
+            # 计划清单对账（P1-11 单元口径）：每单元恰计一次 total；
+            # n_runs/retry 展开计入 attempts
+            total += 1
             if isinstance(result, Exception):
                 # 调度层兜底捕获的异常（runner 内部已隔离大部分，这里双保险）
                 error += 1
+                attempts += 1
                 details.append({
                     "scenario_id": unit.id,
                     "status": "error",
@@ -395,6 +437,7 @@ class Engine:
                 error += 1
             else:
                 failed += 1
+            attempts += self._execution_count(result)
             details.append(self._detail_row(result))
             logger.info(
                 "[Engine] Scenario 完成: scenario_id={} status={} duration_ms={:.2f} ({}/{}) halted={}",
@@ -403,7 +446,7 @@ class Engine:
             )
         cancelled = sum(1 for d in details if d["status"] == "cancelled")
         if cancelled:
-            logger.warning("[Engine] fail_fast：{} 个单元被取消未执行", cancelled)
+            logger.warning("[Engine] fail_fast/plan-timeout：{} 个单元被取消未执行", cancelled)
         if blocked:
             logger.warning("[Engine] {} 个单元因上游失败被 blocked", blocked)
 
@@ -411,9 +454,9 @@ class Engine:
         # （括号行失败计入 failed；halted 同为"未通过"口径）
         exit_code = 0 if (failed + error + halted + blocked) == 0 else 1
         logger.info(
-            "[Engine] Suite 执行完成: suite_id={} mode={} parallel={} total={} passed={} failed={} error={} halted={} blocked={} exit_code={}",
+            "[Engine] Suite 执行完成: suite_id={} mode={} parallel={} total={} passed={} failed={} error={} halted={} blocked={} attempts={} exit_code={}",
             plan.suite_id, plan.mode, plan.policy.parallel > 1, total, passed, failed,
-            error, halted, blocked, exit_code,
+            error, halted, blocked, attempts, exit_code,
         )
         repaired = sum(
             1 for r in results.values()
@@ -425,7 +468,7 @@ class Engine:
             exit_code=exit_code,
             total=total, passed=passed,
             failed=failed, error=error, halted=halted, blocked=blocked,
-            repaired=repaired,
+            repaired=repaired, attempts=attempts,
             details=details,
         )
 

@@ -25,8 +25,37 @@ class UnitPolicy(BaseModel):
     """单元级执行策略。"""
     n_runs: int = Field(default=1, ge=1, description="运行期重复次数（批次 D 落地乘法语义）")
     retry: int = Field(default=0, ge=0, description="失败后自动重跑次数（批次 D）")
-    timeout: Optional[float] = Field(default=None, description="单元超时（秒）")
+    timeout: Optional[float] = Field(
+        default=None, description="单元超时（秒）；每次 attempt 单独计时，"
+        "超时记失败（error_phase=timeout）并触发 retry（P1-12）")
     lock: Optional[str] = Field(default=None, description="互斥锁标签（批次 D）")
+    # P1-12：retry 退避与条件（由 scenario config.retry 映射，见 unit_policy_from）
+    backoff_seconds: float = Field(default=0.0, ge=0, description="重试退避间隔（秒）；退避期间不持 lock")
+    retry_on: list[str] = Field(default_factory=list, description="重试条件标签；空=任何失败都重试，非空=失败签名子串命中才重试")
+
+
+def unit_policy_from(scenario: "Scenario", overrides: Optional[dict] = None) -> UnitPolicy:
+    """scenario config.retry（RetryPolicy）→ UnitPolicy 映射（v2.1 review P1-12）。
+
+    编译/normalize 路径的统一物化点（单场景隐式 Plan 与 graph desugar 共用）：
+
+      - maxAttempts  → retry = maxAttempts - 1（首次执行之外的自动重跑次数）；
+      - backoffSeconds → backoff_seconds（重试退避间隔；退避期间不持 lock）；
+      - retryOn      → retry_on（空列表 = 任何失败都重试；非空 = 失败签名
+                       命中才重试——当前无 error code 分类体系，按错误文本
+                       子串匹配的简化口径，见 scheduler/plan.py `_error_signature`）。
+
+    overrides（编排层 UnitDecl.policy_kwargs：n_runs/retry/lock/...）显式
+    声明优先，逐字段覆盖场景级 config.retry 的映射结果。
+    """
+    fields: dict[str, Any] = {}
+    retry_cfg = getattr(getattr(scenario, "config", None), "retry", None)
+    if retry_cfg is not None:
+        fields["retry"] = max(0, int(retry_cfg.maxAttempts) - 1)
+        fields["backoff_seconds"] = max(0.0, float(retry_cfg.backoffSeconds or 0.0))
+        fields["retry_on"] = [str(t) for t in (retry_cfg.retryOn or [])]
+    fields.update(overrides or {})
+    return UnitPolicy(**fields)
 
 
 class PlanPolicy(BaseModel):

@@ -21,7 +21,7 @@ from typing import Union
 from gimbal.compiler.analysis import ScenarioAnalysis, analyze_scenario
 from gimbal.compiler.errors import CompileError
 from gimbal.log import get_logger
-from gimbal.schema.plan import Plan, PlanPolicy, Unit, UnitPolicy
+from gimbal.schema.plan import Plan, PlanPolicy, Unit, unit_policy_from
 from gimbal.schema.scenario import Control, Scenario, SuiteGraph, UnitDecl
 
 logger = get_logger(__name__)
@@ -52,7 +52,9 @@ def compile_target(target: Union[Scenario, SuiteGraph]) -> Plan:
 def _implicit_plan(scenario: Scenario) -> Plan:
     """单场景 → 隐式 aggregate Plan（单单元）。"""
     plan = Plan(
-        units=[Unit(id=scenario.scenarioId, scenario=scenario)],
+        # P1-12：config.retry → UnitPolicy 映射（无编排覆盖项）
+        units=[Unit(id=scenario.scenarioId, scenario=scenario,
+                    policy=unit_policy_from(scenario))],
         policy=PlanPolicy(),
         suite_id="__default__",
         suite_name="Default Suite",
@@ -291,10 +293,14 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
         for dep in u.needs:
             if dep in {d.ref for d in after}:
                 raise CompileError(f"单元 {u.id!r} 不能依赖 after 括号单元 {dep!r}")
+    # P1-12：括号单元同样映射 scenario config.retry（场景自带的重试声明
+    # 在任何执行位置生效；编排 policy_kwargs 不作用于括号——既有行为）
     after_units = [Unit(id=d.ref, scenario=d.scenario, inputs=dict(d.inputs),
-                        shared_key=d.shared) for d in after]
+                        shared_key=d.shared,
+                        policy=unit_policy_from(d.scenario)) for d in after]
     before_units = [Unit(id=d.ref, scenario=d.scenario, inputs=dict(d.inputs),
-                         shared_key=d.shared) for d in before]
+                         shared_key=d.shared,
+                         policy=unit_policy_from(d.scenario)) for d in before]
 
     # 4. bind：静态分析连线（主体 + after；before 无 needs 但其输出可被依赖）
     decl_by_ref = {d.ref: d for d in [*before, *units_decl, *after]}
