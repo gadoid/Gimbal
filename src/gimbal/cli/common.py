@@ -115,35 +115,6 @@ VarFileOpt = Annotated[
         exists=True, dir_okay=False,
     ),
 ]
-
-ParallelOpt = Annotated[
-    str,
-    typer.Option(
-        "--parallel", "-p",
-        help="并发数，整数或 'auto'(按 CPU 核数)。",
-        rich_help_panel="执行控制",
-    ),
-]
-
-TimeoutOpt = Annotated[
-    int,
-    typer.Option(
-        "--timeout",
-        min=1, max=86400,
-        help="单用例超时（秒）。",
-        rich_help_panel="执行控制",
-    ),
-]
-
-RetryOpt = Annotated[
-    int,
-    typer.Option(
-        "--retry",
-        min=0, max=10,
-        help="失败重试次数。",
-        rich_help_panel="执行控制",
-    ),
-]
 PluginsOpt = Annotated[
     list[str],
     typer.Option(

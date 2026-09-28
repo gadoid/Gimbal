@@ -75,7 +75,7 @@ def execute_run_file(
     source: str,
     fmt,
     *,
-    expect_kind: Literal["scenario", "suite"],
+    expect_kind: Literal["scenario", "graph"],
     env, mode, log_level,
     reporter, report_dir, output,
     step_from=None, step_to=None, halt_at=None,

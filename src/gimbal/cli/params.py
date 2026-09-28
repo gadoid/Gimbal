@@ -26,7 +26,6 @@ starter = typer.Typer(
     help=(
         "gimbal_engine —— 一个为现代测试场景而生的自动化测试框架。\n\n"
         "常用示例：\n"
-        '  gimbal run match "tests/**/*.yaml"\n'
         "  gimbal run launch ./debug.yaml\n"
         "  gimbal run server --port=8765\n"
         "  gimbal run show --from-path ./debug.yaml\n"

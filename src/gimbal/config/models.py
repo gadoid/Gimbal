@@ -44,9 +44,6 @@ class BootstrapConfig(BaseModel):
     scenario_timeout: int | None = Field(None, description="单 scenario 最大执行时间（秒），None 不限制")
     suite_timeout: int | None = Field(None, description="单 suite 最大执行时间（秒），None 不限制")
 
-    poll_timeout: int = Field(60, description="Poll strategy 默认超时（秒）")
-    poll_interval: int = Field(5, description="Poll strategy 默认检查周期（秒）")
-
     # ── CLI 变量注入（修复 #52 完整链路）──
     vars: dict[str, Any] = Field(
         default_factory=dict,

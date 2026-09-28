@@ -17,28 +17,29 @@
 | 文件 | 命令 | 状态 |
 |------|------|------|
 | `run.py` | `gimbal run` 子命令组注册 | 实现 |
-| `run_match.py` | `gimbal run match <PATTERN>...` | 实现（按本地文件路径执行） |
 | `run_server.py` | `gimbal run server` | 实现（常驻服务，基于 `core/server.py`） |
 | `run_launch.py` | `gimbal run launch <FILE>` | 实现（`bootstrap + Engine.run` 参考实现） |
+| `run_target.py` | `gimbal run scenario / suite` | 实现（Plan 单路径；`--where` 检索） |
 | `run_show.py` | `gimbal run show` | 实现（只读展示步骤索引，仅 `--from-path` 输入） |
+| `pipeline_cmds.py` | `gimbal compile / validate / resolve` | 实现（编译管线只读视图；resolve 含 `--unit`） |
+| `ext_cmds.py` | `gimbal ext list` | 实现（strategy/protocol/mode/plugin 四表） |
 | `self_check.py` | `gimbal self-check` | 实现（集成测试级别） |
-| `compile_case.py` | `gimbal compile_case` | 占位 |
-| `resolve.py` | `gimbal resolve` | 占位 |
-| `validate.py` | `gimbal validate` | 占位 |
 
 ## 命令树
 
 ```
 gimbal
 ├── run
-│   ├── match
 │   ├── server
 │   ├── launch
-│   └── show
+│   ├── show
+│   ├── scenario
+│   └── suite
 ├── self-check
-├── compile_case        (待实现)
-├── resolve             (待实现)
-└── validate            (待实现)
+├── compile
+├── validate
+├── resolve
+└── ext
 ```
 
 ## 快速帮助
@@ -46,6 +47,5 @@ gimbal
 ```bash
 python -m gimbal --help
 python -m gimbal run --help
-python -m gimbal run match --help
 python -m gimbal run launch --help
 ```

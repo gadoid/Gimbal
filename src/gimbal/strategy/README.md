@@ -57,16 +57,16 @@ StrategyResult (单条策略)
 
 | 文件 | Executor | 说明 |
 |------|----------|------|
-| `call.py` | `CallExecutor` | HTTP 调用 |
+| `call.py` | `CallExecutor` | 调用执行（经协议注册表分派到 ProtocolExecutor） |
 | `extract.py` | `ExtractExecutor` | 字段提取 |
 | `assign.py` | `AssignExecutor` | 变量赋值 |
 | `assertion.py` | `AssertionExecutor` | 断言验证 |
-| `sleep.py` | `SleepExecutor` | 等待（占位） |
-| `sql.py` | `SqlExecutor` | SQL 执行（占位） |
-| `poll.py` | `PollExecutor` | 轮询（占位） |
-| `chaos.py` | `ChaosExecutor` | 混沌工程（占位） |
-| `composite.py` | `CompositeExecutor` | 组合策略（占位） |
+| `sleep.py` | `SleepExecutor` | 等待（生命周期槽位动作；SleepParams seconds 0–600） |
 | `utils.py` | - | 工具函数 |
+
+> poll / sql / chaos / composite 未实现（v2.1 批次 G 后置）。未注册的 kind
+> 在编译期即被拒（schema 封闭联合 + 生命周期按 strategy 表校验），
+> 不存在「占位返回 PASSED/ERROR」的实现。
 
 ---
 

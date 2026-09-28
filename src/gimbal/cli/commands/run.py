@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import typer
 
-from gimbal.cli.commands.run_match import match
 from gimbal.cli.commands.run_server import server
 from gimbal.cli.commands.run_launch import launch
 from gimbal.cli.commands.run_show import show
@@ -17,8 +16,7 @@ run_app = typer.Typer(
     name="run",
     help=(
         "执行测试。\n\n"
-        "四种执行模式：\n"
-        "  match     按路径/模式匹配本地未注册的用例文件\n"
+        "执行模式：\n"
         "  server    作为服务监听端口接收任务\n"
         "  launch    直接接收文件信息进行加载执行\n"
         "  show      只读展示 Scenario 的步骤索引 → 描述映射（不执行，方便决定 --step-to）"
@@ -28,7 +26,6 @@ run_app = typer.Typer(
 
 
 # 注册子命令
-run_app.command("match")(match)
 run_app.command("server")(server)
 run_app.command("launch")(launch)
 run_app.command("show")(show)

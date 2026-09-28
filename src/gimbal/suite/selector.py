@@ -10,8 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable
 
-from pydantic import TypeAdapter
-
 from gimbal.log import get_logger
 from gimbal.schema.scenario import Scenario
 
@@ -63,13 +61,11 @@ def matches(scenario: Scenario, where: dict[str, str]) -> bool:
 
 def select(source: str | Path, where: dict[str, str] | None = None) -> list[Scenario]:
     """检索入口：枚举 → 解析 scenario → --where 过滤；零命中且给了条件时报错。"""
-    adapter = TypeAdapter(Scenario)
     out: list[Scenario] = []
     for f in iter_scenario_files(source):
         try:
             payload = f.read_text(encoding="utf-8")
-            import json
-            sc = adapter.validate_json(payload) if False else Scenario.model_validate_json(payload)
+            sc = Scenario.model_validate_json(payload)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[selector] 跳过无法解析的文件: {} ({})", f.name, exc)
             continue
