@@ -316,3 +316,30 @@ def test_convert_does_not_bypass_direct_exporter(client: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["converted"] == direct
+
+
+# ── api→call 清理守卫(2026-09-28)────────────────────────────────────
+
+
+def test_convert_rejects_api_form_steps(client: TestClient) -> None:
+    """api 形态步骤输入 → 400,错误信息指向迁移路径(不静默丢弃)。"""
+    raw = _load_scenario_dict()
+    raw["steps"] = [{
+        "kind": "step",
+        "api": {"kind": "api", "service": "fin", "method": "GET", "path": "/x"},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }]
+    resp = client.post("/api/scenario/action/convert",
+                       json={"consumer": "gimbal", "scenario": raw})
+    assert resp.status_code == 400, resp.text
+    assert "api" in resp.text and "migrate_legacy_case" in resp.text
+
+
+def test_convert_platform_steps_render_call(client: TestClient) -> None:
+    """platform 视图步骤渲染 call(不再有 api 字典)。"""
+    payload = {"consumer": "platform", "scenario": _load_scenario_dict()}
+    resp = client.post("/api/scenario/action/convert", json=payload)
+    assert resp.status_code == 200, resp.text
+    steps = resp.json()["data"]["converted"]["steps"]
+    assert steps and all("call" in st and "api" not in st for st in steps)

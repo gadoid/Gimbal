@@ -275,7 +275,6 @@ class GimbalScenarioExporter(ScenarioExporter):
             "config_summary": True,
             "steps": {
                 "__all__": {
-                    "api": {"view_hints": True},
                     "call": {"view_hints": True},
                     # field_states 是编辑器的状态覆盖键(09-05 字段状态
                     # 目录):gimbal 引擎 Step 模型 extra="forbid",带出即
@@ -291,9 +290,6 @@ class GimbalScenarioExporter(ScenarioExporter):
         out = scenario.model_dump(
             mode="json", exclude_none=True, exclude=exclude
         )
-        # v2.1 F（P2 同步）：gimbal 形态产出 call{protocol:"http"}；
-        # 断言/提取路径同步迁移为 call 信封路径。
-        out = _steps_to_call_form(out)
         return self._validate_serializable(out)
 
     @property
@@ -310,59 +306,6 @@ class GimbalScenarioExporter(ScenarioExporter):
             output_schema_kind="scenario",
         )
 
-
-
-
-# ── v2.1 批次 F：gimbal 形态 call 化（与迁移脚本同一映射）──────────
-
-_CALL_PATH_REWRITES = {
-    "$.response_body": "$.call.response.body",
-    "$.response_status": "$.call.response.status",
-    "$.response_headers": "$.call.response.meta.headers",
-    "$.request_body": "$.call.request.body",
-    "$.request_method": "$.call.request.method",
-    "$.request_url": "$.call.request.url",
-    "$.request_headers": "$.call.request.headers",
-    "$.duration_ms": "$.call.elapsed_ms",
-}
-
-
-def _rewrite_strategy_paths(node):
-    """策略字符串中的旧 scratch 路径 → call 信封路径（边界安全）。"""
-    import re as _re
-    if isinstance(node, str):
-        pat = _re.compile(
-            r"\$\.(response_body|response_status|response_headers|request_body|"
-            r"request_method|request_url|request_headers|duration_ms)(?=[.\[]|$)"
-        )
-        return pat.sub(lambda m: _CALL_PATH_REWRITES["$." + m.group(1)], node)
-    if isinstance(node, dict):
-        return {k: _rewrite_strategy_paths(v) for k, v in node.items()}
-    if isinstance(node, list):
-        return [_rewrite_strategy_paths(v) for v in node]
-    return node
-
-
-def _steps_to_call_form(payload):
-    """steps 的 api 糖 → call{protocol:http}，策略路径 → call 信封路径。"""
-    steps = payload.get("steps")
-    if not isinstance(steps, list):
-        return payload
-    new_steps = []
-    for st in steps:
-        if not isinstance(st, dict):
-            new_steps.append(st)
-            continue
-        st = dict(st)
-        api = st.pop("api", None)
-        if api is not None and st.get("call") is None:
-            st["call"] = {"kind": "call", "protocol": "http",
-                          **{k: v for k, v in api.items() if k != "kind"}}
-        if "strategy" in st:
-            st["strategy"] = _rewrite_strategy_paths(st["strategy"])
-        new_steps.append(st)
-    payload["steps"] = new_steps
-    return payload
 
 
 __all__ = [

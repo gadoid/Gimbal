@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from typing import Literal , Optional
 from .strategy import StrategyUnion
 from .call import Call
@@ -9,7 +9,9 @@ class Step(BaseModel):
 
     调用表达（v2.1 批次 F 定稿）：``call = {protocol, ...协议自有字段}``
     是唯一调用形态 —— api 语法糖已随双读期结束退役（存量用例经
-    ``scripts/migrate_legacy_case.py`` 迁移，plate /convert 产出 call 形态）。
+    ``scripts/migrate_legacy_case.py`` 迁移，plate /convert 产出 call 形态；
+    旧 scratch 路径归一化已随 api→call 清理退役，策略路径一律写
+    ``$.call.*`` 信封域）。
     ``request`` 是请求体载体（body 结构由协议定义解释）；
     非调用型协议步骤允许省略 request。
     """
@@ -18,43 +20,6 @@ class Step(BaseModel):
     call : Call = Field(..., description= "协议中立调用:{protocol(必填), ...协议自有字段}")
     request : Optional[RequestUnion] = Field(default=None, description= "当前步骤的请求体信息;body 结构由协议定义")
     strategy : list[StrategyUnion] = Field(... , description= "当前步骤需要执行的策略集")
-
-    @model_validator(mode="after")
-    def _normalize_legacy_request_body_paths(self) -> "Step":
-        """残留 #5：存量请求体引用改写到 ``$.call.request.body`` 子树。
-
-        旧键 ``request_body``（裸名 / ``$.request_body`` / ``$.request_body.x``）
-        在校验期归一为 ``$.call.request.body[.x]`` —— 存量用例零迁移；
-        新写法与协议归一证据树($.call.*)同源。
-        """
-        def _rewrite(value):
-            if isinstance(value, str):
-                if value == "request_body":
-                    return "$.call.request.body"
-                if value == "$.request_body":
-                    return "$.call.request.body"
-                if value.startswith("$.request_body."):
-                    return "$.call.request.body." + value[len("$.request_body."):]
-                if value.startswith("${request_body") :
-                    # ${request_body}/${request_body.x} 模板形态同步改写
-                    return "${call.request.body" + value[len("${request_body"):]
-                return value
-            if isinstance(value, dict):
-                return {k: _rewrite(v) for k, v in value.items()}
-            if isinstance(value, list):
-                return [_rewrite(v) for v in value]
-            return value
-
-        self.strategy = [
-            st.model_copy(update={
-                k: _rewrite(v)
-                for k, v in st.model_dump().items()
-                if _rewrite(v) != v
-            }) if any(_rewrite(v) != v for v in st.model_dump().values())
-            else st
-            for st in self.strategy
-        ]
-        return self
 
     @property
     def call_protocol(self) -> str:

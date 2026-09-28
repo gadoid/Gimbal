@@ -106,13 +106,14 @@ class TestSchemaInterfaceImportable:
         assert c.vars == {}
 
     def test_step_instantiable(self) -> None:
-        from gimbal_plate.schema import Api, Request
+        from gimbal_plate.schema import Call, Request
 
         s = Step(
-            api=Api(service="sample", method="GET", path="/baseline/sample"),
+            call=Call(protocol="http", service="sample",
+                      method="GET", path="/baseline/sample"),
             request=Request(),
         )
-        assert s.api.service == "sample"
+        assert s.call.service == "sample"
 
 
 class TestCaseExporterImportable:

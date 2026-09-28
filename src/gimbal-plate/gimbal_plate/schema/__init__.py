@@ -37,7 +37,6 @@ from gimbal_plate.schema.endpoint import (
 )
 
 # ── Step 及其下挂类型 ──
-from gimbal_plate.schema.api import Api, ApiUnion
 from gimbal_plate.schema.request import Request, RequestUnion
 from gimbal_plate.schema.resource import (
     File,
@@ -58,6 +57,7 @@ from gimbal_plate.schema.strategy import (
 )
 from gimbal_plate.schema.setup import Setup, SetupUnion
 from gimbal_plate.schema.teardown import Teardown, TeardownUnion
+from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.step import Step, StepUnion
 
 # ── Scenario / Suite ──
@@ -71,6 +71,7 @@ from gimbal_plate.schema.scenario import (
 
 
 __all__ = [
+    "Call",
     # base
     "AuthSession",
     "RetryPolicy",
@@ -87,8 +88,6 @@ __all__ = [
     "RequestSpec",
     "ResponseSpec",
     # api / request
-    "Api",
-    "ApiUnion",
     "Request",
     "RequestUnion",
     # resource

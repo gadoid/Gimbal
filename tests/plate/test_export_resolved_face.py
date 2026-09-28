@@ -17,7 +17,7 @@ from gimbal_plate.export.platform import (
     _render_endpoint_view,
     _render_request_view,
 )
-from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     DeclarationEntry,
@@ -201,7 +201,8 @@ def test_endpoint_request_fields_ignores_scenario_increments():
         scenarioId="sc-resolved-face",
         meta=_meta(), config=Config(), resource={},
         steps=[Step(
-            api=Api(service="tst-service", method="POST", path="/resolved-face"),
+            call=Call(protocol="http", service="tst-service",
+                      method="POST", path="/resolved-face"),
             request=Request(body={}),
             field_states={"$.order_id": "carry"},
         )],
@@ -226,7 +227,8 @@ def test_exporter_threads_field_states_end_to_end():
         scenarioId="sc-resolved-face-e2e",
         meta=_meta(), config=Config(), resource={},
         steps=[Step(
-            api=Api(service="tst-service", method="POST", path="/resolved-face"),
+            call=Call(protocol="http", service="tst-service",
+                      method="POST", path="/resolved-face"),
             request=Request(body={}),
             field_states={"$.order_id": "carry"},
         )],

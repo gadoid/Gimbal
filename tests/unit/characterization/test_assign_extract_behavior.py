@@ -316,36 +316,24 @@ class TestExtractPromote:
         )
 
 
-# ── 残留 #5：请求体引用归一($.request_body → $.call.request.body)──
+# ── 旧 scratch 路径域(残留 #5 归一化已随 api→call 清理退役)────────
+# 契约:策略路径一律写 $.call.* 信封域;旧域字符串不再被改写,原样透传
+# (存量文件迁移走 scripts/migrate_legacy_case.py)。
 
 
-class TestRequestBodyPathNormalization:
+class TestLegacyScratchPathsPassThrough:
 
-    def test_legacy_request_body_path_normalized(self):
-        """存量 $.request_body 引用在 Step 校验期归一为 $.call.request.body。"""
+    def test_legacy_request_body_path_untouched(self):
+        """$.request_body 引用不再归一 —— 原样保留(迁移责任在存量脚本)。"""
         step = Step.model_validate({
             "kind": "step",
             "call": {"protocol": "echo", "message": "m"},
             "strategy": [
                 {"kind": "assign", "name": "a", "source": "B",
                  "target": "$.request_body.x"},
-                {"kind": "assertion", "name": "c", "target": "$.request_body.x",
-                 "operator": "eq", "expected": "B"},
             ],
         })
-        assign, assertion = step.strategy[0], step.strategy[1]
-        assert assign.target == "$.call.request.body.x"
-        assert assertion.target == "$.call.request.body.x"
-
-    def test_bare_request_body_target_normalized(self):
-        step = Step.model_validate({
-            "kind": "step",
-            "call": {"protocol": "echo", "message": "m"},
-            "strategy": [
-                {"kind": "assign", "name": "a", "source": "B", "target": "request_body"},
-            ],
-        })
-        assert step.strategy[0].target == "$.call.request.body"
+        assert step.strategy[0].target == "$.request_body.x"
 
     def test_non_request_body_paths_untouched(self):
         """非 request_body 的路径/裸名不改写(callbackUrl 等业务名安全)。"""

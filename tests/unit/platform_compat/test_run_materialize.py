@@ -30,29 +30,12 @@ def _call_step(service: str, **extra) -> dict:
     }
 
 
-def _api_step(service: str) -> dict:
-    return {
-        "kind": "step",
-        "api": {"kind": "api", "service": service, "method": "GET", "path": "/x"},
-        "request": {"kind": "request", "body": {}},
-        "strategy": [],
-    }
-
-
-class TestReferencedServicesDualForm:
-    """v2.1 F-2a：call 形态（plate convert 产物）与 api 形态（过渡期兜底）。"""
+class TestReferencedServices:
+    """call 唯一形态(api 兜底已随 api→call 清理退役)。"""
 
     def test_call_form_services_extracted(self):
         steps = [_call_step("fin"), _call_step("order"), _call_step("fin")]
         assert referenced_services(steps) == ["fin", "order"]
-
-    def test_api_form_fallback(self):
-        steps = [_api_step("legacy-svc")]
-        assert referenced_services(steps) == ["legacy-svc"]
-
-    def test_mixed_forms(self):
-        steps = [_call_step("new"), _api_step("old")]
-        assert referenced_services(steps) == ["new", "old"]
 
     def test_no_service_key(self):
         steps = [{"kind": "step", "call": {"kind": "call", "protocol": "echo",

@@ -49,8 +49,7 @@ from gimbal_plate.utils import path as _path_utils
 class PlatformStepView(BaseModel):
     """platform 视角下的单条 step,shape 与 gimbal step 对齐 + platform 扩展字段。
 
-    call = 步骤唯一调用形态（api→call 清理 G2：视图不再渲染 api 字典；
-    api 形态输入经 Call.from_api 合成 call 后渲染，G4 删 api 输入面时一并退役）。
+    call = 步骤唯一调用形态（api→call 清理：api 输入面已退役，Step 仅收 call）。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -387,11 +386,6 @@ def _render_call_view(call: "Call", ep: EndpointSpec | None) -> dict[str, Any]:
     return out
 
 
-def _step_call(s) -> "Call":
-    """步骤的 call 形态：call 直取；api 形态输入合成 call{protocol:http}。"""
-    return s.call if s.call is not None else Call.from_api(s.api)
-
-
 def _call_coords(c: "Call") -> tuple[str, str]:
     """http 协议的端点坐标 (method, path)（ep_by_key 匹配键；缺省 GET /）。"""
     extra = c.model_extra or {}
@@ -643,8 +637,7 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 1. 按 (method, path) 聚合每个 endpoint 引用过的 step body
         bodies_by_ep: dict[str, list[dict[str, Any]]] = {}
         for s in sc.steps:
-            c = _step_call(s)
-            ep = keys.get(_call_coords(c))
+            ep = keys.get(_call_coords(s.call))
             if ep is None:
                 continue
             body = s.request.body
@@ -660,9 +653,8 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 3. 构造 step 视图(注入 view_hints / source_kind / field_count / field_names / view_note)
         step_views: list[PlatformStepView] = []
         for s in sc.steps:
-            c = _step_call(s)
-            ep = keys.get(_call_coords(c))
-            call_dict = _render_call_view(c, ep)
+            ep = keys.get(_call_coords(s.call))
+            call_dict = _render_call_view(s.call, ep)
             request_dict = _render_request_view(s.request, ep, s.field_states)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
             step_views.append(PlatformStepView(

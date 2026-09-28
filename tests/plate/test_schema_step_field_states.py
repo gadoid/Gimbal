@@ -20,7 +20,8 @@ from gimbal_plate.schema.step import Step
 def _step_dict(**extra: object) -> dict:
     base: dict = {
         "kind": "step",
-        "api": {"kind": "api", "service": "tst-service", "method": "POST", "path": "/p"},
+        "call": {"kind": "call", "protocol": "http",
+                 "service": "tst-service", "method": "POST", "path": "/p"},
         "request": {"kind": "request", "body": {}},
     }
     base.update(extra)
@@ -67,14 +68,14 @@ def test_scenario_validate_keeps_field_states():
 
 
 def test_no_increment_dump_key_identical():
-    """收编前字段宇宙 = kind/api/request/strategy(description None 不携带)。
+    """现行字段宇宙 = kind/call/request/strategy(description None 不携带)。
     全量字面比对 —— 任何意外加键(含 field_states: None)都会在此爆。"""
     dump = Step.model_validate(_step_dict()).model_dump(mode="json", exclude_none=True)
     assert dump == {
         "kind": "step",
-        "api": {
-            "kind": "api", "service": "tst-service", "method": "POST",
-            "path": "/p", "headers": {}, "timeout": 30,
+        "call": {
+            "kind": "call", "protocol": "http", "service": "tst-service",
+            "method": "POST", "path": "/p",
         },
         "request": {"kind": "request", "body": {}},
         "strategy": [],
