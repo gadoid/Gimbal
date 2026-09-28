@@ -345,7 +345,7 @@ ScenarioPreprocessor.run()
 │         _resolve_value/_resolve_nested 调用 utils.template 解析 ${service.x}/${auth.x.token}/${var.x}
 │
 └── Phase 4 base_url                                              [scenario_preprocessor.py:123]
-    base_url = scenario.config.services[scenario.steps[0].api.service] or cfg.services[...]
+    base_url = scenario.config.services[scenario.steps[0].call.service] or cfg.services[...]
     return resolved_steps, base_url
 ```
 

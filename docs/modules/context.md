@@ -640,7 +640,7 @@ sc_ctx = mgr.derive_scenario_context(
 3. **Seal 机制**：Context 执行完毕后封印，防止意外修改；但 Channels 走 `promote_from`，不受 seal 影响（有意设计）。
 4. **视图隔离**：Strategy 通过 `StepContextAdapter` 访问 Context，避免直接操作。
 5. **Policy 检查**：每次提升都检查 `ChannelsPolicy`，防止越权（forbidden_keys / require_reason / allowed_key_prefixes / overwritable_keys 等）。
-6. **JSONPath 写入**：`StepScratch.set("$.request_body.order_id", v)` → 嵌套结构写入。
+6. **JSONPath 写入**：`StepScratch.set("$.call.request.body.order_id", v)` → 嵌套结构写入。
 7. **投影而非事件双份**：原 events.py 中的 `*Started/*Completed` 事件已合并到 `events/types.py`，`projections.py` 只负责填充字段。
 8. **提升事件化**：Channels 通过 `_wire_promotion_listener` 把 `Promotion` 自动 publish 为 `VariablePromotedEvent`，reporter 无需读取 Context 内部状态。
 9. **timezone-aware**：`sealed_at` / `Promotion.at` 等时间戳使用 `datetime.now(timezone.utc)`，避免 naive/aware 混用。

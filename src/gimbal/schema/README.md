@@ -2,6 +2,9 @@
 
 静态描述层，使用 Pydantic 定义测试框架的核心数据模型。
 
+> **调用形态**：`step.call = {protocol, ...协议自有字段}` 是**唯一**调用表达
+> （v2.1 批次 F 定稿；历史 `step.api` 语法糖已退役，见文末「api→call 变更过程」）。
+
 ## 设计理念
 
 ### 1. 层次化设计
@@ -20,7 +23,7 @@ Scenario (场景)
 │   └── File (文件)
 └── steps (步骤列表)
     ├── Step
-    │   ├── api (API 定义)
+    │   ├── call (协议中立调用)
     │   ├── request (请求体)
     │   └── strategy (策略列表)
     │       ├── Extract (字段提取)
@@ -57,7 +60,7 @@ StrategyUnion = Annotated[
 |------|------|--------|
 | `states.py` | 步骤执行状态枚举 | `StepState` |
 | `resource.py` | 资源模型 | `Resource`, `Mock`, `File`, `ResourceUnion` |
-| `api.py` | API 定义模型 | `Api`, `ApiUnion` |
+| `call.py` | 协议中立调用模型 | `Call` |
 | `request.py` | 请求体模型 | `Request`, `RequestUnion` |
 | `step.py` | 测试步骤模型 | `Step`, `StepUnion` |
 | `strategy.py` | 策略模型 | `Scope`, `AssertOperator`, `StrategyPhase`, `FailurePolicy`, `ExtractSource`, `StrategyBase`, `Extract`, `Assign`, `Assertion`, `StrategyUnion` |
@@ -123,24 +126,28 @@ Mock 服务资源，继承自 `Resource`。
 
 ---
 
-## 3. api.py
+## 3. call.py
 
-### Api
+### Call
 
-API 定义模型。
+协议中立调用模型（开放模型：`protocol` 之外的字段由各协议执行器解释校验，
+注册新协议不需要改本文件）。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `kind` | `Literal["api"]` | 是 | `"api"` | 类型标识 |
-| `service` | `str` | 是 | - | 服务名称 |
-| `method` | `Literal["GET", "POST", "PUT", "DELETE", "PATCH"]` | 是 | - | HTTP 方法 |
-| `path` | `str` | 是 | - | 请求路径 |
-| `headers` | `dict[str, str]` | 否 | `{}` | 请求头字典 |
-| `timeout` | `float` | 否 | `30` | 超时时间（秒） |
+| `kind` | `Literal["call"]` | 是 | `"call"` | 类型标识 |
+| `protocol` | `str` | 是 | - | 协议名（执行器注册表 ProtocolRegistry 的分派键） |
+| http 常用字段 | — | — | - | `service` / `method` / `path` / `headers` / `timeout` 由 http 协议执行器（`protocols/builtin/http.py`）读取与校验 |
 
-### ApiUnion
+http 协议示例：
 
-API 类型别名，现为单成员别名 `ApiUnion = Api`。
+```python
+Call(protocol="http", service="fin", method="POST", path="/api/x")
+Call(protocol="grpc", service="user", method="GetUser")   # 自定义协议
+```
+
+协议内字段查询统一走 JSONPath（`gimbal/utils/jsonpath.py`），与
+Extract/Assertion/Assign 同一套查询语言。
 
 ---
 
@@ -162,18 +169,18 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 | body 形态 | 通道 | 隐式 Content-Type | 适用场景 |
 |---|---|---|---|
 | `dict` / `list` | `json=` | `application/json` | 常规 JSON API |
-| `str` | `content=`（UTF-8 bytes） | 由 `api.headers.Content-Type` 控制 | text/xml、application/xml、text/plain 等原始文本 |
+| `str` | `content=`（UTF-8 bytes） | 由 `call.headers.Content-Type` 控制 | text/xml、application/xml、text/plain 等原始文本 |
 
 **str body 的注意事项**：
 
-- **Content-Type**：str body 不带默认 Content-Type；httpx 会兜底为 `text/plain`。**建议在 `api.headers` 显式声明**（如 `Content-Type: application/xml`），否则 call.py 会输出 warning。
+- **Content-Type**：str body 不带默认 Content-Type；httpx 会兜底为 `text/plain`。**建议在 `call.headers` 显式声明**（如 `Content-Type: application/xml`），否则 call.py 会输出 warning。
 - **模板变量**：str body 里的 `${var.x}` 会被 `SpecResolver._resolve_nested` 正常替换（[_resolve_value](src/gimbal/context/resolver.py#L163) 天然支持 str）。
 - **策略可用性**：str 没有可索引字段，下列策略在 str body 下行为降级：
-  - `Extract("$.request_body.xxx")` → 返回 `None`（路径不存在）
-  - `Extract("$.request_body")` → 返回完整 str（**唯一可用形式**）
-  - `Assign("$.request_body.xxx", ...)` → 写无效
+  - `Extract("$.call.request.body.xxx")` → 返回 `None`（路径不存在）
+  - `Extract("$.call.request.body")` → 返回完整 str（**唯一可用形式**）
+  - `Assign("$.call.request.body.xxx", ...)` → 写无效
   - `Assign` 替换整个 body → **合法**，可以 str 替换 dict（反之亦然）
-  - `Assertion("$.request_body.xxx", ...)` → `None` 比较
+  - `Assertion("$.call.request.body.xxx", ...)` → `None` 比较
 
   阶段 1 不在 schema 层强制限制，由文档告知用户；阶段 2 拆 `RawRequest`/`JsonRequest`/`FormRequest` 子类后可通过 Pydantic validator 收紧。
 
@@ -192,9 +199,10 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `kind` | `Literal["step"]` | 是 | 类型标识 |
-| `api` | `ApiUnion` | 是 | 当前步骤的接口请求信息 |
-| `request` | `RequestUnion` | 是 | 当前步骤的请求体信息 |
+| `call` | `Call` | 是 | 协议中立调用（唯一调用形态） |
+| `request` | `Optional[RequestUnion]` | 否 | 当前步骤的请求体信息；非调用型协议步骤允许省略 |
 | `strategy` | `list[StrategyUnion]` | 是 | 当前步骤需要执行的策略集 |
+| `description` | `Optional[str]` | 否 | 步骤说明 |
 
 ### StepUnion
 
@@ -239,12 +247,13 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 
 ### StrategyPhase
 
-策略阶段枚举类，继承自 `str, Enum`。
+策略阶段枚举类，继承自 `str, Enum`（协议中立化后的中立名，value 沿用历史值；
+历史同值别名 `BEFORE_REQUEST`/`AFTER_REQUEST` 已删除）。
 
 | 枚举值 | 字符串值 | 说明 |
 |--------|----------|------|
-| `BEFORE_REQUEST` | `"before_request"` | 请求前阶段（SQL 注入数据、Assign 准备入参） |
-| `AFTER_REQUEST` | `"after_request"` | 请求后阶段（Extract 提取字段） |
+| `PREPARE` | `"before_request"` | 请求前阶段（SQL 注入数据、Assign 准备入参） |
+| `EXTRACTING` | `"after_request"` | 请求后阶段（Extract 提取字段） |
 | `VERIFYING` | `"verifying"` | 验证阶段（Assertion、DBChecker） |
 | `TEARDOWN` | `"teardown"` | 清理阶段（SQL 清理、Chaos 恢复） |
 
@@ -290,16 +299,9 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `name` | `Optional[str]` | 否 | `None` | 策略名称（继承自 StrategyBase） |
-| `phase` | `Optional[StrategyPhase]` | 否 | `None` | 处理阶段（继承自 StrategyBase） |
-| `order` | `int` | 否 | `0` | 执行顺序（继承自 StrategyBase） |
-| `enabled` | `bool` | 否 | `True` | 是否启用（继承自 StrategyBase） |
-| `onFailure` | `FailurePolicy` | 否 | `FailurePolicy.ABORT` | 失败处理策略（继承自 StrategyBase） |
-| `timeout` | `Optional[float]` | 否 | `None` | 超时时间（继承自 StrategyBase） |
-| `tags` | `List[str]` | 否 | `[]` | 标签（继承自 StrategyBase） |
 | `kind` | `Literal["extract"]` | 是 | `"extract"` | 类型标识 |
 | `source` | `ExtractSource` | 是 | - | 提取源 |
-| `expression` | `str` | 是 | - | 提取路径（JSONPath 或类似表达式） |
+| `expression` | `str` | 是 | - | 提取路径（JSONPath，以 `$.call.*` 信封域为根） |
 | `target` | `str` | 是 | - | 写入上下文中的字段名 |
 | `scope` | `Scope` | 否 | `Scope.SCENARIO` | 提取后注入到的作用域 |
 | `default` | `Optional[Any]` | 否 | `None` | 提取失败时的默认值 |
@@ -311,13 +313,6 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `name` | `Optional[str]` | 否 | `None` | 策略名称（继承自 StrategyBase） |
-| `phase` | `Optional[StrategyPhase]` | 否 | `None` | 处理阶段（继承自 StrategyBase） |
-| `order` | `int` | 否 | `0` | 执行顺序（继承自 StrategyBase） |
-| `enabled` | `bool` | 否 | `True` | 是否启用（继承自 StrategyBase） |
-| `onFailure` | `FailurePolicy` | 否 | `FailurePolicy.ABORT` | 失败处理策略（继承自 StrategyBase） |
-| `timeout` | `Optional[float]` | 否 | `None` | 超时时间（继承自 StrategyBase） |
-| `tags` | `List[str]` | 否 | `[]` | 标签（继承自 StrategyBase） |
 | `kind` | `Literal["assign"]` | 是 | `"assign"` | 类型标识 |
 | `source` | `Any` | 是 | - | 值或路径 |
 | `target` | `str` | 是 | - | 模板路径 |
@@ -331,15 +326,8 @@ API 类型别名，现为单成员别名 `ApiUnion = Api`。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `name` | `Optional[str]` | 否 | `None` | 策略名称（继承自 StrategyBase） |
-| `phase` | `Optional[StrategyPhase]` | 否 | `None` | 处理阶段（继承自 StrategyBase） |
-| `order` | `int` | 否 | `0` | 执行顺序（继承自 StrategyBase） |
-| `enabled` | `bool` | 否 | `True` | 是否启用（继承自 StrategyBase） |
-| `onFailure` | `FailurePolicy` | 否 | `FailurePolicy.ABORT` | 失败处理策略（继承自 StrategyBase） |
-| `timeout` | `Optional[float]` | 否 | `None` | 超时时间（继承自 StrategyBase） |
-| `tags` | `List[str]` | 否 | `[]` | 标签（继承自 StrategyBase） |
 | `kind` | `Literal["assertion"]` | 是 | `"assertion"` | 类型标识 |
-| `target` | `str` | 是 | - | 断言的目标字段 |
+| `target` | `str` | 是 | - | 断言的目标字段（JSONPath，如 `$.call.response.body.code`） |
 | `operator` | `AssertOperator` | 是 | - | 断言比较操作符 |
 | `expected` | `Any` | 否 | `None` | 期望值 |
 | `message` | `Optional[str]` | 否 | `None` | 断言失败时的信息 |
@@ -491,7 +479,7 @@ Scenario
 │   └── File
 └── steps: list[StepUnion]
     └── Step
-        ├── api: ApiUnion (Api)
+        ├── call: Call (protocol + 协议自有字段)
         ├── request: RequestUnion (Request)
         └── strategy: list[StrategyUnion]
             ├── Extract
@@ -506,7 +494,7 @@ Scenario
 ```python
 from gimbal import (
     Scenario, Meta, Config,
-    Step, Api, Request,
+    Step, Call, Request,
     Extract, Assertion, Assign,
     Scope, ExtractSource, AssertOperator, StrategyPhase,
     TimeoutPolicy, RetryPolicy,
@@ -514,24 +502,25 @@ from gimbal import (
 )
 from datetime import datetime
 
-# 定义 API
-api = Api(
+# 定义调用（http 协议）
+call = Call(
+    protocol="http",
     service="user-service",
     method="GET",
     path="/api/users/{id}",
     headers={"Authorization": "Bearer ${token}"},
-    timeout=30
+    timeout=30,
 )
 
 # 定义请求
 request = Request(body={})
 
-# 定义策略 - Extract: 从响应中提取数据
+# 定义策略 - Extract: 从响应中提取数据（call 信封域）
 extract_token = Extract(
     name="extract_token",
-    phase=StrategyPhase.AFTER_REQUEST,
+    phase=StrategyPhase.EXTRACTING,
     source=ExtractSource.RESPONSE_BODY,
-    expression="$.data.token",
+    expression="$.call.response.body.data.token",
     target="token",
     scope=Scope.SCENARIO,
     default=None,
@@ -541,17 +530,17 @@ extract_token = Extract(
 # 定义策略 - Assign: 准备入参
 assign_user_id = Assign(
     name="assign_user_id",
-    phase=StrategyPhase.BEFORE_REQUEST,
+    phase=StrategyPhase.PREPARE,
     source="${user_id}",
     target="path.id",
     scope=Scope.STEP
 )
 
-# 定义策略 - Assertion: 断言验证
+# 定义策略 - Assertion: 断言验证（call 信封域）
 assert_status = Assertion(
     name="assert_status",
     phase=StrategyPhase.VERIFYING,
-    target="response.status",
+    target="$.call.response.status",
     operator=AssertOperator.EQ,
     expected=200,
     message="响应状态码不正确",
@@ -560,7 +549,7 @@ assert_status = Assertion(
 
 # 定义步骤
 step = Step(
-    api=api,
+    call=call,
     request=request,
     strategy=[extract_token, assign_user_id, assert_status]
 )
@@ -627,7 +616,7 @@ print(scenario.model_dump())
 # 使用 -m 方式运行模块测试
 python -m gimbal.schema.states
 python -m gimbal.schema.resource
-python -m gimbal.schema.api
+python -m gimbal.schema.call
 python -m gimbal.schema.request
 python -m gimbal.schema.step
 python -m gimbal.schema.strategy
@@ -637,3 +626,33 @@ python -m gimbal.schema.scenario
 python -m gimbal.schema.setup
 python -m gimbal.schema.teardown
 ```
+
+---
+
+## api→call 变更过程（历史记录）
+
+本节是 `step.api` → `step.call` 迁移的唯一现行文档入口；历史计划文档
+（`docs/superpowers/plans/`）是各阶段的时点存档，不再重复维护。
+
+| 时间 | 事件 |
+|------|------|
+| v2.1 批次 F 定稿 | `call = {protocol, ...协议自有字段}` 定为所有协议统一的调用表达；执行器进入 api/call 双读期（api 为 HTTP 语法糖，Step 校验期归一化为 call） |
+| 2026-09-27 | 协议中立化：`CallExchangeEvent` 统一调用证据信封（`$.call.*` scratch 根）；plate `Call` 镜像模型对齐 |
+| 2026-09-28（批次 F 收口） | 引擎删除 `schema/api.py` 与 api 语法糖，`Step` 仅收 call（extra=forbid 拒收 api）；PG 存量 7 场景 65 步一次性迁移（`07831974`，含旧 scratch 路径改写）；平台后端 6 读点保留「call 优先、api 兜底」过渡双读 |
+| 2026-09-28（本轮清理） | 过渡面全部退役：plate Step 仅收 call（api 输入显式拒绝）、`view_api`/`Call.from_api`/`_steps_to_call_form`/`_CALL_PATH_REWRITES` 删除；platform 视图渲染 call；前端 `stepCall()` 单读 call；旧 scratch 路径域（`$.response_body` 等）前端直产 `$.call.*`、引擎归一化与 plate 重写表退役 |
+
+**旧 → 新对照**（存量文件迁移映射，机器可执行版本见
+`scripts/migrate_legacy_case.py`）：
+
+| 旧（api 形态 / scratch 域） | 新（call 形态 / 信封域） |
+|---|---|
+| `step.api = {kind:"api", service, method, path, headers, timeout}` | `step.call = {kind:"call", protocol:"http", service, method, path, headers, timeout}` |
+| `$.response_body` / `$.response_body.x` | `$.call.response.body` / `$.call.response.body.x` |
+| `$.response_status` | `$.call.response.status` |
+| `$.response_headers` | `$.call.response.meta.headers` |
+| `$.request_body` / `$.request_body.x` | `$.call.request.body` / `$.call.request.body.x` |
+| `$.duration_ms` | `$.call.elapsed_ms` |
+
+存量 api 形态用例文件可用 `python scripts/migrate_legacy_case.py <file>`
+原地迁移（幂等）；plate `/convert` 对 api 形态步骤返回 400 并在错误信息中
+指向本节。

@@ -17,7 +17,7 @@
 >
 > **关键概念区分**：
 > - **EndpointSpec** = 一个接口的"模板"（Plate 提供） — 例：orderAdd 的 method / path / 18 个请求字段 / 6 个响应字段
-> - **Step** = Scenario 里的一步 — 例：`{api: EndpointSpec.api, request: {body: {filled_values}}, strategy: [...]}`
+> - **Step** = Scenario 里的一步 — 例：`{call: {protocol:"http", ...接口坐标与值}, request: {body: {filled_values}}, strategy: [...]}`（步骤的调用形态是 call；`EndpointSpec.api` 是 plate 端点结构的接口坐标，两者不是同一概念）
 > - **Scenario** = 整个用例的 JSON 序列（Platform 存储） — 例：`{meta, config, resource, steps: [Step1, Step2, ...]}`
 >
 > **URL path 命名约定（v1.3 起）**：
@@ -522,7 +522,7 @@ A4 拆为 3 块（`meta-and-api` / `request-spec` / `response-specs`），因为
 | 概念 | 角色 | 谁拥有 | 例子 |
 |---|---|---|---|
 | **EndpointSpec** | 抽象 — 一个接口的结构 | **Plate** | `orderAdd` 的 method/path/18 字段定义 |
-| **Step** | 一个接口调用 + 值 + 策略 | **Platform 组装** | `{api: ..., request: {body: {填充值}}, strategy: [...]}`；可选携带 `field_states`（场景侧字段状态稀疏增量，2026-09-07 收编，见下） |
+| **Step** | 一个接口调用 + 值 + 策略 | **Platform 组装** | `{call: ..., request: {body: {填充值}}, strategy: [...]}`；可选携带 `field_states`（场景侧字段状态稀疏增量，2026-09-07 收编，见下） |
 | **Scenario** | 用例（meta + config + resource + steps[]） | **Platform 存储** | `{meta, config, resource, steps: [Step1, Step2, Step3]}` |
 
 **Step wire 的 `field_states` 键（2026-09-07 收编）**：`steps[].field_states`
@@ -591,7 +591,7 @@ Platform 调 Plate 的 A4a / A4b / A5 / B1 拿 **EndpointSpec 抽象**，**Platf
 如果后端实现参考了更早的版本，请按 v1.2 调整：
 
 - ❌ 错误理解：`GET /api/scenarios/{id}/meta` / `.../config` / `.../resource` / `.../steps` — **这些不是 Plate 接口**
-- ✅ 正确理解：`GET /api/endpoints/{id}/meta-and-api` / `.../request-spec` / `.../response-specs` — 这些是 Plate 接口（针对一个 EndpointSpec）
+- ✅ 正确理解：`GET /api/endpoints/{id}/meta-and-api` / `.../request-spec` / `.../response-specs` — 这些是 Plate 接口（针对一个 EndpointSpec；`meta-and-api` 为 v1.2 历史接口名，现行入口见 http-api.md）
 
 - ❌ 删除：`POST /api/scenarios` / `PUT /api/scenarios/{id}` / `DELETE /api/scenarios/{id}` / `POST /api/scenarios/{id}/clone` — Scenario CRUD 是 Platform 职责
 - ❌ 删除：`POST /api/validate/scenario` — Scenario 校验是 Platform 职责

@@ -23,7 +23,7 @@ schema_version: 1.0
 | target | 原因 | evidence | impact | hit_log | src | pin |
 |---|---|---|---|---|---|---|
 | pydantic | 所有模型基于 `BaseModel` 与 `Field` 构造；`Annotated[Union[...], Field(discriminator=...)]` 是联合类型的语法基础 | schema/__init__.py:18-63（全部模型继承自 pydantic.BaseModel） | high | — | human | ◯ |
-| pydantic discriminated unions | `Annotated[Union[...], Field(discriminator="kind")]` 是 schema 全部 *Union 类型的统一模式（ApiUnion / RequestUnion / StepUnion / StrategyUnion / TimePolicyUnion / ResourceUnion / SetupUnion / TeardownUnion / RunUnion） | schema/api.py:16-19、request.py:12-15、step.py:19-22、strategy.py:81-84、timepolicy.py:17-20、resource.py:25-28、setup.py:13-16、teardown.py:14-17、scenario.py:60-63 | high | — | human | ◯ |
+| pydantic discriminated unions | `Annotated[Union[...], Field(discriminator="kind")]` 是 schema 全部 *Union 类型的统一模式（RequestUnion / StepUnion / StrategyUnion / TimePolicyUnion / ResourceUnion / SetupUnion / TeardownUnion / RunUnion） | schema/request.py:12-15、step.py:19-22、strategy.py:81-84、timepolicy.py:17-20、resource.py:25-28、setup.py:13-16、teardown.py:14-17、scenario.py:60-63 | high | — | human | ◯ |
 | stdlib `enum` | `StepState`（执行状态）与 strategy.py 的 `Scope` / `AssertOperator` / `StrategyPhase` / `FailurePolicy` 四个枚举依赖 `str, Enum` 模式以同时支持字符串字面量 | schema/states.py:5-12、schema/strategy.py:6-42 | high | — | human | ◯ |
 | stdlib `datetime` | `AuthSession.expires_at`、`Meta.createTime` 字段类型 | schema/auth.py:8、schema/scenario.py:2、scenario.py:23 | medium | — | human | ◯ |
 | stdlib `typing`（Literal / Annotated / Union / Optional） | 全部模型字段类型注解基础 | 各 .py 文件首行 import | medium | — | human | ◯ |

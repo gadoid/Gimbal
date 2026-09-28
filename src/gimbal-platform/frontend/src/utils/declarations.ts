@@ -713,7 +713,7 @@ function containerBinding(
  * 树容器平摊(匹配面,2026-09-05 注入粒度 P6):object/array/dict 节点
  * → IOFieldBinding[](实例路径,行内嵌套容器如 $.container[0].box_no、
  * 无模板数组的合成字典行 $.misc[0] 亦收)。整容器 assign(target 命中
- * $.request_body<容器实例路径>)与叶子同式匹配 — P3 容器快捷策略的
+ * $.call.request.body<容器实例路径>)与叶子同式匹配 — P3 容器快捷策略的
  * 提示态/角标继任(此前匹配面只含叶子,整容器注入零提示)。根容器
  * ('$')排除:快捷菜单即排除(P3,根无 rel 路径,target 派生畸形)。
  */

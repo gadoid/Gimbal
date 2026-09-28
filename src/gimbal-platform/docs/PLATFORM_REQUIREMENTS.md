@@ -45,8 +45,8 @@ Gimbal 已有的数据契约（`gimbal/schema/`）直接成为本平台的数据
 | `Meta` | `gimbal.schema.Meta` | name / description / module / priority / author / owner / tags / version / expire / requirementRef |
 | `Config` | `gimbal.schema.Config` | services / users / timePolicy / retry / vars / setup / teardown |
 | `Resource` | `gimbal.schema.ResourceUnion` | 平台 V0.1 不渲染（仅占位），对应 UI 仅显示已有键 |
-| `Step` | `gimbal.schema.Step` | description / api / request / strategy |
-| `Api` | `gimbal.schema.Api` | service / method / path / headers / timeout |
+| `Step` | `gimbal.schema.Step` | description / call / request / strategy |
+| `Call` | `gimbal.schema.Call` | protocol + 协议自有字段（http：service / method / path / headers / timeout） |
 | `Request` | `gimbal.schema.Request` | body（任意 JSON） |
 | `Strategy` | `gimbal.schema.StrategyUnion`（Extract / Assign / Assertion） | V0.1 前端用 Monaco JSON 编辑器读写 |
 | `AuthSession` | `gimbal.schema.AuthSession` | url / username / password / expires_in / token_type / token / expires_at |
@@ -287,7 +287,7 @@ default_hidden:
 
 #### C5 步骤列表（**需求明确：steps 中的 step 拖拽**）
 - step-card 列表使用 `vuedraggable`；
-- 每个 step 展开后 sub-tab：`description / api / request / strategy / assertions`；
+- 每个 step 展开后 sub-tab：`description / call / request / strategy / assertions`；
 - step 顶部条：序号 / method-pill / service.path / 折叠按钮 / 删除按钮 / cURL 复制按钮 / 状态徽章；
 - step 子区拖拽：strategy（断言列表）同样支持重排；每个 strategy 用 `.strategy-item` 行（沿用 Prism 风格）；
 - step 删除前 confirm 弹窗（沿用 Prism confirm-modal）；

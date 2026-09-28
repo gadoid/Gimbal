@@ -1,6 +1,6 @@
 # Schema 模块
 
-> 数据模型模块：定义所有 Pydantic v2 数据模型（`Scenario`、`Step`、`Api`、`Strategy`、`AuthSession` 等），为 Gimbal 框架提供静态描述层。
+> 数据模型模块：定义所有 Pydantic v2 数据模型（`Scenario`、`Step`、`Call`、`Strategy`、`AuthSession` 等），为 Gimbal 框架提供静态描述层。
 
 ## 目录结构
 
@@ -10,7 +10,7 @@ gimbal/schema/
 ├── README.md
 ├── states.py            # StepState
 ├── resource.py          # Resource, Mock, File, ResourceUnion
-├── api.py               # Api, ApiUnion
+├── call.py              # Call(协议中立调用)
 ├── request.py           # Request, RequestUnion
 ├── step.py              # Step, StepUnion
 ├── strategy.py          # StrategyBase, Extract, Assign, Assertion, StrategyUnion, Scope, AssertOperator, StrategyPhase, FailurePolicy
@@ -31,7 +31,7 @@ gimbal/schema/
 模型按职责分四类：
 
 1. **场景层**：`Scenario`、`Meta`、`Config`。
-2. **资源/接口/请求层**：`Resource`、`Api`、`Request`。
+2. **资源/调用/请求层**：`Resource`、`Call`、`Request`。
 3. **执行/策略层**：`Step`、`Strategy`（`Extract` / `Assign` / `Assertion`）、`TimePolicy`、`RetryPolicy`、`Setup` / `Teardown`。
 4. **认证层**：`AuthSession`（位于 `auth.py`，详见 `auth.md`）。
 
@@ -40,7 +40,7 @@ gimbal/schema/
 ```python
 from .states import StepState
 from .resource import Resource, Mock, File, ResourceUnion
-from .api import Api, ApiUnion
+from .call import Call
 from .request import Request, RequestUnion
 from .step import Step, StepUnion
 from .strategy import (
@@ -116,23 +116,21 @@ class Config(BaseModel):
 ```python
 class Step(BaseModel):
     kind: Literal["step"] = "step"
-    api: ApiUnion
-    request: RequestUnion
+    call: Call
+    request: RequestUnion | None
     strategy: list[StrategyUnion]
 ```
 
-### Api
+### Call
 
-HTTP API 定义：
+协议中立调用（开放模型；`step.api` 语法糖已退役，见 `src/gimbal/schema/README.md` 的「api→call 变更过程」）：
 
 ```python
-class Api(BaseModel):
-    kind: Literal["api"] = "api"
-    service: str
-    method: str
-    path: str
-    headers: dict | None
-    timeout: float = 30.0
+class Call(BaseModel):   # extra="allow"
+    kind: Literal["call"] = "call"
+    protocol: str                       # 必填;协议执行器的分派键
+    # http 协议自有字段(extras): service/method/path/headers/timeout
+    # 由 protocols/builtin/http.py 读取与校验
 ```
 
 ### Resource
@@ -282,7 +280,6 @@ class StepState(str, Enum):
 ```python
 # 单成员别名（保留 Union 命名以稳定 API 表面）
 StepUnion = Step
-ApiUnion = Api
 RequestUnion = Request
 SetupUnion = Setup
 TeardownUnion = Teardown
@@ -363,7 +360,7 @@ def _aware_utc(dt: datetime) -> datetime:
 
 1. **Discriminated Union**：使用 `Literal` + `Field(discriminator="kind")` 实现多态。所有 `*Union` 派生类都遵循这一约定。
 2. **不可变性优先**：除 `AuthSession` 等显式承担运行期状态的模型外，配置类（如 `BootstrapConfig`）使用 `frozen=True`。
-3. **分层建模**：从 `Scenario` → `Step` → `Api`/`Request`/`Strategy`，层层细化，资源与认证配置由 `Config` 集中管理。
+3. **分层建模**：从 `Scenario` → `Step` → `Call`/`Request`/`Strategy`，层层细化，资源与认证配置由 `Config` 集中管理。
 4. **运行期状态外移**：`Config.users` 中的 `AuthSession` 在 Bootstrap 阶段被解析后，token 状态迁移到 `AuthRegistry`；schema 层只保留静态描述（详见 `auth.md`）。
 
 > 历史备注：schema 曾通过 `*Ref` 引用类型实现"引用分离"（懒加载/外部资产引用），已随资产引用机制整体移除——用例的唯一去向是平台数据库，ref 节点零生产者。

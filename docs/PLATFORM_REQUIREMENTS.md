@@ -650,7 +650,7 @@ WebSocket：`/ws/executions/{id}`（V1；V0.1 用轮询）。
 
 - scenario `e2e订单到应收核销`（中文字符作 ID）
 - 27 个 step；每步同样的 8 个 header（其中 6 个为浏览器嗅探 noise）
-- 25+ 个 strategy 项类型混合（assertion / extract / assign），assign 的 target 多为 `$.request_body.<...>` 或 `$.request_body.<...>[0]`
+- 25+ 个 strategy 项类型混合（assertion / extract / assign），assign 的 target 多为 `$.call.request.body.<...>` 或 `$.call.request.body.<...>[0]`（api→call 清理后前端直产 call 域）
 - `Config.users.codfish.token_type: "Authorization"`（非默认）
 - `Config.vars` 5 个全为字面量业务 ID
 

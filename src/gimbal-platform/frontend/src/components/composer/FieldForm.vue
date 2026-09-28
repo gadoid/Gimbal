@@ -47,7 +47,7 @@
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span v-if="item.n.entry.type" class="ui-tag k-json">{{ item.n.entry.type }}</span>
           <!-- P6:整容器策略角标/注入徽标 — 与叶子行同式(path 键控,
-               assign target 命中 $.request_body<容器实例路径>) -->
+               assign target 命中 $.call.request.body<容器实例路径>) -->
           <button
             v-for="t in strategyTags?.[item.n.path] ?? []"
             :key="t.idx"
@@ -1265,7 +1265,7 @@ function coerceEnumOut(f: IOFieldBinding, raw: string): unknown {
   return f.type === 'integer' || f.type === 'number' ? Number(raw) : raw
 }
 
-/** 动态注入态:该字段命中 assign(target=$.request_body.<path>)→ 值控件只读化
+/** 动态注入态:该字段命中 assign(target=$.call.request.body.<path>)→ 值控件只读化
  *  (key = path:数组行实例各得其所,name 在行间共享会整列误标) */
 function isInjected(f: IOFieldBinding): boolean {
   return (props.injected?.[f.path]?.length ?? 0) > 0
@@ -1279,7 +1279,7 @@ function injectedTitle(f: IOFieldBinding): string {
 }
 
 /** 提取态(域感知提取,2026-09-05):该字段命中 extract(expression=
- *  $.request_body<path>,Canvas requestExtracted 键)→ 值控件保持可编辑
+ *  $.call.request.body<path>,Canvas requestExtracted 键)→ 值控件保持可编辑
  *  (提取只读取),提示行标"运行时读取此值"(与 assign 注入态只读化分面) */
 function isExtracted(f: IOFieldBinding): boolean {
   return (props.extracted?.[f.path]?.length ?? 0) > 0

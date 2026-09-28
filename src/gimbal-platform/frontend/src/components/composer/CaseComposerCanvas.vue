@@ -929,7 +929,7 @@ function pathEndsWithField(p: string, fieldName: string): boolean {
 
 /**
  * 菜单"提取该字段"(域感知):request 侧提取**本步发出的请求体字段**
- * (after_request 时 scratch 已有 request_body — 整容器提出/下一步注入
+ * (EXTRACTING 时 scratch 已有 call.request.body — 整容器提出/下一步注入
  * 复用的既定工作流),表达式确定 = requestBodyTargetOf(与 assign target
  * 同源);response 侧走 respPathOf。target=字段名,scope=scenario。
  */
@@ -946,7 +946,7 @@ function onFieldExtract(f: IOFieldBinding, domain: 'request' | 'response') {
 }
 
 /**
- * assign target 派生(单一真源,修轮 R1):`$.request_body` + 字段 rel 路径。
+ * assign target 派生(单一真源,修轮 R1):`$.call.request.body` + 字段 rel 路径。
  * 根 list(Task 10)`$[0].sku` 剥后 rel 以 `[` 开头 → 前缀直拼无点
  * (`$.call.request.body[0].sku`);平铺/深层 `$.a[0].b` →
  * `$.call.request.body.a[0].b`(行为不变)。onFieldAssign 落 target 与
@@ -1412,7 +1412,7 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
   const sv = s as any
   if (domain === 'request') {
     if (sv.kind === 'assign') return sv.target === requestBodyTargetOf(f.path)
-    // 请求侧提取(取发出的请求体)角标:expression 命中 $.request_body<path>
+    // 请求侧提取(取发出的请求体)角标:expression 命中 $.call.request.body<path>
     if (sv.kind === 'extract') return sv.expression === requestBodyTargetOf(f.path)
     return false
   }
@@ -1465,8 +1465,8 @@ const responseStrategyTags = computed(() => fieldStrategyTags('response'))
 /** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
  *  仅 assign(写入才覆盖 — extract 只读取不锁值控件,提示另见
  *  requestExtracted)。与 fieldStrategyTags 同源同匹配(assign target
- *  精确命中 $.request_body<path> — 平铺/深层加点($.request_body.a.b),
- *  根 list 直拼无点($.request_body[0].sku,见 requestBodyTargetOf)),
+ *  精确命中 $.call.request.body<path> — 平铺/深层加点($.call.request.body.a.b),
+ *  根 list 直拼无点($.call.request.body[0].sku,见 requestBodyTargetOf)),
  *  key = path(实例地址唯一;name 在数组行间共享会整列误标),携带
  *  source/target 供提示条悬停展示。响应侧无此概念(assign 不写响应)。 */
 const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
@@ -1485,7 +1485,7 @@ const requestInjected = computed<Record<string, Array<{ source: string; target: 
 })
 
 /** 请求体字段提取态(域感知提取,2026-09-05):expression 命中
- *  $.request_body<path> 的 extract → 携带 varName/expression 供提示
+ *  $.call.request.body<path> 的 extract → 携带 varName/expression 供提示
  *  悬停。提取运行时只读取不覆盖 — FieldForm 值控件保持可编辑,仅显
  *  「已提取」提示(与 assign 注入态的只读化分面,key 同为 path)。 */
 const requestExtracted = computed<Record<string, Array<{ varName: string; expression: string }>>>(() => {

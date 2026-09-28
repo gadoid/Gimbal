@@ -55,10 +55,10 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-SC-02 | 用例元信息 `Meta`（name/description/module/priority/author/owner/tags/version/createTime/expire/requirementRef） | [schema/scenario.py:13-25](src/gimbal/schema/scenario.py) |
 | R-SC-03 | 用例配置 `Config`（setup/teardown/services/users/timePolicy/retry/vars） | [schema/scenario.py:27-39](src/gimbal/schema/scenario.py) |
 | R-SC-04 | 资源模型 `Resource` / `Mock` / `File` | [schema/resource.py](src/gimbal/schema/resource.py) |
-| R-SC-05 | `Api` 模型（service/method/path/headers/timeout） | [schema/api.py:5-11](src/gimbal/schema/api.py) |
+| R-SC-05 | `Call` 协议中立调用模型（protocol + 协议自有字段；http 的 service/method/path/headers/timeout） | [schema/call.py](src/gimbal/schema/call.py) |
 | R-SC-06 | `Request` 模型（body） | [schema/request.py:5-7](src/gimbal/schema/request.py) |
-| R-SC-07 | `Step` 模型（api / request / strategy 列表） | [schema/step.py:9-14](src/gimbal/schema/step.py) |
-| R-SC-08 | Discriminated Union：`StepUnion` / `ApiUnion` / `RequestUnion` / `StrategyUnion` | 各 schema 模块 |
+| R-SC-07 | `Step` 模型（call / request / strategy 列表） | [schema/step.py:9-14](src/gimbal/schema/step.py) |
+| R-SC-08 | Discriminated Union：`StepUnion` / `RequestUnion` / `StrategyUnion` | 各 schema 模块 |
 | R-SC-09 | 策略基类 `StrategyBase`（name/phase/order/enabled/onFailure/timeout/tags） | [schema/strategy.py:43-51](src/gimbal/schema/strategy.py) |
 | R-SC-10 | 三种核心策略：`Extract` / `Assign` / `Assertion` | [schema/strategy.py:53-75](src/gimbal/schema/strategy.py) |
 | R-SC-11 | 策略阶段枚举 `StrategyPhase`（BEFORE_REQUEST / AFTER_REQUEST / VERIFYING / TEARDOWN） | [schema/strategy.py:31-35](src/gimbal/schema/strategy.py) |

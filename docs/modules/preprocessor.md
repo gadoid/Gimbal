@@ -188,37 +188,12 @@ def _resolve_steps(self, root: dict) -> list["StepUnion"]:
 
 四个子解析阶段：
 
-#### Phase 3.1：Api 解析（`_resolve_api`）
+#### Phase 3.1：Call 解析（`_resolve_call`）
 
-```python
-def _resolve_api(self, api, root: dict):
-    """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符；
-    任一模板变量缺失则 fail-fast 抛 ValueError。
-    """
-    # 修复 B5：先解析所有 header；记录哪些解析失败
-    resolved_headers = {}
-    missing_headers = []
-    for k, v in (api.headers or {}).items():
-        resolved = self._resolve_value(v, root)
-        if resolved is None:
-            missing_headers.append(k)
-        else:
-            resolved_headers[k] = resolved
-
-    if missing_headers:
-        # 修复 B5：header 模板变量未找到时报错，不静默丢弃
-        raise ValueError(
-            f"[Preprocessor] api header 模板变量未找到, header 缺失: {missing_headers}"
-        )
-
-    # path 也必须能解析
-    resolved_path = self._resolve_value(api.path, root)
-    if resolved_path is None:
-        raise ValueError(f"[Preprocessor] api.path 模板变量未找到: {api.path!r}")
-
-    return Api(kind=api.kind, service=api.service, method=api.method,
-               path=resolved_path, headers=resolved_headers, timeout=api.timeout)
-```
+对 `step.call` 的开放字段做模板展开（自定义协议的开放字段递归展开）；
+`_resolve_or_fail` 对缺失模板 fail-fast（抛 ValueError），历史 `_resolve_api`
+（api 语法糖专属解析段）已随 api→call 清理退役（见
+`src/gimbal/schema/README.md` 的「api→call 变更过程」）。
 
 #### Phase 3.2：Request 解析（`_resolve_request`）
 

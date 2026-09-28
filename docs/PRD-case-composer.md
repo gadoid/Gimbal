@@ -220,7 +220,7 @@ class Meta(BaseModel):
 
 **向后兼容**：`system: str` 旧数据迁移为单元素 list；空串 → `[]`。
 
-**平台校验**：保存用例前对比 `meta.system` 与 `steps[*].api.service` 推出来的系统集合，不一致给 warning（提示"声明的系统与实际调用的系统不匹配"）。
+**平台校验**：保存用例前对比 `meta.system` 与 `steps[*].call.service` 推出来的系统集合，不一致给 warning（提示"声明的系统与实际调用的系统不匹配"）。
 
 ### 5.2 `common` 与其他被测系统平级
 
@@ -525,7 +525,7 @@ EndpointDetail Hero（接口元信息卡片）展示：
 | 6 | **批量引用**：多选字段一次性填入 | 高级用户功能，后续 |
 | 7 | **@ 浮层里的"最近用过"快捷区**：把当前 step 用过的变量钉在最上面 | 待你确认是否需要 |
 | 8 | **Strategy 流向图**：把 StrategyCard 升级成"流向图"形态可视化 extract → assign 链路 | 后续 |
-| 9 | **`Meta.system` 自动反推**：保存时与 `steps[*].api.service` 推导集合不一致的 warning 文案 | 平台前端 |
+| 9 | **`Meta.system` 自动反推**：保存时与 `steps[*].call.service` 推导集合不一致的 warning 文案 | 平台前端 |
 | 10 | **用例编排的"我的工作台"迁移路径**：是否废弃旧手写用例库 | 需业务确认 |
 
 ## 12. 关联文档

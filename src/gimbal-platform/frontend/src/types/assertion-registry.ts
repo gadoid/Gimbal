@@ -25,7 +25,7 @@ export interface AssertionEntry {
   name: string
   path: EntryPath
   /** 注入面:替换该字段的值(字面量,原样覆写不 coerce;
-   *  物化 = 引擎 Assign 直补 $.request_body,与 config.vars 零耦合) */
+   *  物化 = 引擎 Assign 直补 $.call.request.body,与 config.vars 零耦合) */
   value: unknown
   asserts: AssertPatch[]
 }

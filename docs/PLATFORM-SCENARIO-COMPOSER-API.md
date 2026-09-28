@@ -916,7 +916,7 @@ PLATE_TIMEOUT_SEC: float = 30.0
 **物化**：`compose_injection_scenario` 在 **plate convert 之前**改**副本**的
 `definition.steps[si]`（先 `copy.deepcopy(definition)`，见 `compose_injection_scenario()` —— 该函数是
 纯函数，不改入参）—— 追加一条 `kind=assign` 的策略，target 是
-`$.request_body` + jsonpath 尾（根 `"$"` → `$.request_body`）；`asserts[]`
+`$.call.request.body` + jsonpath 尾（根 `"$"` → `$.call.request.body`）；`asserts[]`
 里 `mode == "override"` 的改既有 assertion 的 `expected`，其余追加一条
 `kind=assertion`（同在 `compose_injection_scenario()`）。**它不触碰 `config.vars`**：
 数据集行值是正交的另一路叠加（§4.18）。
@@ -1036,7 +1036,7 @@ dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列
 
 **为什么有意不同**：
 
-1. **服务的对象不同**。画布那条是**运行期表达式**（引擎域 `$.response_body...`），
+1. **服务的对象不同**。画布那条是**运行期表达式**（引擎域 `$.call.response.body...`），
    「真实响应里到底有什么」比「契约声明了什么」更贴近它的正确性 —— 而契约未声明、
    运行期却真出现的字段（数组下标、动态键）只能靠样本拿；编辑器那条是**断言目标**，
    契约的响应面就是它的唯一标准定义，引入样本等于给同一件事开第二个口径。

@@ -233,7 +233,7 @@
 |---|---|---|
 | Home 行系统 chip list | `Scenario.meta.system` | list[str] |
 | Canvas 顶部系统 chips | `Scenario.meta.system` | 同上 |
-| Canvas 步骤流系统徽章 | `Step.api.service.split(\".\")[0]` | 平台运行时反推 |
+| Canvas 步骤流系统徽章 | `Step.call.service.split(\".\")[0]` | 平台运行时反推 |
 | 命名空间（fin.codfish） | `Config.users` 的 dict key | 字符串 |
 | 跨系统验证 | `meta.system` vs `set(service.split(\".\")[0] for step in steps)` | 平台校验 |
 
@@ -244,9 +244,9 @@
 | 视觉 | 字段 | 形态 |
 |---|---|---|
 | 步骤名 | `Step.description` | str |
-| 方法徽章 | `Step.api.method` | enum |
-| path | `Step.api.path` | str |
-| 系统徽章 | `Step.api.service.split(\".\")[0]` | 平台反推 |
+| 方法徽章 | `Step.call.method` | enum |
+| path | `Step.call.path` | str |
+| 系统徽章 | `Step.call.service.split(\".\")[0]` | 平台反推 |
 | request body | `Step.request.body` | str/dict/list |
 | 字段列表 | `Step.request.fields_meta` | dict（KeyedBy name） |
 | 策略链 | `Step.strategy` | list[StrategyUnion] |
@@ -387,9 +387,9 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 
 ### 3.3 跨系统识别
 
-**当前实现**：从 `Step.api.service.split(\".\")[0]` 反推 + 与 `Meta.system` 校验。**schema 字段够用**。
+**当前实现**：从 `Step.call.service.split(\".\")[0]` 反推 + 与 `Meta.system` 校验。**schema 字段够用**。
 
-**边界**：历史上的 `ref` 引用（api 以引用形式内联）已随资产引用机制移除——`api` 总是完整定义，`service` 字段总是存在，平台可直接反推归属系统。
+**边界**：历史上的 `ref` 引用（api 以引用形式内联）已随资产引用机制移除——`call` 总是完整定义（http 协议的 `service` 字段总是存在），平台可直接反推归属系统。
 
 ### 3.4 静态 vs 动态注入
 
@@ -421,7 +421,7 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 | 渲染需求 | schema 字段 | 备注 |
 |---|---|---|
 | \"最近使用变量\"快捷区 | 无 | 需要前端在用户态记录 |
-| 跨 step 同名字段冲突的 step 标识 | `Step.api.service` 间接 | 平台运行时反推 |
+| 跨 step 同名字段冲突的 step 标识 | `Step.call.service` 间接 | 平台运行时反推 |
 | 类型校验（number 字段填 string） | `DeclarationEntry.ui_kind` | 平台运行时校验 |
 | 批量引用（多选字段） | 无 | 高级用户功能 |
 | @ 浮层里的\"最近用过\" | 无 | 需要前端在用户态记录 |

@@ -6,8 +6,8 @@ Gimbal 把"场景编排 / 策略执行 / 状态机驱动 / 插件扩展"装进�
 
 ## 特性
 
-- **声明式场景**：Pydantic `Schema` + Discriminated Union（`Step` / `Api` / `Request` / `Strategy`）。
-- **多阶段策略执行**：`BEFORE_REQUEST` (Assign) → `CALLING` (Call) → `AFTER_REQUEST` (Extract) → `VERIFYING` (Assertion) → `TEARDOWN`，由状态机驱动。
+- **声明式场景**：Pydantic `Schema` + Discriminated Union（`Step` / `Call` / `Request` / `Strategy`）。
+- **多阶段策略执行**：`PREPARE` (Assign) → `CALLING` (调用) → `EXTRACTING` (Extract) → `VERIFYING` (Assertion) → `TEARDOWN`，由状态机驱动。
 - **层级执行上下文**：`Framework → Suite → Scenario → Step`，每次 `Engine.run()` 独立创建、互不污染。
 - **完整的扩展点**：自定义 `StrategyExecutor` / `Reporter` / `Authenticator`；通过 `PluginLoader` 流水线以插件形式接入。
 - **Event + Hook 双总线**：Event 通知型，Hook 介入型可中断 / 改写 payload；均支持 `plugin_name` 精确热卸载。

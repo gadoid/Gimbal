@@ -105,7 +105,7 @@ Scenario (场景)
 ├── resource (资源)
 └── steps: list[StepUnion]  # StepUnion = Step（单成员别名）
     └── Step
-        ├── api: ApiUnion                  # ApiUnion = Api
+        ├── call: Call                      # 协议中立调用(protocol + 协议自有字段)
         ├── request: RequestUnion          # RequestUnion = Request
         └── strategy: list[StrategyUnion]  # Extract | Assign | Assertion
 
@@ -185,7 +185,7 @@ TEARDOWN                                 # 执行清理策略
 - `StrategyUnion` = `Extract` | `Assign` | `Assertion`（discriminated union）
 - `ResourceUnion` = `Mock` | `File`（discriminated union）
 - `RunUnion` = `Scenario` | `Suite`（**外层**，CLI 入口直接接受这两种）
-- `StepUnion` / `ApiUnion` / `RequestUnion` / `SetupUnion` / `TeardownUnion` 现为单成员别名（历史上的 `*Ref` 引用分支已随资产引用机制移除）
+- `StepUnion` / `RequestUnion` / `SetupUnion` / `TeardownUnion` 现为单成员别名（历史上的 `*Ref` 引用分支已随资产引用机制移除；`ApiUnion` 已随 api→call 清理删除）
 
 所有 union 成员都通过 `kind` 字段（`"step"` / `"extract"` / `"mock"` / `"scenario"` 等）被 Pydantic 自动分发到对应子类。
 
