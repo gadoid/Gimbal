@@ -86,13 +86,13 @@ def test_body_template_substitutes_sb_username():
         "steps": [{
             "method": "POST", "path": "/api/auth/register", "auth": False,
             "body": {"username": "${sb.username}", "display_name": "sb bootstrap",
-                     "password": "Sb-Test-12345"},
+                     "password": "Pw-12345678"},
             "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}],
         }],
     }
-    d = build_definition(case, sb_username="sb-t-a1b2c3")
+    d = build_definition(case, sb_username="sb_t_a1b2c3")
     body = d["steps"][0]["request"]["body"]
-    assert body["username"] == "sb-t-a1b2c3"
+    assert body["username"] == "sb_t_a1b2c3"
     assert "${" not in str(body)
 
 
@@ -136,3 +136,37 @@ def test_run_token_keeps_scenario_id_regex_safe():
 
     d = build_definition(GOLDEN, sb_username="u", run_token="../../etc")
     assert re.match(r"^sc-[a-z0-9-]+$", d["scenarioId"]), d["scenarioId"]
+
+
+def test_new_username_is_distinct_from_the_bootstrap_account():
+    """黄金链路 T2 要验 register 端点，但它注册的是编排器自己刚建好的那个
+    账号 —— 同名第二次跑必 409。必须另给一个每轮唯一的新用户名。"""
+    d = build_definition(
+        {"id": "T2", "name": "注册", "steps": [
+            {"method": "POST", "path": "/api/auth/register", "auth": False,
+             "body": {"username": "${sb.new_username}", "password": "${sb.password}"},
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 201}]}]},
+        sb_username="sb_boot", sb_password="Pw-123456", run_token="a1b2c3",
+    )
+    body = d["steps"][0]["request"]["body"]
+    assert body["username"] != "sb_boot"
+    assert body["username"] == "sb_a1b2c3", body["username"]
+    assert body["password"] == "Pw-123456"
+    assert "${" not in str(body)
+
+
+def test_new_username_satisfies_platform_username_pattern():
+    """平台 RegisterIn.username = ^[A-Za-z0-9_]+$，不含连字符。"""
+    import re
+
+    d = build_definition(
+        {"id": "T2", "name": "注册", "steps": [
+            {"method": "POST", "path": "/api/auth/register", "auth": False,
+             "body": {"username": "${sb.new_username}"},
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 201}]}]},
+        sb_username="sb_boot", sb_password="Pw-123456", run_token="A1B2-C3/../D",
+    )
+    u = d["steps"][0]["request"]["body"]["username"]
+    assert re.match(r"^[A-Za-z0-9_]+$", u), u

@@ -8,6 +8,7 @@ steps[].api / steps[].request / steps[].strategy。
 from __future__ import annotations
 
 import re
+import uuid
 from typing import Any
 
 SERVICE = "platform-service"
@@ -19,6 +20,12 @@ SCENARIO_ID_RE = re.compile(r"^sc-[a-z0-9-]+$")
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9-]+", "-", text.lower()).strip("-")
+
+
+def _username_slug(text: str) -> str:
+    """平台 RegisterIn.username = ^[A-Za-z0-9_]+$ —— 比 _slug 还窄：
+    连字符和点都不收。"""
+    return re.sub(r"[^A-Za-z0-9_]+", "", text)
 
 
 def _render(value: Any, subs: dict[str, str]) -> Any:
@@ -33,14 +40,23 @@ def _render(value: Any, subs: dict[str, str]) -> Any:
     return value
 
 
-def build_definition(case: dict, *, sb_username: str, run_token: str = "") -> dict:
+def build_definition(
+    case: dict, *, sb_username: str, sb_password: str = "", run_token: str = ""
+) -> dict:
     base = _slug(case["id"])
     token = _slug(run_token)
     scenario_id = f"sc-{base}-{token}" if token else f"sc-{base}"
     if not SCENARIO_ID_RE.match(scenario_id):
         raise ValueError(f"scenario_id 不合规: {scenario_id!r}")
 
-    subs = {"sb.username": sb_username, "sb.scenario_id": scenario_id}
+    subs = {
+        "sb.username": sb_username,
+        "sb.scenario_id": scenario_id,
+        "sb.password": sb_password,
+        # 用来再注册一个全新账号（验 register 端点本身）。不能复用
+        # sb.username —— 那是编排器已经建好并提权过的那个，同名必 409。
+        "sb.new_username": "sb_" + _username_slug(token or uuid.uuid4().hex[:6]),
+    }
 
     steps: list[dict[str, Any]] = []
     for step in case["steps"]:

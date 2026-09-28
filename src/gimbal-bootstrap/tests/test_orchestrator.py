@@ -116,8 +116,7 @@ def test_existing_account_from_env_is_reused_without_registering(monkeypatch):
     from gimbal_bootstrap import orchestrator
 
     monkeypatch.setenv("GIMBAL_SB_USERNAME", "sb-existing")
-    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Sb-Test-12345")
-    monkeypatch.setattr(orchestrator, "PASSWORD", "Sb-Test-12345", raising=False)
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Pw-12345678")
 
     seen: list[tuple[str, str, object]] = []
 
@@ -137,7 +136,7 @@ def test_existing_account_from_env_is_reused_without_registering(monkeypatch):
 
     monkeypatch.setattr("builtins.input", boom)
 
-    client, username = orchestrator._bootstrap_account(pause=True)
+    client, username, _pw = orchestrator._bootstrap_account(pause=True)
     assert username == "sb-existing"
     assert client.token == "tok-1", "登录拿到的 token 必须挂到 client 上"
     assert [p for _, p, _ in seen if p == "/api/auth/register"] == []
@@ -162,6 +161,65 @@ def test_without_env_it_registers_a_fresh_random_account(monkeypatch):
     monkeypatch.setattr(orchestrator, "Platform", Recording)
     monkeypatch.setattr("builtins.input", lambda: "")
 
-    _, username = orchestrator._bootstrap_account(pause=True)
+    _, username, _pw = orchestrator._bootstrap_account(pause=True)
     assert "/api/auth/register" in posts
-    assert username.startswith("sb-") and len(username) == 13, username
+    assert username.startswith("sb_") and len(username) == 13, username
+
+
+def test_generated_username_satisfies_the_platform_pattern(monkeypatch):
+    """平台 `app/schemas/auth.py` 的 RegisterIn.username 是 `^[A-Za-z0-9_]+$` ——
+    **不含连字符**。编排器生成的账号名必须过得了这一关，否则一启动就 422。"""
+    import re
+
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    usernames: list[str] = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            pass
+
+        def post(self, path, body=None):
+            if path == "/api/auth/register":
+                usernames.append(body["username"])
+            return 200, {"access_token": "tok-3"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+
+    orchestrator._bootstrap_account(pause=True)
+    assert usernames, "根本没调注册"
+    assert re.match(r"^[A-Za-z0-9_]+$", usernames[0]), usernames[0]
+
+
+def test_password_is_generated_not_hardcoded(monkeypatch):
+    """管理员提权之后，硬编码在源码里的密码等于一个登进平台的活凭据。
+    密码必须每次注册时随机生成，只在注册那一刻打印一次。"""
+    import re
+    import secrets
+
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    seen: list[str] = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            pass
+
+        def post(self, path, body=None):
+            if path == "/api/auth/register":
+                seen.append(body["password"])
+            return 200, {"access_token": "tok-4"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+
+    orchestrator._bootstrap_account(pause=True)
+    assert seen, "没调注册"
+    # 平台 RegisterIn 要求：>=8 位，且同时含字母和数字
+    assert len(seen[0]) >= 8 and re.search(r"[A-Za-z]", seen[0]) and re.search(r"\d", seen[0])
+    # 源码里不得再留一个固定口令
+    assert orchestrator.PASSWORD == "", "PASSWORD 不该是硬编码常量"

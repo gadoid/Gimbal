@@ -22,12 +22,12 @@ cases:
         path: /api/auth/register
         auth: false
         body:
-          username: "${sb.username}"
+          username: "${sb.new_username}"
           display_name: gimbal-bootstrap
-          password: Sb-Test-12345
+          password: "${sb.password}"
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 201}
-          - {target: "$.call.response.body.user.username", operator: eq, expected: "${sb.username}"}
+          - {target: "$.call.response.body.user.username", operator: eq, expected: "${sb.new_username}"}
           - {target: "$.call.response.body.token_type", operator: eq, expected: bearer}
 
   - id: T3
@@ -38,8 +38,8 @@ cases:
         path: /api/auth/login
         auth: false
         body:
-          username: "${sb.username}"
-          password: Sb-Test-12345
+          username: "${sb.new_username}"
+          password: "${sb.password}"
         extract: {expr: "$.call.response.body.access_token", target: sb_access_token}
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}

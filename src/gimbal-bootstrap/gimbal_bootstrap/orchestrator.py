@@ -19,10 +19,18 @@ from gimbal_bootstrap.case_builder import build_definition
 from gimbal_bootstrap.platform_client import Platform, PlatformError
 
 BASE_URL = "http://127.0.0.1:8000"
-PASSWORD = "Sb-Test-12345"
+# 没有默认口令：自举账号会被提成管理员，源码里躺着一个固定口令等于把平台
+# 交出去了。口令每次注册时随机生成，只在注册那一刻打印一次；之后复用靠
+# GIMBAL_SB_PASSWORD。
+PASSWORD = ""
 RUN_POLL_INTERVAL_SEC = 2.0
 RUN_TIMEOUT_SEC = 180.0
 TERMINAL_STATES = {"done", "failed", "canceled"}
+
+
+def _generate_password() -> str:
+    """平台 RegisterIn 要求：>=8 位，且同时含字母和数字。"""
+    return f"Sb{uuid.uuid4().hex[:10]}x9"
 
 
 def load_cases(path: Path) -> list[dict]:
@@ -30,14 +38,14 @@ def load_cases(path: Path) -> list[dict]:
     return doc["cases"]
 
 
-def _login(username: str, password: str = PASSWORD) -> Platform:
+def _login(username: str, password: str) -> Platform:
     _, body = Platform(BASE_URL).post(
         "/api/auth/login", {"username": username, "password": password}
     )
     return Platform(BASE_URL, body["access_token"])
 
 
-def _bootstrap_account(pause: bool = True) -> tuple[Platform, str]:
+def _bootstrap_account(pause: bool = True) -> tuple[Platform, str, str]:
     """拿一个可用的自举账号（admin），优先复用环境变量里已提权的那个。
 
     新注册用户一律是 member（`app/routers/auth.py` 的 register 只在库里
@@ -48,28 +56,33 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str]:
     """
     existing = os.environ.get("GIMBAL_SB_USERNAME", "").strip()
     if existing:
-        return _login(existing, os.environ.get("GIMBAL_SB_PASSWORD") or PASSWORD), existing
+        password = os.environ.get("GIMBAL_SB_PASSWORD", "").strip()
+        if not password:
+            raise SystemExit("设了 GIMBAL_SB_USERNAME 就必须一起设 GIMBAL_SB_PASSWORD")
+        return _login(existing, password), existing, password
 
-    username = f"sb-{uuid.uuid4().hex[:10]}"
+    # 平台 app/schemas/auth.py 的 RegisterIn.username 是 `^[A-Za-z0-9_]+$` ——
+    # 不含连字符。用 `sb_` 前缀，别用 `sb-`。
+    username = f"sb_{uuid.uuid4().hex[:10]}"
+    password = _generate_password()
     Platform(BASE_URL).post(
         "/api/auth/register",
-        {"username": username, "display_name": "gimbal-bootstrap", "password": PASSWORD},
+        {"username": username, "display_name": "gimbal-bootstrap", "password": password},
     )
 
     if pause:
         print()
         print("=" * 60)
         print(f"  自举账号已注册：{username}")
-        print(f"  密码：{PASSWORD}")
         print("  请到平台把该账号的权限改为管理员，改完回车继续。")
         print("=" * 60)
-        print("  提权后可以 export GIMBAL_SB_USERNAME=%s GIMBAL_SB_PASSWORD=%s"
-              % (username, PASSWORD))
-        print("  之后重跑就不用再注册了。")
+        print("  提权后把下面两行存进环境变量，之后重跑就不用再注册：")
+        print(f"    export GIMBAL_SB_USERNAME={username}")
+        print(f"    export GIMBAL_SB_PASSWORD={password}")
         print("=" * 60)
         input()
 
-    return _login(username), username
+    return _login(username, password), username, password
 
 
 def _cleanup(
@@ -123,10 +136,11 @@ def _poll(client: Platform, execution_id: Any, result: dict) -> None:
     result["ok"] = result["status"] == "done"
 
 
-def _render(case: dict, sb_username: str, scenario_id: str) -> dict:
+def _render(case: dict, sb_username: str, sb_password: str, scenario_id: str) -> dict:
     """把 ${...} 替成编排期已知的真实值。"""
     subs = {
         "sb.username": sb_username,
+        "sb.password": sb_password,
         "sb.scenario_id": scenario_id,
     }
 
@@ -144,7 +158,14 @@ def _render(case: dict, sb_username: str, scenario_id: str) -> dict:
     return walk(case)
 
 
-def run_case(case: dict, client: Platform, sb_username: str, *, run_token: str = "") -> dict:
+def run_case(
+    case: dict,
+    client: Platform,
+    sb_username: str,
+    *,
+    sb_password: str = "",
+    run_token: str = "",
+) -> dict:
     result: dict[str, Any] = {
         "id": case["id"],
         "name": case.get("name", ""),
@@ -156,9 +177,11 @@ def run_case(case: dict, client: Platform, sb_username: str, *, run_token: str =
     }
     scenario_id = dataset_id = scheme_id = None
     try:
-        definition = build_definition(case, sb_username=sb_username, run_token=run_token)
+        definition = build_definition(
+            case, sb_username=sb_username, sb_password=sb_password, run_token=run_token
+        )
         scenario_id = _new_scenario(client, definition)
-        rendered = _render(case, sb_username, scenario_id)
+        rendered = _render(case, sb_username, sb_password, scenario_id)
 
         for step in rendered["steps"]:
             path, method = step["path"], step["method"]
@@ -202,7 +225,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    client, sb_username = _bootstrap_account(pause=not args.no_pause)
+    client, sb_username, sb_password = _bootstrap_account(pause=not args.no_pause)
     print(f"自举账号: {sb_username}")
 
     cases: list[dict] = []
@@ -211,7 +234,10 @@ def main() -> int:
     print(f"共 {len(cases)} 条用例\n")
 
     run_token = uuid.uuid4().hex[:6]
-    results = [run_case(c, client, sb_username, run_token=run_token) for c in cases]
+    results = [
+        run_case(c, client, sb_username, sb_password=sb_password, run_token=run_token)
+        for c in cases
+    ]
     for r in results:
         mark = "OK " if not r["error"] and not r["failed"] and r.get("ok", True) else "FAIL"
         print(f"[{mark}] {r['id']:5} {r['name']}"
