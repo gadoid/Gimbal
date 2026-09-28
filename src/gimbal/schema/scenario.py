@@ -70,6 +70,46 @@ class UnitDecl(BaseModel):
 
 from .plan import PlanPolicy as PlanPolicyRef  # noqa: E402 — SuiteGraph 前置
 
+class NamedParams(BaseModel):
+    """ N1:具名参数块（metrics/plugins 声明共享形态）。"""
+    name : str = Field(..., description="度量/插件名（注册表键）")
+    params : dict[str, Any] = Field(default_factory=dict, description="参数（按注册表的 params 模型校验）")
+
+
+class CheckSelector(BaseModel):
+    """ N1:横切断言的选择器（D6 语义）。
+
+    - ``refs``：精确单元 ref 列表（空 = 全部主体单元）
+    - ``bracket``：限定括号（before/after/main；缺省 = main 主体）
+    - ``tags``：按 scenario.meta.tags 命中（与 refs 并集）
+    """
+    refs : list[str] = Field(default_factory=list, description="命中的单元 ref")
+    bracket : Optional[Literal["before", "after", "main"]] = Field(
+        default=None, description="限定括号段；None=main 主体")
+    tags : list[str] = Field(default_factory=list, description="按 meta.tags 命中")
+
+
+class CheckDecl(BaseModel):
+    """ N1:横切断言声明 —— 命中单元在编译期追加这条策略到其策略列表尾。"""
+    on : CheckSelector = Field(default_factory=CheckSelector, description="选择器")
+    strategy : dict[str, Any] = Field(..., description="断言策略（StrategyUnion dict 形态）")
+
+
+class GateDecl(BaseModel):
+    """ N1:判定门 —— suite 判定阶段按聚合度量做整体通过/失败。
+
+    ``metric`` 取值（本批词表）: pass_rate(0-1) / fail_count / total /
+    avg_duration_ms / max_duration_ms;``op`` ∈ eq/ne/gt/gte/lt/lte。
+    全部 gates 求与（任一失败 → suite 判定失败）。
+    """
+    metric : Literal["pass_rate", "fail_count", "total",
+                     "avg_duration_ms", "max_duration_ms"] = Field(
+        ..., description="聚合度量名")
+    op : Literal["eq", "ne", "gt", "gte", "lt", "lte"] = Field(
+        default="gte", description="比较算子")
+    value : float = Field(..., description="阈值")
+
+
 class SuiteGraph(BaseModel):
     """ 编排套件（v2 §2 desugar 源形态；kind=graph，v2.1 F-2b 起唯一 suite 形态）。 """
     kind : Literal["graph"] = "graph"
@@ -81,6 +121,14 @@ class SuiteGraph(BaseModel):
     policy : Optional[PlanPolicyRef] = None
     # P1-04：声明式订阅（同 CLI --subscribe 写法；编译透传到 Plan.subscribe）
     subscribe : Optional[list[dict]] = Field(default=None, description="声明式订阅规格（P1-04）")
+    # ── N1（D-6 拍板保留,2026-09-29）：suite 横切面（定稿 D6）─────
+    # checks：按选择器横切注入断言（编译期展开到命中单元的策略列表尾）
+    checks : list[CheckDecl] = Field(default_factory=list, description="横切断言（N1/D6）")
+    # gates：suite 判定门（判定阶段按聚合度量决定整体通过/失败）
+    gates : list[GateDecl] = Field(default_factory=list, description="判定门（N1/D6）")
+    # metrics / plugins：suite 级度量与插件声明（激活期消费）
+    metrics : list[NamedParams] = Field(default_factory=list, description="度量收集声明（N1/D6）")
+    plugins : list[NamedParams] = Field(default_factory=list, description="suite 级插件声明（N1/D6）")
 
 RunUnion = Annotated[
     Union[Scenario,SuiteGraph],

@@ -126,6 +126,10 @@ class Plan(BaseModel):
     # 编译期校验见 events/subscribe.compile_subscribe）
     subscribe: Optional[list[dict[str, Any]]] = Field(
         default=None, description="声明式订阅规格（P1-04；CLI --subscribe 同款写法）")
+    # N1（D-6 保留）：suite 判定门透传（Engine 判定阶段消费;checks 在编译期
+    # 已展开进单元策略,不再随 Plan 携带）
+    gates: Optional[list[Any]] = Field(
+        default=None, description="suite 判定门（N1/D6;None=无门")
 
     @property
     def all_units_in_order(self) -> list[Unit]:

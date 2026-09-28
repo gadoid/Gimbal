@@ -191,6 +191,91 @@ class Engine:
             attached_subscribe.detach()
         return result
 
+    def _emit_suite_start(self, plan: Any, suite_ctx: FrameworkContext) -> None:
+        """N2/S4(2026-09-29 复活):suite.start 发布 —— reporter/插件感知边界。"""
+        bus = self._ictx.event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import SuiteStartEvent
+            bus.publish(SuiteStartEvent(
+                run_id=suite_ctx.run_id, suite_id=suite_ctx.suite_id,
+                suite_name=getattr(plan, "suite_name", ""),
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[Engine] emit SUITE_START failed")
+
+    def _emit_suite_end(self, plan: Any, suite_ctx: FrameworkContext,
+                        result: RunResult) -> None:
+        """N2/S4:suite.end 携带对账终态(gates 之后的判定)。"""
+        bus = self._ictx.event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import SuiteEndEvent
+            status = "passed" if result.exit_code == 0 else "failed"
+            bus.publish(SuiteEndEvent(
+                run_id=suite_ctx.run_id, suite_id=suite_ctx.suite_id,
+                status=status,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[Engine] emit SUITE_END failed")
+
+    def _apply_gates(self, plan: Any, result: RunResult,
+                     suite_ctx: FrameworkContext) -> None:
+        """N1(D-6 保留):suite 判定门 —— 聚合度量求与,失败改写判定。
+
+        度量词表(pass_rate/fail_count/total/avg_duration_ms/max_duration_ms)
+        从对账后的 details/单元行聚合;gate 失败 → exit_code=1 + details
+        追加一行(scenario_id="__gates__",steps 空,gate 明细在 halt_reason)。
+        """
+        gates = getattr(plan, "gates", None)
+        if not gates:
+            return
+        rows = [d for d in result.details if isinstance(d, dict)]
+        units = [d for d in rows if d.get("status") not in
+                 ("cancelled", "blocked")]
+        total = len(units)
+        passed = sum(1 for d in units if d.get("status") == "passed")
+        durations = [float(d.get("duration_ms") or 0.0) for d in units]
+        metrics = {
+            "pass_rate": (passed / total) if total else 0.0,
+            "fail_count": sum(1 for d in units if d.get("status") == "failed"),
+            "total": float(total),
+            "avg_duration_ms": (sum(durations) / len(durations)) if durations else 0.0,
+            "max_duration_ms": max(durations) if durations else 0.0,
+        }
+        ops = {
+            "eq": lambda a, b: a == b, "ne": lambda a, b: a != b,
+            "gt": lambda a, b: a > b, "gte": lambda a, b: a >= b,
+            "lt": lambda a, b: a < b, "lte": lambda a, b: a <= b,
+        }
+        failures = []
+        for i, g in enumerate(gates):
+            # Plan 透传为 dict 形态(graph.gates 模型 dump)
+            metric = g.get("metric") if isinstance(g, dict) else g.metric
+            op = (g.get("op") if isinstance(g, dict) else g.op) or "gte"
+            value = g.get("value") if isinstance(g, dict) else g.value
+            actual = metrics[metric]
+            ok = ops[op](actual, float(value))
+            logger.info("[Engine] gate[{}/{}]: {} {} {} → {} (actual={})",
+                        i, len(gates), metric, op, value,
+                        "PASS" if ok else "FAIL", actual)
+            if not ok:
+                failures.append(
+                    f"gate[{i}] {metric}={actual:.4g} !{op} {value}")
+        if failures:
+            result.exit_code = 1
+            result.details = [*result.details, {
+                "scenario_id": "__gates__",
+                "status": "failed",
+                "duration_ms": 0.0,
+                "halted": False,
+                "halt_reason": "; ".join(failures),
+                "steps": [],
+                "gates": True,
+            }]
+
     def _emit_run_finished(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
         """发布 RunFinishedEvent（带 seq，总线锁内分配）。失败仅记日志。"""
         bus = self._ictx.event_bus
@@ -297,6 +382,7 @@ class Engine:
             plugins={},
         )
         logger.debug("[Engine] SuiteContext 创建完成: suite_id={}", suite_ctx.suite_id)
+        self._emit_suite_start(plan, suite_ctx)
 
         runner = ScenarioRunner(
             framework_ctx.dispatcher,
@@ -324,7 +410,13 @@ class Engine:
         # ── 判定：按计划清单对账（blocked / cancelled 由 outcome 呈现）──
         # 残留 #6：单场景/编排统一走 aggregate 口径（halted/error/failed/blocked
         # 分立,exit_code = 0 iff 全零;隐式 Plan 的 before/after 为空,天然退化）
-        return self._assemble_aggregate(plan, outcome)
+        result = self._assemble_aggregate(plan, outcome)
+        # N1（D-6 保留）：suite 判定门 —— 聚合度量上按 gates 求与,
+        # 失败改写 exit_code 并在 details 追加 gate 行(不重算单元状态)
+        self._apply_gates(plan, result, suite_ctx)
+        # N2/S4：suite 边界事件(终态对账 + gates 之后;reporter 感知 suite 边界)
+        self._emit_suite_end(plan, suite_ctx, result)
+        return result
 
     def _run_unit_inner(self, unit, inputs, cancel, runtime_control, runner, suite_ctx) -> Any:
         """单元执行体（P1-01：exec_context 由 _run_unit 包装设置）。"""

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Union
 
 from gimbal.compiler.analysis import ScenarioAnalysis, analyze_scenario
+from pydantic import TypeAdapter
 from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, unit_policy_from
@@ -586,6 +587,49 @@ class _ExpandedDecls:
 
 
 
+def _apply_cross_checks(graph: "SuiteGraph", before: list, units: list,
+                        after: list) -> None:
+    """N1:graph.checks 按选择器命中单元,把断言策略追加进场景各步骤。
+
+    注入语义（定稿 D6）:命中单元的**每个调用步骤**追加该策略一份;
+    策略以 StrategyUnion dict 形态校验(p_validate 后续会复查),非法
+    即 CompileError（CALL_FIELD_INVALID 同族错误码）。
+    """
+    if not getattr(graph, "checks", None):
+        return
+    from gimbal.schema.strategy import StrategyUnion
+    adapter = TypeAdapter(StrategyUnion)
+    for i, check in enumerate(graph.checks):
+        # 策略形状校验(提前到注入点,报错定位在 check[i])
+        try:
+            adapter.validate_python(check.strategy)
+        except Exception as exc:
+            raise CompileError(
+                f"checks[{i}].strategy 非法: {exc}",
+                code=ErrCode.CALL_FIELD_INVALID,
+                location={"field": f"checks[{i}].strategy"}) from exc
+        for decl in _select_check_targets(check.on, before, units, after):
+            for step in decl.scenario.steps:
+                step.strategy = [*step.strategy, dict(check.strategy)]
+
+
+def _select_check_targets(sel, before: list, units: list, after: list) -> list:
+    """选择器命中:refs 精确 ∪ tags 命中,bracket 限定段(None=main)。"""
+    pool = {"before": before, "main": units, "after": after}
+    bracket = sel.bracket or "main"
+    candidates = pool.get(bracket, units)
+    hits = []
+    for d in candidates:
+        by_ref = sel.refs and d.ref in sel.refs
+        by_tag = bool(sel.tags) and bool(
+            set(getattr(d.scenario.meta, "tags", []) or []) & set(sel.tags))
+        if (sel.refs or sel.tags) and (by_ref or by_tag):
+            hits.append(d)
+        elif not sel.refs and not sel.tags:
+            hits.append(d)   # 双空选择器 = 该段全部
+    return hits
+
+
 def p_desugar(graph: SuiteGraph) -> "_ExpandedDecls":
     """desugar 纯函数：结构校验 + 深拷贝 + repeat 展开 + control 闭包 +
     shared 塌缩，产出三段声明与重映射表（不构造 Unit/Plan）。
@@ -605,6 +649,10 @@ def p_desugar(graph: SuiteGraph) -> "_ExpandedDecls":
     before = [d.model_copy(deep=True) for d in graph.before]
     after = [d.model_copy(deep=True) for d in graph.after]
     units_decl = [d.model_copy(deep=True) for d in graph.units]
+
+    # N1（D-6 保留）：横切 checks 注入 —— 命中单元在深拷贝后的声明上
+    # 追加策略到其场景步骤的策略列表尾（编译期展开,运行期零感知）。
+    _apply_cross_checks(graph, before, units_decl, after)
 
     # repeat 编译期展开（批次 D 三种乘法之一；先于闭包，闭包按变体计算）
     variant_map: dict[str, list[str]] = {}
@@ -785,6 +833,7 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
         implicit=False,
         mode=graph.mode,
         subscribe=getattr(graph, "subscribe", None),
+        gates=[g.model_dump() for g in (getattr(graph, "gates", None) or [])] or None,
     )
     logger.info(
         "[compiler] Graph → Plan: mode={} units={} before={} after={} wiring={}",
