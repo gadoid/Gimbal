@@ -296,3 +296,93 @@ def _fake_result(uid: str):
         halt_reason = None
         step_results = []
     return _R()
+
+
+# ── S-4：七阶段纯函数管线 ────────────────────────────────────
+
+
+class TestSevenStages:
+
+    def test_seven_stages_are_pure_functions(self):
+        from gimbal.compiler import pipeline
+        for name in ("p_load", "p_normalize", "p_patch", "p_desugar",
+                     "p_expand", "p_bind", "p_validate"):
+            assert callable(getattr(pipeline, name, None)), name
+
+    def test_patch_scalar_override(self):
+        """五层合并代数：深合并 + 标量后层覆盖 + list 按 index 覆盖。"""
+        from gimbal.compiler.pipeline import p_patch
+        assert p_patch([{"a": 1, "b": {"c": 2}}, {"b": {"c": 3}}]) == {"a": 1, "b": {"c": 3}}
+        # list 按 index 覆盖;多出保留
+        assert p_patch([{"l": [1, 2, 3]}, {"l": [9]}]) == {"l": [9, 2, 3]}
+        # 后层新增键直接并入
+        assert p_patch([{"a": 1}, {"b": 2}]) == {"a": 1, "b": 2}
+        assert p_patch([]) == {}
+
+    def test_expand_repeat_names(self):
+        from gimbal.compiler.pipeline import p_expand
+        decl = UnitDecl(ref="a", scenario=_make_scenario("a"))
+        decl2 = UnitDecl(ref="b", scenario=_make_scenario("b"), needs=["a"], repeat=1)
+        out = p_expand([decl.model_copy(update={"repeat": 3}), decl2])
+        assert [d.ref for d in out] == ["a#1", "a#2", "a#3", "b"]
+        assert out[-1].needs == ["a#1", "a#2", "a#3"]   # fan-in 全变体
+
+    def test_expand_cap_rejects_explosion(self):
+        from gimbal.compiler.pipeline import CompileError, p_expand
+        decls = [UnitDecl(ref=f"u{i}", scenario=_make_scenario(f"u{i}"), repeat=64)
+                 for i in range(65)]   # 65×64 = 4160 > 4096
+        with pytest.raises(CompileError, match="上限"):
+            p_expand(decls)
+
+    def test_validate_detects_cycle(self):
+        """bind 期抛错之外的独立防线：直接构造带环 Plan 复查。"""
+        from gimbal.compiler.pipeline import p_validate
+        from gimbal.schema.plan import Plan, PlanPolicy, Unit
+
+        def _u(uid, needs):
+            return Unit(id=uid, scenario=_make_scenario(uid), needs=needs)
+
+        plan = Plan(units=[_u("a", ["b"]), _u("b", ["a"])], policy=PlanPolicy(),
+                    mode="compose")
+        errs = p_validate(plan)
+        assert any("循环" in e for e in errs)
+
+    def test_validate_flags_bad_wiring_and_dup_ids(self):
+        """schema 层已拦重复 id；此处用 model_construct 构造病态 Plan，
+        验证 p_validate 作为独立防线（编程构造路径）仍然生效。"""
+        from gimbal.compiler.pipeline import p_validate
+        from gimbal.schema.plan import Plan, PlanPolicy, Unit
+
+        u1 = Unit(id="a", scenario=_make_scenario("a"))
+        u1_dup = Unit(id="a", scenario=_make_scenario("a2"))
+        plan = Plan.model_construct(
+            units=[u1, Unit(id="b", scenario=_make_scenario("b"))],
+            before=[u1_dup], policy=PlanPolicy(), mode="compose",
+            wiring={"ghost": {"x": "nope:y"}}, after=[],
+            wiring_ok=None, after_optional=set(),
+        )
+        errs = p_validate(plan)
+        assert any("重复" in e for e in errs)
+        assert any("wiring" in e for e in errs)
+
+    def test_compile_plan_from_raw_dict(self):
+        """compile_plan：raw dict → 七阶段编排 → Plan（含 validate 复查）。"""
+        from gimbal.compiler.pipeline import compile_plan
+        raw = {
+            "kind": "graph", "mode": "aggregate",
+            "units": [{"ref": "u1", "scenario": {
+                "kind": "scenario", "scenarioId": "u1",
+                "meta": {"name": "n", "description": "d", "module": "m",
+                         "priority": 1, "author": "a", "owner": "o", "tags": [],
+                         "version": "1", "createTime": "2026-09-28T00:00:00Z",
+                         "expire": False, "requirementRef": []},
+                "config": {}, "resource": {}, "steps": [],
+            }}],
+        }
+        plan = compile_plan(raw)
+        assert plan.mode == "aggregate" and plan.units[0].id == "u1"
+
+    def test_compile_plan_rejects_unknown_kind(self):
+        from gimbal.compiler.pipeline import CompileError, p_load
+        with pytest.raises(CompileError, match="kind"):
+            p_load({"kind": "nope"})

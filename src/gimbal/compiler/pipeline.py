@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Union
 
 from gimbal.compiler.analysis import ScenarioAnalysis, analyze_scenario
@@ -26,7 +27,9 @@ from gimbal.schema.scenario import Control, Scenario, SuiteGraph, UnitDecl
 
 logger = get_logger(__name__)
 
-__all__ = ["CompileError", "compile_target", "validate_plan", "analyze_scenario"]
+__all__ = ["CompileError", "compile_target", "compile_plan", "validate_plan",
+           "analyze_scenario", "p_load", "p_normalize", "p_patch", "p_desugar",
+           "p_expand", "p_bind", "p_validate"]
 
 
 # ── 入口 ─────────────────────────────────────────────────────
@@ -126,6 +129,92 @@ def _implicit_plan(scenario: Scenario) -> Plan:
     return plan
 
 
+# ── 七阶段公共入口（S-4：load / normalize / patch + compile_plan）──
+
+
+def p_load(raw: dict) -> Union[Scenario, SuiteGraph]:
+    """七阶段之一 load：raw dict → Scenario / SuiteGraph（kind 判别）。
+
+    纯函数：只做模型校验，无 I/O；文件读取由 CLI 层完成。
+    """
+    kind = raw.get("kind")
+    if kind == "scenario":
+        return Scenario.model_validate(raw)
+    if kind == "graph":
+        return SuiteGraph.model_validate(raw)
+    raise CompileError(
+        f"无法识别的目标 kind: {kind!r}（合法: scenario / graph）"
+    )
+
+
+def p_normalize(target: Union[Scenario, SuiteGraph],
+                protocols: "Any | None" = None) -> Union[Scenario, SuiteGraph]:
+    """七阶段之二 normalize：不变量校验（协议字段 / 结构不变量）。
+
+    api→call 归一化在 Step 校验期（schema/step.py）完成、setup/teardown
+    展开在 LifecycleEntry（批次 B/P1-12）；本阶段收口协议自有字段的
+    合法性（S-1 编译期校验）。返回原 target（校验不通过抛 CompileError）。
+    """
+    _validate_call_fields(target, protocols)
+    return target
+
+
+def p_patch(layers: list[dict]) -> dict:
+    """七阶段之三 patch：五层合并代数（源 → suite 补丁 → 单元补丁 →
+    调用参数 → 生效副本；标量后层覆盖前层）。
+
+    规则（纯函数）：
+      - dict 深合并（后层的键覆盖同名键，嵌套 dict 递归合并）；
+      - 标量（含 str）后层覆盖；
+      - list 按 index 覆盖（后层 list[i] 覆盖前层 list[i]；多出的保留，
+        缺短的以前层补齐）。
+    """
+    if not layers:
+        return {}
+
+    def merge(base: dict, override: dict) -> dict:
+        out = dict(base)
+        for k, v in override.items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = merge(out[k], v)
+            elif isinstance(v, list) and isinstance(out.get(k), list):
+                merged = list(out[k])
+                for i, item in enumerate(v):
+                    if i < len(merged):
+                        if isinstance(item, dict) and isinstance(merged[i], dict):
+                            merged[i] = merge(merged[i], item)
+                        else:
+                            merged[i] = item
+                    else:
+                        merged.append(item)
+                out[k] = merged
+            else:
+                out[k] = v
+        return out
+
+    result: dict = {}
+    for layer in layers:
+        result = merge(result, layer or {})
+    return result
+
+
+def compile_plan(raw: Union[dict, Scenario, SuiteGraph],
+                 protocols: "Any | None" = None) -> Plan:
+    """七阶段编排：load → normalize → patch → desugar → expand → bind → validate。
+
+    raw 为 dict 时经 p_load 解析；已校验的模型直入 normalize。
+    （patch 阶段的五层叠加在 schema 补丁层落地前为恒等——合并代数经
+    p_patch 单测钉死，供调用参数/编排补丁接线。）
+    """
+    target = p_load(raw) if isinstance(raw, dict) else raw
+    p_normalize(target, protocols)
+    plan = compile_target(target, protocols)
+    errors = p_validate(plan)
+    if errors:
+        raise CompileError("; ".join(errors))
+    return plan
+
+
 # ── 批次 C：编排套件（SuiteGraph）───────────────────────────
 
 def _check_refs_unique(decls_by_bracket: dict[str, list[UnitDecl]]) -> None:
@@ -175,12 +264,18 @@ def _control_closure(units: list[UnitDecl], control: Control | None,
     return kept
 
 
-def _expand_repeat(decls: list[UnitDecl]) -> list[UnitDecl]:
-    """repeat 编译期展开：ref（repeat=N）→ ref#1..ref#N。
+# 七阶段之五：expand —— repeat 编译期展开（S-4 抽出为纯函数 + 上限闸）
+_MAX_EXPANDED_UNITS = 4096
+
+
+def p_expand(decls: list[UnitDecl]) -> list[UnitDecl]:
+    """repeat 编译期展开：ref（repeat=N）→ ref#1..ref#N；上限闸 4096 单元。
 
     - 展开后 needs 引用原 ref 的单元 → 依赖其**全部变体**（fan-in）；
       变体间同输出名在 bind 命中多变体时按同名冲突处理（用 map 或引用具体 #k 消歧）。
     - repeat=1 不展开（id 保持 ref，无后缀——与既有行为一致）。
+    - 展开后总量（含未展开单元）超过 4096 → CompileError（计划清单上限闸，
+      防数据集 × repeat × 注入变体的乘法爆炸）。
     """
     expanded_ids: dict[str, list[str]] = {}
     out: list[UnitDecl] = []
@@ -192,6 +287,11 @@ def _expand_repeat(decls: list[UnitDecl]) -> list[UnitDecl]:
         expanded_ids[d.ref] = variants
         for k, vid in enumerate(variants, start=1):
             out.append(d.model_copy(update={"ref": vid, "repeat": 1}))
+    if len(out) > _MAX_EXPANDED_UNITS:
+        raise CompileError(
+            f"expand 展开 后单元数 {len(out)} 超上限 {_MAX_EXPANDED_UNITS}"
+            "（repeat × 变体乘法上限闸）"
+        )
     if expanded_ids:
         for d in out:
             d.needs = [
@@ -200,6 +300,10 @@ def _expand_repeat(decls: list[UnitDecl]) -> list[UnitDecl]:
             ]
         logger.info("[compiler] repeat 展开: {}", expanded_ids)
     return out
+
+
+# _expand_repeat 历史别名（S-4 前调用方；compile 内部一律走 p_expand）
+_expand_repeat = p_expand
 
 
 def _effective_definition(decl: UnitDecl) -> dict:
@@ -304,9 +408,31 @@ def _check_acyclic(needs_map: dict[str, list[str]]) -> None:
 
 
 def _graph_plan(graph: SuiteGraph) -> Plan:
-    """SuiteGraph → Plan：control → shared 塌缩 → desugar（mode 表）→ bind。"""
-    from gimbal.suite.modes import build_default_mode_registry
+    """SuiteGraph → Plan（S-4 起为七阶段编排壳：desugar → expand → bind）。"""
+    expanded = p_desugar(graph)
+    return p_bind(graph, expanded)
 
+
+# ── 七阶段之四：desugar —— 括号校验 + 模式隐含依赖解析 ─────────
+
+
+@dataclass
+class _ExpandedDecls:
+    """p_desugar 的产物：三段声明（深拷贝、已展开/闭包/塌缩）+ 重映射表。"""
+    before: list[UnitDecl]
+    units: list[UnitDecl]
+    after: list[UnitDecl]
+    remap: dict[str, str]
+
+
+
+def p_desugar(graph: SuiteGraph) -> "_ExpandedDecls":
+    """desugar 纯函数：结构校验 + 深拷贝 + repeat 展开 + control 闭包 +
+    shared 塌缩，产出三段声明与重映射表（不构造 Unit/Plan）。
+
+    模式语义（compose/chain/fanout 的隐含依赖）由 mode 表在 p_bind 阶段
+    查表应用；本阶段产出的是"哪些主体单元参与编排"的闭包结果。
+    """
     _check_refs_unique({"before": graph.before, "units": graph.units, "after": graph.after})
 
     for bracket in ("before", "after"):
@@ -318,13 +444,13 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
     after = [d.model_copy(deep=True) for d in graph.after]
     units_decl = [d.model_copy(deep=True) for d in graph.units]
 
-    # 0. repeat 编译期展开（批次 D 三种乘法之一；先于闭包，闭包按变体计算）
-    units_decl = _expand_repeat(units_decl)
+    # repeat 编译期展开（批次 D 三种乘法之一；先于闭包，闭包按变体计算）
+    units_decl = p_expand(units_decl)
 
-    # 1. control.only 闭包（只作用于主体单元；按模式隐含依赖）
+    # control.only 闭包（只作用于主体单元；按模式隐含依赖）
     units_decl = _control_closure(units_decl, graph.control, graph.mode)
 
-    # 2. shared 塌缩（三段分别塌缩；ref 全局重映射）
+    # shared 塌缩（三段分别塌缩；ref 全局重映射）
     all_remap: dict[str, str] = {}
     collapsed: list[tuple[str, list[UnitDecl]]] = []
     for bracket, decls in (("before", before), ("units", units_decl), ("after", after)):
@@ -338,8 +464,19 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
     after = dict(collapsed)["after"]
     if not units_decl:
         raise CompileError("control.only 闭包后主体单元为空")
+    return _ExpandedDecls(before=before, units=units_decl, after=after, remap=all_remap)
 
-    # 3. desugar：mode 表查表（主体单元按模式填 needs；括号单元无 needs）
+
+# ── 七阶段之六：bind —— mode 表 + 静态分析连线 ───────────────
+
+
+def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
+    """bind 纯函数：mode 表填 needs → 引用校验 → 静态分析连线 → Plan。"""
+    from gimbal.suite.modes import build_default_mode_registry
+
+    before, units_decl, after = expanded.before, expanded.units, expanded.after
+
+    # mode 表查表（主体单元按模式填 needs；括号单元无 needs）
     mode_table = build_default_mode_registry()
     try:
         _, desugar = mode_table.get(graph.mode)
@@ -447,12 +584,51 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
 
 # ── validate ─────────────────────────────────────────────────
 
-def validate_plan(plan: Plan) -> list[str]:
-    """全图校验；返回错误清单（空 = 通过）。"""
-    # 乘法组合语义见 scheduler/plan.py docstring 与 v2.1 实施案批次 D：
-    # repeat(编译期, ref#k) × n_runs(运行期重复) × retry(失败重跑)；
-    # n_runs/retry 的取值域由 UnitPolicy schema（ge 约束）保证。
+def p_validate(plan: Plan) -> list[str]:
+    """七阶段之七 validate：五项独立防线（返回错误清单,空 = 通过）。
+
+    1. mode 合法；2. 依赖无环（bind 期已抛,此处为独立复查）；
+    3. needs 引用存在且无自环；4. unit id 唯一；5. wiring 目标格式合法
+    （unit_id:output 名；引用的 unit 存在）。
+    users 标签存在性属运行期预认证（C7）/dry-run 校验,不在此层。
+    乘法组合语义见 scheduler/plan.py docstring（repeat × n_runs × retry）；
+    n_runs/retry 取值域由 UnitPolicy schema（ge 约束）保证。
+    """
     errors: list[str] = []
+    # 1. mode
     if plan.mode not in ("aggregate", "compose", "fanout", "chain"):
         errors.append(f"未知 mode: {plan.mode!r}")
+    all_units = [*plan.before, *plan.units, *plan.after]
+    # 4. unit id 唯一
+    ids = [u.id for u in all_units]
+    if len(set(ids)) != len(ids):
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        errors.append(f"unit id 重复: {dup}")
+    by_id = {u.id: u for u in all_units}
+    # 3. needs 引用存在 + 无自环
+    for u in plan.units:
+        for n in u.needs:
+            if n == u.id:
+                errors.append(f"单元 {u.id!r} 不能 needs 自己")
+            elif n not in by_id:
+                errors.append(f"单元 {u.id!r} 的 needs 引用了不存在的 ref: {n!r}")
+    # 2. 依赖无环（独立复查；bind 期 _check_acyclic 已保证）
+    needs_map = {u.id: list(u.needs) for u in [*plan.units, *plan.after]}
+    try:
+        _check_acyclic(needs_map)
+    except CompileError as exc:
+        errors.append(f"依赖存在循环: {exc}")
+    # 5. wiring 目标格式与引用
+    for uid, wires in (plan.wiring or {}).items():
+        if uid not in by_id:
+            errors.append(f"wiring 引用了不存在的单元: {uid!r}")
+        for name, target in wires.items():
+            if ":" not in target or target.split(":", 1)[0] not in by_id:
+                errors.append(
+                    f"wiring {uid}.{name} 的目标 {target!r} 非法（应为 unit_id:output）"
+                )
     return errors
+
+
+# 历史入口别名（compile/validate/resolve CLI 用）
+validate_plan = p_validate
