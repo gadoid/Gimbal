@@ -295,44 +295,83 @@ def _merge_keyed_list(base: list, override: list) -> list:
     return out
 
 
-def p_patch(layers: list[dict]) -> dict:
-    """七阶段之三 patch：五层合并代数（源 → suite 补丁 → 单元补丁 →
-    调用参数 → 生效副本；标量后层覆盖前层）。
+def p_patch(layers: list[dict], *,
+            source_names: "list[str] | None" = None,
+            trace: "ValueSourceTrace | None" = None) -> dict:
+    """七阶段之三 patch：五层合并代数（源 → suite 补丁 → 单元补丁
+    → 调用参数 → CLI var；N3/定稿 D8 按 param_registry 登记表分派策略）。
 
-    **挂起项声明（第三轮评审 #3）**：p_patch 当前在运行路径上是恒等变换
-    ——这是**有意的过渡状态**。其消费者是 D-04 五层补丁的 schema 层
-    （suite 补丁 / 调用参数补丁,批次 6 平台 RunScheme 调用参数层）,
-    该 schema 落地前无接线点;不把 vars 合并强接其上（vars 需要"整名
-    覆盖"语义,深合并会部分覆盖 dict 值,语义变坏）。合并代数经单测钉死,
-    schema 就位即接线。
-
-    规则（纯函数,v2 §patch 对齐）：
-      - dict 深合并（后层的键覆盖同名键，嵌套 dict 递归合并）；
-      - 标量（含 str）后层覆盖；
-      - **list 整体替换**——唯一例外是 setup/teardown 生命周期表：
-        按 (kind, key) 身份合并（后层同身份覆盖,新条目追加）。
+    规则（纯函数,合并代数经单测钉死）：
+      - **override**：后层键整名覆盖(vars 的 dict 值整体换,不深合并);
+      - **deep**：dict 递归合并(services/users);
+      - **keyed**：list 按 (kind,key) 身份合并(setup/teardown);
+      - 标量后层覆盖。
+    trace 非 None 时记录每字段的值来源(N3 验收「值来源说明」)。
     """
+    from gimbal.schema.param_registry import (
+        LAYER_ORDER, ParamSource, merge_of,
+    )
     if not layers:
         return {}
+    if source_names is None:
+        source_names = [e.value for e in LAYER_ORDER]
 
-    def merge(base: dict, override: dict) -> dict:
+    def merge_layer(base: dict, override: dict, source: ParamSource,
+                    prefix: str = "",
+                    _trace: "ValueSourceTrace | None" = None) -> dict:
         out = dict(base)
         for k, v in override.items():
-            if isinstance(v, dict) and isinstance(out.get(k), dict):
-                out[k] = merge(out[k], v)
-            elif isinstance(v, list) and isinstance(out.get(k), list):
-                if k in _KEYED_LIST_FIELDS:
-                    out[k] = _merge_keyed_list(out[k], v)
+            old = out.get(k)
+            strategy = merge_of(k)
+            if strategy.value == "override":
+                if isinstance(v, dict) and isinstance(old, dict):
+                    # override = dict 内逐键覆盖(键值整体换,不深合并):
+                    # {**old, **new} 语义 —— vars 用此策略(生成式 spec 的
+                    # dict 值整体替换,未触碰的键保留)
+                    out[k] = {**old, **v}
                 else:
-                    out[k] = list(v)   # 整体替换
+                    out[k] = v
+            elif (strategy.value == "deep" and isinstance(v, dict)
+                  and isinstance(old, dict)):
+                out[k] = merge_layer(old, v, source, f"{prefix}{k}.",
+                                     _trace=_trace)
+            elif (strategy.value == "keyed" and isinstance(v, list)
+                  and isinstance(old, list) and k in _KEYED_LIST_FIELDS):
+                out[k] = _merge_keyed_list(old, v)
             else:
                 out[k] = v
+            if _trace is not None:
+                _trace.note(f"{prefix}{k}", source, old, out[k])
         return out
 
     result: dict = {}
-    for layer in layers:
-        result = merge(result, layer or {})
+    for i, layer in enumerate(layers):
+        src_name = (source_names[i] if i < len(source_names)
+                    else ParamSource.CALL_PARAM.value)
+        source = ParamSource(src_name)
+        # L0(source)是基线不是「改动」—— trace 只记补丁层(L1+)
+        result = merge_layer(result, layer or {}, source,
+                             _trace=trace if i > 0 else None)
     return result
+
+
+def apply_patch_layers(
+    scenario_config: dict,
+    cli_vars: "dict | None" = None,
+    unit_inputs: "dict | None" = None,
+    suite_patch: "dict | None" = None,
+):
+    """N3 运行路径接线:源 config + 各层补丁 → 生效 config + 值来源追踪。"""
+    from gimbal.schema.param_registry import ValueSourceTrace
+
+    trace = ValueSourceTrace()
+    l2 = {"vars": unit_inputs} if unit_inputs else {}
+    l4 = {"vars": cli_vars} if cli_vars else {}
+    effective = p_patch(
+        [scenario_config or {}, suite_patch or {}, l2, {}, l4],
+        trace=trace,
+    )
+    return effective, trace
 
 
 def compile_plan(raw: Union[dict, Scenario, SuiteGraph],
