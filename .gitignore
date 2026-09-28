@@ -26,3 +26,6 @@ collect.err.log
 gimbal-tmp/
 reports/
 *.bak
+
+# 平台后端本机环境配置(P0-04 出库,模板见 .env.example)
+src/gimbal-platform/backend/.env
