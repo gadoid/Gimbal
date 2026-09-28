@@ -19,18 +19,30 @@ from gimbal_bootstrap.case_builder import build_definition
 from gimbal_bootstrap.platform_client import Platform, PlatformError
 
 BASE_URL = "http://127.0.0.1:8000"
-# 没有默认口令：自举账号会被提成管理员，源码里躺着一个固定口令等于把平台
-# 交出去了。口令每次注册时随机生成，只在注册那一刻打印一次；之后复用靠
-# GIMBAL_SB_PASSWORD。
-PASSWORD = ""
+# 自举账号口令不在源码里 —— 用户要登进平台检查，固定口令必须好打，
+# 但账号是管理员，不该把口令提交进仓库。真值放 gitignore 掉的 .env
+# （模板见同目录 .env.example），进程环境变量优先于它。
+DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+
+
+def _resolve_password() -> str:
+    from_env = os.environ.get("GIMBAL_SB_PASSWORD", "").strip()
+    if from_env:
+        return from_env
+    if DOTENV_PATH.is_file():
+        for line in DOTENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("GIMBAL_SB_PASSWORD="):
+                return line.split("=", 1)[1].strip().strip("\"'")
+    raise SystemExit(
+        f"找不到自举账号口令。设 GIMBAL_SB_PASSWORD，或把 {DOTENV_PATH.name} 补上"
+        f"（模板见 .env.example）。"
+    )
+
+
 RUN_POLL_INTERVAL_SEC = 2.0
 RUN_TIMEOUT_SEC = 180.0
 TERMINAL_STATES = {"done", "failed", "canceled"}
-
-
-def _generate_password() -> str:
-    """平台 RegisterIn 要求：>=8 位，且同时含字母和数字。"""
-    return f"Sb{uuid.uuid4().hex[:10]}x9"
 
 
 def load_cases(path: Path) -> list[dict]:
@@ -56,15 +68,13 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str, str]:
     """
     existing = os.environ.get("GIMBAL_SB_USERNAME", "").strip()
     if existing:
-        password = os.environ.get("GIMBAL_SB_PASSWORD", "").strip()
-        if not password:
-            raise SystemExit("设了 GIMBAL_SB_USERNAME 就必须一起设 GIMBAL_SB_PASSWORD")
+        password = _resolve_password()
         return _login(existing, password), existing, password
 
     # 平台 app/schemas/auth.py 的 RegisterIn.username 是 `^[A-Za-z0-9_]+$` ——
     # 不含连字符。用 `sb_` 前缀，别用 `sb-`。
     username = f"sb_{uuid.uuid4().hex[:10]}"
-    password = _generate_password()
+    password = _resolve_password()
     Platform(BASE_URL).post(
         "/api/auth/register",
         {"username": username, "display_name": "gimbal-bootstrap", "password": password},
@@ -76,9 +86,7 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str, str]:
         print(f"  自举账号已注册：{username}")
         print("  请到平台把该账号的权限改为管理员，改完回车继续。")
         print("=" * 60)
-        print("  提权后把下面两行存进环境变量，之后重跑就不用再注册：")
-        print(f"    export GIMBAL_SB_USERNAME={username}")
-        print(f"    export GIMBAL_SB_PASSWORD={password}")
+        print(f"  口令：{password}")
         print("=" * 60)
         input()
 

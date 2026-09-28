@@ -28,13 +28,26 @@ python -m gimbal_bootstrap.orchestrator
 
 编排器会**先注册一个专用账号然后停下来**：新注册用户一律是 `member`，而
 `/api/users/roster` 这类端点要管理员权限。停住之后到平台里把该账号提权为
-管理员，回车继续。账号和密码也可以直接给：
+管理员，回车继续。
+
+账号名是 `sb_<10位十六进制>`。自举账号口令**不入库** —— 账号是管理员，口令
+提交进仓库等于把平台交出去。真值放 gitignore 掉的 `src/gimbal-bootstrap/.env`：
 
 ```bash
-export GIMBAL_SB_USERNAME=sb-xxxx
+cp src/gimbal-bootstrap/.env.example src/gimbal-bootstrap/.env
+# 编辑 .env 填 GIMBAL_SB_PASSWORD
+```
+
+进程环境变量优先于 `.env`：
+
+```bash
+export GIMBAL_SB_USERNAME=sb_xxxx
 export GIMBAL_SB_PASSWORD=...
 python -m gimbal_bootstrap.orchestrator
 ```
+
+设了 `GIMBAL_SB_USERNAME` 就直接复用该账号，既不注册也不暂停 —— 提权好的
+账号存进环境变量，之后每次重跑都省掉这道人工环节。
 
 想跳过暂停（域用例会 403）用 `--no-pause`，只跑黄金链路用
 `--cases cases/golden_path.yaml`。

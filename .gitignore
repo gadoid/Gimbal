@@ -29,3 +29,6 @@ reports/
 
 # 平台后端本机环境配置(P0-04 出库,模板见 .env.example)
 src/gimbal-platform/backend/.env
+
+# 自举编排器的本机自举账号口令(不入库,模板见 .env.example)
+src/gimbal-bootstrap/.env

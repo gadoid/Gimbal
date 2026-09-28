@@ -193,33 +193,64 @@ def test_generated_username_satisfies_the_platform_pattern(monkeypatch):
     assert re.match(r"^[A-Za-z0-9_]+$", usernames[0]), usernames[0]
 
 
-def test_password_is_generated_not_hardcoded(monkeypatch):
-    """管理员提权之后，硬编码在源码里的密码等于一个登进平台的活凭据。
-    密码必须每次注册时随机生成，只在注册那一刻打印一次。"""
+def test_password_defaults_to_a_fixed_value_and_env_wins(monkeypatch):
+    """用户要登进平台检查自举账号，所以默认口令固定；GIMBAL_SB_PASSWORD 仍可覆盖。"""
     import re
-    import secrets
 
     from gimbal_bootstrap import orchestrator
 
-    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
-    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
     seen: list[str] = []
 
-    class Recording:
-        def __init__(self, base_url, token=None):
-            pass
+    def register_with(env: dict | None) -> str:
+        seen.clear()
+        monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+        for k in ("GIMBAL_SB_PASSWORD",):
+            monkeypatch.delenv(k, raising=False)
+        for k, v in (env or {}).items():
+            monkeypatch.setenv(k, v)
 
-        def post(self, path, body=None):
-            if path == "/api/auth/register":
-                seen.append(body["password"])
-            return 200, {"access_token": "tok-4"}
+        class Recording:
+            def __init__(self, base_url, token=None):
+                pass
 
-    monkeypatch.setattr(orchestrator, "Platform", Recording)
-    monkeypatch.setattr("builtins.input", lambda: "")
+            def post(self, path, body=None):
+                if path == "/api/auth/register":
+                    seen.append(body["password"])
+                return 200, {"access_token": "tok-5"}
 
-    orchestrator._bootstrap_account(pause=True)
-    assert seen, "没调注册"
-    # 平台 RegisterIn 要求：>=8 位，且同时含字母和数字
-    assert len(seen[0]) >= 8 and re.search(r"[A-Za-z]", seen[0]) and re.search(r"\d", seen[0])
-    # 源码里不得再留一个固定口令
-    assert orchestrator.PASSWORD == "", "PASSWORD 不该是硬编码常量"
+        monkeypatch.setattr(orchestrator, "Platform", Recording)
+        monkeypatch.setattr("builtins.input", lambda: "")
+        orchestrator._bootstrap_account(pause=True)
+        return seen[0]
+
+    default = register_with(None)
+    # 平台 RegisterIn：>=8 位，且同时含字母和数字
+    assert len(default) >= 8 and re.search(r"[A-Za-z]", default) and re.search(r"\d", default)
+
+    overridden = register_with({"GIMBAL_SB_PASSWORD": "Env-Ovr-9876"})
+    assert overridden == "Env-Ovr-9876"
+    assert overridden != default
+
+
+def test_password_comes_from_local_env_file_not_source(tmp_path, monkeypatch):
+    """固定口令要能登进平台检查，但不该躺在被跟踪的源码里。
+    真值放在 gitignore 掉的 .env；进程环境变量仍然优先。"""
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", tmp_path / ".env")
+    (tmp_path / ".env").write_text("GIMBAL_SB_PASSWORD=from-dotenv-77\n", encoding="utf-8")
+
+    assert orchestrator._resolve_password() == "from-dotenv-77"
+
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "from-process-88")
+    assert orchestrator._resolve_password() == "from-process-88"
+
+
+def test_missing_password_fails_loudly_instead_of_guessing(tmp_path, monkeypatch):
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", tmp_path / ".env")
+    with pytest.raises(SystemExit):
+        orchestrator._resolve_password()
