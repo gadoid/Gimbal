@@ -2,8 +2,8 @@
 
 职责：
   - protocol 名 → ProtocolExecutor 实例的分派（状态机 _do_call 的第一段）；
-  - 与 StrategyDispatcher 联动：注册协议时同步在 dispatcher 登记其 kind，
-    卸载时同步移除 —— 两张表永不失同步；
+  - 与策略表解耦（S-2）：协议不进策略 dispatcher 的 kind 表，
+    状态机 _do_call 经本表直调执行器模板；
   - 按插件名批量注销（插件热卸载路径，与 event/hook 的清理纪律一致）；
   - 线程安全（RLock）：注册集中在 bootstrap 期，运行期只读，
     加锁是为并行 suite 场景下的注册/查询互斥兜底。
@@ -24,14 +24,24 @@ logger = get_logger(__name__)
 
 
 class ProtocolRegistry:
-    """协议执行器注册表（protocol → executor，附带 dispatcher 联动）。"""
+    """协议执行器注册表（protocol → executor + 参数模型 + 设施注入）。"""
 
-    def __init__(self, dispatcher: Any = None) -> None:
-        """dispatcher 可选：给了则注册/注销时同步维护 dispatcher 的 kind 表。"""
+    def __init__(
+        self,
+        *,
+        hook_registry: Any = None,
+        event_bus: Any = None,
+        auth_registry: Any = None,
+    ) -> None:
+        """埋点设施经构造持有，register 时注入各执行器（S-2：不再联动策略表）。"""
         self._executors: dict[str, ProtocolExecutor] = {}
         self._params: dict[str, "type | None"] = {}  # protocol → call 字段模型（S-1）
         self._by_plugin: dict[str, list[str]] = {}   # plugin_name → [protocol, ...]
-        self._dispatcher = dispatcher
+        self._facilities = {
+            "hook_registry": hook_registry,
+            "event_bus": event_bus,
+            "auth_registry": auth_registry,
+        }
         self._lock = threading.RLock()
 
     # ── 注册/注销 ─────────────────────────────────────────────
@@ -43,8 +53,9 @@ class ProtocolRegistry:
         plugin_name: Optional[str] = None,
         params: Optional["type"] = None,
     ) -> None:
-        """注册协议执行器；同名协议后者覆盖前者（升级语义），并同步 dispatcher。
+        """注册协议执行器；同名协议后者覆盖前者（升级语义）。
 
+        注册时把注册表持有的埋点设施注入执行器（bind 只补空位）。
         params 为该协议 call 字段模型（编译期校验 / ext 导出）；缺省回退读
         executor.params_model 类属性。
         """
@@ -53,6 +64,7 @@ class ProtocolRegistry:
                 f"协议执行器必须继承 ProtocolExecutor，得到 {type(executor).__name__}"
             )
         resolved = params or getattr(executor, "params_model", None)
+        executor.bind(**self._facilities)
         with self._lock:
             self._executors[executor.protocol] = executor
             self._params[executor.protocol] = resolved
@@ -60,15 +72,13 @@ class ProtocolRegistry:
                 protos = self._by_plugin.setdefault(plugin_name, [])
                 if executor.protocol not in protos:
                     protos.append(executor.protocol)
-            if self._dispatcher is not None:
-                self._dispatcher.register(executor, params=resolved)
         logger.debug(
             "[ProtocolRegistry] 协议注册: protocol={} executor={} plugin={}",
             executor.protocol, type(executor).__name__, plugin_name,
         )
 
     def unregister(self, protocol: str) -> bool:
-        """按协议名注销；同步移除 dispatcher 的 kind 表。返回是否原本存在。"""
+        """按协议名注销。返回是否原本存在。"""
         with self._lock:
             executor = self._executors.pop(protocol, None)
             self._params.pop(protocol, None)
@@ -77,12 +87,10 @@ class ProtocolRegistry:
             for protos in self._by_plugin.values():
                 if protocol in protos:
                     protos.remove(protocol)
-            if self._dispatcher is not None:
-                self._dispatcher.unregister(executor.kind)
         return True
 
     def unregister_plugin(self, plugin_name: str) -> int:
-        """按插件名注销其注册的全部协议（含 dispatcher 联动）。返回移除数量。"""
+        """按插件名注销其注册的全部协议。返回移除数量。"""
         with self._lock:
             protos = self._by_plugin.pop(plugin_name, [])
             for proto in protos:
@@ -115,10 +123,21 @@ class ProtocolRegistry:
             return protocol in self._executors
 
 
-def build_default_protocol_registry(dispatcher: Any = None) -> ProtocolRegistry:
-    """构造默认注册表：内置 http 协议（HttpProtocolExecutor，第一员）。"""
+def build_default_protocol_registry(
+    *,
+    hook_registry: Any = None,
+    event_bus: Any = None,
+    auth_registry: Any = None,
+) -> ProtocolRegistry:
+    """构造默认注册表：内置 http 协议（HttpProtocolExecutor，第一员）。
+
+    埋点设施经此注入（bootstrap 传入运行配置的三件），执行器注册时
+    统一 bind（S-2）。
+    """
     from gimbal.protocols.builtin.http import HttpCallParams, HttpProtocolExecutor
 
-    registry = ProtocolRegistry(dispatcher=dispatcher)
+    registry = ProtocolRegistry(
+        hook_registry=hook_registry, event_bus=event_bus, auth_registry=auth_registry,
+    )
     registry.register(HttpProtocolExecutor(), params=HttpCallParams)
     return registry

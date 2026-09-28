@@ -38,9 +38,9 @@ logger = get_logger(__name__)
 class _CallSpec:
     """HTTP 调用描述（render 产物）。不属于 schema。
 
-    duck-type StrategyBase 仅为穿过 dispatcher 的统一插装（计时/钩子/软失败）。
-    kind 固定 "_call"（历史兼容：dispatcher 最早的注册键）。
-    埋点设施（协议层钩子/事件 + 运行上下文）经 pctx 内嵌，send 阶段取用。
+    S-2 起不经过策略 dispatcher：计时/异常兜底由 ProtocolExecutor.execute
+    模板承担。kind 保留 "_call" 作结果标签（历史口径）。
+    埋点设施（协议层钩子/事件/认证）经执行器 bind 注入；pctx 只承载逐调数据。
     """
 
     kind: str = "_call"
@@ -132,31 +132,42 @@ class CallExecutor(ProtocolExecutor):
             message=message,
         )
 
-    # ── 原生认证注入（v2.1 批次 F-2b：auth_headers 插件职责并入适配器）──
+    # ── 协议侧认证握手（S-2：login 并入适配器）─────────────────
 
-    def _inject_auth_headers(self, headers: dict, pctx) -> None:
-        """按 ``call.user`` 标签从 AuthRegistry 取会话，注入 token/timestamp 头。
+    def login(self, user: str, pctx: Optional[ProtocolCallContext] = None) -> dict:
+        """http 握手：按标签取会话，签名 token/timestamp 头（S-2）。
 
         契约与退役插件 auth_headers 逐字节一致（特征化用例钉死）：
         token = md5(f"{session.token}{timestamp}").hexdigest()（32-hex，
         随会话 token 变化）；timestamp = str(int(epoch 秒))。
-        无 call.user / 会话缺失 / token 空 → 跳过（不阻断）。
+        无标签 / 会话缺失 / token 空 → 空 dict（调用方跳过注入，不阻断）。
         """
-        user = getattr(getattr(pctx, "call", None), "user", None)
-        registry = getattr(pctx, "auth_registry", None)
+        registry = getattr(self, "_auth_registry", None)
         if not user or registry is None:
-            return
+            return {}
         session = registry.get(str(user))
         token = getattr(session, "token", None)
         if not token:
             logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
-            return
+            return {}
         import hashlib
         import time as _time
         timestamp = int(_time.time())
-        headers["token"] = hashlib.md5(f"{token}{timestamp}".encode("utf-8")).hexdigest()
-        headers["timestamp"] = str(timestamp)
-        logger.debug("[CallExecutor] 已注入认证头: user={} ts={}", user, timestamp)
+        return {
+            "token": hashlib.md5(f"{token}{timestamp}".encode("utf-8")).hexdigest(),
+            "timestamp": str(timestamp),
+        }
+
+    def _inject_auth_headers(self, headers: dict, pctx) -> None:
+        """按 ``call.user`` 标签注入 login() 签名头（http 语义）。"""
+        user = getattr(getattr(pctx, "call", None), "user", None)
+        if not user:
+            return
+        signed = self.login(str(user), pctx)
+        if not signed:
+            return
+        headers.update(signed)
+        logger.debug("[CallExecutor] 已注入认证头: user={} ts={}", user, signed.get("timestamp"))
 
     # ── send：传输 ────────────────────────────────────────────
 
@@ -280,7 +291,7 @@ class CallExecutor(ProtocolExecutor):
 
     def refresh_auth(self, pctx) -> bool:
         user = getattr(getattr(pctx, "call", None), "user", None)
-        registry = getattr(pctx, "auth_registry", None)
+        registry = getattr(self, "_auth_registry", None)
         if not user or registry is None:
             return False
 
@@ -305,27 +316,27 @@ class CallExecutor(ProtocolExecutor):
 
     # ── http 命名空间埋点（payload/事件形状不变）──────────────
 
-    @staticmethod
-    def _emit_http_request(pctx, method: str, url: str, headers: dict, body) -> None:
+    def _emit_http_request(self, pctx, method: str, url: str, headers: dict, body) -> None:
         """向 event_bus 发送 HttpRequestEvent 事件（method、url、request_body、request_headers 浅拷贝）。"""
-        if pctx is None or pctx.event_bus is None:
+        bus = getattr(self, "_bus", None)
+        if bus is None:
             return
         try:
             from gimbal.events.types import HttpRequestEvent
-            pctx.event_bus.publish(HttpRequestEvent(
-                step_id=pctx.step_id,
+            bus.publish(HttpRequestEvent(
+                step_id=getattr(pctx, "step_id", ""),
                 method=method,
                 url=url,
                 request_body=body,
                 request_headers=dict(headers or {}),
             ))
         except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_REQUEST failed", pctx.step_id)
+            logger.debug("[SM {}] emit HTTP_REQUEST failed", getattr(pctx, "step_id", "?"))
 
-    @staticmethod
-    def _emit_http_response(pctx, call_result: CallResult) -> None:
+    def _emit_http_response(self, pctx, call_result: CallResult) -> None:
         """向 event_bus 发送 HttpResponseEvent 事件；数据取自 CallResult。"""
-        if pctx is None or pctx.event_bus is None:
+        bus = getattr(self, "_bus", None)
+        if bus is None:
             return
         try:
             from gimbal.events.types import HttpResponseEvent
@@ -334,8 +345,8 @@ class CallExecutor(ProtocolExecutor):
                 status_code = int(raw_status) if raw_status is not None else 0
             except (ValueError, TypeError):
                 status_code = 0
-            pctx.event_bus.publish(HttpResponseEvent(
-                step_id=pctx.step_id,
+            bus.publish(HttpResponseEvent(
+                step_id=getattr(pctx, "step_id", ""),
                 method=call_result.request.get("method", ""),
                 url=call_result.request.get("url", ""),
                 status_code=status_code,
@@ -343,4 +354,4 @@ class CallExecutor(ProtocolExecutor):
                 response_body=call_result.body,
             ))
         except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_RESPONSE failed", pctx.step_id)
+            logger.debug("[SM {}] emit HTTP_RESPONSE failed", getattr(pctx, "step_id", "?"))

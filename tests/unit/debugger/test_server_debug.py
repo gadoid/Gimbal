@@ -42,7 +42,7 @@ def client(monkeypatch):
     _capture_orig()
     monkeypatch.setattr(
         _preg, "build_default_protocol_registry",
-        lambda dispatcher=None: _registry_with_echo(dispatcher),
+        lambda **kw: _registry_with_echo(**kw),
     )
     app = create_app(CLIContext())
     return fastapi_testclient.TestClient(app)
@@ -51,9 +51,9 @@ def client(monkeypatch):
 _ORIG_BUILD = None
 
 
-def _registry_with_echo(dispatcher=None):
+def _registry_with_echo(**kw):
     from debugger.test_batch_e import ProgEcho
-    reg = _ORIG_BUILD(dispatcher)
+    reg = _ORIG_BUILD(**kw)
     if "echo" not in reg:
         reg.register(ProgEcho())
     return reg

@@ -98,7 +98,8 @@ class _StubView:
 
 
 def _make_sm(step: Step, hooks: HookRegistry = None, bus: InMemoryEventBus = None):
-    dispatcher = build_default_dispatcher(hook_registry=hooks)
+    # S-2：埋点设施（hooks/bus）经注册表注入执行器，不经 pctx 塞传
+    dispatcher = build_default_dispatcher(hook_registry=hooks, event_bus=bus)
     dispatcher.protocols.register(EchoProtocolExecutor())
     return StepStateMachine(
         step_id="step-000",

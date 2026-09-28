@@ -97,7 +97,9 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     plugin_registry = PluginRegistry()
     auth_registry = AuthRegistry()
     ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
-    dispatcher = build_default_dispatcher(hook_registry=hook_registry)
+    dispatcher = build_default_dispatcher(
+        hook_registry=hook_registry, event_bus=event_bus, auth_registry=auth_registry,
+    )
 
     logger.info(
         "[bootstrap] 基础设施初始化完成: EventBus, Archive, ContextManager, "

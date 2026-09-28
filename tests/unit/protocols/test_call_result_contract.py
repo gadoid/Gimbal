@@ -259,7 +259,7 @@ class TestRedactionAndEvidence:
                     headers={"Authorization": "Bearer secret-token", "X-Ok": "1"}),
             request=Request(body={}), strategy=[],
         )
-        dispatcher = build_default_dispatcher(hook_registry=HookRegistry())
+        dispatcher = build_default_dispatcher(hook_registry=HookRegistry(), event_bus=bus)
         view = _StubView()
         sm = StepStateMachine(
             step_id="s", step_schema=step, dispatcher=dispatcher, view=view,
@@ -364,7 +364,7 @@ class TestScratchRawVsEvidence:
                           operator=AssertOperator.EQ, expected="abc123"),
             ],
         )
-        dispatcher = build_default_dispatcher(hook_registry=HookRegistry())
+        dispatcher = build_default_dispatcher(hook_registry=HookRegistry(), event_bus=bus)
         dispatcher.protocols.register(TokenEchoExecutor())
         view = _StubView()
         sm = StepStateMachine(

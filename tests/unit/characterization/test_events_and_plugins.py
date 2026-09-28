@@ -37,10 +37,13 @@ def make_engine(auth_session=None):
     bus = InMemoryEventBus()
     archive = InMemoryArchive()
     hooks = HookRegistry()
-    dispatcher = build_default_dispatcher(hook_registry=hooks)
+    auth_registry = AuthRegistry()
+    # S-2：埋点设施（bus/auth）经注册表注入协议执行器，顺序先行构造
+    dispatcher = build_default_dispatcher(
+        hook_registry=hooks, event_bus=bus, auth_registry=auth_registry,
+    )
     ctx_manager = ContextManager(archive=archive, event_bus=bus)
     cfg = BootstrapConfig(env="test", mode="local", log_level="error")
-    auth_registry = AuthRegistry()
     if auth_session is not None:
         tag, session = auth_session
         auth_registry.set(tag, session)
@@ -295,7 +298,8 @@ class TestPluginsEngineLevel:
             pc = _P()
             pc.call = Call(protocol="http", service="s", method="GET", path="/",
                            user="buyer")
-            pc.auth_registry = engine._ictx.auth_registry
+            # S-2：认证注册表经执行器 bind 注入（不再经 pctx 塞传）
+            ex.bind(auth_registry=engine._ictx.auth_registry)
             ex._inject_auth_headers(headers_a, pc)
             return headers_a
 

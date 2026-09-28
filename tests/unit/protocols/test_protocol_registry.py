@@ -78,9 +78,8 @@ class TestProtocolRegistry:
 
     def test_dispatcher_integration_default(self):
         d = build_default_dispatcher(hook_registry=HookRegistry())
-        # http 经注册表联动进 dispatcher，kind 沿用历史值 "_call"
-        assert "_call" in d.kinds()
-        assert "extract" in d.kinds() and "assign" in d.kinds() and "assertion" in d.kinds()
+        # S-2 解耦：协议不进策略 kind 表；kinds 只含策略（按字母序）
+        assert d.kinds() == ["assertion", "assign", "extract"]
         assert d.protocols is not None and "http" in d.protocols.protocols()
 
     def test_register_custom_protocol_links_dispatcher(self):
@@ -88,7 +87,7 @@ class TestProtocolRegistry:
         reg = d.protocols
         reg.register(EchoProtocolExecutor())
         assert "echo" in reg.protocols()
-        assert "_call:echo" in d.kinds()   # kind 默认 _call:{protocol}
+        assert "_call:echo" not in d.kinds()   # S-2：协议不进策略 kind 表
         assert isinstance(reg.resolve("echo"), EchoProtocolExecutor)
 
     def test_unregister_plugin_removes_both_tables(self):
@@ -226,6 +225,47 @@ class TestParamsConvergence:
         assert plan.units and plan.units[0].scenario.scenarioId == "ok-call"
 
 
+# ── S-2: 协议/策略表解耦 ─────────────────────────────────────
+
+
+class TestProtocolStrategyDecoupling:
+
+    def test_protocol_executor_not_strategy(self):
+        from gimbal.strategy.executor_base import StrategyExecutor
+        assert not issubclass(ProtocolExecutor, StrategyExecutor)
+
+    def test_login_via_adapter(self):
+        """http 适配器 login()：标签 → 会话 → token/timestamp 签名头。"""
+        import hashlib
+        import time as _t
+
+        class _StubSession:
+            token = "abc123"
+
+        class _StubAuth:
+            def get(self, tag):
+                return _StubSession()
+
+        from gimbal.protocols.builtin.http import HttpProtocolExecutor
+        ex = HttpProtocolExecutor()
+        ex.bind(auth_registry=_StubAuth())
+        signed = ex.login("user1")
+        ts = int(signed["timestamp"])
+        assert signed["token"] == hashlib.md5(f"abc123{ts}".encode()).hexdigest()
+        assert abs(int(_t.time()) - ts) <= 1
+
+    def test_registry_injects_facilities(self):
+        """注册表把埋点设施注入执行器（bind 只补空位）。"""
+        d = build_default_dispatcher(hook_registry=HookRegistry(), event_bus=InMemoryEventBus())
+        ex = d.protocols.resolve("http")
+        assert ex._hooks is d.protocols._facilities["hook_registry"]
+        assert ex._bus is d.protocols._facilities["event_bus"]
+
+    def test_login_without_registry_returns_empty(self):
+        from gimbal.protocols.builtin.http import HttpProtocolExecutor
+        assert HttpProtocolExecutor().login("u") == {}
+
+
 # ── PluginContext 注册通道 ───────────────────────────────────
 
 class _StrategyProbe:
@@ -265,7 +305,7 @@ class TestPluginProtocolChannel:
         ctx.register_protocol(EchoProtocolExecutor())
         assert ctx.protocol_count == 1
         assert "echo" in d.protocols.protocols()
-        assert "_call:echo" in d.kinds()
+        assert "_call:echo" not in d.kinds()   # S-2：两表解耦
 
     def test_register_strategy_via_context(self):
         d, ctx = self._make_ctx()

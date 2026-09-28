@@ -148,7 +148,8 @@ def _make_engine():
     bus = InMemoryEventBus()
     archive = InMemoryArchive()
     hooks = HookRegistry()
-    dispatcher = build_default_dispatcher(hook_registry=hooks)
+    # S-2：bus 经注册表注入执行器（call.exchange 由执行器直发）
+    dispatcher = build_default_dispatcher(hook_registry=hooks, event_bus=bus)
     dispatcher.protocols.register(SlowEchoProtocolExecutor())
     ctx_manager = ContextManager(archive=archive, event_bus=bus)
     cfg = BootstrapConfig(env="test", mode="local", log_level="error")

@@ -219,12 +219,18 @@ class StrategyDispatcher:
         return results
 
 
-def build_default_dispatcher(hook_registry: Optional[Any] = None) -> StrategyDispatcher:
+def build_default_dispatcher(
+    hook_registry: Optional[Any] = None,
+    *,
+    event_bus: Optional[Any] = None,
+    auth_registry: Optional[Any] = None,
+) -> StrategyDispatcher:
     """构造并注册内置所有 executor 的 dispatcher。
 
     2026-09-27 协议中立化：CallExecutor 以 http 协议执行器身份进 ProtocolRegistry
-    （第一员），kind="_call" 的 dispatcher 注册由注册表联动完成；
-    dispatcher.protocols 即本 dispatcher 配套的协议注册表（bootstrap 透传用）。
+    （第一员）。S-2 起协议与策略表解耦：协议不进本 dispatcher 的 kind 表
+    （kinds() 只含策略），d.protocols 仅作为组合接线引用（Engine/状态机
+    透传用），注册表构造时注入埋点设施。
     """
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
@@ -233,7 +239,9 @@ def build_default_dispatcher(hook_registry: Optional[Any] = None) -> StrategyDis
     from gimbal.protocols.registry import build_default_protocol_registry
 
     d = StrategyDispatcher(hook_registry=hook_registry)
-    d.protocols = build_default_protocol_registry(dispatcher=d)   # 注册 http（kind="_call"）
+    d.protocols = build_default_protocol_registry(
+        hook_registry=hook_registry, event_bus=event_bus, auth_registry=auth_registry,
+    )
     d.register(ExtractExecutor(), params=Extract)
     d.register(AssignExecutor(), params=Assign)
     d.register(AssertionExecutor(), params=Assertion)

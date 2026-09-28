@@ -29,11 +29,16 @@ def _make_sm(service: str, base_url: str, services: dict | None = None):
         request=Request(kind="request", body={}),
         strategy=[],
     )
+    # S-2：_do_call 直调执行器 —— 真注册表跑真实 build_spec(路由)，
+    # execute mock 掉(本文件只测路由);spec 从 execute.call_args 取
+    from gimbal.protocols.registry import build_default_protocol_registry
     sm._dispatcher = MagicMock()
-    sm._dispatcher.dispatch.return_value = StrategyResult(
+    sm._protocols = build_default_protocol_registry()
+    http_exec = sm._protocols.resolve("http")
+    http_exec.execute = MagicMock(return_value=StrategyResult(
         status=StrategyStatus.PASSED, strategy_id="_call",
         message="mock ok", duration_ms=0.0,
-    )
+    ))
     sm._view = MagicMock()
     sm._service_base_url = base_url
     sm._services = services or {}
@@ -49,7 +54,7 @@ def _make_sm(service: str, base_url: str, services: dict | None = None):
 
 
 def _called_url(sm) -> str:
-    return sm._dispatcher.dispatch.call_args[0][0].url
+    return sm._protocols.resolve("http").execute.call_args[0][0].url
 
 
 def test_per_step_lookup_beats_fallback_base_url():

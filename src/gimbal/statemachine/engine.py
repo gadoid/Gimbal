@@ -432,13 +432,13 @@ class StepStateMachine:
         )
 
     def _do_call(self) -> StrategyResult:
-        """协议调用三段式：识别 protocol → build_spec → dispatcher 分发。
+        """协议调用三段式：识别 protocol → build_spec → 执行器模板直调（S-2）。
 
         1. 识别：step.call.protocol（归一化后恒有值）→ ProtocolRegistry.resolve；
         2. 合成：协议执行器把 call 开放字段合成为传输 spec（含路由），
            路由期失败直接返回 StrategyResult（不进 dispatch）；
-        3. 分发：dispatcher.dispatch 走统一插装（计时/STRATEGY 钩子/软失败），
-           外层罩中立层 CALL_BEFORE_SEND/AFTER_RECV 钩子。
+        3. 直调：executor.execute 模板（计时/异常兜底/中立 CALL_BEFORE_SEND/
+           AFTER_RECV 钩子均在模板内；S-2 起不经策略 dispatcher）。
         """
         call = getattr(self._step_schema, "call", None)
         if call is None:
@@ -471,9 +471,6 @@ class StepStateMachine:
             services=self._services,
             service_base_url=self._service_base_url,
             request_body=getattr(getattr(self._step_schema, "request", None), "body", None),
-            hook_registry=self._hooks,
-            event_bus=self._bus,
-            auth_registry=getattr(self, "_auth_registry", None),
         )
 
         # 第一+二段：识别协议字段 → 合成 spec（路由失败在此返回）
@@ -485,11 +482,12 @@ class StepStateMachine:
                     self._step_id, call.protocol, type(executor).__name__,
                     getattr(spec, "kind", "?"))
 
-        # 第三段：注册表分发（dispatcher 统一插装）。执行器模板内部完成：
-        # 中立钩子 CALL_BEFORE_SEND（可补丁）→ send → scratch 双写（call 键 +
-        # 旧键）→ CALL_AFTER_RECV + CallExchangeEvent；协议命名空间钩子/事件
-        # 在适配器自己的 send/after_send 里（v2.1 批次 A 契约）。
-        result = self._dispatcher.dispatch(spec, self._view)
+        # 第三段：ProtocolRegistry 直调执行器模板（S-2：不经策略 dispatcher）。
+        # 模板内部完成：中立钩子 CALL_BEFORE_SEND（可补丁）→ send →
+        # scratch 双写（call 键）→ CALL_AFTER_RECV + CallExchangeEvent；
+        # 计时与异常兜底同在模板内；http 命名空间钩子/事件在适配器自己的
+        # send/after_send 里（v2.1 批次 A 契约）。
+        result = executor.execute(spec, self._view)
         logger.info("[SM {}] 协议调用返回: protocol={} status={} duration_ms={:.2f}",
                     self._step_id, call.protocol, result.status, result.duration_ms)
         return result

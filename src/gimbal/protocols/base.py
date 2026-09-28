@@ -19,7 +19,8 @@
 
 render 与 send 分开，是为了让 CALL_BEFORE_SEND 拦截（调试改待发请求）
 有干净落点（v2 §3）。状态机（statemachine/engine.py `_do_call`）只做：
-识别 protocol → build_spec → dispatcher 注册表分发，不含任何协议细节。
+识别 protocol → build_spec → ProtocolRegistry 直调执行器模板（S-2 起
+不经策略 dispatcher），不含任何协议细节。
 
 双读期声明（v2.1 批次 A-F）：scratch 同时保留旧键（response_* 等），
 批次 F 回收；HTTP 命名空间钩子/事件留在 http 适配器内部不动的契约
@@ -31,12 +32,12 @@ render 与 send 分开，是为了让 CALL_BEFORE_SEND 拦截（调试改待发�
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 from gimbal.protocols.result import CallResult, redact_mapping
-from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
@@ -53,9 +54,9 @@ _MISSING = object()
 class ProtocolCallContext:
     """build_spec 阶段的只读输入（状态机合成，随 spec 内嵌传递给 send）。
 
-    为什么放进 ctx 再嵌进 spec：execute(spec, view) 的签名来自
-    StrategyExecutor（dispatcher 统一分发），埋点设施（hooks/bus/step_id）
-    只能经 spec 携带 —— spec 本就是每次调用现合成的，天然是载体。
+    只承载**每次调用变化**的数据（调用声明、路由表、默认请求体）；
+    埋点设施（hook_registry / event_bus / auth_registry）经执行器构造注入
+    （ProtocolExecutor.bind，S-2），不再经 pctx 塞传。
     """
 
     call: "Call"                       # 归一化后的协议中立调用（开放字段）
@@ -65,9 +66,6 @@ class ProtocolCallContext:
     # step.request.body 的默认值（HTTP 语义：scratch request_body 未被
     # Assign 改写时的兜底请求体；其它协议自行解释）
     request_body: Any = None
-    hook_registry: Any = None                      # 协议层钩子（可 None）
-    event_bus: Any = None                          # 协议层事件（可 None）
-    auth_registry: Any = None                      # 认证注册表（auth_expired 刷新；批次 D）
 
 
 class ProtocolTransportError(Exception):
@@ -84,30 +82,57 @@ class ProtocolTransportError(Exception):
         self.traceback_str = traceback_str
 
 
-class ProtocolExecutor(StrategyExecutor):
-    """协议适配器基类（render/send 契约）。
+class ProtocolExecutor(ABC):
+    """协议适配器基类（独立于策略执行器体系，S-2 解耦）。
 
     子类必须声明类属性 ``protocol`` 并实现 build_spec / send；
-    可选覆写 redact（默认按敏感键名脱敏）与 after_send（送达后的协议
-    命名空间扩展点，http 用于触发 HTTP_BEFORE/AFTER 与事件）。
+    可选覆写 redact（默认按敏感键名脱敏）、login（协议侧认证握手）与
+    after_send（送达后的协议命名空间扩展点，http 用于触发事件）。
 
     类属性 ``params_model``（可选）：该协议 call 字段的参数模型
     （extra="forbid"）—— 编译期校验 step.call 的协议自有字段，
     并经 ext 导出供平台表单生成。缺省 None = 不校验（开放协议）。
+
+    埋点设施（hook_registry / event_bus / auth_registry）经构造或
+    ``bind()`` 注入（注册表在 register 时统一注入），不再经 pctx 塞传。
     """
 
     protocol: str = ""
     params_model: Optional[type] = None
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        hook_registry: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
+        auth_registry: Optional[Any] = None,
+    ) -> None:
         if not self.protocol:
             raise ValueError(
                 f"{type(self).__name__} 必须声明非空类属性 protocol（协议注册表分派键）"
             )
+        self._hooks = hook_registry
+        self._bus = event_bus
+        self._auth_registry = auth_registry
+
+    def bind(
+        self,
+        *,
+        hook_registry: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
+        auth_registry: Optional[Any] = None,
+    ) -> None:
+        """注册表注入埋点设施（只补空位，不覆盖已持有的引用）。"""
+        if hook_registry is not None and self._hooks is None:
+            self._hooks = hook_registry
+        if event_bus is not None and self._bus is None:
+            self._bus = event_bus
+        if auth_registry is not None and self._auth_registry is None:
+            self._auth_registry = auth_registry
 
     @property
-    def kind(self) -> str:  # type: ignore[override]
-        """dispatcher 注册键；http 覆写为 '_call' 保持历史兼容，其余为 '_call:{protocol}'。"""
+    def kind(self) -> str:
+        """结果标签（strategy_id 口径）；http 覆写为 '_call' 保持历史兼容。"""
         return f"_call:{self.protocol}"
 
     # ── 子类实现的契约点 ──────────────────────────────────────
@@ -116,9 +141,8 @@ class ProtocolExecutor(StrategyExecutor):
     def build_spec(self, call: "Call", pctx: ProtocolCallContext) -> Any:
         """render：把 step.call 的开放字段合成该协议的传输 spec。
 
-        spec 需要 duck-type StrategyBase（kind/name/enabled/onFailure 等由
-        dispatch 插装读取），并内嵌 pctx 供 send 使用。路由失败可直接返回
-        StrategyResult（状态机采纳，不进 dispatch）。
+        spec 是自由对象（duck-type 保留 kind/name 等标签字段），内嵌 pctx
+        供 send 使用。路由失败可直接返回 StrategyResult（状态机采纳）。
         """
         raise NotImplementedError
 
@@ -134,6 +158,19 @@ class ProtocolExecutor(StrategyExecutor):
     def redact(self, request: dict) -> dict:
         """证据脱敏：默认按敏感键名匹配（authorization/cookie/token/...）。"""
         return redact_mapping(request)
+
+    def login(self, user: str, pctx: Optional[ProtocolCallContext] = None) -> dict:
+        """协议侧认证握手（S-2）：按标签取凭证并完成协议内签名。
+
+        默认实现：从 auth_registry 取会话原样返回 token；http 覆写为
+        token/timestamp 签名头。返回的 dict 由适配器自行并入请求。
+        """
+        registry = getattr(self, "_auth_registry", None)
+        if registry is None or not user:
+            return {}
+        session = registry.get(str(user))
+        token = getattr(session, "token", None)
+        return {"token": token} if token else {}
 
     def refresh_auth(self, pctx: Optional[ProtocolCallContext]) -> bool:
         """凭证过期时的单飞刷新钩子（默认无刷新动作）。
@@ -156,7 +193,11 @@ class ProtocolExecutor(StrategyExecutor):
     # ── 模板方法（子类不再覆写）───────────────────────────────
 
     def execute(self, spec, view) -> StrategyResult:
-        """调用模板：中立拦截 → 请求侧 scratch → send → 双写 → 结果 → 送达后扩展。"""
+        """调用模板：中立拦截 → 请求侧 scratch → send → 双写 → 结果 → 送达后扩展。
+
+        S-2 起协议执行器不经过策略 dispatcher —— 计时与异常兜底（原
+        dispatcher 插装职责）由本模板承担。
+        """
         pctx = getattr(spec, "pctx", None)
         step_id = getattr(pctx, "step_id", "") or ""
 
@@ -167,7 +208,7 @@ class ProtocolExecutor(StrategyExecutor):
         # - Decision(abort) → 不发请求（兼容旧 STOP 字符串拦截者）。
         from gimbal.core.decisions import Decision, ask_decision
         decision = ask_decision(
-            getattr(pctx, "hook_registry", None), "CALL_BEFORE_SEND", {
+            self._hooks, "CALL_BEFORE_SEND", {
                 "protocol": self.protocol,
                 "step_id": step_id,
                 "spec": spec,
@@ -203,6 +244,16 @@ class ProtocolExecutor(StrategyExecutor):
                 strategy_id=self.kind,
                 message=exc.message,
                 error=exc.traceback_str,
+                duration_ms=(time.monotonic() - t0) * 1000,
+            )
+        except Exception as exc:  # noqa: BLE001 — 原 dispatcher 兜底职责
+            logger.exception("[Protocol {}] 执行异常: step_id={}", self.protocol, step_id)
+            return StrategyResult(
+                status=StrategyStatus.ERROR,
+                strategy_id=self.kind,
+                message=f"Unexpected exception in protocol executor: {exc}",
+                error=repr(exc),
+                duration_ms=(time.monotonic() - t0) * 1000,
             )
         if not call_result.elapsed_ms:
             call_result.elapsed_ms = (time.monotonic() - t0) * 1000
@@ -221,20 +272,21 @@ class ProtocolExecutor(StrategyExecutor):
             strategy_id=self.kind,
             message=message,
             extracted={"call": call_result.to_evidence()},
+            duration_ms=(time.monotonic() - t0) * 1000,
         )
 
         # 协议命名空间扩展点（http：http.response 事件）
         self.after_send(spec, view, call_result, result)
 
         # 中立钩子 CALL_AFTER_RECV + 事件信封（携带脱敏 CallResult）
-        self._fire_hook(pctx, "CALL_AFTER_RECV", {
+        self._fire_hook("CALL_AFTER_RECV", {
             "protocol": self.protocol,
             "step_id": step_id,
             "spec": spec,
             "result": result,
             "ctx": view,
         })
-        self._emit_call_exchange(pctx, call_result, result)
+        self._emit_call_exchange(call_result, result, step_id=step_id)
         return result
 
     # ── 模板辅助 ─────────────────────────────────────────────
@@ -299,10 +351,9 @@ class ProtocolExecutor(StrategyExecutor):
             return f"{self.protocol.upper()} {method} {url} -> {cr.status}"
         return f"{self.protocol} call -> {cr.status}"
 
-    @staticmethod
-    def _fire_hook(pctx: Optional[ProtocolCallContext], point_name: str, payload: dict) -> bool:
+    def _fire_hook(self, point_name: str, payload: dict) -> bool:
         """触发中立钩子；返回 True 继续，False 表示被 STOP 中断。"""
-        if pctx is None or pctx.hook_registry is None:
+        if self._hooks is None:
             return True
         try:
             from gimbal.core.hooks import HookPoint
@@ -312,18 +363,17 @@ class ProtocolExecutor(StrategyExecutor):
                 point = HookPoint(point_name)
         except (ValueError, ImportError):
             return True
-        return not pctx.hook_registry.trigger(point, payload).stopped
+        return not self._hooks.trigger(point, payload).stopped
 
-    @staticmethod
-    def _emit_call_exchange(pctx: Optional[ProtocolCallContext],
-                            call_result: CallResult, result: StrategyResult) -> None:
+    def _emit_call_exchange(self, call_result: CallResult, result: StrategyResult,
+                             step_id: str = "") -> None:
         """发布 CallExchangeEvent（中立证据信封，携带脱敏后的 CallResult）。"""
-        if pctx is None or pctx.event_bus is None:
+        if self._bus is None:
             return
         try:
             from gimbal.events.types import CallExchangeEvent
-            pctx.event_bus.publish(CallExchangeEvent(
-                step_id=pctx.step_id,
+            self._bus.publish(CallExchangeEvent(
+                step_id=step_id,
                 protocol=call_result.protocol,
                 status=result.status.value if hasattr(result.status, "value") else str(result.status),
                 message=(result.message or "")[:200],
@@ -332,4 +382,4 @@ class ProtocolExecutor(StrategyExecutor):
                 result=call_result.to_evidence(),
             ))
         except Exception:  # noqa: BLE001
-            logger.debug("[Protocol {}] emit CALL_EXCHANGE failed", getattr(pctx, "step_id", "?"))
+            logger.debug("[Protocol {}] emit CALL_EXCHANGE failed", self.protocol)
