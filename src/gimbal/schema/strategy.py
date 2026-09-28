@@ -4,7 +4,7 @@ from enum import Enum
 
 class Scope(str, Enum):
     FRAMEWORK = "framework"
-    SESSION = "session"
+    SUITE = "suite"        # 历史值 "session" 已随残留清理退役(与 ContextLayer.SUITE 对齐)
     SCENARIO = "scenario"
     STEP = "step"
     REQUEST = "request"

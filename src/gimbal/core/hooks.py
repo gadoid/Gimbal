@@ -198,27 +198,3 @@ class HookRegistry:
         """清空所有已注册的 hook（用于 shutdown 兜底清理）。"""
         with self._lock:
             self._hooks.clear()
-
-
-# ── HookTriggerer：给主流程用的便利触发器 ──────────────────────
-
-class HookTriggerer:
-    """轻量级 fire 包装。
-
-    用法：
-        triggerer = HookTriggerer(registry)
-        payload = {"request": req, "ctx": ctx}
-        result = triggerer.fire(HookPoint.CALL_BEFORE_SEND, payload)
-        if not result:
-            return  # 被某个 hook 拦截
-        # payload 已被 hook 改写，直接用
-        send(payload["request"])
-    """
-
-    def __init__(self, registry: HookRegistry) -> None:
-        """初始化触发器，绑定到一个 HookRegistry 实例。"""
-        self._registry = registry
-
-    def fire(self, point: HookPoint, payload: Any) -> "list[Any]":
-        """在绑定的 registry 上触发指定 point。返回 Decision 列表（S-3）。"""
-        return self._registry.trigger(point, payload)

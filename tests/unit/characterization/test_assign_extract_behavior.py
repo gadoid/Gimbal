@@ -307,7 +307,7 @@ class TestExtractPromote:
         """
         steps = [echo_step("m", [
             {"kind": "extract", "name": "e", "expression": "$.call.response.body.msg",
-                     "target": "sv", "scope": "session"},
+                     "target": "sv", "scope": "suite"},
         ])]
         result = run_steps("extract-session", steps)
         assert result.failed == 1, (

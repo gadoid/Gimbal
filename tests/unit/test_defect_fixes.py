@@ -359,7 +359,7 @@ def _make_sm_with_api(service: str, base_url: str, call: Call = None):
     sm._on_transition = None
     sm._hooks = None
     sm._bus = bus
-    sm._state = sm_engine.StepState.CALLING
+    sm._state = sm_engine.StepState.INVOKING
     sm._phase_results = []
     sm._error = None
     sm._error_phase = None  # 修复 #5：需要显式初始化
@@ -659,9 +659,9 @@ def _build_sm_for_soft_failure(
     sm._error = None
     sm._error_phase = None  # 修复 #5
     sm._handlers = {
-        sm_engine.StepState.BEFORE_REQUEST: sm._handle_before_request,
-        sm_engine.StepState.CALLING: sm._handle_calling,
-        sm_engine.StepState.AFTER_REQUEST: sm._handle_after_request,
+        sm_engine.StepState.PREPARE: sm._handle_prepare,
+        sm_engine.StepState.INVOKING: sm._handle_invoking,
+        sm_engine.StepState.EXTRACTING: sm._handle_extracting,
         sm_engine.StepState.VERIFYING: sm._handle_verifying,
         sm_engine.StepState.TEARDOWN: sm._handle_teardown,
     }
@@ -1310,9 +1310,9 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
     sm._error = None
     sm._error_phase = None
     sm._handlers = {
-        sm_engine.StepState.BEFORE_REQUEST: sm._handle_before_request,
-        sm_engine.StepState.CALLING: sm._handle_calling,
-        sm_engine.StepState.AFTER_REQUEST: sm._handle_after_request,
+        sm_engine.StepState.PREPARE: sm._handle_prepare,
+        sm_engine.StepState.INVOKING: sm._handle_invoking,
+        sm_engine.StepState.EXTRACTING: sm._handle_extracting,
         sm_engine.StepState.VERIFYING: sm._handle_verifying,
         sm_engine.StepState.TEARDOWN: sm._handle_teardown,
     }

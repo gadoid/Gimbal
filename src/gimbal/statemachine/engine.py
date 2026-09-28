@@ -634,7 +634,4 @@ class StepStateMachine:
         else:
             CallExecutor._emit_http_response(p, call_result)
 
-    # 历史方法名别名（与 StepState 中立名/历史名双名策略一致）
-    _handle_before_request = _handle_prepare
-    _handle_calling = _handle_invoking
-    _handle_after_request = _handle_extracting
+    # 残留 #1 收尾：历史方法名别名已删（状态中立名 = 处理器名）

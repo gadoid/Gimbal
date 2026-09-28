@@ -32,12 +32,11 @@ from pydantic import BaseModel, ConfigDict, Field
 class EventType(str, Enum):
     """事件类型枚举——与 HookPoint 的设计风格一致。
 
-    目的：让"订阅事件"和"注册 hook"的 API 看起来一样：
+    目的：让订阅事件的 API 与注册拦截点风格一致（S-3 二分后 hook 只剩
+    拦截点,观察一律走事件）：
         bus.subscribe(handler, EventType.STEP_START)
-        hook_registry.register(HookPoint.STEP_START, handler)
 
     字符串字面量仍然有效：
-        bus.subscribe(handler, "step.start")
     """
     # 框架生命周期
     FRAMEWORK_INIT = "framework.init"

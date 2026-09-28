@@ -55,7 +55,7 @@ LEGAL_SCENARIO = {
     "steps": [
         {
             "kind": "step",
-            "api": {"kind": "api", "service": "mock", "method": "GET", "path": "/ping"},
+            "call": {"protocol": "http", "service": "mock", "method": "GET", "path": "/ping"},
             "request": {"kind": "request", "body": {}},
             "strategy": [],
         }

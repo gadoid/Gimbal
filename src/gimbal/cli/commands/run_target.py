@@ -27,35 +27,9 @@ from gimbal.schema.scenario import RunUnion
 logger = get_logger(__name__)
 
 
-def execute_run_file(
-    cli_ctx: CLIContext,
-    source: str,
-    fmt,
-    *,
-    expect_kind: Literal["scenario", "suite"],
-    env, mode, log_level,
-    reporter, report_dir, output,
-    step_from=None, step_to=None, halt_at=None,
-) -> None:
-    """加载 → kind 强校验 → bootstrap → Engine.run（编译 Plan 单路径）→ 报告。"""
-    cli_ctx.env = env
-    cli_ctx.mode = mode
-    cli_ctx.log_level = log_level.value if hasattr(log_level, "value") else log_level
-    if report_dir:
-        cli_ctx.extras["report_dir"] = report_dir
-    if reporter:
-        cli_ctx.extras["reporters"] = list(reporter)
-
-    configuration = bootstrap(cli_ctx)
-    _publish_run_meta(configuration)
-
-    payload = normalize_input(source, None, fmt)
-    try:
-        target = TypeAdapter(RunUnion).validate_python(payload)
-    except Exception as exc:
-        typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
-        shutdown(configuration)
-        raise typer.Exit(code=2)
+def _run_loaded(cli_ctx, configuration, target, *, expect_kind, output,
+                step_from=None, step_to=None, halt_at=None) -> int:
+    """已加载目标 → kind 校验 → jsonl sink → Engine.run → 报告；返回退出码。"""
     actual = target.kind
     if not actual == expect_kind:
         typer.secho(
@@ -63,7 +37,7 @@ def execute_run_file(
             fg=typer.colors.RED, err=True,
         )
         shutdown(configuration)
-        raise typer.Exit(code=2)
+        return 2
 
     jsonl_sub = None
     if output == OutputFormat.jsonl:
@@ -93,7 +67,70 @@ def execute_run_file(
                 pass
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)
-    raise typer.Exit(code=result.exit_code)
+    return result.exit_code
+
+
+def execute_run_file(
+    cli_ctx: CLIContext,
+    source: str,
+    fmt,
+    *,
+    expect_kind: Literal["scenario", "suite"],
+    env, mode, log_level,
+    reporter, report_dir, output,
+    step_from=None, step_to=None, halt_at=None,
+    where: "list[str] | None" = None,
+) -> None:
+    """加载 → kind 强校验 → bootstrap → Engine.run（编译 Plan 单路径）→ 报告。
+
+    D-14 双模式：source 可为目录（枚举场景文件，--where 直接字段过滤；
+    命中多个时逐个执行，exit_code 取最差）；--where 仅 run scenario 支持。
+    """
+    cli_ctx.env = env
+    cli_ctx.mode = mode
+    cli_ctx.log_level = log_level.value if hasattr(log_level, "value") else log_level
+    if report_dir:
+        cli_ctx.extras["report_dir"] = report_dir
+    if reporter:
+        cli_ctx.extras["reporters"] = list(reporter)
+
+    # 检索器路径（D-15）：目录或带 --where 时经 selector 枚举/过滤
+    import os as _os
+    if where or _os.path.isdir(source):
+        if expect_kind != "scenario":
+            typer.secho("--where/目录模式仅支持 run scenario", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        from gimbal.suite.selector import parse_where, select
+        try:
+            scenarios = select(source, parse_where(where or []))
+        except (ValueError, FileNotFoundError) as exc:
+            typer.secho(f"检索失败: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        worst = 0
+        for sc in scenarios:
+            # 每个场景独立 run（bootstrap 新 Configuration；_run_loaded 内负责 shutdown）
+            configuration = bootstrap(cli_ctx)
+            _publish_run_meta(configuration)
+            worst = max(worst, _run_loaded(
+                cli_ctx, configuration, sc, expect_kind="scenario",
+                output=output, step_from=step_from, step_to=step_to,
+                halt_at=halt_at))
+        raise typer.Exit(code=worst)
+
+    configuration = bootstrap(cli_ctx)
+    _publish_run_meta(configuration)
+
+    payload = normalize_input(source, None, fmt)
+    try:
+        target = TypeAdapter(RunUnion).validate_python(payload)
+    except Exception as exc:
+        typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
+        shutdown(configuration)
+        raise typer.Exit(code=2)
+    code = _run_loaded(
+        cli_ctx, configuration, target, expect_kind=expect_kind, output=output,
+        step_from=step_from, step_to=step_to, halt_at=halt_at)
+    raise typer.Exit(code=code)
 
 
 def scenario(
@@ -125,6 +162,10 @@ def scenario(
         list[str] | None,
         typer.Option("--var", help="覆盖/追加场景变量，K=V 可多次。", rich_help_panel="输入"),
     ] = None,
+    where: Annotated[
+        list[str] | None,
+        typer.Option("--where", help="检索条件 K=V 可多次（直接字段精确匹配，如 scenarioId=x / meta.module=m；source 可为目录）。", rich_help_panel="检索"),
+    ] = None,
 ) -> None:
     """执行单个 Scenario（编译为隐式 aggregate Plan，v2.1 单路径）。"""
     if var:
@@ -143,6 +184,7 @@ def scenario(
         env=env, mode=mode, log_level=log_level,
         reporter=reporter, report_dir=report_dir, output=output,
         step_from=step_from, step_to=step_to, halt_at=halt_at,
+        where=where,
     )
 
 

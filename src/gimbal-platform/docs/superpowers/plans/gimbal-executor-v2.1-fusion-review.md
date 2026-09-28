@@ -222,3 +222,18 @@
 
 全量验证：`python -m pytest -q` → 1014 passed（gimbal + plate 全目录）；
 CLI 冒烟：`run launch -o jsonl` 末行 run.finished(seq)、`--halt-at` halted 语义、`self-check` 12/12。
+
+### 补充轮（2026-09-28 遗漏审计）
+
+| 项 | 修复 | 备注 |
+|---|---|---|
+| D-15 检索器空壳 / --where 缺失（残留 #9 的 --where 部分） | suite/selector.py 落地（目录枚举 + 直接字段 AND 匹配 + 零命中报错）；run scenario 增 `--where`/目录双模式（D-14）；5 用例 + CLI 端到端冒烟 | |
+| tests/unit/test_defect_fixes.py 引用已删枚举（CALLING/BEFORE_REQUEST 别名） | 迁移到中立名（INVOKING/PREPARE/EXTRACTING） | print 式块 pytest 不执行故未暴露,`pytest tests/` 全目录收集时一并验证 |
+| engine.py 处理器历史别名（_handle_calling 等） | 删除（残留 #1 收尾） | |
+| Scope.SESSION≈SUITE 命名地雷 | 枚举改名 SUITE（值 "suite"）；utils 映射同步；存量 "session" 字面量迁移 | 对话评审发现,原清单未列 |
+| events/types.py docstring 引用已删 HookPoint.STEP_START | 更新为 S-3 二分表述 | |
+| HookTriggerer 死代码 | 删除（无消费者） | |
+| observability/ 空目录树 | 本地清理（git 已无跟踪文件） | fusion 批次删了 .py 但留了目录 |
+| tests/integration/test_server_run.py 用旧 api 糖 | 迁移 call 形态（`pytest tests/` 收集期 422 的根因） | 不在 testpaths,此前未跑到 |
+
+补充轮验证：`pytest tests/`（全目录）1042 passed、`pytest -q`（testpaths）1019 passed。

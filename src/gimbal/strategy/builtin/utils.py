@@ -9,7 +9,7 @@ def _scope_to_layer(scope):
     from gimbal.context.base import ContextLayer
     mapping = {
         Scope.FRAMEWORK: ContextLayer.FRAMEWORK,
-        Scope.SESSION: ContextLayer.SUITE,     # session ≈ suite
+        Scope.SUITE: ContextLayer.SUITE,
         Scope.SCENARIO: ContextLayer.SCENARIO,
         Scope.STEP: ContextLayer.SCENARIO,     # STEP 不允许自写，降级到 SCENARIO
         Scope.REQUEST: ContextLayer.SCENARIO,
