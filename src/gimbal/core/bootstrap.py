@@ -120,14 +120,15 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
 
     # 6. 触发 FRAMEWORK_INIT 钩子（在插件激活后；允许插件"接管"框架启动）
     from gimbal.core.hooks import HookPoint
-    init_result = hook_registry.trigger(
+    from gimbal.core.decisions import effective
+    init_decisions = hook_registry.trigger(
         HookPoint.FRAMEWORK_INIT,
         {"cfg": cfg, "ctx_manager": ctx_manager, "plugin_registry": plugin_registry},
     )
-    if init_result.stopped:
+    init_decision = effective(init_decisions)
+    if init_decision.action == "abort":
         logger.warning(
-            "[bootstrap] FRAMEWORK_INIT 被插件中断: plugin={} reason={}",
-            init_result.stop_plugin, init_result.stop_reason,
+            "[bootstrap] FRAMEWORK_INIT 被插件中断: note={}", init_decision.note,
         )
 
     # 7. 装配 Reporter runtime（自注册所有内置 reporter）

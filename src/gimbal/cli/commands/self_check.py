@@ -176,7 +176,7 @@ def self_check(ctx: typer.Context) -> None:
                      True, f"count={len(event_types)}")
 
         # ── C. 注册 3 个 hook（用 HookPoint 枚举，与 EventType 对称）──
-        for point in (HookPoint.CALL_BEFORE_SEND, HookPoint.CALL_AFTER_RECV, HookPoint.STEP_START):
+        for point in (HookPoint.CALL_BEFORE_SEND, HookPoint.CALL_AFTER_RECV, HookPoint.STRATEGY_BEFORE):
             hook_registry.register(point, _make_hook(sc_ctx, point.value), priority=10,
                                    plugin_name=OWNER,
                                    description="self_check: trace")

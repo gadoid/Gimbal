@@ -92,3 +92,36 @@ class TestJsonlSink:
             bus.unsubscribe(sub_id)
         out = capsys.readouterr().out
         assert json.loads(out.strip())["event_type"] == "bare"
+
+
+    def test_run_finished_published_with_seq(self):
+        """S-5：runner 发布 RunFinishedEvent（总线分配 seq,终线即事件）。"""
+        from gimbal.core.bootstrap import bootstrap, shutdown
+        from gimbal.cli.context import CLIContext
+        from gimbal.core.runner import Engine
+        from gimbal.schema.scenario import Config as SC, Meta, Scenario
+        from gimbal.schema.step import Step
+        from gimbal.schema.call import Call
+        from datetime import datetime, timezone
+
+        ictx = bootstrap(CLIContext())
+        try:
+            got = []
+            ictx.event_bus.subscribe(lambda e: got.append(e), "run.finished")
+            sc = Scenario(
+                scenarioId="fin-seq",
+                meta=Meta(name="s", description="d", module="m", priority=1,
+                          author="a", owner="o", tags=[], version="1",
+                          createTime=datetime.now(timezone.utc), expire=False,
+                          requirementRef=[]),
+                config=SC(),
+                resource={},
+                steps=[],   # 空步骤场景:零事件路径下 run.finished 仍发布
+            )
+            result = Engine(ictx).run(sc)
+            assert got, "run.finished 未发布"
+            assert got[-1].seq > 0
+            assert got[-1].exit_code == result.exit_code
+            assert got[-1].passed == result.passed
+        finally:
+            shutdown(ictx)

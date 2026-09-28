@@ -22,7 +22,7 @@ import queue
 import threading
 from typing import Any, Optional, Protocol
 
-from gimbal.core.hooks import HookPoint, HookRegistry, HookSignal
+from gimbal.core.hooks import HookPoint, HookRegistry
 from gimbal.core.decisions import Decision
 from gimbal.log import get_logger
 
@@ -157,12 +157,12 @@ class DebuggerPlugin:
         cmd, note, carry = self._pause("step.before", step_id, payload)
         if cmd == "abort":
             self._aborting = True
-            raise HookSignal.STOP(Decision(action="abort", source="human", note=note))
+            return Decision(action="abort", source="human", note=note)
         if cmd == "write":
             # P1-10：注入 scratch 变量后继续（write 即 continue + 注入，
             # 由状态机在 STEP_BEFORE 决策消费点写入）
-            raise HookSignal.STOP(Decision(action="continue", source="human",
-                                           write=carry["write"], note=note))
+            return Decision(action="continue", source="human",
+                            write=carry["write"], note=note)
         return None   # continue
 
     def _on_call_before(self, payload: dict) -> None:
@@ -172,12 +172,12 @@ class DebuggerPlugin:
         cmd, note, carry = self._pause("call.before", step_id, payload)
         if cmd == "abort":
             self._aborting = True
-            raise HookSignal.STOP(Decision(action="abort", source="human", note=note))
+            return Decision(action="abort", source="human", note=note)
         if cmd == "patch":
             # P1-10：待发请求视图补丁后继续（patch 即 continue + 补丁，
             # 由协议适配器在 CALL_BEFORE_SEND 决策消费点应用）
-            raise HookSignal.STOP(Decision(action="continue", source="human",
-                                           patch=carry["patch"], note=note))
+            return Decision(action="continue", source="human",
+                            patch=carry["patch"], note=note)
         return None
 
     def _on_step_failed(self, payload: dict) -> None:
@@ -192,7 +192,7 @@ class DebuggerPlugin:
         if cmd in ("retry", "skip", "abort"):
             if cmd == "abort":
                 self._aborting = True
-            raise HookSignal.STOP(Decision(action=cmd, source="human", note=note))
+            return Decision(action=cmd, source="human", note=note)
         return None   # continue（记失败）
 
     # ── 暂停与命令循环 ───────────────────────────────────────

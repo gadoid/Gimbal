@@ -543,8 +543,8 @@ class StepStateMachine:
                 point = HookPoint(point_name)
         except (ValueError, ImportError):
             return True
-        result = self._hooks.trigger(point, payload)
-        return not result.stopped
+        from gimbal.core.decisions import effective
+        return effective(self._hooks.trigger(point, payload)).action == "continue"
 
     # HTTP 事件兼容委托：职责在 http 协议适配器（CallExecutor._emit_http_*），
     # 历史直调方（tests/unit/test_defect_fixes.py #34）经此薄委托保持可用。

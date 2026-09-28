@@ -182,28 +182,41 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
     @app.get("/runs/{run_id}/events")
     async def run_events(
         run_id: str,
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
         authorization: str | None = Header(default=None),
         x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
     ):
+        """SSE 事件流：id = 事件 seq（S-5）；Last-Event-ID 续传从 seq+1 起。"""
         _require_token(authorization, x_gimbal_token)
         entry = registry.get(run_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="unknown run")
 
+        resume_seq = 0
+        if last_event_id:
+            try:
+                resume_seq = int(last_event_id)
+            except ValueError:
+                resume_seq = 0
+
         async def stream():
+            nonlocal resume_seq
             import asyncio
             import json
-            sent = 0
             while True:
-                events = list(entry["events"])
-                while sent < len(events):
-                    payload = json.dumps(events[sent], ensure_ascii=False, default=str)
-                    yield ("id: " + str(sent) + NL + "data: " + payload + NL + NL)
-                    sent += 1
-                if entry["status"] != "running" and sent >= len(entry["events"]):
+                events = [e for e in entry["events"]
+                          if int(e.get("seq") or 0) > resume_seq]
+                for ev in events:
+                    payload = json.dumps(ev, ensure_ascii=False, default=str)
+                    yield ("id: " + str(ev.get("seq", 0)) + NL
+                           + "data: " + payload + NL + NL)
+                    resume_seq = max(resume_seq, int(ev.get("seq") or 0))
+                if entry["status"] != "running" and not [
+                        e for e in entry["events"]
+                        if int(e.get("seq") or 0) > resume_seq]:
                     yield ("event: done" + NL + "data: {}" + NL + NL)
                     return
-                await asyncio.sleep(0.2)   # v1 轮询间隔；批次 F 换 seq 续传
+                await asyncio.sleep(0.2)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 

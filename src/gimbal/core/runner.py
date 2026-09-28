@@ -159,7 +159,35 @@ class Engine:
                 self._artifacts = reporter_runtime.finalize_all(result)
             except Exception:  # noqa: BLE001
                 logger.exception("[Engine] reporter_runtime.finalize_all 失败（已隔离）")
+
+        # 6. 终线事件 run.finished（S-5）：判定终态事件化——stdout jsonl 的
+        #    最后一行 / SSE 的 done 前最后事件 / server 终态查询共用此事件；
+        #    在 reporter finalize 之后发布（reporter 不消费终线，transport 消费）
+        self._emit_run_finished(framework_ctx, result)
         return result
+
+    def _emit_run_finished(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
+        """发布 RunFinishedEvent（带 seq，总线锁内分配）。失败仅记日志。"""
+        bus = self._ictx.event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import RunFinishedEvent
+            bus.publish(RunFinishedEvent(
+                run_id=framework_ctx.run_id,
+                exit_code=result.exit_code,
+                total=result.total,
+                passed=result.passed,
+                failed=result.failed,
+                error=result.error,
+                skipped=result.skipped,
+                halted=getattr(result, "halted", 0),
+                blocked=getattr(result, "blocked", 0),
+                repaired=getattr(result, "repaired", 0),
+                details=result.details,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.exception("[Engine] run.finished 发布失败（不影响结果返回）")
 
     def _emit_run_start(self, framework_ctx: FrameworkContext) -> None:
         """向 event_bus 发布 RunStartEvent 事件。

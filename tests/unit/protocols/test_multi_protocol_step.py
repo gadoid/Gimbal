@@ -146,13 +146,18 @@ class TestMultiProtocolStep:
         assert StepState.EXTRACTING.value == "after_request"
 
     def test_neutral_hooks_fired_for_custom_protocol(self):
-        """中立层钩子 CALL_BEFORE_SEND/AFTER_RECV 对所有协议触发。"""
+        """中立层拦截点 CALL_BEFORE_SEND/AFTER_RECV 对所有协议触发。
+
+        S-3：CALL_AFTER_RECV 是 Decision 通道，payload 携带 call_result
+        （CallResult，send 送达即 PASSED 语义），retry 决策可重发。
+        """
         hooks = HookRegistry()
         seen = []
         hooks.register(HookPoint.CALL_BEFORE_SEND,
                        lambda p: seen.append(("before", p["protocol"])))
         hooks.register(HookPoint.CALL_AFTER_RECV,
-                       lambda p: seen.append(("after", p["protocol"], p["result"].status)))
+                       lambda p: seen.append(
+                           ("after", p["protocol"], p["call_result"].status)))
 
         step = Step(call=Call(protocol="echo", message="hi"), strategy=[])
         sm = _make_sm(step, hooks=hooks)
@@ -160,7 +165,7 @@ class TestMultiProtocolStep:
         assert result.status == "passed"
         assert seen[0] == ("before", "echo")
         assert seen[1][0] == "after" and seen[1][1] == "echo"
-        assert seen[1][2] == StrategyStatus.PASSED
+        assert seen[1][2] == 0   # echo CallResult.status（送达）
 
     def test_call_exchange_event_published(self):
         """中立事件信封 CallExchangeEvent 带 protocol 字段。"""

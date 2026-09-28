@@ -179,3 +179,22 @@ class TestDebugOverServer:
             body = "".join(resp.iter_text())
         assert "run.start" in body or "run.end" in body
         assert "event: done" in body
+
+
+def test_sse_id_is_seq(client, monkeypatch):
+    """S-5：SSE id = 事件 seq（单调递增,从 1 起）。"""
+    monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "tok-seq")
+    r = client.post("/runs", json={"target": _scenario_dict("sse-seq-sc")})
+    rid = r.json()["runId"]
+    _wait_finished(client, rid)
+
+    with client.stream("GET", f"/runs/{rid}/events",
+                       headers={"X-Gimbal-Token": "tok-seq"}) as resp:
+        assert resp.status_code == 200
+        body = "".join(resp.iter_text())
+    ids = [int(line[3:]) for line in body.splitlines()
+           if line.startswith("id: ")]
+    assert ids, "SSE 流无 id 行"
+    assert ids == sorted(ids) and ids[0] >= 1
+    # 末事件 run.finished 也应带 seq id(S-5 终线事件化)
+    assert "run.finished" in body

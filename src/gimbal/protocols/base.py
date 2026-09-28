@@ -36,6 +36,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
+from gimbal.core.decisions import ask_decision
 from gimbal.protocols.result import CallResult, redact_mapping
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
@@ -206,7 +207,6 @@ class ProtocolExecutor(ABC):
         # - 或返回 Decision(patch={...})：标量覆盖（method/url/timeout）、
         #   headers 合并、body 覆盖；
         # - Decision(abort) → 不发请求（兼容旧 STOP 字符串拦截者）。
-        from gimbal.core.decisions import Decision, ask_decision
         decision = ask_decision(
             self._hooks, "CALL_BEFORE_SEND", {
                 "protocol": self.protocol,
@@ -228,12 +228,35 @@ class ProtocolExecutor(ABC):
         t0 = time.monotonic()
         try:
             call_result = self.send(spec, view)
-            if getattr(call_result, "auth_expired", False):
-                # 凭证过期 → 单飞刷新 → 重发一次（v2 §调用与协议）
-                if self.refresh_auth(pctx):
-                    logger.info("[Protocol] auth_expired：已刷新凭证，重发一次: step_id={}",
-                                getattr(pctx, "step_id", "?"))
+            # 重发回路（S-3）：auth_expired 单飞刷新重发 ≤1 次、
+            # CALL_AFTER_RECV Decision(retry) 重发 ≤1 次，独立计数
+            auth_resent = False
+            retried = False
+            while True:
+                if getattr(call_result, "auth_expired", False) and not auth_resent:
+                    # 凭证过期 → 单飞刷新 → 重发一次（v2 §调用与协议）
+                    if self.refresh_auth(pctx):
+                        auth_resent = True
+                        logger.info("[Protocol] auth_expired：已刷新凭证，重发一次: step_id={}",
+                                    getattr(pctx, "step_id", "?"))
+                        call_result = self.send(spec, view)
+                        continue
+                after = ask_decision(
+                    self._hooks, "CALL_AFTER_RECV", {
+                        "protocol": self.protocol,
+                        "step_id": step_id,
+                        "spec": spec,
+                        "result": None,
+                        "call_result": call_result,
+                        "ctx": view,
+                    })
+                if after.action == "retry" and not retried:
+                    retried = True
+                    logger.info("[Protocol] CALL_AFTER_RECV retry: step_id={} note={}",
+                                step_id, after.note)
                     call_result = self.send(spec, view)
+                    continue
+                break
         except ProtocolTransportError as exc:
             logger.warning(
                 "[Protocol {}] 传输失败: step_id={} protocol={} message={}",
@@ -278,14 +301,8 @@ class ProtocolExecutor(ABC):
         # 协议命名空间扩展点（http：http.response 事件）
         self.after_send(spec, view, call_result, result)
 
-        # 中立钩子 CALL_AFTER_RECV + 事件信封（携带脱敏 CallResult）
-        self._fire_hook("CALL_AFTER_RECV", {
-            "protocol": self.protocol,
-            "step_id": step_id,
-            "spec": spec,
-            "result": result,
-            "ctx": view,
-        })
+        # CALL_AFTER_RECV 决策已在上方 send 回路中询问（S-3：RETRY 可用）；
+        # 此处只发事件信封（携带脱敏 CallResult）
         self._emit_call_exchange(call_result, result, step_id=step_id)
         return result
 
@@ -350,20 +367,6 @@ class ProtocolExecutor(ABC):
         if method or url:
             return f"{self.protocol.upper()} {method} {url} -> {cr.status}"
         return f"{self.protocol} call -> {cr.status}"
-
-    def _fire_hook(self, point_name: str, payload: dict) -> bool:
-        """触发中立钩子；返回 True 继续，False 表示被 STOP 中断。"""
-        if self._hooks is None:
-            return True
-        try:
-            from gimbal.core.hooks import HookPoint
-            try:
-                point = HookPoint[point_name]
-            except KeyError:
-                point = HookPoint(point_name)
-        except (ValueError, ImportError):
-            return True
-        return not self._hooks.trigger(point, payload).stopped
 
     def _emit_call_exchange(self, call_result: CallResult, result: StrategyResult,
                              step_id: str = "") -> None:

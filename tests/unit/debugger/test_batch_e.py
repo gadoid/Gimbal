@@ -20,7 +20,7 @@ from gimbal.context.manager import ContextManager
 from gimbal.core.bootstrap import Configuration
 from gimbal.core.decisions import Decision, ask_decision
 from gimbal.core.debugger import DebuggerPlugin, ScriptedSession
-from gimbal.core.hooks import HookPoint, HookRegistry, HookSignal
+from gimbal.core.hooks import HookPoint, HookRegistry
 from gimbal.core.runner import Engine
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
@@ -97,18 +97,18 @@ def _scenario(sid, steps_msg="ok", assert_val="ok", n_steps=1) -> Scenario:
 
 class TestDecisionChannel:
 
-    def test_stop_carries_decision(self):
+    def test_handler_returns_decision(self):
         hooks = HookRegistry()
         hooks.register(HookPoint.STEP_BEFORE,
-                       lambda p: (_ for _ in ()).throw(
-                           HookSignal.STOP(Decision(action="skip", source="human"))))
+                       lambda p: (Decision(action="skip", source="human")))
         d = ask_decision(hooks, HookPoint.STEP_BEFORE, {})
         assert d.action == "skip" and d.is_human
 
-    def test_stop_string_maps_to_abort(self):
+    def test_abort_decision_carries_note(self):
+        """S-3：字符串 STOP 通道退役——拦截者直接返回 abort 决策。"""
         hooks = HookRegistry()
         hooks.register(HookPoint.STEP_BEFORE,
-                       lambda p: (_ for _ in ()).throw(HookSignal.STOP("rate limit")))
+                       lambda p: Decision(action="abort", note="rate limit"))
         d = ask_decision(hooks, HookPoint.STEP_BEFORE, {})
         assert d.action == "abort" and "rate limit" in d.note
 
@@ -139,9 +139,8 @@ class TestStepFailed:
                                     body={"msg": msg})
 
         engine, hooks, _ = _make_engine(flaky)
-        hooks.register(HookPoint.STEP_FAILED, lambda p: (
-            _ for _ in ()).throw(HookSignal.STOP(
-                Decision(action="retry", source="human", note="fix-applied"))))
+        hooks.register(HookPoint.STEP_FAILED, lambda p: Decision(
+            action="retry", source="human", note="fix-applied"))
 
         result = engine.run(_scenario("s"))
         assert result.passed == 1
@@ -159,8 +158,7 @@ class TestStepFailed:
                                     body={"msg": msg})
 
         engine, hooks, _ = _make_engine(flaky)
-        hooks.register(HookPoint.STEP_FAILED, lambda p: (
-            _ for _ in ()).throw(HookSignal.STOP(Decision(action="retry"))))
+        hooks.register(HookPoint.STEP_FAILED, lambda p: Decision(action="retry"))
 
         result = engine.run(_scenario("s"))
         assert result.passed == 1 and result.repaired == 0   # auto 不标
@@ -169,8 +167,7 @@ class TestStepFailed:
         engine, hooks, _ = _make_engine()   # 全部通过
         skipped = []
         hooks.register(HookPoint.STEP_FAILED, lambda p: (
-            skipped.append(p["step_id"]) or
-            (_ for _ in ()).throw(HookSignal.STOP(Decision(action="skip")))))
+            skipped.append(p["step_id"]) or Decision(action="skip")))
         # 但没有失败 → 决策点不触发；改用会失败第一步的 send
         def first_bad(spec, view):
             sid = getattr(spec.pctx.call, "message", "?")
@@ -179,8 +176,7 @@ class TestStepFailed:
                                     body={"msg": "bad" if first else "ok"})
 
         engine2, hooks2, _ = _make_engine(first_bad)
-        hooks2.register(HookPoint.STEP_FAILED, lambda p: (
-            _ for _ in ()).throw(HookSignal.STOP(Decision(action="skip"))))
+        hooks2.register(HookPoint.STEP_FAILED, lambda p: Decision(action="skip"))
         result = engine2.run(_scenario("s", n_steps=2))
         assert result.passed == 1           # 第一步 skip，第二步照跑且过
         statuses = [s["status"] for s in result.details[0]["steps"]]
@@ -201,8 +197,7 @@ class TestStepBeforeAndPatch:
 
     def test_step_before_skip(self):
         engine, hooks, _ = _make_engine()
-        hooks.register(HookPoint.STEP_BEFORE, lambda p: (
-            _ for _ in ()).throw(HookSignal.STOP(Decision(action="skip"))))
+        hooks.register(HookPoint.STEP_BEFORE, lambda p: Decision(action="skip"))
         result = engine.run(_scenario("s"))
         assert result.details[0]["steps"][0]["status"] == "skipped"
         # 步骤 skip 不算场景失败（未断言失败）
@@ -215,10 +210,9 @@ class TestStepBeforeAndPatch:
         from gimbal.schema.call import Call
         from gimbal.schema.request import Request
 
-        hooks.register(HookPoint.CALL_BEFORE_SEND, lambda p: (
-            _ for _ in ()).throw(HookSignal.STOP(Decision(
-                action="continue", source="human",
-                patch={"headers": {"X-Debug": "1"}, "body": {"patched": True}}))))
+        hooks.register(HookPoint.CALL_BEFORE_SEND, lambda p: Decision(
+            action="continue", source="human",
+            patch={"headers": {"X-Debug": "1"}, "body": {"patched": True}}))
 
         step = Step(call=Call(protocol="http", service="svc", method="POST", path="/p"),
                     request=Request(body={"orig": 1}), strategy=[])

@@ -126,19 +126,21 @@ class StrategyDispatcher:
                 error=f"UnregisteredKind: {kind}",
             )
 
-        # 3. STRATEGY_BEFORE hook（可被 hook 抛出 STOP 来短路此 strategy）
+        # 3. STRATEGY_BEFORE 拦截点（S-3：Decision 返回值化；skip/abort → 跳过）
         if self._hooks is not None:
-            payload = {"strategy_name": strategy_id, "kind": kind, "spec": spec, "view": view}
-            result_hook = self._hooks.trigger(HookPoint.STRATEGY_BEFORE, payload)
-            if result_hook.stopped:
+            from gimbal.core.decisions import ask_decision
+            decision = ask_decision(self._hooks, HookPoint.STRATEGY_BEFORE, {
+                "strategy_name": strategy_id, "kind": kind, "spec": spec, "view": view,
+            })
+            if decision.action in ("skip", "abort"):
                 logger.info(
-                    "[StrategyDispatcher] STRATEGY_BEFORE blocked: strategy_id={} plugin={} reason={}",
-                    strategy_id, result_hook.stop_plugin, result_hook.stop_reason,
+                    "[StrategyDispatcher] STRATEGY_BEFORE blocked: strategy_id={} action={} note={}",
+                    strategy_id, decision.action, decision.note,
                 )
                 return StrategyResult(
                     status=StrategyStatus.SKIPPED,
                     strategy_id=strategy_id,
-                    message=f"blocked by hook: {result_hook.stop_reason}",
+                    message=f"blocked by hook: {decision.note or decision.action}",
                 )
 
         # 4. 执行（含计时 + 兜底捕获）
@@ -167,15 +169,8 @@ class StrategyDispatcher:
         logger.debug("[StrategyDispatcher] Strategy executed: strategy_id={} status={} duration_ms={:.2f} soft={}",
                     strategy_id, result.status.value, result.duration_ms, result.soft)
 
-        # 5. STRATEGY_AFTER hook（可改写 result）
-        if self._hooks is not None:
-            payload = {
-                "strategy_name": strategy_id,
-                "kind": kind,
-                "result": result,
-                "view": view,
-            }
-            self._hooks.trigger(HookPoint.STRATEGY_AFTER, payload)
+        # 5. STRATEGY_AFTER 观察位已退役（S-3）：策略结果经事件总线
+        # strategy.completed / 归档消费，不再有 hook 通道。
 
         return result
 

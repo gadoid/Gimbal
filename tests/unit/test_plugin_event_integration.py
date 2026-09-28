@@ -17,22 +17,20 @@ print("=" * 60)
 # 1. Hook system
 print()
 print("[1] Hook system")
-from gimbal.core.hooks import HookPoint, HookRegistry, HookSignal
+from gimbal.core.decisions import Decision
+from gimbal.core.hooks import HookPoint, HookRegistry
 
 reg = HookRegistry()
 hits = []
-reg.register(HookPoint.STEP_START, lambda p: hits.append(("a", p.get("step_id"))), priority=10)
-reg.register(HookPoint.STEP_START, lambda p: hits.append(("b", p.get("step_id"))), priority=20)
-
-
-def _stop(p):
-    raise HookSignal.STOP("demo")
-
-
-reg.register(HookPoint.STEP_START, _stop, priority=30)
-r = reg.trigger(HookPoint.STEP_START, {"step_id": "s1"})
-print(f"  hits={hits} stopped={r.stopped} reason={r.stop_reason}")
-assert hits == [("a", "s1"), ("b", "s1")] and r.stopped
+# S-3:观察点退役,示例改用拦截点 STRATEGY_BEFORE;STOP 异常通道 → return Decision
+reg.register(HookPoint.STRATEGY_BEFORE, lambda p: hits.append(("a", p.get("step_id"))), priority=10)
+reg.register(HookPoint.STRATEGY_BEFORE, lambda p: hits.append(("b", p.get("step_id"))), priority=20)
+reg.register(HookPoint.STRATEGY_BEFORE,
+             lambda p: Decision(action="skip", note="demo"), priority=30)
+decisions = reg.trigger(HookPoint.STRATEGY_BEFORE, {"step_id": "s1"})
+print(f"  hits={hits} decisions={[d.action for d in decisions]}")
+assert hits == [("a", "s1"), ("b", "s1")]
+assert decisions and decisions[0].action == "skip"
 print("  PASS")
 
 # 2. Event bus
@@ -77,9 +75,9 @@ try:
                 self.events = []
                 ctx.register_event("scenario.start", lambda e: self.events.append(e.scenario_id))
                 def h(p):
-                    p["seen"] = True
-                    return p  # 修复 #15：in-place 修改需显式 return 才被识别为 modified
-                ctx.register_hook("step.start", h, priority=10)
+                    p["seen"] = True   # S-3：观察位退役，示例改挂拦截点
+                    return None
+                ctx.register_hook("strategy.before", h, priority=10)
     """), encoding="utf-8")
 
     loader = PluginLoader(plugins_dir=pathlib.Path(tmp) / "plugins")
@@ -96,10 +94,9 @@ try:
     assert p.name == "demo"
     from gimbal.events import ScenarioStartEvent
     bus2.publish(ScenarioStartEvent(scenario_id="sc1", scenario_name="x", step_count=1))
-    r2 = hr2.trigger(HookPoint.STEP_START, {})
-    assert r2.modified is True
+    r2 = hr2.trigger(HookPoint.STRATEGY_BEFORE, {})
     print(f"  plugin received events: {p.events}")
-    print(f"  hook modified: {r2.modified}")
+    print(f"  hook decisions: {len(r2)}")
     print("  PASS")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

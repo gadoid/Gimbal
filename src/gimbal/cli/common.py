@@ -358,23 +358,8 @@ def _print_run_report(result: Any, fmt: "OutputFormat", artifacts: list | None =
         return
 
     if fmt == OutputFormat.jsonl:
-        # v2 §5：stdout 只输出事件；调用方读最后一行 run.finished 即得结果。
-        # 事件本体由 jsonl sink 在运行中逐行打印（见 attach_jsonl_sink），
-        # 这里只打终线（RunFinishedEvent 形状）。
-        finished = {
-            "event_type": "run.finished",
-            "exit_code": result.exit_code,
-            "total": result.total,
-            "passed": result.passed,
-            "failed": result.failed,
-            "error": result.error,
-            "skipped": result.skipped,
-            "halted": getattr(result, "halted", 0),
-            "blocked": getattr(result, "blocked", 0),
-            "repaired": getattr(result, "repaired", 0),
-            "details": result.details,
-        }
-        _typer.echo(_json.dumps(finished, ensure_ascii=False, default=str))
+        # S-5：终线 run.finished 由 runner 经总线发布（RunFinishedEvent，
+        # 带 seq）、jsonl sink 逐行打印 —— 此处不再手拼终线 dict。
         return
 
     # console：分组显示通过/失败/错误

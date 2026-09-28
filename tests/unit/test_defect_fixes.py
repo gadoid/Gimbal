@@ -1181,166 +1181,63 @@ def _():
 
 
 # ════════════════════════════════════════════════════════════════════
-# #15  HookResult.modified semantics
+# #15  Hook 决策通道（S-3 重写：HookResult/STOP/payload 替换语义退役）
 # ════════════════════════════════════════════════════════════════════
-print("\n[14] HookResult.modified semantics (#15)")
+print("=== [14] Hook decision channel (S-3) ===")
 
 
-@test("#15.1 noop handler (returns None) does NOT set modified=True")
-def _():
-    hr = _make_sm_with_api.__globals__["sm_engine"]  # not needed, use direct import
-    from gimbal.core.hooks import HookRegistry, HookPoint
-
-    hr2 = HookRegistry()
-
-    def noop_handler(payload):
-        pass  # does nothing, returns None implicitly
-
-    hr2.register(HookPoint.STEP_START, noop_handler, plugin_name="test")
-    result = hr2.trigger(HookPoint.STEP_START, {"key": "value"})
-    assert result.modified is False, (
-        f"noop handler should NOT set modified=True, got: {result.modified}"
-    )
-
-
-@test("#15.2 handler returning a new payload sets modified=True")
+@test("#15.1 noop handler produces no decision")
 def _():
     from gimbal.core.hooks import HookRegistry, HookPoint
 
     hr = HookRegistry()
-
-    def replace_handler(payload):
-        return {"replaced": True}
-
-    hr.register(HookPoint.STEP_START, replace_handler, plugin_name="test")
-    result = hr.trigger(HookPoint.STEP_START, {"original": True})
-    assert result.modified is True, (
-        f"handler returning new payload should set modified=True, got: {result.modified}"
-    )
+    hr.register(HookPoint.STRATEGY_BEFORE, lambda p: None, plugin_name="test")
+    assert hr.trigger(HookPoint.STRATEGY_BEFORE, {"key": "value"}) == []
 
 
-@test("#15.3 handler returning the same payload object sets modified=True")
+@test("#15.2 handler returning Decision is collected")
+def _():
+    from gimbal.core.decisions import Decision
+    from gimbal.core.hooks import HookRegistry, HookPoint
+
+    hr = HookRegistry()
+    hr.register(HookPoint.STRATEGY_BEFORE,
+                lambda p: Decision(action="skip", note="x"), plugin_name="test")
+    decisions = hr.trigger(HookPoint.STRATEGY_BEFORE, {"key": "value"})
+    assert len(decisions) == 1 and decisions[0].action == "skip"
+
+
+@test("#15.3 handler exception is swallowed; others still run")
+def _():
+    from gimbal.core.decisions import Decision
+    from gimbal.core.hooks import HookRegistry, HookPoint
+
+    hr = HookRegistry()
+    hr.register(HookPoint.STRATEGY_BEFORE, lambda p: 1 / 0, priority=10)
+    hr.register(HookPoint.STRATEGY_BEFORE,
+                lambda p: Decision(action="skip"), priority=20)
+    decisions = hr.trigger(HookPoint.STRATEGY_BEFORE, {})
+    assert len(decisions) == 1 and decisions[0].action == "skip"
+
+
+@test("#15.4 effective picks first non-continue / payload-carrying decision")
+def _():
+    from gimbal.core.decisions import Decision, effective
+
+    assert effective([]).action == "continue"
+    assert effective([Decision()]).action == "continue"
+    assert effective([Decision(action="continue", write={"a": 1})]).write == {"a": 1}
+    assert effective([Decision(), Decision(action="abort", note="n")]).action == "abort"
+
+
+@test("#15.5 legacy non-Decision returns are ignored (payload-replacement retired)")
 def _():
     from gimbal.core.hooks import HookRegistry, HookPoint
 
     hr = HookRegistry()
-    payload = {"key": "value"}
+    hr.register(HookPoint.STRATEGY_BEFORE, lambda p: {"replaced": True})
+    assert hr.trigger(HookPoint.STRATEGY_BEFORE, {"old": True}) == []
 
-    def return_same_handler(p):
-        p["seen"] = True
-        return p  # explicitly return to signal modification
-
-    hr.register(HookPoint.STEP_START, return_same_handler, plugin_name="test")
-    result = hr.trigger(HookPoint.STEP_START, payload)
-    assert result.modified is True, (
-        f"handler returning payload (in-place mutator) should set modified=True, "
-        f"got: {result.modified}"
-    )
-
-
-@test("#15.4 in-place mutation WITHOUT return keeps modified=False")
-def _():
-    # This is the case the original test relied on. Now we require explicit return.
-    from gimbal.core.hooks import HookRegistry, HookPoint
-
-    hr = HookRegistry()
-    seen = []
-
-    def in_place_only(p):
-        seen.append(p)
-        # does NOT return -- in-place mutation only
-
-    hr.register(HookPoint.STEP_START, in_place_only, plugin_name="test")
-    result = hr.trigger(HookPoint.STEP_START, {"key": "value"})
-    # Modified should be False because handler didn't return anything
-    assert result.modified is False, (
-        f"in-place-only handler (no return) should NOT set modified=True, "
-        f"got: {result.modified}"
-    )
-    # But the handler DID run (verified by side effect)
-    assert len(seen) == 1, f"handler should have run, seen={len(seen)} times"
-
-
-@test("#15.5 multiple handlers: modified=True if ANY returns new payload")
-def _():
-    from gimbal.core.hooks import HookRegistry, HookPoint
-
-    hr = HookRegistry()
-
-    def noop(p):
-        pass
-
-    def replacer(p):
-        return {"new": True}
-
-    hr.register(HookPoint.STEP_START, noop, priority=10, plugin_name="first")
-    hr.register(HookPoint.STEP_START, replacer, priority=20, plugin_name="second")
-    result = hr.trigger(HookPoint.STEP_START, {"original": True})
-    assert result.modified is True, (
-        f"if any handler replaces payload, modified should be True, got: {result.modified}"
-    )
-
-
-@test("#15.6 multiple noop handlers: modified=False")
-def _():
-    from gimbal.core.hooks import HookRegistry, HookPoint
-
-    hr = HookRegistry()
-
-    def noop1(p):
-        pass
-
-    def noop2(p):
-        pass
-
-    hr.register(HookPoint.STEP_START, noop1, priority=10, plugin_name="a")
-    hr.register(HookPoint.STEP_START, noop2, priority=20, plugin_name="b")
-    result = hr.trigger(HookPoint.STEP_START, {"key": "value"})
-    assert result.modified is False, (
-        f"all noop handlers should keep modified=False, got: {result.modified}"
-    )
-
-
-@test("#15.7 STOP exception does not affect modified (errors are tracked separately)")
-def _():
-    from gimbal.core.hooks import HookRegistry, HookPoint, HookSignal
-
-    hr = HookRegistry()
-
-    def stop_handler(p):
-        raise HookSignal.STOP("intentional")
-
-    hr.register(HookPoint.STEP_START, stop_handler, plugin_name="test")
-    result = hr.trigger(HookPoint.STEP_START, {"key": "value"})
-    assert result.stopped is True
-    # modified is independent of STOP
-    assert result.modified is False, (
-        f"STOP handler should not set modified=True, got: {result.modified}"
-    )
-
-
-@test("#15.8 returned payload replaces original (verifies payload flow)")
-def _():
-    from gimbal.core.hooks import HookRegistry, HookPoint
-
-    hr = HookRegistry()
-    captured = []
-
-    def replacer(p):
-        return {"new": True}
-
-    def capture(p):
-        captured.append(dict(p))
-        return p
-
-    # Replacer runs first (priority 10), then capture sees the new payload
-    hr.register(HookPoint.STEP_START, replacer, priority=10, plugin_name="replace")
-    hr.register(HookPoint.STEP_START, capture, priority=20, plugin_name="capture")
-    result = hr.trigger(HookPoint.STEP_START, {"old": True})
-    assert result.modified is True
-    assert captured == [{"new": True}], (
-        f"capture should see replaced payload, got: {captured}"
-    )
 
 
 # ════════════════════════════════════════════════════════════════════

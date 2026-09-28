@@ -31,75 +31,32 @@ logger = logging.getLogger(__name__)
 # ── Hook Point 枚举 ─────────────────────────────────────────────
 
 class HookPoint(str, Enum):
-    """框架所有可埋点的位置。
+    """拦截埋点（S-3 二分后只保留拦截点；观察一律走事件总线）。
 
-    新增埋点：在此处加一个枚举值，然后在主流程中调用
-        fire(HookPoint.XXX, payload)
-    即可，无需修改其它任何代码。
+    新增拦截点：在此处加一个枚举值，主流程经 ``ask_decision`` 询问；
+    观察（run/scenario/step 生命周期、http 收发）对应事件
+    run.start / scenario.start / step.start / http.request / http.response …
+    —— 订阅事件，不注册 hook。
+
+    拦截点（v2 §拦截表；S-3 起 STRATEGY_AFTER 观察位退役）：
+      STEP_BEFORE       step 进入 BEFORE_REQUEST 前     CONTINUE/SKIP/ABORT(+write)
+      STRATEGY_BEFORE   单条策略执行前                  CONTINUE/SKIP
+      CALL_BEFORE_SEND  render 之后、send 之前          CONTINUE(+patch)/ABORT
+      CALL_AFTER_RECV   send 之后、AFTER_REQUEST 前     CONTINUE/RETRY/ABORT
+      STEP_FAILED       step 失败后(ScenarioRunner 层)  CONTINUE/RETRY/SKIP/ABORT
+      FRAMEWORK_INIT / FRAMEWORK_TEARDOWN  框架生命周期(bootstrap;无事件对位)
     """
-    # 框架生命周期
     FRAMEWORK_INIT = "framework.init"
     FRAMEWORK_TEARDOWN = "framework.teardown"
-
-    # Run 生命周期
-    RUN_START = "run.start"
-    RUN_END = "run.end"
-
-    # Suite 生命周期
-    SUITE_START = "suite.start"
-    SUITE_END = "suite.end"
-
-    # Scenario 生命周期
-    SCENARIO_START = "scenario.start"
-    SCENARIO_END = "scenario.end"
-
-    # Step 生命周期
-    STEP_START = "step.start"
-    STEP_END = "step.end"
     STEP_FAILED = "step.failed"
-
-    # v2.1 批次 F-2b：HTTP_BEFORE_SEND/AFTER_RECV 钩子已退役——
-    # 认证注入原生进 http 适配器（call.user），观察走 http.request/http.response 事件；
-    # 中立拦截点 CALL_BEFORE_SEND/CALL_AFTER_RECV（Decision 通道）保留。
-
-    # 协议调用前后（中立层，所有协议，由状态机 _do_call 触发；2026-09-27 协议中立化）
     CALL_BEFORE_SEND = "call.before_send"   # payload: {protocol, step_id, spec, request, ctx}
     CALL_AFTER_RECV = "call.after_recv"     # payload: {protocol, step_id, spec, result, ctx}
-
-    # 拦截决策点（v2 §拦截 hook，批次 E；经 Decision 通道返回决策）
     STEP_BEFORE = "step.before"             # payload: {step_id, step_schema, ctx}
-    # STEP_FAILED（"step.failed"）已存在；批次 E 起在 ScenarioRunner 层
-    # 作为拦截决策点（CONTINUE/RETRY/SKIP/ABORT）触发
-
-    # Strategy 调用前后
     STRATEGY_BEFORE = "strategy.before"     # payload: {strategy_name, phase, ctx}
-    STRATEGY_AFTER = "strategy.after"       # payload: {strategy_name, phase, result, ctx}
 
 
-# ── Hook Signal：可 raise 的异常类 ──────────────────────────────
-
-class HookSignal:
-    """hook 系统中可被 handler 抛出的信号集合。
-
-    用法：
-        def my_handler(payload):
-            if some_condition:
-                raise HookSignal.STOP("rate limited")   # 中断主流程
-            mutate(payload)
-    """
-    pass
-
-
-class _StopException(Exception):
-    """handler 抛出后中断主流程的信号。
-
-    携带的 reason 可以是字符串（兼容旧拦截者）或 Decision
-    （core/decisions.py，批次 E 拦截决策通道）。
-    """
-
-
-# 把 Stop 挂在 HookSignal 下，类型上是 Exception 的子类（可 raise）
-HookSignal.STOP = _StopException   # type: ignore[attr-defined]
+# S-3：HookSignal.STOP 异常通道退役 —— handler 直接 **return Decision(...)**；
+# 未返回（None）= continue。观察型 handler 请订阅事件总线（events.bus）。
 
 
 # ── Hook 记录 ────────────────────────────────────────────────
@@ -115,39 +72,16 @@ class Hook:
     description: str = ""
 
 
-# ── Hook 触发结果 ────────────────────────────────────────────────
-
-@dataclass
-class HookResult:
-    """fire() 的返回值。
-
-    - stopped:        是否被某个 handler 抛 STOP 中断
-    - stop_reason:    停止原因（handler 抛 STOP 时可附带的字符串）
-    - stop_plugin:    抛出 STOP 的插件名（用于审计/上报）
-    - modified:       是否有 handler 返回了非 None 值（即替换了 payload）
-                      注：in-place 修改（如 dict["k"]=v）需 handler 显式
-                      return payload 才能被识别为 modified
-    - errors:         执行期间 handler 异常列表（仅记录，不抛出）
-    """
-    stopped: bool = False
-    stop_reason: Any = ""     # str（旧拦截者）或 Decision（批次 E 决策通道）
-    stop_plugin: Optional[str] = None
-    modified: bool = False
-    errors: list[dict[str, Any]] = field(default_factory=list)
-
-    def __bool__(self) -> bool:        # 方便 if not triggerer.fire(...): return 这样的写法
-        """支持 `if not result` 这种写法：未中断时为 True（继续主流程）。"""
-        return not self.stopped
-
-
+# S-3：HookResult 退役 —— trigger 返回 ``list[Decision]``（core.decisions），
+# 首个非 continue 决策即生效（decisions.effective）。handler 异常记录后继续。
 # ── Hook Registry ────────────────────────────────────────────────
 
 class HookRegistry:
     """Hook 注册表。
 
-    线程安全（2026-09-27 多线程分派）：register/sort 与 trigger 并发时
-    共享 _hooks 列表，统一用 RLock 保护；trigger 内联执行 handler 也在锁内
-    （干预型 hook 语义 = 串行裁决，并行 scenario 下天然按到达顺序生效）。
+    线程安全：register/sort 与 trigger 并发时共享 _hooks 列表，锁内只做
+    handler 快照，**执行在锁外**（debugger 阻塞等待会话输入时不再持锁，
+    并行下其它线程可继续注册）。
     """
 
     def __init__(self) -> None:
@@ -231,54 +165,34 @@ class HookRegistry:
         return list(out)
 
     # ── 触发 ──
-    def trigger(self, point: HookPoint, payload: Any) -> HookResult:
-        """触发 point 的所有 hook。
+    def trigger(self, point: "HookPoint | str", payload: Any) -> "list[Any]":
+        """触发拦截点，返回全部 handler 产出的 Decision 列表（S-3）。
 
-        payload 约定：dict 或 dataclass（属性可被 handler 直接修改）。
-        返回 HookResult，调用方根据 stopped 决定是否继续。
+        - handler **return Decision(...)** 即产出决策；None / 其它返回值 = continue；
+        - 锁内只做 handler 快照，**执行在锁外**（debugger 阻塞等待输入时
+          不再持锁，其它线程可继续 register）；
+        - handler 异常记录后继续执行后续 handler；
+        - 决策聚合（首个非 continue 生效）由 core.decisions.effective 承担。
         """
-        result = HookResult()
+        if isinstance(point, str):
+            point = HookPoint(point)
         with self._lock:
             hooks = [h for h in self._hooks if h.point == point]
-
-            if not hooks:
-                return result
-
-            logger.debug("[HookRegistry] Trigger %s: %d handler(s)", point.value, len(hooks))
-
-            for h in hooks:
-                try:
-                    ret = h.handler(payload)
-                    if ret is not None and payload is not None:
-                        # 如果 handler 返回了新对象，替换 payload
-                        payload = ret
-                        # 修复 #15：仅当 handler 实际返回新对象（替换 payload）时才标记 modified
-                        # 之前是"任何 handler 跑过就 modified=True"，误导消费者
-                        result.modified = True
-                    # in-place 修改（如 dict["k"]=v）需 handler 显式 return payload 才被识别
-                except _StopException as sig:
-                    result.stopped = True
-                    # reason 兼容 str 与 Decision（批次 E）
-                    result.stop_reason = sig.args[0] if sig.args else ""
-                    result.stop_plugin = h.plugin_name
-                    logger.info(
-                        "[HookRegistry] STOP signal at %s from plugin=%s reason=%s",
-                        point.value, h.plugin_name, result.stop_reason,
-                    )
-                    break
-                except Exception as e:  # noqa: BLE001
-                    logger.exception(
-                        "[HookRegistry] Handler error: point=%s plugin=%s handler=%s",
-                        point.value, h.plugin_name, getattr(h.handler, "__name__", repr(h.handler)),
-                    )
-                    result.errors.append({
-                        "point": point.value,
-                        "plugin": h.plugin_name,
-                        "handler": getattr(h.handler, "__name__", repr(h.handler)),
-                        "error": str(e),
-                    })
-                    # 继续执行其它 hook
-        return result
+        if not hooks:
+            return []
+        logger.debug("[HookRegistry] Trigger %s: %d handler(s)", point.value, len(hooks))
+        decisions: list[Any] = []
+        for h in hooks:
+            try:
+                ret = h.handler(payload)
+                if ret is not None:
+                    decisions.append(ret)
+            except Exception as e:  # noqa: BLE001
+                logger.exception(
+                    "[HookRegistry] Handler error: point=%s plugin=%s handler=%s",
+                    point.value, h.plugin_name, getattr(h.handler, "__name__", repr(h.handler)),
+                )
+        return decisions
 
     def clear(self) -> None:
         """清空所有已注册的 hook（用于 shutdown 兜底清理）。"""
@@ -305,6 +219,6 @@ class HookTriggerer:
         """初始化触发器，绑定到一个 HookRegistry 实例。"""
         self._registry = registry
 
-    def fire(self, point: HookPoint, payload: Any) -> HookResult:
-        """在绑定的 registry 上触发指定 point 的所有 hook。返回 HookResult。"""
+    def fire(self, point: HookPoint, payload: Any) -> "list[Any]":
+        """在绑定的 registry 上触发指定 point。返回 Decision 列表（S-3）。"""
         return self._registry.trigger(point, payload)

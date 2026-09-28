@@ -1,8 +1,8 @@
 """core/decisions.py — 拦截决策（v2 §拦截 hook，v2.1 批次 E）。
 
 hook 是同步拦截点，返回**唯一**决策类型；不承担观察（观察走事件）。
-拦截者通过 ``raise HookSignal.STOP(Decision(...))`` 返回决策（STOP 信号
-天然表达"中断默认流程"；未抛 = continue）。
+拦截者通过 ``return Decision(...)`` 返回决策（S-3 起异常通道退役；
+未返回 / 返回 None = continue）。
 
 五个拦截点（v2 表格；批次 E 接入四个，STRATEGY_BEFORE 复用现有
 dispatcher STOP→SKIP 语义）：
@@ -44,9 +44,24 @@ class Decision:
         return self.source == "human"
 
 
+def effective(decisions: "list[Any]") -> Decision:
+    """决策聚合（S-3）：首个**有内容**的决策生效。
+
+    "有内容" = action != "continue"，**或** continue 但携带载荷
+    （write/patch——debugger 的 write/patch 命令即 continue+载荷）；
+    空 / 全部纯 continue → continue。
+    """
+    for d in decisions:
+        if isinstance(d, Decision) and (
+            d.action != "continue" or d.write or d.patch
+        ):
+            return d
+    return Decision()
+
+
 def ask_decision(hook_registry: Any, point: Any, payload: dict) -> Decision:
-    """在拦截点询问决策：trigger hook；STOP 携带 Decision 即决策，STOP 携带
-    字符串按 abort（兼容旧拦截者）；未中断 = continue。
+    """在拦截点询问决策（S-3）：trigger 收集 handler 返回的 Decision，
+    首个非 continue 生效；无决策 / 全 continue = continue。
 
     point 接受 HookPoint 枚举、枚举名（"CALL_BEFORE_SEND"）或 value
     （"call.before_send"），自动归一化。
@@ -55,16 +70,11 @@ def ask_decision(hook_registry: Any, point: Any, payload: dict) -> Decision:
         return Decision()
     point = _normalize_point(point)
     try:
-        result = hook_registry.trigger(point, payload)
+        decisions = hook_registry.trigger(point, payload)
     except Exception:  # noqa: BLE001
         logger.exception("[Decision] 拦截点触发异常，按 continue 处理: {}", point)
         return Decision()
-    if not result.stopped:
-        return Decision()
-    reason = result.stop_reason
-    if isinstance(reason, Decision):
-        return reason
-    return Decision(action="abort", note=str(reason or "stopped by hook"))
+    return effective(decisions)
 
 
 def _normalize_point(point: Any) -> Any:

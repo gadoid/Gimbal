@@ -328,8 +328,8 @@ def launch(
         else:
             runtime_control.debug_mode = True
 
-    # 7.7 jsonl 事件流（v2.1 批次 F-2c）：订阅全部事件逐行打 stdout，
-    #     终线 run.finished 由 _print_run_report 在 engine.run 返回后打印
+    # 7.7 jsonl 事件流（v2.1 批次 F-2c + S-5）：订阅全部事件逐行打 stdout，
+    #     终线 run.finished 由 runner 发布（RunFinishedEvent）、sink 打印
     jsonl_sub = None
     if output == OutputFormat.jsonl:
         from gimbal.cli.common import attach_jsonl_sink
