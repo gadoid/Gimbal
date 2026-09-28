@@ -429,21 +429,26 @@ class PlanScheduler:
     def _attempt(self, run_unit, unit: Unit, inputs: dict, timeout: float | None) -> Any:
         """单次 attempt：timeout=None 直跑（历史路径）；否则线程池包裹限时。
 
-        超时的执行线程无法安全中止——弃跑弃结果（线程自行结束后由池回收），
+        超时的执行线程无法安全中止——**置位协作取消事件后弃跑弃结果**：
+        被弃线程在下一个 step 边界/重试点检测到事件即停（防止超时后的
+        retry 与被弃线程并发重复发请求——下单类接口的重复下单面）；
+        在飞的单笔请求无法中断（至多与一次重试短暂重叠,有界）。
         本 attempt 以 error_phase="timeout" 的失败结果收口并交由上层重试。
         """
         if timeout is None:
             return self._safe_run(run_unit, unit, inputs)
         import concurrent.futures as cf
+        cancel = threading.Event()
         # 注意：不用 with 语句——__exit__ 会 shutdown(wait=True) 等卡死任务，
         # 使限时失效；此处 wait=False + cancel_futures 尽快脱身
         pool = cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gimbal-attempt")
         try:
-            fut = pool.submit(self._safe_run, run_unit, unit, inputs)
+            fut = pool.submit(self._safe_run, run_unit, unit, inputs, cancel)
             try:
                 return fut.result(timeout=max(0.0, float(timeout)))
             except cf.TimeoutError:
-                logger.warning("[PlanScheduler] 单元超时: unit_id={} timeout={}s",
+                cancel.set()   # 协作取消:被弃线程在 step 边界自行终止
+                logger.warning("[PlanScheduler] 单元超时(已置取消): unit_id={} timeout={}s",
                                unit.id, timeout)
                 return self._timeout_result(unit, float(timeout))
         finally:
@@ -500,8 +505,18 @@ class PlanScheduler:
         return deadline is not None and time.monotonic() >= deadline
 
     @staticmethod
-    def _safe_run(run_unit, unit: Unit, inputs: dict) -> Any:
+    def _safe_run(run_unit, unit: Unit, inputs: dict,
+                  cancel: "threading.Event | None" = None) -> Any:
+        # 签名探测（不能 try/except TypeError——体内的 TypeError 会被误吞并
+        # 以无 cancel 形态重跑,造成重复执行）：二参旧签名按旧口径调用
+        import inspect
         try:
+            arity = len(inspect.signature(run_unit).parameters)
+        except (TypeError, ValueError):
+            arity = 2
+        try:
+            if cancel is not None and arity >= 3:
+                return run_unit(unit, inputs, cancel=cancel)
             return run_unit(unit, inputs)
         except Exception as exc:  # noqa: BLE001
             logger.exception("[PlanScheduler] 单元执行异常: unit_id={}", unit.id)

@@ -55,11 +55,15 @@ class RuntimeControl:
         step_from:     0-based；跳过 [0, step_from) 的 step（v2.1 批次 E 生效；
                        被跳过步骤所需输入由 inputs/--var 提供）。
         debug_mode:    调试档位（引擎让步）：挂起等待不计 scenario 超时。
+        cancel_event:  协作取消事件（threading.Event）。调度器 attempt 超时
+                       弃跑时置位——step 循环与 STEP_FAILED 重试点检测到
+                       即停,防止被弃线程与重试并发重复发请求。
     """
     halt_at: Optional[int] = None
     halt_reason: str = "user-requested"
     step_from: Optional[int] = None
     debug_mode: bool = False
+    cancel_event: Any = None
 
 
 # ── ScenarioRunResult ─────────────────────────────────────────────────────────
@@ -220,6 +224,25 @@ def _abort_originated(result: StepRunResult) -> bool:
 
 # ── ScenarioRunner ────────────────────────────────────────────────────────────
 
+class _NullView:
+    """无上下文时的分派视图兜底（LifecycleEntry 执行用）。"""
+
+    def write_scratch(self, key, value) -> None:
+        pass
+
+    def read_scratch(self, key, default=None):
+        return default
+
+    def get_scratch_dict(self):
+        return {}
+
+    def read_variable(self, key, **kw):
+        return None
+
+    def record_assertion(self, result) -> None:
+        pass
+
+
 class ScenarioRunner:
     """驱动整个 Scenario 的执行。
 
@@ -298,13 +321,28 @@ class ScenarioRunner:
             len(resolved_steps), base_url,
         )
 
+        # 2.6 setup 括号（上轮评审 #9：LifecycleEntry 执行落地）——
+        # 顺序执行；任一失败 → 场景 error 且不进入 steps（suite before 同语义）
+        setup_failed: "StepRunResult | None" = None
+        if scenario_schema.config.setup:
+            setup_res = self._run_lifecycle_entries(
+                scenario_schema.config.setup, scenario_ctx, label="setup")
+            if setup_res is not None:   # 失败条目
+                setup_failed = setup_res
+                logger.error(
+                    "[ScenarioRunner] setup 失败，跳过 steps: scenario_id={} kind={}",
+                    sid, "见 step_results")
+
         # 3. 触发 SCENARIO_START 事件
         #    step_count 用"实际会执行的 step 数"（不含不可执行条目），
         #    reporter 拿到的数字与最终执行结果一致。
         executable_count = sum(
             1 for s in resolved_steps if getattr(s, "call", None) is not None
         )
-        self._emit_scenario_start(scenario_schema, sid, executable_count)
+        # 唯一发布者（评审 #5）：suite_id/run_id 随事件带全
+        self._emit_scenario_start(scenario_schema, sid, executable_count,
+                                  suite_id=suite_ctx.suite_id,
+                                  run_id=suite_ctx.run_id)
 
         # 4. 逐步执行（使用已展开的 resolved_steps）
         step_runner = StepRunner(
@@ -319,7 +357,9 @@ class ScenarioRunner:
         )
 
         step_results: list[StepRunResult] = []
-        overall_status = "passed"
+        if setup_failed is not None:
+            step_results.append(setup_failed)
+        overall_status = "error" if setup_failed is not None else "passed"
         # 阶段 1 最小子集：runtime-controlled halt 信号
         halted = False
         halt_reason_out: Optional[str] = None
@@ -330,6 +370,11 @@ class ScenarioRunner:
         if cfg_timeout is None:
             bs_cfg = scenario_ctx.config
             cfg_timeout = getattr(bs_cfg, "scenario_timeout", None)
+        # 上轮评审 #9：scenario.config.timePolicy 消费——TimeoutPolicy.seconds
+        # 为场景级超时（覆盖全局默认;RecordPolicy 维持计时记录语义）
+        tp = getattr(scenario_schema.config, "timePolicy", None)
+        if tp is not None and getattr(tp, "kind", "") == "timeout":
+            cfg_timeout = int(tp.seconds)
 
         # 修复 B8：cancel flag 检查（移出循环，每 step 多次 sys.modules 查找）
         try:
@@ -360,7 +405,23 @@ class ScenarioRunner:
                 duration_ms=0.0,
             ))
 
-        for idx, step_union in enumerate(resolved_steps):
+        for idx, step_union in enumerate([] if setup_failed else resolved_steps):
+            # 协作取消（attempt 超时弃跑）：被弃线程在 step 边界自行终止,
+            # 不再发后续 step 请求（防与重试并发重复下单）
+            if (runtime_control is not None
+                    and runtime_control.cancel_event is not None
+                    and runtime_control.cancel_event.is_set()):
+                logger.warning(
+                    "[ScenarioRunner] 检测到取消信号（attempt 超时弃跑），停止后续 step: scenario_id={}",
+                    sid)
+                _append_marker(
+                    kind="cancelled",
+                    next_idx=idx,
+                    error="cancelled: attempt timeout (cooperative)",
+                    error_phase="cancelled",
+                )
+                overall_status = "error"
+                break
             # 阶段 1 最小子集：runtime-controlled halt 检查（在 timeout/cancel 之前）
             # halt_at 语义类似 range(stop)：执行到该 idx 后停止；与现有逻辑正交。
             if runtime_control is not None and runtime_control.halt_at is not None and idx >= runtime_control.halt_at:
@@ -440,12 +501,28 @@ class ScenarioRunner:
                     "result": result,
                     "ctx": scenario_ctx,
                 })
-                # P1-10：retry 循环——重跑仍失败则再次询问（再次暂停），
-                # 直至通过 / continue / skip / abort（此前只重跑一次）
+                # P1-10：retry 循环（带上限）——重跑仍失败则再次询问（再次
+                # 暂停），直至通过 / continue / skip / abort / 上限耗尽。
+                # 上限防线：交互会话持续回 retry 不得无限循环（挂死 run）
+                _MAX_STEP_RETRIES = 8
+                _retries = 0
                 while decision.action == "retry":
+                    if (runtime_control is not None
+                            and runtime_control.cancel_event is not None
+                            and runtime_control.cancel_event.is_set()):
+                        logger.warning(
+                            "[ScenarioRunner] retry 前检测到取消（attempt 超时弃跑）: step_id={}",
+                            result.step_id)
+                        break
+                    if _retries >= _MAX_STEP_RETRIES:
+                        logger.error(
+                            "[ScenarioRunner] STEP_FAILED retry 达上限 {}：按最终失败收口 step_id={}",
+                            _MAX_STEP_RETRIES, result.step_id)
+                        break
+                    _retries += 1
                     logger.info(
-                        "[ScenarioRunner] STEP_FAILED 决策 retry：整步重跑 step_id={}（source={}）",
-                        result.step_id, decision.source,
+                        "[ScenarioRunner] STEP_FAILED 决策 retry：整步重跑 step_id={}（source={} {}/{}）",
+                        result.step_id, decision.source, _retries, _MAX_STEP_RETRIES,
                     )
                     rerun = step_runner.run(step_union, scenario_ctx, idx)
                     result = rerun
@@ -497,6 +574,18 @@ class ScenarioRunner:
         except Exception:  # noqa: BLE001
             outputs = {}
 
+        # 4.7 teardown 括号（评审 #9）：必达逆序执行——失败不改变主判定,
+        # 记录为 teardown 留痕（suite after 同语义;主状态 error/pass 不受影响）
+        if scenario_schema.config.teardown:
+            for entry in reversed(scenario_schema.config.teardown):
+                res = self._run_lifecycle_entries([entry], scenario_ctx,
+                                                  label="teardown")
+                if res is not None:
+                    step_results.append(res)
+                    logger.warning(
+                        "[ScenarioRunner] teardown 条目失败(不改变主判定): kind={}",
+                        getattr(entry, "kind", "?"))
+
         # 5. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
         logger.debug(
@@ -505,7 +594,9 @@ class ScenarioRunner:
         )
 
         # 6. 触发 SCENARIO_END 事件（携带 Scenario.meta，让 reporter 可展示 tags/author/priority）
-        self._emit_scenario_end(scenario_schema, sid, overall_status, len(resolved_steps))
+        self._emit_scenario_end(scenario_schema, sid, overall_status, len(resolved_steps),
+                                suite_id=suite_ctx.suite_id,
+                                run_id=suite_ctx.run_id)
 
         return ScenarioRunResult(
             scenario_id=sid,
@@ -519,13 +610,60 @@ class ScenarioRunner:
         )
 
     # ── 埋点辅助 ──
-    def _emit_scenario_start(self, scenario: Scenario, sid: str, step_count: int) -> None:
-        """向 event_bus 发布 ScenarioStartEvent。
+    def _run_lifecycle_entries(self, entries, scenario_ctx, *, label: str):
+        """顺序执行 LifecycleEntry 列表（上轮评审 #9）。
+
+        条目经 params 合成 duck-type 策略 spec（kind/name/enabled/onFailure）
+        交 dispatcher 分派；需要 step 上下文视图——为每个条目开一个轻量
+        StepContext（step_id = {label}:{kind}:{key}）。
+        返回：全部通过 → None；首个失败条目的 StepRunResult 留痕。
+        """
+        from datetime import datetime, timezone
+        from gimbal.schema.strategy import FailurePolicy
+        for entry in entries:
+            step_id = f"{label}:{entry.kind}:{entry.key or '-'}"
+            try:
+                step_ctx = self._ctx_manager.derive_step_context(
+                    scenario_ctx, step_id=step_id,
+                    step_name=step_id, strategy_kind=entry.kind,
+                    strategy_spec=dict(entry.params or {}),
+                )
+            except Exception:  # noqa: BLE001 — 上下文设施缺失时退化为无 ctx 分派
+                step_ctx = None
+            spec = type("_LifecycleSpec", (), {
+                "kind": entry.kind, "name": step_id, "phase": None, "order": 0,
+                "enabled": True, "onFailure": FailurePolicy.ABORT, "tags": [],
+                **dict(entry.params or {}),
+            })()
+            result = self._dispatcher.dispatch(spec, step_ctx.view if step_ctx else _NullView())
+            if step_ctx is not None:
+                try:
+                    self._ctx_manager.finalize_step(
+                        step_ctx,
+                        __import__("gimbal.statemachine.states", fromlist=["StepState"])
+                        .StepStatus.PASSED if result.passed
+                        else __import__("gimbal.statemachine.states", fromlist=["StepStatus"])
+                        .StepStatus.FAILED)
+                except Exception:  # noqa: BLE001
+                    pass
+            if result.failed:
+                return StepRunResult(
+                    step_id=step_id, status="failed",
+                    error=f"{label} entry failed: {result.message}",
+                    duration_ms=result.duration_ms or 0.0,
+                )
+        return None
+
+    def _emit_scenario_start(self, scenario: Scenario, sid: str, step_count: int,
+                             *, suite_id: str = "", run_id: "str | None" = None) -> None:
+        """向 event_bus 发布 ScenarioStartEvent（唯一发布者,字段带全）。
 
         入参:
             scenario:   Scenario 数据对象。
             sid:        scenario 唯一 ID。
             step_count: 实际会执行的 step 数（不含不可执行条目）。
+            suite_id:   所属 suite（套）标识。
+            run_id:     本次 run 标识。
         副作用:
             发布事件，失败仅记 debug 日志。
         """
@@ -537,6 +675,8 @@ class ScenarioRunner:
                 scenario_id=sid,
                 scenario_name=scenario.meta.name,
                 step_count=step_count,
+                suite_id=suite_id,
+                run_id=run_id,
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[ScenarioRunner] emit SCENARIO_START failed")
@@ -547,6 +687,9 @@ class ScenarioRunner:
         sid: str,
         status: str,
         step_count: int,
+        *,
+        suite_id: str = "",
+        run_id: "str | None" = None,
     ) -> None:
         """向 event_bus 发布 ScenarioEndEvent（携带 scenario.meta 拍平后的 dict）。
 
@@ -575,6 +718,8 @@ class ScenarioRunner:
                 status=status,
                 step_count=step_count,
                 meta=meta_dump,
+                suite_id=suite_id,
+                run_id=run_id,
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[ScenarioRunner] emit SCENARIO_END failed")

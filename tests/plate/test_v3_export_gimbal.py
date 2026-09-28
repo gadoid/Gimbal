@@ -27,7 +27,7 @@ from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCENARIO_PATH = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
+SCENARIO_PATH = REPO / "tests" / "plate" / "fixtures" / "Scenario_Test_14_copy.json"
 
 
 def _load_scenario() -> ScenarioModel:

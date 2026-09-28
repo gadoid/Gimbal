@@ -190,7 +190,6 @@ class StepStateMachine:
         logger.info("[SM {}] 状态机开始执行", self._step_id)
 
         # 埋点：STEP_START 事件
-        self._emit_step_start()
 
         try:
             # 拦截决策点 STEP_BEFORE（批次 E）：SKIP → 直接终态跳过；
@@ -206,7 +205,6 @@ class StepStateMachine:
                 logger.info("[SM {}] STEP_BEFORE 决策 skip，整步跳过", self._step_id)
                 self._try_advance(StepState.SKIPPED, reason="step.before skip")
                 duration_ms = (datetime.now(timezone.utc) - t_start).total_seconds() * 1000
-                self._emit_step_end(duration_ms)
                 return StepRunResult(
                     step_id=self._step_id, status=self._state.value,
                     duration_ms=duration_ms,
@@ -258,11 +256,9 @@ class StepStateMachine:
         logger.info("[SM {}] 状态机执行完成: final_state={} duration_ms={:.2f}",
                     self._step_id, self._state.value, duration_ms)
 
-        # 埋点：STEP_END / STEP_FAILED 事件
+        # 埋点：STEP_FAILED 事件（step.start/end 由 ContextManager 投影发布）
         if self._state == StepState.FAILED or self._state == StepState.ERROR:
             self._emit_step_failed(self._error or f"final_state={self._state.value}")
-        else:
-            self._emit_step_end(duration_ms)
 
         return StepRunResult(
             step_id=self._step_id,
@@ -567,33 +563,8 @@ class StepStateMachine:
         )
         self._delegate_http("response", call_spec, cr)
 
-    def _emit_step_start(self) -> None:
-        """向 event_bus 发送 StepStartEvent 事件（含 step_id / step_name / description）；无 bus 时静默 return，内部异常仅 debug 日志。"""
-        if self._bus is None:
-            return
-        try:
-            from gimbal.events.types import StepStartEvent
-            self._bus.publish(StepStartEvent(
-                step_id=self._step_id,
-                step_name=getattr(self._step_schema, "name", "") or self._step_id,
-                description=getattr(self._step_schema, "description", None),
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit STEP_START failed", self._step_id)
-
-    def _emit_step_end(self, duration_ms: float) -> None:
-        """向 event_bus 发送 StepEndEvent 事件（step_id、status、duration_ms）；无 bus 静默 return，内部异常仅 debug 日志。"""
-        if self._bus is None:
-            return
-        try:
-            from gimbal.events.types import StepEndEvent
-            self._bus.publish(StepEndEvent(
-                step_id=self._step_id,
-                status=self._state.value,
-                duration_ms=duration_ms,
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit STEP_END failed", self._step_id)
+    # 生命周期事件唯一发布者（上轮评审 #5）：step.start/end 由 ContextManager
+    # 投影发布（计数字段全）；状态机不再直发（避免双发与字段缺失）
 
     def _emit_step_failed(self, error: str) -> None:
         """向 event_bus 发送 StepFailedEvent 事件（error 截断 500 字符，phase 为当前 state）；无 bus 静默 return，内部异常仅 debug 日志。"""

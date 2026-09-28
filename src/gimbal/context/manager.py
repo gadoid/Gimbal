@@ -112,7 +112,9 @@ class ContextManager:
             config=suite_ctx.config,  # 引用传递
             channels=channels,
         )
-        self._event_bus.publish(project_scenario_started(ctx, ctx.run_id))
+        # 生命周期事件唯一发布者裁定（上轮评审 #5）：scenario.start/end 由
+        # ScenarioRunner 发布（携带 meta 与真实 step_count）；ContextManager
+        # 只发 step.start/end（计数字段最全）与 variable.promoted
         logger.info("[ContextManager] ScenarioContext created: scenario_id={} suite_id={}",
                     scenario_id, suite_ctx.suite_id)
         return ctx
@@ -122,7 +124,6 @@ class ContextManager:
         object.__setattr__(ctx, "ended_at", datetime.now(timezone.utc))
         object.__setattr__(ctx, "status", status)
         ctx.seal()
-        self._event_bus.publish(project_scenario_completed(ctx, ctx.run_id))
         self._archive.save_scenario(ctx)
         logger.info("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
                     ctx.scenario_id, status, len(ctx.step_refs))

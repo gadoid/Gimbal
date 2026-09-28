@@ -1,1 +1,0 @@
-"""Asset selection and assembly."""

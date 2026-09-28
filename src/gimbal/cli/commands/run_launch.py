@@ -248,6 +248,12 @@ def launch(
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
     configuration  = bootstrap(cli_ctx)
+    # 2.1 jsonl sink 在**任何事件之前**挂载（评审 #5：run.meta 是 seq=1，
+    #     晚于它挂载会丢首事件,stdout 流从 seq=2 开始）
+    jsonl_sub = None
+    if output == OutputFormat.jsonl:
+        from gimbal.cli.common import attach_jsonl_sink
+        jsonl_sub = attach_jsonl_sink(configuration.event_bus)
     # 2.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文）
     _publish_run_meta(configuration)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
@@ -333,12 +339,8 @@ def launch(
         else:
             runtime_control.debug_mode = True
 
-    # 7.7 jsonl 事件流（v2.1 批次 F-2c + S-5）：订阅全部事件逐行打 stdout，
+    # 7.7 jsonl 事件流：sink 已在 2.1（bootstrap 后）提前挂载；
     #     终线 run.finished 由 runner 发布（RunFinishedEvent）、sink 打印
-    jsonl_sub = None
-    if output == OutputFormat.jsonl:
-        from gimbal.cli.common import attach_jsonl_sink
-        jsonl_sub = attach_jsonl_sink(configuration.event_bus)
 
     #8. 数据类有效，执行器启动
     engine = Engine(configuration)

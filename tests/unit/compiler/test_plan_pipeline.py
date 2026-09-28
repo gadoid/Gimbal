@@ -313,8 +313,16 @@ class TestSevenStages:
         """五层合并代数：深合并 + 标量后层覆盖 + list 按 index 覆盖。"""
         from gimbal.compiler.pipeline import p_patch
         assert p_patch([{"a": 1, "b": {"c": 2}}, {"b": {"c": 3}}]) == {"a": 1, "b": {"c": 3}}
-        # list 按 index 覆盖;多出保留
-        assert p_patch([{"l": [1, 2, 3]}, {"l": [9]}]) == {"l": [9, 2, 3]}
+        # v2 合并代数:list 整体替换(唯一例外 setup/teardown 按 key 合并)
+        assert p_patch([{"l": [1, 2, 3]}, {"l": [9]}]) == {"l": [9]}
+        # setup/teardown 按 (kind,key) 合并:同身份覆盖,新条目追加
+        merged = p_patch([
+            {"setup": [{"kind": "login", "key": "l1"}, {"kind": "mock", "key": "m1"}]},
+            {"setup": [{"kind": "login", "key": "l1", "params": {"u": "x"}},
+                        {"kind": "sleep", "key": "s1"}]},
+        ])
+        assert [e["kind"] for e in merged["setup"]] == ["login", "mock", "sleep"]
+        assert merged["setup"][0]["params"] == {"u": "x"}
         # 后层新增键直接并入
         assert p_patch([{"a": 1}, {"b": 2}]) == {"a": 1, "b": 2}
         assert p_patch([]) == {}

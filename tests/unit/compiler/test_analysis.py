@@ -157,8 +157,12 @@ class TestOrderedDataflow:
         # 产出面不受影响：orderId 同时是对外输出
         assert "orderId" in a.outputs
 
-    def test_produce_then_use_self_sufficient(self):
-        """step1 提取 order_id，step2 再用 → 自给自足，不算输入（有序不等于全扣）。"""
+    def test_template_use_after_produce_still_requires_input(self):
+        """上轮评审 #3 修正：step1 提取 order_id、step2 用 ``${order_id}`` 模板
+        —— 模板在预处理期渲染（Extract 产出那时尚不存在），运行期必然
+        "模板变量未找到"，**不是**自给自足：分析必须计输入（编译期暴露，
+        可由 config.vars 默认/注入/上游连线供给）。
+        """
         sc = _scenario([
             Step(call=Call(protocol="echo", message="v"),
                  strategy=[_extract("order_id")]),
@@ -166,8 +170,25 @@ class TestOrderedDataflow:
         ])
         a = analyze_scenario(sc)
         assert "order_id" in a.outputs
+        assert "order_id" in a.inputs, (
+            f"模板引用不被场景内产出抵消，得到 inputs={sorted(a.inputs)}"
+        )
+
+    def test_scratch_use_after_produce_self_sufficient(self):
+        """运行期通道对照：step2 经 ``$.order_id``（Assign/断言 scratch 引用）
+        消费 step1 的 Extract 产出 → 自给自足,不算输入。"""
+        sc = _scenario([
+            Step(call=Call(protocol="echo", message="v"),
+                 strategy=[_extract("order_id")]),
+            Step(call=Call(protocol="echo", message="v2"),
+                 strategy=[{"kind": "assertion", "name": "c",
+                            "target": "$.order_id", "operator": "eq",
+                            "expected": "x"}]),
+        ])
+        a = analyze_scenario(sc)
+        assert "order_id" in a.outputs
         assert "order_id" not in a.inputs, (
-            f"produce-then-use 不应计输入，得到 inputs={sorted(a.inputs)}"
+            f"$. 引用可被前序产出抵消，得到 inputs={sorted(a.inputs)}"
         )
 
     def test_late_produce_does_not_cancel_earlier_use_chain_wiring(self):

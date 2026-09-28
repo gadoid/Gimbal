@@ -127,20 +127,33 @@ class TestEventShapes:
         assert ev.result["response"]["body"] == {"ok": 1}
         assert "call" in ev.evidence_keys   # F 定稿：唯一证据键
 
-    def test_scenario_end_meta_flattened(self):
+    def test_scenario_end_single_event_with_meta(self):
+        """上轮评审 #5：生命周期事件唯一发布者——scenario.end 恰一条
+        （Runner 发布,携带拍平 meta）,不再 ContextManager+Runner 双发。"""
         engine, bus, *_ = make_engine()
         got = []
         bus.subscribe(lambda e: got.append(e), "scenario.end")
         with mock_httpx(200, {"code": 0})[0]:
             engine.run(http_scenario("meta-sc"))
-        # scenario.end 双发（先 ContextManager 投影、后 runner emit）是现行行为：
-        # 投影事件无 meta；runner 事件携带拍平的 meta dict
-        assert len(got) == 2
-        projection, runner_emit = got[0], got[1]
-        assert projection.scenario_id == "meta-sc" and projection.status == "passed"
-        assert not (projection.meta or {})
-        assert runner_emit.scenario_id == "meta-sc"
-        assert runner_emit.meta["name"] == "meta-sc"
+        assert len(got) == 1, f"scenario.end 应恰一条（双发回归），得到 {len(got)}"
+        ev = got[0]
+        assert ev.scenario_id == "meta-sc" and ev.status == "passed"
+        assert ev.meta["name"] == "meta-sc"
+
+    def test_step_lifecycle_events_single_and_complete(self):
+        """step.start/end 恰一条且字段完整（scenario_id/断言计数）——
+        唯一发布者为 ContextManager 投影,状态机不再直发。"""
+        engine, bus, *_ = make_engine()
+        starts, ends = [], []
+        bus.subscribe(lambda e: starts.append(e), "step.start")
+        bus.subscribe(lambda e: ends.append(e), "step.end")
+        with mock_httpx(200, {"code": 0})[0]:
+            engine.run(http_scenario("step-evt-sc"))
+        assert len(starts) == 1, f"step.start 应恰一条,得到 {len(starts)}"
+        assert len(ends) == 1, f"step.end 应恰一条,得到 {len(ends)}"
+        assert starts[0].scenario_id == "step-evt-sc"
+        assert ends[0].scenario_id == "step-evt-sc"
+        assert ends[0].status == "passed"
 
     def test_request_evidence_redacted_in_call_exchange(self):
         engine, bus, *_ = make_engine()

@@ -34,7 +34,7 @@ from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCENARIO_PATH = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
+SCENARIO_PATH = REPO / "tests" / "plate" / "fixtures" / "Scenario_Test_14_copy.json"
 
 
 # ── 辅助函数 ──────────────────────────────────────────────────────

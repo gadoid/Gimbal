@@ -137,10 +137,11 @@ class Engine:
 
         # 3. 执行：编译为 Plan → 单路径执行（v2.1 批次 B；scenario=隐式 aggregate）
         try:
-            from gimbal.compiler.pipeline import compile_target, CompileError
-            # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）
+            from gimbal.compiler.pipeline import compile_plan, CompileError
+            # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）；
+            # S-4 收尾：运行路径走 compile_plan（七阶段编排,含 p_validate 复查）
             protocols = self._ictx.protocols or getattr(self._ictx.dispatcher, "protocols", None)
-            plan = compile_target(target, protocols=protocols)
+            plan = compile_plan(target, protocols=protocols)
             result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
         except CompileError as e:
             logger.error("[Engine] 编译失败: {}", e)
@@ -281,7 +282,7 @@ class Engine:
             protocol_registry=self._ictx.protocols,
         )
 
-        def _run_unit(unit, inputs):
+        def _run_unit(unit, inputs, cancel=None):
             scenario = unit.scenario
             if inputs:
                 # 统一输入注入原语：inputs 注入为 scenario vars（生效副本，不改源）；
@@ -291,7 +292,15 @@ class Engine:
                     "config": scenario.config.model_copy(update={"vars": merged}),
                 })
             logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
-            return runner.run(scenario, suite_ctx, runtime_control=runtime_control)
+            rc = runtime_control
+            if cancel is not None:
+                # 调度器超时弃跑的协作取消（P1:RuntimeControl 运行期控制语义）
+                if rc is None:
+                    from gimbal.core.scenario_runner import RuntimeControl as _RC
+                    rc = _RC()
+                if rc.cancel_event is None:
+                    rc.cancel_event = cancel
+            return runner.run(scenario, suite_ctx, runtime_control=rc)
 
         fail_fast = framework_ctx.config.fail_fast
         if plan.policy.fail_fast is not None:

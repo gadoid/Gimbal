@@ -30,7 +30,7 @@ from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCENARIO = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
+SCENARIO = REPO / "tests" / "plate" / "fixtures" / "Scenario_Test_14_copy.json"
 
 
 def _load_scenario() -> ScenarioModel:

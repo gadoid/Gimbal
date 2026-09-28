@@ -22,12 +22,12 @@ render 与 send 分开，是为了让 CALL_BEFORE_SEND 拦截（调试改待发�
 识别 protocol → build_spec → ProtocolRegistry 直调执行器模板（S-2 起
 不经策略 dispatcher），不含任何协议细节。
 
-双读期声明（v2.1 批次 A-F）：scratch 同时保留旧键（response_* 等），
-批次 F 回收；HTTP 命名空间钩子/事件留在 http 适配器内部不动的契约
-（认证原生注入已替代 auth_headers 插件，批次 F-2b 完成）。
+终态契约（批次 F 收官 + 后续评审轮）：scratch 唯一证据键 = ``call``
+（请求体通道 $.call.request.body 挂其子树,残留 #5 统一）；HTTP 命名空间
+事件留在 http 适配器内部；认证原生注入（call.user → login()）。
 
-凭证并入协议（v2 ``login``）：批次 D 前置设计时落地；CallResult 预留
-``auth_expired`` 字段。
+凭证并入协议（v2 ``login``）：S-2 已落地；CallResult.auth_expired 驱动
+单飞刷新 → 重发一次（≤1）。
 """
 from __future__ import annotations
 

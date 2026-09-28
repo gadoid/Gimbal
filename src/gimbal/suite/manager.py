@@ -1,1 +1,0 @@
-"""SuiteManager main class."""

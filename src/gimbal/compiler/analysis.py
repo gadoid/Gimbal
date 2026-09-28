@@ -154,9 +154,15 @@ def _dataflow(steps: list) -> tuple[set[str], set[str]]:
     """按 step 序单遍数据流（P0-7）。
 
     ``produced`` 初始含协议内部键（``_PROTOCOL_PRODUCED_KEYS`` 精确键名）；
-    每个 step **先**收集其引用（模板 ``${var.x}``/裸 ``${x}`` + ``$.x`` 首段），
-    引用时点未在 ``produced`` 中的名字计 required；**后**收集该 step 的产出
-    （Extract 提升目标）入 ``produced``。引用先于产出者不被晚到的产出抵消。
+    每个 step **先**收集其引用，**后**收集该 step 的产出（Extract 提升目标）
+    入 ``produced``。引用先于产出者不被晚到的产出抵消。
+
+    模板与 scratch 两条通道语义不同（上轮评审 #3）：
+      - ``${x}`` 模板引用在**预处理期一次性渲染**（root=var/auth/service），
+        场景内的 Extract 产出那时尚不存在——**一律计外部输入**（可由
+        config.vars 默认/注入/上游单元连线供给），不参与数据流抵消；
+      - ``$.x`` scratch 引用是**运行期**通道，可被本场景前序 Extract 产出
+        抵消（引用时点未在 produced 中才计 required）。
 
     返回 (required, outputs)：
       required —— 需要外部供给的名字（协议内部键已在初始 produced，天然不算）
@@ -167,8 +173,10 @@ def _dataflow(steps: list) -> tuple[set[str], set[str]]:
     outputs: set[str] = set()
     for step in steps:
         var_refs, bare_refs = _collect_template_refs(_dump_safely(step))
-        refs = var_refs | bare_refs | _step_jsonpath_refs(step)
-        required |= refs - produced
+        # 模板引用：预处理期渲染,不被场景内产出抵消（一律外部输入）
+        required |= var_refs | bare_refs
+        # scratch 引用：运行期通道,数据流抵消
+        required |= _step_jsonpath_refs(step) - produced
         outs = _step_productions(step)
         produced |= outs
         outputs |= outs

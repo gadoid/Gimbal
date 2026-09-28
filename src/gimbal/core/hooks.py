@@ -169,10 +169,12 @@ class HookRegistry:
         """触发拦截点，返回全部 handler 产出的 Decision 列表（S-3）。
 
         - handler **return Decision(...)** 即产出决策；None / 其它返回值 = continue；
+        - **短路语义（上轮评审 #8 成文）**：任一 handler 返回 Decision 即停止
+          后续 handler——先到者裁决（与旧 STOP break 一致；abort 后 debugger
+          等后续拦截者不再执行）；
         - 锁内只做 handler 快照，**执行在锁外**（debugger 阻塞等待输入时
           不再持锁，其它线程可继续 register）；
-        - handler 异常记录后继续执行后续 handler；
-        - 决策聚合（首个非 continue 生效）由 core.decisions.effective 承担。
+        - handler 异常记录后继续执行后续 handler。
         """
         if isinstance(point, str):
             point = HookPoint(point)
@@ -187,6 +189,7 @@ class HookRegistry:
                 ret = h.handler(payload)
                 if ret is not None:
                     decisions.append(ret)
+                    break   # 短路:首个返回 Decision 的 handler 即裁决
             except Exception as e:  # noqa: BLE001
                 logger.exception(
                     "[HookRegistry] Handler error: point=%s plugin=%s handler=%s",

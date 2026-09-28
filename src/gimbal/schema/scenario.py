@@ -29,7 +29,7 @@ class Config(BaseModel):
     teardown : list[TeardownUnion] = Field(default_factory=list , description= "用例后置动作")
     services : dict[str, str] = Field(default_factory=dict,description= "服务与URL映射关系")
     users : dict[str,AuthSession] = Field(default_factory=dict, description= "认证信息字典")
-    timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, description="时间处理策略:超时检查或耗时记录")
+    timePolicy : Optional[TimePolicyUnion] = Field(default=None, description="时间处理策略:超时检查(TimeoutPolicy.seconds)或耗时记录;None=不限时")
     retry : Optional[RetryPolicy] = None # 定义重试策略
     # ── 新增：scenario 级变量声明 ──
     vars : dict[str, Any] = Field(

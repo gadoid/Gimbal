@@ -127,6 +127,9 @@ def fake_dispatcher_and_ctx_factory():
             pass
 
     class FakeSuiteCtx:
+        suite_id = "__default__"   # 评审 #5:事件发射读 suite_id/run_id
+        run_id = "test-run"
+
         def __init__(self):
             class _Cfg:
                 def __init__(self):
@@ -147,6 +150,12 @@ def fake_dispatcher_and_ctx_factory():
         fake_steps.append(FakeStep(idx=i))
 
     class FakeScenario:
+        class _Cfg:
+            setup = []
+            teardown = []
+            timePolicy = None
+        config = _Cfg()
+
         def __init__(self):
             self.scenarioId = "test-scenario"
             self.steps = fake_steps

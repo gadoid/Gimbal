@@ -19,12 +19,16 @@ def test_trigger_runs_handlers_outside_lock():
     assert not t.is_alive()
 
 
-def test_trigger_collects_decisions_in_registration_order():
+def test_trigger_short_circuits_on_first_decision():
+    """上轮评审 #8:首个返回 Decision 的 handler 即裁决,后续不执行。"""
     reg = HookRegistry()
+    second_ran = []
     reg.register(HookPoint.STEP_BEFORE, lambda p: Decision(action="skip"), priority=10)
-    reg.register(HookPoint.STEP_BEFORE, lambda p: Decision(action="abort"), priority=20)
+    reg.register(HookPoint.STEP_BEFORE,
+                 lambda p: second_ran.append(1) or Decision(action="abort"), priority=20)
     ds = reg.trigger(HookPoint.STEP_BEFORE, {})
-    assert [d.action for d in ds] == ["skip", "abort"]
+    assert [d.action for d in ds] == ["skip"]
+    assert not second_ran
     assert effective(ds).action == "skip"
 
 

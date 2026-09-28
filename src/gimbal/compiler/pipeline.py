@@ -60,6 +60,34 @@ def compile_target(
     )
 
 
+def _relax_templates(params_model: "type", fields: dict) -> dict:
+    """编译期校验的模板容忍（上轮评审 #7）：``${}`` 模板在预处理期才渲染,
+    编译期不能因类型不符拒收（如 timeout: "${to}" 对 float 字段）。
+
+    含 ``${`` 的字符串按目标字段类型替换为哑元后校验——未知键照常拒绝;
+    渲染后的真实类型由执行器读取时兜底（call.py 的 float() 等 coercer）。
+    """
+    def _dummy_for(annotation: Any) -> Any:
+        ann = str(annotation or "")
+        if "float" in ann:
+            return 1.0
+        if "int" in ann:
+            return 1
+        if "bool" in ann:
+            return True
+        if "dict" in ann:
+            return {}
+        if "list" in ann:
+            return []
+        return "__template__"
+
+    out = dict(fields)
+    for key, value in out.items():
+        if isinstance(value, str) and "${" in value and key in params_model.model_fields:
+            out[key] = _dummy_for(params_model.model_fields[key].annotation)
+    return out
+
+
 def _validate_call_fields(
     target: Union[Scenario, SuiteGraph],
     protocols: "Any | None" = None,
@@ -103,7 +131,8 @@ def _validate_call_fields(
             if params_model is None:
                 continue  # 开放协议：注册时未声明参数模型，不做字段校验
             try:
-                params_model.model_validate(call.extra_fields())
+                params_model.model_validate(
+                    _relax_templates(params_model, call.extra_fields()))
             except ValidationError as exc:
                 raise CompileError(
                     f"step[{idx}] call 协议 {proto!r} 字段校验失败"
@@ -159,15 +188,38 @@ def p_normalize(target: Union[Scenario, SuiteGraph],
     return target
 
 
+_KEYED_LIST_FIELDS = ("setup", "teardown")
+
+
+def _merge_keyed_list(base: list, override: list) -> list:
+    """setup/teardown 按 key 合并：条目身份 = (kind, key)（LifecycleEntry
+    的 key 缺省与 kind 同值）；后层同身份条目覆盖前层,新条目按序追加。"""
+    def ident(item: Any) -> tuple:
+        if isinstance(item, dict):
+            return (item.get("kind", ""), item.get("key") or item.get("kind", ""))
+        return (type(item).__name__, getattr(item, "key", ""))
+
+    out = list(base)
+    base_ids = {ident(x): i for i, x in enumerate(out)}
+    for item in override:
+        k = ident(item)
+        if k in base_ids:
+            out[base_ids[k]] = item
+        else:
+            base_ids[k] = len(out)
+            out.append(item)
+    return out
+
+
 def p_patch(layers: list[dict]) -> dict:
     """七阶段之三 patch：五层合并代数（源 → suite 补丁 → 单元补丁 →
     调用参数 → 生效副本；标量后层覆盖前层）。
 
-    规则（纯函数）：
+    规则（纯函数,v2 §patch 对齐）：
       - dict 深合并（后层的键覆盖同名键，嵌套 dict 递归合并）；
       - 标量（含 str）后层覆盖；
-      - list 按 index 覆盖（后层 list[i] 覆盖前层 list[i]；多出的保留，
-        缺短的以前层补齐）。
+      - **list 整体替换**——唯一例外是 setup/teardown 生命周期表：
+        按 (kind, key) 身份合并（后层同身份覆盖,新条目追加）。
     """
     if not layers:
         return {}
@@ -178,16 +230,10 @@ def p_patch(layers: list[dict]) -> dict:
             if isinstance(v, dict) and isinstance(out.get(k), dict):
                 out[k] = merge(out[k], v)
             elif isinstance(v, list) and isinstance(out.get(k), list):
-                merged = list(out[k])
-                for i, item in enumerate(v):
-                    if i < len(merged):
-                        if isinstance(item, dict) and isinstance(merged[i], dict):
-                            merged[i] = merge(merged[i], item)
-                        else:
-                            merged[i] = item
-                    else:
-                        merged.append(item)
-                out[k] = merged
+                if k in _KEYED_LIST_FIELDS:
+                    out[k] = _merge_keyed_list(out[k], v)
+                else:
+                    out[k] = list(v)   # 整体替换
             else:
                 out[k] = v
         return out
