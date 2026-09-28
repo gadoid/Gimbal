@@ -76,8 +76,29 @@ class PlanOutcome:
         return "pending"
 
 
-# attempt 超时弃跑后 join 被弃线程的时限上限（对齐 http 默认请求超时）
+# attempt 超时弃跑后 join 被弃线程的时限上限（P0-08.1：跟随单元内
+# 最大的 step 协议超时 + 固定余量；未声明任何协议超时时回落本默认值，
+# 对齐 http 默认请求超时 30s）
 _ABANDON_JOIN_TIMEOUT_SEC = 30.0
+_ABANDON_JOIN_MARGIN_SEC = 5.0
+
+
+def _abandon_join_timeout(unit: "Any") -> float:
+    """join 被弃 attempt 的时限：max(step 协议超时) + 余量。
+
+    协议超时取各 step ``call.timeout``（http 默认 30s；其它协议声明了
+    同名字段同样计入）；余量覆盖 step 边界检测与收尾清理的耗时。
+    在飞请求至多跑满协议超时——join 上限盖住它即可避免"join 先放弃、
+    重试与被弃请求并发重复发送"。
+    """
+    worst = 0.0
+    for step in getattr(unit.scenario, "steps", []) or []:
+        t = getattr(getattr(step, "call", None), "timeout", None)
+        if isinstance(t, (int, float)) and t > worst:
+            worst = float(t)
+    if worst <= 0:
+        return _ABANDON_JOIN_TIMEOUT_SEC
+    return worst + _ABANDON_JOIN_MARGIN_SEC
 
 
 class PlanScheduler:
@@ -457,14 +478,15 @@ class PlanScheduler:
                 # 在飞请求无法中断——**join 被弃 attempt 真正退出后**再重试/返回
                 # （锁在此内层,退出前锁不释放）:不等会造成新 attempt 与被弃请求
                 # 并发重复发送（重叠至多 retry+1）,以及弃请求跨锁释放继续跑。
-                # join 上限对齐协议侧默认请求超时(http 默认 30s;更长的协议
-                # 超时场景经 _ABANDON_JOIN_TIMEOUT_SEC 调整）
+                # join 上限 = 单元内最大协议超时 + 余量（P0-08.1,见
+                # _abandon_join_timeout；未声明协议超时时回落默认 30s）
+                join_bound = _abandon_join_timeout(unit)
                 try:
-                    fut.result(timeout=_ABANDON_JOIN_TIMEOUT_SEC)
+                    fut.result(timeout=join_bound)
                 except cf.TimeoutError:
                     logger.error(
-                        "[PlanScheduler] 被弃 attempt 超过 join 上限 {}s 仍未退出: unit_id={}",
-                        _ABANDON_JOIN_TIMEOUT_SEC, unit.id)
+                        "[PlanScheduler] 被弃 attempt 超过 join 上限 {:.1f}s 仍未退出: unit_id={}",
+                        join_bound, unit.id)
                 except Exception:  # noqa: BLE001 — 被弃 attempt 以异常收尾,正是退出
                     pass
                 return self._timeout_result(unit, float(timeout))

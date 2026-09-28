@@ -589,11 +589,11 @@ def _build_sm_for_soft_failure(
         after_request_results = [_make_strategy_result("passed")]
     for _ in before_request_results:
         strategies.append(SimpleNamespace(
-            kind="assign", phase=StrategyPhase.BEFORE_REQUEST, order=0,
+            kind="assign", phase=StrategyPhase.PREPARE, order=0,
             enabled=True, onFailure=FailurePolicy.ABORT, name="before",
         ))
     strategies.append(SimpleNamespace(
-        kind="extract", phase=StrategyPhase.AFTER_REQUEST, order=0,
+        kind="extract", phase=StrategyPhase.EXTRACTING, order=0,
         enabled=True, onFailure=FailurePolicy.ABORT, name="after",
     ))
     for _ in verifying_results:
@@ -638,9 +638,9 @@ def _build_sm_for_soft_failure(
     )
     # dispatch_phase returns the configured per-phase results
     def _dispatch_phase(phase, strategies, view):
-        if phase == StrategyPhase.BEFORE_REQUEST:
+        if phase == StrategyPhase.PREPARE:
             return before_request_results
-        if phase == StrategyPhase.AFTER_REQUEST:
+        if phase == StrategyPhase.EXTRACTING:
             return after_request_results
         if phase == StrategyPhase.VERIFYING:
             return verifying_results
@@ -1258,9 +1258,9 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
               headers={}, timeout=30.0)
     request = Request(kind="request", body={})
     strategies = [
-        SimpleNamespace(kind="assign", phase=StrategyPhase.BEFORE_REQUEST,
+        SimpleNamespace(kind="assign", phase=StrategyPhase.PREPARE,
                         order=0, enabled=True, onFailure=FailurePolicy.ABORT, name="before"),
-        SimpleNamespace(kind="extract", phase=StrategyPhase.AFTER_REQUEST,
+        SimpleNamespace(kind="extract", phase=StrategyPhase.EXTRACTING,
                         order=0, enabled=True, onFailure=FailurePolicy.ABORT, name="after"),
         SimpleNamespace(kind="assertion", phase=StrategyPhase.VERIFYING,
                         order=0, enabled=True, onFailure=FailurePolicy.ABORT, name="verify"),

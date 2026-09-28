@@ -56,7 +56,7 @@ def _make_scenario():
                 strategy=[
                     Extract(
                         name="extract_token",
-                        phase=StrategyPhase.AFTER_REQUEST,
+                        phase=StrategyPhase.EXTRACTING,
                         expression="$.token",
                         target="t",
                         scope=Scope.SCENARIO,

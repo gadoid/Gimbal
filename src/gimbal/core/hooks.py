@@ -39,10 +39,10 @@ class HookPoint(str, Enum):
     —— 订阅事件，不注册 hook。
 
     拦截点（v2 §拦截表；S-3 起 STRATEGY_AFTER 观察位退役）：
-      STEP_BEFORE       step 进入 BEFORE_REQUEST 前     CONTINUE/SKIP/ABORT(+write)
+      STEP_BEFORE       step 进入调用阶段前              CONTINUE/SKIP/ABORT(+write)
       STRATEGY_BEFORE   单条策略执行前                  CONTINUE/SKIP
       CALL_BEFORE_SEND  render 之后、send 之前          CONTINUE(+patch)/ABORT
-      CALL_AFTER_RECV   send 之后、AFTER_REQUEST 前     CONTINUE/RETRY/ABORT
+      CALL_AFTER_RECV   send 之后、提取阶段前           CONTINUE/RETRY/ABORT
       STEP_FAILED       step 失败后(ScenarioRunner 层)  CONTINUE/RETRY/SKIP/ABORT
       FRAMEWORK_INIT / FRAMEWORK_TEARDOWN  框架生命周期(bootstrap;无事件对位)
     """

@@ -258,3 +258,70 @@ class TestTimeoutJoinBeforeRetry:
             total, peak = calls["n"], conc["max"]
         assert total == 4, f"a 应恰 3 次(attempt+2 retries)+b 1 次,得到 {total}"
         assert peak == 1, f"同锁下不应有并发重叠,峰值 {peak}"
+
+
+class TestAbandonJoinBound:
+    """P0-08.1：join 上限跟随单元内最大协议超时 + 余量（未声明回落 30s）。"""
+
+    def test_join_bound_tracks_max_protocol_timeout(self):
+        from gimbal.scheduler.plan import _abandon_join_timeout, _ABANDON_JOIN_MARGIN_SEC
+        sc = _scenario("jt", n_steps=2)
+        # 两个 step 声明不同协议超时（协议自有字段，extra=allow）
+        sc.steps[0].call = Call(protocol="slow", message="a", timeout=1.5)
+        sc.steps[1].call = Call(protocol="slow", message="b", timeout=60)
+        from gimbal.schema.plan import Unit
+        unit = Unit(id="jt", scenario=sc)
+        assert _abandon_join_timeout(unit) == 60 + _ABANDON_JOIN_MARGIN_SEC
+
+    def test_join_bound_falls_back_without_declared_timeouts(self):
+        from gimbal.scheduler.plan import _abandon_join_timeout, _ABANDON_JOIN_TIMEOUT_SEC
+        unit = type("U", (), {"scenario": _scenario("jt2")})()
+        assert _abandon_join_timeout(unit) == _ABANDON_JOIN_TIMEOUT_SEC
+
+    def test_retry_waits_abandoned_attempt_exit(self):
+        """声明协议超时 0.8s、发送实际 0.6s、单元超时 0.1s、retry 1：
+        重试的首次发送必须晚于被弃 attempt 的发送结束（退出前不重试）。"""
+        import threading as _th
+
+        events: list[tuple[str, float]] = []
+        ev_lock = _th.Lock()
+        t0 = time.monotonic()
+
+        class StubbornExecutor(SlowProtocolExecutor):
+            """0.6s 发送且无视协作取消——模拟"在飞请求跑满协议超时"。"""
+            protocol = "stubborn"
+
+            def send(self, spec, view):
+                with ev_lock:
+                    events.append(("send_start", time.monotonic() - t0))
+                time.sleep(0.6)
+                with ev_lock:
+                    events.append(("send_end", time.monotonic() - t0))
+                return CallResult.build(
+                    protocol=self.protocol, request={}, status=0, body={"ok": True})
+
+        from gimbal.schema.scenario import UnitDecl, SuiteGraph
+        from gimbal.schema.plan import UnitPolicy
+
+        cfg = _make_configuration()
+        cfg.dispatcher.protocols.register(StubbornExecutor())
+        engine = Engine(cfg)
+        sc = Scenario(
+            scenarioId="stub", meta=Meta(name="s", description="d", module="m",
+                                         priority=1, author="a", owner="o", tags=[],
+                                         version="1",
+                                         createTime=datetime.now(timezone.utc),
+                                         expire=False, requirementRef=[]),
+            config=SC(), resource={},
+            steps=[Step(call=Call(protocol="stubborn", message="x", timeout=0.8),
+                        strategy=[])],
+        )
+        graph = SuiteGraph(kind="graph", mode="aggregate", units=[
+            UnitDecl(ref="u", scenario=sc, policy_kwargs={"timeout": 0.1, "retry": 1}),
+        ])
+        engine.run(graph)
+        starts = [t for tag, t in events if tag == "send_start"]
+        ends = [t for tag, t in events if tag == "send_end"]
+        assert len(starts) == 2, events            # 被弃 1 次 + 重试 1 次
+        assert len(ends) == 2, events
+        assert starts[1] >= ends[0], events         # 重试不早于被弃发送退出

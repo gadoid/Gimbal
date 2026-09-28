@@ -74,7 +74,7 @@ if __name__ == "__main__":
         strategy=[
             Extract(
                 name="extract_token",
-                phase=StrategyPhase.AFTER_REQUEST,
+                phase=StrategyPhase.EXTRACTING,
                 expression="$.call.response.body.token",
                 target="auth_token",
                 scope=Scope.SCENARIO

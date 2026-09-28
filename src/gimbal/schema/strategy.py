@@ -30,13 +30,12 @@ class AssertOperator(str, Enum):
 class StrategyPhase(str, Enum):
     """策略执行阶段（与 StepState 执行阶段一一对应，协议无关）。
 
-    协议中立化（2026-09-27）：新增中立名别名（PREPARE/EXTRACTING），
-    历史 value 全部不变 —— 存量场景 JSON / plate 导出零迁移。
+    协议中立化（2026-09-27）：中立名 PREPARE/EXTRACTING，value 沿用历史值
+    （before_request/after_request）—— 存量场景 JSON / plate 导出零迁移。
+    历史同值别名（BEFORE_REQUEST/AFTER_REQUEST）已于 2026-09-28 删除。
     """
     PREPARE = "before_request"          # SQL 注入数据、Assign 准备入参
-    BEFORE_REQUEST = PREPARE            # 历史名（别名）
     EXTRACTING = "after_request"        # Extract 提取字段
-    AFTER_REQUEST = EXTRACTING          # 历史名（别名）
     VERIFYING = "verifying"             # Assertion、DBChecker
     TEARDOWN = "teardown"               # SQL 清理、Chaos 恢复
 
@@ -61,7 +60,7 @@ class Extract(StrategyBase) :
     # phase 缺省按 kind 落默认值：dispatch_phase 严格按 phase 过滤，
     # 不给默认时未声明 phase 的策略会被静默跳过（Composer 导出的
     # extract/断言曾因此全部不执行）。extract 提取响应字段 → post-response。
-    phase : StrategyPhase = StrategyPhase.AFTER_REQUEST
+    phase : StrategyPhase = StrategyPhase.EXTRACTING
     expression: str          # JSONPath，在 scratch 上导航
     target: str              # 写入目标的 key
     scope: Scope = Scope.STEP
@@ -71,7 +70,7 @@ class Extract(StrategyBase) :
 class Assign(StrategyBase) :
     kind : Literal["assign"] = "assign"
     # assign 准备入参 → pre-request（与 StrategyPhase 注释语义一致）。
-    phase : StrategyPhase = StrategyPhase.BEFORE_REQUEST
+    phase : StrategyPhase = StrategyPhase.PREPARE
     source : Any # 路径或者值
     target : str # 模板路径
     scope: Scope = Scope.SCENARIO # 如果source为空则从对应的作用域检查是否存在同名字段提取数据
@@ -99,7 +98,7 @@ if __name__ == "__main__":
     # 测试枚举类
     print(f"Scope 测试: {Scope.SCENARIO.value}")
     print(f"AssertOperator 测试: {AssertOperator.EQ.value}")
-    print(f"StrategyPhase 测试: {StrategyPhase.BEFORE_REQUEST.value}")
+    print(f"StrategyPhase 测试: {StrategyPhase.PREPARE.value}")
     print(f"FailurePolicy 测试: {FailurePolicy.ABORT.value}")
 
     # 测试 StrategyBase 实例化

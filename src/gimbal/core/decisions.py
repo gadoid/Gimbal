@@ -7,9 +7,9 @@ hook 是同步拦截点，返回**唯一**决策类型；不承担观察（观�
 五个拦截点（v2 表格；批次 E 接入四个，STRATEGY_BEFORE 复用现有
 dispatcher STOP→SKIP 语义）：
 
-  STEP_BEFORE     step 进入 BEFORE_REQUEST 前     CONTINUE / SKIP / ABORT
-  CALL_BEFORE     render 之后、send 之前          CONTINUE（可带 patch）/ ABORT
-  CALL_AFTER      send 之后、AFTER_REQUEST 前     CONTINUE / ABORT（RETRY 留后）
+  STEP_BEFORE     step 进入调用阶段前              CONTINUE / SKIP / ABORT
+  CALL_BEFORE     render 之后、send 之前           CONTINUE（可带 patch）/ ABORT
+  CALL_AFTER      send 之后、提取阶段前            CONTINUE / ABORT（RETRY 留后）
   STRATEGY_BEFORE 单条策略执行前                  CONTINUE / SKIP（现状已支持）
   STEP_FAILED     step 失败后（ScenarioRunner 层）CONTINUE / RETRY / SKIP / ABORT
 
