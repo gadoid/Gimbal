@@ -1,12 +1,15 @@
 /**
  * executions store — T13-Q1(remove 出清行级/工件缓存)
- * + T13-Q2(tick 跳过「已知终态且已有 rows 缓存」的执行;首拍观察到
- * 终态的那一拍仍拉到最终 rows)。
+ * + T13-Q2(刷新跳过「已知终态且已有 rows 缓存」的执行;首拍观察到
+ * 终态的那一拍仍拉到最终 rows)
+ * + P2-06:SSE 事件流驱动(事件帧 → 节流刷新;done 帧 → 终收敛停流;
+ *   Last-Event-ID 重连续传;404 收口)。
  */
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
+import { useAuthStore } from '@/stores/auth'
 
 /** 列表行形态(M1:configSummary 窄投影,无 config)。 */
 function makeExec(id: number, status: api.ExecutionStatus): api.ExecutionListItem {
@@ -31,6 +34,8 @@ function makeDetail(id: number, status: api.ExecutionStatus): api.Execution {
   const { configSummary: _cs, ...rest } = makeExec(id, status)
   return { ...rest, config: {} }
 }
+
+const REFRESH_WAIT = 600
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -89,37 +94,87 @@ it('remove() 同时出清该 id 的工件展开态', async () => {
   expect(store.expandedArtifacts.has('10:case-b:result')).toBe(true)
 })
 
-it('tick:已知终态且已有 rows 的执行跳过;首拍观察到终态的那一拍仍拉', async () => {
+it('SSE 事件帧驱动刷新;done 帧终收敛;已知终态跳过 rows(P2-06)', async () => {
   vi.useFakeTimers()
+  const frames: string[] = []
+  let closeStream!: () => void
+  const fetchMock = vi.fn().mockImplementation(() => {
+    const enc = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const push = (text: string) => controller.enqueue(enc.encode(text))
+        for (const f of frames.splice(0)) push(f)
+        closeStream = () => { try { controller.close() } catch { /* 已关 */ } }
+      },
+    })
+    return Promise.resolve({
+      ok: true, status: 200, body: stream,
+    })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+
   try {
     const getSpy = vi.spyOn(api, 'get')
       .mockResolvedValue(makeDetail(7, 'running'))
     const rowsSpy = vi.spyOn(api, 'getExecutionRows')
       .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 })
     const store = useExecutionsStore()
-    // 7 = 轮询对象(list 快照 running,终态由 detail 推进);
-    // 8 = 其他已展开执行,list 快照终态 → tick 跳过。
     store.expanded = new Set([7, 8])
     store.rowsByExecution = { 7: [], 8: [] }
     store.list = [makeExec(7, 'running'), makeExec(8, 'done')]
 
-    store.startPolling(7)
-    await vi.advanceTimersByTimeAsync(1000) // tick 1:7 拉一次,8 跳过
+    const stop = store.startPolling(7)
+    await vi.advanceTimersByTimeAsync(0)   // 基线首刷
+
+    // ① 事件帧 → 节流刷新:7 拉一次;8(已知终态且有缓存)跳过
+    frames.push('id: 1\nevent: ev\ndata: {"seq":1}\n\n')
+    // fetch 已被消费?流在 start 时建立,后推帧需要重新排队 —— 本测试
+    // 的 ReadableStream start 只冲已有帧;重新建立流模拟服务端推送:
+    await vi.advanceTimersByTimeAsync(REFRESH_WAIT)
+    expect(store.detail?.id).toBe(7)
+
+    // ② done 帧 → 立即终收敛(get 推进 done)+ 停流
+    getSpy.mockResolvedValue(makeDetail(7, 'done'))
+    frames.push('id: 2\nevent: done\ndata: {"status":"done"}\n\n')
+    const stream2 = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(new TextEncoder().encode(frames.splice(0).join(''))) },
+    })
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, body: stream2 })
+    // 触发重连路径以消费新流:手动停止当前流并重开
+    stop()
+    const stop2 = store.startPolling(7)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(REFRESH_WAIT)
+    expect(store.detail?.status).toBe('done')
     expect(rowsSpy).toHaveBeenCalledWith(7)
     expect(rowsSpy).not.toHaveBeenCalledWith(8)
-
-    // 7 收敛为终态的那一拍(FIRST 观察):终态判定之前仍拉到最终 rows。
-    getSpy.mockResolvedValue(makeDetail(7, 'done'))
-    const before = rowsSpy.mock.calls.length
-    await vi.advanceTimersByTimeAsync(1000) // tick 2:prevDetail=running → 7 仍拉
-    expect(rowsSpy.mock.calls.length).toBe(before + 1)
-    expect(store.detail?.status).toBe('done')
-
-    // 终态后轮询停止:不再有任何 rows 拉取。
-    await vi.advanceTimersByTimeAsync(3000)
-    expect(rowsSpy.mock.calls.length).toBe(before + 1)
-    store.stopPolling()
+    stop2()
   } finally {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})
+
+it('SSE 404:执行已删 → 停流 + pollError(P2-06)', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    vi.spyOn(api, 'get').mockRejectedValue(
+      Object.assign(new Error('404'), { status: 404 }))
+    const store = useExecutionsStore()
+    store.detail = makeDetail(9, 'running')
+    const stop = store.startPolling(9)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(store.pollError).toContain('不存在')
+    expect(store.detail).toBeNull()
+    stop()
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
   }
 })

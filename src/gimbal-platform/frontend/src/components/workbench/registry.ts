@@ -73,6 +73,13 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     component: () => import('./RecentExecutionsCard.vue'),
   },
   {
+    id: 'event-analysis',
+    title: '日志分析',
+    description: '最近执行的事件/日志按模块标签筛选与聚合',
+    accent: 'gold',
+    component: () => import('./EventAnalysisCard.vue'),
+  },
+  {
     id: 'my-scenarios',
     title: '我的场景',
     description: '私有编排速览 — 最近编辑直达 + 过期提醒',

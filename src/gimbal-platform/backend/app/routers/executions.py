@@ -19,8 +19,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -306,6 +306,142 @@ async def get_execution_rows(
 # 按 runId 定位 —— 跨执行读不可能(runId 唯一)。
 _CASE_STEM_RE = re.compile(r"[A-Za-z0-9._-]+")
 _ARTIFACTS = {"engine-log": "engine.log", "result": "result.json"}
+
+
+# ── P2-06/C9:事件流 SSE + P2-07/C10:事件/日志查询 ──────────────
+
+def _event_sse_line(ev) -> str:
+    """ExecutionEvent → SSE 帧(id=seq 续传锚;data=行投影)。"""
+    import json as _json
+    payload = {
+        "id": ev.id, "seq": ev.seq, "ts": ev.ts.isoformat(),
+        "kind": ev.kind, "level": ev.level, "category": ev.category,
+        "module": ev.module, "service": ev.service, "protocol": ev.protocol,
+        "unit": ev.unit, "attempt": ev.attempt, "step": ev.step,
+        "event_type": ev.event_type, "message": ev.message,
+    }
+    _nl = chr(92) + "n"
+    return ("id: " + str(ev.seq) + _nl + "event: ev" + _nl +
+            "data: " + _json.dumps(payload, ensure_ascii=False, default=str)
+            + _nl + _nl)
+
+
+@router.get("/{execution_id}/events/stream")
+async def stream_execution_events(
+    ex: OwnedExecution,
+    request: Request,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+) -> StreamingResponse:
+    """SSE 推送已入库事件(P2-06/C9;替代执行页 1s 轮询)。
+
+    * ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);
+    * 事件到达即推;无事件时 ~15s 心跳注释帧保活;
+    * 终态 + run.finished 已推(或终态但本就无事件流的存量执行)
+      → 发 ``event: done`` 后关流;客户端断开即停。
+    """
+    import asyncio as _asyncio
+
+    from ..core import db as db_module
+    from ..models.execution import STATUS_CANCELED, STATUS_DONE, STATUS_FAILED
+    from ..services import execution_store
+
+    try:
+        cursor = int(last_event_id) if last_event_id else 0
+    except ValueError:
+        cursor = 0
+    execution_id = ex.id
+    terminal = (STATUS_DONE, STATUS_FAILED, STATUS_CANCELED)
+
+    async def _gen():
+        nonlocal cursor
+        idle_ticks = 0
+        finished_seen = cursor > 0   # 续传流:已消费过事件的按已见处理
+        deadline = 3600.0
+        _nl2 = chr(92) + "n"
+        waited = 0.0
+        while waited < deadline:
+            if await request.is_disconnected():
+                return
+            async with db_module.SessionLocal() as session:
+                events = await execution_store.query_events(
+                    session, execution_id, after_seq=cursor, limit=500)
+                ex_row = await session.get(Execution, execution_id)
+                ex_status = ex_row.status if ex_row else STATUS_CANCELED
+            if events:
+                idle_ticks = 0
+                for ev in events:
+                    cursor = ev.seq
+                    if ev.event_type == "run.finished":
+                        finished_seen = True
+                    yield _event_sse_line(ev)
+            else:
+                idle_ticks += 1
+                if idle_ticks >= 15:
+                    idle_ticks = 0
+                    yield ": ping" + _nl2
+            # 终态收敛:run.finished 已推(新链)或终态执行本就无事件(存量)
+            if ex_status in terminal and (finished_seen or not events):
+                import json as _json
+                yield ("event: done" + _nl2 + "data: " + _json.dumps(
+                    {"status": ex_status, "lastSeq": cursor}) + _nl2 + _nl2)
+                return
+            await _asyncio.sleep(1.0)
+            waited += 1.0
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/{execution_id}/events")
+async def get_execution_events(
+    ex: OwnedExecution,
+    session: DbSession,
+    kind: Annotated[str | None, Query(description="event | log")] = None,
+    level: str | None = None,
+    level_min: Annotated[str | None, Query(description="最低日志级别(warning 以上口径)")] = None,
+    category: str | None = None,
+    module: str | None = None,
+    service: str | None = None,
+    unit: str | None = None,
+    step: str | None = None,
+    event_type: str | None = None,
+    search: Annotated[str | None, Query(description="message 全文搜索")] = None,
+    after_seq: Annotated[int | None, Query(ge=None)] = None,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 500,
+) -> dict:
+    """事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。"""
+    from ..services import execution_store
+
+    rows = await execution_store.query_events(
+        session, ex.id, kind=kind, level=level, level_min=level_min,
+        category=category,
+        module=module, service=service, unit=unit, step=step,
+        event_type=event_type, search=search, after_seq=after_seq,
+        limit=limit)
+    import json as _json
+
+    def _row(ev) -> dict:
+        return {
+            "id": ev.id, "seq": ev.seq, "ts": ev.ts.isoformat(),
+            "kind": ev.kind, "level": ev.level, "category": ev.category,
+            "module": ev.module, "service": ev.service,
+            "protocol": ev.protocol, "unit": ev.unit, "attempt": ev.attempt,
+            "step": ev.step, "event_type": ev.event_type,
+            "message": ev.message,
+            "payload": ev.payload if _json.dumps(ev.payload, default=str) else ev.payload,
+        }
+    return {"items": [_row(ev) for ev in rows], "count": len(rows)}
+
+
+@router.get("/{execution_id}/events/counts")
+async def get_execution_event_counts(ex: OwnedExecution, session: DbSession) -> dict:
+    """按 category 聚合计数(P2-07 验收:能展示按 category 聚合的计数)。"""
+    from ..services import execution_store
+
+    return {"byCategory": await execution_store.event_counts_by_category(session, ex.id)}
 
 
 @router.get("/{execution_id}/case-artifact", response_class=PlainTextResponse)

@@ -340,6 +340,7 @@ async def query_events(
     db: AsyncSession, execution_id: int, *,
     kind: "str | None" = None,
     level: "str | None" = None,
+    level_min: "str | None" = None,
     category: "str | None" = None,
     module: "str | None" = None,
     service: "str | None" = None,
@@ -364,6 +365,12 @@ async def query_events(
         stmt = stmt.where(EE.kind == kind)
     if level is not None:
         stmt = stmt.where(EE.level == level)
+    if level_min is not None:
+        # 最低级别过滤(日志分析页「warning 以上」口径):按严重度序比较
+        order = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING",
+                 "ERROR", "CRITICAL")
+        rank = order.index(level_min.upper()) if level_min.upper() in order else 0
+        stmt = stmt.where(EE.level.in_(order[rank:]))
     if category is not None:
         stmt = stmt.where(EE.category == category)
     if module is not None:

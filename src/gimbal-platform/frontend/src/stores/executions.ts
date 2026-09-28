@@ -1,21 +1,27 @@
 /**
- * executions.ts — Pinia store + 1s polling for live status.
+ * executions.ts — Pinia store + SSE 事件流实时状态(P2-06/C9)。
  *
  * The store proxies /api/executions/* and exposes a `startPolling(id)`
- * helper that auto-refreshes detail every second until status reaches
- * a terminal state (done/failed/canceled).
+ * helper(历史名保留,实现已换 SSE):订阅 `/events/stream` 事件流,
+ * 事件帧驱动 detail/rows 刷新(300ms 节流合并突发),`done` 帧终收敛;
+ * 断线带 Last-Event-ID 自动重连(不重复不丢失),404/连续失败回落
+ * pollError 文案。不再有 1s 定时轮询。
  *
- * T13 行级可观测(spec §9.1):rows 只对「已展开」的执行随 tick 拉取
- * (避免列表 N+1);engine-log/result 工件按需拉取,不参与轮询。
+ * T13 行级可观测(spec §9.1):rows 只对「已展开」的执行随刷新拉取
+ * (避免列表 N+1);engine-log/result 工件按需拉取,不参与流刷新。
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/executions'
 import type { Execution, ExecutionListItem, ExecutionRow } from '@/api/executions'
+import { executionEventsStreamUrl } from '@/api/executions'
 import { httpStatusOf } from '@/api/http'
 import { isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { useAuthStore } from '@/stores/auth'
 
-const POLL_INTERVAL_MS = 1000
+const REFRESH_THROTTLE_MS = 300
+const RECONNECT_DELAY_MS = 1000
+const MAX_RECONNECTS = 10
 
 export const useExecutionsStore = defineStore('executions', () => {
   const list = ref<ExecutionListItem[]>([])
@@ -24,9 +30,12 @@ export const useExecutionsStore = defineStore('executions', () => {
   const detail = ref<Execution | null>(null)
   const loading = ref(false)
   const lastError = ref('')
-  /** Set when the detail poller gives up (404 / repeated failures). */
+  /** Set when the event stream gives up (404 / repeated failures). */
   const pollError = ref('')
-  let pollHandle: ReturnType<typeof setInterval> | null = null
+  let streamAbort: AbortController | null = null
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null
+  let lastSeq = 0
+  let reconnects = 0
 
   // ── 行级可观测(spec §9.1)──────────────────────────────
   /** execution id → 行级状态(仅已展开的执行有数据) */
@@ -146,7 +155,10 @@ export const useExecutionsStore = defineStore('executions', () => {
   async function remove(id: number): Promise<void> {
     await api.remove(id)
     list.value = list.value.filter((e) => e.id !== id)
-    if (detail.value?.id === id) detail.value = null
+    if (detail.value?.id === id) {
+      detail.value = null
+      stopPolling()   // 在轮询对象被删:停流(服务端 404 之外的主动收口)
+    }
     // T13-Q1:行级/工件缓存一并出清 — 该 id 的 rows、展开态与工件文本
     // 都指向已删执行;expanded 残留还会让 tick 继续拉一个 404。
     const nextExpanded = new Set(expanded.value)
@@ -185,58 +197,126 @@ export const useExecutionsStore = defineStore('executions', () => {
   }
 
   /**
-   * Poll /api/executions/{id} every 1s until status is terminal
-   * (done/failed/canceled). Returns a stop function the caller
-   * invokes on unmount.
+   * SSE 订阅 `/events/stream`(P2-06/C9,历史名 startPolling 保留):
+   * 事件帧 → 300ms 节流刷新 detail + 已展开 rows;done 帧 → 终收敛
+   * 后关流;断线带 Last-Event-ID 重连。返回停止函数(卸载时调用)。
    */
   function startPolling(id: number): () => void {
     stopPolling()
     pollError.value = ''
-    // Soft-fail budget: transient network hiccups shouldn't kill the
-    // poller, but a deleted execution (404 forever) or a dead backend
-    // must not poll at 1 req/s indefinitely while the page sits open.
-    let consecutiveFailures = 0
-    const MAX_CONSECUTIVE_FAILURES = 10
-    const tick = async () => {
-      try {
-        // 上一拍的 detail 快照:跳过判定用它(见 shouldSkipRowFetch)。
-        const prevDetail = detail.value
-        const d = await api.get(id)
-        consecutiveFailures = 0
-        detail.value = d
-        // 行级表格只对已展开的执行随 tick 刷新;放在终态判定之前,
-        // 让收敛为终态的那一拍仍拉到最终 rows。T13-Q2:已知终态且已有
-        // rows 缓存的执行(终态行级数据不再变化)不再逐秒重拉。
-        for (const rid of expanded.value) {
-          if (shouldSkipRowFetch(rid, prevDetail)) continue
-          await fetchRows(rid)
-        }
-        if (isTerminalExecutionStatus(d.status)) {
-          stopPolling()
-        }
-      } catch (e) {
-        consecutiveFailures += 1
-        const status = (e as { status?: number }).status
-        if (status === 404) {
-          // Execution was deleted (other tab / another user) — stop and
-          // surface it instead of silently polling a corpse.
-          stopPolling()
-          detail.value = null
-          pollError.value = '该执行记录已不存在（可能已被删除）'
-        } else if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          stopPolling()
-          pollError.value = '轮询连续失败，已停止刷新 — 请手动刷新重试'
-        }
-      }
-    }
-    pollHandle = setInterval(tick, POLL_INTERVAL_MS)
+    lastSeq = 0
+    reconnects = 0
+    // 流建立前先拉一次基线(终态执行也有一拍完整视图)
+    void _refreshOnce(id).catch(() => { /* 基线失败留给流帧重试 */ })
+    void _pump(id)
     return stopPolling
   }
 
+  /** 单拍刷新:detail + 已展开 rows(终态且已有缓存跳过,T13-Q2)。 */
+  async function _refreshOnce(id: number): Promise<Execution> {
+    const prevDetail = detail.value
+    const d = await api.get(id)
+    detail.value = d
+    for (const rid of expanded.value) {
+      if (shouldSkipRowFetch(rid, prevDetail)) continue
+      await fetchRows(rid)
+    }
+    return d
+  }
+
+  /** 突发事件帧合并为 ≤1/300ms 的刷新(尾沿保证最后一帧必刷)。 */
+  function _scheduleRefresh(id: number): void {
+    if (refreshTimer !== null) return
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null
+      void _refreshOnce(id).catch(() => { /* 单帧失败,留给下一帧 */ })
+    }, REFRESH_THROTTLE_MS)
+  }
+
+  /** SSE 帧 → {id, event, data}(注释/心跳帧返回 null)。 */
+  function _parseFrame(frame: string): { id?: string; event?: string; data?: string } | null {
+    const out: { id?: string; event?: string; data?: string } = {}
+    for (const raw of frame.split('\n')) {
+      const line = raw.replace(/\r$/, '')
+      if (!line || line.startsWith(':')) continue
+      if (line.startsWith('id:')) out.id = line.slice(3).trim()
+      else if (line.startsWith('event:')) out.event = line.slice(6).trim()
+      else if (line.startsWith('data:')) out.data = line.slice(5).trim()
+    }
+    return out.id || out.event || out.data ? out : null
+  }
+
+  async function _pump(id: number): Promise<void> {
+    const auth = useAuthStore()
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${auth.accessToken}`,
+    }
+    if (lastSeq > 0) headers['Last-Event-ID'] = String(lastSeq)
+    const ctrl = new AbortController()
+    streamAbort = ctrl
+    try {
+      const resp = await fetch(executionEventsStreamUrl(id), {
+        headers, signal: ctrl.signal,
+      })
+      if (resp.status === 404) {
+        detail.value = null
+        pollError.value = '该执行记录已不存在（可能已被删除）'
+        return
+      }
+      if (!resp.ok || !resp.body) {
+        throw Object.assign(new Error(`stream ${resp.status}`), { status: resp.status })
+      }
+      reconnects = 0
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let sep = buf.indexOf('\n\n')
+        while (sep >= 0) {
+          const frame = _parseFrame(buf.slice(0, sep))
+          buf = buf.slice(sep + 2)
+          sep = buf.indexOf('\n\n')
+          if (!frame) continue
+          if (frame.id) lastSeq = Math.max(lastSeq, Number(frame.id) || 0)
+          if (frame.event === 'done') {
+            await _refreshOnce(id).catch(() => { /* 终收敛尽力 */ })
+            return
+          }
+          if (frame.data !== undefined) _scheduleRefresh(id)
+        }
+      }
+      // 服务端关流但执行未终态(如网关空闲断链)→ 走重连路径
+      if (!isTerminalExecutionStatus(detail.value?.status ?? '')) {
+        throw new Error('stream closed before terminal')
+      }
+    } catch (e) {
+      if (ctrl.signal.aborted) return
+      const status = (e as { status?: number }).status ?? httpStatusOf(e)
+      if (status === 404) {
+        detail.value = null
+        pollError.value = '该执行记录已不存在（可能已被删除）'
+        return
+      }
+      reconnects += 1
+      if (reconnects <= MAX_RECONNECTS) {
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS))
+        return _pump(id)
+      }
+      pollError.value = '事件流连接失败，已停止刷新 — 请手动刷新重试'
+    }
+  }
+
   function stopPolling() {
-    if (pollHandle !== null) {
-      clearInterval(pollHandle)
-      pollHandle = null
+    if (streamAbort !== null) {
+      streamAbort.abort()
+      streamAbort = null
+    }
+    if (refreshTimer !== null) {
+      clearTimeout(refreshTimer)
+      refreshTimer = null
     }
   }
 

@@ -196,3 +196,63 @@ export function getScenarioSnapshot(id: number): Promise<ScenarioDraft> {
     .get<ScenarioDraft>(`/executions/${id}/scenario-snapshot`)
     .then((r) => r.data)
 }
+
+// ── P2-06/P2-07:执行事件流(SSE)与事件/日志查询 ─────────────────
+
+/** 事件/日志统一行(execution_events 投影;标签只取执行器写入值)。 */
+export interface ExecutionEventItem {
+  id: number
+  seq: number
+  ts: string
+  kind: 'event' | 'log'
+  level: string | null
+  category: string | null
+  module: string | null
+  service: string | null
+  protocol: string | null
+  unit: string | null
+  attempt: string | null
+  step: string | null
+  event_type: string | null
+  message: string | null
+  payload?: Record<string, unknown>
+}
+
+/** SSE 流地址(Bearer 头鉴权 → fetch 流式读取,EventSource 不支持头)。 */
+export function executionEventsStreamUrl(id: number): string {
+  return `/api/executions/${id}/events/stream`
+}
+
+export interface ExecutionEventsQuery {
+  kind?: 'event' | 'log'
+  level?: string
+  level_min?: string
+  category?: string
+  module?: string
+  service?: string
+  unit?: string
+  step?: string
+  event_type?: string
+  search?: string
+  after_seq?: number
+  limit?: number
+}
+
+/** 事件/日志组合筛选(P2-07 日志分析页读面)。 */
+export function getExecutionEvents(
+  id: number, q: ExecutionEventsQuery = {},
+): Promise<{ items: ExecutionEventItem[]; count: number }> {
+  return http
+    .get<{ items: ExecutionEventItem[]; count: number }>(
+      `/executions/${id}/events`, { params: q })
+    .then((r) => r.data)
+}
+
+/** 按 category 聚合计数(P2-07 验收)。 */
+export function getExecutionEventCounts(
+  id: number,
+): Promise<{ byCategory: Record<string, number> }> {
+  return http
+    .get<{ byCategory: Record<string, number> }>(`/executions/${id}/events/counts`)
+    .then((r) => r.data)
+}

@@ -47,6 +47,8 @@
         class="h-7 px-2 text-amber-700"
         @click="cancelExec"
       >取消</Button>
+      <Button variant="link" size="sm" class="h-7 px-2" data-testid="goto-events"
+              @click="gotoEvents">日志分析</Button>
       <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
       <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
     </template>
@@ -415,6 +417,10 @@ function refreshRowsIfExpanded(): void {
 
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
+
+function gotoEvents(): void {
+  void router.push(`/executions/${execStore.detail?.id}/events`)
+}
 
 async function refreshNow() {
   if (!executionId.value) return
