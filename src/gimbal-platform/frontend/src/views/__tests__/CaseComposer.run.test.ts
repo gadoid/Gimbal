@@ -83,7 +83,7 @@ function sampleScenario(): Scenario {
       expire: false,
       createTime: '2026-01-01T00:00:00Z',
     },
-    steps: [{ api: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
+    steps: [{ call: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
     orchestration: { steps: [], resourceMeta: {} },
     dataSetCount: 0,
     stepCount: 1,
@@ -139,7 +139,7 @@ beforeEach(() => {
     definition: {
       kind: 'scenario', scenarioId: 'sc-demo',
       config: { services: {}, users: {} },
-      steps: [{ api: { service: 'fin-service' } }],
+      steps: [{ call: { service: 'fin-service' } }],
     },
     orchestration: { steps: [], resourceMeta: {} },
     assertion_registry: { entries: [] },
@@ -208,7 +208,8 @@ describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {
     const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
     _resetEndpointFullCacheForTest()
     const sc = sampleScenario()
-    ;(sc.steps[0] as { api: Record<string, unknown> }).api = {
+    ;(sc.steps[0] as { call: Record<string, unknown> }).call = {
+      kind: 'call', protocol: 'http',
       service: 'fin-service', method: 'POST', path: '/x',
       view_hints: { endpoint_id: 'ep-cc' },
     }
@@ -294,7 +295,7 @@ describe('CaseComposer — 契约降级(阶段二 Task 8 → 阶段③ v2 消费
     const sc = sampleScenario()
     sc.steps = [{
       kind: 'step', description: 's',
-      api: {
+      call: {
         kind: 'api', service: 'fin-service', method: 'POST', path: '/x',
         headers: {}, view_hints: { endpoint_id: 'ep-cp' },
       },

@@ -134,7 +134,7 @@ class TestPlatformEditPropagatesToGimbal:
     def test_edit_authorization_header_propagates(self) -> None:
         pv = _platform_view()
         step0 = pv["steps"][0]
-        step0["api"]["headers"]["Authorization"] = (
+        step0["call"]["headers"]["Authorization"] = (
             "${auth.codfish.token}.EDITED_BY_PLATFORM"
         )
         sc, gd = _roundtrip(pv)
@@ -142,7 +142,7 @@ class TestPlatformEditPropagatesToGimbal:
             "${auth.codfish.token}.EDITED_BY_PLATFORM"
         )
         # Scenario 内部也同步
-        assert sc.steps[0].api.headers["Authorization"] == (
+        assert sc.steps[0].call.headers["Authorization"] == (
             "${auth.codfish.token}.EDITED_BY_PLATFORM"
         )
 
@@ -196,7 +196,7 @@ class TestPlatformEditPropagatesToGimbal:
     def test_edit_multiple_steps_propagates(self) -> None:
         pv = _platform_view()
         # 同时改 step0 header + step1 body
-        pv["steps"][0]["api"]["headers"]["X-Test-1"] = "P1"
+        pv["steps"][0]["call"]["headers"]["X-Test-1"] = "P1"
         pv["steps"][1]["request"]["body"]["bl_no"] = "P2-BODY"
         _sc, gd = _roundtrip(pv)
         assert gd["steps"][0]["call"]["headers"]["X-Test-1"] == "P1"
@@ -213,7 +213,7 @@ class TestPlatformEditPropagatesToGimbal:
     def test_edit_via_parametrized_mutator(self, mutator: str, expected: str) -> None:
         pv = _platform_view()
         if mutator == "header":
-            pv["steps"][0]["api"]["headers"]["Authorization"] = expected
+            pv["steps"][0]["call"]["headers"]["Authorization"] = expected
         elif mutator == "body":
             pv["steps"][0]["request"]["body"]["bl_no"] = expected
         elif mutator == "strategy_add":

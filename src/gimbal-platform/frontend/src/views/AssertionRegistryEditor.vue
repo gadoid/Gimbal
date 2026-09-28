@@ -194,7 +194,7 @@
             v-model="pendingAssert.target"
             class="are-target-input"
             :candidates="targetCandidates"
-            placeholder="断言哪个响应字段(例:$.response_body.code)"
+            placeholder="断言哪个响应字段(例:$.call.response.body.code)"
           />
           <!-- operator 需自由输入(原 filterable allow-create)→
                Input + datalist:候选 = OPERATORS,可键入任意算子 -->
@@ -466,7 +466,7 @@ function stateOfPendingPath(path: string): FieldState | undefined {
 }
 
 /** asserts.target 候选 = 所选步骤**端点契约**的 assertable 面,经 toScratchPath
- *  归一到引擎域($.code → $.response_body.code)。契约是响应侧唯一标准定义
+ *  归一到引擎域($.code → $.call.response.body.code)。契约是响应侧唯一标准定义
  *  —— 不引入样本等旁路;契约未声明的字段仍可手打,只是不提示。
  *  **纯缓存读**(裁定 C19):不在此处 ensure —— 取数由 `surface.ensure()` 一次取全
  *  (覆盖全部带 endpoint_id 的步骤),渲染期只读缓存(读 `shallowReactive`
@@ -522,7 +522,7 @@ function addAssert() {
   // 绑定断言的两项必备内容,缺了就落不了条目 —— 但**必须出声**:按钮就在那儿
   // 摆着,静默 return 等于「点了没反应」,用户无从知道差什么(与 addEntry 同口径)
   if (!pendingAssert.value.target) {
-    toast.warning('要先填「断言哪个响应字段」(例:$.response_body.code)')
+    toast.warning('要先填「断言哪个响应字段」(例:$.call.response.body.code)')
     return
   }
   const mode = pendingAssert.value.mode === 'append' ? 'append' : 'override'

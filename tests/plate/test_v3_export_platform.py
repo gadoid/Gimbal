@@ -11,7 +11,7 @@ from gimbal_plate.export.platform import (
     PlatformStepView,
     _render_request_view,
 )
-from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     DeclarationEntry,
@@ -62,10 +62,11 @@ class TestPlatformStepView:
         s0 = view.steps[0]
         dumped = s0.model_dump(mode="json")
         assert dumped["kind"] == "step"
-        assert dumped["api"]["kind"] == "api"
+        assert dumped["call"]["kind"] == "call"
+        assert dumped["call"]["protocol"] == "http"
         assert dumped["request"]["kind"] == "request"
-        # platform 扩展字段:api.view_hints
-        assert "view_hints" in dumped["api"]
+        # platform 扩展字段:call.view_hints
+        assert "view_hints" in dumped["call"]
         # request.body 已用 endpoint 全量字段定义补全(直接渲染 + 直接执行)
         assert "source_kind" not in dumped["request"]
         assert "field_count" not in dumped["request"]
@@ -80,10 +81,10 @@ class TestPlatformStepView:
         sc = _load_scenario()
         exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
         view = exporter.to_view()
-        # 找一个明确命中 endpoint 的 step (step[3].api 一定命中)
+        # 找一个明确命中 endpoint 的 step (step[3].call 一定命中)
         s = view.steps[3]
-        api_dict = s.api
-        ep = exporter._ep_by_key.get((api_dict["method"], api_dict["path"]))
+        call_dict = s.call
+        ep = exporter._ep_by_key.get((call_dict["method"], call_dict["path"]))
         assert ep is not None and ep.request is not None
         expected_field_names = {e.name for e in ep.request.declarations
                                 if e.state != "carry"}
@@ -106,8 +107,8 @@ class TestPlatformStepView:
         exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
         view = exporter.to_view()
         s = view.steps[3]
-        api_dict = s.api
-        ep = exporter._ep_by_key.get((api_dict["method"], api_dict["path"]))
+        call_dict = s.call
+        ep = exporter._ep_by_key.get((call_dict["method"], call_dict["path"]))
         assert ep is not None and ep.request is not None
 
         assert "fields_meta" in s.request, (
@@ -140,7 +141,7 @@ class TestPlatformStepView:
         view = exporter.to_view()
         s0 = view.steps[0]
         # view_hints 应包含 endpoint_id(从 ALL_ENDPOINTS 匹配)
-        assert s0.api["view_hints"]["endpoint_id"].startswith("fin.")
+        assert s0.call["view_hints"]["endpoint_id"].startswith("fin.")
 
 
 class TestPlatformScenarioView:
@@ -209,7 +210,7 @@ class TestPlatformScenarioView:
         view2 = PlatformScenarioView.model_validate_json(s)
         assert view2.scenarioId == view.scenarioId
         assert len(view2.steps) == len(view.steps)
-        assert view2.steps[0].api["method"] == view.steps[0].api["method"]
+        assert view2.steps[0].call["method"] == view.steps[0].call["method"]
 
 
 class TestPlatformEndpointViewRestored:
@@ -393,8 +394,8 @@ class TestDeepPathBindingCompletion:
             config=Config(),
             resource={},
             steps=[Step(
-                api=Api(service="tst-service", method="POST",
-                        path="/deep-order-add"),
+                call=Call(protocol="http", service="tst-service",
+                          method="POST", path="/deep-order-add"),
                 request=Request(body={
                     "supplier": [{"order_supplier_id": "S-001"}],
                 }),

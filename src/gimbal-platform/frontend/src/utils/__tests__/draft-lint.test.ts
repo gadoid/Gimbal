@@ -6,8 +6,8 @@ it('缺 endpoint_id 的步骤与声明未引用的变量都告警', () => {
   const warns = lintDraft({
     config: { vars: { amount: 1, dead_one: 2 } },
     steps: [
-      { api: {}, request: { body: { amount: '${var.amount}' } } },  // 无 endpoint_id
-      { api: { view_hints: { endpoint_id: 'x' } }, request: { body: {} } },
+      { call: {}, request: { body: { amount: '${var.amount}' } } },  // 无 endpoint_id
+      { call: { view_hints: { endpoint_id: 'x' } }, request: { body: {} } },
     ],
   })
   expect(warns).toEqual([
@@ -19,6 +19,6 @@ it('缺 endpoint_id 的步骤与声明未引用的变量都告警', () => {
 it('干净草稿零告警', () => {
   expect(lintDraft({
     config: { vars: { amount: 1 } },
-    steps: [{ api: { view_hints: { endpoint_id: 'x' }, headers: { a: '${var.amount}' } } }],
+    steps: [{ call: { view_hints: { endpoint_id: 'x' }, headers: { a: '${var.amount}' } } }],
   })).toEqual([])
 })

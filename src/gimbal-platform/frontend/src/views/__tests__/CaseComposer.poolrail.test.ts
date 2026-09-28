@@ -138,7 +138,7 @@ describe('CaseComposer — 常量池 rail', () => {
       sampleScenario([{
         kind: 'step',
         description: 'test step',
-        api: {
+        call: {
           kind: 'api', service: 'fin', method: 'POST', path: '/order',
           headers: {}, view_hints: { endpoint_id: 'ep-1' },
         },
@@ -170,7 +170,7 @@ describe('CaseComposer — 常量池 rail', () => {
 
   it('F11: RunDialog 打开时 overlay 内无 panel(panel 数量不变)', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(
-      sampleScenario([{ api: { service: 'settlement', method: 'POST', path: '/x' } }]),
+      sampleScenario([{ call: { service: 'settlement', method: 'POST', path: '/x' } }]),
     )
     const w = mountPage()
     await flushPromises()

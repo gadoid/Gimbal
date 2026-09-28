@@ -16,7 +16,7 @@ const scenario = {
   meta: { scenarioId: 'sc-1', name: 'T', module: 'order', priority: 1,
           system: ['fin'] },
   steps: [{
-    api: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {} },
+    call: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {} },
     request: { body: { amount: '${var.amount}', legacy_field: 'L',
                        settle_type: '1' } },
   }],

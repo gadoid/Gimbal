@@ -35,7 +35,7 @@ from typing import Any, override
 from pydantic import BaseModel, ConfigDict, Field
 
 from gimbal_plate.export._protocol import ExporterCapabilities, ScenarioExporter
-from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import iter_declarations
 from gimbal_plate.schema.request import Request
@@ -47,13 +47,17 @@ from gimbal_plate.utils import path as _path_utils
 # ── 视图输出模型 ──────────────────────────────────────────────────
 
 class PlatformStepView(BaseModel):
-    """platform 视角下的单条 step,shape 与 gimbal step 对齐 + platform 扩展字段。"""
+    """platform 视角下的单条 step,shape 与 gimbal step 对齐 + platform 扩展字段。
+
+    call = 步骤唯一调用形态（api→call 清理 G2：视图不再渲染 api 字典；
+    api 形态输入经 Call.from_api 合成 call 后渲染，G4 删 api 输入面时一并退役）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: str = "step"
     description: str = ""
-    api: dict[str, Any]
+    call: dict[str, Any]
     request: dict[str, Any]
     strategy: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -371,23 +375,27 @@ def _render_request_view(
     }
 
 
-def _render_api_view(api: Api, ep: EndpointSpec | None) -> dict[str, Any]:
-    """把 Api 翻译为 dict,加 view_hints。"""
-    out: dict[str, Any] = {
-        "kind": api.kind,
-        "service": api.service,
-        "method": api.method,
-        "path": api.path,
-        "headers": dict(api.headers),
-        "timeout": api.timeout,
-    }
+def _render_call_view(call: "Call", ep: EndpointSpec | None) -> dict[str, Any]:
+    """把 Call 翻译为 dict（协议自有字段原样透传），注入/合并 view_hints。"""
+    out: dict[str, Any] = call.model_dump(exclude_none=True)
     if ep is not None:
-        out["view_hints"] = {
-            "endpoint_id": ep.id,
-            "module": ep.metadata.module,
-            "tags": list(ep.metadata.tags),
-        }
+        vh = dict(out.get("view_hints") or {})
+        vh.setdefault("endpoint_id", ep.id)
+        vh.setdefault("module", ep.metadata.module)
+        vh.setdefault("tags", list(ep.metadata.tags))
+        out["view_hints"] = vh
     return out
+
+
+def _step_call(s) -> "Call":
+    """步骤的 call 形态：call 直取；api 形态输入合成 call{protocol:http}。"""
+    return s.call if s.call is not None else Call.from_api(s.api)
+
+
+def _call_coords(c: "Call") -> tuple[str, str]:
+    """http 协议的端点坐标 (method, path)（ep_by_key 匹配键；缺省 GET /）。"""
+    extra = c.model_extra or {}
+    return str(extra.get("method", "GET")), str(extra.get("path", "/"))
 
 
 # ── 内部:Endpoint → PlatformEndpointView ────────────────────────
@@ -635,7 +643,8 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 1. 按 (method, path) 聚合每个 endpoint 引用过的 step body
         bodies_by_ep: dict[str, list[dict[str, Any]]] = {}
         for s in sc.steps:
-            ep = keys.get((s.view_api.method, s.view_api.path))
+            c = _step_call(s)
+            ep = keys.get(_call_coords(c))
             if ep is None:
                 continue
             body = s.request.body
@@ -651,13 +660,14 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 3. 构造 step 视图(注入 view_hints / source_kind / field_count / field_names / view_note)
         step_views: list[PlatformStepView] = []
         for s in sc.steps:
-            ep = keys.get((s.view_api.method, s.view_api.path))
-            api_dict = _render_api_view(s.view_api, ep)
+            c = _step_call(s)
+            ep = keys.get(_call_coords(c))
+            call_dict = _render_call_view(c, ep)
             request_dict = _render_request_view(s.request, ep, s.field_states)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
             step_views.append(PlatformStepView(
                 description=s.description or "",
-                api=api_dict,
+                call=call_dict,
                 request=request_dict,
                 strategy=strategy_list,
             ))

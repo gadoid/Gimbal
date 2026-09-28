@@ -14,7 +14,7 @@ import {
 function mkStep(over: Partial<StepLike> = {}): StepLike {
   return {
     strategy: [],
-    api: { headers: {} },
+    call: { headers: {} },
     request: { body: {} },
     ...over,
   }
@@ -71,7 +71,7 @@ describe('varRefsIn / collectVarRefs', () => {
   it('collectVarRefs 带 headers/body/strategy 三类位置', () => {
     const steps = [
       mkStep({
-        api: { headers: { Authorization: '${var.token}' } },
+        call: { headers: { Authorization: '${var.token}' } },
         request: { body: { nested: { q: '${var.qty}' } } },
         strategy: [{ kind: 'extract', target: 't', expression: '${var.base}$.x' }],
       }),
@@ -90,7 +90,7 @@ describe('checkVarRefs — 三类校验', () => {
   const token = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' }] })
 
   it('dangling: 未注册且无数据集', () => {
-    const steps = [mkStep({ api: { headers: { X: '${var.nope}' } } })]
+    const steps = [mkStep({ call: { headers: { X: '${var.nope}' } } })]
     const reg = deriveVarRegistry(steps, {})
     const issues = checkVarRefs(steps, reg, [])
     expect(issues).toHaveLength(1)
@@ -99,7 +99,7 @@ describe('checkVarRefs — 三类校验', () => {
   })
 
   it('missing_column: 未注册但选了数据集且列名对不上', () => {
-    const steps = [mkStep({ api: { headers: { X: '${var.typo}' } } })]
+    const steps = [mkStep({ call: { headers: { X: '${var.typo}' } } })]
     const reg = deriveVarRegistry(steps, {})
     const issues = checkVarRefs(steps, reg, ['qty', 'customer_id'])
     expect(issues).toHaveLength(1)
@@ -107,7 +107,7 @@ describe('checkVarRefs — 三类校验', () => {
   })
 
   it('数据集列命中 → 不报(运行期 dispatcher layer)', () => {
-    const steps = [mkStep({ api: { headers: { X: '${var.qty}' } } })]
+    const steps = [mkStep({ call: { headers: { X: '${var.qty}' } } })]
     const reg = deriveVarRegistry(steps, {})
     expect(checkVarRefs(steps, reg, ['qty'])).toHaveLength(0)
   })
@@ -116,7 +116,7 @@ describe('checkVarRefs — 三类校验', () => {
     // 旧语义:${var.token} 判 order。新语义(#10):${var.x} 是 preprocess
     // 静态展开,时序锚点改为 assign 的 $.source;此处名字已注册,不报
     const steps = [
-      mkStep({ api: { headers: { H: '${var.token}' } } }),
+      mkStep({ call: { headers: { H: '${var.token}' } } }),
       token,
     ]
     const reg = deriveVarRegistry(steps, {})
@@ -139,7 +139,7 @@ describe('checkVarRefs — 三类校验', () => {
 
   it('config 出身不限时序(全局声明)', () => {
     const steps = [
-      mkStep({ api: { headers: { H: '${var.base}' } } }),
+      mkStep({ call: { headers: { H: '${var.base}' } } }),
     ]
     const reg = deriveVarRegistry(steps, { base: 'x' })
     expect(checkVarRefs(steps, reg, [])).toHaveLength(0)
@@ -160,14 +160,14 @@ describe('assignVarRefs — assign source $.name 收集', () => {
     const steps = [
       mkStep({
         strategy: [
-          { kind: 'assign', source: '$.token', target: '$.request_body.a' },
-          { kind: 'assign', source: '$.data.deep.x', target: '$.request_body.b' }, // 嵌套 — 不收
-          { kind: 'assign', source: 'literal', target: '$.request_body.c' },        // 字面量 — 不收
+          { kind: 'assign', source: '$.token', target: '$.call.request.body.a' },
+          { kind: 'assign', source: '$.data.deep.x', target: '$.call.request.body.b' }, // 嵌套 — 不收
+          { kind: 'assign', source: 'literal', target: '$.call.request.body.c' },        // 字面量 — 不收
           { kind: 'extract', target: 't', expression: '${var.x}$.q' },              // 模板 — 不收
         ],
       }),
       mkStep({
-        strategy: [{ kind: 'assign', source: '$.order_id', target: '$.request_body.d' }],
+        strategy: [{ kind: 'assign', source: '$.order_id', target: '$.call.request.body.d' }],
       }),
     ]
     const sites = assignVarRefs(steps)
@@ -181,8 +181,8 @@ describe('assignVarRefs — assign source $.name 收集', () => {
     // step1 产出 y;step2 assign 引用 y(合法);step2 assign 引用 step3 的 x(非法)
     const steps = [
       mkStep({ strategy: [{ kind: 'extract', target: 'y', expression: '$.y' }] }),
-      mkStep({ strategy: [{ kind: 'assign', source: '$.y', target: '$.request_body.a' }] }),
-      mkStep({ strategy: [{ kind: 'assign', source: '$.x', target: '$.request_body.b' }] }),
+      mkStep({ strategy: [{ kind: 'assign', source: '$.y', target: '$.call.request.body.a' }] }),
+      mkStep({ strategy: [{ kind: 'assign', source: '$.x', target: '$.call.request.body.b' }] }),
       late,
     ]
     const reg = deriveVarRegistry(steps, {})
@@ -199,7 +199,7 @@ describe('assignVarRefs — assign source $.name 收集', () => {
       mkStep({
         strategy: [
           { kind: 'extract', target: 'x', expression: '$.x' },
-          { kind: 'assign', source: '$.x', target: '$.request_body.a' },
+          { kind: 'assign', source: '$.x', target: '$.call.request.body.a' },
         ],
       }),
     ]
@@ -216,7 +216,7 @@ describe('assignVarRefs — assign source $.name 收集', () => {
     // 新语义:${var.x} 是 preprocess 静态展开,extract 产物不在其命名空间,
     // 这属于"名字撞车"而非时序问题,不再挂 order(落 dangling/missing_column 语义见前)
     const steps = [
-      mkStep({ api: { headers: { H: '${var.token}' } } }),
+      mkStep({ call: { headers: { H: '${var.token}' } } }),
       mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' }] }),
     ]
     const reg = deriveVarRegistry(steps, {})
@@ -229,7 +229,7 @@ describe('varUsages', () => {
   it('按变量聚合消费处', () => {
     const steps = [
       mkStep({
-        api: { headers: { A: '${var.x}', B: '${var.x}' } },
+        call: { headers: { A: '${var.x}', B: '${var.x}' } },
         request: { body: { k: '${var.y}' } },
       }),
     ]

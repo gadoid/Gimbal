@@ -48,7 +48,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     } as never)
     vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
       definition: {
-        steps: [{ api: { service: 'svc-ref' } }],   // 引用行(未声明)
+        steps: [{ call: { service: 'svc-ref' } }],   // 引用行(未声明)
         config: { vars: {}, services: { 'svc-decl': 'http://decl' }, users: { bob: {} } },
       },
       orchestration: { steps: [], resourceMeta: {} },

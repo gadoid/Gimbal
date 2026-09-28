@@ -59,7 +59,7 @@ function sampleScenario(expire = false): Scenario {
       expire,
       createTime: '2026-01-01T00:00:00Z',
     },
-    steps: [{ api: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
+    steps: [{ call: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
     orchestration: { steps: [], resourceMeta: {} },
     dataSetCount: 0,
     stepCount: 1,

@@ -59,9 +59,9 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
 
   it('覆盖口径 = 含 assertion 策略的步骤 / 总步骤;全覆盖态', async () => {
     vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
-      { name: '下单', api: { method: 'POST', path: '/o' },
+      { name: '下单', call: { method: 'POST', path: '/o' },
         strategy: [{ kind: 'assertion', target: '$.code', operator: '==', expected: 0 }] },
-      { name: '查单', api: { method: 'GET', path: '/q' },
+      { name: '查单', call: { method: 'GET', path: '/q' },
         strategy: [{ kind: 'extract', target: 'v', expression: '$.id' },
                    { kind: 'assertion', target: '$.msg', operator: 'exists' }] },
     ]))
@@ -74,9 +74,9 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
 
   it('部分/零覆盖三态 + 徽标即注册表入口(可点直达)', async () => {
     vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
-      { name: '下单', api: { method: 'POST', path: '/o' },
+      { name: '下单', call: { method: 'POST', path: '/o' },
         strategy: [{ kind: 'assertion', target: '$.code', operator: '==', expected: 0 }] },
-      { name: '查单', api: { method: 'GET', path: '/q' }, strategy: [] },
+      { name: '查单', call: { method: 'GET', path: '/q' }, strategy: [] },
     ]))
     const w = await mountPage()
     const badge = w.find('[data-testid="assert-cov-badge"]')
@@ -89,7 +89,7 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
     // 零覆盖态:无 assertion 策略
     push.mockClear()
     vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
-      { name: 'a', api: { method: 'GET', path: '/a' }, strategy: [] },
+      { name: 'a', call: { method: 'GET', path: '/a' }, strategy: [] },
     ]))
     await mountPage()
     w.unmount()

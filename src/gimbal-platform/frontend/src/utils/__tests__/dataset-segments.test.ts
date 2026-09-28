@@ -16,12 +16,12 @@ const VARS = { amount: 100, exp_code: 200, exp_msg: 'ok' }
 const STEPS: SegmentStepShape[] = [
   {
     request: { body: { amount: '${var.amount}', nested: { policy: '${var.amount}' } } },
-    api: { headers: { 'X-Trace': '${var.bl_no}', Authorization: '${auth.userA.token}' } },
+    call: { headers: { 'X-Trace': '${var.bl_no}', Authorization: '${auth.userA.token}' } },
     strategy: [
       { kind: 'extract', target: 't', expression: '$.a' },
-      { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' },
-      { kind: 'assertion', target: '$.response_body.msg', operator: 'eq', expected: 'prefix ${var.exp_msg} postfix' },
-      { kind: 'assertion', target: '$.response_status', operator: 'eq', expected: 200 },
+      { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '${var.exp_code}' },
+      { kind: 'assertion', target: '$.call.response.body.msg', operator: 'eq', expected: 'prefix ${var.exp_msg} postfix' },
+      { kind: 'assertion', target: '$.call.response.status', operator: 'eq', expected: 200 },
     ],
   },
   { request: { body: { bl_no: '${var.bl_no}' } }, strategy: [] },
@@ -41,7 +41,7 @@ describe('deriveSegments', () => {
     // 期望列:整串 + 混串模板都产列(各带 target/operator/strategyIdx);
     // 非字符串 expected(数字 200)跳过;非 assertion 跳过
     expect(s0.expects.map((e) => e.varName)).toEqual(['exp_code', 'exp_msg'])
-    expect(s0.expects[0]).toMatchObject({ target: '$.response_body.code', operator: 'eq', strategyIdx: 1 })
+    expect(s0.expects[0]).toMatchObject({ target: '$.call.response.body.code', operator: 'eq', strategyIdx: 1 })
     expect(s0.expects[0].baseline).toBe(200)   // 期望列基线 = config.vars 值(Task 4/5 消费)
     expect(s0.expects[1].strategyIdx).toBe(2)
   })
@@ -55,7 +55,7 @@ describe('deriveSegments', () => {
     const cols = gridColumnsOf(deriveSegments(STEPS, VARS)[0])
     expect(cols.map((c) => c.varName)).toEqual(['amount', 'bl_no', 'exp_code', 'exp_msg'])
     expect(cols[2].source).toBe('expect')
-    expect(cols[2].expect).toEqual({ target: '$.response_body.code', operator: 'eq', strategyIdx: 1 })
+    expect(cols[2].expect).toEqual({ target: '$.call.response.body.code', operator: 'eq', strategyIdx: 1 })
   })
 })
 
@@ -88,7 +88,7 @@ describe('fieldPathsOf — 全叶子扫描(spec v2 §4)', () => {
 
   it('FP-2: 非字符串/null 叶仍报路径;空容器无叶;headers 浅扫且 ${auth.*} 不算 varName', () => {
     const step = {
-      api: { headers: { Authorization: 'Bearer ${auth.u1.token}', X: '1' } },
+      call: { headers: { Authorization: 'Bearer ${auth.u1.token}', X: '1' } },
       request: { body: { n: 5, b: true, nil: null, empty: {}, list: [] } },
     }
     expect(fieldPathsOf(step)).toEqual([
@@ -116,8 +116,8 @@ describe('fieldPathsOf — 全叶子扫描(spec v2 §4)', () => {
   it('FP-5: 契约边界钉 — 根标量/null body 单叶 $;headers 浅扫不下钻;undefined header 无叶', () => {
     expect(fieldPathsOf({ request: { body: 5 } })).toEqual([{ source: 'body', path: '$' }])
     expect(fieldPathsOf({ request: { body: null } })).toEqual([{ source: 'body', path: '$' }])
-    expect(fieldPathsOf({ api: { headers: { A: { b: 1 } } }, request: {} }))
+    expect(fieldPathsOf({ call: { headers: { A: { b: 1 } } }, request: {} }))
       .toEqual([{ source: 'headers', path: '$.A' }])
-    expect(fieldPathsOf({ api: { headers: { A: undefined } }, request: {} })).toEqual([])
+    expect(fieldPathsOf({ call: { headers: { A: undefined } }, request: {} })).toEqual([])
   })
 })

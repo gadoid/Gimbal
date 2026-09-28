@@ -56,7 +56,7 @@ function scenario(over: Partial<Scenario['meta']>): Scenario {
       createTime: '2026-01-01T00:00:00Z',
       ...over,
     },
-    steps: [{ api: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
+    steps: [{ call: { service: 'fin-service', method: 'POST', path: '/x' } }] as Scenario['steps'],
     orchestration: { steps: [], resourceMeta: {} },
     dataSetCount: 0,
     stepCount: 1,

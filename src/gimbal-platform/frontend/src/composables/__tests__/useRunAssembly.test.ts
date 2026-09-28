@@ -37,7 +37,7 @@ const DRAFT = {
   definition: {
     kind: 'scenario', scenarioId: 'sc-asm',
     config: { services: { 'svc-decl': 'http://decl' }, users: { shared: {}, builtin: {} } },
-    steps: [{ api: { service: 'svc-ref' } }, { api: { service: 'svc-decl' } }],
+    steps: [{ call: { service: 'svc-ref' } }, { call: { service: 'svc-decl' } }],
   },
   orchestration: { steps: [{ name: '下单' }, { name: '查单' }], resourceMeta: {} },
   assertion_registry: { entries: [] },

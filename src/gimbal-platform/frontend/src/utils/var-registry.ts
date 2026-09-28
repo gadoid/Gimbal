@@ -97,7 +97,7 @@ export interface StepLike {
   // assign 策略的 source 在 StepView 里是 unknown(可注入任意 JSON 值),
   // 消费处自行 typeof 收窄(assignVarRefs:150)。
   strategy?: { kind?: string; target?: string; expression?: string; source?: unknown }[]
-  api?: { headers?: Record<string, string> }
+  call?: { headers?: Record<string, string> }
   request?: { body?: unknown }
 }
 

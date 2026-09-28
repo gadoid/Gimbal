@@ -2,33 +2,33 @@ import { describe, expect, it } from 'vitest'
 import { toScratchPath } from '../scratch-path'
 
 describe('toScratchPath', () => {
-  it('特判 $.status → $.response_status', () => {
-    expect(toScratchPath('$.status')).toBe('$.response_status')
+  it('特判 $.status → $.call.response.status', () => {
+    expect(toScratchPath('$.status')).toBe('$.call.response.status')
   })
 
   it('常规字段加 response_body 前缀', () => {
-    expect(toScratchPath('$.data.orderId')).toBe('$.response_body.data.orderId')
+    expect(toScratchPath('$.data.orderId')).toBe('$.call.response.body.data.orderId')
   })
 
   it('下标语法原样保留', () => {
-    expect(toScratchPath('$.data.container[0].id')).toBe('$.response_body.data.container[0].id')
+    expect(toScratchPath('$.data.container[0].id')).toBe('$.call.response.body.data.container[0].id')
   })
 
-  it('根路径 $ → $.response_body', () => {
-    expect(toScratchPath('$')).toBe('$.response_body')
+  it('根路径 $ → $.call.response.body', () => {
+    expect(toScratchPath('$')).toBe('$.call.response.body')
   })
 
-  it('空串 → $.response_body', () => {
-    expect(toScratchPath('')).toBe('$.response_body')
+  it('空串 → $.call.response.body', () => {
+    expect(toScratchPath('')).toBe('$.call.response.body')
   })
 
   it('已是 scratch 域的路径不重复加前缀', () => {
-    expect(toScratchPath('$.response_body.data.id')).toBe('$.response_body.data.id')
-    expect(toScratchPath('$.response_status')).toBe('$.response_status')
+    expect(toScratchPath('$.call.response.body.data.id')).toBe('$.call.response.body.data.id')
+    expect(toScratchPath('$.call.response.status')).toBe('$.call.response.status')
   })
 
-  it('根 list 形态: $[0].sku → $.response_body[0].sku(前缀直拼无点,修轮 R2)', () => {
-    expect(toScratchPath('$[0].sku')).toBe('$.response_body[0].sku')
-    expect(toScratchPath('$[1].items[0].n')).toBe('$.response_body[1].items[0].n')
+  it('根 list 形态: $[0].sku → $.call.response.body[0].sku(前缀直拼无点,修轮 R2)', () => {
+    expect(toScratchPath('$[0].sku')).toBe('$.call.response.body[0].sku')
+    expect(toScratchPath('$[1].items[0].n')).toBe('$.call.response.body[1].items[0].n')
   })
 })

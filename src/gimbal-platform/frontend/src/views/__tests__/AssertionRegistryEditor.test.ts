@@ -27,10 +27,10 @@ const DEF = {
   kind: 'scenario', scenarioId: 'sc-rg', meta: { name: 'rg' },
   config: { vars: { amount: 100, bl_no: 'BL1' } },
   steps: [
-    { kind: 'step', description: '下单', api: { headers: {} },
+    { kind: 'step', description: '下单', call: { headers: {} },
       request: { kind: 'request', body: { amount: '${var.amount}' } },
-      strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '0' }] },
-    { kind: 'step', description: '查单', api: { headers: {} },
+      strategy: [{ kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '0' }] },
+    { kind: 'step', description: '查单', call: { headers: {} },
       request: { kind: 'request', body: { bl_no: '${var.bl_no}' } }, strategy: [] },
   ],
 }
@@ -39,7 +39,7 @@ const REG = {
     { id: 'inj-1', name: '金额为负',
       path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' },
       value: -1,
-      asserts: [{ stepIndex: 0, target: '$.response_body.code', operator: 'eq', expected: '400', mode: 'override' }] },
+      asserts: [{ stepIndex: 0, target: '$.call.response.body.code', operator: 'eq', expected: '400', mode: 'override' }] },
     { id: 'inj-dead', name: '悬空条目',
       path: { stepIndex: 9, source: 'body', jsonpath: '$.x' },
       value: 1, asserts: [] },
@@ -294,14 +294,14 @@ it('ARE-10: asserts.target 输入 — 按所选步骤的端点契约给出响应
     },
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await w.findAll('.are-row')[0].trigger('click')      // 选中活条目 → 详情出现
   await flushPromises()
   const inputs = w.findAllComponents(JsonPathInput)
   expect(inputs.length).toBe(2)                        // path 输入 + target 输入
   // 契约 assertable 面经 toScratchPath 归一到引擎域;assertable=false 不入选
-  expect(inputs[1].props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+  expect(inputs[1].props('candidates')).toEqual(['$.call.response.body.code', '$.call.response.body.msg'])
   w.unmount()
 })
 
@@ -317,7 +317,7 @@ it('ARE-11: 请求侧候选含契约声明的 carry 字段,并标注状态', asy
     declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   const pathInput = w.findComponent(JsonPathInput)
   expect(pathInput.props('candidates')).toContain('$.customer_id')   // 声明面(body 里没有)
@@ -332,7 +332,7 @@ it('ARE-13: 契约含真值非字符串 path 的声明 → 编辑器不抛、正
     request: { declarations: [{ name: 'bad', path: 7 }, { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' }] },
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await w.find('.jpi-input').setValue('$.')    // 触发建议行渲染 → stateOf 逐条调用
   await flushPromises()
@@ -361,7 +361,7 @@ it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,�
   } as any)
   const ensureSpy = vi.spyOn(endpointFull, 'ensureEndpointFull')
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await flushPromises()
   // 挂载的 ensure() 是**宿主侧**取数口:每端点在面 TTL 内一次(降级后的退避另在组合式内)
@@ -372,7 +372,7 @@ it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,�
   const targetInput = () => w.findAllComponents(JsonPathInput)[1]
   await w.findAll('.are-row')[0].trigger('click')     // 选中活条目 → 详情/候选出现
   await flushPromises()
-  expect(targetInput().props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+  expect(targetInput().props('candidates')).toEqual(['$.call.response.body.code', '$.call.response.body.msg'])
 
   // 渲染色路径:清计数后反复重算候选(切步骤来回 + 重选条目)→ 取数口零调用
   ensureSpy.mockClear()
@@ -382,7 +382,7 @@ it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,�
   expect(targetInput().props('candidates')).toEqual([])
   ;(w.vm as any).pendingAssert.stepIndex = 0          // 切回:候选从缓存重建(算过就说明重算过)
   await flushPromises()
-  expect(targetInput().props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+  expect(targetInput().props('candidates')).toEqual(['$.call.response.body.code', '$.call.response.body.msg'])
   await w.findAll('.are-row')[1].trigger('click')
   await flushPromises()
   expect(ensureSpy).not.toHaveBeenCalled()            // ← 渲染期不触达取数口
@@ -402,7 +402,7 @@ it('ARE-14: 契约在途 → 契约依赖条目不标悬空(与运行面板同�
   // 管理说「悬空」、在运行面板却可勾,正是 C 要消灭的自相矛盾。
   _resetEndpointFullCacheForTest()
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-gate' } }
+  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-gate' } }
   let release: (v: unknown) => void = () => {}
   vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
   const w = await mountEditor({
@@ -437,7 +437,7 @@ it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)'
     declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
   const reg = { entries: [{ id: 'inj-carry', name: 'carry 偏离',
     path: { stepIndex: 0, source: 'body', jsonpath: '$.customer_id' }, value: 1, asserts: [] }] }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: reg })
@@ -458,7 +458,7 @@ it('ARE-16: 契约取数失败 → 降级提示可见 + 可点重试;重试成�
       declared_surface: ['$', '$.carry_x'],
     } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
   const w = await mountEditor({
     definition: def,
     orchestration: { steps: [], resourceMeta: {} },
@@ -493,7 +493,7 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
       id: 'ep-rg', request: { declarations: [] }, declared_surface: ['$'],
     } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
   const w = await mountEditor({
     definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG,
   })
@@ -547,13 +547,13 @@ it('ARE-19: target 填好 → 点「添加期望」正常追加,且不误报告�
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')
   await flushPromises()
-  ;(w.vm as any).pendingAssert.target = '$.response_body.msg'
+  ;(w.vm as any).pendingAssert.target = '$.call.response.body.msg'
   await w.find('.are-add-assert').trigger('click')
   await flushPromises()
   expect(warn).not.toHaveBeenCalled()
   const rows = w.find('.are-asserts tbody').findAll('tr')
   expect(rows.length).toBe(2)
-  expect(rows[1].text()).toContain('$.response_body.msg')
+  expect(rows[1].text()).toContain('$.call.response.body.msg')
   // 默认动作必须是「新增」—— 默认落「改写已有」会选中一个没有对象的动作,
   // 那一条静默无效(见 ARE-21 的拦截)
   expect(rows[1].text()).toContain('新增')
@@ -566,8 +566,8 @@ it('ARE-20: 「改写已有」+ 该步骤确有同目标断言 → 落条目,动
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')     // inj-1
   await flushPromises()
-  // DEF.steps[0] 的 strategy 里确有 target = $.response_body.code 的断言
-  ;(w.vm as any).pendingAssert.target = '$.response_body.code'
+  // DEF.steps[0] 的 strategy 里确有 target = $.call.response.body.code 的断言
+  ;(w.vm as any).pendingAssert.target = '$.call.response.body.code'
   ;(w.vm as any).pendingAssert.mode = 'override'
   await w.find('.are-add-assert').trigger('click')
   await flushPromises()
@@ -582,9 +582,9 @@ it('ARE-21: 「改写已有」+ 该步骤无该目标断言 → 拦下并说明,
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')
   await flushPromises()
-  // 步骤上**没有** target = $.response_body.msg 的断言:后端 override 分支
+  // 步骤上**没有** target = $.call.response.body.msg 的断言:后端 override 分支
   // 找不到匹配就什么都不做 —— 落下去等于一条永不生效的绑定。
-  ;(w.vm as any).pendingAssert.target = '$.response_body.msg'
+  ;(w.vm as any).pendingAssert.target = '$.call.response.body.msg'
   ;(w.vm as any).pendingAssert.mode = 'override'
   await w.find('.are-add-assert').trigger('click')
   await flushPromises()

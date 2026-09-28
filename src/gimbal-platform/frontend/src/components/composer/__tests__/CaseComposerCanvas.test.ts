@@ -58,7 +58,7 @@ vi.mock('@/api/scenario-composer', () => ({
       // ep-deep(R1 数组行注入用): $.supplier 数组容器 + 行模板叶
       // $.supplier.order_supplier_id,body 2 行 → 行数跟 body;
       // ep-list(修轮 R1 根 list 用): 根数组 $(type array, children $.sku)—
-      // 请求体直接是 JSON 数组的端点,assign target 须落 $.request_body[0].sku
+      // 请求体直接是 JSON 数组的端点,assign target 须落 $.call.request.body[0].sku
       declarations: [
         ...(endpointId === 'ep-2'
           ? [{
@@ -301,8 +301,8 @@ function mkStep(over: Partial<StepView> = {}): StepView {
   return {
     kind: 'step',
     description: 'test step',
-    api: {
-      kind: 'api', service: 'fin', method: 'POST', path: '/order',
+    call: {
+      kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
       headers: {}, view_hints: { endpoint_id: 'ep-1' },
     },
     request: {
@@ -321,8 +321,8 @@ function mkStep(over: Partial<StepView> = {}): StepView {
 function respStep(over: Partial<StepView> = {}): StepView {
   return mkStep({
     description: 'resp',
-    api: {
-      kind: 'api', service: 'fin', method: 'POST', path: '/order',
+    call: {
+      kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
       headers: {}, view_hints: { endpoint_id: 'ep-resp' },
     },
     request: { kind: 'request', body: {} },
@@ -343,7 +343,7 @@ function stepOf(service: string): StepView {
   return {
     kind: 'step',
     description: 'ep',
-    api: { kind: 'api', service, method: 'GET', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-1' } },
+    call: { kind: 'call', protocol: 'http', service, method: 'GET', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-1' } },
     request: { kind: 'request', body: {} },
     strategy: [],
   } as StepView
@@ -426,7 +426,7 @@ describe('CaseComposerCanvas — 变量注册表迁入(#1)', () => {
 })
 
 describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
-  it('T5: 提取该字段(请求侧)→ push extract{expression=$.request_body.<path>, scope=scenario}', async () => {
+  it('T5: 提取该字段(请求侧)→ push extract{expression=$.call.request.body.<path>, scope=scenario}', async () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
@@ -441,13 +441,13 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     expect(ex.scope).toBe('scenario')
     // 请求侧提取 = 取本步发出的请求体字段(after_request 时 scratch 已有
     // request_body)— 表达式确定 = requestBodyTargetOf,不再按名猜响应位
-    expect(ex.expression).toBe('$.request_body.orderId')
+    expect(ex.expression).toBe('$.call.request.body.orderId')
   })
 
-  it('T6: 注入 → push assign{source=$.<name>, target=$.request_body.<path>}', async () => {
+  it('T6: 注入 → push assign{source=$.<name>, target=$.call.request.body.<path>}', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = mkStep({
-      api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
+      call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
       request: {
         kind: 'request',
         body: { nested: { oid: '' } },
@@ -471,7 +471,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
-    expect(as.target).toBe('$.request_body.nested.oid')
+    expect(as.target).toBe('$.call.request.body.nested.oid')
   })
 
   it('T7: 注入候选时序门控 — 当前 step 产出的变量 disabled 标"步骤 N 才产出"', async () => {
@@ -502,9 +502,9 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     const item = w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))
     await item!.trigger('click')
     await flush()
-    const as = steps[0].strategy.find((s: any) => s.kind === 'assertion' && (s as any).target !== '$.response_status') as any
+    const as = steps[0].strategy.find((s: any) => s.kind === 'assertion' && (s as any).target !== '$.call.response.status') as any
     expect(as).toBeTruthy()
-    expect(as.target).toBe('$.response_body.data.orderId')
+    expect(as.target).toBe('$.call.response.body.data.orderId')
     expect(as.operator).toBe('exists')
   })
 })
@@ -556,7 +556,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     await exItem.trigger('click')
     await flush()
     const ex = steps[0].strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe('$.response_body.data.orderId')
+    expect(ex.expression).toBe('$.call.response.body.data.orderId')
   })
 
   it('T14: 策略区 request/response 共用 — 两签均显示全部策略', async () => {
@@ -573,9 +573,9 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     try {
     const steps = [mkStep({
       strategy: [
-        { kind: 'assign', source: '$.t', target: '$.request_body.x' } as any,
-        { kind: 'extract', target: 't', expression: '$.response_body.data.t' } as any,
-        { kind: 'assertion', target: '$.response_status', operator: 'eq', expected: 200 } as any,
+        { kind: 'assign', source: '$.t', target: '$.call.request.body.x' } as any,
+        { kind: 'extract', target: 't', expression: '$.call.response.body.data.t' } as any,
+        { kind: 'assertion', target: '$.call.response.status', operator: 'eq', expected: 200 } as any,
       ],
     })]
     const { w } = mountCanvas(steps)
@@ -608,7 +608,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
 
 describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
   it('T20: 右栏按签页分流 — request 页请求侧统计,response 页响应契约全状态码', async () => {
-    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.response_body.data.t' } as any] })
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.call.response.body.data.t' } as any] })
     const { w } = mountCanvas([s0])
     await flushPromises()
     const info = w.find('.col-info')
@@ -648,8 +648,8 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     // ep-carry:$.remark 声明在 request.carry → 编排面无任何 remark 入口
     // (此前经「其他字段」差集行过滤钉住;extras 撤销后整面缺席即天然满足)
     const s0 = mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-carry' },
       },
     })
@@ -669,7 +669,7 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     vi.mocked(getDefaults).mockResolvedValueOnce({ '$.remark': '默认备注' })
     const withEid = (svc: string): StepView => {
       const s = stepOf(svc)
-      ;(s.api as any).view_hints = { endpoint_id: 'ep-carry' }
+      ;(s.call as any).view_hints = { endpoint_id: 'ep-carry' }
       return s
     }
     const { w } = mountCanvas([withEid('fin-service'), withEid('ghost-svc')])
@@ -725,8 +725,8 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
       'local-user-1': { url: 'https://x', username: 'u', password: 'p', token_type: 'Bearer', expires_in: 3600 },
     }
     const s0 = mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: { Authorization: '${auth.local-user-1.token}' },
         view_hints: { endpoint_id: 'ep-1' },
       },
@@ -741,8 +741,8 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
 
   it('引用两边都没有的 alias 仍标悬空', async () => {
     const s0 = mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: { Authorization: '${auth.ghost.token}' },
         view_hints: { endpoint_id: 'ep-1' },
       },
@@ -885,7 +885,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     expect(svc['fin-service-qa2']).toBe('https://qa2.fin.local')
     expect(svc['fin-service']).toBe('https://a')          // 既有声明保留
     // 双写另一面:引用同步切到全串(local 直改)
-    expect(steps[0].api?.service).toBe('fin-service-qa2')
+    expect(steps[0].call?.service).toBe('fin-service-qa2')
     // 拦截:后缀含 "-"
     await w.find('.svc-ref-select').setValue('__create__')
     await w.find('.alias-suffix').setValue('a-b')
@@ -906,8 +906,8 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     ] as never)
     // 既有小写 authorization 行 + 另一个无关头:注入后只留一行 Authorization
     const s0 = mkStep({
-      api: {
-        kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin-service', method: 'POST', path: '/order',
         headers: { authorization: 'Bearer old', 'X-Trace': 't1' },
         view_hints: { endpoint_id: 'ep-1' },
       },
@@ -915,8 +915,8 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' } })
     await flushPromises()
     await w.find('.svc-ref-select').setValue('fin-service-uat')
-    expect(s0.api?.service).toBe('fin-service-uat')
-    expect(s0.api?.headers).toEqual({
+    expect(s0.call?.service).toBe('fin-service-uat')
+    expect(s0.call?.headers).toEqual({
       Authorization: '${auth.uat-cred.token}',
       'X-Trace': 't1',           // 无关头不动
     })
@@ -947,22 +947,22 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await flushPromises()
     // 先选无凭证绑定的已登记别名:headers 保持空对象(不动)
     await w.find('.svc-ref-select').setValue('fin-service-bare')
-    expect(s0.api?.headers).toEqual({})
+    expect(s0.call?.headers).toEqual({})
     // 再切到带凭证绑定的别名:空 headers 上注入一行
     await w.find('.svc-ref-select').setValue('fin-service-uat')
-    expect(s0.api?.headers).toEqual({ Authorization: '${auth.uat-cred.token}' })
+    expect(s0.call?.headers).toEqual({ Authorization: '${auth.uat-cred.token}' })
     // 再切回无凭证别名:注入的模板行必须清掉 —— 不能带着上一个服务的
     // token 发请求(2026-09-23 评审修补)
     await w.find('.svc-ref-select').setValue('fin-service-bare')
-    expect(s0.api?.headers).toEqual({})
+    expect(s0.call?.headers).toEqual({})
     w.unmount()
   })
 
   it('F4 清行边界:切到无凭证别名只清注入的模板行,手写 Authorization 保留', async () => {
     const { listAllAliases } = await import('@/api/service-aliases')
     const s0 = stepOf('fin-service')
-    s0.api = {
-      kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+    s0.call = {
+      kind: 'call', protocol: 'http', service: 'fin-service', method: 'POST', path: '/order',
       headers: { Authorization: 'Bearer handwritten', 'X-Trace': 't1' },
       view_hints: { endpoint_id: 'ep-1' },
     }
@@ -981,7 +981,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await flushPromises()
     // 无凭证别名:手写的字面凭证不是注入痕迹,原样保留
     await w.find('.svc-ref-select').setValue('fin-service-bare')
-    expect(s0.api?.headers).toEqual({
+    expect(s0.call?.headers).toEqual({
       Authorization: 'Bearer handwritten',
       'X-Trace': 't1',
     })
@@ -997,8 +997,8 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
   /** 挂载一个带单行 header 的 step,返回 wrapper + step 引用 */
   async function mountWithHeader() {
     const s0 = mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: { 'X-Header': 'v' }, view_hints: { endpoint_id: 'ep-1' },
       },
     })
@@ -1025,7 +1025,7 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     // 改 key → 既有 value 保留,key 重命名(Input 的 update 管道)
     await input!.setValue('Authorization')
     await flush()
-    expect((step.api ?? step.call ?? {} as any).headers).toEqual({ Authorization: 'v' })
+    expect((step.call ?? step.call ?? {} as any).headers).toEqual({ Authorization: 'v' })
     w.unmount()
   })
 
@@ -1035,7 +1035,7 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     expect(input).toBeTruthy()
     await input!.setValue('X-Custom-Trace')
     await flush()
-    expect((step.api ?? step.call ?? {} as any).headers).toEqual({ 'X-Custom-Trace': 'v' })
+    expect((step.call ?? step.call ?? {} as any).headers).toEqual({ 'X-Custom-Trace': 'v' })
     w.unmount()
   })
 })
@@ -1049,7 +1049,7 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
   /**
    * 痛点: 端点无 assertable_fields(未录响应模型)时按名匹配(respPathByName)静默
    * 兜底 $.data.<字段>,响应 data 为数组则丢 [0] 段(2026-08-28 用户
-   * 踩坑 $.data.data[0].order_id → $.response_body.data.order_id)。
+   * 踩坑 $.data.data[0].order_id → $.call.response.body.data.order_id)。
    * 正解: 粘真实响应样本 → plate resolve-paths 展开候选(数组天然
    * 出下标)→ 合入策略路径字段候选(scratch 域),点选即正确。
    */
@@ -1088,8 +1088,8 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
     expect(candBtn).toBeTruthy()
     await candBtn!.trigger('click')
     const items = w.findAll('.cand-item').map((b) => b.text())
-    expect(items).toContain("$.response_body.data['data'][0]['order_id']")
-    expect(items).toContain('$.response_body.data.orderId')
+    expect(items).toContain("$.call.response.body.data['data'][0]['order_id']")
+    expect(items).toContain('$.call.response.body.data.orderId')
     w.unmount()
   })
 
@@ -1153,7 +1153,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe('$.response_body.data.orderId')
+    expect(ex.expression).toBe('$.call.response.body.data.orderId')
     w.unmount()
   })
 
@@ -1180,16 +1180,16 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe("$.response_body.data['items'][0]['orderId']")
+    expect(ex.expression).toBe("$.call.response.body.data['items'][0]['orderId']")
     w.unmount()
   })
 
-  it('B1e: 请求侧提取确定落 $.request_body.<深路径>;断言无响应命中 → target 空(不猜)', async () => {
+  it('B1e: 请求侧提取确定落 $.call.request.body.<深路径>;断言无响应命中 → target 空(不猜)', async () => {
     // ep-2 请求深叶 oid($.nested.oid):提取 = 请求体地址确定,无需匹配;
     // 断言 = 按名找响应位,assertable(mock 共用)= $.data.orderId/$.code
     // 不含 oid 也无样本 → ''(宁空勿错保留在断言名匹配)
     const s0 = mkStep({
-      api: { kind: 'api', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
+      call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
       request: { kind: 'request', body: { nested: { oid: '' } } },
     })
     const { w } = mountCanvas([s0])
@@ -1200,7 +1200,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
     await exItem!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe('$.request_body.nested.oid')
+    expect(ex.expression).toBe('$.call.request.body.nested.oid')
     // 断言(菜单动作后已收,重开)
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -1208,7 +1208,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
     await asItem!.trigger('click')
     await flush()
     const as = s0.strategy.find(
-      (s: any) => s.kind === 'assertion' && s.target !== '$.response_status',
+      (s: any) => s.kind === 'assertion' && s.target !== '$.call.response.status',
     ) as any
     expect(as.target).toBe('')
     w.unmount()
@@ -1230,7 +1230,7 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
       ok: true,
       json: async () => ({ data: { items: [{
         id: 'ep-d', system: 'fin', service: 'fin-service', name: '下单',
-        description: '创建订单', api: { method: 'POST', path: '/o' },
+        description: '创建订单', call: { method: 'POST', path: '/o' },
       }] } }),
     }))
     // ep-d 定向覆写(catalog 选中拉 /full 与 Canvas ensureEndpointFull 两拉都命中;
@@ -1284,9 +1284,9 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
   it('B1: 策略命中字段 → 对应签页字段行显角标(extract/assertion→Response,assign→Request)', async () => {
     const s0 = mkStep({
       strategy: [
-        { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
-        { kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any,
-        { kind: 'assertion', target: '$.response_body.data.orderId', operator: 'exists', expected: null } as any,
+        { kind: 'extract', target: 'oid', expression: '$.call.response.body.data.orderId' } as any,
+        { kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any,
+        { kind: 'assertion', target: '$.call.response.body.data.orderId', operator: 'exists', expected: null } as any,
       ],
     })
     const { w } = mountCanvas([s0])
@@ -1305,8 +1305,8 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
   it('B2: 同 kind 两条 → 编号 extract_1/extract_2(数组序,不论是否命中字段)', async () => {
     const s0 = mkStep({
       strategy: [
-        { kind: 'extract', target: 'a', expression: '$.response_body.data.orderId' } as any,
-        { kind: 'extract', target: 'b', expression: '$.response_body.nowhere' } as any,
+        { kind: 'extract', target: 'a', expression: '$.call.response.body.data.orderId' } as any,
+        { kind: 'extract', target: 'b', expression: '$.call.response.body.nowhere' } as any,
       ],
     })
     const { w } = mountCanvas([s0])
@@ -1345,8 +1345,8 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
     try {
       const s0 = mkStep({
         strategy: [
-          { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
-          { kind: 'extract', target: 'x', expression: '$.response_body.nowhere' } as any,
+          { kind: 'extract', target: 'oid', expression: '$.call.response.body.data.orderId' } as any,
+          { kind: 'extract', target: 'x', expression: '$.call.response.body.nowhere' } as any,
         ],
       })
       const { w } = mountCanvas([s0], 0, true)
@@ -1387,8 +1387,8 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
     try {
       const s0 = mkStep({
         strategy: [
-          { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
-          { kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any,
+          { kind: 'extract', target: 'oid', expression: '$.call.response.body.data.orderId' } as any,
+          { kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any,
         ],
       })
       const { w } = mountCanvas([s0], 0, true)
@@ -1416,7 +1416,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
 describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段值)', () => {
   it('I1: assign 命中请求字段 → 值控件换只读提示条 + 原值兜底行;角标保留', async () => {
     const s0 = mkStep({
-      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any],
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1424,7 +1424,7 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
     expect(w.find('.ctl-injected').exists()).toBe(true)
     expect(w.text()).toContain('已使用动态策略注入')
     expect(w.find('.field-control input.ctl').exists()).toBe(false)
-    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.request_body.orderId')
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.call.request.body.orderId')
     // 兜底行:原值 + continue 语义
     const fb = w.find('.injected-fallback')
     expect(fb.text()).toContain('ord-1')
@@ -1443,7 +1443,7 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
 
   it('I3: 注入行 ☰ 菜单 — 引用/设为变量/注入禁用(写入必被覆盖),提取/断言可用', async () => {
     const s0 = mkStep({
-      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any],
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1470,7 +1470,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
   const deepStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'deep',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
     request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
     strategy: [],
     ...over,
@@ -1478,7 +1478,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
 
   it('R1-D1: 数组行 assign 命中 → 只读提示条 + 兜底行 + assign 角标(path 键控不误伤同行)', async () => {
     const s0 = deepStep({
-      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.supplier[1].order_supplier_id' } as any],
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.supplier[1].order_supplier_id' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1491,7 +1491,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
     // 只读态:值控件换提示条(运行时覆盖,防编辑误导)
     expect(row1.find('.ctl-injected').exists()).toBe(true)
     expect(row1.find('.ctl-injected').attributes('title'))
-      .toBe('$.oid → $.request_body.supplier[1].order_supplier_id')
+      .toBe('$.oid → $.call.request.body.supplier[1].order_supplier_id')
     // 兜底行:原值 'y' + continue 语义
     expect(row1.find('.injected-fallback').text()).toContain('y')
     expect(row1.find('.injected-fallback').text()).toContain('continue')
@@ -1503,7 +1503,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
     expect(w.findAll('.ctl-injected')).toHaveLength(1)
   })
 
-  it('R1-D2: 数组行菜单注入 → 真 onFieldAssign 落 $.request_body.<行实例路径>,注入态即时闭环', async () => {
+  it('R1-D2: 数组行菜单注入 → 真 onFieldAssign 落 $.call.request.body.<行实例路径>,注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = deepStep()
     const { w } = mountCanvas([s0, s1])
@@ -1526,7 +1526,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
     const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
-    expect(as.target).toBe('$.request_body.supplier[1].order_supplier_id')
+    expect(as.target).toBe('$.call.request.body.supplier[1].order_supplier_id')
     // 注入态闭环:该行换只读提示条 + assign 角标
     const row1After = w.findAll('.arr-row')[1]
     expect(row1After.find('.ctl-injected').exists()).toBe(true)
@@ -1537,24 +1537,24 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
 /**
  * 修轮 R1(Task 10 concern 转正,树模式继任):根数组 body(目录根 $
  * type=array)的 assign target 派生与策略匹配面 —— `replace(/^\$\./,
- * '$.request_body.')` 对根数组叶子 `$[0].sku` 不匹配(无点)→ target
+ * '$.call.request.body.')` 对根数组叶子 `$[0].sku` 不匹配(无点)→ target
  * 落裸 `$[0].sku`、角标/注入态匹配双双落空。统一改:剥 `/^\$\.?/` 得
- * rel,`'$.request_body' + ('[' 开头直拼无点,否则加 '.') + rel` ——
- * `$.supplier[0].x` → `$.request_body.supplier[0].x`(不变),
- * `$[0].sku` → `$.request_body[0].sku`(修好)。
+ * rel,`'$.call.request.body' + ('[' 开头直拼无点,否则加 '.') + rel` ——
+ * `$.supplier[0].x` → `$.call.request.body.supplier[0].x`(不变),
+ * `$[0].sku` → `$.call.request.body[0].sku`(修好)。
  */
 describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修轮 R1)', () => {
   /** ep-list step:根数组容器($ + children $.sku),body 直接是 JSON 数组 */
   const listStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'rootlist',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-list' } },
+    call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-list' } },
     request: { kind: 'request', body: [{ sku: 'A' }] },
     strategy: [],
     ...over,
   } as StepView)
 
-  it('RL1: 菜单注入根数组行 → onFieldAssign 落 target=$.request_body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
+  it('RL1: 菜单注入根数组行 → onFieldAssign 落 target=$.call.request.body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = listStep()
     const { w } = mountCanvas([s0, s1])
@@ -1577,22 +1577,22 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
     const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
-    expect(as.target).toBe('$.request_body[0].sku')
+    expect(as.target).toBe('$.call.request.body[0].sku')
     // 注入态闭环:根数组行换只读提示条 + assign 角标(匹配面同式贯通)
     expect(w.find('.ctl-injected').exists()).toBe(true)
-    expect(w.find('.ctl-injected').attributes('title')).toBe('$.token → $.request_body[0].sku')
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.token → $.call.request.body[0].sku')
     expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
   })
 
-  it('RL2: 既有 assign target=$.request_body[0].sku → 根数组行注入态 + assign 角标(匹配面贯通)', async () => {
+  it('RL2: 既有 assign target=$.call.request.body[0].sku → 根数组行注入态 + assign 角标(匹配面贯通)', async () => {
     const s0 = listStep({
-      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body[0].sku' } as any],
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body[0].sku' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
     // 注入只读态:值控件换提示条(同 I1 惯例,title 透出 source → target)
     expect(w.find('.ctl-injected').exists()).toBe(true)
-    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.request_body[0].sku')
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.call.request.body[0].sku')
     // 兜底行:原值 'A' + continue 语义
     expect(w.find('.injected-fallback').text()).toContain('A')
     expect(w.find('.injected-fallback').text()).toContain('continue')
@@ -1603,7 +1603,7 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
 
 /**
  * P6(整容器注入提示态,2026-09-05 注入粒度):向嵌套结构注入(整容器
- * assign,target 命中 $.request_body<容器实例路径>)此前零提示零角标 —
+ * assign,target 命中 $.call.request.body<容器实例路径>)此前零提示零角标 —
  * requestFieldSurface 匹配面只含叶子(leafSurface),FieldForm 容器头
  * 也无徽标/角标渲染位。修:containerSurface 并入匹配面 + 容器头注入
  * 徽标/角标/体锁定。与 I1(平铺叶)/R1(数组行叶)同族,粒度到整容器。
@@ -1613,7 +1613,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
   const deepStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'deep',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
     request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
     strategy: [],
     ...over,
@@ -1621,13 +1621,13 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
 
   it('P6-1: 既有整容器 assign → 容器头徽标(title 透出 source → target)+ assign 角标 + 体锁定;行叶不误标', async () => {
     const s0 = deepStep({
-      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.supplier' } as any],
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.supplier' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
     const head = w.find('.arr-node > .node-head')
     expect(head.find('.node-injected').exists()).toBe(true)
-    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.request_body.supplier')
+    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.call.request.body.supplier')
     expect(head.find('.strategy-tag').text()).toBe('assign')
     // 体锁定 + 加行隐藏(I1 防编辑误导的容器面);行叶不逐叶横幅
     expect(w.find('.arr-node .arr-body').classes()).toContain('body-locked')
@@ -1638,7 +1638,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
     w.unmount()
   })
 
-  it('P6-2: 容器菜单注入闭环 — ☰ 注入 → target=$.request_body.supplier,徽标/角标即时出现', async () => {
+  it('P6-2: 容器菜单注入闭环 — ☰ 注入 → target=$.call.request.body.supplier,徽标/角标即时出现', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = deepStep()
     const { w } = mountCanvas([s0, s1])
@@ -1663,9 +1663,9 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
     const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
-    expect(as.target).toBe('$.request_body.supplier')
+    expect(as.target).toBe('$.call.request.body.supplier')
     // 注入态闭环:头徽标 + 角标 + 体锁定(匹配面 containerSurface 贯通)
-    expect(w.find('.node-injected').attributes('title')).toBe('$.token → $.request_body.supplier')
+    expect(w.find('.node-injected').attributes('title')).toBe('$.token → $.call.request.body.supplier')
     expect(w.find('.arr-node > .node-head .strategy-tag').text()).toBe('assign')
     expect(w.find('.arr-node .arr-body').classes()).toContain('body-locked')
     w.unmount()
@@ -1719,8 +1719,8 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
   it('P7-2: 嵌套叶策略角标照挂(模板路径匹配面零漂移)+ 容器头角标', async () => {
     const s0 = respStep({
       strategy: [
-        { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
-        { kind: 'assertion', target: '$.response_body.data', operator: 'exists', expected: null } as any,
+        { kind: 'extract', target: 'oid', expression: '$.call.response.body.data.orderId' } as any,
+        { kind: 'assertion', target: '$.call.response.body.data', operator: 'exists', expected: null } as any,
       ],
     })
     const { w } = mountCanvas([s0])
@@ -1785,7 +1785,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
     expect(ex).toBeTruthy()
     expect(ex.target).toBe('sku')
-    expect(ex.expression).toBe('$.response_body.data.items.sku')
+    expect(ex.expression).toBe('$.call.response.body.data.items.sku')
     // 断言同源(respPathOf 单一真源,深层 target 同式落自身路径)
     await w.find('.arr-row .fa-menu-btn').trigger('click')
     await flush()
@@ -1793,9 +1793,9 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     await asItem.trigger('click')
     await flush()
     const as = s0.strategy.find(
-      (s: any) => s.kind === 'assertion' && s.target !== '$.response_status',
+      (s: any) => s.kind === 'assertion' && s.target !== '$.call.response.status',
     ) as any
-    expect(as.target).toBe('$.response_body.data.items.sku')
+    expect(as.target).toBe('$.call.response.body.data.items.sku')
     w.unmount()
   })
 })
@@ -1804,8 +1804,8 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
  * 请求侧提取域感知(2026-09-05 修复):菜单"提取该字段"在请求签此前按
  * 字段名去响应 assertable 撞(撞不上即空)。用户实际工作流是"取本步
  * 发出的请求体字段"(如 container 整容器提出、下一步注入复用 — 运行
- * 草稿里已存在 $.request_body.container 提取模式)。修:提取/断言按签
- * 页域分流 — request 侧表达式确定 = $.request_body<path>
+ * 草稿里已存在 $.call.request.body.container 提取模式)。修:提取/断言按签
+ * 页域分流 — request 侧表达式确定 = $.call.request.body<path>
  * (requestBodyTargetOf,与 assign target 同源);角标匹配面同步
  * (请求侧 extract 按 requestBodyTargetOf 命中挂请求字段行/容器头)。
  */
@@ -1814,13 +1814,13 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
   const deepStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'deep',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
     request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
     strategy: [],
     ...over,
   } as StepView)
 
-  it('N1: 请求容器头提取 → expression=$.request_body.supplier;容器头挂 extract 角标', async () => {
+  it('N1: 请求容器头提取 → expression=$.call.request.body.supplier;容器头挂 extract 角标', async () => {
     const s0 = deepStep()
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1832,22 +1832,22 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
     expect(ex).toBeTruthy()
     expect(ex.target).toBe('supplier')
-    // 整容器提出(运行草稿 $.request_body.container 同式,与 assign target 同源)
-    expect(ex.expression).toBe('$.request_body.supplier')
+    // 整容器提出(运行草稿 $.call.request.body.container 同式,与 assign target 同源)
+    expect(ex.expression).toBe('$.call.request.body.supplier')
     // 角标匹配面同步:容器头挂 extract
     expect(w.find('.arr-node > .node-head .strategy-tag').text()).toBe('extract')
     w.unmount()
   })
 
-  it('N2: 既有请求侧 extract($.request_body.orderId)→ 请求签字段行挂角标;响应签不误挂', async () => {
+  it('N2: 既有请求侧 extract($.call.request.body.orderId)→ 请求签字段行挂角标;响应签不误挂', async () => {
     const s0 = mkStep({
-      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.request_body.orderId' } as any],
+      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.call.request.body.orderId' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
     // 请求签(默认):orderId 行挂 extract 角标
     expect(w.find('.field-label .strategy-tag').text()).toBe('extract')
-    // 响应签:response 字段路径($.data.orderId → $.response_body.data.orderId)
+    // 响应签:response 字段路径($.data.orderId → $.call.response.body.data.orderId)
     // 与请求域表达式不等 → 不误挂
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1860,7 +1860,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     // 提取只读取不覆盖:此前 requestInjected 混收 extract → 容器头误显
     // 「已注入·运行时覆盖整个区块」+ 体锁定 + 藏加行(注入语义错挂)
     const s0 = deepStep({
-      strategy: [{ kind: 'extract', target: 'supplier', expression: '$.request_body.supplier' } as any],
+      strategy: [{ kind: 'extract', target: 'supplier', expression: '$.call.request.body.supplier' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1877,7 +1877,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
 
   it('N4: 叶提取 → 值控件保持可编辑 + 「已提取」提示行;无注入只读条', async () => {
     const s0 = mkStep({
-      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.request_body.orderId' } as any],
+      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.call.request.body.orderId' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -1888,7 +1888,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     const hint = w.find('.extracted-hint')
     expect(hint.exists()).toBe(true)
     expect(hint.text()).toContain('orderId')
-    expect(hint.attributes('title')).toBe('$.request_body.orderId → orderId')
+    expect(hint.attributes('title')).toBe('$.call.request.body.orderId → orderId')
     w.unmount()
   })
 })
@@ -1904,7 +1904,7 @@ describe('CaseComposerCanvas — 容器头值写入项恢复(2026-09-05)', () =>
   const deepStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'deep',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
     request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
     strategy: [],
     ...over,
@@ -1976,8 +1976,8 @@ describe('CaseComposerCanvas — 策略显示名统一(2026-09-05)', () => {
     try {
       const s0 = mkStep({
         strategy: [
-          { kind: 'extract', target: 't', expression: '$.response_body.data.t' } as any,
-          { kind: 'assign', source: '$.t', target: '$.request_body.orderId' } as any,
+          { kind: 'extract', target: 't', expression: '$.call.response.body.data.t' } as any,
+          { kind: 'assign', source: '$.t', target: '$.call.request.body.orderId' } as any,
         ],
       })
       const { w } = mountCanvas([s0])
@@ -2082,8 +2082,8 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
 
   function mkStepOn(eid: string): StepView {
     return mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: eid },
       },
     })
@@ -2174,8 +2174,8 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
 describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
   function mkStepOn(eid: string): StepView {
     return mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: eid },
       },
     })
@@ -2243,8 +2243,8 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
     // step[1] 服务挂目录(fin-service → base 可派生)+ ep-carry($.remark carry 面);
     // 全程不点开它 — 旧实现 /full 只在卡片被选中时才拉,徽标无从渲染
     const s1 = mkStep({
-      api: {
-        kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin-service', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-carry' },
       },
     })
@@ -2287,8 +2287,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     //   $.b { value_source: { view: 'v', column: 'y', group: 'g' } }
     //   $.c 无绑定
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs' },
       },
       request: { kind: 'request', body: {} },
@@ -2341,8 +2341,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // + $.fees.note(无绑定兄弟);body 已有 1 行 → 叶子渲染为实例路径
     // $.fees[0].cost_id(buildTree [i] 语义)
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs-arr' },
       },
       request: { kind: 'request', body: { fees: [{ cost_id: '', note: 'keep' }] } },
@@ -2382,8 +2382,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // —— 组合期查询用执行账号,钉的值执行时必然查得到(§6.3 权限腐烂
     // 由构造消解);凭证池无此别名时后端诚实 422「未找到查询凭证」
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs' },
       },
       request: { kind: 'request', body: {} },
@@ -2420,11 +2420,11 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 首键)— 查询别名必须锚定**当前 step 的服务域**,而非场景 users 首键;
     // 否则错域 token 被 SUT 拒且业务码 401/407 拉黑污染首键本域(§13.8 实证)。
     const steps = [mkStep({
-      api: { kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
              headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
       request: { kind: 'request', body: {} },
     }), mkStep({
-      api: { kind: 'api', service: 'sysY', method: 'POST', path: '/other',
+      call: { kind: 'call', protocol: 'http', service: 'sysY', method: 'POST', path: '/other',
              headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
       request: { kind: 'request', body: {} },
     })]
@@ -2476,8 +2476,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // (为 B 的列查到的候选就是 B 能用的,构造消解 per-凭证);域内首键
     // userA 只是 fallback,有引用时不得吞掉引用
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: { Authorization: '${auth.userB.token}' },
         view_hints: { endpoint_id: 'ep-vs' },
       },
@@ -2515,8 +2515,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 悬空引用不回退猜测:别名照发 'ghost',凭证池无此别名 → 后端诚实 422
     // 「未找到查询凭证」(悬空徽章另有显形)—— 回退到域内首键反而是静默错身份
     const withHeaders = (headers: Record<string, string>) => mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers, view_hints: { endpoint_id: 'ep-vs' },
       },
       request: { kind: 'request', body: {} },
@@ -2556,8 +2556,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // name 绑 customer_part 点列;step body: { customer_id: 'C1' }
     // mock index:customer_part 声明 query_params: ['customer_id']
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
       },
       request: { kind: 'request', body: { customer_id: 'C1' } },
@@ -2589,8 +2589,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
 
   it('参数确认携 params 查询;单对象行点选点列扇出(§13.4)', async () => {
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
       },
       request: { kind: 'request', body: {} },
@@ -2631,8 +2631,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
 
   it('R1: 拉数失败错误态困不住参数面 — ↩ 改参数清错回段(值保留),重开无残错', async () => {
     const steps = [mkStep({
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
         headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
       },
       request: { kind: 'request', body: {} },
@@ -2677,8 +2677,8 @@ describe('CaseComposerCanvas — 期望提升链退场(spec v2 §2)', () => {
       // 两形态并钉:字面量 expected + 已模板化 ${var.exp_*} — 均无提升/还原入口
       const s0 = mkStep({
         strategy: [
-          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: 200 } as any,
-          { kind: 'assertion', target: '$.response_body.msg', operator: 'eq', expected: '${var.exp_msg}' } as any,
+          { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: 200 } as any,
+          { kind: 'assertion', target: '$.call.response.body.msg', operator: 'eq', expected: '${var.exp_msg}' } as any,
         ],
       })
       const { w } = mountCanvas([s0])
@@ -2716,7 +2716,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
           body: { amount: '${var.amount}', policy_id: '${var.policy_id}', plain: 'x' },
         },
         strategy: [
-          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+          { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
         ],
       })
       const { w } = mountCanvas([s0])
@@ -2742,8 +2742,8 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
       const s0 = mkStep()
       const s1 = mkStep({
         strategy: [
-          { kind: 'assertion', target: '$.response_body.a', operator: 'eq', expected: null } as any,
-          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+          { kind: 'assertion', target: '$.call.response.body.a', operator: 'eq', expected: null } as any,
+          { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
         ],
       })
       // 本地复制 mountCanvas 骨架(控制者裁定:不改公用 mountCanvas),
@@ -2797,8 +2797,8 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
       const s0 = mkStep()
       const s1 = mkStep({
         strategy: [
-          { kind: 'assertion', target: '$.response_body.a', operator: 'eq', expected: null } as any,
-          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+          { kind: 'assertion', target: '$.call.response.body.a', operator: 'eq', expected: null } as any,
+          { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
         ],
       })
       const steps = ref<StepView[]>([])
@@ -2858,8 +2858,8 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
       const draft = useScenarioDraftStore()
       draft.draft!.definition.config.vars = { base_url: 'http://x', q: 'Q0' }
       const s0 = mkStep({
-        api: {
-          kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        call: {
+          kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
           headers: {}, view_hints: { endpoint_id: 'ep-vs2' },
         },
         request: { kind: 'request', body: { a: '${var.q}', b: '${var.q}' } },
@@ -2936,7 +2936,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
     expect(emits![0][0]).toEqual({
-      kind: 'assert', stepIndex: 0, target: '$.response_body.data.orderId',
+      kind: 'assert', stepIndex: 0, target: '$.call.response.body.data.orderId',
     })
     w.unmount()
   })
@@ -2964,8 +2964,8 @@ describe('CaseComposerCanvas — 渲染期取数收口(阶段二 Task 7)', () =>
     return {
       kind: 'step',
       description: eid,
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/x',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/x',
         headers: {}, view_hints: { endpoint_id: eid },
       },
       request: { kind: 'request', body: {} },
@@ -3010,8 +3010,8 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
     return {
       kind: 'step',
       description: eid,
-      api: {
-        kind: 'api', service: 'fin', method: 'POST', path: '/x',
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/x',
         headers: {}, view_hints: { endpoint_id: eid },
       },
       request: { kind: 'request', body },

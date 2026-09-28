@@ -713,11 +713,11 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
     const { w } = mountTree({
       decls: boxDecls(),
       body,
-      injected: { '$.container': [{ source: '$.oid', target: '$.request_body.container' }] },
+      injected: { '$.container': [{ source: '$.oid', target: '$.call.request.body.container' }] },
     })
     const head = w.find('.arr-node > .node-head')
     expect(head.find('.node-injected').exists()).toBe(true)
-    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.request_body.container')
+    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.call.request.body.container')
     expect(head.text()).toContain('运行时覆盖整个区块')
     // 体锁定(pointer-events 拦截交互,原值仍可见 = continue 兜底)
     expect(w.find('.arr-node > .arr-body').classes()).toContain('body-locked')
@@ -736,7 +736,7 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
       fieldActions: true,
       varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }],
       injectChoices: [{ name: 'resp_box', origin: 'extract', stepIdx: 0, expression: null }],
-      injected: { '$.container': [{ source: '$.resp_box', target: '$.request_body.container' }] },
+      injected: { '$.container': [{ source: '$.resp_box', target: '$.call.request.body.container' }] },
     })
     await w.find('.node-fa .fa-menu-btn').trigger('click')
     const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
@@ -748,7 +748,7 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
     const { w } = mountTree({
       decls: boxDecls(),
       body,
-      injected: { '$.container[0].box_no': [{ source: '$.nos', target: '$.request_body.container[0].box_no' }] },
+      injected: { '$.container[0].box_no': [{ source: '$.nos', target: '$.call.request.body.container[0].box_no' }] },
     })
     // 徽标唯一,落在 box_no 实例头(文档序 .arr-node = [container, box_no])
     const badges = w.findAll('.node-injected')
@@ -760,7 +760,7 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
     expect(outerHead.find('.node-injected').exists()).toBe(false)  // 外层 container
     expect(innerHead.find('.node-injected').exists()).toBe(true)   // box_no[0]
     expect(innerHead.find('.node-injected').attributes('title'))
-      .toBe('$.nos → $.request_body.container[0].box_no')
+      .toBe('$.nos → $.call.request.body.container[0].box_no')
     // 锁定粒度随实例:box_no 体锁,container 体不锁(box_type 行可编辑)
     // (nodes[0].find('.arr-body') 文档序首个 = container 自身体)
     expect(nodes[1].find('.arr-body').classes()).toContain('body-locked')
@@ -788,13 +788,13 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
     const { w, jumps } = mountTree({
       decls,
       body: { memo: 'm', open: 'x' },
-      injected: { '$.memo': [{ source: '$.note', target: '$.request_body.memo' }] },
+      injected: { '$.memo': [{ source: '$.note', target: '$.call.request.body.memo' }] },
       strategyTags: { '$.memo': [{ label: 'assign', idx: 0 }] },
     })
     await w.find('.folded-toggle').trigger('click')
     const row = w.find('.folded-row')
     expect(row.find('.ctl-injected').exists()).toBe(true)
-    expect(row.find('.ctl-injected').attributes('title')).toBe('$.note → $.request_body.memo')
+    expect(row.find('.ctl-injected').attributes('title')).toBe('$.note → $.call.request.body.memo')
     expect(row.find('input.ctl').exists()).toBe(false)
     expect(row.find('.strategy-tag').text()).toBe('assign')
     await row.find('.strategy-tag').trigger('click')
@@ -812,18 +812,18 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
       decls,
       body: { cfg: { timeout: 30 }, labels: { env: 'qa' } },
       injected: {
-        '$.cfg': [{ source: '$.c', target: '$.request_body.cfg' }],
-        '$.labels': [{ source: '$.l', target: '$.request_body.labels' }],
+        '$.cfg': [{ source: '$.c', target: '$.call.request.body.cfg' }],
+        '$.labels': [{ source: '$.l', target: '$.call.request.body.labels' }],
       },
     })
     // 对象容器:头徽标 + 体锁定;行叶不逐叶横幅
     const obj = w.find('.obj-node')
-    expect(obj.find('.node-head .node-injected').attributes('title')).toBe('$.c → $.request_body.cfg')
+    expect(obj.find('.node-head .node-injected').attributes('title')).toBe('$.c → $.call.request.body.cfg')
     expect(obj.find('.obj-body').classes()).toContain('body-locked')
     expect(obj.find('input.ctl').exists()).toBe(true)  // 原值仍可见(兜底)
     // 开放字典:头徽标 + 体锁定 + 添加键隐藏
     const dict = w.find('.dict-node')
-    expect(dict.find('.node-head .node-injected').attributes('title')).toBe('$.l → $.request_body.labels')
+    expect(dict.find('.node-head .node-injected').attributes('title')).toBe('$.l → $.call.request.body.labels')
     expect(dict.find('.arr-body').classes()).toContain('body-locked')
     expect(dict.find('.arr-add').exists()).toBe(false)
     expect(w.findAll('.node-injected')).toHaveLength(2)
@@ -880,14 +880,14 @@ describe('FieldForm 树模式 — 注入只读态复用', () => {
     const { w } = mountTree({
       decls,
       body: { items: [{ sku: 'A' }, { sku: 'B' }] },
-      injected: { '$.items[1].sku': [{ source: '$.oid', target: '$.request_body.items[1].sku' }] },
+      injected: { '$.items[1].sku': [{ source: '$.oid', target: '$.call.request.body.items[1].sku' }] },
     })
     // 仅 row[1] 只读化;row[0](同 name 不同 path)不受牵连
     expect(w.findAll('.ctl-injected')).toHaveLength(1)
     const row1 = w.findAll('.arr-row')[1]
     expect(row1.find('.ctl-injected').exists()).toBe(true)
     expect(row1.find('.ctl-injected').attributes('title'))
-      .toBe('$.oid → $.request_body.items[1].sku')
+      .toBe('$.oid → $.call.request.body.items[1].sku')
     expect(w.findAll('.arr-row')[0].find('input.ctl').exists()).toBe(true)
   })
 

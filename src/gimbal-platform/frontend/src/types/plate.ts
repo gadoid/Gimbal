@@ -270,25 +270,14 @@ export interface StrategyKindDetailView extends StrategyKindView {
   base_fields: StrategyFieldDescView[]
 }
 
-// ─── plate Scenario 视图(编排用,对齐 gimbal_plate/schema/scenario.py + step/api/request/strategy)──
-
-/** plate Api(step 内)。对齐 gimbal_plate/schema/api.py Api + view_hints 扩展。 */
-export interface ApiView {
-  kind: 'api'
-  service: string
-  method: HttpMethod
-  path: string
-  headers?: Record<string, string>
-  timeout?: number
-  /** 平台视图扩展:endpoint_id/module/tags(GimbalScenarioExporter 导出时剥离) */
-  view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
-}
+// ─── plate Scenario 视图(编排用,对齐 gimbal_plate/schema/scenario.py + step/call/request/strategy)──
 
 /**
  * plate Call(step 内)。对齐 gimbal_plate/schema/call.py Call。
- * v2.1 批次 F-2a:gimbal 侧唯一调用形态(protocol 必填,开放字段)。
- * http 协议的 service/method/path/headers/timeout 与 ApiView 同名同型;
- * 自定义协议字段(access=allow)不做 TS 穷举,运行时 duck-read。
+ * v2.1 F-2a + api→call 清理:call 是唯一调用形态(protocol 必填,开放字段);
+ * api 形态已退役,平台视图/新建步骤一律产 call。
+ * http 协议的 service/method/path/headers/timeout;自定义协议字段
+ * (access=allow)不做 TS 穷举,运行时 duck-read。
  */
 export interface CallView {
   kind: 'call'
@@ -312,7 +301,7 @@ export interface RequestView {
   kind: 'request'
   body: unknown
   /** @deprecated 结构快照不再持久化(容器原则:引用数据不进 payload,
-   *  渲染时按 api.view_hints.endpoint_id 现拉 /full)。仅为读存量 payload
+   *  渲染时按 call.view_hints.endpoint_id 现拉 /full)。仅为读存量 payload
    *  保留的类型;新代码禁止写入。值为 fields_meta 键控面:顶层 name 键控,
    *  2026-09-05 目录化起条目携带 state 与 children 树、树全量展开
    *  (值透传的 carry 顶层条目不进表;plate export/platform.py 投影)。 */
@@ -363,10 +352,8 @@ export type StrategyView = ExtractView | AssignView | AssertionView
 export interface StepView {
   kind: 'step'
   description?: string
-  /** v2.1 F-2a:call 是 gimbal 唯一调用形态;api 为过渡期存量(最终删除) */
-  call?: CallView
-  /** @deprecated 过渡期存量读;新代码一律写 call,读经 stepCall() 双读 */
-  api?: ApiView
+  /** v2.1 F-2a + api→call 清理:call 是唯一调用形态(api 已退役) */
+  call: CallView
   request?: RequestView
   strategy: StrategyView[]
   /**
@@ -462,56 +449,44 @@ export interface ScenarioView {
   config_summary?: unknown
 }
 
-// ─── v2.1 F-2a: call/api 双读辅助(前端统一入口) ───
+// ─── step 调用信息读取辅助(前端统一入口,call 单读) ───
 
 type StepLike = StepView | Record<string, unknown> | unknown
 
 /**
- * 从 step 双读调用信息:call 优先(新形态),api 兜底(存量)。
- * 返回统一的 "视图调用" 形状(service/method/path/headers/timeout 可缺省)。
- * 所有前端消费点一律经此函数,禁止直接读 step.api 或 step.call。
+ * 从 step 读调用信息(call 唯一形态)。返回的引用即 step.call 本体,
+ * 需要改值(headers/service 等)时直接在此对象上写。所有前端消费点
+ * 一律经此函数,禁止散读 step.call。
  */
-export function stepCall(step: StepLike): CallView | ApiView | null {
+export function stepCall(step: StepLike): CallView | null {
   if (!step || typeof step !== 'object') return null
-  const s = step as Record<string, unknown>
-  if (s.call && typeof s.call === 'object') return s.call as CallView
-  if (s.api && typeof s.api === 'object') return s.api as ApiView
-  return null
+  const c = (step as Record<string, unknown>).call
+  return c && typeof c === 'object' ? (c as CallView) : null
 }
 
-/** 从 step 读 view_hints.endpoint_id(仅 api 形态携带;call 形态无此字段,返回 undefined)。 */
+/** 从 step 读 view_hints.endpoint_id(call 形态携带;缺失返回 undefined)。 */
 export function stepEndpointId(step: StepLike): string | undefined {
-  const s = step as Record<string, unknown> | null
-  if (!s || typeof s !== 'object') return undefined
-  // call 优先(新形态),api 兜底(存量)
-  if (s.call && typeof s.call === 'object') {
-    const c = s.call as CallView
-    if (c.view_hints?.endpoint_id) return c.view_hints.endpoint_id
-  }
-  if (s.api && typeof s.api === 'object') {
-    const a = s.api as ApiView
-    if (a.view_hints?.endpoint_id) return a.view_hints.endpoint_id
-  }
-  return undefined
+  const c = stepCall(step)
+  return c?.view_hints?.endpoint_id || undefined
 }
 
-/** 从 step 读 headers(call/api 双读;无调用信息返回空对象)。 */
+/** 从 step 读 headers(无调用信息返回空对象)。 */
 export function stepHeaders(step: StepLike): Record<string, string> {
   const c = stepCall(step)
   return (c?.headers as Record<string, string>) || {}
 }
 
-/** 从 step 读 service(call/api 双读)。 */
+/** 从 step 读 service。 */
 export function stepService(step: StepLike): string {
   return stepCall(step)?.service || ''
 }
 
-/** 从 step 读 method(call/api 双读)。 */
+/** 从 step 读 method。 */
 export function stepMethod(step: StepLike): string {
   return stepCall(step)?.method || ''
 }
 
-/** 从 step 读 path(call/api 双读)。 */
+/** 从 step 读 path。 */
 export function stepPath(step: StepView | Record<string, unknown> | undefined | null): string {
   return stepCall(step)?.path || ''
 }

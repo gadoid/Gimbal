@@ -8,7 +8,7 @@ const E = (over: Partial<AssertionEntry> = {}): AssertionEntry => ({
   id: 'inj-1', name: 'n',
   path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' },
   value: -1,
-  asserts: [{ stepIndex: 0, target: '$.response_body.code', operator: 'eq', expected: '400', mode: 'override' }],
+  asserts: [{ stepIndex: 0, target: '$.call.response.body.code', operator: 'eq', expected: '400', mode: 'override' }],
   ...over,
 })
 const LEGACY: LegacyAssertionEntry = {
@@ -27,7 +27,7 @@ const BODY0 = { 0: ['$.amount', '$.bl_no', '$.items[0].sku'] }
 
 describe('registryIssues — 悬空检测(spec v3 §2)', () => {
   it('RG-1: 全匹配零 issue(path 落在 body 字段树 + override 有匹配)', () => {
-    expect(registryIssues(E(), 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] }))).toEqual([])
+    expect(registryIssues(E(), 2, bodyPaths(BODY0), targets({ 0: ['$.call.response.body.code'] }))).toEqual([])
   })
   it('RG-2: path/asserts 各自的 stepIndex 越界 → step-oob', () => {
     const e = E({ path: { stepIndex: 5, source: 'body', jsonpath: '$.x' } })
@@ -39,11 +39,11 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
   })
   it('RG-3: jsonpath 不落在该步 body 字段树 → path-unresolvable;容器前缀可解析', () => {
     const e = E({ path: { stepIndex: 0, source: 'body', jsonpath: '$.ghost' } })
-    expect(registryIssues(e, 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] })))
+    expect(registryIssues(e, 2, bodyPaths(BODY0), targets({ 0: ['$.call.response.body.code'] })))
       .toContainEqual({ kind: 'path-unresolvable', stepIndex: 0, jsonpath: '$.ghost' })
     // 容器锚点:叶子是它的子路径 → 可解析(Assign 整体覆写该容器)
     const container = E({ path: { stepIndex: 0, source: 'body', jsonpath: '$.items' } })
-    expect(registryIssues(container, 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] }))).toEqual([])
+    expect(registryIssues(container, 2, bodyPaths(BODY0), targets({ 0: ['$.call.response.body.code'] }))).toEqual([])
     // 容器路径靠集合里的**前缀成员**命中(该成员由集合构造侧物化)
     expect(pathResolvable('$.items[0]', bodyPaths(BODY0)(0))).toBe(true)
     expect(pathResolvable('$.amount', new Set(['$.amount']))).toBe(true)
@@ -52,9 +52,9 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
     expect(pathResolvable('$.items[0]', new Set(['$.items[0].sku']))).toBe(false)
   })
   it('RG-4: override 匹配不到既有断言 → override-no-match;append 不查匹配', () => {
-    const base = { 0: ['$.response_body.other'] }
+    const base = { 0: ['$.call.response.body.other'] }
     expect(registryIssues(E(), 2, bodyPaths(BODY0), targets(base)))
-      .toContainEqual({ kind: 'override-no-match', stepIndex: 0, target: '$.response_body.code' })
+      .toContainEqual({ kind: 'override-no-match', stepIndex: 0, target: '$.call.response.body.code' })
     const app = E({ asserts: [{ stepIndex: 0, target: '$.new', operator: 'eq', expected: '1', mode: 'append' }] })
     expect(registryIssues(app, 2, bodyPaths(BODY0), targets(base))).toEqual([])
   })

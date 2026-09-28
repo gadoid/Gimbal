@@ -32,6 +32,7 @@ import type { RegistryIssue } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
 import { iterFlat, resolveState, toTemplatePath } from '@/utils/declarations'
 import type { DeclarationEntryView, FieldState } from '@/types/plate'
+import { stepEndpointId } from '@/types/plate'
 import {
   endpointFullState, ensureEndpointFull, getEndpointFull, surfaceVersion,
 } from '@/composables/useEndpointFull'
@@ -76,10 +77,9 @@ export function useInjectableSurface(
   steps: Ref<any[]>,
   entries: Ref<Array<AssertionEntry | LegacyAssertionEntry>>,
 ): InjectableSurface {
-  /** steps[si] 的契约端点 id(**读,不取数**) */
+  /** steps[si] 的契约端点 id(**读,不取数**)——call 唯一形态,读 call.view_hints */
   function endpointIdOf(si: number): string | undefined {
-    const eid = (steps.value[si] as { api?: { view_hints?: { endpoint_id?: string } } } | null)
-      ?.api?.view_hints?.endpoint_id
+    const eid = stepEndpointId(steps.value[si])
     return typeof eid === 'string' && eid ? eid : undefined
   }
 

@@ -37,7 +37,7 @@ export interface ExpectColumn {
 
 export interface SegmentStepShape {
   request?: { body?: unknown } | null
-  api?: { headers?: Record<string, unknown> | null } | null
+  call?: { headers?: Record<string, unknown> | null } | null
   strategy?: unknown[]
 }
 

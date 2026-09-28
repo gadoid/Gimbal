@@ -48,7 +48,7 @@ function surface(steps: Ref<any[]>, entries: Ref<any>) {
 it('IS-1: dead 分两组 — step-oob/legacy 入 intrinsic,契约未定而 path-unresolvable 入 contractDependent', async () => {
   // 契约未回填(getFullEndpoint 挂起)→ pending=true
   vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise(() => {}) as any)
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-x' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-x' } } }])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 9, source: 'body', jsonpath: '$.z' }, value: 1, asserts: [] },      // step-oob → intrinsic
     { id: 'b', name: 'B', anchor: {}, asserts: [] },                                                            // legacy → intrinsic
@@ -71,7 +71,7 @@ it('IS-2: 契约落定后 contractDependent 清空(声明面命中)', async () =
       { name: 'carry_field', path: '$.carry_field', state: 'carry', required: true, description: '' }] },
     declared_surface: ['$', '$.carry_field'],
   } as any)
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-x' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-x' } } }])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 9, source: 'body', jsonpath: '$.z' }, value: 1, asserts: [] },
     { id: 'b', name: 'B', anchor: {}, asserts: [] },
@@ -88,7 +88,7 @@ it('IS-2: 契约落定后 contractDependent 清空(声明面命中)', async () =
 
 it('IS-3: 契约取数**失败** → 判定从严,path-unresolvable 归 intrinsic(不是悬置)', async () => {
   vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
-  const steps = ref([{ request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-down' } } }])
+  const steps = ref([{ request: { body: {} }, call: { view_hints: { endpoint_id: 'ep-down' } } }])
   const entries = ref([{ id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }] as any)
   const s = surface(steps, entries)
   s.ensure()
@@ -102,7 +102,7 @@ it('IS-5: steps 就地编辑(body 删字段)→ 判定跟着走(记忆化不得�
   // 记忆化的另一个失效面:**就地**深编辑(同一个 step / 同一个 body 对象,
   // 只有深属性变化)。neededEndpoints 只跟踪 view_hints,不跟踪 body ——
   // 光靠它的整表替换清不掉这里的旧集合,判活判死会静默漂移。
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: {} }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: {} }])
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
@@ -122,8 +122,8 @@ it('IS-4: `pending` 只看**被条目引用到**的端点 —— 无关端点在
   vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
     new Promise((res) => { deferred[id] = res }) as any)
   const steps = ref([
-    { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-ref' } } },
-    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-unrelated' } } },
+    { request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-ref' } } },
+    { request: { body: {} }, call: { view_hints: { endpoint_id: 'ep-unrelated' } } },
   ])
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.ghost' }, value: 1, asserts: [] },
@@ -152,8 +152,8 @@ it('IS-6: 未被条目引用的 si —— 该步端点落定后其声明面仍�
   vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
     new Promise((res) => { deferred[id] = res }) as any)
   const steps = ref([
-    { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } },
-    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-b' } } },
+    { request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-a' } } },
+    { request: { body: {} }, call: { view_hints: { endpoint_id: 'ep-b' } } },
   ])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
@@ -176,7 +176,7 @@ it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都�
   // 被调用(正是本用例要拦的形状)。读 / 取分离 ⇒ 渲染色路径是纯缓存读。
   const spy = vi.spyOn(api, 'getFullEndpoint')
     .mockResolvedValue({ id: 'ep-a', request: { declarations: [] }, declared_surface: ['$'] } as any)
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-a' } } }])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
@@ -208,7 +208,7 @@ it('IS-8: 记忆化**命中**面 — 同一 (si, 版本) 只投影一次,输入�
     { id: 'ep-a', request: { declarations: [] }, declared_surface: ['$'] } as any)
   const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
   const steps = ref([
-    { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } },
+    { request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-a' } } },
   ])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
@@ -247,7 +247,7 @@ it('IS-9: 换面即重判 —— 面变后按新面重算 dead(灰显),勾选保
       id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'],
     } as any)
   const entry = { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([entry] as any)
   const s = surface(steps, entries)
   const selectedBefore = entries.value[0]                // 宿主选中的那条(ref 的代理身份)
@@ -283,7 +283,7 @@ it('IS-10: 面没变的重取不惊动记忆化 —— 版本不动 ⇒ 投影�
     .mockResolvedValueOnce(same)
     .mockReturnValueOnce(new Promise((res) => { release = res }) as any)  // 重取挂在在飞窗口里
   const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([
     { id: 'alive', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
     { id: 'dead', name: 'D', path: { stepIndex: 0, source: 'body', jsonpath: '$.nowhere' }, value: 1, asserts: [] },
@@ -323,7 +323,7 @@ it('IS-11: 换面重判锚在**记忆化键**上 —— 不靠「清缓存 watch
     .mockResolvedValue({
       id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'],
     } as any)
-  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const steps = ref([{ request: { body: { amount: 'x' } }, call: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([] as any)
   const s = surface(steps, entries)
   s.ensure()
@@ -357,7 +357,7 @@ const FULL_WITH_CARRY = {
 
 /** 降级夹具:单步 + 单条只被契约托着的条目(见上)。实例走用例作用域。 */
 function surfaceOf(eid = 'ep-s') {
-  const steps = ref([{ request: { body: {} }, api: { view_hints: { endpoint_id: eid } } }])
+  const steps = ref([{ request: { body: {} }, call: { view_hints: { endpoint_id: eid } } }])
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] },
   ] as any)
@@ -419,8 +419,8 @@ it('IS-16: 退避重试覆盖**全部**步骤端点 —— 无条目引用的那
     .mockRejectedValueOnce(new Error('plate down'))   // ep-canvas 挂载首取失败
     .mockResolvedValue(FULL_WITH_CARRY)               // 退避那一档:plate 已恢复
   const steps = ref([
-    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-ref' } } },
-    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-canvas' } } },
+    { request: { body: {} }, call: { view_hints: { endpoint_id: 'ep-ref' } } },
+    { request: { body: {} }, call: { view_hints: { endpoint_id: 'ep-canvas' } } },
   ])
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] },

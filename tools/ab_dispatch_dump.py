@@ -93,9 +93,9 @@ def _ab_batch_scenario(eids: list[str]) -> dict:
         "config": {},
         "steps": [
             {"kind": "step", "description": f"ab:{eid}",
-             "api": {"kind": "api", "service": "fin", "method": "POST",
-                     "path": "/ab", "headers": {},
-                     "view_hints": {"endpoint_id": eid}},
+             "call": {"kind": "call", "protocol": "http", "service": "fin",
+                      "method": "POST", "path": "/ab", "headers": {},
+                      "view_hints": {"endpoint_id": eid}},
              "request": {"kind": "request", "body": {}},
              "strategy": []}
             for eid in eids

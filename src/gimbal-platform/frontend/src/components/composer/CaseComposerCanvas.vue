@@ -647,7 +647,7 @@ const activeIoTab = ref<'request' | 'response'>('request')
 const currentStep = computed(() => local[activeStepIdx.value])
 const currentOrch = computed<StepOrchestration | undefined>(() => orch.steps[activeStepIdx.value])
 
-/** plate Step 无顶层协议 kind;从 api 形状推断展示标签 (http/...) */
+/** plate Step 无顶层协议 kind;从 call 形状推断展示标签 (http/...) */
 function inferProtocol(step: StepView | undefined): string {
   if (stepMethod(step)) return (stepCall(step) as any)?.protocol ?? 'http'
   return 'step'
@@ -948,13 +948,14 @@ function onFieldExtract(f: IOFieldBinding, domain: 'request' | 'response') {
 /**
  * assign target 派生(单一真源,修轮 R1):`$.request_body` + 字段 rel 路径。
  * 根 list(Task 10)`$[0].sku` 剥后 rel 以 `[` 开头 → 前缀直拼无点
- * (`$.request_body[0].sku`);平铺/深层 `$.a[0].b` → `$.request_body.a[0].b`
- * (行为不变)。onFieldAssign 落 target 与 strategyMatchesField 匹配同走此处,
- * 双侧同式不漂移。
+ * (`$.call.request.body[0].sku`);平铺/深层 `$.a[0].b` →
+ * `$.call.request.body.a[0].b`(行为不变)。onFieldAssign 落 target 与
+ * strategyMatchesField 匹配同走此处,双侧同式不漂移。
+ * (api→call 清理:请求侧直产 call 域,不再依赖 plate convert 重写。)
  */
 function requestBodyTargetOf(path: string): string {
   const rel = path.replace(/^\$\.?/, '')
-  return `$.request_body${rel.startsWith('[') ? '' : '.'}${rel}`
+  return `$.call.request.body${rel.startsWith('[') ? '' : '.'}${rel}`
 }
 
 /** 菜单"向该字段动态注入"(P7 更名,原"注入响应变量"):assign 骨架(source=$.<name>,target=request_body.<path>) */
@@ -1713,7 +1714,7 @@ const respTypeC = computed<TypeCField[]>(() => {
 })
 
 // ── 服务引用(别名消费点,spec §1.4 双显)─────────────────────────
-// 目录事实(锚点)只读;引用(steps[k].api.service)可切可建别名。
+// 目录事实(锚点)只读;引用(steps[k].call.service)可切可建别名。
 // 目录名集合 = deriveBase 的唯一外部输入;拉取失败静默降级为空集合 →
 // 全部裸声明黄警,不阻塞编排(酸性测试)。
 
@@ -1885,7 +1886,8 @@ const svcUrlHint = computed(() => {
 function onServiceRefChange(step: StepView, value: string) {
   if (value === '__create__') { creatingAlias.value = true; return }
   creatingAlias.value = false
-  step.api!.service = value          // local 直改,既有 watch 传播 update:steps
+  const call = stepCall(step)!       // call 唯一形态;local 直改经既有 watch 传播
+  call.service = value
   // F4 方案 B:选中已登记别名且带凭证绑定 → headers 直接注入 ${auth.*}
   // 模板这一行(2026-09-23 调整:不做「已有 Authorization 则跳过」的补缺
   // 守卫 —— 选中即写入,换选别名即刷新;既有大小写 Authorization 键先
@@ -1894,7 +1896,7 @@ function onServiceRefChange(step: StepView, value: string) {
   // 字面 Authorization 不是注入痕迹,保留。不写 services 声明 —— URL 走
   // 注册表默认层(执行期物化第三档),写了就成快照。
   const reg = registeredByName.value.get(value)
-  const headers = (step.api!.headers ||= {})
+  const headers = (call.headers ||= {})
   for (const k of Object.keys(headers)) {
     if (k.toLowerCase() !== 'authorization') continue
     if (reg?.credentialAlias || String(headers[k]).startsWith('${auth.'))
@@ -1921,9 +1923,9 @@ function confirmAliasCreate(step: StepView) {
   if (full in (props.services ?? {})) { toast.warning(`别名 ${full} 已存在`); return }
   if (!url) { toast.warning('baseUrl 不能为空'); return }
   // 一次动作双写 ①声明(config.services,经 emit 由父级落 definition)
-  // ②引用(steps[k].api.service,local 直改经既有 watch 传播)
+  // ②引用(steps[k].call.service,local 直改经既有 watch 传播)
   emit('update:services', { ...(props.services ?? {}), [full]: url })
-  step.api!.service = full
+  stepCall(step)!.service = full      // 引用切换(call 唯一形态)
   creatingAlias.value = false
   aliasSuffix.value = ''
   aliasUrl.value = ''
@@ -1994,7 +1996,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
 
 /**
  * 从接口目录把 endpoint 加入步骤流:拉 /full 组装初始 step(策略/初始 body)。
- * 契约禁令(spec 2026-08-27 §1.6):目录插入只此一次写 api.service(初值
+ * 契约禁令(spec 2026-08-27 §1.6):目录插入只此一次写 call.service(初值
  * = 规范目录名);任何 plate 拉取驱动的回写不得再触碰该字段 — 它是用户
  * 引用键(可为别名全串),view_hints.endpoint_id 才是目录锚点。
  */

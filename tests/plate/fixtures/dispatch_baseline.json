@@ -2656,8 +2656,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.account.query_balance",
      "kind": "step",
@@ -2674,8 +2673,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.audit.audit_detail",
      "kind": "step",
@@ -2692,8 +2690,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.audit.audit_execute",
      "kind": "step",
@@ -2710,8 +2707,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.audit.audit_page",
      "kind": "step",
@@ -2728,8 +2724,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.cost.amount_list",
      "kind": "step",
@@ -2746,8 +2741,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.customer.list",
      "kind": "step",
@@ -2764,8 +2758,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.customer.part",
      "kind": "step",
@@ -2782,8 +2775,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.customer.policy",
      "kind": "step",
@@ -2800,8 +2792,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.check_generate_order_sub",
      "kind": "step",
@@ -2818,8 +2809,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.generate_order_sub",
      "kind": "step",
@@ -2836,8 +2826,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_add",
      "kind": "step",
@@ -3102,8 +3091,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_add_demo",
      "kind": "step",
@@ -3362,8 +3350,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_book",
      "kind": "step",
@@ -3628,8 +3615,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_detail",
      "kind": "step",
@@ -3646,8 +3632,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_notice",
      "kind": "step",
@@ -3664,8 +3649,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order.order_page",
      "kind": "step",
@@ -3682,8 +3666,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_entrust.order_add",
      "kind": "step",
@@ -3802,8 +3785,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_entrust.order_customer_container",
      "kind": "step",
@@ -3820,8 +3802,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_entrust.order_dispatch",
      "kind": "step",
@@ -4091,8 +4072,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_entrust.order_page",
      "kind": "step",
@@ -4109,8 +4089,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_fee.asset_push",
      "kind": "step",
@@ -4127,8 +4106,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_fee.book_real_amount_edit",
      "kind": "step",
@@ -4145,8 +4123,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_fee.real_amount_lock_submit",
      "kind": "step",
@@ -4163,8 +4140,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.order_fee.toggle_real_amount",
      "kind": "step",
@@ -4181,8 +4157,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:fin.settlement.create_order",
      "kind": "step",
@@ -4201,8 +4176,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.activity.get_root",
      "kind": "step",
@@ -4219,8 +4193,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_batches",
      "kind": "step",
@@ -4237,8 +4210,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_batches_by_batch_id",
      "kind": "step",
@@ -4255,8 +4227,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_impact",
      "kind": "step",
@@ -4273,8 +4244,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_impact_bulk",
      "kind": "step",
@@ -4291,8 +4261,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_impact_summary",
      "kind": "step",
@@ -4309,8 +4278,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_refs_drift",
      "kind": "step",
@@ -4327,8 +4295,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.get_unindexed_steps",
      "kind": "step",
@@ -4345,8 +4312,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.patch_ops_by_op_id",
      "kind": "step",
@@ -4363,8 +4329,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_batches",
      "kind": "step",
@@ -4381,8 +4346,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_batches_by_batch_id_ops",
      "kind": "step",
@@ -4399,8 +4363,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_batches_by_batch_id_rollback",
      "kind": "step",
@@ -4417,8 +4380,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_carry_batches",
      "kind": "step",
@@ -4435,8 +4397,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_catalog_diff",
      "kind": "step",
@@ -4453,8 +4414,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_ops_by_op_id_apply",
      "kind": "step",
@@ -4471,8 +4431,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.adaptations.post_ops_by_op_id_skip",
      "kind": "step",
@@ -4489,8 +4448,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.admin.get_audit_logs",
      "kind": "step",
@@ -4507,8 +4465,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auth.get_me",
      "kind": "step",
@@ -4525,8 +4482,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auth.post_change_password",
      "kind": "step",
@@ -4543,8 +4499,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auth.post_login",
      "kind": "step",
@@ -4561,8 +4516,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auth.post_refresh",
      "kind": "step",
@@ -4579,8 +4533,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auth.post_register",
      "kind": "step",
@@ -4597,8 +4550,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.delete_by_auth_id",
      "kind": "step",
@@ -4615,8 +4567,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.get_by_alias_references",
      "kind": "step",
@@ -4633,8 +4584,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.get_by_auth_id",
      "kind": "step",
@@ -4651,8 +4601,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.get_root",
      "kind": "step",
@@ -4669,8 +4618,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.patch_by_auth_id",
      "kind": "step",
@@ -4687,8 +4635,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.post_by_auth_id_test",
      "kind": "step",
@@ -4705,8 +4652,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.auths.post_root",
      "kind": "step",
@@ -4723,8 +4669,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.board_cards.delete_by_card_id",
      "kind": "step",
@@ -4741,8 +4686,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.board_cards.patch_by_card_id",
      "kind": "step",
@@ -4759,8 +4703,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.board_cards.post_by_card_id_demote",
      "kind": "step",
@@ -4777,8 +4720,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.board_cards.post_by_card_id_promote",
      "kind": "step",
@@ -4795,8 +4737,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.board_cards.post_root",
      "kind": "step",
@@ -4813,8 +4754,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.get_bindings",
      "kind": "step",
@@ -4831,8 +4771,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.get_bindings_by_service",
      "kind": "step",
@@ -4849,8 +4788,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.get_bindings_by_service_fields",
      "kind": "step",
@@ -4867,8 +4805,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.get_defaults",
      "kind": "step",
@@ -4885,8 +4822,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.get_drift",
      "kind": "step",
@@ -4903,8 +4839,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.put_bindings_by_service",
      "kind": "step",
@@ -4921,8 +4856,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.carry.put_defaults",
      "kind": "step",
@@ -4939,8 +4873,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.catalog.get_services",
      "kind": "step",
@@ -4957,8 +4890,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.constants.delete_by_entry_id",
      "kind": "step",
@@ -4975,8 +4907,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.constants.get_by_entry_id",
      "kind": "step",
@@ -4993,8 +4924,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.constants.get_root",
      "kind": "step",
@@ -5011,8 +4941,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.constants.patch_by_entry_id",
      "kind": "step",
@@ -5029,8 +4958,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.constants.post_root",
      "kind": "step",
@@ -5047,8 +4975,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.data_sets.delete_by_dataset_id",
      "kind": "step",
@@ -5065,8 +4992,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.data_sets.get_by_dataset_id",
      "kind": "step",
@@ -5083,8 +5009,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.data_sets.get_root",
      "kind": "step",
@@ -5101,8 +5026,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.data_sets.put_by_dataset_id",
      "kind": "step",
@@ -5119,8 +5043,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.endpoint_catalog.get_by_endpoint_id_full",
      "kind": "step",
@@ -5137,8 +5060,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108",
      "kind": "step",
@@ -5155,8 +5077,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.endpoint_catalog.post_resolve_paths",
      "kind": "step",
@@ -5173,8 +5094,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.endpoints.get_by_endpoint_id_board",
      "kind": "step",
@@ -5191,8 +5111,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.delete_by_execution_id",
      "kind": "step",
@@ -5209,8 +5128,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_by_execution_id",
      "kind": "step",
@@ -5227,8 +5145,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_by_execution_id_case_artifact",
      "kind": "step",
@@ -5245,8 +5162,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_by_execution_id_rows",
      "kind": "step",
@@ -5263,8 +5179,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_by_execution_id_scenario_snapshot",
      "kind": "step",
@@ -5281,8 +5196,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_root",
      "kind": "step",
@@ -5299,8 +5213,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.get_summary",
      "kind": "step",
@@ -5317,8 +5230,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.post_by_execution_id_cancel",
      "kind": "step",
@@ -5335,8 +5247,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.executions.post_by_execution_id_rerun",
      "kind": "step",
@@ -5353,8 +5264,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.generator_catalog.get_by_kind_full",
      "kind": "step",
@@ -5371,8 +5281,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.generator_catalog.get_root",
      "kind": "step",
@@ -5389,8 +5298,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.handoff.post_root",
      "kind": "step",
@@ -5407,8 +5315,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.health.get_root",
      "kind": "step",
@@ -5425,8 +5332,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.me.get_preferences",
      "kind": "step",
@@ -5443,8 +5349,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.me.put_preferences_by_key",
      "kind": "step",
@@ -5461,8 +5366,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.get_handoff_unread",
      "kind": "step",
@@ -5479,8 +5383,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.get_preferences",
      "kind": "step",
@@ -5497,8 +5400,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.get_root",
      "kind": "step",
@@ -5515,8 +5417,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.get_unread_count",
      "kind": "step",
@@ -5533,8 +5434,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.post_announcements",
      "kind": "step",
@@ -5551,8 +5451,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.post_read",
      "kind": "step",
@@ -5569,8 +5468,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.notifications.put_preferences",
      "kind": "step",
@@ -5587,8 +5485,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.query_views.get_by_name_rows",
      "kind": "step",
@@ -5605,8 +5502,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.query_views.get_root",
      "kind": "step",
@@ -5623,8 +5519,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.run.post_precheck",
      "kind": "step",
@@ -5641,8 +5536,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.runs.post_root",
      "kind": "step",
@@ -5659,8 +5553,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenario_filter_groups.delete_by_bucket_by_group_id",
      "kind": "step",
@@ -5677,8 +5570,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenario_filter_groups.get_root",
      "kind": "step",
@@ -5695,8 +5587,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenario_filter_groups.post_root",
      "kind": "step",
@@ -5713,8 +5604,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.delete_by_scenario_id",
      "kind": "step",
@@ -5731,8 +5621,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300",
      "kind": "step",
@@ -5749,8 +5638,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_by_scenario_id",
      "kind": "step",
@@ -5767,8 +5655,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_by_scenario_id_draft",
      "kind": "step",
@@ -5785,8 +5672,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_by_scenario_id_run_schemes",
      "kind": "step",
@@ -5803,8 +5689,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_facets",
      "kind": "step",
@@ -5821,8 +5706,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_root",
      "kind": "step",
@@ -5839,8 +5723,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.get_signals",
      "kind": "step",
@@ -5857,8 +5740,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_copy",
      "kind": "step",
@@ -5875,8 +5757,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_data_sets",
      "kind": "step",
@@ -5893,8 +5774,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_publish",
      "kind": "step",
@@ -5911,8 +5791,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_run_schemes",
      "kind": "step",
@@ -5929,8 +5808,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_star",
      "kind": "step",
@@ -5947,8 +5825,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_unpublish",
      "kind": "step",
@@ -5965,8 +5842,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_preview_plate",
      "kind": "step",
@@ -5983,8 +5859,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.post_root",
      "kind": "step",
@@ -6001,8 +5876,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.put_by_scenario_id",
      "kind": "step",
@@ -6019,8 +5893,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id",
      "kind": "step",
@@ -6037,8 +5910,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.service_aliases.delete_by_alias_name",
      "kind": "step",
@@ -6055,8 +5927,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.service_aliases.get_root",
      "kind": "step",
@@ -6073,8 +5944,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.service_aliases.patch_by_alias_name",
      "kind": "step",
@@ -6091,8 +5961,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.service_aliases.post_root",
      "kind": "step",
@@ -6109,8 +5978,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.services.get_by_service_grid",
      "kind": "step",
@@ -6127,8 +5995,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.strategy_catalog.get_by_kind_full",
      "kind": "step",
@@ -6145,8 +6012,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.strategy_catalog.get_root",
      "kind": "step",
@@ -6163,8 +6029,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.delete_by_user_id",
      "kind": "step",
@@ -6181,8 +6046,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.get_root",
      "kind": "step",
@@ -6199,8 +6063,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.get_roster",
      "kind": "step",
@@ -6217,8 +6080,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.patch_by_user_id",
      "kind": "step",
@@ -6235,8 +6097,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.post_by_user_id_reset_password",
      "kind": "step",
@@ -6253,8 +6114,7 @@
       "method": "POST",
       "path": "/ab",
       "protocol": "http",
-      "service": "fin",
-      "timeout": 30.0
+      "service": "fin"
      },
      "description": "ab:platform.users.post_root",
      "kind": "step",
@@ -6308,13 +6168,16 @@
    "scenarioId": "ab-batch",
    "steps": [
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.account.query_balance"
+      }
      },
      "description": "ab:fin.account.query_balance",
      "kind": "step",
@@ -6326,13 +6189,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.audit.audit_detail"
+      }
      },
      "description": "ab:fin.audit.audit_detail",
      "kind": "step",
@@ -6344,13 +6210,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.audit.audit_execute"
+      }
      },
      "description": "ab:fin.audit.audit_execute",
      "kind": "step",
@@ -6362,13 +6231,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.audit.audit_page"
+      }
      },
      "description": "ab:fin.audit.audit_page",
      "kind": "step",
@@ -6380,13 +6252,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.cost.amount_list"
+      }
      },
      "description": "ab:fin.cost.amount_list",
      "kind": "step",
@@ -6398,13 +6273,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.customer.list"
+      }
      },
      "description": "ab:fin.customer.list",
      "kind": "step",
@@ -6416,13 +6294,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.customer.part"
+      }
      },
      "description": "ab:fin.customer.part",
      "kind": "step",
@@ -6434,13 +6315,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.customer.policy"
+      }
      },
      "description": "ab:fin.customer.policy",
      "kind": "step",
@@ -6452,13 +6336,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.check_generate_order_sub"
+      }
      },
      "description": "ab:fin.order.check_generate_order_sub",
      "kind": "step",
@@ -6470,13 +6357,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
      },
      "description": "ab:fin.order.generate_order_sub",
      "kind": "step",
@@ -6488,13 +6378,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
      },
      "description": "ab:fin.order.order_add",
      "kind": "step",
@@ -6754,13 +6647,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add_demo"
+      }
      },
      "description": "ab:fin.order.order_add_demo",
      "kind": "step",
@@ -7014,13 +6910,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
      },
      "description": "ab:fin.order.order_book",
      "kind": "step",
@@ -7280,13 +7179,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
      },
      "description": "ab:fin.order.order_detail",
      "kind": "step",
@@ -7298,13 +7200,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_notice"
+      }
      },
      "description": "ab:fin.order.order_notice",
      "kind": "step",
@@ -7316,13 +7221,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order.order_page"
+      }
      },
      "description": "ab:fin.order.order_page",
      "kind": "step",
@@ -7334,13 +7242,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
      },
      "description": "ab:fin.order_entrust.order_add",
      "kind": "step",
@@ -7454,13 +7365,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
      },
      "description": "ab:fin.order_entrust.order_customer_container",
      "kind": "step",
@@ -7472,13 +7386,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
      },
      "description": "ab:fin.order_entrust.order_dispatch",
      "kind": "step",
@@ -7743,13 +7660,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
      },
      "description": "ab:fin.order_entrust.order_page",
      "kind": "step",
@@ -7761,13 +7681,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.asset_push"
+      }
      },
      "description": "ab:fin.order_fee.asset_push",
      "kind": "step",
@@ -7779,13 +7702,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
      },
      "description": "ab:fin.order_fee.book_real_amount_edit",
      "kind": "step",
@@ -7797,13 +7723,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.real_amount_lock_submit"
+      }
      },
      "description": "ab:fin.order_fee.real_amount_lock_submit",
      "kind": "step",
@@ -7815,13 +7744,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.toggle_real_amount"
+      }
      },
      "description": "ab:fin.order_fee.toggle_real_amount",
      "kind": "step",
@@ -7833,13 +7765,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "fin.settlement.create_order"
+      }
      },
      "description": "ab:fin.settlement.create_order",
      "kind": "step",
@@ -7853,13 +7788,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.activity.get_root"
+      }
      },
      "description": "ab:platform.activity.get_root",
      "kind": "step",
@@ -7871,13 +7809,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_batches"
+      }
      },
      "description": "ab:platform.adaptations.get_batches",
      "kind": "step",
@@ -7889,13 +7830,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_batches_by_batch_id"
+      }
      },
      "description": "ab:platform.adaptations.get_batches_by_batch_id",
      "kind": "step",
@@ -7907,13 +7851,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_impact"
+      }
      },
      "description": "ab:platform.adaptations.get_impact",
      "kind": "step",
@@ -7925,13 +7872,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_impact_bulk"
+      }
      },
      "description": "ab:platform.adaptations.get_impact_bulk",
      "kind": "step",
@@ -7943,13 +7893,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_impact_summary"
+      }
      },
      "description": "ab:platform.adaptations.get_impact_summary",
      "kind": "step",
@@ -7961,13 +7914,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_refs_drift"
+      }
      },
      "description": "ab:platform.adaptations.get_refs_drift",
      "kind": "step",
@@ -7979,13 +7935,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.get_unindexed_steps"
+      }
      },
      "description": "ab:platform.adaptations.get_unindexed_steps",
      "kind": "step",
@@ -7997,13 +7956,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.patch_ops_by_op_id"
+      }
      },
      "description": "ab:platform.adaptations.patch_ops_by_op_id",
      "kind": "step",
@@ -8015,13 +7977,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_batches"
+      }
      },
      "description": "ab:platform.adaptations.post_batches",
      "kind": "step",
@@ -8033,13 +7998,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_batches_by_batch_id_ops"
+      }
      },
      "description": "ab:platform.adaptations.post_batches_by_batch_id_ops",
      "kind": "step",
@@ -8051,13 +8019,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_batches_by_batch_id_rollback"
+      }
      },
      "description": "ab:platform.adaptations.post_batches_by_batch_id_rollback",
      "kind": "step",
@@ -8069,13 +8040,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_carry_batches"
+      }
      },
      "description": "ab:platform.adaptations.post_carry_batches",
      "kind": "step",
@@ -8087,13 +8061,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_catalog_diff"
+      }
      },
      "description": "ab:platform.adaptations.post_catalog_diff",
      "kind": "step",
@@ -8105,13 +8082,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_ops_by_op_id_apply"
+      }
      },
      "description": "ab:platform.adaptations.post_ops_by_op_id_apply",
      "kind": "step",
@@ -8123,13 +8103,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.adaptations.post_ops_by_op_id_skip"
+      }
      },
      "description": "ab:platform.adaptations.post_ops_by_op_id_skip",
      "kind": "step",
@@ -8141,13 +8124,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.admin.get_audit_logs"
+      }
      },
      "description": "ab:platform.admin.get_audit_logs",
      "kind": "step",
@@ -8159,13 +8145,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auth.get_me"
+      }
      },
      "description": "ab:platform.auth.get_me",
      "kind": "step",
@@ -8177,13 +8166,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auth.post_change_password"
+      }
      },
      "description": "ab:platform.auth.post_change_password",
      "kind": "step",
@@ -8195,13 +8187,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auth.post_login"
+      }
      },
      "description": "ab:platform.auth.post_login",
      "kind": "step",
@@ -8213,13 +8208,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auth.post_refresh"
+      }
      },
      "description": "ab:platform.auth.post_refresh",
      "kind": "step",
@@ -8231,13 +8229,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auth.post_register"
+      }
      },
      "description": "ab:platform.auth.post_register",
      "kind": "step",
@@ -8249,13 +8250,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.delete_by_auth_id"
+      }
      },
      "description": "ab:platform.auths.delete_by_auth_id",
      "kind": "step",
@@ -8267,13 +8271,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.get_by_alias_references"
+      }
      },
      "description": "ab:platform.auths.get_by_alias_references",
      "kind": "step",
@@ -8285,13 +8292,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.get_by_auth_id"
+      }
      },
      "description": "ab:platform.auths.get_by_auth_id",
      "kind": "step",
@@ -8303,13 +8313,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.get_root"
+      }
      },
      "description": "ab:platform.auths.get_root",
      "kind": "step",
@@ -8321,13 +8334,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.patch_by_auth_id"
+      }
      },
      "description": "ab:platform.auths.patch_by_auth_id",
      "kind": "step",
@@ -8339,13 +8355,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.post_by_auth_id_test"
+      }
      },
      "description": "ab:platform.auths.post_by_auth_id_test",
      "kind": "step",
@@ -8357,13 +8376,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.auths.post_root"
+      }
      },
      "description": "ab:platform.auths.post_root",
      "kind": "step",
@@ -8375,13 +8397,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.board_cards.delete_by_card_id"
+      }
      },
      "description": "ab:platform.board_cards.delete_by_card_id",
      "kind": "step",
@@ -8393,13 +8418,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.board_cards.patch_by_card_id"
+      }
      },
      "description": "ab:platform.board_cards.patch_by_card_id",
      "kind": "step",
@@ -8411,13 +8439,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.board_cards.post_by_card_id_demote"
+      }
      },
      "description": "ab:platform.board_cards.post_by_card_id_demote",
      "kind": "step",
@@ -8429,13 +8460,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.board_cards.post_by_card_id_promote"
+      }
      },
      "description": "ab:platform.board_cards.post_by_card_id_promote",
      "kind": "step",
@@ -8447,13 +8481,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.board_cards.post_root"
+      }
      },
      "description": "ab:platform.board_cards.post_root",
      "kind": "step",
@@ -8465,13 +8502,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.get_bindings"
+      }
      },
      "description": "ab:platform.carry.get_bindings",
      "kind": "step",
@@ -8483,13 +8523,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.get_bindings_by_service"
+      }
      },
      "description": "ab:platform.carry.get_bindings_by_service",
      "kind": "step",
@@ -8501,13 +8544,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.get_bindings_by_service_fields"
+      }
      },
      "description": "ab:platform.carry.get_bindings_by_service_fields",
      "kind": "step",
@@ -8519,13 +8565,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.get_defaults"
+      }
      },
      "description": "ab:platform.carry.get_defaults",
      "kind": "step",
@@ -8537,13 +8586,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.get_drift"
+      }
      },
      "description": "ab:platform.carry.get_drift",
      "kind": "step",
@@ -8555,13 +8607,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.put_bindings_by_service"
+      }
      },
      "description": "ab:platform.carry.put_bindings_by_service",
      "kind": "step",
@@ -8573,13 +8628,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.carry.put_defaults"
+      }
      },
      "description": "ab:platform.carry.put_defaults",
      "kind": "step",
@@ -8591,13 +8649,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.catalog.get_services"
+      }
      },
      "description": "ab:platform.catalog.get_services",
      "kind": "step",
@@ -8609,13 +8670,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.constants.delete_by_entry_id"
+      }
      },
      "description": "ab:platform.constants.delete_by_entry_id",
      "kind": "step",
@@ -8627,13 +8691,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.constants.get_by_entry_id"
+      }
      },
      "description": "ab:platform.constants.get_by_entry_id",
      "kind": "step",
@@ -8645,13 +8712,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.constants.get_root"
+      }
      },
      "description": "ab:platform.constants.get_root",
      "kind": "step",
@@ -8663,13 +8733,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.constants.patch_by_entry_id"
+      }
      },
      "description": "ab:platform.constants.patch_by_entry_id",
      "kind": "step",
@@ -8681,13 +8754,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.constants.post_root"
+      }
      },
      "description": "ab:platform.constants.post_root",
      "kind": "step",
@@ -8699,13 +8775,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.data_sets.delete_by_dataset_id"
+      }
      },
      "description": "ab:platform.data_sets.delete_by_dataset_id",
      "kind": "step",
@@ -8717,13 +8796,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.data_sets.get_by_dataset_id"
+      }
      },
      "description": "ab:platform.data_sets.get_by_dataset_id",
      "kind": "step",
@@ -8735,13 +8817,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.data_sets.get_root"
+      }
      },
      "description": "ab:platform.data_sets.get_root",
      "kind": "step",
@@ -8753,13 +8838,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.data_sets.put_by_dataset_id"
+      }
      },
      "description": "ab:platform.data_sets.put_by_dataset_id",
      "kind": "step",
@@ -8771,13 +8859,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.endpoint_catalog.get_by_endpoint_id_full"
+      }
      },
      "description": "ab:platform.endpoint_catalog.get_by_endpoint_id_full",
      "kind": "step",
@@ -8789,13 +8880,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108"
+      }
      },
      "description": "ab:platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108",
      "kind": "step",
@@ -8807,13 +8901,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.endpoint_catalog.post_resolve_paths"
+      }
      },
      "description": "ab:platform.endpoint_catalog.post_resolve_paths",
      "kind": "step",
@@ -8825,13 +8922,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.endpoints.get_by_endpoint_id_board"
+      }
      },
      "description": "ab:platform.endpoints.get_by_endpoint_id_board",
      "kind": "step",
@@ -8843,13 +8943,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.delete_by_execution_id"
+      }
      },
      "description": "ab:platform.executions.delete_by_execution_id",
      "kind": "step",
@@ -8861,13 +8964,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id"
+      }
      },
      "description": "ab:platform.executions.get_by_execution_id",
      "kind": "step",
@@ -8879,13 +8985,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_case_artifact"
+      }
      },
      "description": "ab:platform.executions.get_by_execution_id_case_artifact",
      "kind": "step",
@@ -8897,13 +9006,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_rows"
+      }
      },
      "description": "ab:platform.executions.get_by_execution_id_rows",
      "kind": "step",
@@ -8915,13 +9027,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_scenario_snapshot"
+      }
      },
      "description": "ab:platform.executions.get_by_execution_id_scenario_snapshot",
      "kind": "step",
@@ -8933,13 +9048,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_root"
+      }
      },
      "description": "ab:platform.executions.get_root",
      "kind": "step",
@@ -8951,13 +9069,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_summary"
+      }
      },
      "description": "ab:platform.executions.get_summary",
      "kind": "step",
@@ -8969,13 +9090,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.post_by_execution_id_cancel"
+      }
      },
      "description": "ab:platform.executions.post_by_execution_id_cancel",
      "kind": "step",
@@ -8987,13 +9111,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.executions.post_by_execution_id_rerun"
+      }
      },
      "description": "ab:platform.executions.post_by_execution_id_rerun",
      "kind": "step",
@@ -9005,13 +9132,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.generator_catalog.get_by_kind_full"
+      }
      },
      "description": "ab:platform.generator_catalog.get_by_kind_full",
      "kind": "step",
@@ -9023,13 +9153,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.generator_catalog.get_root"
+      }
      },
      "description": "ab:platform.generator_catalog.get_root",
      "kind": "step",
@@ -9041,13 +9174,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.handoff.post_root"
+      }
      },
      "description": "ab:platform.handoff.post_root",
      "kind": "step",
@@ -9059,13 +9195,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.health.get_root"
+      }
      },
      "description": "ab:platform.health.get_root",
      "kind": "step",
@@ -9077,13 +9216,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.me.get_preferences"
+      }
      },
      "description": "ab:platform.me.get_preferences",
      "kind": "step",
@@ -9095,13 +9237,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.me.put_preferences_by_key"
+      }
      },
      "description": "ab:platform.me.put_preferences_by_key",
      "kind": "step",
@@ -9113,13 +9258,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.get_handoff_unread"
+      }
      },
      "description": "ab:platform.notifications.get_handoff_unread",
      "kind": "step",
@@ -9131,13 +9279,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.get_preferences"
+      }
      },
      "description": "ab:platform.notifications.get_preferences",
      "kind": "step",
@@ -9149,13 +9300,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.get_root"
+      }
      },
      "description": "ab:platform.notifications.get_root",
      "kind": "step",
@@ -9167,13 +9321,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.get_unread_count"
+      }
      },
      "description": "ab:platform.notifications.get_unread_count",
      "kind": "step",
@@ -9185,13 +9342,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.post_announcements"
+      }
      },
      "description": "ab:platform.notifications.post_announcements",
      "kind": "step",
@@ -9203,13 +9363,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.post_read"
+      }
      },
      "description": "ab:platform.notifications.post_read",
      "kind": "step",
@@ -9221,13 +9384,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.notifications.put_preferences"
+      }
      },
      "description": "ab:platform.notifications.put_preferences",
      "kind": "step",
@@ -9239,13 +9405,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.query_views.get_by_name_rows"
+      }
      },
      "description": "ab:platform.query_views.get_by_name_rows",
      "kind": "step",
@@ -9257,13 +9426,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.query_views.get_root"
+      }
      },
      "description": "ab:platform.query_views.get_root",
      "kind": "step",
@@ -9275,13 +9447,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.run.post_precheck"
+      }
      },
      "description": "ab:platform.run.post_precheck",
      "kind": "step",
@@ -9293,13 +9468,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.runs.post_root"
+      }
      },
      "description": "ab:platform.runs.post_root",
      "kind": "step",
@@ -9311,13 +9489,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenario_filter_groups.delete_by_bucket_by_group_id"
+      }
      },
      "description": "ab:platform.scenario_filter_groups.delete_by_bucket_by_group_id",
      "kind": "step",
@@ -9329,13 +9510,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenario_filter_groups.get_root"
+      }
      },
      "description": "ab:platform.scenario_filter_groups.get_root",
      "kind": "step",
@@ -9347,13 +9531,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenario_filter_groups.post_root"
+      }
      },
      "description": "ab:platform.scenario_filter_groups.post_root",
      "kind": "step",
@@ -9365,13 +9552,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.delete_by_scenario_id"
+      }
      },
      "description": "ab:platform.scenarios.delete_by_scenario_id",
      "kind": "step",
@@ -9383,13 +9573,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300"
+      }
      },
      "description": "ab:platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300",
      "kind": "step",
@@ -9401,13 +9594,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_by_scenario_id"
+      }
      },
      "description": "ab:platform.scenarios.get_by_scenario_id",
      "kind": "step",
@@ -9419,13 +9615,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_by_scenario_id_draft"
+      }
      },
      "description": "ab:platform.scenarios.get_by_scenario_id_draft",
      "kind": "step",
@@ -9437,13 +9636,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_by_scenario_id_run_schemes"
+      }
      },
      "description": "ab:platform.scenarios.get_by_scenario_id_run_schemes",
      "kind": "step",
@@ -9455,13 +9657,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_facets"
+      }
      },
      "description": "ab:platform.scenarios.get_facets",
      "kind": "step",
@@ -9473,13 +9678,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_root"
+      }
      },
      "description": "ab:platform.scenarios.get_root",
      "kind": "step",
@@ -9491,13 +9699,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.get_signals"
+      }
      },
      "description": "ab:platform.scenarios.get_signals",
      "kind": "step",
@@ -9509,13 +9720,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_copy"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_copy",
      "kind": "step",
@@ -9527,13 +9741,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_data_sets"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_data_sets",
      "kind": "step",
@@ -9545,13 +9762,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_publish"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_publish",
      "kind": "step",
@@ -9563,13 +9783,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_run_schemes"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_run_schemes",
      "kind": "step",
@@ -9581,13 +9804,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_star"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_star",
      "kind": "step",
@@ -9599,13 +9825,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_by_scenario_id_unpublish"
+      }
      },
      "description": "ab:platform.scenarios.post_by_scenario_id_unpublish",
      "kind": "step",
@@ -9617,13 +9846,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_preview_plate"
+      }
      },
      "description": "ab:platform.scenarios.post_preview_plate",
      "kind": "step",
@@ -9635,13 +9867,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.post_root"
+      }
      },
      "description": "ab:platform.scenarios.post_root",
      "kind": "step",
@@ -9653,13 +9888,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.put_by_scenario_id"
+      }
      },
      "description": "ab:platform.scenarios.put_by_scenario_id",
      "kind": "step",
@@ -9671,13 +9909,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id"
+      }
      },
      "description": "ab:platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id",
      "kind": "step",
@@ -9689,13 +9930,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.service_aliases.delete_by_alias_name"
+      }
      },
      "description": "ab:platform.service_aliases.delete_by_alias_name",
      "kind": "step",
@@ -9707,13 +9951,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.service_aliases.get_root"
+      }
      },
      "description": "ab:platform.service_aliases.get_root",
      "kind": "step",
@@ -9725,13 +9972,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.service_aliases.patch_by_alias_name"
+      }
      },
      "description": "ab:platform.service_aliases.patch_by_alias_name",
      "kind": "step",
@@ -9743,13 +9993,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.service_aliases.post_root"
+      }
      },
      "description": "ab:platform.service_aliases.post_root",
      "kind": "step",
@@ -9761,13 +10014,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.services.get_by_service_grid"
+      }
      },
      "description": "ab:platform.services.get_by_service_grid",
      "kind": "step",
@@ -9779,13 +10035,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.strategy_catalog.get_by_kind_full"
+      }
      },
      "description": "ab:platform.strategy_catalog.get_by_kind_full",
      "kind": "step",
@@ -9797,13 +10056,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.strategy_catalog.get_root"
+      }
      },
      "description": "ab:platform.strategy_catalog.get_root",
      "kind": "step",
@@ -9815,13 +10077,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.delete_by_user_id"
+      }
      },
      "description": "ab:platform.users.delete_by_user_id",
      "kind": "step",
@@ -9833,13 +10098,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.get_root"
+      }
      },
      "description": "ab:platform.users.get_root",
      "kind": "step",
@@ -9851,13 +10119,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.get_roster"
+      }
      },
      "description": "ab:platform.users.get_roster",
      "kind": "step",
@@ -9869,13 +10140,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.patch_by_user_id"
+      }
      },
      "description": "ab:platform.users.patch_by_user_id",
      "kind": "step",
@@ -9887,13 +10161,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.post_by_user_id_reset_password"
+      }
      },
      "description": "ab:platform.users.post_by_user_id_reset_password",
      "kind": "step",
@@ -9905,13 +10182,16 @@
      "strategy": []
     },
     {
-     "api": {
+     "call": {
       "headers": {},
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/ab",
+      "protocol": "http",
       "service": "fin",
-      "timeout": 30
+      "view_hints": {
+       "endpoint_id": "platform.users.post_root"
+      }
      },
      "description": "ab:platform.users.post_root",
      "kind": "step",
@@ -14493,16 +14773,17 @@
    "scenarioId": "e2e订单到应收核销",
    "steps": [
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验新建委托订舱单（验价）",
      "kind": "step",
@@ -14637,16 +14918,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交委托订舱单",
      "kind": "step",
@@ -14795,16 +15077,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "分页查询委托订单并提取订单ID",
      "kind": "step",
@@ -14853,16 +15136,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询订单详情并提取订单、订单号及供应商订单ID",
      "kind": "step",
@@ -14948,16 +15232,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验补充箱型箱量后的委托订舱单",
      "kind": "step",
@@ -15330,16 +15615,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交补充箱型箱量后的委托订舱单",
      "kind": "step",
@@ -15712,16 +15998,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询订单详情并提取箱信息及关联订单ID",
      "kind": "step",
@@ -15821,16 +16108,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验创建业务订单",
      "kind": "step",
@@ -16218,16 +16506,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderBook",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验订舱单据并提取文件ID",
      "kind": "step",
@@ -16629,16 +16918,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderAdd",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交业务订单及订舱文件",
      "kind": "step",
@@ -17053,16 +17343,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "分页查询业务订单并提取订单ID",
      "kind": "step",
@@ -17110,16 +17401,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "切换订单实收实付金额模式并提取订单ID",
      "kind": "step",
@@ -17177,16 +17469,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/bookRealAmountEdit",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验订舱实收实付金额配置",
      "kind": "step",
@@ -17295,16 +17588,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/bookRealAmountEdit",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交订舱实收实付金额配置",
      "kind": "step",
@@ -17413,16 +17707,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/checkGenerateOrderSub",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验主订单拆分子订单",
      "kind": "step",
@@ -17466,16 +17761,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/generateOrderSub",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "生成应收应付子订单",
      "kind": "step",
@@ -17519,16 +17815,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "刷新实收实付金额汇总并提取子订单编号及费用ID",
      "kind": "step",
@@ -17614,16 +17911,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验费用实收实付锁定",
      "kind": "step",
@@ -17685,16 +17983,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "审核费用实收实付锁定申请",
      "kind": "step",
@@ -17756,16 +18055,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交费用锁定审批申请",
      "kind": "step",
@@ -17854,16 +18154,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/home/audit/auditPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询待审批记录并提取审批ID",
      "kind": "step",
@@ -17926,16 +18227,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/home/audit/auditExecute",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "执行费用锁定审批",
      "kind": "step",
@@ -17983,16 +18285,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "分页查询审批后的业务订单并提取订单ID",
      "kind": "step",
@@ -18040,16 +18343,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询第二阶段订单详情并提取订单ID",
      "kind": "step",
@@ -18107,16 +18411,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "刷新资产推送前的实收实付金额汇总",
      "kind": "step",
@@ -18188,16 +18493,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验费用资产推送",
      "kind": "step",
@@ -18242,16 +18548,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "审核费用资产推送",
      "kind": "step",
@@ -18296,16 +18603,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交费用资产推送审批申请",
      "kind": "step",
@@ -18377,16 +18685,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "刷新资产推送后的实收实付金额汇总",
      "kind": "step",
@@ -18430,16 +18739,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/home/audit/auditPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询资产推送待审批记录并提取审批ID",
      "kind": "step",
@@ -18502,16 +18812,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/home/audit/auditDetail",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询审批详情并提取关联订单ID",
      "kind": "step",
@@ -18569,16 +18880,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/home/audit/auditExecute",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "执行资产推送审批",
      "kind": "step",
@@ -18626,16 +18938,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderPage",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "分页查询资产推送后的业务订单并提取订单ID",
      "kind": "step",
@@ -18683,16 +18996,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "查询最终订单详情并提取订单ID",
      "kind": "step",
@@ -18750,16 +19064,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderNotice",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "校验应收核销通知",
      "kind": "step",
@@ -18804,16 +19119,17 @@
      ]
     },
     {
-     "api": {
+     "call": {
       "headers": {
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "kind": "api",
+      "kind": "call",
       "method": "POST",
       "path": "/api/order/order/orderNotice",
+      "protocol": "http",
       "service": "tidb-test-service",
-      "timeout": 30.0
+      "timeout": 30
      },
      "description": "提交应收核销通知",
      "kind": "step",

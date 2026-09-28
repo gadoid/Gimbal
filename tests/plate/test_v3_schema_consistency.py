@@ -21,7 +21,7 @@ from pathlib import Path
 
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
 from gimbal_plate.export.platform import PlatformScenarioExporter
-from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.request import Request
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 from gimbal_plate.schema.strategy import (
@@ -48,20 +48,6 @@ def _load_scenario() -> ScenarioModel:
     return ScenarioModel.model_validate(raw)
 
 
-
-
-def _to_api_form(sc):
-    """v2.1 批次 F：语料已迁移为 call 形态；view_hints 注入类用例换回 api 形态。"""
-    from gimbal_plate.schema.step import Step
-    s0 = sc.steps[0]
-    if s0.api is None and s0.call is not None:
-        sc.steps[0] = Step.model_validate(
-            {"kind": "step",
-             "api": {"kind": "api", **{k: v for k, v in (s0.call.model_extra or {}).items()}},
-             "request": s0.request.model_dump(),
-             "strategy": [st.model_dump() for st in s0.strategy]},
-        )
-    return sc
 
 
 def _platform_view() -> dict:
@@ -96,7 +82,7 @@ def _declared_body_keys(ep) -> set[str] | None:
 EXPECTED_PLATFORM_FIELDS: dict[str, tuple[type, str]] = {
     # field_name -> (owning_class, documented_type)
     "fields_meta": (Request, "Dict[str, DeclarationEntry] | None"),
-    "view_hints": (Api, "dict[str, Any] | None"),
+    "view_hints": (Call, "dict[str, Any] | None"),
     "view_note": (StrategyBase, "Optional[str]"),
     "endpoints": (ScenarioModel, "list[dict[str, Any]] | None"),
     "navigation": (ScenarioModel, "dict[str, Any] | None"),
@@ -173,7 +159,7 @@ class TestDeserializationContract:
         assert sc.config_summary is not None and "vars" in sc.config_summary
         # step 内层 3 个扩展必须保留
         s0 = sc.steps[0]
-        assert s0.api.view_hints is not None
+        assert s0.call.view_hints is not None
         assert s0.request.fields_meta is not None
         # strategy[*].view_note —— 至少有一个 strategy 上有 view_note
         notes = [st.view_note for st in s0.strategy if st.view_note is not None]
@@ -272,13 +258,12 @@ class TestGimbalDictExcludesPlatformFields:
         assert "navigation" not in gd
         assert "config_summary" not in gd
 
-    def test_gimbal_dict_no_view_hints_in_api(self) -> None:
-        sc = _to_api_form(_load_scenario())
-        # 直接通过 scenario 注入
-        sc.steps[0].api.view_hints = {"endpoint_id": "fin.x"}
+    def test_gimbal_dict_no_view_hints_in_call(self) -> None:
+        sc = _load_scenario()
+        # 直接通过 scenario 注入（view_hints 是 Call 的声明字段）
+        sc.steps[0].call.view_hints = {"endpoint_id": "fin.x"}
         gd = GimbalScenarioExporter(sc).to_dict()
-        # v2.1 批次 F：api 整键不再出现在 gimbal 导出（call 形态），view_hints 无处可挂
-        assert "api" not in gd["steps"][0]
+        # gimbal 导出剥除平台视图扩展：call 里不得残留 view_hints
         assert "view_hints" not in gd["steps"][0].get("call", {})
 
     def test_gimbal_dict_no_fields_meta_in_request(self) -> None:
@@ -317,7 +302,7 @@ class TestPlatformDictIncludesPlatformFields:
         assert "navigation" in pv
         assert "config_summary" in pv
         # step 内层 3 个 —— 至少在某些 step 上出现
-        has_view_hints = any("view_hints" in s["api"] for s in pv["steps"])
+        has_view_hints = any("view_hints" in s["call"] for s in pv["steps"])
         has_fields_meta = any("fields_meta" in s["request"] for s in pv["steps"])
         has_view_note = any(
             "view_note" in st
@@ -341,13 +326,13 @@ class TestRejectedApproachesAreAbsent:
     def test_no_underscore_prefixed_platform_field_in_dump(self) -> None:
         """平台视图扩展字段不应有下划线前缀(Pydantic PrivateAttr 陷阱)。
 
-        仅检查平台视图字段所在的层级(顶层 / step.api / step.request / step.strategy[*]),
+        仅检查平台视图字段所在的层级(顶层 / step.call / step.request / step.strategy[*]),
         不递归进入业务数据 body —— 业务数据(如 customer_file_list[*]._XID)由用户控制,
         与平台视图扩展无关。
         """
-        sc = _to_api_form(_load_scenario())
+        sc = _load_scenario()
         sc.steps[0].request.fields_meta = {"x": {"name": "x"}}
-        sc.steps[0].api.view_hints = {"endpoint_id": "fin.x"}
+        sc.steps[0].call.view_hints = {"endpoint_id": "fin.x"}
         sc.steps[0].strategy[0].view_note = "test"
         sc.endpoints = [{"id": "x"}]
         sc.navigation = {"svc": []}
@@ -361,11 +346,11 @@ class TestRejectedApproachesAreAbsent:
         for k in pv.keys():
             if k.startswith("_"):
                 forbidden_keys.append(("top-level", k))
-        # step.api / step.request 顶层 keys
+        # step.call / step.request 顶层 keys
         for i, s in enumerate(pv["steps"]):
-            for k in s["api"].keys():
+            for k in s["call"].keys():
                 if k.startswith("_"):
-                    forbidden_keys.append((f"steps[{i}].api", k))
+                    forbidden_keys.append((f"steps[{i}].call", k))
             for k in s["request"].keys():
                 if k.startswith("_"):
                     forbidden_keys.append((f"steps[{i}].request", k))

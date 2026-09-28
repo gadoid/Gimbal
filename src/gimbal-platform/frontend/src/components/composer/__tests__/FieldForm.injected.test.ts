@@ -1,6 +1,6 @@
 /**
  * FieldForm — 动态注入只读态(2026-09-03 需求):
- * injected 命中字段(assign target=$.request_body.<path>)→ 值控件换
+ * injected 命中字段(assign target=$.call.request.body.<path>)→ 值控件换
  * 只读提示条,原值降级为 continue 兜底行(仍存 body,不丢);
  * 未命中/不传 → 常规控件。菜单禁用态由 Canvas 挂载级测试覆盖(I3)。
  * key = 字段 path(实例地址唯一;name 在数组行间共享会整列误标 —
@@ -23,7 +23,7 @@ function mkBinding(over: Partial<IOFieldBinding> = {}): IOFieldBinding {
   } as IOFieldBinding
 }
 
-const INJ = { '$.orderId': [{ source: '$.oid', target: '$.request_body.orderId' }] }
+const INJ = { '$.orderId': [{ source: '$.oid', target: '$.call.request.body.orderId' }] }
 
 describe('FieldForm — 动态注入只读态', () => {
   it('命中 → 提示条代替值控件;悬停列 source → target;兜底行透出原值', () => {
@@ -37,7 +37,7 @@ describe('FieldForm — 动态注入只读态', () => {
     expect(w.find('.ctl-injected').exists()).toBe(true)
     expect(w.text()).toContain('已使用动态策略注入')
     expect(w.find('.field-control input.ctl').exists()).toBe(false)
-    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.request_body.orderId')
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.call.request.body.orderId')
     const fb = w.find('.injected-fallback')
     expect(fb.exists()).toBe(true)
     expect(fb.text()).toContain('ord-1')
@@ -61,13 +61,13 @@ describe('FieldForm — 动态注入只读态', () => {
         bindings: [mkBinding()],
         body: { orderId: 'x' },
         injected: { '$.orderId': [
-          { source: '$.a', target: '$.request_body.orderId' },
-          { source: '$.b', target: '$.request_body.orderId' },
+          { source: '$.a', target: '$.call.request.body.orderId' },
+          { source: '$.b', target: '$.call.request.body.orderId' },
         ] },
       }),
     }), { global: { plugins: [] } })
     expect(w.find('.ctl-injected').attributes('title'))
-      .toBe('$.a → $.request_body.orderId\n$.b → $.request_body.orderId')
+      .toBe('$.a → $.call.request.body.orderId\n$.b → $.call.request.body.orderId')
   })
 
   it('未命中字段 path / 不传 injected → 常规 input 控件,无提示条', () => {
@@ -79,7 +79,7 @@ describe('FieldForm — 动态注入只读态', () => {
           ...(injected ? { injected } : {}),
         }),
       }), { global: { plugins: [] } })
-    const a = mk({ '$.other': [{ source: '$.x', target: '$.request_body.other' }] })
+    const a = mk({ '$.other': [{ source: '$.x', target: '$.call.request.body.other' }] })
     expect(a.find('.ctl-injected').exists()).toBe(false)
     expect((a.find('input.ctl').element as HTMLInputElement).value).toBe('ord-1')
     const b = mk()

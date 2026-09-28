@@ -81,12 +81,12 @@ describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
 
   it('编辑已有变量值能写回父 config(回灌修复不能砍掉正常同步)', async () => {
     const initial = makeConfig()
-    initial.vars = { 'fin.api': 'old' }
+    initial.vars = { 'fin.call': 'old' }
     const { w, config } = mountWithParent(initial)
     const val = w.findAll('.c-kv-row input')[1] // 第 1 行 value
     await val.setValue('new')
     await flush()
-    expect(config.value.vars['fin.api']).toBe('new')
+    expect(config.value.vars['fin.call']).toBe('new')
   })
 })
 

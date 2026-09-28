@@ -33,11 +33,11 @@ const DRAFT = {
   definition: {
     steps: [
       {
-        api: { view_hints: { endpoint_id: 'fin.order.add' } },
+        call: { view_hints: { endpoint_id: 'fin.order.add' } },
         request: { body: { amount: '${var.amount}', customer_id: '261' } },
       },
       {
-        api: { view_hints: { endpoint_id: 'fin.order.query' } },
+        call: { view_hints: { endpoint_id: 'fin.order.query' } },
         request: {},
       },
     ],
@@ -83,7 +83,7 @@ describe('useFieldDescriptions', () => {
     const draft = ref({
       definition: {
         steps: [{
-          api: { view_hints: { endpoint_id: 'unknown.ep' } },
+          call: { view_hints: { endpoint_id: 'unknown.ep' } },
           request: { body: { foo: '${var.foo}' } },
         }],
       },
@@ -99,7 +99,7 @@ describe('useFieldDescriptions', () => {
     const draft = ref({
       definition: {
         steps: [{
-          api: { view_hints: { endpoint_id: 'fin.order.add' } },
+          call: { view_hints: { endpoint_id: 'fin.order.add' } },
           request: { body: { amount: '${var.amount}', ghost_field: 'x' } },
         }],
       },
@@ -116,8 +116,8 @@ describe('useFieldDescriptions', () => {
     const draft = ref({
       definition: {
         steps: [
-          { api: {}, request: { body: { amount: '100' } } },   // 无 endpoint_id
-          { api: { view_hints: { endpoint_id: 'fin.order.add' } }, request: { body: { amount: '100' } } },
+          { call: {}, request: { body: { amount: '100' } } },   // 无 endpoint_id
+          { call: { view_hints: { endpoint_id: 'fin.order.add' } }, request: { body: { amount: '100' } } },
         ],
       },
     })
