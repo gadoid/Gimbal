@@ -9,7 +9,8 @@
   - 新增 P0-10 ~ P0-12（盘点补充：卫生批、编译期校验补全、预认证补全）；
   - P2-01 / P2-05 / P3-04 / P3-05 补入前置与字段要求；
   - 待拍板表新增 D-6 / D-7；
-  - **P0 批次执行完成（2026-09-28）**：除 S4（随 D-6 拍板）与 S5（已随本批落库，见路线图执行记录）外，第一部分全部 Goal 完成；全量门 `verify_all.sh` 三步全绿（gimbal+plate 1076 / backend 727 / frontend 1133）。
+  - **P1+P2+P3 主体完成（2026-09-29）**：P1 全部（B1-B4/B6）→ P2 全部（N4/C1-C4/C8-C10）→ P3 的 C5/N5/N1/N2/S4/B5/C7/N3 —— 12 个 Goal 11 笔提交;verify_all 1182/758/131 三步全绿;D-4（不提前）/D-6（保留横切面）已拍板;D-7 已执行。剩余:C11/C12/C13 + C6
+- **P0 批次执行完成（2026-09-28）**：除 S4（随 D-6 拍板）与 S5（已随本批落库，见路线图执行记录）外，第一部分全部 Goal 完成；全量门 `verify_all.sh` 三步全绿（gimbal+plate 1076 / backend 727 / frontend 1133）。
 
 本文把路线图拆成可以直接交给 coding agent 执行的目标（Goal）。每个 Goal 自成一体：做什么、改哪里、不做什么、怎样算完成、遇到什么情况必须停下来问人。
 
@@ -216,6 +217,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P1-01 执行上下文标签
 
+- **状态（2026-09-29）：已完成（ee1e3649）** —— 四边界 contextvar 接线;12 用例 tests/unit/observability
 - **目标**：在四个执行边界设置统一的上下文标签。
 - **范围**：`log/logger.py`（已有的 contextvar 设施）、`core/runner.py`、`scheduler/plan.py`、`core/scenario_runner.py`、`protocols/base.py`。
 - **要求**：
@@ -227,6 +229,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P1-02 事件信封盖标签
 
+- **状态（2026-09-29）：已完成（ee1e3649）** —— 总线锁内盖章;jsonl 行形状兼容
 - **目标**：所有事件自动带上 P1-01 的标签。
 - **范围**：`events/types.py` 的 `FrameworkEvent`、`events/bus.py` 的 `publish`。
 - **要求**：
@@ -239,6 +242,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P1-03 日志结构化与分类
 
+- **状态（2026-09-29）：已完成（ee1e3649）** —— log/category.py 唯一映射表;JsonSink 带标签
 - **目标**：日志带同一组标签，并带有框架模块分类。
 - **范围**：`log/formatters.py`（JSON sink）、`log/logger.py`。
 - **要求**：
@@ -250,6 +254,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P1-04 声明式订阅规格
 
+- **状态（2026-09-29）：已完成（e9892afc）** —— CLI/suite/server 三入口同编译器;SUBSCRIBE_INVALID 错误码
 - **目标**：不写代码即可订阅事件和日志。
 - **范围**：`schema/`（新增订阅规格模型）、`events/bus.py`（编译为 `EventFilter`）、`cli/common.py`（`--subscribe <file>`）、suite schema（`subscribe` 字段）、server 的 `RunsRequest`。
 - **要求**：
@@ -261,6 +266,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P1-05 事件导入与回放
 
+- **状态（2026-09-29）：已完成（e9892afc）** —— gimbal events replay/query;乱序 jsonl 按 seq 回放
 - **目标**：一次执行的事件流可以事后查询和重放给报告器。
 - **范围**：`cli/commands/`（新增 `gimbal events replay <file.jsonl>` 与 `gimbal events query`），`reporter/runtime.py`。
 - **要求**：
@@ -275,6 +281,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-01 单元级台账迁移（0007）
 
+- **状态（2026-09-29）：已完成（b01468a0,0008 迁移）** —— unit_id/branch/attempts;升降级往返验证
 - **目标**：台账从"行"改为"单元"。
 - **范围**：`backend/alembic/versions/0007_*.py`、模型定义、`services/execution_store.py`。
 - **要求**：新增 `unit_id`（别名 + 展开序号，与执行器一致）、`branch`、`attempts`；dataset/injection/row_index 保留为单元属性。**一并补 `skipped` 计数列**（`run.finished` 已携带、当前只留在 result.json 工件）。
@@ -284,6 +291,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-02 事件与日志存储
 
+- **状态（2026-09-29）：已完成（b01468a0）** —— execution_events 统一表;证据拆表;保留期配置
 - **目标**：执行器产出的事件和日志入库。
 - **范围**：alembic 迁移（可与 P2-01 合并为 0007，或单独 0008）；`services/execution_store.py`。
 - **要求**：
@@ -297,6 +305,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-03 流式读取 jsonl
 
+- **状态（2026-09-29）：已完成（27ddc8b7）** —— launcher 逐行回调;_EventIngester 双轨冲刷;kill 保留已读
 - **目标**：平台边运行边读取执行器输出。
 - **范围**：`services/gimbal_launcher.py`、`services/run_dispatcher.py`。
 - **要求**：
@@ -309,6 +318,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-04 台账从事件投影
 
+- **状态（2026-09-29）：已完成（d74f1494）** —— scenario.end 定行状态;run.finished 投影 attempts/unit
 - **目标**：单元状态与计数由事件决定。
 - **范围**：`services/run_dispatcher.py`、`services/execution_store.py`。
 - **要求**：删除平台自行写入行状态的逻辑，改为根据 `scenario.end` 与 `run.finished` 投影。
@@ -317,6 +327,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-05 乘法下沉到执行器
 
+- **状态（2026-09-29）：已完成（d74f1494/954fa057/1ea4caaf）** —— N4 CLI 参数 + nRuns 循环删除 + run.finished 带 attempts
 - **目标**：平台不再自己循环 nRuns、并发。
 - **范围**：`services/run_dispatcher.py`（`n_runs` 相关循环）、`services/run_materialize.py`；**前置（gimbal 侧）**：`run scenario` / `run suite` 增 `--n-runs` / `--retry` / `--parallel` 参数（定稿 D-16 的 scenario 半边；当前 n_runs 无任何 CLI 入口，launcher 传参无从组装）。
 - **要求**：n_runs/retry/parallel 作为执行器参数传入；平台只负责数据集 × 注入的组装。
@@ -326,6 +337,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-06 平台 → 浏览器 SSE
 
+- **状态（2026-09-29）：已完成（ee0016b9）** —— SSE 端点(Last-Event-ID/心跳/done);前端 fetch-SSE 替代 1s 轮询
 - **目标**：用 SSE 替代每秒轮询。
 - **范围**：`backend/app/routers/executions.py`（新增事件流端点）；`frontend/src/views/Executions.vue`。
 - **要求**：推送的是已入库的事件；支持 `Last-Event-ID` 续传；带心跳；鉴权沿用平台会话。
@@ -335,6 +347,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P2-07 日志分析页
 
+- **状态（2026-09-29）：已完成（ee0016b9）** —— 组合筛选 + level_min + 聚合;前端筛选页 + 工作台卡片
 - **目标**：按模块标签筛选和分析日志与事件。
 - **范围**：后端查询接口；前端新增视图，并在工作台补一张卡片（与现有页面的做法一致）。
 - **要求**：
@@ -395,6 +408,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-05 suite 编排页
 
+- **状态（2026-09-29）：已完成（d27d499b）** —— graph 物化下发 + 前端编排(mode/单元/gates/checks)+ 台账单元投影;N5 前置同批(085557f9)
 - **目标**：在平台上编排并执行 graph。
 - **范围**：前端新增视图；后端生成 graph 并下发给执行器。
 - **要求**：
@@ -407,6 +421,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-06 报告定义（执行器侧）
 
+- **状态（2026-09-29）：已完成（80b02153）** —— ReportDefinition schema + DefinitionReporter;replay 一致性
 - **目标**：按内容定制报告。
 - **范围**：`reporter/`（新增通用的"定义驱动"报告器），`schema/`（报告定义模型）。
 - **要求**：报告定义 = 选择（P1-04 的订阅规格）+ 投影（JSONPath 字段清单）+ 呈现（html/markdown 模板或表格列）；现有报告器保留。
@@ -415,6 +430,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-07 报告定义（平台侧）
 
+- **状态（2026-09-29）：已完成（80b02153）** —— CRUD + 私有/公共权限域 + RunRequest.reportDefinitionId
 - **目标**：平台存储并复用报告定义。
 - **要求**：报告定义按用户或团队存储，区分私有区与公共区；执行时可选择报告定义；报告作为执行的工件存储。
 - **验收**：
@@ -422,6 +438,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-08 配置规范（路线图 N3，定稿 D8）
 
+- **状态（2026-09-29）：已完成（773ec1ff）** —— 参数登记表 + p_patch 接线 + 值来源追踪;11 用例
 - **目标**：调用参数有登记表与值来源追踪，补丁叠加可解释。
 - **范围**：`compiler/pipeline.py`（`p_patch` 接线）、`schema/`（参数登记模型）。
 - **要求**：
