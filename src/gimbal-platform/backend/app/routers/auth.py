@@ -18,6 +18,7 @@ from ..core.security import (
 )
 from ..models.user import User
 from ..schemas.auth import (
+    ChangePasswordIn,
     LoginIn,
     MeOut,
     RefreshIn,
