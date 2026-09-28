@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from gimbal.schema.call import Call
 
 from gimbal.log import get_logger
+from gimbal.log.exec_context import exec_context
 
 logger = get_logger(__name__)
 
@@ -198,7 +199,25 @@ class ProtocolExecutor(ABC):
 
         S-2 起协议执行器不经过策略 dispatcher —— 计时与异常兜底（原
         dispatcher 插装职责）由本模板承担。
+
+        P1-01 call 边界：``protocol``（协议名）+ ``endpoint``
+        （call.view_hints.endpoint_id，平台端点标识；无则不设）标签随
+        进入设置、退出恢复。
         """
+        pctx0 = getattr(spec, "pctx", None)
+        call = getattr(pctx0, "call", None)
+        vh = getattr(call, "view_hints", None)
+        if not isinstance(vh, dict):
+            vh = (getattr(call, "model_extra", None) or {}).get("view_hints") or {}
+        endpoint_id = vh.get("endpoint_id") if isinstance(vh, dict) else None
+        labels = {"protocol": self.protocol}
+        if endpoint_id:
+            labels["endpoint"] = str(endpoint_id)
+        with exec_context(_boundary="call", **labels):
+            return self._execute_body(spec, view)
+
+    def _execute_body(self, spec, view) -> StrategyResult:
+        """execute() 的执行主体（P1-01：call 标签由 execute() 包装设置）。"""
         pctx = getattr(spec, "pctx", None)
         step_id = getattr(pctx, "step_id", "") or ""
 

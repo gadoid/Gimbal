@@ -157,6 +157,16 @@ class InMemoryEventBus:
                 object.__setattr__(event, "seq", self._seq)
             except Exception:  # noqa: BLE001  # frozen 模型兜底
                 pass
+            # P1-02 信封盖标签：从 contextvar 取值填充尚未设置的标签字段
+            # （发布点显式值优先；contextvar 在发布线程内读取 = 所属
+            # 单元/步骤的上下文，ASYNC/BATCH 订阅者拿到的是已盖章事件）
+            try:
+                from gimbal.log.exec_context import exec_labels
+                for name, value in exec_labels().items():
+                    if getattr(event, name, None) is None:
+                        object.__setattr__(event, name, value)
+            except Exception:  # noqa: BLE001  # 盖章失败不影响派发
+                pass
             for sub in self._subscriptions:
                 if not sub.event_filter.matches(event):
                     continue

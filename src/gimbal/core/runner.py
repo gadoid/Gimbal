@@ -32,6 +32,7 @@ from .bootstrap import Configuration
 
 
 from gimbal.log import get_logger
+from gimbal.log.exec_context import exec_context
 logger = get_logger(__name__)
 
 
@@ -116,6 +117,14 @@ class Engine:
             run_id=str(uuid.uuid4()),
             cfg= ictx,
         )
+        # P1-01 执行上下文标签：run 边界（信封/日志盖章的根）
+        with exec_context(run=framework_ctx.run_id, _boundary="run"):
+            return self._run_with_labels(framework_ctx, target, runtime_control)
+
+    def _run_with_labels(self, framework_ctx: FrameworkContext, target: Any,
+                         runtime_control: Any) -> RunResult:
+        """run 边界内的执行主体（P1-01：exec_context 由 run() 设置）。"""
+        ictx = self._ictx
         logger.info("[Engine] 执行开始: run_id={} env={} mode={} target={}",
                     framework_ctx.run_id, framework_ctx.config.env, framework_ctx.mode, type(target).__name__)
 
@@ -288,27 +297,10 @@ class Engine:
         )
 
         def _run_unit(unit, inputs, cancel=None):
-            scenario = unit.scenario
-            if inputs:
-                # 统一输入注入原语：inputs 注入为 scenario vars（生效副本，不改源）；
-                # inputs 由调度器解析（字面量 ∪ 连线值）
-                merged = {**(scenario.config.vars or {}), **inputs}
-                scenario = scenario.model_copy(update={
-                    "config": scenario.config.model_copy(update={"vars": merged}),
-                })
-            logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
-            rc = runtime_control
-            if cancel is not None:
-                # 调度器超时弃跑的协作取消——**复制后挂事件,不改共享对象**：
-                # runtime_control 由本次 run 的所有单元/所有 attempt 共用,
-                # 原地写入会把第一次超时的置位事件泄漏给后续全部执行
-                # （CLI --halt-at/--step-from/--debug、server halt/step_from 路径）
-                import dataclasses
-                from gimbal.core.scenario_runner import RuntimeControl as _RC
-                rc = (dataclasses.replace(runtime_control, cancel_event=cancel)
-                      if runtime_control is not None
-                      else _RC(cancel_event=cancel))
-            return runner.run(scenario, suite_ctx, runtime_control=rc)
+            # P1-01：run 标签补全（unit 边界由调度器 _run_one 设置并清空
+            # 更深层标签；此处纯设置不清 —— run 比 unit 浅，叠加即得全链）
+            with exec_context(run=framework_ctx.run_id):
+                return self._run_unit_inner(unit, inputs, cancel, runtime_control, runner, suite_ctx)
 
         fail_fast = framework_ctx.config.fail_fast
         if plan.policy.fail_fast is not None:
@@ -322,6 +314,30 @@ class Engine:
         # 残留 #6：单场景/编排统一走 aggregate 口径（halted/error/failed/blocked
         # 分立,exit_code = 0 iff 全零;隐式 Plan 的 before/after 为空,天然退化）
         return self._assemble_aggregate(plan, outcome)
+
+    def _run_unit_inner(self, unit, inputs, cancel, runtime_control, runner, suite_ctx) -> Any:
+        """单元执行体（P1-01：exec_context 由 _run_unit 包装设置）。"""
+        scenario = unit.scenario
+        if inputs:
+            # 统一输入注入原语：inputs 注入为 scenario vars（生效副本，不改源）；
+            # inputs 由调度器解析（字面量 ∪ 连线值）
+            merged = {**(scenario.config.vars or {}), **inputs}
+            scenario = scenario.model_copy(update={
+                "config": scenario.config.model_copy(update={"vars": merged}),
+            })
+        logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
+        rc = runtime_control
+        if cancel is not None:
+            # 调度器超时弃跑的协作取消——**复制后挂事件,不改共享对象**：
+            # runtime_control 由本次 run 的所有单元/所有 attempt 共用,
+            # 原地写入会把第一次超时的置位事件泄漏给后续全部执行
+            # （CLI --halt-at/--step-from/--debug、server halt/step_from 路径）
+            import dataclasses
+            from gimbal.core.scenario_runner import RuntimeControl as _RC
+            rc = (dataclasses.replace(runtime_control, cancel_event=cancel)
+                  if runtime_control is not None
+                  else _RC(cancel_event=cancel))
+        return runner.run(scenario, suite_ctx, runtime_control=rc)
 
     # ── 判定（两套历史口径，零回归）────────────────────────────
 

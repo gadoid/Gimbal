@@ -54,6 +54,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from gimbal.log import get_logger
+from gimbal.log.exec_context import exec_context
 from gimbal.schema.plan import Plan, Unit
 
 logger = get_logger(__name__)
@@ -378,6 +379,16 @@ class PlanScheduler:
     # ── 乘法执行核（n_runs × retry）+ lock + timeout ──────────
 
     def _run_one(self, run_unit: Callable[[Unit, dict], Any], unit: Unit, inputs: dict) -> Any:
+        """单单元执行（含 lock 与全部乘法）。
+
+        P1-01 unit 边界：``unit`` 标签在此设置（整个乘法之外——attempt
+        标签由内层 _run_with_retry 设置在其上，不被清空）；更深层标签
+        （scenario/step/…）清空，防线程池复用线程的上一单元残留。
+        """
+        with exec_context(unit=unit.id, _boundary="unit"):
+            return self._run_one_body(run_unit, unit, inputs)
+
+    def _run_one_body(self, run_unit: Callable[[Unit, dict], Any], unit: Unit, inputs: dict) -> Any:
         policy = unit.policy
         lock = self._lock_for(policy.lock) if policy.lock else None
         if lock is None:
@@ -407,7 +418,7 @@ class PlanScheduler:
         raw_results: list[Any] = []
         for run_no in range(1, max(1, policy.n_runs) + 1):
             result, retries_used = self._run_with_retry(
-                run_unit, unit, inputs, policy, backoff_hook,
+                run_unit, unit, inputs, policy, backoff_hook, run_no=run_no,
             )
             try:
                 result.run_index = run_no
@@ -420,7 +431,8 @@ class PlanScheduler:
         return self._aggregate_attempts(raw_results)
 
     def _run_with_retry(self, run_unit, unit: Unit, inputs: dict, policy,
-                        backoff_hook: Callable[[float], None] | None = None):
+                        backoff_hook: Callable[[float], None] | None = None,
+                        *, run_no: int = 1):
         """单次 run：失败自动重跑至多 policy.retry 次；返回 (最终结果, 重试次数)。
 
         P1-12：
@@ -428,6 +440,10 @@ class PlanScheduler:
           - retry_on 非空时仅失败签名命中才重试（空 = 任何失败都重试）；
           - 重试间退避 policy.backoff_seconds；持锁单元经 backoff_hook
             放锁睡醒重取（退避期间不持 lock）。
+
+        P1-01：每次 attempt 进入时设置 ``attempt`` 标签（"{n_runs 序号}.
+        {attempt 序号}"，如 "2.3" = 第 2 个 run 的第 3 次尝试），更深层
+        标签清空（scenario/step 等）。
         """
         retry = max(0, policy.retry)
         retry_on = [t for t in (getattr(policy, "retry_on", None) or []) if t]
@@ -436,7 +452,8 @@ class PlanScheduler:
         sleep_fn = backoff_hook or time.sleep
         attempt = 0
         while True:
-            result = self._attempt(run_unit, unit, inputs, timeout)
+            with exec_context(attempt=f"{run_no}.{attempt + 1}", _boundary="attempt"):
+                result = self._attempt(run_unit, unit, inputs, timeout)
             if not self._result_failed(result) or attempt >= retry:
                 return result, attempt
             if retry_on and not self._error_matches(result, retry_on):
@@ -463,12 +480,18 @@ class PlanScheduler:
         if timeout is None:
             return self._safe_run(run_unit, unit, inputs)
         import concurrent.futures as cf
+        import contextvars
+        import functools
         cancel = threading.Event()
+        # P1-01：attempt 线程不继承 contextvar —— 快照当前上下文随任务传播
+        # （run/unit/attempt 标签在真实执行线程内可见，信封/日志盖章不缺）
+        ctx = contextvars.copy_context()
         # 注意：不用 with 语句——__exit__ 会 shutdown(wait=True) 等卡死任务，
         # 使限时失效；此处 wait=False + cancel_futures 尽快脱身
         pool = cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gimbal-attempt")
         try:
-            fut = pool.submit(self._safe_run, run_unit, unit, inputs, cancel)
+            fut = pool.submit(ctx.run, functools.partial(
+                self._safe_run, run_unit, unit, inputs, cancel))
             try:
                 return fut.result(timeout=max(0.0, float(timeout)))
             except cf.TimeoutError:

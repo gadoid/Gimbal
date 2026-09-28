@@ -22,6 +22,7 @@ from gimbal.statemachine.engine import StepStateMachine, StepRunResult
 from gimbal.strategy.dispatcher import StrategyDispatcher
 
 from gimbal.log import get_logger
+from gimbal.log.exec_context import exec_context
 logger = get_logger(__name__)
 
 
@@ -152,6 +153,10 @@ class StepRunner:
     ) -> StepRunResult:
         """执行单个 Step：创建 StepContext、构造状态机、运行并 finalize。
 
+        P1-01 step 边界：``step``（step_id）+ ``service``（call.service，
+        http/带服务概念的协议）标签随进入设置、退出恢复；更深层
+        （protocol/endpoint）清空。
+
         入参:
             step_schema: 已由预处理器展开的 Step 数据对象。
             scenario_ctx: 当前 Scenario 上下文。
@@ -160,6 +165,16 @@ class StepRunner:
             状态机产出的 StepRunResult。
         """
         step_id = f"step-{step_index:03d}"
+        service = getattr(getattr(step_schema, "call", None), "service", None)
+        labels: dict[str, str] = {"step": step_id}
+        if service:
+            labels["service"] = str(service)
+        with exec_context(_boundary="step", **labels):
+            return self._run_body(step_schema, scenario_ctx, step_id)
+
+    def _run_body(self, step_schema: Step, scenario_ctx: ScenarioContext,
+                  step_id: str) -> StepRunResult:
+        """run() 的执行主体（P1-01：step 标签由 run() 包装设置）。"""
         logger.debug("[StepRunner] 开始执行 Step: step_id={} scenario_id={}",
                      step_id, scenario_ctx.scenario_id)
 
@@ -279,6 +294,9 @@ class ScenarioRunner:
     ) -> ScenarioRunResult:
         """驱动整个 Scenario 的执行：派生上下文、预处理、按序跑 step、汇总结果、finalize。
 
+        P1-01 scenario 边界：``scenario``（scenarioId）+ ``module``（meta.module）
+        标签随进入设置、退出恢复；更深层（step/service/protocol/endpoint）清空。
+
         入参:
             scenario_schema:  已校验的 Scenario 数据对象。
             suite_ctx:        上层 Suite 上下文。
@@ -290,6 +308,18 @@ class ScenarioRunner:
         副作用:
             向 ctx_manager 注册 scenario/step 上下文；向 event_bus 发布 SCENARIO_START/END。
         """
+        module = getattr(scenario_schema.meta, "module", None) or ""
+        with exec_context(scenario=scenario_schema.scenarioId, module=module,
+                          _boundary="scenario"):
+            return self._run_body(scenario_schema, suite_ctx, runtime_control)
+
+    def _run_body(
+        self,
+        scenario_schema: Scenario,
+        suite_ctx: SuiteContext,
+        runtime_control: Optional[RuntimeControl] = None,
+    ) -> ScenarioRunResult:
+        """run() 的执行主体（P1-01：scenario 标签由 run() 包装设置）。"""
         started_at = datetime.now(timezone.utc)
         sid = scenario_schema.scenarioId
         logger.info(

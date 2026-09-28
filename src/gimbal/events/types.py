@@ -85,12 +85,28 @@ class FrameworkEvent(BaseModel):
     v2.1 批次 F-2c：``seq`` 是事件全局序号，由总线在发布锁内单调分配
     （v2 §5 信封：跨线程按 seq 排序 = 发布序）；SSE Last-Event-ID 与
     stdout jsonl 事件的 id 都用它。未过总线直接构造的事件 seq=0。
+
+    P1-02 执行上下文标签：九个可选标签（run/unit/attempt/scenario/step/
+    module/service/protocol/endpoint）由总线在发布时从 contextvar 取值
+    **填充尚未设置的字段**（发布点显式给的值优先）；未进入任何执行边界的
+    事件（framework.init / run.meta 等）标签为 None，jsonl 序列化时剥除。
+    子类同名字段（如 CallExchangeEvent.protocol）按子类声明优先。
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     event_type: str = ""
     seq: int = 0
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     run_id: Optional[str] = None
+    # ── 执行上下文标签（P1-02；总线盖章，见 events/bus.py publish）──
+    run: Optional[str] = None
+    unit: Optional[str] = None
+    attempt: Optional[str] = None
+    scenario: Optional[str] = None
+    step: Optional[str] = None
+    module: Optional[str] = None
+    service: Optional[str] = None
+    protocol: Optional[str] = None
+    endpoint: Optional[str] = None
 
 
 # ── 框架级 ─────────────────────────────────────────────

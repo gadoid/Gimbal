@@ -28,6 +28,8 @@ import sys
 from datetime import timezone
 from typing import Any, TYPE_CHECKING
 
+from gimbal.log.category import categorize_logger
+
 if TYPE_CHECKING:
     from loguru import Record, Message
 
@@ -129,8 +131,8 @@ class JsonSink:
 
     输出字段
     --------
-    timestamp, level, logger, function, line, message,
-    run_id?, scenario_id?, step_id?, suite_id?, exception?
+    timestamp, level, logger, category, function, line, message,
+    run_id?, scenario_id?, step_id?, suite_id?, 执行上下文标签(P1-03)?, exception?
     """
 
     def __init__(self, stream=None) -> None:
@@ -145,11 +147,14 @@ class JsonSink:
 
     def _serialize(self, record: "Record") -> str:
         ts = record["time"].astimezone(timezone.utc).isoformat()
+        logger_name = record.get("name") or record.get("module", "")
 
         payload: dict[str, Any] = {
             "timestamp": ts,
             "level":    record["level"].name,
-            "logger":   record.get("name") or record.get("module", ""),
+            "logger":   logger_name,
+            # P1-03：按 logger 名静态映射分类（全仓唯一映射表见 log/category.py）
+            "category": categorize_logger(logger_name),
             "function": record["function"],
             "line":     record["line"],
             "message":  record["message"],
@@ -159,6 +164,10 @@ class JsonSink:
         for key in ("run_id", "scenario_id", "step_id", "suite_id"):
             if key in extra:
                 payload[key] = extra[key]
+
+        # P1-03：执行上下文标签（contextvar 在记录线程内读取 = 所属单元/步骤）
+        from gimbal.log.exec_context import exec_labels
+        payload.update(exec_labels())
 
         exc = record.get("exception")
         if exc is not None:

@@ -294,9 +294,16 @@ def attach_jsonl_sink(event_bus) -> str:
     import json as _json
     import sys as _sys
 
+    from gimbal.log.exec_context import EXEC_LABEL_NAMES as _EXEC_LABEL_NAMES
+
     def _sink(event) -> None:
         try:
-            line = _json.dumps(event.model_dump(mode="json"), ensure_ascii=False, default=str)
+            d = event.model_dump(mode="json")
+            # P1-02：剥除未设置的执行上下文标签（边界外事件保持旧行形状）
+            for label in _EXEC_LABEL_NAMES:
+                if d.get(label) is None:
+                    d.pop(label, None)
+            line = _json.dumps(d, ensure_ascii=False, default=str)
         except Exception:  # noqa: BLE001
             line = _json.dumps({"event_type": getattr(event, "event_type", "?")})
         print(line, file=_sys.stdout, flush=True)   # Windows 子进程逐行 flush
