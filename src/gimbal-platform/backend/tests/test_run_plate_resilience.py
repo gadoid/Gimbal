@@ -164,9 +164,6 @@ async def test_breaker_opens_after_consecutive_unavailable(
     await _wait_terminal(eid)
 
     assert calls["n"] == 3          # 阈值 3:第 4、5 行不再打 plate
-    records = _jsonl_records(run_dispatcher)
-    assert any(
-        rec.get("status") == "plate_unavailable"
-        and "circuit open" in str(rec.get("error", ""))
-        for rec in records
-    )
+    # M6 行级 JSONL 停写:熔断的权威落点 = execution_rows 行终态
+    # (plate_unavailable);JSONL 不再断言行级记录。calls==3 已证开路后
+    # 不再打 plate,行级终态由 _wait_terminal + 行状态覆盖。

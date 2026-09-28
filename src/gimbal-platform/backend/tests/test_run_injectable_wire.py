@@ -108,7 +108,7 @@ async def test_carry_anchored_entry_runs_and_overrides_on_the_wire(
             # 不补则引擎 Scenario 校验 union_tag_not_found → exit 2
             # (gimbal_rejected),永远到不了 wire —— 断言面一字未动。
             "kind": "step",
-            "api": {"kind": "api", "service": "stubsvc", "method": "POST", "path": "/pay",
+            "call": {"kind": "call", "protocol": "http", "service": "stubsvc", "method": "POST", "path": "/pay",
                     "headers": {"Content-Type": "application/json"},
                     "view_hints": {"endpoint_id": "ep-carry-wire"}},
             "request": {"kind": "request", "body": {"bl_no": "${var.bl_no}"}},
@@ -184,7 +184,7 @@ async def test_carry_anchored_entry_overrides_platform_carried_value(
         steps=[{
             "id": "s1",
             "kind": "step",
-            "api": {"kind": "api", "service": "stubsvc", "method": "POST", "path": "/pay",
+            "call": {"kind": "call", "protocol": "http", "service": "stubsvc", "method": "POST", "path": "/pay",
                     "headers": {"Content-Type": "application/json"},
                     "view_hints": {"endpoint_id": "ep-carry-wire"}},
             "request": {"kind": "request", "body": {"bl_no": "${var.bl_no}"}},

@@ -55,7 +55,7 @@ def test_assign_appends_strategy_without_touching_vars():
     out = compose_injection_scenario(DEF, entry)
     assert out["config"]["vars"]["amount"] == 100            # vars 不动
     st = out["steps"][0]["strategy"]
-    assert st[-1] == {"kind": "assign", "source": -1, "target": "$.request_body.amount"}
+    assert st[-1] == {"kind": "assign", "source": -1, "target": "$.call.request.body.amount"}
     assert DEF["steps"][0]["strategy"] == [{"kind": "assertion", "target": "$.response_body.code",
                                             "operator": "eq", "expected": "0"}]   # 源零污染
 
@@ -309,24 +309,24 @@ def test_write_side_skips_string_host_conflict():
 
 def test_host_conflict_guard_leaves_normal_assign_semantics_alone():
     """三条**不算冲突**(Assign 的正常语义或可创建情形)—— 收紧不误伤。"""
-    # target 恰为 ``$.request_body``:整体覆写 body,宿主类型无所谓
+    # target 恰为 ``$.call.request.body``:整体覆写 body,宿主类型无所谓
     out = compose_injection_scenario(
         {"steps": [{"request": {"body": "raw"}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$"}, "value": {"a": 1}})
     assert out["steps"][0]["strategy"] == [
-        {"kind": "assign", "source": {"a": 1}, "target": "$.request_body"}]
+        {"kind": "assign", "source": {"a": 1}, "target": "$.call.request.body"}]
     # body 为 None(无 ``request.body``)→ 由 Assign 创建
     out = compose_injection_scenario(
         {"steps": [{"request": {}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$.x.y"}, "value": 1})
     assert out["steps"][0]["strategy"] == [
-        {"kind": "assign", "source": 1, "target": "$.request_body.x.y"}]
+        {"kind": "assign", "source": 1, "target": "$.call.request.body.x.y"}]
     # 路径段缺失 → 同样由 Assign 创建(不猜、不拦)
     out = compose_injection_scenario(
         {"steps": [{"request": {"body": {"a": 1}}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$.b.c"}, "value": 1})
     assert out["steps"][0]["strategy"] == [
-        {"kind": "assign", "source": 1, "target": "$.request_body.b.c"}]
+        {"kind": "assign", "source": 1, "target": "$.call.request.body.b.c"}]
 
 
 def test_bracket_path_into_str_element_is_skipped():
@@ -369,7 +369,7 @@ def test_bracket_path_into_dict_element_still_materializes():
     out = compose_injection_scenario(
         {"steps": [{"request": {"body": body}}]}, entry)
     assert out["steps"][0]["strategy"] == [                       # 照常物化
-        {"kind": "assign", "source": 9, "target": "$.request_body.items[0].sku"}]
+        {"kind": "assign", "source": 9, "target": "$.call.request.body.items[0].sku"}]
 
 
 def test_positive_out_of_range_index_is_not_a_conflict():
@@ -389,7 +389,7 @@ def test_positive_out_of_range_index_is_not_a_conflict():
         {"steps": [{"request": {"body": {"items": []}}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$.items[5].sku"}, "value": 9})
     assert out["steps"][0]["strategy"] == [
-        {"kind": "assign", "source": 9, "target": "$.request_body.items[5].sku"}]
+        {"kind": "assign", "source": 9, "target": "$.call.request.body.items[5].sku"}]
 
 
 def test_negative_index_is_normalised_before_descending():
@@ -417,7 +417,7 @@ def test_negative_index_is_normalised_before_descending():
         {"steps": [{"request": {"body": {"items": [{"sku": 1}]}}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$.items[-1].sku"}, "value": 9})
     assert out["steps"][0]["strategy"] == [
-        {"kind": "assign", "source": 9, "target": "$.request_body.items[-1].sku"}]
+        {"kind": "assign", "source": 9, "target": "$.call.request.body.items[-1].sku"}]
 
 
 def test_index_into_a_non_dict_element_is_a_conflict():
@@ -486,7 +486,7 @@ def test_root_non_dict_body_is_caught_by_the_root_host_check():
 def test_list_body_bracket_root_path_is_skipped_by_the_guard():
     """列表 body + ``$[0].replace``:守卫**自身**也要挡(纵深防御)。
 
-    ``$.request_body[0].replace`` 的前缀段是 FIELD ``request_body`` + INDEX(0)
+    ``$.call.request.body[0].replace`` 的前缀段是 FIELD ``request_body`` + INDEX(0)
     —— 按 token 判前缀即「在 body 内部」,于是 walk 继续:INDEX(0) 下降进元素
     ``"abc"``,下一个 FIELD 段遇非 dict 即 ``{}`` ⇒ 元素改形。上一条钉判定侧,
     这条钉**物化侧**(直接调 ``compose_injection_scenario``、不经 ``entry_issues``
@@ -551,7 +551,7 @@ def test_integral_float_step_index_materializes_like_judgment():
                         _universe_of(body_of, ())) == []            # 判活
     out = compose_injection_scenario(DEF, entry)
     assert out["steps"][1]["strategy"] == [                          # 物化
-        {"kind": "assign", "source": -1, "target": "$.request_body.bl_no"},
+        {"kind": "assign", "source": -1, "target": "$.call.request.body.bl_no"},
         {"kind": "assertion", "target": "$.response_body.msg",
          "operator": "eq", "expected": "e"}]
     assert DEF["steps"][1]["strategy"] == []                         # 源零污染
@@ -587,7 +587,7 @@ async def test_dispatcher_fans_out_injection_entries(
 ):
     """选中 1 活条目(+ 死条目 + 旧版条目)且无数据集 → case 数 = 活条目数
     ×nRuns;死/旧条目 skip 不炸;case.json 的 steps[0].strategy 已追加
-    Assign 直补($.request_body.amount)且 vars 未被触碰;rows 回放含
+    Assign 直补($.call.request.body.amount)且 vars 未被触碰;rows 回放含
     injectionId。"""
     from .helpers import make_draft as _draft, wait_until as _wait
     from .test_run_m1_capabilities import _patch_launch_capture
@@ -642,7 +642,7 @@ async def test_dispatcher_fans_out_injection_entries(
         st = case["steps"][0]["strategy"]
         assert st[0]["expected"] == "400"                          # override patch
         assert {"kind": "assign", "source": -1,
-                "target": "$.request_body.amount"} in st           # Assign 直补
+                "target": "$.call.request.body.amount"} in st           # Assign 直补
         assert case["config"]["vars"]["amount"] == 100             # vars 未触碰
 
     detail = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
@@ -667,7 +667,7 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
 
     bob = await _member(client, "bob")
     draft = _draft(steps=[
-        {"id": "s1", "api": {"kind": "api", "service": "fin-svc", "method": "POST",
+        {"id": "s1", "call": {"kind": "call", "protocol": "http", "service": "fin-svc", "method": "POST",
                              "path": "/order", "headers": {},
                              "view_hints": {"endpoint_id": "ep-carry-x"}},
          "request": {"body": {"bl_no": "${var.bl_no}"}}, "strategy": []},
@@ -694,7 +694,7 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     await _wait(lambda: len(cases) >= 1)
     assert len(cases) == 1                      # 未被 skip(此前会是 0 case)
     st = cases[0]["steps"][0]["strategy"]
-    assert {"kind": "assign", "source": 261, "target": "$.request_body.customer_id"} in st
+    assert {"kind": "assign", "source": 261, "target": "$.call.request.body.customer_id"} in st
 
     # 降级:声明面不可得 → 同一条目重新被判死(skip),不炸 dispatch
     plate_mock.fulls.pop("ep-carry-x")
@@ -709,7 +709,7 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     await _wait(lambda: len(cases) >= 1)
     assert len(cases) == 1
     assert {"kind": "assign", "source": 261,
-            "target": "$.request_body.customer_id"} not in \
+            "target": "$.call.request.body.customer_id"} not in \
         cases[0]["steps"][0]["strategy"]
 
 
@@ -726,9 +726,9 @@ async def test_dispatcher_fetches_declaration_face_only_for_referenced_steps(
 
     bob = await _member(client, "bob")
     draft = _draft(steps=[
-        {"id": "s1", "api": {"view_hints": {"endpoint_id": "ep-a"}},
+        {"id": "s1", "call": {"protocol": "http", "view_hints": {"endpoint_id": "ep-a"}},
          "request": {"body": {"bl_no": "${var.bl_no}"}}, "strategy": []},
-        {"id": "s2", "api": {"view_hints": {"endpoint_id": "ep-b"}},
+        {"id": "s2", "call": {"protocol": "http", "view_hints": {"endpoint_id": "ep-b"}},
          "request": {"body": {"x": 1}}, "strategy": []},
         {"id": "s3", "request": {"body": {"y": 1}}, "strategy": []},   # 无 endpoint_id
     ], vars_map={"bl_no": "BL1"})
@@ -798,7 +798,7 @@ _PLATE_SCENARIO: dict = {
     "steps": [{
         "kind": "step",
         "description": "下单",
-        "api": {"kind": "api", "service": "fin", "method": "POST", "path": "/order/add",
+        "call": {"kind": "call", "protocol": "http", "service": "fin", "method": "POST", "path": "/order/add",
                 "headers": {}, "view_hints": {"endpoint_id": "fin.order.add"}},
         "request": {"kind": "request", "body": {"amount": "${var.amount}"}},
         "strategy": [{"kind": "assertion", "target": "$.response_body.code",
@@ -847,14 +847,14 @@ def test_assign_shape_carries_literal_fallback_for_reference_shapes(value):
     required:false,否则解析不到 None 即整步 FAILED(见下条反证)。"""
     st = _compose(value)["steps"][0]["strategy"][-1]
     assert st == {"kind": "assign", "source": value,
-                  "target": "$.request_body", "default": value, "required": False}
+                  "target": "$.call.request.body", "default": value, "required": False}
 
 
 @pytest.mark.parametrize("value", ["hello", "-1", "", "$", "0.5", {"a": 1}, [1, 2], True, 0])
 def test_assign_shape_stays_default_for_everything_else(value):
     """非引用形状(含裸 "$")零附加键 — Assign 基座字段全取默认(spec §3)。"""
     st = _compose(value)["steps"][0]["strategy"][-1]
-    assert st == {"kind": "assign", "source": value, "target": "$.request_body"}
+    assert st == {"kind": "assign", "source": value, "target": "$.call.request.body"}
 
 
 @pytest.mark.parametrize("value", [
@@ -863,13 +863,13 @@ def test_assign_shape_stays_default_for_everything_else(value):
 ])
 def test_real_assign_executor_writes_the_user_literal(value):
     """真引擎解析 + 真 AssignExecutor:每条 value 都原样落到 target
-    (整 body 目标 "$.request_body")—— 「原样覆写不 coerce」在引擎侧成立。"""
+    (整 body 目标 "$.call.request.body")—— 「原样覆写不 coerce」在引擎侧成立。"""
     from gimbal.strategy.executor_base import StrategyStatus
 
     strategy = _compose(value)["steps"][0]["strategy"][-1]
     result, view = _real_assign_execute(strategy)
     assert result.status is StrategyStatus.PASSED, result.message
-    assert view.scratch["$.request_body"] == value
+    assert view.scratch["$.call.request.body"] == value
 
 
 def test_real_assign_fails_without_the_literal_fallback():
@@ -878,7 +878,7 @@ def test_real_assign_fails_without_the_literal_fallback():
     from gimbal.strategy.executor_base import StrategyStatus
 
     result, view = _real_assign_execute(
-        {"kind": "assign", "source": "$.amount", "target": "$.request_body"})
+        {"kind": "assign", "source": "$.amount", "target": "$.call.request.body"})
     assert result.status is StrategyStatus.FAILED
     assert "resolved to None" in result.message
     assert view.scratch == {}
@@ -896,9 +896,9 @@ async def test_real_convert_accepts_and_roundtrips_injected_assign():
     from gimbal.schema.scenario import Scenario
 
     cases = [
-        ({"a": [1, 2]}, "$", "$.request_body"),
-        ([1, 2, 3], "$.amount", "$.request_body.amount"),
-        ("$.amount", "$.amount", "$.request_body.amount"),
+        ({"a": [1, 2]}, "$", "$.call.request.body"),
+        ([1, 2, 3], "$.amount", "$.call.request.body.amount"),
+        ("$.amount", "$.amount", "$.call.request.body.amount"),
     ]
     app = create_app()
     async with app.router.lifespan_context(app):

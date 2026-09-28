@@ -144,13 +144,14 @@ def injectable_universe(body: Any, declared: Any) -> set[str]:
 
 
 def _body_target(jsonpath: str) -> str:
-    """条目路径 → Assign 的 target:``$.amount`` → ``$.request_body.amount``;
-    根 ``"$"`` → ``$.request_body``。
+    """条目路径 → Assign 的 target:``$.amount`` → ``$.call.request.body.amount``;
+    根 ``"$"`` → ``$.call.request.body``(执行器残留 #5:请求体通道统一
+    $.call.request.body 子树,Step 校验期自动归一旧写法,此处直接产新形态)。
 
     **判定与物化共用**(Z1)::func:`_path_resolvable` 的宿主判据与
     :func:`compose_injection_scenario` 的物化必须是同一个 target 串 ——
     各拼一份的话,一侧改了前缀另一侧不动,判决与物化就静默分叉。"""
-    return "$.request_body" + (jsonpath[1:] if jsonpath != "$" else "")
+    return "$.call.request.body" + (jsonpath[1:] if jsonpath != "$" else "")
 
 
 def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
@@ -207,8 +208,8 @@ def _host_conflict(body: Any, target: str) -> bool:
 
     引擎 ``_set_at`` 的 FIELD 段遇非 dict 即 ``data={}``、INDEX 段遇非 list 即
     ``data=[]``,故往字符串/数字/别的容器**内部**写值会把整个宿主改形:
-    ``$.request_body.note.replace`` 之于 ``{"note":"hello"}`` ⇒ ``note`` 整体
-    换成 ``{"replace": v}``;``$.request_body.items[0].replace`` 之于
+    ``$.call.request.body.note.replace`` 之于 ``{"note":"hello"}`` ⇒ ``note`` 整体
+    换成 ``{"replace": v}``;``$.call.request.body.items[0].replace`` 之于
     ``{"items":["abc"]}`` ⇒ 元素 ``"abc"`` 换成 ``{"replace": v}``。
 
     分段走 **jsonpath 自己的解析器**的 token(``items[0]`` 是 FIELD+INDEX 两段,
@@ -230,27 +231,38 @@ def _host_conflict(body: Any, target: str) -> bool:
     「一律」就只对「走得到该段」成立。
 
     三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
-    * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
+    * target 就是 ``$.call.request.body`` 本身 —— 整体覆写 body;
     * ``body`` 为 ``None``(无 body)—— Assign 会创建;
     * **dict 键**缺失 / **list 正**越界 —— 同样由 Assign 创建(列表自动扩展)。
 
-    ``target`` 形如 ``$.request_body.note.replace``:首段是调用点
+    ``target`` 形如 ``$.call.request.body.note.replace``:首段是调用点
     (:func:`_body_target` 固定加的前缀)拼接的 FIELD ``request_body``(根
     ``$`` 由 ``_parse`` 吸收),不是 body 的段,**必须剥掉再走**。前缀也按
-    token 认,不按字符串切分 —— 否则 ``$.request_body[0].replace`` 这种
-    ``[`` 紧贴前缀形态会被误判成「不是 body 内部」而放行,而它恰恰是同类改形
-    (「是不是 body 内部」由 walk 回答)。首段不是 ``request_body`` ⇒ 不判、不猜。
+    token 认,不按字符串切分 —— 否则 ``[`` 紧贴前缀的形态会被误判成「不是
+    body 内部」而放行,而它恰恰是同类改形(「是不是 body 内部」由 walk 回答)。
+    前缀不匹配 ⇒ 不判、不猜。
     """
     try:
         nodes = _parse(target)
     except JsonPathError:           # 解析不了 ⇒ 走不动 ⇒ 冲突(见上「规则」)
         return True
-    if (not nodes or nodes[0].kind is not NodeKind.FIELD
-            or nodes[0].value != "request_body"):
+    # 前缀 = call.request.body(三段,残留 #5 请求体通道;旧单段 request_body
+    # 兼容——Step 校验期同样归一,判定侧双口径)。token 级认,不按字符串切。
+    def _strip_body_prefix(ns) -> "list | None":
+        vals = [n.value for n in ns[:3]
+                if n.kind is NodeKind.FIELD]
+        if vals[:3] == ["call", "request", "body"]:
+            return ns[3:]
+        if (ns and ns[0].kind is NodeKind.FIELD
+                and ns[0].value == "request_body"):
+            return ns[1:]           # 旧前缀(归一前存量/直连下发)
+        return None                 # 不是 body 内部路径
+    stripped = _strip_body_prefix(nodes) if nodes else None
+    if stripped is None:
         return False                # 不是 body 内部路径 ⇒ 不判、不猜
-    rest = nodes[1:]
+    rest = stripped
     if not rest:
-        return False                # 恰为 ``$.request_body`` ⇒ 整体覆写
+        return False                # 恰为请求体根 ⇒ 整体覆写
     if body is None:
         return False                # 无 body ⇒ Assign 会创建
     # 走不动的形状**整条先扫一遍**(规则见上):walk 会在「段缺失 / 下标越界」
@@ -367,7 +379,7 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
 
     **不可安全物化的目标同待遇:跳过 + 告警**(Z1)。两类目标不落 Assign,判据
     同归 :func:`_host_conflict`:① target 落在非 dict 宿主内部
-    (``$.request_body.note.replace`` 之于 ``{"note":"hello"}``)时物化会让引擎
+    (``$.call.request.body.note.replace`` 之于 ``{"note":"hello"}``)时物化会让引擎
     ``_set_at`` 把整个宿主改形;② target 的形状**写不进去**(通配 / 过滤器 /
     递归下降 / ``_parse`` 失败)时物化只会把「一次跳过 + 告警」换成「一次失败的
     运行」。

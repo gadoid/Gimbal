@@ -41,8 +41,8 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
 
 
 def _endpoint_id(step: dict) -> Any:
-    """step → view_hints.endpoint_id;api/view_hints 非 dict 时 None。"""
-    api = step.get("api")
+    """step → view_hints.endpoint_id;call/api/view_hints 非 dict 时 None。"""
+    api = step.get("call") or step.get("api")   # call 优先,api 兜底(存量)
     hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}
     if not isinstance(hints, dict):
         return None
@@ -50,8 +50,8 @@ def _endpoint_id(step: dict) -> Any:
 
 
 def _step_service(step: dict) -> Any:
-    """step → api.service;api 非 dict 时 None(防御,同 _apply_carry)。"""
-    api = step.get("api")
+    """step → call.service(存量 api 兜底);非 dict 时 None(防御)。"""
+    api = step.get("call") or step.get("api")
     return api.get("service") if isinstance(api, dict) else None
 
 

@@ -1428,7 +1428,7 @@ async def filter_injection_entries(
 
     def _endpoint_id_of(si: int) -> str | None:
         step = _step_at(raw_steps, si)
-        api = step.get("api")
+        api = step.get("call") or step.get("api")   # call 优先(新形态),api 兜底
         hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
         eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
         return eid if isinstance(eid, str) and eid else None

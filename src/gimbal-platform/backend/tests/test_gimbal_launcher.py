@@ -27,7 +27,7 @@ def test_build_argv_uses_gimbal_bin_when_set(
     monkeypatch.setattr(gl.settings, "GIMBAL_BIN", "D:/x/gimbal.exe")
     argv = build_argv("case.json")
     assert argv == [
-        "D:/x/gimbal.exe", "run", "launch", "case.json", "-o", "json",
+        "D:/x/gimbal.exe", "run", "launch", "case.json", "-o", "jsonl",
     ]
 
 
@@ -37,7 +37,7 @@ def test_build_argv_falls_back_to_python_m_gimbal(
     monkeypatch.setattr(gl.settings, "GIMBAL_BIN", "")
     argv = build_argv("case.json")
     assert argv[:3] == [sys.executable, "-m", "gimbal"]
-    assert argv[3:] == ["run", "launch", "case.json", "-o", "json"]
+    assert argv[3:] == ["run", "launch", "case.json", "-o", "jsonl"]
 
 
 def test_build_argv_appends_optional_flags(
@@ -234,8 +234,8 @@ def _e2e_case(base_url: str, *, expected_status: int) -> dict:
         "steps": [
             {
                 "kind": "step",
-                "api": {
-                    "kind": "api", "service": "mock",
+                "call": {
+                    "kind": "call", "protocol": "http", "service": "mock",
                     "method": "GET", "path": "/ping",
                 },
                 "request": {"kind": "request", "body": {}},
@@ -246,7 +246,7 @@ def _e2e_case(base_url: str, *, expected_status: int) -> dict:
                         # 回退到 None(断言静默跳过),eq 500 会假绿 exit 0,
                         # test_e2e_real_cli_failing_assertion 立刻抓到。
                         "kind": "assertion",
-                        "target": "$.response_status",
+                        "target": "$.call.response.status",
                         "operator": "eq",
                         "expected": expected_status,
                     }

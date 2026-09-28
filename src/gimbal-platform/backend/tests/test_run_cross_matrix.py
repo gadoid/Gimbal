@@ -197,7 +197,7 @@ async def test_cross_matrix_rows_times_entries(
         st = case["steps"][0]["strategy"]
         assert st[0]["expected"] == "400"                        # asserts patch
         assert {"kind": "assign", "source": -1,
-                "target": "$.request_body.amount"} in st         # Assign 直补
+                "target": "$.call.request.body.amount"} in st         # Assign 直补
     # 交叉完备:两行 × 两 rep 都出现过
     assert {c["config"]["vars"]["amount"] for c in cases} == {10, 20}
 
@@ -303,7 +303,7 @@ async def test_dispatcher_uses_raw_step_index_base(client, plate_mock, monkeypat
     bob = await _member(client, "bob")
     draft = _draft(
         steps=[{"id": "s1",
-                "api": {"kind": "api", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-raw"}},
                 "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
         vars_map={"amount": 1},
@@ -330,7 +330,7 @@ async def test_dispatcher_uses_raw_step_index_base(client, plate_mock, monkeypat
     # case.json 原样保留**原始** steps(含 0 位的非 dict 元素)—— 这正是判定与
     # 物化必须同一基数的原因:Assign 落在原始下标 1 上(过滤版会落到 0 位)。
     assert cases[0]["steps"][0] == "GARBAGE"
-    assert {"kind": "assign", "source": 9, "target": "$.request_body.amount"} in \
+    assert {"kind": "assign", "source": 9, "target": "$.call.request.body.amount"} in \
         cases[0]["steps"][1]["strategy"]
 
 
@@ -371,7 +371,7 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
     bob = await _member(client, "bob")
     draft = _draft(
         steps=[{"id": "s1",
-                "api": {"kind": "api", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-absent"}},   # fulls 里不注册 ⇒ 404
                 "request": {"body": {}}, "strategy": []}])
     draft["assertion_registry"] = {"entries": [{

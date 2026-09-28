@@ -116,9 +116,8 @@ async def test_cancel_skips_remaining_rows(client, monkeypatch):
     row = await _wait_terminal(eid)
     assert row.status == "canceled"
     assert row.passed + row.failed < row.total_runs   # 有行被跳过
-
-    records = _jsonl_records(run_dispatcher)
-    assert any(rec.get("status") == "canceled" for rec in records)
+    # M6(27b6431d)行级 JSONL 停写:取消的权威落点 = execution_rows 行终态
+    # (上行断言);JSONL 只保留运行级生命周期行,不再断言行级 canceled 记录。
 
 
 async def test_cancel_terminal_conflicts(client, monkeypatch):

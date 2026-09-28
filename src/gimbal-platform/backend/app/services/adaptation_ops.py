@@ -125,7 +125,8 @@ _SOURCES = ("body", "headers")
 def _containers(step: dict) -> dict[str, dict]:
     """step 的两个字段容器(可变引用):body 在 request 下,headers 在 api 下。"""
     request = step.get("request") if isinstance(step.get("request"), dict) else {}
-    api = step.get("api") if isinstance(step.get("api"), dict) else {}
+    api = step.get("call") or step.get("api")   # call 优先(新形态),api 兜底
+    api = api if isinstance(api, dict) else {}
     out: dict[str, dict] = {}
     for source in _SOURCES:
         holder = request if source == "body" else api
@@ -151,7 +152,7 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
     if not isinstance(i, int) or i < 0 or i >= len(steps):
         return f"step_missing: {i!r}"
     step = steps[i]
-    api = step.get("api") if isinstance(step, dict) else None
+    api = (step.get("call") or step.get("api")) if isinstance(step, dict) else None
     hints = api.get("view_hints") if isinstance(api, dict) else None
     bound = hints.get("endpoint_id") if isinstance(hints, dict) else None
     if bound != endpoint_id:

@@ -48,7 +48,10 @@ def _steps(payload: dict | None) -> list[dict]:
 
 
 def _fields(step: dict, source: str) -> dict:
-    container = (step.get("request") if source == "body" else step.get("api")) or {}
+    # call 优先(新形态),api 兜底(迁移前存量)
+    holder = (step.get("request") if source == "body"
+              else (step.get("call") or step.get("api")))
+    container = holder or {}
     fields = container.get(source) if isinstance(container, dict) else None
     return fields if isinstance(fields, dict) else {}
 
@@ -67,7 +70,8 @@ def parse_refs(
     refs: list[ScenarioEndpointRef] = []
     unindexed: list[dict] = []
     for i, step in enumerate(_steps(payload)):
-        api = step.get("api") if isinstance(step.get("api"), dict) else {}
+        api = (step.get("call") or step.get("api"))
+        api = api if isinstance(api, dict) else {}
         hints = api.get("view_hints") if isinstance(api.get("view_hints"), dict) else {}
         endpoint_id = hints.get("endpoint_id")
         if not endpoint_id:
@@ -107,7 +111,8 @@ def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
     """
     out: list[int] = []
     for i, step in enumerate(_steps(payload)):
-        api = step.get("api") if isinstance(step.get("api"), dict) else {}
+        api = (step.get("call") or step.get("api"))
+        api = api if isinstance(api, dict) else {}
         hints = api.get("view_hints") if isinstance(api.get("view_hints"), dict) else {}
         if hints.get("endpoint_id") == endpoint_id:
             out.append(i)
