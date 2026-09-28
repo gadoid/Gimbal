@@ -321,6 +321,9 @@ class RunFinishedEvent(FrameworkEvent):
     halted: int = 0
     blocked: int = 0
     repaired: int = 0
+    # P2-05：总执行次数单列随终线下发（n_runs/retry 展开计数，单元计数不计入；
+    # 平台台账 attempts 列的投影源）
+    attempts: int = 0
     details: list[dict] = Field(default_factory=list)
 
 

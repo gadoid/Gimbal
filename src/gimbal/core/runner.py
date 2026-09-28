@@ -209,6 +209,7 @@ class Engine:
                 halted=getattr(result, "halted", 0),
                 blocked=getattr(result, "blocked", 0),
                 repaired=getattr(result, "repaired", 0),
+                attempts=getattr(result, "attempts", 0),
                 details=result.details,
             ))
         except Exception:  # noqa: BLE001
