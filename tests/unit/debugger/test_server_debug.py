@@ -251,7 +251,14 @@ class TestServerProtection:
         monkeypatch.setattr("gimbal.core.server_debug._REAP_TTL_SEC", 0.05)
         r = client.post("/runs", json={"target": _scenario_dict("reap-sc")})
         rid = r.json()["runId"]
-        _wait_finished(client, rid)
+        # 直接等待 404(reap 本身就是被测行为;run 完成快于轮询间隔时
+        # 首询可能已过 TTL,不能再先 _wait_finished——那条路径会读到 404 体)
         import time as _t
-        _t.sleep(0.3)   # TTL 0.05s + 余量
-        assert client.get(f"/runs/{rid}").status_code == 404
+        deadline = _t.time() + 5
+        code = None
+        while _t.time() < deadline:
+            code = client.get(f"/runs/{rid}").status_code
+            if code == 404:
+                break
+            _t.sleep(0.05)
+        assert code == 404
