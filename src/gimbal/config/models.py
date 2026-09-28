@@ -66,39 +66,3 @@ class BootstrapConfig(BaseModel):
     # mongo_uri: str = "mongodb://localhost:27017"
     # minio_endpoint: str = "localhost:9000"
 
-
-# class BootstrapConfig(BaseModel):
-#     load_options: LoadOptions
-#     log_options: LogOptions
-#     meta_options: MetaOptions
-#     execution_options : ExecutionOptions
-
-# class LoadOptions(BaseModel) :
-#     base_dir : Path = Path(".")
-#     env : str = Field("dev", description="目标环境 dev|test|staging|prod")
-#     mode: str = Field("local", description="执行模式 local|server|service")
-
-
-# class LogOptions(BaseModel) :
-#     log_level: str = Field("info", description="日志等级 debug|info|warning|error")
-#     no_color: bool = Field(False, description="禁用终端颜色，CI 环境建议开启")
-
-# class MetaOptions(BaseModel) :
-#     framework_version: str = Field(default_factory=getVersion, description="框架版本号")
-#     plugins: tuple[str, ...] = Field(default_factory=tuple, description="启用的插件列表")
-#     reporters: tuple[str, ...] = Field(default_factory=lambda: ("console",), description="启用的 reporter")
-#     report_dir: str = Field("reports", description="报告输出根目录")
-
-
-# class ExecutionOptions(BaseModel) :
-#     fail_fast: bool = Field(False, description="首次失败即终止整个 suite")
-
-#     request_timeout: int | None = Field(None, description="单次 HTTP 请求超时（秒），None 不限制")
-#     scenario_timeout: int | None = Field(None, description="单 scenario 最大执行时间（秒），None 不限制")
-#     suite_timeout: int | None = Field(None, description="单 suite 最大执行时间（秒），None 不限制")
-
-#     poll_timeout: int = Field(60, description="Poll strategy 默认超时（秒）")
-#     poll_interval: int = Field(5, description="Poll strategy 默认检查周期（秒）")
-
-#     retry_count: int = Field(0, description="失败重试次数")
-#     retry_interval: int = Field(5, description="重试间隔（秒）")
