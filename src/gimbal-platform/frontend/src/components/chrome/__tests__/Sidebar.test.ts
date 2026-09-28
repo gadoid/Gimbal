@@ -26,6 +26,7 @@ function makeRouter() {
       { path: '/scenarios/public', component: { template: '<div/>' } },
       { path: '/scenarios/follows', component: { template: '<div/>' } },
       { path: '/executions', component: { template: '<div/>' } },
+      { path: '/suites', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/adaptations', component: { template: '<div/>' } },
       { path: '/admin/users', component: { template: '<div/>' } },
@@ -64,11 +65,11 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
   it('admin 可见全部条目:工作台置顶 + 四组条目齐备', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
-    // 常量池不占侧边栏坑位 → 14 条:工作台/通知(F5)/我的/公共/关注/
+    // 常量池不占侧边栏坑位;C5 增 Suite 编排 → 15 条:工作台/通知(F5)/我的/公共/关注/
     // 认证/传递/适配/画像/服务信息/执行器/执行记录/数据分析/用户。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
     // 说明页,置灰可点(§4.4)
-    expect(links.length).toBe(14)
+    expect(links.length).toBe(15)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications',
@@ -76,7 +77,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
       '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
       // 执行组(执行设计 §0):执行器/执行记录;数据分析置灰保留、可点进说明页
-      '/run', '/executions', '/analytics', '/admin/users',
+      '/run', '/executions', '/suites', '/analytics', '/admin/users',
     ])
     w.unmount()
   })
@@ -129,13 +130,13 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     } as never)
   })
 
-  it('member 不见 用户管理/传递字段/服务信息管理,其余 11 条可见', async () => {
+  it('member 不见 用户管理/传递字段/服务信息管理,其余 12 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
     expect(hrefs).not.toContain('/carry-config')
     expect(hrefs).not.toContain('/service-admin')
-    expect(hrefs.length).toBe(11)  // +通知(F5,全员)
+    expect(hrefs.length).toBe(12)  // +通知(F5,全员)+Suite 编排(C5)
     w.unmount()
   })
 })
@@ -219,8 +220,8 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    // 15 = 14 可点(含置灰可点的数据分析;F5 +通知)+ 1 置灰 span(字段来源分析,§4.4)
-    expect(w.findAll('.nav-text').length).toBe(15)
+    // 16 = 15 可点(含置灰可点的数据分析;C5 Suite 编排;F5 +通知)+ 1 置灰 span(字段来源分析,§4.4)
+    expect(w.findAll('.nav-text').length).toBe(16)
     w.unmount()
   })
 
@@ -236,7 +237,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(15)   // 14 可点 + 1 置灰 span
+    expect(rows.length).toBe(16)   // 15 可点 + 1 置灰 span
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -261,7 +262,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(14)
+    expect(links.length).toBe(15)
     // 配套方案 §4.1 服务组排序:画像/服务信息在前,/auths 从索引 5 移到 7(F5 通知占 0/1 位)
     expect(links[5].attributes('href')).toBe('/services')
     expect(links[7].attributes('href')).toBe('/auths')

@@ -801,6 +801,31 @@ async def dispatch_run(
         },
     )
 
+    # C5(P3-05):graph 编排执行 —— 单 spawn 下发 SuiteGraph(乘法/并发/
+    # 横切面全部在执行器);台账单元投影与事件入库与单场景链共用。
+    if getattr(req, "graph", None) is not None and not is_shutting_down():
+        task = asyncio.create_task(
+            _fanout_graph(
+                db_factory=_session_factory,
+                execution_id=execution.id,
+                run_id=run_id,
+                owner_id=user_id,
+                graph_spec=req.graph.model_dump(by_alias=True),
+                n_runs=req.n_runs,
+                halt_at=req.step_to,
+                scenario_payload=dict(scen.payload or {}),
+            ),
+            name=f"v3-dispatch-graph-{run_id}",
+        )
+        task.add_done_callback(_log_task_exception)
+        _track(task)
+        _tasks_by_execution[execution.id] = task
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None))
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _row_states.pop(eid, None))
+        return RunResponse(runId=run_id, executionId=execution.id)
+
     # 4. Spawn the background fan-out (cancel-cleanly tracked)
     if not is_shutting_down():
         task = asyncio.create_task(
@@ -839,6 +864,94 @@ async def dispatch_run(
 
 
 # ─── background fan-out ──────────────────────────────────────────
+async def _fanout_graph(
+    *,
+    db_factory: Any,
+    execution_id: int,
+    run_id: str,
+    owner_id: int,
+    graph_spec: dict,
+    n_runs: int = 1,
+    halt_at: int | None = None,
+    scenario_payload: dict | None = None,
+) -> None:
+    """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
+    事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。"""
+    from . import graph_dispatch
+    from .graph_dispatch import GraphDispatchError
+
+    _cancel_requested.discard(execution_id)
+    ingester = _EventIngester(db_factory, execution_id)
+    ingester.start()
+    run_dir = _run_dir(run_id)
+    log_path = _jsonl_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    proj = {"unit": None, "status": None, "attempts": 0}
+    status = "failed"
+    result = None
+    try:
+        async with db_factory() as session:
+            graph = await graph_dispatch.materialize_graph(
+                session, owner_id, graph_spec)
+        await _mark_running(db_factory, execution_id)
+
+        def _on_event(d: dict) -> None:
+            et = d.get("event_type")
+            if et == "scenario.end":
+                proj["status"] = d.get("status")
+                proj["unit"] = d.get("unit") or proj["unit"]
+            elif et == "run.finished":
+                proj["attempts"] = int(d.get("attempts") or 0)
+                proj["unit"] = d.get("unit") or proj["unit"]
+            ingester.on_event(d)
+
+        result = await graph_dispatch.execute_graph(
+            db_factory, execution_id, run_dir, graph,
+            on_event=_on_event, on_log=ingester.on_log)
+        if result.launch_status == "ok":
+            if proj["status"] is not None:
+                status = "passed" if proj["status"] == "passed" else "failed"
+            else:
+                status = "passed" if result.exit_code == 0 else (
+                    "gimbal_rejected" if result.exit_code == 2 else "failed")
+        else:
+            status = ("launch_timeout"
+                      if result.launch_status == "timeout" else "launch_error")
+    except GraphDispatchError as e:
+        logger.error("run_dispatcher: graph materialize failed {}: {}",
+                     execution_id, e)
+        status = "plate_rejected"
+    except Exception as e:  # noqa: BLE001
+        logger.exception("run_dispatcher: graph fanout crashed {}", execution_id)
+        status = "dispatcher_error"
+    finally:
+        await ingester.finalize()
+
+    # 台账:graph 执行记一个「图行」(unit_id=graph,attempts 取投影)
+    finished_ts = _utcnow().isoformat() + "Z"
+    _row_states[execution_id] = []   # 无行级 registry;读侧回落 DB
+    from ..models.execution import ExecutionRow
+    passed = 1 if status == "passed" else 0
+    try:
+        async with db_factory() as session:
+            session.add(ExecutionRow(
+                execution_id=execution_id, seq=0,
+                unit_id=proj["unit"] or "graph", branch="graph",
+                attempts=proj["attempts"] or int(
+                    getattr(result, "attempts", 0) or 0) or 1,
+                status=status, case_dir="case-graph",
+                started_at=None, finished_at=_iso_to_dt(finished_ts)))
+            await session.commit()
+    except Exception:  # noqa: BLE001
+        pass
+    # 计数与终态
+    await _bump_counters(db_factory, execution_id,
+                         passed=passed, failed=1 - passed,
+                         skipped=int(getattr(result, "skipped", 0) or 0))
+    await _finalize_execution(db_factory, execution_id)
+
+
 async def _fanout(
     *,
     db_factory: Any,

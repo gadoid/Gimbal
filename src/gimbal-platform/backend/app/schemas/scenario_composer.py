@@ -15,7 +15,7 @@ Key conventions:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -260,6 +260,44 @@ class ScenarioCopyIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class GraphUnitSpec(BaseModel):
+    """C5:编排单元 —— 一个平台场景在 graph 里的一个节点。"""
+    model_config = _CAMEL
+
+    ref: str = Field(..., min_length=1, max_length=128)
+    scenario_id: str = Field(alias="scenarioId",
+                             pattern=r"^sc-[a-z0-9-]+$")
+    needs: list[str] = Field(default_factory=list)
+    shared: str | None = None
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    repeat: int = Field(default=1, ge=1, le=64)
+    n_runs: int = Field(default=1, ge=1, le=64, alias="nRuns")
+    # 单元粒度注入(条目 id 取自该场景的 assertion_registry)
+    injection_entry_ids: list[str] = Field(default_factory=list,
+                                           alias="injectionEntryIds")
+    # 单元粒度服务绑定(与 graph 级合并,单元覆盖同名)
+    service_bindings: dict[str, Any] = Field(default_factory=dict,
+                                              alias="serviceBindings")
+
+
+class GraphSpec(BaseModel):
+    """C5:suite 编排执行规格(D-6 保留横切面:gates/checks 可选)。"""
+    model_config = _CAMEL
+
+    mode: Literal["aggregate", "compose", "fanout", "chain"] = "aggregate"
+    units: list[GraphUnitSpec] = Field(..., min_length=1)
+    before: list[GraphUnitSpec] = Field(default_factory=list)
+    after: list[GraphUnitSpec] = Field(default_factory=list)
+    parallel: int = Field(default=1, ge=1, le=64)
+    n_runs: int = Field(default=1, ge=1, le=64, alias="nRuns")
+    # N1 横切面(D-6 保留):与引擎 GateDecl/CheckDecl 同形
+    gates: list[dict[str, Any]] = Field(default_factory=list)
+    checks: list[dict[str, Any]] = Field(default_factory=list)
+    # graph 级服务绑定(单元可覆盖)
+    service_bindings: dict[str, Any] = Field(default_factory=dict,
+                                              alias="serviceBindings")
+
+
 class RunRequest(BaseModel):
     """一次执行的配方(recipe):数据集/认证等全是纯值。
 
@@ -298,6 +336,9 @@ class RunRequest(BaseModel):
     # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
     # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
     step_to: int | None = Field(default=None, ge=0, alias="stepTo")
+    # C5(P3-05):suite 编排执行 —— 非空时走 graph 链(单元 = 平台场景),
+    # 数据集/注入在单元粒度声明;graph 链忽略顶层 dataSetIds/selection。
+    graph: "GraphSpec | None" = Field(default=None, description="编排执行规格(C5)")
     # ── M1 执行能力补齐(V1 executor 语义移植)────────────────────
     # 每行数据的重复执行次数;total_runs = Σ(rows) × nRuns。
     n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")

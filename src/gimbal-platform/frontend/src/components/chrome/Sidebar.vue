@@ -224,6 +224,7 @@ const groups: SidebarGroup[] = [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
+    { path: '/suites', label: 'Suite 编排', icon: BarChartIcon },
     { path: '/analytics', label: '数据分析', icon: BarChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },

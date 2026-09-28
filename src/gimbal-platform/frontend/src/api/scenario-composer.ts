@@ -236,6 +236,47 @@ export interface RunRequest {
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
+  /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
+   *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
+  graph?: GraphSpec
+}
+
+// ── C5(P3-05):suite 编排执行规格 ──────────────────────────────
+
+export interface GraphUnitSpec {
+  ref: string
+  scenarioId: string
+  needs?: string[]
+  shared?: string | null
+  inputs?: Record<string, unknown>
+  repeat?: number
+  nRuns?: number
+  injectionEntryIds?: string[]
+  serviceBindings?: Record<string, { authAlias?: string; url?: string }>
+}
+
+export interface GateSpec {
+  /** pass_rate(0-1) / fail_count / total / avg_duration_ms / max_duration_ms */
+  metric: 'pass_rate' | 'fail_count' | 'total' | 'avg_duration_ms' | 'max_duration_ms'
+  op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte'
+  value: number
+}
+
+export interface CheckSpec {
+  on: { refs?: string[]; tags?: string[]; bracket?: 'before' | 'after' | 'main' }
+  strategy: Record<string, unknown>
+}
+
+export interface GraphSpec {
+  mode: 'aggregate' | 'compose' | 'fanout' | 'chain'
+  units: GraphUnitSpec[]
+  before?: GraphUnitSpec[]
+  after?: GraphUnitSpec[]
+  parallel?: number
+  nRuns?: number
+  gates?: GateSpec[]
+  checks?: CheckSpec[]
+  serviceBindings?: Record<string, { authAlias?: string; url?: string }>
 }
 
 export interface RunScenarioResult {
