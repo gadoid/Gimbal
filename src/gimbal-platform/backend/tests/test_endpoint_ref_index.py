@@ -10,7 +10,7 @@ from app.services import scenario_store
 from tests.helpers import make_draft
 
 STEPS = [{
-    "api": {
+    "call": {
         "view_hints": {"endpoint_id": "fin.order.add"},
         "headers": {"X-Token": "${var.tok}"},
     },
@@ -21,11 +21,11 @@ STEPS = [{
     }},
 }, {
     # 无 view_hints.endpoint_id → 不进索引,进未索引报告
-    "api": {"headers": {}}, "request": {"body": {"x": "1"}},
+    "call": {"headers": {}}, "request": {"body": {"x": "1"}},
 }]
 
 STEPS2 = [{
-    "api": {"view_hints": {"endpoint_id": "fin.order.add"}},
+    "call": {"view_hints": {"endpoint_id": "fin.order.add"}},
     "request": {"body": {"amount": 5}},   # 数值直填:非 str,via_var None
 }]
 
@@ -105,7 +105,7 @@ async def test_unindexed_steps_reports_api_less_step(fresh_db):
     from app.services import endpoint_ref_index as idx
 
     steps = [
-        {"api": {"view_hints": {"endpoint_id": "fin.order.add"}}},
+        {"call": {"view_hints": {"endpoint_id": "fin.order.add"}}},
         {"request": {"body": {"x": "1"}}},   # 无 api → 无 endpoint_id
     ]
     async with db_module.SessionLocal() as s:
@@ -125,11 +125,11 @@ async def test_anchor_row_for_zero_field_step(fresh_db):
 
     steps = [
         # ① 零字段锚点步(GET 无参典型):一行锚点行
-        {"api": {"view_hints": {"endpoint_id": "fin.order.get"},
+        {"call": {"view_hints": {"endpoint_id": "fin.order.get"},
                  "headers": {}},
          "request": {"body": {}}},
         # ② 有字段锚点步:字段行,无锚点行
-        {"api": {"view_hints": {"endpoint_id": "fin.order.add"}},
+        {"call": {"view_hints": {"endpoint_id": "fin.order.add"}},
          "request": {"body": {"amount": 1}}},
         # ③ 无锚点步:零行(进未索引报告)
         {"request": {"body": {"x": "1"}}},

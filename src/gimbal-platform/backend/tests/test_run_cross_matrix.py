@@ -342,7 +342,7 @@ async def test_dispatcher_tolerates_non_dict_api(client, plate_mock, monkeypatch
 
     bob = await _member(client, "bob")
     draft = _draft(
-        steps=[{"id": "s1", "api": "svc",                    # ← 非 dict
+        steps=[{"id": "s1", "call": "svc",                    # ← 非 dict
                 "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
         vars_map={"amount": 1},
     )

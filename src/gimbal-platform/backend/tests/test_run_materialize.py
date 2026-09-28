@@ -20,9 +20,9 @@ def _converted() -> dict:
             "vars": {},
         },
         "steps": [
-            {"kind": "step", "api": {"service": "fin-service", "path": "/x",
+            {"kind": "step", "call": {"service": "fin-service", "path": "/x",
                                      "headers": {"Authorization": "${auth.qa1.token}"}}},
-            {"kind": "step", "api": {"service": "svc-orphan", "path": "/y"}},
+            {"kind": "step", "call": {"service": "svc-orphan", "path": "/y"}},
         ],
     }
 
@@ -164,7 +164,7 @@ def _carry_converted() -> dict:
         "config": {"services": {}, "users": {}, "vars": {}},
         "steps": [
             {"kind": "step",
-             "api": {"service": "fin-service", "path": "/x",
+             "call": {"service": "fin-service", "path": "/x",
                      "view_hints": {"endpoint_id": "fin.ep1"}},
              "request": {"kind": "request", "body": {"order_id": "o-1"}}},
         ],

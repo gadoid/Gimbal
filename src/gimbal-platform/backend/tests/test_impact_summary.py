@@ -35,19 +35,19 @@ async def _seed():
         await ensure_fk_users(s, 1, 2, make_admin=1)  # 直插 owner_id=1/2;id=1 造成可登录 admin
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-sum-1", steps=[
-                {"api": {"view_hints": {"endpoint_id": EP_A1}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_A1}, "headers": {}},
                  "request": {"body": {"amount": 1}}},
             ])), owner="alice", owner_id=1)
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-sum-2", steps=[
-                {"api": {"view_hints": {"endpoint_id": EP_A1}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_A1}, "headers": {}},
                  "request": {"body": {"amount": 2}}},
-                {"api": {"view_hints": {"endpoint_id": EP_A2}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_A2}, "headers": {}},
                  "request": {"body": {}}},
             ])), owner="bob", owner_id=2)
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-sum-3", steps=[
-                {"api": {"view_hints": {"endpoint_id": EP_B1}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_B1}, "headers": {}},
                  "request": {"body": {"sku": "x"}}},
             ])), owner="bob", owner_id=2)
 

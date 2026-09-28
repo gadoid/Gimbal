@@ -50,7 +50,7 @@ _META = {
 }
 # 模板同时引用 qa1/qa2(overlay 只绑 qa1)— 锁「扫描 ∪ 绑定」并集语义
 _STEP = {"kind": "step",
-         "api": {"service": "fin-service", "path": "/x",
+         "call": {"service": "fin-service", "path": "/x",
                  "headers": {"Authorization": "${auth.qa1.token}",
                              "X-Api-Key": "${auth.qa2.token}"}}}
 
@@ -63,7 +63,7 @@ def _eq_draft() -> dict:
 # view_hints.endpoint_id(carry 面)+ request.body(注入载体)。
 def _carry_step() -> dict:
     return {"kind": "step",
-            "api": {"service": "fin-service", "path": "/x",
+            "call": {"service": "fin-service", "path": "/x",
                     "headers": {"Authorization": "${auth.qa1.token}",
                                 "X-Api-Key": "${auth.qa2.token}"},
                     "view_hints": {"endpoint_id": "fin.ep1"}},

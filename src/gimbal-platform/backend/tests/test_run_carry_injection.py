@@ -31,7 +31,7 @@ from .test_scenario_visibility_and_copy import _member
 
 def _carry_step() -> dict:
     return {"kind": "step",
-            "api": {"service": "fin-service", "path": "/x",
+            "call": {"service": "fin-service", "path": "/x",
                     "view_hints": {"endpoint_id": "fin.settlement.create_order"}},
             "request": {"kind": "request", "body": {"order_id": "o-1"}}}
 
@@ -222,7 +222,7 @@ async def test_run_step_field_states_overlay_flips_face(
 
     def _step(field_states: dict | None = None) -> dict:
         step = {"kind": "step",
-                "api": {"service": "fin-service", "path": "/x",
+                "call": {"service": "fin-service", "path": "/x",
                         "view_hints": {"endpoint_id":
                                        "fin.settlement.create_order"}},
                 "request": {"kind": "request", "body": {"order_id": "o-1"}}}

@@ -45,7 +45,7 @@ NEW_FULL = {
 
 def _steps():
     return [{
-        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+        "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
         "request": {"body": {"amount": "${var.amount}", "legacy_field": "L",
                              "settle_type": "1"}},
     }]
@@ -173,7 +173,7 @@ async def test_open_batch_addfield_covers_zero_field_anchor_step(fresh_db, plate
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-zero", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
                 "request": {"body": {}},
             }])),
             owner="alice", owner_id=1,
@@ -210,7 +210,7 @@ async def test_open_batch_nested_remove_targets_container_ref(fresh_db, plate):
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-nest", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
                 "request": {"body": {"address": {"city": "SH"}}},
             }])),
             owner="alice", owner_id=1,
@@ -298,7 +298,7 @@ async def test_apply_conflict_when_step_reordered(fresh_db, plate):
         row = await scenario_store.get_row(s, "sc-batch")
         payload = _copy.deepcopy(row.payload)
         payload["definition"]["steps"].insert(0, {
-            "api": {"view_hints": {"endpoint_id": "fin.order.book"},
+            "call": {"view_hints": {"endpoint_id": "fin.order.book"},
                     "headers": {}},
             "request": {"body": {}},
         })

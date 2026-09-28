@@ -174,7 +174,7 @@ class TestFlatIteration:
 def _fs_step() -> dict:
     """带 field_states 增量的 step(§3.1:与 api/request/strategy 平级)。"""
     return {"kind": "step",
-            "api": {"service": "fin-service", "path": "/x"},
+            "call": {"service": "fin-service", "path": "/x"},
             "request": {"kind": "request", "body": {"order_no": "O-1"}},
             "field_states": {"$.remark": "form", "$.appCode": "carry"}}
 
@@ -210,7 +210,7 @@ async def test_field_states_absent_by_default(client: AsyncClient) -> None:
     """§3.1 默认不存:零增量的 step 落库后无 field_states 键(零存储)。"""
     headers = await register_and_login(client)
     plain = {"kind": "step",
-             "api": {"service": "fin-service", "path": "/x"},
+             "call": {"service": "fin-service", "path": "/x"},
              "request": {"kind": "request", "body": {"order_no": "O-1"}}}
     r = await client.post("/api/scenarios", headers=headers,
                           json=make_draft("sc-fs-none", steps=[plain]))

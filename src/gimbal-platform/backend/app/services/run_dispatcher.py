@@ -1367,7 +1367,7 @@ def _step_at(steps: list, si: int) -> dict:
     这里抛 IndexError/AttributeError 只会把整单变 500(守齐,B/Z2)。
 
     §5 例外:空 dict 是**该投影的缺省形** —— 「无此步」与「空步骤」在三个消费
-    面(body 无 / api 无 / strategy 无)上等价,故同落一个值;判死不在这里。"""
+    面(body 无 / call 无 / strategy 无)上等价,故同落一个值;判死不在这里。"""
     if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
         return {}
     return steps[si]
@@ -1438,8 +1438,8 @@ async def filter_injection_entries(
 
     def _endpoint_id_of(si: int) -> str | None:
         step = _step_at(raw_steps, si)
-        api = step.get("call") or step.get("api")   # call 优先(新形态),api 兜底
-        hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
+        call = step.get("call")
+        hints = (call.get("view_hints") or {}) if isinstance(call, dict) else {}   # B:守齐
         eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
         return eid if isinstance(eid, str) and eid else None
 

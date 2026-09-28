@@ -24,7 +24,7 @@ def _definition() -> dict:
                    "vars": {"amount": 100}},
         "resource": {},
         "steps": [
-            {"api": {"view_hints": {"endpoint_id": EP},
+            {"call": {"view_hints": {"endpoint_id": EP},
                      "headers": {"Token": "t"}},
              "request": {"body": {"amount": "${var.amount}", "fixed": "X",
                                   "settle_type": "1", "cust_id": "7"}}},
@@ -73,7 +73,7 @@ def test_add_field_creates_containers_on_bodyless_step():
     request.body,addField 的 setdefault 链须自建容器落字段——否则
     open_batch 新生成的那批 op 应用时静默丢失。"""
     d = {"steps": [
-        {"api": {"view_hints": {"endpoint_id": EP}, "headers": {}}},
+        {"call": {"view_hints": {"endpoint_id": EP}, "headers": {}}},
     ]}
     op = {"op": "addField", "step": 0, "field": "reason_code", "value": "R1"}
     assert check_step_addressable(d, op, EP) is None
@@ -86,12 +86,12 @@ def test_add_field_creates_containers_on_bodyless_step():
 
 def test_remove_field_all_sources():
     d = _definition()
-    d["steps"][0]["api"]["headers"]["Token2"] = "t2"
+    d["steps"][0]["call"]["headers"]["Token2"] = "t2"
     op = {"op": "removeField", "step": 0, "field": "Token2"}
     apply_to_definition(d, op)
-    assert "Token2" not in d["steps"][0]["api"]["headers"]
+    assert "Token2" not in d["steps"][0]["call"]["headers"]
     apply_to_definition(d, op)  # 再删无害
-    assert "Token2" not in d["steps"][0]["api"]["headers"]
+    assert "Token2" not in d["steps"][0]["call"]["headers"]
 
 
 def test_rebind_registers_var_default():
@@ -118,12 +118,12 @@ def test_map_value_only_mapped_keys():
 
 def test_rename_var_deep_replace():
     d = _definition()
-    d["steps"][0]["api"]["headers"]["Note"] = "amt=${var.amount}!"
+    d["steps"][0]["call"]["headers"]["Note"] = "amt=${var.amount}!"
     op = {"op": "renameVar", "from": "amount", "to": "amt"}
     apply_to_definition(d, op)
     assert d["steps"][0]["request"]["body"]["amount"] == "${var.amt}"
     assert "amt" not in d["steps"][0]["request"]["body"]
-    assert d["steps"][0]["api"]["headers"]["Note"] == "amt=${var.amt}!"
+    assert d["steps"][0]["call"]["headers"]["Note"] == "amt=${var.amt}!"
     assert "amount" not in d["config"]["vars"]
     assert d["config"]["vars"]["amt"] == 100
     before = copy.deepcopy(d)

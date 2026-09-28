@@ -41,18 +41,18 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
 
 
 def _endpoint_id(step: dict) -> Any:
-    """step → view_hints.endpoint_id;call/api/view_hints 非 dict 时 None。"""
-    api = step.get("call") or step.get("api")   # call 优先,api 兜底(存量)
-    hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}
+    """step → view_hints.endpoint_id;call/view_hints 非 dict 时 None。"""
+    call = step.get("call")
+    hints = (call.get("view_hints") or {}) if isinstance(call, dict) else {}
     if not isinstance(hints, dict):
         return None
     return hints.get("endpoint_id")
 
 
 def _step_service(step: dict) -> Any:
-    """step → call.service(存量 api 兜底);非 dict 时 None(防御)。"""
-    api = step.get("call") or step.get("api")
-    return api.get("service") if isinstance(api, dict) else None
+    """step → call.service;非 dict 时 None(防御)。"""
+    call = step.get("call")
+    return call.get("service") if isinstance(call, dict) else None
 
 
 async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContext:

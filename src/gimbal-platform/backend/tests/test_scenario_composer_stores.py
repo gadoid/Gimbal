@@ -215,7 +215,7 @@ async def test_scenario_read_round_trips_orchestration(fresh_db) -> None:
                 "meta": meta_dict,
                 "config": {"timePolicy": {"kind": "record"}, "vars": {"k": "v"}},
                 "resource": {"mock-a": {"kind": "mock"}},
-                "steps": [{"api": {"service": "fin.x"}}, {"api": {"service": "fin.y"}}],
+                "steps": [{"call": {"service": "fin.x"}}, {"call": {"service": "fin.y"}}],
             },
             "orchestration": {
                 "steps": [

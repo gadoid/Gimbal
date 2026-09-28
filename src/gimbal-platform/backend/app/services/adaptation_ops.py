@@ -123,13 +123,13 @@ _SOURCES = ("body", "headers")
 
 
 def _containers(step: dict) -> dict[str, dict]:
-    """step 的两个字段容器(可变引用):body 在 request 下,headers 在 api 下。"""
+    """step 的两个字段容器(可变引用):body 在 request 下,headers 在 call 下。"""
     request = step.get("request") if isinstance(step.get("request"), dict) else {}
-    api = step.get("call") or step.get("api")   # call 优先(新形态),api 兜底
-    api = api if isinstance(api, dict) else {}
+    call = step.get("call")
+    call = call if isinstance(call, dict) else {}
     out: dict[str, dict] = {}
     for source in _SOURCES:
-        holder = request if source == "body" else api
+        holder = request if source == "body" else call
         container = holder.get(source)
         out[source] = container if isinstance(container, dict) else {}
     return out
@@ -142,7 +142,7 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
     清单生成到应用之间用户可能重排/删步骤 —— 这里挡住盲改。
 
     契约禁令(spec 2026-08-27 §1.6):任何 plate 目录驱动的回写(适配 ops、
-    未来契约同步/导入)不得触碰 ``api.service`` —— 它是用户引用键(可為
+    未来契约同步/导入)不得触碰 ``call.service`` —— 它是用户引用键(可為
     别名全串),``view_hints.endpoint_id`` 才是目录锚点,两权分立。
     """
     steps = definition.get("steps")
@@ -152,8 +152,8 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
     if not isinstance(i, int) or i < 0 or i >= len(steps):
         return f"step_missing: {i!r}"
     step = steps[i]
-    api = (step.get("call") or step.get("api")) if isinstance(step, dict) else None
-    hints = api.get("view_hints") if isinstance(api, dict) else None
+    call = step.get("call") if isinstance(step, dict) else None
+    hints = call.get("view_hints") if isinstance(call, dict) else None
     bound = hints.get("endpoint_id") if isinstance(hints, dict) else None
     if bound != endpoint_id:
         return (f"endpoint_mismatch: step bound to {bound!r}, "

@@ -15,7 +15,7 @@ from httpx import AsyncClient
 from tests.helpers import launch_ok as _ok, make_draft, register_and_login
 
 STEPS = [{
-    "api": {"view_hints": {"endpoint_id": "fin.order.add"}},
+    "call": {"view_hints": {"endpoint_id": "fin.order.add"}},
     "request": {"body": {"customer_id": "${var.customer_id}"}},
 }]
 

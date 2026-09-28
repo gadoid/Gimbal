@@ -235,9 +235,9 @@ def _host_conflict(body: Any, target: str) -> bool:
     * ``body`` 为 ``None``(无 body)—— Assign 会创建;
     * **dict 键**缺失 / **list 正**越界 —— 同样由 Assign 创建(列表自动扩展)。
 
-    ``target`` 形如 ``$.call.request.body.note.replace``:首段是调用点
-    (:func:`_body_target` 固定加的前缀)拼接的 FIELD ``request_body``(根
-    ``$`` 由 ``_parse`` 吸收),不是 body 的段,**必须剥掉再走**。前缀也按
+    ``target`` 形如 ``$.call.request.body.note.replace``:前缀
+    (call.request.body,:func:`_body_target` 固定加;根 ``$`` 由 ``_parse``
+    吸收)不是 body 的段,**必须剥掉再走**。前缀也按
     token 认,不按字符串切分 —— 否则 ``[`` 紧贴前缀的形态会被误判成「不是
     body 内部」而放行,而它恰恰是同类改形(「是不是 body 内部」由 walk 回答)。
     前缀不匹配 ⇒ 不判、不猜。
@@ -246,16 +246,13 @@ def _host_conflict(body: Any, target: str) -> bool:
         nodes = _parse(target)
     except JsonPathError:           # 解析不了 ⇒ 走不动 ⇒ 冲突(见上「规则」)
         return True
-    # 前缀 = call.request.body(三段,残留 #5 请求体通道;旧单段 request_body
-    # 兼容——Step 校验期同样归一,判定侧双口径)。token 级认,不按字符串切。
+    # 前缀 = call.request.body(三段,请求体通道;旧单段 request_body 前缀
+    # 已随 api→call 清理退役)。token 级认,不按字符串切。
     def _strip_body_prefix(ns) -> "list | None":
         vals = [n.value for n in ns[:3]
                 if n.kind is NodeKind.FIELD]
         if vals[:3] == ["call", "request", "body"]:
             return ns[3:]
-        if (ns and ns[0].kind is NodeKind.FIELD
-                and ns[0].value == "request_body"):
-            return ns[1:]           # 旧前缀(归一前存量/直连下发)
         return None                 # 不是 body 内部路径
     stripped = _strip_body_prefix(nodes) if nodes else None
     if stripped is None:

@@ -18,7 +18,7 @@ from .test_scenario_visibility_and_copy import _member
 
 _AUTH_STEP = {
     "kind": "step",
-    "api": {"service": "fin-service", "path": "/x",
+    "call": {"service": "fin-service", "path": "/x",
             "headers": {"Authorization": "${auth.qa1.token}"}},
 }
 

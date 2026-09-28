@@ -33,7 +33,7 @@ async def _uid(username: str) -> int:
 
 
 def _tpl_step(endpoint: str, header_value: str) -> dict:
-    return {"api": {"view_hints": {"endpoint_id": endpoint},
+    return {"call": {"view_hints": {"endpoint_id": endpoint},
                     "headers": {"Authorization": header_value}},
             "request": {"body": {}}}
 

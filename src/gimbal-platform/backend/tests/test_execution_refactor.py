@@ -273,7 +273,7 @@ async def _seed_empty_ds(client: AsyncClient, headers: dict) -> None:
 def _steps_draft(services: dict | None = None, body: dict | None = None) -> dict:
     steps = [{
         "kind": "step", "description": "下单",
-        "api": {"service": "fin.order", "method": "POST", "path": "/x"},
+        "call": {"service": "fin.order", "method": "POST", "path": "/x"},
         "request": {"kind": "request", "body": body if body is not None else {"amount": 1}},
         "strategy": [],
     }]

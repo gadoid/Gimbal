@@ -100,9 +100,9 @@ async def test_carry_alias_key_sparse_override(fresh_db, plate):
         await s.commit()
 
     definition = {"steps": [
-        {"api": {"service": "fin-service-uat", "headers": {}},
+        {"call": {"service": "fin-service-uat", "headers": {}},
          "request": {"body": {}}},
-        {"api": {"service": "fin-service", "headers": {}},
+        {"call": {"service": "fin-service", "headers": {}},
          "request": {"body": {}}},
     ]}
     async with db_module.SessionLocal() as s:
@@ -118,7 +118,7 @@ async def test_carry_bare_alias_still_skipped(fresh_db, plate):
     """目录外的裸声明照旧跳过(空目录 → derive_base None),兼容不变。"""
     async with db_module.SessionLocal() as s:
         ctx = await build_carry_context(s, {"steps": [
-            {"api": {"service": "ghost-svc", "headers": {}},
+            {"call": {"service": "ghost-svc", "headers": {}},
              "request": {"body": {}}},
         ]})
     assert ctx.service_bindings["ghost-svc"] is None
@@ -181,7 +181,7 @@ async def test_alias_credential_chain_end_to_end(
     # 模板扫描不参与(它恒注入,是另一条既有语义)
     alias_step = {
         "kind": "step",
-        "api": {"service": "fin-service-uat", "path": "/x",
+        "call": {"service": "fin-service-uat", "path": "/x",
                 "headers": {"Authorization": "Bearer static"}},
     }
     await client.post("/api/scenarios", headers=bob,

@@ -20,7 +20,7 @@ class CarryContext:
 
     * step_fields:step 索引 → 该 endpoint 的 carry 面 {path: 契约类型}。
       键缺席 = 该 step 无锚点(存量无 view_hints)→ 降级门控。
-    * service_bindings:键 = step.api.service 原始引用串(可含别名前缀);
+    * service_bindings:键 = step.call.service 原始引用串(可含别名前缀);
       值 = 该目录服务的 {path: value};值 None = 服务名解析失败,
       整步跳过(黄警由 dispatch 记)。
     * global_defaults:path → value(全局默认表整表)。
@@ -71,13 +71,13 @@ def materialize_run_copy(
 
 def _step_service(step: dict) -> str | None:
     """step 的 service 键：call 形态优先(plate convert v2.1 批次 F 产出),
-    api 糖兜底(过渡期存量/外部直供)。两形态都无 → None。"""
+    (api 形态已退役;无 call 声明 → None)。"""
     call = step.get("call")
     svc = call.get("service") if isinstance(call, dict) else None
     if isinstance(svc, str) and svc:
         return svc
-    api = step.get("api")
-    svc = api.get("service") if isinstance(api, dict) else None
+    call = step.get("call")
+    svc = call.get("service") if isinstance(call, dict) else None
     return svc if isinstance(svc, str) and svc else None
 
 

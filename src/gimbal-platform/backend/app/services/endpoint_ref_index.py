@@ -30,7 +30,7 @@ from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 # 变量名允许 "."(③ 配置步的 <system>.key 命名空间键含点)
 _VAR_RE = re.compile(r"\$\{var\.([A-Za-z0-9_.]+)\}")
 
-# field 容器:body 在 step.request 下,headers 在 step.api 下(spec §3.2)。
+# field 容器:body 在 step.request 下,headers 在 step.call 下(spec §3.2)。
 # 无 query 容器 —— plate Api schema 无此字段(convert 会静默吞掉),引擎的
 # GET 查询参数约定放 request.body(executor 映射为 params=),body 管道天然覆盖。
 _SOURCES = ("body", "headers")
@@ -48,9 +48,8 @@ def _steps(payload: dict | None) -> list[dict]:
 
 
 def _fields(step: dict, source: str) -> dict:
-    # call 优先(新形态),api 兜底(迁移前存量)
     holder = (step.get("request") if source == "body"
-              else (step.get("call") or step.get("api")))
+              else step.get("call"))
     container = holder or {}
     fields = container.get(source) if isinstance(container, dict) else None
     return fields if isinstance(fields, dict) else {}
@@ -70,9 +69,9 @@ def parse_refs(
     refs: list[ScenarioEndpointRef] = []
     unindexed: list[dict] = []
     for i, step in enumerate(_steps(payload)):
-        api = (step.get("call") or step.get("api"))
-        api = api if isinstance(api, dict) else {}
-        hints = api.get("view_hints") if isinstance(api.get("view_hints"), dict) else {}
+        call = step.get("call")
+        call = call if isinstance(call, dict) else {}
+        hints = call.get("view_hints") if isinstance(call.get("view_hints"), dict) else {}
         endpoint_id = hints.get("endpoint_id")
         if not endpoint_id:
             unindexed.append({
@@ -111,9 +110,9 @@ def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
     """
     out: list[int] = []
     for i, step in enumerate(_steps(payload)):
-        api = (step.get("call") or step.get("api"))
-        api = api if isinstance(api, dict) else {}
-        hints = api.get("view_hints") if isinstance(api.get("view_hints"), dict) else {}
+        call = step.get("call")
+        call = call if isinstance(call, dict) else {}
+        hints = call.get("view_hints") if isinstance(call.get("view_hints"), dict) else {}
         if hints.get("endpoint_id") == endpoint_id:
             out.append(i)
     return out

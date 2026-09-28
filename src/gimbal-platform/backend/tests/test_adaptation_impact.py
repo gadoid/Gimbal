@@ -13,7 +13,7 @@ EP = "fin.order.add"
 
 def _steps():
     return [{
-        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+        "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
         "request": {"body": {"amount": "${var.amount}", "fixed": "X"}},
     }]
 
@@ -103,7 +103,7 @@ async def test_impact_anchor_step_with_all_empty_fields(fresh_db):
             s,
             ScenarioDraft.model_validate(
                 make_draft("sc-imp3", steps=[{
-                    "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                    "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
                     "request": {"body": {}},
                 }])
             ),

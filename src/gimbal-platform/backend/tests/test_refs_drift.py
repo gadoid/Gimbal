@@ -25,9 +25,9 @@ async def _seed():
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-drift", steps=[
-                {"api": {"view_hints": {"endpoint_id": EP_REFFED}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_REFFED}, "headers": {}},
                  "request": {"body": {"amount": 1}}},
-                {"api": {"view_hints": {"endpoint_id": EP_ANCHOR}, "headers": {}},
+                {"call": {"view_hints": {"endpoint_id": EP_ANCHOR}, "headers": {}},
                  "request": {"body": {}}},
             ])),
             owner="alice", owner_id=1,

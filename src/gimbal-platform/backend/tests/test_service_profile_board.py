@@ -58,10 +58,10 @@ async def _seed():
             ScenarioDraft.model_validate(make_draft(
                 "sc-bd-a", name="下单主链路",
                 steps=[{
-                    "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                    "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
                     "request": {"body": {"amount": 1}},
                 }, {
-                    "api": {"view_hints": {"endpoint_id": EP2}, "headers": {}},
+                    "call": {"view_hints": {"endpoint_id": EP2}, "headers": {}},
                     "request": {"body": {"kw": "x"}},
                 }])),
             owner="alice", owner_id=1,
@@ -69,7 +69,7 @@ async def _seed():
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-bd-b", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                "call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
                 "request": {"body": {}},
             }])),
             owner="bob", owner_id=2,

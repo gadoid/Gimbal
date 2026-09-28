@@ -49,7 +49,7 @@ async def _seed():
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-grid-a", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP_FULL}, "headers": {}},
+                "call": {"view_hints": {"endpoint_id": EP_FULL}, "headers": {}},
                 "request": {"body": {"amount": 1}},
             }])),
             owner="alice", owner_id=1,
@@ -58,7 +58,7 @@ async def _seed():
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-grid-b", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP_ANCHOR}, "headers": {}},
+                "call": {"view_hints": {"endpoint_id": EP_ANCHOR}, "headers": {}},
                 "request": {"body": {}},
             }])),
             owner="bob", owner_id=2,
@@ -67,7 +67,7 @@ async def _seed():
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-grid-c", steps=[{
-                "api": {"view_hints": {"endpoint_id": "fin.order.gone"},
+                "call": {"view_hints": {"endpoint_id": "fin.order.gone"},
                         "headers": {}},
                 "request": {"body": {"x": 1}},
             }])),
