@@ -170,3 +170,5 @@ def test_new_username_satisfies_platform_username_pattern():
     )
     u = d["steps"][0]["request"]["body"]["username"]
     assert re.match(r"^[A-Za-z0-9_]+$", u), u
+
+

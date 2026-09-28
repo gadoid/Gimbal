@@ -19,9 +19,12 @@ class FakePlatform:
     def __init__(self, responses: dict[str, tuple[int, object]]):
         self.responses = responses
         self.calls: list[tuple[str, str]] = []
+        self.writes: list[tuple[str, str, object]] = []  # (method, path, body)
 
     def request(self, method, path, body=None):
         self.calls.append((method, path))
+        if method != "GET":
+            self.writes.append((method, path, body))
         if path in self.responses:
             return self.responses[path]
         return 200, {"ok": True}
@@ -368,3 +371,52 @@ def test_new_username_is_run_scoped_not_case_scoped():
         "sb_boot", "Pw-12345678", "sc-t3-tok", new_username="sb_shared9",
     )
     assert out["steps"][0]["body"]["username"] == "sb_shared9"
+
+
+# --- 凭证池：场景引 alias，平台在 run 期注入，definition 里不落 token --------
+
+
+def test_bootstrap_creates_a_credential_pool_entry_for_the_sb_account():
+    """场景步骤头写 ${auth.sb.token}，平台调度时按 alias 从凭证池解析。
+    池里没有 sb 这条，gimbal 就 gimbal_rejected。凭证存的是口令不是 token ——
+    引擎在 auth.url 上现登。"""
+    from gimbal_bootstrap.orchestrator import _ensure_credential
+
+    client = FakePlatform({})
+    _ensure_credential(client, "sb_abc", "Pw-12345678")
+    posts = [b for m, p, b in client.writes if m == "POST" and p == "/api/auths"]
+    assert posts == [{
+        "alias": "sb",
+        "url": "http://127.0.0.1:8000/api/auth/login",
+        "username": "sb_abc",
+        "password": "Pw-12345678",
+        "token_type": "Bearer",
+    }], posts
+
+
+def test_bootstrap_reuses_an_existing_credential_instead_of_duplicating():
+    from gimbal_bootstrap.orchestrator import _ensure_credential
+
+    client = FakePlatform({"/api/auths": (200, {"items": [
+        {"id": 7, "alias": "sb", "url": "http://127.0.0.1:8000/api/auth/login"}
+    ]})})
+    _ensure_credential(client, "sb_abc", "Pw-new")
+    patches = [(p, b) for m, p, b in client.writes if m == "PATCH"]
+    assert [p for p, _ in patches] == ["/api/auths/7"], client.writes
+    assert patches[0][1]["username"] == "sb_abc"
+    assert not [c for c in client.writes if c[0] == "POST" and c[1] == "/api/auths"]
+
+
+def test_definition_keeps_the_placeholder_and_carries_no_token():
+    """definition 里必须仍是 ${auth.sb.token} —— 平台认这个语法，引擎在运行期
+    展开。写成真 token 反而把凭据落在场景记录里。"""
+    from gimbal_bootstrap.case_builder import build_definition
+
+    d = build_definition(
+        {"id": "T1", "name": "x", "steps": [
+            {"method": "GET", "path": "/api/scenarios",
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 200}]}]},
+        sb_username="u",
+    )
+    assert d["steps"][0]["api"]["headers"]["Authorization"] == "Bearer ${auth.sb.token}"

@@ -51,6 +51,34 @@ def load_cases(path: Path) -> list[dict]:
     return doc["cases"]
 
 
+CREDENTIAL_ALIAS = "sb"
+CREDENTIAL_URL = f"{BASE_URL}/api/auth/login"
+
+
+def _ensure_credential(client: Platform, username: str, password: str) -> None:
+    """在平台凭证池里备一条自举账号的凭证。
+
+    场景步骤头写的是 `${auth.sb.token}`（平台 auth_ref_scan 按 alias 扫描），
+    调度时从池里解析出这条凭证、塞进 config.users.sb，引擎再拿 auth.url
+    现登一次换 token。池里没有这条，alias 解析不出来，gimbal 直接
+    gimbal_rejected。
+
+    池里存的是**口令**不是 token —— token 有有效期，存进去很快就废。
+    """
+    _, listing = client.get("/api/auths")
+    body = {
+        "url": CREDENTIAL_URL,
+        "username": username,
+        "password": password,
+        "token_type": "Bearer",
+    }
+    for item in (listing or {}).get("items") or []:
+        if item.get("alias") == CREDENTIAL_ALIAS:
+            client.request("PATCH", f"/api/auths/{item['id']}", body)
+            return
+    client.post("/api/auths", {"alias": CREDENTIAL_ALIAS, **body})
+
+
 def _new_username(scenario_id: str) -> str:
     """每轮唯一的新账号名（黄金链路 T2 用来验 register 端点本身）。
     平台 RegisterIn.username = ^[A-Za-z0-9_]+$。"""
@@ -275,6 +303,7 @@ def main() -> int:
 
     client, sb_username, sb_password = _bootstrap_account(pause=not args.no_pause)
     print(f"自举账号: {sb_username}")
+    _ensure_credential(client, sb_username, sb_password)
 
     cases: list[dict] = []
     for path in sorted(Path(args.cases).glob("*.yaml")):
