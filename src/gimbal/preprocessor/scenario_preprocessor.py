@@ -153,24 +153,30 @@ class ScenarioPreprocessor:
                     tag, type(entry).__name__,
                 )
 
-        # 2. 扫描模板找出实际引用的 auth tags
+        # 2. 扫描引用面：模板 ${auth.<tag>.*} + call.user 字段
         # 模板格式: ${auth.<tag>.token} / ${auth.<tag>.*}
         # Fix 2+4：用公共 helper 递归扫描，自动覆盖嵌套 body / 自定义 strategy 字段。
+        # P0-12（S3，定稿 C7 补全）：经 call.user 字段引用的标签同样 eager
+        # 登录（此前 lazy：调用时才登录，首个 step 的认证时机不受控）。
         from gimbal.utils.jsonpath import find_template_var_refs
 
         referenced_tags: set[str] = set()
         for step_union in self._schema.steps:
             for tag in find_template_var_refs(step_union, prefix="auth"):
                 referenced_tags.add(tag)
+            call = getattr(step_union, "call", None)
+            user_tag = getattr(call, "user", None) if call is not None else None
+            if isinstance(user_tag, str) and user_tag:
+                referenced_tags.add(user_tag)
 
-        # 3. 登录：只登录模板引用的（未引用的 skip）
+        # 3. 登录：只登录被引用的（未引用的 skip）
         auth_manager = AuthManager(self._auth_registry)
         for tag in auth_dict:
             if tag in referenced_tags:
                 try:
                     auth_manager.get_auth(tag)
                     logger.info(
-                        "[Preprocessor] 认证成功（模板引用）: tag={}", tag,
+                        "[Preprocessor] 认证成功（引用标签）: tag={}", tag,
                     )
                 except Exception as exc:
                     logger.error(
@@ -179,7 +185,7 @@ class ScenarioPreprocessor:
                     raise
             else:
                 logger.debug(
-                    "[Preprocessor] tag={} 未在模板中引用，skip 登录", tag,
+                    "[Preprocessor] tag={} 未被引用，skip 登录", tag,
                 )
 
         logger.info(
