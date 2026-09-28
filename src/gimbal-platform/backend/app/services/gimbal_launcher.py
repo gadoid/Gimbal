@@ -183,6 +183,8 @@ async def launch(
     cwd: Path | str | None = None,
     timeout: float | None = None,
     engine_log_path: Path | None = None,
+    on_event: "Callable[[dict], None] | None" = None,
+    on_log: "Callable[[dict], None] | None" = None,
 ) -> LaunchResult:
     """执行 ``gimbal run launch <case_path>``,同步返回 LaunchResult。
 
@@ -192,7 +194,14 @@ async def launch(
     ``engine_log_path``:stderr 逐行流式落盘(边读边写,spec §9.2);
     超时 kill 保留已读部分,spawn 失败不产生该文件。stdout JSON
     解析语义不受影响(stderr 仍会在内存留一份供退化分支取尾行)。
+
+    P2-03(C1)流式读取:``on_event`` 在 stdout 每读出一行合法 jsonl 事件
+    时即时回调(边运行边消费);``on_log`` 对 stderr 每行合法 JSON 日志
+    回调(执行器管道下默认 JSON 日志模式,行含 category 与执行上下文
+    标签,P1-03)。终态判定仍取 run.finished;子进程异常退出/超时时
+    已回调的内容由调用方保留(回调先于退出发生)。回调异常只告警不阻断。
     """
+    from collections.abc import Callable  # noqa: F401  # 注解运行时求值用
     argv = build_argv(case_path, step_to=step_to, report_dir=report_dir)
     timeout = settings.GIMBAL_TIMEOUT_SEC if timeout is None else timeout
 
@@ -257,8 +266,46 @@ async def launch(
             stderr_parts.append(text)
             if log_fh:
                 log_fh.write(text)
+            # P2-03:stderr JSON 日志行即时回调(执行上下文标签/category 已在)
+            if on_log is not None:
+                line = text.strip()
+                if line.startswith("{"):
+                    try:
+                        d = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        d = None
+                    if isinstance(d, dict) and d.get("message") is not None:
+                        try:
+                            on_log(d)
+                        except Exception:  # noqa: BLE001
+                            logger.warning("gimbal_launcher: on_log 回调异常(已忽略)")
 
-    stdout_task = asyncio.create_task(proc.stdout.read())
+    # P2-03:stdout 逐行流式读取(on_event 边运行边回调;整流仍在内存,
+    # 供 run.finished 双读与退化分支)。行级解析失败不阻断读取。
+    stdout_parts: list[str] = []
+
+    async def _drain_stdout() -> None:
+        assert proc.stdout is not None
+        while True:
+            raw = await proc.stdout.readline()
+            if not raw:
+                break
+            text = raw.decode("utf-8", errors="replace")
+            stdout_parts.append(text)
+            if on_event is not None:
+                line = text.strip()
+                if line.startswith("{"):
+                    try:
+                        d = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        d = None
+                    if isinstance(d, dict) and d.get("event_type"):
+                        try:
+                            on_event(d)
+                        except Exception:  # noqa: BLE001
+                            logger.warning("gimbal_launcher: on_event 回调异常(已忽略)")
+
+    stdout_task = asyncio.create_task(_drain_stdout())
     stderr_task = asyncio.create_task(_drain_stderr())
     try:
         await asyncio.wait_for(
@@ -292,7 +339,7 @@ async def launch(
             if not t.done():
                 t.cancel()
 
-    stdout = stdout_task.result().decode("utf-8", errors="replace")
+    stdout = "".join(stdout_parts)
     stderr = "".join(stderr_parts)
     exit_code = proc.returncode
 

@@ -340,6 +340,91 @@ def _dt_to_iso(dt) -> str | None:
     return iso_naive_utc(dt)
 
 
+class _EventIngester:
+    """P2-02/C2:执行器事件/日志流式入库缓冲(launcher 回调 → execution_events)。
+
+    回调在 launch 的读协程内同步触发 —— 只入内存缓冲;达到阈值经
+    ``asyncio.create_task`` 异步批量落库(新会话,不与行持久化抢会话)。
+    ``finalize`` 冲刷余量(gather 收口时调用);落库 best-effort,失败
+    只记日志不阻断执行。
+    """
+
+    _FLUSH_EVERY = 200
+    _FLUSH_INTERVAL_SEC = 0.5
+
+    def __init__(self, db_factory: Any, execution_id: int) -> None:
+        self._db_factory = db_factory
+        self._execution_id = execution_id
+        self._events: list[dict] = []
+        self._logs: list[dict] = []
+        self._pending: "set[asyncio.Task] | None" = None
+        self._ticker: "asyncio.Task | None" = None
+        self._stopped = False
+
+    def start(self) -> None:
+        """启动周期冲刷(短执行也能在运行中被读到;大流量由阈值提前冲)。"""
+        async def _tick() -> None:
+            while not self._stopped:
+                await asyncio.sleep(self._FLUSH_INTERVAL_SEC)
+                if self._events or self._logs:
+                    await self._flush()
+        if self._ticker is None:
+            self._ticker = asyncio.create_task(_tick())
+
+    def on_event(self, d: dict) -> None:
+        self._events.append(d)
+        self._maybe_flush()
+
+    def on_log(self, d: dict) -> None:
+        self._logs.append(d)
+        self._maybe_flush()
+
+    def _maybe_flush(self) -> None:
+        if len(self._events) + len(self._logs) < self._FLUSH_EVERY:
+            return
+        if self._pending is None:
+            try:
+                self._pending = set()
+            except RuntimeError:
+                return   # 无运行循环(同步上下文兜底):留给 finalize
+        if any(not t.done() for t in self._pending):
+            return   # 在飞冲刷未收口,余量并入下一轮
+        t = asyncio.create_task(self._flush())
+        self._pending.add(t)
+        t.add_done_callback(self._pending.discard)
+
+    async def _flush(self) -> None:
+        events, self._events = self._events, []
+        logs, self._logs = self._logs, []
+        try:
+            from . import execution_store
+            async with self._db_factory() as session:
+                await execution_store.insert_events(
+                    session, self._execution_id, events)
+                await execution_store.insert_logs(
+                    session, self._execution_id, logs, seq_base=0)
+                await session.commit()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "run_dispatcher: event flush {}/{} failed: {}",
+                self._execution_id, len(events) + len(logs), e,
+            )
+
+    async def finalize(self) -> None:
+        """gather 收口后冲刷余量并等待在飞冲刷完成。"""
+        self._stopped = True
+        if self._ticker is not None:
+            self._ticker.cancel()
+            try:
+                await self._ticker
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+            self._ticker = None
+        if self._pending:
+            await asyncio.gather(*list(self._pending), return_exceptions=True)
+        await self._flush()
+
+
 async def _persist_row_terminal(db_factory: Any, execution_id: int,
                                 state: "RowState") -> None:
     """行终态即落库(M6 转正):崩溃窗口不丢已终态行。
@@ -778,6 +863,10 @@ async def _fanout(
     # 活跃请求只可能在本 task 启动之后到达(dispatch 先 spawn、后返回
     # 响应,行边界检查更在其后),此处不会误吞。
     _cancel_requested.discard(execution_id)
+    # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
+    # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
+    ingester = _EventIngester(db_factory, execution_id)
+    ingester.start()
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
@@ -981,6 +1070,8 @@ async def _fanout(
                             report_dir=case_dir / "reports",
                             cwd=case_dir,
                             engine_log_path=case_dir / "engine.log",
+                            on_event=ingester.on_event,
+                            on_log=ingester.on_log,
                         )
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":
@@ -1099,6 +1190,8 @@ async def _fanout(
         *(_row(ds, i, row, r, seq, inj)
           for seq, (ds, i, row, inj, r) in enumerate(entries))
     )
+    # P2-02:冲刷事件/日志余量(先于终态落库 —— SSE/日志页在 done 后仍可读全量)
+    await ingester.finalize()
 
     # Terminal status + timestamps only (counters already maintained
     # incrementally above).

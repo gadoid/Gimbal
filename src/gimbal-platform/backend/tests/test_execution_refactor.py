@@ -42,7 +42,8 @@ def _patch_launch_capture(
     """把 ``gimbal_launcher.launch`` 换成读 case.json 并捕获的假实现。"""
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None, engine_log_path=None):
+                       cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 

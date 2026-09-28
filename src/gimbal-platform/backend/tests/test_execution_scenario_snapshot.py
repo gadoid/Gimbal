@@ -25,7 +25,8 @@ def _launch_and_convert_mocks(monkeypatch, sent_convert: list | None = None):
     from app.services import gimbal_launcher as gl, plate_client as pc
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
-                           cwd=None, timeout=None, engine_log_path=None):
+                           cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         return _ok()
 
     async def _fake_convert(scenario):

@@ -39,7 +39,8 @@ async def test_baseline_run_without_datasets(
     case_paths: list[Path] = []
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None, engine_log_path=None):
+                       cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         path = Path(case_path)
         case_paths.append(path)
         cases.append(json.loads(path.read_text(encoding="utf-8")))
@@ -116,7 +117,8 @@ async def test_selected_dataset_with_zero_rows_runs_baseline_once(
     cases: list[dict] = []
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None, engine_log_path=None):
+                       cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         cases.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
@@ -184,7 +186,8 @@ async def test_dataset_row_string_values_coerced_to_baseline_types(
     cases: list[dict] = []
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None, engine_log_path=None):
+                       cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         cases.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
@@ -228,7 +231,8 @@ async def test_run_fills_plate_required_meta_defaults(
     sent: list[dict] = []
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None, engine_log_path=None):
+                       cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         return _ok()
 
     async def _record_convert(scenario):
@@ -259,7 +263,8 @@ async def test_stale_env_key_silently_ignored(client, monkeypatch):
     from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
-                           cwd=None, timeout=None, engine_log_path=None):
+                           cwd=None, timeout=None, engine_log_path=None,
+                       on_event=None, on_log=None):
         return _ok()
 
     async def _fake_convert(scenario):
