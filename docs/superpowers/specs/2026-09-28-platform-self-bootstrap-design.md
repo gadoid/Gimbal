@@ -192,6 +192,7 @@ users / auths / constants / carry / service-aliases / data-sets / run-schemes / 
 
 - 平台已运行（`127.0.0.1:8000`），**真打服务**，不走进程内 ASGI 直调
 - 编排器先注册一个**自举专用账号**（`sb-` 前缀），不复用任何人的身份
+- **注册后停下等人提权** —— `app/routers/auth.py` 的 `register` 只在库里一个用户都没有时才给 `role="admin"`，之后注册一律 `member`。每域用例要打 `/api/users/roster` 等管理员端点，member 身份会 403。编排器打印账号名并等回车；提权过后的账号写进 `GIMBAL_SB_USERNAME`/`GIMBAL_SB_PASSWORD` 供 pytest 复用
 - 编排器先探测 `gimbal` CLI 可用性（执行链依赖 `gimbal_launcher` spawn 子进程），不可用就早失败而不是跑到一半
 
 ### 3.8 清理
