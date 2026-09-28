@@ -21,3 +21,8 @@ run.err
 collect.err.log
 *.log
 .superpowers/
+
+# v2.1 工程卫生（评审第四节）：语料与运行产物不入库
+gimbal-tmp/
+reports/
+*.bak
