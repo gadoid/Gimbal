@@ -23,7 +23,9 @@ cases:
         auth: false
         body:
           username: "${sb.new_username}"
-          display_name: gimbal-bootstrap
+          # display_name 也查重(平台 assert_name_available)，不能沿用自举账号
+          # 那个固定值，否则 409。
+          display_name: "${sb.new_username}"
           password: "${sb.password}"
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 201}
@@ -46,17 +48,19 @@ cases:
           - {target: "$.call.response.body.token_type", operator: eq, expected: bearer}
 
   - id: T4
-    name: 建场景
+    name: 读回建好的场景
     tags: [smoke, e2e]
+    # 建场景这一步由编排器自己完成（每条用例都会建一个，${sb.scenario_id}
+    # 指向的就是它，T5/T6 建在它上面）。这里不再重复 POST —— 同名再建必 409 ——
+    # 改成读回来，验证发出去的 definition 真的落库了。
     steps:
-      - method: POST
-        path: /api/scenarios
-        body:
-          definition: {}
-          orchestration: {steps: [], resourceMeta: {}}
+      - method: GET
+        path: /api/scenarios/${sb.scenario_id}
         asserts:
-          - {target: "$.call.response.status", operator: eq, expected: 201}
-          - {target: "$.call.response.body.scenarioId", operator: exists, expected: null}
+          - {target: "$.call.response.status", operator: eq, expected: 200}
+          - {target: "$.call.response.body.meta.scenarioId", operator: eq, expected: "${sb.scenario_id}"}
+          - {target: "$.call.response.body.meta.module", operator: eq, expected: self-bootstrap}
+          - {target: "$.call.response.body.steps", operator: exists, expected: null}
 
   - id: T5
     name: 建数据集

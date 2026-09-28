@@ -5,6 +5,8 @@
 端到端跑里验。
 """
 
+from pathlib import Path
+
 import pytest
 
 from gimbal_bootstrap.orchestrator import run_case
@@ -93,7 +95,8 @@ def test_cleanup_runs_in_dependency_reverse_order():
     deletes = [p for m, p in client.calls if m == "DELETE"]
     assert deletes == [
         "/api/scenarios/sc-x/run-schemes/sc-1",
-        "/api/scenarios/sc-x/data-sets/ds-1",
+        # 数据组的删除路由是扁平的 /api/data-sets/{id}，不挂在场景下
+        "/api/data-sets/ds-1",
         "/api/scenarios/sc-x",
     ], deletes
 
@@ -254,3 +257,114 @@ def test_missing_password_fails_loudly_instead_of_guessing(tmp_path, monkeypatch
     monkeypatch.setattr(orchestrator, "DOTENV_PATH", tmp_path / ".env")
     with pytest.raises(SystemExit):
         orchestrator._resolve_password()
+
+
+# --- 端到端第一次真跑揪出来的五个问题，各自钉一条测试 --------------------------
+
+
+def test_list_get_on_a_collection_path_is_not_mistaken_for_a_created_resource():
+    """D08：GET /api/data-sets 也以 /data-sets 结尾，但返回的是 list。
+    按 path 后缀抓 id 就会在 list 上调 .get() 炸掉。只认 POST。"""
+    client = FakePlatform({
+        "/api/data-sets": (200, [{"datasetId": "ds-a"}]),
+    })
+    case = {"id": "D08", "name": "数据集列表", "steps": [
+        {"method": "GET", "path": "/api/data-sets",
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 200}]},
+    ]}
+    r = run_case(case, client, "sb_u", run_token="tk1")
+    assert r["error"] is None, r["error"]
+    assert r["failed"] == 0
+
+
+def test_render_substitutes_new_username():
+    """T2 注册用的新账号名，上一版 _render 漏了这个键，字面量原样发出去 422。"""
+    from gimbal_bootstrap.orchestrator import _render
+
+    out = _render(
+        {"steps": [{"body": {"username": "${sb.new_username}",
+                             "password": "${sb.password}"}}]},
+        "sb_boot", "Pw-12345678", "sc-x-1",
+    )
+    assert out["steps"][0]["body"]["username"].startswith("sb_")
+    assert out["steps"][0]["body"]["password"] == "Pw-12345678"
+
+
+def test_render_substitutes_whole_object_placeholders():
+    """T4 要把编排器构造好的 definition 整个塞进去，不能只替字符串。"""
+    from gimbal_bootstrap.orchestrator import _render
+
+    definition = {"scenarioId": "sc-x-1", "steps": [{"kind": "step"}]}
+    out = _render({"body": {"definition": "${sb.definition}"}}, "u", "p", "sc-x-1",
+                  definition=definition)
+    assert out["body"]["definition"] == definition
+
+
+def test_data_set_is_deleted_from_the_flat_route():
+    """数据组的删除路由是 DELETE /api/data-sets/{id}，不是挂在场景下的。"""
+    client = FakePlatform({
+        "/api/scenarios": (201, {"scenarioId": "sc-x"}),
+        "/api/scenarios/sc-x/data-sets": (201, {"datasetId": "ds-1"}),
+    })
+    case = {"id": "T5", "name": "建数据集", "steps": [
+        {"method": "POST", "path": "/api/scenarios", "body": {},
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
+        {"method": "POST", "path": "/api/scenarios/${sb.scenario_id}/data-sets",
+         "body": {"name": "d"},
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
+    ]}
+    r = run_case(case, client, "sb_u", run_token="tk1")
+    assert r["error"] is None, r["error"]
+    deletes = [p for m, p in client.calls if m == "DELETE"]
+    assert deletes == ["/api/data-sets/ds-1", "/api/scenarios/sc-x"], deletes
+
+
+def test_golden_path_does_not_duplicate_the_scenario_creation(tmp_path):
+    """编排器每条用例都已经建好一个场景（${sb.scenario_id} 指向它，T5/T6 建在
+    它上面）。用例自己再 POST 一次同名场景必定 409。T4 改成读回来验证，
+    不再重复创建。"""
+    import yaml
+
+    from gimbal_bootstrap.orchestrator import load_cases
+
+    doc = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
+        .read_text(encoding="utf-8")
+    )
+    creators = [
+        (c["id"], s["path"])
+        for c in doc["cases"]
+        for s in c["steps"]
+        if s["method"] == "POST" and s["path"].rstrip("/") == "/api/scenarios"
+    ]
+    assert not creators, f"用例自己再建场景会和编排器的记账场景撞 id: {creators}"
+
+    t4 = next(c for c in doc["cases"] if c["id"] == "T4")
+    assert t4["steps"][0]["method"] == "GET"
+
+
+def test_golden_path_register_uses_a_unique_display_name():
+    """平台 assert_name_available 对 display_name 也查重。T2 发的
+    display_name 不能是自举账号那个固定值。"""
+    import yaml
+
+    doc = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
+        .read_text(encoding="utf-8")
+    )
+    t2 = next(c for c in doc["cases"] if c["id"] == "T2")
+    assert "${" in str(t2["steps"][0]["body"]["display_name"]), \
+        t2["steps"][0]["body"]["display_name"]
+
+
+def test_new_username_is_run_scoped_not_case_scoped():
+    """T2 注册、T3 登录 —— 两次必须用同一个名字。之前按 scenario_id 派生，
+    而 scenario_id 带用例 id，于是 T2 建的 sb_t2<x> 和 T3 登的 sb_t3<x>
+    不是同一个账号，T3 必 401。新账号名必须由编排器按轮次传下来。"""
+    from gimbal_bootstrap.orchestrator import _render
+
+    out = _render(
+        {"steps": [{"body": {"username": "${sb.new_username}"}}]},
+        "sb_boot", "Pw-12345678", "sc-t3-tok", new_username="sb_shared9",
+    )
+    assert out["steps"][0]["body"]["username"] == "sb_shared9"

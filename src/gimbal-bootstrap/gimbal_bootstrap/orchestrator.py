@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 import uuid
@@ -48,6 +49,13 @@ TERMINAL_STATES = {"done", "failed", "canceled"}
 def load_cases(path: Path) -> list[dict]:
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     return doc["cases"]
+
+
+def _new_username(scenario_id: str) -> str:
+    """每轮唯一的新账号名（黄金链路 T2 用来验 register 端点本身）。
+    平台 RegisterIn.username = ^[A-Za-z0-9_]+$。"""
+    token = re.sub(r"[^A-Za-z0-9_]+", "", scenario_id.removeprefix("sc-"))
+    return "sb_" + (token or uuid.uuid4().hex[:6])
 
 
 def _login(username: str, password: str) -> Platform:
@@ -101,7 +109,7 @@ def _cleanup(
 ) -> None:
     for path in (
         f"/api/scenarios/{scenario_id}/run-schemes/{scheme_id}" if scheme_id else None,
-        f"/api/scenarios/{scenario_id}/data-sets/{dataset_id}" if dataset_id else None,
+        f"/api/data-sets/{dataset_id}" if dataset_id else None,
         f"/api/scenarios/{scenario_id}" if scenario_id else None,
     ):
         if not path:
@@ -112,19 +120,22 @@ def _cleanup(
             print(f"  清理失败 {path}: {exc}", file=sys.stderr)
 
 
+def _aligned_orchestration(definition: dict) -> dict:
+    """orchestration 必须与 definition.steps 严格同序同长。"""
+    return {
+        "steps": [
+            {"enabled": True, "name": f"s{i}"} for i in range(len(definition["steps"]))
+        ],
+        "resourceMeta": {},
+    }
+
+
 def _new_scenario(client: Platform, definition: dict) -> str:
-    """建场景。orchestration 必须与 definition.steps 严格同序同长。"""
     _, created = client.post(
         "/api/scenarios",
         {
             "definition": definition,
-            "orchestration": {
-                "steps": [
-                    {"enabled": True, "name": f"s{i}"}
-                    for i in range(len(definition["steps"]))
-                ],
-                "resourceMeta": {},
-            },
+            "orchestration": _aligned_orchestration(definition),
             "assertion_registry": {"entries": []},
         },
     )
@@ -144,18 +155,38 @@ def _poll(client: Platform, execution_id: Any, result: dict) -> None:
     result["ok"] = result["status"] == "done"
 
 
-def _render(case: dict, sb_username: str, sb_password: str, scenario_id: str) -> dict:
-    """把 ${...} 替成编排期已知的真实值。"""
-    subs = {
+def _render(
+    case: dict,
+    sb_username: str,
+    sb_password: str,
+    scenario_id: str,
+    *,
+    definition: dict | None = None,
+    new_username: str = "",
+) -> dict:
+    """把 ${...} 替成编排期已知的真实值。
+
+    整串就是一个占位符时（`definition: ${sb.definition}`）替换成对象本身，
+    否则只能替字符串 —— 而 T4 需要的就是编排器刚构造好的那个 definition。
+    """
+    subs: dict[str, Any] = {
         "sb.username": sb_username,
         "sb.password": sb_password,
         "sb.scenario_id": scenario_id,
+        "sb.new_username": new_username or _new_username(scenario_id),
     }
+    if definition is not None:
+        subs["sb.definition"] = definition
+        subs["sb.orchestration"] = _aligned_orchestration(definition)
 
     def walk(v):
         if isinstance(v, str):
+            exact = subs.get(v[2:-1]) if v.startswith("${") and v.endswith("}") else None
+            if exact is not None:
+                return exact
             for k, r in subs.items():
-                v = v.replace("${" + k + "}", r)
+                if isinstance(r, str):
+                    v = v.replace("${" + k + "}", r)
             return v
         if isinstance(v, dict):
             return {k: walk(x) for k, x in v.items()}
@@ -173,6 +204,7 @@ def run_case(
     *,
     sb_password: str = "",
     run_token: str = "",
+    new_username: str = "",
 ) -> dict:
     result: dict[str, Any] = {
         "id": case["id"],
@@ -189,7 +221,14 @@ def run_case(
             case, sb_username=sb_username, sb_password=sb_password, run_token=run_token
         )
         scenario_id = _new_scenario(client, definition)
-        rendered = _render(case, sb_username, sb_password, scenario_id)
+        rendered = _render(
+            case,
+            sb_username,
+            sb_password,
+            scenario_id,
+            definition=definition,
+            new_username=new_username,
+        )
 
         for step in rendered["steps"]:
             path, method = step["path"], step["method"]
@@ -206,10 +245,11 @@ def run_case(
                         f"{a.get('expected')!r} —— 实得 {body!r:.200}"
                     )
 
-            if path.endswith("/data-sets"):
-                dataset_id = (body or {}).get("datasetId") or (body or {}).get("id")
-            elif path.endswith("/run-schemes"):
-                scheme_id = (body or {}).get("schemeId") or (body or {}).get("id")
+            created = method == "POST" and isinstance(body, dict)
+            if created and path.endswith("/data-sets"):
+                dataset_id = body.get("datasetId") or body.get("id")
+            elif created and path.endswith("/run-schemes"):
+                scheme_id = body.get("schemeId") or body.get("id")
             elif path == "/api/runs" and body:
                 result["executionId"] = body.get("executionId")
                 _poll(client, body.get("executionId"), result)
@@ -241,15 +281,29 @@ def main() -> int:
         cases.extend(load_cases(path))
     print(f"共 {len(cases)} 条用例\n")
 
+    # run_token / new_username 都是**按轮次**取值：scenario_id 带用例 id，
+    # 从它派生的名字会让 T2 注册的和 T3 登录的不是同一个账号。
     run_token = uuid.uuid4().hex[:6]
+    new_username = "sb_" + uuid.uuid4().hex[:8]
     results = [
-        run_case(c, client, sb_username, sb_password=sb_password, run_token=run_token)
+        run_case(
+            c,
+            client,
+            sb_username,
+            sb_password=sb_password,
+            run_token=run_token,
+            new_username=new_username,
+        )
         for c in cases
     ]
     for r in results:
         mark = "OK " if not r["error"] and not r["failed"] and r.get("ok", True) else "FAIL"
         print(f"[{mark}] {r['id']:5} {r['name']}"
               + (f"  {r['error']}" if r["error"] else ""))
+        for f in r["failures"]:
+            print(f"         └─ {f}")
+        if r.get("status"):
+            print(f"         运行状态 status={r['status']} total={r.get('total')}")
 
     failed = sum(1 for r in results if r["error"] or r["failed"])
     print(f"\n{len(results) - failed} passed, {failed} failed")
