@@ -113,11 +113,11 @@ describe('RunDialog v2 — 两路径', () => {
     expect(w.text()).toContain('冒烟')
   })
 
-  it('总量预览:自建方案 Σrows × nRuns(对齐 200 上限闸)', async () => {
+  it('总量预览:自建方案 Σrows × 注入族(P2-05 单元口径,nRuns 不乘)', async () => {
     const w = mountDialog({ dataSets: [{ datasetId: 'ds-001', scenarioId: 'sc', name: 'DS', rowCount: 2, preview: [] }] })
     await w.find('[data-testid="scheme-chip-rs-002"]').trigger('click')
-    // 2 行 × 1 注入条目 × 3 次 = 6
-    expect(w.find('.summary-chip.total').text()).toContain('6')
+    // 2 行 × 1 注入条目 = 2(nRuns=3 在执行器内展开,计 attempts 列)
+    expect(w.find('.summary-chip.total').text()).toContain('2')
   })
 
   it('深链自建方案后切回默认方案:绑定区重算渲染不崩溃 + confirm 正常发出', async () => {

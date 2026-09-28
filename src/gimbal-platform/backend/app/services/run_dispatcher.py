@@ -365,6 +365,9 @@ class _EventIngester:
         self._pending: "set[asyncio.Task] | None" = None
         self._ticker: "asyncio.Task | None" = None
         self._stopped = False
+        # 日志占位 seq 分配器(负数轴递减):每批分配不重叠区间,
+        # 避免多批撞 (execution_id, seq) 唯一约束被静默丢弃
+        self._log_seq = 0
 
     def start(self) -> None:
         """启动周期冲刷(短执行也能在运行中被读到;大流量由阈值提前冲)。"""
@@ -401,17 +404,24 @@ class _EventIngester:
     async def _flush(self) -> None:
         events, self._events = self._events, []
         logs, self._logs = self._logs, []
+        log_seq_base = self._log_seq - len(logs)
+        self._log_seq = log_seq_base
         try:
             from . import execution_store
             async with self._db_factory() as session:
                 await execution_store.insert_events(
                     session, self._execution_id, events)
                 await execution_store.insert_logs(
-                    session, self._execution_id, logs, seq_base=0)
+                    session, self._execution_id, logs,
+                    seq_base=log_seq_base)
                 await session.commit()
         except Exception as e:  # noqa: BLE001
+            # 失败回填缓冲(下次冲刷重试),不丢这批事件/日志
+            self._events = events + self._events
+            self._logs = logs + self._logs
+            self._log_seq += len(logs)
             logger.warning(
-                "run_dispatcher: event flush {}/{} failed: {}",
+                "run_dispatcher: event flush {}/{} failed (re-buffered): {}",
                 self._execution_id, len(events) + len(logs), e,
             )
 
@@ -978,6 +988,7 @@ async def _fanout(
         state = row_states[seq]
         # P2-04:本行事件投影器(所有路径可安全读;无事件路径恒空)
         proj = {"unit": None, "status": None, "attempts": 0}
+        result = None   # launch 产物(plate 异常路径无 launch → None)
         injection_id = (injection or {}).get("id")
         ds_id = ds["datasetId"] if ds is not None else None
         # 日志定位标签:数据集行用 datasetId,注入族用条目 id,基线行 baseline。
@@ -1186,7 +1197,7 @@ async def _fanout(
             state.unit_id = proj["unit"] or "u"
             state.attempts = (
                 proj["attempts"]
-                or int(getattr(locals().get("result"), "attempts", 0) or 0)
+                or int(getattr(result, "attempts", 0) or 0)
                 or 1
             )
             await _persist_row_terminal(db_factory, execution_id, state)

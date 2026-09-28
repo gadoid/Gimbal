@@ -1,18 +1,16 @@
 /**
- * RunDialog — 总量闸前置(P1,阶段③ v2 改写:两态公式)
+ * RunDialog — 总量闸前置(P1,阶段③ v2 改写;P2-05 乘法下沉后单元口径)
  *
- * 后端 dispatch 侧 MAX_RUNS_PER_EXECUTION=200(rows × nRuns)会整单
+ * 后端 dispatch 侧 MAX_RUNS_PER_EXECUTION=200(rows × 注入族)会整单
  * 409 too_many_runs;前端在 confirm 前同闸拦截,免得用户提交才报错。
  *
- * v2 两态公式:
- * - 默认方案态 = 基线 1 行 × nRuns
- * - 自建方案态 = Σrows × max(注入条目数, 1) × 方案 nRuns(参数只读,取方案值)
+ * P2-05 口径:nRuns 在执行器内展开(计入台账 attempts 列),不再乘进
+ * 总量 —— 总 = Σrows × max(注入条目数, 1);默认方案态恒 1。
  *
  * 锁死:
- * - 默认态 nRuns 300 = 300 > 200 → 不 emit confirm + 提示
- * - 默认态 nRuns 200 = 200 ≤ 200 → 正常 emit(边界含)
- * - 自建态 3 行 × nRuns 100 = 300 > 200 → 不 emit + footer chip 带 over 类
- * - 自建态 3 行 × nRuns 50 = 150 ≤ 200 → 正常 emit
+ * - 默认态 nRuns 300 → 总量 1(乘法下沉)→ 正常 emit confirm
+ * - 自建态 3 行 × 100 注入条目 = 300 > 200 → 不 emit + footer chip 带 over 类
+ * - 自建态整库 3 行(无注入)= 3 ≤ 200 → 正常 emit
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -40,11 +38,13 @@ const DEFAULT_SCHEME: SchemeV2 = {
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
   stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
 }
-/** 整库 3 行 × 方案 nRuns(参数只读 → 总量由方案值决定) */
-const SCHEME_NRUNS = (nRuns: number): SchemeV2 => ({
-  schemeId: `rs-n${nRuns}`, name: `整库${nRuns}次`, isDefault: false,
-  dataSetSelection: [{ datasetId: 'ds-1' }], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns, parallel: 1, plugins: null, logSub: null,
+/** 整库 3 行 × N 注入条目(注入族撑总量;nRuns 不再乘进) */
+const SCHEME_INJ = (nInj: number): SchemeV2 => ({
+  schemeId: `rs-i${nInj}`, name: `整库×${nInj}注入`, isDefault: false,
+  dataSetSelection: [{ datasetId: 'ds-1' }],
+  injectionEntryIds: Array.from({ length: nInj }, (_, i) => `inj-${i}`),
+  serviceBindings: {},
+  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
 })
 
 function mountDialog(schemes: SchemeV2[]) {
@@ -68,25 +68,17 @@ async function clickConfirm(w: ReturnType<typeof mount>) {
 }
 
 describe('RunDialog — 总量闸(两态公式 ≤ 200)', () => {
-  it('默认态:1 × 300 = 300 超闸 → 不 emit confirm', async () => {
+  it('默认态 nRuns 300:P2-05 乘法下沉 → 总量 1,正常 emit confirm', async () => {
     const w = mountDialog([DEFAULT_SCHEME])
     await setNRuns(w, 300)
-    await clickConfirm(w)
-    expect(w.emitted('confirm')).toBeUndefined()
-    w.unmount()
-  })
-
-  it('默认态:1 × 200 = 200 边界 → 正常 emit confirm', async () => {
-    const w = mountDialog([DEFAULT_SCHEME])
-    await setNRuns(w, 200)
     await clickConfirm(w)
     expect(w.emitted('confirm')).toBeTruthy()
     w.unmount()
   })
 
-  it('自建态:3 行 × nRuns 100 = 300 超闸 → 不 emit + chip over', async () => {
-    const w = mountDialog([DEFAULT_SCHEME, SCHEME_NRUNS(100)])
-    await w.find('[data-testid="scheme-chip-rs-n100"]').trigger('click')
+  it('自建态:3 行 × 100 注入条目 = 300 超闸 → 不 emit + chip over', async () => {
+    const w = mountDialog([DEFAULT_SCHEME, SCHEME_INJ(100)])
+    await w.find('[data-testid="scheme-chip-rs-i100"]').trigger('click')
     await clickConfirm(w)
     expect(w.emitted('confirm')).toBeUndefined()
     const chip = w.find('.summary-chip.total')
@@ -95,9 +87,17 @@ describe('RunDialog — 总量闸(两态公式 ≤ 200)', () => {
     w.unmount()
   })
 
-  it('自建态:3 行 × nRuns 50 = 150 → 正常 emit confirm', async () => {
-    const w = mountDialog([DEFAULT_SCHEME, SCHEME_NRUNS(50)])
-    await w.find('[data-testid="scheme-chip-rs-n50"]').trigger('click')
+  it('自建态:整库 3 行(无注入)= 3 ≤ 200 → 正常 emit confirm', async () => {
+    // 合法方案(injectionEntryIds 为空 → 无悬空条目):总量由行数撑,
+    // 远低于闸 → confirm 正常发出
+    const scheme: SchemeV2 = {
+      schemeId: 'rs-rows', name: '整库', isDefault: false,
+      dataSetSelection: [{ datasetId: 'ds-1' }], injectionEntryIds: [],
+      serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
+      plugins: null, logSub: null,
+    }
+    const w = mountDialog([DEFAULT_SCHEME, scheme])
+    await w.find('[data-testid="scheme-chip-rs-rows"]').trigger('click')
     await clickConfirm(w)
     expect(w.emitted('confirm')).toBeTruthy()
     w.unmount()

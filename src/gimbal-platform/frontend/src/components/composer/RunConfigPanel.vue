@@ -288,7 +288,7 @@ const emit = defineEmits<{
       schemeName: string
       /** 0-based 含端点(引擎 halt_at);缺省 = 全量运行 */
       stepTo?: number
-      /** 每行数据的重复执行次数(total = Σrows × nRuns) */
+      /** 每行数据的重复执行次数(执行器内展开,台账计 attempts 列) */
       nRuns?: number
       /** fan-out 并发度(1–200) */
       parallel?: number
@@ -418,10 +418,11 @@ function goWorkbench(schemeId?: string) {
 
 // ── confirm(两路径,spec §7):溯源恒带 ────────────────────────
 const totalRuns = computed(() => {
+  // P2-05 乘法下沉:总运行次数 = 单元口径(行 × 注入族;nRuns 在执行器
+  // 内展开,计入台账 attempts 列,不再乘进 total —— 与后端闸同口径)
   if (!selected.value) return 0
-  if (selected.value.isDefault) return 1 * Math.max(nRuns.value || 1, 1)   // 基线 × nRuns
+  if (selected.value.isDefault) return 1
   return sumRows(selected.value) * Math.max(selected.value.injectionEntryIds.length, 1)
-    * (nRuns.value || 1)
 })
 
 function onConfirm() {
