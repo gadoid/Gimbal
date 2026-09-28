@@ -106,3 +106,62 @@ def test_platform_error_becomes_reported_failure_not_crash():
     r = run_case(_case([{"target": "$.call.response.status", "operator": "eq",
                          "expected": 200}]), Boom({}), "sb-u")
     assert r["error"] and "503" in r["error"]
+
+
+# --- 账号复用：重跑编排器不该每次都往平台里再塞一个账号 -----------------------
+
+
+def test_existing_account_from_env_is_reused_without_registering(monkeypatch):
+    """设了 GIMBAL_SB_USERNAME 就直接登录，不再注册新账号、也不再等人提权。"""
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.setenv("GIMBAL_SB_USERNAME", "sb-existing")
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Sb-Test-12345")
+    monkeypatch.setattr(orchestrator, "PASSWORD", "Sb-Test-12345", raising=False)
+
+    seen: list[tuple[str, str, object]] = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            seen.append(("init", base_url, token))
+            self.token = token
+
+        def post(self, path, body=None):
+            seen.append(("post", path, body))
+            return 200, {"access_token": "tok-1"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+
+    def boom():  # 复用路径上绝不能等人按回车
+        raise AssertionError("复用已有账号时不该有人工暂停")
+
+    monkeypatch.setattr("builtins.input", boom)
+
+    client, username = orchestrator._bootstrap_account(pause=True)
+    assert username == "sb-existing"
+    assert client.token == "tok-1", "登录拿到的 token 必须挂到 client 上"
+    assert [p for _, p, _ in seen if p == "/api/auth/register"] == []
+
+
+def test_without_env_it_registers_a_fresh_random_account(monkeypatch):
+    """没设 env 才注册，且用户名必须带随机尾巴 —— 固定名字第二次跑必 409。"""
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+
+    posts: list[str] = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            pass
+
+        def post(self, path, body=None):
+            posts.append(path)
+            return 200, {"access_token": "tok-2"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+
+    _, username = orchestrator._bootstrap_account(pause=True)
+    assert "/api/auth/register" in posts
+    assert username.startswith("sb-") and len(username) == 13, username

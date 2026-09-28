@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import uuid
@@ -29,20 +30,26 @@ def load_cases(path: Path) -> list[dict]:
     return doc["cases"]
 
 
-def _login(username: str) -> Platform:
+def _login(username: str, password: str = PASSWORD) -> Platform:
     _, body = Platform(BASE_URL).post(
-        "/api/auth/login", {"username": username, "password": PASSWORD}
+        "/api/auth/login", {"username": username, "password": password}
     )
     return Platform(BASE_URL, body["access_token"])
 
 
 def _bootstrap_account(pause: bool = True) -> tuple[Platform, str]:
-    """注册专用账号，等人提权为 admin，再登录拿 token。
+    """拿一个可用的自举账号（admin），优先复用环境变量里已提权的那个。
 
     新注册用户一律是 member（`app/routers/auth.py` 的 register 只在库里
     没用户时才给 admin），而每域用例要打 /api/users/roster 等需要管理员
-    权限的端点。所以注册完必须停一下让人提权，拿到新会话再继续。
+    权限的端点。所以首次注册后必须停一下让人提权；提权好的账号写进
+    GIMBAL_SB_USERNAME / GIMBAL_SB_PASSWORD，之后每次跑都直接复用，不再
+    往平台里塞新账号。
     """
+    existing = os.environ.get("GIMBAL_SB_USERNAME", "").strip()
+    if existing:
+        return _login(existing, os.environ.get("GIMBAL_SB_PASSWORD") or PASSWORD), existing
+
     username = f"sb-{uuid.uuid4().hex[:10]}"
     Platform(BASE_URL).post(
         "/api/auth/register",
@@ -55,6 +62,10 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str]:
         print(f"  自举账号已注册：{username}")
         print(f"  密码：{PASSWORD}")
         print("  请到平台把该账号的权限改为管理员，改完回车继续。")
+        print("=" * 60)
+        print("  提权后可以 export GIMBAL_SB_USERNAME=%s GIMBAL_SB_PASSWORD=%s"
+              % (username, PASSWORD))
+        print("  之后重跑就不用再注册了。")
         print("=" * 60)
         input()
 
