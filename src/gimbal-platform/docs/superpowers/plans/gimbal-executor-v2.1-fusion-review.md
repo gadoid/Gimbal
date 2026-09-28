@@ -191,3 +191,34 @@
 5. P0-5、P1-9 ~ P1-12：after 连线、debugger、计数口径、清理无效字段。
 6. S-1 ~ S-6：注册表收敛、协议与策略解耦、hook 二分、编译管线拆分、终态事件化、server 保护。
 7. 第三、四节：兼容残留清理与提交拆分。
+
+
+---
+
+## 六、修复记录（2026-09-28 勾销对照）
+
+| 项 | 修复提交 | 备注 |
+|---|---|---|
+| P0-1 plate schema/call.py | 0658aac8 | 补提交恢复 import 与测试收集 |
+| P0-2 并行乘法/锁失效 | 062b47e9 | 并行分支走 _run_one；_lock_for 加锁 |
+| P0-3/P0-3b scratch 原值/出口脱敏 | 03dd4bdb / 2bd9145d | scratch 存原值，脱敏截断只在证据出口 |
+| P0-4 before/after 判定 | 5ef34fc1 | 括号失败计入判定，before 失败阻断主体 |
+| P0-5 after 连线 | 55d3d79e | after 可见上游含全部主体单元；缺输入注入 None 成文 |
+| P0-6 shared 塌缩一致性 | f5dd3395 | 比较全量生效定义（inputs/policy/map/repeat） |
+| P0-7/P1-8 静态分析 | f2205a6b | 按 step 序数据流；内部键精确匹配、删 echo_ |
+| P1-9 abort 二次暂停 | 973d688a | debugger abort 后不再触发 STEP_FAILED |
+| P1-10 write/patch/retry 循环 | 9e9e29db | 会话命令补齐 |
+| P1-11/P1-12 计数口径/timeout/retry | dc039d77 | 单元口径 + attempts 单列；timeout/retry 全链路 |
+| S-1 统一注册机制 | 141ebc7f | Registry 收敛 + params_of + Call 编译期校验 + ext 删硬编码 |
+| S-2 协议/策略表解耦 | 32bde794 | ProtocolExecutor 独立 ABC；login 并入适配器；_do_call 直调 |
+| S-3 拦截/观察二分 | 7ad66b31 | HookPoint 收缩七拦截点；STOP/HookResult 退役→Decision 列表；trigger 锁外执行 |
+| S-4 七阶段管线 | 3990b3e7 | p_load/normalize/patch/desugar/expand(4096 闸)/bind/p_validate |
+| S-5 run.finished 事件化 | 7ad66b31 | RunFinishedEvent 带 seq 发布；jsonl 终线事件化；SSE id=seq+续传 |
+| S-6 server 保护 | 28383c69 / 68fcbf12 | POST /runs 鉴权+回环限制；单单元校验；注册表回收；asyncio.sleep；CliSession 走 stderr |
+| 残留 1-3 | 07ddbfb4 | 状态别名删除；kind "_call"→"call"；--breakpoint 拆 --halt-at |
+| 残留 4-9 | bdd599d3 | RuntimeControl 裁定；$.call.request.body 统一；组装合一；死代码删除；plate 恰其一守卫；run target 补参 |
+| 工程卫生 | 65169384 | 语料/报告出库 .gitignore（123 文件）；实施案状态勘误 |
+| （附）主线基线漂移 | d6872fe6 | order_add_demo 入册未回填 + call 形态迁移未重钉 + tests 根包化（评审"无法收集"之外的既有漂移，随本轮修复） |
+
+全量验证：`python -m pytest -q` → 1014 passed（gimbal + plate 全目录）；
+CLI 冒烟：`run launch -o jsonl` 末行 run.finished(seq)、`--halt-at` halted 语义、`self-check` 12/12。
