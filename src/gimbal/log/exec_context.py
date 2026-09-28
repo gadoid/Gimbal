@@ -56,14 +56,22 @@ def exec_labels() -> dict[str, str]:
 
 
 def _enter(labels: dict[str, str], boundary: str | None):
-    """应用标签 + 清空更深层标签；返回恢复用的 token 列表。"""
+    """应用标签 + 清空更深层标签；返回恢复用的 token 列表。
+
+    键合法性**先于任何 token 设置**校验——未知标签在设置前抛 KeyError，
+    避免半设置状态泄漏（__enter__ 抛出时 __exit__ 不会执行）。
+    """
+    unknown = [n for n in labels if n not in _VARS]
+    if unknown:
+        raise KeyError(
+            f"未知执行上下文标签: {unknown[0]!r}（合法: {EXEC_LABEL_NAMES}）")
+    if boundary is not None and boundary not in _BOUNDARY_ORDER:
+        raise KeyError(f"未知边界: {boundary!r}（合法: {_BOUNDARY_ORDER}）")
     tokens: list[tuple[str, object]] = []
     if boundary is not None:
         for name in _deeper_labels(boundary):
             tokens.append((name, _VARS[name].set(None)))
     for name, value in labels.items():
-        if name not in _VARS:
-            raise KeyError(f"未知执行上下文标签: {name!r}（合法: {EXEC_LABEL_NAMES}）")
         tokens.append((name, _VARS[name].set(str(value))))
     return tokens
 
