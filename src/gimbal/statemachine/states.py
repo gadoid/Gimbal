@@ -9,7 +9,7 @@ EXTRACTING）。历史同值别名（BEFORE_REQUEST/CALLING/AFTER_REQUEST）已�
 
 流转：
   PENDING
-    └─→ PREPARE / BEFORE_REQUEST   执行前置策略（Assign 等，协议无关）
+    └─→ PREPARE                    执行前置策略（Assign 等，协议无关）
           ├─→ INVOKING / CALLING     前置策略全部通过
           └─→ TEARDOWN               hard-fail，跳过协议调用
     INVOKING / CALLING             发出协议调用（由 ProtocolRegistry 分派）

@@ -10,7 +10,7 @@
                  3. 返回新对象替换 payload
 
 设计原则：
-    1. 主流程通过 HookTriggerer.fire(point, payload) 调用；
+    1. 主流程经 ask_decision（core/decisions.py）询问拦截点；
     2. 同一 HookPoint 下多个 handler 按 priority 升序执行；
     3. 任一 handler 抛 Stop 异常 → 立即终止后续 handler 与主流程；
     4. handler 异常被吞掉并记录，避免单个插件拖垮整个流程；

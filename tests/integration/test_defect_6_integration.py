@@ -48,7 +48,7 @@ sm._step_schema = step_schema
 sm._dispatcher = MagicMock()
 sm._dispatcher.dispatch.return_value = StrategyResult(
     status=StrategyStatus.PASSED,
-    strategy_id="_call",
+    strategy_id="call",
     message="mock ok",
     duration_ms=10.0,
 )
