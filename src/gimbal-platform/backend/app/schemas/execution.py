@@ -15,6 +15,8 @@ class ExecutionOut(BaseModel):
     total_runs: int
     passed: int
     failed: int
+    # S5:run.finished 携带的跳过计数(引擎 blocked/skip 口径)
+    skipped: int = 0
     started_at: datetime | None
     finished_at: datetime | None
     config: dict
@@ -50,6 +52,7 @@ class ExecutionListItemOut(BaseModel):
     total_runs: int
     passed: int
     failed: int
+    skipped: int = 0
     started_at: datetime | None
     finished_at: datetime | None
     config_summary: dict = Field(default_factory=dict, alias="configSummary")

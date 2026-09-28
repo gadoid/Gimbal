@@ -1058,8 +1058,15 @@ async def _fanout(
             # write-backs) so concurrent rows and concurrent UI
             # deletions (MAX(0, col-1) SQL) compose correctly.
             passed = 1 if log_line["status"] == "passed" else 0
+            # S5:引擎 run.finished 的 skipped 计数随行累加(plate 异常/
+            # 校验拒绝分支无引擎结果,恒 0)
+            row_skipped = (
+                int(getattr(result, "skipped", 0) or 0)
+                if "runResult" in log_line else 0
+            )
             await _bump_counters(
-                db_factory, execution_id, passed=passed, failed=1 - passed
+                db_factory, execution_id, passed=passed, failed=1 - passed,
+                skipped=row_skipped,
             )
 
     # (dataset row × injection entry × repeat) 交叉笛卡尔积(spec v3 §4):
@@ -1225,12 +1232,14 @@ def _write_result_evidence(
 
 
 async def _bump_counters(
-    db_factory: Any, execution_id: int, *, passed: int, failed: int
+    db_factory: Any, execution_id: int, *, passed: int, failed: int,
+    skipped: int = 0,
 ) -> None:
     """Atomic Execution counter bump(P8:失败重试一次,双败 JSONL 记账)。
 
     Deltas(not absolute write-backs)so concurrent rows and concurrent
-    UI deletions compose correctly.
+    UI deletions compose correctly. skipped = 引擎 run.finished 携带的
+    跳过计数(S5 落库;无引擎结果的行恒 0)。
     """
     for attempt in (1, 2):
         try:
@@ -1241,6 +1250,7 @@ async def _bump_counters(
                     .values(
                         passed=Execution.passed + passed,
                         failed=Execution.failed + failed,
+                        skipped=Execution.skipped + skipped,
                     )
                 )
                 await session.commit()

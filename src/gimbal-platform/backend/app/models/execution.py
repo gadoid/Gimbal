@@ -59,6 +59,9 @@ class Execution(Base):
     total_runs: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)
+    # S5(P0):run.finished 携带的 skipped 计数落库(此前只留在 result.json
+    # 工件,台账列缺失)。存量行 0 = 无跳过口径,不回填。
+    skipped: Mapped[int] = mapped_column(Integer, default=0)
     # V3 dispatcher recipe: {runId, scenarioId, dataSetIds,
     # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
     # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
