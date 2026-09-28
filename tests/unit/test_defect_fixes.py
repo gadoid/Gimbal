@@ -2560,17 +2560,12 @@ def _():
     assert ReporterBase.is_async is False, "default should be False (backward compat)"
 
 
-@test("#B9.2 slow reporters (im_notifier / platform_uploader) set is_async=True")
+@test("#B9.2 slow reporters (im_notifier) set is_async=True")
 def _():
+    # platform_uploader 已随 D-7 退役(职责被平台拉流 C1+C2 取代,平台无接收端点)
     from gimbal.reporter.builtin.im_notifier import IMNotifier
-    from gimbal.reporter.builtin.platform_uploader import PlatformUploader
-    # IM notifier: 慢 webhook → async
     assert IMNotifier.is_async is True, (
         "IMNotifier has slow webhook, should be async to not block event pipeline"
-    )
-    # Platform uploader: 慢上传 → async
-    assert PlatformUploader.is_async is True, (
-        "PlatformUploader has slow upload, should be async to not block finalize"
     )
 
 

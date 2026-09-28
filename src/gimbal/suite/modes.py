@@ -96,13 +96,45 @@ def desugar_chain(decls: list[UnitDecl], control: Control | None) -> list[Unit]:
     return units
 
 
+# ── mode 参数模型（N5：ext list --json 的 params_schema 来源）──
+# C5 suite 编排页的「参数表单由 schema 生成」消费此表;字段与四模式的
+# 编排语义一一对应(不虚设不存在的参数)。
+
+from pydantic import BaseModel, Field
+
+
+class AggregateModeParams(BaseModel):
+    """aggregate:无依赖并行。parallel 上限由 PlanPolicy 承载,模式自身
+    只声明主体列表的编排语义约束(needs 禁用已在 desugar 校验)。"""
+    pass
+
+
+class ComposeModeParams(BaseModel):
+    """compose:显式 needs DAG。依赖关系在 UnitDecl.needs 逐单元声明,
+    模式层无可调参数。"""
+    pass
+
+
+class FanoutModeParams(BaseModel):
+    """fanout:首单元为源,其余全部 need 它。"""
+    pass
+
+
+class ChainModeParams(BaseModel):
+    """chain:按声明顺序线性串联;from_node/to_node 切片语义。"""
+    from_node: str | None = Field(
+        default=None, description="起始单元 ref(缺省 = 首单元)")
+    to_node: str | None = Field(
+        default=None, description="终点单元 ref(缺省 = 末单元)")
+
+
 # ── mode 表（泛型 Registry；新增模式即注册）─────────────────
 
 MODE_REGISTRY: Registry[DesugarFn] = Registry("mode")
-MODE_REGISTRY.register("aggregate", desugar_aggregate)
-MODE_REGISTRY.register("compose", desugar_compose)
-MODE_REGISTRY.register("fanout", desugar_fanout)
-MODE_REGISTRY.register("chain", desugar_chain)
+MODE_REGISTRY.register("aggregate", desugar_aggregate, AggregateModeParams)
+MODE_REGISTRY.register("compose", desugar_compose, ComposeModeParams)
+MODE_REGISTRY.register("fanout", desugar_fanout, FanoutModeParams)
+MODE_REGISTRY.register("chain", desugar_chain, ChainModeParams)
 
 
 def build_default_mode_registry() -> Registry[DesugarFn]:

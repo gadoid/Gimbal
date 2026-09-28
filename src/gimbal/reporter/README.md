@@ -47,7 +47,6 @@ reporter.report(results)
 | `builtin/json_reporter.py` | JSON Reporter |
 | `builtin/allure_reporter.py` | Allure Reporter |
 | `builtin/im_notifier.py` | 即时通讯通知 |
-| `builtin/platform_uploader.py` | 平台上报 |
 
 ---
 
@@ -143,7 +142,6 @@ class IMNotifier(Reporter):
 class PlatformUploader(Reporter):
     """平台上报 Reporter。"""
 
-    name = "platform_uploader"
 ```
 
 ---
