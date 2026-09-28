@@ -140,8 +140,25 @@ def _validate_lifecycle_entries(target: Union[Scenario, SuiteGraph],
                     raise CompileError(
                         f"{slot}[{idx}] kind={kind!r} 参数校验失败: {exc}",
                         code=ErrCode.LIFECYCLE_PARAMS_INVALID,
-                        location={"path": f"config.{slot}[{idx}]", "field": "params"},
+                        location={"path": f"config.{slot}[{idx}]",
+                                  "field": _first_invalid_field(exc) or "params"},
                     ) from exc
+
+
+def _first_invalid_field(exc: "ValidationError") -> str:
+    """从 pydantic ValidationError 提取首个出错字段的定位路径。
+
+    extra=forbid 的未知字段 loc 即拼错的键名（如 ``("metod",)``）；类型错误
+    可能是嵌套路径（``("headers", "x")``）——点号连接为 ``headers.x``。
+    拿不到 loc 时回退空串（调用方再退到粗粒度锚点）。
+    """
+    errs = exc.errors()
+    if errs:
+        loc = errs[0].get("loc") or ()
+        joined = ".".join(str(p) for p in loc)
+        if joined:
+            return joined
+    return ""
 
 
 def _validate_call_fields(
@@ -192,11 +209,14 @@ def _validate_call_fields(
                 params_model.model_validate(
                     _relax_templates(params_model, call.extra_fields()))
             except ValidationError as exc:
+                # 字段粒度：loc 直指拼错/类型不符的键（如 metod、headers.x），
+                # 回退到 "call" 仅在拿不到 loc 时
                 raise CompileError(
                     f"step[{idx}] call 协议 {proto!r} 字段校验失败"
                     f"（未知字段或类型不符）: {exc.error_count()} 处 —— {exc.errors()[0].get('loc')}",
                     code=ErrCode.CALL_FIELD_INVALID,
-                    location={"step": idx, "field": "call"},
+                    location={"step": idx,
+                              "field": _first_invalid_field(exc) or "call"},
                 ) from exc
 
 

@@ -64,12 +64,43 @@ def _invoke_json(cmd: str, source: str):
 
 
 def test_call_field_typo_reports_call_field_invalid(tmp_path):
-    """协议字段拼写错误（servic≠service）→ CALL_FIELD_INVALID。"""
+    """协议字段拼写错误（servic≠service）→ CALL_FIELD_INVALID。
+
+    字段粒度（缺陷修正）：location.field 必须直指拼错的键名，
+    不是粗粒度的 "call"。
+    """
     sc = _http_scenario("sc-typo",
                         call=Call(protocol="http", servic="svc",
                                   method="GET", path="/p"))
     data = _invoke_json("validate", _write(tmp_path, sc))
-    assert data["errors"][0]["code"] == "CALL_FIELD_INVALID"
+    err = data["errors"][0]
+    assert err["code"] == "CALL_FIELD_INVALID"
+    assert err["location"]["field"] == "servic"
+    assert err["location"]["step"] == 0
+
+
+def test_call_field_type_error_reports_nested_field(tmp_path):
+    """类型错误同样带字段粒度（timeout 非数字 → field=timeout）。"""
+    sc = _http_scenario("sc-type",
+                        call=Call(protocol="http", service="svc",
+                                  method="GET", path="/p", timeout="abc"))
+    data = _invoke_json("validate", _write(tmp_path, sc))
+    err = data["errors"][0]
+    assert err["code"] == "CALL_FIELD_INVALID"
+    assert err["location"]["field"] == "timeout"
+
+
+def test_lifecycle_params_error_reports_param_field(tmp_path):
+    """生命周期参数错误同样带字段粒度（sleep.seconds 越界 → field=seconds）。"""
+    sc = _http_scenario("sc-life")
+    sc.config = ScenarioConfig(setup=[
+        {"kind": "sleep", "key": "k", "params": {"seconds": 9999}},
+    ])
+    data = _invoke_json("validate", _write(tmp_path, sc))
+    err = data["errors"][0]
+    assert err["code"] == "LIFECYCLE_PARAMS_INVALID"
+    assert err["location"]["field"] == "seconds"
+    assert err["location"]["path"] == "config.setup[0]"
 
 
 def test_unknown_protocol_reports_unknown_protocol(tmp_path):
