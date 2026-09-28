@@ -43,22 +43,29 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
         except Exception:  # pragma: no cover - defensive: lazy import guard
             ALL_ENDPOINTS = ()
-        for ep in ALL_ENDPOINTS:
-            default_registry.register_endpoint(ep)
+        from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+
+        default_registry.register_endpoints((*ALL_ENDPOINTS, *ALL_PLATFORM_ENDPOINTS))
 
         # system 自检:仅在 owned 默认 registry 时执行,尊重外部注入。
+        # 已知 system 白名单(而非"必须等于 FIN_SYSTEM")—— platform 是自举
+        # 被测系统,common 是通用层;拼错 system 名仍会在启动时炸。
+        from gimbal_plate.systems.common.dimensions import COMMON_SYSTEM
         from gimbal_plate.systems.fin.system_info import FIN_SYSTEM
+        from gimbal_plate.systems.platform.system_info import PLATFORM_SYSTEM
+
+        known_systems = {FIN_SYSTEM, PLATFORM_SYSTEM, COMMON_SYSTEM}
         wrong = [
             ep for ep in default_registry.list_endpoints()
-            if ep.system != FIN_SYSTEM
+            if ep.system not in known_systems
         ]
         if wrong:
             ids = ", ".join(repr(ep.id) for ep in wrong[:5])
             raise RuntimeError(
                 f"plate lifespan sanity check failed: "
-                f"{len(wrong)} endpoint(s) have system != FIN_SYSTEM "
-                f"(first: {ids}). "
-                f"请检查 fin/endpoint/*.py 是否与 system_info.FIN_SYSTEM 一致。"
+                f"{len(wrong)} endpoint(s) have system outside "
+                f"{sorted(known_systems)} (first: {ids}). "
+                f"请检查各 systems/*/ 下的 system 名是否与 system_info 一致。"
             )
 
         # M6 grammar: 注册 8 个 dim(7 数据 + 1 语法 strategy)+ 4 条 seed(ADR 0002 §D-D4,
