@@ -228,12 +228,12 @@ class StepStateMachine:
                 logger.info("[SM {}] STEP_BEFORE write 注入 scratch: keys={}",
                             self._step_id, sorted(pre.write))
 
-            # 初始化 scratch.request_body（可能被 Assign 等策略修改）
-            # body 现在可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，
-            # 那样会把 list body 静默改成 dict。
+            # 初始化请求体 scratch（残留 #5：统一 $.call.request.body 子树，
+            # 可能被 Assign 等策略修改）；body 可为 Dict/List —— 不用 `or {}`
+            # 兜底，避免把 list body 静默改成 dict。
             request_body = getattr(getattr(self._step_schema, "request", None), "body", None)
             if request_body:
-                self._view.write_scratch("request_body", request_body)
+                self._view.write_scratch("$.call.request.body", request_body)
 
             # 从 PENDING 推进到第一个执行阶段
             self._advance(StepState.PREPARE, reason="start")

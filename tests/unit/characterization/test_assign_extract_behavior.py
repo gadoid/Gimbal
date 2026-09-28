@@ -314,3 +314,48 @@ class TestExtractPromote:
             "现行行为：SESSION 作用域 promote 因 suite policy require_reason 被拒；"
             "若此断言失败说明行为已变，请更新本特征化用例并评估批次 F 影响"
         )
+
+
+# ── 残留 #5：请求体引用归一($.request_body → $.call.request.body)──
+
+
+class TestRequestBodyPathNormalization:
+
+    def test_legacy_request_body_path_normalized(self):
+        """存量 $.request_body 引用在 Step 校验期归一为 $.call.request.body。"""
+        step = Step.model_validate({
+            "kind": "step",
+            "call": {"protocol": "echo", "message": "m"},
+            "strategy": [
+                {"kind": "assign", "name": "a", "source": "B",
+                 "target": "$.request_body.x"},
+                {"kind": "assertion", "name": "c", "target": "$.request_body.x",
+                 "operator": "eq", "expected": "B"},
+            ],
+        })
+        assign, assertion = step.strategy[0], step.strategy[1]
+        assert assign.target == "$.call.request.body.x"
+        assert assertion.target == "$.call.request.body.x"
+
+    def test_bare_request_body_target_normalized(self):
+        step = Step.model_validate({
+            "kind": "step",
+            "call": {"protocol": "echo", "message": "m"},
+            "strategy": [
+                {"kind": "assign", "name": "a", "source": "B", "target": "request_body"},
+            ],
+        })
+        assert step.strategy[0].target == "$.call.request.body"
+
+    def test_non_request_body_paths_untouched(self):
+        """非 request_body 的路径/裸名不改写(callbackUrl 等业务名安全)。"""
+        step = Step.model_validate({
+            "kind": "step",
+            "call": {"protocol": "echo", "message": "m"},
+            "strategy": [
+                {"kind": "assign", "name": "a", "source": "$.callbackUrl",
+                 "target": "$.request_body_x"},   # 相似前缀,不误伤
+            ],
+        })
+        assert step.strategy[0].source == "$.callbackUrl"
+        assert step.strategy[0].target == "$.request_body_x"

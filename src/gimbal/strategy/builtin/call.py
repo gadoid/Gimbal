@@ -185,13 +185,13 @@ class CallExecutor(ProtocolExecutor):
         # 原生认证注入（批次 F-2b；原 auth_headers 插件的 HTTP_BEFORE_SEND 钩子退役）
         self._inject_auth_headers(headers, pctx)
 
-        # 如果 scratch 中没有 request_body，先用 spec.body 初始化
+        # 请求体通道（残留 #5：$.call.request.body 子树）
         # 注意：用 `is None` 而非 `not ...` —— 空 dict / 空 list 是合法的 request body，
         # 不应被 falsy 判定重新覆盖。
-        if view.read_scratch("request_body") is None:
-            view.write_scratch("request_body", spec.body)
-        # 从 scratch 读取实时渲染的 request_body（可能被 Assign 等策略修改过）
-        body = view.read_scratch("request_body")
+        if view.read_scratch("$.call.request.body") is None:
+            view.write_scratch("$.call.request.body", spec.body)
+        # 从 scratch 读取实时渲染的请求体（可能被 Assign 等策略修改过）
+        body = view.read_scratch("$.call.request.body")
 
         try:
             import httpx

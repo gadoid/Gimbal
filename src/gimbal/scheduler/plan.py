@@ -55,7 +55,6 @@ from typing import Any, Callable
 
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan, Unit
-from gimbal.scheduler.concurrency import dispatch_parallel
 
 logger = get_logger(__name__)
 

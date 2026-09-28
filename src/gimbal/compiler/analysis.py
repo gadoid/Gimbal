@@ -50,8 +50,8 @@ _NON_VAR_PREFIXES = ("service.", "auth.")
 # 业务变量会被 "call" 前缀误吞成内部键、静默丢输入。内部面收敛为一组成
 # 熟的协议归一树键；其余名字一律按外部引用对待。
 _PROTOCOL_PRODUCED_KEYS = frozenset({
-    "call",              # $.call.response... 协议归一树根
-    "request_body",
+    "call",              # $.call.request/response... 协议归一树根
+                         # (残留 #5:请求体通道并入 $.call.request.body 子树)
     "response_body",
     "response_status",
     "duration_ms",

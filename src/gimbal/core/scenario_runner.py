@@ -40,8 +40,12 @@ logger = get_logger(__name__)
 
 @dataclass
 class RuntimeControl:
-    """Scenario 级运行时控制。
+    """Scenario 级运行时控制（残留 #4 裁定：只承载运行期控制）。
 
+    四字段全部是运行期语义（halt/区间/调试挂起）；静态执行参数
+    （n_runs/retry/parallel/fail_fast）在 PlanPolicy/UnitPolicy（schema/plan.py），
+    不入本类。新增字段前先问：它随"这次执行"变 → 这里；随"用例定义"变 → schema。
+    
     Attributes:
         halt_at:       0-based step index；执行到该 index 后停止。
                        None 表示不主动停止（仅依赖现有 timeout/cancel/failure 路径）。

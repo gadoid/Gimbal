@@ -35,6 +35,7 @@ def execute_run_file(
     expect_kind: Literal["scenario", "suite"],
     env, mode, log_level,
     reporter, report_dir, output,
+    step_from=None, step_to=None, halt_at=None,
 ) -> None:
     """加载 → kind 强校验 → bootstrap → Engine.run（编译 Plan 单路径）→ 报告。"""
     cli_ctx.env = env
@@ -69,9 +70,21 @@ def execute_run_file(
         from gimbal.cli.common import attach_jsonl_sink
         jsonl_sub = attach_jsonl_sink(configuration.event_bus)
 
+    from gimbal.core.scenario_runner import RuntimeControl
+    runtime_control = None
+    if any(v is not None for v in (step_from, step_to, halt_at)):
+        runtime_control = RuntimeControl(
+            halt_at=step_to if step_to is not None else halt_at,
+            halt_reason=(
+                f"cli --step-to={step_to}" if step_to is not None
+                else (f"cli --halt-at={halt_at}" if halt_at is not None else "user-requested")
+            ),
+            step_from=step_from,
+        )
+
     engine = Engine(configuration)
     try:
-        result = engine.run(target)
+        result = engine.run(target, runtime_control=runtime_control)
     finally:
         if jsonl_sub is not None:
             try:
@@ -96,12 +109,40 @@ def scenario(
     reporter: ReporterOpt = None,
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
+    step_from: Annotated[
+        int | None,
+        typer.Option("--step-from", help="从指定 step 开始执行（0-based；被跳过步骤的输入由 vars/--var 提供）。", rich_help_panel="步骤控制"),
+    ] = None,
+    step_to: Annotated[
+        int | None,
+        typer.Option("--step-to", help="执行到指定 step 停止（0-based）。", rich_help_panel="步骤控制"),
+    ] = None,
+    halt_at: Annotated[
+        int | None,
+        typer.Option("--halt-at", help="执行到指定 step 停止（--step-to 的别名语义）。", rich_help_panel="步骤控制"),
+    ] = None,
+    var: Annotated[
+        list[str] | None,
+        typer.Option("--var", help="覆盖/追加场景变量，K=V 可多次。", rich_help_panel="输入"),
+    ] = None,
 ) -> None:
     """执行单个 Scenario（编译为隐式 aggregate Plan，v2.1 单路径）。"""
+    if var:
+        import json as _json
+        overrides = {}
+        for kv in var:
+            k, _, v = kv.partition("=")
+            try:
+                overrides[k] = _json.loads(v)
+            except Exception:  # noqa: BLE001 — 非 JSON 字面量按原始字符串
+                overrides[k] = v
+        # 残留 #9：变量覆盖进调用参数层;schema 补丁层(p_patch)接线后并入生效副本
+        ctx.obj.extras.setdefault("vars", {}).update(overrides)
     execute_run_file(
         ctx.obj, source, fmt, expect_kind="scenario",
         env=env, mode=mode, log_level=log_level,
         reporter=reporter, report_dir=report_dir, output=output,
+        step_from=step_from, step_to=step_to, halt_at=halt_at,
     )
 
 

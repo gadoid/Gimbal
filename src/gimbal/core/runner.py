@@ -302,8 +302,8 @@ class Engine:
         outcome = sched.run(plan, _run_unit, fail_fast=fail_fast)
 
         # ── 判定：按计划清单对账（blocked / cancelled 由 outcome 呈现）──
-        if plan.implicit:
-            return self._assemble_implicit(plan, outcome.results)
+        # 残留 #6：单场景/编排统一走 aggregate 口径（halted/error/failed/blocked
+        # 分立,exit_code = 0 iff 全零;隐式 Plan 的 before/after 为空,天然退化）
         return self._assemble_aggregate(plan, outcome)
 
     # ── 判定（两套历史口径，零回归）────────────────────────────
@@ -329,36 +329,6 @@ class Engine:
                 for s in result.step_results
             ],
         }
-
-    def _assemble_implicit(self, plan: Any, results: dict) -> RunResult:
-        """单场景历史计数口径：非通过一律计 failed（含 error 状态）。
-
-        P1-11：total/passed/failed/halted 按单元计数（恒 1 个单元），
-        执行次数（n_runs/retry 展开）单列 attempts。
-        """
-        unit = plan.units[0]
-        result = results.get(unit.id)
-        if result is None or isinstance(result, Exception):
-            logger.error("[Engine] 隐式 Plan 单元未产出结果: unit_id={}", unit.id)
-            return RunResult(exit_code=1, total=1, failed=1, attempts=1)
-        logger.info(
-            "[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f} halted={}",
-            result.scenario_id, result.status, result.duration_ms, result.halted,
-        )
-        repaired = sum(
-            1 for s in getattr(result, "step_results", []) or []
-            if getattr(s, "repaired", False)
-        )
-        return RunResult(
-            exit_code=0 if result.passed else 1,
-            total=1,
-            passed=1 if result.passed else 0,
-            failed=0 if result.passed else 1,
-            halted=1 if result.halted else 0,
-            repaired=repaired,
-            attempts=self._execution_count(result),
-            details=[self._detail_row(result)],
-        )
 
     @staticmethod
     def _execution_count(result: Any) -> int:

@@ -1,9 +1,8 @@
-"""gimbal.scheduler — Suite 调度（串行 / scenario 级并行分派）。
+"""scheduler —— v2.1 多线程分派（PlanScheduler）。
 
-公开面：SuiteScheduler.run_all（Engine._run_suite 使用）。
-依赖 retry / dependency（重试策略、依赖图）留 suite 编排批次（总案 D5）。
+历史 SuiteScheduler/dispatch_parallel 已随残留清理 #7 删除（批次 C 被
+scheduler/plan.py 的 PlanScheduler 取代）。
 """
-from gimbal.scheduler.scheduler import SuiteScheduler
-from gimbal.scheduler.concurrency import clamp_workers, dispatch_parallel
+from gimbal.scheduler.plan import PlanScheduler
 
-__all__ = ["SuiteScheduler", "clamp_workers", "dispatch_parallel"]
+__all__ = ["PlanScheduler"]

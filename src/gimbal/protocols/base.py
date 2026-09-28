@@ -287,7 +287,14 @@ class ProtocolExecutor(ABC):
         # `call` 是唯一证据键；下游一律经 $.call.request/response 导航）
         call_result.remember_raw_request()
         call_result.request = self.redact(call_result.request or {})
-        view.write_scratch("call", call_result.to_scratch())
+        scratch_call = call_result.to_scratch()
+        # 残留 #5：请求体通道($.call.request.body)跨 send 存活 —— 不消费
+        # 请求体的协议(echo 等)覆写 call 树时保留 send 前的通道值
+        # (http 等自带 request.body 的协议自然同值,无感)
+        prev_body = view.read_scratch("$.call.request.body")
+        if prev_body is not None:
+            scratch_call.setdefault("request", {}).setdefault("body", prev_body)
+        view.write_scratch("call", scratch_call)
 
         message = self._summary(call_result)
         result = StrategyResult(

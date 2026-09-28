@@ -1,4 +1,6 @@
-"""Suite 多线程分派 — SuiteScheduler 单元测试 + Engine 级端到端。
+"""Suite 多线程分派 — clamp_workers 工具 + Engine 级端到端。
+
+SuiteScheduler 纯调度测试已随残留清理 #7 删除(被 PlanScheduler 取代)。
 
 覆盖：
   - SuiteScheduler 串行模式：结果有序、fail-fast 停止（历史语义等价）；
@@ -37,7 +39,6 @@ from gimbal.schema.plan import PlanPolicy
 from gimbal.schema.step import Step
 from gimbal.strategy.dispatcher import build_default_dispatcher
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
-from gimbal.scheduler import SuiteScheduler
 from gimbal.scheduler.concurrency import clamp_workers
 
 
@@ -76,69 +77,6 @@ class SlowEchoProtocolExecutor(ProtocolExecutor):
             status=0,
             body={"echo": spec.message},
         )
-
-
-# ── SuiteScheduler 纯调度测试 ───────────────────────────────
-
-class TestSuiteScheduler:
-
-    def test_serial_ordered_and_fail_fast(self):
-        sched = SuiteScheduler()
-
-        def run_one(i):
-            return type("R", (), {"passed": i != 2})()
-
-        results = sched.run_all([0, 1, 2, 3, 4], run_one, fail_fast=True)
-        # fail-fast：第 3 项（i=2）失败即停止，i=3/4 未执行（None 占位）
-        assert results[:3] == [results[0], results[1], results[2]]
-        assert getattr(results[2], "passed") is False
-        assert results[3] is None and results[4] is None
-
-    def test_parallel_results_in_submission_order(self):
-        sched = SuiteScheduler()
-
-        def run_one(i):
-            # 靠后的项先完成 —— 结果仍须按提交序
-            time.sleep(0.05 * (4 - i))
-            return i
-
-        results = sched.run_all(list(range(5)), run_one, parallel=True, max_workers=5)
-        assert results == [0, 1, 2, 3, 4]
-
-    def test_parallel_actually_concurrent(self):
-        sched = SuiteScheduler()
-        started = []
-        import threading
-        barrier = threading.Barrier(3, timeout=5)
-
-        def run_one(i):
-            barrier.wait()   # 3 个任务同时在场才放行 —— 证明真并发
-            return i
-
-        t0 = time.monotonic()
-        results = sched.run_all([0, 1, 2], run_one, parallel=True, max_workers=3)
-        assert results == [0, 1, 2]
-        assert time.monotonic() - t0 < 4   # barrier 没死锁即通过
-
-    def test_parallel_fail_fast_cancels_pending(self):
-        sched = SuiteScheduler()
-
-        def run_one(i):
-            if i == 0:
-                return type("R", (), {"passed": False})()
-            time.sleep(0.3)
-            return type("R", (), {"passed": True})()
-
-        results = sched.run_all(list(range(6)), run_one, parallel=True,
-                                max_workers=1, fail_fast=True)
-        # max_workers=1：首项失败后其余全部取消
-        assert getattr(results[0], "passed") is False
-        assert all(r is None for r in results[1:])
-
-    def test_clamp_workers(self):
-        assert clamp_workers(None) == 4
-        assert clamp_workers(0) == 1
-        assert clamp_workers(999) == 64
 
 
 # ── Engine 级并行 suite 端到端 ─────────────────────────────

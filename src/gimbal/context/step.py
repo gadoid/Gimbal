@@ -47,13 +47,17 @@ class StepScratch:
     def _set_jsonpath(self, path: str, value: Any) -> None:
         """支持 JSONPath 写入嵌套结构。
 
-        path=$.request_body.order_id ->
-            _data["request_body"]["order_id"] = value
+        path=$.call.request.body.order_id ->
+            _data["call"]["request"]["body"]["order_id"] = value
         """
         from gimbal.utils.jsonpath import set_value as jsonpath_set
         jsonpath_set(self._data, path, value)
 
     def get(self, key: str, default: Any = None) -> Any:
+        if key.startswith("$."):
+            from gimbal.utils.jsonpath import get as jsonpath_get
+            value = jsonpath_get(self._data, key)
+            return default if value is None else value
         return self._data.get(key, default)
 
     def has(self, key: str) -> bool:
