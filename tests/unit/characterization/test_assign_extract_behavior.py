@@ -42,7 +42,7 @@ from gimbal.strategy.dispatcher import build_default_dispatcher
 
 @dataclass
 class EchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     name: Optional[str] = "echo_call"
     phase: Optional[str] = None
     order: int = 0

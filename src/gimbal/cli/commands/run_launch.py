@@ -179,9 +179,13 @@ def launch(
         int | None,
         typer.Option("--step-to", help="执行到指定 step 停止（0-based）。", rich_help_panel="步骤控制"),
     ] = None,
+    halt_at: Annotated[
+        int | None,
+        typer.Option("--halt-at", help="执行到指定 step 停止（0-based；残留 #3：承接旧 --breakpoint 数字语义）。", rich_help_panel="步骤控制"),
+    ] = None,
     breakpoint_at: Annotated[
         list[str] | None,
-        typer.Option("--breakpoint", help="step 暂停：纯数字=halt_at（历史语义）；地址形式 'step-001:call_before' = debugger 断点（v2.1 批次 E）。", rich_help_panel="步骤控制"),
+        typer.Option("--breakpoint", help="debugger 断点地址 'step-001:call_before'（只收地址；数字停点用 --halt-at，残留 #3 拆分）。", rich_help_panel="步骤控制"),
     ] = None,
     debug: Annotated[
         bool,
@@ -213,7 +217,7 @@ def launch(
 
         阶段控制（最小子集）：
         cat case.yaml | gimbal run launch - --step-to=3
-        gimbal run launch ./debug.yaml --breakpoint=5
+        gimbal run launch ./debug.yaml --halt-at=5
     """
     # 0. 步骤级控制参数互斥校验（与 run_scenario 对齐）
     if step_from is not None and step_to is not None and step_from > step_to:
@@ -269,32 +273,30 @@ def launch(
         raise typer.Exit(code=2)
     scenario = target
 
-    # 7.4 断点入参分流：纯数字 = halt_at（历史语义）；含 ':' 的地址 = debugger 断点
-    halt_breakpoints: list[int] = []
+    # 7.4 断点入参分流（残留 #3）：--breakpoint 只收地址；数字停点必须用 --halt-at
     debug_breakpoints: list[str] = []
     for bp in (breakpoint_at or []):
         as_str = str(bp)
-        if ":" in as_str:
-            debug_breakpoints.append(as_str)
-        else:
-            try:
-                halt_breakpoints.append(int(as_str))
-            except ValueError:
-                typer.secho(f"无法解析 --breakpoint={bp!r}", fg=typer.colors.RED, err=True)
-                raise typer.Exit(code=2)
-    breakpoint_at = halt_breakpoints or None
+        if ":" not in as_str:
+            typer.secho(
+                f"--breakpoint 只接受地址形式（如 step-000:call_before）；"
+                f"数字停点请用 --halt-at（得到 {bp!r}）",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(code=2)
+        debug_breakpoints.append(as_str)
+    breakpoint_at = None
 
     # 7.5 构造 RuntimeControl（与 run_scenario 同一套优先级）
     from gimbal.core.scenario_runner import RuntimeControl
 
     runtime_control: RuntimeControl | None = None
-    if step_to is not None or step_from is not None or (breakpoint_at and breakpoint_at):
+    if step_to is not None or step_from is not None or halt_at is not None:
         runtime_control = RuntimeControl(
-            halt_at=step_to if step_to is not None else (
-                breakpoint_at[0] if breakpoint_at else None),
+            halt_at=step_to if step_to is not None else halt_at,
             halt_reason=(
                 f"cli --step-to={step_to}" if step_to is not None
-                else (f"cli --breakpoint={breakpoint_at[0]}" if breakpoint_at else "user-requested")
+                else (f"cli --halt-at={halt_at}" if halt_at is not None else "user-requested")
             ),
             step_from=step_from,
         )

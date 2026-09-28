@@ -45,7 +45,7 @@ from gimbal.scheduler.concurrency import clamp_workers
 
 @dataclass
 class SlowEchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     message: str = ""
     delay: float = 0.0
     name: Optional[str] = "echo_call"

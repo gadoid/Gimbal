@@ -3,11 +3,11 @@
 状态机只负责维护当前状态、校验跃迁合法性，不持有业务逻辑。
 业务逻辑全部在 engine.py 的驱动循环里。
 
-协议中立化（2026-09-27）：执行阶段状态新增协议中立名（PREPARE/INVOKING/
-EXTRACTING），历史名（BEFORE_REQUEST/CALLING/AFTER_REQUEST）保留为**同值
-别名** —— 枚举 value 全部不变，事件、报告、状态序列化零回归。
+协议中立化（2026-09-27）：执行阶段状态命名协议中立（PREPARE/INVOKING/
+EXTRACTING）。历史同值别名（BEFORE_REQUEST/CALLING/AFTER_REQUEST）已随
+残留清理退役（评审残留 #1）—— 枚举 value 不变，序列化零回归。
 
-流转（中立名 / 历史名）：
+流转：
   PENDING
     └─→ PREPARE / BEFORE_REQUEST   执行前置策略（Assign 等，协议无关）
           ├─→ INVOKING / CALLING     前置策略全部通过
@@ -34,8 +34,7 @@ from enum import Enum
 class StepState(str, Enum):
     """Step 生命周期状态。
 
-    同一 value 两个名字（先中立名后历史名，后者为枚举别名）：
-    ``StepState.CALLING is StepState.INVOKING`` 恒成立，二者可互换。
+    执行阶段状态为协议中立名（历史别名已退役，评审残留 #1）。
     """
 
     # ── 等待/就绪 ──────────────────────────────
@@ -43,11 +42,8 @@ class StepState(str, Enum):
 
     # ── 执行阶段（对应 StrategyPhase，协议无关）──
     PREPARE = "before_request"         # 协议前置准备（Assign / SQL 注入）
-    BEFORE_REQUEST = PREPARE           # 历史名（别名）
     INVOKING = "calling"               # 协议调用发出、等待结果
-    CALLING = INVOKING                 # 历史名（别名）
     EXTRACTING = "after_request"       # 调用结果后处理（Extract 提取字段）
-    AFTER_REQUEST = EXTRACTING         # 历史名（别名）
     VERIFYING = "verifying"            # Assertion / DBChecker
     TEARDOWN = "teardown"              # SQL 清理 / Chaos 恢复
 

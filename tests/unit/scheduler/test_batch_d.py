@@ -40,7 +40,7 @@ from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
 @dataclass
 class ProgSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     name: Optional[str] = "echo_call"
     phase: Optional[str] = None
     order: int = 0

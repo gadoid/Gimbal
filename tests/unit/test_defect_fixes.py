@@ -349,7 +349,7 @@ def _make_sm_with_api(service: str, base_url: str, call: Call = None):
     sm._dispatcher = MagicMock()
     sm._dispatcher.dispatch.return_value = StrategyResult(
         status=StrategyStatus.PASSED,
-        strategy_id="_call",
+        strategy_id="call",
         message="mock ok",
         duration_ms=0.0,
     )
@@ -632,7 +632,7 @@ def _build_sm_for_soft_failure(
     # HTTP call (dispatch with _CallSpec) returns PASSED
     sm._dispatcher.dispatch.return_value = StrategyResult(
         status=StrategyStatus.PASSED,
-        strategy_id="_call",
+        strategy_id="call",
         message="ok",
         duration_ms=0.0,
     )

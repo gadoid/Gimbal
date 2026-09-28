@@ -45,7 +45,7 @@ from gimbal.strategy.dispatcher import build_default_dispatcher
 
 @dataclass
 class SlowEchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     message: str = ""
     delay: float = 0.0
     name: Optional[str] = "echo_call"

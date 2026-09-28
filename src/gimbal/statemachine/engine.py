@@ -19,13 +19,13 @@
 
 流转表（中立名 / 历史别名，value 不变）：
   PENDING
-    └─→ PREPARE(BEFORE_REQUEST)  执行 Assign 等前置策略
+    └─→ PREPARE                执行 Assign 等前置策略
           ├─→ INVOKING(CALLING)    策略全部通过
           └─→ TEARDOWN             hard-fail，跳过协议调用
     INVOKING(CALLING)           发出协议调用（ProtocolRegistry 分派）
-          ├─→ EXTRACTING(AFTER_REQUEST)  调用成功
+          ├─→ EXTRACTING            调用成功
           └─→ TEARDOWN             调用失败
-    EXTRACTING(AFTER_REQUEST)   执行 Extract 等后置策略
+    EXTRACTING                执行 Extract 等后置策略
           ├─→ VERIFYING            策略全部通过
           └─→ TEARDOWN             hard-fail
     VERIFYING                   执行 Assertion
@@ -279,7 +279,7 @@ class StepStateMachine:
         """执行前置策略（Assign / SQL 注入等，协议无关）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM {}] 进入 PREPARE(BEFORE_REQUEST) 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 PREPARE 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.PREPARE)
         self._phase_results.append(pr)
 
@@ -310,7 +310,7 @@ class StepStateMachine:
         """执行后置策略（Extract 提取字段等）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM {}] 进入 EXTRACTING(AFTER_REQUEST) 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 EXTRACTING 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.EXTRACTING)
         self._phase_results.append(pr)
 
@@ -458,7 +458,7 @@ class StepStateMachine:
             )
             return StrategyResult(
                 status=StrategyStatus.ERROR,
-                strategy_id=f"_call:{call.protocol}",
+                strategy_id=f"call:{call.protocol}",
                 message=(
                     f"No protocol executor registered for protocol={call.protocol!r}; "
                     f"registered={protocols.protocols()}"

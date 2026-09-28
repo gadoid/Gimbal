@@ -2,7 +2,7 @@
 
 覆盖：
   - ProtocolRegistry：register/resolve/unregister_plugin + dispatcher kind 联动
-  - build_default_dispatcher：http 第一员、kind="_call"、四策略齐备
+  - build_default_dispatcher：http 第一员、kind="call"、四策略齐备
   - PluginContext.register_protocol / register_strategy + 卸载清理
   - Step schema：api 糖归一化、恰好其一校验、dump/round-trip、显式 call
 """
@@ -56,7 +56,7 @@ from typing import Any, Optional, Union
 
 @dataclass
 class EchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     message: str = ""
     name: Optional[str] = "echo_call"
     phase: Optional[str] = None
@@ -87,7 +87,7 @@ class TestProtocolRegistry:
         reg = d.protocols
         reg.register(EchoProtocolExecutor())
         assert "echo" in reg.protocols()
-        assert "_call:echo" not in d.kinds()   # S-2：协议不进策略 kind 表
+        assert "call:echo" not in d.kinds()   # S-2：协议不进策略 kind 表
         assert isinstance(reg.resolve("echo"), EchoProtocolExecutor)
 
     def test_unregister_plugin_removes_both_tables(self):
@@ -99,7 +99,7 @@ class TestProtocolRegistry:
         removed = reg.unregister_plugin("my-proto-plugin")
         assert removed == 1
         assert "echo" not in reg.protocols()
-        assert "_call:echo" not in d.kinds()
+        assert "call:echo" not in d.kinds()
 
     def test_register_rejects_non_protocol_executor(self):
         reg = build_default_protocol_registry()
@@ -305,7 +305,7 @@ class TestPluginProtocolChannel:
         ctx.register_protocol(EchoProtocolExecutor())
         assert ctx.protocol_count == 1
         assert "echo" in d.protocols.protocols()
-        assert "_call:echo" not in d.kinds()   # S-2：两表解耦
+        assert "call:echo" not in d.kinds()   # S-2：两表解耦
 
     def test_register_strategy_via_context(self):
         d, ctx = self._make_ctx()
@@ -341,7 +341,7 @@ class TestPluginProtocolChannel:
         report = loader.deactivate_all([plugin])
         assert report.all_ok
         assert "echo" not in d.protocols.protocols()
-        assert "_call:echo" not in d.kinds()
+        assert "call:echo" not in d.kinds()
         assert "probe_strategy" not in d.kinds()
 
 

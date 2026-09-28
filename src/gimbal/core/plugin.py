@@ -176,7 +176,7 @@ class PluginContext:
         """注册协议执行器（ProtocolExecutor）—— 多协议注册的正式入口。
 
         同时登记 ProtocolRegistry（protocol 键）与 dispatcher
-        （kind 键，默认 ``_call:{protocol}``）；卸载时按插件名批量注销。
+        （protocol 名即键）；卸载时按插件名批量注销。
         """
         if self.protocol_registry is None:
             raise RuntimeError(

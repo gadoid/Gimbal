@@ -133,8 +133,8 @@ class ProtocolExecutor(ABC):
 
     @property
     def kind(self) -> str:
-        """结果标签（strategy_id 口径）；http 覆写为 '_call' 保持历史兼容。"""
-        return f"_call:{self.protocol}"
+        """结果标签（strategy_id 口径）；http 覆写为 'call'（残留 #2）。"""
+        return f"call:{self.protocol}"
 
     # ── 子类实现的契约点 ──────────────────────────────────────
 

@@ -37,7 +37,7 @@ from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
 @dataclass
 class EchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     message: str = ""
     name: Optional[str] = "echo_call"
     phase: Optional[str] = None
@@ -136,11 +136,10 @@ class TestMultiProtocolStep:
         phases = [p.phase for p in result.phase_results]
         assert "calling" in phases   # error_phase 历史口径 value 不变
 
-    def test_state_enum_aliases_same_value(self):
-        """中立名与历史名是同一成员、同 value —— 序列化零回归。"""
-        assert StepState.PREPARE is StepState.BEFORE_REQUEST
-        assert StepState.INVOKING is StepState.CALLING
-        assert StepState.EXTRACTING is StepState.AFTER_REQUEST
+    def test_state_enum_aliases_removed(self):
+        """残留 #1：历史同值别名已删,枚举只剩中立名(value 不变零回归)。"""
+        for legacy in ("BEFORE_REQUEST", "CALLING", "AFTER_REQUEST"):
+            assert not hasattr(StepState, legacy), legacy
         assert StepState.PREPARE.value == "before_request"
         assert StepState.INVOKING.value == "calling"
         assert StepState.EXTRACTING.value == "after_request"
@@ -210,3 +209,41 @@ class TestMultiProtocolStep:
         assert "orphan" in result.message
 
 
+
+
+# ── 残留 #2/#3 守卫 ──────────────────────────────────────────
+
+
+class TestLegacyCleanupGuards:
+
+    def test_call_kind_renamed(self):
+        """残留 #2：http 协议 kind 历史值 "_call" → "call"。"""
+        from gimbal.strategy.builtin.call import CallExecutor, _CallSpec
+        assert CallExecutor.kind == "call"
+        assert _CallSpec().kind == "call"
+
+
+    def test_breakpoint_split_cli(self, tmp_path):
+        """残留 #3：--breakpoint 只收地址;数字停点用 --halt-at。"""
+        import json as _json
+        from typer.testing import CliRunner
+        from gimbal.cli.params import starter
+
+        sc = tmp_path / "sc.json"
+        sc.write_text(_json.dumps({
+            "kind": "scenario", "scenarioId": "bp",
+            "meta": {"name": "n", "description": "d", "module": "m", "priority": 1,
+                     "author": "a", "owner": "o", "tags": [], "version": "1",
+                     "createTime": "2026-09-28T00:00:00Z", "expire": False,
+                     "requirementRef": []},
+            "config": {}, "resource": {}, "steps": [],
+        }), encoding="utf-8")
+
+        runner = CliRunner()
+        # 数字 --breakpoint 不再二义:拒绝
+        r_bad = runner.invoke(starter, ["run", "launch", str(sc), "--breakpoint", "5"])
+        assert r_bad.exit_code != 0
+        assert "--halt-at" in (r_bad.output or "") or r_bad.exit_code != 0
+        # --halt-at 语义正常接线:参数被接受(空步骤场景完成,退出码非参数错)
+        r_ok = runner.invoke(starter, ["run", "launch", str(sc), "--halt-at", "3"])
+        assert r_ok.exit_code in (0, 1)

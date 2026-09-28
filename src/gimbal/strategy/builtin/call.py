@@ -9,7 +9,7 @@
 
 v2.1 终态契约（批次 F-2b：auth_headers/response_body_extract 已退役，
 批次 F 回收）：
-  - 类名 CallExecutor / kind="_call" 不变（dispatcher 注册键、直调测试零改动）；
+  - kind 自残留清理 #2 起为 "call"（S-2 后仅为结果标签,无注册键语义）；
   - HTTP_BEFORE_SEND payload 的 headers 与实际请求 headers 是**同一对象**，
     钩子原地改写必须影响真实请求；被 STOP 中断 → 不发请求，ERROR 结果
     （文案 "HTTP request blocked by hook"）；
@@ -39,11 +39,11 @@ class _CallSpec:
     """HTTP 调用描述（render 产物）。不属于 schema。
 
     S-2 起不经过策略 dispatcher：计时/异常兜底由 ProtocolExecutor.execute
-    模板承担。kind 保留 "_call" 作结果标签（历史口径）。
+    模板承担。kind = "call"（残留 #2 起的规范标签）。
     埋点设施（协议层钩子/事件/认证）经执行器 bind 注入；pctx 只承载逐调数据。
     """
 
-    kind: str = "_call"
+    kind: str = "call"
     method: str = "GET"
     url: str = ""
     headers: dict = field(default_factory=dict)
@@ -70,8 +70,8 @@ class CallExecutor(ProtocolExecutor):
     """
 
     protocol = "http"
-    # dispatcher 注册键沿用历史值 "_call"（直接 dispatch _CallSpec 的既有调用方零改动）
-    kind = "_call"
+    # 结果标签（残留 #2：历史 "_call" 改 "call"）
+    kind = "call"
 
     # ── render：识别协议字段 → 合成 spec ─────────────────────
 
@@ -87,7 +87,7 @@ class CallExecutor(ProtocolExecutor):
             return self._routing_error(
                 pctx,
                 message="api is missing the 'service' field required for routing",
-                strategy_id="_call",
+                strategy_id="call",
             )
         method = getattr(call, "method", "GET")
         path = getattr(call, "path", "/")

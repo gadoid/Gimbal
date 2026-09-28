@@ -36,7 +36,7 @@ def _make_sm(service: str, base_url: str, services: dict | None = None):
     sm._protocols = build_default_protocol_registry()
     http_exec = sm._protocols.resolve("http")
     http_exec.execute = MagicMock(return_value=StrategyResult(
-        status=StrategyStatus.PASSED, strategy_id="_call",
+        status=StrategyStatus.PASSED, strategy_id="call",
         message="mock ok", duration_ms=0.0,
     ))
     sm._view = MagicMock()
@@ -45,7 +45,7 @@ def _make_sm(service: str, base_url: str, services: dict | None = None):
     sm._on_transition = None
     sm._hooks = None
     sm._bus = None
-    sm._state = sm_engine.StepState.CALLING
+    sm._state = sm_engine.StepState.INVOKING
     sm._phase_results = []
     sm._error = None
     sm._error_phase = None

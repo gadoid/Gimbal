@@ -66,7 +66,7 @@ class _StubView:
 
 @dataclass
 class EchoSpec:
-    kind: str = "_call:echo"
+    kind: str = "call:echo"
     message: str = ""
     name: Optional[str] = "echo_call"
     phase: Optional[str] = None
@@ -101,7 +101,7 @@ class TokenEchoExecutor(ProtocolExecutor):
 
     def build_spec(self, call, pctx):
         return dataclasses.replace(
-            EchoSpec(message="m", pctx=pctx), kind="_call:tokenecho")
+            EchoSpec(message="m", pctx=pctx), kind="call:tokenecho")
 
     def send(self, spec, view):
         return CallResult.build(
@@ -500,7 +500,7 @@ class TestTransportError:
             protocol = "boom"
 
             def build_spec(self, call, pctx):
-                return dataclasses.replace(EchoSpec(message="x", pctx=pctx), kind="_call:boom")
+                return dataclasses.replace(EchoSpec(message="x", pctx=pctx), kind="call:boom")
 
             def send(self, spec, view):
                 raise ProtocolTransportError("Request timeout: simulated",
