@@ -1,0 +1,112 @@
+# 黄金链路：health → 注册 → 登录 → 建场景 → 建数据集 → 建方案 → 发起运行 → 取结果
+#
+# 注意 auth 域的 wire 键是 snake_case（access_token / token_type），
+# 与其它域的 camelCase 不同 —— 断言键名以 OpenAPI 为准，别凭 Python 字段名写。
+cases:
+  - id: T1
+    name: 健康检查
+    tags: [smoke, e2e]
+    steps:
+      - method: GET
+        path: /api/health
+        auth: false
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 200}
+          - {target: "$.call.response.body.status", operator: eq, expected: ok}
+
+  - id: T2
+    name: 注册自举账号
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/auth/register
+        auth: false
+        body:
+          username: "${sb.username}"
+          display_name: gimbal-bootstrap
+          password: Sb-Test-12345
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 201}
+          - {target: "$.call.response.body.user.username", operator: eq, expected: "${sb.username}"}
+          - {target: "$.call.response.body.token_type", operator: eq, expected: bearer}
+
+  - id: T3
+    name: 登录取 token
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/auth/login
+        auth: false
+        body:
+          username: "${sb.username}"
+          password: Sb-Test-12345
+        extract: {expr: "$.call.response.body.access_token", target: sb_access_token}
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 200}
+          - {target: "$.call.response.body.token_type", operator: eq, expected: bearer}
+
+  - id: T4
+    name: 建场景
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/scenarios
+        body:
+          definition: {}
+          orchestration: {steps: [], resourceMeta: {}}
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 201}
+          - {target: "$.call.response.body.scenarioId", operator: exists, expected: null}
+
+  - id: T5
+    name: 建数据集
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/scenarios/${sb.scenario_id}/data-sets
+        body:
+          name: sb-dataset
+          description: 自举数据集
+          rows: []
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 201}
+          - {target: "$.call.response.body.datasetId", operator: exists, expected: null}
+
+  - id: T6
+    name: 建运行方案
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/scenarios/${sb.scenario_id}/run-schemes
+        body:
+          name: sb-scheme
+          isDefault: true
+          nRuns: 1
+          parallel: 1
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 201}
+          - {target: "$.call.response.body.schemeId", operator: exists, expected: null}
+
+  - id: T7
+    name: 发起运行
+    tags: [smoke, e2e]
+    steps:
+      - method: POST
+        path: /api/runs
+        body:
+          scenarioId: "${sb.scenario_id}"
+          nRuns: 1
+          parallel: 1
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 201}
+          - {target: "$.call.response.body.executionId", operator: exists, expected: null}
+
+  - id: T8
+    name: 读执行结果
+    tags: [smoke, e2e]
+    steps:
+      - method: GET
+        path: /api/executions
+        asserts:
+          - {target: "$.call.response.status", operator: eq, expected: 200}
+          - {target: "$.call.response.body.items", operator: exists, expected: null}
