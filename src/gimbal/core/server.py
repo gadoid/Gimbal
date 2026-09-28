@@ -174,9 +174,17 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
     listen = config.unix_socket or f"{config.host}:{config.port}"
     logger.info("[Server] Starting: listen={} mode={} auth={}", listen, config.mode, config.auth)
     typer.echo(typer.style(f"[Server] Serving on {listen}", fg=typer.colors.GREEN, bold=True))
-    if config.auth != "none":
-        # 阶段 1 只实现 auth=none(本机回环默认);token 模式留给后续。
-        logger.warning("[Server] auth={} requested but not implemented yet; serving without auth", config.auth)
+    import os as _os
+    _token = _os.environ.get("GIMBAL_SERVER_TOKEN") or None
+    if config.auth == "token" and _token is None:
+        # S-6:token 模式必须显式提供令牌,缺令牌直接拒绝启动(不再静默裸跑)
+        logger.error("[Server] auth=token 但 GIMBAL_SERVER_TOKEN 未配置;拒绝启动")
+        typer.secho("[Server] auth=token 需要 GIMBAL_SERVER_TOKEN 环境变量", fg=typer.colors.RED, err=True)
+        return 2
+    if _token is not None:
+        typer.echo("[Server] token auth enabled (GIMBAL_SERVER_TOKEN): /runs 家族端点要求 Bearer/X-Gimbal-Token")
+    elif config.host not in ("127.0.0.1", "localhost", "::1"):
+        typer.echo("[Server] warning: 无 token 且监听非回环地址,POST /runs 将拒绝非回环来源(403)")
 
     uvicorn.run(
         app,  # type: ignore[arg-type]

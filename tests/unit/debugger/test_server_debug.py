@@ -45,7 +45,8 @@ def client(monkeypatch):
         lambda **kw: _registry_with_echo(**kw),
     )
     app = create_app(CLIContext())
-    return fastapi_testclient.TestClient(app)
+    # S-6:POST /runs 无 token 时仅回环可用 —— TestClient 模拟回环来源
+    return fastapi_testclient.TestClient(app, client=("127.0.0.1", 50000))
 
 
 _ORIG_BUILD = None
@@ -115,11 +116,12 @@ class TestAsyncRun:
         r = client.post("/runs", json={
             "target": _scenario_dict(),
             "debug": {"pause": "every_step", "wait_timeout": 8},
-        })
+        }, headers={"X-Gimbal-Token": "t"})
         assert r.status_code == 200
         rid = r.json()["runId"]
         try:
-            r2 = client.post("/runs", json={"target": _scenario_dict()})
+            r2 = client.post("/runs", json={"target": _scenario_dict()},
+                             headers={"X-Gimbal-Token": "t"})
             assert r2.status_code == 409
         finally:
             # 下发 continue 让其结束
@@ -140,7 +142,7 @@ class TestDebugOverServer:
         r = client.post("/runs", json={
             "target": _scenario_dict("dbg-sc"),
             "debug": {"pause": "every_step", "wait_timeout": 10},
-        })
+        }, headers={"X-Gimbal-Token": "tok-1"})
         assert r.status_code == 200
         rid = r.json()["runId"]
         assert r.json()["debugEnabled"] is True
@@ -168,7 +170,8 @@ class TestDebugOverServer:
 
     def test_sse_stream_emits_events(self, client, monkeypatch):
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "tok-2")
-        r = client.post("/runs", json={"target": _scenario_dict("sse-sc")})
+        r = client.post("/runs", json={"target": _scenario_dict("sse-sc")},
+                        headers={"X-Gimbal-Token": "tok-2"})
         rid = r.json()["runId"]
         _wait_finished(client, rid)
 
@@ -184,7 +187,8 @@ class TestDebugOverServer:
 def test_sse_id_is_seq(client, monkeypatch):
     """S-5：SSE id = 事件 seq（单调递增,从 1 起）。"""
     monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "tok-seq")
-    r = client.post("/runs", json={"target": _scenario_dict("sse-seq-sc")})
+    r = client.post("/runs", json={"target": _scenario_dict("sse-seq-sc")},
+                    headers={"X-Gimbal-Token": "tok-seq"})
     rid = r.json()["runId"]
     _wait_finished(client, rid)
 
@@ -198,3 +202,56 @@ def test_sse_id_is_seq(client, monkeypatch):
     assert ids == sorted(ids) and ids[0] >= 1
     # 末事件 run.finished 也应带 seq id(S-5 终线事件化)
     assert "run.finished" in body
+
+
+# ── S-6: server 保护 ─────────────────────────────────────────
+
+
+class TestServerProtection:
+
+    def test_post_runs_requires_token_when_configured(self, client, monkeypatch):
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "s3cret")
+        r = client.post("/runs", json={"target": _scenario_dict("auth-sc")})
+        assert r.status_code == 401
+        r2 = client.post("/runs", json={"target": _scenario_dict("auth-sc")},
+                         headers={"X-Gimbal-Token": "s3cret"})
+        assert r2.status_code == 200
+
+    def test_post_runs_loopback_only_without_token(self, monkeypatch):
+        """无 token 时非回环来源 403(回环 fixture 的对照见其余测试)。"""
+        monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
+        from gimbal.core.server import create_app
+        import fastapi.testclient as ftc
+        from gimbal.cli.context import CLIContext
+        remote = ftc.TestClient(create_app(CLIContext()),
+                                client=("10.0.0.5", 12345))
+        r = remote.post("/runs", json={"target": _scenario_dict("remote-sc")})
+        assert r.status_code == 403
+        assert "loopback" in r.json()["detail"]
+
+    def test_debug_rejects_multi_unit(self, client, monkeypatch):
+        monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
+        from gimbal.schema.scenario import SuiteGraph
+
+        def _unit(ref):
+            return {"ref": ref, "scenario": _scenario_dict(ref)}
+
+        graph = {
+            "kind": "graph", "mode": "aggregate",
+            "units": [_unit("a"), _unit("b")],
+        }
+        r = client.post("/runs", json={
+            "target": graph, "debug": {"pause": "every_step"},
+        })
+        assert r.status_code == 422
+        assert "single-unit" in r.json()["detail"]
+
+    def test_registry_reaped_after_ttl(self, client, monkeypatch):
+        monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
+        monkeypatch.setattr("gimbal.core.server_debug._REAP_TTL_SEC", 0.05)
+        r = client.post("/runs", json={"target": _scenario_dict("reap-sc")})
+        rid = r.json()["runId"]
+        _wait_finished(client, rid)
+        import time as _t
+        _t.sleep(0.3)   # TTL 0.05s + 余量
+        assert client.get(f"/runs/{rid}").status_code == 404

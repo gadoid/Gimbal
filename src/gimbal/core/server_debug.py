@@ -7,11 +7,13 @@
   POST /runs/{id}/debug     调试命令（continue/step/retry/skip/abort/read/write/patch）
   GET  /runs/{id}/events    SSE 事件流（id=序号；批次 F 补 Last-Event-ID 续传）
 
-鉴权硬前置（v2：改值是特权面）：debug 与 events 端点要求
-GIMBAL_SERVER_TOKEN 已配置且 Bearer/X-Gimbal-Token 匹配；未配置 → 403。
-启动端点 POST /runs 维持开放（与旧 POST /run 同口径）。
-事件缓冲：run 线程内订阅 bus 收集到注册表条目（进程内 v1；
-SSE 实时推流 + 结束 done 事件）。
+鉴权（S-6）：
+  - POST /runs：GIMBAL_SERVER_TOKEN 已配置 → Bearer/X-Gimbal-Token 匹配
+    （401）；未配置 → 仅回环（127.0.0.1/::1/localhost）可启动，非回环 403；
+  - debug / events 端点：要求 GIMBAL_SERVER_TOKEN 已配置且匹配（403/401）。
+  - debug 请求校验：目标必须单单元（与 CLI --debug 同一条校验），否则 422。
+注册表回收（S-6）：run 终态后 _REAP_TTL_SEC（默认 600s）由后台 Timer
+回收条目（GET /runs/{id} 此后 404）。
 """
 from __future__ import annotations
 
@@ -19,6 +21,8 @@ import threading
 import time
 import uuid
 from typing import Any
+
+from fastapi import Request
 
 from gimbal.log import get_logger
 
@@ -31,6 +35,9 @@ from gimbal.core.server import (  # noqa: E402
 )
 
 NL = chr(10)
+
+# run 终态后的注册表/事件缓冲回收时限（S-6;测试可 patch）
+_REAP_TTL_SEC = 600.0
 
 
 def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
@@ -58,17 +65,53 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
         if supplied != token:
             raise HTTPException(status_code=401, detail="invalid debug token")
 
+    def _require_start_auth(request: "Any", authorization: str | None,
+                            x_token: str | None) -> None:
+        """POST /runs 鉴权（S-6）：token 配置 → 校验;未配置 → 仅回环。"""
+        token = os.environ.get("GIMBAL_SERVER_TOKEN") or None
+        if token is not None:
+            supplied = x_token or (
+                authorization[7:]
+                if authorization and authorization.startswith("Bearer ")
+                else None
+            )
+            if supplied != token:
+                raise HTTPException(status_code=401, detail="invalid server token")
+            return
+        host = (request.client.host if request.client else "") or ""
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            raise HTTPException(
+                status_code=403,
+                detail="POST /runs without GIMBAL_SERVER_TOKEN is loopback-only",
+            )
+
     @app.post("/runs", response_model=RunsCreated)
-    async def start_run(req: RunsRequest) -> Any:
+    async def start_run(
+        req: RunsRequest,
+        request: Request,
+        authorization: str | None = Header(default=None),
+        x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
+    ) -> Any:
         from pydantic import TypeAdapter
         from gimbal.schema.scenario import RunUnion
 
+        _require_start_auth(request, authorization, x_gimbal_token)
         try:
             target = TypeAdapter(RunUnion).validate_python(req.target)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=422, detail=f"target validation failed: {exc}"
             ) from exc
+
+        # debug 单单元校验（S-6:与 CLI --debug 同一条校验函数）
+        if req.debug is not None:
+            from gimbal.core.debugger import debug_unit_count
+            if debug_unit_count(target) != 1:
+                raise HTTPException(
+                    status_code=422,
+                    detail="debug requires a single-unit target "
+                           "(suite-level debug is not supported)",
+                )
 
         with reg_lock:
             if any(e["status"] == "running" for e in registry.values()):
@@ -129,6 +172,14 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                     debugger.deactivate(configuration.hook_registry)
                 shutdown(configuration)
 
+        def _reap(rid: str) -> None:
+            """终态 TTL 后回收注册表条目与事件缓冲（S-6）。"""
+            with reg_lock:
+                e = registry.get(rid)
+                if e is not None and e["status"] != "running":
+                    del registry[rid]
+                    logger.info("[Server] run 注册表回收: {}", rid)
+
         def _watch():
             try:
                 _execute()
@@ -137,6 +188,9 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 entry["error"] = str(exc)
             finally:
                 entry["status"] = "finished"
+                timer = threading.Timer(_REAP_TTL_SEC, _reap, args=(run_id,))
+                timer.daemon = True
+                timer.start()
 
         threading.Thread(target=_watch, daemon=True,
                          name=f"gimbal-run-{run_id[:8]}").start()
@@ -176,7 +230,8 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
         if entry["status"] != "running":
             return DebugCommandResponse(accepted=False, output=session.drain_output())
         session.submit(req.command)
-        time.sleep(0.05)   # 给执行线程一点时间产出输出
+        import asyncio
+        await asyncio.sleep(0.05)   # 给执行线程一点时间产出输出(S-6:不阻塞事件循环)
         return DebugCommandResponse(accepted=True, output=session.drain_output())
 
     @app.get("/runs/{run_id}/events")

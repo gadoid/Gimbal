@@ -37,17 +37,36 @@ class DebugSession(Protocol):
     def recv(self, timeout: Optional[float] = None) -> Optional[str]: ...
 
 
+def debug_unit_count(target) -> int:
+    """调试目标单元计数（Scenario=1；SuiteGraph=括号+主体总数）。
+
+    CLI `--debug` 与 server debug 请求共用同一条"仅单单元"校验（S-6）。
+    """
+    from gimbal.schema.scenario import SuiteGraph
+    if isinstance(target, SuiteGraph):
+        return len(target.units) + len(target.before) + len(target.after)
+    return 1
+
+
 class CliSession:
-    """终端极简会话（v1 口径）：回车=continue/下一步、q=abort、r=read。"""
+    """终端极简会话（v1 口径）：回车=continue/下一步、q=abort、r=read。
+
+    S-6：提示与输出走 **stderr** —— `--debug` 与 `-o jsonl` 同用时
+    stdout 保持纯事件流（平台/CI 按行消费不被调试提示污染）。
+    """
 
     def send(self, text: str) -> None:
-        print(text, flush=True)
+        import sys
+        print(text, file=sys.stderr, flush=True)
 
     def recv(self, timeout: Optional[float] = None) -> Optional[str]:
+        import sys
         try:
             return input("(debug) 回车=继续 q=退出 r=查看 > ").strip() or "continue"
         except EOFError:
             return "abort"
+        # 注:input 的提示经 readline 走 stderr(无 readline 平台由 send 的
+        # stderr 提示兜底),不再向 stdout 写任何调试内容
 
 
 class ScriptedSession:

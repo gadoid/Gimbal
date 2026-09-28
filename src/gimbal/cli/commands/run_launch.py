@@ -303,10 +303,13 @@ def launch(
     # 7.6 debugger 装载（v2.1 批次 E）：仅单单元且 n_runs=1；调试挂起不计超时
     debugger = None
     if debug:
-        from gimbal.schema.scenario import SuiteGraph as _Graph
-        unit_count = 1
-        if isinstance(scenario, _Graph):
-            unit_count = len(scenario.units) + len(scenario.before) + len(scenario.after)
+        from gimbal.core.debugger import debug_unit_count
+        if output == OutputFormat.jsonl:
+            typer.secho(
+                "--debug 与 -o jsonl 同用:调试提示走 stderr,stdout 保持纯事件流",
+                fg=typer.colors.YELLOW, err=True,
+            )
+        unit_count = debug_unit_count(scenario)
         if unit_count != 1:
             typer.secho(
                 f"--debug 仅支持单单元目标（当前 {unit_count} 个）；suite 级调试明确不做",
