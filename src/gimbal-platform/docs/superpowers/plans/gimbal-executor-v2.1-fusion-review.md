@@ -237,3 +237,22 @@ CLI 冒烟：`run launch -o jsonl` 末行 run.finished(seq)、`--halt-at` halted
 | tests/integration/test_server_run.py 用旧 api 糖 | 迁移 call 形态（`pytest tests/` 收集期 422 的根因） | 不在 testpaths,此前未跑到 |
 
 补充轮验证：`pytest tests/`（全目录）1042 passed、`pytest -q`（testpaths）1019 passed。
+
+
+### 第二轮补充（2026-09-28 复审遗漏）
+
+| 项 | 修复 | 验证 |
+|---|---|---|
+| 语料移出后测试失依赖（8 文件读 gimbal-tmp） | 语料入 tests/plate/fixtures/ 并提交；8 测试改引用 | 干净克隆可用 |
+| 单元超时弃线程仍运行（重复下单面） | 协作取消事件贯通 _attempt→run_unit→RuntimeControl.cancel_event；step 边界与 retry 前检测；_safe_run 签名探测替代 TypeError 兜底 | 回归测试：被弃线程停在 step 边界（sends==1，3× 稳定） |
+| 静态分析与模板语义不一致（${m} 被 extract 抵消） | ${} 模板引用一律计外部输入（预处理期渲染）；$. scratch 引用维持数据流抵消 | 分析器/连线 145 绿 + 双通道对照测试 |
+| STEP_FAILED retry 无上限 | 上限 8 次（_MAX_STEP_RETRIES），耗尽按最终失败收口 | 单测 |
+| 生命周期事件双发/字段缺失/seq=1 丢失 | scenario.start/end 唯一发布者=Runner（补 suite_id/run_id）；step.start/end 唯一=ContextManager（计数全）；状态机停发；jsonl sink 提前到 bootstrap 后 | 冒烟：每事件恰 1 条、suite_id/scenario_id/assertion_count 齐、首行 run.meta seq=1 单调 |
+| S-4 半成品 | Engine 改调 compile_plan（p_validate 上运行路径）；p_patch 列表整体替换+setup/teardown 按 (kind,key) 合并（对齐 v2 代数） | 测试更新+全绿 |
+| 24 个一行空壳 | 22 无引用者删除（compiler/suite/scheduler/cli/ai 等）；保留有引用的 errors/logging/types/version | 全目录收集绿 |
+| 编译期校验先于模板渲染 | _relax_templates：含 ${} 的值按字段类型注哑元再校验（未知键照拒） | compiler 测试 |
+| 拦截语义变更未成文 | 改回短路：首个返回 Decision 的 handler 即裁决（与旧 STOP break 一致）并成文 | 短路测试（后续 handler 不执行） |
+| setup/teardown 未执行、timePolicy 无读取 | LifecycleEntry 落地（kind=策略 kind+key+params；setup 失败阻断 steps、teardown 必达逆序）；TimeoutPolicy.seconds 作场景级超时 | 4 专项测试 |
+| protocols/base.py 文档过时 | 双读期/旧键表述清换为终态契约 | — |
+
+第二轮验证：`pytest tests/` 1049 passed；CLI 冒烟事件形态全部达标。
