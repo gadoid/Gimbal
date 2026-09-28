@@ -170,6 +170,22 @@ def launch(
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
     ] = False,
+    n_runs: Annotated[
+        int,
+        typer.Option("--n-runs", min=1, help="运行期重复次数（N4：乘法下沉入口；"
+                     "某次失败即停止该单元后续重复——稳定性语义）",
+                     rich_help_panel="执行控制"),
+    ] = 1,
+    retry: Annotated[
+        int,
+        typer.Option("--retry", min=0, help="失败后自动重跑次数（N4；同一 run 内）",
+                     rich_help_panel="执行控制"),
+    ] = 0,
+    parallel: Annotated[
+        int,
+        typer.Option("--parallel", min=1, max=64, help="graph 单元级并发上限"
+                     "（N4；单 scenario 忽略）", rich_help_panel="执行控制"),
+    ] = 1,
     # ========== 步骤级控制（阶段 1 最小子集）==========
     step_from: Annotated[
         int | None,
@@ -304,7 +320,11 @@ def launch(
     except Exception as exc:
         typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
-    scenario = target
+
+    # 7.1 N4 乘法入口：--n-runs/--retry/--parallel 下沉给执行器
+    #     （平台不再自己循环 nRuns；批次 D 的单元乘法是唯一执行方）。
+    scenario = apply_multiplication(target, n_runs=n_runs, retry=retry,
+                                    parallel=parallel)
 
     # 7.4 断点入参分流（残留 #3）：--breakpoint 只收地址；数字停点必须用 --halt-at
     debug_breakpoints: list[str] = []
@@ -338,6 +358,12 @@ def launch(
     # 7.6 debugger 装载（v2.1 批次 E）：仅单单元且 n_runs=1；调试挂起不计超时
     debugger = None
     if debug:
+        if n_runs > 1 or retry > 0:
+            typer.secho(
+                "--debug 与 --n-runs/--retry 互斥（调试要求单次执行）",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(code=2)
         from gimbal.core.debugger import debug_unit_count
         if output == OutputFormat.jsonl:
             typer.secho(
@@ -386,4 +412,50 @@ def launch(
         # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)
+
+
+def apply_multiplication(target, *, n_runs: int = 1, retry: int = 0,
+                         parallel: int = 1):
+    """N4：CLI 乘法参数 → 目标形态变换（P2-05 乘法下沉的入口）。
+
+    * Scenario + n_runs/retry → 隐式 aggregate graph（单单元 policy_kwargs
+      承载乘法；与隐式 Plan 同语义）；
+    * SuiteGraph + n_runs/retry → 逐 UnitDecl policy_kwargs 覆盖；
+    * SuiteGraph + parallel → PlanPolicy.parallel 覆盖（Scenario 忽略——
+      单单元无并发面）；
+    * 全部缺省（1/0/1）→ 原样返回。
+    """
+    if n_runs <= 1 and retry <= 0 and parallel <= 1:
+        return target
+    from gimbal.schema.scenario import Scenario, SuiteGraph, UnitDecl
+    from gimbal.schema.plan import PlanPolicy
+    if isinstance(target, Scenario):
+        if n_runs <= 1 and retry <= 0:
+            return target    # 仅 parallel:单单元无并发面,原样返回
+        return SuiteGraph(
+            kind="graph", mode="aggregate",
+            units=[UnitDecl(ref="u", scenario=target,
+                            policy_kwargs={"n_runs": n_runs, "retry": retry})],
+            policy=PlanPolicy(parallel=1),
+        )
+    if isinstance(target, SuiteGraph):
+        updates: dict = {}
+        if n_runs > 1:
+            updates["n_runs"] = n_runs
+        if retry > 0:
+            updates["retry"] = retry
+        if updates:
+            target = target.model_copy(update={
+                "units": [
+                    u.model_copy(update={
+                        "policy_kwargs": {**u.policy_kwargs, **updates}})
+                    for u in target.units
+                ]})
+        if parallel > 1:
+            base = target.policy or PlanPolicy()
+            target = target.model_copy(update={
+                "policy": base.model_copy(update={"parallel": parallel})})
+        return target
+    return target
+
     raise typer.Exit(code=result.exit_code)
