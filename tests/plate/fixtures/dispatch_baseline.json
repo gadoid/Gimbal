@@ -11,6 +11,7 @@
   "fin.order.check_generate_order_sub",
   "fin.order.generate_order_sub",
   "fin.order.order_add",
+  "fin.order.order_add_demo",
   "fin.order.order_book",
   "fin.order.order_detail",
   "fin.order.order_notice",
@@ -105,6 +106,229 @@
    "$.customer_tax_number": "string",
    "$.customer_address_cn": "string",
    "$.client_expand_id": "string",
+   "$.customer_contact_phone": "string",
+   "$.customer_main_id": "string",
+   "$.customer_main_name": "string",
+   "$.business_main_id": "string",
+   "$.business_main_name": "string",
+   "$.fund_code": "string",
+   "$.fund_name": "string",
+   "$.track_atd": "string",
+   "$.track_eta": "string",
+   "$.track_ata": "string",
+   "$.track_stcs": "string",
+   "$.track_ship_name": "string",
+   "$.track_voy": "string",
+   "$.finance_date": "string",
+   "$.pol_cn": "string",
+   "$.pol_country_id": "string",
+   "$.pol_country": "string",
+   "$.pol_country_cn": "string",
+   "$.pod_cn": "string",
+   "$.pot_cn": "string",
+   "$.del_cn": "string",
+   "$.country_id": "string",
+   "$.country_name_cn": "string",
+   "$.customer_period": "string",
+   "$.customer_settlement_date": "string",
+   "$.period_rule": "string",
+   "$.term_rule_name": "string",
+   "$.customer_due_date": "string",
+   "$.customer_put_date": "string",
+   "$.customer_payment_collection_date": "string",
+   "$.customer_put_date_manual": "string",
+   "$.customer_put_writeoff_date": "string",
+   "$.supplier_due_date": "string",
+   "$.discount_start": "string",
+   "$.discount_rule": "string",
+   "$.discount_end": "string",
+   "$.discount_ratio": "string",
+   "$.discount_status": "string",
+   "$.discount_currency": "string",
+   "$.book_upload_date": "string",
+   "$.trans_cost_put_preserve_date": "string",
+   "$.bl_no_upload_date": "string",
+   "$.supplier_invoice_date": "string",
+   "$.supplier_invoice_taketime": "string",
+   "$.real_cost_date": "string",
+   "$.customer_invoice_request_date": "string",
+   "$.first_financing_doc_ok_date": "string",
+   "$.second_financing_doc_ok_date": "string",
+   "$.insurance_doc_ok_date": "string",
+   "$.customer_confirm_date": "string",
+   "$.is_delayed_recovery": "string",
+   "$.delayed_recovery_usd": "string",
+   "$.delayed_recovery_cny": "string",
+   "$.delayed_time": "string",
+   "$.expect_fee_status": "string",
+   "$.real_fee_status": "string",
+   "$.fee_lock_status": "string",
+   "$.pay_account_status": "string",
+   "$.account_status": "string",
+   "$.real_pay_usd": "string",
+   "$.real_pay_cny": "string",
+   "$.real_put_usd": "string",
+   "$.real_put_cny": "string",
+   "$.real_put_discount_rate": "string",
+   "$.exchange_rate": "string",
+   "$.folde_pay_usd": "string",
+   "$.folde_put_usd": "string",
+   "$.folde_pay_total": "string",
+   "$.folde_put_total": "string",
+   "$.gross_margin": "string",
+   "$.gross_margin_rate": "string",
+   "$.is_special_pay": "string",
+   "$.is_loan_before_invoice": "string",
+   "$.is_fee_miss": "string",
+   "$.fee_miss_name": "string",
+   "$.cancel_remark": "string",
+   "$.cancel_time": "string",
+   "$.effective_id": "string",
+   "$.effective_by": "string",
+   "$.effective_time": "string",
+   "$.create_id": "string",
+   "$.create_by": "string",
+   "$.update_id": "string",
+   "$.update_by": "string",
+   "$.delete_time": "string",
+   "$.business_time": "string",
+   "$.main_ids": "string",
+   "$.reverse_status": "string",
+   "$.proprietary_business_status": "string",
+   "$.loan_status": "string",
+   "$.first_status": "string",
+   "$.second_status": "string",
+   "$.loan_pay_status": "string",
+   "$.change_type": "string",
+   "$.copy_order_id": "string",
+   "$.real_fee_locked": "boolean",
+   "$.is_usd_project": "string",
+   "$.pay_status": "string",
+   "$.is_sync_es": "string",
+   "$.expect_discount_status": "string",
+   "$.real_discount_status": "string",
+   "$.remark": "string",
+   "$.audit_type": "string",
+   "$.is_system_generate": "string",
+   "$.is_financing": "string",
+   "$.confirm_status": "string",
+   "$.is_traverse": "string",
+   "$.financing_apply_amount": "string",
+   "$.financing_apply_amount_cny": "string",
+   "$.financing_apply_amount_usd": "string",
+   "$.receive_time_limit": "string",
+   "$.customer_put_date_desc": "string",
+   "$.deposit_refund_day": "string",
+   "$.deposit_settlement_date": "string",
+   "$.deposit_refund_month": "string",
+   "$.payment_type": "string",
+   "$.product_id": "string",
+   "$.revoke_status": "string",
+   "$.revoke_type": "string",
+   "$.asset_status": "string",
+   "$.revoke_failure_reason": "string",
+   "$.repayment_date": "string",
+   "$.repay_warn_time": "string",
+   "$.reverse_status_name": "string",
+   "$.is_delayed_recovery_name": "string",
+   "$.order_finance_arr": "array",
+   "$.order_main_bank_arr": "array",
+   "$.order_sub": "array",
+   "$.order_sub_no": "string",
+   "$.service_project": "object",
+   "$.service_project_amount": "object",
+   "$.finance_status": "boolean",
+   "$.main_ids_name": "string",
+   "$.policy_main_arr": "array",
+   "$.policy_type_name": "string",
+   "$.business_type_name": "string",
+   "$.cargo_type_name": "string",
+   "$.period_rule_name": "string",
+   "$.trade_term_name": "string",
+   "$.carrier_name": "string",
+   "$.terms_transport_name": "string",
+   "$.terms_payment_name": "string",
+   "$.pay_type_name": "string",
+   "$.m_delivery_type_name": "string",
+   "$.payment_type_name": "string",
+   "$.audit": "array",
+   "$.enable": "string",
+   "$.policy_match": "string",
+   "$.policy_match_name": "string",
+   "$.real_discount_status_name": "string",
+   "$.expect_discount_status_name": "string",
+   "$.expect_policy_status_name": "string",
+   "$.policy_status_name": "string",
+   "$.subsidy_category_name": "string",
+   "$.expect_subsidy_category_name": "string",
+   "$.real_subsidy_category_name": "string",
+   "$.revoke_status_name": "string",
+   "$.revoke_type_name": "string",
+   "$.asset_status_name": "string"
+  },
+  "fin.order.order_add_demo": {
+   "$.order_file": "array",
+   "$.m_delivery_type": "string",
+   "$.service_id": "string",
+   "$.service_name": "string",
+   "$.sale_id": "string",
+   "$.sale_name": "string",
+   "$.operator_id": "string",
+   "$.operator_name": "string",
+   "$.customer_contact_id": "string",
+   "$.customer_contact_name": "string",
+   "$.main_sort": "string",
+   "$.policy_type": "string",
+   "$.settle_type": "string",
+   "$.settle_type_name": "string",
+   "$.customer_product_id": "string",
+   "$.product_name": "string",
+   "$.deposit_type": "string",
+   "$.deposit_type_name": "string",
+   "$.period_delay_type": "string",
+   "$.period_delay_type_name": "string",
+   "$.service_items": "array",
+   "$.business_type": "string",
+   "$.trade_term": "string",
+   "$.carrier": "string",
+   "$.carrier_id": "string",
+   "$.etd": "integer",
+   "$.atd": "integer",
+   "$.ship_name": "string",
+   "$.voy": "string",
+   "$.pol": "string",
+   "$.pot": "string",
+   "$.pod": "string",
+   "$.del": "string",
+   "$.country_name": "string",
+   "$.airline_type": "string",
+   "$.ocean_type": "string",
+   "$.terms_payment": "string",
+   "$.terms_transport": "string",
+   "$.pay_type": "string",
+   "$.customer_order_sn": "string",
+   "$.terms_shipment": "string",
+   "$.shipper": "string",
+   "$.consignee": "string",
+   "$.notifier": "string",
+   "$.ship_mark": "string",
+   "$.commodity": "string",
+   "$.notes": "string",
+   "$.cargo_type": "string",
+   "$.packer": "string",
+   "$.num": "string",
+   "$.gross_weight": "string",
+   "$.bulk": "string",
+   "$.sea_trans_cost": "string",
+   "$.teu": "string",
+   "$.volume": "string",
+   "$.volume_desc": "string",
+   "$.order_sn": "string",
+   "$.sea_trans_currency": "string",
+   "$.message_board": "array",
+   "$.customer_category": "string",
+   "$.customer_tax_number": "string",
+   "$.customer_address_cn": "string",
    "$.customer_contact_phone": "string",
    "$.customer_main_id": "string",
    "$.customer_main_name": "string",
@@ -1088,6 +1312,249 @@
    "revoke_type_name": "ab:$.revoke_type_name",
    "asset_status_name": "ab:$.asset_status_name"
   },
+  "fin.order.order_add_demo": {
+   "order_file": [
+    "ab"
+   ],
+   "m_delivery_type": "ab:$.m_delivery_type",
+   "service_id": "ab:$.service_id",
+   "service_name": "ab:$.service_name",
+   "sale_id": "ab:$.sale_id",
+   "sale_name": "ab:$.sale_name",
+   "operator_id": "ab:$.operator_id",
+   "operator_name": "ab:$.operator_name",
+   "customer_contact_id": "ab:$.customer_contact_id",
+   "customer_contact_name": "ab:$.customer_contact_name",
+   "main_sort": "ab:$.main_sort",
+   "policy_type": "ab:$.policy_type",
+   "settle_type": "ab:$.settle_type",
+   "settle_type_name": "ab:$.settle_type_name",
+   "customer_product_id": "ab:$.customer_product_id",
+   "product_name": "ab:$.product_name",
+   "deposit_type": "ab:$.deposit_type",
+   "deposit_type_name": "ab:$.deposit_type_name",
+   "period_delay_type": "ab:$.period_delay_type",
+   "period_delay_type_name": "ab:$.period_delay_type_name",
+   "service_items": [
+    "ab"
+   ],
+   "business_type": "ab:$.business_type",
+   "trade_term": "ab:$.trade_term",
+   "carrier": "ab:$.carrier",
+   "carrier_id": "ab:$.carrier_id",
+   "etd": 7,
+   "atd": 7,
+   "ship_name": "ab:$.ship_name",
+   "voy": "ab:$.voy",
+   "pol": "ab:$.pol",
+   "pot": "ab:$.pot",
+   "pod": "ab:$.pod",
+   "del": "ab:$.del",
+   "country_name": "ab:$.country_name",
+   "airline_type": "ab:$.airline_type",
+   "ocean_type": "ab:$.ocean_type",
+   "terms_payment": "ab:$.terms_payment",
+   "terms_transport": "ab:$.terms_transport",
+   "pay_type": "ab:$.pay_type",
+   "customer_order_sn": "ab:$.customer_order_sn",
+   "terms_shipment": "ab:$.terms_shipment",
+   "shipper": "ab:$.shipper",
+   "consignee": "ab:$.consignee",
+   "notifier": "ab:$.notifier",
+   "ship_mark": "ab:$.ship_mark",
+   "commodity": "ab:$.commodity",
+   "notes": "ab:$.notes",
+   "cargo_type": "ab:$.cargo_type",
+   "packer": "ab:$.packer",
+   "num": "ab:$.num",
+   "gross_weight": "ab:$.gross_weight",
+   "bulk": "ab:$.bulk",
+   "sea_trans_cost": "ab:$.sea_trans_cost",
+   "teu": "ab:$.teu",
+   "volume": "ab:$.volume",
+   "volume_desc": "ab:$.volume_desc",
+   "order_sn": "ab:$.order_sn",
+   "sea_trans_currency": "ab:$.sea_trans_currency",
+   "message_board": [
+    "ab"
+   ],
+   "customer_category": "ab:$.customer_category",
+   "customer_tax_number": "ab:$.customer_tax_number",
+   "customer_address_cn": "ab:$.customer_address_cn",
+   "customer_contact_phone": "ab:$.customer_contact_phone",
+   "customer_main_id": "ab:$.customer_main_id",
+   "customer_main_name": "ab:$.customer_main_name",
+   "business_main_id": "ab:$.business_main_id",
+   "business_main_name": "ab:$.business_main_name",
+   "fund_code": "ab:$.fund_code",
+   "fund_name": "ab:$.fund_name",
+   "track_atd": "ab:$.track_atd",
+   "track_eta": "ab:$.track_eta",
+   "track_ata": "ab:$.track_ata",
+   "track_stcs": "ab:$.track_stcs",
+   "track_ship_name": "ab:$.track_ship_name",
+   "track_voy": "ab:$.track_voy",
+   "finance_date": "ab:$.finance_date",
+   "pol_cn": "ab:$.pol_cn",
+   "pol_country_id": "ab:$.pol_country_id",
+   "pol_country": "ab:$.pol_country",
+   "pol_country_cn": "ab:$.pol_country_cn",
+   "pod_cn": "ab:$.pod_cn",
+   "pot_cn": "ab:$.pot_cn",
+   "del_cn": "ab:$.del_cn",
+   "country_id": "ab:$.country_id",
+   "country_name_cn": "ab:$.country_name_cn",
+   "customer_period": "ab:$.customer_period",
+   "customer_settlement_date": "ab:$.customer_settlement_date",
+   "period_rule": "ab:$.period_rule",
+   "term_rule_name": "ab:$.term_rule_name",
+   "customer_due_date": "ab:$.customer_due_date",
+   "customer_put_date": "ab:$.customer_put_date",
+   "customer_payment_collection_date": "ab:$.customer_payment_collection_date",
+   "customer_put_date_manual": "ab:$.customer_put_date_manual",
+   "customer_put_writeoff_date": "ab:$.customer_put_writeoff_date",
+   "supplier_due_date": "ab:$.supplier_due_date",
+   "discount_start": "ab:$.discount_start",
+   "discount_rule": "ab:$.discount_rule",
+   "discount_end": "ab:$.discount_end",
+   "discount_ratio": "ab:$.discount_ratio",
+   "discount_status": "ab:$.discount_status",
+   "discount_currency": "ab:$.discount_currency",
+   "book_upload_date": "ab:$.book_upload_date",
+   "trans_cost_put_preserve_date": "ab:$.trans_cost_put_preserve_date",
+   "bl_no_upload_date": "ab:$.bl_no_upload_date",
+   "supplier_invoice_date": "ab:$.supplier_invoice_date",
+   "supplier_invoice_taketime": "ab:$.supplier_invoice_taketime",
+   "real_cost_date": "ab:$.real_cost_date",
+   "customer_invoice_request_date": "ab:$.customer_invoice_request_date",
+   "first_financing_doc_ok_date": "ab:$.first_financing_doc_ok_date",
+   "second_financing_doc_ok_date": "ab:$.second_financing_doc_ok_date",
+   "insurance_doc_ok_date": "ab:$.insurance_doc_ok_date",
+   "customer_confirm_date": "ab:$.customer_confirm_date",
+   "is_delayed_recovery": "ab:$.is_delayed_recovery",
+   "delayed_recovery_usd": "ab:$.delayed_recovery_usd",
+   "delayed_recovery_cny": "ab:$.delayed_recovery_cny",
+   "delayed_time": "ab:$.delayed_time",
+   "expect_fee_status": "ab:$.expect_fee_status",
+   "real_fee_status": "ab:$.real_fee_status",
+   "fee_lock_status": "ab:$.fee_lock_status",
+   "pay_account_status": "ab:$.pay_account_status",
+   "account_status": "ab:$.account_status",
+   "real_pay_usd": "ab:$.real_pay_usd",
+   "real_pay_cny": "ab:$.real_pay_cny",
+   "real_put_usd": "ab:$.real_put_usd",
+   "real_put_cny": "ab:$.real_put_cny",
+   "real_put_discount_rate": "ab:$.real_put_discount_rate",
+   "exchange_rate": "ab:$.exchange_rate",
+   "folde_pay_usd": "ab:$.folde_pay_usd",
+   "folde_put_usd": "ab:$.folde_put_usd",
+   "folde_pay_total": "ab:$.folde_pay_total",
+   "folde_put_total": "ab:$.folde_put_total",
+   "gross_margin": "ab:$.gross_margin",
+   "gross_margin_rate": "ab:$.gross_margin_rate",
+   "is_special_pay": "ab:$.is_special_pay",
+   "is_loan_before_invoice": "ab:$.is_loan_before_invoice",
+   "is_fee_miss": "ab:$.is_fee_miss",
+   "fee_miss_name": "ab:$.fee_miss_name",
+   "cancel_remark": "ab:$.cancel_remark",
+   "cancel_time": "ab:$.cancel_time",
+   "effective_id": "ab:$.effective_id",
+   "effective_by": "ab:$.effective_by",
+   "effective_time": "ab:$.effective_time",
+   "create_id": "ab:$.create_id",
+   "create_by": "ab:$.create_by",
+   "update_id": "ab:$.update_id",
+   "update_by": "ab:$.update_by",
+   "delete_time": "ab:$.delete_time",
+   "business_time": "ab:$.business_time",
+   "main_ids": "ab:$.main_ids",
+   "reverse_status": "ab:$.reverse_status",
+   "proprietary_business_status": "ab:$.proprietary_business_status",
+   "loan_status": "ab:$.loan_status",
+   "first_status": "ab:$.first_status",
+   "second_status": "ab:$.second_status",
+   "loan_pay_status": "ab:$.loan_pay_status",
+   "change_type": "ab:$.change_type",
+   "copy_order_id": "ab:$.copy_order_id",
+   "real_fee_locked": true,
+   "is_usd_project": "ab:$.is_usd_project",
+   "pay_status": "ab:$.pay_status",
+   "is_sync_es": "ab:$.is_sync_es",
+   "expect_discount_status": "ab:$.expect_discount_status",
+   "real_discount_status": "ab:$.real_discount_status",
+   "remark": "ab:$.remark",
+   "audit_type": "ab:$.audit_type",
+   "is_system_generate": "ab:$.is_system_generate",
+   "is_financing": "ab:$.is_financing",
+   "confirm_status": "ab:$.confirm_status",
+   "is_traverse": "ab:$.is_traverse",
+   "financing_apply_amount": "ab:$.financing_apply_amount",
+   "financing_apply_amount_cny": "ab:$.financing_apply_amount_cny",
+   "financing_apply_amount_usd": "ab:$.financing_apply_amount_usd",
+   "receive_time_limit": "ab:$.receive_time_limit",
+   "customer_put_date_desc": "ab:$.customer_put_date_desc",
+   "deposit_refund_day": "ab:$.deposit_refund_day",
+   "deposit_settlement_date": "ab:$.deposit_settlement_date",
+   "deposit_refund_month": "ab:$.deposit_refund_month",
+   "payment_type": "ab:$.payment_type",
+   "product_id": "ab:$.product_id",
+   "revoke_status": "ab:$.revoke_status",
+   "revoke_type": "ab:$.revoke_type",
+   "asset_status": "ab:$.asset_status",
+   "revoke_failure_reason": "ab:$.revoke_failure_reason",
+   "repayment_date": "ab:$.repayment_date",
+   "repay_warn_time": "ab:$.repay_warn_time",
+   "reverse_status_name": "ab:$.reverse_status_name",
+   "is_delayed_recovery_name": "ab:$.is_delayed_recovery_name",
+   "order_finance_arr": [
+    "ab"
+   ],
+   "order_main_bank_arr": [
+    "ab"
+   ],
+   "order_sub": [
+    "ab"
+   ],
+   "order_sub_no": "ab:$.order_sub_no",
+   "service_project": {
+    "ab": "v"
+   },
+   "service_project_amount": {
+    "ab": "v"
+   },
+   "finance_status": true,
+   "main_ids_name": "ab:$.main_ids_name",
+   "policy_main_arr": [
+    "ab"
+   ],
+   "policy_type_name": "ab:$.policy_type_name",
+   "business_type_name": "ab:$.business_type_name",
+   "cargo_type_name": "ab:$.cargo_type_name",
+   "period_rule_name": "ab:$.period_rule_name",
+   "trade_term_name": "ab:$.trade_term_name",
+   "carrier_name": "ab:$.carrier_name",
+   "terms_transport_name": "ab:$.terms_transport_name",
+   "terms_payment_name": "ab:$.terms_payment_name",
+   "pay_type_name": "ab:$.pay_type_name",
+   "m_delivery_type_name": "ab:$.m_delivery_type_name",
+   "payment_type_name": "ab:$.payment_type_name",
+   "audit": [
+    "ab"
+   ],
+   "enable": "ab:$.enable",
+   "policy_match": "ab:$.policy_match",
+   "policy_match_name": "ab:$.policy_match_name",
+   "real_discount_status_name": "ab:$.real_discount_status_name",
+   "expect_discount_status_name": "ab:$.expect_discount_status_name",
+   "expect_policy_status_name": "ab:$.expect_policy_status_name",
+   "policy_status_name": "ab:$.policy_status_name",
+   "subsidy_category_name": "ab:$.subsidy_category_name",
+   "expect_subsidy_category_name": "ab:$.expect_subsidy_category_name",
+   "real_subsidy_category_name": "ab:$.real_subsidy_category_name",
+   "revoke_status_name": "ab:$.revoke_status_name",
+   "revoke_type_name": "ab:$.revoke_type_name",
+   "asset_status_name": "ab:$.asset_status_name"
+  },
   "fin.order.order_book": {
    "client_expand_name": "ab:$.client_expand_name",
    "m_delivery_type": "ab:$.m_delivery_type",
@@ -1743,184 +2210,186 @@
     {
      "kind": "step",
      "description": "ab:fin.account.query_balance",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.audit.audit_detail",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.audit.audit_execute",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.audit.audit_page",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.cost.amount_list",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.customer.list",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.customer.part",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.customer.policy",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order.check_generate_order_sub",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order.generate_order_sub",
-     "api": {
-      "kind": "api",
-      "service": "fin",
-      "method": "POST",
-      "path": "/ab",
-      "headers": {},
-      "timeout": 30.0
-     },
      "request": {
       "kind": "request",
       "body": {}
      },
-     "strategy": []
-    },
-    {
-     "kind": "step",
-     "description": "ab:fin.order.order_add",
-     "api": {
-      "kind": "api",
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order.order_add",
      "request": {
       "kind": "request",
       "body": {
@@ -2173,19 +2642,280 @@
        "asset_status_name": "ab:$.asset_status_name"
       }
      },
-     "strategy": []
-    },
-    {
-     "kind": "step",
-     "description": "ab:fin.order.order_book",
-     "api": {
-      "kind": "api",
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order.order_add_demo",
+     "request": {
+      "kind": "request",
+      "body": {
+       "order_file": [
+        "ab"
+       ],
+       "m_delivery_type": "ab:$.m_delivery_type",
+       "service_id": "ab:$.service_id",
+       "service_name": "ab:$.service_name",
+       "sale_id": "ab:$.sale_id",
+       "sale_name": "ab:$.sale_name",
+       "operator_id": "ab:$.operator_id",
+       "operator_name": "ab:$.operator_name",
+       "customer_contact_id": "ab:$.customer_contact_id",
+       "customer_contact_name": "ab:$.customer_contact_name",
+       "main_sort": "ab:$.main_sort",
+       "policy_type": "ab:$.policy_type",
+       "settle_type": "ab:$.settle_type",
+       "settle_type_name": "ab:$.settle_type_name",
+       "customer_product_id": "ab:$.customer_product_id",
+       "product_name": "ab:$.product_name",
+       "deposit_type": "ab:$.deposit_type",
+       "deposit_type_name": "ab:$.deposit_type_name",
+       "period_delay_type": "ab:$.period_delay_type",
+       "period_delay_type_name": "ab:$.period_delay_type_name",
+       "service_items": [
+        "ab"
+       ],
+       "business_type": "ab:$.business_type",
+       "trade_term": "ab:$.trade_term",
+       "carrier": "ab:$.carrier",
+       "carrier_id": "ab:$.carrier_id",
+       "etd": 7,
+       "atd": 7,
+       "ship_name": "ab:$.ship_name",
+       "voy": "ab:$.voy",
+       "pol": "ab:$.pol",
+       "pot": "ab:$.pot",
+       "pod": "ab:$.pod",
+       "del": "ab:$.del",
+       "country_name": "ab:$.country_name",
+       "airline_type": "ab:$.airline_type",
+       "ocean_type": "ab:$.ocean_type",
+       "terms_payment": "ab:$.terms_payment",
+       "terms_transport": "ab:$.terms_transport",
+       "pay_type": "ab:$.pay_type",
+       "customer_order_sn": "ab:$.customer_order_sn",
+       "terms_shipment": "ab:$.terms_shipment",
+       "shipper": "ab:$.shipper",
+       "consignee": "ab:$.consignee",
+       "notifier": "ab:$.notifier",
+       "ship_mark": "ab:$.ship_mark",
+       "commodity": "ab:$.commodity",
+       "notes": "ab:$.notes",
+       "cargo_type": "ab:$.cargo_type",
+       "packer": "ab:$.packer",
+       "num": "ab:$.num",
+       "gross_weight": "ab:$.gross_weight",
+       "bulk": "ab:$.bulk",
+       "sea_trans_cost": "ab:$.sea_trans_cost",
+       "teu": "ab:$.teu",
+       "volume": "ab:$.volume",
+       "volume_desc": "ab:$.volume_desc",
+       "order_sn": "ab:$.order_sn",
+       "sea_trans_currency": "ab:$.sea_trans_currency",
+       "message_board": [
+        "ab"
+       ],
+       "customer_category": "ab:$.customer_category",
+       "customer_tax_number": "ab:$.customer_tax_number",
+       "customer_address_cn": "ab:$.customer_address_cn",
+       "customer_contact_phone": "ab:$.customer_contact_phone",
+       "customer_main_id": "ab:$.customer_main_id",
+       "customer_main_name": "ab:$.customer_main_name",
+       "business_main_id": "ab:$.business_main_id",
+       "business_main_name": "ab:$.business_main_name",
+       "fund_code": "ab:$.fund_code",
+       "fund_name": "ab:$.fund_name",
+       "track_atd": "ab:$.track_atd",
+       "track_eta": "ab:$.track_eta",
+       "track_ata": "ab:$.track_ata",
+       "track_stcs": "ab:$.track_stcs",
+       "track_ship_name": "ab:$.track_ship_name",
+       "track_voy": "ab:$.track_voy",
+       "finance_date": "ab:$.finance_date",
+       "pol_cn": "ab:$.pol_cn",
+       "pol_country_id": "ab:$.pol_country_id",
+       "pol_country": "ab:$.pol_country",
+       "pol_country_cn": "ab:$.pol_country_cn",
+       "pod_cn": "ab:$.pod_cn",
+       "pot_cn": "ab:$.pot_cn",
+       "del_cn": "ab:$.del_cn",
+       "country_id": "ab:$.country_id",
+       "country_name_cn": "ab:$.country_name_cn",
+       "customer_period": "ab:$.customer_period",
+       "customer_settlement_date": "ab:$.customer_settlement_date",
+       "period_rule": "ab:$.period_rule",
+       "term_rule_name": "ab:$.term_rule_name",
+       "customer_due_date": "ab:$.customer_due_date",
+       "customer_put_date": "ab:$.customer_put_date",
+       "customer_payment_collection_date": "ab:$.customer_payment_collection_date",
+       "customer_put_date_manual": "ab:$.customer_put_date_manual",
+       "customer_put_writeoff_date": "ab:$.customer_put_writeoff_date",
+       "supplier_due_date": "ab:$.supplier_due_date",
+       "discount_start": "ab:$.discount_start",
+       "discount_rule": "ab:$.discount_rule",
+       "discount_end": "ab:$.discount_end",
+       "discount_ratio": "ab:$.discount_ratio",
+       "discount_status": "ab:$.discount_status",
+       "discount_currency": "ab:$.discount_currency",
+       "book_upload_date": "ab:$.book_upload_date",
+       "trans_cost_put_preserve_date": "ab:$.trans_cost_put_preserve_date",
+       "bl_no_upload_date": "ab:$.bl_no_upload_date",
+       "supplier_invoice_date": "ab:$.supplier_invoice_date",
+       "supplier_invoice_taketime": "ab:$.supplier_invoice_taketime",
+       "real_cost_date": "ab:$.real_cost_date",
+       "customer_invoice_request_date": "ab:$.customer_invoice_request_date",
+       "first_financing_doc_ok_date": "ab:$.first_financing_doc_ok_date",
+       "second_financing_doc_ok_date": "ab:$.second_financing_doc_ok_date",
+       "insurance_doc_ok_date": "ab:$.insurance_doc_ok_date",
+       "customer_confirm_date": "ab:$.customer_confirm_date",
+       "is_delayed_recovery": "ab:$.is_delayed_recovery",
+       "delayed_recovery_usd": "ab:$.delayed_recovery_usd",
+       "delayed_recovery_cny": "ab:$.delayed_recovery_cny",
+       "delayed_time": "ab:$.delayed_time",
+       "expect_fee_status": "ab:$.expect_fee_status",
+       "real_fee_status": "ab:$.real_fee_status",
+       "fee_lock_status": "ab:$.fee_lock_status",
+       "pay_account_status": "ab:$.pay_account_status",
+       "account_status": "ab:$.account_status",
+       "real_pay_usd": "ab:$.real_pay_usd",
+       "real_pay_cny": "ab:$.real_pay_cny",
+       "real_put_usd": "ab:$.real_put_usd",
+       "real_put_cny": "ab:$.real_put_cny",
+       "real_put_discount_rate": "ab:$.real_put_discount_rate",
+       "exchange_rate": "ab:$.exchange_rate",
+       "folde_pay_usd": "ab:$.folde_pay_usd",
+       "folde_put_usd": "ab:$.folde_put_usd",
+       "folde_pay_total": "ab:$.folde_pay_total",
+       "folde_put_total": "ab:$.folde_put_total",
+       "gross_margin": "ab:$.gross_margin",
+       "gross_margin_rate": "ab:$.gross_margin_rate",
+       "is_special_pay": "ab:$.is_special_pay",
+       "is_loan_before_invoice": "ab:$.is_loan_before_invoice",
+       "is_fee_miss": "ab:$.is_fee_miss",
+       "fee_miss_name": "ab:$.fee_miss_name",
+       "cancel_remark": "ab:$.cancel_remark",
+       "cancel_time": "ab:$.cancel_time",
+       "effective_id": "ab:$.effective_id",
+       "effective_by": "ab:$.effective_by",
+       "effective_time": "ab:$.effective_time",
+       "create_id": "ab:$.create_id",
+       "create_by": "ab:$.create_by",
+       "update_id": "ab:$.update_id",
+       "update_by": "ab:$.update_by",
+       "delete_time": "ab:$.delete_time",
+       "business_time": "ab:$.business_time",
+       "main_ids": "ab:$.main_ids",
+       "reverse_status": "ab:$.reverse_status",
+       "proprietary_business_status": "ab:$.proprietary_business_status",
+       "loan_status": "ab:$.loan_status",
+       "first_status": "ab:$.first_status",
+       "second_status": "ab:$.second_status",
+       "loan_pay_status": "ab:$.loan_pay_status",
+       "change_type": "ab:$.change_type",
+       "copy_order_id": "ab:$.copy_order_id",
+       "real_fee_locked": true,
+       "is_usd_project": "ab:$.is_usd_project",
+       "pay_status": "ab:$.pay_status",
+       "is_sync_es": "ab:$.is_sync_es",
+       "expect_discount_status": "ab:$.expect_discount_status",
+       "real_discount_status": "ab:$.real_discount_status",
+       "remark": "ab:$.remark",
+       "audit_type": "ab:$.audit_type",
+       "is_system_generate": "ab:$.is_system_generate",
+       "is_financing": "ab:$.is_financing",
+       "confirm_status": "ab:$.confirm_status",
+       "is_traverse": "ab:$.is_traverse",
+       "financing_apply_amount": "ab:$.financing_apply_amount",
+       "financing_apply_amount_cny": "ab:$.financing_apply_amount_cny",
+       "financing_apply_amount_usd": "ab:$.financing_apply_amount_usd",
+       "receive_time_limit": "ab:$.receive_time_limit",
+       "customer_put_date_desc": "ab:$.customer_put_date_desc",
+       "deposit_refund_day": "ab:$.deposit_refund_day",
+       "deposit_settlement_date": "ab:$.deposit_settlement_date",
+       "deposit_refund_month": "ab:$.deposit_refund_month",
+       "payment_type": "ab:$.payment_type",
+       "product_id": "ab:$.product_id",
+       "revoke_status": "ab:$.revoke_status",
+       "revoke_type": "ab:$.revoke_type",
+       "asset_status": "ab:$.asset_status",
+       "revoke_failure_reason": "ab:$.revoke_failure_reason",
+       "repayment_date": "ab:$.repayment_date",
+       "repay_warn_time": "ab:$.repay_warn_time",
+       "reverse_status_name": "ab:$.reverse_status_name",
+       "is_delayed_recovery_name": "ab:$.is_delayed_recovery_name",
+       "order_finance_arr": [
+        "ab"
+       ],
+       "order_main_bank_arr": [
+        "ab"
+       ],
+       "order_sub": [
+        "ab"
+       ],
+       "order_sub_no": "ab:$.order_sub_no",
+       "service_project": {
+        "ab": "v"
+       },
+       "service_project_amount": {
+        "ab": "v"
+       },
+       "finance_status": true,
+       "main_ids_name": "ab:$.main_ids_name",
+       "policy_main_arr": [
+        "ab"
+       ],
+       "policy_type_name": "ab:$.policy_type_name",
+       "business_type_name": "ab:$.business_type_name",
+       "cargo_type_name": "ab:$.cargo_type_name",
+       "period_rule_name": "ab:$.period_rule_name",
+       "trade_term_name": "ab:$.trade_term_name",
+       "carrier_name": "ab:$.carrier_name",
+       "terms_transport_name": "ab:$.terms_transport_name",
+       "terms_payment_name": "ab:$.terms_payment_name",
+       "pay_type_name": "ab:$.pay_type_name",
+       "m_delivery_type_name": "ab:$.m_delivery_type_name",
+       "payment_type_name": "ab:$.payment_type_name",
+       "audit": [
+        "ab"
+       ],
+       "enable": "ab:$.enable",
+       "policy_match": "ab:$.policy_match",
+       "policy_match_name": "ab:$.policy_match_name",
+       "real_discount_status_name": "ab:$.real_discount_status_name",
+       "expect_discount_status_name": "ab:$.expect_discount_status_name",
+       "expect_policy_status_name": "ab:$.expect_policy_status_name",
+       "policy_status_name": "ab:$.policy_status_name",
+       "subsidy_category_name": "ab:$.subsidy_category_name",
+       "expect_subsidy_category_name": "ab:$.expect_subsidy_category_name",
+       "real_subsidy_category_name": "ab:$.real_subsidy_category_name",
+       "revoke_status_name": "ab:$.revoke_status_name",
+       "revoke_type_name": "ab:$.revoke_type_name",
+       "asset_status_name": "ab:$.asset_status_name"
+      }
      },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30.0
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order.order_book",
      "request": {
       "kind": "request",
       "body": {
@@ -2438,70 +3168,74 @@
        ]
       }
      },
-     "strategy": []
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30.0
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order.order_detail",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order.order_notice",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order.order_page",
-     "api": {
-      "kind": "api",
-      "service": "fin",
-      "method": "POST",
-      "path": "/ab",
-      "headers": {},
-      "timeout": 30.0
-     },
      "request": {
       "kind": "request",
       "body": {}
      },
-     "strategy": []
-    },
-    {
-     "kind": "step",
-     "description": "ab:fin.order_entrust.order_add",
-     "api": {
-      "kind": "api",
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order_entrust.order_add",
      "request": {
       "kind": "request",
       "body": {
@@ -2608,36 +3342,38 @@
        ]
       }
      },
-     "strategy": []
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30.0
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_entrust.order_customer_container",
-     "api": {
-      "kind": "api",
-      "service": "fin",
-      "method": "POST",
-      "path": "/ab",
-      "headers": {},
-      "timeout": 30.0
-     },
      "request": {
       "kind": "request",
       "body": {}
      },
-     "strategy": []
-    },
-    {
-     "kind": "step",
-     "description": "ab:fin.order_entrust.order_dispatch",
-     "api": {
-      "kind": "api",
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order_entrust.order_dispatch",
      "request": {
       "kind": "request",
       "body": {
@@ -2895,111 +3631,126 @@
        ]
       }
      },
-     "strategy": []
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30.0
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_entrust.order_page",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_fee.asset_push",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_fee.book_real_amount_edit",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_fee.real_amount_lock_submit",
-     "api": {
-      "kind": "api",
+     "request": {
+      "kind": "request",
+      "body": {}
+     },
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
-     "request": {
-      "kind": "request",
-      "body": {}
-     },
-     "strategy": []
+     }
     },
     {
      "kind": "step",
      "description": "ab:fin.order_fee.toggle_real_amount",
-     "api": {
-      "kind": "api",
-      "service": "fin",
-      "method": "POST",
-      "path": "/ab",
-      "headers": {},
-      "timeout": 30.0
-     },
      "request": {
       "kind": "request",
       "body": {}
      },
-     "strategy": []
-    },
-    {
-     "kind": "step",
-     "description": "ab:fin.settlement.create_order",
-     "api": {
-      "kind": "api",
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "fin",
       "method": "POST",
       "path": "/ab",
       "headers": {},
       "timeout": 30.0
-     },
+     }
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.settlement.create_order",
      "request": {
       "kind": "request",
       "body": {
        "remark": "ab:$.remark"
       }
      },
-     "strategy": []
+     "strategy": [],
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30.0
+     }
     }
    ]
   }
@@ -3305,6 +4056,266 @@
        "customer_tax_number": "ab:$.customer_tax_number",
        "customer_address_cn": "ab:$.customer_address_cn",
        "client_expand_id": "ab:$.client_expand_id",
+       "customer_contact_phone": "ab:$.customer_contact_phone",
+       "customer_main_id": "ab:$.customer_main_id",
+       "customer_main_name": "ab:$.customer_main_name",
+       "business_main_id": "ab:$.business_main_id",
+       "business_main_name": "ab:$.business_main_name",
+       "fund_code": "ab:$.fund_code",
+       "fund_name": "ab:$.fund_name",
+       "track_atd": "ab:$.track_atd",
+       "track_eta": "ab:$.track_eta",
+       "track_ata": "ab:$.track_ata",
+       "track_stcs": "ab:$.track_stcs",
+       "track_ship_name": "ab:$.track_ship_name",
+       "track_voy": "ab:$.track_voy",
+       "finance_date": "ab:$.finance_date",
+       "pol_cn": "ab:$.pol_cn",
+       "pol_country_id": "ab:$.pol_country_id",
+       "pol_country": "ab:$.pol_country",
+       "pol_country_cn": "ab:$.pol_country_cn",
+       "pod_cn": "ab:$.pod_cn",
+       "pot_cn": "ab:$.pot_cn",
+       "del_cn": "ab:$.del_cn",
+       "country_id": "ab:$.country_id",
+       "country_name_cn": "ab:$.country_name_cn",
+       "customer_period": "ab:$.customer_period",
+       "customer_settlement_date": "ab:$.customer_settlement_date",
+       "period_rule": "ab:$.period_rule",
+       "term_rule_name": "ab:$.term_rule_name",
+       "customer_due_date": "ab:$.customer_due_date",
+       "customer_put_date": "ab:$.customer_put_date",
+       "customer_payment_collection_date": "ab:$.customer_payment_collection_date",
+       "customer_put_date_manual": "ab:$.customer_put_date_manual",
+       "customer_put_writeoff_date": "ab:$.customer_put_writeoff_date",
+       "supplier_due_date": "ab:$.supplier_due_date",
+       "discount_start": "ab:$.discount_start",
+       "discount_rule": "ab:$.discount_rule",
+       "discount_end": "ab:$.discount_end",
+       "discount_ratio": "ab:$.discount_ratio",
+       "discount_status": "ab:$.discount_status",
+       "discount_currency": "ab:$.discount_currency",
+       "book_upload_date": "ab:$.book_upload_date",
+       "trans_cost_put_preserve_date": "ab:$.trans_cost_put_preserve_date",
+       "bl_no_upload_date": "ab:$.bl_no_upload_date",
+       "supplier_invoice_date": "ab:$.supplier_invoice_date",
+       "supplier_invoice_taketime": "ab:$.supplier_invoice_taketime",
+       "real_cost_date": "ab:$.real_cost_date",
+       "customer_invoice_request_date": "ab:$.customer_invoice_request_date",
+       "first_financing_doc_ok_date": "ab:$.first_financing_doc_ok_date",
+       "second_financing_doc_ok_date": "ab:$.second_financing_doc_ok_date",
+       "insurance_doc_ok_date": "ab:$.insurance_doc_ok_date",
+       "customer_confirm_date": "ab:$.customer_confirm_date",
+       "is_delayed_recovery": "ab:$.is_delayed_recovery",
+       "delayed_recovery_usd": "ab:$.delayed_recovery_usd",
+       "delayed_recovery_cny": "ab:$.delayed_recovery_cny",
+       "delayed_time": "ab:$.delayed_time",
+       "expect_fee_status": "ab:$.expect_fee_status",
+       "real_fee_status": "ab:$.real_fee_status",
+       "fee_lock_status": "ab:$.fee_lock_status",
+       "pay_account_status": "ab:$.pay_account_status",
+       "account_status": "ab:$.account_status",
+       "real_pay_usd": "ab:$.real_pay_usd",
+       "real_pay_cny": "ab:$.real_pay_cny",
+       "real_put_usd": "ab:$.real_put_usd",
+       "real_put_cny": "ab:$.real_put_cny",
+       "real_put_discount_rate": "ab:$.real_put_discount_rate",
+       "exchange_rate": "ab:$.exchange_rate",
+       "folde_pay_usd": "ab:$.folde_pay_usd",
+       "folde_put_usd": "ab:$.folde_put_usd",
+       "folde_pay_total": "ab:$.folde_pay_total",
+       "folde_put_total": "ab:$.folde_put_total",
+       "gross_margin": "ab:$.gross_margin",
+       "gross_margin_rate": "ab:$.gross_margin_rate",
+       "is_special_pay": "ab:$.is_special_pay",
+       "is_loan_before_invoice": "ab:$.is_loan_before_invoice",
+       "is_fee_miss": "ab:$.is_fee_miss",
+       "fee_miss_name": "ab:$.fee_miss_name",
+       "cancel_remark": "ab:$.cancel_remark",
+       "cancel_time": "ab:$.cancel_time",
+       "effective_id": "ab:$.effective_id",
+       "effective_by": "ab:$.effective_by",
+       "effective_time": "ab:$.effective_time",
+       "create_id": "ab:$.create_id",
+       "create_by": "ab:$.create_by",
+       "update_id": "ab:$.update_id",
+       "update_by": "ab:$.update_by",
+       "delete_time": "ab:$.delete_time",
+       "business_time": "ab:$.business_time",
+       "main_ids": "ab:$.main_ids",
+       "reverse_status": "ab:$.reverse_status",
+       "proprietary_business_status": "ab:$.proprietary_business_status",
+       "loan_status": "ab:$.loan_status",
+       "first_status": "ab:$.first_status",
+       "second_status": "ab:$.second_status",
+       "loan_pay_status": "ab:$.loan_pay_status",
+       "change_type": "ab:$.change_type",
+       "copy_order_id": "ab:$.copy_order_id",
+       "real_fee_locked": true,
+       "is_usd_project": "ab:$.is_usd_project",
+       "pay_status": "ab:$.pay_status",
+       "is_sync_es": "ab:$.is_sync_es",
+       "expect_discount_status": "ab:$.expect_discount_status",
+       "real_discount_status": "ab:$.real_discount_status",
+       "remark": "ab:$.remark",
+       "audit_type": "ab:$.audit_type",
+       "is_system_generate": "ab:$.is_system_generate",
+       "is_financing": "ab:$.is_financing",
+       "confirm_status": "ab:$.confirm_status",
+       "is_traverse": "ab:$.is_traverse",
+       "financing_apply_amount": "ab:$.financing_apply_amount",
+       "financing_apply_amount_cny": "ab:$.financing_apply_amount_cny",
+       "financing_apply_amount_usd": "ab:$.financing_apply_amount_usd",
+       "receive_time_limit": "ab:$.receive_time_limit",
+       "customer_put_date_desc": "ab:$.customer_put_date_desc",
+       "deposit_refund_day": "ab:$.deposit_refund_day",
+       "deposit_settlement_date": "ab:$.deposit_settlement_date",
+       "deposit_refund_month": "ab:$.deposit_refund_month",
+       "payment_type": "ab:$.payment_type",
+       "product_id": "ab:$.product_id",
+       "revoke_status": "ab:$.revoke_status",
+       "revoke_type": "ab:$.revoke_type",
+       "asset_status": "ab:$.asset_status",
+       "revoke_failure_reason": "ab:$.revoke_failure_reason",
+       "repayment_date": "ab:$.repayment_date",
+       "repay_warn_time": "ab:$.repay_warn_time",
+       "reverse_status_name": "ab:$.reverse_status_name",
+       "is_delayed_recovery_name": "ab:$.is_delayed_recovery_name",
+       "order_finance_arr": [
+        "ab"
+       ],
+       "order_main_bank_arr": [
+        "ab"
+       ],
+       "order_sub": [
+        "ab"
+       ],
+       "order_sub_no": "ab:$.order_sub_no",
+       "service_project": {
+        "ab": "v"
+       },
+       "service_project_amount": {
+        "ab": "v"
+       },
+       "finance_status": true,
+       "main_ids_name": "ab:$.main_ids_name",
+       "policy_main_arr": [
+        "ab"
+       ],
+       "policy_type_name": "ab:$.policy_type_name",
+       "business_type_name": "ab:$.business_type_name",
+       "cargo_type_name": "ab:$.cargo_type_name",
+       "period_rule_name": "ab:$.period_rule_name",
+       "trade_term_name": "ab:$.trade_term_name",
+       "carrier_name": "ab:$.carrier_name",
+       "terms_transport_name": "ab:$.terms_transport_name",
+       "terms_payment_name": "ab:$.terms_payment_name",
+       "pay_type_name": "ab:$.pay_type_name",
+       "m_delivery_type_name": "ab:$.m_delivery_type_name",
+       "payment_type_name": "ab:$.payment_type_name",
+       "audit": [
+        "ab"
+       ],
+       "enable": "ab:$.enable",
+       "policy_match": "ab:$.policy_match",
+       "policy_match_name": "ab:$.policy_match_name",
+       "real_discount_status_name": "ab:$.real_discount_status_name",
+       "expect_discount_status_name": "ab:$.expect_discount_status_name",
+       "expect_policy_status_name": "ab:$.expect_policy_status_name",
+       "policy_status_name": "ab:$.policy_status_name",
+       "subsidy_category_name": "ab:$.subsidy_category_name",
+       "expect_subsidy_category_name": "ab:$.expect_subsidy_category_name",
+       "real_subsidy_category_name": "ab:$.real_subsidy_category_name",
+       "revoke_status_name": "ab:$.revoke_status_name",
+       "revoke_type_name": "ab:$.revoke_type_name",
+       "asset_status_name": "ab:$.asset_status_name"
+      },
+      "fields_meta": {}
+     },
+     "strategy": []
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.order.order_add_demo",
+     "api": {
+      "kind": "api",
+      "service": "fin",
+      "method": "POST",
+      "path": "/ab",
+      "headers": {},
+      "timeout": 30
+     },
+     "request": {
+      "kind": "request",
+      "body": {
+       "order_file": [
+        "ab"
+       ],
+       "m_delivery_type": "ab:$.m_delivery_type",
+       "service_id": "ab:$.service_id",
+       "service_name": "ab:$.service_name",
+       "sale_id": "ab:$.sale_id",
+       "sale_name": "ab:$.sale_name",
+       "operator_id": "ab:$.operator_id",
+       "operator_name": "ab:$.operator_name",
+       "customer_contact_id": "ab:$.customer_contact_id",
+       "customer_contact_name": "ab:$.customer_contact_name",
+       "main_sort": "ab:$.main_sort",
+       "policy_type": "ab:$.policy_type",
+       "settle_type": "ab:$.settle_type",
+       "settle_type_name": "ab:$.settle_type_name",
+       "customer_product_id": "ab:$.customer_product_id",
+       "product_name": "ab:$.product_name",
+       "deposit_type": "ab:$.deposit_type",
+       "deposit_type_name": "ab:$.deposit_type_name",
+       "period_delay_type": "ab:$.period_delay_type",
+       "period_delay_type_name": "ab:$.period_delay_type_name",
+       "service_items": [
+        "ab"
+       ],
+       "business_type": "ab:$.business_type",
+       "trade_term": "ab:$.trade_term",
+       "carrier": "ab:$.carrier",
+       "carrier_id": "ab:$.carrier_id",
+       "etd": 7,
+       "atd": 7,
+       "ship_name": "ab:$.ship_name",
+       "voy": "ab:$.voy",
+       "pol": "ab:$.pol",
+       "pot": "ab:$.pot",
+       "pod": "ab:$.pod",
+       "del": "ab:$.del",
+       "country_name": "ab:$.country_name",
+       "airline_type": "ab:$.airline_type",
+       "ocean_type": "ab:$.ocean_type",
+       "terms_payment": "ab:$.terms_payment",
+       "terms_transport": "ab:$.terms_transport",
+       "pay_type": "ab:$.pay_type",
+       "customer_order_sn": "ab:$.customer_order_sn",
+       "terms_shipment": "ab:$.terms_shipment",
+       "shipper": "ab:$.shipper",
+       "consignee": "ab:$.consignee",
+       "notifier": "ab:$.notifier",
+       "ship_mark": "ab:$.ship_mark",
+       "commodity": "ab:$.commodity",
+       "notes": "ab:$.notes",
+       "cargo_type": "ab:$.cargo_type",
+       "packer": "ab:$.packer",
+       "num": "ab:$.num",
+       "gross_weight": "ab:$.gross_weight",
+       "bulk": "ab:$.bulk",
+       "sea_trans_cost": "ab:$.sea_trans_cost",
+       "teu": "ab:$.teu",
+       "volume": "ab:$.volume",
+       "volume_desc": "ab:$.volume_desc",
+       "order_sn": "ab:$.order_sn",
+       "sea_trans_currency": "ab:$.sea_trans_currency",
+       "message_board": [
+        "ab"
+       ],
+       "customer_category": "ab:$.customer_category",
+       "customer_tax_number": "ab:$.customer_tax_number",
+       "customer_address_cn": "ab:$.customer_address_cn",
        "customer_contact_phone": "ab:$.customer_contact_phone",
        "customer_main_id": "ab:$.customer_main_id",
        "customer_main_name": "ab:$.customer_main_name",
@@ -4392,8 +5403,9 @@
     {
      "kind": "step",
      "description": "校验新建委托订舱单（验价）",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
@@ -4401,7 +5413,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -4523,7 +5535,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -4534,8 +5546,9 @@
     {
      "kind": "step",
      "description": "提交委托订舱单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
@@ -4543,7 +5556,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -4665,7 +5678,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -4679,7 +5692,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body",
+       "expression": "$.call.response.body",
        "target": "resp1",
        "scope": "scenario",
        "required": true
@@ -4689,8 +5702,9 @@
     {
      "kind": "step",
      "description": "分页查询委托订单并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderPage",
@@ -4698,7 +5712,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -4720,7 +5734,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderPage 应返回200",
@@ -4734,7 +5748,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id",
        "scope": "scenario",
        "required": true
@@ -4744,8 +5758,9 @@
     {
      "kind": "step",
      "description": "查询订单详情并提取订单、订单号及供应商订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
@@ -4753,7 +5768,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -4771,7 +5786,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -4783,7 +5798,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
@@ -4797,7 +5812,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.supplier[0].order_supplier_id",
+       "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
        "target": "order_supplier_id",
        "scope": "scenario",
        "required": true
@@ -4810,7 +5825,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_2",
        "scope": "scenario",
        "required": true
@@ -4823,7 +5838,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_no",
+       "expression": "$.call.response.body.data.order_no",
        "target": "order_no",
        "scope": "scenario",
        "required": true
@@ -4833,8 +5848,9 @@
     {
      "kind": "step",
      "description": "校验补充箱型箱量后的委托订舱单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
@@ -4842,7 +5858,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -5147,7 +6163,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true
       },
@@ -5160,7 +6176,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true
       },
@@ -5173,7 +6189,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -5186,7 +6202,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true
       },
@@ -5198,7 +6214,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -5209,8 +6225,9 @@
     {
      "kind": "step",
      "description": "提交补充箱型箱量后的委托订舱单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderEntrust/orderAdd",
@@ -5218,7 +6235,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -5523,7 +6540,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true
       },
@@ -5536,7 +6553,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true
       },
@@ -5549,7 +6566,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -5562,7 +6579,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true
       },
@@ -5574,7 +6591,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
@@ -5585,8 +6602,9 @@
     {
      "kind": "step",
      "description": "查询订单详情并提取箱信息及关联订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
@@ -5594,7 +6612,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -5612,7 +6630,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -5624,7 +6642,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
@@ -5638,7 +6656,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.container[0].order_container_id",
+       "expression": "$.call.response.body.data.container[0].order_container_id",
        "target": "order_container_id",
        "scope": "scenario",
        "required": true
@@ -5651,7 +6669,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.supplier[0].order_supplier_id",
+       "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
        "target": "order_supplier_id_2",
        "scope": "scenario",
        "required": true
@@ -5664,7 +6682,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_3",
        "scope": "scenario",
        "required": true
@@ -5677,7 +6695,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body",
+       "expression": "$.call.response.body",
        "target": "resp",
        "scope": "scenario",
        "required": true
@@ -5687,8 +6705,9 @@
     {
      "kind": "step",
      "description": "校验创建业务订单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderAdd",
@@ -5696,7 +6715,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -6002,7 +7021,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true
       },
@@ -6015,7 +7034,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true
       },
@@ -6028,7 +7047,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6041,7 +7060,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6054,7 +7073,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true
       },
@@ -6066,7 +7085,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderAdd 应返回200",
@@ -6077,8 +7096,9 @@
     {
      "kind": "step",
      "description": "校验订舱单据并提取文件ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderBook",
@@ -6086,7 +7106,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -6392,7 +7412,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true
       },
@@ -6405,7 +7425,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true
       },
@@ -6418,7 +7438,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6431,7 +7451,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6444,7 +7464,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true
       },
@@ -6456,7 +7476,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderBook 应返回200",
@@ -6470,7 +7490,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data[0].file_id",
+       "expression": "$.call.response.body.data[0].file_id",
        "target": "file_id",
        "scope": "scenario",
        "required": true
@@ -6480,8 +7500,9 @@
     {
      "kind": "step",
      "description": "提交业务订单及订舱文件",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderAdd",
@@ -6489,7 +7510,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -6808,7 +7829,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true
       },
@@ -6821,7 +7842,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.file_id",
-       "target": "$.request_body.customer_file_list[0].file_id",
+       "target": "$.call.request.body.customer_file_list[0].file_id",
        "scope": "scenario",
        "required": true
       },
@@ -6834,7 +7855,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true
       },
@@ -6847,7 +7868,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6860,7 +7881,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6873,7 +7894,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true
       },
@@ -6885,7 +7906,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderAdd 应返回200",
@@ -6896,8 +7917,9 @@
     {
      "kind": "step",
      "description": "分页查询业务订单并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderPage",
@@ -6905,7 +7927,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -6926,7 +7948,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
@@ -6940,7 +7962,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_4",
        "scope": "scenario",
        "required": true
@@ -6950,8 +7972,9 @@
     {
      "kind": "step",
      "description": "切换订单实收实付金额模式并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
@@ -6959,7 +7982,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -6977,7 +8000,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_4",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -6989,7 +8012,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -7003,7 +8026,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_5",
        "scope": "scenario",
        "required": true
@@ -7013,8 +8036,9 @@
     {
      "kind": "step",
      "description": "校验订舱实收实付金额配置",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/bookRealAmountEdit",
@@ -7022,7 +8046,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7105,7 +8129,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7117,7 +8141,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
@@ -7128,8 +8152,9 @@
     {
      "kind": "step",
      "description": "提交订舱实收实付金额配置",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/bookRealAmountEdit",
@@ -7137,7 +8162,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7220,7 +8245,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7232,7 +8257,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
@@ -7243,8 +8268,9 @@
     {
      "kind": "step",
      "description": "校验主订单拆分子订单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/checkGenerateOrderSub",
@@ -7252,7 +8278,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7270,7 +8296,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7282,7 +8308,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/checkGenerateOrderSub 应返回200",
@@ -7293,8 +8319,9 @@
     {
      "kind": "step",
      "description": "生成应收应付子订单",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/generateOrderSub",
@@ -7302,7 +8329,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7320,7 +8347,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7332,7 +8359,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/generateOrderSub 应返回200",
@@ -7343,8 +8370,9 @@
     {
      "kind": "step",
      "description": "刷新实收实付金额汇总并提取子订单编号及费用ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
@@ -7352,7 +8380,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7370,7 +8398,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7382,7 +8410,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -7396,7 +8424,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_6",
        "scope": "scenario",
        "required": true
@@ -7409,7 +8437,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+       "expression": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
        "target": "order_fee_real_ids",
        "scope": "scenario",
        "required": true
@@ -7422,7 +8450,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].order_sub_no",
+       "expression": "$.call.response.body.data.to_customer[0].order_sub_no",
        "target": "code",
        "scope": "scenario",
        "required": true
@@ -7432,8 +8460,9 @@
     {
      "kind": "step",
      "description": "校验费用实收实付锁定",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -7441,7 +8470,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7463,7 +8492,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7476,7 +8505,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true
       },
@@ -7488,7 +8517,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -7499,8 +8528,9 @@
     {
      "kind": "step",
      "description": "审核费用实收实付锁定申请",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -7508,7 +8538,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7530,7 +8560,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7543,7 +8573,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true
       },
@@ -7555,7 +8585,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -7566,8 +8596,9 @@
     {
      "kind": "step",
      "description": "提交费用锁定审批申请",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/realAmountLockSubmit",
@@ -7575,7 +8606,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7610,7 +8641,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7623,7 +8654,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true
       },
@@ -7636,7 +8667,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.code",
-       "target": "$.request_body.audit_msg.code",
+       "target": "$.call.request.body.audit_msg.code",
        "scope": "scenario",
        "required": true
       },
@@ -7648,7 +8679,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
@@ -7659,8 +8690,9 @@
     {
      "kind": "step",
      "description": "查询待审批记录并提取审批ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/home/audit/auditPage",
@@ -7668,7 +8700,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7690,7 +8722,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditPage 应返回200",
@@ -7704,7 +8736,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_id",
        "scope": "scenario",
        "required": true
@@ -7717,7 +8749,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_ids",
        "scope": "scenario",
        "required": true
@@ -7727,8 +8759,9 @@
     {
      "kind": "step",
      "description": "执行费用锁定审批",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/home/audit/auditExecute",
@@ -7736,7 +8769,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7758,7 +8791,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_ids",
-       "target": "$.request_body.audit_ids[0]",
+       "target": "$.call.request.body.audit_ids[0]",
        "scope": "scenario",
        "required": true
       },
@@ -7770,7 +8803,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditExecute 应返回200",
@@ -7781,8 +8814,9 @@
     {
      "kind": "step",
      "description": "分页查询审批后的业务订单并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderPage",
@@ -7790,7 +8824,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7811,7 +8845,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
@@ -7825,7 +8859,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_7",
        "scope": "scenario",
        "required": true
@@ -7835,8 +8869,9 @@
     {
      "kind": "step",
      "description": "查询第二阶段订单详情并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
@@ -7844,7 +8879,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7862,7 +8897,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_7",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7874,7 +8909,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
@@ -7888,7 +8923,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_8",
        "scope": "scenario",
        "required": true
@@ -7898,8 +8933,9 @@
     {
      "kind": "step",
      "description": "刷新资产推送前的实收实付金额汇总",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
@@ -7907,7 +8943,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -7925,7 +8961,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_8",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -7937,7 +8973,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -7951,7 +8987,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_9",
        "scope": "scenario",
        "required": true
@@ -7964,7 +9000,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].order_sub_no",
+       "expression": "$.call.response.body.data.to_customer[0].order_sub_no",
        "target": "code_2",
        "scope": "scenario",
        "required": true
@@ -7974,8 +9010,9 @@
     {
      "kind": "step",
      "description": "校验费用资产推送",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
@@ -7983,7 +9020,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8002,7 +9039,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8014,7 +9051,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
@@ -8025,8 +9062,9 @@
     {
      "kind": "step",
      "description": "审核费用资产推送",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
@@ -8034,7 +9072,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8053,7 +9091,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8065,7 +9103,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
@@ -8076,8 +9114,9 @@
     {
      "kind": "step",
      "description": "提交费用资产推送审批申请",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/assetPush",
@@ -8085,7 +9124,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8117,7 +9156,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8130,7 +9169,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.code_2",
-       "target": "$.request_body.audit_msg.code",
+       "target": "$.call.request.body.audit_msg.code",
        "scope": "scenario",
        "required": true
       },
@@ -8142,7 +9181,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
@@ -8153,8 +9192,9 @@
     {
      "kind": "step",
      "description": "刷新资产推送后的实收实付金额汇总",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/orderFee/toggleRealAmount",
@@ -8162,7 +9202,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8180,7 +9220,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8192,7 +9232,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
@@ -8203,8 +9243,9 @@
     {
      "kind": "step",
      "description": "查询资产推送待审批记录并提取审批ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/home/audit/auditPage",
@@ -8212,7 +9253,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8234,7 +9275,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditPage 应返回200",
@@ -8248,7 +9289,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_id_2",
        "scope": "scenario",
        "required": true
@@ -8261,7 +9302,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_ids_2",
        "scope": "scenario",
        "required": true
@@ -8271,8 +9312,9 @@
     {
      "kind": "step",
      "description": "查询审批详情并提取关联订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/home/audit/auditDetail",
@@ -8280,7 +9322,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8298,7 +9340,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_id_2",
-       "target": "$.request_body.audit_id",
+       "target": "$.call.request.body.audit_id",
        "scope": "scenario",
        "required": true
       },
@@ -8310,7 +9352,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditDetail 应返回200",
@@ -8324,7 +9366,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.audit_content.relation_id",
+       "expression": "$.call.response.body.data.audit_content.relation_id",
        "target": "order_id_10",
        "scope": "scenario",
        "required": true
@@ -8334,8 +9376,9 @@
     {
      "kind": "step",
      "description": "执行资产推送审批",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/home/audit/auditExecute",
@@ -8343,7 +9386,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8365,7 +9408,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_ids_2",
-       "target": "$.request_body.audit_ids[0]",
+       "target": "$.call.request.body.audit_ids[0]",
        "scope": "scenario",
        "required": true
       },
@@ -8377,7 +9420,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditExecute 应返回200",
@@ -8388,8 +9431,9 @@
     {
      "kind": "step",
      "description": "分页查询资产推送后的业务订单并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderPage",
@@ -8397,7 +9441,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8418,7 +9462,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
@@ -8432,7 +9476,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_11",
        "scope": "scenario",
        "required": true
@@ -8442,8 +9486,9 @@
     {
      "kind": "step",
      "description": "查询最终订单详情并提取订单ID",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderDetail",
@@ -8451,7 +9496,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8469,7 +9514,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_11",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8481,7 +9526,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
@@ -8495,7 +9540,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_12",
        "scope": "scenario",
        "required": true
@@ -8505,8 +9550,9 @@
     {
      "kind": "step",
      "description": "校验应收核销通知",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderNotice",
@@ -8514,7 +9560,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8533,7 +9579,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_12",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8545,7 +9591,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderNotice 应返回200",
@@ -8556,8 +9602,9 @@
     {
      "kind": "step",
      "description": "提交应收核销通知",
-     "api": {
-      "kind": "api",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
       "service": "tidb-test-service",
       "method": "POST",
       "path": "/api/order/order/orderNotice",
@@ -8565,7 +9612,7 @@
        "Authorization": "${auth.codfish.token}",
        "Content-Type": "application/json;charset=UTF-8"
       },
-      "timeout": 30.0
+      "timeout": 30
      },
      "request": {
       "kind": "request",
@@ -8592,7 +9639,7 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_12",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true
       },
@@ -8604,7 +9651,7 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderNotice 应返回200",
@@ -8805,12 +9852,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -8949,12 +9996,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id",
@@ -8964,11 +10011,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body",
+       "expression": "$.call.response.body",
        "target": "resp1",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body → resp1"
+       "view_note": "$.call.response.body → resp1"
       }
      ]
     },
@@ -9007,12 +10054,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id",
@@ -9022,11 +10069,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].order_id → order_id"
+       "view_note": "$.call.response.body.data.data[0].order_id → order_id"
       }
      ]
     },
@@ -9061,10 +10108,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id → $.request_body.order_id"
+       "view_note": "$.order_id → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -9074,12 +10121,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_supplier_id",
@@ -9089,11 +10136,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.supplier[0].order_supplier_id",
+       "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
        "target": "order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.supplier[0].order_supplier_id → order_supplier_id"
+       "view_note": "$.call.response.body.data.supplier[0].order_supplier_id → order_supplier_id"
       },
       {
        "name": "extract_order_id_2",
@@ -9103,11 +10150,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_2",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.order_id → order_id_2"
+       "view_note": "$.call.response.body.data.order_id → order_id_2"
       },
       {
        "name": "extract_order_no",
@@ -9117,11 +10164,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_no",
+       "expression": "$.call.response.body.data.order_no",
        "target": "order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.order_no → order_no"
+       "view_note": "$.call.response.body.data.order_no → order_no"
       }
      ]
     },
@@ -9443,10 +10490,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_supplier_id → $.request_body.supplier[0].order_supplier_id"
+       "view_note": "$.order_supplier_id → $.call.request.body.supplier[0].order_supplier_id"
       },
       {
        "name": "assign_order_id_2",
@@ -9457,10 +10504,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_2 → $.request_body.supplier[0].order_id"
+       "view_note": "$.order_id_2 → $.call.request.body.supplier[0].order_id"
       },
       {
        "name": "assign_order_id_2",
@@ -9471,10 +10518,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_2 → $.request_body.order_id"
+       "view_note": "$.order_id_2 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_no",
@@ -9485,10 +10532,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_no → $.request_body.order_no"
+       "view_note": "$.order_no → $.call.request.body.order_no"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -9498,12 +10545,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -9825,10 +10872,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_supplier_id → $.request_body.supplier[0].order_supplier_id"
+       "view_note": "$.order_supplier_id → $.call.request.body.supplier[0].order_supplier_id"
       },
       {
        "name": "assign_order_id_2",
@@ -9839,10 +10886,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_2 → $.request_body.supplier[0].order_id"
+       "view_note": "$.order_id_2 → $.call.request.body.supplier[0].order_id"
       },
       {
        "name": "assign_order_id_2",
@@ -9853,10 +10900,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_2 → $.request_body.order_id"
+       "view_note": "$.order_id_2 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_no",
@@ -9867,10 +10914,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_no → $.request_body.order_no"
+       "view_note": "$.order_no → $.call.request.body.order_no"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -9880,12 +10927,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderEntrust/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -9920,10 +10967,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_2",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_2 → $.request_body.order_id"
+       "view_note": "$.order_id_2 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -9933,12 +10980,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_container_id",
@@ -9948,11 +10995,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.container[0].order_container_id",
+       "expression": "$.call.response.body.data.container[0].order_container_id",
        "target": "order_container_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.container[0].order_container_id → order_container_id"
+       "view_note": "$.call.response.body.data.container[0].order_container_id → order_container_id"
       },
       {
        "name": "extract_order_supplier_id_2",
@@ -9962,11 +11009,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.supplier[0].order_supplier_id",
+       "expression": "$.call.response.body.data.supplier[0].order_supplier_id",
        "target": "order_supplier_id_2",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.supplier[0].order_supplier_id → order_supplier_id_2"
+       "view_note": "$.call.response.body.data.supplier[0].order_supplier_id → order_supplier_id_2"
       },
       {
        "name": "extract_order_id_3",
@@ -9976,11 +11023,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_3",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.order_id → order_id_3"
+       "view_note": "$.call.response.body.data.order_id → order_id_3"
       },
       {
        "name": "extract_order_id",
@@ -9990,11 +11037,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body",
+       "expression": "$.call.response.body",
        "target": "resp",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body → resp"
+       "view_note": "$.call.response.body → resp"
       }
      ]
     },
@@ -10317,10 +11364,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_container_id → $.request_body.container[0].order_container_id"
+       "view_note": "$.order_container_id → $.call.request.body.container[0].order_container_id"
       },
       {
        "name": "assign_order_supplier_id_2",
@@ -10331,10 +11378,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_supplier_id_2 → $.request_body.supplier[0].order_supplier_id"
+       "view_note": "$.order_supplier_id_2 → $.call.request.body.supplier[0].order_supplier_id"
       },
       {
        "name": "assign_order_id_3",
@@ -10345,10 +11392,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.supplier[0].order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.supplier[0].order_id"
       },
       {
        "name": "assign_order_id_3",
@@ -10359,10 +11406,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_no",
@@ -10373,10 +11420,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_no → $.request_body.order_no"
+       "view_note": "$.order_no → $.call.request.body.order_no"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -10386,12 +11433,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -10714,10 +11761,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_container_id → $.request_body.container[0].order_container_id"
+       "view_note": "$.order_container_id → $.call.request.body.container[0].order_container_id"
       },
       {
        "name": "assign_order_supplier_id_2",
@@ -10728,10 +11775,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_supplier_id_2 → $.request_body.supplier[0].order_supplier_id"
+       "view_note": "$.order_supplier_id_2 → $.call.request.body.supplier[0].order_supplier_id"
       },
       {
        "name": "assign_order_id_3",
@@ -10742,10 +11789,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.supplier[0].order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.supplier[0].order_id"
       },
       {
        "name": "assign_order_id_3",
@@ -10756,10 +11803,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_no",
@@ -10770,10 +11817,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_no → $.request_body.order_no"
+       "view_note": "$.order_no → $.call.request.body.order_no"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -10783,12 +11830,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderBook 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_file_id",
@@ -10798,11 +11845,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data[0].file_id",
+       "expression": "$.call.response.body.data[0].file_id",
        "target": "file_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data[0].file_id → file_id"
+       "view_note": "$.call.response.body.data[0].file_id → file_id"
       }
      ]
     },
@@ -11138,10 +12185,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_container_id",
-       "target": "$.request_body.container[0].order_container_id",
+       "target": "$.call.request.body.container[0].order_container_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_container_id → $.request_body.container[0].order_container_id"
+       "view_note": "$.order_container_id → $.call.request.body.container[0].order_container_id"
       },
       {
        "name": "assign_file_id",
@@ -11152,10 +12199,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.file_id",
-       "target": "$.request_body.customer_file_list[0].file_id",
+       "target": "$.call.request.body.customer_file_list[0].file_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.file_id → $.request_body.customer_file_list[0].file_id"
+       "view_note": "$.file_id → $.call.request.body.customer_file_list[0].file_id"
       },
       {
        "name": "assign_order_supplier_id_2",
@@ -11166,10 +12213,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_supplier_id_2",
-       "target": "$.request_body.supplier[0].order_supplier_id",
+       "target": "$.call.request.body.supplier[0].order_supplier_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_supplier_id_2 → $.request_body.supplier[0].order_supplier_id"
+       "view_note": "$.order_supplier_id_2 → $.call.request.body.supplier[0].order_supplier_id"
       },
       {
        "name": "assign_order_id_3",
@@ -11180,10 +12227,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.supplier[0].order_id",
+       "target": "$.call.request.body.supplier[0].order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.supplier[0].order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.supplier[0].order_id"
       },
       {
        "name": "assign_order_id_3",
@@ -11194,10 +12241,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_3",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_3 → $.request_body.order_id"
+       "view_note": "$.order_id_3 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_no",
@@ -11208,10 +12255,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_no",
-       "target": "$.request_body.order_no",
+       "target": "$.call.request.body.order_no",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_no → $.request_body.order_no"
+       "view_note": "$.order_no → $.call.request.body.order_no"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11221,12 +12268,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderAdd 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11264,12 +12311,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_4",
@@ -11279,11 +12326,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_4",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].order_id → order_id_4"
+       "view_note": "$.call.response.body.data.data[0].order_id → order_id_4"
       }
      ]
     },
@@ -11318,10 +12365,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_4",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_4 → $.request_body.order_id"
+       "view_note": "$.order_id_4 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11331,12 +12378,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_5",
@@ -11346,11 +12393,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_5",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.amount_summary.order_id → order_id_5"
+       "view_note": "$.call.response.body.data.amount_summary.order_id → order_id_5"
       }
      ]
     },
@@ -11450,10 +12497,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_5 → $.request_body.order_id"
+       "view_note": "$.order_id_5 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11463,12 +12510,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11568,10 +12615,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_5 → $.request_body.order_id"
+       "view_note": "$.order_id_5 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11581,12 +12628,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11621,10 +12668,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_5 → $.request_body.order_id"
+       "view_note": "$.order_id_5 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11634,12 +12681,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/checkGenerateOrderSub 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11674,10 +12721,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_5 → $.request_body.order_id"
+       "view_note": "$.order_id_5 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11687,12 +12734,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/generateOrderSub 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11727,10 +12774,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_5",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_5 → $.request_body.order_id"
+       "view_note": "$.order_id_5 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11740,12 +12787,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_6",
@@ -11755,11 +12802,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_6",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.amount_summary.order_id → order_id_6"
+       "view_note": "$.call.response.body.data.amount_summary.order_id → order_id_6"
       },
       {
        "name": "extract_order_fee_real_ids",
@@ -11769,11 +12816,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+       "expression": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
        "target": "order_fee_real_ids",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id → order_fee_real_ids"
+       "view_note": "$.call.response.body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id → order_fee_real_ids"
       },
       {
        "name": "extract_code",
@@ -11783,11 +12830,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].order_sub_no",
+       "expression": "$.call.response.body.data.to_customer[0].order_sub_no",
        "target": "code",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.to_customer[0].order_sub_no → code"
+       "view_note": "$.call.response.body.data.to_customer[0].order_sub_no → code"
       }
      ]
     },
@@ -11826,10 +12873,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_6 → $.request_body.order_id"
+       "view_note": "$.order_id_6 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_fee_real_ids",
@@ -11840,10 +12887,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_fee_real_ids → $.request_body.order_fee_real_ids[0]"
+       "view_note": "$.order_fee_real_ids → $.call.request.body.order_fee_real_ids[0]"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11853,12 +12900,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11897,10 +12944,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_6 → $.request_body.order_id"
+       "view_note": "$.order_id_6 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_fee_real_ids",
@@ -11911,10 +12958,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_fee_real_ids → $.request_body.order_fee_real_ids[0]"
+       "view_note": "$.order_fee_real_ids → $.call.request.body.order_fee_real_ids[0]"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -11924,12 +12971,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -11981,10 +13028,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_6",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_6 → $.request_body.order_id"
+       "view_note": "$.order_id_6 → $.call.request.body.order_id"
       },
       {
        "name": "assign_order_fee_real_ids",
@@ -11995,10 +13042,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_fee_real_ids",
-       "target": "$.request_body.order_fee_real_ids[0]",
+       "target": "$.call.request.body.order_fee_real_ids[0]",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_fee_real_ids → $.request_body.order_fee_real_ids[0]"
+       "view_note": "$.order_fee_real_ids → $.call.request.body.order_fee_real_ids[0]"
       },
       {
        "name": "assign_code",
@@ -12009,10 +13056,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.code",
-       "target": "$.request_body.audit_msg.code",
+       "target": "$.call.request.body.audit_msg.code",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.code → $.request_body.audit_msg.code"
+       "view_note": "$.code → $.call.request.body.audit_msg.code"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12022,12 +13069,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12066,12 +13113,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_audit_id",
@@ -12081,11 +13128,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].audit_id → audit_id"
+       "view_note": "$.call.response.body.data.data[0].audit_id → audit_id"
       },
       {
        "name": "extract_audit_ids",
@@ -12095,11 +13142,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_ids",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].audit_id → audit_ids"
+       "view_note": "$.call.response.body.data.data[0].audit_id → audit_ids"
       }
      ]
     },
@@ -12138,10 +13185,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_ids",
-       "target": "$.request_body.audit_ids[0]",
+       "target": "$.call.request.body.audit_ids[0]",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.audit_ids → $.request_body.audit_ids[0]"
+       "view_note": "$.audit_ids → $.call.request.body.audit_ids[0]"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12151,12 +13198,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditExecute 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12194,12 +13241,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_7",
@@ -12209,11 +13256,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_7",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].order_id → order_id_7"
+       "view_note": "$.call.response.body.data.data[0].order_id → order_id_7"
       }
      ]
     },
@@ -12248,10 +13295,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_7",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_7 → $.request_body.order_id"
+       "view_note": "$.order_id_7 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12261,12 +13308,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_8",
@@ -12276,11 +13323,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_8",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.order_id → order_id_8"
+       "view_note": "$.call.response.body.data.order_id → order_id_8"
       }
      ]
     },
@@ -12315,10 +13362,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_8",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_8 → $.request_body.order_id"
+       "view_note": "$.order_id_8 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12328,12 +13375,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_9",
@@ -12343,11 +13390,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.amount_summary.order_id",
+       "expression": "$.call.response.body.data.amount_summary.order_id",
        "target": "order_id_9",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.amount_summary.order_id → order_id_9"
+       "view_note": "$.call.response.body.data.amount_summary.order_id → order_id_9"
       },
       {
        "name": "extract_code_2",
@@ -12357,11 +13404,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.to_customer[0].order_sub_no",
+       "expression": "$.call.response.body.data.to_customer[0].order_sub_no",
        "target": "code_2",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.to_customer[0].order_sub_no → code_2"
+       "view_note": "$.call.response.body.data.to_customer[0].order_sub_no → code_2"
       }
      ]
     },
@@ -12397,10 +13444,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_9 → $.request_body.order_id"
+       "view_note": "$.order_id_9 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12410,12 +13457,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12451,10 +13498,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_9 → $.request_body.order_id"
+       "view_note": "$.order_id_9 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12464,12 +13511,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12518,10 +13565,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_9 → $.request_body.order_id"
+       "view_note": "$.order_id_9 → $.call.request.body.order_id"
       },
       {
        "name": "assign_code_2",
@@ -12532,10 +13579,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.code_2",
-       "target": "$.request_body.audit_msg.code",
+       "target": "$.call.request.body.audit_msg.code",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.code_2 → $.request_body.audit_msg.code"
+       "view_note": "$.code_2 → $.call.request.body.audit_msg.code"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12545,12 +13592,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/assetPush 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12585,10 +13632,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_9",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_9 → $.request_body.order_id"
+       "view_note": "$.order_id_9 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12598,12 +13645,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/orderFee/toggleRealAmount 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12642,12 +13689,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_audit_id_2",
@@ -12657,11 +13704,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_id_2",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].audit_id → audit_id_2"
+       "view_note": "$.call.response.body.data.data[0].audit_id → audit_id_2"
       },
       {
        "name": "extract_audit_ids_2",
@@ -12671,11 +13718,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].audit_id",
+       "expression": "$.call.response.body.data.data[0].audit_id",
        "target": "audit_ids_2",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].audit_id → audit_ids_2"
+       "view_note": "$.call.response.body.data.data[0].audit_id → audit_ids_2"
       }
      ]
     },
@@ -12710,10 +13757,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_id_2",
-       "target": "$.request_body.audit_id",
+       "target": "$.call.request.body.audit_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.audit_id_2 → $.request_body.audit_id"
+       "view_note": "$.audit_id_2 → $.call.request.body.audit_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12723,12 +13770,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditDetail 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_10",
@@ -12738,11 +13785,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.audit_content.relation_id",
+       "expression": "$.call.response.body.data.audit_content.relation_id",
        "target": "order_id_10",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.audit_content.relation_id → order_id_10"
+       "view_note": "$.call.response.body.data.audit_content.relation_id → order_id_10"
       }
      ]
     },
@@ -12781,10 +13828,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.audit_ids_2",
-       "target": "$.request_body.audit_ids[0]",
+       "target": "$.call.request.body.audit_ids[0]",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.audit_ids_2 → $.request_body.audit_ids[0]"
+       "view_note": "$.audit_ids_2 → $.call.request.body.audit_ids[0]"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12794,12 +13841,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/home/audit/auditExecute 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -12837,12 +13884,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderPage 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_11",
@@ -12852,11 +13899,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.data[0].order_id",
+       "expression": "$.call.response.body.data.data[0].order_id",
        "target": "order_id_11",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.data[0].order_id → order_id_11"
+       "view_note": "$.call.response.body.data.data[0].order_id → order_id_11"
       }
      ]
     },
@@ -12891,10 +13938,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_11",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_11 → $.request_body.order_id"
+       "view_note": "$.order_id_11 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12904,12 +13951,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderDetail 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       },
       {
        "name": "extract_order_id_12",
@@ -12919,11 +13966,11 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "extract",
-       "expression": "$.response_body.data.order_id",
+       "expression": "$.call.response.body.data.order_id",
        "target": "order_id_12",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.response_body.data.order_id → order_id_12"
+       "view_note": "$.call.response.body.data.order_id → order_id_12"
       }
      ]
     },
@@ -12959,10 +14006,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_12",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_12 → $.request_body.order_id"
+       "view_note": "$.order_id_12 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -12972,12 +14019,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderNotice 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     },
@@ -13021,10 +14068,10 @@
        "tags": [],
        "kind": "assign",
        "source": "$.order_id_12",
-       "target": "$.request_body.order_id",
+       "target": "$.call.request.body.order_id",
        "scope": "scenario",
        "required": true,
-       "view_note": "$.order_id_12 → $.request_body.order_id"
+       "view_note": "$.order_id_12 → $.call.request.body.order_id"
       },
       {
        "name": "assert_http_status_eq_200",
@@ -13034,12 +14081,12 @@
        "onFailure": "abort",
        "tags": [],
        "kind": "assertion",
-       "target": "$.response_status",
+       "target": "$.call.response.status",
        "operator": "eq",
        "expected": 200,
        "message": "/api/order/order/orderNotice 应返回200",
        "soft": false,
-       "view_note": "$.response_status eq 200"
+       "view_note": "$.call.response.status eq 200"
       }
      ]
     }

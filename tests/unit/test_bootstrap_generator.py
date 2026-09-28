@@ -35,8 +35,14 @@ def test_cfg_model_copy_preserves_other_fields():
 
 
 def test_generator_has_7_kinds():
-    """默认注册表包含 7 个内置生成器。"""
+    """默认注册表包含 9 个内置生成器。
+
+    原始 7 个(uuid/random_str/random_int/random_decimal/timestamp/now/seq)
+    + random_decorated / time_offset(装饰随机串与时间偏移,随生成器目录
+    扩充入册)= 9;函数名保留历史称呼。
+    """
     g = Generator(build_default_registry())
-    assert len(g._registry.kinds()) == 7
+    assert len(g._registry.kinds()) == 9
     assert set(g._registry.kinds()) == {"uuid", "random_str", "random_int",
-                                          "random_decimal", "timestamp", "now", "seq"}
+                                          "random_decimal", "timestamp", "now", "seq",
+                                          "random_decorated", "time_offset"}

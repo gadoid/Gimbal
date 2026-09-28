@@ -512,6 +512,19 @@ def _classify_var(value: Any) -> str:
 
 # ── ScenarioExporter(消费 Scenario 数据类) ─────────────────────────
 
+
+def _ep_key_map(endpoints: list[EndpointSpec]) -> dict[tuple[str, str], EndpointSpec]:
+    """(method, path) → endpoint;同坐标多端点时**先注册者胜**。
+
+    demo 端点(如 fin.order.order_add_demo)与正式端点共享坐标,登记顺序
+    在后 —— 先注册者胜保证样本聚合/step 关联落到正式端点上。
+    """
+    m: dict[tuple[str, str], EndpointSpec] = {}
+    for ep in endpoints:
+        m.setdefault((ep.api.method, ep.api.path), ep)
+    return m
+
+
 class PlatformScenarioExporter(ScenarioExporter):
     """把 Scenario(中性数据类)翻译为 platform 渲染视图 dict。
 
@@ -549,9 +562,7 @@ class PlatformScenarioExporter(ScenarioExporter):
     ) -> None:
         self.scenario = scenario
         self.endpoints: list[EndpointSpec] = list(endpoints or [])
-        self._ep_by_key: dict[tuple[str, str], EndpointSpec] = {
-            (ep.api.method, ep.api.path): ep for ep in self.endpoints
-        }
+        self._ep_by_key = _ep_key_map(self.endpoints)
 
     def to_dict(self) -> dict[str, Any]:
         """整 scenario → platform 落库 dict(向后兼容入口)。"""
@@ -576,9 +587,7 @@ class PlatformScenarioExporter(ScenarioExporter):
         """
         self._validate_scenario(scenario)
         ep_list = self._validate_endpoints(endpoints)
-        ep_by_key: dict[tuple[str, str], EndpointSpec] = {
-            (ep.api.method, ep.api.path): ep for ep in ep_list
-        }
+        ep_by_key = _ep_key_map(ep_list)
         view = self.to_view(
             scenario=scenario,
             endpoints=ep_list,

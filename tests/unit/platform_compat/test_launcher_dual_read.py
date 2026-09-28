@@ -3,8 +3,12 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                                "src", "gimbal-platform", "backend"))
+# backend 路径必须 append 到尾部:insert(0) 会让 backend/tests(正式包)
+# 遮蔽仓库根的命名空间包 tests,合跑 tests/plate 时 tests.plate 解析失败
+_BACKEND = os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                        "src", "gimbal-platform", "backend")
+if _BACKEND not in sys.path:
+    sys.path.append(_BACKEND)
 
 from app.services.gimbal_launcher import parse_run_result
 
