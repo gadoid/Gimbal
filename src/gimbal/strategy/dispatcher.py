@@ -10,10 +10,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from .executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 from gimbal.core.hooks import HookPoint
+from gimbal.core.registry import Registry
 from gimbal.exceptions import StrategyError
 from gimbal.log import get_logger
 
 if TYPE_CHECKING:
+    from pydantic import BaseModel
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
 
@@ -26,41 +28,66 @@ class StrategyDispatcher:
     用法::
 
         dispatcher = StrategyDispatcher()
-        dispatcher.register(ExtractExecutor())
-        dispatcher.register(AssignExecutor())
-        dispatcher.register(AssertionExecutor())
+        dispatcher.register(ExtractExecutor(), params=Extract)
+        dispatcher.register(AssignExecutor(), params=Assign)
+        dispatcher.register(AssertionExecutor(), params=Assertion)
 
         result = dispatcher.dispatch(spec, view)
 
     可选埋点：
         dispatcher = StrategyDispatcher(hook_registry=registry)
+
+    注册面收敛（S-1）：kind 表由泛型 Registry 承载 —— 身份、参数模型、
+    describe 导出统一走 core.registry；params_of 供 ext/平台取参数 schema。
     """
 
     def __init__(self, hook_registry: Optional[Any] = None) -> None:
         """初始化 dispatcher：空 executor 注册表，可选 hook_registry 用于 STRATEGY_BEFORE/AFTER 埋点。"""
-        self._registry: dict[str, StrategyExecutor] = {}
+        self._table: Registry[StrategyExecutor] = Registry("strategy")
         self._hooks = hook_registry
-        # 协议注册表（protocol → executor，与 _registry 的 kind 表联动）；
+        # 协议注册表（protocol → executor，与 kind 表联动）；
         # 由 build_default_dispatcher 装配，Engine/ScenarioRunner/状态机经此透传
         self.protocols: Any = None
 
-    def register(self, executor: StrategyExecutor) -> None:
-        """注册一个 executor，以其 kind 为键。"""
+    def register(
+        self,
+        executor: StrategyExecutor,
+        params: Optional["type[BaseModel]"] = None,
+    ) -> None:
+        """注册一个 executor，以其 kind 为键。
+
+        params 为该策略的参数模型（ext 导出 / 表单生成用）；缺省时回退读
+        executor.params_model 类属性，两者皆无则该条目 params_schema=None。
+        """
         if not executor.kind:
             raise StrategyError(f"{type(executor).__name__} must declare a non-empty `kind`")
-        self._registry[executor.kind] = executor
-        logger.debug("[StrategyDispatcher] Executor registered: kind={} executor={}", executor.kind, type(executor).__name__)
+        resolved = params or getattr(executor, "params_model", None)
+        self._table.register(executor.kind, executor, params=resolved)
+        logger.debug("[StrategyDispatcher] Executor registered: kind={} executor={} params={}",
+                     executor.kind, type(executor).__name__,
+                     getattr(resolved, "__name__", None))
 
     def unregister(self, kind: str) -> bool:
         """按 kind 注销 executor（插件热卸载路径）。返回是否原本存在。"""
-        existed = self._registry.pop(kind, None) is not None
+        # Registry 表设计为注册期写、运行期读；插件热卸载需要移除，
+        # 经内部表操作（同包协作），不外泄到 Registry 公共面。
+        with self._table._lock:  # noqa: SLF001
+            existed = self._table._items.pop(kind, None) is not None  # noqa: SLF001
         if existed:
             logger.debug("[StrategyDispatcher] Executor unregistered: kind={}", kind)
         return existed
 
     def kinds(self) -> list[str]:
         """已注册的 executor kind 列表（快照）。"""
-        return sorted(self._registry.keys())
+        return self._table.names()
+
+    def params_of(self, kind: str) -> Optional["type[BaseModel]"]:
+        """按 kind 取参数模型；未注册或无模型返回 None（ext/平台消费）。"""
+        return self._table.params_of(kind)
+
+    def describe(self) -> list[dict]:
+        """strategy 表 describe 导出（ext list --json 口径）。"""
+        return self._table.describe()
 
     def dispatch(
         self,
@@ -88,8 +115,9 @@ class StrategyDispatcher:
                 message="strategy disabled",
             )
         # 2. 查找 executor
-        executor = self._registry.get(kind)  # type: ignore[arg-type]
-        if executor is None:
+        try:
+            _params, executor = self._table.get(kind)
+        except KeyError:
             logger.error("[StrategyDispatcher] No executor registered: kind={} strategy_id={}", kind, strategy_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
@@ -201,11 +229,12 @@ def build_default_dispatcher(hook_registry: Optional[Any] = None) -> StrategyDis
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
+    from gimbal.schema.strategy import Assign, Assertion, Extract
     from gimbal.protocols.registry import build_default_protocol_registry
 
     d = StrategyDispatcher(hook_registry=hook_registry)
     d.protocols = build_default_protocol_registry(dispatcher=d)   # 注册 http（kind="_call"）
-    d.register(ExtractExecutor())
-    d.register(AssignExecutor())
-    d.register(AssertionExecutor())
+    d.register(ExtractExecutor(), params=Extract)
+    d.register(AssignExecutor(), params=Assign)
+    d.register(AssertionExecutor(), params=Assertion)
     return d

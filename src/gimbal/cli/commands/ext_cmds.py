@@ -18,31 +18,18 @@ from gimbal.log import get_logger
 
 logger = get_logger(__name__)
 
-# 策略 kind → 参数模型（dispatch 校验的 schema 面）
-_STRATEGY_PARAMS = {
-    "extract": "gimbal.schema.strategy:Extract",
-    "assign": "gimbal.schema.strategy:Assign",
-    "assertion": "gimbal.schema.strategy:Assertion",
-}
-
-
-def _resolve_params(dotted: str):
-    mod, _, attr = dotted.partition(":")
-    try:
-        import importlib
-        return getattr(importlib.import_module(mod), attr)
-    except Exception:  # noqa: BLE001
-        return None
-
 
 def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -> list[dict]:
-    """聚合四张表的 describe()（JSON 安全）。"""
+    """聚合四张表的 describe()（JSON 安全）。
+
+    S-1：strategy 表参数模型经 dispatcher.params_of（注册面收敛），
+    protocol 表经 protocols.params_of —— 本文件不再持有任何硬编码映射。
+    """
     out: list[dict] = []
 
-    # strategy 表（dispatcher 的 kind 键；params 模型按映射解析）
+    # strategy 表（dispatcher 的 kind 键；params 模型由注册面携带）
     for kind in dispatcher.kinds():
-        dotted = _STRATEGY_PARAMS.get(kind)
-        params_cls = _resolve_params(dotted) if dotted else None
+        params_cls = dispatcher.params_of(kind)
         out.append({
             "table": "strategy",
             "name": kind,
@@ -51,10 +38,11 @@ def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -
 
     # protocol 表（ProtocolRegistry）
     for proto in protocols.protocols():
+        params_cls = protocols.params_of(proto)
         out.append({
             "table": "protocol",
             "name": proto,
-            "params_schema": None,   # per-协议 call 字段模型在批次 F Registry 收敛时补
+            "params_schema": params_cls.model_json_schema() if params_cls else None,
         })
 
     # mode 表（泛型 Registry）

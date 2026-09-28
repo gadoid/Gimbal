@@ -57,6 +57,12 @@ class Registry(Generic[T]):
                 )
             return self._items[name]
 
+    def params_of(self, name: str) -> Optional[type[BaseModel]]:
+        """按名取参数模型；未注册或该条目无模型返回 None。"""
+        with self._lock:
+            item = self._items.get(name)
+            return item[0] if item is not None else None
+
     def __contains__(self, name: str) -> bool:
         with self._lock:
             return name in self._items

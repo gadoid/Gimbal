@@ -29,26 +29,39 @@ class ProtocolRegistry:
     def __init__(self, dispatcher: Any = None) -> None:
         """dispatcher 可选：给了则注册/注销时同步维护 dispatcher 的 kind 表。"""
         self._executors: dict[str, ProtocolExecutor] = {}
+        self._params: dict[str, "type | None"] = {}  # protocol → call 字段模型（S-1）
         self._by_plugin: dict[str, list[str]] = {}   # plugin_name → [protocol, ...]
         self._dispatcher = dispatcher
         self._lock = threading.RLock()
 
     # ── 注册/注销 ─────────────────────────────────────────────
 
-    def register(self, executor: ProtocolExecutor, *, plugin_name: Optional[str] = None) -> None:
-        """注册协议执行器；同名协议后者覆盖前者（升级语义），并同步 dispatcher。"""
+    def register(
+        self,
+        executor: ProtocolExecutor,
+        *,
+        plugin_name: Optional[str] = None,
+        params: Optional["type"] = None,
+    ) -> None:
+        """注册协议执行器；同名协议后者覆盖前者（升级语义），并同步 dispatcher。
+
+        params 为该协议 call 字段模型（编译期校验 / ext 导出）；缺省回退读
+        executor.params_model 类属性。
+        """
         if not isinstance(executor, ProtocolExecutor):
             raise TypeError(
                 f"协议执行器必须继承 ProtocolExecutor，得到 {type(executor).__name__}"
             )
+        resolved = params or getattr(executor, "params_model", None)
         with self._lock:
             self._executors[executor.protocol] = executor
+            self._params[executor.protocol] = resolved
             if plugin_name:
                 protos = self._by_plugin.setdefault(plugin_name, [])
                 if executor.protocol not in protos:
                     protos.append(executor.protocol)
             if self._dispatcher is not None:
-                self._dispatcher.register(executor)
+                self._dispatcher.register(executor, params=resolved)
         logger.debug(
             "[ProtocolRegistry] 协议注册: protocol={} executor={} plugin={}",
             executor.protocol, type(executor).__name__, plugin_name,
@@ -58,6 +71,7 @@ class ProtocolRegistry:
         """按协议名注销；同步移除 dispatcher 的 kind 表。返回是否原本存在。"""
         with self._lock:
             executor = self._executors.pop(protocol, None)
+            self._params.pop(protocol, None)
             if executor is None:
                 return False
             for protos in self._by_plugin.values():
@@ -86,6 +100,11 @@ class ProtocolRegistry:
         with self._lock:
             return self._executors.get(protocol)
 
+    def params_of(self, protocol: str) -> Optional["type"]:
+        """按协议名取 call 字段模型；未注册或无模型返回 None（编译期校验 / ext 用）。"""
+        with self._lock:
+            return self._params.get(protocol)
+
     def protocols(self) -> list[str]:
         """已注册协议名列表（快照）。"""
         with self._lock:
@@ -98,8 +117,8 @@ class ProtocolRegistry:
 
 def build_default_protocol_registry(dispatcher: Any = None) -> ProtocolRegistry:
     """构造默认注册表：内置 http 协议（HttpProtocolExecutor，第一员）。"""
-    from gimbal.protocols.builtin.http import HttpProtocolExecutor
+    from gimbal.protocols.builtin.http import HttpCallParams, HttpProtocolExecutor
 
     registry = ProtocolRegistry(dispatcher=dispatcher)
-    registry.register(HttpProtocolExecutor())
+    registry.register(HttpProtocolExecutor(), params=HttpCallParams)
     return registry

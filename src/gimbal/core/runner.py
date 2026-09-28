@@ -138,7 +138,9 @@ class Engine:
         # 3. 执行：编译为 Plan → 单路径执行（v2.1 批次 B；scenario=隐式 aggregate）
         try:
             from gimbal.compiler.pipeline import compile_target, CompileError
-            plan = compile_target(target)
+            # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）
+            protocols = self._ictx.protocols or getattr(self._ictx.dispatcher, "protocols", None)
+            plan = compile_target(target, protocols=protocols)
             result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
         except CompileError as e:
             logger.error("[Engine] 编译失败: {}", e)

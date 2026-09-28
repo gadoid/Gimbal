@@ -90,9 +90,14 @@ class ProtocolExecutor(StrategyExecutor):
     子类必须声明类属性 ``protocol`` 并实现 build_spec / send；
     可选覆写 redact（默认按敏感键名脱敏）与 after_send（送达后的协议
     命名空间扩展点，http 用于触发 HTTP_BEFORE/AFTER 与事件）。
+
+    类属性 ``params_model``（可选）：该协议 call 字段的参数模型
+    （extra="forbid"）—— 编译期校验 step.call 的协议自有字段，
+    并经 ext 导出供平台表单生成。缺省 None = 不校验（开放协议）。
     """
 
     protocol: str = ""
+    params_model: Optional[type] = None
 
     def __init__(self) -> None:
         if not self.protocol:

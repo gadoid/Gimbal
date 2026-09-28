@@ -31,12 +31,22 @@ __all__ = ["CompileError", "compile_target", "validate_plan", "analyze_scenario"
 
 # ── 入口 ─────────────────────────────────────────────────────
 
-def compile_target(target: Union[Scenario, SuiteGraph]) -> Plan:
+def compile_target(
+    target: Union[Scenario, SuiteGraph],
+    protocols: "Any | None" = None,
+) -> Plan:
     """把 Scenario / SuiteGraph 编译为 Plan。
 
     v2.1 批次 F-2b：嵌入式 Suite（list[Scenario]）已删除——其 aggregate
     语义由 SuiteGraph(mode=aggregate) 承接（迁移脚本 suite→graph）。
+
+    protocols（S-1）：用于编译期校验 step.call 协议字段的协议注册表。
+    严格度跟随注册表来源：
+      - 显式传入（Engine 运行时，权威注册表）→ 未注册协议即 CompileError；
+      - 缺省（内置注册表；库直调 / 无 bootstrap 的 compile CLI）→ 只校验
+        已知协议的字段，插件协议不在内置表内、运行期由 Engine 路径收口。
     """
+    _validate_call_fields(target, protocols)
     if isinstance(target, Scenario):
         return _implicit_plan(target)
     if isinstance(target, SuiteGraph):
@@ -45,6 +55,57 @@ def compile_target(target: Union[Scenario, SuiteGraph]) -> Plan:
         f"无法编译的目标类型: {type(target).__name__}"
         "（嵌入式 Suite 已删除，请用 graph 或经迁移脚本转换）"
     )
+
+
+def _validate_call_fields(
+    target: Union[Scenario, SuiteGraph],
+    protocols: "Any | None" = None,
+) -> None:
+    """normalize 期协议字段校验（v2 §normalize）：未知协议 / 未知字段 → CompileError。
+
+    Call 是开放模型（extra="allow"），协议自有字段的合法性由各协议的
+    params_model（extra="forbid"）在编译期收口——注册新协议不改 Call。
+    protocols 缺省时用内置注册表且**不**对未注册协议报错（见 compile_target
+    docstring 的严格度规则）。
+    """
+    from pydantic import ValidationError
+
+    strict = protocols is not None
+    if protocols is None:
+        from gimbal.protocols.registry import build_default_protocol_registry
+        protocols = build_default_protocol_registry()
+
+    scenarios: list[Scenario] = []
+    if isinstance(target, Scenario):
+        scenarios.append(target)
+    else:  # SuiteGraph：括号与主体全部单元的场景
+        for decl in [*target.before, *target.units, *target.after]:
+            if getattr(decl, "scenario", None) is not None:
+                scenarios.append(decl.scenario)
+
+    for sc in scenarios:
+        for idx, step in enumerate(sc.steps):
+            call = getattr(step, "call", None)
+            if call is None:
+                continue
+            proto = call.protocol
+            if protocols.resolve(proto) is None:
+                if strict:
+                    raise CompileError(
+                        f"step[{idx}] call 引用未注册的协议: {proto!r}"
+                        f"（已注册: {protocols.protocols()}）"
+                    )
+                continue  # 非权威注册表：插件协议留给运行期收口
+            params_model = protocols.params_of(proto)
+            if params_model is None:
+                continue  # 开放协议：注册时未声明参数模型，不做字段校验
+            try:
+                params_model.model_validate(call.extra_fields())
+            except ValidationError as exc:
+                raise CompileError(
+                    f"step[{idx}] call 协议 {proto!r} 字段校验失败"
+                    f"（未知字段或类型不符）: {exc.error_count()} 处 —— {exc.errors()[0].get('loc')}"
+                ) from exc
 
 
 # ── 批次 B：scenario / 嵌入式 suite ──────────────────────────

@@ -118,6 +118,114 @@ class TestProtocolRegistry:
         assert "grpc" not in reg
 
 
+# ── S-1: 参数 schema 收敛入注册表 ────────────────────────────
+
+
+class TestParamsConvergence:
+    """S-1: strategy/protocol 参数模型入注册表;Call 编译期协议字段校验。"""
+
+    def test_http_params_schema_registered(self):
+        reg = build_default_protocol_registry()
+        params = reg.params_of("http")
+        assert params is not None
+        for f in ("service", "method", "path", "headers", "timeout", "user"):
+            assert f in params.model_fields, f
+
+    def test_params_of_unknown_protocol_is_none(self):
+        reg = build_default_protocol_registry()
+        assert reg.params_of("grpc") is None
+
+    def test_strategy_params_from_registry(self):
+        """dispatcher 注册面携带参数模型 —— ext 不再依赖硬编码 dotted 映射。"""
+        d = build_default_dispatcher(hook_registry=HookRegistry())
+        expect = {"extract": "target", "assign": "source", "assertion": "operator"}
+        for kind, field in expect.items():
+            params = d.params_of(kind)
+            assert params is not None, kind
+            assert field in params.model_fields, kind
+
+    def test_call_unknown_protocol_field_rejected(self):
+        from datetime import datetime, timezone
+
+        from gimbal.compiler.pipeline import CompileError, compile_target
+        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+
+        scenario = Scenario(
+            scenarioId="bad-call",
+            meta=Meta(name="n", description="d", module="m", priority=1, author="a",
+                      owner="o", tags=[], version="1.0",
+                      createTime=datetime.now(timezone.utc), expire=False,
+                      requirementRef=[]),
+            config=ScenarioConfig(),
+            resource={},
+            steps=[Step(call=Call(protocol="http", service="s", method="GET",
+                                  path="/x", bogus=1), strategy=[])],
+        )
+        with pytest.raises(CompileError, match="bogus|未知字段|Extra inputs"):
+            compile_target(scenario)
+
+    def test_call_unknown_protocol_rejected(self):
+        """显式传入注册表（Engine 路径）= 严格模式：未注册协议编译期报错。"""
+        from datetime import datetime, timezone
+
+        from gimbal.compiler.pipeline import CompileError, compile_target
+        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+
+        scenario = Scenario(
+            scenarioId="bad-proto",
+            meta=Meta(name="n", description="d", module="m", priority=1, author="a",
+                      owner="o", tags=[], version="1.0",
+                      createTime=datetime.now(timezone.utc), expire=False,
+                      requirementRef=[]),
+            config=ScenarioConfig(),
+            resource={},
+            steps=[Step(call=Call(protocol="nope", x=1), strategy=[])],
+        )
+        with pytest.raises(CompileError, match="未注册的协议|nope"):
+            compile_target(scenario, protocols=build_default_protocol_registry())
+
+    def test_call_unknown_protocol_lenient_without_explicit_registry(self):
+        """缺省注册表（库直调/无 bootstrap CLI）只校验已知协议,容忍插件协议。"""
+        from datetime import datetime, timezone
+
+        from gimbal.compiler.pipeline import compile_target
+        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+
+        scenario = Scenario(
+            scenarioId="plugin-proto",
+            meta=Meta(name="n", description="d", module="m", priority=1, author="a",
+                      owner="o", tags=[], version="1.0",
+                      createTime=datetime.now(timezone.utc), expire=False,
+                      requirementRef=[]),
+            config=ScenarioConfig(),
+            resource={},
+            steps=[Step(call=Call(protocol="echo", message="hi"), strategy=[])],
+        )
+        plan = compile_target(scenario)   # echo 不在内置表,不报错;运行期收口
+        assert plan.units[0].scenario.scenarioId == "plugin-proto"
+
+    def test_call_valid_http_fields_pass(self):
+        from datetime import datetime, timezone
+
+        from gimbal.compiler.pipeline import compile_target
+        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+
+        scenario = Scenario(
+            scenarioId="ok-call",
+            meta=Meta(name="n", description="d", module="m", priority=1, author="a",
+                      owner="o", tags=[], version="1.0",
+                      createTime=datetime.now(timezone.utc), expire=False,
+                      requirementRef=[]),
+            config=ScenarioConfig(),
+            resource={},
+            steps=[Step(call=Call(protocol="http", service="s", method="POST",
+                                  path="/x", headers={"A": "b"}, timeout=5.0,
+                                  user="codfish"), strategy=[])],
+        )
+        plan = compile_target(scenario)
+        assert plan.units and plan.units[0].scenario.scenarioId == "ok-call"
+
+
 # ── PluginContext 注册通道 ───────────────────────────────────
 
 class _StrategyProbe:
