@@ -47,6 +47,9 @@ class ErrCode:
     # ── users 标签（validate 期）──────────────────────────
     USERS_TAG_UNKNOWN = "USERS_TAG_UNKNOWN"      # 引用了未在 config.users 声明的标签（P0-11 S1）
 
+    # ── 订阅规格（P1-04）──────────────────────────────────
+    SUBSCRIBE_INVALID = "SUBSCRIBE_INVALID"      # --subscribe/graph.subscribe 规格非法
+
     # ── 未分类（历史调用点 / 外部包装）─────────────────────
     GENERIC = "GENERIC"
 

@@ -122,6 +122,10 @@ class Plan(BaseModel):
     # P0-5：bind 期即无上游供给的 after 单元 id（不 CompileError 成文记录；
     # 其有供给的输入照常连线，缺失语义由运行期注入 None 兜底）
     after_optional: set[str] = Field(default_factory=set)
+    # P1-04：声明式订阅规格（graph.subscribe 透传；Engine 在 run 边界挂载，
+    # 编译期校验见 events/subscribe.compile_subscribe）
+    subscribe: Optional[list[dict[str, Any]]] = Field(
+        default=None, description="声明式订阅规格（P1-04；CLI --subscribe 同款写法）")
 
     @property
     def all_units_in_order(self) -> list[Unit]:

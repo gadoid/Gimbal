@@ -145,6 +145,7 @@ class Engine:
                 logger.exception("[Engine] reporter_runtime.begin_all 失败（已隔离）")
 
         # 3. 执行：编译为 Plan → 单路径执行（v2.1 批次 B；scenario=隐式 aggregate）
+        attached_subscribe = None
         try:
             from gimbal.compiler.pipeline import compile_plan, CompileError
             # S-1：编译期协议字段校验用本配置的协议注册表（含插件协议）；
@@ -156,6 +157,12 @@ class Engine:
             plan = compile_plan(target, protocols=protocols,
                                 strategies=self._ictx.dispatcher,
                                 auth_tags=_auth_tags)
+            # P1-04：graph 声明的订阅在此挂载（编译期已校验；CLI --subscribe
+            # 与 server 请求的订阅由各自入口挂载，三种入口共用同一编译器）
+            if getattr(plan, "subscribe", None) and self._ictx.event_bus is not None:
+                from gimbal.events.subscribe import attach, compile_subscribe
+                attached_subscribe = attach(
+                    compile_subscribe(plan.subscribe), self._ictx.event_bus)
             result = self._run_plan(plan, framework_ctx, runtime_control=runtime_control)
         except CompileError as e:
             logger.error("[Engine] 编译失败: {}", e)
@@ -179,6 +186,9 @@ class Engine:
         #    最后一行 / SSE 的 done 前最后事件 / server 终态查询共用此事件；
         #    在 reporter finalize 之后发布（reporter 不消费终线，transport 消费）
         self._emit_run_finished(framework_ctx, result)
+        # P1-04：订阅覆盖到终线之后再卸载（run.finished 是常见订阅对象）
+        if attached_subscribe is not None:
+            attached_subscribe.detach()
         return result
 
     def _emit_run_finished(self, framework_ctx: FrameworkContext, result: RunResult) -> None:

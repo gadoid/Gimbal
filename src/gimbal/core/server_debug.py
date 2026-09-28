@@ -113,6 +113,16 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                            "(suite-level debug is not supported)",
                 )
 
+        # P1-04：订阅规格请求期编译校验（非法 422），执行线程内挂载
+        subscribe_spec = None
+        if req.subscribe is not None:
+            from gimbal.compiler.errors import CompileError
+            from gimbal.events.subscribe import compile_subscribe
+            try:
+                subscribe_spec = compile_subscribe(req.subscribe)
+            except CompileError as exc:
+                raise HTTPException(status_code=422, detail=exc.to_json()) from exc
+
         with reg_lock:
             if any(e["status"] == "running" for e in registry.values()):
                 raise HTTPException(
@@ -146,11 +156,16 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
 
             configuration = bootstrap(cli_ctx)
             debugger = None
+            attached_subscribe = None
             try:
                 # 事件缓冲：订阅全部事件到注册表（SSE 推流源）
                 sub_id = configuration.event_bus.subscribe(
                     lambda e: entry["events"].append(_event_dict(e))
                 )
+                if subscribe_spec is not None:
+                    from gimbal.events.subscribe import attach as _attach_sub
+                    attached_subscribe = _attach_sub(
+                        subscribe_spec, configuration.event_bus)
                 try:
                     if req.debug is not None:
                         debugger = DebuggerPlugin(
@@ -167,6 +182,8 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                         target, runtime_control=runtime_control)
                 finally:
                     configuration.event_bus.unsubscribe(sub_id)
+                    if attached_subscribe is not None:
+                        attached_subscribe.detach()
             finally:
                 if debugger is not None:
                     debugger.deactivate(configuration.hook_registry)

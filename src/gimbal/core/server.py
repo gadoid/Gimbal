@@ -78,6 +78,10 @@ def _define_models() -> tuple[type, type]:
         debug: DebugSpec | None = Field(None, description="调试装载（单单元且 n_runs=1）")
         halt_at: int | None = Field(None)
         step_from: int | None = Field(None)
+        # P1-04：声明式订阅（与 CLI --subscribe / graph.subscribe 同款写法；
+        # 请求期校验，非法 422；输出落 server 进程的 sink 通道）
+        subscribe: list[dict] | None = Field(
+            None, description="声明式订阅规格（P1-04）")
 
     class RunsCreated(BaseModel):
         runId: str

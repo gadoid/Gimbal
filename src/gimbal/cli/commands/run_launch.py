@@ -201,6 +201,12 @@ def launch(
     reporter: ReporterOpt = None,
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
+    subscribe: Annotated[
+        str | None,
+        typer.Option("--subscribe", help="声明式订阅规格文件（JSON 列表；P1-04，"
+                    "与 graph.subscribe / server 请求同款写法）",
+                     rich_help_panel="报告与输出"),
+    ] = None,
 ) -> None:
     """Typer 命令：bootstrap 框架 → 归一化输入为 dict → 校验为 Scenario → Engine.run 执行并打印报告。"""
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
@@ -254,6 +260,27 @@ def launch(
     if output == OutputFormat.jsonl:
         from gimbal.cli.common import attach_jsonl_sink
         jsonl_sub = attach_jsonl_sink(configuration.event_bus)
+    # 2.2 P1-04：--subscribe 声明式订阅（编译期校验；非法 exit 2）
+    attached_subscribe = None
+    if subscribe is not None:
+        from gimbal.compiler.errors import CompileError
+        from gimbal.events.subscribe import attach as _attach_sub, compile_subscribe
+        import pathlib as _pl
+        try:
+            raw_spec = json.loads(_pl.Path(subscribe).read_text(encoding="utf-8"))
+            attached_subscribe = _attach_sub(
+                compile_subscribe(raw_spec), configuration.event_bus)
+        except CompileError as exc:
+            if output == OutputFormat.json:
+                typer.echo(json.dumps(exc.to_json(), ensure_ascii=False))
+            else:
+                typer.secho(f"订阅规格非法: {exc}", fg=typer.colors.RED, err=True)
+            shutdown(configuration)
+            raise typer.Exit(code=2)
+        except Exception as exc:  # noqa: BLE001  # 文件读/解析失败
+            typer.secho(f"--subscribe 读取失败: {exc}", fg=typer.colors.RED, err=True)
+            shutdown(configuration)
+            raise typer.Exit(code=2)
     # 2.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文）
     _publish_run_meta(configuration)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
@@ -354,6 +381,8 @@ def launch(
                 configuration.event_bus.unsubscribe(jsonl_sub)
             except Exception:  # noqa: BLE001
                 pass
+        if attached_subscribe is not None:
+            attached_subscribe.detach()
         # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)

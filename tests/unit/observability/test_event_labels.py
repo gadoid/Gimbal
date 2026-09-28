@@ -242,7 +242,7 @@ class TestLogCategory:
                 "level": type("L", (), {"name": "INFO"})(),
                 "name": logger_name,
                 "function": "f", "line": 1, "message": message,
-                "extra": {}, "exception": None,
+                "extra": {"name": logger_name}, "exception": None,
             }
 
         with exec_context(run="r1", unit="u1", step="step-000"):

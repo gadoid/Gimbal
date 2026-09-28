@@ -21,6 +21,7 @@ error_brief、suite_id、reason 等），event_type 字符串统一为 "step.sta
 "scenario.start" / "scenario.end" / "variable.promoted"。
 """
 from __future__ import annotations
+import sys
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Literal
@@ -345,3 +346,21 @@ class DebugAfterInputMissingEvent(FrameworkEvent):
     unit_id: str = ""
     input_name: str = ""
     source: str = ""
+
+
+def known_event_types() -> set[str]:
+    """全仓已知事件类型集合（P1-04/P1-05 消费）。
+
+    = 全部 FrameworkEvent 子类的 event_type 默认值 ∪ EventType 枚举值
+    （枚举落后于类表——新增事件只声明类不进枚举；订阅校验与回放重建
+    都以本集合为准）。
+    """
+    table: set[str] = {e.value for e in EventType}
+    for obj in list(vars(sys.modules[__name__]).values()):
+        if (isinstance(obj, type) and issubclass(obj, FrameworkEvent)
+                and obj is not FrameworkEvent):
+            f = obj.model_fields.get("event_type")
+            default = f.get_default() if f is not None else None
+            if isinstance(default, str) and default:
+                table.add(default)
+    return table

@@ -10,6 +10,7 @@ from gimbal.cli.commands.self_check import self_check
 from gimbal.cli.commands.pipeline_cmds import compile_cmd, validate_cmd, resolve_cmd
 import typer as _typer
 from gimbal.cli.commands.ext_cmds import ext_list
+from gimbal.cli.commands.events_cmds import events_app
 
 # 退出码集中定义在 gimbal.cli.exit_codes，避免与子命令模块形成循环导入。
 from gimbal.cli.exit_codes import (  # noqa: E402,F401
@@ -45,6 +46,7 @@ starter.command("resolve")(resolve_cmd)     # v2.1 批次 C：编译视图 / --u
 _ext_app = _typer.Typer(help="扩展注册表（v2.1 批次 C）", no_args_is_help=True)
 _ext_app.command("list")(ext_list)
 starter.add_typer(_ext_app, name="ext")     # gimbal ext list [--json]
+starter.add_typer(events_app, name="events")  # gimbal events replay/query（P1-05）
 
 
 def _version_callback(value: bool) -> None:

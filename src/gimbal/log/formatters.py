@@ -147,7 +147,10 @@ class JsonSink:
 
     def _serialize(self, record: "Record") -> str:
         ts = record["time"].astimezone(timezone.utc).isoformat()
-        logger_name = record.get("name") or record.get("module", "")
+        # logger 名优先取 get_logger() 的绑定名（extra.name）；裸 record.name
+        # 是调用方模块名，库外调用（测试/脚本）会与绑定名不一致
+        logger_name = (record.get("extra", {}).get("name")
+                       or record.get("name") or record.get("module", ""))
 
         payload: dict[str, Any] = {
             "timestamp": ts,

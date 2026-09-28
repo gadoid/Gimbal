@@ -79,6 +79,8 @@ class SuiteGraph(BaseModel):
     after : list[UnitDecl] = Field(default_factory=list)
     control : Optional[Control] = None
     policy : Optional[PlanPolicyRef] = None
+    # P1-04：声明式订阅（同 CLI --subscribe 写法；编译透传到 Plan.subscribe）
+    subscribe : Optional[list[dict]] = Field(default=None, description="声明式订阅规格（P1-04）")
 
 RunUnion = Annotated[
     Union[Scenario,SuiteGraph],

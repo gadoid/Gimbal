@@ -768,6 +768,11 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
         if wires:
             wiring[unit.id] = wires
 
+    # P1-04：订阅规格随 graph 透传（Engine 在 run 边界编译挂载）
+    if getattr(graph, "subscribe", None):
+        from gimbal.events.subscribe import compile_subscribe
+        compile_subscribe(graph.subscribe)   # 编译期校验（非法即 CompileError）
+
     plan = Plan(
         units=main_units,
         before=before_units,
@@ -779,6 +784,7 @@ def p_bind(graph: SuiteGraph, expanded: "_ExpandedDecls") -> Plan:
         suite_name="Graph",
         implicit=False,
         mode=graph.mode,
+        subscribe=getattr(graph, "subscribe", None),
     )
     logger.info(
         "[compiler] Graph → Plan: mode={} units={} before={} after={} wiring={}",
