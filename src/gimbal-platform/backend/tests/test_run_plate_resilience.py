@@ -32,7 +32,8 @@ async def _wait_terminal(execution_id: int, timeout_s: float = 5.0):
 
 async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
     from tests.helpers import launch_ok
     return launch_ok()
 
@@ -117,14 +118,8 @@ async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
                                   body_over={"nRuns": 3})
     await _wait_terminal(eid)
 
-    assert calls["n"] == 1          # 前提:rep 2/3 确实命中 memo
-    assert len(snapshots) == 3
-    assert snapshots[1] == snapshots[0], (
-        f"rep 2 携带 rep 1 的注入痕迹: {snapshots[1]}"
-    )
-    assert snapshots[2] == snapshots[0], (
-        f"rep 3 携带前次注入痕迹: {snapshots[2]}"
-    )
+    assert calls["n"] == 1          # P2-05:nRuns=3 单 spawn(memo 一次命中)
+    assert len(snapshots) == 1      # 单 spawn → 单快照,无 rep 系列可对拍
 
 
 async def test_breaker_opens_after_consecutive_unavailable(

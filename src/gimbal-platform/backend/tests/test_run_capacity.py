@@ -42,12 +42,13 @@ async def test_dispatch_rejects_over_cap(client, monkeypatch):
                       json=make_draft("sc-cap", vars_map={"customer_id": "1"}))
     r = await client.post("/api/scenarios/sc-cap/data-sets", headers=headers,
                           json={"name": "ds", "rows": [
-                              {"customer_id": "1"}, {"customer_id": "2"}]})
+                              {"customer_id": "1"}, {"customer_id": "2"},
+                              {"customer_id": "3"}, {"customer_id": "4"}]})
     ds_id = r.json()["datasetId"]
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-cap", "dataSetIds": [ds_id],
-        "nRuns": 2,                      # 2 行 × 2 次 = 4 > 3
+        "nRuns": 2,                      # P2-05:nRuns 不进总量闸;4 行 > 3 触发
     })
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "too_many_runs"

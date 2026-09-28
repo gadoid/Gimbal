@@ -122,6 +122,7 @@ async def test_launch_roundtrip_captures_counts(
     )
     assert result.run_result == {
         "exitCode": 0, "total": 1, "passed": 1, "failed": 0, "skipped": 0,
+        "attempts": 0,
     }
 
 

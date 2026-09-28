@@ -242,6 +242,11 @@ class RowState:
     # 交叉定位(spec v3 §4):注入条目 id + 数据集行两字段首次同时有值;
     # 纯基线行/纯数据集的另一侧为 None。
     injection_id: str | None = None
+    # P2-01/P2-04:单元级台账面(从执行器事件投影;旧引擎/无事件路径
+    # unit_id=""、attempts=1 —— 与 0008 存量行兼容)
+    unit_id: str = ""
+    branch: str = "main"
+    attempts: int = 1
 
 
 # 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
@@ -440,6 +445,8 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
         async with db_factory() as session:
             session.add(ExecutionRow(
                 execution_id=execution_id, seq=state.seq,
+                unit_id=state.unit_id, branch=state.branch,
+                attempts=state.attempts,
                 dataset_id=state.dataset_id, injection_id=state.injection_id,
                 row_index=state.row_index, rep=state.rep,
                 status=state.status, case_dir=state.case_dir or "",
@@ -458,6 +465,8 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
                     .where(ExecutionRow.execution_id == execution_id,
                            ExecutionRow.seq == state.seq)
                     .values(status=state.status, case_dir=state.case_dir or "",
+                            unit_id=state.unit_id, branch=state.branch,
+                            attempts=state.attempts,
                             started_at=state.started_at,
                             finished_at=state.finished_at)
                 )
@@ -686,17 +695,16 @@ async def dispatch_run(
     injections = list(selected_entries) or [None]
     if not fanout_datasets:
         fanout_datasets = [{"datasetId": None, "rows": [(0, {})]}]
-    # 数据集族 × 注入族合计(rows × entries × nRuns)。
+    # P2-05:单元口径 —— nRuns 不再展开进 total_runs(乘法下沉执行器,
+    # 台账 attempts 列承载展开计数);P7 闸同口径(行 × 注入族)。
     total_runs = (
         sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
-    ) * req.n_runs
-    # P7:总量闸——行数 × nRuns 无上限时,万行数据集 × n_runs 会派生
-    # 出十万级子进程。
+    )
     if total_runs > settings.MAX_RUNS_PER_EXECUTION:
         raise Conflict(
             "too_many_runs",
             f"total runs {total_runs} exceed platform cap "
-            f"{settings.MAX_RUNS_PER_EXECUTION} (rows x nRuns)",
+            f"{settings.MAX_RUNS_PER_EXECUTION} (rows x injections)",
         )
     # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
     # steps(authored 模板所在处,${auth.*} 引用一网打尽);绑定的
@@ -890,7 +898,7 @@ async def _fanout(
             execution_id, e,
         )
         total_rows = (sum(len(ds["rows"]) for ds in datasets)
-                      * len(injections or [None])) * n_runs
+                      * len(injections or [None]))
         await _fail_whole_execution(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
@@ -963,10 +971,13 @@ async def _fanout(
 
     async def _row(ds: dict | None, row_idx: int, row: dict | None, rep: int,
                    seq: int, injection: dict | None = None) -> None:
-        """One (dataset row × injection entry × repeat) cross entry —
-        compose + convert + launch.  ``row_idx`` 是编辑器原始行号
+        """One (dataset row × injection entry) cross entry —
+        compose + convert + launch(乘法经 --n-runs 下沉执行器)。
+        ``row_idx`` 是编辑器原始行号
         (``rows`` 携带 (原始行号, 行字典) 对,稀疏选择不重排)。"""
         state = row_states[seq]
+        # P2-04:本行事件投影器(所有路径可安全读;无事件路径恒空)
+        proj = {"unit": None, "status": None, "attempts": 0}
         injection_id = (injection or {}).get("id")
         ds_id = ds["datasetId"] if ds is not None else None
         # 日志定位标签:数据集行用 datasetId,注入族用条目 id,基线行 baseline。
@@ -1064,14 +1075,29 @@ async def _fanout(
                     # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
                     # 合并生效;行级 sem 只管单 execution 的 parallel)。
                     async with _global_launch_sem():
+                        # P2-04 事件投影:本行的 scenario.end/run.finished
+                        # 单独摘出(状态/attempts/unit 由此投影;无事件路径
+                        # —— PlateMock/旧引擎 —— 回退 launch 结果推导)。
+                        def _row_on_event(d: dict, _p=proj) -> None:
+                            et = d.get("event_type")
+                            if et == "scenario.end":
+                                _p["status"] = d.get("status")
+                                _p["unit"] = d.get("unit") or _p["unit"]
+                            elif et == "run.finished":
+                                # attempts 缺省(旧引擎)=0 → 行级回退 1
+                                _p["attempts"] = int(d.get("attempts") or 0)
+                                _p["unit"] = d.get("unit") or _p["unit"]
+                            ingester.on_event(d)
+
                         result = await gimbal_launcher.launch(
                             case_path,
                             step_to=halt_at,
                             report_dir=case_dir / "reports",
                             cwd=case_dir,
                             engine_log_path=case_dir / "engine.log",
-                            on_event=ingester.on_event,
+                            on_event=_row_on_event,
                             on_log=ingester.on_log,
+                            n_runs=n_runs,
                         )
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":
@@ -1087,6 +1113,18 @@ async def _fanout(
                             "run_dispatcher: launch {} for row {}/{}#{}: {}",
                             result.launch_status, row_src, row_idx, rep,
                             result.error,
+                        )
+                    elif proj["status"] is not None:
+                        # P2-04:scenario.end 事件投影(执行器权威);
+                        # passed 之外一律 failed(与 exit 判定同口径)
+                        log_line["status"] = (
+                            "passed" if proj["status"] == "passed" else "failed"
+                        )
+                        logger.info(
+                            "run_dispatcher: row {}/{} projected by events: "
+                            "unit={} status={} attempts={}",
+                            row_src, row_idx, proj["unit"], proj["status"],
+                            proj["attempts"],
                         )
                     elif result.exit_code == 0:
                         log_line["status"] = "passed"
@@ -1143,6 +1181,14 @@ async def _fanout(
             state.status = log_line["status"]
             state.finished_at = finished_ts
             state.case_dir = case_dir.name
+            # P2-04/P2-05:单元列投影(unit 取事件标签;attempts 取
+            # run.finished 单列,缺省回退 launch 解析值,再缺省 1)
+            state.unit_id = proj["unit"] or "u"
+            state.attempts = (
+                proj["attempts"]
+                or int(getattr(locals().get("result"), "attempts", 0) or 0)
+                or 1
+            )
             await _persist_row_terminal(db_factory, execution_id, state)
 
             # Atomic per-row counter bump.  Deltas (not absolute
@@ -1166,12 +1212,13 @@ async def _fanout(
     # 不重排。seq 为 case 文件名里的全局序号(与 entries 顺序一致,
     # 单测可断言)。
     injections = list(injections) or [None]
+    # P2-05:乘法下沉 —— n_runs 不再展开为行(repeat 维退役),单行一次
+    # spawn 传 --n-runs/--retry 给执行器;entries = 行 × 注入族。
     entries = [
-        (ds, row_idx, row, inj, rep)
+        (ds, row_idx, row, inj, 0)
         for ds in datasets
         for row_idx, row in ds["rows"]
         for inj in injections
-        for rep in range(n_runs)
     ]
     # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
     # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。

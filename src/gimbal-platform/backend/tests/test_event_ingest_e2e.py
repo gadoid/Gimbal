@@ -66,7 +66,8 @@ async def test_events_ingested_during_execution(
 
     async def _streaming_launch(case_path, *, step_to=None, report_dir=None,
                                 cwd=None, timeout=None, engine_log_path=None,
-                                on_event=None, on_log=None):
+                                on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         # 模拟执行器:逐行回调事件流,然后挂起等测试放行
         for ev in events:
             if on_event is not None:

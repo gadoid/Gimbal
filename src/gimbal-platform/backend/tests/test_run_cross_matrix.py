@@ -167,9 +167,10 @@ async def test_duplicate_segments_merge_order_independent(
 async def test_cross_matrix_rows_times_entries(
     client, plate_mock: PlateMock, monkeypatch
 ):
-    """双选 = N×M 交叉(spec v3 §4):2 行 × 1 条目 × nRuns=2 = 4 cases;
-    每 case 行值合入 vars AND Assign 直补同场(正交叠加);rows 回放
-    三定位同记(datasetId + rowIndex + injectionId);stem 带三定位。"""
+    """双选 = N×M 交叉(spec v3 §4):2 行 × 1 条目 = 2 cases(nRuns=2
+    经 P2-05 乘法下沉,单 spawn 传 --n-runs=2,不再展开为行);每 case
+    行值合入 vars AND Assign 直补同场(正交叠加);rows 回放三定位
+    同记(datasetId + rowIndex + injectionId);stem 带三定位。"""
     from .helpers import wait_until as _wait
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
@@ -190,8 +191,8 @@ async def test_cross_matrix_rows_times_entries(
     assert r.status_code == 201, r.text
     exec_id = r.json()["executionId"]
 
-    await _wait(lambda: len(cases) >= 4)
-    assert len(cases) == 4                          # 2 行 × 1 条目 × 2 rep
+    await _wait(lambda: len(cases) >= 2)
+    assert len(cases) == 2                          # 2 行 × 1 条目(nRuns 下沉)
     for case in cases:
         assert case["config"]["vars"]["amount"] in (10, 20)     # 行值合入
         st = case["steps"][0]["strategy"]
@@ -202,12 +203,12 @@ async def test_cross_matrix_rows_times_entries(
     assert {c["config"]["vars"]["amount"] for c in cases} == {10, 20}
 
     detail = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
-    assert detail["total_runs"] == 4
+    assert detail["total_runs"] == 2   # P2-05:单元口径(nRuns=2 不展开)
     await _await_final(client, bob, exec_id)
 
     rows = (await client.get(f"/api/executions/{exec_id}/rows", headers=bob)
             ).json()["items"]
-    assert len(rows) == 4
+    assert len(rows) == 2                # P2-05:单元口径(nRuns=2 不展开)
     assert all(row["datasetId"] == ds_id for row in rows)
     assert all(row["injectionId"] == "inj-live" for row in rows)   # 三定位同记
     assert {row["rowIndex"] for row in rows} == {0, 1}

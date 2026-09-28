@@ -57,6 +57,8 @@ class LaunchResult:
     passed: int = 0
     failed: int = 0
     skipped: int = 0
+    # P2-05:n_runs/retry 展开的总执行次数(run.finished attempts 单列)。
+    attempts: int = 0
     # 步骤级明细(-o json stdout 里的 details[];解析失败/兜底路径为 [])。
     details: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
@@ -74,6 +76,7 @@ class LaunchResult:
             "passed": self.passed,
             "failed": self.failed,
             "skipped": self.skipped,
+            "attempts": self.attempts,
         }
 
 
@@ -90,6 +93,8 @@ def build_argv(
     *,
     step_to: int | None = None,
     report_dir: Path | str | None = None,
+    n_runs: int = 1,
+    retry: int = 0,
 ) -> list[str]:
     """组装 ``gimbal run launch`` 命令行。
 
@@ -98,12 +103,18 @@ def build_argv(
     * ``--step-to`` — 0-based 含端点,与平台 RunRequest.stepTo 同语义,
       直接透传引擎 RuntimeControl.halt_at。
     * ``--report-dir`` — 引擎原生报告目录(逐 case 隔离,防并发互踩)。
+    * ``--n-runs/--retry`` — P2-05 乘法下沉:平台不再循环 nRuns,
+      乘法由执行器单元策略执行(N4 CLI 入口)。
     """
     argv = [*_base_argv(), "run", "launch", str(case_path), "-o", "jsonl"]
     if step_to is not None:
         argv += ["--step-to", str(step_to)]
     if report_dir is not None:
         argv += ["--report-dir", str(report_dir)]
+    if n_runs and n_runs > 1:
+        argv += ["--n-runs", str(n_runs)]
+    if retry and retry > 0:
+        argv += ["--retry", str(retry)]
     return argv
 
 
@@ -185,6 +196,8 @@ async def launch(
     engine_log_path: Path | None = None,
     on_event: "Callable[[dict], None] | None" = None,
     on_log: "Callable[[dict], None] | None" = None,
+    n_runs: int = 1,
+    retry: int = 0,
 ) -> LaunchResult:
     """执行 ``gimbal run launch <case_path>``,同步返回 LaunchResult。
 
@@ -202,7 +215,8 @@ async def launch(
     已回调的内容由调用方保留(回调先于退出发生)。回调异常只告警不阻断。
     """
     from collections.abc import Callable  # noqa: F401  # 注解运行时求值用
-    argv = build_argv(case_path, step_to=step_to, report_dir=report_dir)
+    argv = build_argv(case_path, step_to=step_to, report_dir=report_dir,
+                      n_runs=n_runs, retry=retry)
     timeout = settings.GIMBAL_TIMEOUT_SEC if timeout is None else timeout
 
     # Windows: 不弹控制台窗;其他平台无该 flag。
@@ -364,6 +378,7 @@ async def launch(
         passed=counts["passed"],
         failed=counts["failed"],
         skipped=counts["skipped"],
+        attempts=counts.get("attempts", 0),
         details=counts["details"],
         stdout=stdout,
         argv=argv,

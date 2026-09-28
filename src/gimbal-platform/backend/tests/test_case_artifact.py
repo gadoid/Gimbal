@@ -38,7 +38,8 @@ async def finished_run(client, plate_mock: PlateMock, monkeypatch):
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         case_dir = Path(case_path).parent
         (case_dir / "engine.log").write_text("engine says hi\n", encoding="utf-8")
         return _ok()

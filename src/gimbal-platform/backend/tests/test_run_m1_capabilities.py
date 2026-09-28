@@ -46,7 +46,8 @@ def _patch_launch_capture(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
@@ -60,7 +61,8 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """2 行数据 × nRuns=3 → total_runs=6,gimbal launch 被调 6 次。"""
+    """P2-05 乘法下沉:2 行 × nRuns=3 → 2 次 launch(各带 n_runs=3),
+    total_runs=2(单元口径),行 attempts=3(展开计数入列)。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios",
@@ -77,15 +79,26 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
     assert r.status_code == 200, r.text
 
     calls: list[dict] = []
-    _patch_launch_capture(monkeypatch, calls)
+    kw: list[dict] = []
+
+    async def _capture_nruns(case_path, *, step_to=None, report_dir=None,
+                             cwd=None, timeout=None, engine_log_path=None,
+                             on_event=None, on_log=None, n_runs=1, retry=0):
+        calls.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
+        kw.append({"n_runs": n_runs, "retry": retry})
+        return _ok()
+
+    from app.services import gimbal_launcher as gl
+    monkeypatch.setattr(gl, "launch", _capture_nruns)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(nRuns=3, parallel=2)
     )
     assert r.status_code == 201, r.text
 
-    await _wait(lambda: len(calls) >= 6)
-    assert len(calls) == 6
+    await _wait(lambda: len(calls) >= 2)
+    assert len(calls) == 2                       # 每 spawn 一次,乘法在执行器
+    assert [k["n_runs"] for k in kw] == [3, 3]   # n_runs 经 --n-runs 下沉透传
 
     import sqlalchemy as sa
 
@@ -98,7 +111,7 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
             .scalars()
             .first()
         )
-        assert ex.total_runs == 6
+        assert ex.total_runs == 2                # 单元口径(nRuns 不再展开)
         assert ex.config_json["nRuns"] == 3
         assert ex.config_json["parallel"] == 2
 
@@ -129,7 +142,8 @@ async def test_parallel_limits_concurrency(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         nonlocal in_flight, max_in_flight, done
         in_flight += 1
         max_in_flight = max(max_in_flight, in_flight)
@@ -146,8 +160,9 @@ async def test_parallel_limits_concurrency(
     )
     assert r.status_code == 201, r.text
 
-    await _wait(lambda: done >= 8)
-    assert done == 8
+    # P2-05:4 行 × nRuns=2 → 4 次 spawn(乘法在执行器)
+    await _wait(lambda: done >= 4)
+    assert done == 4
     assert max_in_flight <= 2
 
 

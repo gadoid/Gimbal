@@ -161,7 +161,8 @@ def gimbal_mock(monkeypatch: pytest.MonkeyPatch) -> dict:
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                            cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         state["calls"].append(
             json.loads(Path(case_path).read_text(encoding="utf-8"))
         )

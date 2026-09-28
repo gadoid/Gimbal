@@ -23,7 +23,8 @@ def _mock_fanout(monkeypatch) -> list:
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None):
+                       on_event=None, on_log=None,
+                       n_runs=1, retry=0):
         cases.append({"path": Path(case_path)})
         return _ok()
 

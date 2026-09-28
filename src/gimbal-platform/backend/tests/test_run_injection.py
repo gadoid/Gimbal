@@ -636,8 +636,8 @@ async def test_dispatcher_fans_out_injection_entries(
     assert r.status_code == 201, r.text
     exec_id = r.json()["executionId"]
 
-    await _wait(lambda: len(cases) >= 2)
-    assert len(cases) == 2                       # 1 活条目 × nRuns=2;死/旧 skip
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1        # 1 活条目(nRuns=2 下沉单 spawn);死/旧 skip
     for case in cases:
         st = case["steps"][0]["strategy"]
         assert st[0]["expected"] == "400"                          # override patch
@@ -646,12 +646,12 @@ async def test_dispatcher_fans_out_injection_entries(
         assert case["config"]["vars"]["amount"] == 100             # vars 未触碰
 
     detail = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
-    assert detail["total_runs"] == 2
+    assert detail["total_runs"] == 1   # P2-05:1 活条目单 spawn(nRuns=2 下沉)
     await _await_final(client, bob, exec_id)
 
     rows = (await client.get(f"/api/executions/{exec_id}/rows", headers=bob)
             ).json()["items"]
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert all(row["injectionId"] == "inj-live" for row in rows)
     assert all(row["datasetId"] is None for row in rows)
 
