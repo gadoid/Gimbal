@@ -205,3 +205,225 @@ async def delete_execution(session: AsyncSession, ex: Execution) -> None:
     await session.commit()
     if run_id:
         run_dispatcher.purge_case_dir(str(run_id))
+
+
+# ── P2-02/C2:事件与日志落库(统一表)─────────────────────────────
+
+def _dialect_insert(db: AsyncSession):
+    """双方言 insert(PG/SQLite;照 notifications.py 的自律模式)。"""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    return pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
+
+
+async def insert_events(db: AsyncSession, execution_id: int,
+                        events: list[dict]) -> None:
+    """执行器 jsonl 事件批量入库。
+
+    ``events`` = 事件 model_dump dict 列表(含信封标签);``call.exchange``
+    的 ``result`` 证据体拆 ``ExecutionEventEvidence``,主表 message 留
+    摘要(protocol/status/duration)。同 (execution_id, seq) 冲突跳过
+    (崩溃重放窗口不重复入库)。
+    """
+    from datetime import datetime, timezone
+
+    from ..models.execution import ExecutionEvent, ExecutionEventEvidence
+    insert_ = _dialect_insert(db)
+
+    if not events:
+        return
+    rows: list[dict] = []
+    evidences: list[dict] = []
+    for d in events:
+        et = str(d.get("event_type") or "")
+        payload = dict(d)
+        message = None
+        evidence = None
+        if et == "call.exchange":
+            evidence = payload.pop("result", None)
+            req = evidence.get("request") if isinstance(evidence, dict) else None
+            message = "{} {} → {} ({:.0f}ms)".format(
+                (req or {}).get("method")
+                or payload.get("protocol") or "?",
+                (req or {}).get("url") or "?",
+                payload.get("status") or "?",
+                float(payload.get("duration_ms") or 0.0),
+            )
+        ts = d.get("timestamp")
+        rows.append({
+            "execution_id": execution_id,
+            "seq": int(d.get("seq") or 0),
+            "ts": _parse_ts(ts) or datetime.now(timezone.utc),
+            "kind": "event",
+            "level": None,
+            "category": None,
+            "module": d.get("module"),
+            "service": d.get("service"),
+            "protocol": d.get("protocol"),
+            "unit": d.get("unit"),
+            "attempt": d.get("attempt"),
+            "step": d.get("step"),
+            "event_type": et or None,
+            "message": message,
+            "payload": payload,
+        })
+        if evidence is not None:
+            evidences.append({
+                "execution_id": execution_id,
+                "seq": int(d.get("seq") or 0),
+                "evidence": evidence,
+            })
+
+    stmt = insert_(ExecutionEvent).values(rows)
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=["execution_id", "seq"])
+    await db.execute(stmt)
+    if evidences:
+        ev_stmt = insert_(ExecutionEventEvidence).values(evidences)
+        ev_stmt = ev_stmt.on_conflict_do_nothing(
+            index_elements=["execution_id", "seq"])
+        await db.execute(ev_stmt)
+
+
+async def insert_logs(db: AsyncSession, execution_id: int,
+                      logs: list[dict], *, seq_base: int) -> None:
+    """执行器结构化日志(stderr JSON 行)批量入库。
+
+    平台侧无引擎 seq —— 用 ``seq_base - len(logs) + i`` 递减占位,
+    保证与事件流不冲突(事件 seq 恒正且从 1 递增;日志占位取负数或
+    大偏移,由调用方保证不与事件撞号:seq_base 传 0 → 日志 seq 为负)。
+    """
+    from datetime import datetime, timezone
+
+    from ..models.execution import ExecutionEvent
+    insert_ = _dialect_insert(db)
+
+    if not logs:
+        return
+    rows = []
+    for i, d in enumerate(logs):
+        rows.append({
+            "execution_id": execution_id,
+            "seq": seq_base - len(logs) + i,
+            "ts": _parse_ts(d.get("timestamp")) or datetime.now(timezone.utc),
+            "kind": "log",
+            "level": d.get("level"),
+            "category": d.get("category"),
+            "module": d.get("module"),
+            "service": d.get("service"),
+            "protocol": d.get("protocol"),
+            "unit": d.get("unit"),
+            "attempt": d.get("attempt"),
+            "step": d.get("step"),
+            "event_type": None,
+            "message": d.get("message"),
+            "payload": dict(d),
+        })
+    stmt = insert_(ExecutionEvent).values(rows)
+    stmt = stmt.on_conflict_do_nothing(index_elements=["execution_id", "seq"])
+    await db.execute(stmt)
+
+
+def _parse_ts(value) -> "datetime | None":
+    from datetime import datetime
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+async def query_events(
+    db: AsyncSession, execution_id: int, *,
+    kind: "str | None" = None,
+    level: "str | None" = None,
+    category: "str | None" = None,
+    module: "str | None" = None,
+    service: "str | None" = None,
+    unit: "str | None" = None,
+    step: "str | None" = None,
+    event_type: "str | None" = None,
+    search: "str | None" = None,
+    after_seq: "int | None" = None,
+    limit: int = 500,
+) -> list[ExecutionEvent]:
+    """事件/日志组合筛选(P2-07 日志分析页与 SSE 续传共用读面)。
+
+    标签精确匹配 + message 全文 search(ILIKE);``after_seq`` 支撑
+    Last-Event-ID 续传语义;命中 (execution_id, seq) 索引。
+    """
+    from ..models.execution import ExecutionEvent as EE
+
+    stmt = select(EE).where(EE.execution_id == execution_id)
+    if after_seq is not None:
+        stmt = stmt.where(EE.seq > after_seq)
+    if kind is not None:
+        stmt = stmt.where(EE.kind == kind)
+    if level is not None:
+        stmt = stmt.where(EE.level == level)
+    if category is not None:
+        stmt = stmt.where(EE.category == category)
+    if module is not None:
+        stmt = stmt.where(EE.module == module)
+    if service is not None:
+        stmt = stmt.where(EE.service == service)
+    if unit is not None:
+        stmt = stmt.where(EE.unit == unit)
+    if step is not None:
+        stmt = stmt.where(EE.step == step)
+    if event_type is not None:
+        stmt = stmt.where(EE.event_type == event_type)
+    if search:
+        stmt = stmt.where(EE.message.ilike(f"%{search}%"))
+    stmt = stmt.order_by(EE.seq.asc()).limit(limit)
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def event_counts_by_category(
+    db: AsyncSession, execution_id: int
+) -> dict[str, int]:
+    """按 category 聚合计数(P2-07 验收:能展示按 category 聚合的计数)。"""
+    from sqlalchemy import func
+
+    from ..models.execution import ExecutionEvent as EE
+
+    stmt = (
+        select(EE.category, func.count())
+        .where(EE.execution_id == execution_id)
+        .group_by(EE.category)
+    )
+    return {c or "(none)": n for c, n in (await db.execute(stmt)).all()}
+
+
+async def purge_expired_events(db: AsyncSession) -> int:
+    """超期执行的事件面清扫(保留 EXEC_EVENTS_RETENTION_DAYS 天;0=禁用)。
+
+    与 case 案卷清扫同节奏由 dispatch 收口/维护入口调用;执行主行与
+    台账单元行不受影响(它们是审计面)。
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import delete
+
+    from ..core.config import settings
+    from ..models.execution import ExecutionEvent, ExecutionEventEvidence
+
+    days = settings.EXEC_EVENTS_RETENTION_DAYS
+    if days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    subq = (
+        select(Execution.id)
+        .where(Execution.finished_at.is_not(None),
+               Execution.finished_at < cutoff)
+    )
+    ev_del = delete(ExecutionEvent).where(ExecutionEvent.execution_id.in_(subq))
+    result = await db.execute(ev_del)
+    n = result.rowcount or 0
+    await db.execute(
+        delete(ExecutionEventEvidence).where(
+            ExecutionEventEvidence.execution_id.in_(subq)))
+    return n

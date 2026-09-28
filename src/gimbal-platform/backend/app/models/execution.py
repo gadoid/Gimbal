@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, func
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -93,12 +93,14 @@ class ExecutionSnapshot(Base):
 
 
 class ExecutionRow(Base):
-    """行级明细台账(M2 建表;JSONL 吸收,M6 转正为读写面)。
+    """单元级明细台账（M2 行级建表；P2-01/C8 单元化）。
 
-    字段对齐 run_dispatcher._replay_rows 折叠后的真实行形状 —— JSONL
-    是事件流(同 (execution_id, seq) 后行覆盖前行),落库写入点 =
-    **每行终态即 upsert**(崩溃窗口不丢已终态行);活跃执行读侧仍走
-    内存 _row_states,DB 行作持久层跟进(§2.2)。
+    P2-01 前 = 行级（dataset/injection × row_index × rep）；P2-01 起
+    ``unit_id``（别名+展开序号，与执行器事件标签一致）、``branch``
+    （分支维度）、``attempts``（乘法执行次数）成为主键面，dataset/
+    injection/row_index 保留为单元属性。写入点 = 每单元终态即 upsert
+    （P2-04 起由执行器事件投影，平台不再自行写行状态）。存量行
+    unit_id=''（行级时代写入，读侧兼容）。
     """
 
     __tablename__ = "execution_rows"
@@ -108,6 +110,12 @@ class ExecutionRow(Base):
         ForeignKey("executions.id", ondelete="CASCADE")
     )
     seq: Mapped[int] = mapped_column(Integer)
+    # P2-01:单元标识(与执行器 unit 标签一致);存量行 '' = 行级时代
+    unit_id: Mapped[str] = mapped_column(String(255), default="")
+    # P2-01:分支维度(graph 括号/主体;单场景恒 main)
+    branch: Mapped[str] = mapped_column(String(16), default="main")
+    # P2-01:乘法执行次数(n_runs run 数 + 各 run 内重试数)
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
     dataset_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # 注入族行的条目 id;数据集行缺省 None
     injection_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -129,3 +137,55 @@ class ExecutionRow(Base):
         # upsert 冲突面,M6 写路径依赖
         Index("uq_execution_row_seq", "execution_id", "seq", unique=True),
     )
+
+
+class ExecutionEvent(Base):
+    """执行事件/日志统一落库面（P2-02/C2）。
+
+    执行器 jsonl 事件流（kind='event'）与结构化日志（kind='log'）共用
+    一张表：标签列（category/module/service/protocol/unit/attempt/step）
+    建索引支撑日志分析页（P2-07）组合筛选；``payload`` 存原始内容
+    （事件 model_dump / 日志行 JSON）。``call.exchange`` 的证据体拆
+    ``ExecutionEventEvidence``，主表 message 只留摘要。
+    """
+
+    __tablename__ = "execution_events"
+
+    # Integer(非 BigInteger):SQLite 仅对 INTEGER 主键生成 rowid 自增
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    execution_id: Mapped[int] = mapped_column(
+        ForeignKey("executions.id", ondelete="CASCADE")
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    ts: Mapped[datetime] = mapped_column(UtcDateTime)
+    kind: Mapped[str] = mapped_column(String(8))          # event | log
+    level: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    module: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    service: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    protocol: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attempt: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict] = mapped_column(JsonVar, default=dict)
+
+    __table_args__ = (
+        Index("uq_execution_event_seq", "execution_id", "seq", unique=True),
+        Index("ix_execution_events_labels", "execution_id", "category", "unit"),
+        Index("ix_execution_events_type", "execution_id", "event_type"),
+        Index("ix_execution_events_ts", "ts"),
+    )
+
+
+class ExecutionEventEvidence(Base):
+    """``call.exchange`` 证据体（P2-02/C2：大字段单独存，主表留摘要与引用）。"""
+
+    __tablename__ = "execution_event_evidence"
+
+    execution_id: Mapped[int] = mapped_column(
+        ForeignKey("executions.id", ondelete="CASCADE"), primary_key=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    evidence: Mapped[dict] = mapped_column(JsonVar, default=dict)

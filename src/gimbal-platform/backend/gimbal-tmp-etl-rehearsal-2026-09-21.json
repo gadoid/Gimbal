@@ -1,0 +1,111 @@
+{
+  "source": "C:/Users/CODFIS~1/AppData/Local/Temp/m2_rehearsal_src.db",
+  "target": "postgresql+psycopg://gimbal:gimbal@127.0.0.1:5432/m2_rehearsal",
+  "generated_at": "2026-09-21T15:28:39.922173+00:00",
+  "tables": {
+    "adaptation_ops": {
+      "rows": 3,
+      "target_rows": 3
+    },
+    "adaptation_snapshots": {
+      "rows": 9,
+      "target_rows": 9
+    },
+    "catalog_versions": {
+      "rows": 26,
+      "target_rows": 26
+    },
+    "users": {
+      "rows": 3,
+      "target_rows": 3
+    },
+    "adaptation_batches": {
+      "rows": 6,
+      "target_rows": 6
+    },
+    "audit_logs": {
+      "rows": 0,
+      "target_rows": 0
+    },
+    "auth_sessions": {
+      "rows": 2,
+      "target_rows": 2
+    },
+    "board_cards": {
+      "rows": 0,
+      "target_rows": 0
+    },
+    "carry_global_defaults": {
+      "rows": 0,
+      "target_rows": 0
+    },
+    "carry_service_bindings": {
+      "rows": 236,
+      "target_rows": 236
+    },
+    "composer_scenarios": {
+      "rows": 5,
+      "target_rows": 5
+    },
+    "constant_entries": {
+      "rows": 6,
+      "target_rows": 6
+    },
+    "executions": {
+      "rows": 55,
+      "target_rows": 55
+    },
+    "notifications": {
+      "rows": 0,
+      "target_rows": 0
+    },
+    "service_aliases": {
+      "rows": 1,
+      "target_rows": 1
+    },
+    "user_prefs": {
+      "rows": 0,
+      "target_rows": 0
+    },
+    "composer_data_sets": {
+      "rows": 3,
+      "target_rows": 3
+    },
+    "composer_run_schemes": {
+      "rows": 6,
+      "target_rows": 6
+    },
+    "execution_rows": {
+      "rows": 81,
+      "target_rows": 81
+    },
+    "execution_snapshots": {
+      "rows": 55,
+      "target_rows": 55
+    },
+    "user_stars": {
+      "rows": 1,
+      "target_rows": 1
+    }
+  },
+  "verifications": {
+    "stars_dangling_skipped": [
+      {
+        "user_id": 1,
+        "scenario_id": "sc-n-ji-k-yyqwmqsg3"
+      }
+    ],
+    "stars_imported": 1,
+    "stars_in_file": 2,
+    "execution_rows_absorbed": 81,
+    "identity_columns_setval": 15,
+    "row_counts_match": true,
+    "sample_checksums_match": true,
+    "generated_columns_sampled": {
+      "checked": 5,
+      "match": true
+    },
+    "fk_clean": true,
+    "fk_violations": {}
+  }
+}
