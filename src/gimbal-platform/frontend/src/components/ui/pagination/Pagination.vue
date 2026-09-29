@@ -111,7 +111,7 @@ const props = withDefaults(defineProps<{
   disabled: false,
   showTotal: true,
   showPageSize: false,
-  pageSizes: () => [10, 20, 50, 100],
+  pageSizes: () => [5, 10, 20, 50, 100],
   showJump: false,
 })
 

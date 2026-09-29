@@ -115,7 +115,7 @@
       v-model:page="listPage"
       :page-size="listPageSize"
       :total="listTotal"
-      :page-sizes="[20, 50, 100, 200]"
+      :page-sizes="[5, 20, 50, 100, 200]"
       show-page-size
       show-jump
       @update:page-size="list.setPageSize"
