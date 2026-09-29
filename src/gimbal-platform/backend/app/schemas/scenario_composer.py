@@ -348,6 +348,12 @@ class RunRequest(BaseModel):
     n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
     # fan-out 并发度(asyncio.Semaphore 上限)。
     parallel: int = Field(default=1, ge=1, le=200, alias="parallel")
+    # ── C6(P3-04)调试执行 ──────────────────────────────────────
+    # 调试装载:强制单 case(dataSet 行 × 注入族 = 1)且 nRuns=1、非 graph,
+    # 恒走执行器 server 链;执行中经 /executions/{id}/debug/* 代理交互。
+    debug: "DebugLaunchSpec | None" = Field(
+        default=None,
+        description="调试执行装载(C6;单 case 且 nRuns=1)")
     # 方案溯源(spec §5,阶段③):config_json 快照语义 — 记录本次执行
     # 来自哪个方案(改名不断链:schemeId 权威,name 仅展示)。可选 —
     # 基线/旧客户端不传;纯记录,不参与任何分发语义。
@@ -358,6 +364,19 @@ class RunRequest(BaseModel):
     # 单条发起(运行对话框/重跑)不传;纯归并键,不参与分发语义(每条
     # 仍是独立 Execution,批级执行策略本期不存在)。
     batch_id: str | None = Field(default=None, alias="batchId", max_length=64)
+
+
+class DebugLaunchSpec(BaseModel):
+    """C6:调试执行装载（转发为引擎 DebugSpec;断点地址 = step_id[:before|
+    call_before|after] 形态,与 CLI --breakpoint 同一语法）。"""
+
+    model_config = _CAMEL
+
+    pause: Literal["none", "on_failure", "every_step"] = "on_failure"
+    breakpoints: list[str] = Field(default_factory=list)
+    wait_timeout: float | None = Field(
+        default=None, ge=1, le=3600, alias="waitTimeout",
+        description="暂停等待上限(秒);超时按 abort")
 
 
 class RunResponse(BaseModel):

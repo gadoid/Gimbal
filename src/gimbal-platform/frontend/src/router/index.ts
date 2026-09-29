@@ -148,6 +148,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // C6/P3-04:调试台(运行中调试执行的命令/输出/事件代理)
+    path: '/executions/:id(\d+)/debug',
+    component: () => import('@/views/DebugConsole.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // C5/P3-05:suite 编排页(graph 编排执行)
     path: '/suites',
     component: () => import('@/views/SuiteComposer.vue'),

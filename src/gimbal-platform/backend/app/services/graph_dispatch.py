@@ -191,15 +191,28 @@ def _all_referenced_services(resolved: list[dict]) -> list[str]:
 
 async def execute_graph(
     db_factory, execution_id: int, run_dir: Path, graph: dict,
-    *, on_event=None, on_log=None,
+    *, on_event=None, on_log=None, chain: str = "legacy",
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
-    LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。"""
+    LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
+
+    C12/C13：``chain="server"`` 走执行器 server 实例（POST /runs +
+    SSE 消费）；legacy 走 run launch 子进程（stdout jsonl）。
+    """
     case_dir = run_dir / "case-graph"
     case_dir.mkdir(parents=True, exist_ok=True)
     case_path = case_dir / "case.json"
     case_path.write_text(_json_dumps(graph), encoding="utf-8")
     n_runs = 1    # graph 内单元已带 policy_kwargs;spawn 级乘法不叠
+    if chain == "server":
+        from .gimbal_server_session import ServerSession
+        ss = ServerSession()
+        await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir)
+        try:
+            return await ss.run_case(
+                case_path, n_runs=n_runs, on_event=on_event)
+        finally:
+            await ss.close()
     return await launch(
         case_path,
         report_dir=case_dir / "reports",

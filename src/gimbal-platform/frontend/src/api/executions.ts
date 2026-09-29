@@ -248,6 +248,45 @@ export function getExecutionEvents(
     .then((r) => r.data)
 }
 
+
+// ── C6(P3-04):调试台(执行器 token 不出后端;命令与引擎 DebugCommand 同形) ──
+
+export interface DebugLaunchSpec {
+  pause: 'none' | 'on_failure' | 'every_step'
+  breakpoints?: string[]
+  waitTimeout?: number
+}
+
+export interface DebugSessionInfo {
+  executionId: number
+  status: string
+  active: boolean
+  runId: string | null
+}
+
+export interface DebugCommandBody {
+  kind: 'continue' | 'step' | 'abort' | 'read' | 'write' | 'patch' | 'retry' | 'skip'
+  variable?: string
+  path?: string
+  value?: unknown
+}
+
+export function getDebugSession(id: number): Promise<DebugSessionInfo> {
+  return http.get<DebugSessionInfo>(`/executions/${id}/debug`).then((r) => r.data)
+}
+
+export function getDebugOutput(id: number): Promise<{ output: string[] }> {
+  return http.get<{ output: string[] }>(`/executions/${id}/debug/output`)
+    .then((r) => r.data)
+}
+
+export function postDebugCommand(
+  id: number, body: DebugCommandBody,
+): Promise<{ accepted: boolean; output: string[] }> {
+  return http.post<{ accepted: boolean; output: string[] }>(
+    `/executions/${id}/debug/command`, body).then((r) => r.data)
+}
+
 /** 按 category 聚合计数(P2-07 验收)。 */
 export function getExecutionEventCounts(
   id: number,

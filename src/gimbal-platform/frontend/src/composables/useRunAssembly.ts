@@ -44,6 +44,8 @@ export interface RunConfirmOpts {
   parallel?: number
   serviceBindings?: Record<string, ServiceBinding>
   injectionEntryIds?: string[]
+  /** C6:调试执行装载(单 case 且 nRuns=1;发起后进调试台) */
+  debug?: { pause: string; breakpoints?: string[] }
 }
 
 export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
@@ -179,6 +181,7 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
         ? { serviceBindings: opts.serviceBindings } : {}),
       ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
+      ...(opts.debug ? { debug: opts.debug } : {}),
     }
     return runScenario(body)
   }

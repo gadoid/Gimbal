@@ -1103,6 +1103,7 @@ async function onRunConfirm(
     parallel?: number
     serviceBindings?: Record<string, ServiceBinding>
     injectionEntryIds?: string[]
+    debug?: { pause: string; breakpoints?: string[] }
   },
 ) {
   if (!scenario.value) {
@@ -1118,6 +1119,13 @@ async function onRunConfirm(
     const resp = await dispatchRunAssembly(dataSetSelection, opts)
     lastRunId.value = resp.runId
     toast.success(`运行已发起: ${resp.runId}`)
+    // C6:调试执行 → 直达调试台(会话由后端持有,事件/输出/命令经代理)
+    if (opts.debug && resp.executionId) {
+      closeRunDialog()
+      runDispatching.value = false
+      void router.push(`/executions/${resp.executionId}/debug`)
+      return
+    }
     // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清深链预选
     // initialSchemeId,否则下一次从「运行」入口打开会复活旧的深链预选
     // (Ruling 12 同款语义)。失败路径不关窗(原样保留错误态,可重试)。

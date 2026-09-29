@@ -210,6 +210,8 @@ export interface RunOverlay {
 
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
+  /** C6(P3-04):调试执行装载(单 case 且 nRuns=1;后端强制校验) */
+  debug?: { pause: string; breakpoints?: string[]; waitTimeout?: number }
   scenarioId: string
   /** 溯源(方案工作台阶段③,Task 1 后端已接受):本次执行按哪个方案发起 —
    *  默认/自建两态都带(wire camelCase) */

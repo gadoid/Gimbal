@@ -86,6 +86,34 @@
         <div v-if="stepCount === 0" class="muted small">场景暂无步骤,停止于步骤不可用</div>
       </section>
 
+      <!-- C6(P3-04):调试执行 — 单 case 基线专用 -->
+      <section class="run-section">
+        <label class="run-label">调试执行 <span class="muted small">(单 case · 调试台逐步交互)</span></label>
+        <div class="adv-grid">
+          <div class="adv-field">
+            <span class="adv-name">模式</span>
+            <select v-model="debugPause" class="adv-select" data-testid="debug-pause"
+              :disabled="!debugEnabled">
+              <option value="on_failure">失败时暂停</option>
+              <option value="every_step">每步暂停</option>
+              <option value="none">不暂停(仅断点)</option>
+            </select>
+          </div>
+          <div class="adv-field">
+            <span class="adv-name">断点地址</span>
+            <input v-model="debugBreakpoints" class="adv-input" data-testid="debug-breakpoints"
+              :disabled="!debugEnabled"
+              placeholder="step-000:call_before, 逗号分隔" />
+          </div>
+        </div>
+        <label class="rd-debug-toggle">
+          <input type="checkbox" v-model="debugEnabled" data-testid="debug-enabled"
+            :disabled="nRuns !== 1" />
+          以调试模式发起(发起后进入调试台;要求执行次数 = 1)
+        </label>
+        <div v-if="debugEnabled && nRuns !== 1" class="muted small">调试要求执行次数为 1</div>
+      </section>
+
       <!-- 另存为方案(D3:默认方案自由配置可另存) -->
       <section v-if="footer" class="run-section rd-save-as">
         <label class="run-label">另存为方案 <span class="muted small">(当前绑定与参数存为自建方案)</span></label>
@@ -376,6 +404,10 @@ const dsLabel = (x: { datasetId: string }) => datasetLabel(x, props.dataSets)
 const stepTo = ref<number | null>(null)
 const nRuns = ref(1)
 const parallel = ref(1)
+// C6(P3-04):调试执行装载(仅默认方案基线单 case;nRuns 必须为 1)
+const debugEnabled = ref(false)
+const debugPause = ref<'on_failure' | 'every_step' | 'none'>('on_failure')
+const debugBreakpoints = ref('')
 const saveAsName = ref('')
 
 const stepCount = computed(() => props.scenario?.stepCount ?? 0)
@@ -441,6 +473,16 @@ function onConfirm() {
   }
   if (!s.isDefault && schemeInvalid(s)) return   // 失效禁跑(按钮也禁,双保险)
   const common = { schemeId: s.schemeId, schemeName: s.name }
+  // C6:调试装载(仅默认方案基线单 case;引擎约束 nRuns=1)
+  const debugSpec = (s.isDefault && debugEnabled.value && nRuns.value === 1)
+    ? {
+        pause: debugPause.value,
+        ...(debugBreakpoints.value.trim()
+          ? { breakpoints: debugBreakpoints.value.split(/[,，]/)
+              .map((x) => x.trim()).filter(Boolean) }
+          : {}),
+      }
+    : undefined
   if (s.isDefault) {
     const serviceBindings = assembleExplicitBindings(bindings.value, props.serviceRows)
     emit('confirm', [], {
@@ -449,6 +491,7 @@ function onConfirm() {
       ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
       ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
       ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
+      ...(debugSpec ? { debug: debugSpec } : {}),
     })
     return
   }
