@@ -333,6 +333,7 @@ def run_case(
     run_token: str = "",
     new_username: str = "",
     new_password: str = "",
+    keep: bool = False,
 ) -> dict:
     """建场景 → 发起运行 → 读回 gimbal 的判定 → 清理。
 
@@ -377,7 +378,10 @@ def run_case(
     except Exception as exc:  # noqa: BLE001 — 编排器要吞掉一切并汇报
         result["error"] = repr(exc)
     finally:
-        _cleanup(client, scenario_id, None, None)
+        # keep 是给人看的：场景建在平台上，不删的话人登进平台才看得到编排器
+        # 到底写了什么。默认还是清掉，不往平台里堆垃圾。
+        if not keep:
+            _cleanup(client, scenario_id, None, None)
     return result
 
 
@@ -399,6 +403,10 @@ def main() -> int:
     parser.add_argument(
         "--no-pause", action="store_true",
         help="注册后不等人工提权，直接以 member 身份跑（域用例会 403）",
+    )
+    parser.add_argument(
+        "--keep", action="store_true",
+        help="跑完不删场景 —— 留给人登进平台查看用例会往平台上写了什么",
     )
     args = parser.parse_args()
 
@@ -426,6 +434,7 @@ def main() -> int:
                 run_token=run_token,
                 new_username=new_username,
                 new_password=new_password,
+                keep=args.keep,
             )
             for c in cases
         ]

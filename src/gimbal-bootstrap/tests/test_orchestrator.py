@@ -474,6 +474,23 @@ def _run_main(monkeypatch, tmp_path, *, users=(), auths=()):
     return client
 
 
+def test_keep_leaves_the_scenario_in_the_platform_for_a_person_to_read():
+    """默认跑完就清（不往平台里堆垃圾），但要能留下给人看。
+
+    用例是在平台上建出来的真场景，不留的话人登进平台只能看到一片空 ——
+    想核对「编排器到底往平台写了什么」就没有窗口了。
+    """
+    client = _client()
+    run_case(_case(), client, "sb_u", run_token="tk1", keep=True)
+    assert not [p for m, p in client.calls if m == "DELETE"], client.calls
+
+
+def test_cleanup_is_the_default():
+    client = _client()
+    run_case(_case(), client, "sb_u", run_token="tk1")
+    assert [p for m, p in client.calls if m == "DELETE"] == ["/api/scenarios/sc-x"]
+
+
 def test_a_case_does_not_retire_the_throwaway_that_later_cases_still_need():
     """一次性账号是**按轮次**的，不是按用例的。
 
