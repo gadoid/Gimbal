@@ -321,6 +321,10 @@ def run_case(
 
     `new_password` 是一次性账号的口令，跟管理员口令无关 —— 管理员口令不进
     definition（见 `build_definition` 的说明）。
+
+    一次性账号**不在这里删**。它是按轮次的：T2 注册它、T3 拿同一个用户名
+    口令去登录，每条用例各删一次的话，账号在第一条用例收工时就没了，后面
+    拿它的用例必然 401。退役由 `main` 在所有用例跑完之后做一次。
     """
     result: dict[str, Any] = {
         "id": case["id"],
@@ -354,8 +358,6 @@ def run_case(
         result["error"] = repr(exc)
     finally:
         _cleanup(client, scenario_id, None, None)
-        if new_username and new_username != sb_username:
-            _retire_throwaway(client, new_username)
     return result
 
 
@@ -406,6 +408,10 @@ def main() -> int:
         )
         for c in cases
     ]
+    # 一次性账号在这时才退役：它是**按轮次**的，T2 注册它、T3 拿它登录，
+    # 任何一条用例跑完就删都会让后面那条必然 401。
+    if new_username and new_username != sb_username:
+        _retire_throwaway(client, new_username)
     for r in results:
         mark = "OK " if not _is_failure(r) else "FAIL"
         print(f"[{mark}] {r['id']:5} {r['name']}"

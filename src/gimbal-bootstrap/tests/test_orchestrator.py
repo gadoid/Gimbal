@@ -426,17 +426,84 @@ def test_username_written_to_dotenv_is_picked_up_on_the_next_run(tmp_path, monke
     assert "/api/auth/register" not in seen, seen
 
 
-def test_throwaway_account_is_deleted_after_the_run():
-    """每轮注册的一次性账号用完就删 —— 否则每次重跑都往平台里堆一个死账号，
-    而且它在 execution_snapshots 里还留着一份明文口令。"""
+def test_a_case_does_not_retire_the_throwaway_that_later_cases_still_need():
+    """一次性账号是**按轮次**的，不是按用例的。
+
+    黄金链路里 T2 注册它、T3 拿同一个用户名口令去登录。之前 run_case 的
+    finally 每条用例收工就把它删了 —— 账号在 T2 结束时就消失了，T3 的登录
+    必然 401，而引擎给的 error 是 None（只说"失败"，不说是 401）。
+    """
     client = _client()
     client.responses["/api/users"] = (200, {"items": [
-        {"id": "u-boot", "username": "sb_u"},        # 自举账号，绝不能删
-        {"id": "u-x", "username": "sb_t2throw"},
-    ]})
+        {"id": "u-x", "username": "sb_t2throw"}]})
     _run(client, new_username="sb_t2throw", new_password="Throw-9911")
-    deleted = [p for m, p in client.calls if m == "DELETE"]
-    assert deleted == ["/api/scenarios/sc-x", "/api/users/u-x"], deleted
+    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
+    assert not [p for m, p in client.calls if m == "DELETE" and p.startswith("/api/users")]
+
+
+def test_throwaway_is_retired_once_after_every_case_has_run(monkeypatch, tmp_path):
+    """用完还是要删的 —— 但只删一次，且在**所有**用例跑完之后。
+
+    不删的话每次重跑都往平台里堆一个死账号，而且它在 execution_snapshots
+    里还留着一份明文口令。
+    """
+    import sys
+
+    from gimbal_bootstrap import orchestrator
+
+    cases_dir = tmp_path / "cases"
+    cases_dir.mkdir()
+    (cases_dir / "a.yaml").write_text(
+        "cases:\n"
+        "  - id: T2\n    name: 注册\n    steps:\n"
+        "      - {method: POST, path: /api/auth/register, auth: false,\n"
+        "         asserts: [{target: '$.call.response.status', operator: eq, expected: 201}]}\n"
+        "  - id: T3\n    name: 登录\n    steps:\n"
+        "      - {method: POST, path: /api/auth/login, auth: false,\n"
+        "         asserts: [{target: '$.call.response.status', operator: eq, expected: 200}]}\n",
+        encoding="utf-8",
+    )
+
+    # main 自己生成一次性用户名（uuid），钉死它，否则断言无从下手。
+    class _FixedUUID:
+        hex = "deadbeef12345678"
+
+    monkeypatch.setattr(orchestrator.uuid, "uuid4", lambda: _FixedUUID())
+    throwaway = "sb_deadbeef"        # main 取 hex[:8]
+
+    class _MainPlatform(FakePlatform):
+        def __init__(self, base_url, token=None):
+            super().__init__({
+                "/api/auth/login": (200, {"access_token": "tok-live"}),
+                "/api/auths": (200, {"items": []}),
+                "/api/scenarios": (201, {"scenarioId": "sc-x"}),
+                "/api/runs": (201, {"executionId": 42}),
+                "/api/executions/42": (200, {"status": "done", "totalRuns": 1}),
+                "/api/executions/42/rows": (200, {"items": [
+                    {"caseDir": "case-000-r0-n0", "status": "done"}]}),
+                "/api/users": (200, {"items": [
+                    {"id": "u-boot", "username": "sb_u"},        # 自举账号，绝不能删
+                    {"id": "u-x", "username": throwaway},
+                ]}),
+            })
+            self.token = token
+
+    client = _MainPlatform("http://x")
+    monkeypatch.setattr(orchestrator, "Platform", lambda *a, **k: client)
+    monkeypatch.setattr(orchestrator, "_resolve_env",
+                        lambda k: {"GIMBAL_SB_USERNAME": "sb_u",
+                                   "GIMBAL_SB_PASSWORD": "Pw-1234"}.get(k, ""))
+    monkeypatch.setattr(sys, "argv", ["orchestrator", "--cases", str(cases_dir), "--no-pause"])
+
+    assert orchestrator.main() == 0, "两条用例都应通过"
+
+    user_deletes = [i for i, (m, p) in enumerate(client.calls)
+                    if m == "DELETE" and p == "/api/users/u-x"]
+    assert len(user_deletes) == 1, f"应只删一次，实际 {user_deletes}"
+    last_dispatch = max(i for i, (m, p) in enumerate(client.calls) if p == "/api/runs")
+    assert user_deletes[0] > last_dispatch, "账号必须在所有用例跑完之后才删"
+    assert not [p for m, p in client.calls
+                if m == "DELETE" and p.endswith("u-boot")], "自举账号被删了"
 
 
 def test_bootstrap_account_is_never_deleted_even_if_it_looks_like_a_case_account():
@@ -511,6 +578,44 @@ def test_no_case_dispatches_a_run_of_itself():
         if s["method"] != "GET" and s["path"].rstrip("/") == "/api/runs"
     ]
     assert offenders == [], offenders
+
+
+def test_every_case_hits_a_route_the_platform_actually_declares():
+    """用例里手写的 path 必须真实存在于契约里。
+
+    漂移门验的是「生成的契约 vs 平台」，验不到「用例的 path vs 契约」——
+    中间这层是空的，于是 T7 打 `GET /api/runs` 一直到实跑才暴露（契约里
+    /api/runs 只有 POST，405）。实跑一次要建场景、投递、等引擎跑完；契约
+    就在本地，静态就能拦。
+
+    路径参数按**段数**比：契约写 `{scenario_id}`、用例写 `${sb.scenario_id}`，
+    都归一成 `{}`。参数名写错拦不住（那会 422，不是 404），但路由不存在
+    拦得住 —— 那才是这类手写最容易犯的错。
+    """
+    import re
+    from pathlib import Path
+
+    from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+
+    from gimbal_bootstrap.orchestrator import load_cases
+
+    def _shape(path: str) -> str:
+        # 先吃 ${...}，否则 `$\{...\}` 会留下一个孤零零的 $
+        path = re.sub(r"\$\{[^}]+\}", "{}", path)
+        return re.sub(r"\{[^}]+\}", "{}", path)
+
+    declared = {(ep.api.method.upper(), _shape(ep.api.path))
+                for ep in ALL_PLATFORM_ENDPOINTS}
+
+    cases_dir = Path(__file__).resolve().parents[1] / "cases"
+    missing = [
+        f"{c['id']}  {s['method'].upper()} {_shape(s['path'])}"
+        for p in sorted(cases_dir.glob("*.yaml"))
+        for c in load_cases(p)
+        for s in c["steps"]
+        if (s["method"].upper(), _shape(s["path"])) not in declared
+    ]
+    assert missing == [], "用例打了契约里没有的路由：\n" + "\n".join(missing)
 
 
 def test_username_is_only_remembered_after_the_login_works(tmp_path, monkeypatch):

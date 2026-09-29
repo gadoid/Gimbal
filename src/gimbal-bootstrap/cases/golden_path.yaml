@@ -63,6 +63,11 @@ cases:
           - {target: "$.call.response.body.meta.scenarioId", operator: eq, expected: "${sb.scenario_id}"}
           - {target: "$.call.response.body.meta.module", operator: eq, expected: self-bootstrap}
           - {target: "$.call.response.body.steps", operator: exists, expected: null}
+          # 回读 call 形态：v2.1 批次 F 退役了 step.api，生成器改错了的话
+          # 平台存进去的每个场景都是死的。这条把「生成对了」和「平台真存下了
+          # 对的形状」连起来 —— 静态那门只管到生成侧。
+          - {target: "$.call.response.body.steps.0.call.kind", operator: eq, expected: call}
+          - {target: "$.call.response.body.steps.0.call.protocol", operator: eq, expected: http}
 
   - id: T5
     name: 建数据集
@@ -94,17 +99,21 @@ cases:
           - {target: "$.call.response.body.schemeId", operator: exists, expected: null}
 
   - id: T7
-    name: 读运行列表
+    name: 读常量池
     tags: [smoke, e2e]
     # 这里刻意**不** POST /api/runs：「发起运行」是编排器自己在做的事，
     # 每条用例都由编排器投递一次。场景里再投一次就是拿自己投自己 —— 每次
     # 运行都会再派生一次运行，无限递归。
+    #
+    # 也不能写 GET /api/runs —— 契约里 /api/runs 只有 POST，那是实跑第一次
+    # 才暴露的 405。常量池是另一片没被覆盖的域，且不碰 PII。
     steps:
       - method: GET
-        path: /api/runs
+        path: /api/constants
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
           - {target: "$.call.response.body.items", operator: exists, expected: null}
+          - {target: "$.call.response.body.total", operator: exists, expected: null}
 
   - id: T8
     name: 读执行结果
