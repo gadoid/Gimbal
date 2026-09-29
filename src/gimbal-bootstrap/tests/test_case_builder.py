@@ -118,8 +118,21 @@ def test_auth_step_carries_bearer_header():
                        "asserts": [{"target": "$.call.response.status",
                                     "operator": "eq", "expected": 200}]}]}
     d = build_definition(case, sb_username="u")
-    headers = d["steps"][0]["api"]["headers"]
+    headers = d["steps"][0]["call"]["headers"]
     assert headers["Authorization"] == "Bearer ${auth.sb.token}"
+
+
+def test_no_step_carries_the_retired_api_form():
+    """v2.1 批次 F 退役了 step.api，plate 在 validate 期显式拒绝。
+
+    生成器一旦改回 api 形态，platform 侧存进去的每个场景都是死的，而
+    失败点在平台的 schema 校验里，离这里十万八千里。这门把它钉死在生成侧。
+    """
+    d = build_definition(GOLDEN, sb_username="u")
+    for step in d["steps"]:
+        assert "api" not in step, step
+        assert step["call"]["kind"] == "call"
+        assert step["call"]["protocol"] == "http"
 
 
 def test_run_token_makes_scenario_id_unique_per_run():

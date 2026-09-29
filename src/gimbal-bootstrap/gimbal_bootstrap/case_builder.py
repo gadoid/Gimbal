@@ -2,7 +2,7 @@
 
 definition 必须是能过 plate /convert 的合法 Scenario。实测最小必填集：
 scenarioId / meta(11 项) / config.services / config.timePolicy / resource /
-steps[].api / steps[].request / steps[].strategy。
+steps[].call / steps[].request / steps[].strategy。
 """
 
 from __future__ import annotations
@@ -113,8 +113,13 @@ def build_definition(
 
         steps.append({
             "kind": "step",
-            "api": {
-                "kind": "api",
+            # call 是唯一调用形态（v2.1 批次 F 退役了 step.api）。
+            # plate 的 Step._reject_api_form 在 validate 期显式拒 api 形态，
+            # 存量文件的迁移见 scripts/migrate_legacy_case.py；这里是生成器，
+            # 直接按新形态产出，不走迁移。
+            "call": {
+                "kind": "call",
+                "protocol": "http",
                 "service": SERVICE,
                 "method": step["method"],
                 "path": _render(step["path"], subs),
