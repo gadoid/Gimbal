@@ -127,13 +127,16 @@ async def test_debug_endpoints_proxy_session(client):
                           json={"kind": "continue"})
     assert r.status_code == 409
 
-    # 等执行终态(fanout teardown 会 pop debug_sessions——先等它跑完
-    # 再注入,否则注入的假会话被出清)
-    from app.models.execution import Execution as _Ex
+    # 等 job 终态(Execution 终态先于 fanout _teardown 的 debug_sessions
+    # pop——job finish 在任务体返回之后,teardown 必已跑完;直接等
+    # Execution 会注入后被 pop,偶发 409 即本测试的历史抖动根因)
+    from app.models.execution import ExecutionJob as _Job
+    from sqlalchemy import select as _sel
     for _ in range(300):
         async with db_module.SessionLocal() as s:
-            ex = await s.get(_Ex, eid)
-            if ex.status in ("done", "failed", "canceled"):
+            job_status = (await s.execute(
+                _sel(_Job.status).where(_Job.execution_id == eid))).scalar()
+            if job_status in ("done", "failed", "canceled"):
                 break
         await asyncio.sleep(0.05)
 

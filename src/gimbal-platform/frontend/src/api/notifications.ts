@@ -58,8 +58,17 @@ export function list(params?: {
   page?: number
   pageSize?: number
 }) {
+  // 后端分页参读 snake_case(page_size);此前直传 camelCase 被忽略,
+  // 落默认 50 —— 「每页 10 实显 13」的根因。与 executions/users 的
+  // 映射同款,响应信封仍 camelCase。
   return http
-    .get<NotificationList>('/notifications', { params })
+    .get<NotificationList>('/notifications', {
+      params: {
+        ...(params?.unreadOnly ? { unread_only: true } : {}),
+        ...(params?.page != null ? { page: params.page } : {}),
+        ...(params?.pageSize != null ? { page_size: params.pageSize } : {}),
+      },
+    })
     .then((r) => r.data)
 }
 

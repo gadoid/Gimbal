@@ -149,7 +149,6 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     title: '用户管理',
     description: '成员数与停用提醒(admin)',
     accent: 'blue',
-    defaultSize: 'S',
     adminOnly: true,
     component: () => import('./UsersSummaryCard.vue'),
   },

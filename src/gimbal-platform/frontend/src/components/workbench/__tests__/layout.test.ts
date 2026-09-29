@@ -86,7 +86,6 @@ describe('useWorkbenchLayout — order(存档 = 镜像 + 服务端)', () => {
     expect(orderedIds.value).toEqual(ids())
     for (const d of workbenchRegistry) expect(sizeOf(d.id)).toBe(d.defaultSize ?? 'M')
     // 用户管理只出两个计数,列表不是 glance 信息 —— 唯一刻意 S 起步的卡
-    expect(sizeOf('users')).toBe('S')
   })
 
   it('给 eligibleIds → 默认板只含可见集(adminOnly 卡不塞给 member)', () => {

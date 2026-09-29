@@ -712,6 +712,8 @@ def _passes_filters(
             row.scenario_id or "",
             meta.name or "",
             meta.module or "",
+            # 检索面与前端占位符对齐(含系统);system 是 JSONB 数组镜像列
+            *(getattr(row, "system", None) or []),
             meta.description or "",
         ]
         haystacks.extend(meta.tags or [])

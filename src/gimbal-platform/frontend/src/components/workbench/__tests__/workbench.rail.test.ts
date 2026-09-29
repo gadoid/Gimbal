@@ -77,7 +77,7 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     const kids = Array.from(w.find('.id-hero').element.children)
     expect(kids.indexOf(avatar.element)).toBeGreaterThan(kids.indexOf(w.find('.id-text').element))
     expect(w.find('.id-name').text()).toBe('Alice Zhang')
-    expect(w.find('.id-welcome').text()).toMatch(/好，欢迎回到工作台$/)
+    expect(w.find('.id-welcome').text()).toMatch(/好，欢迎回来$/)
     expect(w.find('.id-user').text()).toBe('@alice')
     expect(w.find('.id-role').text()).toBe('成员')
     expect(w.find('.id-joined').exists()).toBe(false)                 // 加入时间已撤

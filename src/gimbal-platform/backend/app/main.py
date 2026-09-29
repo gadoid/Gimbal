@@ -90,6 +90,18 @@ async def lifespan(app: FastAPI):
     # Same-process app reuse (tests) needs the shutdown flag cleared,
     # or dispatches silently skip their fan-out.
     reset_shutdown_state()
+    # 复盘裁定(2026-09-29):SQLite 只作测试方言(conftest 每测试临时库/
+    # TEST_DATABASE_URL=PG 时 schema-per-test);生产事实源自 PG 迁移
+    # (0005-0009)起就是远端 PG,本地 data/app.db 已落后 5 个迁移,静默
+    # 回退只会以 UndefinedColumn 崩在半路 —— 缺 .env/DATABASE_URL 时
+    # 在这里给出指向明确的 fail-fast,而不是造一个空 SQLite 库。
+    from .core.config import settings as _settings
+    if _settings.DATABASE_URL.startswith("sqlite"):
+        raise RuntimeError(
+            "DATABASE_URL 指向 SQLite(本地默认回退)。生产/开发服务必须"
+            "配置远端 PG:复制 backend/.env.example 为 .env 并设置"
+            " DATABASE_URL(postgresql+asyncpg://...)。SQLite 仅作为"
+            " pytest 测试方言保留,不承载服务运行。")
     # P3:重启后把丢失 _fanout 的 queued 僵尸单收敛为 failed。
     try:
         n_stale, _swept = await startup_recovery()

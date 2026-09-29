@@ -37,6 +37,8 @@ class ActivityEvent(BaseModel):
     executionId: int | None = None
     status: str | None = None
     scenarioId: str | None = None
+    # 用例展示名(快照列;空(历史行)由前端回退 scenarioId)
+    scenarioName: str | None = None
     # scenario 面(F3 起走 activity_events:action 是子动作
     # edit/rename/save_as/handoff_received;detail 携带
     # name/oldName/newName/sourceScenarioId/senderName)
@@ -83,7 +85,8 @@ async def get_activity(
                 continue
             events.append(ActivityEvent(
                 kind="execution", at=iso_naive_utc(at) or "",
-                executionId=e.id, status=e.status, scenarioId=e.scenario_id))
+                executionId=e.id, status=e.status, scenarioId=e.scenario_id,
+                scenarioName=(e.scenario_name or None)))
         sources["executions"] = True
     except Exception:
         sources["executions"] = False

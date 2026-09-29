@@ -74,9 +74,13 @@ def _q_clause(q: str | None):
     """
     if not q:
         return None
+    # 检索面 = scenarioId/name/module/system/description/tags —— 与前端
+    # 搜索框占位符「按名 / 模块 / 系统 / scenarioId / tag 搜索」逐项对齐
+    # (system 缺席时按表里明示的系统值搜不中,即「公共场景搜索异常」)
     return sa_text(
         "(scenario_id ILIKE CAST(:qp AS text) OR name ILIKE CAST(:qp AS text)"
         " OR module ILIKE CAST(:qp AS text)"
+        " OR system::text ILIKE CAST(:qp AS text)"
         " OR description ILIKE CAST(:qp AS text)"
         " OR tags::text ILIKE CAST(:qp AS text))"
     ).bindparams(bindparam("qp", value=f"%{q}%"))

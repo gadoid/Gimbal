@@ -164,14 +164,6 @@ async def request_cancel(db, execution_id: int) -> bool:
     return await _eq.request_cancel(db, execution_id)
 
 
-async def has_live_fanout(db, execution_id: int) -> bool:
-    """活单判据（cancel 端点区分「等行边界收敛」与「僵尸立即终态化」）。"""
-    from . import execution_queue as _eq
-    snap = await _eq.job_snapshot(db, execution_id)
-    return bool(snap and snap["status"] in ("queued", "running")
-                and snap["lease_fresh"])
-
-
 def reset_cancel_state() -> None:
     """测试隔离：清空调试会话注册表与取消快速通道（DB 位随 fresh 库自清）。"""
     debug_sessions.clear()

@@ -89,7 +89,6 @@ const events = ref<ExecutionEventItem[]>([])
 const output = ref<string[]>([])
 const sending = ref(false)
 let lastSeq = 0
-let stopped = false
 
 const quickCommands = ['continue', 'step', 'abort', 'read', 'retry', 'skip'] as const
 const writeVar = ref('')
@@ -168,7 +167,6 @@ onMounted(async () => {
   outputTimer = window.setInterval(tickOutput, 800)
 })
 onBeforeUnmount(() => {
-  stopped = true
   window.clearInterval(infoTimer)
   window.clearInterval(eventTimer)
   window.clearInterval(outputTimer)

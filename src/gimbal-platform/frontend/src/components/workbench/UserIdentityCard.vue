@@ -7,7 +7,7 @@
     <div class="id-hero">
       <div class="id-text">
         <h3 class="id-name" :title="displayName">{{ displayName }}</h3>
-        <p class="id-welcome">{{ greeting }}，欢迎回到工作台</p>
+        <p class="id-welcome">{{ greeting }}，欢迎回来</p>
         <div class="id-chips">
           <span class="id-user mono">@{{ user.username }}</span>
           <span class="id-role" :class="auth.role">{{ { member: '成员', operator: '运维', admin: '管理员' }[auth.role] }}</span>

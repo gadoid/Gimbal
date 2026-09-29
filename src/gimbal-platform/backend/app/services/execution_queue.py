@@ -151,21 +151,6 @@ async def is_cancel_requested(db, execution_id: int) -> bool:
     return bool(row.scalar())
 
 
-async def job_snapshot(db, execution_id: int) -> dict | None:
-    """任务的可见状态快照（cancel 端点区分活单/僵尸用）。"""
-    from sqlalchemy import select
-    row = (await db.execute(
-        select(ExecutionJob).where(
-            ExecutionJob.execution_id == execution_id))).scalar_one_or_none()
-    if row is None:
-        return None
-    fresh = (row.status != "running"
-             or row.heartbeat_at is None
-             or row.heartbeat_at > _utcnow() - timedelta(seconds=LEASE_SEC * 2))
-    return {"status": row.status, "attempts": row.attempts,
-            "cancel_requested": bool(row.cancel_requested), "lease_fresh": fresh}
-
-
 # ─── 孤儿回收 / 启动恢复 ──────────────────────────────────────
 
 async def sweep_stale(db) -> int:

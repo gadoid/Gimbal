@@ -36,6 +36,9 @@ class Settings(BaseSettings):
 
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
+    # 默认 SQLite 仅让「导入可完成 + pytest 可跑」(测试引擎每测试换库);
+    # 服务启动(lifespan)对 sqlite 显式 fail-fast 指路 .env —— 生产
+    # 事实源是远端 PG(复盘 2026-09-29),不再维护 SQLite 运行链。
     DATABASE_URL: str = (
         f"sqlite+aiosqlite:///{(_BACKEND_ROOT / 'data' / 'app.db').as_posix()}"
     )
@@ -60,7 +63,6 @@ class Settings(BaseSettings):
     # P7 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)与
     # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
     MAX_RUNS_PER_EXECUTION: int = 200
-    MAX_CONCURRENT_LAUNCHES: int = 8
     # ── C11(P3-01)执行队列 ──────────────────────────────────
     # worker 数(每 worker 同时只跑一个 execution_jobs 任务;多 backend
     # 进程部署时 SKIP LOCKED 天然分单)

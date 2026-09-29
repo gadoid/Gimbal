@@ -47,7 +47,7 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
     return {
       key: `exec-${e.executionId}`, kind: 'execution', at: e.at,
       title: `执行 #${e.executionId} ${executionStatusText(e.status ?? '')}`,
-      detail: e.scenarioId ?? undefined, to: executionUrl(e.executionId!),
+      detail: e.scenarioName || e.scenarioId || undefined, to: executionUrl(e.executionId!),
     }
   }
   if (e.kind === 'scenario') {

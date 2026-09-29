@@ -12,6 +12,8 @@ export interface ActivityEventIn {
   executionId?: number | null
   status?: string | null
   scenarioId?: string | null
+  /** 执行面的用例展示名(快照列;空(历史行)回退 scenarioId)。 */
+  scenarioName?: string | null
   name?: string | null
   module?: string | null
   batchId?: string | null

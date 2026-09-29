@@ -362,6 +362,7 @@ async def scenario_facets(
             from ..services.scenario_store import _meta_from_row
             m = _meta_from_row(r)
             hay = [r.scenario_id or "", m.name or "", m.module or "",
+                   *(getattr(r, "system", None) or []),
                    m.description or "", *(m.tags or [])]
             return any(ql in (h or "").lower() for h in hay)
 

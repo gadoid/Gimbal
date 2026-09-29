@@ -110,6 +110,19 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
         future=True,
         connect_args={"timeout": 30, "check_same_thread": False},
     )
+
+    # C11 复盘(2026-09-29):默认 rollback journal 下,队列 worker 与请求
+    # 各持连接、读事务升级写时互相阻塞,busy timeout 只是等 30s 后炸
+    # 「database is locked」(test_run_cross_matrix 偶发三连红)。WAL 让
+    # 读写不再互斥(单写多读),锁竞争面收敛为写-写,30s 足够消化。
+    from sqlalchemy import event as _event
+
+    @_event.listens_for(test_engine.sync_engine, "connect")
+    def _sqlite_wal(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
     test_session_factory = async_sessionmaker(
         test_engine, expire_on_commit=False, class_=AsyncSession
     )
