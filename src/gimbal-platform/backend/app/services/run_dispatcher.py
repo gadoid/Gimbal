@@ -958,6 +958,71 @@ async def _fanout_graph(
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # P3 收尾(graph 恢复策略 = at-most-once):graph 执行整图一个 run,
+    # 恢复重跑必然整图重放,对被测系统重复全部副作用不可接受 → 已开跑
+    # (存在事件)的恢复直接 failed 收口、不重跑。cases 链是行级断点
+    # (P3.5-2),只有中断行重跑 —— 恢复语义对照见路线图 P3.5。
+    from sqlalchemy import func as _f, select as _sel
+
+    from ..models.execution import ExecutionEvent as _EV
+    try:
+        async with db_factory() as session:
+            _prior = (await session.execute(
+                _sel(_f.count()).select_from(_EV)
+                .where(_EV.execution_id == execution_id))).scalar()
+    except Exception:  # noqa: BLE001 — 查询失败按无进度处理(可重跑)
+        _prior = 0
+    if _prior:
+        logger.warning(
+            "run_dispatcher: graph execution {} recovered with {} prior "
+            "events → failed (at-most-once, no graph replay)",
+            execution_id, _prior)
+        from ..models.execution import ExecutionRow
+
+        finished_ts = _utcnow().isoformat() + "Z"
+        _row_states[execution_id] = []
+        try:
+            from sqlalchemy.exc import IntegrityError as _IE
+
+            async with db_factory() as session:
+                session.add(ExecutionRow(
+                    execution_id=execution_id, seq=0,
+                    unit_id="graph", branch="graph", attempts=1,
+                    status="failed", case_dir="case-graph",
+                    started_at=None, finished_at=_iso_to_dt(finished_ts)))
+                try:
+                    await session.commit()
+                except _IE:
+                    await session.rollback()
+                    from sqlalchemy import update as _u
+
+                    await session.execute(
+                        _u(ExecutionRow)
+                        .where(ExecutionRow.execution_id == execution_id,
+                               ExecutionRow.seq == 0)
+                        .values(status="failed",
+                                finished_at=_iso_to_dt(finished_ts)))
+                    await session.commit()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            async with db_factory() as session:
+                ex = await session.get(Execution, execution_id)
+                if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
+                    ex.status = STATUS_FAILED
+                    ex.finished_at = _utcnow()
+                    cfg = dict(ex.config_json or {})
+                    cfg["dispatcherError"] = (
+                        f"graph recovery: at-most-once 收口"
+                        f"({_prior} prior events, 不整图重放)")
+                    ex.config_json = cfg
+                    await session.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "run_dispatcher: graph recovery finalize failed {}", execution_id)
+        await ingester.finalize()
+        return
+
     proj = {"unit": None, "status": None, "attempts": 0}
     status = "failed"
     result = None
@@ -1119,8 +1184,11 @@ async def _fanout(
         from .gimbal_server_session import ServerSessionPool
         _total_rows = (sum(len(ds["rows"]) for ds in datasets)
                        * len(list(injections) or [None]))
+        # P3 收尾:全局上限钳制 —— parallel 可到 MAX_RUNS_PER_EXECUTION,
+        # 不钳制会一次冷启动上百个引擎进程(行排队等空闲槽位)
         _slots = (1 if debug is not None
-                  else max(1, min(int(parallel or 1), _total_rows or 1)))
+                  else max(1, min(int(parallel or 1), _total_rows or 1,
+                                  settings.EXEC_MAX_SERVER_INSTANCES)))
         server_pool = ServerSessionPool(size=_slots)
     # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)

@@ -57,6 +57,14 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
     sqlite(默认): 每测试一个临时文件库;PG(设 TEST_DATABASE_URL 时):
     每测试一个独立 schema,连进来的会话 search_path 钉在该 schema 上。
     """
+    # P3.6:默认链已切 server(生产),测试钉回 legacy —— 大量用例按
+    # legacy 假引擎(monkeypatch gimbal_launcher.launch)编写,默认拉真
+    # server 实例会拖爆套件且伪 convert 场景被引擎拒绝。server 链由
+    # 显式 chain_override/debug 的专项用例覆盖,不受此钉影响。
+    from app.core.config import settings as _settings
+
+    monkeypatch.setattr(_settings, "EXEC_CHAIN", "legacy", raising=True)
+
     if TEST_DATABASE_URL.startswith("postgresql"):
         import uuid
 

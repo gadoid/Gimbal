@@ -210,6 +210,13 @@ class ProtocolExecutor(ABC):
         if not isinstance(vh, dict):
             vh = (getattr(call, "model_extra", None) or {}).get("view_hints") or {}
         endpoint_id = vh.get("endpoint_id") if isinstance(vh, dict) else None
+        if not endpoint_id:
+            # 信封完整(P3 收尾)：无平台端点标识时按调用自有字段推导
+            # （http 形如 "fin POST /api/x"；非 http 协议至少带 service）
+            parts = [str(getattr(call, k, None) or "")
+                     for k in ("service", "method", "path")]
+            derived = " ".join(p for p in parts if p)
+            endpoint_id = derived or None
         labels = {"protocol": self.protocol}
         if endpoint_id:
             labels["endpoint"] = str(endpoint_id)

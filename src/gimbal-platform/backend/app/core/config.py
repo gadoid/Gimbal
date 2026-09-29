@@ -67,15 +67,21 @@ class Settings(BaseSettings):
     # worker 数(每 worker 同时只跑一个 execution_jobs 任务;多 backend
     # 进程部署时 SKIP LOCKED 天然分单)
     EXEC_WORKERS: int = 1
+    # server 链实例池全局上限(P3 收尾):parallel 可到 MAX_RUNS_PER_EXECUTION,
+    # 槽位池 = min(parallel, 行数) 再被此上限钳制 —— 防一次执行冷启动
+    # 上百个引擎进程
+    EXEC_MAX_SERVER_INSTANCES: int = 8
     # running 任务租约(秒):heartbeat 周期 = 租约/3;超租约未续 = 孤儿
     EXEC_JOB_LEASE_SEC: float = 120.0
     # 认领次数上限(含首次):孤儿回收超过即失败收口(执行不可假设幂等)
     EXEC_JOB_MAX_ATTEMPTS: int = 2
     # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
-    # legacy = run launch 子进程(stdout jsonl,现状);
-    # server = 每次执行一个 gimbal run server 实例(POST /runs + SSE)。
-    # 灰度开关:关(legacy)即回旧链——回滚路径。
-    EXEC_CHAIN: str = "legacy"
+    # server = 每执行一组 gimbal run server 实例(POST /runs + SSE;槽位池
+    #   见 EXEC_MAX_SERVER_INSTANCES)—— 2026-09-29 起为默认(P3 收尾:
+    #   P3.5 三缺陷修复 + 五形态对账 match 后放量);
+    # legacy = run launch 子进程(stdout jsonl)——回滚路径,稳定一段
+    #   时间后删除(不留兼容层)。
+    EXEC_CHAIN: str = "server"
     # ── Gimbal 插件注入(透传给执行子进程;空值 = 现状零变化) ──
     # GIMBAL_PLUGINS_DIR:文件系统插件目录(绝对路径;空 = 引擎默认 base_dir/plugins)
     GIMBAL_PLUGINS_DIR: str = ""

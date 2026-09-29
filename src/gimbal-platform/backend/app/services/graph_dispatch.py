@@ -127,7 +127,11 @@ async def materialize_graph(
             service_bindings=merged_bindings,
             resolved_auths=exec_auths,
             built_in_users=_built_in_users(composed),
-            carry_context={},
+            # graph 不做 carry 注入;须显式 None —— 空 dict 会经
+            # materialize 的 ``is not None`` 判定进 _apply_carry,在
+            # step 引用了 service 时炸 AttributeError(dict 无
+            # service_bindings 属性;对账基准扩充实测抓到)
+            carry_context=None,
             alias_base_urls=alias_urls,
         )
         unit_payloads[r["unit"]["ref"]] = materialized

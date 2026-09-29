@@ -19,7 +19,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from gimbal.events.bus import InMemoryEventBus
-from gimbal.events.types import CallExchangeEvent, StepStartEvent, StepEndEvent
+from gimbal.events.types import (
+    CallExchangeEvent,
+    RunMetaEvent,
+    RunStartEvent,
+    StepEndEvent,
+    StepStartEvent,
+)
 from gimbal.log.category import categorize_logger, CATEGORIES
 from gimbal.log.exec_context import exec_context
 
@@ -63,6 +69,49 @@ class TestBusStampsLabels:
         bus.publish(StepEndEvent(step_id="s", status="passed", duration_ms=1.0))
         ev = got[0]
         assert ev.unit is None and ev.scenario is None and ev.step is None
+
+    def test_run_id_aliased_from_run_label(self):
+        """信封完整(P3 收尾)：入 run 边界的事件 run_id 与标签 run 同值。"""
+        bus = InMemoryEventBus()
+        got: list = []
+        bus.subscribe(got.append)
+        with exec_context(run="r-42"):
+            bus.publish(StepStartEvent(step_id="s", step_name="n"))
+            bus.publish(RunStartEvent(env="dev", mode="local"))
+        assert all(ev.run_id == "r-42" for ev in got)
+        # 边界外(run.meta 类)不伪造
+        bus2_events: list = []
+        bus2 = InMemoryEventBus()
+        bus2.subscribe(bus2_events.append)
+        bus2.publish(RunMetaEvent(meta={}))
+        assert bus2_events[0].run_id is None
+
+    def test_endpoint_label_fallback_derived_from_call(self):
+        """无 view_hints.endpoint_id 时按 service/method/path 推导。"""
+        from gimbal.protocols.base import ProtocolExecutor
+        from gimbal.schema.call import Call
+
+        class _P(ProtocolExecutor):
+            protocol = "http"
+
+            def build_spec(self, step, view):  # pragma: no cover - 抽象桩
+                raise NotImplementedError
+
+            def send(self, spec, view):        # pragma: no cover - 抽象桩
+                raise NotImplementedError
+
+            def _execute_body(self, spec, view):
+                from gimbal.log.exec_context import exec_labels
+                self.captured = dict(exec_labels())
+                return None
+
+        p = _P.__new__(_P)
+        call = Call(protocol="http", service="fin", method="POST", path="/api/x")
+        spec = type("S", (), {"pctx": type("P", (), {"call": call,
+                                                     "step_id": "s1"})()})()
+        p.execute(spec, None)   # type: ignore[arg-type]
+        assert p.captured["protocol"] == "http"
+        assert p.captured["endpoint"] == "fin POST /api/x"
 
 
 class TestJsonlSinkStripsNoneLabels:
@@ -226,11 +275,17 @@ class TestLogCategory:
         assert categorize_logger("gimbal.scheduler.plan") == "scheduler"
         assert categorize_logger("gimbal.plugins.loader") == "plugin"
         assert categorize_logger("gimbal.core.debugger") == "debug"
-        assert categorize_logger("gimbal.core.runner") == "core"
+        # P3 收尾细化:状态机/预处理/上下文三类独立
+        assert categorize_logger("gimbal.core.runner") == "step"
+        assert categorize_logger("gimbal.core.scenario_runner") == "step"
+        assert categorize_logger("gimbal.preprocessor.scenario_preprocessor") == "resolve"
+        assert categorize_logger("gimbal.context.channels") == "context"
         assert categorize_logger("gimbal.statemachine.engine") == "core"
+        assert categorize_logger("httpx.client") == "core"   # 桥接的 stdlib 名走默认
         assert categorize_logger(None) == "core"
         assert set(CATEGORIES) == {"call", "auth", "strategy", "compiler",
-                                   "scheduler", "plugin", "debug", "core"}
+                                   "scheduler", "plugin", "debug",
+                                   "step", "resolve", "context", "core"}
 
     def test_json_sink_carries_category_and_labels(self):
         from gimbal.log.formatters import JsonSink
@@ -247,9 +302,9 @@ class TestLogCategory:
 
         with exec_context(run="r1", unit="u1", step="step-000"):
             line1 = json.loads(sink._serialize(_record("gimbal.scheduler.plan")))
-        line2 = json.loads(sink._serialize(_record("gimbal.core.runner")))
+        line2 = json.loads(sink._serialize(_record("gimbal.context.channels")))
         assert line1["category"] == "scheduler"
         assert line1["run"] == "r1" and line1["unit"] == "u1"
         assert line1["step"] == "step-000"
-        assert line2["category"] == "core"
+        assert line2["category"] == "context"
         assert "run" not in line2 and "step" not in line2

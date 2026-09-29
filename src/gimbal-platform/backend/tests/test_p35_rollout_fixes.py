@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 
@@ -71,7 +72,8 @@ def stub_sut2():
 
 
 async def _dispatch_chain(client, username: str, *, dataset_rows: list[dict],
-                          parallel: int, chain: str, sut_url: str) -> int:
+                          parallel: int, chain: str, sut_url: str,
+                          steps: list | None = None) -> int:
     """3 行数据集场景按指定链发起;返回 executionId(等执行者处理)。
 
     scenarioId 全局唯一 —— 同测试多链各用各的场景(按用户名派生)。
@@ -81,7 +83,7 @@ async def _dispatch_chain(client, username: str, *, dataset_rows: list[dict],
     sc_id = f"sc-p35-{username}"
     h = await register_and_login(client, username, "pw123456")
     r = await client.post("/api/scenarios", headers=h, json=make_draft(
-        sc_id, steps=_STEPS, vars_map={"a": "1"},
+        sc_id, steps=steps or _STEPS, vars_map={"a": "1"},
         description="p35", author="t", owner=username, tags=[],
         version="1", createTime="2026-09-24T00:00:00Z", expire=False,
         requirementRef=[],
@@ -198,7 +200,259 @@ async def test_dual_chain_equivalence_multirow(client, monkeypatch, stub_sut2):
                 .order_by(ExecutionRow.seq))).all()
         return [tuple(r) for r in rs]
 
-    assert await _rows(eid_l) == await _rows(eid_s)
+    rows_l, rows_s = await _rows(eid_l), await _rows(eid_s)
+    # 状态逐行等价;attempts 负载敏感(偶发重试两链独立抖动),只设下界
+    assert [st for st, _ in rows_l] == [st for st, _ in rows_s]
+    assert all(a >= 1 for _, a in rows_l + rows_s)
+
+
+# ── P3 收尾:对账基准扩充(五形态,真引擎)───────────────────────
+
+class _SlowSut(BaseHTTPRequestHandler):
+    """慢被测系统:每请求睡 4s(超时/取消形态的时序基座)。"""
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self):  # noqa: N802
+        time.sleep(4.0)
+        out = json.dumps({"code": "0"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    def log_message(self, *a):  # noqa: D102
+        pass
+
+
+@pytest.fixture
+def slow_sut():
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _SlowSut)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{srv.server_address[1]}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+async def _summaries(ex_l: Execution, ex_s: Execution) -> tuple[dict, dict]:
+    return (
+        {"status": ex_l.status, "total": ex_l.total_runs,
+         "passed": ex_l.passed, "failed": ex_l.failed, "skipped": ex_l.skipped},
+        {"status": ex_s.status, "total": ex_s.total_runs,
+         "passed": ex_s.passed, "failed": ex_s.failed, "skipped": ex_s.skipped},
+    )
+
+
+@pytest.mark.skipif(not _engine_available(),
+                    reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
+async def test_reconcile_assertion_failure_shape(client, monkeypatch, stub_sut2):
+    """断言失败形态:期望值打错 → 双链 3 行全 failed、计数一致。"""
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+    bad = [{
+        "id": "s1", "kind": "step",
+        "call": {"kind": "call", "protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/ping"},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [{"kind": "assertion",
+                      "target": "$.call.response.body.code",
+                      "operator": "eq", "expected": "1"}],   # 实际恒 0
+    }]
+    rows = [{"a": "1"}, {"a": "2"}, {"a": "3"}]
+    eid_l = await _dispatch_chain(client, "p35e", dataset_rows=rows, parallel=3,
+                                  chain="legacy", sut_url=stub_sut2, steps=bad)
+    eid_s = await _dispatch_chain(client, "p35f", dataset_rows=rows, parallel=3,
+                                  chain="server", sut_url=stub_sut2, steps=bad)
+    ex_l, ex_s = await _wait_final(eid_l), await _wait_final(eid_s)
+    sl, ss = await _summaries(ex_l, ex_s)
+    assert sl == ss
+    assert sl["failed"] == 3 and sl["passed"] == 0
+
+
+@pytest.mark.skipif(not _engine_available(),
+                    reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
+async def test_reconcile_multistep_extract_shape(client, monkeypatch, stub_sut2):
+    """多 step 带 extract:提取→跨步 assign→断言(引擎正规跨步数据流)。"""
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+    steps = [
+        {"id": "s1", "kind": "step",
+         "call": {"kind": "call", "protocol": "http", "service": "svc",
+                  "method": "GET", "path": "/ping"},
+         "request": {"kind": "request", "body": {}},
+         "strategy": [{"kind": "extract",
+                       "expression": "$.call.response.body.code",
+                       "target": "token", "scope": "scenario"}]},
+        {"id": "s2", "kind": "step",
+         "call": {"kind": "call", "protocol": "http", "service": "svc",
+                  "method": "GET", "path": "/ping"},
+         "request": {"kind": "request", "body": {}},
+         "strategy": [
+             {"kind": "assign", "source": "$.token", "target": "tok",
+              "scope": "scenario"},
+             {"kind": "assertion", "target": "$.tok",
+              "operator": "eq", "expected": "0"}]},
+    ]
+    rows = [{"a": "1"}, {"a": "2"}]
+    eid_l = await _dispatch_chain(client, "p35g", dataset_rows=rows, parallel=2,
+                                  chain="legacy", sut_url=stub_sut2, steps=steps)
+    eid_s = await _dispatch_chain(client, "p35h", dataset_rows=rows, parallel=2,
+                                  chain="server", sut_url=stub_sut2, steps=steps)
+    ex_l, ex_s = await _wait_final(eid_l), await _wait_final(eid_s)
+    sl, ss = await _summaries(ex_l, ex_s)
+    assert sl == ss
+    assert sl["passed"] == 2 and sl["failed"] == 0   # extract 流真实走通
+
+
+@pytest.mark.skipif(not _engine_available(),
+                    reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
+async def test_reconcile_graph_shape(client, monkeypatch, stub_sut2):
+    """graph 形态:两单元 chain 图,双链图行/计数一致。"""
+    from app.schemas.scenario_composer import (
+        GraphSpec, GraphUnitSpec, RunRequest, ServiceBinding,
+    )
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+
+    async def _dispatch_graph(username: str, chain: str) -> int:
+        h = await register_and_login(client, username, "pw123456")
+        for i in (1, 2):
+            await client.post("/api/scenarios", headers=h, json=make_draft(
+                f"sc-p35-{username}-u{i}", steps=_STEPS, vars_map={"a": "1"},
+                description="p35", author="t", owner=username, tags=[],
+                version="1", createTime="2026-09-24T00:00:00Z", expire=False,
+                requirementRef=[]))
+        req = RunRequest(
+            scenarioId=f"sc-p35-{username}-u1",   # 锚场景(graph 挂载点)
+            graph=GraphSpec(mode="chain", units=[
+                GraphUnitSpec(ref="u1", scenario_id=f"sc-p35-{username}-u1"),
+                GraphUnitSpec(ref="u2",
+                              scenario_id=f"sc-p35-{username}-u2"),
+            ], service_bindings={"svc": {"url": stub_sut2}}),
+        )
+        async with db_module.SessionLocal() as db:
+            from app.models.user import User
+            user = (await db.execute(
+                sa.select(User).where(User.username == username))).scalar_one()
+            resp = await run_dispatcher.dispatch_run(
+                db, user.id, req, chain_override=chain)
+            await db.commit()
+        return resp.execution_id
+
+    eid_l = await _dispatch_graph("p35i", "legacy")
+    eid_s = await _dispatch_graph("p35j", "server")
+    ex_l, ex_s = await _wait_final(eid_l), await _wait_final(eid_s)
+    sl, ss = await _summaries(ex_l, ex_s)
+
+    assert sl == ss and sl["passed"] == 1 and sl["failed"] == 0
+
+    async def _graph_row(eid: int) -> tuple:
+        async with db_module.SessionLocal() as s:
+            r = (await s.execute(
+                sa.select(ExecutionRow.status, ExecutionRow.attempts)
+                .where(ExecutionRow.execution_id == eid, ExecutionRow.seq == 0))
+                ).one()
+        return tuple(r)
+
+    rl, rs = await _graph_row(eid_l), await _graph_row(eid_s)
+    # 状态必须等价;attempts 是负载敏感值(满套件负载下偶发重试会 +1,
+    # 两链独立采样必然抖动)——只设下界(两单元各至少一次尝试)
+    assert rl[0] == rs[0] == "passed"
+    assert rl[1] >= 2 and rs[1] >= 2
+
+
+@pytest.mark.skipif(not _engine_available(),
+                    reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
+async def test_reconcile_step_timeout_shape(client, monkeypatch, slow_sut):
+    """超时形态:step 协议超时 2s × 慢 SUT 4s → 引擎内超时失败,双链一致。"""
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+    steps = [{
+        "id": "s1", "kind": "step",
+        "call": {"kind": "call", "protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/slow", "timeout": 2},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }]
+    eid_l = await _dispatch_chain(client, "p35k", dataset_rows=[], parallel=1,
+                                  chain="legacy", sut_url=slow_sut, steps=steps)
+    eid_s = await _dispatch_chain(client, "p35l", dataset_rows=[], parallel=1,
+                                  chain="server", sut_url=slow_sut, steps=steps)
+    ex_l, ex_s = await _wait_final(eid_l, timeout_s=120), \
+        await _wait_final(eid_s, timeout_s=120)
+    sl, ss = await _summaries(ex_l, ex_s)
+    assert sl == ss and sl["failed"] == 1
+
+
+@pytest.mark.skipif(not _engine_available(),
+                    reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
+async def test_reconcile_cancel_shape(client, monkeypatch, slow_sut):
+    """取消形态:3 行串行,首行在飞时取消 → 在飞行自然跑完、余行 canceled,
+    执行 canceled —— 双链语义一致(C11 协作取消:行边界消费)。"""
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+
+    async def _dispatch_and_cancel(username: str, chain: str) -> int:
+        eid = await _dispatch_chain(
+            client, username, dataset_rows=[{"a": "1"}, {"a": "2"}, {"a": "3"}],
+            parallel=1, chain=chain, sut_url=slow_sut)
+        # 等首行真实开跑(首批事件入库)再取消 —— 命中"在飞行"窗口
+        for _ in range(300):
+            async with db_module.SessionLocal() as s:
+                n = (await s.execute(
+                    sa.select(sa.func.count())
+                    .where(ExecutionEvent.execution_id == eid))).scalar()
+            if n:
+                break
+            await asyncio.sleep(0.05)
+        async with db_module.SessionLocal() as s:
+            await execution_queue.request_cancel(s, eid)
+            await s.commit()
+        return eid
+
+    eid_l = await _dispatch_and_cancel("p35m", "legacy")
+    eid_s = await _dispatch_and_cancel("p35n", "server")
+    ex_l, ex_s = await _wait_final(eid_l, timeout_s=120), \
+        await _wait_final(eid_s, timeout_s=120)
+    assert ex_l.status == "canceled" and ex_s.status == "canceled"
+    assert ex_l.passed == ex_s.passed == 1   # 在飞首行双链都自然跑完
+
+    async def _row_statuses(eid: int) -> list:
+        async with db_module.SessionLocal() as s:
+            rs = (await s.execute(
+                sa.select(ExecutionRow.status)
+                .where(ExecutionRow.execution_id == eid)
+                .order_by(ExecutionRow.seq))).scalars().all()
+        return list(rs)
+
+    assert await _row_statuses(eid_l) == await _row_statuses(eid_s)
 
 
 # ── P3.5-2：恢复行级断点(伪引擎)────────────────────────────────

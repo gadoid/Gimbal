@@ -22,7 +22,7 @@ import typer
 from pydantic import TypeAdapter, ValidationError
 
 from gimbal.cli.commands.run_launch import normalize_input
-from gimbal.cli.common import InputFormat, FormatOpt
+from gimbal.cli.common import InputFormat, FormatOpt, OutputFormat
 from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.compiler.pipeline import compile_target, p_validate
 from gimbal.log import get_logger
@@ -31,10 +31,20 @@ from gimbal.schema.scenario import RunUnion
 
 logger = get_logger(__name__)
 
-JsonOpt = Annotated[
-    bool,
-    typer.Option("-o", "--output", help="机器可读 JSON 输出（失败时输出结构化错误）"),
+# -o 语义统一（P3 收尾）：与 run/events 命令同为**取值枚举**（此前是布尔
+# 开关）。jsonl 是执行事件流格式，仅对 run 系列有意义，这里显式拒绝。
+OutputOpt = Annotated[
+    OutputFormat,
+    typer.Option("-o", "--output",
+                 help="输出格式：console（人读）/ json（机器可读，失败时输出结构化错误）"),
 ]
+
+
+def _json_mode(output: OutputFormat) -> bool:
+    if output == OutputFormat.jsonl:
+        raise typer.BadParameter(
+            "jsonl 是执行事件流格式，仅用于 run 系列命令")
+    return output == OutputFormat.json
 
 _CODE_PREFIX_RE = re.compile(r"^([A-Z][A-Z0-9_]*): (.*)$", re.S)
 
@@ -123,9 +133,10 @@ def compile_cmd(
     source: Annotated[str, typer.Argument(help="Scenario/Graph 文件路径", metavar="SOURCE")],
     fmt: FormatOpt = InputFormat.auto,
     full: Annotated[bool, typer.Option("--full", help="输出完整 Plan（含生效副本）而非摘要")] = False,
-    json_mode: JsonOpt = False,
+    output: OutputOpt = OutputFormat.console,
 ) -> None:
     """编译为 Plan 并打印（不执行）。"""
+    json_mode = _json_mode(output)
     ok, target = _load_target(source, fmt, json_mode)
     if not ok:
         raise typer.Exit(code=2)
@@ -147,9 +158,10 @@ def compile_cmd(
 def validate_cmd(
     source: Annotated[str, typer.Argument(help="Scenario/Graph 文件路径", metavar="SOURCE")],
     fmt: FormatOpt = InputFormat.auto,
-    json_mode: JsonOpt = False,
+    output: OutputOpt = OutputFormat.console,
 ) -> None:
     """校验：schema + 编译管线 + Plan 校验（不执行）。"""
+    json_mode = _json_mode(output)
     ok, target = _load_target(source, fmt, json_mode)
     if not ok:
         raise typer.Exit(code=2)
@@ -184,11 +196,13 @@ def resolve_cmd(
     source: Annotated[str, typer.Argument(help="Scenario/Graph 文件路径", metavar="SOURCE")],
     fmt: FormatOpt = InputFormat.auto,
     unit: Annotated[str | None, typer.Option("--unit", help="导出指定单元为独立可调 scenario（inputs 注入 config.vars）")] = None,
-    json_mode: JsonOpt = False,
+    output: OutputOpt = OutputFormat.console,
 ) -> None:
     """展示编译视图：单元清单 + 静态分析输入/输出面 + 连线；--unit 导出单元。"""
     import json as _json
     from gimbal.compiler.analysis import analyze_scenario
+
+    json_mode = _json_mode(output)
 
     ok, target = _load_target(source, fmt, json_mode)
     if not ok:

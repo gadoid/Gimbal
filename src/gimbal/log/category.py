@@ -12,7 +12,10 @@
     gimbal.scheduler.*                                → scheduler
     gimbal.plugins.*                                  → plugin
     gimbal.core.debugger                              → debug
-    其余                                              → core
+    gimbal.core.runner / scenario_runner              → step   （状态机：run/单元/步骤生命周期推进）
+    gimbal.preprocessor.*                             → resolve（预处理：模板渲染/vars/users 解析）
+    gimbal.context.*                                  → context（上下文：channels/views/scratch 通道）
+    其余（含经 InterceptHandler 桥接的第三方 stdlib 名）→ core
 """
 from __future__ import annotations
 
@@ -26,12 +29,17 @@ _PREFIX_MAP: tuple[tuple[str, str], ...] = (
     ("gimbal.scheduler.", "scheduler"),
     ("gimbal.plugins.", "plugin"),
     ("gimbal.core.debugger", "debug"),
+    ("gimbal.core.runner", "step"),
+    ("gimbal.core.scenario_runner", "step"),
+    ("gimbal.preprocessor.", "resolve"),
+    ("gimbal.context.", "context"),
 )
 
 DEFAULT_CATEGORY = "core"
 
 CATEGORIES: tuple[str, ...] = (
-    "call", "auth", "strategy", "compiler", "scheduler", "plugin", "debug", "core",
+    "call", "auth", "strategy", "compiler", "scheduler", "plugin", "debug",
+    "step", "resolve", "context", "core",
 )
 
 

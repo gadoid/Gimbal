@@ -165,6 +165,11 @@ class InMemoryEventBus:
                 for name, value in exec_labels().items():
                     if getattr(event, name, None) is None:
                         object.__setattr__(event, name, value)
+                # 信封完整(P3 收尾)：run_id 是消费者按 run 关联的正式字段,
+                # 与标签 run 同值 —— 已入 run 边界的事件二者必齐
+                if (getattr(event, "run_id", "__missing__") is None
+                        and getattr(event, "run", None) is not None):
+                    object.__setattr__(event, "run_id", event.run)
             except Exception:  # noqa: BLE001  # 盖章失败不影响派发
                 pass
             for sub in self._subscriptions:

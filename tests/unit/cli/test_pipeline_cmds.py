@@ -52,7 +52,8 @@ def _write(tmp_path: Path, target) -> str:
 
 
 def _invoke_json(cmd: str, source: str):
-    result = runner.invoke(starter, [cmd, source, "-o"])
+    # -o 语义统一（P3 收尾）：取值形态 ``-o json``（此前布尔开关是裸 -o）
+    result = runner.invoke(starter, [cmd, source, "-o", "json"])
     assert result.exit_code == 2, (result.exit_code, result.output)
     data = json.loads(result.output)
     assert data["ok"] is False
@@ -144,7 +145,7 @@ def test_validate_success_json_shape(tmp_path):
     p = tmp_path / "ok.json"
     p.write_text(json.dumps(sc.model_dump(mode="json"), ensure_ascii=False),
                  encoding="utf-8")
-    result = runner.invoke(starter, ["validate", str(p), "-o"])
+    result = runner.invoke(starter, ["validate", str(p), "-o", "json"])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data == {"ok": True, "kind": "scenario", "mode": "aggregate",
@@ -157,7 +158,7 @@ def test_resolve_unknown_unit_json_error(tmp_path):
     p = tmp_path / "r.json"
     p.write_text(json.dumps(sc.model_dump(mode="json"), ensure_ascii=False),
                  encoding="utf-8")
-    result = runner.invoke(starter, ["resolve", str(p), "--unit", "ghost", "-o"])
+    result = runner.invoke(starter, ["resolve", str(p), "--unit", "ghost", "-o", "json"])
     assert result.exit_code == 2, result.output
     payload = json.loads(result.output)
     assert payload["ok"] is False

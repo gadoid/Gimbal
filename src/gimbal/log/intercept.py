@@ -50,7 +50,11 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back  # type: ignore[assignment]
             depth += 1
 
-        # 使用 opt(depth=…, exception=…) 保留原始位置和异常信息
-        logger.opt(depth=depth, exception=record.exc_info).log(
+        # 使用 opt(depth=…, exception=…) 保留原始位置和异常信息；
+        # bind(name=record.name) 保留 stdlib 侧原始 logger 名 —— JsonSink
+        # 与 category 映射据此取值（否则统一显示 "logging"、全归 core，
+        # 第三方库(httpx/uvicorn…)与引擎自身日志无法区分）
+        logger.opt(depth=depth, exception=record.exc_info).bind(
+            name=record.name).log(
             level, record.getMessage()
         )

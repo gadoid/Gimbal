@@ -164,6 +164,9 @@ class ExecutionEvent(Base):
     module: Mapped[str | None] = mapped_column(String(128), nullable=True)
     service: Mapped[str | None] = mapped_column(String(128), nullable=True)
     protocol: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 调用边界端点标识（P3 收尾信封完整：view_hints.endpoint_id 或
+    # service/method/path 推导），0010 迁移补列
+    endpoint: Mapped[str | None] = mapped_column(String(128), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attempt: Mapped[str | None] = mapped_column(String(16), nullable=True)
     step: Mapped[str | None] = mapped_column(String(64), nullable=True)
