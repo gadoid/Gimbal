@@ -17,7 +17,6 @@ STRATEGY_BEFORE 复用 dispatcher 现有 STOP→SKIP）；引擎的三个让步�
 """
 from __future__ import annotations
 
-import json
 import queue
 import threading
 from typing import Any, Optional, Protocol
@@ -49,28 +48,38 @@ def debug_unit_count(target) -> int:
 
 
 class CliSession:
-    """终端极简会话（v1 口径）：回车=continue/下一步、q=abort、r=read。
+    """终端极简会话：回车=continue/下一步、q=abort、r=read。
 
     S-6：提示与输出走 **stderr** —— `--debug` 与 `-o jsonl` 同用时
     stdout 保持纯事件流（平台/CI 按行消费不被调试提示污染）。
+    N6：文本行经 parse_debug_command 解析为结构化命令；解析失败在会话内
+    友好重试（不进 debugger 命令循环）。
     """
 
     def send(self, text: str) -> None:
         import sys
         print(text, file=sys.stderr, flush=True)
 
-    def recv(self, timeout: Optional[float] = None) -> Optional[str]:
+    def recv(self, timeout: Optional[float] = None) -> Optional["DebugCommand"]:
         import sys
-        try:
-            return input("(debug) 回车=继续 q=退出 r=查看 > ").strip() or "continue"
-        except EOFError:
-            return "abort"
-        # 注:input 的提示经 readline 走 stderr(无 readline 平台由 send 的
-        # stderr 提示兜底),不再向 stdout 写任何调试内容
+        from gimbal.schema.debug import DebugCommand, DebugCommandError, parse_debug_command
+        while True:
+            try:
+                line = input("(debug) 回车=继续 q=退出 r=查看 > ")
+            except EOFError:
+                return DebugCommand(kind="abort")
+            try:
+                return parse_debug_command(line)
+            except DebugCommandError as e:
+                self.send(f"[debug] {e}")
 
 
 class ScriptedSession:
-    """测试用预编程序列会话：按序返回命令；耗尽后返回 'continue'。"""
+    """测试用预编程序列会话：按序返回命令；耗尽后返回 continue。
+
+    命令仍是文本写法（与 CLI 同一 parse 通道）。惰性解析：坏命令在 recv
+    时报错并继续取下一条（与会话内友好重试同语义）。
+    """
 
     def __init__(self, commands: list[str]) -> None:
         self._commands = list(commands)
@@ -79,27 +88,32 @@ class ScriptedSession:
     def send(self, text: str) -> None:
         self.log.append(text)
 
-    def recv(self, timeout: Optional[float] = None) -> Optional[str]:
-        if not self._commands:
-            return "continue"
-        return self._commands.pop(0).strip() or "continue"
+    def recv(self, timeout: Optional[float] = None) -> Optional["DebugCommand"]:
+        from gimbal.schema.debug import DebugCommand, DebugCommandError, parse_debug_command
+        while self._commands:
+            raw = self._commands.pop(0)
+            try:
+                return parse_debug_command(raw)
+            except DebugCommandError as e:
+                self.send(f"[debug] {e}")
+        return DebugCommand(kind="continue")
 
 
 class QueueSession:
-    """server 会话：命令经队列注入（POST /runs/{id}/debug），输出可取回。"""
+    """server 会话：结构化命令经队列注入（POST /runs/{id}/debug），输出可取回。"""
 
     def __init__(self, timeout: float = 300.0) -> None:
-        self._inbox: "queue.Queue[str]" = queue.Queue()
+        self._inbox: "queue.Queue[DebugCommand]" = queue.Queue()
         self.output: list[str] = []
         self.timeout = timeout
 
     def send(self, text: str) -> None:
         self.output.append(text)
 
-    def submit(self, command: str) -> None:
+    def submit(self, command: "DebugCommand") -> None:
         self._inbox.put(command)
 
-    def recv(self, timeout: Optional[float] = None) -> Optional[str]:
+    def recv(self, timeout: Optional[float] = None) -> Optional["DebugCommand"]:
         try:
             return self._inbox.get(timeout=timeout if timeout is not None else self.timeout)
         except queue.Empty:
@@ -219,9 +233,13 @@ class DebuggerPlugin:
     def _pause(self, point: str, step_id: str, payload: dict) -> tuple[str, str, Optional[dict]]:
         """阻塞等一条命令；超时按 abort。返回 (命令, 附注, 携带数据)。
 
+        命令是结构化 ``DebugCommand``（N6：文本解析在会话层完成；server
+        请求体经 pydantic 校验直接携带模型，运行期不再有未知命令分支）。
         携带数据仅 write/patch 改值命令非空（P1-10）：
         ``{"write": {变量名: 值}}`` / ``{"patch": {jsonpath: 值}}``。
         """
+        from gimbal.schema.debug import DebugCommand
+
         self.paused_count += 1
         result = getattr(payload.get("result"), "error", None)
         head = f"[debug 暂停] {point} step={step_id}"
@@ -230,93 +248,50 @@ class DebuggerPlugin:
         self.session.send(head)
         self._emit_event("paused", {"point": point, "step_id": step_id})
 
-        cmd = self.session.recv(timeout=self.wait_timeout)
-        if cmd is None:
+        command = self.session.recv(timeout=self.wait_timeout)
+        if command is None:
             self.session.send("[debug] 等待超时，按 abort 处理")
             return "abort", "debug wait timeout", None
 
-        cmd = cmd.strip() or "continue"
-        if cmd in ("r", "read"):
+        kind = command.kind
+
+        if kind == "read":
             call = self._latest_call(payload)
             self.session.send(f"[read] 最近调用证据: {call}")
             self._emit_event("command", {"point": point, "step_id": step_id, "cmd": "read"})
             # read 后继续等下一条
             return self._pause(point, step_id, payload)
 
-        # P1-10：write/patch 改值命令（点位校验 + 宽松 JSON 值解析）
-        if cmd.split(" ", 1)[0] in ("write", "patch"):
-            parsed, err = self._parse_set_command(cmd, point)
-            if parsed is None:
-                self.session.send(f"[debug] {err}")
-                self._emit_event("command", {"point": point, "step_id": step_id,
-                                             "cmd": cmd, "unknown": True})
+        # P1-10/N6：write/patch 改值命令（点位校验留在运行期——schema 不知点位）
+        if kind in ("write", "patch"):
+            if kind == "write" and point != "step.before":
+                self.session.send("[debug] write 仅在 step.before 暂停时可用")
                 return self._pause(point, step_id, payload)
-            kind, key, value = parsed
+            if kind == "patch":
+                if point != "call.before":
+                    self.session.send("[debug] patch 仅在 call.before 暂停时可用")
+                    return self._pause(point, step_id, payload)
+                if not (command.path or "").startswith("$."):
+                    self.session.send("[debug] patch 的键须为 JSONPath（以 $. 开头）")
+                    return self._pause(point, step_id, payload)
             # 事件只记键不记值（敏感值不进事件流）
             self._emit_event("command", {"point": point, "step_id": step_id,
-                                         "cmd": kind, "key": key})
+                                         "cmd": kind, "key": command.key()})
             self._emit_event("resumed", {"point": point, "step_id": step_id,
                                           "decision": kind})
-            return kind, f"debugger:{kind}", {kind: {key: value}}
+            return kind, f"debugger:{kind}", {kind: {command.key(): command.value}}
 
-        if cmd not in ("continue", "step", "c", "\n", "q", "quit", "abort",
-                       "retry", "skip"):
-            self.session.send(f"[debug] 未知命令 {cmd!r}（{self._allowed_commands(point)}）")
-            self._emit_event("command", {"point": point, "step_id": step_id, "cmd": cmd, "unknown": True})
-            return self._pause(point, step_id, payload)
-
-        normalized = {"c": "continue", "step": "continue", "\n": "continue",
-                      "q": "abort", "quit": "abort"}[cmd] if cmd in ("c", "step", "\n", "q", "quit") else cmd
-        self._emit_event("command", {"point": point, "step_id": step_id, "cmd": normalized})
+        # continue/step 同为放行（every_step 档位下 step 即步进语义）
+        if kind in ("continue", "step"):
+            action = "continue"
+        else:
+            action = kind   # abort / retry / skip
+        self._emit_event("command", {"point": point, "step_id": step_id, "cmd": action})
         self._emit_event("resumed", {"point": point, "step_id": step_id,
-                                       "decision": normalized})
-        return normalized, f"debugger:{normalized}", None
+                                      "decision": action})
+        return action, f"debugger:{action}", None
 
-    # ── write/patch 命令解析（P1-10）──────────────────────────
-
-    @staticmethod
-    def _parse_set_command(
-        cmd: str, point: str,
-    ) -> tuple[Optional[tuple[str, str, Any]], Optional[str]]:
-        """解析改值命令：``write <变量名>=<json>`` / ``patch <jsonpath>=<json>``。
-
-        值解析宽松：先 json.loads，失败回落原串（裸 token 按字符串）。
-        返回 ``((kind, key, value), None)`` 或 ``(None, 错误提示)``——
-        错误提示面向会话（友好重试，不崩会话循环）。
-        """
-        kind, _, rest = cmd.partition(" ")
-        usage = {
-            "write": 'write <变量名>=<json>（如 write orderId="O-9"）',
-            "patch": "patch <jsonpath>=<json>（如 patch $.request.body.qty=5）",
-        }.get(kind, "write/patch <键>=<json>")
-        key, eq, raw = rest.strip().partition("=")
-        key, raw = key.strip(), raw.strip()
-        if not key or not eq or not raw:
-            return None, f"命令格式错误，用法: {usage}"
-        if kind == "write" and point != "step.before":
-            return None, "write 仅在 step.before 暂停时可用"
-        if kind == "patch":
-            if point != "call.before":
-                return None, "patch 仅在 call.before 暂停时可用"
-            if not key.startswith("$."):
-                return None, f"patch 的键须为 JSONPath（以 $. 开头），用法: {usage}"
-        try:
-            value: Any = json.loads(raw)
-        except json.JSONDecodeError:
-            value = raw   # 裸 token 回落：按字符串
-        return (kind, key, value), None
-
-    @staticmethod
-    def _allowed_commands(point: str) -> str:
-        """各暂停点可用的命令清单（未知命令提示用）。"""
-        allowed = "continue/step/q/r"
-        if point == "step.failed":
-            allowed += "/retry/skip"
-        if point == "step.before":
-            allowed += "/write"
-        if point == "call.before":
-            allowed += "/patch"
-        return allowed
+    # ── 最近调用证据（read 命令）─────────────────────────────
 
     @staticmethod
     def _latest_call(payload: dict) -> Any:

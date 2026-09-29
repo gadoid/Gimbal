@@ -2,15 +2,19 @@
 
 挂在 create_app 产出的 FastAPI 应用上（server.py 调 register_debug_endpoints）：
 
-  POST /runs                异步启动（单 run；立即返回 runId）
+  POST /runs                异步启动（单 run；立即返回 runId；C12 起支持
+                            n_runs/parallel 乘法参数与 POST cancel）
   GET  /runs/{id}           状态与摘要
-  POST /runs/{id}/debug     调试命令（continue/step/retry/skip/abort/read/write/patch）
+  POST /runs/{id}/debug     调试命令（N6 结构化 DebugCommand：
+                            continue/step/abort/read/write/patch/retry/skip）
+  POST /runs/{id}/cancel    协作取消（C12：置位外层取消事件，步骤边界/
+                            未启动单元生效；平台取消链的执行器侧端点）
   GET  /runs/{id}/events    SSE 事件流（id=序号；批次 F 补 Last-Event-ID 续传）
 
 鉴权（S-6）：
   - POST /runs：GIMBAL_SERVER_TOKEN 已配置 → Bearer/X-Gimbal-Token 匹配
     （401）；未配置 → 仅回环（127.0.0.1/::1/localhost）可启动，非回环 403；
-  - debug / events 端点：要求 GIMBAL_SERVER_TOKEN 已配置且匹配（403/401）。
+  - debug / cancel / events 端点：要求 GIMBAL_SERVER_TOKEN 已配置且匹配（403/401）。
   - debug 请求校验：目标必须单单元（与 CLI --debug 同一条校验），否则 422。
 注册表回收（S-6）：run 终态后 _REAP_TTL_SEC（默认 600s）由后台 Timer
 回收条目（GET /runs/{id} 此后 404）。
@@ -32,6 +36,7 @@ logger = get_logger(__name__)
 # server.py 在 create_app() 内延迟导入本模块，此时 server 模块已初始化完毕）
 from gimbal.core.server import (  # noqa: E402
     RunsRequest, RunsCreated, DebugCommandRequest, DebugCommandResponse,
+    CancelResponse,
 )
 
 NL = chr(10)
@@ -103,6 +108,22 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 status_code=422, detail=f"target validation failed: {exc}"
             ) from exc
 
+        # C12：乘法参数（N4 同款目标变换；debug 与乘法互斥——单单元且 n_runs=1）
+        if req.n_runs > 1 or req.parallel > 1:
+            if req.debug is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="debug requires n_runs=1 and parallel=1",
+                )
+            from gimbal.cli.commands.run_launch import apply_multiplication
+            try:
+                target = apply_multiplication(
+                    target, n_runs=req.n_runs, parallel=req.parallel)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"multiplication transform failed: {exc}") from exc
+
         # debug 单单元校验（S-6:与 CLI --debug 同一条校验函数）
         if req.debug is not None:
             from gimbal.core.debugger import debug_unit_count
@@ -134,18 +155,22 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             from gimbal.core.debugger import QueueSession
             session = QueueSession(
                 timeout=req.debug.wait_timeout or 300.0) if req.debug else None
+            # C12：外层取消事件 —— POST /runs/{id}/cancel 置位，
+            # 经 RuntimeControl.cancel_event 在步骤边界/未启动单元生效
+            cancel_event = threading.Event()
             registry[run_id] = {"status": "running", "result": None, "error": None,
-                                "debugger": None, "session": session, "events": []}
+                                "debugger": None, "session": session, "events": [],
+                                "cancel": cancel_event}
 
         from gimbal.core.scenario_runner import RuntimeControl
-        runtime_control = None
-        if req.halt_at is not None or req.step_from is not None or req.debug is not None:
-            runtime_control = RuntimeControl(
-                halt_at=req.halt_at,
-                halt_reason="server-request",
-                step_from=req.step_from,
-                debug_mode=req.debug is not None,   # 调试挂起不计 scenario 超时
-            )
+        # C12 起恒建 RC（cancel 通道恒在）；其余字段按请求
+        runtime_control = RuntimeControl(
+            halt_at=req.halt_at,
+            halt_reason="server-request",
+            step_from=req.step_from,
+            debug_mode=req.debug is not None,   # 调试挂起不计 scenario 超时
+            cancel_event=cancel_event,
+        )
 
         entry = registry[run_id]
 
@@ -226,7 +251,12 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             "summary": None if result is None else {
                 "exitCode": result.exit_code, "total": result.total,
                 "passed": result.passed, "failed": result.failed,
-                "blocked": result.blocked, "repaired": result.repaired,
+                "skipped": getattr(result, "skipped", 0),
+                "halted": getattr(result, "halted", 0),
+                "blocked": getattr(result, "blocked", 0),
+                "repaired": getattr(result, "repaired", 0),
+                # C12:P2-05 口径 —— 乘法执行次数单列(平台台账投影源)
+                "attempts": getattr(result, "attempts", 0),
             },
         }
 
@@ -246,10 +276,52 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             raise HTTPException(status_code=409, detail="run not started with debug")
         if entry["status"] != "running":
             return DebugCommandResponse(accepted=False, output=session.drain_output())
-        session.submit(req.command)
+        session.submit(req.command)   # N6：结构化命令（请求体已校验）
         import asyncio
         await asyncio.sleep(0.05)   # 给执行线程一点时间产出输出(S-6:不阻塞事件循环)
         return DebugCommandResponse(accepted=True, output=session.drain_output())
+
+    @app.get("/runs/{run_id}/debug/output")
+    async def debug_output(
+        run_id: str,
+        authorization: str | None = Header(default=None),
+        x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
+    ) -> Any:
+        """C6（P3-04）：取回（并清空）调试会话输出缓冲。
+
+        平台调试台轮询此端点转发暂停提示；与命令响应的 output 同源
+        （后取者得增量，消费即清）。
+        """
+        _require_token(authorization, x_gimbal_token)
+        entry = registry.get(run_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="unknown run")
+        session = entry.get("session")
+        if session is None:
+            return {"output": []}
+        return {"output": session.drain_output()}
+
+    @app.post("/runs/{run_id}/cancel", response_model=CancelResponse)
+    async def cancel_run(
+        run_id: str,
+        authorization: str | None = Header(default=None),
+        x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
+    ) -> Any:
+        """C12（P3-02）：协作取消 —— 置位外层取消事件。
+
+        生效点：在飞步骤完成后的步骤边界、未启动单元的调度边界；
+        在飞的单笔请求不中断（至多跑满协议超时）。
+        """
+        _require_token(authorization, x_gimbal_token)
+        entry = registry.get(run_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="unknown run")
+        cancel = entry.get("cancel")
+        if entry["status"] != "running" or cancel is None:
+            return CancelResponse(accepted=False, runId=run_id)
+        cancel.set()
+        logger.info("[Server] 协作取消已请求: {}", run_id)
+        return CancelResponse(accepted=True, runId=run_id)
 
     @app.get("/runs/{run_id}/events")
     async def run_events(

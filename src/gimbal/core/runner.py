@@ -36,6 +36,37 @@ from gimbal.log.exec_context import exec_context
 logger = get_logger(__name__)
 
 
+class _CompositeCancel:
+    """外层取消（server cancel）与内层取消（attempt 超时）的合成视图。
+
+    C12（P3-02）：scenario_runner 只消费 ``is_set()``——任一置位即视为已
+    取消；内层置位**不回写**外层（attempt 超时弃跑后重试是合法路径，
+    不得终止整个 run）。``set()`` 只置内层（场景内主动取消=本 attempt）。
+    """
+
+    __slots__ = ("_outer", "_inner")
+
+    def __init__(self, outer, inner) -> None:
+        self._outer = outer
+        self._inner = inner
+
+    def is_set(self) -> bool:
+        return self._outer.is_set() or self._inner.is_set()
+
+    def set(self) -> None:
+        self._inner.set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        import time as _time
+        deadline = None if timeout is None else _time.monotonic() + timeout
+        while True:
+            if self.is_set():
+                return True
+            if deadline is not None and _time.monotonic() >= deadline:
+                return False
+            _time.sleep(0.02)
+
+
 # ── RunResult ─────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -429,17 +460,39 @@ class Engine:
                 "config": scenario.config.model_copy(update={"vars": merged}),
             })
         logger.debug("[Engine] 开始执行单元: unit_id={}", unit.id)
+        # C12（P3-02）：外层取消（server POST /runs/{id}/cancel 置位）在
+        # 单元调度边界短路 —— 未启动的单元不再进场景（在飞步骤由
+        # scenario_runner 的步骤边界检查收口）
+        outer = (getattr(runtime_control, "cancel_event", None)
+                 if runtime_control is not None else None)
+        if outer is not None and outer.is_set():
+            from datetime import datetime, timezone
+            from gimbal.core.scenario_runner import ScenarioRunResult
+            now = datetime.now(timezone.utc)
+            logger.warning(
+                "[Engine] 外层取消已置位，单元短路: unit_id={}", unit.id)
+            return ScenarioRunResult(
+                scenario_id=scenario.scenarioId, status="halted",
+                started_at=now, ended_at=now,
+                halted=True, halt_reason="cancelled",
+            )
         rc = runtime_control
         if cancel is not None:
             # 调度器超时弃跑的协作取消——**复制后挂事件,不改共享对象**：
             # runtime_control 由本次 run 的所有单元/所有 attempt 共用,
             # 原地写入会把第一次超时的置位事件泄漏给后续全部执行
-            # （CLI --halt-at/--step-from/--debug、server halt/step_from 路径）
+            # （CLI --halt-at/--step-from/--debug、server halt/step_from 路径）。
+            # C12：外层取消事件存在时挂合成视图——外层置位（server cancel）
+            # 场景可见；内层置位（本 attempt 超时）不回写外层（重试可继续）
             import dataclasses
             from gimbal.core.scenario_runner import RuntimeControl as _RC
-            rc = (dataclasses.replace(runtime_control, cancel_event=cancel)
-                  if runtime_control is not None
-                  else _RC(cancel_event=cancel))
+            if outer is not None:
+                rc = dataclasses.replace(
+                    runtime_control, cancel_event=_CompositeCancel(outer, cancel))
+            else:
+                rc = (dataclasses.replace(runtime_control, cancel_event=cancel)
+                      if runtime_control is not None
+                      else _RC(cancel_event=cancel))
         return runner.run(scenario, suite_ctx, runtime_control=rc)
 
     # ── 判定（两套历史口径，零回归）────────────────────────────

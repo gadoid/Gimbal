@@ -41,9 +41,11 @@ class ServerConfig:
 
 # ─── 请求/响应模型(模块级:FastAPI 签名解析不支持函数内局部类) ──
 
-def _define_models() -> tuple[type, type]:
+def _define_models() -> tuple[type, ...]:
     """惰性定义(导入期不依赖 fastapi)+ 模块级注册,见 _RunRequest。"""
     from pydantic import BaseModel, Field
+
+    from gimbal.schema.debug import DebugCommand  # noqa: F401（N6 结构化命令）
 
     class RunRequest(BaseModel):
         """POST /run 请求体。
@@ -78,6 +80,10 @@ def _define_models() -> tuple[type, type]:
         debug: DebugSpec | None = Field(None, description="调试装载（单单元且 n_runs=1）")
         halt_at: int | None = Field(None)
         step_from: int | None = Field(None)
+        # C12（P3-02）：乘法参数（N4 同款语义——Scenario 变换为隐式
+        # aggregate graph，SuiteGraph 逐单元/策略覆盖）
+        n_runs: int = Field(1, ge=1, le=64, description="运行期重复次数")
+        parallel: int = Field(1, ge=1, le=64, description="graph 单元级并发上限")
         # P1-04：声明式订阅（与 CLI --subscribe / graph.subscribe 同款写法；
         # 请求期校验，非法 422；输出落 server 进程的 sink 通道）
         subscribe: list[dict] | None = Field(
@@ -88,19 +94,29 @@ def _define_models() -> tuple[type, type]:
         debugEnabled: bool = False
 
     class DebugCommandRequest(BaseModel):
-        command: str = Field(..., description="continue/step/retry/skip/abort/read/write/patch")
+        """N6（P3-04）：结构化调试命令（pydantic 校验即红线）。"""
+        command: "DebugCommand" = Field(..., description="调试命令（continue/step/abort/read/write/patch/retry/skip）")
+
+    class DebugCommandResponse(BaseModel):
+        accepted: bool
+        output: list[str] = Field(default_factory=list)
+
+    class CancelResponse(BaseModel):
+        """POST /runs/{id}/cancel：协作取消已请求（步骤边界/未启动单元生效）。"""
+        accepted: bool
+        runId: str
 
     class DebugCommandResponse(BaseModel):
         accepted: bool
         output: list[str] = Field(default_factory=list)
 
     return (RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
-            DebugCommandRequest, DebugCommandResponse)
+            DebugCommandRequest, DebugCommandResponse, CancelResponse)
 
 
 _MODELS = _define_models()
 (RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
- DebugCommandRequest, DebugCommandResponse) = _MODELS
+ DebugCommandRequest, DebugCommandResponse, CancelResponse) = _MODELS
 
 
 # ─── app 工厂 ─────────────────────────────────────────────────────

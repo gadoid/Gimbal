@@ -81,17 +81,17 @@ class TestServerAuth:
 
     def test_debug_endpoint_forbidden_without_token_env(self, client, monkeypatch):
         monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
-        r = client.post("/runs/xxx/debug", json={"command": "continue"})
+        r = client.post("/runs/xxx/debug", json={"command": {"kind": "continue"}})
         assert r.status_code == 403
         assert "GIMBAL_SERVER_TOKEN" in r.json()["detail"]
 
     def test_debug_endpoint_rejects_wrong_token(self, client, monkeypatch):
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "s3cret")
-        r = client.post("/runs/xxx/debug", json={"command": "continue"},
+        r = client.post("/runs/xxx/debug", json={"command": {"kind": "continue"}},
                         headers={"X-Gimbal-Token": "wrong"})
         assert r.status_code == 401
         r2 = client.post(
-            "/runs/xxx/debug", json={"command": "continue"},
+            "/runs/xxx/debug", json={"command": {"kind": "continue"}},
             headers={"Authorization": "Bearer s3cret"})
         assert r2.status_code in (404, 409)   # 鉴权过了，卡在 run 不存在
 
@@ -125,7 +125,7 @@ class TestAsyncRun:
             assert r2.status_code == 409
         finally:
             # 下发 continue 让其结束
-            client.post(f"/runs/{rid}/debug", json={"command": "continue"},
+            client.post(f"/runs/{rid}/debug", json={"command": {"kind": "continue"}},
                         headers={"X-Gimbal-Token": "t"})
             _wait_finished(client, rid, timeout=15)
 
@@ -155,7 +155,7 @@ class TestDebugOverServer:
             if st["status"] == "running":
                 # 有暂停输出即可下发 continue
                 r2 = client.post(f"/runs/{rid}/debug",
-                                 json={"command": "continue"},
+                                 json={"command": {"kind": "continue"}},
                                  headers={"X-Gimbal-Token": "tok-1"})
                 if r2.status_code == 200 and r2.json()["accepted"]:
                     paused = True
@@ -262,3 +262,121 @@ class TestServerProtection:
                 break
             _t.sleep(0.05)
         assert code == 404
+
+
+class TestCancelAndMultiplication:
+    """C12（P3-02）：cancel 端点 + n_runs 乘法 + debug output 端点。"""
+
+    def test_cancel_requires_token(self, client, monkeypatch):
+        monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
+        r = client.post("/runs/xxx/cancel")
+        assert r.status_code == 403
+
+    def test_cancel_unknown_run_404(self, client, monkeypatch):
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t1")
+        r = client.post("/runs/xxx/cancel",
+                        headers={"X-Gimbal-Token": "t1"})
+        assert r.status_code == 404
+
+    def test_cancel_accepted_for_running_and_rejected_after_finish(
+        self, client, monkeypatch,
+    ):
+        """慢场景运行中 cancel 被受理；终态后再 cancel 拒绝。"""
+        import threading
+        from debugger.test_batch_e import ProgEcho
+        gate = threading.Event()
+        release = threading.Event()
+
+        class _Gated(ProgEcho):
+            protocol = "echo"
+
+            def send(self, spec, view):
+                gate.set()
+                release.wait(timeout=10.0)
+                return super().send(spec, view)
+
+        import gimbal.protocols.registry as preg
+        monkeypatch.setattr(
+            preg, "build_default_protocol_registry",
+            lambda **kw: _registry_with_gated(**kw))
+
+        reg_holder = {}
+
+        def _registry_with_gated(**kw):
+            reg = _ORIG_BUILD(**kw)
+            reg.register(_Gated())
+            reg_holder["reg"] = reg
+            return reg
+
+        # 两步场景:取消落在 step1 完成后的步骤边界(单步场景在飞即终态,
+        # 边界检查没有落点)
+        two_step = _scenario_dict("srv-cancel")
+        two_step["steps"].append({"kind": "step",
+                                  "call": {"protocol": "echo", "message": "s2"},
+                                  "strategy": []})
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t2")
+        h = {"X-Gimbal-Token": "t2"}
+        r = client.post("/runs", json={"target": two_step}, headers=h)
+        assert r.status_code == 200, r.text
+        rid = r.json()["runId"]
+        assert gate.wait(timeout=10.0), "run 未进入发送"
+
+        rc = client.post(f"/runs/{rid}/cancel", headers=h)
+        assert rc.status_code == 200 and rc.json()["accepted"] is True
+        release.set()
+        st = _wait_finished(client, rid)
+        # 协作取消:执行以 halted/canceled 口径收口(exit 非 0)
+        assert st["summary"]["exitCode"] != 0
+
+        rc2 = client.post(f"/runs/{rid}/cancel", headers=h)
+        assert rc2.status_code == 200 and rc2.json()["accepted"] is False
+
+    def test_n_runs_multiplication_via_server(self, client, monkeypatch):
+        """n_runs=3 → attempts=3、total 按单元计数（=1）。"""
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t3")
+        h = {"X-Gimbal-Token": "t3"}
+        r = client.post("/runs", json={
+            "target": _scenario_dict("srv-nruns"), "n_runs": 3,
+        }, headers=h)
+        assert r.status_code == 200, r.text
+        rid = r.json()["runId"]
+        st = _wait_finished(client, rid)
+        assert st["summary"]["exitCode"] == 0
+        assert st["summary"]["passed"] == 1
+        assert st["summary"]["attempts"] == 3
+
+    def test_debug_with_multiplication_rejected(self, client, monkeypatch):
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t4")
+        h = {"X-Gimbal-Token": "t4"}
+        r = client.post("/runs", json={
+            "target": _scenario_dict(), "n_runs": 3,
+            "debug": {"pause": "every_step"},
+        }, headers=h)
+        assert r.status_code == 422
+
+    def test_debug_output_endpoint(self, client, monkeypatch):
+        """every_step 暂停产出提示 → GET /debug/output 取回。"""
+        from gimbal.core.debugger import QueueSession
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t5")
+        h = {"X-Gimbal-Token": "t5"}
+        r = client.post("/runs", json={
+            "target": _scenario_dict(), "debug": {"pause": "every_step"},
+        }, headers=h)
+        rid = r.json()["runId"]
+        # 暂停提示出现在 output（轮询等待 debugger 装载）
+        import time as _t
+        deadline = _t.time() + 10
+        got: list[str] = []
+        while _t.time() < deadline:
+            ro = client.get(f"/runs/{rid}/debug/output", headers=h)
+            if ro.status_code == 200:
+                got = ro.json().get("output") or []
+                if any("暂停" in line for line in got):
+                    break
+            _t.sleep(0.1)
+        assert any("暂停" in line for line in got), got
+        # 放行收尾
+        rd = client.post(f"/runs/{rid}/debug",
+                         json={"command": {"kind": "continue"}}, headers=h)
+        assert rd.status_code == 200
+        _wait_finished(client, rid)
