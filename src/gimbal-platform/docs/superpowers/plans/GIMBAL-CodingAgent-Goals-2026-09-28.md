@@ -9,7 +9,7 @@
   - 新增 P0-10 ~ P0-12（盘点补充：卫生批、编译期校验补全、预认证补全）；
   - P2-01 / P2-05 / P3-04 / P3-05 补入前置与字段要求；
   - 待拍板表新增 D-6 / D-7；
-  - **P1+P2+P3 主体完成（2026-09-29）**：P1 全部（B1-B4/B6）→ P2 全部（N4/C1-C4/C8-C10）→ P3 的 C5/N5/N1/N2/S4/B5/C7/N3 —— 12 个 Goal 11 笔提交;verify_all 1182/758/131 三步全绿;D-4（不提前）/D-6（保留横切面）已拍板;D-7 已执行。剩余:C11/C12/C13 + C6
+  - **P1+P2+P3 主体完成（2026-09-29）**：P1 全部（B1-B4/B6）→ P2 全部（N4/C1-C4/C8-C10）→ P3 的 C5/N5/N1/N2/S4/B5/C7/N3 —— 12 个 Goal 11 笔提交;verify_all 1182/758/131 三步全绿;D-4（不提前）/D-6（保留横切面）已拍板;D-7 已执行。剩余:C11/C12/C13 + C6 —— **已于 2026-09-29 完成(见 P3-01~04 状态行;全量门 gimbal 1198 / backend 769 / frontend 1133 三步全绿)**
 - **P0 批次执行完成（2026-09-28）**：除 S4（随 D-6 拍板）与 S5（已随本批落库，见路线图执行记录）外，第一部分全部 Goal 完成；全量门 `verify_all.sh` 三步全绿（gimbal+plate 1076 / backend 727 / frontend 1133）。
 
 本文把路线图拆成可以直接交给 coding agent 执行的目标（Goal）。每个 Goal 自成一体：做什么、改哪里、不做什么、怎样算完成、遇到什么情况必须停下来问人。
@@ -365,6 +365,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-01 PG 队列
 
+- **状态（2026-09-29）**：✅ 已完成——0009 迁移 execution_jobs（一执行一任务，fresh 守卫）；claim_next 用 FOR UPDATE SKIP LOCKED（PG）/普通子查询（SQLite）；租约+heartbeat+attempts 上限的孤儿回收（sweep_stale）；dispatch 只入队（ensure_workers 惰性入口覆盖 lifespan 未跑的测试直连）；取消=cancel_requested DB 位+本进程 advisory 快速通道；_in_flight/_cancel_requested/_tasks_by_execution/全局 launch 信号量退役；重启恢复：queued 任务留存续跑、无 job 僵尸 failed 收口；单 worker 串行测试钉住跨执行上界。6 个队列专项测试。
 - **目标**：执行任务持久化排队。
 - **范围**：alembic 迁移；`services/run_dispatcher.py`。
 - **要求**：用 `FOR UPDATE SKIP LOCKED` 取任务；删除 `_in_flight`、`_cancel_requested` 与进程内信号量；支持多个 worker。
@@ -374,6 +375,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-02 执行进程模型切换
 
+- **状态（2026-09-29）**：✅ 已完成——services/gimbal_server_session.py：每执行一个 ``gimbal run server`` 实例（随机空闲端口+平台生成 token+healthz 就绪等待）；POST /runs + SSE 逐帧消费（chunk 边界缓冲分行,事件入 execution_events 同一面）；run.finished 计数映射 LaunchResult；超时→cancel 端点+3s 宽限→launch_status=timeout；close()=terminate→wait→kill 无残留。执行器侧配套：POST /runs/{id}/cancel（外层取消事件,步骤边界/未启动单元生效——_CompositeCancel 双向传播+单元边界短路）;RunsRequest n_runs/parallel(apply_multiplication 同款变换);run_status 摘要补 attempts/skipped/halted。修 P2 遗留:多 case 事件 seq 撞唯一约束被静默丢弃→execution 级单调分配器。server 链端到端测试(真实拉起实例)通过。
 - **目标**：每次执行起一个执行器 server 实例（总案决策 15）。
 - **范围**：`services/gimbal_launcher.py`、`services/run_dispatcher.py`。
 - **要求**：
@@ -386,6 +388,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-03 灰度与对账
 
+- **状态（2026-09-29）**：✅ 已完成——settings.EXEC_CHAIN(legacy|server,默认 legacy=回滚路径即关开关)；dispatch_run(chain_override=) 供对账强制链,config_json.chain 留档；scripts/reconcile_chain.py：同配方双链各跑一次,逐字段 diff(行 unit/status/attempts+计数)+事件类型集合与量级(>20% 差异)比对,verdict match/mismatch。
 - **目标**：新旧执行链可以按执行粒度切换，并能对账。
 - **要求**：提供特性开关；对同一场景可以两条链各跑一次，逐字段对比单元状态、计数与耗时量级；保留回滚路径。
 - **验收**：
@@ -394,6 +397,7 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 
 ### P3-04 调试页
 
+- **状态（2026-09-29）**：✅ 已完成——引擎侧 schema/debug.py 结构化命令(N6:kind+variable/path/value 成对校验,parse_debug_command 统一 CLI 文本协议,server 请求体直接校验 422);GET /runs/{id}/debug/output。平台侧 RunRequest.debug(单 case+nRuns=1+非 graph 强校验 409,恒走 server 链);/executions/{id}/debug(信息|output|command 三代理,token 不出后端);前端 RunConfigPanel 调试模式(pause/断点)+DebugConsole 调试台(事件流 after_seq 增量/输出轮询/九命令面板,write/patch 改值表单)+路由与发起直达跳转。取消语义/结构化校验/代理投影/端到端 server 链均有测试。
 - **目标**：在平台上单步调试一个场景。
 - **范围**：后端代理执行器 `/runs/{id}/debug`；前端新增调试视图。
 - **要求**：
