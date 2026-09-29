@@ -39,27 +39,59 @@ def installed() -> dict:
     return {ep.id: ep for ep in ALL_ENDPOINTS}
 
 
-def _dict_paths(decls: list[dict], out: set[str] | None = None) -> set[str]:
-    """中间形态的声明树 → 模板态 path 集合（测试侧自带展开，不依赖被测实现）。"""
-    out = set() if out is None else out
-    for d in decls:
-        out.add(d["path"])
-        _dict_paths(d.get("children") or [], out)
-    return out
+def test_the_drift_check_catches_every_kind_of_field_regression():
+    """漂移检测不只要说得出「少了什么」，还要说得出「变了什么」。
 
+    只比 path 集合的话，下面四种退化全是静默的，而每一種都会伤到用例作者：
 
-def _spec_paths(decls) -> set[str]:
-    from gimbal_plate.schema.endpoint.io_spec import iter_declarations
+    - 字段消失 —— 按老文档写的断言永远落空
+    - 类型从 string 变 object —— 断言求值器按 string 处理，拿到的却是 dict
+    - 必填标记被抹掉 —— 表单少给一个必填项，后端 422，错的不是用例
+    - 说明被清空 —— 用例作者没有写断言的唯一依据，只能靠猜
 
-    return {d.path for d in iter_declarations(decls)}
+    这一条先 RED：`已有 py 定义` 与 `重新生成` 的比对此前只比 path。
+    """
+    from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
+
+    base = {"name": "batch_id", "path": "$.batch_id", "type": "string",
+            "assertable": True, "required": True, "description": "批次号"}
+
+    def _drift(**over):
+        from gimbal_bootstrap.contract_gen_py import _field_drift
+
+        got = DeclarationEntry(**{**base, "ui_kind": "text", **over})
+        return _field_drift([base], [got])
+
+    assert _drift() == [], "完全一致的字段面不该报漂移"
+
+    for over, needle in [
+        ({"type": "object"}, "类型"),
+        ({"required": False}, "必填"),
+        ({"assertable": False}, "不可断言"),
+        ({"description": "  "}, "说明"),
+        ({"ui_kind": "unknown"}, "控件形态"),
+    ]:
+        out = _drift(**over)
+        assert len(out) == 1, f"应恰好报一条，实际 {out}"
+        assert needle in out[0], f"{needle!r} 没被点名：{out[0]}"
+
+    from gimbal_bootstrap.contract_gen_py import _field_drift
+
+    assert _field_drift([base], []) == ["$.batch_id 消失了"]
 
 
 def test_every_generated_field_is_still_declared_in_the_py_definitions(generated, installed):
-    """生成器展开出的每个字段，都得在已落地的 py 定义里还在。
+    """生成器展开出的每个字段，都得在已落地的 py 定义里还在，且没走样。
 
     少一个就是一个「用例作者按老文档写了断言、跑起来挂掉」的坑 —— 而且是静默的：
     契约少声明一个字段，用例照样能建，只是那条断言永远落空。
+
+    方向仍是单向（生成的 ⊆ 已声明的）：端点文件是给人改的，人可以把说明写得
+    更好看、把一个可选字段标成必填，这些都是允许的；而「掉了一个字段 / 走样了」
+    才是要拦的。
     """
+    from gimbal_bootstrap.contract_gen_py import _field_drift
+
     missing: list[str] = []
     for eid, spec in generated.items():
         ep = installed.get(eid)
@@ -67,15 +99,10 @@ def test_every_generated_field_is_still_declared_in_the_py_definitions(generated
             missing.append(f"{eid}: 契约里有这个端点，plate 的定义里没有")
             continue
         for status, r in spec["responses"].items():
-            want = _dict_paths(r["declarations"])
-            got = _spec_paths(ep.responses[int(status)].declarations)
-            dropped = sorted(want - got)
-            if dropped:
-                missing.append(f"{eid} {status} 少了 {len(dropped)} 个字段: {dropped[:5]}")
-        want = _dict_paths(spec["request"]["declarations"])
-        got = _spec_paths(ep.request.declarations)
-        if want - got:
-            missing.append(f"{eid} request 少了 {sorted(want - got)[:5]}")
+            drift = _field_drift(r["declarations"], ep.responses[int(status)].declarations)
+            missing += [f"{eid} {status} {d}" for d in drift[:5]]
+        drift = _field_drift(spec["request"]["declarations"], ep.request.declarations)
+        missing += [f"{eid} request {d}" for d in drift[:5]]
     assert not missing, "py 契约定义与重新生成的结果不一致：\n" + "\n".join(missing)
 
 
@@ -139,12 +166,17 @@ def test_the_py_definitions_carry_more_than_the_generator_ever_writes(installed)
 
     上一条门若退化成「什么都不查」，这里会响 —— 定义里必须真有下钻出来的
     children，而不是一层一级桩。
+
+    下限按**实测值**定，不拍脑袋：当前 126 端点里响应侧 413 条、请求侧 25 条
+    带下级结构。取 300（响应侧实测的 ~73%）而不是原来那个 200 —— 200 意味着
+    砍掉一半的下钻量仍然全绿，等于没有门。平台下掉一部分端点时这个数会自然
+    走低，真到了要调的时候再调，调的依据是实测不是猜测。
     """
     nested = sum(
         len(d.children or [])
         for ep in installed.values()
-        for r in ep.responses.values()
-        for d in r.declarations
+        for decls in [ep.request.declarations, *(r.declarations for r in ep.responses.values())]
+        for d in decls
     )
     assert len(installed) > 100, f"定义只剩 {len(installed)} 条端点，生成器多半坏了"
-    assert nested > 200, f"带下级结构的声明只剩 {nested} 条，下钻多半退化了"
+    assert nested > 300, f"带下级结构的声明只剩 {nested} 条，下钻多半退化了"

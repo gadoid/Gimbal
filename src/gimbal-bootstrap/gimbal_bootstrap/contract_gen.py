@@ -20,6 +20,13 @@ SYSTEM = "platform"
 SERVICE = "platform-service"
 PLATFORM_BASE_URL = "http://127.0.0.1:8000"
 
+# 与 plate 的 systems/platform/system_info.py 对应的契约身份字段。
+# 提成常量是因为 `contract_gen_py` 的端点文件把这些值**写死成 plate 的常量名**
+# （`version=PLATFORM_DEFAULT_VERSION`），中间形态与常量对不上就是生成器在说谎。
+# 两边一致由 tests/test_contract_gen_py.py::test_generated_constants_match_plate_system_info 盯。
+CONTRACT_VERSION = "1.0.0"
+OWNER = "gimbal-bootstrap"
+
 # 这三个端点不需要 Authorization，其余都要 bearer
 NO_AUTH_PATHS = {"/api/health", "/api/auth/register", "/api/auth/login"}
 
@@ -309,13 +316,13 @@ def build_specs(openapi: dict) -> tuple[list[dict], list[str]]:
                 "metadata": {
                     "module": domain,
                     "tags": [SYSTEM],
-                    "owner": "gimbal-bootstrap",
+                    "owner": OWNER,
                     "business_notes": (
                         "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）"
                         if synthetic else ""
                     ),
                 },
-                "version": "1.0.0",
+                "version": CONTRACT_VERSION,
             })
 
     check_collisions(specs)

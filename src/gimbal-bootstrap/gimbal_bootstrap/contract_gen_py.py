@@ -22,14 +22,22 @@ plate 不认识生成器，只看得到一堆正常的 py 定义文件。
 from __future__ import annotations
 
 import json
+import keyword
 import re
 from pathlib import Path
 from typing import Any
 
-from gimbal_bootstrap.contract_gen import SERVICE, SYSTEM, build_specs
+from gimbal_bootstrap.contract_gen import (
+    CONTRACT_VERSION,
+    OWNER,
+    SERVICE,
+    SYSTEM,
+    build_specs,
+)
 
-# id 的分节（platform.<domain>.<action>）必须各自像个 Python 标识符 ——
-# 分节直接决定模块路径与常量名，不合法的要在生成期就挡下来。
+# id 的分节（platform.<domain>.<action>）必须各自像个 Python 标识符，且**不能
+# 是关键字** —— 分节直接进 dotted import 路径，`import` / `class` / `lambda` 这
+# 类域名会让聚合层写出的 `from ...endpoint.import.x import ...` 编译不过。
 _SEGMENT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 # 六原语 → 表单控件。容器走 json（见模块 docstring 里的偏离说明）。
@@ -81,10 +89,10 @@ def constant_name(endpoint_id: str) -> str:
         )
     rest = parts[1:]
     for seg in rest:
-        if not _SEGMENT_RE.match(seg):
+        if not _SEGMENT_RE.match(seg) or keyword.iskeyword(seg):
             raise ValueError(
                 f"id={endpoint_id!r} 的分节 {seg!r} 不能变成 Python 标识符"
-                f"（需匹配 {_SEGMENT_RE.pattern}）"
+                f"（需匹配 {_SEGMENT_RE.pattern} 且不是关键字）"
             )
     return "_".join(rest).upper()
 
@@ -178,9 +186,49 @@ def _block(keyword: str, decls: list[dict[str, Any]], pad: str) -> list[str]:
     return lines
 
 
+def _field_drift(want: list[dict[str, Any]], got: Any) -> list[str]:
+    """中间形态的声明树 vs 已安装的声明条目 → 人类可读的漂移清单。
+
+    **只拦退化，不拦人工增益。** 端点文件是给人改的：把说明写得更清楚、把一个
+    可选字段标成必填、给容器另配 ui_kind，都是允许的；反过来，字段消失、类型
+    走样、必填标记被抹掉、说明被清空、控件形态退回 unknown，五种都会伤到用例
+    作者（详见 tests/test_contract_definitions.py 里的对应用例）。
+
+    只比 path 集合是不够的：上面后四种退化，path 一个都不会少，门全是绿的。
+    """
+    from gimbal_plate.schema.endpoint.io_spec import (  # noqa: PLC0415
+        iter_declarations,
+    )
+
+    wanted: dict[str, dict[str, Any]] = {}
+    stack = list(want)
+    while stack:
+        d = stack.pop()
+        wanted[d["path"]] = d
+        stack.extend(d.get("children") or [])
+    installed = {d.path: d for d in iter_declarations(got)}
+
+    out: list[str] = []
+    for path, w in sorted(wanted.items()):
+        g = installed.get(path)
+        if g is None:
+            out.append(f"{path} 消失了")
+            continue
+        if g.type != w["type"]:
+            out.append(f"{path} 类型 {w['type']} → {g.type}")
+        if w.get("assertable") and not g.assertable:
+            out.append(f"{path} 不可断言了")
+        if w.get("required") and not g.required:
+            out.append(f"{path} 的必填标记没了")
+        if (w.get("description") or "").strip() and not (g.description or "").strip():
+            out.append(f"{path} 的说明被清空了")
+        if ui_kind_of(w["type"]) != "unknown" and g.ui_kind == "unknown":
+            out.append(f"{path} 的控件形态退化成 unknown")
+    return out
+
+
 def _docstring(spec: dict[str, Any]) -> str:
-    # 文件头：替代「翻源码才知道这个端点是干嘛的」。三引号闭合单独占一行 ——
-    # 描述里带引号也不会把 docstring 提前闭合。
+    # 文件头：替代「翻源码才知道这个端点是干嘛的」。
     #
     # （用注释而非 docstring：本函数的 docstring 里写不出三引号本身。）
     api = spec["api"]
@@ -196,21 +244,39 @@ def _docstring(spec: dict[str, Any]) -> str:
         "\n**可以手改** —— 实测核订的语义（description / ui_kind / required）写在"
         "\n这里，重新生成默认不覆盖；要覆盖用 --force。"
     )
-    body = "\n\n".join(p.replace('"""', "'''") for p in paras)
+    # 两处转义，缺一不可：
+    # - `"""` → `'''`：描述里带三引号会把 docstring 提前闭合；
+    # - `\` → `\\`：这是**非 raw** 三引号串，后端 docstring 里写正则（`\d+`）
+    #   很常见，原样透传会被当成转义序列（3.12+ 发 SyntaxWarning），而结尾
+    #   一个 `\` 还会把后面整行续接掉。
+    body = "\n\n".join(
+        p.replace("\\", "\\\\").replace('"""', "'''") for p in paras
+    )
     return f'"""{body}\n"""\n'
 
 
 def emit_module(spec: dict[str, Any]) -> str:
     """中间形态的一条端点 → 一个 fin 形制的端点文件源码。"""
-    if spec["system"] != SYSTEM or spec["service"] != SERVICE:
-        raise ValueError(
-            f"{spec['id']}: 端点文件按 system_info 的常量写死 system/service，"
-            f"中间形态却带着 ({spec['system']!r}, {spec['service']!r})"
-        )
+    # 端点文件里的身份字段是**写死的 plate 常量名**（`system=PLATFORM_SYSTEM`、
+    # `version=PLATFORM_DEFAULT_VERSION`）。中间形态一旦跟这些常量对不上，
+    # 生成器就是在照着常量说谎 —— 而结构对账只比 path，不会发现。所以在这里
+    # 挡：说谎要在生成期暴露，不是等到 plate 加载后无从追查。
+    meta = spec.get("metadata") or {}
+    for key, got, want in (
+        ("system", spec["system"], SYSTEM),
+        ("service", spec["service"], SERVICE),
+        ("version", spec.get("version"), CONTRACT_VERSION),
+        ("owner", meta.get("owner"), OWNER),
+        ("tags", meta.get("tags"), [SYSTEM]),
+    ):
+        if got != want:
+            raise ValueError(
+                f"{spec['id']}: 中间形态的 {key}={got!r} 与端点文件写死的常量 "
+                f"{want!r} 不一致 —— 要么改生成器常量，要么改 plate 的 system_info"
+            )
     api = spec["api"]
     req = spec["request"]
     responses = spec["responses"]
-    meta = spec.get("metadata") or {}
     out: list[str] = [_docstring(spec), "\n", _IMPORT_BLOCK, "\n"]
 
     # 合成 200 与真实状态码共用同一份声明（build_specs 的占位约定）—— 提成一个
@@ -331,17 +397,29 @@ def emit_package(
     root.mkdir(parents=True, exist_ok=True)
     ordered = sorted(specs, key=lambda s: s["id"])
     written: list[Path] = []
-    domains: set[str] = set()
 
-    for spec in ordered:
+    # 全部生成 + 编译通过，才开始落盘。生成中途失败就抛在写之前，上一份能用的
+    # 聚合层原封不动 —— 半新半旧的聚合层比这一轮什么都不生效更糟（新增端点成了
+    # 没人注册的孤儿，已删端点则 ImportError）。
+    sources = [(spec, emit_module(spec)) for spec in ordered]
+    agg_src = _emit_aggregator(ordered)
+    for spec, src in sources:
+        compile(src, f"<{spec['id']}>", "exec")
+    compile(agg_src, "<aggregator>", "exec")
+
+    # 域名的收集**不能**放在「文件已存在就跳过」之后：正常重跑时每个端点文件
+    # 都已存在，那样一个域都收集不到，域目录的 __init__.py 永远补不回来 ——
+    # 而「删掉一个 __init__.py 再跑一次生成器」正是最需要它自愈的场景。
+    domains = {module_path(spec["id"]).parts[0] for spec in ordered}
+
+    for spec, src in sources:
         rel = module_path(spec["id"])
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists() and not force:
             continue
-        target.write_text(emit_module(spec), encoding="utf-8")
+        target.write_text(src, encoding="utf-8")
         written.append(target)
-        domains.add(rel.parts[0])
 
     for domain in sorted(domains):
         init = root / domain / "__init__.py"
@@ -349,7 +427,7 @@ def emit_package(
         written.append(init)
 
     agg = root / "__init__.py"
-    agg.write_text(_emit_aggregator(ordered), encoding="utf-8")
+    agg.write_text(agg_src, encoding="utf-8")
     written.append(agg)
     return written
 
