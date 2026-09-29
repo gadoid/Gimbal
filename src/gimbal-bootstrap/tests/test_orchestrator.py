@@ -426,27 +426,8 @@ def test_username_written_to_dotenv_is_picked_up_on_the_next_run(tmp_path, monke
     assert "/api/auth/register" not in seen, seen
 
 
-def test_a_case_does_not_retire_the_throwaway_that_later_cases_still_need():
-    """一次性账号是**按轮次**的，不是按用例的。
-
-    黄金链路里 T2 注册它、T3 拿同一个用户名口令去登录。之前 run_case 的
-    finally 每条用例收工就把它删了 —— 账号在 T2 结束时就消失了，T3 的登录
-    必然 401，而引擎给的 error 是 None（只说"失败"，不说是 401）。
-    """
-    client = _client()
-    client.responses["/api/users"] = (200, {"items": [
-        {"id": "u-x", "username": "sb_t2throw"}]})
-    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
-    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
-    assert not [p for m, p in client.calls if m == "DELETE" and p.startswith("/api/users")]
-
-
-def test_throwaway_is_retired_once_after_every_case_has_run(monkeypatch, tmp_path):
-    """用完还是要删的 —— 但只删一次，且在**所有**用例跑完之后。
-
-    不删的话每次重跑都往平台里堆一个死账号，而且它在 execution_snapshots
-    里还留着一份明文口令。
-    """
+def _run_main(monkeypatch, tmp_path, *, users=(), auths=()):
+    """把 main() 架在假平台上跑一遍，返回记录了全部调用的 client。"""
     import sys
 
     from gimbal_bootstrap import orchestrator
@@ -469,31 +450,58 @@ def test_throwaway_is_retired_once_after_every_case_has_run(monkeypatch, tmp_pat
         hex = "deadbeef12345678"
 
     monkeypatch.setattr(orchestrator.uuid, "uuid4", lambda: _FixedUUID())
-    throwaway = "sb_deadbeef"        # main 取 hex[:8]
 
-    class _MainPlatform(FakePlatform):
+    class _P(FakePlatform):
         def __init__(self, base_url, token=None):
             super().__init__({
                 "/api/auth/login": (200, {"access_token": "tok-live"}),
-                "/api/auths": (200, {"items": []}),
+                "/api/auths": (200, {"items": list(auths)}),
                 "/api/scenarios": (201, {"scenarioId": "sc-x"}),
                 "/api/runs": (201, {"executionId": 42}),
                 "/api/executions/42": (200, {"status": "done", "totalRuns": 1}),
                 "/api/executions/42/rows": (200, {"items": [
                     {"caseDir": "case-000-r0-n0", "status": "done"}]}),
-                "/api/users": (200, {"items": [
-                    {"id": "u-boot", "username": "sb_u"},        # 自举账号，绝不能删
-                    {"id": "u-x", "username": throwaway},
-                ]}),
+                "/api/users": (200, {"items": list(users)}),
             })
             self.token = token
 
-    client = _MainPlatform("http://x")
+    client = _P("http://x")
     monkeypatch.setattr(orchestrator, "Platform", lambda *a, **k: client)
     monkeypatch.setattr(orchestrator, "_resolve_env",
                         lambda k: {"GIMBAL_SB_USERNAME": "sb_u",
                                    "GIMBAL_SB_PASSWORD": "Pw-1234"}.get(k, ""))
     monkeypatch.setattr(sys, "argv", ["orchestrator", "--cases", str(cases_dir), "--no-pause"])
+    return client
+
+
+def test_a_case_does_not_retire_the_throwaway_that_later_cases_still_need():
+    """一次性账号是**按轮次**的，不是按用例的。
+
+    黄金链路里 T2 注册它、T3 拿同一个用户名口令去登录。之前 run_case 的
+    finally 每条用例收工就把它删了 —— 账号在 T2 结束时就消失了，T3 的登录
+    必然 401，而引擎给的 error 是 None（只说"失败"，不说是 401）。
+    """
+    client = _client()
+    client.responses["/api/users"] = (200, {"items": [
+        {"id": "u-x", "username": "sb_t2throw"}]})
+    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
+    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
+    assert not [p for m, p in client.calls if m == "DELETE" and p.startswith("/api/users")]
+
+
+def test_throwaway_is_retired_once_after_every_case_has_run(monkeypatch, tmp_path):
+    """用完还是要删的 —— 但只删一次，且在**所有**用例跑完之后。
+
+    不删的话每次重跑都往平台里堆一个死账号，而且它在 execution_snapshots
+    里还留着一份明文口令。
+    """
+    from gimbal_bootstrap import orchestrator
+
+    client = _run_main(
+        monkeypatch, tmp_path,
+        users=[{"id": "u-boot", "username": "sb_u"},   # 自举账号，绝不能删
+               {"id": "u-x", "username": "sb_deadbeef"}],   # main 取 hex[:8]
+    )
 
     assert orchestrator.main() == 0, "两条用例都应通过"
 
@@ -504,6 +512,28 @@ def test_throwaway_is_retired_once_after_every_case_has_run(monkeypatch, tmp_pat
     assert user_deletes[0] > last_dispatch, "账号必须在所有用例跑完之后才删"
     assert not [p for m, p in client.calls
                 if m == "DELETE" and p.endswith("u-boot")], "自举账号被删了"
+
+
+def test_bootstrap_credential_is_deleted_after_the_run(monkeypatch, tmp_path):
+    """凭证池里 `sb` 那条存的是**管理员口令**，跑完必须删。
+
+    常驻等于把 admin 明文长期搁在平台数据库里，而那条凭证没有 TTL。跑之前
+    要它存在（场景头写的是 `${auth.sb.token}`，池里没这条 alias 解析不出来，
+    引擎直接 gimbal_rejected），跑完就没必要留着了。
+    """
+    from gimbal_bootstrap import orchestrator
+
+    client = _run_main(
+        monkeypatch, tmp_path,
+        auths=[{"id": "a-1", "alias": "sb"}],
+    )
+    assert orchestrator.main() == 0
+
+    deletes = [i for i, (m, p) in enumerate(client.calls)
+               if m == "DELETE" and p == "/api/auths/a-1"]
+    assert len(deletes) == 1, f"凭证应被删一次，实际 {deletes}"
+    last_dispatch = max(i for i, (m, p) in enumerate(client.calls) if p == "/api/runs")
+    assert deletes[0] > last_dispatch, "凭证必须在所有用例跑完之后才删"
 
 
 def test_bootstrap_account_is_never_deleted_even_if_it_looks_like_a_case_account():

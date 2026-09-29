@@ -64,8 +64,8 @@ CREDENTIAL_ALIAS = "sb"
 CREDENTIAL_URL = f"{BASE_URL}/api/auth/login"
 
 
-def _ensure_credential(client: Platform, username: str, password: str) -> None:
-    """在平台凭证池里备一条自举账号的凭证。
+def _ensure_credential(client: Platform, username: str, password: str) -> str | None:
+    """在平台凭证池里备一条自举账号的凭证，返回它的 id（供跑完退役）。
 
     场景步骤头写的是 `${auth.sb.token}`（平台 auth_ref_scan 按 alias 扫描），
     调度时从池里解析出这条凭证、塞进 config.users.sb，引擎再拿 auth.url
@@ -86,24 +86,44 @@ def _ensure_credential(client: Platform, username: str, password: str) -> None:
         "token_type": "Bearer",
     }
 
-    def _patch_existing(items) -> bool:
+    def _patch_existing(items) -> str | None:
         for item in (items or {}).get("items") or []:
             if item.get("alias") == CREDENTIAL_ALIAS:
                 client.request("PATCH", f"/api/auths/{item['id']}", body)
-                return True
-        return False
+                return item.get("id")
+        return None
 
-    if _patch_existing(listing):
-        return
+    patched = _patch_existing(listing)
+    if patched:
+        return patched
     try:
-        client.post("/api/auths", {"alias": CREDENTIAL_ALIAS, **body})
+        _, created = client.post("/api/auths", {"alias": CREDENTIAL_ALIAS, **body})
+        return (created or {}).get("id")
     except PlatformError as exc:
         if exc.status != 409:
             raise
         # 有人抢先建了。重新读一遍按 id 改，不跟对方抢。
         _, listing = client.get("/api/auths")
-        if not _patch_existing(listing):
+        patched = _patch_existing(listing)
+        if not patched:
             raise
+        return patched
+
+
+def _retire_credential(client: Platform, credential_id: str | None) -> None:
+    """删掉这一轮用过的那条凭证。
+
+    池里存的是**管理员口令**，而凭证没有 TTL —— 跑完不删等于把 admin 明文
+    长期留在平台数据库里。跑之前则必须有它：场景头写的是
+    `${auth.sb.token}`，池里没这条 alias 解析不出来，引擎直接
+    gimbal_rejected。
+    """
+    if not credential_id:
+        return
+    try:
+        client.delete(f"/api/auths/{credential_id}")
+    except PlatformError as exc:
+        print(f"  清理凭证失败 /api/auths/{credential_id}: {exc}", file=sys.stderr)
 
 
 def _remember_username(username: str) -> None:
@@ -384,12 +404,7 @@ def main() -> int:
 
     client, sb_username, sb_password = _bootstrap_account(pause=not args.no_pause)
     print(f"自举账号: {sb_username}")
-    _ensure_credential(client, sb_username, sb_password)
-
-    cases: list[dict] = []
-    for path in sorted(Path(args.cases).glob("*.yaml")):
-        cases.extend(load_cases(path))
-    print(f"共 {len(cases)} 条用例\n")
+    credential_id = _ensure_credential(client, sb_username, sb_password)
 
     # run_token / new_username / new_password 都是**按轮次**取值：scenario_id
     # 带用例 id，从它派生的名字会让 T2 注册的和 T3 登录的不是同一个账号。
@@ -397,21 +412,31 @@ def main() -> int:
     run_token = uuid.uuid4().hex[:6]
     new_username = "sb_" + uuid.uuid4().hex[:8]
     new_password = "Sb" + uuid.uuid4().hex[:12] + "9"
-    results = [
-        run_case(
-            c,
-            client,
-            sb_username,
-            run_token=run_token,
-            new_username=new_username,
-            new_password=new_password,
-        )
-        for c in cases
-    ]
-    # 一次性账号在这时才退役：它是**按轮次**的，T2 注册它、T3 拿它登录，
-    # 任何一条用例跑完就删都会让后面那条必然 401。
-    if new_username and new_username != sb_username:
-        _retire_throwaway(client, new_username)
+    try:
+        cases: list[dict] = []
+        for path in sorted(Path(args.cases).glob("*.yaml")):
+            cases.extend(load_cases(path))
+        print(f"共 {len(cases)} 条用例\n")
+
+        results = [
+            run_case(
+                c,
+                client,
+                sb_username,
+                run_token=run_token,
+                new_username=new_username,
+                new_password=new_password,
+            )
+            for c in cases
+        ]
+    finally:
+        # 两样带明文口令的东西都在这里退役：一次性账号（按轮次的，T2 注册、
+        # T3 登录，任何一条用例跑完就删都会让后面那条必然 401）和凭证池里
+        # 那条存着管理员口令的凭证。放 finally 里 —— 中途崩了也照样删，
+        # 否则一次异常就把 admin 明文留在平台库里。
+        if new_username and new_username != sb_username:
+            _retire_throwaway(client, new_username)
+        _retire_credential(client, credential_id)
     for r in results:
         mark = "OK " if not _is_failure(r) else "FAIL"
         print(f"[{mark}] {r['id']:5} {r['name']}"

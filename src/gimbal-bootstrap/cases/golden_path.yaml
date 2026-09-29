@@ -66,8 +66,10 @@ cases:
           # 回读 call 形态：v2.1 批次 F 退役了 step.api，生成器改错了的话
           # 平台存进去的每个场景都是死的。这条把「生成对了」和「平台真存下了
           # 对的形状」连起来 —— 静态那门只管到生成侧。
-          - {target: "$.call.response.body.steps.0.call.kind", operator: eq, expected: call}
-          - {target: "$.call.response.body.steps.0.call.protocol", operator: eq, expected: http}
+          # 下标必须走 bracket 记法：`.0` 求值器不认（报 Unexpected character
+          # at position 27），只有 `[0]` 行。
+          - {target: "$.call.response.body.steps[0].call.kind", operator: eq, expected: call}
+          - {target: "$.call.response.body.steps[0].call.protocol", operator: eq, expected: http}
 
   - id: T5
     name: 建数据集
