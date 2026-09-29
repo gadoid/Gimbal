@@ -1082,11 +1082,17 @@
   "platform.executions.delete_by_execution_id": {},
   "platform.executions.get_by_execution_id": {},
   "platform.executions.get_by_execution_id_case_artifact": {},
+  "platform.executions.get_by_execution_id_debug": {},
+  "platform.executions.get_by_execution_id_debug_output": {},
+  "platform.executions.get_by_execution_id_events": {},
+  "platform.executions.get_by_execution_id_events_counts": {},
+  "platform.executions.get_by_execution_id_events_stream": {},
   "platform.executions.get_by_execution_id_rows": {},
   "platform.executions.get_by_execution_id_scenario_snapshot": {},
   "platform.executions.get_root": {},
   "platform.executions.get_summary": {},
   "platform.executions.post_by_execution_id_cancel": {},
+  "platform.executions.post_by_execution_id_debug_command": {},
   "platform.executions.post_by_execution_id_rerun": {},
   "platform.generator_catalog.get_by_kind_full": {},
   "platform.generator_catalog.get_root": {},
@@ -1103,6 +1109,11 @@
   "platform.notifications.put_preferences": {},
   "platform.query_views.get_by_name_rows": {},
   "platform.query_views.get_root": {},
+  "platform.report_definitions.delete_by_definition_id": {},
+  "platform.report_definitions.get_by_definition_id": {},
+  "platform.report_definitions.get_root": {},
+  "platform.report_definitions.post_root": {},
+  "platform.report_definitions.put_by_definition_id": {},
   "platform.run.post_precheck": {},
   "platform.runs.post_root": {},
   "platform.scenario_filter_groups.delete_by_bucket_by_group_id": {},
@@ -2319,11 +2330,17 @@
   "platform.executions.delete_by_execution_id": {},
   "platform.executions.get_by_execution_id": {},
   "platform.executions.get_by_execution_id_case_artifact": {},
+  "platform.executions.get_by_execution_id_debug": {},
+  "platform.executions.get_by_execution_id_debug_output": {},
+  "platform.executions.get_by_execution_id_events": {},
+  "platform.executions.get_by_execution_id_events_counts": {},
+  "platform.executions.get_by_execution_id_events_stream": {},
   "platform.executions.get_by_execution_id_rows": {},
   "platform.executions.get_by_execution_id_scenario_snapshot": {},
   "platform.executions.get_root": {},
   "platform.executions.get_summary": {},
   "platform.executions.post_by_execution_id_cancel": {},
+  "platform.executions.post_by_execution_id_debug_command": {},
   "platform.executions.post_by_execution_id_rerun": {},
   "platform.generator_catalog.get_by_kind_full": {},
   "platform.generator_catalog.get_root": {},
@@ -2340,6 +2357,11 @@
   "platform.notifications.put_preferences": {},
   "platform.query_views.get_by_name_rows": {},
   "platform.query_views.get_root": {},
+  "platform.report_definitions.delete_by_definition_id": {},
+  "platform.report_definitions.get_by_definition_id": {},
+  "platform.report_definitions.get_root": {},
+  "platform.report_definitions.post_root": {},
+  "platform.report_definitions.put_by_definition_id": {},
   "platform.run.post_precheck": {},
   "platform.runs.post_root": {},
   "platform.scenario_filter_groups.delete_by_bucket_by_group_id": {},
@@ -5164,6 +5186,91 @@
       "protocol": "http",
       "service": "fin"
      },
+     "description": "ab:platform.executions.get_by_execution_id_debug",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.executions.get_by_execution_id_debug_output",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_counts",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_stream",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
      "description": "ab:platform.executions.get_by_execution_id_rows",
      "kind": "step",
      "request": {
@@ -5233,6 +5340,23 @@
       "service": "fin"
      },
      "description": "ab:platform.executions.post_by_execution_id_cancel",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.executions.post_by_execution_id_debug_command",
      "kind": "step",
      "request": {
       "body": {},
@@ -5505,6 +5629,91 @@
       "service": "fin"
      },
      "description": "ab:platform.query_views.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.report_definitions.delete_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.report_definitions.get_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.report_definitions.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.report_definitions.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin"
+     },
+     "description": "ab:platform.report_definitions.put_by_definition_id",
      "kind": "step",
      "request": {
       "body": {},
@@ -9014,6 +9223,111 @@
       "protocol": "http",
       "service": "fin",
       "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_debug"
+      }
+     },
+     "description": "ab:platform.executions.get_by_execution_id_debug",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_debug_output"
+      }
+     },
+     "description": "ab:platform.executions.get_by_execution_id_debug_output",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_events"
+      }
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_events_counts"
+      }
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_counts",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.executions.get_by_execution_id_events_stream"
+      }
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_stream",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
        "endpoint_id": "platform.executions.get_by_execution_id_rows"
       }
      },
@@ -9102,6 +9416,27 @@
       }
      },
      "description": "ab:platform.executions.post_by_execution_id_cancel",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.executions.post_by_execution_id_debug_command"
+      }
+     },
+     "description": "ab:platform.executions.post_by_execution_id_debug_command",
      "kind": "step",
      "request": {
       "body": {},
@@ -9438,6 +9773,111 @@
       }
      },
      "description": "ab:platform.query_views.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.report_definitions.delete_by_definition_id"
+      }
+     },
+     "description": "ab:platform.report_definitions.delete_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.report_definitions.get_by_definition_id"
+      }
+     },
+     "description": "ab:platform.report_definitions.get_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.report_definitions.get_root"
+      }
+     },
+     "description": "ab:platform.report_definitions.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.report_definitions.post_root"
+      }
+     },
+     "description": "ab:platform.report_definitions.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/ab",
+      "protocol": "http",
+      "service": "fin",
+      "view_hints": {
+       "endpoint_id": "platform.report_definitions.put_by_definition_id"
+      }
+     },
+     "description": "ab:platform.report_definitions.put_by_definition_id",
      "kind": "step",
      "request": {
       "body": {},
@@ -10290,11 +10730,17 @@
   "platform.executions.delete_by_execution_id",
   "platform.executions.get_by_execution_id",
   "platform.executions.get_by_execution_id_case_artifact",
+  "platform.executions.get_by_execution_id_debug",
+  "platform.executions.get_by_execution_id_debug_output",
+  "platform.executions.get_by_execution_id_events",
+  "platform.executions.get_by_execution_id_events_counts",
+  "platform.executions.get_by_execution_id_events_stream",
   "platform.executions.get_by_execution_id_rows",
   "platform.executions.get_by_execution_id_scenario_snapshot",
   "platform.executions.get_root",
   "platform.executions.get_summary",
   "platform.executions.post_by_execution_id_cancel",
+  "platform.executions.post_by_execution_id_debug_command",
   "platform.executions.post_by_execution_id_rerun",
   "platform.generator_catalog.get_by_kind_full",
   "platform.generator_catalog.get_root",
@@ -10311,6 +10757,11 @@
   "platform.notifications.put_preferences",
   "platform.query_views.get_by_name_rows",
   "platform.query_views.get_root",
+  "platform.report_definitions.delete_by_definition_id",
+  "platform.report_definitions.get_by_definition_id",
+  "platform.report_definitions.get_root",
+  "platform.report_definitions.post_root",
+  "platform.report_definitions.put_by_definition_id",
   "platform.run.post_precheck",
   "platform.runs.post_root",
   "platform.scenario_filter_groups.delete_by_bucket_by_group_id",

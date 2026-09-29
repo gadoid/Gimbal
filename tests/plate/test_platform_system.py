@@ -4,7 +4,7 @@ import pytest
 
 from gimbal_plate.http.app import create_app
 from gimbal_plate.registry import PlateRegistry
-from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
 from gimbal_plate.systems.platform.system_info import PLATFORM_SYSTEM
 
 
