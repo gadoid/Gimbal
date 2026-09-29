@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -189,3 +189,48 @@ class ExecutionEventEvidence(Base):
     )
     seq: Mapped[int] = mapped_column(Integer, primary_key=True)
     evidence: Mapped[dict] = mapped_column(JsonVar, default=dict)
+
+
+class ExecutionJob(Base):
+    """C11（P3-01）：执行任务持久化队列。
+
+    POST /api/runs 只入队（Execution 行 + 本表一行）；worker 经
+    ``FOR UPDATE SKIP LOCKED`` 认领（PG；SQLite 测试链退化为普通子查询
+    ——单连接测试无并发抢占面）。取消是 DB 位（``cancel_requested``），
+    worker 在行边界查询；进程内注册表（_in_flight/_cancel_requested/
+    信号量）随之退役。
+
+    - attempts：认领次数。认领即 +1；超上限的僵尸回收直接失败收口
+      （执行链不可假设幂等——重复下单面）。
+    - heartbeat_at：运行中 worker 周期续租；超过租约未续视为孤儿。
+    - payload：执行配方（dispatch_run 已完成校验/物化参数的快照，
+      worker 不再回查请求上下文）。
+    """
+
+    __tablename__ = "execution_jobs"
+
+    # Integer(PK):SQLite 仅对 INTEGER 主键生成 rowid 自增（同 execution_rows）
+    id: Mapped[int] = mapped_column(Integer, primary_key=True,
+                                    autoincrement=True)
+    execution_id: Mapped[int] = mapped_column(
+        ForeignKey("executions.id", ondelete="CASCADE"), unique=True)
+    # queued / running / done / failed / canceled
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    # cases / graph / debug（debug = cases + debug 段，强制 server 链）
+    kind: Mapped[str] = mapped_column(String(16), default="cases")
+    payload: Mapped[dict] = mapped_column(JsonVar, default=dict)
+    claimed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claimed_at: Mapped["datetime | None"] = mapped_column(
+        UtcDateTime, nullable=True)
+    heartbeat_at: Mapped["datetime | None"] = mapped_column(
+        UtcDateTime, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_execution_jobs_status_id", "status", "id"),
+    )

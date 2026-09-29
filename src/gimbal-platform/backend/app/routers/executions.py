@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -579,10 +580,12 @@ async def cancel_execution(
     session: DbSession,
     user: CurrentUser,
 ) -> ExecutionOut:
-    """P4 协作式取消:登记请求,在飞 fanout 在行边界收敛为 canceled。
+    """C11 协作式取消：写 execution_jobs.cancel_requested 位。
 
-    可取消态 = queued | running(running 由在飞 fanout 行边界消费);
-    无在飞 task 的 queued/running 都是重启僵尸,立即终态化。终态单 409。
+    可取消态 = queued | running（worker 在任务起点/行边界消费 DB 位，
+    收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的
+    queued/running 立即终态化。终态单 409。server 链的在飞 run 由
+    worker 侧 cancel 端点协作收口（步骤边界生效）。
     """
     if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
         raise HTTPException(
@@ -592,8 +595,8 @@ async def cancel_execution(
                 "message": f"execution already {ex.status}",
             },
         )
-    run_dispatcher.request_cancel(ex.id)
-    if not run_dispatcher.has_live_fanout(ex.id):
+    live = await run_dispatcher.request_cancel(session, ex.id)
+    if not live:
         ex.status = STATUS_CANCELED
         ex.finished_at = utcnow()
         await session.commit()
@@ -602,3 +605,78 @@ async def cancel_execution(
         session, user, [ex.scenario_id])
     return execution_store.execution_out(
         ex, **execution_store.display_kwargs(ex, disp))
+
+
+# ── C6(P3-04):调试台代理(执行器 token 不出后端)────────────────
+
+class DebugCommandIn(BaseModel):
+    """调试命令(与引擎 schema/debug.py DebugCommand 同形:kind + 键值成对)。
+
+    平台侧本地镜像(平台不 import gimbal);契约由 gimbal 侧
+    server_debug 端点二次校验兜底。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["continue", "step", "abort", "read",
+                  "write", "patch", "retry", "skip"]
+    variable: str | None = None
+    path: str | None = None
+    value: Any = None
+
+    @model_validator(mode="after")
+    def _check_payload(self) -> "DebugCommandIn":
+        if self.kind == "write" and not self.variable:
+            raise ValueError("write 需要 variable")
+        if self.kind == "patch" and not self.path:
+            raise ValueError("patch 需要 path")
+        if self.kind not in ("write", "patch") and (
+                self.variable is not None or self.path is not None):
+            raise ValueError(f"{self.kind} 不携带 variable/path")
+        return self
+
+
+class DebugCommandOut(BaseModel):
+    accepted: bool
+    output: list[str] = Field(default_factory=list)
+
+
+def _debug_ctx(ex: Execution) -> dict:
+    ctx = run_dispatcher.debug_sessions.get(ex.id)
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "no_debug_session",
+                    "message": "execution is not an active debug run"},
+        )
+    return ctx
+
+
+@router.get("/{execution_id}/debug")
+async def debug_session_info(ex: OwnedExecution) -> dict:
+    """调试会话元信息（前端据此渲染调试台入口与命令可用态）。"""
+    ctx = run_dispatcher.debug_sessions.get(ex.id)
+    return {"executionId": ex.id, "status": ex.status,
+            "active": ctx is not None,
+            "runId": (ctx or {}).get("session").run_id
+            if ctx is not None else None}
+
+
+@router.get("/{execution_id}/debug/output")
+async def debug_session_output(ex: OwnedExecution) -> dict:
+    """取回（并清空）调试会话输出（暂停提示等）；前端轮询。"""
+    ctx = _debug_ctx(ex)
+    session = ctx["session"]
+    return {"output": await session.debug_output()}
+
+
+@router.post("/{execution_id}/debug/command", response_model=DebugCommandOut)
+async def debug_session_command(
+    ex: OwnedExecution, body: DebugCommandIn,
+) -> DebugCommandOut:
+    """代理结构化调试命令（N6：与引擎 DebugCommand 同形）。"""
+    ctx = _debug_ctx(ex)
+    session = ctx["session"]
+    result = await session.debug_command(body.model_dump())
+    return DebugCommandOut(accepted=bool(result.get("accepted")),
+                           output=list(result.get("output") or []))

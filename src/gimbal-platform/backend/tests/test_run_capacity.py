@@ -54,12 +54,13 @@ async def test_dispatch_rejects_over_cap(client, monkeypatch):
     assert r.json()["detail"]["code"] == "too_many_runs"
 
 
-async def test_global_launch_semaphore_caps_concurrency(client, monkeypatch):
-    from app.core.config import settings
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+async def test_worker_serializes_executions_across_queue(client, monkeypatch):
+    """C11(P3-01):全局 launch 信号量已退役——跨 execution 并发上限改由
+    队列 worker 数界定(EXEC_WORKERS=1 → 串行:两 execution 的 launch
+    时间线互不重叠;行级 parallel 仍由行 sem 承担)。"""
+    from app.services import gimbal_launcher as gl, plate_client as pc,         execution_queue as eq
 
-    run_dispatcher.reset_concurrency_state()
-    monkeypatch.setattr(settings, "MAX_CONCURRENT_LAUNCHES", 2)
+    eq.reset_worker_state()
 
     headers = await register_and_login(client)
     await client.post("/api/scenarios", headers=headers,
@@ -89,4 +90,6 @@ async def test_global_launch_semaphore_caps_concurrency(client, monkeypatch):
 
     for eid in eids:
         await _wait_terminal(eid)
-    assert state["peak"] <= 2
+    # 单 worker 串行:任一时刻至多一个 launch 在飞(原全局闸的等价收敛,
+    # 上界从 MAX_CONCURRENT_LAUNCHES 换成 worker 数)
+    assert state["peak"] == 1

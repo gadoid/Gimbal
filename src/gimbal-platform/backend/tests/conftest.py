@@ -101,10 +101,14 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
         return
 
     db_file = tmp_path / "test.db"
+    # C11 起 dispatch 请求与队列 worker 在同一库上并发读写(SQLite 单写锁)
+    # ——busy timeout 让后到写者等待而非立刻 database is locked;WAL 进一步
+    # 放开读并发(生产是 PG,无此语义)。
     test_engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_file}",
         echo=False,
         future=True,
+        connect_args={"timeout": 30, "check_same_thread": False},
     )
     test_session_factory = async_sessionmaker(
         test_engine, expire_on_commit=False, class_=AsyncSession
@@ -194,6 +198,26 @@ def _default_plate_stub():
         yield
     finally:
         plate_client.set_client_for_tests(None)
+
+
+@pytest.fixture(autouse=True)
+async def _isolate_execution_workers():
+    """C11：逐测试隔离执行队列 worker。
+
+    worker 承接的 fanout 可能跨测试存活（测试断言完成后仍在收尾）——
+    其 teardown 会 pop `_row_states[execution_id]`，而 fresh 库的执行 id
+    从 1 重来，晚到的 pop 会砸掉**下一个测试**刚建的同号注册表
+    （test_run_baseline + test_execution_rows 组合复现：live 行读回 0）。
+    每测收尾停 worker（当前任务收口后再继续），隔离时序确定。
+    """
+    yield
+    from app.services import execution_queue as _eq
+    from app.services import run_dispatcher as _rd
+    try:
+        await _eq.stop_workers(timeout_s=10.0)
+    except Exception:  # noqa: BLE001 — 隔离兜底,失败不盖测试结果
+        _eq.reset_worker_state()
+    _rd.reset_cancel_state()
 
 
 @pytest.fixture

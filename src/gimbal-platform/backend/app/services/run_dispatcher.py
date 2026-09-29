@@ -52,6 +52,7 @@ from ..models.execution import (
     STATUS_DONE,
     STATUS_FAILED,
     STATUS_QUEUED,
+    ExecutionJob,
     STATUS_RUNNING,
 )
 from ..models.auth_session import AuthSession as DBAuthSession
@@ -107,11 +108,10 @@ class ResolvedAuth:
         )
 
 
-# ─── in-flight tracking ───────────────────────────────────────────
-# 与 routers/executions.py 相同的 task 跟踪模式(tracked
-# ``set[asyncio.Task]`` + ``_shutting_down`` flag):app lifespan 调用
-# ``drain_in_flight_dispatches()`` 等待取消。
-_in_flight: set[asyncio.Task] = set()
+# ─── shutdown 状态 + 队列 worker 桥（C11）───────────────────────
+# 进程内注册表（_in_flight/_cancel_requested/_tasks_by_execution/全局
+# launch 信号量）已退役：执行任务进 execution_jobs 表，worker 循环
+# （services/execution_queue.py）认领驱动；取消走 DB 位。
 _shutting_down: bool = False
 
 
@@ -119,50 +119,26 @@ def is_shutting_down() -> bool:
     return _shutting_down
 
 
-def _track(task: asyncio.Task) -> None:
-    _in_flight.add(task)
-    task.add_done_callback(_in_flight.discard)
-
-
-def _log_task_exception(task: asyncio.Task) -> None:
-    """Done-callback that surfaces unhandled exceptions in background tasks.
-
-    Without this an exception inside ``_fanout`` would be silently lost
-    (asyncio doesn't propagate task exceptions to the parent).  We
-    already track + discard from ``_in_flight`` in the parent callback;
-    this one only logs the exception, never raises.
-    """
-    if task.cancelled():
-        return
-    exc = task.exception()
-    if exc is not None:
-        logger.exception(
-            "run_dispatcher: background fan-out task crashed: {}", exc
-        )
-
-
 async def wait_dispatchers_quiescent(timeout_s: float = 10.0) -> bool:
-    """等待在途 dispatch 自然收尾(不取消、不置停机位)—— 测试 teardown
+    """等待在途执行任务自然收尾(不取消、不置停机位)—— 测试 teardown
     与 DROP SCHEMA 竞态的解:M6 起行终态落库把后台尾巴略微拉长,
-    PG teardown 若不等它,DELETE/INSERT 与 DROP SCHEMA 互锁死锁。"""
+    PG teardown 若不等它,DELETE/INSERT 与 DROP SCHEMA 互锁死锁。
+
+    C11:在途 = 本进程 worker 正在执行的任务（execution_queue._busy）。"""
+    from . import execution_queue as _eq
     loop = asyncio.get_event_loop()
     deadline = loop.time() + timeout_s
-    while _in_flight and loop.time() < deadline:
+    while _eq._busy and loop.time() < deadline:
         await asyncio.sleep(0.05)
-    return not _in_flight
+    return not _eq._busy
 
 
 async def drain_in_flight_dispatches() -> int:
-    """Cancel + await all in-flight dispatch tasks.  Called from lifespan."""
+    """优雅停止 worker（当前任务回队）。lifespan 调用。"""
     global _shutting_down
     _shutting_down = True
-    n = len(_in_flight)
-    if not n:
-        return 0
-    for t in list(_in_flight):
-        t.cancel()
-    await asyncio.gather(*_in_flight, return_exceptions=True)
-    return n
+    from . import execution_queue as _eq
+    return await _eq.stop_workers()
 
 
 def reset_shutdown_state() -> None:
@@ -170,57 +146,42 @@ def reset_shutdown_state() -> None:
 
     ``_shutting_down`` 只在 drain 时置位;不复位的话,同一进程复用模块
     (测试直接调 drain 后再来一次 app lifespan)时 dispatch 会静默跳过
-    fan-out,Execution 永远停在 queued。
+    入队,Execution 永远停在 queued。
     """
     global _shutting_down
     _shutting_down = False
 
 
-# ─── global launch concurrency gate (P7) ──────────────────────────
-# 全局 launch 并发闸(P7):按事件循环缓存 Semaphore——asyncio 原语
-# 绑定创建时的 loop,pytest 每用例新 loop,进程级单例会跨 loop 复用
-# 报 "attached to a different loop"。
-_launch_sems: dict[int, asyncio.Semaphore] = {}
+# ─── 取消（C11：DB 位）+ 调试会话注册表（C6）────────────────────
+# 取消语义保持协作式：request_cancel 写 execution_jobs.cancel_requested
+# 位；worker 的 _fanout 取消轮询器在行边界消费（在飞子进程/请求自然
+# 跑完——Windows 下 task.cancel 会泄漏 gimbal 子进程，不做）；未跑行
+# 记 canceled、不进计数器；canceled 单允许 passed+failed < total_runs。
+# 语义判据：job 状态 queued/running 且租约新鲜 = 活单。
+async def request_cancel(db, execution_id: int) -> bool:
+    """标记取消请求（DB 位）；返回是否存在可取消的活任务。"""
+    from . import execution_queue as _eq
+    return await _eq.request_cancel(db, execution_id)
 
 
-def _global_launch_sem() -> asyncio.Semaphore:
-    loop_id = id(asyncio.get_running_loop())
-    sem = _launch_sems.get(loop_id)
-    if sem is None:
-        sem = asyncio.Semaphore(max(1, settings.MAX_CONCURRENT_LAUNCHES))
-        _launch_sems[loop_id] = sem
-    return sem
-
-
-def reset_concurrency_state() -> None:
-    """测试隔离:清空按 loop 缓存的信号量(换上限后重建)。"""
-    _launch_sems.clear()
-
-
-# ─── cooperative cancel registry (P4) ─────────────────────────────
-# 取消注册表(P4 协作式取消):取消请求集合 + 在飞 fanout task 索引。
-# 取消语义:协作式 —— 只在未来行边界生效,在飞子进程自然跑完
-# (Windows 下 task.cancel 会让 asyncio 放弃收尸、泄漏 gimbal 子进程,
-# 不做);未跑行记 ``canceled`` JSONL 行、不进计数器;``total_runs``
-# 不变,canceled 单允许 ``passed+failed < total_runs``(finalize 跳过
-# 校账)。
-_cancel_requested: set[int] = set()
-_tasks_by_execution: dict[int, asyncio.Task] = {}
-
-
-def request_cancel(execution_id: int) -> None:
-    """登记取消请求(幂等);由 _fanout 在行边界消费。"""
-    _cancel_requested.add(execution_id)
-
-
-def has_live_fanout(execution_id: int) -> bool:
-    return execution_id in _tasks_by_execution
+async def has_live_fanout(db, execution_id: int) -> bool:
+    """活单判据（cancel 端点区分「等行边界收敛」与「僵尸立即终态化」）。"""
+    from . import execution_queue as _eq
+    snap = await _eq.job_snapshot(db, execution_id)
+    return bool(snap and snap["status"] in ("queued", "running")
+                and snap["lease_fresh"])
 
 
 def reset_cancel_state() -> None:
-    """测试隔离:清空取消注册表。"""
-    _cancel_requested.clear()
-    _tasks_by_execution.clear()
+    """测试隔离：清空调试会话注册表与取消快速通道（DB 位随 fresh 库自清）。"""
+    debug_sessions.clear()
+    from . import execution_queue as _eq0
+    _eq0._cancel_hint.clear()
+
+
+# C6（P3-04）：execution_id → 调试执行上下文（ServerSession 由本模块
+# 持有；命令/输出端点经此代理——前端不接触执行器 token）。
+debug_sessions: dict[int, dict] = {}
 
 
 # ─── row-level live registry (spec v3 §4 审计三定位)────────────────
@@ -365,6 +326,11 @@ class _EventIngester:
         self._pending: "set[asyncio.Task] | None" = None
         self._ticker: "asyncio.Task | None" = None
         self._stopped = False
+        # C12 修正：execution 级单调 seq 分配器——引擎 seq 是进程内
+        # 计数，多 case（每 case 一个进程/run）会从 1 重来，直接落库
+        # 会撞 (execution_id, seq) 唯一约束被静默丢弃（多行执行丢事件）。
+        # 此处重映射为执行域单调递增（逐 case 内保序）。
+        self._next_seq = 1
         # 日志占位 seq 分配器(负数轴递减):每批分配不重叠区间,
         # 避免多批撞 (execution_id, seq) 唯一约束被静默丢弃
         self._log_seq = 0
@@ -380,6 +346,9 @@ class _EventIngester:
             self._ticker = asyncio.create_task(_tick())
 
     def on_event(self, d: dict) -> None:
+        d = dict(d)
+        d["seq"] = self._next_seq
+        self._next_seq += 1
         self._events.append(d)
         self._maybe_flush()
 
@@ -527,26 +496,34 @@ def _replay_rows(execution_id: int) -> list[dict]:
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
 async def reconcile_stale_executions(db_factory: Any) -> int:
-    """启动期 reconcile:进程内 _fanout 随重启丢失,queued/running 即僵尸。
+    """启动期 reconcile（C11 起 jobs 感知）。
 
-    全部标 failed + ``config_json.reconciled`` 记录(P3:此前永远
-    停在 queued,UI 无从得知;running 同为进程孤儿,一并收敛)。
+    * executions stuck queued/running **且无 job 行**（0009 前遗留/
+      建行后入队前崩溃）→ failed + ``config_json.reconciled``（原口径）;
+    * job ``failed``/``canceled`` 终态而 execution 仍 queued/running
+      （worker 收口前崩溃）→ failed 收口;
+    * job ``queued``/``running``：留给 worker（queued 待认领;running
+      由 sweep_stale 按租约回收——回队重跑或 attempts 耗尽失败）。
+
     返回处理行数。
     """
+    from sqlalchemy import select as _select
     count = 0
     async with db_factory() as session:
         rows = (
             (
                 await session.execute(
-                    select(Execution).where(
-                        Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING))
-                    )
+                    _select(Execution, ExecutionJob.status).outerjoin(
+                        ExecutionJob,
+                        ExecutionJob.execution_id == Execution.id).where(
+                        Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)))
                 )
             )
-            .scalars()
             .all()
         )
-        for ex in rows:
+        for ex, job_status in rows:
+            if job_status in ("queued", "running"):
+                continue   # worker 域:待认领或由租约回收
             ex.status = STATUS_FAILED
             if ex.started_at is None:
                 ex.started_at = ex.created_at or _utcnow()
@@ -554,24 +531,34 @@ async def reconcile_stale_executions(db_factory: Any) -> int:
             cfg = dict(ex.config_json or {})
             cfg["reconciled"] = {
                 "at": _utcnow().isoformat() + "Z",
-                "reason": "backend restarted mid-dispatch",
+                "reason": ("backend restarted mid-dispatch"
+                           if job_status is None
+                           else f"job {job_status} without execution finalize"),
             }
             ex.config_json = cfg
             count += 1
         await session.commit()
     if count:
         logger.warning(
-            "run_dispatcher: reconciled {} stale queued/running execution(s) after restart",
+            "run_dispatcher: reconciled {} stale execution(s) after restart",
             count,
         )
     return count
 
 
 async def startup_recovery() -> tuple[int, int]:
-    """启动恢复:reconcile 僵尸执行 + 清扫过期 case 目录(Task 5 接入)。"""
+    """启动恢复（C11）：租约孤儿回收 → reconcile 僵尸执行 → 清扫 case 目录。
+
+    「平台重启后排队中的任务继续执行」由 job 留存 + worker 认领兑现;
+    「已在运行的任务按对账结果收口」= 孤儿按 attempts 回队重跑或失败。
+    """
+    from . import execution_queue as _eq
+    async with _session_factory() as session:
+        swept_jobs = await _eq.sweep_stale(session)
+        await session.commit()
     stale = await reconcile_stale_executions(_session_factory)
     swept = sweep_stale_case_dirs()
-    return stale, swept
+    return stale, swept + swept_jobs
 
 
 # ─── main entry point ─────────────────────────────────────────────
@@ -581,13 +568,19 @@ async def dispatch_run(
     req: RunRequest,
     *,
     preloaded_scenario: ComposerScenario | None = None,
+    chain_override: str | None = None,
 ) -> RunResponse:
-    """Validate + fan out + return runId.
+    """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
+    worker 认领驱动；本函数不再 spawn 进程内 fanout）。
 
     Caller (the runs router) wraps any exception in HTTPException.  This
     function NEVER raises for "Plate is down" — it records the failure
     and returns the runId so the user can still see the run in
     ``/executions`` (per the agreed run-failure semantics).
+
+    ``chain_override``（C13 对账用，非公开 API 面）：强制本次执行的链
+    （legacy|server），覆盖 settings.EXEC_CHAIN；随配方与 config_json
+    落档，回滚 = 开关关闭即回旧链。
 
     ``preloaded_scenario``: the runs router already loads the scenario
     row for the ownership check — pass it here to avoid querying the
@@ -743,6 +736,22 @@ async def dispatch_run(
         *(cred for raw, cred in alias_creds.items() if raw not in bound_keys),
     ]))
 
+    from . import execution_queue as _eq
+    chain = chain_override or str(
+        getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
+    debug_spec = getattr(req, "debug", None)
+    if debug_spec is not None:
+        # 调试前置（引擎既有约束的收口）：单 case 且无乘法、非 graph
+        if getattr(req, "graph", None) is not None:
+            raise Conflict("debug_not_supported", "graph 执行不支持调试")
+        if total_runs != 1:
+            raise Conflict(
+                "debug_single_case",
+                "调试执行仅支持单 case（数据集行 × 注入族须为 1）")
+        if int(req.n_runs or 1) != 1:
+            raise Conflict("debug_single_run", "调试执行要求 nRuns=1")
+        chain = "server"
+
     execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景)。
@@ -794,6 +803,8 @@ async def dispatch_run(
             "nRuns": req.n_runs,
             "reportDefinitionId": getattr(req, "report_definition_id", None),
             "parallel": req.parallel,
+            # C13:执行链留档（legacy|server;调试恒 server）
+            "chain": chain,
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
             # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
             # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
@@ -802,66 +813,105 @@ async def dispatch_run(
         },
     )
 
-    # C5(P3-05):graph 编排执行 —— 单 spawn 下发 SuiteGraph(乘法/并发/
-    # 横切面全部在执行器);台账单元投影与事件入库与单场景链共用。
-    if getattr(req, "graph", None) is not None and not is_shutting_down():
-        task = asyncio.create_task(
-            _fanout_graph(
-                db_factory=_session_factory,
-                execution_id=execution.id,
-                run_id=run_id,
-                owner_id=user_id,
-                graph_spec=req.graph.model_dump(by_alias=True),
-                n_runs=req.n_runs,
-                halt_at=req.step_to,
-                scenario_payload=dict(scen.payload or {}),
-            ),
-            name=f"v3-dispatch-graph-{run_id}",
-        )
-        task.add_done_callback(_log_task_exception)
-        _track(task)
-        _tasks_by_execution[execution.id] = task
-        task.add_done_callback(
-            lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None))
-        task.add_done_callback(
-            lambda _t, eid=execution.id: _row_states.pop(eid, None))
-        return RunResponse(runId=run_id, executionId=execution.id)
-
-    # 4. Spawn the background fan-out (cancel-cleanly tracked)
-    if not is_shutting_down():
-        task = asyncio.create_task(
-            _fanout(
-                db_factory=_session_factory,
-                execution_id=execution.id,
-                run_id=run_id,
-                scenario_payload=dict(scen.payload or {}),
-                datasets=fanout_datasets,
-                injections=selected_entries,
-                owner_id=user_id,
-                auth_aliases=auth_aliases,
-                halt_at=req.step_to,
-                n_runs=req.n_runs,
-                parallel=req.parallel,
-                service_bindings=req.service_bindings,
-            ),
-            name=f"v3-dispatch-{run_id}",
-        )
-        task.add_done_callback(_log_task_exception)
-        _track(task)
-        # P4:在飞 fanout 索引(cancel 端点据此区分"活单等行边界收敛"与
-        # "僵尸单立即终态化")。出清回调与 _in_flight.discard 并存。
-        _tasks_by_execution[execution.id] = task
-        task.add_done_callback(
-            lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None)
-        )
-        # spec §9.1:fanout task 结束(含异常/被取消的崩溃路径,届时
-        # _finalize_execution 不会执行)即出清活跃行状态,防 registry
-        # 泄漏盖住回放;正常路径 finalize 已 pop,此处幂等。
-        task.add_done_callback(
-            lambda _t, eid=execution.id: _row_states.pop(eid, None)
-        )
-
+    # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
+    # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
+    # chain（C13）记录执行链：settings.EXEC_CHAIN（legacy|server）或
+    # dispatch 的 chain_override（对账脚本用）；debug（C6）强制 server 链。
+    from . import execution_queue as _eq
+    if getattr(req, "graph", None) is not None:
+        payload = {
+            "kind": "graph",
+            "chain": chain,
+            "args": {
+                "execution_id": execution.id, "run_id": run_id,
+                "owner_id": user_id,
+                "graph_spec": req.graph.model_dump(by_alias=True),
+                "n_runs": req.n_runs, "halt_at": req.step_to,
+                "scenario_payload": dict(scen.payload or {}),
+            },
+        }
+    else:
+        payload = {
+            "kind": "cases",
+            "chain": chain,
+            "debug": (debug_spec.model_dump(by_alias=True)
+                      if debug_spec is not None else None),
+            "args": {
+                "execution_id": execution.id, "run_id": run_id,
+                "scenario_payload": dict(scen.payload or {}),
+                "datasets": fanout_datasets,
+                "injections": selected_entries,
+                "owner_id": user_id,
+                "auth_aliases": auth_aliases,
+                "halt_at": req.step_to,
+                "n_runs": req.n_runs,
+                "parallel": req.parallel,
+                "service_bindings": {
+                    k: b.model_dump(by_alias=True)
+                    for k, b in (req.service_bindings or {}).items()
+                },
+            },
+        }
+    await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
+    # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
+    _eq.ensure_workers()
     return RunResponse(runId=run_id, executionId=execution.id)
+
+
+# ─── C11：worker 任务体入口（payload → fanout）──────────────────
+
+async def run_job_from_payload(job: dict) -> None:
+    """execution_queue worker 的任务体：解包配方 → _fanout/_fanout_graph。
+
+    payload 是 dispatch_run 校验后的完整快照（JSON 往返安全形态）；
+    ServiceBinding 在此重建为模型（_fanout 消费面不变）。
+    """
+    p = job["payload"]
+    args = dict(p["args"])
+    if p["kind"] == "graph":
+        await _fanout_graph(db_factory=_session_factory, **args)
+        return
+    bindings = args.get("service_bindings") or {}
+    args["service_bindings"] = {
+        k: ServiceBinding(**v) for k, v in bindings.items()
+    }
+    await _fanout(
+        db_factory=_session_factory,
+        chain=p.get("chain") or "legacy",
+        debug=p.get("debug"),
+        **args,
+    )
+
+
+async def finalize_canceled_before_start(job: dict) -> None:
+    """取消先于启动：执行直接 canceled 收口（无行、零计数）。"""
+    execution_id = job["payload"]["args"]["execution_id"]
+    async with _session_factory() as session:
+        ex = await session.get(Execution, execution_id)
+        if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
+            ex.status = STATUS_CANCELED
+            ex.finished_at = _utcnow()
+            await session.commit()
+    _row_states.pop(execution_id, None)
+    logger.info("run_dispatcher: execution {} canceled before start", execution_id)
+
+
+async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
+    """任务体异常的兜底终态化（幂等：终态不再改）。"""
+    try:
+        async with _session_factory() as session:
+            ex = await session.get(Execution, execution_id)
+            if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
+                ex.status = STATUS_FAILED
+                ex.finished_at = _utcnow()
+                cfg = dict(ex.config_json or {})
+                cfg["dispatcherError"] = str(error)[:512]
+                ex.config_json = cfg
+                await session.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "run_dispatcher: finalize_execution_if_stuck failed for {}",
+            execution_id)
 
 
 # ─── background fan-out ──────────────────────────────────────────
@@ -875,13 +925,14 @@ async def _fanout_graph(
     n_runs: int = 1,
     halt_at: int | None = None,
     scenario_payload: dict | None = None,
+    chain: str = "legacy",
 ) -> None:
     """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
-    事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。"""
+    事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
+    C12/C13：chain=server 时 spawn 走执行器 server 实例。"""
     from . import graph_dispatch
     from .graph_dispatch import GraphDispatchError
 
-    _cancel_requested.discard(execution_id)
     ingester = _EventIngester(db_factory, execution_id)
     ingester.start()
     run_dir = _run_dir(run_id)
@@ -909,7 +960,7 @@ async def _fanout_graph(
 
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
-            on_event=_on_event, on_log=ingester.on_log)
+            on_event=_on_event, on_log=ingester.on_log, chain=chain)
         if result.launch_status == "ok":
             if proj["status"] is not None:
                 status = "passed" if proj["status"] == "passed" else "failed"
@@ -967,16 +1018,22 @@ async def _fanout(
     n_runs: int = 1,
     parallel: int = 1,
     service_bindings: dict[str, ServiceBinding] | None = None,
+    chain: str = "legacy",
+    debug: "dict | None" = None,
 ) -> None:
-    """Per-row × per-repeat compose + convert + ``gimbal run launch`` 子进程。
+    """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
     ``halt_at``(V1 step_to 移植):0-based 含端点,透传 CLI
     ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
 
-    M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
-    (asyncio.Semaphore);``service_bindings`` 逐绑定传给
-    ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
-    prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
+    C12/C13 双链:``chain``（legacy|server）——legacy 落盘 case 后
+    ``gimbal run launch`` 子进程（stdout jsonl）；server 为本次执行
+    持有一个执行器 server 实例（POST /runs + SSE 消费），取消走
+    cancel 端点，结束 terminate 进程树。``debug``（C6）强制 server 链
+    且单 case；会话注册进 ``debug_sessions`` 供平台调试台代理。
+
+    C11 取消：DB 位（execution_jobs.cancel_requested）→ 本函数的取消
+    轮询器写入局部标志 → 行边界消费（未跑行记 canceled 不进计数器）。
 
     spec v3 §8:``injections`` 为选中的断言注入条目(dispatch 已过滤死/
     旧条目)— 与数据集行交叉(spec v3 §4:行 × 条目 × repeat 笛卡尔),
@@ -984,17 +1041,43 @@ async def _fanout(
     ``compose_injection_scenario`` patch(Assign 直补 + asserts patch,
     不触碰 config.vars)后走 plate convert,``materialize_run_copy``
     其后照旧。
-
-    V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
-    ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
-    case 文件即数据驱动用例快照(含注入后的明文 users —— 与 V1 临时
-    yaml 同语义,落在平台 DATA_DIR 权限域内)。
     """
-    # P4:防御性出清该 id 的历史残留取消请求(僵尸单由 cancel 端点
-    # inline 终态化,没有 fanout 来消费;测试的 fresh 库会复用执行 id)。
-    # 活跃请求只可能在本 task 启动之后到达(dispatch 先 spawn、后返回
-    # 响应,行边界检查更在其后),此处不会误吞。
-    _cancel_requested.discard(execution_id)
+    from . import execution_queue as _eq
+
+    # C11 取消轮询器:DB 位 → 局部标志(0.5s 节拍;行边界同步读)
+    cancel_local = {"set": False, "done": False}
+
+    async def _poll_cancel() -> None:
+        while not cancel_local["done"]:
+            try:
+                async with db_factory() as s:
+                    if await _eq.is_cancel_requested(s, execution_id):
+                        cancel_local["set"] = True
+                        return
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(0.5)
+
+    cancel_poller = asyncio.create_task(_poll_cancel())
+
+    async def _teardown() -> None:
+        """fanout 收尾：停取消轮询、回收 server 实例、注销调试会话。"""
+        cancel_local["done"] = True
+        cancel_poller.cancel()
+        if server_session is not None:
+            try:
+                await server_session.close()
+            except Exception:  # noqa: BLE001
+                pass
+        debug_sessions.pop(execution_id, None)
+        _eq._cancel_hint.discard(execution_id)
+        _row_states.pop(execution_id, None)
+
+    # C12:server 链/调试 —— 本次执行持有的执行器 server 实例
+    server_session = None
+    if chain == "server" or debug is not None:
+        from .gimbal_server_session import ServerSession
+        server_session = ServerSession()
     # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
     ingester = _EventIngester(db_factory, execution_id)
@@ -1004,6 +1087,18 @@ async def _fanout(
     # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
     # 互不互踩;与 JSONL 同域构成执行审计面(什么数据真的打给了引擎)。
     run_dir = _run_dir(run_id)
+    if server_session is not None:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # C12:执行级 server 实例(reports 落 run_dir,引擎 reporter 相对
+        # server 进程 cwd 写;调试实例在 debug_sessions 注册供代理)
+        try:
+            await server_session.start(
+                engine_log_path=run_dir / "server-engine.log", cwd=run_dir)
+        except Exception as e:  # noqa: BLE001
+            await _teardown()
+            raise
+        if debug is not None:
+            debug_sessions[execution_id] = {"session": server_session}
 
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
@@ -1027,6 +1122,7 @@ async def _fanout(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
         )
+        await _teardown()
         return
 
     # 认证解析通过、即将分发行 → queued 置 running(UI 可见"在跑")。
@@ -1112,9 +1208,10 @@ async def _fanout(
             # 启动时就已创建并排队,准入前检查永远看不到晚到的取消请求)。
             # 已准入的行视为在飞、自然跑完;排队中的行在准入时刻检查,
             # 未启动的直接记 canceled,不进计数器。
-            if execution_id in _cancel_requested:
-                # M6:行终态(canceled 含)即落库;行级 JSONL 停写(运行级
-                # 生命周期行保留为运维审计面)。
+            if cancel_local["set"] or execution_id in _eq._cancel_hint:
+                # (hint = 路由同进程写入的取消快速通道;轮询器 0.5s 节拍
+                # 之内也能即刻收敛)M6:行终态(canceled 含)即落库;行级
+                # JSONL 停写(运行级生命周期行保留为运维审计面)。
                 state.status = "canceled"
                 state.finished_at = _utcnow().isoformat() + "Z"
                 await _persist_row_terminal(db_factory, execution_id, state)
@@ -1199,8 +1296,9 @@ async def _fanout(
                     case_path = _write_case_file(case_dir, composed_exec)
                     # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
                     # 合并生效;行级 sem 只管单 execution 的 parallel)。
-                    async with _global_launch_sem():
-                        # P2-04 事件投影:本行的 scenario.end/run.finished
+                    if True:
+                        # (C11:P7 全局 launch 闸退役——并发由 worker 数与
+                        # 行级 sem 界定)P2-04 事件投影:本行的 scenario.end/run.finished
                         # 单独摘出(状态/attempts/unit 由此投影;无事件路径
                         # —— PlateMock/旧引擎 —— 回退 launch 结果推导)。
                         def _row_on_event(d: dict, _p=proj) -> None:
@@ -1214,16 +1312,23 @@ async def _fanout(
                                 _p["unit"] = d.get("unit") or _p["unit"]
                             ingester.on_event(d)
 
-                        result = await gimbal_launcher.launch(
-                            case_path,
-                            step_to=halt_at,
-                            report_dir=case_dir / "reports",
-                            cwd=case_dir,
-                            engine_log_path=case_dir / "engine.log",
-                            on_event=_row_on_event,
-                            on_log=ingester.on_log,
-                            n_runs=n_runs,
-                        )
+                        if server_session is not None:
+                            # C12:server 链(调试恒走此链) —— SSE 事件同
+                            # 一回调面;超时由 run_case 内部 cancel 收口
+                            result = await server_session.run_case(
+                                case_path, halt_at=halt_at, n_runs=n_runs,
+                                debug=debug, on_event=_row_on_event)
+                        else:
+                            result = await gimbal_launcher.launch(
+                                case_path,
+                                step_to=halt_at,
+                                report_dir=case_dir / "reports",
+                                cwd=case_dir,
+                                engine_log_path=case_dir / "engine.log",
+                                on_event=_row_on_event,
+                                on_log=ingester.on_log,
+                                n_runs=n_runs,
+                            )
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":
                         # 子进程层故障(超时 kill / spawn 失败):记失败但
@@ -1358,23 +1463,26 @@ async def _fanout(
         )
         for seq, (ds, row_idx, _, inj, rep) in enumerate(entries)
     ]
-    await asyncio.gather(
-        *(_row(ds, i, row, r, seq, inj)
-          for seq, (ds, i, row, inj, r) in enumerate(entries))
-    )
-    # P2-02:冲刷事件/日志余量(先于终态落库 —— SSE/日志页在 done 后仍可读全量)
-    await ingester.finalize()
+    try:
+        await asyncio.gather(
+            *(_row(ds, i, row, r, seq, inj)
+              for seq, (ds, i, row, inj, r) in enumerate(entries))
+        )
+        # P2-02:冲刷事件/日志余量(先于终态落库 —— SSE/日志页在 done 后仍可读全量)
+        await ingester.finalize()
 
-    # Terminal status + timestamps only (counters already maintained
-    # incrementally above).
-    if execution_id in _cancel_requested:
-        # P4 协作式取消:未跑行已在行边界记 canceled,在飞子进程已自然
-        # 跑完;canceled 允许 passed+failed < total_runs(finalize 跳过
-        # 校账)。请求在此消费出清(终态后状态归零,同 id 空间不被污染)。
-        await _finalize_execution(db_factory, execution_id, status=STATUS_CANCELED)
-        _cancel_requested.discard(execution_id)
-    else:
-        await _finalize_execution(db_factory, execution_id)
+        # Terminal status + timestamps only (counters already maintained
+        # incrementally above).
+        if cancel_local["set"] or execution_id in _eq._cancel_hint:
+            # C11 协作式取消:未跑行已在行边界记 canceled,在飞子进程/
+            # server run 已自然跑完(或经 cancel 端点收口);canceled 允许
+            # passed+failed < total_runs(finalize 跳过校账)。
+            await _finalize_execution(db_factory, execution_id,
+                                      status=STATUS_CANCELED)
+        else:
+            await _finalize_execution(db_factory, execution_id)
+    finally:
+        await _teardown()
 
 
 async def _mark_running(db_factory: Any, execution_id: int) -> None:

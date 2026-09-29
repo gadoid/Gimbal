@@ -97,12 +97,18 @@ async def lifespan(app: FastAPI):
             logger.warning("lifespan: reconciled {} stale execution(s)", n_stale)
     except Exception as e:  # noqa: BLE001
         logger.error("lifespan: startup recovery failed: {}", e)
+    # C11(P3-01):启动执行队列 worker(POST /api/runs 只入队;worker
+    # 经 FOR UPDATE SKIP LOCKED 认领驱动执行——重启后 queued 任务继续跑)。
+    try:
+        from .services import execution_queue
+        execution_queue.reset_worker_state()
+        execution_queue.start_workers()
+    except Exception as e:  # noqa: BLE001
+        logger.error("lifespan: execution queue workers failed to start: {}", e)
     try:
         yield
     finally:
-        # V3 场景编排:取消并等待所有在途的逐行 dispatch 任务。
-        # (P4 起 V1 子进程 orchestrator/孤儿回收已随 executor.py 退役;
-        #  V3.2 起执行调用走 gimbal_launcher 子进程,无 HTTP 引擎客户端。)
+        # C11:优雅停止 worker(当前任务回队;等收口后清 plate 客户端)。
         n_dispatched = await drain_in_flight_dispatches()
         if n_dispatched:
             logger.info("lifespan: drained {} in-flight dispatcher(s)", n_dispatched)

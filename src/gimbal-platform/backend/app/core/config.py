@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
     MAX_RUNS_PER_EXECUTION: int = 200
     MAX_CONCURRENT_LAUNCHES: int = 8
+    # ── C11(P3-01)执行队列 ──────────────────────────────────
+    # worker 数(每 worker 同时只跑一个 execution_jobs 任务;多 backend
+    # 进程部署时 SKIP LOCKED 天然分单)
+    EXEC_WORKERS: int = 1
+    # running 任务租约(秒):heartbeat 周期 = 租约/3;超租约未续 = 孤儿
+    EXEC_JOB_LEASE_SEC: float = 120.0
+    # 认领次数上限(含首次):孤儿回收超过即失败收口(执行不可假设幂等)
+    EXEC_JOB_MAX_ATTEMPTS: int = 2
+    # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
+    # legacy = run launch 子进程(stdout jsonl,现状);
+    # server = 每次执行一个 gimbal run server 实例(POST /runs + SSE)。
+    # 灰度开关:关(legacy)即回旧链——回滚路径。
+    EXEC_CHAIN: str = "legacy"
     # ── Gimbal 插件注入(透传给执行子进程;空值 = 现状零变化) ──
     # GIMBAL_PLUGINS_DIR:文件系统插件目录(绝对路径;空 = 引擎默认 base_dir/plugins)
     GIMBAL_PLUGINS_DIR: str = ""

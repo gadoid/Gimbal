@@ -1,7 +1,9 @@
 from .user import User
 from .auth_session import AuthSession
 from .constant_entry import ConstantEntry
-from .execution import Execution, ExecutionRow, ExecutionSnapshot
+from .execution import (
+    Execution, ExecutionRow, ExecutionSnapshot, ExecutionJob,
+)
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
 from .composer_run_scheme import ComposerRunScheme
@@ -24,6 +26,7 @@ __all__ = [
     "ConstantEntry",
     "Execution",
     "ExecutionRow",
+    "ExecutionJob",
     "ExecutionSnapshot",
     "ComposerScenario",
     "ComposerDataSet",
