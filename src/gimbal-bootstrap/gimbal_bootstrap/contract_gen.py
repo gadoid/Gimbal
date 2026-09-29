@@ -28,6 +28,11 @@ NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ID_RE = re.compile(r"^[a-z][a-z0-9_.\-]{1,63}$")
 BACKEND_DIR = Path(__file__).resolve().parents[2] / "gimbal-platform/backend"
 
+# 下钻深度上限。契约生成是全量跑的，一次无限递归就是把整个自举挂死。
+# 5 层够覆盖平台实际形态（list → 行 → meta → 字段），再深的部分在响应
+# 断言里本来也用不到。
+MAX_DECL_DEPTH = 5
+
 
 def fetch_openapi(
     base_url: str = PLATFORM_BASE_URL, *, allow_inprocess_fallback: bool = False
@@ -89,9 +94,31 @@ def _node_type(node: dict, schemas: dict) -> str:
         resolved = _node_type(alt, schemas)
         if resolved in PRIMITIVES:
             return resolved
-    if "properties" in n:
+    if "properties" in n or "items" in n:
         return "object"
     return "string"
+
+
+def _ref_name(node: dict) -> str | None:
+    """$ref 指向的模型名 —— 环检测靠它，不是靠对象身份。
+
+    按模型名而不是 node 对象：同一个模型经不同路径进来是同一份 schema，
+    环的定义就是"又回到了同一个模型"。
+    """
+    ref = node.get("$ref")
+    return ref.split("/")[-1] if isinstance(ref, str) else None
+
+
+def _container_node(node: dict) -> dict:
+    """容器的子结构节点：object 是自身，array 取 items。
+
+    **刻意不 resolve** —— $ref 名要原样留给下一层做环检测；这一层如果
+    先解开了，下一层就再也认不出自己正走进一个环。
+    """
+    if node.get("type") == "array" or "items" in node:
+        items = node.get("items")
+        return items if isinstance(items, dict) else {}
+    return node
 
 
 def _union(node: dict, schemas: dict, warnings: list[str] | None) -> dict:
@@ -119,6 +146,21 @@ def _union(node: dict, schemas: dict, warnings: list[str] | None) -> dict:
     return merged
 
 
+def _root_node(schema: dict, schemas: dict, warnings: list[str] | None) -> dict:
+    """把入口节点归一化成"带 properties 的 object"。
+
+    两件事：顶层 anyOf/oneOf 折并集；顶层本身就是数组时，元素模型即根 ——
+    `GET /api/data-sets` 的响应是 `array[DataSetSummary]`，根节点没有
+    properties，不做这一步该端点的字段面全空。
+    """
+    n = _resolve(schema, schemas)
+    if "anyOf" in n or "oneOf" in n:
+        n = _union(n, schemas, warnings)
+    if n.get("type") == "array" or ("type" not in n and "items" in n):
+        return _resolve(_container_node(n), schemas)
+    return n
+
+
 def declarations(
     schema: dict,
     schemas: dict,
@@ -127,10 +169,27 @@ def declarations(
     depth: int = 0,
     assertable: bool = False,
     warnings: list[str] | None = None,
+    ref_stack: tuple[str, ...] = (),
 ) -> list[dict]:
-    n = _resolve(schema, schemas)
-    if "anyOf" in n or "oneOf" in n:
-        n = _union(n, schemas, warnings)
+    """schema → 声明条目（含 children 结构树）。
+
+    object 递归 properties，array 递归 items —— 两者都要下钻，否则
+    `$.ops` 标成 array 就收工，数组里有什么全平台无人知道。
+
+    children 的 path 是**模板态**（不带 `[i]`）：plate 的
+    `_check_declarations` ③ 硬性要求，且实例下标本就是渲染器的活
+    （io_spec 文档："深实例下标是渲染器实例化的产物，不进目录"）。
+    """
+    own = _ref_name(schema)
+    if own:
+        if own in ref_stack:
+            # 结构环（Node.child 又是 Node）：到此为止。留一个无 children
+            # 的容器条目，形状仍然对，只是这一支不再展开。
+            return []
+        ref_stack = (*ref_stack, own)
+
+    n = _root_node(schema, schemas, warnings)
+    required_names = set(n.get("required") or [])
     out: list[dict] = []
     for name, prop in sorted(n.get("properties", {}).items()):
         if not NAME_RE.match(name):
@@ -146,11 +205,18 @@ def declarations(
             "assertable": assertable,
             "description": (resolved.get("description") or "")[:500],
         }
-        if dtype == "object" and "properties" in resolved and depth < 3:
-            entry["children"] = declarations(
-                resolved, schemas, prefix=f"{prefix}.{name}", depth=depth + 1,
-                assertable=assertable, warnings=warnings,
+        if name in required_names:
+            entry["required"] = True
+        if dtype in ("object", "array") and depth < MAX_DECL_DEPTH:
+            # 传 prop 原始节点（不传 resolved）：$ref 名要留到下一层做环检测
+            kids = declarations(
+                prop, schemas, prefix=f"{prefix}.{name}", depth=depth + 1,
+                assertable=assertable, warnings=warnings, ref_stack=ref_stack,
             )
+            # children 只在非空时挂 —— plate 拒 children=[]（容器要么不带，
+            # 要么非空），挂一个空列表会让产物在加载期才炸。
+            if kids:
+                entry["children"] = kids
         out.append(entry)
     return out
 

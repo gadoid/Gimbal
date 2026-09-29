@@ -1,7 +1,7 @@
 {
  "_generated_from": "http://127.0.0.1:8000/openapi.json",
  "_generated_by": "gimbal-bootstrap/gimbal_bootstrap/contract_gen.py",
- "_endpoint_count": 115,
+ "_endpoint_count": 123,
  "endpoints": [
   {
    "id": "platform.activity.get_root",
@@ -37,7 +37,109 @@
        "path": "$.events",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "action",
+         "path": "$.events.action",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "at",
+         "path": "$.events.at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "batchId",
+         "path": "$.events.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "detail",
+         "path": "$.events.detail",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "endpointId",
+         "path": "$.events.endpointId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "executionId",
+         "path": "$.events.executionId",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "fromVersion",
+         "path": "$.events.fromVersion",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "kind",
+         "path": "$.events.kind",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "module",
+         "path": "$.events.module",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "name",
+         "path": "$.events.name",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opCount",
+         "path": "$.events.opCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.events.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.events.status",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "toVersion",
+         "path": "$.events.toVersion",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "sources",
@@ -87,7 +189,8 @@
       "path": "$.endpointId",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -101,7 +204,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "closedAt",
@@ -115,14 +219,16 @@
        "path": "$.createdAt",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointId",
        "path": "$.endpointId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointMethod",
@@ -150,7 +256,8 @@
        "path": "$.fromVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "opCounts",
@@ -164,35 +271,139 @@
        "path": "$.operatorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ops",
        "path": "$.ops",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "appliedAt",
+         "path": "$.ops.appliedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "batchId",
+         "path": "$.ops.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "datasetId",
+         "path": "$.ops.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.ops.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.ops.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.ops.note",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opType",
+         "path": "$.ops.opType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "payload",
+         "path": "$.ops.payload",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioDisplayName",
+         "path": "$.ops.scenarioDisplayName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.ops.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.ops.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "snapshots",
        "path": "$.snapshots",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.snapshots.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.snapshots.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "toVersion",
        "path": "$.toVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -205,7 +416,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "closedAt",
@@ -219,14 +431,16 @@
        "path": "$.createdAt",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointId",
        "path": "$.endpointId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointMethod",
@@ -254,7 +468,8 @@
        "path": "$.fromVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "opCounts",
@@ -268,35 +483,139 @@
        "path": "$.operatorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ops",
        "path": "$.ops",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "appliedAt",
+         "path": "$.ops.appliedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "batchId",
+         "path": "$.ops.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "datasetId",
+         "path": "$.ops.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.ops.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.ops.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.ops.note",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opType",
+         "path": "$.ops.opType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "payload",
+         "path": "$.ops.payload",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioDisplayName",
+         "path": "$.ops.scenarioDisplayName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.ops.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.ops.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "snapshots",
        "path": "$.snapshots",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.snapshots.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.snapshots.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "toVersion",
        "path": "$.toVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -345,7 +664,101 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "batchId",
+         "path": "$.items.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "closedAt",
+         "path": "$.items.closedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "createdAt",
+         "path": "$.items.createdAt",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "endpointId",
+         "path": "$.items.endpointId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "endpointMethod",
+         "path": "$.items.endpointMethod",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "endpointName",
+         "path": "$.items.endpointName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "endpointPath",
+         "path": "$.items.endpointPath",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "fromVersion",
+         "path": "$.items.fromVersion",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "opCounts",
+         "path": "$.items.opCounts",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "operatorId",
+         "path": "$.items.operatorId",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "status",
+         "path": "$.items.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "toVersion",
+         "path": "$.items.toVersion",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -415,7 +828,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "closedAt",
@@ -429,14 +843,16 @@
        "path": "$.createdAt",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointId",
        "path": "$.endpointId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointMethod",
@@ -464,7 +880,8 @@
        "path": "$.fromVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "opCounts",
@@ -478,35 +895,139 @@
        "path": "$.operatorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ops",
        "path": "$.ops",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "appliedAt",
+         "path": "$.ops.appliedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "batchId",
+         "path": "$.ops.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "datasetId",
+         "path": "$.ops.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.ops.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.ops.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.ops.note",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opType",
+         "path": "$.ops.opType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "payload",
+         "path": "$.ops.payload",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioDisplayName",
+         "path": "$.ops.scenarioDisplayName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.ops.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.ops.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "snapshots",
        "path": "$.snapshots",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.snapshots.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.snapshots.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "toVersion",
        "path": "$.toVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -556,7 +1077,8 @@
       "path": "$.opType",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "payload",
@@ -591,7 +1113,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "datasetId",
@@ -612,7 +1135,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "note",
@@ -626,7 +1150,8 @@
        "path": "$.opType",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "payload",
@@ -654,7 +1179,8 @@
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -674,7 +1200,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "datasetId",
@@ -695,7 +1222,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "note",
@@ -709,7 +1237,8 @@
        "path": "$.opType",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "payload",
@@ -737,7 +1266,8 @@
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -786,28 +1316,74 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "conflicts",
        "path": "$.conflicts",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.conflicts.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.conflicts.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.conflicts.note",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "restored",
        "path": "$.restored",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.restored.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.restored.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -864,7 +1440,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "closedAt",
@@ -878,14 +1455,16 @@
        "path": "$.createdAt",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointId",
        "path": "$.endpointId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointMethod",
@@ -913,7 +1492,8 @@
        "path": "$.fromVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "opCounts",
@@ -927,35 +1507,139 @@
        "path": "$.operatorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ops",
        "path": "$.ops",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "appliedAt",
+         "path": "$.ops.appliedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "batchId",
+         "path": "$.ops.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "datasetId",
+         "path": "$.ops.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.ops.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.ops.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.ops.note",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opType",
+         "path": "$.ops.opType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "payload",
+         "path": "$.ops.payload",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioDisplayName",
+         "path": "$.ops.scenarioDisplayName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.ops.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.ops.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "snapshots",
        "path": "$.snapshots",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.snapshots.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.snapshots.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "toVersion",
        "path": "$.toVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -968,7 +1652,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "closedAt",
@@ -982,14 +1667,16 @@
        "path": "$.createdAt",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointId",
        "path": "$.endpointId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "endpointMethod",
@@ -1017,7 +1704,8 @@
        "path": "$.fromVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "opCounts",
@@ -1031,35 +1719,139 @@
        "path": "$.operatorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ops",
        "path": "$.ops",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "appliedAt",
+         "path": "$.ops.appliedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "batchId",
+         "path": "$.ops.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "datasetId",
+         "path": "$.ops.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.ops.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.ops.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "note",
+         "path": "$.ops.note",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "opType",
+         "path": "$.ops.opType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "payload",
+         "path": "$.ops.payload",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioDisplayName",
+         "path": "$.ops.scenarioDisplayName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenarioId",
+         "path": "$.ops.scenarioId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.ops.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "snapshots",
        "path": "$.snapshots",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "entityId",
+         "path": "$.snapshots.entityId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entityType",
+         "path": "$.snapshots.entityType",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "toVersion",
        "path": "$.toVersion",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -1108,7 +1900,33 @@
        "path": "$.anomalies",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "detail",
+         "path": "$.anomalies.detail",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "endpointId",
+         "path": "$.anomalies.endpointId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "reason",
+         "path": "$.anomalies.reason",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "baselinedNow",
@@ -1122,7 +1940,33 @@
        "path": "$.pending",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "endpointId",
+         "path": "$.pending.endpointId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "fromVersion",
+         "path": "$.pending.fromVersion",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "toVersion",
+         "path": "$.pending.toVersion",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       }
      ]
     }
@@ -1165,7 +2009,59 @@
     "200": {
      "status": 200,
      "description": "Successful Response",
-     "declarations": []
+     "declarations": [
+      {
+       "name": "datasetColumn",
+       "path": "$.datasetColumn",
+       "type": "string",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "datasetId",
+       "path": "$.datasetId",
+       "type": "string",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "field",
+       "path": "$.field",
+       "type": "string",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "scenarioId",
+       "path": "$.scenarioId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "source",
+       "path": "$.source",
+       "type": "string",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "stepIndex",
+       "path": "$.stepIndex",
+       "type": "integer",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "viaVar",
+       "path": "$.viaVar",
+       "type": "string",
+       "assertable": true,
+       "description": ""
+      }
+     ]
     }
    },
    "metadata": {
@@ -1253,7 +2149,41 @@
        "path": "$.services",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "caseCount",
+         "path": "$.services.caseCount",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "changeCount",
+         "path": "$.services.changeCount",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "name",
+         "path": "$.services.name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "recentFailCount",
+         "path": "$.services.recentFailCount",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "totals",
@@ -1261,34 +2191,39 @@
        "type": "object",
        "assertable": true,
        "description": "",
+       "required": true,
        "children": [
         {
          "name": "caseCount",
          "path": "$.totals.caseCount",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "changeCount",
          "path": "$.totals.changeCount",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "recentFailCount",
          "path": "$.totals.recentFailCount",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "serviceCount",
          "path": "$.totals.serviceCount",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -1354,7 +2289,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "datasetId",
@@ -1375,7 +2311,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "note",
@@ -1389,7 +2326,8 @@
        "path": "$.opType",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "payload",
@@ -1417,7 +2355,8 @@
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -1473,7 +2412,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "datasetId",
@@ -1494,7 +2434,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "note",
@@ -1508,7 +2449,8 @@
        "path": "$.opType",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "payload",
@@ -1536,7 +2478,8 @@
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -1592,7 +2535,8 @@
        "path": "$.batchId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "datasetId",
@@ -1613,7 +2557,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "note",
@@ -1627,7 +2572,8 @@
        "path": "$.opType",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "payload",
@@ -1655,7 +2601,8 @@
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -1711,7 +2658,8 @@
        "path": "$.plateReachable",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "zeroRef",
@@ -1761,7 +2709,32 @@
     "200": {
      "status": 200,
      "description": "Successful Response",
-     "declarations": []
+     "declarations": [
+      {
+       "name": "reason",
+       "path": "$.reason",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "scenarioId",
+       "path": "$.scenarioId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "stepIndex",
+       "path": "$.stepIndex",
+       "type": "integer",
+       "assertable": true,
+       "description": "",
+       "required": true
+      }
+     ]
     }
    },
    "metadata": {
@@ -1815,7 +2788,69 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "action",
+         "path": "$.items.action",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "actorId",
+         "path": "$.items.actorId",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "actorName",
+         "path": "$.items.actorName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "createdAt",
+         "path": "$.items.createdAt",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "detail",
+         "path": "$.items.detail",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "resourceId",
+         "path": "$.items.resourceId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "resourceType",
+         "path": "$.items.resourceType",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "page",
@@ -1879,14 +2914,16 @@
       "path": "$.new_password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "old_password",
       "path": "$.old_password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -1940,14 +2977,16 @@
       "path": "$.password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "username",
       "path": "$.username",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -1961,14 +3000,16 @@
        "path": "$.access_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "refresh_token",
        "path": "$.refresh_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "token_type",
@@ -1983,34 +3024,39 @@
        "type": "object",
        "assertable": true,
        "description": "Public-facing user view. ``created_at`` is serialized to ISO 8601 string.",
+       "required": true,
        "children": [
         {
          "name": "created_at",
          "path": "$.user.created_at",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "display_name",
          "path": "$.user.display_name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "id",
          "path": "$.user.id",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_active",
          "path": "$.user.is_active",
          "type": "boolean",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_admin",
@@ -2038,7 +3084,8 @@
          "path": "$.user.username",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -2090,34 +3137,39 @@
        "type": "object",
        "assertable": true,
        "description": "Public-facing user view. ``created_at`` is serialized to ISO 8601 string.",
+       "required": true,
        "children": [
         {
          "name": "created_at",
          "path": "$.user.created_at",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "display_name",
          "path": "$.user.display_name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "id",
          "path": "$.user.id",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_active",
          "path": "$.user.is_active",
          "type": "boolean",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_admin",
@@ -2145,7 +3197,8 @@
          "path": "$.user.username",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -2190,7 +3243,8 @@
       "path": "$.refresh_token",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -2204,14 +3258,16 @@
        "path": "$.access_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "refresh_token",
        "path": "$.refresh_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "token_type",
@@ -2226,34 +3282,39 @@
        "type": "object",
        "assertable": true,
        "description": "Public-facing user view. ``created_at`` is serialized to ISO 8601 string.",
+       "required": true,
        "children": [
         {
          "name": "created_at",
          "path": "$.user.created_at",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "display_name",
          "path": "$.user.display_name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "id",
          "path": "$.user.id",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_active",
          "path": "$.user.is_active",
          "type": "boolean",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_admin",
@@ -2281,7 +3342,8 @@
          "path": "$.user.username",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -2333,14 +3395,16 @@
       "path": "$.password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "username",
       "path": "$.username",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -2354,14 +3418,16 @@
        "path": "$.access_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "refresh_token",
        "path": "$.refresh_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "token_type",
@@ -2376,34 +3442,39 @@
        "type": "object",
        "assertable": true,
        "description": "Public-facing user view. ``created_at`` is serialized to ISO 8601 string.",
+       "required": true,
        "children": [
         {
          "name": "created_at",
          "path": "$.user.created_at",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "display_name",
          "path": "$.user.display_name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "id",
          "path": "$.user.id",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_active",
          "path": "$.user.is_active",
          "type": "boolean",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_admin",
@@ -2431,7 +3502,8 @@
          "path": "$.user.username",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -2446,14 +3518,16 @@
        "path": "$.access_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "refresh_token",
        "path": "$.refresh_token",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "token_type",
@@ -2468,34 +3542,39 @@
        "type": "object",
        "assertable": true,
        "description": "Public-facing user view. ``created_at`` is serialized to ISO 8601 string.",
+       "required": true,
        "children": [
         {
          "name": "created_at",
          "path": "$.user.created_at",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "display_name",
          "path": "$.user.display_name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "id",
          "path": "$.user.id",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_active",
          "path": "$.user.is_active",
          "type": "boolean",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "is_admin",
@@ -2523,7 +3602,8 @@
          "path": "$.user.username",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         }
        ]
       }
@@ -2574,7 +3654,95 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "alias",
+         "path": "$.items.alias",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "alias_ref_count",
+         "path": "$.items.alias_ref_count",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "created_at",
+         "path": "$.items.created_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "expires_in",
+         "path": "$.items.expires_in",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "password_masked",
+         "path": "$.items.password_masked",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenario_ref_count",
+         "path": "$.items.scenario_ref_count",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "token_type",
+         "path": "$.items.token_type",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "updated_at",
+         "path": "$.items.updated_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "url",
+         "path": "$.items.url",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "username",
+         "path": "$.items.username",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -2645,7 +3813,8 @@
       "path": "$.alias",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "expires_in",
@@ -2659,7 +3828,8 @@
       "path": "$.password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "token_type",
@@ -2673,14 +3843,16 @@
       "path": "$.url",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "username",
       "path": "$.username",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -2694,7 +3866,8 @@
        "path": "$.alias",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "alias_ref_count",
@@ -2708,21 +3881,24 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "expires_in",
        "path": "$.expires_in",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "password_masked",
@@ -2743,28 +3919,32 @@
        "path": "$.token_type",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updated_at",
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "url",
        "path": "$.url",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "username",
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -2777,7 +3957,8 @@
        "path": "$.alias",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "alias_ref_count",
@@ -2791,21 +3972,24 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "expires_in",
        "path": "$.expires_in",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "password_masked",
@@ -2826,28 +4010,32 @@
        "path": "$.token_type",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updated_at",
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "url",
        "path": "$.url",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "username",
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -2896,7 +4084,32 @@
        "path": "$.alias_refs",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "alias_name",
+         "path": "$.alias_refs.alias_name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "base_service",
+         "path": "$.alias_refs.base_service",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "group_tag",
+         "path": "$.alias_refs.group_tag",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "scenario_refs",
@@ -2917,7 +4130,41 @@
          "path": "$.scenario_refs.visible",
          "type": "array",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "children": [
+          {
+           "name": "kinds",
+           "path": "$.scenario_refs.visible.kinds",
+           "type": "array",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "name",
+           "path": "$.scenario_refs.visible.name",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "owner_id",
+           "path": "$.scenario_refs.visible.owner_id",
+           "type": "integer",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "scenario_id",
+           "path": "$.scenario_refs.visible.scenario_id",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          }
+         ]
         }
        ]
       }
@@ -3130,7 +4377,8 @@
        "path": "$.alias",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "alias_ref_count",
@@ -3144,21 +4392,24 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "expires_in",
        "path": "$.expires_in",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "password_masked",
@@ -3179,28 +4430,32 @@
        "path": "$.token_type",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updated_at",
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "url",
        "path": "$.url",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "username",
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -3295,14 +4550,16 @@
        "path": "$.message",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ok",
        "path": "$.ok",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "status_code",
@@ -3359,21 +4616,24 @@
       "path": "$.body",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "quadrant",
       "path": "$.quadrant",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "subjectId",
       "path": "$.subjectId",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -3394,14 +4654,16 @@
        "path": "$.authorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "body",
        "path": "$.body",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "createdAt",
@@ -3415,7 +4677,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "isRoot",
@@ -3429,21 +4692,24 @@
        "path": "$.quadrant",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectId",
        "path": "$.subjectId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectKind",
        "path": "$.subjectKind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updatedAt",
@@ -3470,14 +4736,16 @@
        "path": "$.authorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "body",
        "path": "$.body",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "createdAt",
@@ -3491,7 +4759,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "isRoot",
@@ -3505,21 +4774,24 @@
        "path": "$.quadrant",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectId",
        "path": "$.subjectId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectKind",
        "path": "$.subjectKind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updatedAt",
@@ -3604,14 +4876,16 @@
        "path": "$.authorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "body",
        "path": "$.body",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "createdAt",
@@ -3625,7 +4899,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "isRoot",
@@ -3639,21 +4914,24 @@
        "path": "$.quadrant",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectId",
        "path": "$.subjectId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectKind",
        "path": "$.subjectKind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updatedAt",
@@ -3762,14 +5040,16 @@
        "path": "$.authorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "body",
        "path": "$.body",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "createdAt",
@@ -3783,7 +5063,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "isRoot",
@@ -3797,21 +5078,24 @@
        "path": "$.quadrant",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectId",
        "path": "$.subjectId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectKind",
        "path": "$.subjectKind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updatedAt",
@@ -3874,14 +5158,16 @@
        "path": "$.authorId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "body",
        "path": "$.body",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "createdAt",
@@ -3895,7 +5181,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "isRoot",
@@ -3909,21 +5196,24 @@
        "path": "$.quadrant",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectId",
        "path": "$.subjectId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "subjectKind",
        "path": "$.subjectKind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "updatedAt",
@@ -4141,7 +5431,69 @@
        "path": "$.fields",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "description",
+         "path": "$.fields.description",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "endpoints",
+         "path": "$.fields.endpoints",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "id",
+           "path": "$.fields.endpoints.id",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "method",
+           "path": "$.fields.endpoints.method",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.fields.endpoints.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "path",
+           "path": "$.fields.endpoints.path",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        },
+        {
+         "name": "path",
+         "path": "$.fields.path",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "type",
+         "path": "$.fields.type",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       }
      ]
     }
@@ -4303,7 +5655,45 @@
        "path": "$.services",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "baseService",
+         "path": "$.services.baseService",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "orphaned",
+         "path": "$.services.orphaned",
+         "type": "array",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "renamedSuggestions",
+         "path": "$.services.renamedSuggestions",
+         "type": "array",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "service",
+         "path": "$.services.service",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "uncovered",
+         "path": "$.services.uncovered",
+         "type": "array",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       }
      ]
     }
@@ -4352,7 +5742,26 @@
        "path": "$.endpoints",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "id",
+         "path": "$.endpoints.id",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "service",
+         "path": "$.endpoints.service",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "plateReachable",
@@ -4366,7 +5775,34 @@
        "path": "$.services",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "endpointCount",
+         "path": "$.services.endpointCount",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "name",
+         "path": "$.services.name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "system",
+         "path": "$.services.system",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       }
      ]
     }
@@ -4415,7 +5851,72 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "created_at",
+         "path": "$.items.created_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "description",
+         "path": "$.items.description",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "entry_kind",
+         "path": "$.items.entry_kind",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "name",
+         "path": "$.items.name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "spec",
+         "path": "$.items.spec",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "updated_at",
+         "path": "$.items.updated_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "value",
+         "path": "$.items.value",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "page",
@@ -4486,14 +5987,16 @@
       "path": "$.entry_kind",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "name",
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "spec",
@@ -4521,35 +6024,40 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
        "path": "$.description",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "entry_kind",
        "path": "$.entry_kind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "name",
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "spec",
@@ -4563,7 +6071,8 @@
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "value",
@@ -4583,35 +6092,40 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
        "path": "$.description",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "entry_kind",
        "path": "$.entry_kind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "name",
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "spec",
@@ -4625,7 +6139,8 @@
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "value",
@@ -4681,35 +6196,40 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
        "path": "$.description",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "entry_kind",
        "path": "$.entry_kind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "name",
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "spec",
@@ -4723,7 +6243,8 @@
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "value",
@@ -4801,35 +6322,40 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
        "path": "$.description",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "entry_kind",
        "path": "$.entry_kind",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "name",
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "spec",
@@ -4843,7 +6369,8 @@
        "path": "$.updated_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "value",
@@ -4939,7 +6466,46 @@
     "200": {
      "status": 200,
      "description": "Successful Response",
-     "declarations": []
+     "declarations": [
+      {
+       "name": "datasetId",
+       "path": "$.datasetId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "name",
+       "path": "$.name",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "preview",
+       "path": "$.preview",
+       "type": "array",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "rowCount",
+       "path": "$.rowCount",
+       "type": "integer",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "scenarioId",
+       "path": "$.scenarioId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      }
+     ]
     }
    },
    "metadata": {
@@ -4986,7 +6552,8 @@
        "path": "$.datasetId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
@@ -5000,7 +6567,8 @@
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "rowCount",
@@ -5021,7 +6589,8 @@
        "path": "$.scenarioId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "varUnlocks",
@@ -5078,7 +6647,8 @@
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "rows",
@@ -5106,7 +6676,8 @@
        "path": "$.datasetId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
@@ -5120,7 +6691,8 @@
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "rowCount",
@@ -5141,7 +6713,8 @@
        "path": "$.scenarioId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "varUnlocks",
@@ -5244,7 +6817,8 @@
       "path": "$.response_body_sample",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -5389,14 +6963,80 @@
        "path": "$.edges",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "from",
+         "path": "$.edges.from",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "kind",
+         "path": "$.edges.kind",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "to",
+         "path": "$.edges.to",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "nodes",
        "path": "$.nodes",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "id",
+         "path": "$.nodes.id",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "kind",
+         "path": "$.nodes.kind",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "label",
+         "path": "$.nodes.label",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "meta",
+         "path": "$.nodes.meta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "quadrant",
+         "path": "$.nodes.quadrant",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "quadrants",
@@ -5411,6 +7051,7 @@
        "type": "object",
        "assertable": true,
        "description": "",
+       "required": true,
        "children": [
         {
          "name": "degraded",
@@ -5431,7 +7072,8 @@
          "path": "$.subject.id",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "method",
@@ -5468,7 +7110,25 @@
        "path": "$.trails",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "kind",
+         "path": "$.trails.kind",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "path",
+         "path": "$.trails.path",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       }
      ]
     }
@@ -5517,7 +7177,123 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "batch_id",
+         "path": "$.items.batch_id",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "configSummary",
+         "path": "$.items.configSummary",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "consecutive_failures",
+         "path": "$.items.consecutive_failures",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "failed",
+         "path": "$.items.failed",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "finished_at",
+         "path": "$.items.finished_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "has_scenario_snapshot",
+         "path": "$.items.has_scenario_snapshot",
+         "type": "boolean",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "passed",
+         "path": "$.items.passed",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "scenario_deleted",
+         "path": "$.items.scenario_deleted",
+         "type": "boolean",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenario_display_name",
+         "path": "$.items.scenario_display_name",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "scenario_id",
+         "path": "$.items.scenario_id",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "skipped",
+         "path": "$.items.skipped",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "started_at",
+         "path": "$.items.started_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "status",
+         "path": "$.items.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "total_runs",
+         "path": "$.items.total_runs",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -5538,7 +7314,8 @@
        "path": "$.total",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -5699,7 +7476,8 @@
        "path": "$.config",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "consecutive_failures",
@@ -5713,14 +7491,16 @@
        "path": "$.failed",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "finished_at",
        "path": "$.finished_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "has_scenario_snapshot",
@@ -5734,7 +7514,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ownerName",
@@ -5748,7 +7529,8 @@
        "path": "$.passed",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "scenario_deleted",
@@ -5769,7 +7551,8 @@
        "path": "$.scenario_id",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "skipped",
@@ -5783,21 +7566,24 @@
        "path": "$.started_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "total_runs",
        "path": "$.total_runs",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -5899,7 +7685,8 @@
        "path": "$.config",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "consecutive_failures",
@@ -5913,14 +7700,16 @@
        "path": "$.failed",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "finished_at",
        "path": "$.finished_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "has_scenario_snapshot",
@@ -5934,7 +7723,8 @@
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "ownerName",
@@ -5948,7 +7738,8 @@
        "path": "$.passed",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "scenario_deleted",
@@ -5969,7 +7760,8 @@
        "path": "$.scenario_id",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "skipped",
@@ -5983,21 +7775,24 @@
        "path": "$.started_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "status",
        "path": "$.status",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "total_runs",
        "path": "$.total_runs",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6023,6 +7818,129 @@
     "service": "platform-service",
     "method": "GET",
     "path": "/api/executions/{execution_id}/case-artifact",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "executions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）"
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Get Execution Events",
+   "description": "事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "GET",
+    "path": "/api/executions/{execution_id}/events",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "executions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": ""
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events_counts",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Get Execution Event Counts",
+   "description": "按 category 聚合计数(P2-07 验收:能展示按 category 聚合的计数)。",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "GET",
+    "path": "/api/executions/{execution_id}/events/counts",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "executions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": ""
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events_stream",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Stream Execution Events",
+   "description": "SSE 推送已入库事件(P2-06/C9;替代执行页 1s 轮询)。\n\n* ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);\n* 事件到达即推;无事件时 ~15s 心跳注释帧保活;\n* 终态 + run.finished 已推(或终态但本就无事件流的存量执行)\n  → 发 ``event: done`` 后关流;客户端断开即停。",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "GET",
+    "path": "/api/executions/{execution_id}/events/stream",
     "timeout_seconds": 30.0,
     "auth": "bearer",
     "produces": [
@@ -6087,14 +8005,16 @@
        "path": "$.executionId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "runId",
        "path": "$.runId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -6107,14 +8027,16 @@
        "path": "$.executionId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "runId",
        "path": "$.runId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6163,7 +8085,82 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "caseDir",
+         "path": "$.items.caseDir",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetId",
+         "path": "$.items.datasetId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "datasetName",
+         "path": "$.items.datasetName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "finishedAt",
+         "path": "$.items.finishedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "injectionId",
+         "path": "$.items.injectionId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "rep",
+         "path": "$.items.rep",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "rowIndex",
+         "path": "$.items.rowIndex",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "seq",
+         "path": "$.items.seq",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "startedAt",
+         "path": "$.items.startedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "status",
+         "path": "$.items.status",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -6350,7 +8347,8 @@
       "path": "$.resource_id",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "resource_type",
@@ -6364,7 +8362,8 @@
       "path": "$.target_user_id",
       "type": "integer",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -6378,21 +8377,24 @@
        "path": "$.new_name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "new_resource_id",
        "path": "$.new_resource_id",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "renamed",
        "path": "$.renamed",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "status",
@@ -6489,7 +8491,8 @@
        "path": "$.items",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6532,7 +8535,8 @@
       "path": "$.value",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -6546,14 +8550,16 @@
        "path": "$.key",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "value",
        "path": "$.value",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6602,7 +8608,71 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "batchId",
+         "path": "$.items.batchId",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "body",
+         "path": "$.items.body",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "created_at",
+         "path": "$.items.created_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "link",
+         "path": "$.items.link",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "readAt",
+         "path": "$.items.readAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "title",
+         "path": "$.items.title",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "type",
+         "path": "$.items.type",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -6630,7 +8700,8 @@
        "path": "$.unread",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6687,7 +8758,8 @@
       "path": "$.title",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -6747,7 +8819,32 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "resourceId",
+         "path": "$.items.resourceId",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "senderName",
+         "path": "$.items.senderName",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       }
      ]
     }
@@ -6796,7 +8893,8 @@
        "path": "$.off",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6853,7 +8951,8 @@
        "path": "$.off",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -6951,7 +9050,8 @@
        "path": "$.count",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "roleVersion",
@@ -7056,6 +9156,301 @@
    "version": "1.0.0"
   },
   {
+   "id": "platform.report_definitions.get_root",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "List Definitions",
+   "description": "",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "GET",
+    "path": "/api/report-definitions",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "report-definitions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": ""
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.report_definitions.post_root",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Create Definition",
+   "description": "",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "POST",
+    "path": "/api/report-definitions",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "json",
+    "declarations": [
+     {
+      "name": "definition",
+      "path": "$.definition",
+      "type": "object",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "description",
+      "path": "$.description",
+      "type": "string",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "name",
+      "path": "$.name",
+      "type": "string",
+      "assertable": false,
+      "description": "",
+      "required": true
+     },
+     {
+      "name": "presentation",
+      "path": "$.presentation",
+      "type": "object",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "projection",
+      "path": "$.projection",
+      "type": "object",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "public",
+      "path": "$.public",
+      "type": "boolean",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "selection",
+      "path": "$.selection",
+      "type": "object",
+      "assertable": false,
+      "description": ""
+     }
+    ]
+   },
+   "responses": {
+    "201": {
+     "status": 201,
+     "description": "Successful Response",
+     "declarations": []
+    },
+    "200": {
+     "status": 200,
+     "description": "成功",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "report-definitions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）"
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.report_definitions.get_by_definition_id",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Get Definition",
+   "description": "",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "GET",
+    "path": "/api/report-definitions/{definition_id}",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "report-definitions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": ""
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.report_definitions.put_by_definition_id",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Update Definition",
+   "description": "",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "PUT",
+    "path": "/api/report-definitions/{definition_id}",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "json",
+    "declarations": [
+     {
+      "name": "definition",
+      "path": "$.definition",
+      "type": "object",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "description",
+      "path": "$.description",
+      "type": "string",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "name",
+      "path": "$.name",
+      "type": "string",
+      "assertable": false,
+      "description": ""
+     },
+     {
+      "name": "public",
+      "path": "$.public",
+      "type": "boolean",
+      "assertable": false,
+      "description": ""
+     }
+    ]
+   },
+   "responses": {
+    "200": {
+     "status": 200,
+     "description": "Successful Response",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "report-definitions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": ""
+   },
+   "version": "1.0.0"
+  },
+  {
+   "id": "platform.report_definitions.delete_by_definition_id",
+   "system": "platform",
+   "service": "platform-service",
+   "name": "Delete Definition",
+   "description": "",
+   "api": {
+    "protocol": "http",
+    "service": "platform-service",
+    "method": "DELETE",
+    "path": "/api/report-definitions/{definition_id}",
+    "timeout_seconds": 30.0,
+    "auth": "bearer",
+    "produces": [
+     "application/json"
+    ],
+    "consumes": [
+     "application/json"
+    ]
+   },
+   "request": {
+    "body_type": "none",
+    "declarations": []
+   },
+   "responses": {
+    "204": {
+     "status": 204,
+     "description": "Successful Response",
+     "declarations": []
+    },
+    "200": {
+     "status": 200,
+     "description": "成功",
+     "declarations": []
+    }
+   },
+   "metadata": {
+    "module": "report-definitions",
+    "tags": [
+     "platform"
+    ],
+    "owner": "gimbal-bootstrap",
+    "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）"
+   },
+   "version": "1.0.0"
+  },
+  {
    "id": "platform.run.post_precheck",
    "system": "platform",
    "service": "platform-service",
@@ -7077,13 +9472,89 @@
    },
    "request": {
     "body_type": "json",
-    "declarations": []
+    "declarations": [
+     {
+      "name": "scenarioId",
+      "path": "$.scenarioId",
+      "type": "string",
+      "assertable": false,
+      "description": "",
+      "required": true
+     },
+     {
+      "name": "schemeId",
+      "path": "$.schemeId",
+      "type": "string",
+      "assertable": false,
+      "description": "",
+      "required": true
+     }
+    ]
    },
    "responses": {
     "200": {
      "status": 200,
      "description": "Successful Response",
-     "declarations": []
+     "declarations": [
+      {
+       "name": "danglingEntryIds",
+       "path": "$.danglingEntryIds",
+       "type": "array",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "deadDatasetIds",
+       "path": "$.deadDatasetIds",
+       "type": "array",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "found",
+       "path": "$.found",
+       "type": "boolean",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "scenarioId",
+       "path": "$.scenarioId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "schemeFound",
+       "path": "$.schemeFound",
+       "type": "boolean",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "schemeId",
+       "path": "$.schemeId",
+       "type": "string",
+       "assertable": true,
+       "description": "",
+       "required": true
+      },
+      {
+       "name": "schemeValid",
+       "path": "$.schemeValid",
+       "type": "boolean",
+       "assertable": true,
+       "description": ""
+      },
+      {
+       "name": "unboundServices",
+       "path": "$.unboundServices",
+       "type": "array",
+       "assertable": true,
+       "description": ""
+      }
+     ]
     }
    },
    "metadata": {
@@ -7138,7 +9609,297 @@
       "path": "$.dataSetSelection",
       "type": "array",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "children": [
+       {
+        "name": "datasetId",
+        "path": "$.dataSetSelection.datasetId",
+        "type": "string",
+        "assertable": false,
+        "description": "",
+        "required": true
+       },
+       {
+        "name": "rowIndexes",
+        "path": "$.dataSetSelection.rowIndexes",
+        "type": "array",
+        "assertable": false,
+        "description": ""
+       }
+      ]
+     },
+     {
+      "name": "graph",
+      "path": "$.graph",
+      "type": "object",
+      "assertable": false,
+      "description": "编排执行规格(C5)",
+      "children": [
+       {
+        "name": "after",
+        "path": "$.graph.after",
+        "type": "array",
+        "assertable": false,
+        "description": "",
+        "children": [
+         {
+          "name": "injectionEntryIds",
+          "path": "$.graph.after.injectionEntryIds",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "inputs",
+          "path": "$.graph.after.inputs",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "nRuns",
+          "path": "$.graph.after.nRuns",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "needs",
+          "path": "$.graph.after.needs",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "ref",
+          "path": "$.graph.after.ref",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "repeat",
+          "path": "$.graph.after.repeat",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "scenarioId",
+          "path": "$.graph.after.scenarioId",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "serviceBindings",
+          "path": "$.graph.after.serviceBindings",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "shared",
+          "path": "$.graph.after.shared",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
+       },
+       {
+        "name": "before",
+        "path": "$.graph.before",
+        "type": "array",
+        "assertable": false,
+        "description": "",
+        "children": [
+         {
+          "name": "injectionEntryIds",
+          "path": "$.graph.before.injectionEntryIds",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "inputs",
+          "path": "$.graph.before.inputs",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "nRuns",
+          "path": "$.graph.before.nRuns",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "needs",
+          "path": "$.graph.before.needs",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "ref",
+          "path": "$.graph.before.ref",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "repeat",
+          "path": "$.graph.before.repeat",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "scenarioId",
+          "path": "$.graph.before.scenarioId",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "serviceBindings",
+          "path": "$.graph.before.serviceBindings",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "shared",
+          "path": "$.graph.before.shared",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
+       },
+       {
+        "name": "checks",
+        "path": "$.graph.checks",
+        "type": "array",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "gates",
+        "path": "$.graph.gates",
+        "type": "array",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "mode",
+        "path": "$.graph.mode",
+        "type": "string",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "nRuns",
+        "path": "$.graph.nRuns",
+        "type": "integer",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "parallel",
+        "path": "$.graph.parallel",
+        "type": "integer",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "serviceBindings",
+        "path": "$.graph.serviceBindings",
+        "type": "object",
+        "assertable": false,
+        "description": ""
+       },
+       {
+        "name": "units",
+        "path": "$.graph.units",
+        "type": "array",
+        "assertable": false,
+        "description": "",
+        "children": [
+         {
+          "name": "injectionEntryIds",
+          "path": "$.graph.units.injectionEntryIds",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "inputs",
+          "path": "$.graph.units.inputs",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "nRuns",
+          "path": "$.graph.units.nRuns",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "needs",
+          "path": "$.graph.units.needs",
+          "type": "array",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "ref",
+          "path": "$.graph.units.ref",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "repeat",
+          "path": "$.graph.units.repeat",
+          "type": "integer",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "scenarioId",
+          "path": "$.graph.units.scenarioId",
+          "type": "string",
+          "assertable": false,
+          "description": "",
+          "required": true
+         },
+         {
+          "name": "serviceBindings",
+          "path": "$.graph.units.serviceBindings",
+          "type": "object",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "shared",
+          "path": "$.graph.units.shared",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
+       }
+      ]
      },
      {
       "name": "injectionEntryIds",
@@ -7162,11 +9923,19 @@
       "description": ""
      },
      {
+      "name": "reportDefinitionId",
+      "path": "$.reportDefinitionId",
+      "type": "integer",
+      "assertable": false,
+      "description": "报告定义 id(P3-07;None = 默认报告)"
+     },
+     {
       "name": "scenarioId",
       "path": "$.scenarioId",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "schemeId",
@@ -7208,14 +9977,16 @@
        "path": "$.executionId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "runId",
        "path": "$.runId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -7228,14 +9999,16 @@
        "path": "$.executionId",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "runId",
        "path": "$.runId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -7284,7 +10057,47 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "createdAt",
+         "path": "$.items.createdAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "filters",
+         "path": "$.items.filters",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "name",
+         "path": "$.items.name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "q",
+         "path": "$.items.q",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       }
      ]
     }
@@ -7327,7 +10140,8 @@
       "path": "$.bucket",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "filters",
@@ -7341,7 +10155,8 @@
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "q",
@@ -7376,14 +10191,16 @@
        "path": "$.id",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "name",
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "q",
@@ -7481,7 +10298,8 @@
       "path": "$.definition",
       "type": "object",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "orchestration",
@@ -7502,7 +10320,23 @@
         "path": "$.orchestration.steps",
         "type": "array",
         "assertable": false,
-        "description": ""
+        "description": "",
+        "children": [
+         {
+          "name": "enabled",
+          "path": "$.orchestration.steps.enabled",
+          "type": "boolean",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "name",
+          "path": "$.orchestration.steps.name",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
        }
       ]
      }
@@ -7533,6 +10367,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -7567,14 +10402,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -7588,14 +10425,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -7632,7 +10471,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -7709,6 +10580,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -7743,14 +10615,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -7764,14 +10638,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -7808,7 +10684,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -7906,7 +10814,163 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "dataSetCount",
+         "path": "$.items.dataSetCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "meta",
+         "path": "$.items.meta",
+         "type": "object",
+         "assertable": true,
+         "description": "Scenario metadata; one Scenario has exactly one Meta.",
+         "required": true,
+         "children": [
+          {
+           "name": "author",
+           "path": "$.items.meta.author",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "createTime",
+           "path": "$.items.meta.createTime",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "description",
+           "path": "$.items.meta.description",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "expire",
+           "path": "$.items.meta.expire",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "module",
+           "path": "$.items.meta.module",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "name",
+           "path": "$.items.meta.name",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "owner",
+           "path": "$.items.meta.owner",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "priority",
+           "path": "$.items.meta.priority",
+           "type": "integer",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "scenarioId",
+           "path": "$.items.meta.scenarioId",
+           "type": "string",
+           "assertable": true,
+           "description": "",
+           "required": true
+          },
+          {
+           "name": "system",
+           "path": "$.items.meta.system",
+           "type": "array",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "tags",
+           "path": "$.items.meta.tags",
+           "type": "array",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "updateTime",
+           "path": "$.items.meta.updateTime",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "version",
+           "path": "$.items.meta.version",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        },
+        {
+         "name": "schemeCount",
+         "path": "$.items.schemeCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "starred",
+         "path": "$.items.starred",
+         "type": "boolean",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "stepCount",
+         "path": "$.items.stepCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "tags",
+         "path": "$.items.tags",
+         "type": "array",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "varCount",
+         "path": "$.items.varCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "visibility",
+         "path": "$.items.visibility",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "page",
@@ -8018,7 +11082,8 @@
       "path": "$.definition",
       "type": "object",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "orchestration",
@@ -8039,7 +11104,23 @@
         "path": "$.orchestration.steps",
         "type": "array",
         "assertable": false,
-        "description": ""
+        "description": "",
+        "children": [
+         {
+          "name": "enabled",
+          "path": "$.orchestration.steps.enabled",
+          "type": "boolean",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "name",
+          "path": "$.orchestration.steps.name",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
        }
       ]
      },
@@ -8048,7 +11129,16 @@
       "path": "$.overlay",
       "type": "object",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "children": [
+       {
+        "name": "serviceBindings",
+        "path": "$.overlay.serviceBindings",
+        "type": "object",
+        "assertable": false,
+        "description": ""
+       }
+      ]
      }
     ]
    },
@@ -8069,14 +11159,33 @@
        "path": "$.errors",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "message",
+         "path": "$.errors.message",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "path",
+         "path": "$.errors.path",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "ok",
        "path": "$.ok",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -8181,6 +11290,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -8215,14 +11325,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -8236,14 +11348,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -8280,7 +11394,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -8379,7 +11525,8 @@
       "path": "$.definition",
       "type": "object",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "orchestration",
@@ -8400,7 +11547,23 @@
         "path": "$.orchestration.steps",
         "type": "array",
         "assertable": false,
-        "description": ""
+        "description": "",
+        "children": [
+         {
+          "name": "enabled",
+          "path": "$.orchestration.steps.enabled",
+          "type": "boolean",
+          "assertable": false,
+          "description": ""
+         },
+         {
+          "name": "name",
+          "path": "$.orchestration.steps.name",
+          "type": "string",
+          "assertable": false,
+          "description": ""
+         }
+        ]
        }
       ]
      }
@@ -8431,6 +11594,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -8465,14 +11629,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -8486,14 +11652,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -8530,7 +11698,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -8697,6 +11897,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -8731,14 +11932,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -8752,14 +11955,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -8796,7 +12001,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -8873,6 +12110,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -8907,14 +12145,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -8928,14 +12168,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -8972,7 +12214,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -9071,7 +12345,8 @@
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "rows",
@@ -9099,7 +12374,8 @@
        "path": "$.datasetId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
@@ -9113,7 +12389,8 @@
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "rowCount",
@@ -9134,7 +12411,8 @@
        "path": "$.scenarioId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "varUnlocks",
@@ -9154,7 +12432,8 @@
        "path": "$.datasetId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "description",
@@ -9168,7 +12447,8 @@
        "path": "$.name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "rowCount",
@@ -9189,7 +12469,8 @@
        "path": "$.scenarioId",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "varUnlocks",
@@ -9252,7 +12533,8 @@
        "path": "$.definition",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "orchestration",
@@ -9273,7 +12555,23 @@
          "path": "$.orchestration.steps",
          "type": "array",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
         }
        ]
       }
@@ -9339,6 +12637,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -9373,14 +12672,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -9394,14 +12695,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -9438,7 +12741,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -9578,7 +12913,24 @@
       "path": "$.dataSetSelection",
       "type": "array",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "children": [
+       {
+        "name": "datasetId",
+        "path": "$.dataSetSelection.datasetId",
+        "type": "string",
+        "assertable": false,
+        "description": "",
+        "required": true
+       },
+       {
+        "name": "rowIndexes",
+        "path": "$.dataSetSelection.rowIndexes",
+        "type": "array",
+        "assertable": false,
+        "description": ""
+       }
+      ]
      },
      {
       "name": "injectionEntryIds",
@@ -9613,7 +12965,8 @@
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "parallel",
@@ -9702,7 +13055,24 @@
       "path": "$.dataSetSelection",
       "type": "array",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "children": [
+       {
+        "name": "datasetId",
+        "path": "$.dataSetSelection.datasetId",
+        "type": "string",
+        "assertable": false,
+        "description": "",
+        "required": true
+       },
+       {
+        "name": "rowIndexes",
+        "path": "$.dataSetSelection.rowIndexes",
+        "type": "array",
+        "assertable": false,
+        "description": ""
+       }
+      ]
      },
      {
       "name": "injectionEntryIds",
@@ -9737,7 +13107,8 @@
       "path": "$.name",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "parallel",
@@ -9860,7 +13231,8 @@
       "path": "$.starred",
       "type": "boolean",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -9935,6 +13307,7 @@
        "type": "object",
        "assertable": true,
        "description": "Scenario metadata; one Scenario has exactly one Meta.",
+       "required": true,
        "children": [
         {
          "name": "author",
@@ -9969,14 +13342,16 @@
          "path": "$.meta.module",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "name",
          "path": "$.meta.name",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "owner",
@@ -9990,14 +13365,16 @@
          "path": "$.meta.priority",
          "type": "integer",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "scenarioId",
          "path": "$.meta.scenarioId",
          "type": "string",
          "assertable": true,
-         "description": ""
+         "description": "",
+         "required": true
         },
         {
          "name": "system",
@@ -10034,7 +13411,39 @@
        "path": "$.orchestration",
        "type": "object",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "resourceMeta",
+         "path": "$.orchestration.resourceMeta",
+         "type": "object",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "steps",
+         "path": "$.orchestration.steps",
+         "type": "array",
+         "assertable": true,
+         "description": "",
+         "children": [
+          {
+           "name": "enabled",
+           "path": "$.orchestration.steps.enabled",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "name",
+           "path": "$.orchestration.steps.name",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "resource",
@@ -10132,7 +13541,68 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "aliasName",
+         "path": "$.items.aliasName",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "baseService",
+         "path": "$.items.baseService",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "baseUrl",
+         "path": "$.items.baseUrl",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "createdAt",
+         "path": "$.items.createdAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "credentialAlias",
+         "path": "$.items.credentialAlias",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "groupTag",
+         "path": "$.items.groupTag",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "ownerUserId",
+         "path": "$.items.ownerUserId",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "updatedAt",
+         "path": "$.items.updatedAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        }
+       ]
       },
       {
        "name": "page",
@@ -10196,14 +13666,16 @@
       "path": "$.aliasName",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "baseUrl",
       "path": "$.baseUrl",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "credentialAlias",
@@ -10238,14 +13710,16 @@
        "path": "$.aliasName",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseService",
        "path": "$.baseService",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseUrl",
@@ -10300,14 +13774,16 @@
        "path": "$.aliasName",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseService",
        "path": "$.baseService",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseUrl",
@@ -10420,14 +13896,16 @@
        "path": "$.aliasName",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseService",
        "path": "$.baseService",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "baseUrl",
@@ -10564,21 +14042,105 @@
        "path": "$.endpoints",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "children": [
+        {
+         "name": "caseCount",
+         "path": "$.endpoints.caseCount",
+         "type": "integer",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "id",
+         "path": "$.endpoints.id",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "lastRunAt",
+         "path": "$.endpoints.lastRunAt",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "method",
+         "path": "$.endpoints.method",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "name",
+         "path": "$.endpoints.name",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "path",
+         "path": "$.endpoints.path",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "signals",
+         "path": "$.endpoints.signals",
+         "type": "object",
+         "assertable": true,
+         "description": "四格状态条(§2.3)。位置固定:①需求 ②用例 ③最近执行 ④适配告警。",
+         "children": [
+          {
+           "name": "alarm",
+           "path": "$.endpoints.signals.alarm",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "cases",
+           "path": "$.endpoints.signals.cases",
+           "type": "boolean",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "lastRun",
+           "path": "$.endpoints.signals.lastRun",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          },
+          {
+           "name": "req",
+           "path": "$.endpoints.signals.req",
+           "type": "string",
+           "assertable": true,
+           "description": ""
+          }
+         ]
+        }
+       ]
       },
       {
        "name": "plateReachable",
        "path": "$.plateReachable",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "service",
        "path": "$.service",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "stats",
@@ -10746,7 +14308,71 @@
        "path": "$.items",
        "type": "array",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true,
+       "children": [
+        {
+         "name": "created_at",
+         "path": "$.items.created_at",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "display_name",
+         "path": "$.items.display_name",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "id",
+         "path": "$.items.id",
+         "type": "integer",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "is_active",
+         "path": "$.items.is_active",
+         "type": "boolean",
+         "assertable": true,
+         "description": "",
+         "required": true
+        },
+        {
+         "name": "is_admin",
+         "path": "$.items.is_admin",
+         "type": "boolean",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "role",
+         "path": "$.items.role",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "updated_at",
+         "path": "$.items.updated_at",
+         "type": "string",
+         "assertable": true,
+         "description": ""
+        },
+        {
+         "name": "username",
+         "path": "$.items.username",
+         "type": "string",
+         "assertable": true,
+         "description": "",
+         "required": true
+        }
+       ]
       },
       {
        "name": "page",
@@ -10817,7 +14443,8 @@
       "path": "$.password",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      },
      {
       "name": "role",
@@ -10831,7 +14458,8 @@
       "path": "$.username",
       "type": "string",
       "assertable": false,
-      "description": ""
+      "description": "",
+      "required": true
      }
     ]
    },
@@ -10845,28 +14473,32 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "display_name",
        "path": "$.display_name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_active",
        "path": "$.is_active",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_admin",
@@ -10894,7 +14526,8 @@
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     },
@@ -10907,28 +14540,32 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "display_name",
        "path": "$.display_name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_active",
        "path": "$.is_active",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_admin",
@@ -10956,7 +14593,8 @@
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
@@ -11075,28 +14713,32 @@
        "path": "$.created_at",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "display_name",
        "path": "$.display_name",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "id",
        "path": "$.id",
        "type": "integer",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_active",
        "path": "$.is_active",
        "type": "boolean",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       },
       {
        "name": "is_admin",
@@ -11124,7 +14766,8 @@
        "path": "$.username",
        "type": "string",
        "assertable": true,
-       "description": ""
+       "description": "",
+       "required": true
       }
      ]
     }
