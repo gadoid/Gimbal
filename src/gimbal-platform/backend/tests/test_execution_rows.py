@@ -80,6 +80,23 @@ async def test_registry_popped_after_finalize(client, plate_mock: PlateMock,
     exec_id = r.json()["executionId"]
     await _wait(lambda: len(cases) >= 1)
     await _await_final(client, bob, exec_id)
+    # Execution 终态先于 fanout _teardown 的 registry pop(job finish 在
+    # 任务体返回之后)——只等 Execution 会与 pop 竞态偶发红;等 job 终态
+    # 则 teardown 必已跑完(与 test_debug_console 同款模式)。
+    from sqlalchemy import select
+
+    from app.core import db as db_module
+    from app.models.execution import ExecutionJob
+    for _ in range(200):
+        async with db_module.SessionLocal() as s:
+            job_status = (await s.execute(
+                select(ExecutionJob.status)
+                .where(ExecutionJob.execution_id == exec_id))).scalar()
+        if job_status in ("done", "failed", "canceled"):
+            break
+        await asyncio.sleep(0.05)
+    else:
+        raise AssertionError("job not final in 10s")
 
     from app.services import run_dispatcher
     assert exec_id not in run_dispatcher._row_states   # 活跃表不泄漏

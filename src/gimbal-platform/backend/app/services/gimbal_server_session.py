@@ -272,3 +272,98 @@ class ServerSession:
                 return []
             r.raise_for_status()
             return r.json().get("output") or []
+
+
+class ServerSessionPool:
+    """P3.5-1（方案 A）：并发槽位实例池。
+
+    引擎 ``/runs`` 是单 run 设计（并发第二个 POST 直接 409），多行执行
+    且 parallel>1 时每个并发槽位各持一个 server 实例：``start`` 冷启动
+    槽位 0（沿用 C12 的 fanout 期 fail-fast 语义），``run_case`` 借出
+    空闲实例（无则按需冷启动至 size 上限，锁外并行），用毕归还；
+    单行/调试（size=1）退化为旧的单实例语义。``close`` 收口全部实例。
+    """
+
+    def __init__(self, *, size: int) -> None:
+        self._size = max(1, int(size))
+        self._idle: "asyncio.Queue[ServerSession]" = asyncio.Queue()
+        self._live: list[ServerSession] = []
+        self._started = 0            # 已冷启动槽位数（含失败回退）
+        self._engine_log_path: "Path | None" = None
+        self._cwd: "Path | str | None" = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def first(self) -> "ServerSession | None":
+        """槽位 0 实例（调试会话注册用；``start`` 之后必有）。"""
+        return self._live[0] if self._live else None
+
+    def _log_path(self, slot: int) -> "Path | None":
+        if self._engine_log_path is None:
+            return None
+        # 槽位 0 沿用 server-engine.log（单实例/调试的历史名），其余加序号
+        if slot == 0:
+            return self._engine_log_path
+        return self._engine_log_path.parent / (
+            f"{self._engine_log_path.stem}-{slot}{self._engine_log_path.suffix}")
+
+    async def start(self, *, engine_log_path: "Path | None" = None,
+                    cwd: "Path | str | None" = None) -> None:
+        """冷启动槽位 0（引擎不可用在此 fail-fast，与 C12 行为一致）。
+
+        占位 ``_started=1`` —— 不占位的话首个 ``_acquire`` 会再起一个
+        slot 0 实例,两个实例同写 server-engine.log("w" 互截)。
+        """
+        self._engine_log_path = engine_log_path
+        self._cwd = cwd
+        async with self._lock:
+            if self._started > 0:
+                return                    # 已预热(幂等)
+            self._started = 1             # 槽位 0 由本方法占用
+        try:
+            s = await self._spawn(0)
+        except Exception:
+            async with self._lock:
+                self._started -= 1        # 归还槽位,后续 acquire 重试
+            raise
+        self._idle.put_nowait(s)
+
+    async def _spawn(self, slot: int) -> ServerSession:
+        s = ServerSession()
+        await s.start(engine_log_path=self._log_path(slot), cwd=self._cwd)
+        self._live.append(s)
+        return s
+
+    async def _acquire(self) -> ServerSession:
+        spawn_slot: "int | None" = None
+        async with self._lock:
+            if not self._idle.empty():
+                return self._idle.get_nowait()
+            if self._started < self._size:
+                spawn_slot = self._started
+                self._started += 1     # 预占槽位，冷启动放锁外并行
+        if spawn_slot is None:
+            return await self._idle.get()   # 池满 → 等归还
+        try:
+            return await self._spawn(spawn_slot)
+        except Exception:
+            async with self._lock:
+                self._started -= 1     # 归还槽位，后续行重试冷启动
+            raise
+
+    async def run_case(self, case_path: "Path | str", **kwargs: Any) -> LaunchResult:
+        """借槽位实例执行一个 case（借出 → run_case → 归还）。"""
+        s = await self._acquire()
+        try:
+            return await s.run_case(case_path, **kwargs)
+        finally:
+            self._idle.put_nowait(s)
+
+    async def close(self) -> None:
+        """收口全部实例（terminate → kill；无残留）。"""
+        for s in self._live:
+            try:
+                await s.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._live.clear()

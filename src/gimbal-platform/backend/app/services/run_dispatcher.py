@@ -337,6 +337,25 @@ class _EventIngester:
         if self._ticker is None:
             self._ticker = asyncio.create_task(_tick())
 
+    async def seed_from_db(self) -> None:
+        """P3.5-2：恢复重跑时 seq 续接 —— 从已有事件 max(seq) / 日志
+        min(seq)（负数轴最深处）起步。job 因租约过期/重启回队重跑时，
+        不续接会从 1 重分配、撞 (execution_id, seq) 唯一约束被
+        on_conflict_do_nothing 静默丢弃（重跑段事件整批丢失）。
+        首次运行空表 → 起点不变（一次聚合查询的开销）。
+        """
+        from sqlalchemy import func as _func, select as _select
+
+        from ..models.execution import ExecutionEvent as _EE
+        async with self._db_factory() as session:
+            row = (await session.execute(
+                _select(_func.max(_EE.seq), _func.min(_EE.seq))
+                .where(_EE.execution_id == self._execution_id))).one()
+        if row[0] is not None:
+            self._next_seq = int(row[0]) + 1
+        if row[1] is not None and int(row[1]) < self._log_seq:
+            self._log_seq = int(row[1])
+
     def on_event(self, d: dict) -> None:
         d = dict(d)
         d["seq"] = self._next_seq
@@ -376,11 +395,17 @@ class _EventIngester:
                     session, self._execution_id, logs,
                     seq_base=log_seq_base)
                 await session.commit()
-        except Exception as e:  # noqa: BLE001
-            # 失败回填缓冲(下次冲刷重试),不丢这批事件/日志
+        except BaseException as e:  # noqa: BLE001
+            # 失败/取消都要回填缓冲(下次冲刷重试),不丢这批事件/日志。
+            # P3.5-3 对账实测:finalize 取消 ticker 时批次可能正在 DB
+            # 往返中,CancelledError 不是 Exception 子类,旧 except
+            # Exception 会放行 → 整批静默丢失(批已换出,final flush
+            # 拿到空缓冲)。回填后由 finalize 的收尾 flush 重试。
             self._events = events + self._events
             self._logs = logs + self._logs
             self._log_seq += len(logs)
+            if not isinstance(e, Exception):
+                raise          # CancelledError 照常传播(取消语义不变)
             logger.warning(
                 "run_dispatcher: event flush {}/{} failed (re-buffered): {}",
                 self._execution_id, len(events) + len(logs), e,
@@ -427,7 +452,8 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
             try:
                 await session.commit()
             except IntegrityError:
-                # 同 (execution, seq) 已有终态行(理论不可达,重启重放兜底)
+                # 同 (execution, seq) 已有终态行(P3.5-2:job 重跑时行级
+                # 断点之外的兜底 —— 中断行重跑完成即撞唯一约束)
                 await session.rollback()
                 from sqlalchemy import update
 
@@ -438,8 +464,8 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
                     .values(status=state.status, case_dir=state.case_dir or "",
                             unit_id=state.unit_id, branch=state.branch,
                             attempts=state.attempts,
-                            started_at=state.started_at,
-                            finished_at=state.finished_at)
+                            started_at=_iso_to_dt(state.started_at),
+                            finished_at=_iso_to_dt(state.finished_at))
                 )
                 await session.commit()
     except Exception as e:  # noqa: BLE001
@@ -926,6 +952,7 @@ async def _fanout_graph(
     from .graph_dispatch import GraphDispatchError
 
     ingester = _EventIngester(db_factory, execution_id)
+    await ingester.seed_from_db()   # P3.5-2：恢复重跑事件 seq 续接
     ingester.start()
     run_dir = _run_dir(run_id)
     log_path = _jsonl_path()
@@ -978,6 +1005,8 @@ async def _fanout_graph(
     from ..models.execution import ExecutionRow
     passed = 1 if status == "passed" else 0
     try:
+        from sqlalchemy.exc import IntegrityError
+
         async with db_factory() as session:
             session.add(ExecutionRow(
                 execution_id=execution_id, seq=0,
@@ -986,7 +1015,24 @@ async def _fanout_graph(
                     getattr(result, "attempts", 0) or 0) or 1,
                 status=status, case_dir="case-graph",
                 started_at=None, finished_at=_iso_to_dt(finished_ts)))
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                # P3.5-2:job 重跑 graph 执行 —— 图行 upsert(恢复时 graph
+                # 整图重放,事件 seq 已由 ingester 续接)
+                await session.rollback()
+                from sqlalchemy import update as _upd
+
+                await session.execute(
+                    _upd(ExecutionRow)
+                    .where(ExecutionRow.execution_id == execution_id,
+                           ExecutionRow.seq == 0)
+                    .values(status=status,
+                            unit_id=proj["unit"] or "graph",
+                            attempts=proj["attempts"] or int(
+                                getattr(result, "attempts", 0) or 0) or 1,
+                            finished_at=_iso_to_dt(finished_ts)))
+                await session.commit()
     except Exception:  # noqa: BLE001
         pass
     # 计数与终态
@@ -1056,41 +1102,49 @@ async def _fanout(
         """fanout 收尾：停取消轮询、回收 server 实例、注销调试会话。"""
         cancel_local["done"] = True
         cancel_poller.cancel()
-        if server_session is not None:
+        if server_pool is not None:
             try:
-                await server_session.close()
+                await server_pool.close()
             except Exception:  # noqa: BLE001
                 pass
         debug_sessions.pop(execution_id, None)
         _eq._cancel_hint.discard(execution_id)
         _row_states.pop(execution_id, None)
 
-    # C12:server 链/调试 —— 本次执行持有的执行器 server 实例
-    server_session = None
+    # C12/P3.5-1:server 链/调试 —— 并发槽位实例池(引擎 /runs 单 run
+    # 设计,并发第二个 POST 直接 409;多行 × parallel>1 须每槽位一实例。
+    # 单行/调试退化为单实例语义)
+    server_pool = None
     if chain == "server" or debug is not None:
-        from .gimbal_server_session import ServerSession
-        server_session = ServerSession()
+        from .gimbal_server_session import ServerSessionPool
+        _total_rows = (sum(len(ds["rows"]) for ds in datasets)
+                       * len(list(injections) or [None]))
+        _slots = (1 if debug is not None
+                  else max(1, min(int(parallel or 1), _total_rows or 1)))
+        server_pool = ServerSessionPool(size=_slots)
     # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
     ingester = _EventIngester(db_factory, execution_id)
+    await ingester.seed_from_db()   # P3.5-2：恢复重跑事件 seq 续接
     ingester.start()
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
     # 互不互踩;与 JSONL 同域构成执行审计面(什么数据真的打给了引擎)。
     run_dir = _run_dir(run_id)
-    if server_session is not None:
+    if server_pool is not None:
         run_dir.mkdir(parents=True, exist_ok=True)
-        # C12:执行级 server 实例(reports 落 run_dir,引擎 reporter 相对
-        # server 进程 cwd 写;调试实例在 debug_sessions 注册供代理)
+        # C12:执行级 server 池槽位 0(reports 落 run_dir,引擎 reporter 相对
+        # server 进程 cwd 写;调试实例在 debug_sessions 注册供代理)。
+        # P3.5-1:槽位 1..N-1 在行执行按需冷启动(锁外并行)
         try:
-            await server_session.start(
+            await server_pool.start(
                 engine_log_path=run_dir / "server-engine.log", cwd=run_dir)
         except Exception as e:  # noqa: BLE001
             await _teardown()
             raise
         if debug is not None:
-            debug_sessions[execution_id] = {"session": server_session}
+            debug_sessions[execution_id] = {"session": server_pool.first}
 
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
@@ -1188,6 +1242,12 @@ async def _fanout(
         ``row_idx`` 是编辑器原始行号
         (``rows`` 携带 (原始行号, 行字典) 对,稀疏选择不重排)。"""
         state = row_states[seq]
+        _prev = done_rows.get(seq)
+        if _prev is not None:
+            # P3.5-2 恢复跳过:沿用首次尝试的终态(registry 读侧一致),
+            # 不重跑、不重计数
+            state.status = _prev
+            return
         # P2-04:本行事件投影器(所有路径可安全读;无事件路径恒空)
         proj = {"unit": None, "status": None, "attempts": 0}
         result = None   # launch 产物(plate 异常路径无 launch → None)
@@ -1304,10 +1364,12 @@ async def _fanout(
                                 _p["unit"] = d.get("unit") or _p["unit"]
                             ingester.on_event(d)
 
-                        if server_session is not None:
+                        if server_pool is not None:
                             # C12:server 链(调试恒走此链) —— SSE 事件同
-                            # 一回调面;超时由 run_case 内部 cancel 收口
-                            result = await server_session.run_case(
+                            # 一回调面;超时由 run_case 内部 cancel 收口。
+                            # P3.5-1:实例经槽位池借还,parallel>1 的多行
+                            # 各占一个实例,不再撞引擎单 run 409
+                            result = await server_pool.run_case(
                                 case_path, halt_at=halt_at, n_runs=n_runs,
                                 debug=debug, on_event=_row_on_event)
                         else:
@@ -1442,6 +1504,23 @@ async def _fanout(
         for row_idx, row in ds["rows"]
         for inj in injections
     ]
+    # P3.5-2:行级断点 —— 恢复场景(job 租约过期/重启回队重跑)先读已
+    # 终态行,已完成的 seq 不再执行:不重复打被测系统、不重复计数
+    # (行落库先于计数 bump → DB 存在的行必已计数,跳过即无重复)。
+    # DB 只落终态行(_persist_row_terminal),存在即终态;首次运行空集。
+    done_rows: dict[int, str] = {}
+    try:
+        from sqlalchemy import select as _sel_row
+
+        from ..models.execution import ExecutionRow as _ER
+        async with db_factory() as session:
+            _existing = (await session.execute(
+                _sel_row(_ER.seq, _ER.status)
+                .where(_ER.execution_id == execution_id))).all()
+        done_rows = {int(s): st for s, st in _existing
+                     if st in _FINAL_STATUSES}
+    except Exception:  # noqa: BLE001 — 查询失败按无断点处理(全量重跑)
+        done_rows = {}
     # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
     # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。
     row_states = _row_states[execution_id] = [

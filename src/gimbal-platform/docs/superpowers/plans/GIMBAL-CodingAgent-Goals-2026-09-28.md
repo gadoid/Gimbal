@@ -629,3 +629,4 @@ P1–P3 与 P4–P6 两条线可以并行，交汇点只有 P4-06（平台编排
 | D-5 | 外部集成的推送方向是否提前到 P2 之后 | P8-01~04 的时机 |
 | D-6 | suite 横切面（checks/gates/metrics/plugins，定稿 D6）与 SUITE 生命周期事件（定稿 D7）是否仍要 | 裁撤则删除 SuiteStart/SuiteEndEvent 死类型；保留则随 P3-05 一批实现，避免编排页二次返工 |
 | D-7 | platform_uploader reporter 的退役时机 | 其职责被 P2-03/P2-02 的平台拉流取代且平台无接收端点；建议 P2 落地后退役，不补接收端 |
+| D-8 | P3.5-1 修法：server 链多行并发——A=每并发槽位一实例 / B=合成 aggregate graph 单 run | **已拍板（2026-09-29）：方案 A**（ServerSessionPool，已实施并验证；B 留作后续优化） |

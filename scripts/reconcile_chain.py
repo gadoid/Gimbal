@@ -38,6 +38,7 @@ async def _dispatch(chain: str, args, user_id: int) -> int:
         dataSetIds=args.dataset or [],
         injectionEntryIds=args.injection or [],
         nRuns=args.n_runs,
+        parallel=args.parallel,
     )
     async with db_module.SessionLocal() as session:
         resp = await run_dispatcher.dispatch_run(
@@ -88,9 +89,12 @@ async def _event_counts(execution_id: int) -> dict:
     from app.models.execution import ExecutionEvent
 
     async with db_module.SessionLocal() as session:
+        # 只比 kind='event' 的真实事件流 —— 日志行(kind='log')仅在
+        # legacy 链经 on_log 入库(server 链只消费事件),混入恒假差异
         rows = (await session.execute(
             select(ExecutionEvent.event_type, func.count())
-            .where(ExecutionEvent.execution_id == execution_id)
+            .where(ExecutionEvent.execution_id == execution_id,
+                   ExecutionEvent.kind == "event")
             .group_by(ExecutionEvent.event_type))).all()
         return {et: n for et, n in rows}
 
@@ -113,6 +117,8 @@ async def main() -> int:
     ap.add_argument("--dataset", action="append", default=[])
     ap.add_argument("--injection", action="append", default=[])
     ap.add_argument("--n-runs", type=int, default=1)
+    ap.add_argument("--parallel", type=int, default=1,
+                    help="行级并发(P3.5-1 探针形态须 >1 方可覆盖槽位实例池)")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--owner", default=None, help="场景归属用户名（默认第一个用户）")
     args = ap.parse_args()
@@ -156,11 +162,15 @@ async def main() -> int:
     diffs = _diff({"summary": summary_l, "rows": rows_l},
                   {"summary": summary_s, "rows": rows_s})
     # 事件量级：类型集合一致 + 每类型数量同量级（server 链多 run.meta 等
-    # 会话事件,允许 ≤3 的类型差;同类型数量差 >20% 记差异）
+    # 会话事件,允许 ≤3 的类型差;同类型数量差 >20% 记差异）。run.meta 是
+    # 进程级 CI 元数据:legacy 每 case 一个进程、jsonl 订阅先于 bootstrap;
+    # server 的 per-run 订阅在 bootstrap 之后才挂上 → 恒 legacy-only,属
+    # 链路固有差异不入 diff(超过容忍度才记)。
     types_l, types_s = set(ev_l), set(ev_s)
-    if types_l - types_s or types_s - types_l:
-        diffs.append(f"event types: legacy-only={sorted(types_l - types_s)} "
-                     f"server-only={sorted(types_s - types_l)}")
+    only_l, only_s = types_l - types_s, types_s - types_l
+    if len(only_l) + len(only_s) > 3:
+        diffs.append(f"event types: legacy-only={sorted(only_l)} "
+                     f"server-only={sorted(only_s)}")
     for t in types_l & types_s:
         a, b = ev_l[t], ev_s[t]
         if max(a, b) and abs(a - b) / max(a, b) > 0.2:
