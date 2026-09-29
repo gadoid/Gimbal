@@ -99,8 +99,8 @@ def test_a_step_pointing_at_the_wrong_contract_entry_is_rejected():
         build_definition(case, sb_username="sb-t-user")
 
 
-def test_every_golden_case_step_is_bound_to_its_contract_entry():
-    """全量：8 条 golden case 的每一步，声明的 endpoint 都存在、路由对得上。
+def test_every_case_file_step_is_bound_to_its_contract_entry():
+    """全量：**cases/ 下每一个 yaml** 的每一步，声明的 endpoint 都存在、路由对得上。
 
     且**发 body 的那几步**请求面真的非空 —— 非空才有表单可渲染，页面上的 body
     才不是裸 JSON 框。
@@ -108,38 +108,53 @@ def test_every_golden_case_step_is_bound_to_its_contract_entry():
     只对发 body 的方法提这个要求：GET 本来就没有请求体，请求面为空是**正确的**
     （契约里 42 个端点的请求面为空，其中相当一部分是 204/空体）。对无 body 的
     GET 提要求，等于逼用例侧去给契约编字段。
+
+    门扫的是**目录**不是某一个文件：这门最早只点名 golden_path.yaml，于是
+    domains.yaml 的 10 条烟雾用例整批漏网 —— 真跑到编排器才炸，而那 10 条的
+    症状（页面上 body 是裸 JSON 框）跟「契约里根本没这条路由」长得一模一样。
+    新增用例文件必须自动进门。
     """
     import yaml
 
     from gimbal_bootstrap.case_builder import CONTRACT_INDEX
 
-    cases = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
-        .read_text(encoding="utf-8")
-    )
-    if isinstance(cases, dict):
-        cases = cases.get("cases", [])
+    case_files = sorted((Path(__file__).resolve().parents[1] / "cases").glob("*.yaml"))
+    assert case_files, "cases/ 下一个 yaml 都没有 —— 门会空转成全绿"
 
     problems: list[str] = []
     bodies = 0
-    for case in cases:
-        d = build_definition(case, sb_username="sb-t-user", run_token="r0")
-        for i, step in enumerate(d["steps"]):
-            eid = step["call"]["view_hints"]["endpoint_id"]
-            ep = CONTRACT_INDEX.get(eid)
-            if ep is None:
-                problems.append(f"{case['id']} s{i}: {eid} 不在契约里")
+    steps = 0
+    for f in case_files:
+        cases = yaml.safe_load(f.read_text(encoding="utf-8"))
+        if isinstance(cases, dict):
+            cases = cases.get("cases", [])
+        for case in cases:
+            # build_definition 自身就拒「没声明 endpoint」和「路由对不上」。
+            # 接住再记，是为了把**哪个文件**的哪条用例挂上 —— 直接让它抛出来
+            # 只看得到 case id，看不出是从哪个 yaml 读出来的。
+            try:
+                d = build_definition(case, sb_username="sb-t-user", run_token="r0")
+            except ValueError as e:
+                problems.append(f"{f.name} {case.get('id')}: {e}")
                 continue
-            sends_body = step["call"]["method"] in ("POST", "PUT", "PATCH")
-            if sends_body:
-                bodies += 1
-                if not ep.request.declarations:
-                    problems.append(
-                        f"{case['id']} s{i}: {eid} 发 body 却没有请求面声明，"
-                        f"页面上仍是裸 JSON"
-                    )
+            for i, step in enumerate(d["steps"]):
+                steps += 1
+                eid = step["call"]["view_hints"]["endpoint_id"]
+                ep = CONTRACT_INDEX.get(eid)
+                if ep is None:
+                    problems.append(f"{f.name} {case['id']} s{i}: {eid} 不在契约里")
+                    continue
+                sends_body = step["call"]["method"] in ("POST", "PUT", "PATCH")
+                if sends_body:
+                    bodies += 1
+                    if not ep.request.declarations:
+                        problems.append(
+                            f"{f.name} {case['id']} s{i}: {eid} 发 body 却没有请求面声明，"
+                            f"页面上仍是裸 JSON"
+                        )
     assert not problems, "\n".join(problems)
-    assert bodies >= 4, f"只有 {bodies} 步发 body —— golden_path 的覆盖面退化了"
+    assert steps >= 18, f"只扫到 {steps} 步 —— 用例文件覆盖面退化了"
+    assert bodies >= 4, f"只有 {bodies} 步发 body —— 覆盖面退化了"
 
 
 def test_definition_passes_plate_validation():

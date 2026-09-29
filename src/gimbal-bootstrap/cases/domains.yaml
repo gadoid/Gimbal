@@ -1,41 +1,45 @@
 # 每域一条烟雾用例，只断言响应契约。每条都需要登录态（auth 默认 true）。
+#
+# 每条 step 都显式声明契约端点 id：编辑面靠 call.view_hints.endpoint_id 拉
+# plate 的 /full 拿字段面，缺了它 body 退回裸 JSON 文本框（见 case_builder
+# 模块 docstring）。id 必须在已装机的契约里且路由对得上，否则生成期就拒。
 cases:
   - {id: D01, name: 用户花名册, tags: [smoke],
-     steps: [{method: GET, path: /api/users/roster,
+     steps: [{method: GET, path: /api/users/roster, endpoint: platform.users.get_roster,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D02, name: 执行摘要, tags: [smoke],
-     steps: [{method: GET, path: /api/executions/summary,
+     steps: [{method: GET, path: /api/executions/summary, endpoint: platform.executions.get_summary,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D03, name: 场景 facets, tags: [smoke],
-     steps: [{method: GET, path: /api/scenarios/facets,
+     steps: [{method: GET, path: /api/scenarios/facets, endpoint: platform.scenarios.get_facets,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D04, name: 凭证池列表, tags: [smoke],
-     steps: [{method: GET, path: /api/auths,
+     steps: [{method: GET, path: /api/auths, endpoint: platform.auths.get_root,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D05, name: 常量池列表, tags: [smoke],
-     steps: [{method: GET, path: /api/constants,
+     steps: [{method: GET, path: /api/constants, endpoint: platform.constants.get_root,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D06, name: carry 默认值, tags: [smoke],
-     steps: [{method: GET, path: /api/carry/defaults,
+     steps: [{method: GET, path: /api/carry/defaults, endpoint: platform.carry.get_defaults,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D07, name: 服务别名列表, tags: [smoke],
-     steps: [{method: GET, path: /api/service-aliases,
+     steps: [{method: GET, path: /api/service-aliases, endpoint: platform.service_aliases.get_root,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D08, name: 数据集列表, tags: [smoke],
-     steps: [{method: GET, path: /api/data-sets,
+     steps: [{method: GET, path: /api/data-sets, endpoint: platform.data_sets.get_root,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D09, name: 端点目录, tags: [smoke],
-     steps: [{method: GET, path: /api/catalog/services,
+     steps: [{method: GET, path: /api/catalog/services, endpoint: platform.catalog.get_services,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
 
   - {id: D10, name: 通知列表, tags: [smoke],
-     steps: [{method: GET, path: /api/notifications,
+     steps: [{method: GET, path: /api/notifications, endpoint: platform.notifications.get_root,
               asserts: [{target: "$.call.response.status", operator: eq, expected: 200}]}]}
