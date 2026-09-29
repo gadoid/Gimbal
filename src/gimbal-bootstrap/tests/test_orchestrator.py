@@ -72,9 +72,9 @@ def _client(**kw):
     }, **kw)
 
 
-def _case(path="/api/users/roster", method="GET"):
+def _case(path="/api/health", method="GET", endpoint="platform.health.get_root"):
     return {"id": "D01", "name": "花名册", "steps": [
-        {"method": method, "path": path,
+        {"method": method, "path": path, "endpoint": endpoint,
          "asserts": [{"target": "$.call.response.status", "operator": "eq",
                       "expected": 200}]}
     ]}
@@ -438,9 +438,11 @@ def _run_main(monkeypatch, tmp_path, *, users=(), auths=()):
         "cases:\n"
         "  - id: T2\n    name: 注册\n    steps:\n"
         "      - {method: POST, path: /api/auth/register, auth: false,\n"
+        "         endpoint: platform.auth.post_register,\n"
         "         asserts: [{target: '$.call.response.status', operator: eq, expected: 201}]}\n"
         "  - id: T3\n    name: 登录\n    steps:\n"
         "      - {method: POST, path: /api/auth/login, auth: false,\n"
+        "         endpoint: platform.auth.post_login,\n"
         "         asserts: [{target: '$.call.response.status', operator: eq, expected: 200}]}\n",
         encoding="utf-8",
     )
@@ -566,6 +568,7 @@ def test_throwaway_password_reaches_the_scenario_body():
     client = _client()
     case = {"id": "T2", "name": "注册", "steps": [
         {"method": "POST", "path": "/api/auth/register", "auth": False,
+         "endpoint": "platform.auth.post_register",
          "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
          "asserts": [{"target": "$.call.response.status", "operator": "eq",
                       "expected": 201}]}]}

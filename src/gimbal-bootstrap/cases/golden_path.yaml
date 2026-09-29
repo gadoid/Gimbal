@@ -9,6 +9,7 @@ cases:
     steps:
       - method: GET
         path: /api/health
+        endpoint: platform.health.get_root
         auth: false
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
@@ -20,6 +21,7 @@ cases:
     steps:
       - method: POST
         path: /api/auth/register
+        endpoint: platform.auth.post_register
         auth: false
         body:
           username: "${sb.new_username}"
@@ -40,6 +42,7 @@ cases:
     steps:
       - method: POST
         path: /api/auth/login
+        endpoint: platform.auth.post_login
         auth: false
         body:
           username: "${sb.new_username}"
@@ -58,6 +61,7 @@ cases:
     steps:
       - method: GET
         path: /api/scenarios/${sb.scenario_id}
+        endpoint: platform.scenarios.get_by_scenario_id
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
           - {target: "$.call.response.body.meta.scenarioId", operator: eq, expected: "${sb.scenario_id}"}
@@ -77,6 +81,7 @@ cases:
     steps:
       - method: POST
         path: /api/scenarios/${sb.scenario_id}/data-sets
+        endpoint: platform.scenarios.post_by_scenario_id_data_sets
         body:
           name: sb-dataset
           description: 自举数据集
@@ -91,6 +96,7 @@ cases:
     steps:
       - method: POST
         path: /api/scenarios/${sb.scenario_id}/run-schemes
+        endpoint: platform.scenarios.post_by_scenario_id_run_schemes
         body:
           name: sb-scheme
           isDefault: true
@@ -112,6 +118,7 @@ cases:
     steps:
       - method: GET
         path: /api/constants
+        endpoint: platform.constants.get_root
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
           - {target: "$.call.response.body.items", operator: exists, expected: null}
@@ -123,6 +130,7 @@ cases:
     steps:
       - method: GET
         path: /api/executions
+        endpoint: platform.executions.get_root
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
           - {target: "$.call.response.body.items", operator: exists, expected: null}

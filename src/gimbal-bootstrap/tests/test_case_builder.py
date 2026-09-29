@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ GOLDEN = {
         {
             "method": "GET",
             "path": "/api/health",
+            "endpoint": "platform.health.get_root",
             "auth": False,
             "asserts": [
                 {"target": "$.call.response.status", "operator": "eq", "expected": 200},
@@ -19,6 +21,125 @@ GOLDEN = {
         }
     ],
 }
+
+
+def test_every_step_carries_the_endpoint_id_the_composer_needs_to_render_its_form():
+    """**这是「结构还是个 json」那一条的根因门。**
+
+    前端 `stepEndpointId()` 只认 `call.view_hints.endpoint_id`；拿不到就不拉
+    plate 的 `/full`，`requestNodes` 为空，于是 body 退回**裸 JSON 文本框** +
+    「该接口未声明请求字段契约」提示。契约定义得再全也没用 —— 用例组织这一侧
+    没把接口身份带过去，字段面就到不了编辑面。
+
+    平台自带的「从接口目录添加」路径（CaseComposerCanvas.onAddEndpoint）写的就是
+    这个 key，注释原话是「字段设计渲染/断言候选/数据集绑定都依赖此 key」。
+    自举生成的场景是手搓的 definition，绕开了那条路径，所以漏了。
+    """
+    d = build_definition(GOLDEN, sb_username="sb-t-user")
+    for step in d["steps"]:
+        assert step["call"]["view_hints"]["endpoint_id"] == "platform.health.get_root"
+
+
+@pytest.mark.parametrize(
+    ("step_path", "contract_path"),
+    [
+        # 契约侧是 OpenAPI 的模板态 `{x}`，用例侧是运行态 `${sb.x}` ——
+        # 两者是同一条路由，只是变量来源不同
+        ("/api/scenarios/${sb.scenario_id}", "/api/scenarios/{scenario_id}"),
+        ("/api/scenarios/${sb.scenario_id}/data-sets", "/api/scenarios/{scenario_id}/data-sets"),
+        ("/api/auth/register", "/api/auth/register"),
+    ],
+)
+def test_a_step_is_bound_to_the_contract_entry_its_route_resolves_to(step_path, contract_path):
+    """step 声明的 endpoint 必须与它实际打的那条路由对得上。
+
+    只写 id 不校验是不够的：id 写错一个字母，用例照样建得起来、跑得起来，只是
+    编辑面挂的是另一个接口的字段面 —— 断言写对了、用例绿了，人在页面上看到的
+    却是错的契约。比对走**路径归一**（`${x}` 与 `{x}` 同形），因为用例的 path 是
+    运行态、契约的 path 是模板态。
+    """
+    from gimbal_bootstrap.case_builder import path_shape
+
+    assert path_shape(step_path) == path_shape(contract_path)
+
+
+def test_a_step_that_names_no_endpoint_is_rejected():
+    """不给 endpoint 就没有身份可带 —— 与其静默退回裸 JSON，不如生成期就拒。"""
+    case = {"id": "T1", "name": "x", "steps": [
+        {"method": "GET", "path": "/api/health", "auth": False,
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 200}]},
+    ]}
+    with pytest.raises(ValueError, match="endpoint"):
+        build_definition(case, sb_username="sb-t-user")
+
+
+def test_an_endpoint_that_drifted_out_of_the_contract_is_rejected():
+    """平台下掉一条路由、用例还指着它时，生成期就要响。
+
+    否则症状是：场景建得起来、跑得起来，页面上 body 是个裸 JSON 框，看不出是
+    契约没了 —— 与本次修的一模一样。
+    """
+    case = {"id": "T1", "name": "x", "steps": [
+        {"method": "GET", "path": "/api/health", "auth": False,
+         "endpoint": "platform.health.get_gone",
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 200}]},
+    ]}
+    with pytest.raises(ValueError, match="get_gone"):
+        build_definition(case, sb_username="sb-t-user")
+
+
+def test_a_step_pointing_at_the_wrong_contract_entry_is_rejected():
+    """id 存在、但对不上这条路由 —— 比「id 根本不存在」更隐蔽。"""
+    case = {"id": "T1", "name": "x", "steps": [
+        {"method": "GET", "path": "/api/health", "auth": False,
+         "endpoint": "platform.constants.get_root",
+         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 200}]},
+    ]}
+    with pytest.raises(ValueError, match="route"):
+        build_definition(case, sb_username="sb-t-user")
+
+
+def test_every_golden_case_step_is_bound_to_its_contract_entry():
+    """全量：8 条 golden case 的每一步，声明的 endpoint 都存在、路由对得上。
+
+    且**发 body 的那几步**请求面真的非空 —— 非空才有表单可渲染，页面上的 body
+    才不是裸 JSON 框。
+
+    只对发 body 的方法提这个要求：GET 本来就没有请求体，请求面为空是**正确的**
+    （契约里 42 个端点的请求面为空，其中相当一部分是 204/空体）。对无 body 的
+    GET 提要求，等于逼用例侧去给契约编字段。
+    """
+    import yaml
+
+    from gimbal_bootstrap.case_builder import CONTRACT_INDEX
+
+    cases = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
+        .read_text(encoding="utf-8")
+    )
+    if isinstance(cases, dict):
+        cases = cases.get("cases", [])
+
+    problems: list[str] = []
+    bodies = 0
+    for case in cases:
+        d = build_definition(case, sb_username="sb-t-user", run_token="r0")
+        for i, step in enumerate(d["steps"]):
+            eid = step["call"]["view_hints"]["endpoint_id"]
+            ep = CONTRACT_INDEX.get(eid)
+            if ep is None:
+                problems.append(f"{case['id']} s{i}: {eid} 不在契约里")
+                continue
+            sends_body = step["call"]["method"] in ("POST", "PUT", "PATCH")
+            if sends_body:
+                bodies += 1
+                if not ep.request.declarations:
+                    problems.append(
+                        f"{case['id']} s{i}: {eid} 发 body 却没有请求面声明，"
+                        f"页面上仍是裸 JSON"
+                    )
+    assert not problems, "\n".join(problems)
+    assert bodies >= 4, f"只有 {bodies} 步发 body —— golden_path 的覆盖面退化了"
 
 
 def test_definition_passes_plate_validation():
@@ -63,11 +184,11 @@ def test_extract_targets_use_call_response_body_prefix():
         "name": "提取",
         "steps": [
             {
-                "method": "GET", "path": "/api/health", "auth": False,
+                "method": "GET", "path": "/api/health", "endpoint": "platform.health.get_root", "auth": False,
                 "extract": {"expr": "$.call.response.body.status", "target": "sb_status"},
             },
             {
-                "method": "GET", "path": "/api/health", "auth": False,
+                "method": "GET", "path": "/api/health", "endpoint": "platform.health.get_root", "auth": False,
                 "asserts": [{"target": "$.call.response.body.status", "operator": "eq",
                              "expected": "${sb_status}"}],
             },
@@ -86,7 +207,7 @@ def test_body_template_substitutes_sb_username():
     case = {
         "id": "TX", "name": "注册",
         "steps": [{
-            "method": "POST", "path": "/api/auth/register", "auth": False,
+            "method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
             "body": {"username": "${sb.username}", "display_name": "sb bootstrap",
                      "password": "Pw-12345678"},
             "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}],
@@ -100,21 +221,23 @@ def test_body_template_substitutes_sb_username():
 
 def test_unknown_service_is_rejected():
     case = {"id": "TX", "name": "x",
-            "steps": [{"method": "GET", "path": "/api/health", "service": "nope", "auth": False}]}
+            "steps": [{"method": "GET", "path": "/api/health", "service": "nope", "auth": False,
+                       "endpoint": "platform.health.get_root"}]}
     with pytest.raises(ValueError, match="service"):
         build_definition(case, sb_username="u")
 
 
 def test_step_without_strategy_is_rejected():
     case = {"id": "TX", "name": "x",
-            "steps": [{"method": "GET", "path": "/api/health", "auth": False}]}
+            "steps": [{"method": "GET", "path": "/api/health", "auth": False,
+                       "endpoint": "platform.health.get_root"}]}
     with pytest.raises(ValueError, match="strategy"):
         build_definition(case, sb_username="u")
 
 
 def test_auth_step_carries_bearer_header():
     case = {"id": "TX", "name": "x",
-            "steps": [{"method": "GET", "path": "/api/scenarios",
+            "steps": [{"method": "GET", "path": "/api/scenarios", "endpoint": "platform.scenarios.get_root",
                        "asserts": [{"target": "$.call.response.status",
                                     "operator": "eq", "expected": 200}]}]}
     d = build_definition(case, sb_username="u")
@@ -158,7 +281,7 @@ def test_new_username_is_distinct_from_the_bootstrap_account():
     账号 —— 同名第二次跑必 409。必须另给一个每轮唯一的新用户名。"""
     d = build_definition(
         {"id": "T2", "name": "注册", "steps": [
-            {"method": "POST", "path": "/api/auth/register", "auth": False,
+            {"method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
              "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 201}]}]},
@@ -182,7 +305,7 @@ def test_admin_password_never_lands_in_the_persisted_scenario():
     一次性账号必须用**当场生成的一次性口令**，跟管理员口令无关。"""
     d = build_definition(
         {"id": "T2", "name": "注册", "steps": [
-            {"method": "POST", "path": "/api/auth/register", "auth": False,
+            {"method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
              "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 201}]}]},
@@ -196,7 +319,7 @@ def test_builder_has_no_substitution_key_for_the_admin_password():
     """`${sb.password}` 这个占位符本身就不该存在 —— 留着它，早晚有人
     在某个用例里填进去。"""
     case = {"id": "T2", "name": "注册", "steps": [
-        {"method": "POST", "path": "/api/auth/register", "auth": False,
+        {"method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
          "body": {"username": "${sb.new_username}", "password": "${sb.password}"},
          "asserts": [{"target": "$.call.response.status", "operator": "eq",
                       "expected": 201}]}]}
@@ -213,7 +336,7 @@ def test_new_username_satisfies_platform_username_pattern():
 
     d = build_definition(
         {"id": "T2", "name": "注册", "steps": [
-            {"method": "POST", "path": "/api/auth/register", "auth": False,
+            {"method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
              "body": {"username": "${sb.new_username}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 201}]}]},
@@ -231,7 +354,7 @@ def test_substituted_text_is_never_rescanned_for_more_placeholders():
     改掉，T3 登录时拿着一个不存在的用户名。"""
     d = build_definition(
         {"id": "T2", "name": "注册", "steps": [
-            {"method": "POST", "path": "/api/auth/register", "auth": False,
+            {"method": "POST", "path": "/api/auth/register", "endpoint": "platform.auth.post_register", "auth": False,
              "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 201}]}]},
@@ -246,7 +369,7 @@ def test_unknown_placeholder_is_left_alone():
     """别把不认识的占位符清成空串 —— 那样一条用例会静悄悄丢掉它要填的东西。"""
     d = build_definition(
         {"id": "T1", "name": "x", "steps": [
-            {"method": "GET", "path": "/api/health", "auth": False,
+            {"method": "GET", "path": "/api/health", "endpoint": "platform.health.get_root", "auth": False,
              "body": {"note": "${sb.nonexistent}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 200}]}]},
