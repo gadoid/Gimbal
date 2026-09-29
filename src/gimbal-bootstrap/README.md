@@ -8,7 +8,7 @@
 |---|---|---|
 | 契约生成器 | `gimbal_bootstrap/contract_gen.py` | 拉平台自己的 `/openapi.json`，转成 plate 的 `EndpointSpec`，落成 `endpoints.json` |
 | 契约登记 | `src/gimbal-plate/gimbal_plate/systems/platform/` | 加载 `endpoints.json`，通过 plate 现有的 registry 注册 115 条 platform 端点 |
-| 用例编排 | `gimbal_bootstrap/orchestrator.py` + `cases/*.yaml` | 以普通用户身份走平台公开 HTTP，跑黄金链路与每域烟雾，用完清理 |
+| 用例编排 | `gimbal_bootstrap/orchestrator.py` + `cases/*.yaml` | 把每条用例建成场景、交给平台跑一遍，**步骤执行和断言求值都发生在 gimbal 那边**，编排器只负责建场景 → 发起运行 → 轮询 → 读回结果 → 清理 |
 
 平台代码改动只有一处：`app/routers/auth.py` 补了一行 `ChangePasswordIn` 的 import
 （文件有 `from __future__ import annotations`，漏这个 import 会让
@@ -28,7 +28,8 @@ python -m gimbal_bootstrap.orchestrator
 
 编排器会**先注册一个专用账号然后停下来**：新注册用户一律是 `member`，而
 `/api/users/roster` 这类端点要管理员权限。停住之后到平台里把该账号提权为
-管理员，回车继续。
+管理员，回车继续。账号名会**自动写回 `.env`**，下次重跑直接复用，不再注册、
+不再暂停。
 
 账号名是 `sb_<10位十六进制>`。自举账号口令**不入库** —— 账号是管理员，口令
 提交进仓库等于把平台交出去。真值放 gitignore 掉的 `src/gimbal-bootstrap/.env`：
@@ -45,9 +46,6 @@ export GIMBAL_SB_USERNAME=sb_xxxx
 export GIMBAL_SB_PASSWORD=...
 python -m gimbal_bootstrap.orchestrator
 ```
-
-设了 `GIMBAL_SB_USERNAME` 就直接复用该账号，既不注册也不暂停 —— 提权好的
-账号存进环境变量，之后每次重跑都省掉这道人工环节。
 
 想跳过暂停（域用例会 403）用 `--no-pause`，只跑黄金链路用
 `--cases cases/golden_path.yaml`。
@@ -74,6 +72,18 @@ python -m pytest tests/test_contract_drift.py
 **`orchestration.steps` 必须和 `definition.steps` 严格同序同长。** 少一个，
 建场景就被拒。`_new_scenario()` 按 `len(definition["steps"])` 生成。
 
+## 凭据怎么进到场景里
+
+场景步骤头写的是占位符 `Authorization: Bearer ${auth.sb.token}`，**definition
+里不落任何真凭据**。调度时平台 `run_dispatcher` 扫到 `${auth.*}`，按 alias 从
+凭证池解析出 `sb` 那条，塞进 `config.users.sb`，引擎再拿 `auth.url` 现登一次
+换 token。池里没有 `sb` 这条，gimbal 直接 `gimbal_rejected` —— 编排器
+`_ensure_credential()` 负责在跑之前把它备好。
+
+池里存的是**口令**不是 token：token 有有效期，存进去很快就废。`case.json`
+这个 artifact 平台是故意不开放的，正是因为里面有明文凭据；判定读的是
+`result.json`。
+
 ## 目录
 
 ```
@@ -81,10 +91,9 @@ gimbal_bootstrap/
   contract_gen.py      OpenAPI → EndpointSpec
   platform_client.py   薄 HTTP 客户端，4xx/5xx 抛 PlatformError
   case_builder.py      用例 YAML → plate Scenario definition
-  assertions.py        断言求值器（$.call.response.* 路径）
-  orchestrator.py      端到端：注册 → 建资源 → 跑 → 清理
+  orchestrator.py      建场景 → 发起运行 → 轮询 → 读回 gimbal 判定 → 清理
 cases/
   golden_path.yaml     T1-T8 全链路
   domains.yaml         每域一条烟雾
-tests/                 43 passed, 1 skipped
+tests/                 50 passed, 1 skipped
 ```

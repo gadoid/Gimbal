@@ -1,30 +1,53 @@
-"""编排逻辑 —— 用假 Platform 测「断言真的被评估了」。
+"""编排器 —— 验证的是「由 gimbal 驱动」这件事本身。
 
-不打真平台：这些用例验证的是编排器的判定逻辑（passed/failed 怎么来、
-清理怎么倒序），不是平台的响应。平台的真实往返在 orchestrator 的
-端到端跑里验。
+编排器**不执行**用例里的 HTTP 步骤：它把场景建出来、发起运行、把引擎的
+判定读回来、清理干净。步骤执行和断言求值都是 gimbal 的活。这里不打真平台 ——
+平台的真实往返在端到端跑里验。
 """
 
-from pathlib import Path
+import json
 
 import pytest
 
 from gimbal_bootstrap.orchestrator import run_case
 from gimbal_bootstrap.platform_client import PlatformError
 
+RESULT_OK = {
+    "status": "passed", "total": 1, "passed": 1, "failed": 0, "skipped": 0,
+    "details": [],
+}
+RESULT_BAD = {
+    "status": "failed", "total": 1, "passed": 0, "failed": 1, "skipped": 0,
+    "details": [{
+        "scenario_id": "sc-x",
+        "steps": [{
+            "step_id": "step-000", "status": "failed",
+            "error": "期望 200 实得 403", "error_phase": "verifying",
+        }],
+    }],
+}
+
 
 class FakePlatform:
-    """记录调用、按 path 返回预置响应的 Platform 替身。"""
+    """记录调用、按 path 返回预置响应的 Platform 替身。
 
-    def __init__(self, responses: dict[str, tuple[int, object]]):
-        self.responses = responses
-        self.calls: list[tuple[str, str]] = []
-        self.writes: list[tuple[str, str, object]] = []  # (method, path, body)
+    默认让运行一步到位地跑完（终态 done + 一份通过的 result.json），
+    免得用例全在 _poll 里等到超时。
+    """
+
+    def __init__(self, responses=None, *, result=RESULT_OK):
+        self.responses = responses or {}
+        self.calls = []
+        self.writes = []  # (method, path, body)
+        self.token = "tok-fake"
+        self._result = result
 
     def request(self, method, path, body=None):
         self.calls.append((method, path))
         if method != "GET":
             self.writes.append((method, path, body))
+        if "case-artifact" in path:
+            return 200, self._result
         if path in self.responses:
             return self.responses[path]
         return 200, {"ok": True}
@@ -39,96 +62,173 @@ class FakePlatform:
         return self.request("DELETE", path)
 
 
-def _case(asserts, path="/api/health", method="GET"):
-    return {"id": "TX", "name": "x", "steps": [
-        {"method": method, "path": path, "auth": False, "asserts": asserts}
-    ]}
-
-
-def test_passing_asserts_are_counted_as_passed():
-    client = FakePlatform({"/api/health": (200, {"status": "ok"})})
-    r = run_case(
-        _case([{"target": "$.call.response.status", "operator": "eq", "expected": 200},
-               {"target": "$.call.response.body.status", "operator": "eq", "expected": "ok"}]),
-        client, "sb-u",
-    )
-    assert r["error"] is None
-    assert r["passed"] == 2 and r["failed"] == 0
-
-
-def test_failing_assert_is_counted_as_failed_not_passed():
-    """编排器不评估断言就报 passed —— 那是在自欺。"""
-    client = FakePlatform({"/api/health": (200, {"status": "degraded"})})
-    r = run_case(
-        _case([{"target": "$.call.response.body.status", "operator": "eq", "expected": "ok"}]),
-        client, "sb-u",
-    )
-    assert r["failed"] == 1 and r["passed"] == 0
-    assert any("degraded" in f or "status" in f for f in r["failures"])
-
-
-def test_orchestration_is_index_aligned_with_definition_steps():
-    client = FakePlatform({"/api/scenarios": (201, {"scenarioId": "sc-x"})})
-    case = _case([{"target": "$.call.response.status", "operator": "eq", "expected": 201}],
-                 path="/api/scenarios", method="POST")
-    case["steps"][0]["body"] = {"definition": {}, "orchestration": {}}
-    run_case(case, client, "sb-u")
-    post = next(c for c in client.calls if c == ("POST", "/api/scenarios"))
-    assert post is not None
-
-
-def test_cleanup_runs_in_dependency_reverse_order():
-    client = FakePlatform({
+def _client(**kw):
+    return FakePlatform({
         "/api/scenarios": (201, {"scenarioId": "sc-x"}),
-        "/api/scenarios/sc-x/data-sets": (201, {"datasetId": "ds-1"}),
-        "/api/scenarios/sc-x/run-schemes": (201, {"schemeId": "sc-1"}),
-    })
-    case = {"id": "TX", "name": "x", "steps": [
-        {"method": "POST", "path": "/api/scenarios", "body": {},
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
-        {"method": "POST", "path": "/api/scenarios/${sb.scenario_id}/data-sets",
-         "body": {"name": "d"},
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
-        {"method": "POST", "path": "/api/scenarios/${sb.scenario_id}/run-schemes",
-         "body": {"name": "s"},
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
+        "/api/runs": (201, {"executionId": 42}),
+        "/api/executions/42": (200, {"status": "done", "totalRuns": 1}),
+        "/api/executions/42/rows": (200, {"items": [
+            {"caseDir": "case-000-r0-n0", "status": "done"}]}),
+    }, **kw)
+
+
+def _case(path="/api/users/roster", method="GET"):
+    return {"id": "D01", "name": "花名册", "steps": [
+        {"method": method, "path": path,
+         "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                      "expected": 200}]}
     ]}
-    r = run_case(case, client, "sb-u")
-    assert r["error"] is None
-    deletes = [p for m, p in client.calls if m == "DELETE"]
-    assert deletes == [
-        "/api/scenarios/sc-x/run-schemes/sc-1",
-        # 数据组的删除路由是扁平的 /api/data-sets/{id}，不挂在场景下
-        "/api/data-sets/ds-1",
-        "/api/scenarios/sc-x",
-    ], deletes
 
 
-def test_platform_error_becomes_reported_failure_not_crash():
+def _run(client=None, case=None, **kw):
+    return run_case(case or _case(), client or _client(), "sb_u",
+                    run_token="tk1", **kw)
+
+
+# --- 编排器不自己发 HTTP：那是 gimbal 的活 ---------------------------------
+
+
+def test_orchestrator_never_calls_the_case_paths_itself():
+    client = _client()
+    _run(client)
+    assert "/api/users/roster" not in [p for _, p in client.calls], client.calls
+
+
+def test_every_case_becomes_a_dispatched_run():
+    client = _client()
+    r = _run(client)
+    assert ("POST", "/api/scenarios") in client.calls, client.calls
+    assert ("POST", "/api/runs") in client.calls, client.calls
+    assert r["executionId"] == 42, r
+
+
+def test_run_is_issued_against_the_scenario_that_was_created():
+    client = _client()
+    _run(client)
+    runs = [b for m, p, b in client.writes if p == "/api/runs"]
+    assert runs == [{"scenarioId": "sc-x", "nRuns": 1, "parallel": 1}], runs
+
+
+def test_orchestration_stays_index_aligned_with_the_definition():
+    client = _client()
+    _run(client)
+    body = next(b for m, p, b in client.writes if p == "/api/scenarios")
+    assert len(body["orchestration"]["steps"]) == len(body["definition"]["steps"])
+
+
+# --- 判定来自 gimbal，不是编排器自己算的 -----------------------------------
+
+
+def test_counts_come_from_gimbal_result_json():
+    r = _run(_client(result=RESULT_BAD))
+    assert r["passed"] == 0 and r["failed"] == 1, r
+    assert any("403" in f and "verifying" in f for f in r["failures"]), r["failures"]
+
+
+def test_passing_run_reports_gimbal_pass_counts():
+    r = _run()
+    assert r["passed"] == 1 and r["failed"] == 0, r
+    assert r["ok"] is True, r
+
+
+def test_result_json_may_arrive_as_a_raw_string():
+    """artifact 接口给的是文件原文，解析责任在编排器。"""
+    r = _run(_client(result=json.dumps(RESULT_BAD)))
+    assert r["failed"] == 1, r
+
+
+def test_a_run_gimbal_rejects_is_reported_as_failed():
+    client = _client()
+    client.responses["/api/executions/42"] = (200, {"status": "failed"})
+    client.responses["/api/executions/42/rows"] = (200, {"items": [
+        {"caseDir": "case-000-r0-n0", "status": "gimbal_rejected"}]})
+    r = _run(client)
+    assert r["failed"] >= 1, r
+    assert any("gimbal" in f for f in r["failures"]), r["failures"]
+
+
+def test_unparseable_result_json_is_a_failure_not_a_silent_pass():
+    r = _run(_client(result="not json at all"))
+    assert r["failed"] == 1, r
+
+
+# --- 生命周期 -------------------------------------------------------------
+
+
+def test_scenario_is_deleted_after_the_run():
+    client = _client()
+    _run(client)
+    assert [p for m, p in client.calls if m == "DELETE"] == ["/api/scenarios/sc-x"]
+
+
+def test_scenario_is_deleted_even_when_the_run_blows_up():
     class Boom(FakePlatform):
-        def request(self, method, path, body=None):
+        def post(self, path, body=None):
+            if path == "/api/runs":
+                raise PlatformError(503, {"detail": "dispatcher down"})
+            return FakePlatform.post(self, path, body)
+
+    client = Boom({"/api/scenarios": (201, {"scenarioId": "sc-x"})})
+    r = _run(client)
+    assert r["error"] and "503" in r["error"]
+    assert [p for m, p in client.calls if m == "DELETE"] == ["/api/scenarios/sc-x"]
+
+
+def test_platform_error_becomes_a_reported_failure_not_a_crash():
+    class Boom(FakePlatform):
+        def post(self, path, body=None):
             raise PlatformError(503, {"detail": "unavailable"})
 
-    r = run_case(_case([{"target": "$.call.response.status", "operator": "eq",
-                         "expected": 200}]), Boom({}), "sb-u")
+    r = _run(Boom({}))
     assert r["error"] and "503" in r["error"]
 
 
-# --- 账号复用：重跑编排器不该每次都往平台里再塞一个账号 -----------------------
+# --- 凭证池：场景引 alias，平台在 run 期注入 --------------------------------
+
+
+def test_bootstrap_creates_a_credential_pool_entry_for_the_sb_account():
+    """场景步骤头写 ${auth.sb.token}，平台调度时按 alias 从凭证池解析。池里
+    没有 sb 这条，gimbal 就 gimbal_rejected。池里存的是**口令**不是 token ——
+    引擎拿 auth.url 现登一次换 token。"""
+    from gimbal_bootstrap.orchestrator import CREDENTIAL_URL, _ensure_credential
+
+    client = FakePlatform()
+    _ensure_credential(client, "sb_abc", "Pw-12345678")
+    posts = [b for m, p, b in client.writes if m == "POST" and p == "/api/auths"]
+    assert posts == [{
+        "alias": "sb", "url": CREDENTIAL_URL,
+        "username": "sb_abc", "password": "Pw-12345678",
+        "token_type": "Bearer",
+    }], posts
+
+
+def test_bootstrap_reuses_an_existing_credential_instead_of_duplicating():
+    from gimbal_bootstrap.orchestrator import _ensure_credential
+
+    client = FakePlatform({"/api/auths": (200, {"items": [
+        {"id": 7, "alias": "sb", "url": "http://127.0.0.1:8000/api/auth/login"}]})})
+    _ensure_credential(client, "sb_abc", "Pw-new")
+    patches = [(p, b) for m, p, b in client.writes if m == "PATCH"]
+    assert [p for p, _ in patches] == ["/api/auths/7"], client.writes
+    assert patches[0][1]["username"] == "sb_abc"
+    assert not [c for c in client.writes if c[0] == "POST" and c[1] == "/api/auths"]
+
+
+# --- 账号 -----------------------------------------------------------------
 
 
 def test_existing_account_from_env_is_reused_without_registering(monkeypatch):
     """设了 GIMBAL_SB_USERNAME 就直接登录，不再注册新账号、也不再等人提权。"""
     from gimbal_bootstrap import orchestrator
 
-    monkeypatch.setenv("GIMBAL_SB_USERNAME", "sb-existing")
+    monkeypatch.setenv("GIMBAL_SB_USERNAME", "sb_existing")
     monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Pw-12345678")
 
-    seen: list[tuple[str, str, object]] = []
+    seen = []
 
     class Recording:
         def __init__(self, base_url, token=None):
-            seen.append(("init", base_url, token))
+            seen.append(("init", base_url))
             self.token = token
 
         def post(self, path, body=None):
@@ -136,111 +236,70 @@ def test_existing_account_from_env_is_reused_without_registering(monkeypatch):
             return 200, {"access_token": "tok-1"}
 
     monkeypatch.setattr(orchestrator, "Platform", Recording)
-
-    def boom():  # 复用路径上绝不能等人按回车
-        raise AssertionError("复用已有账号时不该有人工暂停")
-
-    monkeypatch.setattr("builtins.input", boom)
+    monkeypatch.setattr("builtins.input", _never_pause)
 
     client, username, _pw = orchestrator._bootstrap_account(pause=True)
-    assert username == "sb-existing"
+    assert username == "sb_existing"
     assert client.token == "tok-1", "登录拿到的 token 必须挂到 client 上"
-    assert [p for _, p, _ in seen if p == "/api/auth/register"] == []
+    assert [e[1] for e in seen if e[0] == "post"] == ["/api/auth/login"], seen
 
 
-def test_without_env_it_registers_a_fresh_random_account(monkeypatch):
-    """没设 env 才注册，且用户名必须带随机尾巴 —— 固定名字第二次跑必 409。"""
-    from gimbal_bootstrap import orchestrator
-
-    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
-
-    posts: list[str] = []
-
-    class Recording:
-        def __init__(self, base_url, token=None):
-            pass
-
-        def post(self, path, body=None):
-            posts.append(path)
-            return 200, {"access_token": "tok-2"}
-
-    monkeypatch.setattr(orchestrator, "Platform", Recording)
-    monkeypatch.setattr("builtins.input", lambda: "")
-
-    _, username, _pw = orchestrator._bootstrap_account(pause=True)
-    assert "/api/auth/register" in posts
-    assert username.startswith("sb_") and len(username) == 13, username
-
-
-def test_generated_username_satisfies_the_platform_pattern(monkeypatch):
-    """平台 `app/schemas/auth.py` 的 RegisterIn.username 是 `^[A-Za-z0-9_]+$` ——
-    **不含连字符**。编排器生成的账号名必须过得了这一关，否则一启动就 422。"""
+def test_generated_username_satisfies_the_platform_pattern(tmp_path, monkeypatch):
+    """平台 app/schemas/auth.py 的 RegisterIn.username 是 `^[A-Za-z0-9_]+$` ——
+    **不含连字符**。生成的账号名过不了这一关，一启动就 422。"""
     import re
 
     from gimbal_bootstrap import orchestrator
 
     monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
-    usernames: list[str] = []
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Pw-12345678")
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", tmp_path / ".env")
+    seen = []
 
     class Recording:
         def __init__(self, base_url, token=None):
-            pass
+            self.token = None
 
         def post(self, path, body=None):
-            if path == "/api/auth/register":
-                usernames.append(body["username"])
+            seen.append((path, body))
             return 200, {"access_token": "tok-3"}
 
     monkeypatch.setattr(orchestrator, "Platform", Recording)
     monkeypatch.setattr("builtins.input", lambda: "")
 
     orchestrator._bootstrap_account(pause=True)
-    assert usernames, "根本没调注册"
-    assert re.match(r"^[A-Za-z0-9_]+$", usernames[0]), usernames[0]
+    regs = [b for p, b in seen if p == "/api/auth/register"]
+    assert regs, "根本没调注册"
+    assert re.match(r"^[A-Za-z0-9_]+$", regs[0]["username"]), regs[0]["username"]
 
 
-def test_password_defaults_to_a_fixed_value_and_env_wins(monkeypatch):
-    """用户要登进平台检查自举账号，所以默认口令固定；GIMBAL_SB_PASSWORD 仍可覆盖。"""
-    import re
-
+def test_password_defaults_to_the_env_value_and_env_wins(tmp_path, monkeypatch):
+    """用户要登进平台检查自举账号，所以口令固定、且能从 .env / 环境变量喂进来。"""
     from gimbal_bootstrap import orchestrator
 
-    seen: list[str] = []
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", tmp_path / ".env")
+    seen = []
 
-    def register_with(env: dict | None) -> str:
-        seen.clear()
-        monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
-        for k in ("GIMBAL_SB_PASSWORD",):
-            monkeypatch.delenv(k, raising=False)
-        for k, v in (env or {}).items():
-            monkeypatch.setenv(k, v)
+    class Recording:
+        def __init__(self, base_url, token=None):
+            self.token = None
 
-        class Recording:
-            def __init__(self, base_url, token=None):
-                pass
+        def post(self, path, body=None):
+            if path == "/api/auth/register":
+                seen.append(body["password"])
+            return 200, {"access_token": "tok-5"}
 
-            def post(self, path, body=None):
-                if path == "/api/auth/register":
-                    seen.append(body["password"])
-                return 200, {"access_token": "tok-5"}
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
 
-        monkeypatch.setattr(orchestrator, "Platform", Recording)
-        monkeypatch.setattr("builtins.input", lambda: "")
-        orchestrator._bootstrap_account(pause=True)
-        return seen[0]
-
-    default = register_with(None)
-    # 平台 RegisterIn：>=8 位，且同时含字母和数字
-    assert len(default) >= 8 and re.search(r"[A-Za-z]", default) and re.search(r"\d", default)
-
-    overridden = register_with({"GIMBAL_SB_PASSWORD": "Env-Ovr-9876"})
-    assert overridden == "Env-Ovr-9876"
-    assert overridden != default
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Env-Ovr-9876")
+    orchestrator._bootstrap_account(pause=True)
+    assert seen == ["Env-Ovr-9876"], seen
 
 
 def test_password_comes_from_local_env_file_not_source(tmp_path, monkeypatch):
-    """固定口令要能登进平台检查，但不该躺在被跟踪的源码里。
-    真值放在 gitignore 掉的 .env；进程环境变量仍然优先。"""
+    """固定口令要能登进平台检查，但不该躺在被跟踪的源码里。真值放 gitignore
+    掉的 .env；进程环境变量仍然优先。"""
     from gimbal_bootstrap import orchestrator
 
     monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
@@ -253,6 +312,265 @@ def test_password_comes_from_local_env_file_not_source(tmp_path, monkeypatch):
     assert orchestrator._resolve_password() == "from-process-88"
 
 
+def test_fresh_username_is_written_back_to_the_dotenv_file(tmp_path, monkeypatch):
+    """注册完把账号名写回 .env —— 下次重跑直接复用，不用每次手工 export。
+    否则提权好的账号名只活在一次终端的回显里。"""
+    from gimbal_bootstrap import orchestrator
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("GIMBAL_SB_PASSWORD=Pw-12345678\n", encoding="utf-8")
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", dotenv)
+
+    seen = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            self.token = None
+
+        def post(self, path, body=None):
+            seen.append((path, body))
+            return 200, {"access_token": "tok-9"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+
+    _client_, username, _pw = orchestrator._bootstrap_account(pause=False)
+    text = dotenv.read_text(encoding="utf-8")
+    assert f"GIMBAL_SB_USERNAME={username}" in text, text
+    # 口令行不能被冲掉，也不能重复追加
+    assert text.count("GIMBAL_SB_PASSWORD=") == 1, text
+    assert "tok-9" not in text
+
+
+def test_dotenv_writeback_keeps_a_manually_edited_password(tmp_path, monkeypatch):
+    from gimbal_bootstrap import orchestrator
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("# 注释行\nGIMBAL_SB_PASSWORD=Pw-12345678\nOTHER=1\n", encoding="utf-8")
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", dotenv)
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            self.token = None
+
+        def post(self, path, body=None):
+            return 200, {"access_token": "tok-9"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+
+    _c, username, _pw = orchestrator._bootstrap_account(pause=False)
+    text = dotenv.read_text(encoding="utf-8")
+    assert "# 注释行" in text and "OTHER=1" in text, text
+    assert "GIMBAL_SB_PASSWORD=Pw-12345678" in text, text
+    assert f"GIMBAL_SB_USERNAME={username}" in text, text
+
+
+def test_writeback_failure_does_not_lose_the_run(tmp_path, monkeypatch):
+    """.env 只读/写不了都不该让注册好的账号白注册 —— 提示一下，照常返回。"""
+    from gimbal_bootstrap import orchestrator
+
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.setenv("GIMBAL_SB_PASSWORD", "Pw-12345678")
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            self.token = token
+
+        def post(self, path, body=None):
+            return 200, {"access_token": "tok-9"}
+
+    def boom(username):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", lambda: "")
+    monkeypatch.setattr(orchestrator, "_remember_username", boom)
+
+    client, username, _pw = orchestrator._bootstrap_account(pause=False)
+    assert client.token == "tok-9"
+    assert username.startswith("sb_")
+
+
+def test_username_written_to_dotenv_is_picked_up_on_the_next_run(tmp_path, monkeypatch):
+    """写回 .env 就要读得回来，否则「下次自动复用」是假的。"""
+    from gimbal_bootstrap import orchestrator
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "GIMBAL_SB_PASSWORD=Pw-12345678\nGIMBAL_SB_USERNAME=sb_prev\n", encoding="utf-8"
+    )
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", dotenv)
+
+    seen = []
+
+    class Recording:
+        def __init__(self, base_url, token=None):
+            self.token = token
+
+        def post(self, path, body=None):
+            seen.append(path)
+            return 200, {"access_token": "tok-1"}
+
+    monkeypatch.setattr(orchestrator, "Platform", Recording)
+    monkeypatch.setattr("builtins.input", _never_pause)
+
+    _client, username, _pw = orchestrator._bootstrap_account(pause=True)
+    assert username == "sb_prev", username
+    assert "/api/auth/register" not in seen, seen
+
+
+def test_throwaway_account_is_deleted_after_the_run():
+    """每轮注册的一次性账号用完就删 —— 否则每次重跑都往平台里堆一个死账号，
+    而且它在 execution_snapshots 里还留着一份明文口令。"""
+    client = _client()
+    client.responses["/api/users"] = (200, {"items": [
+        {"id": "u-boot", "username": "sb_u"},        # 自举账号，绝不能删
+        {"id": "u-x", "username": "sb_t2throw"},
+    ]})
+    _run(client, new_username="sb_t2throw", new_password="Throw-9911")
+    deleted = [p for m, p in client.calls if m == "DELETE"]
+    assert deleted == ["/api/scenarios/sc-x", "/api/users/u-x"], deleted
+
+
+def test_bootstrap_account_is_never_deleted_even_if_it_looks_like_a_case_account():
+    client = _client()
+    client.responses["/api/users"] = (200, {"items": [
+        {"id": "u-boot", "username": "sb_u"}]})
+    run_case(_case(), client, "sb_u", run_token="tk1",
+             new_username="sb_u", new_password="Throw-9911")
+    assert not [p for m, p in client.calls if m == "DELETE" and p.startswith("/api/users")]
+
+
+def test_throwaway_password_reaches_the_scenario_body():
+    client = _client()
+    case = {"id": "T2", "name": "注册", "steps": [
+        {"method": "POST", "path": "/api/auth/register", "auth": False,
+         "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
+         "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                      "expected": 201}]}]}
+    run_case(case, client, "sb_u", run_token="tk1",
+             new_username="sb_t2throw", new_password="Throw-9911")
+    body = next(b for m, p, b in client.writes if p == "/api/scenarios")
+    rendered = body["definition"]["steps"][0]["request"]["body"]
+    assert rendered["password"] == "Throw-9911", rendered
+
+
+def test_a_run_that_never_reached_done_counts_as_a_failure():
+    """回归：运行状态 failed 但一个断言都没失败 —— 这种必须算失败。
+
+    之前屏幕打 `[FAIL]`、汇总说「0 failed」、退出码 0。接到 CI 里就是
+    满屏红字配一个绿灯。"""
+    from gimbal_bootstrap.orchestrator import _is_failure
+
+    result = {"id": "T7", "passed": 1, "failed": 0, "error": None,
+              "status": "failed", "ok": False, "failures": []}
+    assert _is_failure(result) is True
+
+
+def test_a_clean_run_is_not_a_failure():
+    from gimbal_bootstrap.orchestrator import _is_failure
+
+    assert _is_failure({"passed": 1, "failed": 0, "error": None,
+                        "status": "done", "ok": True}) is False
+    assert _is_failure({"passed": 0, "failed": 0, "error": None,
+                        "status": "done", "ok": True, }) is False
+
+
+def test_no_case_file_references_the_admin_password_placeholder():
+    """兜底：`${sb.password}` 这个占位符已经不存在了，任何用例文件再用它
+    都会渲染成空串 —— register 会因为「口令太弱」400，而不是让这条用例
+    静悄悄失去它要验的东西。"""
+    from pathlib import Path
+
+    cases_dir = Path(__file__).resolve().parents[1] / "cases"
+    offenders = [p.name for p in cases_dir.glob("*.yaml")
+                 if "${sb.password}" in p.read_text(encoding="utf-8")]
+    assert offenders == [], offenders
+
+
+def test_no_case_dispatches_a_run_of_itself():
+    """场景里 POST /api/runs 就是拿自己投自己：每跑一次派生一次新运行，
+    无限递归。投递是编排器的活，用例里不能出现。"""
+    from pathlib import Path
+
+    from gimbal_bootstrap.orchestrator import load_cases
+
+    cases_dir = Path(__file__).resolve().parents[1] / "cases"
+    offenders = [
+        f"{c['id']} {s['method']} {s['path']}"
+        for p in sorted(cases_dir.glob("*.yaml"))
+        for c in load_cases(p)
+        for s in c["steps"]
+        if s["method"] != "GET" and s["path"].rstrip("/") == "/api/runs"
+    ]
+    assert offenders == [], offenders
+
+
+def test_username_is_only_remembered_after_the_login_works(tmp_path, monkeypatch):
+    """回归：写回 .env 必须发生在登录成功之后。
+
+    顺序反了的话，register 成功但 login 401 时账号名照样进了 .env，之后
+    每次重跑都走「复用已有账号」分支，永远卡在这个登不上的账号上。"""
+    from gimbal_bootstrap import orchestrator
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("GIMBAL_SB_PASSWORD=Pw-12345678\n", encoding="utf-8")
+    monkeypatch.delenv("GIMBAL_SB_USERNAME", raising=False)
+    monkeypatch.delenv("GIMBAL_SB_PASSWORD", raising=False)
+    monkeypatch.setattr(orchestrator, "DOTENV_PATH", dotenv)
+
+    class RegisterOnly:
+        """register 收下了，login 拒绝。"""
+        def __init__(self, base_url, token=None):
+            self.token = token
+
+        def post(self, path, body=None):
+            if path == "/api/auth/login":
+                raise PlatformError(401, {"detail": {"code": 4004}})
+            return 201, {"access_token": "tok-9"}
+
+    monkeypatch.setattr(orchestrator, "Platform", RegisterOnly)
+
+    with pytest.raises(PlatformError):
+        orchestrator._bootstrap_account(pause=False)
+
+    assert "GIMBAL_SB_USERNAME" not in dotenv.read_text(encoding="utf-8"), \
+        "登录都没成，账号名不该被写进 .env"
+
+
+def test_concurrent_first_creation_409_is_absorbed_not_raised():
+    """两个并发跑共用一个自举账号 → 抢着建同一条 alias → 一个吃 409
+    （AuthCredential 对 (owner_id, alias) 有唯一约束）。
+
+    函数叫 `_ensure_`，就该是幂等的：第二个调用者不能死在这儿，更不能把
+    整个 run 带走 —— 一条栈追踪，用户看不出是两个终端同时跑。"""
+    from gimbal_bootstrap.orchestrator import _ensure_credential
+
+    class Racing(FakePlatform):
+        def post(self, path, body=None):
+            if path == "/api/auths":
+                self.calls.append(("POST", path))
+                self.writes.append(("POST", path, body))
+                raise PlatformError(409, {"detail": "alias 已存在"})
+            return FakePlatform.post(self, path, body)
+
+        def get(self, path):
+            if path == "/api/auths" and ("POST", "/api/auths") in self.calls:
+                return 200, {"items": [{"id": 7, "alias": "sb"}]}
+            return FakePlatform.get(self, path)
+
+    client = Racing()
+    _ensure_credential(client, "sb_abc", "Pw-12345678")
+    assert [p for m, p, b in client.writes if m == "PATCH"] == ["/api/auths/7"], client.writes
+
+
 def test_missing_password_fails_loudly_instead_of_guessing(tmp_path, monkeypatch):
     from gimbal_bootstrap import orchestrator
 
@@ -262,161 +580,5 @@ def test_missing_password_fails_loudly_instead_of_guessing(tmp_path, monkeypatch
         orchestrator._resolve_password()
 
 
-# --- 端到端第一次真跑揪出来的五个问题，各自钉一条测试 --------------------------
-
-
-def test_list_get_on_a_collection_path_is_not_mistaken_for_a_created_resource():
-    """D08：GET /api/data-sets 也以 /data-sets 结尾，但返回的是 list。
-    按 path 后缀抓 id 就会在 list 上调 .get() 炸掉。只认 POST。"""
-    client = FakePlatform({
-        "/api/data-sets": (200, [{"datasetId": "ds-a"}]),
-    })
-    case = {"id": "D08", "name": "数据集列表", "steps": [
-        {"method": "GET", "path": "/api/data-sets",
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 200}]},
-    ]}
-    r = run_case(case, client, "sb_u", run_token="tk1")
-    assert r["error"] is None, r["error"]
-    assert r["failed"] == 0
-
-
-def test_render_substitutes_new_username():
-    """T2 注册用的新账号名，上一版 _render 漏了这个键，字面量原样发出去 422。"""
-    from gimbal_bootstrap.orchestrator import _render
-
-    out = _render(
-        {"steps": [{"body": {"username": "${sb.new_username}",
-                             "password": "${sb.password}"}}]},
-        "sb_boot", "Pw-12345678", "sc-x-1",
-    )
-    assert out["steps"][0]["body"]["username"].startswith("sb_")
-    assert out["steps"][0]["body"]["password"] == "Pw-12345678"
-
-
-def test_render_substitutes_whole_object_placeholders():
-    """T4 要把编排器构造好的 definition 整个塞进去，不能只替字符串。"""
-    from gimbal_bootstrap.orchestrator import _render
-
-    definition = {"scenarioId": "sc-x-1", "steps": [{"kind": "step"}]}
-    out = _render({"body": {"definition": "${sb.definition}"}}, "u", "p", "sc-x-1",
-                  definition=definition)
-    assert out["body"]["definition"] == definition
-
-
-def test_data_set_is_deleted_from_the_flat_route():
-    """数据组的删除路由是 DELETE /api/data-sets/{id}，不是挂在场景下的。"""
-    client = FakePlatform({
-        "/api/scenarios": (201, {"scenarioId": "sc-x"}),
-        "/api/scenarios/sc-x/data-sets": (201, {"datasetId": "ds-1"}),
-    })
-    case = {"id": "T5", "name": "建数据集", "steps": [
-        {"method": "POST", "path": "/api/scenarios", "body": {},
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
-        {"method": "POST", "path": "/api/scenarios/${sb.scenario_id}/data-sets",
-         "body": {"name": "d"},
-         "asserts": [{"target": "$.call.response.status", "operator": "eq", "expected": 201}]},
-    ]}
-    r = run_case(case, client, "sb_u", run_token="tk1")
-    assert r["error"] is None, r["error"]
-    deletes = [p for m, p in client.calls if m == "DELETE"]
-    assert deletes == ["/api/data-sets/ds-1", "/api/scenarios/sc-x"], deletes
-
-
-def test_golden_path_does_not_duplicate_the_scenario_creation(tmp_path):
-    """编排器每条用例都已经建好一个场景（${sb.scenario_id} 指向它，T5/T6 建在
-    它上面）。用例自己再 POST 一次同名场景必定 409。T4 改成读回来验证，
-    不再重复创建。"""
-    import yaml
-
-    from gimbal_bootstrap.orchestrator import load_cases
-
-    doc = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
-        .read_text(encoding="utf-8")
-    )
-    creators = [
-        (c["id"], s["path"])
-        for c in doc["cases"]
-        for s in c["steps"]
-        if s["method"] == "POST" and s["path"].rstrip("/") == "/api/scenarios"
-    ]
-    assert not creators, f"用例自己再建场景会和编排器的记账场景撞 id: {creators}"
-
-    t4 = next(c for c in doc["cases"] if c["id"] == "T4")
-    assert t4["steps"][0]["method"] == "GET"
-
-
-def test_golden_path_register_uses_a_unique_display_name():
-    """平台 assert_name_available 对 display_name 也查重。T2 发的
-    display_name 不能是自举账号那个固定值。"""
-    import yaml
-
-    doc = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "cases" / "golden_path.yaml")
-        .read_text(encoding="utf-8")
-    )
-    t2 = next(c for c in doc["cases"] if c["id"] == "T2")
-    assert "${" in str(t2["steps"][0]["body"]["display_name"]), \
-        t2["steps"][0]["body"]["display_name"]
-
-
-def test_new_username_is_run_scoped_not_case_scoped():
-    """T2 注册、T3 登录 —— 两次必须用同一个名字。之前按 scenario_id 派生，
-    而 scenario_id 带用例 id，于是 T2 建的 sb_t2<x> 和 T3 登的 sb_t3<x>
-    不是同一个账号，T3 必 401。新账号名必须由编排器按轮次传下来。"""
-    from gimbal_bootstrap.orchestrator import _render
-
-    out = _render(
-        {"steps": [{"body": {"username": "${sb.new_username}"}}]},
-        "sb_boot", "Pw-12345678", "sc-t3-tok", new_username="sb_shared9",
-    )
-    assert out["steps"][0]["body"]["username"] == "sb_shared9"
-
-
-# --- 凭证池：场景引 alias，平台在 run 期注入，definition 里不落 token --------
-
-
-def test_bootstrap_creates_a_credential_pool_entry_for_the_sb_account():
-    """场景步骤头写 ${auth.sb.token}，平台调度时按 alias 从凭证池解析。
-    池里没有 sb 这条，gimbal 就 gimbal_rejected。凭证存的是口令不是 token ——
-    引擎在 auth.url 上现登。"""
-    from gimbal_bootstrap.orchestrator import _ensure_credential
-
-    client = FakePlatform({})
-    _ensure_credential(client, "sb_abc", "Pw-12345678")
-    posts = [b for m, p, b in client.writes if m == "POST" and p == "/api/auths"]
-    assert posts == [{
-        "alias": "sb",
-        "url": "http://127.0.0.1:8000/api/auth/login",
-        "username": "sb_abc",
-        "password": "Pw-12345678",
-        "token_type": "Bearer",
-    }], posts
-
-
-def test_bootstrap_reuses_an_existing_credential_instead_of_duplicating():
-    from gimbal_bootstrap.orchestrator import _ensure_credential
-
-    client = FakePlatform({"/api/auths": (200, {"items": [
-        {"id": 7, "alias": "sb", "url": "http://127.0.0.1:8000/api/auth/login"}
-    ]})})
-    _ensure_credential(client, "sb_abc", "Pw-new")
-    patches = [(p, b) for m, p, b in client.writes if m == "PATCH"]
-    assert [p for p, _ in patches] == ["/api/auths/7"], client.writes
-    assert patches[0][1]["username"] == "sb_abc"
-    assert not [c for c in client.writes if c[0] == "POST" and c[1] == "/api/auths"]
-
-
-def test_definition_keeps_the_placeholder_and_carries_no_token():
-    """definition 里必须仍是 ${auth.sb.token} —— 平台认这个语法，引擎在运行期
-    展开。写成真 token 反而把凭据落在场景记录里。"""
-    from gimbal_bootstrap.case_builder import build_definition
-
-    d = build_definition(
-        {"id": "T1", "name": "x", "steps": [
-            {"method": "GET", "path": "/api/scenarios",
-             "asserts": [{"target": "$.call.response.status", "operator": "eq",
-                          "expected": 200}]}]},
-        sb_username="u",
-    )
-    assert d["steps"][0]["api"]["headers"]["Authorization"] == "Bearer ${auth.sb.token}"
+def _never_pause():
+    raise AssertionError("复用已有账号时不该有人工暂停")

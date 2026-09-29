@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from gimbal_bootstrap.case_builder import build_definition
@@ -144,16 +146,52 @@ def test_new_username_is_distinct_from_the_bootstrap_account():
     d = build_definition(
         {"id": "T2", "name": "注册", "steps": [
             {"method": "POST", "path": "/api/auth/register", "auth": False,
-             "body": {"username": "${sb.new_username}", "password": "${sb.password}"},
+             "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
              "asserts": [{"target": "$.call.response.status", "operator": "eq",
                           "expected": 201}]}]},
-        sb_username="sb_boot", sb_password="Pw-123456", run_token="a1b2c3",
+        sb_username="sb_boot", run_token="a1b2c3", new_password="Throw-9911",
     )
     body = d["steps"][0]["request"]["body"]
     assert body["username"] != "sb_boot"
     assert body["username"] == "sb_a1b2c3", body["username"]
-    assert body["password"] == "Pw-123456"
+    assert body["password"] == "Throw-9911"
     assert "${" not in str(body)
+
+
+def test_admin_password_never_lands_in_the_persisted_scenario():
+    """管理员口令不能进 definition。
+
+    definition 就是 POST /api/scenarios 的 body，平台把它存进
+    composer_scenario.payload，每次运行再深拷贝进 execution_snapshots ——
+    那张表本仓库里没人清理。口令进去等于把平台交出去，而且是绕过
+    「口令不入库」那条原则从数据库这条路绕出去的。
+
+    一次性账号必须用**当场生成的一次性口令**，跟管理员口令无关。"""
+    d = build_definition(
+        {"id": "T2", "name": "注册", "steps": [
+            {"method": "POST", "path": "/api/auth/register", "auth": False,
+             "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 201}]}]},
+        sb_username="sb_boot", sb_password="ADMIN-SECRET-9f3a",
+        run_token="a1b2c3", new_password="Throw-9911",
+    )
+    assert "ADMIN-SECRET-9f3a" not in json.dumps(d, ensure_ascii=False)
+
+
+def test_builder_has_no_substitution_key_for_the_admin_password():
+    """`${sb.password}` 这个占位符本身就不该存在 —— 留着它，早晚有人
+    在某个用例里填进去。"""
+    case = {"id": "T2", "name": "注册", "steps": [
+        {"method": "POST", "path": "/api/auth/register", "auth": False,
+         "body": {"username": "${sb.new_username}", "password": "${sb.password}"},
+         "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                      "expected": 201}]}]}
+    d = build_definition(case, sb_username="sb_boot", sb_password="ADMIN-SECRET-9f3a",
+                         run_token="a1b2c3", new_password="Throw-9911")
+    body = d["steps"][0]["request"]["body"]
+    assert body["password"] != "ADMIN-SECRET-9f3a", body
+    assert "${sb.password}" in body["password"], body
 
 
 def test_new_username_satisfies_platform_username_pattern():
@@ -170,5 +208,37 @@ def test_new_username_satisfies_platform_username_pattern():
     )
     u = d["steps"][0]["request"]["body"]["username"]
     assert re.match(r"^[A-Za-z0-9_]+$", u), u
+
+
+def test_substituted_text_is_never_rescanned_for_more_placeholders():
+    """替换是**一遍过**的。
+
+    逐个 key 依次 replace 的话，替换出来的内容会被后面的 key 再扫一遍：
+    一次性口令里只要含有 `${sb.new_username}` 这种字面量，就会被当占位符
+    改掉，T3 登录时拿着一个不存在的用户名。"""
+    d = build_definition(
+        {"id": "T2", "name": "注册", "steps": [
+            {"method": "POST", "path": "/api/auth/register", "auth": False,
+             "body": {"username": "${sb.new_username}", "password": "${sb.new_password}"},
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 201}]}]},
+        sb_username="sb_boot", run_token="a1b2c3",
+        new_username="sb_x", new_password="p4ss${sb.new_username}w0rd",
+    )
+    body = d["steps"][0]["request"]["body"]
+    assert body["password"] == "p4ss${sb.new_username}w0rd", body["password"]
+
+
+def test_unknown_placeholder_is_left_alone():
+    """别把不认识的占位符清成空串 —— 那样一条用例会静悄悄丢掉它要填的东西。"""
+    d = build_definition(
+        {"id": "T1", "name": "x", "steps": [
+            {"method": "GET", "path": "/api/health", "auth": False,
+             "body": {"note": "${sb.nonexistent}"},
+             "asserts": [{"target": "$.call.response.status", "operator": "eq",
+                          "expected": 200}]}]},
+        sb_username="sb_boot", run_token="a1b2c3",
+    )
+    assert d["steps"][0]["request"]["body"]["note"] == "${sb.nonexistent}"
 
 

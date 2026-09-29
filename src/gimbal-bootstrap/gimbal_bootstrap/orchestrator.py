@@ -1,12 +1,14 @@
-"""自举编排器：注册账号 → 建资源 → 发起运行 → 轮询 → 清理。
+"""自举编排器：账号 → 建场景 → 发起运行 → 轮询 → 读回 gimbal 判定 → 清理。
 
-全程以普通用户身份走平台公开 HTTP API，不碰任何内部接口。
+编排器**不执行**用例里的 HTTP 步骤 —— 那是 gimbal 的活。它只负责把场景
+建出来、让它在平台上跑起来、把引擎的判定读回来。全程以普通用户身份走平台
+公开 HTTP API，不碰任何内部接口。
 """
 
 from __future__ import annotations
 
+import json
 import os
-import re
 import sys
 import time
 import uuid
@@ -15,7 +17,6 @@ from typing import Any
 
 import yaml
 
-from gimbal_bootstrap.assertions import evaluate
 from gimbal_bootstrap.case_builder import build_definition
 from gimbal_bootstrap.platform_client import Platform, PlatformError
 
@@ -26,19 +27,27 @@ BASE_URL = "http://127.0.0.1:8000"
 DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 
-def _resolve_password() -> str:
-    from_env = os.environ.get("GIMBAL_SB_PASSWORD", "").strip()
+def _resolve_env(key: str) -> str:
+    """进程环境变量优先，其次本机 .env（gitignore 掉的）。"""
+    from_env = os.environ.get(key, "").strip()
     if from_env:
         return from_env
     if DOTENV_PATH.is_file():
         for line in DOTENV_PATH.read_text(encoding="utf-8").splitlines():
             line = line.strip()
-            if line.startswith("GIMBAL_SB_PASSWORD="):
+            if line.startswith(key + "="):
                 return line.split("=", 1)[1].strip().strip("\"'")
-    raise SystemExit(
-        f"找不到自举账号口令。设 GIMBAL_SB_PASSWORD，或把 {DOTENV_PATH.name} 补上"
-        f"（模板见 .env.example）。"
-    )
+    return ""
+
+
+def _resolve_password() -> str:
+    value = _resolve_env("GIMBAL_SB_PASSWORD")
+    if not value:
+        raise SystemExit(
+            f"找不到自举账号口令。设 GIMBAL_SB_PASSWORD，或把 {DOTENV_PATH.name} 补上"
+            f"（模板见 .env.example）。"
+        )
+    return value
 
 
 RUN_POLL_INTERVAL_SEC = 2.0
@@ -64,6 +73,10 @@ def _ensure_credential(client: Platform, username: str, password: str) -> None:
     gimbal_rejected。
 
     池里存的是**口令**不是 token —— token 有有效期，存进去很快就废。
+
+    幂等：`AuthCredential` 对 (owner_id, alias) 有唯一约束，两个终端同时跑
+    会抢着建同一条 alias，第二个吃 409。那不是错误，是「别人先建好了」，
+    回头读出来改掉就行。
     """
     _, listing = client.get("/api/auths")
     body = {
@@ -72,18 +85,42 @@ def _ensure_credential(client: Platform, username: str, password: str) -> None:
         "password": password,
         "token_type": "Bearer",
     }
-    for item in (listing or {}).get("items") or []:
-        if item.get("alias") == CREDENTIAL_ALIAS:
-            client.request("PATCH", f"/api/auths/{item['id']}", body)
-            return
-    client.post("/api/auths", {"alias": CREDENTIAL_ALIAS, **body})
+
+    def _patch_existing(items) -> bool:
+        for item in (items or {}).get("items") or []:
+            if item.get("alias") == CREDENTIAL_ALIAS:
+                client.request("PATCH", f"/api/auths/{item['id']}", body)
+                return True
+        return False
+
+    if _patch_existing(listing):
+        return
+    try:
+        client.post("/api/auths", {"alias": CREDENTIAL_ALIAS, **body})
+    except PlatformError as exc:
+        if exc.status != 409:
+            raise
+        # 有人抢先建了。重新读一遍按 id 改，不跟对方抢。
+        _, listing = client.get("/api/auths")
+        if not _patch_existing(listing):
+            raise
 
 
-def _new_username(scenario_id: str) -> str:
-    """每轮唯一的新账号名（黄金链路 T2 用来验 register 端点本身）。
-    平台 RegisterIn.username = ^[A-Za-z0-9_]+$。"""
-    token = re.sub(r"[^A-Za-z0-9_]+", "", scenario_id.removeprefix("sc-"))
-    return "sb_" + (token or uuid.uuid4().hex[:6])
+def _remember_username(username: str) -> None:
+    """把刚注册的账号名写回 .env，下次重跑直接复用，不用每次手工 export。
+
+    只追加/替换 GIMBAL_SB_USERNAME 这一行，别的行（口令、注释）原样留着。
+    """
+    line = f"GIMBAL_SB_USERNAME={username}"
+    existing = (
+        DOTENV_PATH.read_text(encoding="utf-8").splitlines()
+        if DOTENV_PATH.is_file() else []
+    )
+    kept = [
+        l for l in existing
+        if l.strip() and not l.strip().startswith("GIMBAL_SB_USERNAME=")
+    ]
+    DOTENV_PATH.write_text("\n".join(kept + [line]) + "\n", encoding="utf-8")
 
 
 def _login(username: str, password: str) -> Platform:
@@ -102,7 +139,7 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str, str]:
     GIMBAL_SB_USERNAME / GIMBAL_SB_PASSWORD，之后每次跑都直接复用，不再
     往平台里塞新账号。
     """
-    existing = os.environ.get("GIMBAL_SB_USERNAME", "").strip()
+    existing = _resolve_env("GIMBAL_SB_USERNAME")
     if existing:
         password = _resolve_password()
         return _login(existing, password), existing, password
@@ -126,7 +163,41 @@ def _bootstrap_account(pause: bool = True) -> tuple[Platform, str, str]:
         print("=" * 60)
         input()
 
-    return _login(username, password), username, password
+    # 先确认真的登得进去，再把账号名写回 .env。反过来的话，register 成功
+    # 但 login 401 时账号名照样进了 .env，之后每次重跑都走「复用已有账号」
+    # 分支，永远卡在这个登不上的账号上。
+    client = _login(username, password)
+    try:
+        _remember_username(username)
+    except OSError as exc:
+        # .env 只读/写不了不该让已经注册好的账号白注册。下次记得手工
+        # export GIMBAL_SB_USERNAME=...，或者直接看这行提示。
+        print(f"  账号名没能写回 {DOTENV_PATH.name}（{exc}）", file=sys.stderr)
+        print(f"  记住它，下次 export GIMBAL_SB_USERNAME={username}", file=sys.stderr)
+
+    return client, username, password
+
+
+def _retire_throwaway(client: Platform, username: str | None) -> None:
+    """把这一轮注册的一次性账号删掉。
+
+    不删的话每次重跑都往平台里堆一个死账号，而且它在 execution_snapshots
+    里还留着一份明文口令 —— 账号没了那份口令才失效。
+    自举账号本身绝不能删。
+    """
+    if not username:
+        return
+    try:
+        _, listing = client.get("/api/users")
+    except PlatformError as exc:
+        print(f"  查一次性账号失败 {username}: {exc}", file=sys.stderr)
+        return
+    for item in (listing or {}).get("items") or []:
+        if item.get("username") == username and item.get("id"):
+            try:
+                client.delete(f"/api/users/{item['id']}")
+            except PlatformError as exc:
+                print(f"  清理失败 /api/users/{item['id']}: {exc}", file=sys.stderr)
 
 
 def _cleanup(
@@ -183,46 +254,54 @@ def _poll(client: Platform, execution_id: Any, result: dict) -> None:
     result["ok"] = result["status"] == "done"
 
 
-def _render(
-    case: dict,
-    sb_username: str,
-    sb_password: str,
-    scenario_id: str,
-    *,
-    definition: dict | None = None,
-    new_username: str = "",
-) -> dict:
-    """把 ${...} 替成编排期已知的真实值。
+def _dispatch(client: Platform, scenario_id: str) -> Any:
+    """发起一次运行。步骤执行和断言求值都在 gimbal 那边发生。"""
+    _, body = client.post(
+        "/api/runs", {"scenarioId": scenario_id, "nRuns": 1, "parallel": 1}
+    )
+    return (body or {}).get("executionId")
 
-    整串就是一个占位符时（`definition: ${sb.definition}`）替换成对象本身，
-    否则只能替字符串 —— 而 T4 需要的就是编排器刚构造好的那个 definition。
+
+def _read_gimbal_result(client: Platform, execution_id: Any, result: dict) -> None:
+    """读 gimbal 的判定结果。
+
+    真相源是每个 case 目录下的 result.json —— 断言是引擎求的，编排器不重复
+    求值一遍（那才是"自己另写一套 runner"）。行状态里的 gimbal_rejected
+    表示引擎连场景都没接受，同样算失败。
     """
-    subs: dict[str, Any] = {
-        "sb.username": sb_username,
-        "sb.password": sb_password,
-        "sb.scenario_id": scenario_id,
-        "sb.new_username": new_username or _new_username(scenario_id),
-    }
-    if definition is not None:
-        subs["sb.definition"] = definition
-        subs["sb.orchestration"] = _aligned_orchestration(definition)
-
-    def walk(v):
-        if isinstance(v, str):
-            exact = subs.get(v[2:-1]) if v.startswith("${") and v.endswith("}") else None
-            if exact is not None:
-                return exact
-            for k, r in subs.items():
-                if isinstance(r, str):
-                    v = v.replace("${" + k + "}", r)
-            return v
-        if isinstance(v, dict):
-            return {k: walk(x) for k, x in v.items()}
-        if isinstance(v, list):
-            return [walk(x) for x in v]
-        return v
-
-    return walk(case)
+    _, rows = client.get(f"/api/executions/{execution_id}/rows")
+    for row in (rows or {}).get("items") or []:
+        case_dir, row_status = row.get("caseDir"), row.get("status")
+        if row_status == "gimbal_rejected":
+            result["failed"] += 1
+            result["failures"].append(f"gimbal 拒绝接受该场景（{case_dir}）")
+            continue
+        if not case_dir:
+            continue
+        _, blob = client.request(
+            "GET",
+            f"/api/executions/{execution_id}/case-artifact"
+            f"?case={case_dir}&file=result",
+        )
+        if isinstance(blob, str):
+            try:
+                blob = json.loads(blob)
+            except ValueError:
+                result["failed"] += 1
+                result["failures"].append(f"{case_dir} result.json 解析失败")
+                continue
+        if not isinstance(blob, dict):
+            continue
+        result["passed"] += int(blob.get("passed") or 0)
+        result["failed"] += int(blob.get("failed") or 0)
+        result["skipped"] += int(blob.get("skipped") or 0)
+        for detail in blob.get("details") or []:
+            for step in detail.get("steps") or []:
+                if step.get("status") == "failed":
+                    result["failures"].append(
+                        f"{detail.get('scenario_id')} {step.get('step_id')}: "
+                        f"{step.get('error') or '失败'}（{step.get('error_phase')}）"
+                    )
 
 
 def run_case(
@@ -233,7 +312,16 @@ def run_case(
     sb_password: str = "",
     run_token: str = "",
     new_username: str = "",
+    new_password: str = "",
 ) -> dict:
+    """建场景 → 发起运行 → 读回 gimbal 的判定 → 清理。
+
+    编排器**不执行**用例里的 HTTP 步骤 —— 那是 gimbal 的活。编排器只负责
+    把场景建出来、让它跑起来、把引擎的判定读回来。
+
+    `new_password` 是一次性账号的口令，跟管理员口令无关 —— 管理员口令不进
+    definition（见 `build_definition` 的说明）。
+    """
     result: dict[str, Any] = {
         "id": case["id"],
         "name": case.get("name", ""),
@@ -243,51 +331,42 @@ def run_case(
         "error": None,
         "failures": [],
     }
-    scenario_id = dataset_id = scheme_id = None
+    scenario_id = None
     try:
         definition = build_definition(
-            case, sb_username=sb_username, sb_password=sb_password, run_token=run_token
+            case,
+            sb_username=sb_username,
+            sb_password=sb_password,
+            run_token=run_token,
+            new_username=new_username,
+            new_password=new_password,
         )
         scenario_id = _new_scenario(client, definition)
-        rendered = _render(
-            case,
-            sb_username,
-            sb_password,
-            scenario_id,
-            definition=definition,
-            new_username=new_username,
-        )
-
-        for step in rendered["steps"]:
-            path, method = step["path"], step["method"]
-            status, body = client.request(method, path, step.get("body") or None)
-            scratch = {"call": {"response": {"status": status, "body": body}}}
-
-            for a in step.get("asserts", []):
-                if evaluate(scratch, a):
-                    result["passed"] += 1
-                else:
-                    result["failed"] += 1
-                    result["failures"].append(
-                        f"{method} {path} :: {a['target']} {a['operator']} "
-                        f"{a.get('expected')!r} —— 实得 {body!r:.200}"
-                    )
-
-            created = method == "POST" and isinstance(body, dict)
-            if created and path.endswith("/data-sets"):
-                dataset_id = body.get("datasetId") or body.get("id")
-            elif created and path.endswith("/run-schemes"):
-                scheme_id = body.get("schemeId") or body.get("id")
-            elif path == "/api/runs" and body:
-                result["executionId"] = body.get("executionId")
-                _poll(client, body.get("executionId"), result)
+        execution_id = _dispatch(client, scenario_id)
+        result["executionId"] = execution_id
+        result["scenarioId"] = scenario_id
+        _poll(client, execution_id, result)
+        if result.get("status") in TERMINAL_STATES:
+            _read_gimbal_result(client, execution_id, result)
     except PlatformError as exc:
         result["error"] = f"HTTP {exc.status}: {exc.payload}"
     except Exception as exc:  # noqa: BLE001 — 编排器要吞掉一切并汇报
         result["error"] = repr(exc)
     finally:
-        _cleanup(client, scenario_id, dataset_id, scheme_id)
+        _cleanup(client, scenario_id, None, None)
+        if new_username and new_username != sb_username:
+            _retire_throwaway(client, new_username)
     return result
+
+
+def _is_failure(result: dict) -> bool:
+    """一条用例算不算失败 —— 屏幕上的 `[FAIL]` 和进程退出码必须是同一个判断。
+
+    三条缺一不可：编排器自己炸了（error）、引擎判定有失败步骤（failed）、
+    这次运行压根没跑到 done（ok）。少看一条就会「满屏 FAIL 却 exit 0」。
+    """
+    return bool(result.get("error")) or bool(result.get("failed")) \
+        or not result.get("ok", True)
 
 
 def main() -> int:
@@ -310,23 +389,25 @@ def main() -> int:
         cases.extend(load_cases(path))
     print(f"共 {len(cases)} 条用例\n")
 
-    # run_token / new_username 都是**按轮次**取值：scenario_id 带用例 id，
-    # 从它派生的名字会让 T2 注册的和 T3 登录的不是同一个账号。
+    # run_token / new_username / new_password 都是**按轮次**取值：scenario_id
+    # 带用例 id，从它派生的名字会让 T2 注册的和 T3 登录的不是同一个账号。
+    # 一次性口令当场生成，跟管理员口令无关。
     run_token = uuid.uuid4().hex[:6]
     new_username = "sb_" + uuid.uuid4().hex[:8]
+    new_password = "Sb" + uuid.uuid4().hex[:12] + "9"
     results = [
         run_case(
             c,
             client,
             sb_username,
-            sb_password=sb_password,
             run_token=run_token,
             new_username=new_username,
+            new_password=new_password,
         )
         for c in cases
     ]
     for r in results:
-        mark = "OK " if not r["error"] and not r["failed"] and r.get("ok", True) else "FAIL"
+        mark = "OK " if not _is_failure(r) else "FAIL"
         print(f"[{mark}] {r['id']:5} {r['name']}"
               + (f"  {r['error']}" if r["error"] else ""))
         for f in r["failures"]:
@@ -334,7 +415,7 @@ def main() -> int:
         if r.get("status"):
             print(f"         运行状态 status={r['status']} total={r.get('total')}")
 
-    failed = sum(1 for r in results if r["error"] or r["failed"])
+    failed = sum(1 for r in results if _is_failure(r))
     print(f"\n{len(results) - failed} passed, {failed} failed")
     return 1 if failed else 0
 

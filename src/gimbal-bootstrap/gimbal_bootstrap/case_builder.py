@@ -41,8 +41,25 @@ def _render(value: Any, subs: dict[str, str]) -> Any:
 
 
 def build_definition(
-    case: dict, *, sb_username: str, sb_password: str = "", run_token: str = ""
+    case: dict,
+    *,
+    sb_username: str,
+    sb_password: str = "",
+    run_token: str = "",
+    new_username: str = "",
+    new_password: str = "",
 ) -> dict:
+    """用例 YAML → plate Scenario definition。
+
+    **管理员口令不进 definition。** definition 就是 POST /api/scenarios 的
+    body，平台把它存进 composer_scenario.payload，每次运行再深拷贝进
+    execution_snapshots —— 那张表本仓库里没人清理。管理员口令从这条路进去
+    等于把平台交出去，而且绕开了「口令不入库」那条原则。
+
+    所以这里根本没有 `${sb.password}` 这个占位符：验 register/login 用的是
+    一次性账号，口令由编排器当场随机生成（`new_password`），跟管理员口令
+    无关，跑完就把那个账号删掉。
+    """
     base = _slug(case["id"])
     token = _slug(run_token)
     scenario_id = f"sc-{base}-{token}" if token else f"sc-{base}"
@@ -52,10 +69,13 @@ def build_definition(
     subs = {
         "sb.username": sb_username,
         "sb.scenario_id": scenario_id,
-        "sb.password": sb_password,
-        # 用来再注册一个全新账号（验 register 端点本身）。不能复用
-        # sb.username —— 那是编排器已经建好并提权过的那个，同名必 409。
-        "sb.new_username": "sb_" + _username_slug(token or uuid.uuid4().hex[:6]),
+        # 一次性账号：验 register / login 端点本身。不能复用 sb.username ——
+        # 那是编排器已经建好并提权过的那个，同名必 409。必须由编排器按
+        # **轮次**传进来：按用例派生的话，注册的账号和后续登录的账号就
+        # 不是同一个。
+        "sb.new_username": new_username
+        or "sb_" + _username_slug(token or uuid.uuid4().hex[:6]),
+        "sb.new_password": new_password,
     }
 
     steps: list[dict[str, Any]] = []

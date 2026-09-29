@@ -26,7 +26,9 @@ cases:
           # display_name 也查重(平台 assert_name_available)，不能沿用自举账号
           # 那个固定值，否则 409。
           display_name: "${sb.new_username}"
-          password: "${sb.password}"
+          # 一次性口令，当场随机生成，跟管理员口令无关 —— 管理员口令不能进
+          # definition（它会被平台存进 execution_snapshots）。
+          password: "${sb.new_password}"
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 201}
           - {target: "$.call.response.body.user.username", operator: eq, expected: "${sb.new_username}"}
@@ -41,7 +43,7 @@ cases:
         auth: false
         body:
           username: "${sb.new_username}"
-          password: "${sb.password}"
+          password: "${sb.new_password}"
         extract: {expr: "$.call.response.body.access_token", target: sb_access_token}
         asserts:
           - {target: "$.call.response.status", operator: eq, expected: 200}
@@ -92,18 +94,17 @@ cases:
           - {target: "$.call.response.body.schemeId", operator: exists, expected: null}
 
   - id: T7
-    name: 发起运行
+    name: 读运行列表
     tags: [smoke, e2e]
+    # 这里刻意**不** POST /api/runs：「发起运行」是编排器自己在做的事，
+    # 每条用例都由编排器投递一次。场景里再投一次就是拿自己投自己 —— 每次
+    # 运行都会再派生一次运行，无限递归。
     steps:
-      - method: POST
+      - method: GET
         path: /api/runs
-        body:
-          scenarioId: "${sb.scenario_id}"
-          nRuns: 1
-          parallel: 1
         asserts:
-          - {target: "$.call.response.status", operator: eq, expected: 201}
-          - {target: "$.call.response.body.executionId", operator: exists, expected: null}
+          - {target: "$.call.response.status", operator: eq, expected: 200}
+          - {target: "$.call.response.body.items", operator: exists, expected: null}
 
   - id: T8
     name: 读执行结果
