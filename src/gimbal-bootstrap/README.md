@@ -6,8 +6,9 @@
 
 | 部件 | 位置 | 干什么 |
 |---|---|---|
-| 契约生成器 | `gimbal_bootstrap/contract_gen.py` | 拉平台自己的 `/openapi.json`，转成 plate 的 `EndpointSpec`，落成 `endpoints.json` |
-| 契约登记 | `src/gimbal-plate/gimbal_plate/systems/platform/` | 加载 `endpoints.json`，通过 plate 现有的 registry 注册 115 条 platform 端点 |
+| 契约生成器 | `gimbal_bootstrap/contract_gen.py` | 拉平台自己的 `/openapi.json`，展开成契约的中间形态（纯 dict） |
+| 契约定义产出 | `gimbal_bootstrap/contract_gen_py.py` | 把中间形态落成 plate 侧每端点一个的 py 定义（fin 形制）。`python -m gimbal_bootstrap.contract_gen_py [--force]`，`--force` 才覆盖已存在的端点文件 |
+| 契约登记 | `src/gimbal-plate/gimbal_plate/systems/platform/endpoint/` | 126 条 platform 端点的 `EndpointSpec` 定义，按域分目录；`ALL_ENDPOINTS` 聚合导出，plate 现有的 registry 一键注册 |
 | 用例编排 | `gimbal_bootstrap/orchestrator.py` + `cases/*.yaml` | 把每条用例建成场景、交给平台跑一遍，**步骤执行和断言求值都发生在 gimbal 那边**，编排器只负责建场景 → 发起运行 → 轮询 → 读回结果 → 清理 |
 
 平台代码改动只有一处：`app/routers/auth.py` 补了一行 `ChangePasswordIn` 的 import

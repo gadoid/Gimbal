@@ -642,7 +642,7 @@ def test_every_case_hits_a_route_the_platform_actually_declares():
     import re
     from pathlib import Path
 
-    from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
 
     from gimbal_bootstrap.orchestrator import load_cases
 

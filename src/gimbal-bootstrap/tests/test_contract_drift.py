@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from gimbal_bootstrap.contract_gen import fetch_openapi
-from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
 # 实测层挑的端点：全是 GET，admin 才能过，不产生任何写。
 LIVE_PROBES = [
     ("GET", "/api/health"),

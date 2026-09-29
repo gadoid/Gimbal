@@ -1,8 +1,9 @@
-"""OpenAPI → plate EndpointSpec JSON。
+"""OpenAPI → 契约**中间形态**（纯 dict，不认识 plate 的类型）。
 
 契约的唯一真源是 gimbal-platform 的 /openapi.json，人工不写任何字段。
-产物落在 plate 的 systems/platform/endpoints.json —— plate 只负责加载，
-不认识本模块。生成器因此放在 gimbal-bootstrap 而不是 plate 里。
+产物不是给人用的 —— 落成 plate 侧的定义文件是 `contract_gen_py` 的活，本模块
+只负责把 schema 展开成声明树。生成器因此放在 gimbal-bootstrap 而不是 plate
+里：plate 不认识生成器，只看得到一堆正常的 py 定义文件。
 """
 
 from __future__ import annotations
@@ -342,6 +343,11 @@ def check_collisions(specs: list[dict]) -> None:
 
 
 def write_json(specs: list[dict], out_path: Path, source: str) -> None:
+    """把中间形态落成一份 JSON —— **给人看的调试件，不是产物**。
+
+    产物是 `contract_gen_py` 产出的 py 定义。这份 JSON 只在「想知道生成器到底
+    展开了什么」时用；plate 不读它，测试也不依赖它。
+    """
     payload = {
         "_generated_from": source,
         "_generated_by": "gimbal-bootstrap/gimbal_bootstrap/contract_gen.py",
@@ -352,31 +358,3 @@ def write_json(specs: list[dict], out_path: Path, source: str) -> None:
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
-
-
-def main() -> int:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="从平台 OpenAPI 生成 plate 契约")
-    parser.add_argument("--base-url", default=PLATFORM_BASE_URL)
-    parser.add_argument(
-        "--out",
-        default=str(
-            Path(__file__).resolve().parents[2]
-            / "gimbal-plate/gimbal_plate/systems/platform/endpoints.json"
-        ),
-    )
-    args = parser.parse_args()
-
-    openapi = fetch_openapi(args.base_url, allow_inprocess_fallback=True)
-    specs, warnings = build_specs(openapi)
-    write_json(specs, Path(args.out), args.base_url + "/openapi.json")
-
-    print(f"generated {len(specs)} endpoints -> {args.out}")
-    for w in warnings:
-        print("WARN:", w)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

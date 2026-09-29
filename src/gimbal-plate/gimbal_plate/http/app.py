@@ -40,12 +40,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # "endpoint already registered" on restart.
         default_registry.reset()
         try:
-            from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
+            from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS as FIN_ENDPOINTS
         except Exception:  # pragma: no cover - defensive: lazy import guard
-            ALL_ENDPOINTS = ()
-        from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+            FIN_ENDPOINTS = ()
+        # platform 是自举被测系统,定义形态与 fin 同构(每端点一个 .py);平台侧
+        # 故意不吞异常 —— 端点文件坏了要在启动时炸,不是静默少注册一半。
+        from gimbal_plate.systems.platform.endpoint import (
+            ALL_ENDPOINTS as PLATFORM_ENDPOINTS,
+        )
 
-        default_registry.register_endpoints((*ALL_ENDPOINTS, *ALL_PLATFORM_ENDPOINTS))
+        default_registry.register_endpoints((*FIN_ENDPOINTS, *PLATFORM_ENDPOINTS))
 
         # system 自检:仅在 owned 默认 registry 时执行,尊重外部注入。
         # 已知 system 白名单(而非"必须等于 FIN_SYSTEM")—— platform 是自举

@@ -63,7 +63,7 @@ def by_route() -> dict:
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "gimbal-plate"))
-    from gimbal_plate.systems.platform.endpoints import ALL_PLATFORM_ENDPOINTS
+    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
 
     return {(e.api.method, e.api.path): e for e in ALL_PLATFORM_ENDPOINTS}
 
