@@ -1,0 +1,191 @@
+---
+id: platform.scenarios.get_root
+type: endpoints
+system: platform
+service: platform-service
+---
+
+# List Scenarios
+
+```gimbal:endpoint
+review: reviewed
+id: platform.scenarios.get_root
+system: platform
+service: platform-service
+name: List Scenarios
+description: '列表(Page 信封 + M1 响应投影,PG迁移方案 §4.1/§7 M1)。
+
+
+  读侧收紧:admin 全量;普通用户 = public + 自己的。可选
+
+  ``visibility=public|private`` 再过滤一层,供前端"公共 / 我的"分组
+
+  标签使用。
+
+
+  属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
+
+  一趟全表投影,单请求双全表扫描)。
+
+
+  多值筛选参数(system/module/priority/tag/author)收逗号联合字符串,
+
+  语义与前端 ``utils/filters.ts`` 对齐(system/tag=OR 携带,其余精确
+
+  命中其一);``updated_within`` 锚 DB 行 updated_at。排序服务端定死
+
+  ``updated_at DESC``(§4.1,不接受任意 sort)。分页在 Python 侧切片
+
+  ——M1 的服务端查询仍全表加载 payload,SQL 端过滤/排序是 M3 的事。
+
+  ``fields=options`` 返回轻量元数据形态(选择器/名称映射专用)。'
+binding:
+  protocol: http
+  method: GET
+  path: /api/scenarios
+  auth: bearer
+  body_type: none
+request: {}
+responses:
+  '200':
+    description: Successful Response
+    declarations:
+    - name: items
+      path: $.items
+      type: array
+      ui_kind: json
+      assertable: true
+      children:
+      - name: dataSetCount
+        path: $.items.dataSetCount
+        type: integer
+        ui_kind: number
+        assertable: true
+      - name: meta
+        path: $.items.meta
+        type: object
+        required: true
+        description: Scenario metadata; one Scenario has exactly one Meta.
+        ui_kind: json
+        assertable: true
+        children:
+        - name: author
+          path: $.items.meta.author
+          type: string
+          ui_kind: text
+          assertable: true
+        - name: createTime
+          path: $.items.meta.createTime
+          type: string
+          ui_kind: text
+          assertable: true
+        - name: description
+          path: $.items.meta.description
+          type: string
+          ui_kind: text
+          assertable: true
+        - name: expire
+          path: $.items.meta.expire
+          type: boolean
+          ui_kind: boolean
+          assertable: true
+        - name: module
+          path: $.items.meta.module
+          type: string
+          required: true
+          ui_kind: text
+          assertable: true
+        - name: name
+          path: $.items.meta.name
+          type: string
+          required: true
+          ui_kind: text
+          assertable: true
+        - name: owner
+          path: $.items.meta.owner
+          type: string
+          ui_kind: text
+          assertable: true
+        - name: priority
+          path: $.items.meta.priority
+          type: integer
+          required: true
+          ui_kind: number
+          assertable: true
+        - name: scenarioId
+          path: $.items.meta.scenarioId
+          type: string
+          required: true
+          ui_kind: text
+          assertable: true
+        - name: system
+          path: $.items.meta.system
+          type: array
+          ui_kind: json
+          assertable: true
+        - name: tags
+          path: $.items.meta.tags
+          type: array
+          ui_kind: json
+          assertable: true
+        - name: updateTime
+          path: $.items.meta.updateTime
+          type: string
+          ui_kind: text
+          assertable: true
+        - name: version
+          path: $.items.meta.version
+          type: string
+          ui_kind: text
+          assertable: true
+      - name: schemeCount
+        path: $.items.schemeCount
+        type: integer
+        ui_kind: number
+        assertable: true
+      - name: starred
+        path: $.items.starred
+        type: boolean
+        ui_kind: boolean
+        assertable: true
+      - name: stepCount
+        path: $.items.stepCount
+        type: integer
+        ui_kind: number
+        assertable: true
+      - name: tags
+        path: $.items.tags
+        type: array
+        ui_kind: json
+        assertable: true
+      - name: varCount
+        path: $.items.varCount
+        type: integer
+        ui_kind: number
+        assertable: true
+      - name: visibility
+        path: $.items.visibility
+        type: string
+        ui_kind: text
+        assertable: true
+    - name: page
+      path: $.page
+      type: integer
+      ui_kind: number
+      assertable: true
+    - name: pageSize
+      path: $.pageSize
+      type: integer
+      ui_kind: number
+      assertable: true
+    - name: total
+      path: $.total
+      type: integer
+      ui_kind: number
+      assertable: true
+metadata:
+  module: scenarios
+  tags:
+  - platform
+  owner: gimbal-bootstrap
+```
