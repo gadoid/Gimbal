@@ -111,15 +111,15 @@
           <!-- Hero -->
           <div class="hero">
             <div class="title-row">
-              <span class="hero-method-badge" :class="`m-${(selected.api?.method || 'get').toLowerCase()}`">{{ selected.api?.method }}</span>
+              <span class="hero-method-badge" :class="`m-${(selected.binding?.method || 'get').toLowerCase()}`">{{ selected.binding?.method }}</span>
               <h2>{{ selected.name }}</h2>
             </div>
             <div class="path-line">
               <code class="sys-tag">{{ selected.system }}</code>
               <span class="path-sep">/</span>
               <code class="svc-tag">{{ selected.service }}</code>
-              <code class="path">{{ selected.api?.path }}</code>
-              <span class="muted">v{{ selected.version }}</span>
+              <code class="path">{{ selected.binding?.path }}</code>
+              <span class="muted" v-if="selected.shape_hash">#{{ selected.shape_hash.slice(0, 8) }}</span>
             </div>
             <p v-if="selected.description" class="desc">{{ selected.description }}</p>
             <div v-if="selected.metadata" class="meta">
@@ -296,7 +296,7 @@ const filtered = computed(() => {
     const q = filterQuery.value.toLowerCase().trim()
     list = list.filter(e =>
       e.name.toLowerCase().includes(q) ||
-      (e.api?.path || '').toLowerCase().includes(q) ||
+      (e.binding?.path || '').toLowerCase().includes(q) ||
       (e.description || '').toLowerCase().includes(q) ||
       e.id.toLowerCase().includes(q))
   }

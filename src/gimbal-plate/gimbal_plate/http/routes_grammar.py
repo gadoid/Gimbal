@@ -786,7 +786,15 @@ def action_system_gaps(
     from gimbal_plate.dialect.parser import parse_markdown
     from pathlib import Path as _P
 
-    system = request.path_params.get("system") or "fin"
+    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
+    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
+    # 不再默认回落 fin(静默指向/冻结错误系统)。
+    system = request.path_params.get("system") or (body or {}).get("_system") or ""
+    if not system:
+        raise PlateHTTPError(
+            http_status=400, code=ErrorCode.INVALID_ACTION,
+            message="system required: use /api/systems/{system}/system/action/gaps",
+        )
     repo = _P(__file__).resolve().parents[4]
     system_root = repo / "systems" / system
     endpoints, statements, terms = [], [], {}
@@ -816,7 +824,15 @@ def action_system_check(
     from gimbal_plate.dialect import EndpointSpec, Statement, Term
     from pathlib import Path as _P
 
-    system = request.path_params.get("system") or "fin"
+    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
+    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
+    # 不再默认回落 fin(静默指向/冻结错误系统)。
+    system = request.path_params.get("system") or (body or {}).get("_system") or ""
+    if not system:
+        raise PlateHTTPError(
+            http_status=400, code=ErrorCode.INVALID_ACTION,
+            message="system required: use /api/systems/{system}/system/action/check",
+        )
     repo = _P(__file__).resolve().parents[4]
     system_root = repo / "systems" / system
     types = load_types(repo / "types" / "types.yaml")
@@ -847,7 +863,10 @@ def action_system_release(
     from pathlib import Path as _P
     from gimbal_plate.release import release_system
 
-    system = request.path_params.get("system") or "fin"
+    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
+    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
+    # 不再默认回落 fin(静默指向/冻结错误系统)。
+    system = request.path_params.get("system") or (body or {}).get("_system") or ""
     repo = _P(__file__).resolve().parents[4]
     body = body or {}
     result = release_system(

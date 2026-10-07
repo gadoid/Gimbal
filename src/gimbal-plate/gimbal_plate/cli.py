@@ -155,22 +155,59 @@ def cmd_check(args: argparse.Namespace) -> int:
         ValidationReport, load_types, validate_consistency,
         validate_deliverable, validate_references, validate_terms,
     )
+    from gimbal_plate.dialect.parser import DialectError
     text = sys.stdin.read() if args.stdin else None
     types = load_types(_TYPES)
     report = ValidationReport()
+    try:
+        _check_body(args, text, types, report)
+    except DialectError as e:
+        # 方言错误不裸抛 traceback(评审 P1):转 finding,退出码 1
+        from gimbal_plate.dialect.validation import Finding
+        report.add(Finding("F0", "blocking", str(e),
+                           source=str(e).split(":", 1)[0],
+                           line=int(str(e).split(":", 2)[1])
+                           if str(e).count(":") >= 2 else 0))
+    _emit_check(args, report)
+    return 0 if report.ok else 1
+
+
+def _check_body(args, text, types, report) -> None:
+    from gimbal_plate.dialect import Term, parse_markdown
+    from gimbal_plate.dialect.validation import (
+        validate_consistency, validate_deliverable, validate_references,
+        validate_terms,
+    )
     if text is not None:
-        from gimbal_plate.dialect import parse_markdown
         d = parse_markdown(text, source="<stdin>")
         validate_deliverable(d, types=types, report=report)
+        return
     else:
         root = _repo_system(args.system)
         _, deliverables, endpoints, statements, terms = _load_tree(args.system)
+        # 统一 check 引擎(评审 P1):并入 common 参照 —— 否则 T1 查不了
+        # common 重名、S2/T2 对 common 词条误报。与 release 同口径。
+        common_terms: dict = {}
+        common_root = _REPO / "systems" / "common"
+        if common_root.is_dir() and args.system != "common":
+            for m in sorted(common_root.rglob("*.md")):
+                for b in parse_markdown(m.read_text(encoding="utf-8"),
+                                        source=str(m)).blocks("term"):
+                    for tm in b.models():
+                        if isinstance(tm, Term):
+                            common_terms[tm.id] = tm
         for d in deliverables:
             validate_deliverable(d, types=types, report=report)
-        validate_terms(terms.values(), system_id=args.system, report=report)
-        validate_references(endpoints, statements, terms, report=report)
+        validate_terms(terms.values(), system_id=args.system,
+                       common_ids=set(common_terms), report=report)
+        validate_references(endpoints, statements, terms,
+                            common_terms=common_terms, report=report)
         validate_consistency(endpoints, statements, report=report)
         _ = root
+    _ = args
+
+
+def _emit_check(args, report) -> None:
     if args.json:
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=1))
     else:
@@ -180,7 +217,6 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"{'OK' if report.ok else 'BLOCKED'}: "
               f"{len(report.blocking)} blocking / {len(report.warnings)} warnings"
               f" / {len(report.corrections)} corrections")
-    return 0 if report.ok else 1
 
 
 def cmd_diff(args: argparse.Namespace) -> int:

@@ -1,20 +1,20 @@
 {
  "bare_no_defaults": {
-  "object_hash": "473ae15238b89c680294f920d5c6ce383240f7c7804eae7287aca09782542c31",
-  "shape_hash": "a5996b4b13cb851b11ac7e3e56e83c2baf3220fc19a97eb492b9b909a6ec790d"
+  "object_hash": "75978866b988a14b61c99048685929a0c71426d219820eed36af1251ab93265f",
+  "shape_hash": "55f517e8a3177c1cb7a00e87cae35aefc6cc95044275502f89735b03e23d9d98"
  },
  "doc.platform.user.update": {
-  "object_hash": "999fd52f2ebd42ed851fa8a666ae03b0248760dda6949b85c72f392d6313c744",
-  "shape_hash": "9acb3b514d731e5674739acaf8e199a17bde4c1f75deaf1c36ff59b2fdb099ec"
+  "object_hash": "22d835243c927478e3bc3f6a60549a08a3613eefc2717ebef71a4648bf7685d5",
+  "shape_hash": "ee7a5e3f9caddba16b42de6937552ae2ba33dd84ea8611aa43bb605915d06a30"
  },
  "fin.order.order_add": {
-  "object_hash": "ed563e08d378b6c6b31e8a7ef06d810c2d042dcdff4e93889619773e77c1712c",
-  "shape_hash": "4d98c81f537b79e7ae1c383caf29ebf45b6efd036f2f903879f02e2de41d8e3f"
+  "object_hash": "a931b0c00307603d77c7c898dd3d39a417ce78e9cf7802a9c91d45cd03e25489",
+  "shape_hash": "e3269f2cc59d23fa192b583f83ac599f7ef42c889532e91f7c4398d6cdd0dc79"
  },
  "statement:st.user-mgmt.disable": {
   "object_hash": "c04100ac775e352b66295000c95d8a5a3d304f73ad47a138f2dec3c296b41aea"
  },
  "statement:st.user-mgmt.last-admin": {
-  "object_hash": "2a3abaf90d18d5558a688cd8e6d73b17f0e0b632510e03c003f2dbe369a6ec17"
+  "object_hash": "f5e62e763ac99671d55e5d49ba72d43f73c8d8cebf044f4e4c84939d54ad7b17"
  }
 }

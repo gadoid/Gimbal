@@ -25,6 +25,51 @@ _YAML_KWARGS: dict[str, Any] = {
     "width": 4096,
 }
 
+
+def _is_ambiguous(value: str) -> bool:
+    """评审 P0-9:字符串标量在 1.1 或 1.2 任一口径下会被读成非本串。
+
+    两个方向都要防:
+    - 1.1 误读(PyYAML 实测):'01'→1、'on'→True、'12:30'→750、'null'→None;
+    - 1.2 误读(1.1 恰好保串):'08'/'1e3' 在 1.2 core schema 是数字。
+    渲染强制双引号,两口径读回都得原串(设计口径修订:方言按 1.1 解析,
+    渲染保证歧义标量带引号)。设计原文「按 YAML 1.2 解析」在修订十改为
+    本口径(换 ruamel 1.2 属新增依赖,不取)。
+    """
+    import yaml as _yaml
+    stripped = value.strip()
+    if not stripped:
+        return False
+    try:
+        resolved = _yaml.safe_load(stripped)
+    except Exception:  # noqa: BLE001 — 解析失败 = 无歧义
+        return False
+    if resolved is None or isinstance(resolved, bool):
+        return True
+    if not isinstance(resolved, str):
+        return True
+    # 1.2 数字形状(1.1 保串):float 可解析即视为有歧义
+    try:
+        float(stripped)
+        return True
+    except ValueError:
+        pass
+    return resolved != value
+
+
+class _QuotingDumper(yaml.SafeDumper):
+    """字符串歧义标量双引号写出(其余走 SafeDumper 默认)。"""
+
+
+def _str_representer(dumper, value):
+    if _is_ambiguous(value):
+        return dumper.represent_scalar(
+            "tag:yaml.org,2002:str", value, style='"')
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value)
+
+
+_QuotingDumper.add_representer(str, _str_representer)
+
 # 渲染时排除的派生字段（解析期由块后散文派生，不写入块内——6.3）：
 # ``Statement.text`` 仍参与 canonical/hash（它是对象内容），只不进块体。
 _RENDER_EXCLUDE: dict[str, set[str]] = {"statement": {"text"}}
@@ -36,7 +81,7 @@ def _model_to_payload(model: Any, exclude: set[str] = frozenset()) -> dict[str, 
 
 
 def _dump_yaml(data: Any) -> str:
-    out = yaml.safe_dump(data, **_YAML_KWARGS)
+    out = yaml.dump(data, Dumper=_QuotingDumper, **_YAML_KWARGS)
     return out.rstrip("\n")
 
 

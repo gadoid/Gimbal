@@ -119,8 +119,16 @@ class TestValidationEngine:
                               "violation": "outcome:u.last"})
         s2 = Statement(id="st.2", kind="outcome",
                        slots={"cap": "cap:b.del", "outcome": "outcome:u.last"})
+        s1._source, s2._source = "prd.md", "endpoints.md"  # 不同来源
         report = validate_consistency([], [s1, s2])
         assert any(f.rule == "C1" for f in report.corrections)
+        # 同来源(评审 P0-14):单文件内多段引用不算跨来源不一致
+        s3 = Statement(id="st.3", kind="rule",
+                       slots={"about": "attr:u.r", "cap": "cap:c.x",
+                              "violation": "outcome:u.last"})
+        s3._source = "prd.md"
+        report_same = validate_consistency([], [s1, s3])
+        assert not [f for f in report_same.corrections if f.rule == "C1"]
 
 
 def _deliverable_with_statement(st: Statement):
@@ -160,14 +168,16 @@ class TestRelease:
         assert obj["kind"] == "endpoint" and obj["id"] == "fin.a.b"
 
         # 二次冻结:同内容 → 池不增长,manifest hash 全同,序号 +1
-        r2 = release_system(systems / "fin", artifacts_root=artifacts)
+        r2 = release_system(systems / "fin", artifacts_root=artifacts,
+                            signed_by="t2")
         assert r2.success and r2.release_id.endswith(".2")
         assert len(list((artifacts / "objects").glob("*.json"))) == 1
         assert r2.manifest["objects"][0]["hash"] == first_hash
 
         # 内容变更 → 新 hash,旧对象保留(只追加)
         ep_md.write_text(ep_md.read_text(encoding="utf-8").replace("name: b", "name: b2"), encoding="utf-8")
-        r3 = release_system(systems / "fin", artifacts_root=artifacts)
+        r3 = release_system(systems / "fin", artifacts_root=artifacts,
+                            signed_by="t3")
         assert r3.success
         assert r3.manifest["objects"][0]["hash"] != first_hash
         assert len(list((artifacts / "objects").glob("*.json"))) == 2
@@ -181,7 +191,8 @@ class TestRelease:
             "name: c\nbinding:\n  protocol: http\n  method: GET\n  path: /c\n"
             "responses:\n  '200': {}\n```\n",  # 无 review → draft(缺省)
             encoding="utf-8")
-        r = release_system(systems / "fin", artifacts_root=tmp_path / "art")
+        r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
+                           signed_by="t")
         # 8v:draft 块不进 release,但不阻塞(与词条同口径,修订九)
         assert r.success
         assert r.manifest["summary"]["endpoints"] == 0
@@ -206,7 +217,8 @@ class TestRelease:
             "binding:\n  protocol: http\n  method: GET\n  path: /d\n"
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
-        r = release_system(systems / "fin", artifacts_root=tmp_path / "art")
+        r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
+                           signed_by="t")
         assert not r.success
         assert "引用闭包" in r.message
 
@@ -221,7 +233,7 @@ class TestRelease:
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "a",
-                           checklist={"endpoints_with_capability": 1})
+                           signed_by="t", checklist={"endpoints_with_capability": 1})
         assert not r.success and "F4" in r.message or "交付件清单" in r.message
 
     def test_call_projection_shape(self) -> None:

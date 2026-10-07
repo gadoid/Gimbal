@@ -449,57 +449,76 @@ def validate_consistency(
     endpoints: Iterable[EndpointSpec], statements: Iterable[Statement],
     report: ValidationReport | None = None,
 ) -> ValidationReport:
-    """C1–C3:跨来源一致性(列入语义矫正,发布闸门要求处理完毕)。"""
+    """C1–C3:跨**来源**(交付物文件)一致性(评审 P0-14 重写)。
+
+    - 同一文件内的多处引用不算「来源不一致」(同来源由评审把关);
+    - C1:同一 outcome 在**不同来源**中关联的 cap 集合不一致;
+    - C2:同一 about 主语在不同来源中的 before 前置条件不一致;
+    - C3:同一 attr 在不同来源中 transition 涉及的取值集合不一致
+      (Spec enum 与词条未挂钩,挂钩后并入;设计 7 节口径)。
+    """
     report = report if report is not None else ValidationReport()
-    # C1:同一 outcome 的 rule/outcome 片段,引用的 cap 集合一致
-    caps_by_outcome: dict[str, set[str]] = {}
+
+    def _src(st: Statement) -> str:
+        return getattr(st, "_source", "") or "<unknown>"
+
+    # C1
+    caps_by_outcome: dict[str, dict[str, set[str]]] = {}
     for st in statements:
         if st.kind not in ("rule", "outcome"):
             continue
-        slots = st.slots
+        cap = st.slots.get("cap")
+        if not isinstance(cap, str):
+            continue
         for slot in ("violation", "outcome"):
-            v = slots.get(slot)
+            v = st.slots.get(slot)
             if isinstance(v, str):
-                caps_by_outcome.setdefault(v, set()).add(str(slots.get("cap", "")))
-    for outcome, caps in caps_by_outcome.items():
-        if len(caps - {""}) > 1:
+                caps_by_outcome.setdefault(v, {}).setdefault(
+                    _src(st), set()).add(cap)
+    for outcome, per_src in caps_by_outcome.items():
+        sets = [s for s in per_src.values() if s]
+        if len(sets) > 1 and any(a != sets[0] for a in sets[1:]):
             report.add(Finding(
                 "C1", "correction",
-                f"outcome {outcome!r} 在各来源关联的 cap 集合不一致: {sorted(caps)}",
+                f"outcome {outcome!r} 各来源关联的 cap 集合不一致: "
+                + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
-    # C2:同一 cap 的 before 前置条件各来源一致
-    before_by_cap: dict[str, set[str]] = {}
+    # C2
+    before_by_about: dict[str, dict[str, set[str]]] = {}
     for st in statements:
-        if st.kind == "rule" and "before" in st.slots:
-            v = st.slots["before"]
-            before_by_cap.setdefault(str(st.slots.get("about", st.slots.get("cap", ""))), set()).add(
-                v if isinstance(v, str) else ",".join(v)
-            )
-    for cap, befores in before_by_cap.items():
-        if len(befores) > 1:
+        if st.kind != "rule":
+            continue
+        about, before = st.slots.get("about"), st.slots.get("before")
+        if not isinstance(about, str) or "before" not in st.slots:
+            continue
+        b = before if isinstance(before, str) else ",".join(before)
+        before_by_about.setdefault(about, {}).setdefault(
+            _src(st), set()).add(b)
+    for about, per_src in before_by_about.items():
+        sets = [s for s in per_src.values() if s]
+        if len(sets) > 1 and any(a != sets[0] for a in sets[1:]):
             report.add(Finding(
                 "C2", "correction",
-                f"cap {cap!r} 的 before 前置条件各来源不一致: {sorted(befores)}",
+                f"{about!r} 的 before 前置条件各来源不一致: "
+                + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
-    # C3:同一 attr 的取值集合各来源一致(transition from/to vs Spec enum)
-    values_by_attr: dict[str, set[frozenset[str]]] = {}
+    # C3(transition 取值集合,按 attr 分组,跨来源比较)
+    values_by_attr: dict[str, dict[str, set[str]]] = {}
     for st in statements:
-        if st.kind == "transition":
-            attr = str(st.slots.get("from", "")).rsplit(".", 1)[0]
-            if attr:
-                values_by_attr.setdefault(attr, set()).add(frozenset(
-                    {str(st.slots.get("from", "")), str(st.slots.get("to", ""))}))
-    for ep in endpoints:
-        for resp in ep.responses.values():
-            for decl in resp.declarations:
-                if decl.enum:
-                    key = "attr:" + decl.path.strip("$.").replace("data.", "")
-                    values_by_attr.setdefault(key, set()).add(frozenset(map(str, decl.enum)))
-    for attr, value_sets in values_by_attr.items():
-        if len(value_sets) > 1:
+        if st.kind != "transition":
+            continue
+        f_ = str(st.slots.get("from", ""))
+        t_ = str(st.slots.get("to", ""))
+        attr = f_.rsplit(".", 1)[0]
+        if attr and f_.startswith("value:"):
+            values_by_attr.setdefault(attr, {}).setdefault(
+                _src(st), set()).update({f_, t_})
+    for attr, per_src in values_by_attr.items():
+        sets = [s for s in per_src.values() if s]
+        if len(sets) > 1 and any(a != sets[0] for a in sets[1:]):
             report.add(Finding(
                 "C3", "correction",
-                f"attr {attr!r} 的取值集合各来源不一致: "
-                f"{[sorted(s)[:4] for s in value_sets]}",
+                f"attr {attr!r} 各来源 transition 取值集合不一致: "
+                + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
     return report

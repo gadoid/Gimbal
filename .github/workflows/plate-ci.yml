@@ -1,0 +1,50 @@
+# 入库闸门(批次 D,评审 P1):plate check + 三侧测试。
+# check 含 common 参照(N3:common 变更触发全部引用系统重校验 —— 本工作流
+# 对全树跑 check,天然覆盖)。
+name: plate-ci
+on:
+  pull_request:
+    paths:
+      - "systems/**"
+      - "types/**"
+      - "src/gimbal-plate/**"
+      - "src/gimbal-platform/**"
+      - "src/gimbal/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/plate-ci.yml"
+  push:
+    branches: [main]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (editable, plate entry included)
+        run: pip install -e .[dev]
+      - name: 入库闸门 — plate check(规则编号即错误码)
+        run: |
+          set -e
+          for s in fin platform; do plate check "$s" --json; done
+      - name: 方言纪律 — 真源树可解析 + 一文件一交付物
+        run: pytest tests/plate/test_v3_one_file_per_endpoint.py tests/plate/dialect -q
+      - name: plate 全量
+        run: pytest tests/plate -q
+      - name: 执行器全量
+        run: pytest tests/unit tests/integration -q
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: vitest
+        working-directory: src/gimbal-platform/frontend
+        run: |
+          npm ci || npm install
+          npx vue-tsc --noEmit
+          npx vitest run --silent

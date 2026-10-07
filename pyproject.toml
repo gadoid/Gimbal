@@ -33,6 +33,13 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# 评审 P0-4:hatch 默认只打包 src/gimbal → `plate` 入口安装后 ModuleNotFoundError。
+[tool.hatch.build.targets.wheel]
+packages = ["src/gimbal", "src/gimbal-plate/gimbal_plate"]
+# editable 模式:hatch 由 packages 推导的路径只落 src/(漏 src/gimbal-plate),
+# 显式声明两个 dev 目录,`plate` 入口在 pip install -e . 后可用(评审 P0-4)。
+dev-mode-dirs = ["src", "src/gimbal-plate"]
+
 [tool.ruff]
 line-length = 100
 

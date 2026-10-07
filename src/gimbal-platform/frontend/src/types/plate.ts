@@ -76,6 +76,7 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 
 
 /** ApiSpec.auth —— 认证方式。对齐 api_spec.py ApiSpec.auth。 */
 export type AuthKind = 'none' | 'bearer' | 'basic' | 'cookie' | 'custom'
+export type BodyKind = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
 
 /** RequestSpec.body_type —— 请求体类型。对齐 io_spec.py RequestSpec.body_type。 */
 export type BodyType = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
@@ -168,16 +169,16 @@ export interface ResponseSpecView {
   schema?: Record<string, unknown>
 }
 
-/** ApiSpec 视图 —— 被接口的坐标与协议元信息。对齐 api_spec.py ApiSpec。 */
-export interface ApiSpecView {
-  service: string
+/** Binding 视图 —— 被接口的坐标与协议元信息(A2:api → binding,6.2)。
+ * 对齐 dialect/models.py HttpBinding(判别联合首成员;service 在外壳)。 */
+export interface BindingView {
+  protocol: string
   method: HttpMethod
   path: string
   headers: Record<string, string>
   timeout_seconds: number
   auth: AuthKind
-  produces: string[]
-  consumes: string[]
+  body_type: BodyKind
 }
 
 /** EndpointMetadata 视图 —— 业务元信息(不进执行产物)。对齐 metadata.py EndpointMetadata。 */
@@ -202,7 +203,7 @@ export interface EndpointMetadataView {
  * 对齐 gimbal_plate/http/views.py 的 EndpointDetailView(extra="forbid" 强契约视图)。
  * 它是前端渲染接口详情(Catalog 详情面板 / Canvas 表单)的唯一数据形状。
  *
- * - request 为 null 表示该接口无请求体(body_type=none 或未声明)
+ * - request 为 null 表示该接口无请求体(binding.body_type=none 或未声明)
  * - responses 的 key 是 HTTP 状态码的字符串形式(如 "200"),plate 侧是 dict[int, ...],
  *   JSON 序列化后 key 变字符串
  */
@@ -212,12 +213,14 @@ export interface EndpointFullView {
   service: string
   name: string
   description: string
-  api: ApiSpecView
+  capability: string | null
+  consumes: string[]
+  produces: string[]
+  binding: BindingView
   request: RequestSpecView | null
   responses: Record<string, ResponseSpecView>
   metadata: EndpointMetadataView
-  version: string
-  updated_at: string | null
+  shape_hash: string
   /**
    * 声明侧的**可注入面**(platform 代理 `GET /api/endpoint-catalog/{id}/full`
    * 附加字段,非 plate EndpointDetailView 的键):扁平字符串列表,每级容器前缀

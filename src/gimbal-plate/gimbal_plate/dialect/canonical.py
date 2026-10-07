@@ -34,10 +34,24 @@ def canonical_payload(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_defaults=True)
 
 
+def _sorted_dicts(obj):
+    """递归排序 dict 键（评审 P0-8：同一对象的 hash 不得依赖文件书写序）。
+
+    模型字段序在各层由 model_dump 保序（键序=定义序的规范形原则不受影响
+    ——排序只发生在 hash 输入层，渲染层保持模型定义序）。
+    """
+    if isinstance(obj, dict):
+        return {k: _sorted_dicts(obj[k]) for k in sorted(obj)}
+    if isinstance(obj, list):
+        return [_sorted_dicts(x) for x in obj]
+    return obj
+
+
 def canonical_bytes(model: BaseModel) -> bytes:
-    """规范序列化字节流（hash 的输入；紧凑、无排序、utf-8）。"""
+    """规范序列化字节流（hash 输入；紧凑、utf-8、dict 键全排序）。"""
     return json.dumps(
-        canonical_payload(model), ensure_ascii=False, separators=(",", ":")
+        _sorted_dicts(canonical_payload(model)),
+        ensure_ascii=False, separators=(",", ":"),
     ).encode("utf-8")
 
 
@@ -46,24 +60,33 @@ def object_hash(model: BaseModel) -> str:
     return hashlib.sha256(canonical_bytes(model)).hexdigest()
 
 
+# 声明条目中不参与 shape 的说明性字段（评审 P0-11，按评审建议拍板）：
+# default / example 保留（影响用例取值）；description / ui_kind 剔除（纯展示）。
+_DECL_SHAPE_EXCLUDE = {"description", "ui_kind"}
+
+
+def _decl_shape(entries: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {k: v for k, v in e.model_dump(mode="json", exclude_defaults=True).items()
+         if k not in _DECL_SHAPE_EXCLUDE}
+        for e in entries
+    ]
+
+
 def shape_projection(spec: EndpointSpec) -> dict[str, Any]:
-    """形状投影：只留 binding 与请求 / 响应声明树（不含语义与展示字段）。"""
-    proj: dict[str, Any] = {"binding": spec.binding.model_dump(mode="json")}
+    """形状投影：只留 binding 与请求 / 响应声明树（不含语义与展示字段）。
+
+    评审 P0-7：binding 段同样排除缺省值（修订九第①条对嵌套模型生效——
+    否则给 Binding 加带默认值字段会改变全部接口的 shape_hash）。
+    """
+    proj: dict[str, Any] = {
+        "binding": spec.binding.model_dump(mode="json", exclude_defaults=True)
+    }
     if spec.request is not None and spec.request.declarations:
-        proj["request"] = {"declarations": [
-            d.model_dump(mode="json", exclude_defaults=True)
-            for d in spec.request.declarations
-        ]}
+        proj["request"] = {"declarations": _decl_shape(spec.request.declarations)}
     if spec.responses:
-        # 键序：结果键排序（dict 键来自文件声明序，投影侧统一排序保证
-        # 同一形状集合不同书写序不产生不同 shape_hash）
         proj["responses"] = {
-            outcome: {
-                "declarations": [
-                    d.model_dump(mode="json", exclude_defaults=True)
-                    for d in resp.declarations
-                ]
-            }
+            outcome: {"declarations": _decl_shape(resp.declarations)}
             for outcome, resp in sorted(spec.responses.items())
         }
     return proj
@@ -75,9 +98,8 @@ def shape_hash(spec: EndpointSpec) -> str:
     序列化纪律同 ``canonical_bytes``（紧凑、无排序、排除默认值）；与
     对象 hash 的差异仅在覆盖面（投影而非整对象）。
     """
-    payload = shape_projection(spec)
-    # binding 内部键序 = 模型定义序（model_dump 保序），无需排序
     data = json.dumps(
-        payload, ensure_ascii=False, separators=(",", ":"), sort_keys=False
+        _sorted_dicts(shape_projection(spec)),
+        ensure_ascii=False, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(data).hexdigest()

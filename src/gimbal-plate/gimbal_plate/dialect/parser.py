@@ -19,6 +19,39 @@ import yaml
 
 from .models import EndpointSpec, Frontmatter, Statement, Term
 
+
+class _StrictLoader(yaml.SafeLoader):
+    """重复键即报错（评审 P0-10：N5 合并冲突残留不再静默取后值）。"""
+
+
+def _no_dup_keys(loader, node, deep=False):
+    seen = set()
+    for k_node, _ in node.value:
+        key = loader.construct_object(k_node, deep=True)
+        if key in seen:
+            raise DialectError(
+                f"YAML 重复键 {key!r}（合并冲突残留?）",
+                source=getattr(loader, "_dialect_source", "<yaml>"),
+                line=getattr(loader, "_dialect_line", node.start_mark.line + 1),
+            )
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_keys)
+
+
+def strict_yaml_load(text: str, *, source: str, line: int):
+    """统一 YAML 入口：重复键检测 + 环境信息注入。"""
+    loader = _StrictLoader(text)
+    loader._dialect_source = source  # noqa: SLF001
+    loader._dialect_line = line  # noqa: SLF001
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
+
 BLOCK_TYPES = ("endpoint", "system", "defaults", "statement", "term")
 REVIEW_VALUES = ("draft", "reviewed")
 
@@ -173,7 +206,8 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
             raise DialectError("frontmatter 未闭合（缺少结尾 '---'）",
                                source=source, line=1)
         try:
-            data = yaml.safe_load("\n".join(lines[1:end])) or {}
+            data = strict_yaml_load("\n".join(lines[1:end]),
+                                    source=source, line=1) or {}
         except yaml.YAMLError as e:
             raise DialectError(f"frontmatter YAML 解析失败: {e}",
                                source=source, line=1) from e
@@ -221,7 +255,8 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
                 raise DialectError(f"gimbal:{block_type} 围栏未闭合",
                                    source=source, line=i + 1)
             try:
-                data = yaml.safe_load("\n".join(lines[body_start:close]))
+                data = strict_yaml_load("\n".join(lines[body_start:close]),
+                                        source=source, line=i + 1)
             except yaml.YAMLError as e:
                 raise DialectError(
                     f"gimbal:{block_type} 块体 YAML 解析失败: {e}",

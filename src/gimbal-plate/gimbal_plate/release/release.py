@@ -86,19 +86,27 @@ def _next_release_id(system_releases_dir: Path) -> str:
 def _freeze_objects(
     artifacts_root: Path, models: list[tuple[str, Any]],
 ) -> list[dict[str, Any]]:
-    """对象落全局池(已存在即跳过——hash 相同内容必相同)。返回清单条目。"""
+    """对象落全局池（评审 P0-16：临时文件 + rename 原子写；复用前校验）。"""
+    import os
+    import tempfile
+
     objects_dir = artifacts_root / "objects"
     objects_dir.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, Any]] = []
     for kind, model in models:
         h = object_hash(model)
         obj_path = objects_dir / f"{h}.json"
-        if not obj_path.exists():
-            payload = {"kind": kind, **model.model_dump(mode="json")}
-            obj_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=1),
-                encoding="utf-8", newline="\n",
-            )
+        content = json.dumps(
+            {"kind": kind, **model.model_dump(mode="json")},
+            ensure_ascii=False, indent=1,
+        ).encode("utf-8")
+        if not (obj_path.exists() and obj_path.read_bytes() == content):
+            fd, tmp = tempfile.mkstemp(dir=objects_dir, suffix=".tmp")
+            try:
+                os.write(fd, content)
+            finally:
+                os.close(fd)
+            os.replace(tmp, obj_path)   # 原子:截断文件不会被「已存在」掩护
         entries.append({"kind": kind, "id": getattr(model, "id", ""), "hash": h})
     return entries
 
@@ -119,6 +127,9 @@ def release_system(
     artifacts_root = artifacts_root or (repo_root / "plate_artifacts")
     if not system_root.is_dir():
         return ReleaseResult(success=False, message=f"系统目录不存在: {system_root}")
+    # 评审 P0-12:签发人必填(8.2 ④「人签发」,空值拒绝)
+    if not signed_by or not signed_by.strip():
+        return ReleaseResult(success=False, message="签发人(signed_by)不可为空")
 
     # ── 装载（working 树;common 参照随引用系统一并冻结,N3）──
     deliverables: list[Deliverable] = [
@@ -126,6 +137,7 @@ def release_system(
         for md in sorted(system_root.rglob("*.md"))
     ]
     common_terms: dict[str, Term] = {}
+    common_review: dict[str, bool] = {}
     common_root = system_root.parent / "common"
     if common_root.is_dir() and system_root.name != "common":
         for md in sorted(common_root.rglob("*.md")):
@@ -134,6 +146,7 @@ def release_system(
                 for m in b.models():
                     if isinstance(m, Term):
                         common_terms[m.id] = m
+                        common_review[m.id] = (b.review == "reviewed")
 
     # ── ① 机械检查 ──
     types = load_types(repo_root / "types" / "types.yaml")
@@ -171,6 +184,15 @@ def release_system(
         report.add(Finding(
             "F3", "blocking", f"接口 id 系统内重复: {sorted(dup_eps)[:3]}"))
 
+    # 块信封映射(评审 P0-15):区分「词条不存在」与「词条为 draft」
+    term_block_review: dict[str, bool] = {}
+    for d in deliverables:
+        for b in d.blocks("term"):
+            for m in b.models():
+                if isinstance(m, Term):
+                    term_block_review[m.id] = (b.review == "reviewed")
+    term_block_review.update(common_review)
+
     validate_terms(
         terms.values(), system_id=system_root.name,
         common_ids=set(common_terms), report=report,
@@ -198,12 +220,41 @@ def release_system(
                     f"(首条: {report.blocking[0].message})",
             report=report,
         )
+    # 8.2 ②(评审 P0-13):C 类不一致须经矫正变更处理,否则阻塞发布;
+    # correction_log 记 finding 供矫正定位,清零后方可发出。
+    if report.corrections:
+        return ReleaseResult(
+            success=False,
+            message=f"C 类一致性未处理: {len(report.corrections)} 条"
+                    f"(首条: {report.corrections[0].message[:80]})",
+            report=report,
+        )
 
-    # ── ②③ 冻结范围与引用闭包(8v)──
-    frozen_term_ids = {
-        m.id for kind, m in reviewed if kind == "term"
-    } | set(common_terms)
+    # ── ②③ 冻结范围与引用闭包(8v,评审 P0-15 强化:闭包传递)──
+    # 被(传递地)引用到的词条必须 reviewed;沿 refers/父节点/replaced_by
+    # 传递展开。common 词条(N3):只冻结**被引用到的**子集且须 reviewed,
+    # 未被引用的不进 manifest;draft 的 common 词条被引用即阻塞。
+    from gimbal_plate.dialect.validation import _parent_of
+
+    def _term_edges(tid: str) -> list[str]:
+        t_ = terms.get(tid) or common_terms.get(tid)
+        if t_ is None:
+            return []
+        out: list[str] = []
+        if t_.refers:
+            out.append(t_.refers)
+        if t_.replaced_by:
+            out.append(t_.replaced_by)
+        parent = _parent_of(tid)
+        if parent:
+            out.append(parent)
+        return out
+
+    frozen_ids = {m.id for kind, m in reviewed if kind == "term"}
+    common_frozen: set[str] = set()
     closure: list[tuple[str, str]] = []
+    visited: set[str] = set()
+    queue: list[tuple[str, str]] = []
     for kind, m in reviewed:
         refs: list[str] = []
         if isinstance(m, EndpointSpec):
@@ -214,9 +265,24 @@ def release_system(
                     refs.append(v)
                 elif isinstance(v, list):
                     refs.extend(x for x in v if isinstance(x, str))
-        for ref in refs:
-            if ref and ref not in frozen_term_ids:
-                closure.append((getattr(m, "id", "?"), ref))
+        for r in refs:
+            queue.append((getattr(m, "id", "?"), r))
+    while queue:
+        owner, tid = queue.pop()
+        if tid in visited:
+            continue
+        visited.add(tid)   # 边始终展开:种子(reviewed)也不例外——传递引用仍要查
+        if tid not in terms and tid not in common_terms:
+            closure.append((owner, tid))   # 不存在(S2 已报,双保险)
+            continue
+        if not term_block_review.get(tid, False):
+            closure.append((owner, tid))   # draft 词条被待冻结内容引用
+            continue
+        if tid in common_terms:
+            common_frozen.add(tid)
+        else:
+            frozen_ids.add(tid)
+        queue.extend((owner, e) for e in _term_edges(tid))
     if closure:
         return ReleaseResult(
             success=False,
@@ -227,11 +293,25 @@ def release_system(
             report=report,
         )
 
-    # ── 冻结 ──
-    release_id = _next_release_id(
-        artifacts_root / system_root.name / "releases"
-    )
-    object_entries = _freeze_objects(artifacts_root, reviewed)
+    # ── 冻结(评审 P0-16:release_id 用 O_EXCL 建目录防并发覆盖)──
+    import os
+
+    releases_dir = artifacts_root / system_root.name / "releases"
+    release_id = _next_release_id(releases_dir)
+    manifest_dir = releases_dir / release_id
+    for _attempt in range(8):
+        try:
+            manifest_dir.mkdir(parents=True)
+            break
+        except FileExistsError:
+            release_id = _next_release_id(releases_dir)
+            manifest_dir = releases_dir / release_id
+    else:
+        return ReleaseResult(success=False, message="release_id 竞争重试耗尽")
+    freeze_list = list(reviewed) + [
+        ("term", common_terms[mid]) for mid in sorted(common_frozen)
+    ]
+    object_entries = _freeze_objects(artifacts_root, freeze_list)
     call_projections = {
         m.id: _call_projection(m)
         for kind, m in reviewed if kind == "endpoint"
@@ -244,19 +324,20 @@ def release_system(
         "dialect_version": DIALECT_VERSION,
         "m2_version": M2_VERSION,
         "types_version": 1,
+        "checklist_applied": checklist or {},
         "objects": object_entries,
         "call_projections": call_projections,
         "correction_log": [f.to_dict() for f in report.corrections],
         "summary": {
             "endpoints": sum(1 for k, _ in reviewed if k == "endpoint"),
             "statements": sum(1 for k, _ in reviewed if k == "statement"),
-            "terms": sum(1 for k, _ in reviewed if k == "term"),
+            "terms": sum(1 for k, _ in reviewed if k == "term")
+            + len(common_frozen),
+            "common_terms_frozen": len(common_frozen),
             "draft_skipped_endpoints": len(endpoints)
             - sum(1 for k, _ in reviewed if k == "endpoint"),
         },
     }
-    manifest_dir = artifacts_root / system_root.name / "releases" / release_id
-    manifest_dir.mkdir(parents=True, exist_ok=True)
     (manifest_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1),
         encoding="utf-8", newline="\n",

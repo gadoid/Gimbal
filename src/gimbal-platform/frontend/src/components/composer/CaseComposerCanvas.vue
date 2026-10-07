@@ -2025,9 +2025,9 @@ async function onAddEndpoint(ep: any) {
         kind: 'call',
         protocol: 'http',
         service: ep.service,
-        method: ep.api?.method || 'GET',
-        path: ep.api?.path || '',
-        headers: ep.api?.headers || {},
+        method: ep.binding?.method || 'GET',
+        path: ep.binding?.path || '',
+        headers: ep.binding?.headers || {},
         // 接口身份持久化(#2):字段设计渲染/断言候选/数据集绑定都依赖此 key
         view_hints: { endpoint_id: ep.id },
       },
