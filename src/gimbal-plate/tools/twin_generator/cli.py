@@ -1,3 +1,5 @@
+> ⚠️ **实验工具（非主线）**：twin_generator 属尝试性实现，不在「编写 → 评审 → 入库」主线上（见 claude/plate-design.md 附录 C X2）；产物已移出仓库（S1-0 B1）。降级为 Agent 编写的参考输入。
+
 """孪生生成器 CLI:S1→S5 串联。
 
 真实源默认值指向 D:\fin-test;产物默认落 src/gimbal-plate/tmp/twin_gen(不入册)。
