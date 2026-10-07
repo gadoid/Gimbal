@@ -209,12 +209,16 @@ export const useExecutionsStore = defineStore('executions', () => {
    * 一次 GET(同数据幂等覆盖),SSE 挂了它就是唯一的生命线。
    */
   let fallbackTimer: ReturnType<typeof setInterval> | null = null
+  /** startPolling 的代际号:stopPolling 递增 → 迟到的 SSE 重连自行退出 */
+  let pollGeneration = 0
 
   function _startFallback(id: number): void {
     _stopFallback()
     fallbackTimer = setInterval(() => {
       const st = detail.value?.status
-      if (!st || isTerminalExecutionStatus(st)) {
+      // detail 为 null = 首拍基线拉取失败/尚未返回 → 不能停,继续重试;
+      // 终态才停(此时数据稳定,无需再刷)
+      if (st !== undefined && isTerminalExecutionStatus(st)) {
         _stopFallback()
         return
       }
@@ -234,9 +238,11 @@ export const useExecutionsStore = defineStore('executions', () => {
     pollError.value = ''
     lastSeq = 0
     reconnects = 0
+    pollGeneration += 1
+    const gen = pollGeneration
     // 流建立前先拉一次基线(终态执行也有一拍完整视图)
     void _refreshOnce(id).catch(() => { /* 基线失败留给流帧重试 */ })
-    void _pump(id)
+    void _pump(id, gen)
     // 兜底:SSE 断流/静默失败时仍能感知终态(3s 一拍,终态即停)
     _startFallback(id)
     return stopPolling
@@ -276,7 +282,10 @@ export const useExecutionsStore = defineStore('executions', () => {
     return out.id || out.event || out.data ? out : null
   }
 
-  async function _pump(id: number): Promise<void> {
+  async function _pump(id: number, gen: number = pollGeneration): Promise<void> {
+    // 代际检查:stopPolling 递增了 pollGeneration → 本次重连是残留的,
+    // 自行退出(不建新 SSE 连接,避免组件卸载后的僵尸流)
+    if (gen !== pollGeneration) return
     const auth = useAuthStore()
     const headers: Record<string, string> = {
       Authorization: `Bearer ${auth.accessToken}`,
@@ -333,13 +342,15 @@ export const useExecutionsStore = defineStore('executions', () => {
       reconnects += 1
       if (reconnects <= MAX_RECONNECTS) {
         await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS))
-        return _pump(id)
+        // 延迟期间可能已 stopPolling(卸载/手动刷新)→ 代际不匹配即退出
+        return _pump(id, gen)
       }
       pollError.value = '事件流连接失败，已停止刷新 — 请手动刷新重试'
     }
   }
 
   function stopPolling() {
+    pollGeneration += 1   // 使所有在飞/延迟中的 _pump 重连自行退出
     if (streamAbort !== null) {
       streamAbort.abort()
       streamAbort = null
