@@ -13,6 +13,7 @@ id: platform.users.delete_by_user_id
 system: platform
 service: platform-service
 name: Delete User
+capability: cap:user.disable
 description: 'Delete ``user_id``(P2-2:资源处置三选一)。
 
 

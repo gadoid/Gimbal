@@ -211,12 +211,15 @@ def validate_deliverable(
             ))
         for model in block.models():
             if isinstance(model, Statement):
+                counts[f"kind:{model.kind}"] = (
+                    counts.get(f"kind:{model.kind}", 0) + 1)
                 _check_statement(model, allowed_kinds, src, block.line, report)
 
     # F2:required 计数（片段 kind 也计入）
     required: dict[str, int] = template.get("required", {}) or {}
     for key, minimum in required.items():
-        actual = counts.get(key, 0)
+        # 计数口径(6.5):键匹配块类型(如 system)或片段 kind(如 step)
+        actual = counts.get(key, counts.get(f"kind:{key}", 0))
         if actual < minimum:
             report.add(Finding(
                 "F2", "blocking",

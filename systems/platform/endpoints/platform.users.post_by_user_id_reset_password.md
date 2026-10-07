@@ -13,6 +13,7 @@ id: platform.users.post_by_user_id_reset_password
 system: platform
 service: platform-service
 name: Reset Password
+capability: cap:user.reset_password
 description: 'Generate a fresh random password for ``user_id`` and persist its hash.
 
 

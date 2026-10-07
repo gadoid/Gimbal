@@ -13,6 +13,7 @@ id: platform.users.post_root
 system: platform
 service: platform-service
 name: Create User
+capability: cap:user.create
 description: 'Create a new user(M2.5 收紧:admin 开号 —— 创建账号是人事权,
 
   spec-1「任何登录用户可开号」的遗留闭合,权限方案 §5.3)。'
