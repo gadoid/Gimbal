@@ -9,25 +9,18 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from gimbal_plate.dialect import HttpBinding, RequestSpec, ResponseSpec  # A2
 from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
-from gimbal_plate.systems.fin.dimensions import register_fin_dims
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
-    DeclarationEntry, RequestSpec, ResponseSpec,
+    DeclarationEntry,
 )
-from gimbal_plate.schema.endpoint.api_spec import ApiSpec
 from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
-
-
-class _Req(BaseModel):
-    placeholder: str
-
 
 class _Out(BaseModel):
     code: int
     msg: str
-
 
 def _build_endpoint() -> EndpointSpec:
     return EndpointSpec(
@@ -35,12 +28,13 @@ def _build_endpoint() -> EndpointSpec:
         system="sample",
         service="sample-svc",
         name="sample",
-        api=ApiSpec(service="sample-svc", method="POST", path="/sample/failed"),
-        request=RequestSpec.declare(_Req),
+        binding=HttpBinding(method="POST", path="/sample/failed"),
+        request=RequestSpec(declarations=[
+                DeclarationEntry(name="q", path="$.q", type="string",
+                                 required=True, example="v1"),
+            ]),
         responses={
-            200: ResponseSpec(
-                status=200,
-                declarations=[
+            "200": ResponseSpec(declarations=[
                     DeclarationEntry(name="code", path="$.code", type='integer',
                                      required=True,
                                      assertable=True),
@@ -54,14 +48,13 @@ def _build_endpoint() -> EndpointSpec:
                 "422 客户不存在",
             ]
         ),
-        version="1.0.0",
     )
-
 
 def test_failed_criteria_resolved() -> None:
     reg = PlateRegistry()
     reg.register_endpoint(_build_endpoint())
-    register_fin_dims(reg)
+    from gimbal_plate.loader import register_core_dims
+    register_core_dims(reg)
     with TestClient(create_app(registry=reg)) as client:
         resp = client.post(
             "/api/endpoint/sample.failed/action/failed-criteria",

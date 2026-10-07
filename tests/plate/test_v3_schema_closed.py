@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from gimbal_plate.schema import (
-    ApiSpec,
     Config,
     DeclarationEntry,
     EndpointMetadata,
@@ -17,7 +16,6 @@ from gimbal_plate.schema import (
 
 
 SCHEMA_CLASSES = (
-    ApiSpec,
     DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
@@ -36,7 +34,7 @@ class TestSchemaClosed:
 
     def test_schema_classes_are_defined_in_schema_modules(self) -> None:
         for cls in SCHEMA_CLASSES:
-            assert cls.__module__.startswith("gimbal_plate.schema.")
+            assert cls.__module__.startswith(("gimbal_plate.schema.", "gimbal_plate.dialect."))
 
     def test_schema_classes_have_no_system_subclasses(self) -> None:
         for cls in SCHEMA_CLASSES:

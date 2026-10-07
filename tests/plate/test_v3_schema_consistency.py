@@ -14,6 +14,14 @@
 """
 from __future__ import annotations
 
+from gimbal_plate.dialect import EndpointSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+
 import inspect
 import json
 from copy import deepcopy
@@ -30,7 +38,6 @@ from gimbal_plate.schema.strategy import (
     Extract,
     StrategyBase,
 )
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -56,7 +63,7 @@ def _platform_view() -> dict:
 
 
 # 与 PlatformScenarioExporter 相同的 step↔endpoint 匹配键
-_EP_BY_KEY = {(ep.api.method, ep.api.path): ep for ep in ALL_ENDPOINTS}
+_EP_BY_KEY = {(ep.binding.method, ep.binding.path): ep for ep in ALL_ENDPOINTS}
 
 
 def _declared_body_keys(ep) -> set[str] | None:

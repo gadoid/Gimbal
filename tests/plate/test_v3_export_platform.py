@@ -5,6 +5,14 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from gimbal_plate.dialect import EndpointSpec, HttpBinding, RequestSpec, ResponseSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+
 from gimbal_plate.export.platform import (
     PlatformScenarioExporter,
     PlatformScenarioView,
@@ -13,7 +21,6 @@ from gimbal_plate.export.platform import (
 )
 from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.endpoint import (
-    ApiSpec,
     DeclarationEntry,
     EndpointSpec,
     RequestSpec,
@@ -26,7 +33,6 @@ from gimbal_plate.schema.scenario import (
     Scenario as ScenarioModel,
 )
 from gimbal_plate.schema.step import Step
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -44,7 +50,7 @@ def _load_scenario() -> ScenarioModel:
 class TestPlatformScenarioExporterInstantiation:
     def test_platform_scenario_exporter_constructible(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         assert exporter.scenario is sc
 
     def test_exporter_endpoints_is_isolated_copy(self) -> None:
@@ -57,7 +63,7 @@ class TestPlatformScenarioExporterInstantiation:
 class TestPlatformStepView:
     def test_step_view_shape_matches_gimbal(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         s0 = view.steps[0]
         dumped = s0.model_dump(mode="json")
@@ -79,7 +85,7 @@ class TestPlatformStepView:
     def test_request_body_is_full_payload(self) -> None:
         """request.body 应当补全为 endpoint 全量字段定义(不再单独输出 field_names)。"""
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         # 找一个明确命中 endpoint 的 step (step[3].call 一定命中)
         s = view.steps[3]
@@ -104,7 +110,7 @@ class TestPlatformStepView:
         (2026-09-05 目录化:carry 顶层条目不进 fields_meta,值透传。)
         """
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         s = view.steps[3]
         call_dict = s.call
@@ -137,7 +143,7 @@ class TestPlatformStepView:
 
     def test_step_view_view_hints_match_endpoint_id(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         s0 = view.steps[0]
         # view_hints 应包含 endpoint_id(从 ALL_ENDPOINTS 匹配)
@@ -147,7 +153,7 @@ class TestPlatformStepView:
 class TestPlatformScenarioView:
     def test_top_shape_matches_gimbal_scenario(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         dumped = view.model_dump(mode="json")
         # 顶层:与 gimbal 一致的 6 字段 + platform 扩展 3 字段
@@ -160,21 +166,21 @@ class TestPlatformScenarioView:
 
     def test_meta_passthrough(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         assert view.meta["name"] == sc.meta.name
         assert view.meta["system"] == sc.meta.system
 
     def test_config_passthrough(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         assert set(view.config["services"].keys()) == {"tidb-test-service"}
         assert "bl_no" in view.config["vars"]
 
     def test_steps_count_matches(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         assert len(view.steps) == 36
         for s in view.steps:
@@ -182,7 +188,7 @@ class TestPlatformScenarioView:
 
     def test_step_carries_full_request_body(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         s0 = view.steps[0]
         assert s0.request["body"]["bl_no"] == "${var.bl_no}"
@@ -192,7 +198,7 @@ class TestPlatformScenarioView:
 
     def test_strategy_kinds_match_gimbal(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         all_kinds: list[str] = []
         for s in view.steps:
@@ -204,7 +210,7 @@ class TestPlatformScenarioView:
 
     def test_view_round_trips_as_json(self) -> None:
         sc = _load_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
+        exporter = PlatformScenarioExporter(sc, endpoints=ALL_FIN)
         view = exporter.to_view()
         s = view.model_dump_json()
         view2 = PlatformScenarioView.model_validate_json(s)
@@ -218,8 +224,8 @@ class TestPlatformEndpointViewRestored:
 
     def test_endpoints_aggregated(self) -> None:
         sc = _load_scenario()
-        view = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_view()
-        assert len(view.endpoints) == len(ALL_ENDPOINTS)
+        view = PlatformScenarioExporter(sc, endpoints=ALL_FIN).to_view()
+        assert len(view.endpoints) == len(ALL_FIN)
         # 每个 endpoint 都有 request_fields / response_fields / deep_link
         for ev in view.endpoints:
             assert ev.deep_link.startswith("/platform/endpoints/")
@@ -228,7 +234,7 @@ class TestPlatformEndpointViewRestored:
 
     def test_request_body_sample_aggregated_from_steps(self) -> None:
         sc = _load_scenario()
-        view = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_view()
+        view = PlatformScenarioExporter(sc, endpoints=ALL_FIN).to_view()
         # order_add 在 scenario 出现 5 次,应有 5 个样本
         order_add = next(e for e in view.endpoints if e.id == "fin.order.order_add")
         assert len(order_add.request_body_samples) >= 1
@@ -237,7 +243,7 @@ class TestPlatformEndpointViewRestored:
 
     def test_navigation_grouped_by_service(self) -> None:
         sc = _load_scenario()
-        view = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_view()
+        view = PlatformScenarioExporter(sc, endpoints=ALL_FIN).to_view()
         # fin 全部 endpoint 统一归属 fin-service:导航树只有一组
         # 2026-09-08 cost_amount_list 入册,20 → 21;
         # 2026-09-09 客户域三端点入册,21 → 24;
@@ -251,7 +257,7 @@ class TestPlatformEndpointViewRestored:
 
     def test_config_summary_classifies_placeholders(self) -> None:
         sc = _load_scenario()
-        view = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_view()
+        view = PlatformScenarioExporter(sc, endpoints=ALL_FIN).to_view()
         cs = view.config_summary
         assert "services" in cs and "users" in cs and "vars" in cs
         # vars:bl_no 是 random_decorated
@@ -271,13 +277,11 @@ def _deep_binding_ep(declarations: list[DeclarationEntry]) -> EndpointSpec:
         service="tst-service",
         name="deep_order_add",
         description="深层 binding 补全测试端点",
-        api=ApiSpec(service="tst-service", method="POST", path="/deep-order-add"),
-        request=RequestSpec(
-            body_type="json",
-            
-            declarations=declarations,
+        binding=HttpBinding(method="POST", path="/deep-order-add"),
+        request=RequestSpec(declarations=declarations,
         ),
-        responses={200: ResponseSpec(status=200)},
+        responses={
+            "200": ResponseSpec()},
     )
 
 

@@ -1,351 +1,41 @@
-"""V3 阶段 1/2/3:systems/fin/ 三个文件齐全 + 组合挂载正确 + defaults round-trip。
+"""fin 系统清单(A2 重写:Python 实例与模板工厂已退役,真源 = systems/fin/)。
 
-V3.2 增量:systems/common/ 公共模板工厂 + systems/fin/{meta,config}.py 系统专属工厂,
-defaults.py 改为薄封装。本测试覆盖 factory 行为契约。
+旧版覆盖 systems/fin/*.py 工厂契约;A2 起模板内容转为
+``systems/fin/system.md`` 的 gimbal:defaults 数据,工厂测试使命完成。
+本测试保留 fin 系统的结构性验收:端点数、服务声明、默认模板可加载。
 """
 from __future__ import annotations
 
-import pytest
-from pydantic import BaseModel
-
-from gimbal_plate.schema.endpoint import (
-    EndpointSpec,
-    RequestSpec,
-    ResponseSpec,
-)
-from gimbal_plate.schema.endpoint.io_spec import iter_declarations
-from gimbal_plate.systems.common.config import common_config_template
-from gimbal_plate.systems.common.meta import common_meta_template
-from gimbal_plate.systems.fin import (
-    CONFIG_TEMPLATE,
-    META_TEMPLATE,
-    fin_config_template,
-    fin_meta_template,
-)
-from gimbal_plate.systems.fin.endpoint import (
-    ACCOUNT_QUERY_BALANCE,
-    ALL_ENDPOINTS,
-    SETTLEMENT_CREATE_ORDER,
-)
-
-
-class TestSystemsFinEndpointExists:
-    """systems/fin/endpoint/ 三个文件齐全。"""
-
-    def test_endpoint_init_aggregates_all_endpoints(self) -> None:
-        # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)
-        # + order_book / audit_page(2026-09-04/05)= 21 个;2026-09-06
-        # order_confirm 并入 fin.order.order_add(独立文件删除)= 20 个;
-        # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1)= 21 个;
-        # 2026-09-09 客户域三端点入册(§13 级联链:list/part/policy)= 24 个;
-        # S1-0 B3(2026-10-07):order_add_demo 删除 + order_dispatch 停注
-        # (同坐标双注违反 F3),25 → 23
-        assert len(ALL_ENDPOINTS) == 23
-
-    def test_endpoint_constants_are_endpointspec_instances(self) -> None:
-        assert isinstance(SETTLEMENT_CREATE_ORDER, EndpointSpec)
-        assert isinstance(ACCOUNT_QUERY_BALANCE, EndpointSpec)
-
-    def test_endpoint_ids_are_unique(self) -> None:
-        ids = [ep.id for ep in ALL_ENDPOINTS]
-        assert len(set(ids)) == len(ids)
-
-    def test_endpoints_use_fin_system(self) -> None:
-        for ep in ALL_ENDPOINTS:
-            assert ep.system == "fin", f"{ep.id} system should be 'fin'"
-
-
-class TestEndpointValidatorChecks:
-    """EndpointSpec._validate_integrity 的所有硬约束都被现有实例满足。"""
-
-    def test_id_pattern_matches(self) -> None:
-        import re
-
-        pattern = re.compile(r"^[a-z][a-z0-9_.\-]{1,63}$")
-        for ep in ALL_ENDPOINTS:
-            assert pattern.match(ep.id), f"{ep.id} id pattern mismatch"
-
-    def test_version_is_semver(self) -> None:
-        import re
-
-        pattern = re.compile(r"^\d+\.\d+\.\d+$")
-        for ep in ALL_ENDPOINTS:
-            assert pattern.match(ep.version), f"{ep.id} version not semver"
-
-    def test_api_service_matches_endpoint_service(self) -> None:
-        for ep in ALL_ENDPOINTS:
-            assert ep.api.service == ep.service
-
-    def test_responses_contains_200(self) -> None:
-        for ep in ALL_ENDPOINTS:
-            assert 200 in ep.responses
-
-
-class TestCatalogComposition:
-    """body 契约以 declare() 全量目录组合挂载(2026-09-05 目录化):
-    declarations 为唯一承重,schema_/title 锚退役;面划分读 entry.state。"""
-
-    def test_create_order_endpoint_request_catalog(self) -> None:
-        rs = SETTLEMENT_CREATE_ORDER.request
-        assert isinstance(rs, RequestSpec)
-        assert [e.name for e in rs.declarations] == [
-            "order_id", "amount", "currency", "remark"]
-
-    def test_create_order_endpoint_response_catalog(self) -> None:
-        rsp = SETTLEMENT_CREATE_ORDER.responses[200]
-        assert isinstance(rsp, ResponseSpec)
-        assert [e.name for e in rsp.declarations] == [
-            "order_id", "status", "created_at"]
-
-    def test_query_balance_endpoint_response_catalog(self) -> None:
-        rsp = ACCOUNT_QUERY_BALANCE.responses[200]
-        assert isinstance(rsp, ResponseSpec)
-        assert [e.name for e in rsp.declarations] == [
-            "account_id", "balance", "currency", "as_of"]
-
-    def test_create_order_request_face(self) -> None:
-        rs = SETTLEMENT_CREATE_ORDER.request
-        assert rs is not None
-        assert [e.name for e in rs.declarations
-                if e.state == "form"] == ["order_id", "amount", "currency"]
-        assert [e.path for e in rs.declarations
-                if e.state == "carry"] == ["$.remark"]
-
-
-class TestCarryStatePolicy:
-    """全端点 state 策略(2026-09-05 目录化,取代旧 channel 面 census):
-    描述性传递字段(备注族)一律 state=carry,不得滞留 form(业务表单面)。
-
-    原 TestCarryFacesAllEndpoints 的 91/233 键 EXPECTED_CARRY 全量普查
-    随 channel 轴退役(§4.1(c)):目录化后面基准 = entry.state 共识默认,
-    逐键 census 属打地鼠重钉负担;存活的策略钉收窄为下方两条。
-    """
-
-    DESCRIPTIVE = {"remark", "notes", "cancel_remark"}
-
-    def test_descriptive_fields_never_in_form_state(self) -> None:
-        for ep in ALL_ENDPOINTS:
-            rs = ep.request
-            if rs is None:
-                continue
-            leaked = {e.name for e in rs.declarations
-                      if e.state == "form"} & self.DESCRIPTIVE
-            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 form 面"
-
-    def test_carry_state_needs_no_channel(self) -> None:
-        # wire 面不再有 channel 键;state 是唯一面划分轴。
-        for ep in ALL_ENDPOINTS:
-            rs = ep.request
-            if rs is None:
-                continue
-            for e in rs.declarations:
-                assert "channel" not in e.model_dump()
-
-
-class TestDefaultsRoundTrip:
-    """defaults.py 的 Meta / Config 模板可 round-trip,system 信息携带正确。"""
-
-    def test_meta_template_system_is_fin(self) -> None:
-        assert META_TEMPLATE.system == ["fin"]
-
-    def test_meta_template_round_trip(self) -> None:
-        from gimbal_plate.schema import Meta
-
-        dumped = META_TEMPLATE.model_dump(mode="json")
-        restored = Meta.model_validate(dumped)
-        assert restored.system == ["fin"]
-        assert restored.name == META_TEMPLATE.name
-        assert restored.version == META_TEMPLATE.version
-
-    def test_config_template_has_fin_services(self) -> None:
-        assert "fin-service" in CONFIG_TEMPLATE.services
-        assert "test-api.example.com/fin" in CONFIG_TEMPLATE.services["fin-service"]
-
-    def test_config_template_users_have_no_production_secrets(self) -> None:
-        # 文档 §3:defaults.py 的 services / users 不放生产敏感信息。
-        # tester_a 的密码必须是占位符引用,不能是真实值。
-        tester = CONFIG_TEMPLATE.users["tester_a"]
-        password = tester.password
-        assert password.startswith("${") and password.endswith("}"), (
-            f"密码必须是占位符引用,实际为 {password!r}"
-        )
-
-    def test_config_template_round_trip(self) -> None:
-        from gimbal_plate.schema import Config
-
-        dumped = CONFIG_TEMPLATE.model_dump(mode="json")
-        restored = Config.model_validate(dumped)
-        assert restored.services == CONFIG_TEMPLATE.services
-        assert restored.users.keys() == CONFIG_TEMPLATE.users.keys()
-
-
-class TestCommonMetaFactory:
-    """systems/common/meta.py —— 系统无关的 Meta 默认模板工厂。"""
-
-    def test_default_system_is_empty_list(self) -> None:
-        # common 的系统字段默认空 list:任何具体系统通过覆盖传入
-        m = common_meta_template(
-            name="x", description="x", module="x", priority=1,
-            author="x", owner="x", tags=[],
-        )
-        assert m.system == []
-
-    def test_default_version_is_1_0_0(self) -> None:
-        m = common_meta_template(
-            name="x", description="x", module="x", priority=1,
-            author="x", owner="x", tags=[],
-        )
-        assert m.version == "1.0.0"
-
-    def test_caller_overrides_system(self) -> None:
-        m = common_meta_template(
-            name="x", description="x", module="x", priority=1,
-            author="x", owner="x", tags=[],
-            system=["mall"],
-        )
-        assert m.system == ["mall"]
-
-    def test_caller_overrides_version(self) -> None:
-        m = common_meta_template(
-            name="x", description="x", module="x", priority=1,
-            author="x", owner="x", tags=[],
-            version="2.5.1",
-        )
-        assert m.version == "2.5.1"
-
-    def test_missing_required_fields_raises(self) -> None:
-        # 必填字段(name/description/module/priority/author/owner/tags)
-        # 由调用方提供,common 不代填 — 这是设计意图
-        with pytest.raises(Exception):
-            common_meta_template()
-
-
-class TestCommonConfigFactory:
-    """systems/common/config.py —— 系统无关的 Config 默认模板工厂。"""
-
-    def test_default_services_is_empty(self) -> None:
-        c = common_config_template()
-        assert c.services == {}
-
-    def test_default_users_is_empty(self) -> None:
-        c = common_config_template()
-        assert c.users == {}
-
-    def test_caller_overrides_services(self) -> None:
-        c = common_config_template(
-            services={"foo": "https://x"},
-        )
-        assert c.services == {"foo": "https://x"}
-
-
-class TestFinMetaFactory:
-    """systems/fin/meta.py —— fin 系统的 Meta 默认模板工厂。"""
-
-    def test_no_args_returns_fin_defaults(self) -> None:
-        m = fin_meta_template()
-        assert m.system == ["fin"]
-        assert m.module == "fin"
-        assert m.author == "fin-team"
-        assert m.owner == "fin-team"
-        assert m.tags == ["fin"]
-
-    def test_caller_override_does_not_lose_fin_defaults(self) -> None:
-        # 覆盖 author 不应丢失 fin 的其他默认
-        m = fin_meta_template(author="fin-team-qa")
-        assert m.system == ["fin"]  # fin 默认保留
-        assert m.module == "fin"     # fin 默认保留
-        assert m.author == "fin-team-qa"  # 仅此项覆盖
-
-    def test_factory_output_equals_defaults_constant(self) -> None:
-        # 关键契约:defaults.META_TEMPLATE == fin_meta_template() 输出
-        m = fin_meta_template()
-        assert m.model_dump() == META_TEMPLATE.model_dump()
-
-
-class TestFinConfigFactory:
-    """systems/fin/config.py —— fin 系统的 Config 默认模板工厂。"""
-
-    def test_no_args_returns_fin_defaults(self) -> None:
-        c = fin_config_template()
-        assert "fin-service" in c.services
-        assert "tester_a" in c.users
-        assert c.users["tester_a"].password.startswith("${")
-
-    def test_factory_output_equals_defaults_constant(self) -> None:
-        c = fin_config_template()
-        assert c.model_dump() == CONFIG_TEMPLATE.model_dump()
-
-
-class TestSchemaClosedInvariant:
-    """V3 §1:工厂返回 schema.Meta/Config 实例,不是派生类(保持 schema 封闭)。"""
-
-    def test_meta_template_is_schema_meta_not_subclass(self) -> None:
-        from gimbal_plate.schema import Meta
-
-        assert type(META_TEMPLATE) is Meta, (
-            f"META_TEMPLATE 必须是 schema.Meta 实例,实际 {type(META_TEMPLATE).__name__}"
-        )
-
-    def test_config_template_is_schema_config_not_subclass(self) -> None:
-        from gimbal_plate.schema import Config
-
-        assert type(CONFIG_TEMPLATE) is Config, (
-            f"CONFIG_TEMPLATE 必须是 schema.Config 实例,实际 {type(CONFIG_TEMPLATE).__name__}"
-        )
-
-    def test_fin_factory_output_is_schema_meta_not_subclass(self) -> None:
-        from gimbal_plate.schema import Meta
-
-        m = fin_meta_template()
-        assert type(m) is Meta
+from gimbal_plate.dialect import EndpointSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == "fin"]
+
+
+class TestSystemsFinInventory:
+    def test_endpoint_count(self):
+        # 21 → 24(09-09 客户域)→ 25(09-20 demo)→ 23(S1-0 B3)
+        assert len(ALL_FIN) == 23
+
+    def test_service_declared_with_metadata(self):
+        svc = _REG.get_service("fin-service")
+        assert svc is not None
+        assert svc.version == "1.1.0"  # gimbal:system 块声明
+
+    def test_defaults_seeded(self):
+        assert _REG.index_for("config").index.get("fin.default") is not None
+        assert _REG.index_for("meta").index.get("fin.default") is not None
+        assert _REG.index_for("resource").index.get("fin.tidb_test") is not None
+        assert _REG.index_for("scenario").index.get("sc-fin-default") is not None
 
 
 class TestQueryViews:
-    """动态取数源目录落点(2026-09-07 spec §3.1/§3.2/§7.1)。"""
+    def test_endpoint_with_views(self):
+        eps = [e for e in ALL_FIN if e.query_views]
+        assert eps, "fin 应有挂 query_views 的端点"
 
-    def test_endpoint_count(self):  # 21 → 24(09-09)→ 25(09-20 demo)→ 23(S1-0 B3,2026-10-07)
-        assert len(ALL_ENDPOINTS) == 23
-
-    def test_views_present(self):
-        by_id = {e.id: e for e in ALL_ENDPOINTS}
-        views = {v.name: v for v in by_id["fin.cost.amount_list"].query_views or []}
-        assert views["cost_list"].items == "$.data[*]"
-        assert views["cost_list"].label == "cost_name"
-        pv = {v.name: v for v in by_id["fin.order_entrust.order_page"].query_views or []}
-        assert pv["pending_orders"].params == {"entrust_status": "1"}
-        assert pv["pending_orders"].items == "$.data.data[*]"
-        assert by_id["fin.order_entrust.order_page"].metadata.query_safe is True
-
-    def test_bindings(self):
-        by_id = {e.id: e for e in ALL_ENDPOINTS}
-        add = by_id["fin.order_entrust.order_add"].request.declarations
-        bl = next(e for e in add if e.name == "bl_no")
-        assert bl.value_source is not None
-        assert bl.value_source.view == "pending_orders"
-        assert bl.value_source.column == "bl_no"
-        assert bl.value_source.group == ""            # 缺省组 = view(N=1)
-        # cost_id 两条为深传容器 children(2026-09-07 结构化),
-        # 顶层 declarations 不展平 —— 须经 iter_declarations 树→平面投影
-        fee = list(iter_declarations(
-            by_id["fin.order_fee.book_real_amount_edit"].request.declarations))
-        c_ids = [e for e in fee if e.name == "cost_id"]
-        assert len(c_ids) == 2
-        groups = {e.value_source.group for e in c_ids}
-        assert groups == {"cost_list#to_customer", "cost_list#to_supplier"}  # 双角色拆组
-
-    def test_enum_backfill(self):
-        for ep in ALL_ENDPOINTS:
-            for e in ep.request.declarations if ep.request else []:
-                if e.name == "action":
-                    assert e.enum == ["check", "submit"], f"{ep.id} action enum"
-        by_id = {e.id: e for e in ALL_ENDPOINTS}
-        tabs = [e for e in by_id["fin.audit.audit_page"].request.declarations
-                if e.name == "active_tab"]
-        assert tabs[0].enum == ["examine_wait", "examine_done"]
-        so = [e for e in by_id["fin.order.order_page"].request.declarations
-              if e.name == "sort_order"]
-        assert so[0].enum == ["asc", "desc"]
-        # sort_order ×2 的另一处(order_entrust_order_page,§7.1 回填第 11 处)
-        so2 = [e for e in by_id["fin.order_entrust.order_page"].request.declarations
-               if e.name == "sort_order"]
-        assert so2[0].enum == ["asc", "desc"]
+    def test_endpoint_count_total(self):
+        assert len(ALL_ENDPOINTS) == 149

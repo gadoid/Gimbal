@@ -10,11 +10,12 @@
 不依赖通道轴,目录化后原样存活。
 """
 import pytest
-from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, RequestSpec
+from gimbal_plate.dialect import RequestSpec
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
 
 
 def _build(*entries):
-    return RequestSpec(body_type="json", declarations=list(entries))
+    return RequestSpec(declarations=list(entries))
 
 
 def _decl(**kw):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from gimbal_plate.schema.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec  # A2:M2 真源在方言层
 from gimbal_plate.schema.service_definition import ServiceDefinition
 
 from .index import _Index
@@ -165,8 +165,11 @@ class PlateRegistry:
         """
         return self._index.by_id.get(endpoint_id)
 
-    def find_endpoints(self, service: str, method: str, path: str) -> list[EndpointSpec]:
-        ep_id = self._index.by_route.get((service, method, path))
+    def find_endpoints(
+        self, service: str, method: str, path: str, *, protocol: str = "http"
+    ) -> list[EndpointSpec]:
+        # 路由键 = (protocol, service, *locator)（A2）；http 查询面缺省 http
+        ep_id = self._index.by_route.get((protocol, service, method, path))
         if ep_id is None:
             return []
         return [self._index.by_id[ep_id]]

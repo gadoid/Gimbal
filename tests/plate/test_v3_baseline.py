@@ -10,13 +10,13 @@ from datetime import datetime
 import pytest
 from pydantic import BaseModel
 
+from gimbal_plate.dialect import HttpBinding  # A2
 from gimbal_plate.export.gimbal import (
     EndpointCase,
     EndpointCaseDataset,
     EndpointCaseExporter,
 )
 from gimbal_plate.schema import (
-    ApiSpec,
     Config,
     DeclarationEntry,
     EndpointMetadata,
@@ -45,10 +45,19 @@ def sample_endpoint() -> EndpointSpec:
         system="baseline",
         service="sample",
         name="基线样例",
-        api=ApiSpec(service="sample", method="GET", path="/baseline/sample"),
-        request=RequestSpec.declare(_SampleIn),
-        responses={200: ResponseSpec.declare(_SampleOut, status=200)},
-        version="1.0.0",
+        binding=HttpBinding(method="GET", path="/baseline/sample"),
+        request=RequestSpec(declarations=[
+            DeclarationEntry(name="order_id", path="$.order_id", type="string",
+                             required=True),
+        ]),
+        responses={
+            "200": ResponseSpec(declarations=[
+                DeclarationEntry(name="order_id", path="$.data.order_id",
+                                 type="string", assertable=True),
+                DeclarationEntry(name="status", path="$.data.status",
+                                 type="string", assertable=True),
+            ]),
+        },
     )
 
 
@@ -75,7 +84,7 @@ class TestSchemaEndpointImportable:
     def test_endpoint_spec_instantiable(self, sample_endpoint: EndpointSpec) -> None:
         assert sample_endpoint.id == "baseline.sample.endpoint"
         assert sample_endpoint.system == "baseline"
-        assert sample_endpoint.version == "1.0.0"
+    # 8n:EndpointSpec.version 已删除
 
     def test_endpoint_spec_dump_contains_response_declarations(
         self, sample_endpoint: EndpointSpec
@@ -85,7 +94,7 @@ class TestSchemaEndpointImportable:
         # 测试只校验 dump 出来的结构里我们填的关键字段都在。
         dumped = sample_endpoint.model_dump(mode="json")
         assert dumped["id"] == "baseline.sample.endpoint"
-        assert dumped["api"]["path"] == "/baseline/sample"
+        assert dumped["binding"]["path"] == "/baseline/sample"
         resp_200 = dumped["responses"]["200"]
         assert "schema" not in resp_200
         assert [e["name"] for e in resp_200["declarations"]] == [

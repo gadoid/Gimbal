@@ -56,15 +56,15 @@ def test_endpoint_full_returns_full_contract(http_client: TestClient) -> None:
     assert isinstance(item["name"], str) and item["name"]
 
     # Full contract keys — these are NOT in the light EndpointView:
-    assert "api" in item and isinstance(item["api"], dict)
+    assert "binding" in item and isinstance(item["binding"], dict)
     assert "metadata" in item and isinstance(item["metadata"], dict)
     assert "request" in item  # may be None or dict depending on spec
     assert "responses" in item and isinstance(item["responses"], dict)
 
     # The nested api object carries the HTTP method / path (light has them as
     # flat fields — this is the structural marker that the full factory ran).
-    assert item["api"].get("method") == "POST"
-    assert "path" in item["api"]
+    assert item["binding"].get("method") == "POST"
+    assert "path" in item["binding"]
 
     # Wire 形状(P2 存储翻转后):IO 节点只发 declarations(+可选 schema),
     # legacy fields/carry/assertable_fields 键不再出现。
@@ -111,7 +111,7 @@ def test_endpoint_full_list_shape(http_client: TestClient) -> None:
     assert data["total"] == len(items) >= 18
     # Every item is an EndpointDetailView (api/metadata nested).
     for it in items:
-        assert "api" in it and isinstance(it["api"], dict)
+        assert "binding" in it and isinstance(it["binding"], dict)
         assert "metadata" in it and isinstance(it["metadata"], dict)
     # Sample id is present.
     ids = {it["id"] for it in items}
@@ -162,4 +162,4 @@ def test_endpoint_full_for_system_single(http_client: TestClient) -> None:
     assert resp.status_code == 200
     item = resp.json()["data"]["item"]
     assert item["id"] == SAMPLE_ENDPOINT
-    assert "api" in item and "metadata" in item
+    assert "binding" in item and "metadata" in item

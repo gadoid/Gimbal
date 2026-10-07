@@ -1,10 +1,17 @@
 """V3 阶段 7:层级隔离回归测试。"""
 from __future__ import annotations
 
+from gimbal_plate.dialect import EndpointSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+
 import re
 from pathlib import Path
 
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 PKG_ROOT = Path(__file__).resolve().parents[2] / "src" / "gimbal-plate" / "gimbal_plate"
@@ -119,7 +126,7 @@ class TestEndpointCompositionHolds:
     """V3 核心原则:系统差异由组合表达,允许 EndpointSpec 容纳 body model。"""
 
     def test_all_fin_endpoints_carry_system_and_service(self) -> None:
-        expected_services = {"fin-service"}
+        expected = {"fin": {"fin-service"}, "platform": {"platform-service"}}
         for endpoint in ALL_ENDPOINTS:
-            assert endpoint.system == "fin"
-            assert endpoint.service in expected_services
+            assert endpoint.system in expected, endpoint.id
+            assert endpoint.service in expected[endpoint.system]

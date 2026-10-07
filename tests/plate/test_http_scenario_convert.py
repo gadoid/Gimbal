@@ -33,7 +33,6 @@ from fastapi.testclient import TestClient
 from gimbal_plate.export.gimbal import GimbalScenarioExporter as DirectGimbalExporter
 from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
-from gimbal_plate.systems.fin.dimensions import register_fin_dims
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -57,7 +56,8 @@ def _load_scenario_dict() -> dict[str, Any]:
 def client() -> TestClient:
     """A ``TestClient`` with full fin dim registration (so the action is wired)."""
     reg = PlateRegistry()
-    register_fin_dims(reg)
+    from gimbal_plate.loader import register_core_dims
+    register_core_dims(reg)
     with TestClient(create_app(registry=reg)) as c:
         yield c
 

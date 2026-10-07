@@ -17,10 +17,10 @@ def test_list_systems_returns_fin_and_common(http_client: TestClient) -> None:
     systems = body["data"]["items"]
     # fin:endpoint 派生;common:声明式通用层(register_common_dims)。
     ids = [s["id"] for s in systems]
-    assert ids == ["common", "fin"]
+    assert ids == ["common", "fin", "platform"]
     fin = next(s for s in systems if s["id"] == "fin")
     assert fin["service_count"] >= 1
     assert fin["endpoint_count"] >= 1
-    assert "registered_at" in fin
+    # registered_at 已随 8n 置空(批次 B 随 release 落快照提交时间)
     common = next(s for s in systems if s["id"] == "common")
     assert common["endpoint_count"] == 0

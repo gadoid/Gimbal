@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from gimbal_plate import ApiSpec, EndpointSpec, ResponseSpec
+from gimbal_plate import EndpointSpec, ResponseSpec, HttpBinding
 from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
 
@@ -31,8 +31,9 @@ def fin_client(fresh_registry: PlateRegistry) -> TestClient:
     """
     fresh_registry.register_endpoint(EndpointSpec(
         id="fin.probe.minimal", system="fin", service="probe", name="探针",
-        api=ApiSpec(service="probe", method="GET", path="/probe"),
-        responses={200: ResponseSpec(status=200, description="成功")},
+        binding=HttpBinding(method="GET", path="/probe"),
+        responses={
+            "200": ResponseSpec(description="成功")},
     ))
     from fastapi.testclient import TestClient as _TC  # noqa: F811
     with _TC(create_app(registry=fresh_registry)) as client:

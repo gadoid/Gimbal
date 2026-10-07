@@ -16,9 +16,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from gimbal_plate.schema.endpoint.api_spec import ApiSpec
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
-from gimbal_plate.schema.endpoint.io_spec import RequestSpec, ResponseSpec
+from gimbal_plate.dialect import EndpointSpec, HttpBinding, RequestSpec, ResponseSpec
+from gimbal_plate.dialect.canonical import shape_hash
 from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 from gimbal_plate.schema.resource import ResourceUnion
 from gimbal_plate.schema.scenario import Config, Meta, Scenario
@@ -140,7 +139,13 @@ class ServiceDetailView(BaseModel):
 
 
 class EndpointView(BaseModel):
-    """Public view of an :class:`EndpointSpec`."""
+    """Public view of an :class:`EndpointSpec`（A2 / 修订三口径）。
+
+    轻列表条目保持**平铺坐标字段**（method / path，http 专属便捷投影，
+    取自 binding.locator()）并带 protocol 与 shape_hash（适配中心的
+    O(1) 变更检测信号）；完整 binding 对象只在 /full 出现。
+    version / updated_at 已随 8n 删除。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -150,72 +155,47 @@ class EndpointView(BaseModel):
     name: str
     description: str = ""
     protocol: str = "http"
-    method: str
-    path: str
+    method: str = ""
+    path: str = ""
+    shape_hash: str = ""
     module: str = ""
     tags: list[str] = Field(default_factory=list)
     priority: int | None = None
-    version: str = "1.0.0"
-    updated_at: datetime | None = None
+    capability: str | None = None
 
     @classmethod
     def from_spec(cls, ep: EndpointSpec) -> "EndpointView":
-        api = ep.api
+        binding = ep.binding
+        # 非 http 协议无平铺坐标（locator 形状由各协议 Binding 定义）
+        method, path = (
+            binding.locator() if isinstance(binding, HttpBinding) else ("", "")
+        )
         return cls(
             id=ep.id,
             system=ep.system,
             service=ep.service,
             name=ep.name,
             description=ep.description,
-            protocol=api.protocol,
-            method=api.method,
-            path=api.path,
+            protocol=binding.protocol,
+            method=method,
+            path=path,
+            shape_hash=shape_hash(ep),
             module=ep.metadata.module or "",
             tags=list(ep.metadata.tags or []),
             priority=ep.metadata.priority,
-            version=ep.version,
-            updated_at=ep.updated_at,
+            capability=ep.capability,
         )
 
 
 class EndpointDetailView(BaseModel):
-    """Full :class:`EndpointSpec` contract as a *strict* view.
+    """Full :class:`EndpointSpec` contract as a *strict* view（A2 修订）。
 
-    This view is the rendering contract consumed by the platform frontend
-    (via ``GET /api/endpoint/{id}/full``). It is therefore a **complete,
-    explicit** mirror of :class:`EndpointSpec` — not a loose ``model_dump``
-    pass-through:
+    平台前端渲染契约（``GET /api/endpoint/{id}/full``）：
 
-    - Every field is declared with its real schema type (``ApiSpec`` /
-      ``EndpointMetadata`` / ``RequestSpec`` / ``ResponseSpec``), reusing the
-      source definitions which are themselves ``extra="forbid"``.
-    - ``extra="forbid"`` on this view means: if ``EndpointSpec`` grows a new
-      field and this view is not updated in lock-step, plate fails loudly
-      (here / in tests) rather than letting the frontend silently miss a
-      field. Adding a field is a contract change that *must* touch both the
-      definition side and the platform side — by design.
-
-    Deliberate boundary (2026-09-08): endpoint-level ``query_views`` is NOT
-    mirrored here. Views are served exclusively through the
-    ``GET /api/query-views`` index route — a single supply channel, so the
-    same data never drifts between two projections (dynamic-value-source
-    spec §3.4 追认).
-
-    Output shape on the wire is unchanged from the previous pass-through:
-    ``request`` / ``responses`` serialise their ``@model_serializer`` keys
-    (``{body_type, declarations}`` / ``{status, description, declarations}``)
-    because those are produced by the source types' own serializers, not by
-    this view. The retired ``model`` mechanism (and its ``model_schema`` /
-    ``model_name`` serializer keys) was removed on 2026-08-31; ``schema_``
-    was in turn retired on 2026-09-05 (field-state catalog) — the
-    ``children`` inline tree on each declaration entry is the sole
-    structural source of truth, and the ``schema`` wire key no longer
-    exists.
-
-    Light :class:`EndpointView` returns only id / method / path /
-    description / module / tags. The ``/full`` endpoint surfaces the full
-    :class:`EndpointSpec` for code generators and assertion builders that
-    need the field-declaration metadata.
+    - ``api`` → ``binding``（判别联合；6.2），outcome 为字符串键（N1）；
+    - ``capability`` / ``consumes`` / ``produces`` 语义锚点（词条引用）；
+    - ``version`` / ``updated_at`` 删除（8n），``shape_hash`` 供适配检测；
+    - 查询视图仍只经 ``GET /api/query-views`` 单通道（2026-09-08 追认）。
     """
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
@@ -225,31 +205,31 @@ class EndpointDetailView(BaseModel):
     service: str
     name: str
     description: str = ""
-    api: ApiSpec
+    capability: str | None = None
+    consumes: list[str] = Field(default_factory=list)
+    produces: list[str] = Field(default_factory=list)
+    binding: HttpBinding
     request: RequestSpec | None = None
-    responses: dict[int, ResponseSpec] = Field(default_factory=dict)
+    responses: dict[str, ResponseSpec] = Field(default_factory=dict)
     metadata: EndpointMetadata
-    version: str = "1.0.0"
-    updated_at: datetime | None = None
+    shape_hash: str = ""
 
     @classmethod
     def from_spec(cls, ep: EndpointSpec) -> "EndpointDetailView":
-        # No model_dump round-trip: the view now mirrors EndpointSpec field
-        # for field, so the source instance is handed over directly. The
-        # field types (ApiSpec / RequestSpec / …) are *the same* objects,
-        # which is what guarantees the wire shape stays identical.
         return cls(
             id=ep.id,
             system=ep.system,
             service=ep.service,
             name=ep.name,
             description=ep.description,
-            api=ep.api,
+            capability=ep.capability,
+            consumes=list(ep.consumes),
+            produces=list(ep.produces),
+            binding=ep.binding,
             request=ep.request,
-            responses=ep.responses,
+            responses=dict(ep.responses),
             metadata=ep.metadata,
-            version=ep.version,
-            updated_at=ep.updated_at,
+            shape_hash=shape_hash(ep),
         )
 
 

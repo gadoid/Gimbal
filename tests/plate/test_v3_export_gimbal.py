@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry  # A2
+from gimbal_plate.dialect import HttpBinding  # A2
 from gimbal_plate.export.gimbal import (
     EndpointCase,
     EndpointCaseDataset,
@@ -18,7 +20,6 @@ from gimbal_plate.export.gimbal import (
     GimbalScenarioExporter,
 )
 from gimbal_plate.schema.endpoint import (
-    ApiSpec,
     EndpointSpec,
     RequestSpec,
     ResponseSpec,
@@ -56,10 +57,16 @@ class TestExportGimbalFunctional:
             system="fin",
             service="settlement",
             name="创建结算单",
-            api=ApiSpec(service="settlement", method="POST", path="/api/v1/fin/settlement/orders"),
-            request=RequestSpec.declare(_InBody),
-            responses={200: ResponseSpec.declare(_OutBody, status=200)},
-            version="1.0.0",
+            binding=HttpBinding(method="POST", path="/api/v1/fin/settlement/orders"),
+            request=RequestSpec(declarations=[
+                DeclarationEntry(name="order_no", path="$.order_no", type="string",
+                                 required=True, example="ORD-1"),
+            ]),
+            responses={
+            "200": ResponseSpec(declarations=[
+                DeclarationEntry(name="order_id", path="$.data.order_id",
+                                 type="string", assertable=True),
+            ])},
         )
 
     def test_to_gimbal_step_returns_compatible_dict(self) -> None:

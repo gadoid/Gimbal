@@ -27,14 +27,6 @@ from gimbal_plate.schema.time_policy import (
 )
 
 # ── endpoint(目录形式,保持现状) ──
-from gimbal_plate.schema.endpoint import (
-    ApiSpec,
-    DeclarationEntry,
-    EndpointMetadata,
-    EndpointSpec,
-    RequestSpec,
-    ResponseSpec,
-)
 
 # ── Step 及其下挂类型 ──
 from gimbal_plate.schema.request import Request, RequestUnion
@@ -81,12 +73,6 @@ __all__ = [
     "TimePolicyUnion",
     "TimeoutPolicy",
     # endpoint
-    "ApiSpec",
-    "EndpointMetadata",
-    "EndpointSpec",
-    "DeclarationEntry",
-    "RequestSpec",
-    "ResponseSpec",
     # api / request
     "Request",
     "RequestUnion",
@@ -119,3 +105,18 @@ __all__ = [
     "Scenario",
     
 ]
+
+# A2:端点模型真源在方言层(dialect.models)。急切转发会与
+# dialect.models → schema.endpoint.io_spec 的共享模型依赖成环,
+# 故门面用 PEP 562 惰性导出。
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry  # A2:急切(无环)
+from gimbal_plate.schema.endpoint.metadata import EndpointMetadata  # A2:急切(无环)
+
+_LAZY_ENDPOINT_NAMES = {"DeclarationEntry", "EndpointMetadata", "EndpointSpec", "RequestSpec", "ResponseSpec"}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_ENDPOINT_NAMES:
+        from gimbal_plate.schema.endpoint import __getattr__ as _ep_getattr
+        return _ep_getattr(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -11,16 +11,13 @@ from typing import Any
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from gimbal_plate.dialect import HttpBinding, RequestSpec, ResponseSpec  # A2
 from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
-from gimbal_plate.systems.fin.dimensions import register_fin_dims
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
     DeclarationEntry,
-    RequestSpec,
-    ResponseSpec,
 )
-from gimbal_plate.schema.endpoint.api_spec import ApiSpec
 
 
 class _ReqIn(BaseModel):
@@ -41,10 +38,8 @@ def _build_endpoint() -> EndpointSpec:
         system="sample",
         service="sample-svc",
         name="sample",
-        api=ApiSpec(service="sample-svc", method="POST", path="/sample/fields"),
-        request=RequestSpec(
-            body_type="json",
-            declarations=[
+        binding=HttpBinding(method="POST", path="/sample/fields"),
+        request=RequestSpec(declarations=[
                 DeclarationEntry(
                     name="client_expand_name",
                     path="$.client_expand_name", type='string',
@@ -70,16 +65,20 @@ def _build_endpoint() -> EndpointSpec:
                 ),
             ],
         ),
-        responses={200: ResponseSpec.declare(_RespOut, status=200)},
-        version="1.0.0",
+        responses={
+            "200": ResponseSpec(declarations=[
+                    DeclarationEntry(name="order_id", path="$.data.order_id",
+                                     type="string", assertable=True),
+                ])},
     )
 
 
 def _client() -> TestClient:
     reg = PlateRegistry()
     reg.register_endpoint(_build_endpoint())
-    # M6 grammar — wire endpoint dim (only endpoint is needed for field-defaults).
-    register_fin_dims(reg)
+    # A2:dim 装配统一入口为 loader.register_core_dims
+    from gimbal_plate.loader import register_core_dims
+    register_core_dims(reg)
     return TestClient(create_app(registry=reg))
 
 
@@ -103,9 +102,7 @@ def test_field_defaults_kinds() -> None:
 def test_field_defaults_generated_fields_from_response() -> None:
     endpoint = _build_endpoint()
     # P2 存储翻转:改声明面 = 整替 ResponseSpec 的 declarations
-    endpoint.responses[200] = ResponseSpec(
-        status=200,
-        declarations=[
+    endpoint.responses["200"] = ResponseSpec(declarations=[
             DeclarationEntry(
                 name="internal_note",
                 path="$.internal_note", type='string',
@@ -116,7 +113,8 @@ def test_field_defaults_generated_fields_from_response() -> None:
     )
     reg = PlateRegistry()
     reg.register_endpoint(endpoint)
-    register_fin_dims(reg)
+    from gimbal_plate.loader import register_core_dims
+    register_core_dims(reg)
     with TestClient(create_app(registry=reg)) as client:
         resp = client.get("/api/endpoint/sample.fields/action/field-defaults")
     assert resp.status_code == 200

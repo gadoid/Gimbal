@@ -2,8 +2,9 @@
 import pytest
 from pydantic import ValidationError
 
+from gimbal_plate.dialect import HttpBinding, RequestSpec, ResponseSpec  # A2
 from gimbal_plate.schema.endpoint import (
-    ApiSpec, EndpointMetadata, EndpointSpec, RequestSpec, ResponseSpec,
+    EndpointMetadata, EndpointSpec, RequestSpec, ResponseSpec,
 )
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
 from gimbal_plate.schema.endpoint.query_view import QueryView, ValueSource
@@ -13,8 +14,9 @@ def _spec(**kw) -> EndpointSpec:
     """最小合法端点(POST 版,便于测 query_safe)。"""
     base = dict(
         id="t.demo.ep", system="t", service="svc", name="demo",
-        api=ApiSpec(service="svc", method="POST", path="/api/demo"),
-        responses={200: ResponseSpec(status=200)},
+        binding=HttpBinding(method="POST", path="/api/demo"),
+        responses={
+            "200": ResponseSpec()},
     )
     base.update(kw)
     return EndpointSpec(**base)
@@ -69,19 +71,19 @@ class TestQuerySafeAndClosure:  # §3.3④⑤
         assert ep.query_views[0].name == "v"
 
     def test_get_view_without_params_closure_ok(self):
-        ep = _spec(api=ApiSpec(service="svc", method="GET", path="/api/d"),
+        ep = _spec(binding=HttpBinding(method="GET", path="/api/d"),
                    query_views=[QueryView(name="v", items="$.d[*]", label="x")])
         assert ep.metadata.query_safe is False  # GET 不要求
 
     def test_required_key_double_none_rejected(self):
         decls = [DeclarationEntry(name="q", path="q", type="string", required=True)]
         with pytest.raises(ValidationError, match="必填键"):
-            _spec(api=ApiSpec(service="svc", method="GET", path="/api/d"),
+            _spec(binding=HttpBinding(method="GET", path="/api/d"),
                   request=RequestSpec(declarations=decls),
                   query_views=[QueryView(name="v", items="$.d[*]", label="x")])
         # 可选键双 None → 合法(缺省不携带)
         decls_opt = [DeclarationEntry(name="q", path="q", type="string", required=False)]
-        _spec(api=ApiSpec(service="svc", method="GET", path="/api/d"),
+        _spec(binding=HttpBinding(method="GET", path="/api/d"),
               request=RequestSpec(declarations=decls_opt),
               query_views=[QueryView(name="v", items="$.d[*]", label="x")])
 
@@ -89,7 +91,7 @@ class TestQuerySafeAndClosure:  # §3.3④⑤
         # 空串/0/false 是合法值,不算缺(required 键 example='' 也闭合)
         decls = [DeclarationEntry(name="q", path="q", type="string",
                                   required=True, example="")]
-        _spec(api=ApiSpec(service="svc", method="GET", path="/api/d"),
+        _spec(binding=HttpBinding(method="GET", path="/api/d"),
               request=RequestSpec(declarations=decls),
               query_views=[QueryView(name="v", items="$.d[*]", label="x")])
 
@@ -136,12 +138,13 @@ def test_closure_exempts_query_params_keys():
     索引仍透出 missing_required(backend 422 兜底)。"""
     ep = EndpointSpec(
         id="t.customer.part", system="t", service="t-service", name="part",
-        api=ApiSpec(service="t-service", method="POST", path="/p", auth="none"),
-        request=RequestSpec(body_type="json", declarations=[
+        binding=HttpBinding(method="POST", path="/p", auth="none"),
+        request=RequestSpec(declarations=[
             DeclarationEntry(name="customer_id", path="$.customer_id",
                              type="string", required=True, ui_kind="text"),
         ]),
-        responses={200: ResponseSpec(status=200)},
+        responses={
+            "200": ResponseSpec()},
         metadata=EndpointMetadata(query_safe=True),
         query_views=[QueryView(name="v_part", query_params=["customer_id"],
                                items="$.data", label="x")],

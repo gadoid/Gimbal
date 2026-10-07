@@ -2,7 +2,7 @@
 
 本期公共 API(C1 + C2):
     结构定义:
-        EndpointSpec, ApiSpec, RequestSpec, ResponseSpec,
+        Binding, EndpointSpec, HttpBinding, RequestSpec, ResponseSpec,
         DeclarationEntry, EndpointMetadata, ServiceDefinition
     能力提供:
         EndpointCase, EndpointCaseDataset, EndpointCaseExporter,
@@ -12,8 +12,11 @@
 """
 
 # 结构定义层
+from gimbal_plate.dialect import (
+    Binding,
+    HttpBinding,
+)
 from gimbal_plate.schema.endpoint import (
-    ApiSpec,
     DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
@@ -39,8 +42,7 @@ from gimbal_plate.registry import (
 __all__ = [
     # 结构定义
     "EndpointSpec",
-    "ApiSpec",
-    "RequestSpec",
+        "RequestSpec",
     "ResponseSpec",
     "DeclarationEntry",
     "EndpointMetadata",

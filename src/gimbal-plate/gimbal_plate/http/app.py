@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from gimbal_plate.http.envelope import (
     PlateHTTPError,
@@ -15,71 +15,30 @@ from gimbal_plate.http.envelope import (
 from gimbal_plate.http.grammar import ErrorCode
 from gimbal_plate.http.routes_grammar import router as grammar_router
 from gimbal_plate.registry import PlateRegistry, registry as default_registry
-from gimbal_plate.systems.common.dimensions import register_common_dims
-from gimbal_plate.systems.fin.dimensions import register_fin_dims
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Ensure the bundled fin system + 7 dims are registered on startup.
+    """Ensure the systems tree + all dims are loaded on startup（A2 统一加载器）.
 
     When an external registry is injected via ``create_app(registry=...)`` this
     step is skipped so the caller controls its own state.
 
-    启动流程(owned 模式):
-    1. ``ALL_ENDPOINTS`` 注册到默认 registry(产生 system / service / endpoint 三个 dim 的数据)。
-    2. ``system == FIN_SYSTEM`` 自检:若有人改了某个 endpoint 但忘了同步 system_info,
-       服务启动即失败,便于尽早暴露问题。
-    3. ``register_dim`` 8 个 dim(7 数据: endpoint / service / system / config / meta /
-           resource / scenario;1 语法: strategy —— kind 描述符,2026-08-17)。
-    4. 给 4 个 storage-backed dim 写入 1 条 seed,保证 ``GET /api/config`` 等返回非空。
+    启动流程(owned 模式)——全部收敛到 :func:`gimbal_plate.loader.load_registry`:
+    1. 按「路径列表」发现系统(缺省 ``systems/``,``PLATE_SYSTEMS_PATH`` 覆盖);
+    2. 解析 Markdown 方言,注册新栈 EndpointSpec(F3:重复路由键注册即报错
+       —— 取代旧 system 自检);system.md 声明系统/服务并播种默认模板 dim;
+    3. 9 个 dim 全局挂载一次(数据 dim + 框架 dim,修订四)。
     """
     if getattr(app.state, "registry_owned", True):
-        # Reset the default registry before re-registering so a stale
-        # singleton from a prior process / test session doesn't raise
-        # "endpoint already registered" on restart.
+        from gimbal_plate.loader import load_registry
+
+        # 装载进默认 registry(create_app 已把它挂到 app.state.registry);
+        # reset 防陈旧单例,加载失败(fenced 块坏了)启动即炸,不静默少半。
         default_registry.reset()
-        try:
-            from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS as FIN_ENDPOINTS
-        except Exception:  # pragma: no cover - defensive: lazy import guard
-            FIN_ENDPOINTS = ()
-        # platform 是自举被测系统,定义形态与 fin 同构(每端点一个 .py);平台侧
-        # 故意不吞异常 —— 端点文件坏了要在启动时炸,不是静默少注册一半。
-        from gimbal_plate.systems.platform.endpoint import (
-            ALL_ENDPOINTS as PLATFORM_ENDPOINTS,
-        )
-
-        default_registry.register_endpoints((*FIN_ENDPOINTS, *PLATFORM_ENDPOINTS))
-
-        # system 自检:仅在 owned 默认 registry 时执行,尊重外部注入。
-        # 已知 system 白名单(而非"必须等于 FIN_SYSTEM")—— platform 是自举
-        # 被测系统,common 是通用层;拼错 system 名仍会在启动时炸。
-        from gimbal_plate.systems.common.dimensions import COMMON_SYSTEM
-        from gimbal_plate.systems.fin.system_info import FIN_SYSTEM
-        from gimbal_plate.systems.platform.system_info import PLATFORM_SYSTEM
-
-        known_systems = {FIN_SYSTEM, PLATFORM_SYSTEM, COMMON_SYSTEM}
-        wrong = [
-            ep for ep in default_registry.list_endpoints()
-            if ep.system not in known_systems
-        ]
-        if wrong:
-            ids = ", ".join(repr(ep.id) for ep in wrong[:5])
-            raise RuntimeError(
-                f"plate lifespan sanity check failed: "
-                f"{len(wrong)} endpoint(s) have system outside "
-                f"{sorted(known_systems)} (first: {ids}). "
-                f"请检查各 systems/*/ 下的 system 名是否与 system_info 一致。"
-            )
-
-        # M6 grammar: 注册 8 个 dim(7 数据 + 1 语法 strategy)+ 4 条 seed(ADR 0002 §D-D4,
-        # 共享入口见 ``gimbal_plate.systems.fin.dimensions``)。
-        register_fin_dims(default_registry)
-
-        # common 通用层:声明式系统 + ``common.default`` config/meta 通用默认
-        # (编排页"选系统 → 场景骨架预填"的默认源;meta 在通用层管理,
-        # 不放业务系统下)。须在 register_fin_dims 之后(dim 已就位才可播种)。
-        register_common_dims(default_registry)
+        load_registry(reg=default_registry)
+        # 快照标识(G5/7.1):working 阶段无 release,标 @working
+        app.state.snapshot_label = "working"
     yield
 
 
@@ -110,9 +69,36 @@ def create_app(
     if registry is None:
         app.state.registry = default_registry
         app.state.registry_owned = True
+        app.state.snapshot_label = "working"
     else:
         app.state.registry = registry
         app.state.registry_owned = False
+        app.state.snapshot_label = "working"
+
+    # G5(7.2,已定):每个响应标明所读快照。统一在响应出口注入,信封构造
+    # 点(ok_response)零改动;非信封响应(healthz 等)不受影响。
+    @app.middleware("http")
+    async def _snapshot_middleware(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/") and response.status_code == 200:
+            label = getattr(request.app.state, "snapshot_label", "working")
+            # JSON body 重写仅在确为信封时进行(content-type 判定,流式响应跳过)
+            ctype = response.headers.get("content-type", "")
+            if "application/json" in ctype:
+                import json as _json
+                body = b"".join([chunk async for chunk in response.body_iterator])
+                try:
+                    data = _json.loads(body)
+                except Exception:  # noqa: BLE001 — 非信封 JSON 原样放行
+                    return Response(content=body, status_code=200,
+                                    media_type="application/json",
+                                    headers=dict(response.headers))
+                if isinstance(data, dict) and "ok" in data and "snapshot" not in data:
+                    data["snapshot"] = label
+                return Response(content=_json.dumps(data, ensure_ascii=False),
+                                status_code=200, media_type="application/json",
+                                headers=dict(response.headers))
+        return response
 
     @app.exception_handler(PlateHTTPError)
     async def _plate_http_error_handler(

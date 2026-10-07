@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, model_validator
 
 if TYPE_CHECKING:  # 仅类型引用,运行时零依赖(避免与 endpoint/io_spec 循环 import)
-    from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+    from gimbal_plate.dialect import EndpointSpec  # A2:M2 真源在方言层
 
 # view name 标识符规则:与 io_spec _NAME_RE 同式(四重身份 §3.5,命名不可变)
 _QV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")

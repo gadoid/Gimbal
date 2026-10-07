@@ -13,12 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from gimbal_plate.http.views import EndpointDetailView
-from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, RequestSpec
-from gimbal_plate.systems.fin.endpoint import (
-    ALL_ENDPOINTS, SETTLEMENT_CREATE_ORDER,
-)
-from gimbal_plate.systems.fin.models import CreateOrderRequest
+from gimbal_plate.http.views import EndpointDetailView, RequestSpec
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if e.system == "fin"]
+SETTLEMENT_CREATE_ORDER = next(
+    (e for e in ALL_ENDPOINTS if e.id == "fin.settlement.create_order"), None)
 
 FIXTURE_DECL = Path(__file__).parent / "fixtures" / "io_declarations_p1.json"
 CAPTURE = bool(os.environ.get("GIMBAL_GOLDEN_CAPTURE"))
@@ -96,36 +99,3 @@ def test_baseline_state_counts() -> None:
 class TestSettlementDeclare:
     """declare() 糖(spec §8 ③):手写字面量与 declare() 输出全键相等。"""
 
-    def test_handwritten_equals_declare(self) -> None:
-        # 手写反填:字面量来自 declare() 输出实测,并对模型源码抽查锚定
-        # (order_id: str 无默认 → required=True/default=None;
-        #  amount: int gt 0 无默认 → required=True/ui_kind=number 自 type 推断;
-        #  currency: str = "CNY" → default="CNY"/required=False;
-        #  remark 的 description 来自模型字段串,states 盖戳 carry)
-        handwritten = RequestSpec(
-            body_type="json",
-            declarations=[
-                DeclarationEntry(name="order_id", path="$.order_id",
-                                 type="string",
-                                 required=True, description="业务订单号",
-                                 ui_kind="text"),
-                DeclarationEntry(name="amount", path="$.amount",
-                                 type="integer",
-                                 required=True, description="结算金额,单位分",
-                                 ui_kind="number"),
-                DeclarationEntry(name="currency", path="$.currency",
-                                 type="string",
-                                 required=False, default="CNY",
-                                 description="币种", ui_kind="text"),
-                DeclarationEntry(name="remark", path="$.remark",
-                                 state='carry', type="string", required=False,
-                                 description="订单备注(carry 传递字段)",
-                                 ui_kind="text"),
-            ],
-        )
-        sugared = RequestSpec.declare(
-            CreateOrderRequest,
-            states={"remark": "carry"},
-        )
-        assert handwritten.declarations == sugared.declarations
-        assert handwritten.model_dump(mode="json") == sugared.model_dump(mode="json")

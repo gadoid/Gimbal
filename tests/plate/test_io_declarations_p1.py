@@ -4,19 +4,26 @@
 P2 存储翻转后访问面为 .declarations 属性(存储即声明,wire 同形);
 channel 键已退役,面划分读 entry.state。
 """
+from gimbal_plate.dialect import EndpointSpec, RequestSpec, ResponseSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+ACCOUNT_QUERY_BALANCE = next(
+    (e for e in ALL_FIN if e.id == 'fin.account.query_balance'), None)
+SETTLEMENT_CREATE_ORDER = next(
+    (e for e in ALL_FIN if e.id == 'fin.settlement.create_order'), None)
+
 from gimbal_plate.schema.endpoint.io_spec import (
-    DeclarationEntry, RequestSpec, ResponseSpec,
-)
-from gimbal_plate.systems.fin.endpoint import (
-    ALL_ENDPOINTS, SETTLEMENT_CREATE_ORDER, ACCOUNT_QUERY_BALANCE,
+    DeclarationEntry,
 )
 
 
 class TestDeclarationsShape:
     def test_request_states_and_order(self) -> None:
-        rs = RequestSpec(
-            body_type="json",
-            declarations=[
+        rs = RequestSpec(declarations=[
                 DeclarationEntry(name="remark", path="$.remark", type='string'),
                 DeclarationEntry(name="notes", path="$.notes", state='carry',
                                  type="string", description="备注"),
@@ -31,9 +38,7 @@ class TestDeclarationsShape:
         assert all(e["assertable"] is False for e in dv)  # 请求侧恒 False
 
     def test_response_assertable_flags(self) -> None:
-        resp = ResponseSpec(
-            status=200,
-            declarations=[
+        resp = ResponseSpec(declarations=[
                 DeclarationEntry(name="audit_id",
                                  path="$.data.data[0].audit_id", type='string'),
                 DeclarationEntry(name="total", path="$.data.total", type='string',
@@ -48,9 +53,7 @@ class TestDeclarationsShape:
     def test_root_path_entry(self) -> None:
         # 根路径现网实例已随 2026-09-02 语料重构移除;合成用例锁合法形态:
         # 根路径 last_segment 为 None → name 惯例落 "$"(spec §3.1)
-        rs = RequestSpec(
-            body_type="json",
-            declarations=[DeclarationEntry(name="$", path="$",
+        rs = RequestSpec(declarations=[DeclarationEntry(name="$", path="$",
                                            state='carry', type="object")],
         )
         (e,) = rs.declarations
@@ -67,7 +70,7 @@ class TestDeclarationsShape:
         # customer_id ×2 + status ×1;list/part/policy)= 951;
         # 2026-09-20 order_add_demo 入册(服务画像 P1,+240 演示声明)= 1191。
         total = 0
-        for ep in ALL_ENDPOINTS:
+        for ep in ALL_FIN:
             if ep.request:
                 total += len(ep.request.declarations)
             total += sum(len(r.declarations)
@@ -78,7 +81,8 @@ class TestDeclarationsShape:
 
     def test_serialize_wire_shape(self) -> None:
         # P2 后 wire 恒发 declarations(空声明即空表,不再按键省略)
-        rs = RequestSpec(body_type="json")
+        rs = RequestSpec(
+)
         assert rs.model_dump(mode="json")["declarations"] == []
         # account:零请求声明端点,full 视图不含 declarations(⑨ 的前置事实)
         full = ACCOUNT_QUERY_BALANCE.request

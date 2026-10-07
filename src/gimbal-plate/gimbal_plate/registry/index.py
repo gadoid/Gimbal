@@ -39,22 +39,21 @@ class _Index:
         self.by_service.setdefault(ep.service, set()).add(ep.id)
         for tag in ep.metadata.tags:
             self.by_tag.setdefault(tag, set()).add(ep.id)
-        # by-protocol 分派纪律（2026-09-27）：by_route 的 (service, method,
-        # path) 三元组是 http 协议自己的坐标形状，仅对 http 端点建索引；
-        # 非 http 协议端点将来各自定义 route 键（阶段 7 ApiSpec 变体）。
-        if getattr(ep.api, "is_http", True):
-            route_key = (ep.api.service, ep.api.method, ep.api.path)
-            # S1-0 B3 / F3（2026-10-07）：路由键唯一，重复注册报错——
-            # 取代「后写静默覆盖」的顺序依赖语义（P4：注册顺序不携带语义）。
-            existing = self.by_route.get(route_key)
-            if existing is not None and existing != ep.id:
-                raise ValueError(
-                    f"重复路由键 (service={route_key[0]!r}, method={route_key[1]!r}, "
-                    f"path={route_key[2]!r})：{existing!r} 与 {ep.id!r} 同坐标。"
-                    f"同物理接口不得双建 Spec（F3）；如为两次捕获（curl 导入 / twin_gen），"
-                    f"合并或废弃其一后再注册。"
-                )
-            self.by_route[route_key] = ep.id
+        # 路由键 = (protocol, service, *binding.locator())（A2 / 6.2 / F3）：
+        # by-protocol 分派纪律沿用——locator 形状由各协议 Binding 自定义
+        #（http = (method, path)）。
+        route_key = (ep.binding.protocol, ep.service, *ep.binding.locator())
+        # S1-0 B3 / F3（2026-10-07）：路由键唯一，重复注册报错——
+        # 取代「后写静默覆盖」的顺序依赖语义（P4：注册顺序不携带语义）。
+        existing = self.by_route.get(route_key)
+        if existing is not None and existing != ep.id:
+            raise ValueError(
+                f"重复路由键 (protocol={route_key[0]!r}, service={route_key[1]!r}, "
+                f"locator={route_key[2:]!r})：{existing!r} 与 {ep.id!r} 同坐标。"
+                f"同物理接口不得双建 Spec（F3）；如为两次捕获（curl 导入 / twin_gen），"
+                f"合并或废弃其一后再注册。"
+            )
+        self.by_route[route_key] = ep.id
 
     def remove(self, endpoint_id: str) -> EndpointSpec | None:
         ep = self.by_id.pop(endpoint_id, None)
@@ -63,8 +62,9 @@ class _Index:
         self.by_service.get(ep.service, set()).discard(endpoint_id)
         for tag in ep.metadata.tags:
             self.by_tag.get(tag, set()).discard(endpoint_id)
-        if getattr(ep.api, "is_http", True):
-            self.by_route.pop((ep.api.service, ep.api.method, ep.api.path), None)
+        self.by_route.pop(
+            (ep.binding.protocol, ep.service, *ep.binding.locator()), None
+        )
         return ep
 
     def clear(self) -> None:

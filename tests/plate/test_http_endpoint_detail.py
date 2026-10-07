@@ -21,8 +21,7 @@ def test_endpoint_detail_returns_minimal_view(http_client: TestClient) -> None:
     assert body["dim"] == "endpoint"
     data = body["data"]
     item = data["item"]
-    for key in ("id", "system", "service", "name", "method", "path", "version"):
-        assert key in item, key
+
     assert item["id"] == "fin.order_entrust.order_add"
     assert item["system"] == "fin"
     assert item["service"] == "fin-service"

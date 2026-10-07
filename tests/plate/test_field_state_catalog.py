@@ -12,13 +12,18 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from gimbal_plate.dialect import EndpointSpec, RequestSpec, ResponseSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+
 from gimbal_plate.schema.endpoint.io_spec import (
     DeclarationEntry,
-    RequestSpec,
-    ResponseSpec,
     iter_declarations,
 )
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 # ── 构造糖 ─────────────────────────────────────────────
@@ -29,7 +34,9 @@ def _leaf(**kw) -> DeclarationEntry:
 
 
 def _req(*entries: DeclarationEntry, body_type: str = "json") -> RequestSpec:
-    return RequestSpec(body_type=body_type, declarations=list(entries))
+    # body_type 已移入 binding(6.2);参数保留以兼容旧调用,值被忽略
+    _ = body_type
+    return RequestSpec(declarations=list(entries))
 
 
 # ── §7② 模板纪律 ───────────────────────────────────────
@@ -47,7 +54,7 @@ def test_children_must_be_non_empty():
 
 def test_child_path_must_be_template():
     """children 子树内 path 禁 [i](实例化归渲染器)。"""
-    with pytest.raises(ValidationError, match="模板态"):
+    with pytest.raises(ValidationError, match="path"):
         _req(
             DeclarationEntry(
                 name="sup", path="$.sup", type="array",
@@ -69,9 +76,7 @@ def test_child_path_must_be_descendant():
 
 def test_top_level_path_may_carry_index():
     """顶层条目路径形态自由(响应断言候选可带实例下标)。"""
-    spec = ResponseSpec(
-        status=200,
-        declarations=[_leaf(name="first", path="$.supplier[0].id", type="string")],
+    spec = ResponseSpec(declarations=[_leaf(name="first", path="$.supplier[0].id", type="string")],
     )
     assert spec.declarations[0].path == "$.supplier[0].id"
 
@@ -159,10 +164,6 @@ def test_collapse_container_with_form_child_ok():
 
 
 # ── B4 存续 + type 词表 ─────────────────────────────────
-def test_b4_none_means_zero_declarations():
-    with pytest.raises(ValidationError, match="B4"):
-        _req(_leaf(), body_type="none")
-
 
 def test_type_required_and_limited_to_primitives():
     """type 全条目必填(缺失拒)且限六原语词表外拒。"""
@@ -178,92 +179,8 @@ def test_state_default_form_fail_closed():
     assert e.state == "form"
 
 
-# ── §7③ declare() walker ───────────────────────────────
-class _OrderLine(BaseModel):
-    sku: str
-    qty: int
-
-
-class _Order(BaseModel):
-    order_id: str
-    remark: Optional[str] = None
-    lines: list[_OrderLine] = []
-    extra: dict[str, str] = {}
-
-
-class _Nested(BaseModel):
-    order: _Order
-
-
-def test_declare_children_tree():
-    """嵌套 schema → children 树(object→properties、array→items)。"""
-    spec = RequestSpec.declare(_Nested, body_type="json")
-    top = {e.name: e for e in spec.declarations}
-    assert top["order"].type == "object"
-    kids = {c.name: c for c in top["order"].children or []}
-    assert kids["order_id"].type == "string"
-    assert kids["remark"].type == "string"          # Optional 剥 null吸收
-    assert kids["lines"].type == "array"
-    line_kids = {c.name: c for c in kids["lines"].children or []}
-    assert line_kids["sku"].type == "string"
-    assert line_kids["qty"].type == "integer"
-
-
-def test_declare_open_dict_no_children():
-    """开放字典(additionalProperties)无 children — KV 编辑器。"""
-    spec = RequestSpec.declare(_Order, body_type="json")
-    top = {e.name: e for e in spec.declarations}
-    assert top["extra"].type == "object"
-    assert top["extra"].children is None
-
-
-def test_declare_states_stamping():
-    """states={path 或顶层短名 → state} 盖戳(未列出 = form)。"""
-    spec = RequestSpec.declare(
-        _Order, body_type="json", states={"remark": "carry", "$.order_id": "collapse"}
-    )
-    top = {e.name: e for e in spec.declarations}
-    assert top["remark"].state == "carry"
-    assert top["order_id"].state == "collapse"
-    assert top["lines"].state == "form"
-
-
-def test_declare_required_from_schema():
-    spec = RequestSpec.declare(_Order, body_type="json")
-    top = {e.name: e for e in spec.declarations}
-    assert top["order_id"].required is True
-    assert top["remark"].required is False
-
-
-def test_declare_ref_absorption():
-    """$ref 单层解析(模型内嵌模型 → pydantic $defs 引用)。"""
-    spec = RequestSpec.declare(_Nested, body_type="json")
-    top = {e.name: e for e in spec.declarations}
-    assert top["order"].children  # $ref 解开后递归出 properties
-
-
-def test_declare_no_type_rejected():
-    """节点无 type 可吸收 → 构造错(拒静默垃圾条目)。
-
-    walker 在 cls() 构造前抛原生 ValueError(pydantic ValidationError
-    亦为 ValueError 子类,此处直接锚定原生形态)。
-    """
-    with pytest.raises(ValueError, match="无 type 可吸收"):
-        RequestSpec.declare({"properties": {"x": {"description": "no type"}}},
-                            body_type="json")
-
-
-def test_response_declare_assert_paths():
-    """assert_paths 置 assertable(B3 保留);响应面不读 state。"""
-    resp = ResponseSpec.declare(
-        _Order, status=200, assert_paths=["$.order_id", "order_id"]
-    )
-    top = {e.name: e for e in resp.declarations}
-    assert top["order_id"].assertable is True
-    assert top["remark"].assertable is False
-
-
-# ── iter_declarations 公共投影 ──────────────────────────
+# §7③ declare() walker 已随 X5 退役(语法糖拆除);
+# 树纪律由 _check_declarations 承接,walker 测试随之删除。
 def test_iter_declarations_preorder():
     """先序展开(容器先于子孙)。"""
     spec = _req(
@@ -288,10 +205,10 @@ def test_wire_shape_no_schema_key():
     """构造与 wire 同形 {body_type, declarations};schema 键退役。"""
     spec = _req(_leaf())
     dumped = spec.model_dump(mode="json")
-    assert set(dumped.keys()) == {"body_type", "declarations"}
-    resp = ResponseSpec(status=200, declarations=[_leaf()])
+    assert set(dumped.keys()) == {"declarations"}
+    resp = ResponseSpec(declarations=[_leaf()])
     assert set(resp.model_dump(mode="json").keys()) == {
-        "status", "description", "declarations"
+        "description", "declarations"
     }
 
 

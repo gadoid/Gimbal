@@ -1,8 +1,9 @@
 """目录级校验 ①②⑥ + 索引投影(spec §3.3 聚合层 / §3.4)。"""
 import pytest
 
+from gimbal_plate.dialect import HttpBinding, RequestSpec, ResponseSpec  # A2
 from gimbal_plate.schema.endpoint import (
-    ApiSpec, EndpointMetadata, EndpointSpec, RequestSpec, ResponseSpec,
+    EndpointMetadata, EndpointSpec, RequestSpec, ResponseSpec,
 )
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
 from gimbal_plate.schema.endpoint.query_view import QueryView, ValueSource
@@ -19,9 +20,10 @@ def _ep(eid, *, views=None, binds=None, method="GET", query_safe=False):
     ]
     return EndpointSpec(
         id=eid, system="t", service="svc", name=eid,
-        api=ApiSpec(service="svc", method=method, path=f"/api/{eid}"),
+        binding=HttpBinding(method=method, path=f"/api/{eid}"),
         request=RequestSpec(declarations=decls) if decls else None,
-        responses={200: ResponseSpec(status=200)},
+        responses={
+            "200": ResponseSpec()},
         metadata=EndpointMetadata(query_safe=query_safe),
         query_views=views,
     )
@@ -77,9 +79,10 @@ class TestValidate:
         ])
         ep = EndpointSpec(
             id="t.d", system="t", service="svc", name="d",
-            api=ApiSpec(service="svc", method="GET", path="/api/d"),
+            binding=HttpBinding(method="GET", path="/api/d"),
             request=RequestSpec(declarations=[deep]),
-            responses={200: ResponseSpec(status=200)},
+            responses={
+            "200": ResponseSpec()},
             query_views=[VIEW],
         )
         with pytest.raises(ValueError, match="未命中"):
@@ -119,9 +122,10 @@ class TestIndex:
                  DeclarationEntry(name="x", path="$.x", type="string",
                                   value_source=ValueSource(view="v1"))]
         ep2 = EndpointSpec(id="t.a", system="t", service="svc", name="a",
-                           api=ApiSpec(service="svc", method="GET", path="/api/a"),
+                           binding=HttpBinding(method="GET", path="/api/a"),
                            request=RequestSpec(declarations=decls),
-                           responses={200: ResponseSpec(status=200)},
+                           responses={
+            "200": ResponseSpec()},
                            query_views=ep.query_views)
         (r,) = build_query_view_index([ep2])
         assert r["params"] == {"k": 9, "page": 7}

@@ -37,7 +37,7 @@ def test_endpoint_full_for_system(http_client: TestClient) -> None:
     item = resp.json()["data"]["item"]
     assert item["id"] == SAMPLE_ENDPOINT
     # Full contract marker.
-    assert "api" in item and "metadata" in item
+    assert "binding" in item and "metadata" in item
 
 
 def test_config_full_for_system(http_client: TestClient) -> None:

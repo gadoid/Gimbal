@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from gimbal_plate.dialect import HttpBinding, RequestSpec, ResponseSpec  # A2
 from gimbal_plate.export.platform import (
     PlatformScenarioExporter,
     _render_endpoint_view,
@@ -19,7 +20,6 @@ from gimbal_plate.export.platform import (
 )
 from gimbal_plate.schema.call import Call
 from gimbal_plate.schema.endpoint import (
-    ApiSpec,
     DeclarationEntry,
     EndpointSpec,
     RequestSpec,
@@ -42,9 +42,10 @@ def _ep(declarations: list[DeclarationEntry]) -> EndpointSpec:
     return EndpointSpec(
         id="tst.resolved_face", system="tst", service="tst-service",
         name="resolved_face", description="解析链导出面测试端点",
-        api=ApiSpec(service="tst-service", method="POST", path="/resolved-face"),
-        request=RequestSpec(body_type="json", declarations=declarations),
-        responses={200: ResponseSpec(status=200)},
+        binding=HttpBinding(method="POST", path="/resolved-face"),
+        request=RequestSpec(declarations=declarations),
+        responses={
+            "200": ResponseSpec()},
     )
 
 

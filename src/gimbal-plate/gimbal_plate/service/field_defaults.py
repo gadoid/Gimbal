@@ -5,8 +5,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec  # A2:M2 真源在方言层
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, iter_declarations
+
+def _success_baseline(endpoint) -> object | None:
+    """成功基准(第 12 节第 5 项,已定):http 下数值最小的已声明 2xx。
+
+    存量唯一成功键即 200,迁移后行为不变;responses.get(200) 的旧读法
+    随 N1(键为字符串)退役。
+    """
+    successes = [
+        str(o) for o in endpoint.responses
+        if endpoint.binding.outcome_is_valid(str(o))
+        and endpoint.binding.outcome_is_success(str(o))
+    ]
+    if not successes:
+        return None
+    return endpoint.responses[min(successes)] if not isinstance(next(iter(endpoint.responses), None), int) else endpoint.responses[int(min(successes))]
+
 
 FieldDefaultKind = Literal[
     "literal",
@@ -90,7 +106,7 @@ def compute_field_defaults(
     #  条目内层旗标同步由 "carry": True 改名 "generated": True,
     #  全仓零生产消费方,仅本测试锁形状。)
     generated_fields: list[dict[str, Any]] = []
-    resp_200 = endpoint.responses.get(200)
+    resp_200 = _success_baseline(endpoint)
     if resp_200 is not None:
         # 响应面单脸(state 无视),全量展开
         for f in iter_declarations(resp_200.declarations):

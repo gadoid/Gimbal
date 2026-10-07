@@ -89,7 +89,7 @@ class PlatformEndpointView(BaseModel):
     path: str
     auth: str = "bearer"
     timeout_seconds: float = 30.0
-    version: str
+    # version 已随 8n 删除(适配展示改用快照标识/shape hash 前缀)
 
     module: str = ""
     tags: list[str] = Field(default_factory=list)
@@ -467,11 +467,10 @@ def _render_endpoint_view(
         service=ep.service,
         name=ep.name,
         description=ep.description,
-        method=ep.api.method,
-        path=ep.api.path,
-        auth=ep.api.auth,
-        timeout_seconds=ep.api.timeout_seconds,
-        version=ep.version,
+        method=ep.binding.method,
+        path=ep.binding.path,
+        auth=ep.binding.auth,
+        timeout_seconds=ep.binding.timeout_seconds,
         module=md.module,
         tags=list(md.tags),
         owner=md.owner,
@@ -539,7 +538,7 @@ def _ep_key_map(endpoints: list[EndpointSpec]) -> dict[tuple[str, str], Endpoint
     """
     m: dict[tuple[str, str], EndpointSpec] = {}
     for ep in endpoints:
-        m.setdefault((ep.api.method, ep.api.path), ep)
+        m.setdefault((*ep.binding.locator(),), ep)
     return m
 
 

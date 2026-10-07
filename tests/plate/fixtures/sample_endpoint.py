@@ -4,10 +4,10 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from gimbal_plate import (
-    ApiSpec,
     DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
+    HttpBinding,
     RequestSpec,
     ResponseSpec,
 )
@@ -49,8 +49,7 @@ def make_sample_endpoint() -> EndpointSpec:
             ],
         ),
         responses={
-            200: ResponseSpec(
-                status=200,
+            "200": ResponseSpec(
                 description="成功",
                 declarations=[
                     DeclarationEntry(name="order_id", path="$.order_id",

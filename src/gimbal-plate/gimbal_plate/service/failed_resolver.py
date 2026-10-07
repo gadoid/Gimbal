@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec  # A2:M2 真源在方言层
 
 # A failed_criteria line typically looks like:
 #   "401 未登录 / token 过期 → response.code = 10001"
@@ -13,6 +13,18 @@ from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 # possible. Field references match $.<jsonpath> optionally followed by =<value>.
 _LEADING_CODE = re.compile(r"^\s*(\d{3})\b")
 _FIELD_REF = re.compile(r"(\$[\w.\[\]'\"]+)\s*=\s*([^\s,;→]+)")
+
+def _success_baseline(endpoint: EndpointSpec) -> object | None:
+    """成功基准(第 12 节第 5 项,已定):http 下数值最小的已声明 2xx。"""
+    successes = [
+        str(o) for o in endpoint.responses
+        if endpoint.binding.outcome_is_valid(str(o))
+        and endpoint.binding.outcome_is_success(str(o))
+    ]
+    if not successes:
+        return None
+    return endpoint.responses[min(successes)] if not isinstance(next(iter(endpoint.responses), None), int) else endpoint.responses[int(min(successes))]
+
 
 
 def _parse_line(line: str) -> tuple[int | None, str, str | None, str | None]:
@@ -48,7 +60,7 @@ def _parse_line(line: str) -> tuple[int | None, str, str | None, str | None]:
 
 def resolve_failed_criteria(endpoint: EndpointSpec) -> dict[str, Any]:
     """Return B2-shaped failed_criteria analysis for ``endpoint``."""
-    resp_200 = endpoint.responses.get(200)
+    resp_200 = _success_baseline(endpoint)
     # 2026-09-05 目录化:响应面单脸(state 无视),assertable 即断言面
     assertable = {
         e.path for e in (resp_200.declarations if resp_200 is not None else [])

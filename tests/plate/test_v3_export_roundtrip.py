@@ -14,11 +14,18 @@ from pathlib import Path
 
 import pytest
 
+from gimbal_plate.dialect import EndpointSpec
+from tests.plate.conftest import SYSTEMS_ROOT
+from gimbal_plate.loader import load_registry
+
+_REG = load_registry([SYSTEMS_ROOT])
+ALL_ENDPOINTS = [e for e in _REG.list_endpoints() if isinstance(e, EndpointSpec)]
+ALL_FIN = [e for e in ALL_ENDPOINTS if e.system == 'fin']
+
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
 from gimbal_plate.export.platform import PlatformScenarioExporter
 from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -49,7 +56,7 @@ def _roundtrip(platform_dict: dict) -> tuple[ScenarioModel, dict]:
 
 
 # 与 PlatformScenarioExporter 相同的 step↔endpoint 匹配键
-_EP_BY_KEY = {(ep.api.method, ep.api.path): ep for ep in ALL_ENDPOINTS}
+_EP_BY_KEY = {ep.binding.locator(): ep for ep in ALL_ENDPOINTS}
 
 
 def _declared_body_keys(ep) -> set[str] | None:

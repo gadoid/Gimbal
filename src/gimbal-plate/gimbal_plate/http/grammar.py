@@ -29,7 +29,7 @@ from gimbal_plate.http.views import (
     SystemView,
 )
 from gimbal_plate.http.strategy_dim import StrategyIndex
-from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.dialect import EndpointSpec  # A2:M2 真源在方言层
 from gimbal_plate.schema.resource import ResourceUnion
 from gimbal_plate.schema.scenario import Config, Meta, Scenario
 from gimbal_plate.schema.service_definition import ServiceDefinition
@@ -135,7 +135,7 @@ def _apply_endpoint_filters(
     method = filters.get("method")
     if method is not None:
         upper = method.upper()
-        out = [ep for ep in out if ep.api.method.upper() == upper]
+        out = [ep for ep in out if ep.binding.method.upper() == upper]
     q = filters.get("q")
     if q:
         needle = q.lower()
@@ -145,7 +145,7 @@ def _apply_endpoint_filters(
             if needle in ep.id.lower()
             or needle in ep.name.lower()
             or needle in (ep.description or "").lower()
-            or needle in ep.api.path.lower()
+            or needle in ep.binding.path.lower()
         ]
     tag = filters.get("tag")
     if tag is not None:
@@ -229,17 +229,15 @@ class SystemIndex(BaseIndex):
     def _summary(self, system: str) -> dict[str, Any]:
         eps = list(self.registry.iter_endpoints_for_system(system))
         services = {ep.service for ep in eps}
-        latest = None
-        for ep in eps:
-            ts = ep.updated_at
-            if ts is not None and (latest is None or ts > latest):
-                latest = ts
+        # 8n(已定):EndpointSpec.updated_at 删除。系统时间戳改取快照提交
+        # 时间(A2 影响清单);working 阶段无提交信息,registered_at 置空,
+        # 批次 B 随 release/ref 落地。
         return {
             "id": system,
             "name": system,
             "service_count": len(services),
             "endpoint_count": len(eps),
-            "registered_at": latest,
+            "registered_at": None,
         }
 
 

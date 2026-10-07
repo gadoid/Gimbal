@@ -21,7 +21,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
-from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, _check_declarations
 from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 from gimbal_plate.schema.endpoint.query_view import QueryView, resolve_view_params
 
@@ -94,11 +94,21 @@ Binding = Annotated[Union[HttpBinding], Field(discriminator="protocol")]
 
 
 class RequestSpec(BaseModel):
-    """请求声明树（body_type 已移入 binding）。"""
+    """请求声明树（body_type 已移入 binding）。
+
+    声明树纪律（模板态 path、兄弟命名唯一等）沿用 ``_check_declarations``
+    ——与旧栈同一实现，单一来源（io_spec）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     declarations: list[DeclarationEntry] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_tree(self) -> "RequestSpec":
+        # owner 仅用于报错定位;模型层无 id 上下文,给稳定占位
+        _check_declarations(self.declarations, owner="request")
+        return self
 
 
 class ResponseSpec(BaseModel):
@@ -114,6 +124,11 @@ class ResponseSpec(BaseModel):
 
     description: str = ""
     declarations: list[DeclarationEntry] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_tree(self) -> "ResponseSpec":
+        _check_declarations(self.declarations, owner="response")
+        return self
 
 
 class EndpointSpec(BaseModel):

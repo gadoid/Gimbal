@@ -181,9 +181,9 @@ class EndpointCaseExporter:
             "endpoint": {
                 "id": self.endpoint.id,
                 "name": self.endpoint.name,
-                "service": self.endpoint.api.service,
-                "method": self.endpoint.api.method,
-                "path": self.endpoint.api.path,
+                "service": self.endpoint.service,
+                "method": self.endpoint.binding.method,
+                "path": self.endpoint.binding.path,
             },
         }
 
@@ -195,15 +195,15 @@ class EndpointCaseExporter:
 
     def _render_call(self, case: EndpointCase) -> dict[str, Any]:
         """v2.1 批次 F：call{protocol:"http"}（gimbal 新形态）。"""
-        api = self.endpoint.api
+        binding = self.endpoint.binding
         return {
             "kind": "call",
-            "protocol": "http",
-            "service": api.service,
-            "method": api.method,
-            "path": api.path,
-            "headers": dict(api.headers),
-            "timeout": api.timeout_seconds,
+            "protocol": binding.protocol,
+            "service": self.endpoint.service,
+            "method": binding.method,
+            "path": binding.path,
+            "headers": dict(binding.headers),
+            "timeout": binding.timeout_seconds,
         }
 
 

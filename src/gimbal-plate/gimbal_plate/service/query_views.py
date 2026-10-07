@@ -71,8 +71,8 @@ def build_query_view_index(endpoints: list[EndpointSpec]) -> list[dict[str, Any]
                 "endpoint_id": ep.id,
                 "system": ep.system,
                 "service": ep.service,
-                "method": ep.api.method,
-                "path": ep.api.path,
+                "method": ep.binding.method,
+                "path": ep.binding.path,
                 "params": merged,
                 "query_params": list(v.query_params or []),
                 "items": v.items,
@@ -81,8 +81,8 @@ def build_query_view_index(endpoints: list[EndpointSpec]) -> list[dict[str, Any]
                 "query_safe": ep.metadata.query_safe,
                 "missing_required": missing,
                 # §4.2:超时与鉴权跟随 ApiSpec —— 索引是派生载体,真源仍是 ApiSpec
-                "auth": ep.api.auth,
-                "timeout_seconds": ep.api.timeout_seconds,
+                "auth": ep.binding.auth,
+                "timeout_seconds": ep.binding.timeout_seconds,
             })
     rows.sort(key=lambda r: r["name"])
     return rows

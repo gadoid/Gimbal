@@ -1,4 +1,4 @@
-"""gimbal_plate 测试 fixtures。"""
+"""gimbal_plate 测试 fixtures（A2：统一加载器 + 方言 M2）。"""
 from __future__ import annotations
 
 import pytest
@@ -7,54 +7,36 @@ import pytest
 import sys
 from pathlib import Path
 
-_pkg_root = Path(__file__).resolve().parents[2] / "src" / "gimbal-plate"
+_repo = Path(__file__).resolve().parents[2]
+_pkg_root = _repo / "src" / "gimbal-plate"
 if str(_pkg_root) not in sys.path:
     sys.path.insert(0, str(_pkg_root))
 
-from pydantic import BaseModel
-
 from gimbal_plate import (
-    ApiSpec,
     DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
+    HttpBinding,
     RequestSpec,
     ResponseSpec,
     registry,
 )
 from gimbal_plate.http import create_app
+from gimbal_plate.loader import load_registry
 from gimbal_plate.registry import PlateRegistry
-from gimbal_plate.systems.common.dimensions import register_common_dims
-from gimbal_plate.systems.fin.dimensions import register_fin_dims
+
+# systems/ 真源（P1：Markdown 方言为唯一真源；测试与生产同一加载器）
+SYSTEMS_ROOT = _repo / "systems"
 
 
 @pytest.fixture
 def fresh_registry() -> PlateRegistry:
-    """A fresh in-memory registry pre-loaded with the bundled fin system + M6 dims.
+    """统一加载器从 ``systems/`` 构建的全新 registry（与生产 lifespan 同路径）。
 
-    Both production (``gimbal_plate.http.app._lifespan``) and this fixture
-    route through the same single source of truth:
-    :func:`gimbal_plate.systems.fin.dimensions.register_fin_dims`. Tests pass
-    this registry to ``create_app(registry=...)``, which means the production
-    lifespan will skip its owned-mode setup.
-
-    ADR 0002 §D-D4: shared helper replaces the prior near-verbatim duplicate
-    of ``app._register_fin_dims`` — drift between app and tests is no longer
-    possible.
-
-    ``register_fin_dims`` 不注册 endpoint(防二次注册);按其契约,
-    调用方须先把 ``ALL_ENDPOINTS`` 注册进 registry(与生产端
-    ``app._lifespan`` owned 模式步骤 1 对齐)。
+    A2 起：不再 import 各系统 Python 实例 / dimensions.py —— 单一装配
+    入口是 :func:`gimbal_plate.loader.load_registry`。
     """
-    from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
-
-    reg = PlateRegistry()
-    for ep in ALL_ENDPOINTS:
-        reg.register_endpoint(ep)
-    register_fin_dims(reg)
-    # common 通用层与生产 lifespan 同步注册(声明式系统 + 通用 seed)。
-    register_common_dims(reg)
-    return reg
+    return load_registry([SYSTEMS_ROOT])
 
 
 @pytest.fixture
@@ -64,23 +46,6 @@ def http_client(fresh_registry: PlateRegistry):
 
     with TestClient(create_app(registry=fresh_registry)) as client:
         yield client
-
-
-# ── 示例 Pydantic 模型 ──────────────────────────────────────────────
-
-class OrderIn(BaseModel):
-    order_no: str
-    amount: float
-
-
-class OrderOut(BaseModel):
-    order_id: str
-    order_no: str
-
-
-class OrderPatch(BaseModel):
-    order_id: str
-    status: str
 
 
 # ── Fixtures ──────────────────────────────────────────────
@@ -95,22 +60,20 @@ def reset_registry() -> None:
 
 @pytest.fixture
 def order_endpoint() -> EndpointSpec:
-    """一个示例 EndpointSpec:新增订单(POST /api/v1/orders)。"""
+    """一个示例 EndpointSpec:新增订单(POST /api/v1/orders)—— 方言 M2 形态。"""
     return EndpointSpec(
         id="finas.order.add",
         system="finas",
         service="settlement",
         name="新增订单",
         description="创建一笔结算订单",
-        api=ApiSpec(
-            service="settlement",
+        binding=HttpBinding(
             method="POST",
             path="/api/v1/orders",
             timeout_seconds=30,
             auth="bearer",
         ),
         request=RequestSpec(
-            body_type="json",
             declarations=[
                 DeclarationEntry(name="order_no", path="$.order_no", type='string',
                                  required=True,
@@ -121,19 +84,18 @@ def order_endpoint() -> EndpointSpec:
             ],
         ),
         responses={
-            200: ResponseSpec(
-                status=200,
+            "200": ResponseSpec(
                 description="成功",
                 declarations=[
-                    DeclarationEntry(name="order_id", path="$.order_id", type='string',
-                                     required=True,
+                    DeclarationEntry(name="order_id", path="$.data.order_id",
+                                     type='string', required=True,
                                      ui_kind="text", assertable=True),
-                    DeclarationEntry(name="order_no", path="$.order_no", type='string',
-                                     required=True,
+                    DeclarationEntry(name="order_no", path="$.data.order_no",
+                                     type='string', required=True,
                                      ui_kind="text", assertable=True),
                 ],
             ),
-            400: ResponseSpec(status=400, description="参数错误"),
+            "400": ResponseSpec(description="参数错误"),
         },
         metadata=EndpointMetadata(
             module="订单",
@@ -143,7 +105,6 @@ def order_endpoint() -> EndpointSpec:
             preconditions=["已登录"],
             success_criteria="返回 order_id",
         ),
-        version="1.0.0",
     )
 
 
@@ -155,22 +116,23 @@ def order_patch_endpoint() -> EndpointSpec:
         system="finas",
         service="settlement",
         name="更新订单",
-        api=ApiSpec(
-            service="settlement",
-            method="POST",
-            path="/api/v1/orders/patch",
-        ),
+        binding=HttpBinding(method="POST", path="/api/v1/orders/patch"),
         request=RequestSpec(
-            body_type="json",
             declarations=[
                 DeclarationEntry(name="order_id", path="$.order_id", type='string',
-                                 required=True,
-                                 ui_kind="text"),
+                                 required=True, ui_kind="text"),
                 DeclarationEntry(name="status", path="$.status", type='string',
-                                 required=True,
-                                 ui_kind="text"),
+                                 required=True, ui_kind="text"),
             ],
         ),
-        responses={200: ResponseSpec.declare(OrderOut, status=200)},
+        # declare() 语法糖已随旧栈退役(X5);声明树直写
+        responses={
+            "200": ResponseSpec(declarations=[
+                DeclarationEntry(name="order_id", path="$.data.order_id",
+                                 type='string', assertable=True),
+                DeclarationEntry(name="status", path="$.data.status",
+                                 type='string', assertable=True),
+            ]),
+        },
         metadata=EndpointMetadata(tags=["结算"], owner="bob"),
     )
