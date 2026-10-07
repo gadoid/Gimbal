@@ -788,41 +788,35 @@ def action_system_from_service(
 def action_system_register(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
-    """C1 — declare a system (idempotent, no endpoints required).
+    """C1 — **已停用**（S1-0 B4，2026-10-07）。
 
-    body: ``{"id": str, "name"?: str, "description"?: str}``。
-    声明的系统存活于当前进程的内存 registry(plate 一期不做持久化,
-    重启即失;内置系统如 fin/common 由 lifespan 代码注册,不受影响)。
+    与「Markdown 方言为唯一真源」（P1）冲突：内存态系统注册重启即失，
+    主线下系统必须对应 ``systems/<系统>/`` 下的文件（附录 C X4）。
+    平台侧无调用（已核实）。随 HTTP 写入路径重新设计时再评估替代。
     """
-    _ = item, index
-    body = body or {}
-    system_id = str(body.get("id") or "").strip()
-    if not system_id:
-        raise PlateHTTPError(
-            http_status=400,
-            code=ErrorCode.INVALID_ACTION,
-            message="system registration requires a non-empty body.id",
-        )
-    reg = _registry(request)
-    info = reg.declare_system(
-        system_id, name=body.get("name"), description=body.get("description")
+    _ = item, body, index, request
+    raise PlateHTTPError(
+        http_status=410,
+        code=ErrorCode.INVALID_ACTION,
+        message=(
+            "action 'system-register' is disabled (S1-0 B4): in-memory system "
+            "registration conflicts with Markdown-as-single-source (P1); "
+            "declare systems as systems/<id>/ files instead"
+        ),
     )
-    return ok_response({"item": info, "total": 1}, dim="system")
 
 
 def action_system_sync(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
-    """C2 — structure sync stub."""
-    _ = item, index, request
-    body = body or {}
-    system = body.get("_system") or "<unknown>"
+    """C2 — **已停用**（S1-0 B4，2026-10-07；原为 501 占位 stub）。"""
+    _ = item, body, index, request
     raise PlateHTTPError(
-        http_status=501,
+        http_status=410,
         code=ErrorCode.ADMIN_NOT_IMPLEMENTED,
         message=(
-            f"structure sync for system '{system}' is not implemented in plate; "
-            f"C2 is deferred to the platform backend"
+            "action 'system-sync' is disabled (S1-0 B4): structure sync is "
+            "superseded by the unified loader over systems/<id>/ files"
         ),
     )
 

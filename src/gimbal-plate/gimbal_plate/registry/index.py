@@ -43,7 +43,18 @@ class _Index:
         # path) 三元组是 http 协议自己的坐标形状，仅对 http 端点建索引；
         # 非 http 协议端点将来各自定义 route 键（阶段 7 ApiSpec 变体）。
         if getattr(ep.api, "is_http", True):
-            self.by_route[(ep.api.service, ep.api.method, ep.api.path)] = ep.id
+            route_key = (ep.api.service, ep.api.method, ep.api.path)
+            # S1-0 B3 / F3（2026-10-07）：路由键唯一，重复注册报错——
+            # 取代「后写静默覆盖」的顺序依赖语义（P4：注册顺序不携带语义）。
+            existing = self.by_route.get(route_key)
+            if existing is not None and existing != ep.id:
+                raise ValueError(
+                    f"重复路由键 (service={route_key[0]!r}, method={route_key[1]!r}, "
+                    f"path={route_key[2]!r})：{existing!r} 与 {ep.id!r} 同坐标。"
+                    f"同物理接口不得双建 Spec（F3）；如为两次捕获（curl 导入 / twin_gen），"
+                    f"合并或废弃其一后再注册。"
+                )
+            self.by_route[route_key] = ep.id
 
     def remove(self, endpoint_id: str) -> EndpointSpec | None:
         ep = self.by_id.pop(endpoint_id, None)

@@ -1,3 +1,5 @@
+> ⚠️ **过时（2026-10-07，S1-0 清理 A4）**：本文描述的部分结构将在 plate 重构（批次 A1/A2）中退役（ApiSpec、schema_、channel 三分类等）。现行设计见 `claude/plate-design.md`；重构完成后本文按其 7.2 节重写。在此之前，以代码与测试为准。
+
 # Plate HTTP API 参考(M6 路由语法 · ADR 0002)
 
 > 适用版本:`gimbal-plate` 一期落地后 + Phase β `references` 端点 · 路由语法遵循 ADR 0002 §D-D1/D-D2/D-D3/D-D5

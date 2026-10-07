@@ -1,4 +1,5 @@
-"""Minimal release capability skeleton."""
+"""⚠️ 占位实现（S1-0 B5 注）：本模块恒返回 success=False，正式实现属批次 B（内容寻址构件 + manifest + call 投影，见 claude/plate-design.md 7.1 / 8.2）。在此之前请勿依赖本入口。
+Minimal release capability skeleton."""
 
 from __future__ import annotations
 

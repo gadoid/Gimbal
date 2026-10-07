@@ -241,10 +241,10 @@ class TestPlatformEndpointViewRestored:
         # fin 全部 endpoint 统一归属 fin-service:导航树只有一组
         # 2026-09-08 cost_amount_list 入册,20 → 21;
         # 2026-09-09 客户域三端点入册,21 → 24;
-        # 2026-09-20 order_add_demo 入册,24 → 25
+        # S1-0 B3(2026-10-07):demo 删 + dispatch 停注,25 → 23
         assert len(view.navigation) == 1
         assert "fin-service" in view.navigation
-        assert len(view.navigation["fin-service"]) == 25
+        assert len(view.navigation["fin-service"]) == 23
         # 每个节点含 id/name/description/method/path/deep_link
         node = view.navigation["fin-service"][0]
         assert {"id", "name", "description", "method", "path", "deep_link"} <= set(node.keys())

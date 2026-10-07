@@ -27,9 +27,10 @@ from gimbal_plate.systems.fin.endpoint.order_entrust_check_order_customer_contai
 from gimbal_plate.systems.fin.endpoint.order_entrust_order_add import (
     ORDER_ENTRUST_ORDER_ADD,
 )
-from gimbal_plate.systems.fin.endpoint.order_entrust_order_dispatch import (
-    ORDER_ENTRUST_ORDER_DISPATCH,
-)
+# S1-0 B3（2026-10-07）停注：order_entrust_order_dispatch 是 2026-09-01 curl 导入，
+# 与 twin_gen 的 ORDER_ENTRUST_ORDER_ADD 双重捕获同一物理接口
+# (POST /api/order/orderEntrust/orderAdd)——F3 路由键唯一性下不可双注。
+# 模块保留作 A1 迁移时人工合并裁定的参考（声明树与 order_add 合并或废弃）。
 from gimbal_plate.systems.fin.endpoint.order_entrust_order_page import (
     ORDER_ENTRUST_ORDER_PAGE,
 )
@@ -37,10 +38,9 @@ from gimbal_plate.systems.fin.endpoint.order_entrust_order_page import (
 from gimbal_plate.systems.fin.endpoint.order_order_add import (
     ORDER_ORDER_ADD,
 )
-# ⚠️ 临时测试脚手架(2026-09-09,不入册不提交):级联参数手验副本,测完删
-from gimbal_plate.systems.fin.endpoint.order_order_add_demo import (
-    ORDER_ORDER_ADD_DEMO,
-)
+# S1-0 B3（2026-10-07）删除：order_order_add_demo 为临时测试脚手架
+# (2026-09-09 标注「测完删」，与服务画像 P1 演示期已过)，
+# 且与 ORDER_ORDER_ADD 同坐标、在 by_route 中遮蔽正式端点。
 from gimbal_plate.systems.fin.endpoint.order_order_detail import (
     ORDER_ORDER_DETAIL,
 )
@@ -92,10 +92,8 @@ ALL_ENDPOINTS = [
     ACCOUNT_QUERY_BALANCE,
     ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER,
     ORDER_ENTRUST_ORDER_ADD,
-    ORDER_ENTRUST_ORDER_DISPATCH,
     ORDER_ENTRUST_ORDER_PAGE,
     ORDER_ORDER_ADD,
-    ORDER_ORDER_ADD_DEMO,   # ⚠️ 临时测试脚手架,测完删
     ORDER_ORDER_DETAIL,
     ORDER_ORDER_PAGE,
     ORDER_ORDER_BOOK,
@@ -124,8 +122,6 @@ __all__ = [
     "ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER",
     "ORDER_ENTRUST_ORDER_ADD",
     "ORDER_ORDER_ADD",
-    "ORDER_ORDER_ADD_DEMO",   # ⚠️ 临时测试脚手架,测完删
-    "ORDER_ENTRUST_ORDER_DISPATCH",
     "ORDER_ENTRUST_ORDER_PAGE",
     "ORDER_ORDER_DETAIL",
     "ORDER_ORDER_PAGE",

@@ -1,4 +1,6 @@
-"""fin.order_entrust.order_add —— 委托订舱下单接口契约。在 scen_test_14 中出现4次。"""
+"""⚠️ 已停注（S1-0 B3，2026-10-07）：本端点是 2026-09-01 curl 导入，与 ORDER_ENTRUST_ORDER_ADD（twin_gen）双重捕获同一物理接口 POST /api/order/orderEntrust/orderAdd，F3 路由键唯一性下不再入册 ALL_ENDPOINTS。模块保留作批次 A1 迁移时人工合并裁定的参考（声明树并入 order_add 或废弃）。
+
+fin.order_entrust.order_add —— 委托订舱下单接口契约。在 scen_test_14 中出现4次。"""
 
 from typing import Final
 

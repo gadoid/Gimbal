@@ -40,31 +40,25 @@ class TestDeclareSystemKernel:
 
 
 class TestC1RegisterAction:
-    def test_register_creates_declared_system(self, http_client: TestClient) -> None:
+    """S1-0 B4（2026-10-07）：C1 内存注册已停用（410，与 P1「文件为唯一真源」冲突，
+    见 claude/plate-design.md 附录 C X4）。平台侧无调用（已核实）。"""
+
+    def test_register_returns_410_disabled(self, http_client: TestClient) -> None:
         resp = http_client.post(
             "/api/system/action/register",
             json={"id": "logi", "name": "物流", "description": "物流系统"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["ok"] is True
-        # 注册后系统列表可见(0 endpoint,纯声明)
-        listing = http_client.get("/api/system").json()["data"]["items"]
-        ids = [s["id"] for s in listing]
-        assert "logi" in ids
-        logi = next(s for s in listing if s["id"] == "logi")
-        assert logi["endpoint_count"] == 0
-
-    def test_register_is_idempotent(self, http_client: TestClient) -> None:
-        payload = {"id": "logi"}
-        r1 = http_client.post("/api/system/action/register", json=payload)
-        r2 = http_client.post("/api/system/action/register", json=payload)
-        assert r1.status_code == 200 and r2.status_code == 200
+        assert resp.status_code == 410
+        body = resp.json()
+        assert body["ok"] is False
+        assert "disabled" in body["error"]["message"]
+        # 未注册：系统列表不出现
         ids = [s["id"] for s in http_client.get("/api/system").json()["data"]["items"]]
-        assert ids.count("logi") == 1
+        assert "logi" not in ids
 
-    def test_register_missing_id_returns_400(self, http_client: TestClient) -> None:
+    def test_register_disabled_regardless_of_body(self, http_client: TestClient) -> None:
         resp = http_client.post("/api/system/action/register", json={"name": "x"})
-        assert resp.status_code == 400
+        assert resp.status_code == 410
 
 
 class TestCommonBuiltinLayer:

@@ -577,3 +577,9 @@ generic handler 暴露 `Config` 全字段必然要决定:
   - `src/gimbal-plate/gimbal_plate/http/envelope.py:18-29` — 现有 EnvelopeOk/Err,本 ADR 升级 `data` 形状。
   - `src/gimbal-plate/gimbal_plate/registry/registry.py:91-95` — 现有 `find_endpoints(service, method, path)`,本 ADR 的 `index_for(dim)` 是它的兄弟方法。
   - `src/gimbal-plate/gimbal_plate/registry/index.py` — 现有 `_Index` 4 维度索引,本 ADR 沿用其 `by_id` / `by_service` / `by_tag` / `by_route` 不变。
+
+---
+
+## 修订说明（2026-10-07，S1-0 清理 A5）
+
+本 ADR 的 dim 路由语法（`/systems/{system}/{dim}`、`/{dim}/{id}/full`、`…/action/{name}`）**继续有效**并被 plate 重构沿用（含新增 `term` / `statement` / `deliverable` / `type` dim 与 `doc` / `paths` / `check` / `diff` / `release` 动作）。但文中遗留的 `schema_` 等前缀表述描述的是已退役结构。整体架构决策（Markdown 方言 + 三概念 + 主线流程 + 内容寻址构件）见 **ADR 0004** 与 `claude/plate-design.md`。

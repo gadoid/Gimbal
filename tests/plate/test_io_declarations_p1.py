@@ -72,7 +72,9 @@ class TestDeclarationsShape:
                 total += len(ep.request.declarations)
             total += sum(len(r.declarations)
                          for r in ep.responses.values())
-        assert total == 1191, f"declarations 覆盖 {total} != 1191"
+        # S1-0 B3(2026-10-07):order_add_demo(-240)删除、order_dispatch(-239)
+        # 停注(F3 同坐标双注),1191 → 712。
+        assert total == 712, f"declarations 覆盖 {total} != 712"
 
     def test_serialize_wire_shape(self) -> None:
         # P2 后 wire 恒发 declarations(空声明即空表,不再按键省略)

@@ -20,8 +20,9 @@ class ServiceDefinition(BaseModel):
     - ``title``:业务名称,用于 Web 端展示
     - ``version``:被测系统部署版本(人维护,字面与被测系统版本保持一致,无格式校验)
     - ``description``:业务描述
-    - ``endpoints_module``:端点定义所在 Python 模块路径
-    - ``models_module``:Pydantic 模型所在 Python 模块路径
+
+    S1-0 清理 B2(2026-10-07):``endpoints_module`` / ``models_module`` 已删除
+    ——指向 Python 模块路径与「Markdown 方言为唯一真源」(P1)冲突,且全仓无消费方。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -33,13 +34,6 @@ class ServiceDefinition(BaseModel):
         description="被测系统部署版本(人维护,字面与被测系统版本保持一致,无格式校验)",
     )
     description: str = Field(default="", description="服务业务描述")
-
-    endpoints_module: str = Field(
-        default="", description="端点定义所在 Python 模块路径"
-    )
-    models_module: str = Field(
-        default="", description="Pydantic 模型所在 Python 模块路径"
-    )
 
     @model_validator(mode="after")
     def _validate_version_nonempty(self) -> "ServiceDefinition":

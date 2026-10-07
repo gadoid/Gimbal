@@ -32,3 +32,7 @@ src/gimbal-platform/backend/.env
 
 # 自举编排器的本机自举账号口令(不入库,模板见 .env.example)
 src/gimbal-bootstrap/.env
+
+# S1-0 B1: twin_generator 实验产物不入库（工具代码保留于 tools/twin_generator，标注实验）
+src/gimbal-plate/tmp/
+plate_artifacts/

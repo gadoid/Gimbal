@@ -387,9 +387,25 @@ def _render_call_view(call: "Call", ep: EndpointSpec | None) -> dict[str, Any]:
 
 
 def _call_coords(c: "Call") -> tuple[str, str]:
-    """http 协议的端点坐标 (method, path)（ep_by_key 匹配键；缺省 GET /）。"""
+    """http 协议的端点坐标 (method, path)（ep_by_key 匹配键；缺省 GET / ）。"""
     extra = c.model_extra or {}
     return str(extra.get("method", "GET")), str(extra.get("path", "/"))
+
+
+def _ep_for_call(c: "Call", keys: dict, by_id: dict) -> EndpointSpec | None:
+    """step ↔ endpoint 关联（S1-0 B3，P4）。
+
+    优先 ``call.view_hints.endpoint_id``（显式 id 关联，不依赖坐标与注册
+    顺序）；坐标匹配 (method, path) 降为兜底——仅用于未携带 endpoint_id
+    的历史 step。跨系统同坐标的错关联由此消除。
+    """
+    vh = getattr(c, "view_hints", None)
+    eid = vh.get("endpoint_id") if isinstance(vh, dict) else None
+    if eid is not None:
+        ep = by_id.get(str(eid))
+        if ep is not None:
+            return ep
+    return keys.get(_call_coords(c))
 
 
 # ── 内部:Endpoint → PlatformEndpointView ────────────────────────
@@ -634,10 +650,12 @@ class PlatformScenarioExporter(ScenarioExporter):
         eps = endpoints if endpoints is not None else self.endpoints
         keys = ep_by_key if ep_by_key is not None else self._ep_by_key
 
-        # 1. 按 (method, path) 聚合每个 endpoint 引用过的 step body
+        # 1. 按 endpoint 聚合每个 endpoint 引用过的 step body
+        #    （关联口径见 _ep_for_call：显式 endpoint_id 优先，坐标兜底）
+        ep_by_id = {ep.id: ep for ep in eps}
         bodies_by_ep: dict[str, list[dict[str, Any]]] = {}
         for s in sc.steps:
-            ep = keys.get(_call_coords(s.call))
+            ep = _ep_for_call(s.call, keys, ep_by_id)
             if ep is None:
                 continue
             body = s.request.body
@@ -653,7 +671,7 @@ class PlatformScenarioExporter(ScenarioExporter):
         # 3. 构造 step 视图(注入 view_hints / source_kind / field_count / field_names / view_note)
         step_views: list[PlatformStepView] = []
         for s in sc.steps:
-            ep = keys.get(_call_coords(s.call))
+            ep = _ep_for_call(s.call, keys, ep_by_id)
             call_dict = _render_call_view(s.call, ep)
             request_dict = _render_request_view(s.request, ep, s.field_states)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
