@@ -160,6 +160,54 @@ def test_shape_hash_tracks_shape_changes() -> None:
     })) == base, "responses 声明序不应影响 shape_hash"
 
 
+def test_p8_nested_model_defaults_keeps_hashes() -> None:
+    """P8 扩展(评审 P0-7):嵌套模型(Binding)加默认字段,hash 不变。"""
+
+    class BindingVNext(HttpBinding.__class__):
+        pass
+
+    # 直接构造:给 binding 显式写默认值 vs 不写 —— object/shape 全等
+    ep_min = _sample_endpoint()
+    ep_explicit = _sample_endpoint(binding=HttpBinding(
+        method="POST", path="/api/order/order/orderAdd", auth="bearer",
+        timeout_seconds=30.0, body_type="json", headers={},
+    ))
+    assert object_hash(ep_explicit) == object_hash(ep_min)
+    assert shape_hash(ep_explicit) == shape_hash(ep_min)
+
+
+def test_dict_key_order_irrelevant() -> None:
+    """评审 P0-8:responses/headers 书写序不产生不同 hash。"""
+    ep_a = _sample_endpoint(responses={
+        "200": ResponseSpec(declarations=[
+            DeclarationEntry(name="order_id", path="$.data.order_id", type="string")]),
+        "409": ResponseSpec(description="dup"),
+    })
+    ep_b = _sample_endpoint(responses={
+        "409": ResponseSpec(description="dup"),
+        "200": ResponseSpec(declarations=[
+            DeclarationEntry(name="order_id", path="$.data.order_id", type="string")]),
+    })
+    assert object_hash(ep_a) == object_hash(ep_b)
+    assert shape_hash(ep_a) == shape_hash(ep_b)
+
+
+def test_shape_excludes_decl_presentational_fields() -> None:
+    """评审 P0-11:description/ui_kind 改动不改 shape;default/example 改动改。"""
+    ep = _sample_endpoint()
+    base = shape_hash(ep)
+    desc_changed = _sample_endpoint(request=RequestSpec(declarations=[
+        DeclarationEntry(name="bl_no", path="$.bl_no", type="string",
+                         required=True, description="改了", ui_kind="textarea"),
+    ]))
+    assert shape_hash(desc_changed) == base, "description/ui_kind 不应进 shape"
+    value_changed = _sample_endpoint(request=RequestSpec(declarations=[
+        DeclarationEntry(name="bl_no", path="$.bl_no", type="string",
+                         required=True, default="BL-001"),
+    ]))
+    assert shape_hash(value_changed) != base, "default 影响用例取值,应进 shape"
+
+
 def test_canonical_excludes_defaults() -> None:
     """规范序列化排除默认值:显式写出的默认 == 缺省(语义等价,hash 相同)。"""
     explicit = _sample_endpoint(binding=HttpBinding(
