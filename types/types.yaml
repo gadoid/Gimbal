@@ -1,0 +1,47 @@
+# 交付物类型模板（plate 全局配置，6.5 / 已定 8t）
+#
+# - blocks: 该类型交付物允许的块类型（F1）
+# - statement_kinds: 片段块允许的 kind（F1）
+# - required: 按块类型或片段 kind 的最少数量（F2，release 时阻塞）
+# - anchor: 默认锚点语法（S4 按 anchor 前缀分派解析器）
+#
+# 新增一类交付物 = 加一份模板，不改 schema；修改走评审但不算 schema 变更。
+- id: system
+  blocks: [system, defaults]
+  required: {system: 1}
+  anchor: section
+- id: dictionary
+  blocks: [term]
+  anchor: section
+- id: endpoints
+  blocks: [endpoint, statement]
+  statement_kinds: [outcome, rule, note]
+  anchor: spec_path
+- id: prd
+  label: 需求文档
+  blocks: [statement]
+  statement_kinds: [define, rule, outcome, step, note, mention]
+  anchor: section
+- id: user_story
+  blocks: [statement]
+  statement_kinds: [step, note]
+  required: {step: 1}
+  anchor: section
+- id: ui_design
+  blocks: [statement]
+  statement_kinds: [mention, rule, note]
+  anchor: ui
+- id: db_design
+  blocks: [statement]
+  statement_kinds: [define, mention, rule, outcome, note]
+  anchor: table_column
+- id: state_design
+  blocks: [statement]
+  statement_kinds: [define, transition, rule, note]
+  anchor: section
+- id: defect
+  # 第 12 节第 10 项（已定）：缺陷 / 事故
+  label: 缺陷与事故
+  blocks: [statement]
+  statement_kinds: [rule, outcome, note]
+  anchor: section

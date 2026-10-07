@@ -41,8 +41,11 @@ from gimbal_plate.http.routes_grammar import (
     action_endpoint_find,
     action_endpoint_resolve_paths,
     action_scenario_convert,
+    action_system_check,
     action_system_from_service,
+    action_system_gaps,
     action_system_register,
+    action_system_release,
     action_system_sync,
 )
 from gimbal_plate.http.views import (
@@ -142,6 +145,10 @@ def register_core_dims(reg: PlateRegistry) -> None:
                 # register / sync 已停用（S1-0 B4），保留动作面以返回 410
                 "register": action_system_register,
                 "sync": action_system_sync,
+                # 批次 B：gaps(G6) / check(校验全量) / release(冻结)
+                "gaps": action_system_gaps,
+                "check": action_system_check,
+                "release": action_system_release,
             },
         ),
     )

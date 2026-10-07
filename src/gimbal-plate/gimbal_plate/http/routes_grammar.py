@@ -772,6 +772,108 @@ def action_endpoint_find(
     )
 
 
+
+def action_system_gaps(
+    *, item: Any, body: Any, index: Any, request: Any
+) -> dict[str, Any]:
+    """G6:定义完整性缺口清单(判定项与交付件清单共用,8p)。
+
+    dim-node action:``POST /api/system/{id}/system/action/gaps``。
+    """
+    _ = item, body, index
+    from gimbal_plate.dialect import EndpointSpec, Statement, Term
+    from gimbal_plate.dialect.gaps import gaps_report
+    from gimbal_plate.dialect.parser import parse_markdown
+    from pathlib import Path as _P
+
+    system = request.path_params.get("system") or "fin"
+    repo = _P(__file__).resolve().parents[4]
+    system_root = repo / "systems" / system
+    endpoints, statements, terms = [], [], {}
+    for md in sorted(system_root.rglob("*.md")):
+        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+        for b in d.blocks():
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    endpoints.append(m)
+                elif isinstance(m, Statement):
+                    statements.append(m)
+                elif isinstance(m, Term):
+                    terms[m.id] = m
+    return ok_response(gaps_report(endpoints, statements, terms), dim="system")
+
+
+def action_system_check(
+    *, item: Any, body: Any, index: Any, request: Any
+) -> dict[str, Any]:
+    """校验报告(``check``,规则编号即错误码;``--json`` CLI 同引擎,G2)。"""
+    _ = item, body, index
+    from gimbal_plate.dialect.parser import parse_markdown
+    from gimbal_plate.dialect.validation import (
+        ValidationReport, load_types, validate_consistency,
+        validate_deliverable, validate_references, validate_terms,
+    )
+    from gimbal_plate.dialect import EndpointSpec, Statement, Term
+    from pathlib import Path as _P
+
+    system = request.path_params.get("system") or "fin"
+    repo = _P(__file__).resolve().parents[4]
+    system_root = repo / "systems" / system
+    types = load_types(repo / "types" / "types.yaml")
+    report = ValidationReport()
+    endpoints, statements, terms = [], [], {}
+    for md in sorted(system_root.rglob("*.md")):
+        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+        validate_deliverable(d, types=types, report=report)
+        for b in d.blocks():
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    endpoints.append(m)
+                elif isinstance(m, Statement):
+                    statements.append(m)
+                elif isinstance(m, Term):
+                    terms[m.id] = m
+    validate_terms(terms.values(), system_id=system, report=report)
+    validate_references(endpoints, statements, terms, report=report)
+    validate_consistency(endpoints, statements, report=report)
+    return ok_response(report.to_dict(), dim="system")
+
+
+def action_system_release(
+    *, item: Any, body: Any, index: Any, request: Any
+) -> dict[str, Any]:
+    """冻结(发布闸门只检查不编辑;签发人由调用方传入,body.signed_by)。"""
+    _ = item, index
+    from pathlib import Path as _P
+    from gimbal_plate.release import release_system
+
+    system = request.path_params.get("system") or "fin"
+    repo = _P(__file__).resolve().parents[4]
+    body = body or {}
+    result = release_system(
+        repo / "systems" / system,
+        artifacts_root=repo / "plate_artifacts",
+        signed_by=str(body.get("signed_by") or ""),
+        checklist=body.get("checklist") or None,
+    )
+    payload = {
+        "success": result.success,
+        "release_id": result.release_id,
+        "message": result.message,
+    }
+    if result.report is not None:
+        payload["report"] = result.report.to_dict()
+    if result.manifest is not None:
+        payload["summary"] = result.manifest["summary"]
+    if not result.success:
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=result.message,
+            details={"payload": payload},
+        )
+    return ok_response({"item": payload, "total": 1}, dim="system")
+
+
 def action_system_from_service(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
