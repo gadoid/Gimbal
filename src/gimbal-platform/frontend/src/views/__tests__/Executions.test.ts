@@ -467,16 +467,16 @@ describe('Executions.vue — 执行时场景快照导出', () => {
 
 // ── 执行信息文案:标题改名 + 未配置项基线兜底 ──────────────────────
 // 契约:① 「执行配方」标题改为「执行信息」;② 未配置项(空数组/空对象/
-// null)不再显示 '(空)'/'—',改显示「使用基线配置」;③ 行级明细基线虚行
-// (datasetId null)的数据集列同样显示「使用基线配置」。工件空文件的
+// null)不再显示 '(空)'/'—',改显示「场景本体」;③ 行级明细基线虚行
+// (datasetId null)的数据集列同样显示「场景本体」。工件空文件的
 // '(空)'(engine.log 内容为空 ≠ 未配置)不在本契约内。
-describe('Executions.vue — 执行信息(标题 + 使用基线配置)', () => {
+describe('Executions.vue — 执行信息(标题 + 场景本体)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('标题为「执行信息」;空数组/空对象未配置项显示「使用基线配置」', async () => {
+  it('标题为「执行信息」;空数组/空对象未配置项显示「场景本体」', async () => {
     const execStore = useExecutionsStore()
     const detail = {
       ...fakeDetail,
@@ -499,13 +499,13 @@ describe('Executions.vue — 执行信息(标题 + 使用基线配置)', () => {
 
     expect(w.find('.recipe-title').text()).toBe('执行信息')
     const recipe = w.find('.recipe')
-    expect(recipe.text()).toContain('使用基线配置')
+    expect(recipe.text()).toContain('场景本体')
     expect(recipe.text()).not.toContain('(空)')
     expect(recipe.text()).not.toContain('{}')
     w.unmount()
   })
 
-  it('行级明细:基线虚行(datasetId null)数据集列显示「使用基线配置」', async () => {
+  it('行级明细:基线虚行(datasetId null)数据集列显示「场景本体」', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
         caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
@@ -519,9 +519,9 @@ describe('Executions.vue — 执行信息(标题 + 使用基线配置)', () => {
     await w.find('[data-testid="exec-row-7"]').trigger('click')
     await flushPromises()
 
-    // 第 2 列(数据集):基线虚行 → 使用基线配置(旧行为是 '—')
+    // 第 2 列(数据集):基线虚行 → 场景本体(旧行为是 '—')
     const cells = w.findAll('.ex-table-row')[0].findAll('td')
-    expect(cells[1].text()).toBe('使用基线配置')
+    expect(cells[1].text()).toBe('场景本体')
     w.unmount()
   })
 })

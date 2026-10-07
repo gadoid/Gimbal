@@ -138,7 +138,7 @@
                 row.datasetName
                   ?? (row.datasetId
                     ? row.datasetId
-                    : (row.injectionId ? '基线' : '使用基线配置'))
+                    : (row.injectionId ? '注入直跑' : '场景本体'))
               }}</td>
               <td>
                 <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
@@ -307,14 +307,14 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
     .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
 })
 
-/** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景基线配置生效。 */
+/** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效。 */
 function formatRecipeValue(v: unknown): string {
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '使用基线配置'
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '场景本体'
   // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
   if (v !== null && typeof v === 'object') {
-    return Object.keys(v).length ? valueJson(v) : '使用基线配置'
+    return Object.keys(v).length ? valueJson(v) : '场景本体'
   }
-  if (v === null || v === '') return '使用基线配置'
+  if (v === null || v === '') return '场景本体'
   return String(v)
 }
 

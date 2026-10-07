@@ -452,7 +452,12 @@ async def get_case_artifact(
     file: Annotated[str, Query(max_length=32)],
 ) -> PlainTextResponse:
     """白名单工件:engine.log(引擎日志)/ result.json(步骤级明细)。
-    case.json 刻意不暴露 — 含明文凭证,无前端消费场景。Task 13 前端消费。"""
+    case.json 刻意不暴露 — 含明文凭证,无前端消费场景。Task 13 前端消费。
+
+    engine.log 按 EXEC_CHAIN 分派:launch 链写在 case 目录;server 链
+    写 run 级 server-engine.log(每执行一份,非 per-case)——case 目录
+    缺 engine.log 时回退 run 级,不 404(否则新执行也被前端判为「已过期
+    清扫」,误导)。"""
     name = _ARTIFACTS.get(file)
     if name is None or case in {".", ".."} or not _CASE_STEM_RE.fullmatch(case):
         raise HTTPException(
@@ -468,7 +473,13 @@ async def get_case_artifact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "artifact_not_found", "message": name},
         )
-    path = run_dispatcher.run_dir(str(run_id)) / case / name
+    rdir = run_dispatcher.run_dir(str(run_id))
+    path = rdir / case / name
+    if not path.is_file() and file == "engine-log":
+        # server 链:引擎日志在 run 级 server-engine.log
+        fallback = rdir / "server-engine.log"
+        if fallback.is_file():
+            path = fallback
     if not path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

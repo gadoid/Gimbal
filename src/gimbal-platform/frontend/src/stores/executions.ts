@@ -74,13 +74,13 @@ export const useExecutionsStore = defineStore('executions', () => {
       delete errs[key]
       artifactError.value = errs
     } catch (e) {
-      // 「已过期清扫」分支(M1,PG迁移方案 §2.2):caseDir 是软引用,
-      // 工件按 CASE_RETENTION_DAYS=14 启动期清扫 —— 404 不是错误,是
-      // 台账行还在、工件已被回收的既有事实,显式说人话而非死链 404。
+      // 404 分支:caseDir 是软引用,可能因工件清扫(CASE_RETENTION_DAYS=14)
+      // 或 server 链部分工件不在 case 目录。人话提示而非死链 404;
+      // 具体原因前端无法区分,统一为「不可用」并注明常见原因。
       if (httpStatusOf(e) === 404) {
         artifactError.value = {
           ...artifactError.value,
-          [key]: '该行工件已过期清扫(工件保留 14 天,台账行长期保留)',
+          [key]: '该工件当前不可用(可能已被过期清扫或该执行链不产此工件)',
         }
         return
       }
