@@ -15,6 +15,9 @@ dependencies = [
 ]
 [project.scripts]
 gimbal = "gimbal.cli.main:starter"
+# 批次 D(附录 D 已定):plate 独立入口——不用 gimbal plate 子命令,
+# 避免执行器包反向依赖 plate(与 test_v3_no_reverse_import 守卫一致)
+plate = "gimbal_plate.cli:main"
 
 [project.optional-dependencies]
 dev = [

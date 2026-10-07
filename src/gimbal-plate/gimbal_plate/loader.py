@@ -184,6 +184,13 @@ def register_core_dims(reg: PlateRegistry) -> None:
                             full_view_factory=StrategyKindDetailView.from_descriptor,
                             actions={}),
     )
+    # 批次 D/G1:type dim —— 类型模板目录 + 方言自描述(JSON Schema 视图)
+    from gimbal_plate.dialect.selfdescribe_view import TypeCatalogIndex
+    reg.register_dim(
+        "type", DimSpec(name="type", index=TypeCatalogIndex(registry=reg),
+                        view_factory=lambda item: item,
+                        full_view_factory=lambda item: item, actions={}),
+    )
     reg.register_dim(
         "generators", DimSpec(name="generators", index=GeneratorIndex(registry=reg),
                               view_factory=GeneratorKindView.from_descriptor,
