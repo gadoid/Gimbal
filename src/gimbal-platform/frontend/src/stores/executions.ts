@@ -22,6 +22,8 @@ import { useAuthStore } from '@/stores/auth'
 const REFRESH_THROTTLE_MS = 300
 const RECONNECT_DELAY_MS = 1000
 const MAX_RECONNECTS = 10
+/** 兜底轮询间隔:SSE 是主刷新通道,但断流/静默失败时保底(见 startPolling) */
+const FALLBACK_POLL_MS = 3000
 
 export const useExecutionsStore = defineStore('executions', () => {
   const list = ref<ExecutionListItem[]>([])
@@ -200,7 +202,33 @@ export const useExecutionsStore = defineStore('executions', () => {
    * SSE 订阅 `/events/stream`(P2-06/C9,历史名 startPolling 保留):
    * 事件帧 → 300ms 节流刷新 detail + 已展开 rows;done 帧 → 终收敛
    * 后关流;断线带 Last-Event-ID 重连。返回停止函数(卸载时调用)。
+   *
+   * 兜底轮询:SSE 是唯一刷新通道时存在单点故障(代理断流/token 过期/
+   * 静默失败 → 状态永远停在 running)。加一个 3s 定时器,非终态时无论
+   * SSE 是否活着都拉一次 detail;终态后自动停止。SSE 正常时它是多余的
+   * 一次 GET(同数据幂等覆盖),SSE 挂了它就是唯一的生命线。
    */
+  let fallbackTimer: ReturnType<typeof setInterval> | null = null
+
+  function _startFallback(id: number): void {
+    _stopFallback()
+    fallbackTimer = setInterval(() => {
+      const st = detail.value?.status
+      if (!st || isTerminalExecutionStatus(st)) {
+        _stopFallback()
+        return
+      }
+      void _refreshOnce(id).catch(() => { /* 静默:下拍再试 */ })
+    }, FALLBACK_POLL_MS)
+  }
+
+  function _stopFallback(): void {
+    if (fallbackTimer !== null) {
+      clearInterval(fallbackTimer)
+      fallbackTimer = null
+    }
+  }
+
   function startPolling(id: number): () => void {
     stopPolling()
     pollError.value = ''
@@ -209,6 +237,8 @@ export const useExecutionsStore = defineStore('executions', () => {
     // 流建立前先拉一次基线(终态执行也有一拍完整视图)
     void _refreshOnce(id).catch(() => { /* 基线失败留给流帧重试 */ })
     void _pump(id)
+    // 兜底:SSE 断流/静默失败时仍能感知终态(3s 一拍,终态即停)
+    _startFallback(id)
     return stopPolling
   }
 
@@ -318,6 +348,7 @@ export const useExecutionsStore = defineStore('executions', () => {
       clearTimeout(refreshTimer)
       refreshTimer = null
     }
+    _stopFallback()
   }
 
   return {
