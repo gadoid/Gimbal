@@ -151,10 +151,7 @@ def cmd_term_search(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    from gimbal_plate.dialect.validation import (
-        ValidationReport, load_types, validate_consistency,
-        validate_deliverable, validate_references, validate_terms,
-    )
+    from gimbal_plate.dialect.validation import ValidationReport, load_types
     from gimbal_plate.dialect.parser import DialectError
     text = sys.stdin.read() if args.stdin else None
     types = load_types(_TYPES)
@@ -176,7 +173,7 @@ def _check_body(args, text, types, report) -> None:
     from gimbal_plate.dialect import Term, parse_markdown
     from gimbal_plate.dialect.validation import (
         validate_consistency, validate_deliverable, validate_references,
-        validate_terms,
+        validate_terms, validate_tree_ids,
     )
     if text is not None:
         d = parse_markdown(text, source="<stdin>")
@@ -198,6 +195,7 @@ def _check_body(args, text, types, report) -> None:
                             common_terms[tm.id] = tm
         for d in deliverables:
             validate_deliverable(d, types=types, report=report)
+        validate_tree_ids(deliverables, report=report)
         validate_terms(terms.values(), system_id=args.system,
                        common_ids=set(common_terms), report=report)
         validate_references(endpoints, statements, terms,

@@ -180,7 +180,7 @@ class PlateRegistry:
     # ── N2 cleanup (ADR 0002 §N2): public API replacing private access ─
     #
     # ``EndpointIndex`` / ``ServiceIndex`` / ``SystemIndex`` / ``_resolve_system``
-    # used to reach into ``_index.by_id.values()`` with ``# noqa: SLF001``.
+    # used to reach into ``_index.by_id.values()`` with ````.
     # Those accesses are now routed through these public methods so the
     # registry's internal storage strategy (in-memory dict today, possibly
     # a database-backed index tomorrow) is fully encapsulated behind a

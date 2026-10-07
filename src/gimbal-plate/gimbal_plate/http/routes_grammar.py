@@ -210,7 +210,6 @@ def get_full_dim_item_for_system(
     # We compare against the URL path param ``id`` directly — the index's
     # ``list_for_system`` may return objects without a uniform ``id`` attribute
     # (e.g. Config has no `id`), so we filter the *registered keys* instead.
-    items = spec.index.list_for_system(system)
     if not _item_belongs_to_system(spec, item, id, system):
         raise PlateHTTPError(
             http_status=404,

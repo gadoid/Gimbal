@@ -293,9 +293,7 @@ def release_system(
             report=report,
         )
 
-    # ── 冻结(评审 P0-16:release_id 用 O_EXCL 建目录防并发覆盖)──
-    import os
-
+    # ── 冻结(评审 P0-16:release_id 目录冲突重试防并发覆盖)──
     releases_dir = artifacts_root / system_root.name / "releases"
     release_id = _next_release_id(releases_dir)
     manifest_dir = releases_dir / release_id

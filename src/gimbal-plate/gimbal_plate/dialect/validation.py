@@ -27,7 +27,7 @@ from typing import Any, Iterable
 import yaml
 
 from .models import EndpointSpec, Statement, Term
-from .parser import Deliverable, parse_markdown
+from .parser import Deliverable
 
 _SEVERITY_ORDER = {"blocking": 0, "warning": 1, "correction": 2}
 
@@ -161,6 +161,20 @@ _REQUIRED_SLOTS: dict[str, set[str]] = {
     "step": {"cap", "order"},
     "note": set(),
 }
+# 各 kind 的合法槽位全集(6.3 表;白名单外即 S1 阻塞——评审 R2-a)
+_ALLOWED_SLOTS: dict[str, set[str]] = {
+    "mention": {"subject"},
+    "define": {"subject"},
+    "rule": {"about", "before", "violation"},
+    "outcome": {"cap", "outcome", "when", "target"},
+    "transition": {"cap", "from", "to"},
+    "step": {"cap", "order", "branch_on"},
+    "note": {"terms"},
+}
+# 至少一槽(6.3:outcome 与 target 至少一个)
+_AT_LEAST_ONE: dict[str, tuple[str, ...]] = {
+    "outcome": ("outcome", "target"),
+}
 
 
 def term_kind_of(term_id: str) -> str | None:
@@ -245,6 +259,30 @@ def _check_statement(
         report.add(Finding(
             "S1", "blocking",
             f"片段 {st.id}: kind={st.kind} 缺必填槽位 {sorted(missing)}",
+            source=src, line=line,
+        ))
+    # S1:槽位白名单(kind 私有语法,未知槽=拼写错误/错 kind)
+    unknown = set(st.slots) - _ALLOWED_SLOTS.get(st.kind, set())
+    if unknown:
+        report.add(Finding(
+            "S1", "blocking",
+            f"片段 {st.id}: kind={st.kind} 不接受槽位 {sorted(unknown)}"
+            f"(合法: {sorted(_ALLOWED_SLOTS[st.kind])})",
+            source=src, line=line,
+        ))
+    # S1:at-least-one(如 outcome 须有 outcome 或 target 之一)
+    need_group = _AT_LEAST_ONE.get(st.kind)
+    if need_group and not any(g in st.slots for g in need_group):
+        report.add(Finding(
+            "S1", "blocking",
+            f"片段 {st.id}: kind={st.kind} 须至少提供 {'/'.join(need_group)}",
+            source=src, line=line,
+        ))
+    # S1:step.order 整数
+    if st.kind == "step" and not isinstance(st.slots.get("order"), int):
+        report.add(Finding(
+            "S1", "blocking",
+            f"片段 {st.id}: step.order 须为整数",
             source=src, line=line,
         ))
     # S1:槽位词条 kind 约束(order 为整数槽)
@@ -521,4 +559,26 @@ def validate_consistency(
                 f"attr {attr!r} 各来源 transition 取值集合不一致: "
                 + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
+    return report
+
+
+def validate_tree_ids(
+    deliverables: list[Deliverable],
+    report: ValidationReport | None = None,
+) -> ValidationReport:
+    """F3(树级):系统内交付物 id(显式声明的)唯一。"""
+    report = report if report is not None else ValidationReport()
+    seen: dict[str, str] = {}
+    for d in deliverables:
+        if d.frontmatter is None or not d.frontmatter.id:
+            continue   # 缺省取路径,天然唯一(8w)
+        did = d.frontmatter.id
+        if did in seen:
+            report.add(Finding(
+                "F3", "blocking",
+                f"交付物 id {did!r} 重复(先见于 {seen[did]})",
+                source=d.source,
+            ))
+        else:
+            seen[did] = d.source
     return report

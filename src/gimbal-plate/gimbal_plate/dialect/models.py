@@ -86,8 +86,8 @@ class HttpBinding(_TaggedBindingMixin, BaseModel):
         return bool(_HTTP_OUTCOME_PATTERN.match(outcome)) and outcome.startswith("2")
 
     def outcome_is_valid(self, outcome: str) -> bool:
-        """结果键合法性由 binding 判定（http：三位数字字符串）。"""
-        return bool(_HTTP_OUTCOME_PATTERN.match(outcome))
+        """结果键合法性由 binding 判定（http：三位数字，1xx–5xx 语义段）。"""
+        return bool(_HTTP_OUTCOME_PATTERN.match(outcome)) and outcome[0] in "12345"
 
 
 Binding = Annotated[Union[HttpBinding], Field(discriminator="protocol")]

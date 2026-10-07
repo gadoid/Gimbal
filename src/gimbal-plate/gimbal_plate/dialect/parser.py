@@ -166,7 +166,11 @@ def _coerce_payload(
 def _derive_statement_text(
     nodes: list[Node], index: int, *, source: str
 ) -> None:
-    """片段原文 = 块后紧跟的段落，直到下一个块或标题（6.3 / 第 5 节）。"""
+    """片段原文 = 块后紧跟的段落，直到下一个块或标题（6.3 / 第 5 节）。
+
+    散文节点可能一段含多行（标题行混在其中）——首个标题行之前的行属于
+    片段原文，之后的内容属于下一章节，不吞入（评审 R1-a）。
+    """
     block = nodes[index]
     assert isinstance(block, Block)
     parts: list[str] = []
@@ -175,9 +179,15 @@ def _derive_statement_text(
         nxt = nodes[j]
         if isinstance(nxt, Block):
             break
-        # 标题行终止片段原文
-        if _HEADING_RE.match(nxt.text.split("\n", 1)[0]):
-            break
+        lines = nxt.text.split("\n")
+        cut = next(
+            (i for i, line in enumerate(lines) if _HEADING_RE.match(line)),
+            None,
+        )
+        if cut is not None:
+            if cut > 0:
+                parts.append("\n".join(lines[:cut]))
+            break   # 标题终止片段原文
         parts.append(nxt.text.strip("\n"))
         j += 1
     text = "\n\n".join(p for p in (q.strip() for q in parts) if p)
@@ -189,6 +199,12 @@ def _derive_statement_text(
 
 def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
     """解析一个交付物文件。frontmatter 可缺省（无块文件 = 纯散文）。"""
+    # BOM:编辑器常留;剥掉后 frontmatter 才能识别(评审 R2-c)
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    # CRLF:统一归一为 \n(解析层);render 输出恒 \n(规范形)——
+    # CRLF 输入一轮回写后即为规范形,与字节幂等口径一致。
+    text = text.replace("\r\n", "\n")
     lines = text.split("\n")
     # 末尾单个换行是文件终止符而非内容行:剥掉,由 render 恒补一个,
     # 保证 render→parse→render 字节幂等(尾换行不逐轮累积)。
@@ -287,6 +303,17 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
                 )
             review = reviews.pop() if reviews else "draft"
             payload_data = data if top_is_list else envelopes[0][1]
+            # 6.1:frontmatter.service 公共默认供文件内接口块继承——
+            # 校验前注入缺 service 的 endpoint 载荷(解析期物化,对象自含,P7)
+            if (
+                deliverable.frontmatter is not None
+                and deliverable.frontmatter.service
+                and block_type == "endpoint"
+                and isinstance(payload_data, dict)
+                and "service" not in payload_data
+            ):
+                payload_data = {**payload_data,
+                                "service": deliverable.frontmatter.service}
             payload = _coerce_payload(
                 block_type, payload_data, source=source, line=i + 1
             )

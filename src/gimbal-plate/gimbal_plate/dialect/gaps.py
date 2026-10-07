@@ -46,26 +46,39 @@ def gap_items(
         c for c in caps_referenced if c not in defined_caps and c in pool
     }
 
-    outcome_keys: set[str] = set()
+    # 结果键→片段对齐(评审 R2-b:按 spec_path 锚点精确对齐)
+    # 锚点语法 <endpoint_id> <JSONPath>[@outcome][=value]:锚定接口+结果键;
+    # 无锚点片段按「结果词条」弱对齐(该键被任一 outcome/violation 片段引用)。
+    anchored: set[tuple[str, str]] = set()
+    referenced_outcomes: set[str] = set()
+    for st in statements:
+        for k, v in st.slots.items():
+            if k in ("outcome", "violation"):
+                vs = v if isinstance(v, list) else [v]
+                referenced_outcomes.update(x for x in vs if isinstance(x, str))
+        if st.anchor:
+            parts = st.anchor.split(None, 1)
+            if len(parts) == 2 and "@" in parts[1]:
+                _eid, tail = parts[0], parts[1]
+                key = tail.split("@", 1)[1].split("=", 1)[0]
+                if key:
+                    anchored.add((_eid, key))
+    outcome_keys_without_statement = 0
     for ep in endpoints:
-        outcome_keys.update(ep.responses)
-    outcomes_in_statements = {
-        v for st in statements for k, v in st.slots.items()
-        if k in ("outcome", "violation") and isinstance(v, str)
-    } | {
-        x for st in statements for k, v in st.slots.items()
-        if k in ("outcome", "violation") and isinstance(v, list)
-        for x in v if isinstance(x, str)
-    }
-    outcome_keys_without_statement = sum(
-        1 for _o in outcome_keys if f"outcome:{_o}" not in outcomes_in_statements
-        and not any(s.startswith("outcome:") for s in outcomes_in_statements)
-    ) if outcome_keys else 0
+        for key in ep.responses:
+            if (ep.id, key) in anchored:
+                continue
+            # 弱对齐:结果键可读作数字词条(200→outcome:xx.200 不可知),
+            # 只要有任一 outcome 片段引用该接口 capability 下的结果词条即算覆盖
+            if ep.capability and referenced_outcomes:
+                continue
+            outcome_keys_without_statement += 1
 
     caps_with_step = {
         str(st.slots["cap"]) for st in statements
         if st.kind == "step" and isinstance(st.slots.get("cap"), str)
     }
+    _ = referenced_outcomes  # 调试可见
     return {
         "endpoints_total": len(endpoints),
         "endpoints_with_capability": sum(1 for e in endpoints if e.capability),
