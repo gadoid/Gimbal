@@ -90,14 +90,21 @@ def create_app(
                 try:
                     data = _json.loads(body)
                 except Exception:  # noqa: BLE001 — 非信封 JSON 原样放行
-                    return Response(content=body, status_code=200,
-                                    media_type="application/json",
-                                    headers=dict(response.headers))
+                    return Response(
+                        content=body, status_code=200,
+                        media_type="application/json",
+                        headers={k: v for k, v in response.headers.items()
+                                 if k.lower() != "content-length"})
                 if isinstance(data, dict) and "ok" in data and "snapshot" not in data:
                     data["snapshot"] = label
+                # 丢弃原 content-length:重序列化后长度必变(补了 snapshot 字段),
+                # 沿用旧值会被 uvicorn 以「body 长于声明」拒掉(TestClient 不校验,
+                # 真 ASGI 服务器校验——8765 实跑暴露)。Response 自会重算。
+                headers = {k: v for k, v in response.headers.items()
+                           if k.lower() != "content-length"}
                 return Response(content=_json.dumps(data, ensure_ascii=False),
                                 status_code=200, media_type="application/json",
-                                headers=dict(response.headers))
+                                headers=headers)
         return response
 
     @app.exception_handler(PlateHTTPError)
