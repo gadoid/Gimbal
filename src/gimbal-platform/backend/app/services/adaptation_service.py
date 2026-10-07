@@ -155,29 +155,21 @@ async def catalog_diff(db: AsyncSession) -> dict:
                 })
                 continue
             db.add(CatalogVersion(
-                endpoint_id=eid, version=ver,
+                endpoint_id=eid, version=str(it.get("shape_hash") or ver),
                 spec_json=full, synced_at=_utcnow(),
             ))
             baselined += 1
             continue
-        if _semver_gt(ver, stamp.version):
+        # A2(修订九②):变更检测 = shape_hash 比较(轻列表字段)。
+        # 旧双门已退役——semver 门建于不递增常量上(updated_at 门为它打的
+        # 补丁,且 plate 重启即误报);hash 门天然覆盖「改了忘 bump」。
+        shape = str(it.get("shape_hash") or "")
+        if shape and shape != stamp.version:
             pending.append({
                 "endpointId": eid,
-                "fromVersion": stamp.version, "toVersion": ver,
+                "fromVersion": stamp.version[:8], "toVersion": shape[:8],
             })
             continue
-        updated = _parse_dt(it.get("updated_at"))
-        # M2 timestamptz:synced_at 在 PG 读回 aware,_parse_dt 产 naive ——
-        # 统一 ensure_aware 后比较(naive 视为 UTC,与写入约定一致)。
-        synced = ensure_aware(stamp.synced_at)
-        if ver == stamp.version and updated is not None and ensure_aware(updated) > synced:
-            anomalies.append({
-                "endpointId": eid, "reason": "updated_without_bump",
-                "detail": (
-                    f"plate updated_at {updated.isoformat()}"
-                    f" > synced_at {stamp.synced_at.isoformat()}"
-                ),
-            })
     for eid in sorted(stamps):  # 库内残留、plate 已下架
         anomalies.append({
             "endpointId": eid, "reason": "missing_on_plate",
@@ -377,10 +369,11 @@ async def open_batch(
     full = await _plate_full_endpoint(endpoint_id)
     if full is None:
         raise ValueError(f"no_pending_change: {endpoint_id} missing on plate")
-    to_version = str(full.get("version") or "")
-    if not _semver_gt(to_version, stamp.version):
+    # A2:shape_hash 门(与 catalog_diff 同口径);不等于戳内指纹才开批
+    to_version = str(full.get("shape_hash") or full.get("version") or "")
+    if to_version == stamp.version:
         raise ValueError(
-            f"no_pending_change: plate {to_version} not ahead of {stamp.version}"
+            f"no_pending_change: shape {to_version[:8]} == stamp"
         )
 
     refs = (await db.execute(
@@ -518,7 +511,8 @@ async def _batch_detail(
             CatalogVersion.endpoint_id == batch.endpoint_id)
     )).scalar_one_or_none()
     if isinstance(stamp_json, dict):
-        api = stamp_json.get("api")
+        # A2:新戳存 binding(旧戳 api)——读时兼容双形,PG 存量迁移(8m)另批
+        api = stamp_json.get("binding") or stamp_json.get("api")
         api = api if isinstance(api, dict) else {}
         ep_name = str(stamp_json.get("name") or "")
         ep_method = str(api.get("method") or "")

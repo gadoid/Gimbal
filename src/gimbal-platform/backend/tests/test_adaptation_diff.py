@@ -60,15 +60,16 @@ async def test_version_bump_pending(fresh_db, plate):
         s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.0.0",
                              spec_json=FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
-    plate.items = [{"id": "fin.order.add", "version": "1.1.0",
-                    "updated_at": "2026-06-01T00:00:00Z"}]
+    # A2:shape_hash 门(hash 变 = pending;from/to 显示为指纹前缀)
+    plate.items = [{"id": "fin.order.add", "shape_hash": "ff00e1d2c3",
+                    "version": "1.1.0"}]
     async with await _session() as s:
         report = await catalog_diff(s)
     assert report["baselinedNow"] == 0
     assert report["anomalies"] == []
     assert report["pending"] == [{
         "endpointId": "fin.order.add",
-        "fromVersion": "1.0.0", "toVersion": "1.1.0",
+        "fromVersion": "1.0.0", "toVersion": "ff00e1d2",
     }]
 
 
@@ -77,15 +78,15 @@ async def test_c12_updated_without_bump(fresh_db, plate):
         s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.0.0",
                              spec_json=FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
-    plate.items = [{"id": "fin.order.add", "version": "1.0.0",   # 版本没动
-                    "updated_at": "2026-02-02T00:00:00Z"}]        # 但 plate 改过
+    # A2/修订九:C12「updated_without_bump」异常类消灭——shape 相同即无变更,
+    # plate 重启假时间戳不再触发误报(hash 门天然覆盖「改了忘 bump」)。
+    plate.items = [{"id": "fin.order.add", "shape_hash": "1.0.0",
+                    "version": "1.0.0", "updated_at": "2026-02-02T00:00:00Z"}]
     async with await _session() as s:
         report = await catalog_diff(s)
     assert report["pending"] == []
     assert report["baselinedNow"] == 0
-    (anomaly,) = report["anomalies"]
-    assert anomaly["endpointId"] == "fin.order.add"
-    assert anomaly["reason"] == "updated_without_bump"
+    assert report["anomalies"] == []
 
 
 async def test_missing_on_plate_and_full_404(fresh_db, plate):

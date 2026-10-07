@@ -23,10 +23,11 @@ from .test_carry_api import _admin
 
 EP = "fin.order.add"
 EP2 = "fin.order.query"   # expand 二度:sc-a 还引用它
+# A2 形状:api → binding;version → shape_hash 指纹(8 位前缀进 subject)
 FULL = {
-    "id": EP, "version": "1.1.0", "name": "新增订单",
-    "api": {"service": "fin-service", "method": "POST",
-            "path": "/api/home/order/add"},
+    "id": EP, "shape_hash": "ab12cd34ef56", "name": "新增订单",
+    "binding": {"protocol": "http", "method": "POST",
+                "path": "/api/home/order/add"},
     "request": {"declarations": [
         {"name": "amount", "state": "form"},
         {"name": "reason_code", "state": "form"},
@@ -38,10 +39,10 @@ def _install_plate(plate):
     plate.items = [
         {"id": EP, "service": "fin-service", "system": "fin",
          "method": "POST", "path": "/api/home/order/add", "name": "新增订单",
-         "version": "1.1.0", "updated_at": None},
+         "shape_hash": "ab12cd34ef56", "version": "1.1.0"},
         {"id": EP2, "service": "fin-service", "system": "fin",
          "method": "GET", "path": "/api/home/order/query", "name": "查单",
-         "version": "1.0.0", "updated_at": None},
+         "shape_hash": "ff99ee88dd77", "version": "1.0.0"},
     ]
     plate.fulls = {EP: FULL}
 
@@ -101,7 +102,7 @@ async def test_board_assembly_and_trail(fresh_db, plate):
 
     assert out["subject"] == {
         "id": EP, "method": "POST", "path": "/api/home/order/add",
-        "name": "新增订单", "version": "1.1.0", "fieldCount": 2,
+        "name": "新增订单", "version": "ab12cd34", "fieldCount": 2,
         "degraded": False,
     }
     ids = {n["id"] for n in out["nodes"]}

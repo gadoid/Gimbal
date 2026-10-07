@@ -181,11 +181,14 @@ async def board(
     method = path = name = version = ""
     field_count = 0
     if item is not None:
-        api = item.get("api") if isinstance(item.get("api"), dict) else {}
-        method = str(api.get("method") or "")
-        path = str(api.get("path") or "")
+        # A2:api → binding(修订三:坐标平铺进 binding,method/path 同名直读)
+        binding = item.get("binding") if isinstance(item.get("binding"), dict) else {}
+        method = str(binding.get("method") or "")
+        path = str(binding.get("path") or "")
         name = str(item.get("name") or "")
-        version = str(item.get("version") or "")
+        # 8n:version 已删;主体 meta 的版本槽改填 shape 指纹前缀(G5 snapshot
+        # 在信封层,board 主体拿不到——用 shape_hash 前 8 位作稳定指称)
+        version = str(item.get("shape_hash") or "")[:8]
         request = item.get("request") if isinstance(item.get("request"), dict) else {}
         decls = request.get("declarations")
         field_count = len(decls) if isinstance(decls, list) else 0
