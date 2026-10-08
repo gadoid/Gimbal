@@ -20,8 +20,24 @@ import yaml
 from .models import EndpointSpec, Frontmatter, Statement, Term
 
 
-class _StrictLoader(yaml.SafeLoader):
-    """重复键即报错（评审 P0-10：N5 合并冲突残留不再静默取后值）。"""
+# ── YAML 口径（修订十一拍板：1.2 core 隐式类型）──────────────────
+# PyYAML 默认按 1.1 语义解析，会悄悄改值：on/yes→bool、12:30→750(六十进制)、
+# 01→1(八进制)、2026-10-08→date。修订十只堵了渲染侧（歧义标量加引号），
+# 手写块体仍然在解析侧被静默改形。本口径在 PyYAML 上重建 1.2 core 的
+# 隐式类型表（null/true-false/十进制+0o+0x 整数/浮点；无 timestamp、
+# 无 on/yes、无六十进制），约 30 行、零新依赖；libyaml 的 C 加载器
+# 只负责扫描，隐式类型仍走本表 —— 纯 Python 与 C 路径行为一致。
+_YAML_BASE = getattr(yaml, "CSafeLoader", None) or yaml.SafeLoader
+
+
+class _StrictLoader(_YAML_BASE):
+    """重复键即报错（评审 P0-10）+ 1.2 core 隐式类型表（修订十一）。
+
+    两张类表显式复制到本类再改写，避免污染全局 SafeLoader/CSafeLoader。
+    """
+
+    yaml_implicit_resolvers: dict = {}
+    yaml_constructors = dict(_YAML_BASE.yaml_constructors)
 
 
 def _no_dup_keys(loader, node, deep=False):
@@ -35,15 +51,70 @@ def _no_dup_keys(loader, node, deep=False):
                 line=getattr(loader, "_dialect_line", node.start_mark.line + 1),
             )
         seen.add(key)
-    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+    return _YAML_BASE.construct_mapping(loader, node, deep)
 
 
 _StrictLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_keys)
 
 
+def _core_implicit(tag: str, pattern: str, first: str) -> None:
+    yaml.add_implicit_resolver(
+        tag, re.compile(pattern), list(first), Loader=_StrictLoader)
+
+
+# YAML 1.2 core schema 的隐式类型全集（正则按 spec 10.3.3 core 表；
+# null 的空串备选让空标量仍解析为 null——与 PyYAML 缺省行为一致）。
+_core_implicit("tag:yaml.org,2002:null",
+               r"^(?:|~|null|Null|NULL)$", "~nN")
+_core_implicit("tag:yaml.org,2002:bool",
+               r"^(?:true|True|TRUE|false|False|FALSE)$", "tTfF")
+_core_implicit("tag:yaml.org,2002:int",
+               r"^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$",
+               "-+0123456789")
+_core_implicit(
+    "tag:yaml.org,2002:float",
+    r"^(?:[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?"
+    r"|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$",
+    "-+.0123456789")
+
+
+def _core_int(loader, node):
+    """int 构造器同步 1.2 core：十进制 / 0o / 0x，无 1.1 的前导零八进制、
+    下划线分隔与六十进制（构造器与 resolver 必须同一口径，否则 '08' 会被
+    构造器按八进制炸 ValueError）。"""
+    value = loader.construct_scalar(node)
+    sign = 1
+    if value[:1] in "-+":
+        sign = -1 if value[0] == "-" else 1
+        value = value[1:]
+    if value.startswith("0o"):
+        return sign * int(value[2:], 8)
+    if value.startswith("0x"):
+        return sign * int(value[2:], 16)
+    return sign * int(value, 10)
+
+
+def _core_float(loader, node):
+    """float 构造器同步 1.2 core（.inf/.nan 与十进制浮点）。"""
+    value = loader.construct_scalar(node)
+    sign = 1
+    if value[:1] in "-+":
+        sign = -1 if value[0] == "-" else 1
+        value = value[1:]
+    if value.lower() == ".inf":
+        return sign * float("inf")
+    if value.lower() == ".nan":
+        return float("nan")
+    return sign * float(value)
+
+
+_StrictLoader.add_constructor("tag:yaml.org,2002:int", _core_int)
+_StrictLoader.add_constructor("tag:yaml.org,2002:float", _core_float)
+
+
 def strict_yaml_load(text: str, *, source: str, line: int):
-    """统一 YAML 入口：重复键检测 + 环境信息注入。"""
+    """统一 YAML 入口：1.2 core 隐式类型 + 重复键检测 + 环境信息注入。"""
     loader = _StrictLoader(text)
     loader._dialect_source = source  # noqa: SLF001
     loader._dialect_line = line  # noqa: SLF001
@@ -51,6 +122,11 @@ def strict_yaml_load(text: str, *, source: str, line: int):
         return loader.get_single_data()
     finally:
         loader.dispose()
+
+
+def core_scalar(value: str):
+    """单标量按 1.2 core 口径解析（渲染歧义判定与解析同口径，修订十一）。"""
+    return strict_yaml_load(value, source="<scalar>", line=0)
 
 BLOCK_TYPES = ("endpoint", "system", "defaults", "statement", "term")
 REVIEW_VALUES = ("draft", "reviewed")
@@ -317,6 +393,13 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
             payload = _coerce_payload(
                 block_type, payload_data, source=source, line=i + 1
             )
+            # 来源标注（评审 R1）：C 类一致性按「来源（交付物文件）」分组，
+            # 此前生产路径无人设置 _source、全部片段落入同一 <unknown> 来源，
+            # 闸门永不触发。解析期在此记文件路径（pydantic 私有属性，不进
+            # 模型序列化 / hash）。词条同理（T 类 finding 的定位信息）。
+            for m in (payload if isinstance(payload, list) else [payload]):
+                if isinstance(m, (Statement, Term)):
+                    m._source = source  # noqa: SLF001
             deliverable.nodes.append(
                 Block(type=block_type, review=review, payload=payload, line=i + 1)
             )

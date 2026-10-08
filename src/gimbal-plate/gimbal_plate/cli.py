@@ -170,39 +170,16 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def _check_body(args, text, types, report) -> None:
-    from gimbal_plate.dialect import Term, parse_markdown
-    from gimbal_plate.dialect.validation import (
-        validate_consistency, validate_deliverable, validate_references,
-        validate_terms, validate_tree_ids,
-    )
+    from gimbal_plate.dialect.validation import validate_system_tree
     if text is not None:
+        from gimbal_plate.dialect import parse_markdown
+        from gimbal_plate.dialect.validation import validate_deliverable
         d = parse_markdown(text, source="<stdin>")
         validate_deliverable(d, types=types, report=report)
         return
-    else:
-        root = _repo_system(args.system)
-        _, deliverables, endpoints, statements, terms = _load_tree(args.system)
-        # 统一 check 引擎(评审 P1):并入 common 参照 —— 否则 T1 查不了
-        # common 重名、S2/T2 对 common 词条误报。与 release 同口径。
-        common_terms: dict = {}
-        common_root = _REPO / "systems" / "common"
-        if common_root.is_dir() and args.system != "common":
-            for m in sorted(common_root.rglob("*.md")):
-                for b in parse_markdown(m.read_text(encoding="utf-8"),
-                                        source=str(m)).blocks("term"):
-                    for tm in b.models():
-                        if isinstance(tm, Term):
-                            common_terms[tm.id] = tm
-        for d in deliverables:
-            validate_deliverable(d, types=types, report=report)
-        validate_tree_ids(deliverables, report=report)
-        validate_terms(terms.values(), system_id=args.system,
-                       common_ids=set(common_terms), report=report)
-        validate_references(endpoints, statements, terms,
-                            common_terms=common_terms, report=report)
-        validate_consistency(endpoints, statements, report=report)
-        _ = root
-    _ = args
+    # 统一 check 引擎(评审 R10):CLI 与 HTTP system/action/check 调同一
+    # validate_system_tree(common 参照 + 树级 F3 + C 类,与 release 机械检查同口径)。
+    validate_system_tree(_repo_system(args.system), types=types, report=report)
 
 
 def _emit_check(args, report) -> None:

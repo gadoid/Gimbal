@@ -501,12 +501,22 @@ def validate_consistency(
         return getattr(st, "_source", "") or "<unknown>"
 
     # C1
+    # cap 关联取法按 kind 的合法槽位（6.3）：outcome 片段读 cap 槽；
+    # rule 片段没有 cap 槽（S1 白名单 about/before/violation），其 cap
+    # 关联 = about 槽为 cap 类词条时（评审 R1：原实现读 rule 的 cap 槽，
+    # 该写法被 S1 拒绝，rule 一侧永不参与 C1，闸门失明）。
     caps_by_outcome: dict[str, dict[str, set[str]]] = {}
     for st in statements:
         if st.kind not in ("rule", "outcome"):
             continue
-        cap = st.slots.get("cap")
-        if not isinstance(cap, str):
+        cap: str | None = None
+        if st.kind == "outcome":
+            c = st.slots.get("cap")
+            cap = c if isinstance(c, str) else None
+        else:
+            a = st.slots.get("about")
+            cap = a if isinstance(a, str) and a.startswith("cap:") else None
+        if cap is None:
             continue
         for slot in ("violation", "outcome"):
             v = st.slots.get(slot)
@@ -581,4 +591,62 @@ def validate_tree_ids(
             ))
         else:
             seen[did] = d.source
+    return report
+
+
+def validate_system_tree(
+    system_root: Path,
+    *,
+    types: dict[str, Any] | None = None,
+    report: ValidationReport | None = None,
+) -> ValidationReport:
+    """系统级校验引擎——CLI ``plate check`` 与 HTTP ``system/action/check``
+    的**同一**实现（评审 R10：此前两处各写一份装配，HTTP 缺 common 参照
+    与树级 F3，引用 common 词条时误报 S2 阻塞、结论与 CLI 不一致）。
+
+    装配口径与 release 的机械检查一致：单交付物规则（F1/F2/S1/S3）+
+    树级 F3 + 词条 T1–T6（含 ``systems/common`` 参照，T1 查重名、
+    T2/S2 消除对 common 的误报）+ 引用 S2 + 一致性 C1–C3。
+    """
+    from .parser import parse_markdown
+
+    report = report if report is not None else ValidationReport()
+    types = types if types is not None else load_types()
+    deliverables: list[Deliverable] = []
+    endpoints: list[EndpointSpec] = []
+    statements: list[Statement] = []
+    terms: dict[str, Term] = {}
+    for md in sorted(system_root.rglob("*.md")):
+        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+        deliverables.append(d)
+        for b in d.blocks():
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    endpoints.append(m)
+                elif isinstance(m, Statement):
+                    statements.append(m)
+                elif isinstance(m, Term):
+                    terms[m.id] = m
+
+    common_terms: dict[str, Term] = {}
+    common_root = system_root.parent / "common"
+    if common_root.is_dir() and system_root.name != "common":
+        for md in sorted(common_root.rglob("*.md")):
+            d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+            for b in d.blocks("term"):
+                for m in b.models():
+                    if isinstance(m, Term):
+                        common_terms[m.id] = m
+
+    for d in deliverables:
+        validate_deliverable(d, types=types, report=report)
+    validate_tree_ids(deliverables, report=report)
+    validate_terms(
+        terms.values(), system_id=system_root.name,
+        common_ids=set(common_terms), report=report,
+    )
+    validate_references(
+        endpoints, statements, terms, common_terms=common_terms, report=report,
+    )
+    validate_consistency(endpoints, statements, report=report)
     return report

@@ -8,6 +8,13 @@
 > - YAML 口径改判：方言按 **YAML 1.1（PyYAML）** 解析 + 重复键即报错；渲染对 1.1/1.2 任一口径会误读的标量强制双引号（'08'/'1e3'/'12:30'/on/off 等）。原「按 YAML 1.2 解析」不作数（ruamel 属新增依赖）。
 > - 发布闸门补强（修订九未竟项）：C 类不一致阻塞发布（清零后方可发出）；引用闭包沿 refers/父节点/replaced_by 传递展开；common 词条只冻结被引用到的子集且须 reviewed（N3 落地）；对象写临时文件后原子 rename、复用前校验内容；release_id 目录 O_EXCL 防并发覆盖；签发人必填。
 > - S1.5（自本分支显式降级，合入条件 = P0 清零 + 本清单）：7.1 快照化/原子重载/ref 多版本与 /convert 钉住；G5 快照带 commit 标识；reload 触达运行服务；term/statement/deliverable dim 与 doc/paths/references 动作（9.1 画像 P2/P3 接线依赖此项）；diff --base working/main；N4 单块回写；批次 C 自描述深度（订阅/参数登记/报告/计划/调试的字段级对拍）；路径可配置贯穿 CLI/HTTP。
+> 2026-10-08 修订十一（第三轮评审收口——两项拍板 + 闸门真实生效 + S1.5 补遗）：
+> - **YAML 口径再判（拍板）**：解析端改按 **YAML 1.2 core 隐式类型**（PyYAML 自定义 resolver，零新依赖，C 加载器兼容）——修订十的「按 1.1 解析」作数废除：1.1 会悄悄改值（on/yes→布尔、12:30→750、01→1、日期→date 对象），渲染侧加引号只保住了回写文件，手写块体仍被静默改形。渲染歧义判定与解析同口径，且对 1.1/1.2 任一口径歧义的标量仍强制双引号（规范形是跨消费方兼容面）。存量 164 块在两口径下零值变（已验证）。
+> - **correction_log 删除（拍板）**：发布闸门只放行零 finding 的 release，该字段在已发布 manifest 里恒为空，属死字段——从 manifest 删除；「记录矫正变更的引用（提交/PR）」随 C 闸门语义成熟（finding → 矫正变更 → 复检的闭环台账）在 S1.5 回填。
+> - 闸门真实生效（此前三处「已修」只通过了手工构造条件的测试）：C 类按 `_source` 区分来源——来源现由解析器在生产路径记录（不再依赖手工设置）；C1 的 rule 一侧读 `about`（cap 类）而非不存在的 cap 槽；全局 release 路由与 gaps/check 同 400 守卫（不得把 systems/ 整树当一个系统冻结）；引用闭包起点 = 全部 reviewed 词条（含未被块引用者的 refers/父节点/replaced_by 边）；HTTP check 与 CLI 调同一 `validate_system_tree`（含 common 参照与树级 F3）。
+> - shape 口径补遗：声明树剔除说明字段递归到嵌套 `children`；hash 序列化的 dict 键排序落到 7.1/7.2 正文（修订十只写在头部）。
+> - 规范形收口：systems/ 全量重渲染一次（154/155 曾偏离——渲染器强制双引号后原单引号标量不再是规范形），CI 以 `render(parse(x)) == x` 守门；common 的 F2 口径 = 与各系统一致（system.md 补 `gimbal:system` 声明块），common 进入 CI 检查范围。
+> - S1.5 补遗（修订十清单漏登的既未修也未列项，防止被悄悄丢掉）：manifest 记 shape_hash / call 投影内容寻址、`_call_projection` 与 `_render_call` 双实现合一；diff release 号数值排序（`.10`>`.9`）、月份取本地时区、两 release 字段级 diff（G7）；`check --stdin` 补 T/S2 与 finding 行号；G1 full_schema 的 HTTP 入口；批次 E story→Scenario 派生与执行、step 分支表达力验证、DELETE 接口 cap 归位、caps_without_define 收敛；`review <词条id>` 目标粒度回写；responses 空集校验、YAML 合并键/复合键错误面；G4 结构化锚点、plate_client 按快照失效缓存（9.1）；Agent 编写 skill（批次 D 项）；批次 C 框架 dim 全局挂载与枚举漂移守卫；A7 服务画像文档 P2/P3 表述、B6 路线图登记；S1 期间「已可 release 发版但平台仍读 working」的过渡口径成文。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---
@@ -102,7 +109,7 @@ plate 只存定义态知识；运行态（用例值、场景实例、执行记�
 ## 5. 方言语法（已定，块类型按本版收敛）
 
 - 用户应用层用 Markdown；Python 工具链负责解析、校验、投影、反向渲染。方言是全部被测系统 M1 的唯一编辑形态与真源（框架自描述不在此列）；不生成 Python 实例文件。M2 仍是 Python。没有任何消费方直接读 Markdown。
-- 块：围栏代码块 `gimbal:endpoint` / `gimbal:system` / `gimbal:defaults` / `gimbal:statement` / `gimbal:term`，块体为 YAML。`gimbal:system` 声明系统与服务（取代 `system_info.py`，服务后续承接 D6）；`gimbal:defaults` 声明该系统用例的默认模板（Meta / Config / Resource / Scenario，取代 `meta.py` / `config.py` / `defaults.py` 等）。块体按 YAML 1.2 解析，结果码键写成字符串。一个块可以是单个对象，也可以是对象列表。
+- 块：围栏代码块 `gimbal:endpoint` / `gimbal:system` / `gimbal:defaults` / `gimbal:statement` / `gimbal:term`，块体为 YAML。`gimbal:system` 声明系统与服务（取代 `system_info.py`，服务后续承接 D6）；`gimbal:defaults` 声明该系统用例的默认模板（Meta / Config / Resource / Scenario，取代 `meta.py` / `config.py` / `defaults.py` 等）。块体按 YAML 1.2 core 隐式类型解析（修订十一：PyYAML 自定义 resolver，零新依赖——on/yes 不再读成布尔、12:30 不再按六十进制读数、日期保持字符串；修订十「按 1.1 解析」作数废除），结果码键写成字符串。一个块可以是单个对象，也可以是对象列表。
 - 行内引用：`[[term-id]]`——S1 为纯书写约定（不解析、不校验、不进规范形），出现真实消费方（Obsidian 反链、RAG 前缀）时再升级为语法（已定）。
 - 片段原文 = 块后紧跟的段落，直到下一个块或标题。
 - 同一文件内位置不携带语义，所有关联必须显式写 id / 槽位。
@@ -352,7 +359,7 @@ class Term(BaseModel):
 | parse | 扫描 `systems/` 下全部 Markdown，按块类型解析为 M2 对象，按 id 组装 |
 | validate | 结构校验（M2）+ 引用校验 + 一致性校验，规则见下 |
 | render | 结构化对象 → Markdown，只替换块内部，无损往返 |
-| release | 冻结构件、生成 manifest、执行全部检查、记录矫正日志 |
+| release | 冻结构件、生成 manifest、执行全部检查（correction_log 已删——零 finding 才能发版，字段恒空；修订十一） |
 
 校验规则：
 
@@ -385,7 +392,7 @@ C1 的实例：`outcome:user.last_admin` 在 PRD 中只关联「降级」，在�
 | 层 | 内容 | 性质 |
 |---|---|---|
 | 真源 | `systems/` 下的 Markdown（git 工作区） | 可编辑；经评审入库 |
-| 构件 | release 冻结产物，内容寻址：`plate_artifacts/objects/<hash>.json`（**全局对象池**，每个对象一份，跨版本、跨系统共享——hash 全局唯一，common 词条对象天然去重、跨系统引用无路径尴尬）+ `plate_artifacts/<系统>/releases/<release_id>/manifest.json`（对象 id → hash 清单、call 投影清单、模板版本、方言 / M2 schema 版本、矫正日志） | 不可变；只追加；磁盘增长与「变更量」成正比，而不是与「版本数 × 全量」成正比 |
+| 构件 | release 冻结产物，内容寻址：`plate_artifacts/objects/<hash>.json`（**全局对象池**，每个对象一份，跨版本、跨系统共享——hash 全局唯一，common 词条对象天然去重、跨系统引用无路径尴尬）+ `plate_artifacts/<系统>/releases/<release_id>/manifest.json`（对象 id → hash 清单、call 投影清单、模板版本、方言 / M2 schema 版本；矫正日志字段已删，见修订十一） | 不可变；只追加；磁盘增长与「变更量」成正比，而不是与「版本数 × 全量」成正比 |
 | 运行时索引 | 内存中的 registry（各 dim 索引 + 词条反查索引） | 派生；随时可从真源或构件重建 |
 
 现有「全部加载到内存」的方式保留，补三点：
@@ -396,7 +403,7 @@ C1 的实例：`outcome:user.last_admin` 在 PRD 中只关联「降级」，在�
 - 多版本的典型访问都是**对象级**而不是全量快照级：执行器只加载钉住的一个版本；两版本差异 = 比较两份 manifest 的 hash，只加载变化的对象；单个对象的历史 = 沿各版本 manifest 取 hash；用例变更插件只需某接口在两个版本中的对象。
 - 旧版本冷化：不再被任何平台值记录 / 场景引用的 release，可整体移入归档存储；manifest 保留以便追溯。
 - **call 投影随 release 冻结**：冻结时对每个接口按 6.2 的 export 映射同时产出可执行 call 投影（内容寻址、进 manifest）。执行器（S3）与平台 convert 只消费投影，不在执行器侧复制 binding→call 转换（避免第二次真源）；副产品：plate 服务不可用时，平台可降级读本地构件做 convert（只读、确定性），P6 熔断「plate 挂 → 执行停」有了出路。
-- **hash 的存储与归属**：plate 侧**零新增存储**——release 期对象 hash 即 manifest 里的对象条目（本节已有），working 期在快照构建时对每个接口按规范序列化（键序按 M2 模型定义序、排除等于默认值的字段，见 7.2）各算一次**对象 hash**（整对象：构件去重与 release 差异）与 **shape_hash**（形状：binding + 请求 / 响应声明树，适配检测信号）存内存索引（快照不可变，算一次即可）。平台侧唯一的持有点是适配版本戳（`catalog_versions`）：`version` 列复用存 shape_hash（随 8m 的 alembic 一并），语义 = 「已适配到的定义形状指纹」——**与 ref 无关**（过渡期 working 与 release 期同一机制），且按接口粒度各自推进（适配批次异步落定：A 已推进、B 仍 pending，各持各的指纹）。戳的 `spec_json` 旧形状缓存在批次 B 的 `diff --json` 就绪后可瘦身为「shape_hash + 快照标识」（旧形状按需从构件取），过渡期保留。平台持有的版本信息共两处、各司其职：适配戳的 shape_hash 管「适配到了哪个形状」；值记录的 release_id（第 12 节第 11 项）管「执行基于哪个版本」。归属总表与平台自持的理由见 9.1。
+- **hash 的存储与归属**：plate 侧**零新增存储**——release 期对象 hash 即 manifest 里的对象条目（本节已有），working 期在快照构建时对每个接口按规范序列化（模型字段定义序、排除等于默认值的字段，**hash 输入层对全部 dict 键排序**——书写序不携带语义，修订十/十一；见 7.2）各算一次**对象 hash**（整对象：构件去重与 release 差异）与 **shape_hash**（形状：binding + 请求 / 响应声明树，适配检测信号）存内存索引（快照不可变，算一次即可）。平台侧唯一的持有点是适配版本戳（`catalog_versions`）：`version` 列复用存 shape_hash（随 8m 的 alembic 一并），语义 = 「已适配到的定义形状指纹」——**与 ref 无关**（过渡期 working 与 release 期同一机制），且按接口粒度各自推进（适配批次异步落定：A 已推进、B 仍 pending，各持各的指纹）。戳的 `spec_json` 旧形状缓存在批次 B 的 `diff --json` 就绪后可瘦身为「shape_hash + 快照标识」（旧形状按需从构件取），过渡期保留。平台持有的版本信息共两处、各司其职：适配戳的 shape_hash 管「适配到了哪个形状」；值记录的 release_id（第 12 节第 11 项）管「执行基于哪个版本」。归属总表与平台自持的理由见 9.1。
 - **系统目录路径可配置**：统一加载器按「路径列表」发现系统，缺省单仓 `systems/`。被测系统定义将来可放独立仓（如 fin 团队在自己的 PR 里评审自己的交付物）；NEIGHBOR 的外部仓读取（第 13 节②）复用同一机制。
 - **部署拓扑前提（成文）**：`working` = 主干最新提交隐含两个前提——plate 主机有仓库 checkout、CI 可触发 plate 主机的 reload；多实例部署时重载信号需广播（已列触发条件表）。
 
@@ -431,7 +438,7 @@ C1 的实例：`outcome:user.last_admin` 在 PRD 中只关联「降级」，在�
 
 dim 注册由 plate 核心的统一目录完成：加载器发现系统后为每个系统挂载同一套**数据** dim；框架自描述 dim（strategy / generators 及批次 C 收回的 protocol / subscribe / param_registry / report / plan / debug）全局挂载一次、不走 `/systems/{system}/…`——修正现状框架 dim 注册在 fin 装配点的 pragmatic 拍板。删除各系统的 `dimensions.py`。
 
-endpoint 轻列表与过滤参数的口径（已定）：轻列表条目保持平铺坐标字段（`method` / `path`，http 专属便捷投影，取自 `binding.locator()`）并新增 `protocol` 字段；`method=` 查询过滤标注为 http-only 便捷过滤，协议中立的坐标过滤走 locator。平铺坐标是平台 grid 聚合与前端目录直拉的兼容面，完整 `binding` 对象只在 `/full` 出现。轻列表与 `/full` 条目另带 **shape_hash**（形状 hash，修订九）——只覆盖影响用例值的部分：`binding` 与 request / responses 的声明树；**不含** `description`、`metadata`、`capability`、`consumes` / `produces`、`query_views`（语义标注不触发适配批次——批次 E 为 151 个接口补 capability 不会开批）。**对象 hash**（整对象）只存在于 manifest 与快照内存索引，用于构件去重与 release 差异，不经 HTTP 暴露。两种 hash 与 call 投影 hash 共用规范序列化规则（修订九，A1 实现前置）：键序按 M2 模型定义序、**排除等于默认值的字段**（`exclude_defaults=True`）——保证 P8 加法演进下新增带默认值的字段不改变未使用它的对象的 hash，否则每次加字段全部接口 hash 齐变（适配风暴 + 跨版本对象去重失效）。`endpoint id` 变更不经 hash（走 missing_on_plate / 首见基线路径）。shape_hash 是平台适配中心的 O(1) 变更检测信号（`≠` 戳内指纹即 pending），不必拉全量自算 diff。
+endpoint 轻列表与过滤参数的口径（已定）：轻列表条目保持平铺坐标字段（`method` / `path`，http 专属便捷投影，取自 `binding.locator()`）并新增 `protocol` 字段；`method=` 查询过滤标注为 http-only 便捷过滤，协议中立的坐标过滤走 locator。平铺坐标是平台 grid 聚合与前端目录直拉的兼容面，完整 `binding` 对象只在 `/full` 出现。轻列表与 `/full` 条目另带 **shape_hash**（形状 hash，修订九）——只覆盖影响用例值的部分：`binding` 与 request / responses 的声明树；**不含** `description`、`metadata`、`capability`、`consumes` / `produces`、`query_views`（语义标注不触发适配批次——批次 E 为 151 个接口补 capability 不会开批）。**对象 hash**（整对象）只存在于 manifest 与快照内存索引，用于构件去重与 release 差异，不经 HTTP 暴露。两种 hash 与 call 投影 hash 共用规范序列化规则（修订九/十/十一，A1 实现前置）：模型字段定义序、**排除等于默认值的字段**（`exclude_defaults=True`）、**hash 输入层对全部 dict 键排序**（书写序不携带语义）——保证 P8 加法演进下新增带默认值的字段不改变未使用它的对象的 hash，否则每次加字段全部接口 hash 齐变（适配风暴 + 跨版本对象去重失效）。`endpoint id` 变更不经 hash（走 missing_on_plate / 首见基线路径）。shape_hash 是平台适配中心的 O(1) 变更检测信号（`≠` 戳内指纹即 pending），不必拉全量自算 diff。
 
 **EndpointDoc（视图）**：EndpointSpec 的可理解形态保留，但不再是存储结构。编写形态 = 接口文件中紧跟 `gimbal:endpoint` 块的片段块；阅读形态 = `endpoint` dim 上的 `doc` 动作，聚合两类片段的并集：① 锚点为 `spec_path` 且指向该接口 id 的片段；② 槽位 `cap` 等于该接口 `capability` 的片段（来自 PRD、用户故事等任意交付物）。
 
@@ -462,11 +469,11 @@ G1–G7 满足路线图「Agent 可消费」的四条验收项：机器可读输
 | 编写 | 工作区中的一个或多个交付物文件 | 类型模板（新建骨架）、`plate check --json`、词条检索（编写方先查再建） | — |
 | 评审 | 一次变更（S1 为 git 提交 / PR，可含多个交付物文件） | 结构化差异（工作区 vs 基线，按交付物、按块、按字段）；C 类一致性告警。要点简报由核心之外的评审 Agent 基于差异产出（不给结论） | 人在变更内按交付物逐一评审 |
 | 入库 | 合入工作版本 | — | **入库闸门**：F / T / S 阻塞级规则全部通过（CI 执行）；C 类规则只告警 |
-| 发布 | 一个版本 | 冻结构件、manifest、矫正日志 | **发布闸门**：类型模板 required（F2）、交付件清单（F4）、C 类不一致全部经语义矫正处理、人签发 |
+| 发布 | 一个版本 | 冻结构件、manifest | **发布闸门**：类型模板 required（F2）、交付件清单（F4）、C 类不一致全部经语义矫正处理、人签发 |
 
 - S1 不提供 HTTP 写入：编写只在本地工作区进行（编辑器 + CLI），评审与入库走 git；反向渲染只通过 CLI 作用于工作区。HTTP 写入路径与评审 / 标注界面一起延后设计。
 - 部署环境中的 `working` 指主干分支的最新提交，不是某个人的本地工作区。合入后由 CI 拉取代码并调用重载接口，快照标识记录该提交（已定）。
-- **发布闸门只检查、不编辑**：检出的 C 类不一致通过普通变更修正（编写 → 评审 → 入库），全部合入后再发起发布；manifest 的矫正日志记录这些矫正变更的引用（提交 / PR），而不是在发布环节直接改文件（已定）。
+- **发布闸门只检查、不编辑**：检出的 C 类不一致通过普通变更修正（编写 → 评审 → 入库），全部合入后再发起发布；而不是在发布环节直接改文件（已定）。矫正变更的引用台账（提交 / PR）原定记入 manifest 矫正日志——修订十一裁定：零 finding 才能发版使该字段恒空，已删除；引用台账随 C 闸门语义成熟在 S1.5 回填（`plate release --correction-ref` 一类入口）。
 - 评审状态的落点：入库即代表变更已评审；块信封上的 `review` 表示「内容是否已确认可用于发布」，由评审人在评审中置为 `reviewed`；交付物的状态由其所含块派生。
 
 ### 8.2 版本与发布（已定）
@@ -484,7 +491,7 @@ G1–G7 满足路线图「Agent 可消费」的四条验收项：机器可读输
 | label / alias 冲突 | 合并或改名（废弃 + 新建） |
 | 原文与槽位疑似不符（Agent 标记） | 重新填槽位，或改为另一种 kind |
 
-  矫正动作以普通变更完成（见 8.1），manifest 的矫正日志记录变更引用。已发布的片段只能引用评审过的词条。
+  矫正动作以普通变更完成（见 8.1）。已发布的片段只能引用评审过的词条。
 - 结构化差异按结构、按字段计算，同时服务：评审简报、判断哪些接口需要用例变更插件、检查 M2 读兼容；差异可用词条表述。
 - 评审 Agent 只拿结构化交付物和评审规则，不带生产过程上下文。
 - 归档：发布事件触发的结构化投影，形式不限；旧版本构件保留在 plate。若归档目标同时是接入来源，必须从接入中排除归档产物。
@@ -608,7 +615,7 @@ plate 重构后的能力与平台侧需要的功能一一接线如下（查询�
 |---|---|---|
 | A1 方言内核 | Spec 改造（Binding 联合、outcome 字符串键、删 version / updated_at）+ Frontmatter / Statement / Term 的 M2 + 方言解析 / 校验 / 渲染（含规范形）+ 迁移脚本与 151 个接口的等价校验（plate 自身测试闭环，暂不切消费方）+ 纪律测试改写为方言版（一文件一交付物；M2 封闭与无反向 import 守卫保留） | 4–6 |
 | A2 消费方切换 | 统一加载器替换 `app.py` 写死导入、删除 Python 实例与按系统的 dim 注册 + 平台前后端适配（含前端直连面）+ `spec_json` 存量迁移 + 响应信封标明快照（G5）与锚点结构化（G4） | 4–6 |
-| B release | 冻结（内容寻址构件 + call 投影 + 全局对象池）、manifest（模板 / 方言 / M2 版本）、交付件清单与 `gaps`（G6）、类型模板、结构化差异、校验规则全量、矫正日志 | 3–5 |
+| B release | 冻结（内容寻址构件 + call 投影 + 全局对象池）、manifest（模板 / 方言 / M2 版本）、交付件清单与 `gaps`（G6）、类型模板、结构化差异、校验规则全量 | 3–5 |
 | C 收回自描述 | 执行器 v2.1 的协议 / 模式 / 订阅 / 参数登记表 / 报告定义 / 计划 / 调试原样复制进 plate + 契约测试 | 1–2（与 A1 / A2 并行） |
 | D 编写与评审支撑 | 方言自描述（G1）、`check --json` 与无写入校验（G2）、词条候选检索（G3）、`diff --json`（G7）、Agent 编写 skill 初版、CI 接入（入库闸门的执行载体：plate 校验挂进 PR 流程——仓库现无任何 CI 配置，此项为运营前置）、CLI 入口（独立 console script `plate`，不用 `gimbal plate` 子命令——避免执行器包反向依赖 plate，见附录 D） | 2–3 |
 | E 自举切片 | 以 gimbal-platform 为被测系统，「管理员管理成员」：原生编写 PRD 片段 + 词条 + user_story + 派生 Scenario + 执行 + 过闸门 | 3–5（瓶颈在人工评审与标注） |

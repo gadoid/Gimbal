@@ -813,14 +813,9 @@ def action_system_gaps(
 def action_system_check(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
-    """校验报告(``check``,规则编号即错误码;``--json`` CLI 同引擎,G2)。"""
+    """校验报告(``check``,规则编号即错误码;与 CLI 同一引擎,G2/R10)。"""
     _ = item, body, index
-    from gimbal_plate.dialect.parser import parse_markdown
-    from gimbal_plate.dialect.validation import (
-        ValidationReport, load_types, validate_consistency,
-        validate_deliverable, validate_references, validate_terms,
-    )
-    from gimbal_plate.dialect import EndpointSpec, Statement, Term
+    from gimbal_plate.dialect.validation import load_types, validate_system_tree
     from pathlib import Path as _P
 
     # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
@@ -833,24 +828,11 @@ def action_system_check(
             message="system required: use /api/systems/{system}/system/action/check",
         )
     repo = _P(__file__).resolve().parents[4]
-    system_root = repo / "systems" / system
-    types = load_types(repo / "types" / "types.yaml")
-    report = ValidationReport()
-    endpoints, statements, terms = [], [], {}
-    for md in sorted(system_root.rglob("*.md")):
-        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-        validate_deliverable(d, types=types, report=report)
-        for b in d.blocks():
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    endpoints.append(m)
-                elif isinstance(m, Statement):
-                    statements.append(m)
-                elif isinstance(m, Term):
-                    terms[m.id] = m
-    validate_terms(terms.values(), system_id=system, report=report)
-    validate_references(endpoints, statements, terms, report=report)
-    validate_consistency(endpoints, statements, report=report)
+    # 评审 R10:与 CLI `plate check` 调同一 validate_system_tree —— 此前
+    # HTTP 版自带装配且缺 common 参照与树级 F3,引用 common 词条时误报
+    # S2 阻塞,与 CLI 结论不一致。
+    report = validate_system_tree(
+        repo / "systems" / system, types=load_types(repo / "types" / "types.yaml"))
     return ok_response(report.to_dict(), dim="system")
 
 
@@ -866,6 +848,14 @@ def action_system_release(
     # 系统作用域路由为 /systems/{system}/... → path_params["system"];
     # 不再默认回落 fin(静默指向/冻结错误系统)。
     system = request.path_params.get("system") or (body or {}).get("_system") or ""
+    # 评审 R2:release 与 gaps/check 同守卫 —— 缺系统名直接 400。否则
+    # repo/"systems"/"" 解析到 systems/ 本身,整棵树当一个系统过发布闸门
+    # (此前只因 common/system.md 过不了 F2 才没真的冻结出去)。
+    if not system:
+        raise PlateHTTPError(
+            http_status=400, code=ErrorCode.INVALID_ACTION,
+            message="system required: use /api/systems/{system}/system/action/release",
+        )
     repo = _P(__file__).resolve().parents[4]
     body = body or {}
     result = release_system(

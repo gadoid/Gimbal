@@ -114,8 +114,11 @@ class TestValidationEngine:
         assert any(f.rule == "S2" and f.severity == "warning" for f in report2.findings)
 
     def test_c1_inconsistent_cap_sets(self) -> None:
+        # 槽位形态与生产一致(评审 R1):rule 无 cap 槽(S1 白名单
+        # about/before/violation),其 cap 关联 = about 为 cap 类词条;
+        # outcome 片段的 cap 关联 = cap 槽。
         s1 = Statement(id="st.1", kind="rule",
-                       slots={"about": "attr:u.r", "cap": "cap:a.down",
+                       slots={"about": "cap:a.down",
                               "violation": "outcome:u.last"})
         s2 = Statement(id="st.2", kind="outcome",
                        slots={"cap": "cap:b.del", "outcome": "outcome:u.last"})
@@ -124,11 +127,50 @@ class TestValidationEngine:
         assert any(f.rule == "C1" for f in report.corrections)
         # 同来源(评审 P0-14):单文件内多段引用不算跨来源不一致
         s3 = Statement(id="st.3", kind="rule",
-                       slots={"about": "attr:u.r", "cap": "cap:c.x",
+                       slots={"about": "cap:c.x",
                               "violation": "outcome:u.last"})
         s3._source = "prd.md"
         report_same = validate_consistency([], [s1, s3])
         assert not [f for f in report_same.corrections if f.rule == "C1"]
+
+    def test_c1_source_from_parser(self) -> None:
+        """评审 R1 回归:_source 由解析器在生产路径记录(不再手工设置),
+        两个真实文件(prd + endpoints)各挂同一 outcome 到不同 cap →
+        release 级 C 闸门必须阻塞。"""
+        import tempfile
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "systems" / "x").mkdir(parents=True)
+        (tmp / "systems" / "x" / "dictionary").mkdir()
+        (tmp / "systems" / "x" / "dictionary" / "user.md").write_text(
+            "---\nid: x.dict.user\ntype: dictionary\nsystem: x\n---\n# U\n\n"
+            "```gimbal:term\n"
+            "- id: entity:user\n  label: 用户\n"
+            "- id: cap:user.update\n  label: 更新用户\n"
+            "- id: cap:user.delete\n  label: 删除用户\n"
+            "- id: outcome:user.last_admin\n  label: 最后管理员\n"
+            "```\n",
+            encoding="utf-8")
+        (tmp / "systems" / "x" / "deliverables").mkdir()
+        (tmp / "systems" / "x" / "deliverables" / "prd.md").write_text(
+            "---\nid: x.prd.r\ntype: prd\nsystem: x\n---\n# R\n\n"
+            "```gimbal:statement\nreview: reviewed\n"
+            "id: st.prd.1\nkind: rule\n"
+            "slots: {about: cap:user.update, violation: outcome:user.last_admin}\n"
+            "anchor: 'A1'\n```\n不能降级最后一个管理员。\n",
+            encoding="utf-8")
+        (tmp / "systems" / "x" / "endpoints").mkdir()
+        (tmp / "systems" / "x" / "endpoints" / "user.md").write_text(
+            "---\nid: x.ep.u\ntype: endpoints\nsystem: x\n---\n# U\n\n"
+            "```gimbal:statement\nreview: reviewed\n"
+            "id: st.ep.1\nkind: outcome\n"
+            "slots: {cap: cap:user.delete, outcome: outcome:user.last_admin}\n"
+            "anchor: 'A2'\n```\n删除最后一个管理员被拒绝。\n",
+            encoding="utf-8")
+        r = release_system(tmp / "systems" / "x",
+                           artifacts_root=tmp / "arts", signed_by="t")
+        assert not r.success
+        assert "C 类一致性未处理" in r.message, r.message
+        assert any(f.rule == "C1" for f in r.report.corrections)
 
 
 def _deliverable_with_statement(st: Statement):
@@ -222,6 +264,37 @@ class TestRelease:
         assert not r.success
         assert "引用闭包" in r.message
 
+    def test_closure_starts_from_all_reviewed_terms(self, tmp_path: Path) -> None:
+        """评审 R4 回归:闭包起点 = 全部 reviewed 词条(非只被块引用的)。
+        reviewed 词条未被任何块引用,但自身 refers 到 draft 词条 / 父节点
+        draft → 仍须阻塞。"""
+        systems = tmp_path / "systems"
+        (systems / "fin" / "dictionary").mkdir(parents=True)
+        (systems / "fin" / "dictionary" / "d.md").write_text(
+            "---\ntype: dictionary\nsystem: fin\n---\n"
+            # attr:a.b reviewed,refers 到 draft 的 attr:a.c;父 entity:a 也 draft
+            "```gimbal:term\n"
+            "- id: attr:a.b\n  label: B\n  refers: attr:a.c\n  review: reviewed\n"
+            "```\n"
+            "```gimbal:term\n"
+            "- id: entity:a\n  label: A\n"
+            "- id: attr:a.c\n  label: C\n"
+            "```\n",
+            encoding="utf-8")
+        # 一个 reviewed 端点保证 release 有可冻结内容(不带词条引用)
+        (systems / "fin" / "endpoints").mkdir()
+        (systems / "fin" / "endpoints" / "fin.a.f.md").write_text(
+            "---\nid: fin.a.f\ntype: endpoints\nsystem: fin\n---\n"
+            "```gimbal:endpoint\nreview: reviewed\n"
+            "id: fin.a.f\nsystem: fin\nservice: fin-service\nname: f\n"
+            "binding:\n  protocol: http\n  method: GET\n  path: /f\n"
+            "responses:\n  '200': {}\n```\n",
+            encoding="utf-8")
+        r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
+                           signed_by="t")
+        assert not r.success
+        assert "引用闭包" in r.message
+
     def test_f4_checklist_threshold(self, tmp_path: Path) -> None:
         systems = tmp_path / "systems"
         (systems / "fin" / "endpoints").mkdir(parents=True)
@@ -276,12 +349,18 @@ class TestGaps:
 
     def test_release_http_action_writes_manifest(self, http_client, tmp_path,
                                                  monkeypatch) -> None:
-        # 指到临时 artifacts,不污染仓库
-        from gimbal_plate.release import release as release_mod
+        # 指到临时 artifacts,不污染仓库。patch 目标必须是**包属性**
+        # gimbal_plate.release.release_system(routes_grammar 的函数内
+        # `from gimbal_plate.release import release_system` 按包属性解析;
+        # 此前 patch 在子模块 gimbal_plate.release.release 上,路由拿到
+        # 的仍是原函数 → 测试把 manifest 写进了仓库 plate_artifacts/,
+        # 评审降级清单第 15 项)。
+        import gimbal_plate.release as release_pkg
+        real = release_pkg.release_system
         monkeypatch.setattr(
-            release_mod, "release_system",
-            lambda root, **kw: release_mod.release_system(
-                root, artifacts_root=tmp_path / "art", **kw),
+            release_pkg, "release_system",
+            lambda root, **kw: real(
+                root, **{**kw, "artifacts_root": tmp_path / "art"}),
         )
         resp = http_client.post("/api/systems/fin/system/action/release",
                                 json={"signed_by": "tester"})
@@ -289,3 +368,10 @@ class TestGaps:
         item = resp.json()["data"]["item"]
         assert item["success"] is True
         assert item["summary"]["endpoints"] == 23
+
+    def test_release_http_action_requires_system(self, http_client) -> None:
+        """评审 R2:全局路由(无系统名)不得把 systems/ 整树当一个系统冻结。"""
+        resp = http_client.post("/api/system/action/release",
+                                json={"signed_by": "tester"})
+        assert resp.status_code == 400
+        assert "system required" in resp.json()["error"]["message"]

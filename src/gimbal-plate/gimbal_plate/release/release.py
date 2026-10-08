@@ -11,7 +11,8 @@
 产物（内容寻址，全局对象池）：
     plate_artifacts/objects/<hash>.json          每对象一份,跨版本/跨系统共享
     plate_artifacts/<系统>/releases/<id>/manifest.json
-        对象 hash 清单 + call 投影清单 + 模板/方言/M2 版本 + 矫正日志
+        对象 hash 清单 + call 投影清单 + 模板/方言/M2 版本
+        (correction_log 已删——零 finding 才能发版,该字段恒空;见修订十一)
 
 release_id = ``YYYY.MM.N``（年月 + 当月序号，系统内单调递增，N2 已定）。
 磁盘增长与「变更量」成正比（未变化对象跨版本同 hash,manifest 天然 diff）。
@@ -221,7 +222,9 @@ def release_system(
             report=report,
         )
     # 8.2 ②(评审 P0-13):C 类不一致须经矫正变更处理,否则阻塞发布;
-    # correction_log 记 finding 供矫正定位,清零后方可发出。
+    # 清零后方可发出(revision-11 拍板:correction_log 字段删除——发布
+    # 闸门只放行零 finding 的 release,该字段在已发布 manifest 里恒为空,
+    # 属死字段;「记录矫正变更引用」随 C 闸门语义成熟再回填,S1.5 清单)。
     if report.corrections:
         return ReleaseResult(
             success=False,
@@ -255,6 +258,10 @@ def release_system(
     closure: list[tuple[str, str]] = []
     visited: set[str] = set()
     queue: list[tuple[str, str]] = []
+    # 闭包起点 = **全部 reviewed 词条**(评审 R4):此前种子只含 reviewed
+    # 块对词条的引用,未被块引用的 reviewed 词条自身 refers 到 draft、
+    # 或父节点是 draft,都漏检照样发版。reviewed 词条自己的边也是待冻结
+    # 内容的引用,同样须闭合。
     for kind, m in reviewed:
         refs: list[str] = []
         if isinstance(m, EndpointSpec):
@@ -265,6 +272,8 @@ def release_system(
                     refs.append(v)
                 elif isinstance(v, list):
                     refs.extend(x for x in v if isinstance(x, str))
+        elif isinstance(m, Term):
+            refs = _term_edges(m.id)
         for r in refs:
             queue.append((getattr(m, "id", "?"), r))
     while queue:
@@ -325,7 +334,6 @@ def release_system(
         "checklist_applied": checklist or {},
         "objects": object_entries,
         "call_projections": call_projections,
-        "correction_log": [f.to_dict() for f in report.corrections],
         "summary": {
             "endpoints": sum(1 for k, _ in reviewed if k == "endpoint"),
             "statements": sum(1 for k, _ in reviewed if k == "statement"),

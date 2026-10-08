@@ -121,6 +121,40 @@ class TestNoReverseImport:
                 offenders.append(f"{rel}:{line_no}: {stripped}")
         assert offenders == [], f"残留 ServiceDefinition 旧路径引用: {offenders}"
 
+    def test_no_import_of_executor_package(self) -> None:
+        """P4 单向依赖守卫(第三轮评审降级清单第 1 项补齐):plate 不得
+        import 执行器包 ``gimbal``。
+
+        pyproject 的 plate 入口注释、selfdescribe/protocols.py、
+        http/strategy_dim.py 与设计附录 D 都引用本守卫——单向纪律的落点:
+        plate 是最底层事实源(设计第 2 节),执行器/平台消费 plate;反向
+        import 会让独立 `plate` 入口拖进执行器安装树。
+        gimbal_plate.utils.jsonpath 是 V2 拍板的同期拷贝(coverage 配置
+        已注明),不是 import,不受本条约束。AST 扫描:字符串/注释里的
+        "gimbal" 不算,只有真实 import 语句算。
+        """
+        import ast
+
+        def _hits(module: str) -> bool:
+            return module == "gimbal" or module.startswith("gimbal.")
+
+        offenders: list[str] = []
+        all_py = sorted(PKG_ROOT.rglob("*.py"))  # 含 __init__.py(不沿用 PY_FILES 的排除)
+        for path in all_py:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            rel = path.relative_to(PKG_ROOT)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if _hits(alias.name):
+                            offenders.append(f"{rel}: import {alias.name}")
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    if _hits(node.module):
+                        offenders.append(f"{rel}: from {node.module} import")
+        assert offenders == [], (
+            f"P4 单向依赖被破坏(plate 不得 import 执行器包 gimbal): {offenders}"
+        )
+
 
 class TestEndpointCompositionHolds:
     """V3 核心原则:系统差异由组合表达,允许 EndpointSpec 容纳 body model。"""

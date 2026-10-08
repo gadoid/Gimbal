@@ -27,34 +27,27 @@ _YAML_KWARGS: dict[str, Any] = {
 
 
 def _is_ambiguous(value: str) -> bool:
-    """评审 P0-9:字符串标量在 1.1 或 1.2 任一口径下会被读成非本串。
+    """字符串标量在 1.1 或 1.2 core 任一口径下会被读成非本串（评审 P0-9）。
 
-    两个方向都要防:
-    - 1.1 误读(PyYAML 实测):'01'→1、'on'→True、'12:30'→750、'null'→None;
-    - 1.2 误读(1.1 恰好保串):'08'/'1e3' 在 1.2 core schema 是数字。
-    渲染强制双引号,两口径读回都得原串(设计口径修订:方言按 1.1 解析,
-    渲染保证歧义标量带引号)。设计原文「按 YAML 1.2 解析」在修订十改为
-    本口径(换 ruamel 1.2 属新增依赖,不取)。
+    解析口径已是 1.2 core（修订十一，parser._core_implicit）；渲染的规范形
+    仍须对**两个口径**都无歧义——手写文件可能被任何 YAML 工具读取，
+    规范形是跨消费方的兼容面。两口径都按解析器真跑一遍（而非正则近似）：
+    - 1.1 误读（PyYAML 缺省）：'01'→1、'on'→True、'12:30'→750、'null'→None；
+    - 1.2 core 误读：'08'/'1e3'/'0o10'→数字。
     """
-    import yaml as _yaml
+    from .parser import core_scalar
     stripped = value.strip()
     if not stripped:
         return False
     try:
-        resolved = _yaml.safe_load(stripped)
+        resolved_12 = core_scalar(stripped)
+        resolved_11 = yaml.safe_load(stripped)
     except Exception:  # noqa: BLE001 — 解析失败 = 无歧义
         return False
-    if resolved is None or isinstance(resolved, bool):
-        return True
-    if not isinstance(resolved, str):
-        return True
-    # 1.2 数字形状(1.1 保串):float 可解析即视为有歧义
-    try:
-        float(stripped)
-        return True
-    except ValueError:
-        pass
-    return resolved != value
+    for resolved in (resolved_11, resolved_12):
+        if not isinstance(resolved, str) or resolved != value:
+            return True
+    return False
 
 
 class _QuotingDumper(yaml.SafeDumper):

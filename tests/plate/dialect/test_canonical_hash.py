@@ -208,6 +208,36 @@ def test_shape_excludes_decl_presentational_fields() -> None:
     assert shape_hash(value_changed) != base, "default 影响用例取值,应进 shape"
 
 
+def test_shape_excludes_nested_children_presentational_fields() -> None:
+    """评审 R8:嵌套 children 里的 description/ui_kind 同样不进 shape
+    (systems/ 有 46 个文件用 children;顶层剔除、嵌套漏剔 = 说明性改动
+    触发假适配 pending)。"""
+    def _nested(description: str | None) -> EndpointSpec:
+        child = DeclarationEntry(name="id", path="$.container.id",
+                                 type="string")
+        if description is not None:
+            child = child.model_copy(update={"description": description})
+        container = DeclarationEntry(
+            name="container", path="$.container", type="object",
+            children=[child])
+        return _sample_endpoint(request=RequestSpec(declarations=[
+            DeclarationEntry(name="bl_no", path="$.bl_no", type="string",
+                             required=True),
+            container,
+        ]))
+
+    base = _nested(None)
+    assert shape_hash(_nested("嵌套说明改了")) == shape_hash(base), (
+        "嵌套 children 的 description 是纯展示字段,不应触发 shape_hash 变化"
+    )
+    # 对照:嵌套结构真变化(改 type)必须变
+    changed_type = _nested(None)
+    container = changed_type.request.declarations[1]
+    container.children = [DeclarationEntry(name="id", path="$.container.id",
+                                           type="number")]
+    assert shape_hash(changed_type) != shape_hash(base)
+
+
 def test_canonical_excludes_defaults() -> None:
     """规范序列化排除默认值:显式写出的默认 == 缺省(语义等价,hash 相同)。"""
     explicit = _sample_endpoint(binding=HttpBinding(

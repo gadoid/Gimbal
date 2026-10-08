@@ -66,11 +66,17 @@ _DECL_SHAPE_EXCLUDE = {"description", "ui_kind"}
 
 
 def _decl_shape(entries: list[Any]) -> list[dict[str, Any]]:
-    return [
-        {k: v for k, v in e.model_dump(mode="json", exclude_defaults=True).items()
-         if k not in _DECL_SHAPE_EXCLUDE}
-        for e in entries
-    ]
+    """声明条目 → shape 投影（递归：嵌套 ``children`` 里的说明性字段同样
+    剔除——评审 R8：此前只处理顶层，嵌套 description 改动照样触发适配
+    pending，systems/ 有 46 个文件用到 children）。"""
+    out: list[dict[str, Any]] = []
+    for e in entries:
+        d = {k: v for k, v in e.model_dump(mode="json", exclude_defaults=True).items()
+             if k not in _DECL_SHAPE_EXCLUDE}
+        if e.children:
+            d["children"] = _decl_shape(e.children)
+        out.append(d)
+    return out
 
 
 def shape_projection(spec: EndpointSpec) -> dict[str, Any]:

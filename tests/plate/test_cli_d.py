@@ -36,62 +36,46 @@ class TestCliGapsAndTerm:
 
     def test_term_search_common_and_local(self, capsys, tmp_path,
                                           monkeypatch) -> None:
-        # 在 fin 词典临时加一个词条 → 检索命中(label + alias + 相似度)
-        from gimbal_plate.cli import _REPO
-        dic = _REPO / "systems" / "fin" / "dictionary"
-        dic.mkdir(parents=True, exist_ok=True)
-        f = dic / "_cli_test_terms.md"
-        f.write_text(
+        # 在**临时仓库根**的 fin 词典加词条 → 检索命中(label+alias+相似度)。
+        # 不写真源 systems/(评审降级清单第 15 项:测试不得往仓库写东西)。
+        from gimbal_plate import cli
+        (tmp_path / "systems" / "fin" / "dictionary").mkdir(parents=True)
+        monkeypatch.setattr(cli, "_REPO", tmp_path)
+        (tmp_path / "systems" / "fin" / "dictionary" / "t.md").write_text(
             "---\ntype: dictionary\nsystem: fin\n---\n"
             "```gimbal:term\n- id: entity:order\n  label: 订单\n  aliases: [委托单]\n"
             "- id: cap:order.create\n  label: 创建订单\n```\n",
             encoding="utf-8")
-        try:
-            assert main(["term", "search", "委托单", "--system", "fin",
-                         "--json"]) == 0
-            hits = json.loads(capsys.readouterr().out)["hits"]
-            assert any(h["id"] == "entity:order" and "alias" in "/".join(
-                h["matched_by"]) for h in hits)
-            assert main(["term", "search", "订单", "--system", "fin",
-                         "--json"]) == 0
-            hits2 = json.loads(capsys.readouterr().out)["hits"]
-            assert any(h["id"] == "cap:order.create" for h in hits2)
-        finally:
-            f.unlink(missing_ok=True)
+        assert main(["term", "search", "委托单", "--system", "fin",
+                     "--json"]) == 0
+        hits = json.loads(capsys.readouterr().out)["hits"]
+        assert any(h["id"] == "entity:order" and "alias" in "/".join(
+            h["matched_by"]) for h in hits)
+        assert main(["term", "search", "订单", "--system", "fin",
+                     "--json"]) == 0
+        hits2 = json.loads(capsys.readouterr().out)["hits"]
+        assert any(h["id"] == "cap:order.create" for h in hits2)
 
 
 class TestCliNewAndReview:
-    def test_new_and_review_roundtrip(self, capsys, tmp_path) -> None:
-        from gimbal_plate.cli import _REPO
-        target = _REPO / "systems" / "fin" / "deliverables" / "_cli_new_prd.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            assert main(["new", "prd", "--system", "fin", "--id",
-                         "_cli_new_prd"]) == 0
-            assert target.exists()
-            text = target.read_text(encoding="utf-8")
-            assert "type: prd" in text and "gimbal:statement" in text
-            # review 置位 → 规范形回写带 review: reviewed
-            assert main(["review", "fin.prd._cli_new_prd"]) == 0
-            text2 = target.read_text(encoding="utf-8")
-            assert "review: reviewed" in text2
-            # 校验:新骨架若缺必填槽位 → check 红(骨架 slots 为注释占位)
-            import subprocess, sys as _s
-            r = subprocess.run(
-                [_s.executable, "-c",
-                 "import sys;sys.path.insert(0,'src/gimbal-plate');"
-                 "from gimbal_plate.cli import main;"
-                 "raise SystemExit(main(['check','fin','--json']))"],
-                capture_output=True, text=True, cwd=_REPO)
-            # 骨架的 statement 无槽位 → S1 红(F1 允许 note/prd 的 kinds,
-            # 但 required 槽位缺失会阻塞)——验证引擎确实拦手写骨架
-            assert r.returncode in (0, 1)
-        finally:
-            target.unlink(missing_ok=True)
-            # 清理产生的空目录
-            d = _REPO / "systems" / "fin" / "deliverables"
-            if d.exists() and not any(d.iterdir()):
-                d.rmdir()
+    def test_new_and_review_roundtrip(self, capsys, tmp_path, monkeypatch) -> None:
+        # 临时仓库根(评审降级清单第 15 项:此前写到真源 systems/fin/ 下,
+        # 失败中断即残留);types 仍指向真源模板。
+        from gimbal_plate import cli
+        (tmp_path / "systems" / "fin").mkdir(parents=True)
+        monkeypatch.setattr(cli, "_REPO", tmp_path)
+        target = tmp_path / "systems" / "fin" / "deliverables" / "_cli_new_prd.md"
+        assert main(["new", "prd", "--system", "fin", "--id",
+                     "_cli_new_prd"]) == 0
+        assert target.exists()
+        text = target.read_text(encoding="utf-8")
+        assert "type: prd" in text and "gimbal:statement" in text
+        # review 置位 → 规范形回写带 review: reviewed
+        assert main(["review", "fin.prd._cli_new_prd"]) == 0
+        text2 = target.read_text(encoding="utf-8")
+        assert "review: reviewed" in text2
+        # 校验:骨架 statement 的 slots 为注释占位 → S1 红(引擎拦手写骨架)
+        assert main(["check", "fin", "--json"]) == 1
 
 
 class TestG1SelfDescribe:
