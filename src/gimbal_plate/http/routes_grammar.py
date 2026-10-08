@@ -318,6 +318,14 @@ def run_item_action_for_system(
             code=ErrorCode.DIM_ITEM_NOT_FOUND,
             message=f"{dim} '{id}' not found",
         )
+    # X4(第六轮):系统作用域的对象动作补归属校验——与同 URL 的 GET
+    # 详情同口径(此前动作直接作用在别系统的对象上,GET 却 404)。
+    if not _item_belongs_to_system(spec, item, id, system):
+        raise PlateHTTPError(
+            http_status=404,
+            code=ErrorCode.DIM_ITEM_NOT_FOUND,
+            message=f"{dim} '{id}' not found in system '{system}'",
+        )
     return _dispatch_action(
         reg=reg,
         spec=spec,

@@ -11,9 +11,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("asyncpg")  # 驱动脚本在 main() 内才 import;测试自身需要
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "migrate_legacy_case_pg.py"
 _spec = importlib.util.spec_from_file_location("migrate_legacy_case_pg", _SCRIPT)
@@ -74,12 +77,16 @@ class FakeConn:
 
 @pytest.fixture()
 def patched_connect(monkeypatch):
+    """X1 后 asyncpg 在 main() 内 import——patch sys.modules 让函数内
+    import 拿到假件(真实 asyncpg 缺席时整个文件按 importorskip 跳过)。"""
     conns: list[FakeConn] = []
+    fake_mod = types.ModuleType("asyncpg")
 
     async def fake_connect(_url):
         return conns[-1] if conns else FakeConn([])
 
-    monkeypatch.setattr(drv.asyncpg, "connect", fake_connect)
+    fake_mod.connect = fake_connect
+    monkeypatch.setitem(sys.modules, "asyncpg", fake_mod)
     return conns
 
 
@@ -91,7 +98,7 @@ def test_dry_run_default_writes_nothing(tmp_path, patched_connect, monkeypatch):
     rc = asyncio.run(drv.main("fake://db", write=False))
     assert rc == 0
     assert conn.executed == []                      # 不写库
-    assert not (tmp_path / "legacy-path-migration-backup.json").exists()
+    assert not list(tmp_path.glob("legacy-path-migration-backup*"))
 
 
 def test_write_backup_holds_pre_change_state(tmp_path, patched_connect, monkeypatch):
@@ -102,11 +109,29 @@ def test_write_backup_holds_pre_change_state(tmp_path, patched_connect, monkeypa
     import asyncio
     rc = asyncio.run(drv.main("fake://db", write=True))
     assert rc == 0
-    backup = json.loads(
-        (tmp_path / "legacy-path-migration-backup.json").read_text(encoding="utf-8"))
+    backup_files = list(tmp_path.glob("legacy-path-migration-backup-*.json"))
+    assert len(backup_files) == 1
+    backup = json.loads(backup_files[0].read_text(encoding="utf-8"))
     raw = json.dumps(backup, ensure_ascii=False)
     assert "$.response_status" in raw                # 旧态在备份里
     assert "$.call.response" not in raw               # 备份未被迁移污染
     # 更新走事务且只写新态
     assert conn.executed and not conn.executed_outside_tx
     assert "$.call.response.status" in conn.executed[0][0]
+
+
+def test_write_refuses_to_overwrite_existing_backup(
+        tmp_path, patched_connect, monkeypatch):
+    """X6:已有(带时间戳的)备份文件时拒绝运行——冲掉上一份=丢掉唯一旧态。"""
+    monkeypatch.setattr(drv, "_REPO", tmp_path)
+    conn = FakeConn([("sc-1", _scenario("sc-1", ""))])
+    patched_connect.append(conn)
+    import asyncio
+    rc = asyncio.run(drv.main("fake://db", write=True))
+    assert rc == 0
+    first = list(tmp_path.glob("legacy-path-migration-backup-*.json"))[0]
+    conn2 = FakeConn([("sc-2", _scenario("sc-2", ""))])
+    patched_connect.append(conn2)
+    with pytest.raises(SystemExit):
+        asyncio.run(drv.main("fake://db", write=True))
+    assert conn2.executed == []                      # 未动库

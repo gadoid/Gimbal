@@ -127,6 +127,12 @@ def release_system(
     # 评审 P0-12:签发人必填(8.2 ④「人签发」,空值拒绝)
     if not signed_by or not signed_by.strip():
         return ReleaseResult(success=False, message="签发人(signed_by)不可为空")
+    # X3(第六轮,N3):common 不单独发版——被引用的 common 对象随引用
+    # 系统的 manifest 冻结;common 自身无独立版本语义。
+    if system_root.name == "common":
+        return ReleaseResult(
+            success=False,
+            message="common 不单独发版(N3):被引用的 common 对象随引用系统的 manifest 冻结")
 
     # ── 装载 + ① 机械检查(J1,第五轮:与 check 同一引擎)──
     # 此前 release 自带一套装配,弱于 check(不跑树级 F3/路由键/J3);
@@ -139,7 +145,13 @@ def release_system(
     try:
         tree = collect_system_tree(system_root)
     except DialectError as e:
-        return ReleaseResult(success=False, message=f"方言错误: {e}")
+        # J5 残留(第六轮):方言错误也带 report(F0 finding),HTTP 422
+        # 的 details 里可见 findings,与 check 的口径一致
+        report = ValidationReport()
+        report.add(Finding("F0", "blocking", str(e),
+                           source=e.source, line=e.line))
+        return ReleaseResult(
+            success=False, message=f"方言错误: {e}", report=report)
     report = validate_system_tree(system_root, types=types, tree=tree)
     endpoints, statements = tree.endpoints, tree.statements
     terms, common_terms = tree.terms, tree.common_terms
@@ -260,6 +272,14 @@ def release_system(
     freeze_list = list(reviewed) + [
         ("term", common_terms[mid]) for mid in sorted(common_frozen)
     ]
+    # X3(第六轮):0 个对象的「空 release」拒绝——manifest 无内容、
+    # 序号却被占用,还会把后续真实 release 的编号挤后。
+    if not freeze_list:
+        return ReleaseResult(
+            success=False,
+            message="无可冻结对象(reviewed 块为空且无被引用的 common 词条)"
+                    "——空 release 拒绝发出",
+            report=report)
     object_entries = _freeze_objects(artifacts_root, freeze_list)
     call_projections = {
         m.id: _call_projection(m)

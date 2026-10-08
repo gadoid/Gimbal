@@ -111,7 +111,12 @@ def cmd_new(args: argparse.Namespace) -> int:
 
 
 def cmd_term_search(args: argparse.Namespace) -> int:
-    _, _, _, _, terms = _load_tree(args.system)
+    from gimbal_plate.dialect.parser import DialectError
+    try:
+        _, _, _, _, terms = _load_tree(args.system)
+    except DialectError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     # common 一并检索(解析顺序:本系统 → common)
     for m in sorted((_REPO / "systems" / "common").rglob("*.md")):
         from gimbal_plate.dialect import parse_markdown, Term
@@ -235,9 +240,15 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 def cmd_gaps(args: argparse.Namespace) -> int:
     from gimbal_plate.dialect.gaps import gaps_report
-    *_, endpoints, statements, terms = [
-        *_load_tree(args.system)[2:],
-    ]
+    from gimbal_plate.dialect.parser import DialectError
+    try:
+        *_, endpoints, statements, terms = [
+            *_load_tree(args.system)[2:],
+        ]
+    except DialectError as e:
+        # J5 残留(第六轮):内容错误不裸 traceback(与 check 的 F0 同源)
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     out = gaps_report(endpoints, statements, terms)
     if args.json:
         print(json.dumps(out, ensure_ascii=False, indent=1))

@@ -280,10 +280,21 @@ def load_registry(
     reg = reg if reg is not None else PlateRegistry()
     register_core_dims(reg)
     total = {"endpoints": 0, "deliverables": 0}
+    import re as _re
+    _name_re = _re.compile(r"^[a-z][a-z0-9_-]*$")
     for root in systems_roots(roots):
         if not root.is_dir():
             continue
+        root_resolved = root.resolve()
         for system_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+            # X5(第六轮):与动作路由同口径——非法名字不加载、符号链接
+            # 逃出根的目录不加载(否则查询面暴露动作侧 404 的树,前后不一)
+            if not _name_re.match(system_dir.name):
+                continue
+            try:
+                system_dir.resolve().relative_to(root_resolved)
+            except ValueError:
+                continue
             c = _load_system_dir(reg, system_dir)
             total["endpoints"] += c["endpoints"]
             total["deliverables"] += c["deliverables"]

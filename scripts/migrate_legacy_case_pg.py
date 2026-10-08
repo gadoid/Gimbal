@@ -17,10 +17,12 @@ scripts/migrate_legacy_case.py 的 migrate_payload(幂等、边界安全);
 均由带引用 bug 的首版生成,**都不是变更前状态**——
 ``legacy-path-migration-backup.json`` 含新路径(旧路径 0 处);
 ``order_dispatch-rebind-backup.json`` 已无 order_dispatch 引用(但保留了
-改绑前的 $.response_status 路径)。若需回滚,两类的原态均可确定性重建:
-路径迁移反查 scripts/migrate_legacy_case.py 的映射表反向应用;改绑的
-8 个步骤 endpoint_id 已知(fin.order_entrust.order_dispatch)。备份文件
-不入库(含场景业务数据,已加 .gitignore)。
+改绑前的 $.response_status 路径)。**回滚口径(第六轮更正:此前「可确定性重建」的说法不成立)**:映射是
+多对一的($.call.response.* → $.response_*,反向不唯一——迁移前就写了
+$.call.response.* 的场景会被错改回旧路径),也没有反向脚本;历史两份
+备份又是污染态。因此 09c1779 那次迁移**没有真正的变更前备份,只有
+尽力而为的人工反查**;本脚本修复后新跑的迁移才有可靠备份(带时间戳、
+拒绝覆盖)。备份文件不入库(含场景业务数据,已加 .gitignore)。
 
 用法:
     python scripts/migrate_legacy_case_pg.py --db "$GIMBAL_DB_URL" [--write]
@@ -44,10 +46,13 @@ mig = importlib.util.module_from_spec(_spec)
 sys.modules["migrate_legacy_case"] = mig
 _spec.loader.exec_module(mig)
 
-import asyncpg  # noqa: E402
+# asyncpg 延迟到 main() 内 import(评审 X1:顶层 import 会让 CI 的
+# pytest 收集阶段炸掉——.[dev] 不含 asyncpg,tests/plate 整个中断)
 
 
 async def main(db_url: str, *, write: bool) -> int:
+    import asyncpg
+
     conn = await asyncpg.connect(db_url)
     rows = await conn.fetch("SELECT scenario_id, payload FROM composer_scenarios")
     backup: dict = {}
@@ -69,8 +74,13 @@ async def main(db_url: str, *, write: bool) -> int:
     if not write or not pending:
         await conn.close()
         return 0
-    # B2:备份先落盘(旧态),更新走单事务
-    backup_path = _REPO / "legacy-path-migration-backup.json"
+    # B2/X6:备份先落盘(旧态),更新走单事务;文件名带时间戳且拒绝
+    # 覆盖已有备份(冲掉上一份=丢掉唯一旧态)。
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = _REPO / f"legacy-path-migration-backup-{stamp}.json"
+    if backup_path.exists():
+        raise SystemExit(f"error: 备份文件已存在,拒绝覆盖: {backup_path}")
     backup_path.write_text(
         json.dumps(backup, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"备份(变更前状态)→ {backup_path}")

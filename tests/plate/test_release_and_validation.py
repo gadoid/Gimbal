@@ -356,10 +356,26 @@ class TestRelease:
             encoding="utf-8")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
                            signed_by="t")
-        # 8v:draft 块不进 release,但不阻塞(与词条同口径,修订九)
-        assert r.success
-        assert r.manifest["summary"]["endpoints"] == 0
-        assert r.manifest["summary"]["draft_skipped_endpoints"] == 1
+        # 8v:draft 块不产生阻塞 finding(与词条同口径,修订九)——但
+        # 全 draft 树无可冻结内容,按 X3(第六轮)结果性拒绝空 release:
+        # 不阻塞闸门,也不发出空 manifest。
+        assert not r.success
+        assert "无可冻结对象" in r.message
+        assert not r.report.blocking          # draft 不是阻塞(8v 保持)
+
+    def test_x3_common_release_refused(self, tmp_path: Path) -> None:
+        """X3/N3:common 不单独发版——被引用的 common 对象随引用系统冻结。"""
+        common = tmp_path / "systems" / "common"
+        common.mkdir(parents=True)
+        (common / "system.md").write_text(
+            "---\ntype: system\nsystem: common\n---\n"
+            "```gimbal:system\nreview: reviewed\nname: common\n"
+            "title: c\ndescription: d\n```\n",
+            encoding="utf-8")
+        r = release_system(common, artifacts_root=tmp_path / "art",
+                           signed_by="t")
+        assert not r.success
+        assert "common 不单独发版" in r.message
 
     def test_closure_blocks_on_referenced_unfrozen_term(self, tmp_path: Path) -> None:
         systems = tmp_path / "systems"

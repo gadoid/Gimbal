@@ -694,7 +694,12 @@ def validate_system_tree(
     from .parser import DialectError
 
     report = report if report is not None else ValidationReport()
-    types = types if types is not None else load_types()
+    if types is None:
+        # X2(第六轮):types 与 release 同源——优先数据根旁的 types/
+        # (systems 根的上一级),缺失时 load_types 内部回退 CWD → 包位置。
+        # 此前 check 默认走 CWD/包、release 读数据根旁,同一棵树两边
+        # 可能读到不同模板。
+        types = load_types(system_root.parent.parent / "types" / "types.yaml")
     if tree is None:
         try:
             tree = collect_system_tree(system_root)

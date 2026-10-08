@@ -42,6 +42,14 @@
 > - **J5**：方言错误统一在 `validate_system_tree` 内转 F0（用 `e.source`/`e.line`）——CLI 弃字符串拆分（Windows 盘符路径拆错列），HTTP 不再裸 500。
 > - 小项：M2 未设 `PLATE_REPO_ROOT` 时 CLI 给人话提示；M3 的 C1 测试改环形多元素集（三个单元素集两两本就不相交，钉不住「全局交集」口径）；bootstrap 跳过守卫的 ImportError 收窄到 `gimbal_plate.systems.*`（自身 import 失败照常炸）；前端降级横幅改 `sseDegraded` 标志（不再靠横幅文字匹配，改文案即失效）。
 > - **S1.5 追加登记（第五轮次要项，合入后消化）**：注册表失败不回滚（原子重载落地时升主要）；release 文件/输入处理组——manifest 非原子写、releases 目录混入非版本名目录时 release_id 抛 ValueError、0 对象可发版、common 可单独发版（违反 N3）、checklist 非字典 500；系统作用域对象动作不校验归属（`/systems/platform/endpoint/fin.…/action/*` 可作用于 fin）；`export/gimbal.py _interpolate` 只处理顶层值且数字转字符串；`test_export_dispatch` 的 `hasattr(typing, get_args)` 恒真断言；后端 4 个 contract 测试在执行器 CLI 不可用时报失败应改跳过；迁移脚本 docstring 内网 IP（N4=C 已裁定维持）。
+> 2026-10-08 修订十三补（第六轮复核收口——X1 必修 + X2/X3 + J5 残留 + X4–X6）：
+> - **X1（必修）**：PG 迁移驱动的 `import asyncpg` 移入 `main()`（顶层 import 让 CI 无 asyncpg 时 `pytest tests/plate` 收集中断）；测试加 `importorskip`，假件改注 `sys.modules`。
+> - **X2**：`validate_system_tree` 的 types 缺省来源与 release 同源——优先**数据根旁的 `types/`**（systems 根上一级），缺失回退 CWD → 包位置；同一棵树 check 与 release 不再可能读到不同模板。
+> - **X3（N3 兑现）**：common 拒绝单独发版；**空 release（0 个可冻结对象）拒绝发出**——draft-only 树不再产出空 manifest（8v 语义保持：draft 不产生阻塞 finding，拒绝是结果性的）。
+> - **J5 残留**：release 遇方言错误返回带 F0 finding 的 report（HTTP 422 details 可见 findings）；`plate gaps` / `term search` 方言错误友好报错不再裸 traceback。
+> - **X4**：系统作用域对象动作补归属校验（与同 URL GET 详情同口径——`/systems/platform/endpoint/fin.…/action/*` 现返回 404）。
+> - **X5**：loader 与动作路由同口径——非法系统名（`^[a-z][a-z0-9_-]*$` 之外）不加载、符号链接逃出根的目录不加载（查询面不再暴露动作侧 404 的树）。
+> - **X6**：迁移备份文件名带时间戳且**拒绝覆盖已有备份**；docstring 更正——旧「原态可确定性重建」说法作废（映射多对一、无反向脚本、历史备份为污染态），口径改为「09c1779 那次迁移只有尽力而为的人工反查，修复后的新跑才有可靠备份」。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---
