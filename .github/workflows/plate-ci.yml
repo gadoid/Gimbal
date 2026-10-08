@@ -7,9 +7,10 @@ on:
     paths:
       - "systems/**"
       - "types/**"
+      - "src/gimbal/**"
+      - "src/gimbal_plate/**"
       - "src/gimbal-plate/**"
       - "src/gimbal-platform/**"
-      - "src/gimbal/**"
       - "tests/**"
       - "pyproject.toml"
       - ".github/workflows/plate-ci.yml"
@@ -39,6 +40,14 @@ jobs:
         run: pytest tests/plate -q
       - name: 执行器全量
         run: pytest tests/unit tests/integration -q
+      # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
+      # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
+      - name: 非 editable 安装冒烟
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install -q .
+          /tmp/wheelenv/bin/plate --help >/dev/null
+          /tmp/wheelenv/bin/python -c "import gimbal_plate, gimbal; print('non-editable install OK')"
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                                "src", "gimbal-plate"))
+                                "src"))
 
 from gimbal_plate.schema.step import Step
 

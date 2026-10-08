@@ -15,6 +15,14 @@
 > - shape 口径补遗：声明树剔除说明字段递归到嵌套 `children`；hash 序列化的 dict 键排序落到 7.1/7.2 正文（修订十只写在头部）。
 > - 规范形收口：systems/ 全量重渲染一次（154/155 曾偏离——渲染器强制双引号后原单引号标量不再是规范形），CI 以 `render(parse(x)) == x` 守门；common 的 F2 口径 = 与各系统一致（system.md 补 `gimbal:system` 声明块），common 进入 CI 检查范围。
 > - S1.5 补遗（修订十清单漏登的既未修也未列项，防止被悄悄丢掉）：manifest 记 shape_hash / call 投影内容寻址、`_call_projection` 与 `_render_call` 双实现合一；diff release 号数值排序（`.10`>`.9`）、月份取本地时区、两 release 字段级 diff（G7）；`check --stdin` 补 T/S2 与 finding 行号；G1 full_schema 的 HTTP 入口；批次 E story→Scenario 派生与执行、step 分支表达力验证、DELETE 接口 cap 归位、caps_without_define 收敛；`review <词条id>` 目标粒度回写；responses 空集校验、YAML 合并键/复合键错误面；G4 结构化锚点、plate_client 按快照失效缓存（9.1）；Agent 编写 skill（批次 D 项）；批次 C 框架 dim 全局挂载与枚举漂移守卫；A7 服务画像文档 P2/P3 表述、B6 路线图登记；S1 期间「已可 release 发版但平台仍读 working」的过渡口径成文。
+> 2026-10-08 修订十二（第三轮复核收口——N1–N3 必修 + C 类口径拍板 + 入库闸门 F3 补齐 + 打包根因修复）：
+> - **YAML 空值回归修复（N1）**：1.2 core resolver 的 null 首字符登记漏了空串键（PyYAML 按 `value[0]` 查表、空标量查 `''` 键，首字符表必须传**列表**且含 `''`）——此前 `a:` / `- ` 读成 `''` 而非 null，`refers:` 留空变成指向空串；已修并钉测试（test_yaml_core_schema）。
+> - **C1/C3 口径拍板：不冲突（交集为空才报）**。C1 = 各来源对同一 outcome 的 cap 归属集合**没有任何公共值**才报；C3 改**边级**比对 = 同一 (attr, from) 的去向集合没有任何公共值才报（a→b 与完整链互补不报、同 from 分支有公共去向不报）。理由：C 类在发布闸门是硬阻塞，全等口径会让「局部文档撞完整文档」随文档增多频繁锁死发版，而 §7 的典型实例本就是不相交集合。C2 维持全等（要求级语义，待观察）。
+> - **入库闸门 F3 补齐**：check 阶段与 release 同口径——跨文件重复的接口 id / 路由键 `(protocol, service, *locator)` / 片段 id 即拦（修订十一「树级 F3」的表述就此兑现；此前只查交付物 id）。
+> - **冷启动重落防吞变更（N3）**：`catalog_diff` / 戳迁移脚本对旧 semver 戳重落基线前先做字段比对——旧 `spec_json` 有形状缓存且与真源有漂移（删字段/增字段/改值域）→ 保留为待适配，不静默覆盖；无形状缓存（空 spec_json）→ 无可比对物，按首见基线静默重落。
+> - **打包根因修复**：hatchling 的 packages 多条目不支持嵌套异父路径（`src/gimbal-plate/gimbal_plate` 并列时静默丢包，wheel 零条目）；force-include 可修 wheel 但会泄漏进 editable（site-packages 落物理拷贝遮蔽 dev 路径）。**`gimbal_plate` 提为 `src/` 平级包**（2026-10-08 目录移动），两个平级 packages 为原生支持；CI 增加非 editable 安装冒烟（`pip install .` + `plate --help`）。`plate` / `gimbal` 双入口在 editable 与 wheel 两种安装下均可用。
+> - 前端执行详情（N5）：重连耗尽只停 SSE，**兜底轮询继续**（其存在意义正是 SSE 长期不通的场景），横幅如实写「按 3 秒轮询刷新」；404 处置加代际比对，上一执行迟到的 404 不再误停当前轮询。引擎日志（R11）：多 worker 并行时不再固定回落第一个 worker 的日志（单 worker 才回落，多 worker 无 case 级日志返回 404；彻底修 = 执行行记录槽位，入 S1.5）。`.gitattributes` 收窄到 `systems/**/*.md`。CI 补 `pydantic-settings`（N2）。
+> - S1.5 追加：执行行记录 server 槽位、engine-log 按 case 精确路由；批次 C 自描述契约测试的恒真断言（`hasattr(__file__)` 类）重写为字段级对拍。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---
@@ -379,9 +387,9 @@ class Term(BaseModel):
 | S2 | 槽位与 Spec 的 capability / consumes / produces 引用全部可解析 | 不存在阻塞；已废弃告警 |
 | S3 | transition 的 from / to 属于同一 attr | 阻塞 |
 | S4 | anchor 符合所在类型的锚点语法；`spec_path` 能解析到接口、声明路径、enum | 告警（按版本升级为阻塞） |
-| C1 | 引用同一 outcome 的 rule / outcome 片段，在各来源中引用的 cap 集合一致 | 列入语义矫正 |
+| C1 | 引用同一 outcome 的 rule / outcome 片段，各来源的 cap 归属集合**没有任何公共值**（修订十二：不冲突口径——子集/有交集 = 部分描述，兼容） | 列入语义矫正 |
 | C2 | 同一 cap 的 `before` 前置条件在各来源中一致 | 列入语义矫正 |
-| C3 | 同一 attr 的取值集合在各来源中一致（DB、Spec enum、前端等） | 列入语义矫正 |
+| C3 | 同一 (attr, from) 转移各来源的去向集合**没有任何公共值**（修订十二：边级比对——互补边/分支 = 部分描述，兼容） | 列入语义矫正 |
 
 C1 的实例：`outcome:user.last_admin` 在 PRD 中只关联「降级」，在接口文档中只关联「删除」，C1 检出不一致。
 
@@ -598,7 +606,7 @@ plate 重构后的能力与平台侧需要的功能一一接线如下（查询�
 |---|---|---|---|
 | B1 | `src/gimbal-plate/tmp/twin_gen/`（727 个已入库文件） | 非主线产物入库（P2，附录 C X2） | 移出仓库或加入 `.gitignore`；工具代码保留，标注为实验 |
 | B2 | `ServiceDefinition.endpoints_module` / `models_module` | 指向 Python 模块路径，与 P1 冲突；全仓无消费方 | 删除字段 |
-| B3 | `export/platform.py` `_ep_key_map`「同坐标先注册者胜」、`registry/index.py` by_route「后写静默覆盖」 | 注册顺序携带语义（P4）；统一加载器按目录发现后顺序不确定 | step 与端点关联改为优先 `view_hints.endpoint_id`；重复路由键在注册时报错（对应 F3）。若存量存在同坐标端点（如 `fin.order.order_add_demo`），先改为显式 id 关联 |
+| B3 | `export/platform.py` `_ep_key_map`「同坐标先注册者胜」、`registry/index.py` by_route「后写静默覆盖」 | 注册顺序携带语义（P4）；统一加载器按目录发现后顺序不确定 | step 与端点关联改为优先 `view_hints.endpoint_id`；重复路由键在注册时报错（对应 F3）。**结局（2026-10-08 补记）**：存量同坐标端点 `fin.order_entrust.order_dispatch` / `fin.order.order_add_demo` / `fin.order_entrust.order_confirm` 未走显式 id 关联，而是直接删除（order_confirm 已并入 order_add；order_dispatch 为演示残留；平台侧引用其的场景已改绑 order_add）——「清理不改变对外行为」在此三例上的实际执行口径 = 定义退役 + 引用方迁移，而非保留改绑 |
 | B4 | `action_system_register` / `action_system_sync`（C1 / C2） | 与 P1 冲突（附录 C X4） | 停用：返回明确的「已停用」错误码；平台侧如有调用一并移除 |
 | B5 | `release/release.py`（恒返回失败的占位） | 无冲突，但会被误用 | 保留至批次 B，文件头注明 |
 | B6 | JSONPath 三份实现（`gimbal/utils`、`gimbal_plate/utils`、平台 `services/jsonpath.py` 镜像） | 镜像维护（P3） | 不在 plate 清理范围；记入 S3 反转（与 F4 field_states 镜像同批处理） |
@@ -676,7 +684,7 @@ plate 重构后的能力与平台侧需要的功能一一接线如下（查询�
 
 ### 路线图调整
 
-- P4 验收门：`systems/platform` 上自举纵向切片端到端走通，存量定义零改动；D9 移入后置储备。
+- P4 验收门（修订十二对齐 S1.5 降级现状）：`systems/platform` 自举纵向切片**管道走通**（编写 → 评审 → 入库 → 编排），存量定义零改动；story → Scenario 派生与执行已随批次 E 降级进 S1.5，验收不含「执行过闸门」；D9 移入后置储备。
 - S1 期间撰写只用本地编辑器（Obsidian / VS Code）+ `plate check` + git。
 
 ## 12. 待确认事项

@@ -93,7 +93,7 @@ def systems_roots(explicit: list[Path] | None = None) -> list[Path]:
     env = os.environ.get("PLATE_SYSTEMS_PATH")
     if env:
         return [Path(p) for p in env.split(os.pathsep) if p]
-    _pkg_repo_root = Path(__file__).resolve().parents[3]
+    _pkg_repo_root = Path(__file__).resolve().parents[2]
     roots = [Path(DEFAULT_SYSTEMS_ROOT), _pkg_repo_root / DEFAULT_SYSTEMS_ROOT]
     # 同目录双表达(CWD 相对 vs 绝对)去重,防系统重复注册
     seen: set[str] = set()

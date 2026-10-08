@@ -363,7 +363,7 @@ class PlateRelease:
 
     def release(self, *, version: str | None = None) -> ReleaseResult:
         _ = version
-        repo = Path(__file__).resolve().parents[3]
+        repo = Path(__file__).resolve().parents[2]
         return release_system(repo / "systems" / "fin")
 
 

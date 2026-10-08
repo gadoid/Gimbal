@@ -421,7 +421,7 @@ class TestFailedCriteriaExtraForbid:
 class TestSerialization:
     """序列化语义等价校验:基于 ``version`` 字段;``updated_at`` 不参与断言。
 
-    详见 [ENDPOINT_SPEC_V1.md §2.3](../src/gimbal-plate/gimbal_plate/design/ENDPOINT_SPEC_V1.md)。
+    详见 [ENDPOINT_SPEC_V1.md §2.3](../src/gimbal_plate/design/ENDPOINT_SPEC_V1.md)。
     """
 
     # 同版本下需断言语义相等的字段子集(仅稳定字段,不含 updated_at)。

@@ -252,3 +252,56 @@ it('代际比对(R9):切换执行后,上一执行的迟到响应不覆盖当前 
     vi.unstubAllGlobals()
   }
 })
+
+it('N5:重连耗尽只停 SSE,兜底继续拉取(状态不再卡 running)', async () => {
+  vi.useFakeTimers()
+  // SSE 恒 500(重连 10 次耗尽);api.get 正常返回 running → 兜底应持续刷新
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    const getSpy = vi.spyOn(api, 'get')
+      .mockResolvedValue(makeDetail(30, 'running'))
+    const store = useExecutionsStore()
+    store.startPolling(30)
+    // 走完 10 次重连(每次 1s 间隔)+ 若干兜底拍(3s 一拍)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(store.pollError).toContain('按 3 秒轮询刷新')
+    const callsAfterExhaust = getSpy.mock.calls.length
+    expect(callsAfterExhaust).toBeGreaterThan(5)  // 兜底一直在拉
+    await vi.advanceTimersByTimeAsync(9_000)      // 再走 3 拍
+    expect(getSpy.mock.calls.length).toBeGreaterThanOrEqual(callsAfterExhaust + 3)
+    expect(store.detail?.status).toBe('running')  // 数据仍在更新通道上
+    store.stopPolling()
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})
+
+it('N5:上一执行迟到的 404 不停掉当前执行的轮询', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => { /* SSE 挂起 */ })))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    let rejectOld!: (e: unknown) => void
+    vi.spyOn(api, 'get')
+      .mockImplementationOnce(() => new Promise((_res, rej) => { rejectOld = rej }))
+      .mockResolvedValue(makeDetail(41, 'running'))
+    const store = useExecutionsStore()
+    store.startPolling(40)                       // 旧执行基线刷新挂起
+    await vi.advanceTimersByTimeAsync(0)
+    store.stopPolling()
+    store.startPolling(41)                       // 切到新执行
+    await vi.advanceTimersByTimeAsync(0)
+    rejectOld(Object.assign(new Error('404'), { status: 404 }))  // 旧执行 404 迟到
+    await vi.advanceTimersByTimeAsync(4000)      // 兜底照常走拍
+    expect(store.pollError).not.toContain('不存在')
+    expect(store.detail?.id).toBe(41)            // 当前执行轮询未被误停
+    store.stopPolling()
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})

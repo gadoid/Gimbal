@@ -215,6 +215,7 @@ export const useExecutionsStore = defineStore('executions', () => {
   function _startFallback(id: number): void {
     _stopFallback()
     fallbackTimer = setInterval(() => {
+      const gen = pollGeneration
       const st = detail.value?.status
       // detail 为 null = 首拍基线拉取失败/尚未返回 → 不能停,继续重试;
       // 终态才停(此时数据稳定,无需再刷)
@@ -223,6 +224,8 @@ export const useExecutionsStore = defineStore('executions', () => {
         return
       }
       void _refreshOnce(id).catch((e) => {
+        // 迟到的上一执行响应(代际已换)不得处置当前执行(N5)
+        if (gen !== pollGeneration) return
         // 404 = 执行已删(R9):视为终态收口,不再每 3s 拉一次 404
         if (httpStatusOf(e) === 404) {
           detail.value = null
@@ -311,7 +314,9 @@ export const useExecutionsStore = defineStore('executions', () => {
       })
       if (resp.status === 404) {
         // R9:执行已删 = 终态——停整个轮询(含兜底定时器),否则 detail=null
-        // 会让兜底每 3s 拉一次 404,直到页面卸载
+        // 会让兜底每 3s 拉一次 404,直到页面卸载。代际比对(N5):迟到的
+        // 上一执行 404 不得停掉当前执行的轮询。
+        if (gen !== pollGeneration) return
         detail.value = null
         pollError.value = '该执行记录已不存在（可能已被删除）'
         stopPolling()
@@ -350,7 +355,9 @@ export const useExecutionsStore = defineStore('executions', () => {
       if (ctrl.signal.aborted) return
       const status = (e as { status?: number }).status ?? httpStatusOf(e)
       if (status === 404) {
-        // R9:同上——404 是终态,停兜底定时器,不做永动 404 轮询
+        // R9+N5:404 是终态(停兜底,不做永动 404 轮询);代际比对——
+        // 迟到的上一执行 404 不得停掉当前执行的轮询
+        if (gen !== pollGeneration) return
         detail.value = null
         pollError.value = '该执行记录已不存在（可能已被删除）'
         stopPolling()
@@ -362,10 +369,10 @@ export const useExecutionsStore = defineStore('executions', () => {
         // 延迟期间可能已 stopPolling(卸载/手动刷新)→ 代际不匹配即退出
         return _pump(id, gen)
       }
-      // R9:重连耗尽 = 放弃刷新——横幅写「已停止刷新」就要真的停
-      // (含兜底定时器;此前兜底继续跑,横幅与行为不符)
-      pollError.value = '事件流连接失败，已停止刷新 — 请手动刷新重试'
-      stopPolling()
+      // N5:重连耗尽只放弃 SSE,**兜底定时器继续拉取**——兜底存在的意义
+      // 恰是 SSE 长期不通的场景(如经会缓冲的代理);此前连兜底一起停,
+      // 状态会永远卡在 running。横幅如实说明当前刷新方式。
+      pollError.value = '实时推送已断开，按 3 秒轮询刷新 — 可手动刷新重试'
     }
   }
 

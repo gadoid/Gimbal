@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_REPO = Path(__file__).resolve().parents[3]
+_REPO = Path(__file__).resolve().parents[2]
 _TYPES = _REPO / "types" / "types.yaml"
 
 

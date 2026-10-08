@@ -26,12 +26,12 @@ from .s5_emit import emit_all, compare_faces
 REPO = Path(__file__).resolve().parents[4]
 
 # 产物永不写 gimbal_plate 包内,除非显式 --install-dir(人工 gate)
-_PLATE_PKG = (REPO / "src" / "gimbal-plate" / "gimbal_plate").resolve()
+_PLATE_PKG = (REPO / "src" / "gimbal_plate").resolve()
 
 
 def _plate_registry():
     """(existing_ids, view_rows, handbuilt_faces);plate 不可 import → 全空降级。"""
-    sys.path.insert(0, str(REPO / "src" / "gimbal-plate"))
+    sys.path.insert(0, str(REPO / "src"))
     try:
         from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
         from gimbal_plate.service.query_views import build_query_view_index

@@ -1,4 +1,5 @@
 # 规范形守门(test_canonical_tree)对换行符敏感:render 恒输出 LF,
-# autocrlf=true 的 Windows 检出会把 systems/ 改成 CRLF 破坏
-# render(parse(x))==x —— 真源树钉死 LF。
-systems/** text eol=lf
+# autocrlf=true 的 Windows 检出会把 md 改成 CRLF 破坏
+# render(parse(x))==x —— 方言文件钉死 LF。只匹配 *.md:systems/ 以后
+# 放截图/PDF 等二进制时不得被当文本改写换行(评审 N8)。
+systems/**/*.md text eol=lf

@@ -476,10 +476,17 @@ async def get_case_artifact(
     rdir = run_dispatcher.run_dir(str(run_id))
     path = rdir / case / name
     if not path.is_file() and file == "engine-log":
-        # server 链:引擎日志在 run 级 server-engine.log
-        fallback = rdir / "server-engine.log"
-        if fallback.is_file():
-            path = fallback
+        # R11:server 链各槽位写 run 级 server-engine-N.log(槽位 0 沿用
+        # 无序号名)。当前无 case→槽位映射,多 worker 并行时回落到固定
+        # 文件会拿到**别的 worker** 的日志——仅当 run 目录只有一个
+        # worker 日志(单实例/调试)时回落才是正确文件;多 worker 且
+        # case 无自带日志 → 404 不再返回错误内容。彻底修(执行行记录
+        # 槽位、按 case 精确路由)见 S1.5。
+        worker_logs = sorted(rdir.glob("server-engine*.log"))
+        if len(worker_logs) <= 1:
+            fallback = rdir / "server-engine.log"
+            if fallback.is_file():
+                path = fallback
     if not path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

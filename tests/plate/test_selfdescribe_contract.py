@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-_PLATE_ROOT = Path(__file__).resolve().parents[2] / "src" / "gimbal-plate"
+_PLATE_ROOT = Path(__file__).resolve().parents[2] / "src"
 _GIMBAL_ROOT = Path(__file__).resolve().parents[2] / "src" / "gimbal"
 for _p in (_PLATE_ROOT, _GIMBAL_ROOT):
     if str(_p) not in sys.path:

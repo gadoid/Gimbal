@@ -38,6 +38,7 @@ from .adaptation_ops import (
     diff_field_specs,
     field_match_names,
     rename_in_list,
+    spec_has_field_cache,
 )
 from .plate_client import PlateUnavailableError
 
@@ -104,9 +105,10 @@ async def catalog_diff(db: AsyncSession) -> dict:
 
     * 首见(库内无戳)→ 拉全量 spec 落基线戳 + spec_json(幂等,
       不算待适配、不建批次);列表有但 /full 404 → full_unavailable 异常;
-    * 旧 semver 戳(非 64-hex,未跑 8m 迁移的环境)→ 与首见同口径重落
-      基线(评审 R6④:冷启动不得把全部端点打成假 pending,149 个全 pending
-      需要人工开 149 次批次);
+    * 旧 semver 戳(非 64-hex,未跑 8m 迁移的环境)→ 重落前先做字段
+      比对(评审 N3:有真实漂移——后来删掉/新增/改值域的字段——保留为
+      待适配,不静默吞掉;无形状缓存的旧戳没有可比对物,与首见同口径
+      静默重落。R6④:冷启动不得把全部端点打成假 pending);
     * A2(修订九②):变更检测 = shape_hash 比较 —— ≠ 戳内指纹即 pending;
     * 库内有戳但 plate 列表无此 endpoint → missing_on_plate 异常。
 
@@ -134,15 +136,28 @@ async def catalog_diff(db: AsyncSession) -> dict:
                     "detail": "plate list has endpoint but /full returned 404",
                 })
                 continue
+            shape = str(it.get("shape_hash") or ver)
             if stamp is None:
                 db.add(CatalogVersion(
-                    endpoint_id=eid, version=str(it.get("shape_hash") or ver),
+                    endpoint_id=eid, version=shape,
                     spec_json=full, synced_at=_utcnow(),
                 ))
-            else:  # 旧 semver 戳 → 首见基线口径重落(评审 R6④)
-                stamp.version = str(it.get("shape_hash") or ver)
-                stamp.spec_json = full
-                stamp.synced_at = _utcnow()
+                baselined += 1
+                continue
+            # 旧 semver 戳(R6④ 冷启动重落;N3 防吞变更):重落前先做
+            # 字段比对——有真实漂移(后来删掉/新增/改值域的字段)时保留
+            # 为待适配,不静默覆盖;无形状缓存的旧戳没有可比对物,静默重落。
+            old_spec = stamp.spec_json if isinstance(stamp.spec_json, dict) else {}
+            if spec_has_field_cache(old_spec) and diff_field_specs(old_spec, full):
+                pending.append({
+                    "endpointId": eid,
+                    "fromVersion": str(stamp.version or "")[:8],
+                    "toVersion": shape[:8],
+                })
+                continue
+            stamp.version = shape
+            stamp.spec_json = full
+            stamp.synced_at = _utcnow()
             baselined += 1
             continue
         # A2(修订九②):变更检测 = shape_hash 比较(轻列表字段)。

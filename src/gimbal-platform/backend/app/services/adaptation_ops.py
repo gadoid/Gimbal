@@ -54,6 +54,26 @@ def _enum_set(field: dict) -> set[str] | None:
     return {str(v) for v in enum}
 
 
+def spec_has_field_cache(spec: dict | None) -> bool:
+    """旧戳是否携带可比对的字段形状(request/responses 声明树非空)。
+
+    评审 N3:冷启动对旧 semver 戳重落基线前,须先跑字段 diff 防吞真实
+    变更;但无形状缓存的旧戳(空 spec_json)没有可比对物——diff 会把
+    全部字段判成 addField,因此这类戳按首见基线静默重落,不算漂移。
+    """
+    s = spec if isinstance(spec, dict) else None
+    if not s:
+        return False
+    request = s.get("request")
+    req_decls = (request.get("declarations") if isinstance(request, dict) else None) or []
+    responses = s.get("responses")
+    resp_decls = any(
+        (isinstance(r, dict) and r.get("declarations"))
+        for r in (responses.values() if isinstance(responses, dict) else [])
+    )
+    return bool(req_decls or resp_decls)
+
+
 def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]:
     """形状 diff → 自动草案 op 列表(spec §5.4 收窄裁定)。
 

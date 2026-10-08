@@ -58,15 +58,17 @@ _StrictLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_keys)
 
 
-def _core_implicit(tag: str, pattern: str, first: str) -> None:
+def _core_implicit(tag: str, pattern: str, first) -> None:
     yaml.add_implicit_resolver(
-        tag, re.compile(pattern), list(first), Loader=_StrictLoader)
+        tag, re.compile(pattern), first, Loader=_StrictLoader)
 
 
-# YAML 1.2 core schema 的隐式类型全集（正则按 spec 10.3.3 core 表；
-# null 的空串备选让空标量仍解析为 null——与 PyYAML 缺省行为一致）。
+# YAML 1.2 core schema 的隐式类型全集(正则按 spec 10.3.3 core 表)。
+# null 的首字符**必须传列表且含 ''**(PyYAML 按 value[0] 查表,空标量查
+# 的就是 '' 键——传字符串 "~nN" 迭代不出空串,留空的值会静默变 '' 而非
+# null;评审 N1 回归,PyYAML 缺省注册即 ['~','n','N',''])。
 _core_implicit("tag:yaml.org,2002:null",
-               r"^(?:|~|null|Null|NULL)$", "~nN")
+               r"^(?:|~|null|Null|NULL)$", ["~", "n", "N", ""])
 _core_implicit("tag:yaml.org,2002:bool",
                r"^(?:true|True|TRUE|false|False|FALSE)$", "tTfF")
 _core_implicit("tag:yaml.org,2002:int",
@@ -396,9 +398,10 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
             # 来源标注（评审 R1）：C 类一致性按「来源（交付物文件）」分组，
             # 此前生产路径无人设置 _source、全部片段落入同一 <unknown> 来源，
             # 闸门永不触发。解析期在此记文件路径（pydantic 私有属性，不进
-            # 模型序列化 / hash）。词条同理（T 类 finding 的定位信息）。
+            # 模型序列化 / hash）。词条同理（T 类 finding 的定位信息）；
+            # 接口也记（F3 check 阶段的重复定位）。
             for m in (payload if isinstance(payload, list) else [payload]):
-                if isinstance(m, (Statement, Term)):
+                if isinstance(m, (Statement, Term, EndpointSpec)):
                     m._source = source  # noqa: SLF001
             deliverable.nodes.append(
                 Block(type=block_type, review=review, payload=payload, line=i + 1)

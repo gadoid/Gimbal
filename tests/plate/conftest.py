@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import pytest
 
-# 确保 gimbal_plate 可被 import(src/gimbal-plate 在 PYTHONPATH 或已安装)
+# 确保 gimbal_plate 可被 import(src 在 PYTHONPATH 或已安装)
 import sys
 from pathlib import Path
 
 _repo = Path(__file__).resolve().parents[2]
-_pkg_root = _repo / "src" / "gimbal-plate"
+_pkg_root = _repo / "src"
 if str(_pkg_root) not in sys.path:
     sys.path.insert(0, str(_pkg_root))
 

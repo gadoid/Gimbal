@@ -28,21 +28,25 @@ dev = [
     "httpx>=0.28",
     "loguru>=0.7.0",
     # tests/unit/platform_compat 的执行器测试 import 平台后端
-    # (app.core.config → cryptography.fernet);CI 只装 .[dev] 时收集
-    # 阶段即报错(评审 R5)。
+    # (app.core.config → cryptography.fernet + pydantic_settings。
+    # BaseSettings);CI 只装 .[dev] 时收集阶段即报错(评审 R5/N2)。
     "cryptography>=42.0",
+    "pydantic-settings>=2.0",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# 评审 P0-4:hatch 默认只打包 src/gimbal → `plate` 入口安装后 ModuleNotFoundError。
+# 评审 P0-4 + 第三轮:非 editable 安装(`pip install .`)必须可用。
+# hatchling 的 packages 多条目不支持嵌套异父路径(src/gimbal-plate/
+# gimbal_plate 与 src/gimbal 并列时后者静默丢失,实测 wheel 内零条目;
+# force-include 虽可修 wheel 但会泄漏进 editable——site-packages 落物理
+# 拷贝遮蔽 dev 路径)。根因修复:gimbal_plate 提为 src/ 平级包
+# (2026-10-08 目录移动),两个平级 packages 为 hatchling 原生支持。
 [tool.hatch.build.targets.wheel]
-packages = ["src/gimbal", "src/gimbal-plate/gimbal_plate"]
-# editable 模式:hatch 由 packages 推导的路径只落 src/(漏 src/gimbal-plate),
-# 显式声明两个 dev 目录,`plate` 入口在 pip install -e . 后可用(评审 P0-4)。
-dev-mode-dirs = ["src", "src/gimbal-plate"]
+packages = ["src/gimbal", "src/gimbal_plate"]
+dev-mode-dirs = ["src"]
 
 [tool.ruff]
 line-length = 100

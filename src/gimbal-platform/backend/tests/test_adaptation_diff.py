@@ -79,6 +79,51 @@ async def test_legacy_semver_stamp_rebaselined(fresh_db, plate):
     assert stamps["fin.order.add"].spec_json["id"] == "fin.order.add"
 
 
+async def test_legacy_semver_with_field_drift_kept_pending(fresh_db, plate):
+    """N3:旧戳 spec_json 携带形状缓存且与真源有漂移(字段被删)时,
+    保留为待适配——不静默重落吞掉本应出现的 removeField。"""
+    drifted_old = {
+        "id": "fin.order.add", "shape_hash": H1,
+        "request": {"declarations": [
+            {"name": "amount", "state": "form", "enum": None},
+            {"name": "gone_later", "path": "$.gone", "type": "string"},
+        ]},
+    }
+    async with await _session() as s:
+        s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.1.0",
+                             spec_json=drifted_old,
+                             synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
+        await s.commit()
+    plate.items = [{"id": "fin.order.add", "shape_hash": H1}]
+    plate.fulls = {"fin.order.add": FULL}
+    async with await _session() as s:
+        report = await catalog_diff(s)
+    assert report["baselinedNow"] == 0
+    assert report["pending"] == [{
+        "endpointId": "fin.order.add",
+        "fromVersion": "1.1.0", "toVersion": H1[:8],
+    }]
+    async with await _session() as s:   # 戳未被覆盖,漂移证据保留
+        stamp = (await s.execute(select(CatalogVersion))).scalars().first()
+        assert stamp.version == "1.1.0"
+        assert stamp.spec_json == drifted_old
+
+
+async def test_legacy_semver_without_shape_cache_rebaselined(fresh_db, plate):
+    """N3 对照:旧戳无形状缓存(空 spec_json)没有可比对物——
+    静默重落(否则 diff_field_specs 会把全部字段误判为新增)。"""
+    async with await _session() as s:
+        s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.1.0",
+                             spec_json={},
+                             synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
+        await s.commit()
+    plate.items = [{"id": "fin.order.add", "shape_hash": H1}]
+    plate.fulls = {"fin.order.add": FULL}
+    async with await _session() as s:
+        report = await catalog_diff(s)
+    assert report == {"pending": [], "anomalies": [], "baselinedNow": 1}
+
+
 async def test_shape_hash_change_pending(fresh_db, plate):
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id="fin.order.add", version=H1,

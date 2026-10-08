@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 
-PKG_ROOT = Path(__file__).resolve().parents[2] / "src" / "gimbal-plate" / "gimbal_plate"
+PKG_ROOT = Path(__file__).resolve().parents[2] / "src" / "gimbal_plate"
 PY_FILES = sorted(
     p for p in PKG_ROOT.rglob("*.py")
     if p.name != "__init__.py"

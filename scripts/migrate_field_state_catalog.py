@@ -13,7 +13,7 @@
 
 变换后逐文件 import 验证(构造校验全量跑),报告前后条目计数。
 用法(仓库根 Gimbal/ 下):
-    PYTHONPATH=src/gimbal-plate python ../scripts/migrate_field_state_catalog.py [--check]
+    PYTHONPATH=src python ../scripts/migrate_field_state_catalog.py [--check]
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
-ENDPOINT_DIR = REPO / "src" / "gimbal-plate" / "gimbal_plate" / "systems" / "fin" / "endpoint"
+ENDPOINT_DIR = REPO / "src" / "gimbal_plate" / "systems" / "fin" / "endpoint"
 
 # ── 位置工具 ─────────────────────────────────────────────
 

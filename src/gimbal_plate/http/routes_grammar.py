@@ -794,7 +794,7 @@ def action_system_gaps(
             http_status=400, code=ErrorCode.INVALID_ACTION,
             message="system required: use /api/systems/{system}/system/action/gaps",
         )
-    repo = _P(__file__).resolve().parents[4]
+    repo = _P(__file__).resolve().parents[3]
     system_root = repo / "systems" / system
     endpoints, statements, terms = [], [], {}
     for md in sorted(system_root.rglob("*.md")):
@@ -827,7 +827,7 @@ def action_system_check(
             http_status=400, code=ErrorCode.INVALID_ACTION,
             message="system required: use /api/systems/{system}/system/action/check",
         )
-    repo = _P(__file__).resolve().parents[4]
+    repo = _P(__file__).resolve().parents[3]
     # 评审 R10:与 CLI `plate check` 调同一 validate_system_tree —— 此前
     # HTTP 版自带装配且缺 common 参照与树级 F3,引用 common 词条时误报
     # S2 阻塞,与 CLI 结论不一致。
@@ -856,7 +856,7 @@ def action_system_release(
             http_status=400, code=ErrorCode.INVALID_ACTION,
             message="system required: use /api/systems/{system}/system/action/release",
         )
-    repo = _P(__file__).resolve().parents[4]
+    repo = _P(__file__).resolve().parents[3]
     body = body or {}
     result = release_system(
         repo / "systems" / system,

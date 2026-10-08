@@ -12,10 +12,11 @@
     S3 transition from/to 同 attr
 告警级：
     T4 同 kind label 重复；T5 alias 冲突；S2 已废弃词条引用；S4 anchor 语法
-语义矫正（C 类，发布闸门要求处理完毕）：
-    C1 同一 outcome 各来源引用的 cap 集合一致
+语义矫正（C 类，发布闸门要求处理完毕；修订十二：不冲突口径——
+交集为空才报，子集/互补 = 部分描述，兼容）：
+    C1 同一 outcome 各来源的 cap 归属集合没有任何交集
     C2 同一 cap 的 before 前置条件各来源一致
-    C3 同一 attr 的取值集合各来源一致
+    C3 同一 (attr, from) 转移各来源的去向集合没有任何交集
 """
 from __future__ import annotations
 
@@ -94,7 +95,7 @@ def load_types(types_path: Path | None = None) -> dict[str, dict[str, Any]]:
     候选顺序:CWD types/ → 包位置回溯仓库根 types/(A2 同款双根)。
     显式路径不存在时同样回退——tmp 系统树的测试不依赖调用方位置。
     """
-    _pkg_repo = Path(__file__).resolve().parents[3]
+    _pkg_repo = Path(__file__).resolve().parents[2]
     candidates = [
         types_path,
         Path("types") / "types.yaml",
@@ -487,24 +488,28 @@ def validate_consistency(
     endpoints: Iterable[EndpointSpec], statements: Iterable[Statement],
     report: ValidationReport | None = None,
 ) -> ValidationReport:
-    """C1–C3:跨**来源**(交付物文件)一致性(评审 P0-14 重写)。
+    """C1–C3:跨**来源**(交付物文件)一致性(评审 P0-14 重写;修订十二
+    口径 = 不冲突:交集为空才报,子集/互补视为部分描述)。
 
     - 同一文件内的多处引用不算「来源不一致」(同来源由评审把关);
-    - C1:同一 outcome 在**不同来源**中关联的 cap 集合不一致;
+    - C1:同一 outcome 在**不同来源**中的 cap 归属集合没有任何公共值
+      (PRD 只关联降级、接口文档只关联删除 → 不相交 → 报);
     - C2:同一 about 主语在不同来源中的 before 前置条件不一致;
-    - C3:同一 attr 在不同来源中 transition 涉及的取值集合不一致
-      (Spec enum 与词条未挂钩,挂钩后并入;设计 7 节口径)。
+    - C3:同一 (attr, from) 转移在不同来源中的去向集合没有任何公共值
+      (a→b vs a→c → 报;a→b vs 完整链里的 a→b → 不报——边级比对,
+      不同转移边互补不比较)。
     """
     report = report if report is not None else ValidationReport()
 
     def _src(st: Statement) -> str:
         return getattr(st, "_source", "") or "<unknown>"
 
-    # C1
-    # cap 关联取法按 kind 的合法槽位（6.3）：outcome 片段读 cap 槽；
-    # rule 片段没有 cap 槽（S1 白名单 about/before/violation），其 cap
-    # 关联 = about 槽为 cap 类词条时（评审 R1：原实现读 rule 的 cap 槽，
-    # 该写法被 S1 拒绝，rule 一侧永不参与 C1，闸门失明）。
+    # C1(修订十二拍板:不冲突口径)
+    # 报告条件 = 各来源 cap 集合的**交集为空**(对同一 outcome 没有任何
+    # 一致的 cap 归属)。子集/超集/有交集 = 部分描述,兼容——C 类在发布
+    # 闸门是硬阻塞,全等口径会让「局部文档撞完整文档」随文档增多频繁
+    # 锁死发版;设计 §7 的典型实例(PRD 只关联降级、接口文档只关联删除)
+    # 本就是两个不相交的集合,交集口径足以捕捉。
     caps_by_outcome: dict[str, dict[str, set[str]]] = {}
     for st in statements:
         if st.kind not in ("rule", "outcome"):
@@ -525,10 +530,10 @@ def validate_consistency(
                     _src(st), set()).add(cap)
     for outcome, per_src in caps_by_outcome.items():
         sets = [s for s in per_src.values() if s]
-        if len(sets) > 1 and any(a != sets[0] for a in sets[1:]):
+        if len(sets) > 1 and not set.intersection(*sets):
             report.add(Finding(
                 "C1", "correction",
-                f"outcome {outcome!r} 各来源关联的 cap 集合不一致: "
+                f"outcome {outcome!r} 各来源没有任何一致的 cap 归属: "
                 + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
     # C2
@@ -550,8 +555,12 @@ def validate_consistency(
                 f"{about!r} 的 before 前置条件各来源不一致: "
                 + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
-    # C3(transition 取值集合,按 attr 分组,跨来源比较)
-    values_by_attr: dict[str, dict[str, set[str]]] = {}
+    # C3(修订十二拍板:不冲突口径,边级比对)
+    # 同一 (attr, from) 的去向集合按来源分组,**交集为空**才报——同一
+    # from 的分支(去向有公共值)= 更完整的描述,兼容;不同转移边
+    # (a→b 与 b→c)= 互补描述同一状态机,不比较。全等口径会把「一份
+    # 文档只描述状态机的一部分」误判为与完整描述冲突。
+    edges_by_from: dict[tuple[str, str], dict[str, set[str]]] = {}
     for st in statements:
         if st.kind != "transition":
             continue
@@ -559,14 +568,14 @@ def validate_consistency(
         t_ = str(st.slots.get("to", ""))
         attr = f_.rsplit(".", 1)[0]
         if attr and f_.startswith("value:"):
-            values_by_attr.setdefault(attr, {}).setdefault(
-                _src(st), set()).update({f_, t_})
-    for attr, per_src in values_by_attr.items():
+            edges_by_from.setdefault((attr, f_), {}).setdefault(
+                _src(st), set()).add(t_)
+    for (attr, from_v), per_src in edges_by_from.items():
         sets = [s for s in per_src.values() if s]
-        if len(sets) > 1 and any(a != sets[0] for a in sets[1:]):
+        if len(sets) > 1 and not set.intersection(*sets):
             report.add(Finding(
                 "C3", "correction",
-                f"attr {attr!r} 各来源 transition 取值集合不一致: "
+                f"attr {attr!r} 的转移 {from_v!r} 各来源没有任何一致的去向: "
                 + "; ".join(f"{src}→{sorted(s)}" for src, s in per_src.items()),
             ))
     return report
@@ -641,6 +650,42 @@ def validate_system_tree(
     for d in deliverables:
         validate_deliverable(d, types=types, report=report)
     validate_tree_ids(deliverables, report=report)
+    # F3(树级,与 release 闸门同口径——评审第三轮:此前 check 只查交付物
+    # id,跨文件重复的接口 id / 片段 id / 路由键要到发版才拦,入库闸门
+    # 漏 F3)。路由键 = (protocol, service, *locator),取代旧注册表
+    # 「先注册者胜」的顺序依赖语义(设计 §7 F3)。
+    ep_seen: dict[str, str] = {}
+    route_seen: dict[tuple, str] = {}
+    for ep in endpoints:
+        src = getattr(ep, "_source", "")
+        if ep.id in ep_seen:
+            report.add(Finding(
+                "F3", "blocking",
+                f"接口 id {ep.id!r} 系统内重复(先见于 {ep_seen[ep.id]})",
+                source=src,
+            ))
+        else:
+            ep_seen[ep.id] = src
+        route = (ep.binding.protocol, ep.service, *ep.binding.locator())
+        if route in route_seen:
+            report.add(Finding(
+                "F3", "blocking",
+                f"路由键 {route} 重复({ep.id} 与先见于 {route_seen[route]} 的接口)",
+                source=src,
+            ))
+        else:
+            route_seen[route] = ep.id
+    st_seen: dict[str, str] = {}
+    for st in statements:
+        src = getattr(st, "_source", "")
+        if st.id in st_seen:
+            report.add(Finding(
+                "F3", "blocking",
+                f"片段 id {st.id!r} 系统内重复(先见于 {st_seen[st.id]})",
+                source=src,
+            ))
+        else:
+            st_seen[st.id] = src
     validate_terms(
         terms.values(), system_id=system_root.name,
         common_ids=set(common_terms), report=report,

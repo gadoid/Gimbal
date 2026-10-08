@@ -133,6 +133,106 @@ class TestValidationEngine:
         report_same = validate_consistency([], [s1, s3])
         assert not [f for f in report_same.corrections if f.rule == "C1"]
 
+    def test_c1_subset_is_compatible(self) -> None:
+        """修订十二不冲突口径:一来源是另一来源的子集 = 部分描述,
+        不报(PRD 只写主干,接口文档列全 → 有公共 cap 即兼容)。"""
+        s1 = Statement(id="st.1", kind="rule",
+                       slots={"about": "cap:a.down",
+                              "violation": "outcome:u.last"})
+        s1._source = "prd.md"
+        s2 = Statement(id="st.2", kind="outcome",
+                       slots={"cap": "cap:a.down", "outcome": "outcome:u.last"})
+        s3 = Statement(id="st.3", kind="outcome",
+                       slots={"cap": "cap:b.del", "outcome": "outcome:u.last"})
+        s2._source = s3._source = "api.md"   # 同来源合并为 {a.down, b.del}
+        report = validate_consistency([], [s1, s2, s3])
+        assert not [f for f in report.corrections if f.rule == "C1"]
+
+    def test_c3_edge_conflict_and_complement(self) -> None:
+        """修订十二不冲突口径(边级):同一 from 去向不相交才报;
+        互补边(a→b 与 b→c)= 部分描述,不报。"""
+        def tr(sid, f, t, src):
+            s = Statement(id=sid, kind="transition",
+                          slots={"cap": "cap:o.x", "from": f, "to": t})
+            s._source = src
+            return s
+        # 互补:doc1 a→b;doc2 b→c(旧集合口径会误报,边级不报)
+        ok = validate_consistency([], [
+            tr("t1", "value:s.p.a", "value:s.p.b", "state1.md"),
+            tr("t2", "value:s.p.b", "value:s.p.c", "state2.md"),
+        ])
+        assert not [f for f in ok.corrections if f.rule == "C3"]
+        # 部分描述:同一 from a,doc1 去向 {b},doc2 去向 {b,c}(分支)→ 不报
+        ok2 = validate_consistency([], [
+            tr("t3", "value:s.p.a", "value:s.p.b", "state1.md"),
+            tr("t4", "value:s.p.a", "value:s.p.b", "state2.md"),
+            tr("t5", "value:s.p.a", "value:s.p.c", "state2.md"),
+        ])
+        assert not [f for f in ok2.corrections if f.rule == "C3"]
+        # 冲突:同一 from a,doc1 → b,doc2 → c(无公共去向)→ 报
+        bad = validate_consistency([], [
+            tr("t6", "value:s.p.a", "value:s.p.b", "state1.md"),
+            tr("t7", "value:s.p.a", "value:s.p.c", "state2.md"),
+        ])
+        assert any(f.rule == "C3" for f in bad.corrections)
+
+
+class TestCheckStageF3:
+    """评审第三轮:check 阶段的树级 F3(与 release 闸门同口径)——
+    跨文件重复的接口 id / 路由键 / 片段 id 在入库闸门即拦,
+    此前只有交付物 id 在 check 查、其余要到发版。"""
+
+    EP_MD = ("---\nid: {fid}\ntype: endpoints\nsystem: x\n---\n"
+             "```gimbal:endpoint\nreview: reviewed\n"
+             "id: {eid}\nsystem: x\nservice: svc\nname: n\n"
+             "binding:\n  protocol: http\n  method: GET\n  path: {path}\n"
+             "responses:\n  '200': {{}}\n```\n")
+    ST_MD = ("---\nid: {fid}\ntype: prd\nsystem: x\n---\n"
+             "```gimbal:statement\nreview: reviewed\n"
+             "id: st.dup\nkind: rule\nslots: {{about: cap:a.b}}\n"
+             "anchor: 'A1'\n```\n原文\n")
+
+    def _tree(self, tmp_path, files: list[tuple[str, str, str, str]]):
+        root = tmp_path / "systems" / "x"
+        (root / "endpoints").mkdir(parents=True, exist_ok=True)
+        (root / "deliverables").mkdir(parents=True, exist_ok=True)
+        from gimbal_plate.dialect.validation import validate_system_tree
+        for fname, fid, eid, path in files:
+            target = root / fname
+            if Path(fname).name.startswith("prd"):
+                target.write_text(self.ST_MD.format(fid=fid), encoding="utf-8")
+            else:
+                target.write_text(
+                    self.EP_MD.format(fid=fid, eid=eid, path=path),
+                    encoding="utf-8")
+        return validate_system_tree(root, types=load_types())
+
+    def test_duplicate_endpoint_id_blocked_at_check(self, tmp_path):
+        rep = self._tree(tmp_path, [
+            ("endpoints/a.md", "x.a", "x.ep", "/a"),
+            ("endpoints/b.md", "x.b", "x.ep", "/b"),
+        ])
+        assert any(f.rule == "F3" and "接口 id" in f.message for f in rep.blocking)
+
+    def test_duplicate_route_key_blocked_at_check(self, tmp_path):
+        rep = self._tree(tmp_path, [
+            ("endpoints/a.md", "x.a", "x.ep1", "/same"),
+            ("endpoints/b.md", "x.b", "x.ep2", "/same"),
+        ])
+        assert any(f.rule == "F3" and "路由键" in f.message for f in rep.blocking)
+
+    def test_duplicate_statement_id_blocked_at_check(self, tmp_path):
+        rep = self._tree(tmp_path, [
+            ("endpoints/a.md", "x.a", "x.ep", "/a"),
+            ("deliverables/prd1.md", "x.p1", "", ""),
+            ("deliverables/prd2.md", "x.p2", "", ""),
+        ])
+        assert any(f.rule == "F3" and "片段 id" in f.message for f in rep.blocking)
+
+    def test_clean_tree_no_f3(self, tmp_path):
+        rep = self._tree(tmp_path, [("endpoints/a.md", "x.a", "x.ep", "/a")])
+        assert not [f for f in rep.blocking if f.rule == "F3"]
+
     def test_c1_source_from_parser(self) -> None:
         """评审 R1 回归:_source 由解析器在生产路径记录(不再手工设置),
         两个真实文件(prd + endpoints)各挂同一 outcome 到不同 cap →

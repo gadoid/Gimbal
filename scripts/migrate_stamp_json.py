@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO / "src" / "gimbal-plate"))
+sys.path.insert(0, str(_REPO / "src"))
+sys.path.insert(0, str(_REPO / "src" / "gimbal-platform" / "backend"))
 
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
@@ -124,7 +125,7 @@ async def main(db_url: str, *, dry_run: bool) -> int:
                 if isinstance(m, EndpointSpec):
                     tree[m.id] = m
     engine = create_async_engine(db_url)
-    migrated = deleted = current = diverged = missing = 0
+    migrated = deleted = current = diverged = drift = missing = 0
     async with engine.connect() as conn:
         rows = (await conn.execute(
             text("SELECT endpoint_id, version, spec_json FROM catalog_versions")
@@ -147,6 +148,8 @@ async def main(db_url: str, *, dry_run: bool) -> int:
                 continue
             old_ver = str(row["version"] or "")
             new_h = shape_hash(ep)
+            item = EndpointDetailView.from_spec(ep).model_dump(
+                mode="json", exclude_none=True)
             if _is_hex_stamp(old_ver):
                 if old_ver == new_h:
                     current += 1          # 已是当前口径
@@ -157,13 +160,22 @@ async def main(db_url: str, *, dry_run: bool) -> int:
                     print(f"  ! {eid}: 戳与新旧口径均不符(真源已变化)— 保留")
                     diverged += 1
                     continue
+            else:
+                # 旧 semver 戳:重落前先字段比对(评审 N3)——旧 spec_json
+                # 有形状缓存且与当前真源有漂移(删字段/增字段/改值域)时
+                # 保留为待适配,不静默吞掉;无形状缓存则首见基线静默重落。
+                old_spec = row["spec_json"] if isinstance(row["spec_json"], dict) else {}
+                from app.services.adaptation_ops import (
+                    diff_field_specs, spec_has_field_cache)
+                if spec_has_field_cache(old_spec) and diff_field_specs(old_spec, item):
+                    print(f"  ! {eid}: 旧戳形状有漂移(真实待适配)— 保留")
+                    drift += 1
+                    continue
             if dry_run:
                 print(f"  would restamp {'(rehash)' if _is_hex_stamp(old_ver) else '(baseline)'}: "
                       f"{eid} {old_ver[:12] or old_ver!r} -> {new_h[:12]}")
                 migrated += 1
                 continue
-            item = EndpointDetailView.from_spec(ep).model_dump(
-                mode="json", exclude_none=True)
             await conn.execute(text(
                 "UPDATE catalog_versions SET version = :v, spec_json = :s "
                 "WHERE endpoint_id = :e"),
@@ -176,8 +188,9 @@ async def main(db_url: str, *, dry_run: bool) -> int:
     await engine.dispose()
     mode = " [dry-run]" if dry_run else ""
     print(f"8m 迁移{mode}: {migrated} 重落 / {deleted} 删除(退役) / "
-          f"{current} 已当前 / {diverged} 真源已变(保留) / {missing} 缺真源(保留)")
-    return 0 if (diverged == 0 and missing == 0) else 1
+          f"{current} 已当前 / {diverged} 真源已变(保留) / "
+          f"{drift} 旧戳漂移(保留为待适配) / {missing} 缺真源(保留)")
+    return 0 if (diverged == 0 and drift == 0 and missing == 0) else 1
 
 
 if __name__ == "__main__":
