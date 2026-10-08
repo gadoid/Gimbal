@@ -1,4 +1,4 @@
-"""批次 F 存量 case 的 PG 侧迁移驱动(评审 M5 入库)。
+"""批次 F 存量 case 的 PG 侧迁移驱动(评审 M5 入库;B2 修正)。
 
 2026-10-08 对远端 PG(192.168.22.106)执行过一次:6 个场景共 176 处
 旧 scratch 伪路径($.response_status/$.response_body.* → $.call.*),
@@ -6,20 +6,30 @@
 scripts/migrate_legacy_case.py 的 migrate_payload(幂等、边界安全);
 本脚本只负责 PG 读写、kind 补齐与备份。
 
-迁移前 payload 备份(含 order_dispatch 改绑前的另一份)落在**执行机
-仓库根**(不入库,含场景业务数据):
-    legacy-path-migration-backup.json      ← 本脚本的备份
-    order_dispatch-rebind-backup.json      ← 同日接口改绑的备份
+**B2 安全纪律(第五轮评审)**:
+- 备份 = **深拷贝**且在任何更新之前落盘(首版 `backup[sid] = d` 存的是
+  引用,`d["definition"] = out` 原地改后备份里全是新路径——不可回滚);
+- 全部更新包在单个 ``conn.transaction()`` 里,中途失败整体回滚,
+  不留半迁移的表;
+- **默认 dry-run**,只有 ``--write`` 才动库。
+
+**历史备份核查结论(2026-10-08,人工核对)**:执行机仓库根的两份备份
+均由带引用 bug 的首版生成,**都不是变更前状态**——
+``legacy-path-migration-backup.json`` 含新路径(旧路径 0 处);
+``order_dispatch-rebind-backup.json`` 已无 order_dispatch 引用(但保留了
+改绑前的 $.response_status 路径)。若需回滚,两类的原态均可确定性重建:
+路径迁移反查 scripts/migrate_legacy_case.py 的映射表反向应用;改绑的
+8 个步骤 endpoint_id 已知(fin.order_entrust.order_dispatch)。备份文件
+不入库(含场景业务数据,已加 .gitignore)。
 
 用法:
-    python scripts/migrate_legacy_case_pg.py --db "$GIMBAL_DB_URL" [--dry-run]
-
---dry-run 只打印将迁移的场景与变更数,不写库。
+    python scripts/migrate_legacy_case_pg.py --db "$GIMBAL_DB_URL" [--write]
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import importlib.util
 import json
 import sys
@@ -37,10 +47,11 @@ _spec.loader.exec_module(mig)
 import asyncpg  # noqa: E402
 
 
-async def main(db_url: str, *, dry_run: bool) -> int:
+async def main(db_url: str, *, write: bool) -> int:
     conn = await asyncpg.connect(db_url)
     rows = await conn.fetch("SELECT scenario_id, payload FROM composer_scenarios")
-    backup, migrated = {}, 0
+    backup: dict = {}
+    pending: list[tuple[str, dict]] = []
     for sid, payload in rows:
         d = json.loads(payload) if isinstance(payload, str) else payload
         definition = d.get("definition") or {}
@@ -49,23 +60,29 @@ async def main(db_url: str, *, dry_run: bool) -> int:
         out, res = mig.migrate_payload(definition)
         if not had_kind:
             out.pop("kind", None)
-        backup[sid] = d
+        backup[sid] = copy.deepcopy(d)           # B2:深拷贝,先留旧态
         if res.changes:
-            migrated += 1
-            print(f"{'would migrate' if dry_run else 'migrated'} "
+            pending.append((sid, d, out))
+            print(f"{'would migrate' if not write else 'migrate'} "
                   f"{sid}: {len(res.changes)} 处 warnings={res.warnings or '无'}")
-            if not dry_run:
-                d["definition"] = out
-                await conn.execute(
-                    "UPDATE composer_scenarios SET payload=$1::jsonb "
-                    "WHERE scenario_id=$2",
-                    json.dumps(d, ensure_ascii=False), sid)
-    if not dry_run and migrated:
-        (_REPO / "legacy-path-migration-backup.json").write_text(
-            json.dumps(backup, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"备份 → {_REPO / 'legacy-path-migration-backup.json'}")
-    print(f"共 {'would migrate' if dry_run else 'migrated'} {migrated} 个场景")
+    print(f"共 {'would migrate' if not write else 'migrate'} {len(pending)} 个场景")
+    if not write or not pending:
+        await conn.close()
+        return 0
+    # B2:备份先落盘(旧态),更新走单事务
+    backup_path = _REPO / "legacy-path-migration-backup.json"
+    backup_path.write_text(
+        json.dumps(backup, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"备份(变更前状态)→ {backup_path}")
+    async with conn.transaction():
+        for sid, d, out in pending:
+            d["definition"] = out
+            await conn.execute(
+                "UPDATE composer_scenarios SET payload=$1::jsonb "
+                "WHERE scenario_id=$2",
+                json.dumps(d, ensure_ascii=False), sid)
     await conn.close()
+    print(f"已提交 {len(pending)} 个场景(单事务)")
     return 0
 
 
@@ -74,9 +91,10 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=os.environ.get("GIMBAL_DB_URL") or "")
-    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--write", action="store_true",
+                    help="默认 dry-run;--write 才写库")
     args = ap.parse_args()
     if not args.db:
         print("error: 缺少连接串 — --db 或环境变量 GIMBAL_DB_URL", file=sys.stderr)
         raise SystemExit(2)
-    raise SystemExit(asyncio.run(main(args.db, dry_run=args.dry_run)))
+    raise SystemExit(asyncio.run(main(args.db, write=args.write)))

@@ -211,6 +211,9 @@ export const useExecutionsStore = defineStore('executions', () => {
   let fallbackTimer: ReturnType<typeof setInterval> | null = null
   /** startPolling 的代际号:stopPolling 递增 → 迟到的 SSE 重连自行退出 */
   let pollGeneration = 0
+  /** SSE 降级标志(N5):true = 实时推送已断、只剩 3s 兜底在拉。
+   *  用标志而非横幅文字匹配(第五轮:改文案即失效)控制收起逻辑 */
+  let sseDegraded = false
 
   function _startFallback(id: number): void {
     _stopFallback()
@@ -218,11 +221,10 @@ export const useExecutionsStore = defineStore('executions', () => {
       const gen = pollGeneration
       const st = detail.value?.status
       // detail 为 null = 首拍基线拉取失败/尚未返回 → 不能停,继续重试;
-      // 终态才停(此时数据稳定,无需再刷;横幅一并收起——M5 小瑕疵:
-      // 「按 3 秒轮询」的提示不该在轮询已停后继续挂着)
+      // 终态才停(此时数据稳定,无需再刷;降级横幅一并收起)
       if (st !== undefined && isTerminalExecutionStatus(st)) {
         _stopFallback()
-        if (pollError.value.includes('按 3 秒')) pollError.value = ''
+        if (sseDegraded) { sseDegraded = false; pollError.value = '' }
         return
       }
       void _refreshOnce(id).catch((e) => {
@@ -373,13 +375,16 @@ export const useExecutionsStore = defineStore('executions', () => {
       }
       // N5:重连耗尽只放弃 SSE,**兜底定时器继续拉取**——兜底存在的意义
       // 恰是 SSE 长期不通的场景(如经会缓冲的代理);此前连兜底一起停,
-      // 状态会永远卡在 running。横幅如实说明当前刷新方式。
+      // 状态会永远卡在 running。横幅如实说明当前刷新方式;降级标志在
+      // 兜底到达终态时收起横幅(不再靠文字匹配,第五轮)。
+      sseDegraded = true
       pollError.value = '实时推送已断开，按 3 秒轮询刷新 — 可手动刷新重试'
     }
   }
 
   function stopPolling() {
     pollGeneration += 1   // 使所有在飞/延迟中的 _pump 重连自行退出
+    sseDegraded = false
     if (streamAbort !== null) {
       streamAbort.abort()
       streamAbort = null

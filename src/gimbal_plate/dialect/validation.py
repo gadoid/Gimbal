@@ -611,53 +611,103 @@ def validate_tree_ids(
     return report
 
 
+@dataclass
+class SystemTree:
+    """一次系统树装配的全部产物。
+
+    评审 J1/J5(第五轮):「同一引擎」不能只靠口头约定——此前
+    validate_system_tree / release / gaps / cli._load_tree / loader 各自
+    遍历,已经出现口径分歧(release 弱于 check、错误处理不一致)。
+    collect_system_tree 是唯一装配点;校验走 validate_system_tree,
+    消费方(release 冻结 / gaps / CLI 检索)复用同一份产物。
+    """
+
+    system_root: Path
+    deliverables: list[Deliverable] = field(default_factory=list)
+    endpoints: list[EndpointSpec] = field(default_factory=list)
+    statements: list[Statement] = field(default_factory=list)
+    terms: dict[str, Term] = field(default_factory=dict)
+    reviewed: list[tuple[str, Any]] = field(default_factory=list)  # (kind, model),8v
+    term_block_review: dict[str, bool] = field(default_factory=dict)  # 含 common
+    common_terms: dict[str, Term] = field(default_factory=dict)
+
+
+def collect_system_tree(
+    system_root: Path, *, with_common: bool = True,
+) -> SystemTree:
+    """解析一个系统目录(+common 参照)为 SystemTree(唯一装配点)。
+
+    DialectError 不在此吞——调用方决定口径:validate_system_tree 转
+    F0 finding(J5),release 转发布失败。
+    """
+    from .parser import parse_markdown
+
+    tree = SystemTree(system_root=system_root)
+    for md in sorted(system_root.rglob("*.md")):
+        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+        tree.deliverables.append(d)
+        for b in d.blocks():
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    tree.endpoints.append(m)
+                    if b.review == "reviewed":
+                        tree.reviewed.append(("endpoint", m))
+                elif isinstance(m, Statement):
+                    tree.statements.append(m)
+                    if b.review == "reviewed":
+                        tree.reviewed.append(("statement", m))
+                elif isinstance(m, Term):
+                    tree.terms[m.id] = m
+                    tree.term_block_review[m.id] = (b.review == "reviewed")
+                    if b.review == "reviewed":
+                        tree.reviewed.append(("term", m))
+    if with_common:
+        common_root = system_root.parent / "common"
+        if common_root.is_dir() and system_root.name != "common":
+            for md in sorted(common_root.rglob("*.md")):
+                d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
+                for b in d.blocks("term"):
+                    for m in b.models():
+                        if isinstance(m, Term):
+                            tree.common_terms[m.id] = m
+                            tree.term_block_review[m.id] = (b.review == "reviewed")
+    return tree
+
+
 def validate_system_tree(
     system_root: Path,
     *,
     types: dict[str, Any] | None = None,
     report: ValidationReport | None = None,
+    tree: SystemTree | None = None,
 ) -> ValidationReport:
-    """系统级校验引擎——CLI ``plate check`` 与 HTTP ``system/action/check``
-    的**同一**实现（评审 R10：此前两处各写一份装配，HTTP 缺 common 参照
-    与树级 F3，引用 common 词条时误报 S2 阻塞、结论与 CLI 不一致）。
+    """系统级校验引擎——CLI ``plate check`` / HTTP ``system/action/check``
+    / ``release_system`` 机械检查的**同一**实现。
 
-    装配口径与 release 的机械检查一致：单交付物规则（F1/F2/S1/S3）+
-    树级 F3 + 词条 T1–T6（含 ``systems/common`` 参照，T1 查重名、
-    T2/S2 消除对 common 的误报）+ 引用 S2 + 一致性 C1–C3。
+    装配口径:单交付物规则(F1/F2/S1/S3)+ 树级 F3(交付物 id / 接口
+    id / 路由键 / 片段 id / system 字段与目录一致性)+ 词条 T1–T6
+    (含 ``systems/common`` 参照)+ 引用 S2 + 一致性 C1–C3。
+
+    J5:方言级解析错误在此统一转 F0(带 e.source/e.line)——CLI 与
+    HTTP 不再各自拆字符串或裸 500。
     """
-    from .parser import parse_markdown
+    from .parser import DialectError
 
     report = report if report is not None else ValidationReport()
     types = types if types is not None else load_types()
-    deliverables: list[Deliverable] = []
-    endpoints: list[EndpointSpec] = []
-    statements: list[Statement] = []
-    terms: dict[str, Term] = {}
-    for md in sorted(system_root.rglob("*.md")):
-        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-        deliverables.append(d)
-        for b in d.blocks():
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    endpoints.append(m)
-                elif isinstance(m, Statement):
-                    statements.append(m)
-                elif isinstance(m, Term):
-                    terms[m.id] = m
+    if tree is None:
+        try:
+            tree = collect_system_tree(system_root)
+        except DialectError as e:
+            report.add(Finding("F0", "blocking", str(e),
+                               source=e.source, line=e.line))
+            return report
+    endpoints, statements = tree.endpoints, tree.statements
+    common_terms = tree.common_terms
 
-    common_terms: dict[str, Term] = {}
-    common_root = system_root.parent / "common"
-    if common_root.is_dir() and system_root.name != "common":
-        for md in sorted(common_root.rglob("*.md")):
-            d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-            for b in d.blocks("term"):
-                for m in b.models():
-                    if isinstance(m, Term):
-                        common_terms[m.id] = m
-
-    for d in deliverables:
+    for d in tree.deliverables:
         validate_deliverable(d, types=types, report=report)
-    validate_tree_ids(deliverables, report=report)
+    validate_tree_ids(tree.deliverables, report=report)
     # F3(树级,与 release 闸门同口径——评审第三轮:此前 check 只查交付物
     # id,跨文件重复的接口 id / 片段 id / 路由键要到发版才拦,入库闸门
     # 漏 F3)。路由键 = (protocol, service, *locator),取代旧注册表
@@ -666,6 +716,15 @@ def validate_system_tree(
     route_seen: dict[tuple, str] = {}
     for ep in endpoints:
         src = getattr(ep, "_source", "")
+        # J3:接口 system 字段须与所在目录一致——不一致时 loader 会把它
+        # 注册到别的系统下,check/release 冻结的归属与查询面分裂
+        if ep.system != system_root.name:
+            report.add(Finding(
+                "F3", "blocking",
+                f"接口 {ep.id!r} 的 system 字段 {ep.system!r} 与所在目录 "
+                f"{system_root.name!r} 不一致",
+                source=src,
+            ))
         if ep.id in ep_seen:
             report.add(Finding(
                 "F3", "blocking",
@@ -695,11 +754,11 @@ def validate_system_tree(
         else:
             st_seen[st.id] = src
     validate_terms(
-        terms.values(), system_id=system_root.name,
+        tree.terms.values(), system_id=system_root.name,
         common_ids=set(common_terms), report=report,
     )
     validate_references(
-        endpoints, statements, terms, common_terms=common_terms, report=report,
+        endpoints, statements, tree.terms, common_terms=common_terms, report=report,
     )
     validate_consistency(endpoints, statements, report=report)
     return report

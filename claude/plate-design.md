@@ -32,6 +32,16 @@
 > - 小项：YAML 显式 `''` 仍是空串的对照断言补入 test_yaml_core_schema；前端兜底轮询到达终态后收起「按 3 秒轮询」横幅。
 > - **N4 拍板（凭据暴露，2026-10-08 用户裁定 = C 维持现状）**：仓库确认私网——git 历史与 HEAD 少量文件中的 `gimbal:gimbal` 口令仅对应本地 compose 实例（127.0.0.1:15432，仅本机可达）与远端 PG（192.168.22.106，纯内网），暴露面 = 仓库可见者，可接受；不清历史、不轮换。**前置条件成文：仓库若转公开，必须先轮换远端 PG 口令（并使本地/远端口令分离）再公开**——历史不可变，届时清理无效，轮换是唯一治本。
 > - **S1.5 质量尾项（一次性登记，合入后逐个消化）**：S4 缺失、T5 不比较别名与他人 label、T3/T6 对 common 目标误阻塞、F3 finding 行号为 0；YAML 合并键静默成字面量、复合键裸 TypeError、代码块内 `#` 行被当标题切分；`responses` 空集通过校验、列表块不继承 service、P8 嵌套测试恒真；平台侧 hash 显示截断不一致、`open_batch` 空戳、`_ep_key_map`、`baselinedNow` 无界面展示；bootstrap contract 工具——死模块引用已改为按理由跳过（目录可收集，第五轮 review 收口），余 43 项休眠腐化（测试数据已迁 call 形态、fake client 未跟上等，不在任何 CI 路径）随附录 C 整训。
+> 2026-10-08 修订十三（第五轮评审收口——B1/B2 阻塞项 + J1–J5 主要项）：
+> - **B1 安全纪律**：system 动作（gaps/check/release）的系统名**只**来自路径参数——请求体 `_system` 注入通道删除（曾可路径穿越并在任意位置写 manifest）；校验链 = 名字格式 `^[a-z][a-z0-9_-]*$` → 跨 loader 根存在性 → `resolve()` 包含性（防 `../` 与符号链接逃逸）；系统不存在返回 404（此前 nonexistent 返回 200 ok:true 假绿）。
+> - **B2 迁移纪律**：PG 迁移驱动（scripts/migrate_legacy_case_pg.py）备份 = 深拷贝 + **任何更新之前落盘**（首版存引用，原地改后备份全为新路径、不可回滚）；全部更新包单事务；**默认 dry-run**，`--write` 才动库；`*-backup.json` 入 .gitignore。**历史备份核查结论**：执行机两份备份均由带 bug 首版生成、皆为变更后状态——两类原态均可确定性重建（路径映射反查 / 改绑 id 已知）。
+> - **J1 同一引擎落地**：新增 `collect_system_tree` 为**唯一装配点**（validation），validate_system_tree / release / HTTP gaps / CLI `_load_tree` 全部复用——「5 份遍历」收敛为 1 份 + loader；release 不再弱于 check（路由键/树级 F3/J3 在发布闸门同样生效）。
+> - **J2 数据根同源**：HTTP system 动作改用 loader 的 `systems_roots()`（认 `PLATE_SYSTEMS_PATH`）——服务设该变量时不再出现「查询读 A 树、发版冻 B 树」；gaps 对 0 接口/0 片段/0 词条的空树报 422（wheel 部署未配根时不再静默零报表）。
+> - **J3**：接口 `system` 字段与所在目录一致性进 F3（check 阻塞）+ loader 注册时 fail-fast。
+> - **J4**：`field-defaults` 对无请求体接口返回空列表（不再 500）。
+> - **J5**：方言错误统一在 `validate_system_tree` 内转 F0（用 `e.source`/`e.line`）——CLI 弃字符串拆分（Windows 盘符路径拆错列），HTTP 不再裸 500。
+> - 小项：M2 未设 `PLATE_REPO_ROOT` 时 CLI 给人话提示；M3 的 C1 测试改环形多元素集（三个单元素集两两本就不相交，钉不住「全局交集」口径）；bootstrap 跳过守卫的 ImportError 收窄到 `gimbal_plate.systems.*`（自身 import 失败照常炸）；前端降级横幅改 `sseDegraded` 标志（不再靠横幅文字匹配，改文案即失效）。
+> - **S1.5 追加登记（第五轮次要项，合入后消化）**：注册表失败不回滚（原子重载落地时升主要）；release 文件/输入处理组——manifest 非原子写、releases 目录混入非版本名目录时 release_id 抛 ValueError、0 对象可发版、common 可单独发版（违反 N3）、checklist 非字典 500；系统作用域对象动作不校验归属（`/systems/platform/endpoint/fin.…/action/*` 可作用于 fin）；`export/gimbal.py _interpolate` 只处理顶层值且数字转字符串；`test_export_dispatch` 的 `hasattr(typing, get_args)` 恒真断言；后端 4 个 contract 测试在执行器 CLI 不可用时报失败应改跳过；迁移脚本 docstring 内网 IP（N4=C 已裁定维持）。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---

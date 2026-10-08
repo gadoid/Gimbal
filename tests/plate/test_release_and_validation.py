@@ -149,10 +149,11 @@ class TestValidationEngine:
         assert not [f for f in report.corrections if f.rule == "C1"]
 
     def test_c1_no_consensus_across_three_sources_reports(self) -> None:
-        """修订十二口径钉死(M3 拍板):判「全部来源的交集为空」——三份
-        文档两两有交集、但没有一个 cap 是三方都认可的({del,demote}/
-        {demote,login}/{login,del})时**报**。没有共同事实 = 无一致归属,
-        交矫正裁定;any-pairwise-disjoint 口径会漏掉这种环形分歧。"""
+        """修订十二口径钉死(M3 拍板,第五轮评审修正用例):判「**全部
+        来源集合的交集**为空」——必须用两两有交集、但无三方一致公共
+        cap 的环形集({del,demote}/{demote,login}/{login,del})才能
+        区分于 any-pairwise-disjoint 口径(三个单元素集两两本就不相交,
+        两种口径都会报,钉不住决定)。环形分歧 = 没有共同事实,要报。"""
         def rule(sid, cap, src):
             s = Statement(id=sid, kind="rule",
                           slots={"about": cap, "violation": "outcome:u.last"})
@@ -160,8 +161,11 @@ class TestValidationEngine:
             return s
         r = validate_consistency([], [
             rule("s1", "cap:del", "prd.md"),
+            rule("s1b", "cap:demote", "prd.md"),      # prd = {del, demote}
             rule("s2", "cap:demote", "api.md"),
+            rule("s2b", "cap:login", "api.md"),        # api = {demote, login}
             rule("s3", "cap:login", "state.md"),
+            rule("s3b", "cap:del", "state.md"),        # state = {login, del}
         ])
         assert any(f.rule == "C1" for f in r.corrections)
 
@@ -492,3 +496,65 @@ class TestGaps:
                                 json={"signed_by": "tester"})
         assert resp.status_code == 400
         assert "system required" in resp.json()["error"]["message"]
+
+    def test_b1_system_from_body_rejected(self, http_client) -> None:
+        """评审 B1:系统名不得来自请求体(_system 注入曾可路径穿越并
+        在任意位置写 manifest);非法名 400,不存在 404(不再假绿)。"""
+        # ① _system 注入被忽略(全局路由无路径参数)→ 400
+        r1 = http_client.post("/api/system/action/check",
+                              json={"_system": "fin"})
+        assert r1.status_code == 400
+        # ② 路径穿越/非法名 → 400(格式闸先拦)
+        r2 = http_client.post("/api/system/action/gaps",
+                              json={"_system": "../tests/plate"})
+        assert r2.status_code == 400
+        r3 = http_client.post("/api/systems/../tests/plate/system/action/check")
+        assert r3.status_code in (400, 404)
+        # ③ 系统作用域路由下,不存在的系统 → 404(此前 200 ok:true 假绿)
+        r4 = http_client.post("/api/systems/nonexistent/system/action/check")
+        assert r4.status_code == 404
+        assert r4.json()["error"]["code"] == "system_not_found"
+
+    def test_j1_release_blocked_by_route_key_dup(self, tmp_path: Path) -> None:
+        """评审 J1:release 与 check 同引擎——路由键重复在发布闸门即拦
+        (此前 release 自带装配弱于 check,照常冻结)。"""
+        systems = tmp_path / "systems"
+        (systems / "x" / "endpoints").mkdir(parents=True)
+        ep = ("---\nid: x.ep.{n}\ntype: endpoints\nsystem: x\n---\n"
+              "```gimbal:endpoint\nreview: reviewed\n"
+              "id: x.ep.{n}\nsystem: x\nservice: svc\nname: n{n}\n"
+              "binding:\n  protocol: http\n  method: GET\n  path: /same\n"
+              "responses:\n  '200': {{}}\n```\n")
+        (systems / "x" / "endpoints" / "a.md").write_text(
+            ep.format(n=1), encoding="utf-8")
+        (systems / "x" / "endpoints" / "b.md").write_text(
+            ep.format(n=2), encoding="utf-8")
+        r = release_system(systems / "x", artifacts_root=tmp_path / "art",
+                           signed_by="t")
+        assert not r.success
+        assert any(f.rule == "F3" and "路由键" in f.message
+                   for f in r.report.blocking)
+
+    def test_j3_system_field_mismatch_blocked(self, tmp_path: Path) -> None:
+        """评审 J3:接口 system 字段与所在目录不一致 → 阻塞(否则 loader
+        注册到别的系统下,查询面与冻结归属分裂)。"""
+        systems = tmp_path / "systems"
+        (systems / "x" / "endpoints").mkdir(parents=True)
+        (systems / "x" / "endpoints" / "a.md").write_text(
+            "---\nid: x.ep.a\ntype: endpoints\nsystem: x\n---\n"
+            "```gimbal:endpoint\nreview: reviewed\n"
+            "id: platform.ep.a\nsystem: platform\nservice: svc\nname: a\n"
+            "binding:\n  protocol: http\n  method: GET\n  path: /a\n"
+            "responses:\n  '200': {}\n```\n",
+            encoding="utf-8")
+        from gimbal_plate.dialect.validation import validate_system_tree
+        rep = validate_system_tree(systems / "x", types=load_types())
+        assert any(f.rule == "F3" and "不一致" in f.message for f in rep.blocking)
+
+    def test_j4_field_defaults_without_request(self, http_client) -> None:
+        """评审 J4:无请求体的接口(GET)调 field-defaults 返回空列表,
+        不再 500。fin.account.query_balance 即无 request 形态。"""
+        resp = http_client.post(
+            "/api/endpoint/fin.account.query_balance/action/field-defaults")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["field_defaults"] == []

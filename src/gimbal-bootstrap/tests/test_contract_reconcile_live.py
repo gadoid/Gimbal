@@ -61,7 +61,9 @@ def client():
 # 实例结构(e.api.*),整体前提已退役;整文件跳过留痕,继任随附录 C。
 try:
     from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as _ALL  # noqa: F401
-except ImportError:  # 含"命名空间包可 import 但属性已删"的残留形态
+except ImportError as e:  # 含"命名空间包可 import 但属性已删"的残留形态
+    if "gimbal_plate.systems" not in str(e):
+        raise  # gimbal_plate 自身 import 失败不是预期的退役形态——照常炸
     pytest.skip(
         "A2 已删 Python 接口实例;附录 C 契约工具待重定向",
         allow_module_level=True,

@@ -648,7 +648,9 @@ def test_every_case_hits_a_route_the_platform_actually_declares():
     # A2 已删 Python 接口实例(方言真源取代)——路由存在性门待重定向
     try:
         from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
-    except ImportError:
+    except ImportError as e:
+        if "gimbal_plate.systems" not in str(e):
+            raise  # gimbal_plate 自身 import 失败不是预期的退役形态——照常炸
         pytest.skip("A2 已删 Python 接口实例;路由对账随附录 C 重定向")
 
     from gimbal_bootstrap.orchestrator import load_cases

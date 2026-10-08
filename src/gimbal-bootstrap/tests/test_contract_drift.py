@@ -20,7 +20,9 @@ from gimbal_bootstrap.contract_gen import fetch_openapi
 # 整文件跳过留痕;契约对账的继任(真源树 vs OpenAPI)随附录 C 评估。
 try:
     from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
-except ImportError:  # 含"命名空间包可 import 但属性已删"的残留形态
+except ImportError as e:  # 含"命名空间包可 import 但属性已删"的残留形态
+    if "gimbal_plate.systems" not in str(e):
+        raise  # gimbal_plate 自身 import 失败不是预期的退役形态——照常炸
     pytest.skip(
         "A2 已删 Python 接口实例(方言真源取代);附录 C 契约工具待重定向",
         allow_module_level=True,

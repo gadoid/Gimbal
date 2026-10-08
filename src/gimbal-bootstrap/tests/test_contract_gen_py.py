@@ -268,7 +268,9 @@ def test_generated_constants_match_plate_system_info():
     # A2 已删 Python 接口实例(方言真源取代)——常量对账门待重定向到真源树
     try:
         from gimbal_plate.systems.platform import system_info as si
-    except ImportError:
+    except ImportError as e:
+        if "gimbal_plate.systems" not in str(e):
+            raise  # gimbal_plate 自身 import 失败不是预期的退役形态——照常炸
         pytest.skip("A2 已删 Python 接口实例;常量对账随附录 C 重定向")
 
     assert si.PLATFORM_SYSTEM == SYSTEM

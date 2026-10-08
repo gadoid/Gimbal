@@ -25,15 +25,11 @@ from pathlib import Path
 from typing import Any
 
 from gimbal_plate.dialect import EndpointSpec, Statement, Term, object_hash
-from gimbal_plate.dialect.parser import Deliverable, parse_markdown
 from gimbal_plate.dialect.validation import (
     Finding,
     ValidationReport,
     load_types,
-    validate_consistency,
-    validate_deliverable,
-    validate_references,
-    validate_terms,
+    validate_system_tree,
 )
 
 DIALECT_VERSION = "1"   # 方言版本(manifest 记录,修订四)
@@ -132,76 +128,22 @@ def release_system(
     if not signed_by or not signed_by.strip():
         return ReleaseResult(success=False, message="签发人(signed_by)不可为空")
 
-    # ── 装载（working 树;common 参照随引用系统一并冻结,N3）──
-    deliverables: list[Deliverable] = [
-        parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-        for md in sorted(system_root.rglob("*.md"))
-    ]
-    common_terms: dict[str, Term] = {}
-    common_review: dict[str, bool] = {}
-    common_root = system_root.parent / "common"
-    if common_root.is_dir() and system_root.name != "common":
-        for md in sorted(common_root.rglob("*.md")):
-            d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-            for b in d.blocks("term"):
-                for m in b.models():
-                    if isinstance(m, Term):
-                        common_terms[m.id] = m
-                        common_review[m.id] = (b.review == "reviewed")
+    # ── 装载 + ① 机械检查(J1,第五轮:与 check 同一引擎)──
+    # 此前 release 自带一套装配,弱于 check(不跑树级 F3/路由键/J3);
+    # 现与 validate_system_tree 共用 collect_system_tree 唯一装配点,
+    # 发布闸门只保留自己特有的步骤(签发/F4/闭包/冻结)。
+    from gimbal_plate.dialect.parser import DialectError
+    from gimbal_plate.dialect.validation import collect_system_tree
 
-    # ── ① 机械检查 ──
     types = load_types(repo_root / "types" / "types.yaml")
-    report = ValidationReport()
-    endpoints: list[EndpointSpec] = []
-    statements: list[Statement] = []
-    terms: dict[str, Term] = {}
-    reviewed: list[tuple[str, Any]] = []   # 只收 reviewed(8v)
-    statement_ids: set[str] = set()
-
-    for d in deliverables:
-        validate_deliverable(d, types=types, report=report)
-        for b in d.blocks():
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    endpoints.append(m)
-                    if b.review == "reviewed":
-                        reviewed.append(("endpoint", m))
-                elif isinstance(m, Statement):
-                    if m.id in statement_ids:
-                        report.add(Finding(
-                            "F3", "blocking", f"片段 id {m.id!r} 系统内重复"))
-                    statement_ids.add(m.id)
-                    statements.append(m)
-                    if b.review == "reviewed":
-                        reviewed.append(("statement", m))
-                elif isinstance(m, Term):
-                    terms[m.id] = m
-                    if b.review == "reviewed":
-                        reviewed.append(("term", m))
-
-    ep_ids = [e.id for e in endpoints]
-    dup_eps = {i for i in ep_ids if ep_ids.count(i) > 1}
-    if dup_eps:
-        report.add(Finding(
-            "F3", "blocking", f"接口 id 系统内重复: {sorted(dup_eps)[:3]}"))
-
-    # 块信封映射(评审 P0-15):区分「词条不存在」与「词条为 draft」
-    term_block_review: dict[str, bool] = {}
-    for d in deliverables:
-        for b in d.blocks("term"):
-            for m in b.models():
-                if isinstance(m, Term):
-                    term_block_review[m.id] = (b.review == "reviewed")
-    term_block_review.update(common_review)
-
-    validate_terms(
-        terms.values(), system_id=system_root.name,
-        common_ids=set(common_terms), report=report,
-    )
-    validate_references(
-        endpoints, statements, terms, common_terms=common_terms, report=report,
-    )
-    validate_consistency(endpoints, statements, report=report)
+    try:
+        tree = collect_system_tree(system_root)
+    except DialectError as e:
+        return ReleaseResult(success=False, message=f"方言错误: {e}")
+    report = validate_system_tree(system_root, types=types, tree=tree)
+    endpoints, statements = tree.endpoints, tree.statements
+    terms, common_terms = tree.terms, tree.common_terms
+    reviewed, term_block_review = tree.reviewed, dict(tree.term_block_review)
 
     # F4:交付件清单阈值(判定项与 gaps 共用)
     from gimbal_plate.dialect.gaps import gap_items

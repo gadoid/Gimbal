@@ -244,6 +244,12 @@ def _load_system_dir(
             for ep in block.models():
                 if not isinstance(ep, EndpointSpec):
                     continue
+                # J3(第五轮):system 字段与所在目录必须一致——否则注册到
+                # 别的系统下,查询面与 check/release 的归属判定分裂
+                if ep.system != system_id:
+                    raise ValueError(
+                        f"{md}: 接口 {ep.id!r} 的 system 字段 {ep.system!r} "
+                        f"与所在目录 {system_id!r} 不一致")
                 reg.register_endpoint(ep)
                 counts["endpoints"] += 1
     return counts

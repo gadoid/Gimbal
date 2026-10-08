@@ -36,3 +36,6 @@ src/gimbal-bootstrap/.env
 # S1-0 B1: twin_generator 实验产物不入库（工具代码保留于 tools/twin_generator，标注实验）
 src/gimbal-plate/tmp/
 plate_artifacts/
+
+# 评审 B2:迁移/改绑的备份文件含场景业务数据,不入库
+*-backup.json

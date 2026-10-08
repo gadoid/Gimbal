@@ -20,6 +20,7 @@ Otherwise FastAPI matches /systems as dim="systems", or eats action names into {
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -772,6 +773,45 @@ def action_endpoint_find(
 
 
 
+# ── system 动作的系统名解析(B1/J2,第五轮评审)───────────────────
+# 安全纪律:系统名**只**来自路径参数(/api/systems/{system}/...);
+# 绝不接受请求体(评审 B1:_system 注入曾可路径穿越并在任意位置写
+# manifest)。校验链 = 名字格式 → 跨 loader 根查找 → resolve 包含性
+# (防 ../ 与符号链接逃逸);不存在返回 404(此前 nonexistent 返回
+# 200 ok:true 的假绿)。数据根与查询面同源(loader.systems_roots,
+# 认 PLATE_SYSTEMS_PATH)——评审 J2:此前 HTTP 动作用包位置推导,
+# 服务设 PLATE_SYSTEMS_PATH 时会出现「查询读 A 树、发版冻 B 树」。
+_SYSTEM_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+
+def _resolve_action_system(request: Any) -> "Path":
+    from gimbal_plate.loader import systems_roots
+
+    system = request.path_params.get("system") or ""
+    if not system:
+        raise PlateHTTPError(
+            http_status=400, code=ErrorCode.INVALID_ACTION,
+            message="system required: use /api/systems/{system}/system/action/{name}",
+        )
+    if not _SYSTEM_NAME_RE.match(system):
+        raise PlateHTTPError(
+            http_status=400, code=ErrorCode.INVALID_ACTION,
+            message=f"invalid system name {system!r} (expected ^[a-z][a-z0-9_-]*$)",
+        )
+    for root in systems_roots():
+        candidate = (root / system).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError:
+            continue  # 解析后逃出根(符号链接等)——不在此根命中
+        if candidate.is_dir():
+            return candidate
+    raise PlateHTTPError(
+        http_status=404, code=ErrorCode.SYSTEM_NOT_FOUND,
+        message=f"system {system!r} not found under any systems root",
+    )
+
+
 def action_system_gaps(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
@@ -780,34 +820,30 @@ def action_system_gaps(
     dim-node action:``POST /api/system/{id}/system/action/gaps``。
     """
     _ = item, body, index
-    from gimbal_plate.dialect import EndpointSpec, Statement, Term
     from gimbal_plate.dialect.gaps import gaps_report
-    from gimbal_plate.dialect.parser import parse_markdown
-    from pathlib import Path as _P
+    from gimbal_plate.dialect.parser import DialectError
+    from gimbal_plate.dialect.validation import collect_system_tree
 
-    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
-    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
-    # 不再默认回落 fin(静默指向/冻结错误系统)。
-    system = request.path_params.get("system") or (body or {}).get("_system") or ""
-    if not system:
+    # B1/J2:系统名只认路径参数,经 _resolve_action_system 统一校验
+    # (格式/跨 loader 根存在性/包含性);数据根与查询面同源。
+    system_root = _resolve_action_system(request)
+    try:
+        tree = collect_system_tree(system_root, with_common=False)
+    except DialectError as e:
         raise PlateHTTPError(
-            http_status=400, code=ErrorCode.INVALID_ACTION,
-            message="system required: use /api/systems/{system}/system/action/gaps",
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=f"system tree parse error: {e}",
+        ) from e
+    # J2:0 接口且 0 片段 0 词条 → 大概率数据根配错(如 wheel 部署未设
+    # PLATE_SYSTEMS_PATH),静默返回零报表比报错更危险
+    if not (tree.endpoints or tree.statements or tree.terms):
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=f"system {system_root.name!r} tree is empty "
+                    f"(no endpoints/statements/terms) — wrong systems root?",
         )
-    repo = _P(__file__).resolve().parents[3]
-    system_root = repo / "systems" / system
-    endpoints, statements, terms = [], [], {}
-    for md in sorted(system_root.rglob("*.md")):
-        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-        for b in d.blocks():
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    endpoints.append(m)
-                elif isinstance(m, Statement):
-                    statements.append(m)
-                elif isinstance(m, Term):
-                    terms[m.id] = m
-    return ok_response(gaps_report(endpoints, statements, terms), dim="system")
+    return ok_response(
+        gaps_report(tree.endpoints, tree.statements, tree.terms), dim="system")
 
 
 def action_system_check(
@@ -815,24 +851,12 @@ def action_system_check(
 ) -> dict[str, Any]:
     """校验报告(``check``,规则编号即错误码;与 CLI 同一引擎,G2/R10)。"""
     _ = item, body, index
-    from gimbal_plate.dialect.validation import load_types, validate_system_tree
-    from pathlib import Path as _P
-
-    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
-    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
-    # 不再默认回落 fin(静默指向/冻结错误系统)。
-    system = request.path_params.get("system") or (body or {}).get("_system") or ""
-    if not system:
-        raise PlateHTTPError(
-            http_status=400, code=ErrorCode.INVALID_ACTION,
-            message="system required: use /api/systems/{system}/system/action/check",
-        )
-    repo = _P(__file__).resolve().parents[3]
-    # 评审 R10:与 CLI `plate check` 调同一 validate_system_tree —— 此前
-    # HTTP 版自带装配且缺 common 参照与树级 F3,引用 common 词条时误报
-    # S2 阻塞,与 CLI 结论不一致。
-    report = validate_system_tree(
-        repo / "systems" / system, types=load_types(repo / "types" / "types.yaml"))
+    from gimbal_plate.dialect.validation import validate_system_tree
+    # B1/J2:系统名只认路径参数,统一走 _resolve_action_system;
+    # 与 CLI 同一 validate_system_tree(R10),方言错误在引擎内转 F0(J5),
+    # 不再裸 500。
+    system_root = _resolve_action_system(request)
+    report = validate_system_tree(system_root)
     return ok_response(report.to_dict(), dim="system")
 
 
@@ -844,22 +868,14 @@ def action_system_release(
     from pathlib import Path as _P
     from gimbal_plate.release import release_system
 
-    # 评审 P0-3:全局动作路由(/{dim}/action/{name})的 path_params 无 system,
-    # 系统作用域路由为 /systems/{system}/... → path_params["system"];
-    # 不再默认回落 fin(静默指向/冻结错误系统)。
-    system = request.path_params.get("system") or (body or {}).get("_system") or ""
-    # 评审 R2:release 与 gaps/check 同守卫 —— 缺系统名直接 400。否则
-    # repo/"systems"/"" 解析到 systems/ 本身,整棵树当一个系统过发布闸门
-    # (此前只因 common/system.md 过不了 F2 才没真的冻结出去)。
-    if not system:
-        raise PlateHTTPError(
-            http_status=400, code=ErrorCode.INVALID_ACTION,
-            message="system required: use /api/systems/{system}/system/action/release",
-        )
+    # B1/J2:系统名只认路径参数(评审 B1:_system 注入曾可路径穿越并在
+    # 任意位置写 manifest),统一走 _resolve_action_system;构件输出仍落
+    # 包位置推导的仓库根 plate_artifacts(构件目录可配置属 S1.5)。
+    system_root = _resolve_action_system(request)
     repo = _P(__file__).resolve().parents[3]
     body = body or {}
     result = release_system(
-        repo / "systems" / system,
+        system_root,
         artifacts_root=repo / "plate_artifacts",
         signed_by=str(body.get("signed_by") or ""),
         checklist=body.get("checklist") or None,

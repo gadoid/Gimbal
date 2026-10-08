@@ -34,28 +34,24 @@ _TYPES = _REPO / "types" / "types.yaml"
 def _repo_system(system: str) -> Path:
     root = _REPO / "systems" / system
     if not root.is_dir():
-        print(f"error: 未知系统 {system!r}(目录不存在: {root})", file=sys.stderr)
+        hint = ""
+        if not os.environ.get("PLATE_REPO_ROOT") and "site-packages" in str(_REPO):
+            hint = ("\n(wheel 安装的包位置回溯不到数据目录——"
+                    "设 PLATE_REPO_ROOT 指向仓库 checkout)")
+        print(f"error: 未知系统 {system!r}(目录不存在: {root}){hint}",
+              file=sys.stderr)
         raise SystemExit(2)
     return root
 
 
 def _load_tree(system: str):
-    from gimbal_plate.dialect import EndpointSpec, Statement, Term, parse_markdown
+    """装配系统树(评审 J1:与 check/release/gaps 同一 collect_system_tree,
+    不再各写一份遍历)。"""
+    from gimbal_plate.dialect.validation import collect_system_tree
 
     root = _repo_system(system)
-    deliverables, endpoints, statements, terms = [], [], [], {}
-    for md in sorted(root.rglob("*.md")):
-        d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
-        deliverables.append(d)
-        for b in d.blocks():
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    endpoints.append(m)
-                elif isinstance(m, Statement):
-                    statements.append(m)
-                elif isinstance(m, Term):
-                    terms[m.id] = m
-    return root, deliverables, endpoints, statements, terms
+    tree = collect_system_tree(root)
+    return (root, tree.deliverables, tree.endpoints, tree.statements, tree.terms)
 
 
 # ── 命令 ──────────────────────────────────────────────────────────
@@ -166,12 +162,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     try:
         _check_body(args, text, types, report)
     except DialectError as e:
-        # 方言错误不裸抛 traceback(评审 P1):转 finding,退出码 1
+        # 方言错误不裸抛 traceback(评审 P1):转 finding,退出码 1。
+        # J5:直接用异常自带的 source/line——此前拆报错字符串,Windows
+        # 盘符路径(C:\...)会把列拆错;系统级 check 的 F0 已由
+        # validate_system_tree 内部生成,这里兜 --stdin 单文件路径。
         from gimbal_plate.dialect.validation import Finding
         report.add(Finding("F0", "blocking", str(e),
-                           source=str(e).split(":", 1)[0],
-                           line=int(str(e).split(":", 2)[1])
-                           if str(e).count(":") >= 2 else 0))
+                           source=e.source, line=e.line))
     _emit_check(args, report)
     return 0 if report.ok else 1
 

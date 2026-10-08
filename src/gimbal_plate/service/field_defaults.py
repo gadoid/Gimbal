@@ -93,8 +93,11 @@ def compute_field_defaults(
     # 2026-09-05 目录化:全量出默认值(children 树展开,含嵌套叶子 —
     # 前端行壳预填用);form/carry 面划分是场景语境,由 platform 按
     # 解析态(step.field_states ?? entry.state)过滤,plate 不带参数。
+    # J4(第五轮):request 为 None(GET 无请求体)时返回空列表——
+    # 其他调用点都判了空,这里漏判曾直接 500。
     field_defaults: list[dict[str, Any]] = []
-    for f in iter_declarations(endpoint.request.declarations):
+    for f in iter_declarations(
+            (endpoint.request.declarations if endpoint.request else None) or []):
         kind, value = _classify(f)
         field_defaults.append(
             {"name": f.name, "path": f.path, "kind": kind, "value": value}
