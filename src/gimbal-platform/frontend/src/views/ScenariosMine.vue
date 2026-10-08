@@ -20,6 +20,19 @@
         @input="writeSearch(($event.target as HTMLInputElement).value)"
       />
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
+      <!-- 浏览镜头(方案 §5.1):admin 默认「我的」,显式切「全员视角」
+           恢复全量。镜头是查询偏好(记本地),不动权限边界。 -->
+      <button
+        v-if="lensAvailable"
+        type="button"
+        class="slib-lens"
+        :class="{ on: lensAll }"
+        :data-testid="lensAll ? 'mine-lens-all-on' : 'mine-lens-all-off'"
+        :title="lensAll
+          ? '当前:全员视角(全部场景)——点按回「我的」'
+          : '当前:我的——点按切「全员视角」看全部场景'"
+        @click="toggleLens"
+      >{{ lensAll ? '◉ 全员视角' : '○ 全员视角' }}</button>
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
 
@@ -71,6 +84,14 @@
                     :data-testid="`handoff-badge-${row.meta.scenarioId}`"
                     :title="`来自 ${handoffSenders.get(row.meta.scenarioId)} 的分享`"
                   >分享</span>
+                  <!-- 已发布徽标(§5.2):mine 镜头含自己的已发布场景,
+                       徽标替代「发布后从我的页消失」的旧缺陷。 -->
+                  <span
+                    v-if="row.visibility === 'public'"
+                    class="pub-badge"
+                    :data-testid="`pub-badge-${row.meta.scenarioId}`"
+                    title="已发布到公共库"
+                  >公共</span>
                   <button
                     v-if="row.schemeCount"
                     type="button"
@@ -246,6 +267,7 @@ const runs = useScenarioRuns()
 // 与筛选分组骨架全在 useScenarioListView,与公共页共用。
 const {
   store, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+  lensAll, lensAvailable, toggleLens,
   searchBox, writeSearch,
   groups, groupsState, savingGroup, activeGroupId, canSaveGroup, loadGroups, applyGroup, saveGroup, removeGroup,
 } = useScenarioListView('mine')
@@ -274,7 +296,9 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
  *  装的是全员的私有场景,副标题必须说实话,不能对管理员自称"你的"。 */
 const pageSubtitle = computed(() =>
   auth.isAdmin
-    ? `共 ${total.value} 个场景 · 管理员可见全员私有编排(含他人的)`
+    ? (lensAll.value
+        ? `共 ${total.value} 个场景 · 全员视角(全量)`
+        : `共 ${total.value} 个场景 · 我的(切「全员视角」看全部)`)
     : `共 ${total.value} 个场景 · 你创建或拥有的编排`,
 )
 
@@ -544,5 +568,38 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   background: rgb(245 158 11 / 12%);
   border: 1px solid rgb(245 158 11 / 45%);
   cursor: help;
+}
+
+/* 已发布徽标(§5.2):mine 镜头里自己的公共场景。 */
+.pub-badge {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #15803d;
+  background: rgb(34 197 94 / 12%);
+  border: 1px solid rgb(34 197 94 / 45%);
+  cursor: help;
+}
+
+/* 浏览镜头开关(§5.1):admin 的显式「全员视角」。 */
+.slib-lens {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--sl-ink-soft, #64748b);
+  background: transparent;
+  border: 1px solid rgb(100 116 139 / 35%);
+  white-space: nowrap;
+}
+.slib-lens:hover { border-color: rgb(100 116 139 / 70%); }
+.slib-lens.on {
+  color: #1d4ed8;
+  border-color: rgb(59 130 246 / 55%);
+  background: rgb(59 130 246 / 10%);
 }
 </style>

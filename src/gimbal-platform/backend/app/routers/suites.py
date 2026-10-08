@@ -1,0 +1,507 @@
+"""Suite 路由(权限域二期 P1,《Suite成员层、引用分享与浏览镜头-设计
+方案》§9 的 P1 子集:CRUD + 成员管理 + 反查;run 见本文件运行节,
+publish/分享端点随 P2)。
+
+安全边界(§6.3,唯一的安全设计点):**suite 里只能放属主自己的
+场景** —— 应用层先校验返回 404(不泄露存在性),库层组合外键兜底
+(绕过应用层直写也被约束拒绝),**admin 无豁免**(admin 经组把 A 的
+内容洗给 B 的通道不存在,§7.7)。
+
+P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ admin,
+非属主 GET 详情 404;写 = 属主 ∨ admin(治理)。
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.config import settings
+from ..core.db import get_db
+from ..core.deps import CurrentUser
+from ..models.execution import Execution
+from ..models.suite import Suite, SuiteMember
+from ._error_mapping import not_found_404
+from ._ownership import ensure_owner
+from ..schemas.scenario_composer import RunRequest
+from ..schemas.suite import (
+    SuiteCreateIn, SuiteDetailOut, SuiteLookupItem, SuiteMembersAddIn,
+    SuiteMembersOrderIn, SuiteMemberOut, SuitePageOut, SuitePatchIn,
+    SuiteSummaryOut,
+)
+from ..services import run_dispatcher, scenario_store, scheme_store
+
+router = APIRouter(prefix="/suites", tags=["suites"])
+# 反查路由(prefix=/scenarios;与 run_schemes/data_sets 的嵌套先例同款,
+# 不得与 scenarios.py 的 catch-all 冲突 —— 路径段 suites 独占)
+lookup_router = APIRouter(prefix="/scenarios", tags=["suites"])
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
+    row = await db.get(Suite, suite_id)
+    if row is None:
+        raise not_found_404("suite", str(suite_id))
+    return row
+
+
+def _require_read(user: CurrentUser, suite: Suite) -> None:
+    """读闸:P1 suite 恒 private → 属主 ∨ admin,否则 404(不泄露)。"""
+    if user.role != "admin" and user.id != suite.owner_id:
+        raise not_found_404("suite", str(suite.id))
+
+
+def _require_write(user: CurrentUser, suite: Suite) -> None:
+    ensure_owner(
+        user, suite.owner_id,
+        {"code": "not_owner",
+         "message": "only the suite's owner (or admin) can manage it"},
+    )
+
+
+def _iso(v) -> str | None:
+    return v.isoformat() if v is not None else None
+
+
+async def _member_count(db: AsyncSession, suite_id: int) -> int:
+    return int((await db.execute(
+        select(func.count()).where(SuiteMember.suite_id == suite_id)
+    )).scalar() or 0)
+
+
+def _summary(suite: Suite, member_count: int) -> SuiteSummaryOut:
+    return SuiteSummaryOut(
+        suiteId=suite.id, name=suite.name, description=suite.description,
+        visibility=suite.visibility, mode=suite.mode,
+        memberCount=member_count,
+        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+    )
+
+
+async def _ordered_members(
+    db: AsyncSession, suite_id: int,
+) -> list[SuiteMember]:
+    rows = (await db.execute(
+        select(SuiteMember).where(SuiteMember.suite_id == suite_id)
+        .order_by(SuiteMember.sort, SuiteMember.added_at)
+    )).scalars().all()
+    return list(rows)
+
+
+async def _members_out(
+    db: AsyncSession, members: list[SuiteMember],
+) -> list[SuiteMemberOut]:
+    """成员摘要:名称/模块来自场景行(行缺失 = 场景被删的瞬态,名字
+    回落 scenarioId;FK CASCADE 会随即收掉成员行,这里只是读窗口)。"""
+    out: list[SuiteMemberOut] = []
+    for m in members:
+        scen = await scenario_store.get_row(db, m.scenario_id)
+        meta = scenario_store._meta_from_row(scen) if scen is not None else None
+        out.append(SuiteMemberOut(
+            scenarioId=m.scenario_id,
+            name=(meta.name if meta and meta.name else m.scenario_id),
+            module=(meta.module or "") if meta else "",
+            visibility=(scen.visibility or "private") if scen else "private",
+            sort=m.sort, addedAt=_iso(m.added_at),
+        ))
+    return out
+
+
+# ── CRUD ───────────────────────────────────────────────────────────
+@router.get("", response_model=SuitePageOut)
+async def list_suites(
+    user: CurrentUser, db: DbSession,
+    scope: Literal["mine", "all"] = "all",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> SuitePageOut:
+    """suite 列表。API 默认 all(向后兼容惯例);P1 无引用分享 →
+    非 admin 的 all ≡ mine(自己的);admin 的 all = 全量(治理)。"""
+    # 浏览镜头口径与场景库一致(§5.1):mine = owner 过滤,admin 同样生效
+    clauses = []
+    if scope == "mine" or user.role != "admin":
+        clauses.append(Suite.owner_id == user.id)
+    rows = (await db.execute(
+        select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
+    )).scalars().all()
+    total = len(rows)
+    start = (page - 1) * page_size
+    items = []
+    for s in rows[start : start + page_size]:
+        items.append(_summary(s, await _member_count(db, s.id)))
+    return SuitePageOut(items=items, total=total, page=page, pageSize=page_size)
+
+
+@router.post("", response_model=SuiteSummaryOut, status_code=201)
+async def create_suite(
+    user: CurrentUser, db: DbSession, body: SuiteCreateIn,
+) -> SuiteSummaryOut:
+    count = int((await db.execute(
+        select(func.count()).where(Suite.owner_id == user.id)
+    )).scalar() or 0)
+    if count >= settings.SUITE_CAP:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_cap_exceeded",
+            "message": f"suite cap per user is {settings.SUITE_CAP}"})
+    dup = (await db.execute(
+        select(func.count()).where(Suite.owner_id == user.id,
+                                   Suite.name == body.name)
+    )).scalar()
+    if dup:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_name_conflict",
+            "message": "同名 suite 已存在(属主内唯一)"})
+    suite = Suite(name=body.name, description=body.description,
+                  owner_id=user.id)
+    db.add(suite)
+    await db.commit()
+    await db.refresh(suite)
+    return _summary(suite, 0)
+
+
+@router.get("/{suite_id}", response_model=SuiteDetailOut)
+async def get_suite(user: CurrentUser, db: DbSession, suite_id: int) -> SuiteDetailOut:
+    suite = await _load_suite(db, suite_id)
+    _require_read(user, suite)
+    members = await _ordered_members(db, suite.id)
+    return SuiteDetailOut(
+        suiteId=suite.id, name=suite.name, description=suite.description,
+        visibility=suite.visibility, mode=suite.mode,
+        memberCount=len(members),
+        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+        members=await _members_out(db, members),
+    )
+
+
+@router.patch("/{suite_id}", response_model=SuiteSummaryOut)
+async def patch_suite(
+    user: CurrentUser, db: DbSession, suite_id: int, body: SuitePatchIn,
+) -> SuiteSummaryOut:
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    if body.name is not None and body.name != suite.name:
+        dup = (await db.execute(
+            select(func.count()).where(Suite.owner_id == suite.owner_id,
+                                       Suite.name == body.name,
+                                       Suite.id != suite.id)
+        )).scalar()
+        if dup:
+            raise HTTPException(status_code=409, detail={
+                "code": "suite_name_conflict",
+                "message": "同名 suite 已存在(属主内唯一)"})
+        suite.name = body.name
+    if body.description is not None:
+        suite.description = body.description
+    await db.commit()
+    await db.refresh(suite)
+    return _summary(suite, await _member_count(db, suite.id))
+
+
+@router.delete("/{suite_id}", status_code=204)
+async def delete_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> Response:
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    await db.delete(suite)  # 成员行随组合外键 CASCADE,场景不受影响
+    await db.commit()
+    return Response(status_code=204)
+
+
+# ── 成员管理 ───────────────────────────────────────────────────────
+@router.post("/{suite_id}/members", response_model=SuiteDetailOut)
+async def add_members(
+    user: CurrentUser, db: DbSession, suite_id: int, body: SuiteMembersAddIn,
+) -> SuiteDetailOut:
+    """批量加入。安全边界(§6.3):成员必须是 **suite 属主自己的**
+    场景 —— 他人场景(含不存在的)一律 404,不泄露存在性;admin 也
+    无豁免。库层组合外键兜底直写。"""
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+
+    existing = {m.scenario_id for m in await _ordered_members(db, suite.id)}
+    next_sort = (
+        int((await db.execute(
+            select(func.max(SuiteMember.sort))
+            .where(SuiteMember.suite_id == suite.id)
+        )).scalar() or -1) + 1
+    )
+    added = 0
+    for sid in dict.fromkeys(body.scenarioIds):  # 去重保序
+        if sid in existing:
+            continue
+        scen = await scenario_store.get_row(db, sid)
+        # 一刀切(§6.3):scenario 属主 ≠ suite 属主 → 404。
+        if scen is None or scen.owner_id != suite.owner_id:
+            await db.rollback()
+            raise not_found_404("scenario", sid)
+        if len(existing) + added + 1 > settings.SUITE_MEMBER_CAP:
+            await db.rollback()
+            raise HTTPException(status_code=409, detail={
+                "code": "suite_member_cap_exceeded",
+                "message": (f"suite member cap is "
+                            f"{settings.SUITE_MEMBER_CAP}")})
+        db.add(SuiteMember(
+            suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
+            sort=next_sort,
+        ))
+        next_sort += 1
+        added += 1
+    await db.commit()
+    members = await _ordered_members(db, suite.id)
+    return SuiteDetailOut(
+        suiteId=suite.id, name=suite.name, description=suite.description,
+        visibility=suite.visibility, mode=suite.mode,
+        memberCount=len(members),
+        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+        members=await _members_out(db, members),
+    )
+
+
+@router.patch("/{suite_id}/members/order", response_model=SuiteDetailOut)
+async def reorder_members(
+    user: CurrentUser, db: DbSession, suite_id: int, body: SuiteMembersOrderIn,
+) -> SuiteDetailOut:
+    """整表排序:列表顺序即 sort(0..n-1);清单必须恰为当前成员全集。"""
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    members = {m.scenario_id: m for m in await _ordered_members(db, suite.id)}
+    incoming = list(dict.fromkeys(body.scenarioIds))
+    if set(incoming) != set(members) or len(incoming) != len(members):
+        raise HTTPException(status_code=422, detail={
+            "code": "members_order_mismatch",
+            "message": "排序清单必须恰为当前成员全集(无遗漏、无多余)"})
+    for idx, sid in enumerate(incoming):
+        members[sid].sort = idx
+    await db.commit()
+    ordered = await _ordered_members(db, suite.id)
+    return SuiteDetailOut(
+        suiteId=suite.id, name=suite.name, description=suite.description,
+        visibility=suite.visibility, mode=suite.mode,
+        memberCount=len(ordered),
+        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+        members=await _members_out(db, ordered),
+    )
+
+
+@router.delete("/{suite_id}/members/{scenario_id}", status_code=204)
+async def remove_member(
+    user: CurrentUser, db: DbSession, suite_id: int, scenario_id: str,
+) -> Response:
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    m = await db.get(SuiteMember, (suite_id, scenario_id))
+    if m is not None:
+        await db.delete(m)
+        await db.commit()
+    return Response(status_code=204)
+
+
+# ── 聚合模式运行(§6.6)───────────────────────────────────────────
+def _req_from_scheme(
+    scenario_id: str, scheme: dict, batch_id: str,
+) -> RunRequest:
+    """默认方案参数 → RunRequest(与前端「直接执行」同口径:读默认
+    方案后内联发送,§13.3-2);batchId 必带 —— 执行行据此挂批次键
+    (批次视图/通知聚合的归并面)。"""
+    return RunRequest(
+        scenarioId=scenario_id,
+        batchId=batch_id,
+        dataSetIds=scheme.get("dataSetIds") or [],
+        dataSetSelection=scheme.get("dataSetSelection") or [],
+        injectionEntryIds=scheme.get("injectionEntryIds") or [],
+        serviceBindings=scheme.get("serviceBindings") or {},
+        stepTo=scheme.get("stepTo"),
+        nRuns=scheme.get("nRuns") or 1,
+        parallel=scheme.get("parallel") or 1,
+        schemeId=scheme.get("schemeId"),
+        schemeName=scheme.get("name"),
+    )
+
+
+@router.post("/{suite_id}/run", status_code=201)
+async def run_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> dict:
+    """聚合模式 = 逐个跑成员、无执行策略(§6.6):服务端循环分发 +
+    batch_id 归并,是聚合模式的完整实现,不依赖执行器侧 suite 能力。
+
+    实现纪律(定稿 §6.6,全部钉死):
+    - **循环前物化**:成员快照与各成员默认方案参数先取纯值,循环内
+      不触碰 ORM 实例 —— ``rollback()`` 总是使 Session 内已加载实例
+      过期,async 下访问过期属性触发懒加载抛 ``MissingGreenlet``,
+      一个成员出错会让后续成员连锁失败;发起人 id/角色同样先取纯值。
+    - **防重按 (suite, 发起人)**:本人时效窗口内的未终态批次 → 409,
+      深链只指本人批次(P1 无引用分享,锁整个 suite 会互相阻塞的说法
+      留给 P2 之后的语义;现在按人即正确形态);**不加服务端锁**
+      (事务级锁在逐成员自决 commit 下提前释放、会话级与连接池冲突,
+      接受良性竞态 —— 双开提交的后果只是多一个批次)。
+    - **总量预检**:Σ 成员 runs 复用 ``compute_run_fanout``/``fanout_total``
+      与 dispatch 同一份实现,防「预检通过、单成员 409」漂移。
+    - **逐成员 try/except**:校验类(NotFound/Conflict)进 skipped;
+      基础设施异常先 rollback,**再按落库事实归类** —— 该成员在本
+      batch_id 下已有执行行 → started 附警告(执行会照常跑,不能
+      「显示跳过实际在跑」),没有才 skipped。
+    """
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+
+    # ── 循环前物化(纯值):发起人、成员快照、各成员默认方案 ──
+    runner_id = user.id
+    members = await _ordered_members(db, suite_id)
+    if not members:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_empty", "message": "suite 没有成员,无可执行场景"})
+
+    scen_rows: dict[str, object] = {}
+    default_schemes: dict[str, dict | None] = {}
+    stale_ids: list[str] = []
+    for m in members:
+        scen = await scenario_store.get_row(db, m.scenario_id)
+        if scen is None:
+            # 瞬态:成员快照后场景被删(FK CASCADE 随即收掉成员行)
+            stale_ids.append(m.scenario_id)
+            continue
+        scen_rows[m.scenario_id] = scen
+        await scheme_store.ensure_default_scheme(db, m.scenario_id)
+        schemes = await scheme_store.list_schemes(db, m.scenario_id)
+        default_schemes[m.scenario_id] = next(
+            (s for s in schemes if s.get("isDefault")), None)
+    await db.commit()  # ensure_default_scheme 的自愈写入先落库
+
+    # ── 防重(§6.6):按 (suite, 发起人),时效窗口内的未终态批次 ──
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=settings.SUITE_RUN_STALE_HOURS)
+    rows = (await db.execute(
+        select(Execution.id, Execution.batch_id).where(
+            Execution.owner_id == runner_id,
+            Execution.status.in_(("queued", "running")),
+            Execution.created_at > cutoff,
+        )
+    )).all()
+    prefix = f"suite-{suite_id}-"
+    in_flight = next(
+        (r for r in rows if r.batch_id and r.batch_id.startswith(prefix)),
+        None,
+    )
+    if in_flight is not None:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_run_in_progress",
+            "message": "该 suite 已有你未完成的批次(先查看或取消后再发起)",
+            "batchId": in_flight.batch_id,
+            "link": f"/executions?batchId={in_flight.batch_id}"})
+
+    batch_id = f"suite-{suite_id}-{runner_id}-{uuid4().hex[:12]}"
+    plain: list[dict] = [
+        {"scenarioId": sid, "req": None, "skip_reason": "scenario_not_found"}
+        for sid in stale_ids
+    ] + [
+        {
+            "scenarioId": sid,
+            "req": (_req_from_scheme(sid, default_schemes[sid], batch_id)
+                    if default_schemes[sid] is not None
+                    else RunRequest(scenarioId=sid, batchId=batch_id)),
+        }
+        for sid in scen_rows
+    ]
+
+    # ── 总量预检(与 dispatch 同一份计算;校验类失败提前归 skipped)──
+    total_runs = 0
+    for entry in plain:
+        if entry["req"] is None:
+            continue
+        try:
+            fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(
+                db, scen_rows[entry["scenarioId"]], entry["req"])
+            total_runs += run_dispatcher.fanout_total(fd, inj)
+        except (run_dispatcher.NotFound, run_dispatcher.Conflict) as e:
+            entry["req"] = None
+            entry["skip_reason"] = e.code
+    if total_runs > settings.SUITE_RUN_TOTAL_CAP:
+        raise HTTPException(status_code=409, detail={
+            "code": "too_many_runs",
+            "message": (f"suite total runs {total_runs} exceed cap "
+                        f"{settings.SUITE_RUN_TOTAL_CAP} (rows x injections)")})
+
+    started: list[int] = []
+    skipped: list[dict] = []
+    dispatch_warnings: list[dict] = []
+
+    for entry in plain:
+        sid = entry["scenarioId"]
+        if entry["req"] is None:
+            skipped.append({"scenarioId": sid, "reason": entry["skip_reason"]})
+            continue
+        try:
+            # 不传 preloaded_scenario:except 分支的 rollback 会使 ORM
+            # 实例过期(懒加载在 async 下抛 MissingGreenlet),让
+            # dispatch_run 每成员自查一行(PK 查询,代价可忽略)。
+            resp = await run_dispatcher.dispatch_run(
+                db, user_id=runner_id, req=entry["req"])
+            started.append(resp.execution_id)
+        except (run_dispatcher.NotFound, run_dispatcher.Conflict) as e:
+            skipped.append({"scenarioId": sid, "reason": e.code})
+        except Exception as e:  # noqa: BLE001 —— 基础设施异常不连坐(§6.6)
+            await db.rollback()
+            # 归类按落库事实:enqueue 自决 commit 后抛错的成员,其执行
+            # 行已存在、之后会照常跑 —— 归 started 附警告,不进 skipped。
+            ex_id = (await db.execute(
+                select(Execution.id).where(
+                    Execution.batch_id == batch_id,
+                    Execution.scenario_id == sid,
+                )
+            )).scalar_one_or_none()
+            if ex_id is not None:
+                started.append(ex_id)
+                dispatch_warnings.append({
+                    "scenarioId": sid, "executionId": ex_id,
+                    "message": f"dispatch error after enqueue: {e}"})
+            else:
+                skipped.append({"scenarioId": sid, "reason": "dispatch_error"})
+
+    return {
+        "batchId": batch_id,
+        "started": started,
+        "skipped": skipped,
+        "dispatchWarnings": dispatch_warnings,
+        "totalRuns": total_runs,
+    }
+
+
+# ── 反查:场景在哪些 suite ─────────────────────────────────────────
+@lookup_router.get("/{scenario_id}/suites", response_model=list[SuiteLookupItem])
+async def suites_of_scenario(
+    user: CurrentUser, db: DbSession, scenario_id: str,
+) -> list[SuiteLookupItem]:
+    """场景详情「所属 suite」反查:自己的 suite(成员 ⊆ 自己的场景,
+    场景属主视角天然成立);admin 另见全量(治理)。"""
+    scen = await scenario_store.get_row(db, scenario_id)
+    if scen is None:
+        raise not_found_404("scenario", scenario_id)
+    ensure_owner(
+        user, scen.owner_id,
+        {"code": "not_owner",
+         "message": "only the scenario's owner (or admin) can view "
+                    "its suites"},
+    )
+    clauses = [Suite.id.in_(
+        select(SuiteMember.suite_id)
+        .where(SuiteMember.scenario_id == scenario_id)
+    )]
+    if user.role != "admin":
+        clauses.append(Suite.owner_id == user.id)
+    rows = (await db.execute(
+        select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
+    )).scalars().all()
+    return [
+        SuiteLookupItem(
+            suiteId=s.id, name=s.name,
+            memberCount=await _member_count(db, s.id),
+            ownerName="",
+        )
+        for s in rows
+    ]

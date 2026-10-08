@@ -19,6 +19,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { useAuthStore } from '@/stores/auth'
 import { useServerList } from '@/composables/useServerList'
 import { emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
 import { fetchScenarioFacets, type ScenarioFacets } from '@/api/scenario-composer'
@@ -32,13 +33,39 @@ export type ScenarioListRow = ScenarioListItem
 
 export const LIST_PAGE_SIZE = 20
 
-/** 分桶 → 服务端 visibility 参数:mine=private(自己的;admin=全员私有,
- *  与旧「非 public」谓词同口径),public=public。 */
+/** 分桶:mine = 「我的场景」页(浏览镜头,scope=mine——自己创建的全部
+ *  含已发布;admin 默认同样只见自己的,「全员视角」是显式开关),public
+ *  = 公共页(visibility=public,口径不变)。
+ *  此前 mine 桶下推 visibility=private——admin 查 private = 全员私有,
+ *  是「admin 场景库被淹没」的根源;且自己的已发布场景从「我的」页消失。 */
 type Bucket = 'mine' | 'public'
+
+/** 浏览镜头的本地偏好键(仅 admin 的全员视角开关用;镜头不进权限)。 */
+const LENS_KEY = 'scenarios-mine-lens'
 
 export function useScenarioListView(bucket: Bucket) {
   const store = useScenarioComposerStore()
   const route = useRoute()
+  const auth = useAuthStore()
+
+  // ── 浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1)──
+  // 仅 mine 桶、仅 admin:默认「我的」(scope=mine),显式切「全员视角」
+  // (scope=all)。偏好记本地;镜头是查询偏好,不进权限判定——scope=all
+  // 拿到的集合与可见性上限严格一致。
+  const lensAll = ref(
+    bucket === 'mine'
+      && auth.isAdmin
+      && window.localStorage.getItem(LENS_KEY) === 'all',
+  )
+
+  function toggleLens(): void {
+    lensAll.value = !lensAll.value
+    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'mine')
+  }
+
+  function lensScope(): 'mine' | 'all' {
+    return lensAll.value ? 'all' : 'mine'
+  }
 
   // 初始 q 从地址栏读回(在 useServerList 创建前赋值,不触发首拉)。
   const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
@@ -59,7 +86,10 @@ export function useScenarioListView(bucket: Bucket) {
 
   const params = () => ({
     q: effQ() || undefined,
-    visibility: (bucket === 'mine' ? 'private' : 'public') as 'private' | 'public',
+    // 分桶下推:mine 桶走 scope(镜头),public 桶维持 visibility=public。
+    ...(bucket === 'mine'
+      ? { scope: lensScope() }
+      : { visibility: 'public' as const }),
     system: filters.value.systems.join(',') || undefined,
     module: filters.value.modules.join(',') || undefined,
     tag: filters.value.tags.join(',') || undefined,
@@ -98,22 +128,23 @@ export function useScenarioListView(bucket: Bucket) {
   )
 
   // ── facets(M3):FilterPopover 可选值的服务端数据源 ─────────────
-  // 与列表同口径下推 q + 分桶 visibility;静默失败(置 null 即回落池)。
+  // 与列表同口径下推 q + 分桶参数(镜头切换同步刷新);静默失败(置 null
+  // 即回落池)。
   const facets = ref<ScenarioFacets | null>(null)
-  const visibility = (bucket === 'mine' ? 'private' : 'public') as 'private' | 'public'
 
   async function loadFacets(): Promise<void> {
     try {
-      facets.value = await fetchScenarioFacets({
-        q: effQ() || undefined,
-        visibility,
-      })
+      facets.value = await fetchScenarioFacets(bucket === 'mine'
+        ? { q: effQ() || undefined, scope: lensScope() }
+        : { q: effQ() || undefined, visibility: 'public' as const })
     } catch {
       facets.value = null
     }
   }
 
   watch([q, appliedGroupId], () => void loadFacets())
+  // 镜头切换:params 签名变化已触发列表重拉,这里补 facets。
+  watch(lensAll, () => void loadFacets())
   void loadFacets()
 
   /** 生效口径:分组态下搜索框虽空,列表确实在筛。 */
@@ -234,6 +265,8 @@ export function useScenarioListView(bucket: Bucket) {
   return {
     store,
     q, filters,
+    // 浏览镜头(mine 桶):admin 显式「全员视角」开关。
+    lensAll, lensAvailable: bucket === 'mine' && auth.isAdmin, toggleLens,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

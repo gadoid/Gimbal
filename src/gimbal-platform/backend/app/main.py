@@ -39,6 +39,7 @@ from .routers import (
     service_aliases,
     service_profile,
     strategy_catalog,
+    suites,
     user_preferences,
     users,
 )
@@ -165,6 +166,10 @@ def create_app() -> FastAPI:
     # data_sets module; register BEFORE scenarios' /{scenario_id}
     # catch-all.
     app.include_router(data_sets.create_router, prefix="/api")
+    # 权限域二期 P1:suite 成员层(lookup_router 挂 /scenarios/{id}/suites,
+    # 必须先于 scenarios 的 /{scenario_id} catch-all 注册)
+    app.include_router(suites.router, prefix="/api")
+    app.include_router(suites.lookup_router, prefix="/api")
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(constants.router, prefix="/api")

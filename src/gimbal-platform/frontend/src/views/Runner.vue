@@ -274,13 +274,15 @@ const filteredPicker = computed(() => {
 // 只作用于已加载页,场景过百后第 101 条会静默丢失;带 q 重拉修复。
 async function loadPicker(q = ''): Promise<void> {
   try {
-    const env = await listScenarioOptions({ page_size: 100, q: q || undefined })
-    const all = env.items
-    // 发起要过属主闸(runs 路由 ensure_owner):member 只列私有(=自己的,
-    // 场景库 mine 页同口径);admin 全列。
-    pickerList.value = auth.isAdmin
-      ? all
-      : all.filter((s) => s.visibility !== 'public')
+    // 发起要过属主闸(runs 路由 ensure_owner):member 只列自己创建的
+    // (scope=mine,含自己已发布的——owner 可跑自己的公共场景;与场景
+    // 库 mine 镜头同口径);admin 全列。
+    const env = await listScenarioOptions({
+      page_size: 100,
+      q: q || undefined,
+      ...(auth.isAdmin ? {} : { scope: 'mine' as const }),
+    })
+    pickerList.value = env.items
   } catch (e) {
     showError('加载场景清单', e)
   }

@@ -26,6 +26,10 @@ export interface ScenarioListParams {
   tag?: string
   author?: string
   visibility?: 'public' | 'private'
+  /** 浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1):
+   *  mine = 自己创建的全部(含已发布,admin 同样生效);默认 all =
+   *  现行可见性上限。visibility=public 时后端不叠加 scope。 */
+  scope?: 'mine' | 'all'
   updatedWithin?: '24h' | '7d' | '30d'
   /** 关注页/关注卡数据源(store 退位后 ?starred=true 服务端过滤)。 */
   starred?: boolean
@@ -72,6 +76,8 @@ export async function fetchScenarioSignals(ids: string[]): Promise<
 export async function fetchScenarioFacets(params: {
   q?: string
   visibility?: 'public' | 'private'
+  /** 与列表同口径的浏览镜头(§5.1)。 */
+  scope?: 'mine' | 'all'
 }): Promise<ScenarioFacets> {
   const { data } = await http.get<ScenarioFacets>('/scenarios/facets', { params })
   return data
@@ -84,6 +90,8 @@ export async function listScenarioOptions(params?: {
   page_size?: number
   /** G2:选择器检索下推(场景过百后第 101 条仍可选到;吃 trgm)。 */
   q?: string
+  /** 浏览镜头(§5.1):选择器只列自己创建的(Runner 的 member 分支)。 */
+  scope?: 'mine' | 'all'
 }): Promise<ScenarioOptionsPage> {
   const { data } = await http.get<ScenarioOptionsPage>('/scenarios', {
     params: { ...(params ?? {}), fields: 'options' },

@@ -154,9 +154,23 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // C5/P3-05:suite 编排页(graph 编排执行)
+    // 权限域二期 P1:用例组(suite 成员层)管理页。/suites = 列表;
+    // /suites/composer = 既有一次性 graph 编排(原 /suites,与用例组
+    // 是正交概念,关系待设计定稿 §13.2-2 拍板);/suites/:id = 详情。
+    // 静态段 composer 必须先于 :id 注册。
     path: '/suites',
+    component: () => import('@/views/SuiteLibrary.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // C5/P3-05:suite 编排页(graph 编排执行,一次性)
+    path: '/suites/composer',
     component: () => import('@/views/SuiteComposer.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/suites/:id(\\d+)',
+    component: () => import('@/views/SuiteDetail.vue'),
     meta: { requiresAuth: true },
   },
   {
@@ -190,8 +204,8 @@ const routes = [
     // 服务信息管理(方案 §4;P1 唯一净新增页面)— 配置池,admin 写面
     path: '/service-admin',
     component: () => import('@/views/ServiceAdmin.vue'),
-    // 权限方案 §1.2:服务信息管理 = operator+(共享别名行);旧 requiresAdmin 误标修正
-    meta: { requiresAuth: true, requiresRoles: ['operator', 'admin'] },
+    // 权限方案 §1.2:服务信息管理 = member+(共享别名行);旧 requiresAdmin 误标修正
+    meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
   },
   {
     // 键详情(配套方案 §2.2):别名全名或 base 服务名同一详情页,

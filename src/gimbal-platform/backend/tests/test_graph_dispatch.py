@@ -121,3 +121,61 @@ class TestGraphRunEndToEnd:
                 ExecutionRow.execution_id == exec_id))).scalar_one()
             assert row.unit_id == "a" and row.attempts == 3
             assert row.status == "passed"
+
+
+class TestGraphUnitAuthz:
+    """请求侧 unit 属主闸(《Suite成员层、引用分享与浏览镜头-设计方案》
+    §8.2 必修缺口)。
+
+    顶层场景闸此前已存在;units / before / after 括号场景此前只在
+    worker 侧物化时查存在性、无归属检查——本组测试钉住「编排不能
+    绕过属主闸」(P0 阶段 = 属主 ∨ admin,与顶层闸同款契约)。
+    """
+
+    async def test_non_owner_unit_rejected(self, client):
+        await register_and_login(client, "gauth0", "gauth0pass123")  # bootstrap
+        alice = await register_and_login(client, "gauth1", "gauth1pass123")
+        bob = await register_and_login(client, "gauth2", "gauth2pass123")
+        await _mk_scenario(client, alice, "sc-g-alice")
+        await _mk_scenario(client, alice, "sc-g-alice2")
+        await _mk_scenario(client, bob, "sc-g-bob")
+        # 顶层是 bob 自己的(过顶层闸);unit 与 before 括号引 alice 的
+        # 私有场景 → 403 not_owner(编排不再是绕过属主闸的通道)
+        r = await client.post("/api/runs", headers=bob, json={
+            "scenarioId": "sc-g-bob",
+            "graph": {
+                "mode": "aggregate",
+                "units": [
+                    {"ref": "mine", "scenarioId": "sc-g-bob"},
+                    {"ref": "stolen", "scenarioId": "sc-g-alice"},
+                ],
+                "before": [{"ref": "pre", "scenarioId": "sc-g-alice2"}],
+            },
+        })
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == "not_owner"
+
+    async def test_nonexistent_unit_404(self, client):
+        h = await register_and_login(client, "gauth3", "gauth3pass123")
+        await _mk_scenario(client, h, "sc-g-own3")
+        r = await client.post("/api/runs", headers=h, json={
+            "scenarioId": "sc-g-own3",
+            "graph": {"units": [{"ref": "a", "scenarioId": "sc-g-ghost"}]},
+        })
+        assert r.status_code == 404, r.text
+        assert r.json()["detail"]["code"] == "scenario_not_found"
+
+    async def test_admin_gate_open_for_units(self, client):
+        admin = await register_and_login(client, "gauth4", "gauth4pass123")
+        member = await register_and_login(client, "gauth5", "gauth5pass123")
+        await _mk_scenario(client, member, "sc-g-mem5")
+        await _mk_scenario(client, admin, "sc-g-adm4")
+        # admin 对 unit 场景有矩阵授权(全量可见可管可跑)→ 过闸
+        r = await client.post("/api/runs", headers=admin, json={
+            "scenarioId": "sc-g-adm4",
+            "graph": {"units": [
+                {"ref": "a", "scenarioId": "sc-g-adm4"},
+                {"ref": "b", "scenarioId": "sc-g-mem5"},
+            ]},
+        })
+        assert r.status_code == 201, r.text

@@ -1,12 +1,12 @@
 """User-management endpoints: list / create / patch / delete / reset-password.
 
 Authorization (hardened):
-* ``DELETE /{user_id}`` — admin only (a member can never delete another
+* ``DELETE /{user_id}`` — admin only (a non-admin can never delete another
   account; self-delete is separately refused with 409/code 4091).
-* ``PATCH /{user_id}``  — admin may patch anyone; a member may only patch
-  **themselves** and may NOT touch the ``is_admin`` flag (403/code 4032).
+* ``PATCH /{user_id}``  — admin may patch anyone; a non-admin may only patch
+  **themselves** and may NOT touch the ``role`` field (403/code 4032).
 * ``reset-password``    — admin (for anyone) or the target user (for
-  themselves); a member resetting *someone else's* password is refused
+  themselves); a non-admin resetting *someone else's* password is refused
   (403/code 4033) — this used to be a full account-takeover vector.
 * All endpoints require a Bearer token; missing/invalid → 401 (handled by
   :func:`app.core.deps.get_current_user`).
@@ -31,7 +31,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser, CurrentUser, OperatorUser
+from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import hash_password
 from ..models.user import User
 from ..models.auth_session import AuthSession
@@ -85,8 +85,8 @@ async def get_roster(
     user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """分发对话框的成员选择器:CurrentUser 可调(分发是 member 级能力,
-    现有 GET /users 是 operator+ 且带管理字段,不能降级复用)。
+    """分发对话框的成员选择器:CurrentUser 可调(分发是 user 级能力,
+    现有 GET /users 是 member+ 且带管理字段,不能降级复用)。
 
     仅 ``is_active`` 用户、排除自己;User 表无 email 列,不为选人器
     加列 —— ``display_name (username)`` 对内部平台足够定位人。
@@ -108,14 +108,14 @@ async def get_roster(
 # ── GET / ──────────────────────────────────────────────────────────────
 @router.get("", response_model=UserListOut)
 async def list_users(
-    user: OperatorUser,
+    user: MemberUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     q: Annotated[str | None, Query(max_length=64)] = None,
     role: Annotated[str | None, Query(max_length=16)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> UserListOut:
-    """List every user(M2.5 收紧:operator+ 可见;原「任何登录用户全量
+    """List every user(M2.5 收紧:member+ 可见;原「任何登录用户全量
     可见」的 spec-1 遗留闭合 —— 权限方案 §5.3)。M4(§6.3):q
     (username/display_name 子串)+ role 精确 + Page 信封。"""
     base = select(User)
@@ -196,7 +196,7 @@ async def patch_user(
 
     Authorization:
     * admin caller — may patch any user, any field.
-    * member caller — may only patch **themselves** (403/4032 on other
+    * non-admin caller — may only patch **themselves** (403/4032 on other
       targets) and may never touch ``role`` (privilege-escalation fix).
 
     Constraint: demoting the last admin(``role`` 从 admin 降下)被 409 拒。
@@ -297,7 +297,7 @@ async def reset_password(
     """Generate a fresh random password for ``user_id`` and persist its hash.
 
     Authorization: admin (any target) or the target user themselves
-    (account-takeover fix: a member can no longer reset *someone else's*
+    (account-takeover fix: a non-admin can no longer reset *someone else's*
     password and receive the plaintext).  The plaintext password is
     returned **once** in the response and is never stored on the server.
     """
@@ -347,7 +347,7 @@ async def delete_user(
 ):
     """Delete ``user_id``(P2-2:资源处置三选一)。
 
-    Authorization: admin only — a member can never delete another account
+    Authorization: admin only — a non-admin can never delete another account
     (403/4031).  Self-delete is separately refused below (409/code 4091),
     so effectively "admin deleting someone else".
 
@@ -421,6 +421,36 @@ async def delete_user(
     from ..services.run_dispatcher import purge_case_dir
 
     caller_label = caller.display_name or caller.username
+
+    # ── suite 处置(权限域二期 P1,《Suite成员层、引用分享与浏览镜头-
+    #    设计方案》§7.10;必须在场景处置之前)────────────────────────
+    # publicize:先删该用户全部 suite(成员行随组合外键 CASCADE;SQLite
+    #   不强制 FK,显式删成员行兜底),再置空场景属主 —— suite_members
+    #   的组合外键 (scenario_id, owner_id) 在 owner 置 NULL 时失配,
+    #   顺序不可倒;无主公共资源上也不该挂「可执行」的组语义。
+    # transfer:suite/成员/场景三处 owner_id 同一事务改写 —— 组合外键
+    #   DEFERRED 到提交时校验,「只转场景不转 suite」的拆分会被整体
+    #   拒绝,处置不可拆分即由库层保证。
+    # purge:suite 删除(成员行级联),场景照旧走 scenario_store.delete。
+    from ..models.suite import Suite, SuiteMember
+
+    if disposal == "publicize":
+        await db.execute(
+            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
+        await db.execute(
+            sa_delete(Suite).where(Suite.owner_id == user_id))
+    elif disposal == "transfer":
+        await db.execute(
+            sa_update(Suite).where(Suite.owner_id == user_id)
+            .values(owner_id=transferee.id))
+        await db.execute(
+            sa_update(SuiteMember).where(SuiteMember.owner_id == user_id)
+            .values(owner_id=transferee.id))
+    else:  # purge
+        await db.execute(
+            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
+        await db.execute(
+            sa_delete(Suite).where(Suite.owner_id == user_id))
 
     # ── 场景处置(三选一)─────────────────────────────────────────
     scenario_ids = list((await db.execute(

@@ -579,6 +579,104 @@ async def startup_recovery() -> tuple[int, int]:
     return stale, swept + swept_jobs
 
 
+# ─── fanout 计算(dispatch 与 suite 预检共用)────────────────────
+async def compute_run_fanout(
+    db: AsyncSession, scen: ComposerScenario, req: RunRequest,
+) -> tuple[list[dict], list, list, list]:
+    """数据集选择合并 + 注入条目过滤 + 交叉矩阵 → (fanout_datasets,
+    injections, selected_entries, skipped_while_degraded)。
+
+    权限域二期 P1 自 dispatch_run 抽出:**suite 总量预检与 dispatch
+    共用这同一份实现**(《Suite成员层、引用分享与浏览镜头-设计方案》
+    §6.6)—— 两处算法漂移会出现「预检通过、单成员 409」的边缘。
+    selected_entries = 选中注入条目(dispatch 的配方留档);
+    skipped_while_degraded = 降级期跳过的条目 id(判定降级留档);
+    预检只消费 fanout/injections 计数,后两者忽略。不建行、不改库;
+    校验失败照常抛 NotFound/Conflict。
+    """
+    # 行级选择合并(spec v3 §4):dataSetSelection 权威键 — 仅当其缺省
+    # (空)时旧 dataSetIds 才生效(兼容读,映射整库);两键同发则旧键
+    # 整键忽略。同库多段合并取超集、段序无关:行集 ∪ 行集;任一段整库
+    # (行集空)则整库(整库 ⊇ 任意行集);段内行号去重。
+    sel_by_ds: dict[str, list[int] | None] = {}
+    for sel in req.data_set_selection:
+        ds_id = sel.dataset_id
+        row_idxes = sorted(set(sel.row_indexes))
+        if ds_id not in sel_by_ds:
+            sel_by_ds[ds_id] = row_idxes or None
+        elif not row_idxes:
+            # 重复的整库段无论先后都提升为整库(超集语义)。
+            sel_by_ds[ds_id] = None
+        elif sel_by_ds[ds_id] is not None:
+            sel_by_ds[ds_id] = sorted(set(sel_by_ds[ds_id]) | set(row_idxes))
+        # else:已整库(None)遇行集段 — 整库 ⊇ 行集,保持整库。
+    if not sel_by_ds:
+        for ds_id in req.data_set_ids:
+            sel_by_ds[ds_id] = None
+
+    selected_datasets: list[ComposerDataSet] = []
+    for ds_id in sel_by_ds:
+        ds = await _find_dataset_by_id(db, ds_id)
+        if ds is None or ds.scenario_id != scen.scenario_id:
+            raise NotFound(
+                "data_set_not_found", f"data set not found: {ds_id}"
+            )
+        selected_datasets.append(ds)
+
+    # 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族
+    # (与数据集行交叉派生 case,spec v3 §4);死/旧条目 skip + 告警,
+    # 绝不炸。判定本体 = filter_injection_entries(执行设计 §1.6:
+    # /run/precheck 与 dispatch 共用这**一份**实现,失效口径不开第二份)。
+    raw_payload = scen.payload or {}
+    selected_entries, dangling_ids, skipped_while_degraded = (
+        await filter_injection_entries(raw_payload, req.injection_entry_ids or [])
+    )
+    if dangling_ids:
+        logger.warning(
+            "run_dispatcher: dangling injection entries skipped: {}",
+            dangling_ids,
+        )
+
+    # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
+    # 数据集 = 隐式空覆盖行(D12 基线语义);rowIndexes 校验对真实行数。
+    # rows 携带 (原始行号, 行字典) 对 — 审计/stem 记编辑器行号,
+    # 稀疏选择不重排(整库选择即 0..N-1 原样)。
+    fanout_datasets: list[dict] = []
+    for ds in selected_datasets:
+        rows_raw = list(ds.rows or [])
+        sel = sel_by_ds.get(ds.dataset_id)
+        if sel is None:
+            fanout_datasets.append({
+                "datasetId": ds.dataset_id,
+                "rows": [(i, r) for i, r in enumerate(rows_raw)] or [(0, {})],
+            })
+        else:
+            for ri in sel:
+                if ri < 0 or ri >= len(rows_raw):
+                    raise Conflict(
+                        "row_index_out_of_range",
+                        f"rowIndex={ri} out of range for data set "
+                        f"{ds.dataset_id} (0..{len(rows_raw) - 1})",
+                    )
+            fanout_datasets.append({
+                "datasetId": ds.dataset_id,
+                "rows": [(ri, rows_raw[ri]) for ri in sel],
+            })
+    # 交叉矩阵(spec v3 §4):R(行集合,空={[基线]})× E(选中条目集合,
+    # 空={[无注入]})— 每 case = 一行 × 一条目,单一偏离可直接归因;
+    # 替代 v2 的 N+M 并集与 `not fanout and not entries` 特判。
+    injections = list(selected_entries) or [None]
+    if not fanout_datasets:
+        fanout_datasets = [{"datasetId": None, "rows": [(0, {})]}]
+    return fanout_datasets, injections, selected_entries, skipped_while_degraded
+
+
+def fanout_total(fanout_datasets: list[dict], injections: list) -> int:
+    """R × E 的单元口径计数(P2-05:nRuns 乘法下沉执行器,不展开进
+    total_runs;P7 闸同口径)。"""
+    return sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
+
+
 # ─── main entry point ─────────────────────────────────────────────
 async def dispatch_run(
     db: AsyncSession,
@@ -637,90 +735,17 @@ async def dispatch_run(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
-    # 行级选择合并(spec v3 §4):dataSetSelection 权威键 — 仅当其缺省
-    # (空)时旧 dataSetIds 才生效(兼容读,映射整库);两键同发则旧键
-    # 整键忽略。同库多段合并取超集、段序无关:行集 ∪ 行集;任一段整库
-    # (行集空)则整库(整库 ⊇ 任意行集);段内行号去重。
-    sel_by_ds: dict[str, list[int] | None] = {}
-    for sel in req.data_set_selection:
-        ds_id = sel.dataset_id
-        row_idxes = sorted(set(sel.row_indexes))
-        if ds_id not in sel_by_ds:
-            sel_by_ds[ds_id] = row_idxes or None
-        elif not row_idxes:
-            # 重复的整库段无论先后都提升为整库(超集语义)。
-            sel_by_ds[ds_id] = None
-        elif sel_by_ds[ds_id] is not None:
-            sel_by_ds[ds_id] = sorted(set(sel_by_ds[ds_id]) | set(row_idxes))
-        # else:已整库(None)遇行集段 — 整库 ⊇ 行集,保持整库。
-    if not sel_by_ds:
-        for ds_id in req.data_set_ids:
-            sel_by_ds[ds_id] = None
-
-    selected_datasets: list[ComposerDataSet] = []
-    for ds_id in sel_by_ds:
-        ds = await _find_dataset_by_id(db, ds_id)
-        if ds is None or ds.scenario_id != scen.scenario_id:
-            raise NotFound(
-                "data_set_not_found", f"data set not found: {ds_id}"
-            )
-        selected_datasets.append(ds)
-
-    # 2.5 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族
-    # (与数据集行交叉派生 case,spec v3 §4);死/旧条目 skip + 告警,
-    # 绝不炸 dispatch。判定本体 = filter_injection_entries(执行设计 §1.6:
-    # /run/precheck 与 dispatch 共用这**一份**实现,失效口径不开第二份)。
-    raw_payload = scen.payload or {}
-    selected_entries, dangling_ids, skipped_while_degraded = (
-        await filter_injection_entries(raw_payload, req.injection_entry_ids or [])
-    )
-    if dangling_ids:
-        logger.warning(
-            "run_dispatcher: dangling injection entries skipped: {}",
-            dangling_ids,
-        )
+    # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
+    # 预检与本处共用同一份实现,算法不得漂移)。
+    (fanout_datasets, injections, selected_entries,
+     skipped_while_degraded) = await compute_run_fanout(db, scen, req)
 
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
     # 超过 total_runs 出现 failed > total 的怪状态。
     run_id = _new_run_id()
-    # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
-    # 数据集 = 隐式空覆盖行(D12 基线语义);rowIndexes 校验对真实行数。
-    # rows 携带 (原始行号, 行字典) 对 — 审计/stem 记编辑器行号,
-    # 稀疏选择不重排(整库选择即 0..N-1 原样)。
-    fanout_datasets: list[dict] = []
-    for ds in selected_datasets:
-        rows_raw = list(ds.rows or [])
-        sel = sel_by_ds.get(ds.dataset_id)
-        if sel is None:
-            fanout_datasets.append({
-                "datasetId": ds.dataset_id,
-                "rows": [(i, r) for i, r in enumerate(rows_raw)] or [(0, {})],
-            })
-        else:
-            for ri in sel:
-                if ri < 0 or ri >= len(rows_raw):
-                    raise Conflict(
-                        "row_index_out_of_range",
-                        f"rowIndex={ri} out of range for data set "
-                        f"{ds.dataset_id} (0..{len(rows_raw) - 1})",
-                    )
-            fanout_datasets.append({
-                "datasetId": ds.dataset_id,
-                "rows": [(ri, rows_raw[ri]) for ri in sel],
-            })
-    # 交叉矩阵(spec v3 §4):R(行集合,空={[基线]})× E(选中条目集合,
-    # 空={[无注入]})— 每 case = 一行 × 一条目,单一偏离可直接归因;
-    # 替代 v2 的 N+M 并集与 `not fanout and not entries` 特判。
-    injections = list(selected_entries) or [None]
-    if not fanout_datasets:
-        fanout_datasets = [{"datasetId": None, "rows": [(0, {})]}]
-    # P2-05:单元口径 —— nRuns 不再展开进 total_runs(乘法下沉执行器,
-    # 台账 attempts 列承载展开计数);P7 闸同口径(行 × 注入族)。
-    total_runs = (
-        sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
-    )
+    total_runs = fanout_total(fanout_datasets, injections)
     if total_runs > settings.MAX_RUNS_PER_EXECUTION:
         raise Conflict(
             "too_many_runs",

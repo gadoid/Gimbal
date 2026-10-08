@@ -75,6 +75,19 @@ class Settings(BaseSettings):
     EXEC_JOB_LEASE_SEC: float = 120.0
     # 认领次数上限(含首次):孤儿回收超过即失败收口(执行不可假设幂等)
     EXEC_JOB_MAX_ATTEMPTS: int = 2
+    # ── 权限域二期 P1:suite 聚合模式运行(§6.3/§6.6)──────────
+    # 每人 suite 数 / 每个 suite 成员数(防 sprawl,超出 409)
+    SUITE_CAP: int = 50
+    SUITE_MEMBER_CAP: int = 100
+    # 单次 suite 运行的总 runs 上限:分发前预检(复用 dispatch 的
+    # total_runs 同一份计算),防一次点击把单 worker 队列塞满数小时
+    SUITE_RUN_TOTAL_CAP: int = 1000
+    # 防重时效窗口(小时):只计入窗口内创建的未终态执行 —— 卡死批次
+    # 不会把某人对该 suite 永久锁死(§6.6;无批次级取消入口,靠窗口
+    # 兜底)。**窗口应大于预期的最长批次耗时**:单 worker 下
+    # 50 成员 × MAX_RUNS_PER_EXECUTION=200 的极端量级可能真跑超 24h,
+    # 超窗再发起属可接受降级(旧批仍在跑、新批排队,不损正确性)。
+    SUITE_RUN_STALE_HOURS: int = 24
     # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
     # server = 每执行一组 gimbal run server 实例(POST /runs + SSE;槽位池
     #   见 EXEC_MAX_SERVER_INSTANCES)—— 2026-09-29 起为默认(P3 收尾:

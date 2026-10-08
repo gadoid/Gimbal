@@ -199,9 +199,15 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     # 这里是 SQLite 兜底(该方言默认不强制 FK,CASCADE 不触发)——
     # 单条机械 DELETE,非逐用户簿记。
     from ..models.permission import UserStar
+    # suite_members 同款兜底(权限域二期 P1:场景删除 → 自动退出全部
+    # suite;组合外键 CASCADE 的 SQLite 兜底)。
+    from ..models.suite import SuiteMember
 
     await db.execute(
         sa_delete(UserStar).where(UserStar.scenario_id == scenario_id)
+    )
+    await db.execute(
+        sa_delete(SuiteMember).where(SuiteMember.scenario_id == scenario_id)
     )
     await db.delete(row)
     await db.commit()

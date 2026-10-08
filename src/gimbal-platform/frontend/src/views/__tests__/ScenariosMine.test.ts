@@ -70,11 +70,14 @@ function scen(id: string, vis: 'private' | 'public', schemeCount: number): Scena
 }
 
 function mountPage(scenarios: Scenario[] = []) {
-  // 服务端分桶:mock 尊重 visibility 参数(页面不再做客户端桶过滤)。
+  // 服务端分桶(浏览镜头 §5.1):mock 尊重 scope/visibility 参数——
+  // scope=mine 的入参集合即「自己创建的全部」,mock 原样返回种子集。
   vi.mocked(composerApi.listScenarios).mockImplementation(async (params) => {
-    const items = params?.visibility
-      ? scenarios.filter((s) => s.visibility === params.visibility)
-      : scenarios
+    const items = params?.scope
+      ? scenarios
+      : params?.visibility
+        ? scenarios.filter((s) => s.visibility === params.visibility)
+        : scenarios
     return { items, total: items.length, page: params?.page ?? 1, pageSize: params?.page_size ?? 20 } as never
   })
   const router = createRouter({
@@ -106,12 +109,15 @@ function mountPage(scenarios: Scenario[] = []) {
 describe('ScenariosMine — 拆分后的我的场景页', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('只列私有场景;无方案行显示虚线「+ 创建方案」', async () => {
+  it('列出我创建的全部(含已发布带公共徽标);无方案行显示虚线「+ 创建方案」', async () => {
     const w = mountPage([scen('sc-a', 'private', 5), scen('sc-hello', 'private', 0), scen('sc-p1', 'public', 0)])
     await flushPromises()
     expect(w.text()).toContain('sc-a')
     expect(w.text()).toContain('sc-hello')
-    expect(w.text()).not.toContain('sc-p1')
+    // mine 镜头 = 自己创建的全部(§5.2:修复「发布后从我的页消失」),
+    // 自己的已发布场景在列且带公共徽标
+    expect(w.text()).toContain('sc-p1')
+    expect(w.find('[data-testid="pub-badge-sc-p1"]').exists()).toBe(true)
     expect(w.find('.schemes-chip').text()).toContain('5 个方案')
     expect(w.find('.create-scheme-chip').exists()).toBe(true)
     w.unmount()
@@ -204,13 +210,19 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     w.unmount()
   })
 
-  it('管理员看到的列表含他人私有 → 副标题不得自称"你的"', async () => {
+  it('admin 默认「我的」镜头(副标题不自称"你的"),显式开关切「全员视角」', async () => {
     const { useAuthStore } = await import('@/stores/auth')
     useAuthStore().currentUser = { id: 1, username: 'root', display_name: 'root', is_admin: true } as never
     const w = mountPage([scen('sc-a', 'private', 1)])
     await flushPromises()
-    expect(w.find('.slib-sub').text()).toContain('管理员可见全员私有编排')
+    // 默认镜头 = 我的;全员视角是显式动作(§5.1),不再是默认全知
+    expect(w.find('.slib-sub').text()).toContain('我的')
     expect(w.find('.slib-sub').text()).not.toContain('你创建或拥有的')
+    expect(w.find('[data-testid="mine-lens-all-off"]').exists()).toBe(true)
+    await w.find('[data-testid="mine-lens-all-off"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="mine-lens-all-on"]').exists()).toBe(true)
+    expect(w.find('.slib-sub').text()).toContain('全员视角')
     w.unmount()
   })
 

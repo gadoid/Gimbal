@@ -329,17 +329,23 @@ async def scenario_facets(
     db: DbSession,
     q: str | None = None,
     visibility: str | None = None,
+    scope: Literal["mine", "all"] = "all",
 ) -> dict:
     """五维 facets:modules/systems/tags/authors/priorities 可选值+计数。
 
     替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走
     GROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。
+    scope 与 list 同口径(§5.1):mine 只统计自己创建的;visibility=public
+    时 scope 不叠加。
     """
+    if visibility == "public":
+        scope = "all"
     is_pg = db.bind.dialect.name == "postgresql"
     if is_pg:
         from ..services import scenario_query
         out = await scenario_query.facets(
-            db, user=user, viewer_id=user.id, q=q, visibility=visibility)
+            db, user=user, viewer_id=user.id, q=q, visibility=visibility,
+            scope=scope)
         return {
             dim: [{"value": k, "count": n} for k, n in pairs]
             for dim, pairs in out.items()
@@ -352,6 +358,8 @@ async def scenario_facets(
         if can_read_scenario(
             user, owner_id=r.owner_id, visibility=r.visibility or "private")
     ]
+    if scope == "mine":
+        visible = [r for r in visible if r.owner_id == user.id]
     if visibility:
         visible = [r for r in visible
                    if (r.visibility or "private") == visibility]
@@ -399,6 +407,7 @@ async def list_scenarios(
     tag: str | None = None,
     author: str | None = None,
     visibility: str | None = None,
+    scope: Literal["mine", "all"] = "all",
     updated_within: Literal["24h", "7d", "30d"] | None = None,
     starred: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -413,6 +422,12 @@ async def list_scenarios(
 
     属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
     一趟全表投影,单请求双全表扫描)。
+
+    浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1):
+    ``scope=mine`` = 只看自己创建的(含已发布),对 admin 同样生效——
+    镜头是查询偏好不动权限边界;API 默认 ``all`` 与现行行为完全一致,
+    前端负责默认传 mine。``visibility=public`` 是公共页专用口径,
+    scope 不叠加(公共页行为不变)。
 
     多值筛选参数(system/module/priority/tag/author)收逗号联合字符串,
     语义与前端 ``utils/filters.ts`` 对齐(system/tag=OR 携带,其余精确
@@ -429,6 +444,10 @@ async def list_scenarios(
     # M6-2:收藏源改 UserStar 表(marks_store/stars.json 退役)
     from ..services import user_stars as user_stars_svc
 
+    # 镜头参数归一(§5.1):公共页口径优先,scope 不叠加。
+    if visibility == "public":
+        scope = "all"
+
     user_star_ids = await user_stars_svc.star_ids(db, user.id)
     starred_ids = sorted(user_star_ids) if starred is True else None
     is_pg = db.bind.dialect.name == "postgresql"
@@ -442,7 +461,7 @@ async def list_scenarios(
             tags=scenario_query.split_csv(tag),
             authors=scenario_query.split_csv(author),
             cutoff=scenario_query.updated_cutoff(updated_within),
-            visibility=visibility, starred_ids=starred_ids,
+            visibility=visibility, scope=scope, starred_ids=starred_ids,
             page=page, page_size=page_size,
         )
         if fields == "options":
@@ -481,6 +500,8 @@ async def list_scenarios(
             user, owner_id=r.owner_id, visibility=r.visibility or "private"
         )
     ]
+    if scope == "mine":
+        readable = [r for r in readable if r.owner_id == user.id]
     if visibility:
         readable = [r for r in readable if (r.visibility or "private") == visibility]
     # 关注页/关注卡的服务端数据源(store 退位后前端不再持有全量可过滤,

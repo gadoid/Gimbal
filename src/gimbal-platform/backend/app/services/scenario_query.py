@@ -53,8 +53,15 @@ def updated_cutoff(updated_within: str | None) -> datetime | None:
 # ── 谓词构造 ────────────────────────────────────────────────────────
 
 
-def visibility_clause(user=None, viewer_id: int | None = None):
-    """可见性谓词:admin 全量;member = public + 自己的(None = 全量)。"""
+def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all"):
+    """可见性谓词:admin 全量;member = public + 自己的(None = 全量)。
+
+    scope=mine(浏览镜头,《Suite成员层、引用分享与浏览镜头》§5.1):
+    只看自己创建的(含已发布),对 admin 同样生效——镜头是查询偏好,
+    不动权限边界;调用方负责在 visibility=public 时忽略 scope。
+    """
+    if scope == "mine" and user is not None:
+        return ComposerScenario.owner_id == user.id
     is_admin = getattr(user, "role", None) == "admin"
     if user is not None and is_admin:
         return None
@@ -152,6 +159,7 @@ async def list_page(
     authors: list[str] | None = None,
     cutoff: datetime | None = None,
     visibility: str | None = None,
+    scope: str = "all",
     starred_ids: list[str] | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -167,7 +175,7 @@ async def list_page(
         priorities=priorities or [], tags=tags or [], authors=authors or [],
         cutoff=cutoff, visibility=visibility, starred_ids=starred_ids,
     )
-    vis = visibility_clause(user, viewer_id)
+    vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
 
@@ -197,6 +205,7 @@ async def facets(
     viewer_id: int | None = None,
     q: str | None = None,
     visibility: str | None = None,
+    scope: str = "all",
 ) -> dict:
     """五维 facets:modules/systems/tags/authors/priorities 的可选值+计数。
 
@@ -209,7 +218,7 @@ async def facets(
         clauses.append(qc)
     if visibility:
         clauses.append(ComposerScenario.visibility == visibility)
-    vis = visibility_clause(user, viewer_id)
+    vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
 

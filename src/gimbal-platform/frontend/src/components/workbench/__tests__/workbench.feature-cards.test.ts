@@ -187,7 +187,7 @@ describe('适配中心卡', () => {
 })
 
 describe('执行器卡', () => {
-  it('缺方案的私有场景进行里,可执行数只算有方案的', async () => {
+  it('可执行 = scope=mine 返回集中有方案的(含自己的已发布);缺方案进行里', async () => {
     vi.mocked(composerApi.listScenarios).mockResolvedValue({
       items: [scen('p1', 0), scen('p2', 2), scen('pub', 1, 'public')],
       total: 3, page: 1, pageSize: 100,
@@ -195,11 +195,15 @@ describe('执行器卡', () => {
     const w = mountPage()
     await waitCard(w, 'runner')
     const card = w.find('[data-testid="wb-card-runner"]')
-    expect(card.find('.chead-count').text()).toBe('1 可跑')
+    // 卡片自带 scope=mine 查询(§5.1 口径):mock 返回集即「自己创建的
+    // 全部」——p2 与 pub(owner 可跑自己的已发布)都算可执行;p1 缺方案
+    expect(card.find('.chead-count').text()).toBe('2 可跑')
     expect(card.find('[data-testid="wb-rn-row-p1"]').exists()).toBe(true)
     expect(card.find('[data-testid="wb-rn-row-p2"]').exists()).toBe(false)
     expect(card.find('[data-testid="wb-rn-row-p1"]').attributes('href'))
       .toBe('/scenarios/p1/schemes')
+    expect(composerApi.listScenarios).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: 'mine' }))
     w.unmount()
   })
 })

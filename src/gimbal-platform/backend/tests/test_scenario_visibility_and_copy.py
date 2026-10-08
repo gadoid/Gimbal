@@ -336,3 +336,96 @@ async def test_resolve_name_conflict_clamps_base_even_without_conflict(
         assert taken is False          # 没撞名,不加计数后缀
         assert len(resolved) == 64     # 但基名被钳到上限
         await s.rollback()
+
+
+# ── 浏览镜头 scope(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1)──
+async def test_scope_mine_admin_default_lens(client: AsyncClient) -> None:
+    """admin 的 scope=mine 只见自己创建的——全员视角不再是默认镜头。
+
+    首注册用户 bootstrap 为 admin:直接用它当 admin,再注册一个普通
+    成员建私有场景。
+    """
+    admin = await _register_and_login(client, "lensadmin", "lensadminpass123")
+    member = await _register_and_login(client, "lensbob", "lensbobpass123")
+    r = await client.post(
+        "/api/scenarios", headers=member, json=_draft("sc-lens-bob"))
+    assert r.status_code == 201, r.text
+
+    def ids(resp) -> set:
+        return {s["meta"]["scenarioId"] for s in resp.json()["items"]}
+
+    # 默认(all):admin 全量可见(既有行为不变)
+    r = await client.get("/api/scenarios", headers=admin)
+    assert "sc-lens-bob" in ids(r)
+    # scope=mine:admin 只看自己创建的,他人的 private 不再涌入
+    r = await client.get("/api/scenarios", headers=admin, params={"scope": "mine"})
+    assert "sc-lens-bob" not in ids(r)
+
+
+async def test_scope_mine_includes_own_public(client: AsyncClient) -> None:
+    """mine = 自己创建的全部(含已发布)——修复「发布后从我的页消失」。"""
+    await _register_and_login(client, "admin1", "admin1pass123")  # 吃掉 bootstrap
+    bob = await _member(client, "lenscarol")
+    r = await client.post(
+        "/api/scenarios", headers=bob, json=_draft("sc-lens-mine"))
+    assert r.status_code == 201, r.text
+    r = await client.post("/api/scenarios/sc-lens-mine/publish", headers=bob)
+    assert r.status_code == 200, r.text
+
+    def ids(resp) -> set:
+        return {s["meta"]["scenarioId"] for s in resp.json()["items"]}
+
+    # 自己 scope=mine 仍能看到已发布的自己场景
+    r = await client.get("/api/scenarios", headers=bob, params={"scope": "mine"})
+    assert "sc-lens-mine" in ids(r)
+    # 他人 scope=mine 看不到(不是他创建的)
+    dave = await _register_and_login(client, "lensdave", "lensdavepass123")
+    r = await client.get("/api/scenarios", headers=dave, params={"scope": "mine"})
+    assert "sc-lens-mine" not in ids(r)
+    # 他人默认(all)能看到(public)
+    r = await client.get("/api/scenarios", headers=dave)
+    assert "sc-lens-mine" in ids(r)
+
+
+async def test_scope_not_stacked_on_public_visibility(client: AsyncClient) -> None:
+    """visibility=public 是公共页专用口径,scope 不叠加——行为不变。"""
+    await _register_and_login(client, "admin2", "admin2pass123")
+    bob = await _member(client, "lenserin")
+    r = await client.post(
+        "/api/scenarios", headers=bob, json=_draft("sc-lens-pub"))
+    assert r.status_code == 201, r.text
+    r = await client.post("/api/scenarios/sc-lens-pub/publish", headers=bob)
+    assert r.status_code == 200, r.text
+
+    dave = await _register_and_login(client, "lensfrank", "lensfrankpass123")
+    # 公共页(visibility=public)即使带了 scope=mine 也按公共口径返回
+    r = await client.get(
+        "/api/scenarios", headers=dave,
+        params={"visibility": "public", "scope": "mine"})
+    ids = {s["meta"]["scenarioId"] for s in r.json()["items"]}
+    assert "sc-lens-pub" in ids
+
+
+async def test_facets_scope_mine(client: AsyncClient) -> None:
+    """facets 与 list 同口径:mine 只统计自己创建的。"""
+    await _register_and_login(client, "admin3", "admin3pass123")
+    bob = await _member(client, "lensgina")
+    r = await client.post(
+        "/api/scenarios", headers=bob,
+        json=_draft("sc-lens-facet", module="lensmod"))
+    assert r.status_code == 201, r.text
+
+    dave = await _register_and_login(client, "lenshank", "lenshankpass123")
+
+    def mods(resp) -> set:
+        return {m["value"] for m in resp.json()["modules"]}
+
+    # dave 默认 facets 看不到 bob private 场景的 module(可见性不变量)
+    r = await client.get("/api/scenarios/facets", headers=dave)
+    assert "lensmod" not in mods(r)
+    # bob 自己的 mine / all 都统计得到(自己的 private)
+    r = await client.get(
+        "/api/scenarios/facets", headers=bob, params={"scope": "mine"})
+    assert "lensmod" in mods(r)
+    r = await client.get("/api/scenarios/facets", headers=bob)
+    assert "lensmod" in mods(r)

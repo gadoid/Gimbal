@@ -7,6 +7,8 @@ from .execution import (
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
 from .composer_run_scheme import ComposerRunScheme
+# 权限域二期 P1:suite 成员层(组合外键 = 库层安全边界)
+from .suite import Suite, SuiteMember
 from .scenario_endpoint_ref import ScenarioEndpointRef
 from .catalog_version import CatalogVersion
 from .adaptation_batch import AdaptationBatch
@@ -31,6 +33,8 @@ __all__ = [
     "ComposerScenario",
     "ComposerDataSet",
     "ComposerRunScheme",
+    "Suite",
+    "SuiteMember",
     "ScenarioEndpointRef",
     "CatalogVersion",
     "AdaptationBatch",

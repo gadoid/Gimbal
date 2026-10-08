@@ -16,13 +16,17 @@ system: platform
 - review: reviewed
   id: attr:user.role
   label: 成员角色
-  gloss: admin / member 两级;admin 持有成员管理权
+  gloss: user / member / admin 三级单角色(0011 更名后口径:原 member→user、operator→member,admin 不变);user 为基础用户,member 持技术运营权(共享别名/carry 默认值/适配处理),admin 另持人事与内容权;role 不进 JWT、每请求查库即时生效
+- review: reviewed
+  id: value:user.role.user
+  label: 基础用户
+- review: reviewed
+  id: value:user.role.member
+  label: 技术运营成员
+  gloss: 更名前的 operator 层;共享别名/carry 默认值/适配处理的读写权
 - review: reviewed
   id: value:user.role.admin
   label: 管理员
-- review: reviewed
-  id: value:user.role.member
-  label: 普通成员
 - review: reviewed
   id: cap:user.create
   label: 创建成员

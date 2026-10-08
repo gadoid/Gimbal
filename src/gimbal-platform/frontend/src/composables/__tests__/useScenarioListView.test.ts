@@ -92,11 +92,15 @@ describe('useScenarioListView(服务端化)', () => {
     vi.mocked(groupApi.deleteFilterGroup).mockResolvedValue(undefined)
   })
 
-  it('分桶下推:mine → visibility=private,public → visibility=public', async () => {
+  it('分桶下推:mine → scope=mine(浏览镜头),public → visibility=public', async () => {
     mockEnv([item(1)])
     const mine = useScenarioListView('mine')
     await mine.load()
-    expect((await lastCallParams()).visibility).toBe('private')
+    // 镜头口径(§5.1):mine 桶下推 scope(自己创建的全部,含已发布;
+    // admin 同样生效)而非 visibility=private——后者会让 admin 查到
+    // 全员 private,是被淹没的根源。
+    expect((await lastCallParams()).scope).toBe('mine')
+    expect((await lastCallParams()).visibility).toBeUndefined()
 
     const pub = useScenarioListView('public')
     await pub.load()
@@ -138,17 +142,17 @@ describe('useScenarioListView(服务端化)', () => {
     expect(row.system).toEqual(['fin'])
   })
 
-  it('facets 随列表口径拉取(分桶 visibility + q),失败回落 null 池兜底', async () => {
+  it('facets 随列表口径拉取(分桶参数 + q),失败回落 null 池兜底', async () => {
     const v = useScenarioListView('mine')
     await flushPromises()
     const facetsCall = vi.mocked(composerApi.fetchScenarioFacets).mock.calls[0]
-    expect(facetsCall?.[0]).toEqual({ visibility: 'private' })
+    expect(facetsCall?.[0]).toEqual({ scope: 'mine' })
 
     v.q.value = '订单'
     await flushPromises()
     expect(
       vi.mocked(composerApi.fetchScenarioFacets).mock.lastCall?.[0],
-    ).toEqual({ q: '订单', visibility: 'private' })
+    ).toEqual({ q: '订单', scope: 'mine' })
 
     // 请求失败 → facets 置 null(FilterPopover 回落当前页 uniq 池)
     vi.mocked(composerApi.fetchScenarioFacets).mockRejectedValueOnce(new Error('502'))

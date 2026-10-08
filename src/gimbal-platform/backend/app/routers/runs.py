@@ -67,6 +67,39 @@ async def post_run(
                 "message": "only the scenario's owner (or admin) can run this scenario",
             },
         )
+        # graph 链 unit 授权(必修缺口,《Suite成员层、引用分享与浏览镜头-
+        # 设计方案》§8.2):unit 与 before/after 括号场景此前只在 worker 侧
+        # 物化时查存在性、无归属检查——任何登录用户都能经编排跑他人
+        # 私有场景。请求侧逐个过属主闸(与顶层同款 = 属主 ∨ admin,403
+        # not_owner;不存在 → 404 不泄露)。rerun 不重放 graph(config 重放
+        # 构造无 graph 字段),此处即唯一入口。
+        if body.graph is not None:
+            seen_unit_ids: set[str] = set()
+            for unit in [
+                *body.graph.units,
+                *body.graph.before,
+                *body.graph.after,
+            ]:
+                if unit.scenario_id in seen_unit_ids:
+                    continue
+                seen_unit_ids.add(unit.scenario_id)
+                unit_scen = await scenario_store.get_row(db, unit.scenario_id)
+                if unit_scen is None:
+                    raise run_dispatcher.NotFound(
+                        "scenario_not_found",
+                        f"scenario not found: {unit.scenario_id}",
+                    )
+                ensure_owner(
+                    user,
+                    unit_scen.owner_id,
+                    {
+                        "code": "not_owner",
+                        "message": (
+                            "only the scenario's owner (or admin) can run "
+                            f"graph unit: {unit.scenario_id}"
+                        ),
+                    },
+                )
         return await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,

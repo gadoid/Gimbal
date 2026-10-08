@@ -13,7 +13,7 @@ id: platform.service_aliases.patch_by_alias_name
 system: platform
 service: platform-service
 name: Patch Alias
-description: 改别名:共享行 operator+;个人行 admin(归属域的写权只属 admin)。
+description: 改别名:共享行 member+;个人行 admin(归属域的写权只属 admin)。
 binding:
   protocol: http
   method: PATCH

@@ -15,9 +15,11 @@ service: platform-service
 name: Create Alias
 description: '登记别名(M2.5,权限方案 §1.2 两类归属拆行):
 
-  团队共享(owner_user_id 空)= operator+;个人默认(owner_user_id
+  团队共享(owner_user_id 空)= member+〔0011 更名:原 operator+〕;
 
-  非空,即「归属字段」)= admin —— 人事/内容权不落进技术运营角色。'
+  个人默认(owner_user_id 非空,即「归属字段」)= admin —— 人事/
+
+  内容权不落进技术运营角色。'
 binding:
   protocol: http
   method: POST

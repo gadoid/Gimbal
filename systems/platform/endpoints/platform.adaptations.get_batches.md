@@ -13,9 +13,11 @@ id: platform.adaptations.get_batches
 system: platform
 service: platform-service
 name: List Batches
-description: '批次列表:operator/admin 全量;member 仅 ``scope=mine``(C13 owner
+description: '批次列表:member/admin 全量;user 仅 ``scope=mine``(C13 owner
 
-  知情视图;M2.5 起技术运营权归 operator,权限方案 §1.2)。M4(§6.3):
+  知情视图;M2.5 起技术运营权归 member〔0011 更名:原 operator〕,
+
+  权限方案 §1.2)。M4(§6.3):
 
   status 精确 + Page 信封。'
 binding:

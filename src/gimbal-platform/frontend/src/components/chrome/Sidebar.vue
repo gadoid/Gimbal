@@ -158,7 +158,7 @@ const { collapsed, toggle } = useSidebarCollapse()
 watch(
   () => auth.role,
   (role) => {
-    if (role !== 'member') void adaptations.ensureBadgeLoaded()
+    if (role !== 'user') void adaptations.ensureBadgeLoaded()
   },
   { immediate: true },
 )
@@ -209,11 +209,11 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, roles: ['operator', 'admin'] },
+      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, roles: ['member', 'admin'] },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
       // 服务信息管理的键详情,本页只剩跨服务兜底层)
-      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['operator', 'admin'] },
+      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['member', 'admin'] },
       { path: '/adaptations', label: '适配中心', icon: ActivityLogIcon },
     ],
   },
@@ -224,7 +224,9 @@ const groups: SidebarGroup[] = [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
-    { path: '/suites', label: 'Suite 编排', icon: BarChartIcon },
+    // 用例组(权限域二期 P1):suite 成员层管理(列表/成员/整组运行)
+    { path: '/suites', label: '用例组', icon: BarChartIcon },
+    { path: '/suites/composer', label: 'Suite 编排', icon: BarChartIcon, dimmed: true, dimmedTitle: '一次性 graph 编排 — 与「用例组」正交;关系待方案 §13.2-2 拍板' },
     { path: '/analytics', label: '数据分析', icon: BarChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },

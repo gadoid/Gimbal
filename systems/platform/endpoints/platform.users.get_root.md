@@ -13,7 +13,7 @@ id: platform.users.get_root
 system: platform
 service: platform-service
 name: List Users
-description: "List every user(M2.5 收紧:operator+ 可见;原「任何登录用户全量\n可见」的 spec-1 遗留闭合 —— 权限方案 §5.3)。M4(§6.3):q\n(username/display_name 子串)+ role 精确 + Page 信封。"
+description: "List every user(M2.5 收紧:member+ 可见〔0011 更名:原 operator+〕;\n原「任何登录用户全量可见」的 spec-1 遗留闭合 —— 权限方案 §5.3)。\nM4(§6.3):q(username/display_name 子串)+ role 精确 + Page 信封。"
 binding:
   protocol: http
   method: GET
