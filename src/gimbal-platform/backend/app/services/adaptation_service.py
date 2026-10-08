@@ -7,6 +7,7 @@ plate 目录是接口契约权威;本模块把"plate 现状"与平台基线戳
 from __future__ import annotations
 
 import copy
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -83,40 +84,17 @@ async def _plate_full_endpoint(endpoint_id: str) -> dict | None:
 
 
 # ─── 版本/时间比较 ────────────────────────────────────────────────
-def _semver_key(version: str) -> tuple[int, ...] | None:
-    try:
-        return tuple(int(p) for p in version.strip().split("."))
-    except ValueError:
-        return None
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
-def _semver_gt(a: str, b: str) -> bool:
-    """a 严格高于 b。双侧可解析 → 元组数值比较;否则退化为字典序,
-    且仅"确实不同"才算前进(避免怪版本号误报 pending)。"""
-    ka, kb = _semver_key(a), _semver_key(b)
-    if ka is not None and kb is not None:
-        return ka > kb
-    return a != b and a > b
-
-
-def _parse_dt(value) -> datetime | None:
-    """plate 侧 ISO 时间(可带 Z / +00:00)→ naive-UTC;解析失败 → None。"""
-    if isinstance(value, datetime):
-        dt = value
-    elif isinstance(value, str) and value:
-        try:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    else:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
+def _is_hex_stamp(version: str) -> bool:
+    """64-hex = 8m 迁移后的 shape_hash 戳;其余(旧 semver)视为未迁移,
+    按首见基线重落(评审 R6④)。"""
+    return bool(_HEX64.match(version or ""))
 
 
 def _utcnow() -> datetime:
-    """naive-UTC(与 _parse_dt 同基准;SQLite CURRENT_TIMESTAMP 亦为 UTC)。"""
+    """naive-UTC(SQLite CURRENT_TIMESTAMP 亦为 UTC)。"""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -126,8 +104,10 @@ async def catalog_diff(db: AsyncSession) -> dict:
 
     * 首见(库内无戳)→ 拉全量 spec 落基线戳 + spec_json(幂等,
       不算待适配、不建批次);列表有但 /full 404 → full_unavailable 异常;
-    * plate version 严格高于戳 → pending;
-    * version 相同但 plate updated_at > synced_at → C12「忘 bump」异常;
+    * 旧 semver 戳(非 64-hex,未跑 8m 迁移的环境)→ 与首见同口径重落
+      基线(评审 R6④:冷启动不得把全部端点打成假 pending,149 个全 pending
+      需要人工开 149 次批次);
+    * A2(修订九②):变更检测 = shape_hash 比较 —— ≠ 戳内指纹即 pending;
     * 库内有戳但 plate 列表无此 endpoint → missing_on_plate 异常。
 
     基线落库是写副作用,末尾单次 commit —— 路由层因此用 POST。
@@ -146,7 +126,7 @@ async def catalog_diff(db: AsyncSession) -> dict:
         if not eid:
             continue
         stamp = stamps.pop(eid, None)
-        if stamp is None:
+        if stamp is None or not _is_hex_stamp(str(stamp.version or "")):
             full = await _plate_full_endpoint(eid)
             if full is None:  # 列表有、full 404:plate 自身状态不一致
                 anomalies.append({
@@ -154,10 +134,15 @@ async def catalog_diff(db: AsyncSession) -> dict:
                     "detail": "plate list has endpoint but /full returned 404",
                 })
                 continue
-            db.add(CatalogVersion(
-                endpoint_id=eid, version=str(it.get("shape_hash") or ver),
-                spec_json=full, synced_at=_utcnow(),
-            ))
+            if stamp is None:
+                db.add(CatalogVersion(
+                    endpoint_id=eid, version=str(it.get("shape_hash") or ver),
+                    spec_json=full, synced_at=_utcnow(),
+                ))
+            else:  # 旧 semver 戳 → 首见基线口径重落(评审 R6④)
+                stamp.version = str(it.get("shape_hash") or ver)
+                stamp.spec_json = full
+                stamp.synced_at = _utcnow()
             baselined += 1
             continue
         # A2(修订九②):变更检测 = shape_hash 比较(轻列表字段)。

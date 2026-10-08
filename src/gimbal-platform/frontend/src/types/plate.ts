@@ -222,6 +222,15 @@ export interface EndpointFullView {
   metadata: EndpointMetadataView
   shape_hash: string
   /**
+   * 轻列表(`GET /api/endpoint`)的**平铺坐标便捷投影**(7.2:http 专属,
+   * 取自 binding.locator();完整 binding 对象只在 /full 出现)。轻列表条目
+   * 只有这三个扁平字段 + 基础字段,没有 binding/request/responses/metadata;
+   * /full 响应则不携带它们。两形态共用本接口时按可选字段读。
+   */
+  protocol?: string
+  method?: HttpMethod
+  path?: string
+  /**
    * 声明侧的**可注入面**(platform 代理 `GET /api/endpoint-catalog/{id}/full`
    * 附加字段,非 plate EndpointDetailView 的键):扁平字符串列表,每级容器前缀
    * 与模板形态都已展开(spec §2.2)⇒ 消费侧只做成员判定,不再自己归一。

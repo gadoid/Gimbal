@@ -178,3 +178,77 @@ it('SSE 404:执行已删 → 停流 + pollError(P2-06)', async () => {
     vi.unstubAllGlobals()
   }
 })
+
+it('SSE 404 后兜底轮询停拍(R9):不再每 3s 拉一次 404 直到卸载', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    const getSpy = vi.spyOn(api, 'get').mockRejectedValue(
+      Object.assign(new Error('404'), { status: 404 }))
+    const store = useExecutionsStore()
+    store.detail = makeDetail(11, 'running')
+    store.startPolling(11)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1000)   // SSE 404 → 收口
+    const callsAfter404 = getSpy.mock.calls.length
+    await vi.advanceTimersByTimeAsync(10_000) // 再走 10s(3 拍以上)
+    expect(getSpy.mock.calls.length).toBe(callsAfter404)
+    expect(store.pollError).toContain('不存在')
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})
+
+it('兜底轮询 404 视为终态(R9):SSE 静默时兜底自身停拍', async () => {
+  vi.useFakeTimers()
+  // SSE 流挂起(不开 404);api.get 404 → 兜底发现已删 → 收口
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => { /* 挂起 */ })))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    const getSpy = vi.spyOn(api, 'get').mockRejectedValue(
+      Object.assign(new Error('404'), { status: 404 }))
+    const store = useExecutionsStore()
+    store.detail = makeDetail(12, 'running')
+    store.startPolling(12)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(3100)   // 首拍兜底 404 → 收口
+    const calls = getSpy.mock.calls.length
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(getSpy.mock.calls.length).toBe(calls)
+    expect(store.pollError).toContain('不存在')
+    expect(store.detail).toBeNull()
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})
+
+it('代际比对(R9):切换执行后,上一执行的迟到响应不覆盖当前 detail', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => { /* SSE 挂起 */ })))
+  const auth = useAuthStore()
+  auth.accessToken = 'tok'
+  try {
+    let resolveOld!: (d: api.Execution) => void
+    const getSpy = vi.spyOn(api, 'get')
+      .mockImplementationOnce(() => new Promise((res) => { resolveOld = res }))
+      .mockResolvedValue(makeDetail(21, 'running'))
+    const store = useExecutionsStore()
+    store.startPolling(20)                       // 旧执行的基线刷新挂起
+    await vi.advanceTimersByTimeAsync(0)
+    store.stopPolling()
+    store.startPolling(21)                       // 切到新执行
+    await vi.advanceTimersByTimeAsync(0)
+    resolveOld(makeDetail(20, 'done'))           // 旧响应迟到到达
+    await vi.advanceTimersByTimeAsync(100)
+    expect(store.detail?.id).toBe(21)            // 不被旧执行覆盖
+    expect(getSpy).toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  }
+})

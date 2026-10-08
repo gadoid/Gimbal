@@ -111,14 +111,14 @@
           <!-- Hero -->
           <div class="hero">
             <div class="title-row">
-              <span class="hero-method-badge" :class="`m-${(selected.binding?.method || 'get').toLowerCase()}`">{{ selected.binding?.method }}</span>
+              <span class="hero-method-badge" :class="`m-${(selected.binding?.method || selected.method || 'get').toLowerCase()}`">{{ selected.binding?.method || selected.method }}</span>
               <h2>{{ selected.name }}</h2>
             </div>
             <div class="path-line">
               <code class="sys-tag">{{ selected.system }}</code>
               <span class="path-sep">/</span>
               <code class="svc-tag">{{ selected.service }}</code>
-              <code class="path">{{ selected.binding?.path }}</code>
+              <code class="path">{{ selected.binding?.path || selected.path }}</code>
               <span class="muted" v-if="selected.shape_hash">#{{ selected.shape_hash.slice(0, 8) }}</span>
             </div>
             <p v-if="selected.description" class="desc">{{ selected.description }}</p>
@@ -294,9 +294,10 @@ const filtered = computed(() => {
   }
   if (filterQuery.value.trim()) {
     const q = filterQuery.value.toLowerCase().trim()
+    // 轻列表行读平铺 path(评审 R7);full 形态回退 binding.path
     list = list.filter(e =>
       e.name.toLowerCase().includes(q) ||
-      (e.binding?.path || '').toLowerCase().includes(q) ||
+      (e.path || e.binding?.path || '').toLowerCase().includes(q) ||
       (e.description || '').toLowerCase().includes(q) ||
       e.id.toLowerCase().includes(q))
   }
@@ -440,10 +441,16 @@ async function refetch() {
     if (r.ok) {
       const data: any = await r.json()
       const items = data?.data?.items || data?.items || (Array.isArray(data) ? data : [])
+      // 轻列表条目 = 平铺坐标(method/path/protocol + shape_hash,7.2);
+      // 不再读旧嵌套 e.api / e.version(评审 R7:旧字段恒 undefined →
+      // 按路径搜索搜不到、/full 失败时详情头空白)。
       all.value = items.map((e: any) => ({
         id: e.id, system: e.system, service: e.service, name: e.name,
-        description: e.description, api: e.api, request: e.request,
-        responses: e.responses, metadata: e.metadata, version: e.version,
+        description: e.description ?? '',
+        method: e.method ?? '',
+        path: e.path ?? '',
+        protocol: e.protocol ?? 'http',
+        shape_hash: e.shape_hash ?? '',
       }))
       // 默认展开第一个 system + 它所有的 services (避免用户多点 6 次)
       if (systemsInFiltered.value.length > 0 && openSystems.value.length === 0) {

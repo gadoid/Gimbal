@@ -222,7 +222,15 @@ export const useExecutionsStore = defineStore('executions', () => {
         _stopFallback()
         return
       }
-      void _refreshOnce(id).catch(() => { /* 静默:下拍再试 */ })
+      void _refreshOnce(id).catch((e) => {
+        // 404 = 执行已删(R9):视为终态收口,不再每 3s 拉一次 404
+        if (httpStatusOf(e) === 404) {
+          detail.value = null
+          pollError.value = '该执行记录已不存在（可能已被删除）'
+          stopPolling()
+        }
+        /* 其余失败:静默,下拍再试 */
+      })
     }, FALLBACK_POLL_MS)
   }
 
@@ -248,10 +256,14 @@ export const useExecutionsStore = defineStore('executions', () => {
     return stopPolling
   }
 
-  /** 单拍刷新:detail + 已展开 rows(终态且已有缓存跳过,T13-Q2)。 */
+  /** 单拍刷新:detail + 已展开 rows(终态且已有缓存跳过,T13-Q2)。
+   * 代际比对(R9):请求在途期间若已 stopPolling(切换执行/卸载/删除),
+   * 迟到响应不得覆盖当前 detail。 */
   async function _refreshOnce(id: number): Promise<Execution> {
+    const gen = pollGeneration
     const prevDetail = detail.value
     const d = await api.get(id)
+    if (gen !== pollGeneration) return d   // 迟到响应:代际已换,放弃写入
     detail.value = d
     for (const rid of expanded.value) {
       if (shouldSkipRowFetch(rid, prevDetail)) continue
@@ -298,8 +310,11 @@ export const useExecutionsStore = defineStore('executions', () => {
         headers, signal: ctrl.signal,
       })
       if (resp.status === 404) {
+        // R9:执行已删 = 终态——停整个轮询(含兜底定时器),否则 detail=null
+        // 会让兜底每 3s 拉一次 404,直到页面卸载
         detail.value = null
         pollError.value = '该执行记录已不存在（可能已被删除）'
+        stopPolling()
         return
       }
       if (!resp.ok || !resp.body) {
@@ -335,8 +350,10 @@ export const useExecutionsStore = defineStore('executions', () => {
       if (ctrl.signal.aborted) return
       const status = (e as { status?: number }).status ?? httpStatusOf(e)
       if (status === 404) {
+        // R9:同上——404 是终态,停兜底定时器,不做永动 404 轮询
         detail.value = null
         pollError.value = '该执行记录已不存在（可能已被删除）'
+        stopPolling()
         return
       }
       reconnects += 1
@@ -345,7 +362,10 @@ export const useExecutionsStore = defineStore('executions', () => {
         // 延迟期间可能已 stopPolling(卸载/手动刷新)→ 代际不匹配即退出
         return _pump(id, gen)
       }
+      // R9:重连耗尽 = 放弃刷新——横幅写「已停止刷新」就要真的停
+      // (含兜底定时器;此前兜底继续跑,横幅与行为不符)
       pollError.value = '事件流连接失败，已停止刷新 — 请手动刷新重试'
+      stopPolling()
     }
   }
 
