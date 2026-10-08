@@ -13,11 +13,7 @@ id: platform.executions.get_by_execution_id_rows
 system: platform
 service: platform-service
 name: Get Execution Rows
-description: '行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存
-
-  registry;历史执行读 execution_rows DB 分页;M6 前的存量单回放
-
-  JSONL(只读归档)兜底。信封 {items,total,page,pageSize}。'
+description: "行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存\nregistry;历史执行读 execution_rows DB 分页;M6 前的存量单回放\nJSONL(只读归档)兜底。信封 {items,total,page,pageSize}。"
 binding:
   protocol: http
   method: GET
@@ -26,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: items

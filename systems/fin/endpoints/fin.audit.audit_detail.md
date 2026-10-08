@@ -13,7 +13,7 @@ id: fin.audit.audit_detail
 system: fin
 service: fin-service
 name: 查询审批详情
-description: '由 Scenario_Test_14 提取: 查询审批详情'
+description: "由 Scenario_Test_14 提取: 查询审批详情"
 binding:
   protocol: http
   method: POST
@@ -28,7 +28,7 @@ request:
     example: ''
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: relation_id

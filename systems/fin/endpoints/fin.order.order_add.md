@@ -28,8 +28,8 @@ request:
   - name: order_id
     path: $.order_id
     type: string
-    default: '354066893969032192'
-    example: '354066893969032192'
+    default: "354066893969032192"
+    example: "354066893969032192"
     ui_kind: text
   - name: order_no
     path: $.order_no
@@ -45,8 +45,8 @@ request:
   - name: entrust_status
     path: $.entrust_status
     type: string
-    default: '2'
-    example: '2'
+    default: "2"
+    example: "2"
     ui_kind: text
   - name: action
     path: $.action
@@ -1208,7 +1208,7 @@ request:
     type: string
     state: carry
 responses:
-  '200': {}
+  "200": {}
 metadata:
   module: fin
   tags:

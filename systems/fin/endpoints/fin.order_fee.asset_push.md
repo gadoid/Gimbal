@@ -13,7 +13,7 @@ id: fin.order_fee.asset_push
 system: fin
 service: fin-service
 name: 费用资产推送
-description: '由 Scenario_Test_14 提取: 费用资产推送'
+description: "由 Scenario_Test_14 提取: 费用资产推送"
 binding:
   protocol: http
   method: POST
@@ -51,11 +51,11 @@ request:
     type: array
     required: true
     example:
-    - node_sort: '0'
-      user_id: '828'
+    - node_sort: "0"
+      user_id: "828"
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
 metadata:
   module: fin

@@ -540,7 +540,7 @@ request:
     path: $.entrust_status
     type: integer
     default: ''
-    example: '1'
+    example: "1"
     description: 1是检查，2是分发
     ui_kind: text
   - name: order_file
@@ -554,7 +554,7 @@ request:
     path: $.update_time
     type: string
 responses:
-  '200': {}
+  "200": {}
 metadata:
   module: fin
   tags:

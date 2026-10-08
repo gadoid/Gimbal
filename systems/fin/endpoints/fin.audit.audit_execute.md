@@ -13,7 +13,7 @@ id: fin.audit.audit_execute
 system: fin
 service: fin-service
 name: 执行审批
-description: '由 Scenario_Test_14 提取: 执行审批'
+description: "由 Scenario_Test_14 提取: 执行审批"
 binding:
   protocol: http
   method: POST
@@ -40,7 +40,7 @@ request:
     required: true
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
 metadata:
   module: fin

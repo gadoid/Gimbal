@@ -50,9 +50,9 @@ request:
     type: object
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
-  '201':
+  "201":
     description: Successful Response
 metadata:
   module: report-definitions

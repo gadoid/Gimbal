@@ -13,12 +13,7 @@ id: platform.endpoints.get_by_endpoint_id_board
 system: platform
 service: platform-service
 name: Endpoint Board
-description: '接口级线索板:主体 + 测试象限 + 自建卡 + trails(§3)。
-
-
-  ``?expand=<nodeId>`` 拉该节点的二度关联(P1 支持场景节点 → 它引用
-
-  的其他接口),默认只拉一度,避免一次拉巨图。'
+description: "接口级线索板:主体 + 测试象限 + 自建卡 + trails(§3)。\n\n``?expand=<nodeId>`` 拉该节点的二度关联(P1 支持场景节点 → 它引用\n的其他接口),默认只拉一度,避免一次拉巨图。"
 binding:
   protocol: http
   method: GET
@@ -27,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: edges

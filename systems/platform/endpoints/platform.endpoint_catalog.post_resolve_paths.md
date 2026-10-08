@@ -40,7 +40,7 @@ request:
     required: true
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: Successful Response
 metadata:
   module: endpoint-catalog

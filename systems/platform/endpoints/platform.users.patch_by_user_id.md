@@ -13,8 +13,8 @@ id: platform.users.patch_by_user_id
 system: platform
 service: platform-service
 name: Patch User
-capability: cap:user.update
 description: "Update ``display_name`` / ``is_admin`` / ``is_active`` / ``new_password``.\n\nAuthorization:\n* admin caller — may patch any user, any field.\n* member caller — may only patch **themselves** (403/4032 on other\n  targets) and may never touch ``role`` (privilege-escalation fix).\n\nConstraint: demoting the last admin(``role`` 从 admin 降下)被 409 拒。"
+capability: cap:user.update
 binding:
   protocol: http
   method: PATCH
@@ -39,7 +39,7 @@ request:
     type: string
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: created_at

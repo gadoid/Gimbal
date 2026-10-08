@@ -13,14 +13,7 @@ id: platform.data_sets.get_root
 system: platform
 service: platform-service
 name: List Data Sets
-description: 'List summaries scoped to the caller.
-
-
-  Data-set rows are business parameter matrices — listing every user''s
-
-  data (the previous behaviour) is a cross-user disclosure, so non-admin
-
-  callers only see data-sets whose parent scenario they own.'
+description: "List summaries scoped to the caller.\n\nData-set rows are business parameter matrices — listing every user's\ndata (the previous behaviour) is a cross-user disclosure, so non-admin\ncallers only see data-sets whose parent scenario they own."
 binding:
   protocol: http
   method: GET
@@ -29,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: datasetId

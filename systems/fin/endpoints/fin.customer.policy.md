@@ -34,7 +34,7 @@ request:
     description: 策略状态(视图静态预设 status=2,§13.1)
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code
@@ -52,7 +52,7 @@ responses:
 query_views:
 - name: customer_policy
   params:
-    status: '2'
+    status: "2"
   query_params:
   - customer_id
   items: $.data[*]

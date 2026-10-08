@@ -13,32 +13,7 @@ id: platform.scenarios.get_root
 system: platform
 service: platform-service
 name: List Scenarios
-description: '列表(Page 信封 + M1 响应投影,PG迁移方案 §4.1/§7 M1)。
-
-
-  读侧收紧:admin 全量;普通用户 = public + 自己的。可选
-
-  ``visibility=public|private`` 再过滤一层,供前端"公共 / 我的"分组
-
-  标签使用。
-
-
-  属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
-
-  一趟全表投影,单请求双全表扫描)。
-
-
-  多值筛选参数(system/module/priority/tag/author)收逗号联合字符串,
-
-  语义与前端 ``utils/filters.ts`` 对齐(system/tag=OR 携带,其余精确
-
-  命中其一);``updated_within`` 锚 DB 行 updated_at。排序服务端定死
-
-  ``updated_at DESC``(§4.1,不接受任意 sort)。分页在 Python 侧切片
-
-  ——M1 的服务端查询仍全表加载 payload,SQL 端过滤/排序是 M3 的事。
-
-  ``fields=options`` 返回轻量元数据形态(选择器/名称映射专用)。'
+description: "列表(Page 信封 + M1 响应投影,PG迁移方案 §4.1/§7 M1)。\n\n读侧收紧:admin 全量;普通用户 = public + 自己的。可选\n``visibility=public|private`` 再过滤一层,供前端\"公共 / 我的\"分组\n标签使用。\n\n属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑\n一趟全表投影,单请求双全表扫描)。\n\n多值筛选参数(system/module/priority/tag/author)收逗号联合字符串,\n语义与前端 ``utils/filters.ts`` 对齐(system/tag=OR 携带,其余精确\n命中其一);``updated_within`` 锚 DB 行 updated_at。排序服务端定死\n``updated_at DESC``(§4.1,不接受任意 sort)。分页在 Python 侧切片\n——M1 的服务端查询仍全表加载 payload,SQL 端过滤/排序是 M3 的事。\n``fields=options`` 返回轻量元数据形态(选择器/名称映射专用)。"
 binding:
   protocol: http
   method: GET
@@ -47,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: items

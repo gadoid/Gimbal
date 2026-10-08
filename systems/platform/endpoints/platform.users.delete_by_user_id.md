@@ -13,7 +13,6 @@ id: platform.users.delete_by_user_id
 system: platform
 service: platform-service
 name: Delete User
-capability: cap:user.disable
 description: 'Delete ``user_id``(P2-2:资源处置三选一)。
 
 
@@ -42,6 +41,7 @@ description: 'Delete ``user_id``(P2-2:资源处置三选一)。
   owner_name 快照,展示「已注销」);case 目录按 owner 定位 runId
 
   当场清扫(case.json 含注入后明文凭证,不等 14 天周期)。'
+capability: cap:user.disable
 binding:
   protocol: http
   method: DELETE
@@ -58,9 +58,9 @@ request:
     type: integer
     ui_kind: number
 responses:
-  '200':
+  "200":
     description: 成功
-  '204':
+  "204":
     description: Successful Response
 metadata:
   module: users

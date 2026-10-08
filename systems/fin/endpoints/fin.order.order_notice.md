@@ -13,7 +13,7 @@ id: fin.order.order_notice
 system: fin
 service: fin-service
 name: 应收核销通知
-description: '由 Scenario_Test_14 提取: 应收核销通知'
+description: "由 Scenario_Test_14 提取: 应收核销通知"
 binding:
   protocol: http
   method: POST
@@ -53,7 +53,7 @@ request:
     - ${var.bank_id_1}
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
 metadata:
   module: fin

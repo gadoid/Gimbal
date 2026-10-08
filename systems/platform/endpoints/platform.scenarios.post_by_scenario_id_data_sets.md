@@ -38,7 +38,7 @@ request:
     type: array
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: datasetId
@@ -79,7 +79,7 @@ responses:
       type: array
       ui_kind: json
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: datasetId

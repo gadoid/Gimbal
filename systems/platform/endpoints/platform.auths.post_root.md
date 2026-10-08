@@ -49,7 +49,7 @@ request:
     required: true
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: alias
@@ -115,7 +115,7 @@ responses:
       required: true
       ui_kind: text
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: alias

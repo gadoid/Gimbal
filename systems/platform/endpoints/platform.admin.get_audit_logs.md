@@ -13,9 +13,7 @@ id: platform.admin.get_audit_logs
 system: platform
 service: platform-service
 name: List Audit Logs
-description: '特权写审计(权限方案 §6):新→旧分页;``action`` 精确过滤;
-
-  ``actions`` 带回词表供前端过滤 chip。'
+description: "特权写审计(权限方案 §6):新→旧分页;``action`` 精确过滤;\n``actions`` 带回词表供前端过滤 chip。"
 binding:
   protocol: http
   method: GET
@@ -24,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: actions

@@ -26,7 +26,7 @@ request:
     description: 要标读的通知 id;缺省 = 全部已读
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: Successful Response
 metadata:
   module: notifications

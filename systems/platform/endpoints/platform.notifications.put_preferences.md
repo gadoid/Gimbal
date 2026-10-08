@@ -20,15 +20,15 @@ binding:
   auth: bearer
 request:
   declarations:
-  - name: 'off'
+  - name: "off"
     path: $.off
     type: array
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
-    - name: 'off'
+    - name: "off"
       path: $.off
       type: array
       required: true

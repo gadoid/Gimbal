@@ -26,9 +26,9 @@ request:
     required: true
     ui_kind: boolean
 responses:
-  '200':
+  "200":
     description: 成功
-  '204':
+  "204":
     description: Successful Response
 metadata:
   module: scenarios

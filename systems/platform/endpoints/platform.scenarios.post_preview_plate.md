@@ -13,16 +13,7 @@ id: platform.scenarios.post_preview_plate
 system: platform
 service: platform-service
 name: Preview Plate
-description: 'Forward the draft to Plate''s ``/convert`` and return the verdict.
-
-
-  Does NOT persist anything — the draft is treated as ephemeral so the
-
-  user can preview before saving.  The converted payload (Plate
-
-  /convert 的归一化结果) 也一并返回,前端导出按钮直接用它作为
-
-  "GIMBAL 可执行" 的场景 JSON/YAML。'
+description: "Forward the draft to Plate's ``/convert`` and return the verdict.\n\nDoes NOT persist anything — the draft is treated as ephemeral so the\nuser can preview before saving.  The converted payload (Plate\n/convert 的归一化结果) 也一并返回,前端导出按钮直接用它作为\n\"GIMBAL 可执行\" 的场景 JSON/YAML。"
 binding:
   protocol: http
   method: POST
@@ -42,18 +33,7 @@ request:
   - name: orchestration
     path: $.orchestration
     type: object
-    description: 'Platform rendering/orchestration container.
-
-
-      steps is index-aligned with definition.steps (same order, same length).
-
-      resourceMeta is name-aligned with definition.resource keys.
-
-      (runSchemes sidecar 键已随阶段④下线 — 方案不经场景 payload,唯一
-
-      读写面是 /run-schemes CRUD;存量 payload 中的同键被 extra=ignore
-
-      静默忽略。)'
+    description: "Platform rendering/orchestration container.\n\nsteps is index-aligned with definition.steps (same order, same length).\nresourceMeta is name-aligned with definition.resource keys.\n(runSchemes sidecar 键已随阶段④下线 — 方案不经场景 payload,唯一\n读写面是 /run-schemes CRUD;存量 payload 中的同键被 extra=ignore\n静默忽略。)"
     ui_kind: json
     children:
     - name: resourceMeta
@@ -83,7 +63,7 @@ request:
       type: object
       ui_kind: json
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: converted

@@ -13,10 +13,7 @@ id: platform.notifications.get_handoff_unread
 system: platform
 service: platform-service
 name: Handoff Unread
-description: '未读分享列表(F1 悬浮标签数据源):场景行渲染 O(1) 查 Set 用。
-
-
-  查询走 0005 已建的 (user_id, id) 索引,量级足够(方案 §1.4)。'
+description: "未读分享列表(F1 悬浮标签数据源):场景行渲染 O(1) 查 Set 用。\n\n查询走 0005 已建的 (user_id, id) 索引,量级足够(方案 §1.4)。"
 binding:
   protocol: http
   method: GET
@@ -25,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: items

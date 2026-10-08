@@ -34,7 +34,7 @@ request:
     type: string
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: aliasName

@@ -13,7 +13,7 @@ id: fin.order_fee.book_real_amount_edit
 system: fin
 service: fin-service
 name: 订舱实收实付金额配置
-description: '由 Scenario_Test_14 提取: 订舱实收实付金额配置'
+description: "由 Scenario_Test_14 提取: 订舱实收实付金额配置"
 binding:
   protocol: http
   method: POST
@@ -32,7 +32,7 @@ request:
   - name: order_id
     path: $.order_id
     type: string
-    example: '355255812731438080'
+    example: "355255812731438080"
     ui_kind: text
   - name: discount_ratio
     path: $.discount_ratio
@@ -262,7 +262,7 @@ request:
           type: integer
           ui_kind: number
 responses:
-  '200':
+  "200":
     description: 成功
 metadata:
   module: fin

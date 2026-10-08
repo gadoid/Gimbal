@@ -3,6 +3,7 @@ id: platform.story.admin-manages-members
 type: user_story
 system: platform
 ---
+
 # 管理员管理成员(用户故事)
 
 ```gimbal:statement
@@ -14,6 +15,7 @@ slots:
   order: 1
 anchor: US-1
 ```
+
 管理员创建一个新成员(普通角色)。
 
 ```gimbal:statement
@@ -25,6 +27,7 @@ slots:
   order: 2
 anchor: US-1
 ```
+
 管理员更新该成员的角色。
 
 ```gimbal:statement
@@ -36,6 +39,7 @@ slots:
   order: 3
 anchor: US-1
 ```
+
 管理员为该成员重置密码。
 
 ```gimbal:statement
@@ -48,6 +52,7 @@ slots:
   branch_on: outcome:user.last_admin
 anchor: US-1
 ```
+
 管理员把成员降级为普通成员;若目标为最后一名管理员则被拒绝。
 
 ```gimbal:statement
@@ -59,4 +64,5 @@ slots:
   order: 5
 anchor: US-1
 ```
+
 管理员禁用一个成员;若其为最后一名管理员则被拒绝。

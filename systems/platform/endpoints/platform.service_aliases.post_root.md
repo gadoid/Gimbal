@@ -48,7 +48,7 @@ request:
     type: integer
     ui_kind: number
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: aliasName
@@ -93,7 +93,7 @@ responses:
       type: string
       ui_kind: text
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: aliasName

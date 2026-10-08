@@ -13,9 +13,7 @@ id: platform.activity.get_root
 system: platform
 service: platform-service
 name: Get Activity
-description: '本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次,
-
-  按 at 倒序合并,截 ``limit``。'
+description: "本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次,\n按 at 倒序合并,截 ``limit``。"
 binding:
   protocol: http
   method: GET
@@ -24,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: events

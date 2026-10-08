@@ -21,10 +21,10 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
-    - name: 'off'
+    - name: "off"
       path: $.off
       type: array
       required: true

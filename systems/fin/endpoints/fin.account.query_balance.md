@@ -21,7 +21,7 @@ binding:
   timeout_seconds: 5.0
   auth: bearer
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: account_id

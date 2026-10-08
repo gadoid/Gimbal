@@ -13,7 +13,7 @@ id: fin.order_entrust.order_page
 system: fin
 service: fin-service
 name: 委托订单的分页查询
-description: '由 Scenario_Test_14 提取: 分页查询委托订单'
+description: "由 Scenario_Test_14 提取: 分页查询委托订单"
 binding:
   protocol: http
   method: POST
@@ -67,7 +67,7 @@ request:
     example: {}
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code
@@ -208,7 +208,7 @@ responses:
 query_views:
 - name: pending_orders
   params:
-    entrust_status: '1'
+    entrust_status: "1"
   items: $.data.data[*]
   label: order_no
 metadata:

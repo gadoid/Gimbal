@@ -13,7 +13,7 @@ id: fin.order.order_page
 system: fin
 service: fin-service
 name: 分页查询委托订单
-description: '由 Scenario_test_14 提取: 分页查询委托订单'
+description: "由 Scenario_test_14 提取: 分页查询委托订单"
 binding:
   protocol: http
   method: POST
@@ -67,7 +67,7 @@ request:
     example: {}
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code

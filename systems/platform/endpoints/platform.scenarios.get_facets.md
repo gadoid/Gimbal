@@ -13,12 +13,7 @@ id: platform.scenarios.get_facets
 system: platform
 service: platform-service
 name: Scenario Facets
-description: '五维 facets:modules/systems/tags/authors/priorities 可选值+计数。
-
-
-  替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走
-
-  GROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。'
+description: "五维 facets:modules/systems/tags/authors/priorities 可选值+计数。\n\n替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走\nGROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。"
 binding:
   protocol: http
   method: GET
@@ -27,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
 metadata:
   module: scenarios

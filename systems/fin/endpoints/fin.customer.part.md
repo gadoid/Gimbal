@@ -28,7 +28,7 @@ request:
     description: 客户ID(点击期参数面供给,§13.2)
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code

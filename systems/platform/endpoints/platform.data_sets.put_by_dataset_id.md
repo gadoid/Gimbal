@@ -38,7 +38,7 @@ request:
     type: array
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: datasetId

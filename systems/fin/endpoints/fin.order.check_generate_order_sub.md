@@ -28,7 +28,7 @@ request:
     example: ''
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
 metadata:
   module: fin

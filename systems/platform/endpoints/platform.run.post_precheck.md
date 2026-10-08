@@ -32,7 +32,7 @@ request:
     required: true
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: danglingEntryIds

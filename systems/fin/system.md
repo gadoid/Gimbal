@@ -44,7 +44,7 @@ meta:
   tags:
   - fin
   version: 1.0.0
-  createTime: '2026-08-04T00:00:00Z'
+  createTime: "2026-08-04T00:00:00Z"
   expire: false
   requirementRef: []
   system:
@@ -57,7 +57,7 @@ resources:
     config:
       region: test
     portMapping:
-      '4000': 4000
+      "4000": 4000
 scenarios:
   sc-fin-default:
     kind: scenario
@@ -72,7 +72,7 @@ scenarios:
       tags:
       - fin
       version: 1.0.0
-      createTime: '2026-08-04T00:00:00Z'
+      createTime: "2026-08-04T00:00:00Z"
       expire: false
       requirementRef: []
       system:

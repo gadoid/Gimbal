@@ -37,7 +37,7 @@ request:
     type: boolean
     ui_kind: boolean
 responses:
-  '200':
+  "200":
     description: Successful Response
 metadata:
   module: report-definitions

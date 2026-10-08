@@ -13,10 +13,8 @@ id: platform.users.post_root
 system: platform
 service: platform-service
 name: Create User
+description: "Create a new user(M2.5 收紧:admin 开号 —— 创建账号是人事权,\nspec-1「任何登录用户可开号」的遗留闭合,权限方案 §5.3)。"
 capability: cap:user.create
-description: 'Create a new user(M2.5 收紧:admin 开号 —— 创建账号是人事权,
-
-  spec-1「任何登录用户可开号」的遗留闭合,权限方案 §5.3)。'
 binding:
   protocol: http
   method: POST
@@ -43,7 +41,7 @@ request:
     required: true
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: created_at
@@ -91,7 +89,7 @@ responses:
       required: true
       ui_kind: text
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: created_at

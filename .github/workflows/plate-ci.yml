@@ -28,7 +28,11 @@ jobs:
       - name: 入库闸门 — plate check(规则编号即错误码)
         run: |
           set -e
-          for s in fin platform; do plate check "$s" --json; done
+          # common 一并检查(评审 R5:common 词条此前不在检查范围——坏 id、
+          # 孤儿父节点、悬空 refers 都漏检;common/system.md 已补 gimbal:system
+          # 块,F2 与各系统同口径)。规范形守门(render(parse(x)) == x)随
+          # tests/plate 的 test_canonical_tree 执行。
+          for s in common fin platform; do plate check "$s" --json; done
       - name: 方言纪律 — 真源树可解析 + 一文件一交付物
         run: pytest tests/plate/test_v3_one_file_per_endpoint.py tests/plate/dialect -q
       - name: plate 全量

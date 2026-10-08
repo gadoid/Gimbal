@@ -13,16 +13,7 @@ id: platform.executions.post_by_execution_id_cancel
 system: platform
 service: platform-service
 name: Cancel Execution
-description: 'C11 协作式取消：写 execution_jobs.cancel_requested 位。
-
-
-  可取消态 = queued | running（worker 在任务起点/行边界消费 DB 位，
-
-  收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的
-
-  queued/running 立即终态化。终态单 409。server 链的在飞 run 由
-
-  worker 侧 cancel 端点协作收口（步骤边界生效）。'
+description: "C11 协作式取消：写 execution_jobs.cancel_requested 位。\n\n可取消态 = queued | running（worker 在任务起点/行边界消费 DB 位，\n收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的\nqueued/running 立即终态化。终态单 409。server 链的在飞 run 由\nworker 侧 cancel 端点协作收口（步骤边界生效）。"
 binding:
   protocol: http
   method: POST
@@ -31,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: batch_id

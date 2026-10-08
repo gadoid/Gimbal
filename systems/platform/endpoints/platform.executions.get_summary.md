@@ -13,14 +13,7 @@ id: platform.executions.get_summary
 system: platform
 service: platform-service
 name: Executions Summary
-description: '顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
-
-
-  口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);
-
-  窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。
-
-  行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。'
+description: "顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。\n\n口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);\n窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。\n行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。"
 binding:
   protocol: http
   method: GET
@@ -29,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: activeExecutions

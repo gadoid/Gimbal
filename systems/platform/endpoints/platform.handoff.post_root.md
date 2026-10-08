@@ -35,7 +35,7 @@ request:
     required: true
     ui_kind: number
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: new_name

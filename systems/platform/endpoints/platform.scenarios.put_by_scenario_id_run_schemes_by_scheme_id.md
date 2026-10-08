@@ -76,7 +76,7 @@ request:
     type: integer
     ui_kind: number
 responses:
-  '200':
+  "200":
     description: Successful Response
 metadata:
   module: scenarios

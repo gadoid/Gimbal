@@ -13,9 +13,7 @@ id: platform.constants.get_root
 system: platform
 service: platform-service
 name: List Constants
-description: 'Page 信封 + 服务端过滤(M4,§6.3):``q``(name/description 子串)、
-
-  ``kind``(literal/generator 精确)。条目小但也会长,先立信封契约。'
+description: "Page 信封 + 服务端过滤(M4,§6.3):``q``(name/description 子串)、\n``kind``(literal/generator 精确)。条目小但也会长,先立信封契约。"
 binding:
   protocol: http
   method: GET
@@ -24,7 +22,7 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
     declarations:
     - name: items

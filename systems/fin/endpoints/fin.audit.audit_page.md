@@ -13,7 +13,7 @@ id: fin.audit.audit_page
 system: fin
 service: fin-service
 name: 查询待审批记录
-description: '由 Scenario_Test_14 提取: 查询待审批记录'
+description: "由 Scenario_Test_14 提取: 查询待审批记录"
 binding:
   protocol: http
   method: POST
@@ -40,7 +40,7 @@ request:
     type: string
     required: true
     example: examine_wait
-    description: '审批页签: examine_wait=待审批 / examine_done=已审批'
+    description: "审批页签: examine_wait=待审批 / examine_done=已审批"
     enum:
     - examine_wait
     - examine_done
@@ -57,7 +57,7 @@ request:
     type: string
     required: true
     example: desc
-    description: '排序方向: asc / desc'
+    description: "排序方向: asc / desc"
     enum:
     - asc
     - desc
@@ -70,7 +70,7 @@ request:
     description: 业务过滤条件,如单号/客户/日期范围
     ui_kind: json
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: audit_id

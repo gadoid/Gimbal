@@ -13,16 +13,7 @@ id: platform.scenarios.post_by_scenario_id_copy
 system: platform
 service: platform-service
 name: Copy Scenario To Me
-description: '深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。
-
-  需要读权限(public 或自己的场景才可复制)。
-
-
-  带 ``name``(另存为,2026-09-23 批次 F2):与本人已有场景重名 →
-
-  409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端
-
-  确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。'
+description: "深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。\n需要读权限(public 或自己的场景才可复制)。\n\n带 ``name``(另存为,2026-09-23 批次 F2):与本人已有场景重名 →\n409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端\n确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。"
 binding:
   protocol: http
   method: POST
@@ -35,7 +26,7 @@ request:
     type: string
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: config
@@ -187,7 +178,7 @@ responses:
       type: string
       ui_kind: text
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: config

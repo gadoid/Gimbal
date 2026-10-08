@@ -13,7 +13,7 @@ id: fin.order_fee.toggle_real_amount
 system: fin
 service: fin-service
 name: 切换订单实收实付金额模式
-description: '由 Scenario_Test_14 提取: 切换订单实收实付金额模式'
+description: "由 Scenario_Test_14 提取: 切换订单实收实付金额模式"
 binding:
   protocol: http
   method: POST
@@ -28,7 +28,7 @@ request:
     example: ''
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: order_id

@@ -21,9 +21,9 @@ binding:
   body_type: none
 request: {}
 responses:
-  '200':
+  "200":
     description: 成功
-  '204':
+  "204":
     description: Successful Response
 metadata:
   module: report-definitions

@@ -13,7 +13,7 @@ id: fin.order.order_book
 system: fin
 service: fin-service
 name: 提交订舱文件
-description: '由 Scenario_Test_14 提取: 提交订舱文件'
+description: "由 Scenario_Test_14 提取: 提交订舱文件"
 binding:
   protocol: http
   method: POST
@@ -29,7 +29,7 @@ request:
   - name: order_id
     path: $.order_id
     type: string
-    example: '354066893969032192'
+    example: "354066893969032192"
     ui_kind: text
   - name: order_no
     path: $.order_no
@@ -44,7 +44,7 @@ request:
   - name: entrust_status
     path: $.entrust_status
     type: string
-    example: '2'
+    example: "2"
     description: '1: 委托订单 2: 订单已分发'
     ui_kind: text
   - name: action
@@ -1207,7 +1207,7 @@ request:
     type: array
     state: carry
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code
@@ -1230,7 +1230,7 @@ responses:
       - name: client_company_id
         path: $.data.client_company_id
         type: string
-        example: '335247043402399744'
+        example: "335247043402399744"
         ui_kind: text
         assertable: true
       - name: client_company_name
@@ -1242,7 +1242,7 @@ responses:
       - name: trustee_company_id
         path: $.data.trustee_company_id
         type: string
-        example: '1'
+        example: "1"
         ui_kind: text
         assertable: true
       - name: trustee_company_name
@@ -1272,7 +1272,7 @@ responses:
       - name: file_id
         path: $.data.file_id
         type: string
-        example: '354640409386812416'
+        example: "354640409386812416"
         ui_kind: text
         assertable: true
       - name: file_type

@@ -22,11 +22,11 @@ request:
   - name: order_id
     path: $.order_id
     type: string
-    example: '353724757260108800'
+    example: "353724757260108800"
     description: 订单id
     ui_kind: text
 responses:
-  '200':
+  "200":
     declarations:
     - name: code
       path: $.code
@@ -43,7 +43,7 @@ responses:
     - name: order_id
       path: $.data.order_id
       type: string
-      example: '353724757260108800'
+      example: "353724757260108800"
       ui_kind: text
       assertable: true
     - name: order_no
@@ -55,7 +55,7 @@ responses:
     - name: customer_id
       path: $.data.customer_id
       type: string
-      example: '335247043402399744'
+      example: "335247043402399744"
       ui_kind: text
       assertable: true
     - name: supplier
@@ -66,31 +66,31 @@ responses:
       - name: order_supplier_id
         path: $.data.supplier.order_supplier_id
         type: string
-        example: '354632242825266176'
+        example: "354632242825266176"
         ui_kind: text
         assertable: true
       - name: order_id
         path: $.data.supplier.order_id
         type: string
-        example: '354632241306928128'
+        example: "354632241306928128"
         ui_kind: text
         assertable: true
       - name: isset_supplier
         path: $.data.supplier.isset_supplier
         type: string
-        example: '1'
+        example: "1"
         ui_kind: text
         assertable: true
       - name: is_primary
         path: $.data.supplier.is_primary
         type: string
-        example: '1'
+        example: "1"
         ui_kind: text
         assertable: true
       - name: supplier_id
         path: $.data.supplier.supplier_id
         type: string
-        example: '1'
+        example: "1"
         ui_kind: text
         assertable: true
       - name: supplier_name
@@ -102,13 +102,13 @@ responses:
       - name: settle_object_id
         path: $.data.supplier.settle_object_id
         type: string
-        example: '15'
+        example: "15"
         ui_kind: text
         assertable: true
       - name: user_id
         path: $.data.supplier.user_id
         type: string
-        example: '41'
+        example: "41"
         ui_kind: text
         assertable: true
       - name: user_name
@@ -126,37 +126,37 @@ responses:
       - name: supplier_period
         path: $.data.supplier.supplier_period
         type: string
-        example: '30'
+        example: "30"
         ui_kind: text
         assertable: true
       - name: settlement_date
         path: $.data.supplier.settlement_date
         type: string
-        example: '20'
+        example: "20"
         ui_kind: text
         assertable: true
       - name: supplier_pay_date
         path: $.data.supplier.supplier_pay_date
         type: string
-        example: '1789833600'
+        example: "1789833600"
         ui_kind: text
         assertable: true
       - name: is_manual
         path: $.data.supplier.is_manual
         type: string
-        example: '0'
+        example: "0"
         ui_kind: text
         assertable: true
       - name: sys_upttime
         path: $.data.supplier.sys_upttime
         type: string
-        example: '2026-09-05 22:22:00'
+        example: "2026-09-05 22:22:00"
         ui_kind: text
         assertable: true
       - name: pay_time_limit
         path: $.data.supplier.pay_time_limit
         type: string
-        example: '10'
+        example: "10"
         ui_kind: text
         assertable: true
       - name: supplier_pay_date_desc
@@ -168,7 +168,7 @@ responses:
       - name: settle_type
         path: $.data.supplier.settle_type
         type: string
-        example: '1'
+        example: "1"
         ui_kind: text
         assertable: true
       - name: supplier_label
@@ -198,7 +198,7 @@ responses:
     - name: order_container_id
       path: $.data.container[0].order_container_id
       type: string
-      example: '354178949166662656'
+      example: "354178949166662656"
       ui_kind: text
       assertable: true
 metadata:

@@ -23,12 +23,12 @@ request:
   - name: customer_id
     path: $.customer_id
     type: string
-    example: '335247043402399744'
+    example: "335247043402399744"
     ui_kind: text
   - name: order_id
     path: $.order_id
     type: string
-    example: '354066893969032192'
+    example: "354066893969032192"
     ui_kind: text
   - name: container
     path: $.container
@@ -36,12 +36,12 @@ request:
     example:
     - order_container_id: ''
       box_type: 20GP
-      box_num: '1'
+      box_num: "1"
       box_no:
       - ''
       seal_number:
       - ''
-      sea_trans_unit_price: '100'
+      sea_trans_unit_price: "100"
     ui_kind: text
     children:
     - name: order_container_id
@@ -74,7 +74,7 @@ request:
     example: JSZX
     ui_kind: text
 responses:
-  '200': {}
+  "200": {}
 metadata:
   module: fin
   tags:

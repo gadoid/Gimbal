@@ -13,9 +13,7 @@ id: platform.adaptations.post_carry_batches
 system: platform
 service: platform-service
 name: Open Carry Batch
-description: '开 carry 值表批(漂移面板入口,spec §7);ops 经既有
-
-  POST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。'
+description: "开 carry 值表批(漂移面板入口,spec §7);ops 经既有\nPOST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。"
 binding:
   protocol: http
   method: POST
@@ -28,7 +26,7 @@ request:
     type: string
     ui_kind: text
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: batchId
@@ -181,7 +179,7 @@ responses:
       required: true
       ui_kind: text
       assertable: true
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: batchId

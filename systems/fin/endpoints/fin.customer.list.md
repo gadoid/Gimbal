@@ -21,7 +21,7 @@ binding:
   auth: bearer
 request: {}
 responses:
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: code
