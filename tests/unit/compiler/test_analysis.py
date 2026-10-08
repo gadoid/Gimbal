@@ -70,13 +70,21 @@ class TestThreeForms:
         assert "upstream_key" in a.inputs
 
     def test_form2_internal_scratch_prefix_not_input(self):
-        """形态 2 的内部面：协议调用产出的 scratch 前缀不算外部输入。"""
+        """形态 2 的内部面：协议归一树键($.call.*)不算外部输入;
+        退役旧键($.response_body.*)显形为外部引用(批次 F 终态——无人
+        写入,残留引用须可见而非静默吞掉)。"""
         sc = _scenario([Step(
+            call=Call(protocol="echo", message="x"),
+            strategy=[{"kind": "assign", "name": "a", "source": "$.call.response.body.code",
+                       "target": "c"}])])
+        a = analyze_scenario(sc)
+        assert "call" not in a.inputs
+        legacy = _scenario([Step(
             call=Call(protocol="echo", message="x"),
             strategy=[{"kind": "assign", "name": "a", "source": "$.response_body.code",
                        "target": "c"}])])
-        a = analyze_scenario(sc)
-        assert "response_body" not in a.inputs
+        la = analyze_scenario(legacy)
+        assert "response_body" in la.jsonpath_refs, "退役旧键引用应显形为外部引用"
 
     def test_form3_bare_name_scratch(self):
         """形态 3：Assign source ${x}（STEP 作用域先 scratch 后 scenario）→ 输入 x。"""
@@ -232,7 +240,8 @@ class TestExactInternalKeys:
         assert "callbackUrl" in a.inputs
 
     def test_exact_protocol_keys_still_internal(self):
-        """精确协议键（$.call… / $.response_body…）仍不算外部输入。"""
+        """精确协议键($.call…)不算外部输入;退役旧键($.response_body…)
+        显形为外部引用(批次 F 终态,见 test_form2 注)。"""
         sc = _scenario([Step(
             call=Call(protocol="echo", message="x"),
             strategy=[
@@ -243,4 +252,4 @@ class TestExactInternalKeys:
             ])])
         a = analyze_scenario(sc)
         assert "call" not in a.inputs
-        assert "response_body" not in a.inputs
+        assert "response_body" in a.jsonpath_refs

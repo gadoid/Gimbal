@@ -232,13 +232,16 @@ class CallExecutor(StrategyExecutor):
 
 特殊点：它不对应 schema 中某个 `Strategy` 子类，而是由 `ScenarioRunner` 在 `CALLING` 阶段直接调用，传入内部合成的 `_CallSpec`。
 
-实现要点：
+实现要点（v2.1 批次 F 终态；render/send 分离见 `protocols/base.py` 模板）：
 
-- 从 `view.read_scratch("request_body")` 读取实时请求体（可能被 Assign 修改）
+- 请求体通道：状态机把 step.request.body 初始化到 `$.call.request.body`，
+  实时读取同一子树（可能被 Assign 修改）
 - 用 `httpx.Client(timeout=spec.timeout)` 发出请求
 - `GET`/`HEAD` 用 `params=body`，其它方法用 `json=body`
-- 写入 scratch：`request_method` / `request_url` / `request_headers` / `request_body`
-- 写入响应 scratch：`response_status` / `response_headers` / `response_body` / `duration_ms`
+- scratch 只写**唯一证据键** `call`（协议归一树 `$.call.response.status /
+  meta.headers / body`、`$.call.elapsed_ms`）——旧响应侧键
+  `response_status` / `response_headers` / `response_body` / `duration_ms`
+  已退役（断言/提取路径迁移见 `scripts/migrate_legacy_case.py`）
 - 异常分支：`httpx.TimeoutException` / `httpx.RequestError` / 其它 → 全部返回 `ERROR` + traceback
 
 ### SleepExecutor（`builtin/sleep.py`）

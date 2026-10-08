@@ -30,7 +30,10 @@ class AssertionExecutor(StrategyExecutor):
             )
 
             # 统一从 scratch 用 JSONPath 取值
-            # target 可以是 "$.response_status" 或 "$.response_body.code"
+            # target 是 scratch 路径:协议归一树 $.call.response.status /
+            # $.call.response.body.code(v2.1 批次 F 终态——旧伪路径
+            # $.response_status/$.response_body.* 已退役,取值恒 None;
+            # 存量经 scripts/migrate_legacy_case.py 迁移)
             scratch = view.get_scratch_dict()
 
             if is_jsonpath(spec.target):

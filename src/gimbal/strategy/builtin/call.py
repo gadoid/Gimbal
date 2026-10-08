@@ -5,7 +5,9 @@
   - send = 传输：HTTP_BEFORE_SEND 钩子（http 命名空间，可原地改写 headers）
     → httpx 传输 → CallResult（统一证据形状）；
   - after_send：HTTP_AFTER_RECV 钩子 + HttpRequest/HttpResponse 事件；
-  - execute 为基类模板方法（双写 scratch：``call`` 键 + 旧键），本类不再覆写。
+  - execute 为基类模板方法（scratch 只写 ``call`` 证据键——批次 F 终态，
+    旧键 response_* 已退役，存量断言/提取路径经 scripts/migrate_legacy_case.py
+    迁移），本类不再覆写。
 
 v2.1 终态契约（批次 F-2b：auth_headers/response_body_extract 已退役，
 批次 F 回收）：

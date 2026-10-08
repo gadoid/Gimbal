@@ -49,12 +49,12 @@ _NON_VAR_PREFIXES = ("service.", "auth.")
 # 前缀匹配（"call"/"response_"/"echo_"/…），callbackUrl / caller_no 这类
 # 业务变量会被 "call" 前缀误吞成内部键、静默丢输入。内部面收敛为一组成
 # 熟的协议归一树键；其余名字一律按外部引用对待。
+# v2.1 批次 F 终态：旧键 response_body/response_status/duration_ms 已
+# 退役（无人写入）——不再列为内部键，未迁移存量 case 的残留引用按外部
+# 引用显形（jsonpath_refs 可见），而不是被静默吞成内部面。
 _PROTOCOL_PRODUCED_KEYS = frozenset({
     "call",              # $.call.request/response... 协议归一树根
                          # (残留 #5:请求体通道并入 $.call.request.body 子树)
-    "response_body",
-    "response_status",
-    "duration_ms",
 })
 
 

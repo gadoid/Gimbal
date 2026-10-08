@@ -323,28 +323,11 @@ def _emit_step_failed(self, error: str) -> None:
     except Exception:
         logger.debug("[SM {}] emit STEP_FAILED failed", self._step_id)
 
-def _emit_http_response(self, call_spec, result) -> None:
-    if self._bus is None:
-        return
-    try:
-        from gimbal.events.types import HttpResponseEvent
-        # 防御：HTTP 失败时 result.status 是字符串（"timeout"/"RequestError"），
-        # int() 会抛 ValueError 吞掉整个事件；只把能转 int 的状态码写事件
-        raw_status = getattr(result, "status", None)
-        try:
-            status_code = int(raw_status) if raw_status is not None else 0
-        except (ValueError, TypeError):
-            status_code = 0
-        self._bus.publish(HttpResponseEvent(
-            step_id=self._step_id,
-            method=call_spec.method,
-            url=call_spec.url,
-            status_code=status_code,
-            duration_ms=float(getattr(result, "duration_ms", 0.0) or 0.0),
-            response_body=getattr(result, "body", None),
-        ))
-    except Exception:
-        logger.debug("[SM {}] emit HTTP_RESPONSE failed", self._step_id)
+# HTTP 事件（http.request / http.response）自 v2.1 协议中立化起由
+# http 协议适配器（CallExecutor._emit_http_*，经 after_send 扩展点）发布；
+# 状态机仅保留 _emit_http_request/_emit_http_response 薄委托供历史直调方
+# （tests/unit/test_defect_fixes.py #34）使用——内部把 result.extracted 的
+# response_status/response_body 组装成 CallResult 再委托适配器。
 ```
 
 `event_bus` 为 None 时静默跳过；`publish` 失败也不影响主流程（log debug）。

@@ -23,11 +23,14 @@ class StepScratch:
     生命周期随 StepContext，finalize 后 clear。
     所有 Step 内临时数据统一存储，通过 JSONPath 导航读取。
 
-    约定 key：
-        request_method / request_url / request_headers / request_body
-        response_status / response_headers / response_body
-        duration_ms
-        其余 key 为业务临时变量
+    约定 key（v2.1 批次 F 终态）：
+        $.call.request.body            请求体通道（状态机初始化/Assign 可改写）
+        $.call.response.status / meta.headers / body
+                                       协议归一树（协议执行器唯一证据键 call）
+        $.call.elapsed_ms              调用耗时
+        其余 key 为业务临时变量（Extract/Assign 写入）
+        旧伪路径 $.response_* / $.request_* / $.duration_ms 已退役——
+        无人写入、读取恒 None（迁移入口 scripts/migrate_legacy_case.py）
     """
 
     def __init__(self) -> None:

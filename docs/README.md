@@ -158,7 +158,11 @@ config:
       username: admin
       password: admin123
 steps:
-  - api:
+  # v2.1 起 call 是唯一调用形态（api 语法糖已退役；协议中立，
+  # http 专属字段 method/path/headers 平铺在 call 上）
+  - call:
+      kind: call
+      protocol: http
       service: user-service
       method: POST
       path: /api/login
@@ -167,12 +171,15 @@ steps:
         username: "${auth.admin.username}"
         password: "${auth.admin.password}"
     strategy:
+      # 提取/断言统一走协议归一树 $.call.*（v2.1 批次 F 终态；
+      # 旧伪路径 $.response_status/$.response_body.* 已退役、取值恒 None，
+      # 存量迁移见 scripts/migrate_legacy_case.py）
       - kind: extract
-        source: response_body
-        expression: "$.token"
+        expression: "$.call.response.body.token"
         target: access_token
+        scope: scenario
       - kind: assertion
-        target: response_status
+        target: "$.call.response.status"
         operator: eq
         expected: 200
 ```

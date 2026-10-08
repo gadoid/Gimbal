@@ -12,8 +12,9 @@
 ``execute()`` 是**模板方法，子类不再覆写**（v2 运行时口径）::
 
     build_spec(状态机已调) → CALL_BEFORE_SEND(中立钩子，可原地补丁)
-    → 请求侧旧键 scratch → send → redact 复核
-    → scratch 双写（``call`` 键 + 响应侧旧键）→ StrategyResult
+    → 请求侧 scratch($.call.request.body 子树) → send → redact 复核
+    → scratch 只写 ``call`` 证据键（批次 F 终态：旧响应侧键已退役，
+    迁移入口 scripts/migrate_legacy_case.py）→ StrategyResult
     → after_send 扩展点（http 在此触发其命名空间钩子/事件）
     → CALL_AFTER_RECV + CallExchangeEvent
 
