@@ -26,7 +26,7 @@ function mountPage() {
   const auth = useAuthStore()
   auth.accessToken = 'tok'
   auth.currentUser = {
-    id: 7, username: 'alice', display_name: 'Alice', role: 'member',
+    id: 7, username: 'alice', display_name: 'Alice', role: 'user',
     is_active: true, is_admin: false,
   } as never
   return mount(Profile)
@@ -43,7 +43,7 @@ describe('Profile — 个人设置(P2-1)', () => {
 
   it('昵称自改:PATCH /users/{self} 只带 display_name', async () => {
     vi.mocked(usersApi.patch).mockResolvedValue({
-      id: 7, username: 'alice', display_name: 'Alice2', role: 'member',
+      id: 7, username: 'alice', display_name: 'Alice2', role: 'user',
       is_active: true, created_at: 'x',
     } as never)
     const w = mountPage()

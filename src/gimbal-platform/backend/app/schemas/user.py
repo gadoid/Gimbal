@@ -12,7 +12,9 @@ from .auth import DisplayNameField, PasswordField, UsernameField
 from .page import PageOut
 
 
-Role = Literal["member", "operator", "admin"]
+# 三级单角色(2026-09-29 更名:user | member | admin;原 member→user、
+# 原 operator→member,权限边界不变)。
+Role = Literal["user", "member", "admin"]
 
 
 class UserCreateIn(BaseModel):
@@ -22,7 +24,7 @@ class UserCreateIn(BaseModel):
     username: str = UsernameField
     password: str = PasswordField
     display_name: str = DisplayNameField
-    role: Role = "member"
+    role: Role = "user"
 
 
 class UserDeleteIn(BaseModel):

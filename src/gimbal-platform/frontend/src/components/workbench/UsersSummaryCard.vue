@@ -30,7 +30,7 @@
           <span class="wrow-name mono" :title="u.username">{{ u.username }}</span>
           <span class="us-display" :title="u.display_name">{{ u.display_name || '—' }}</span>
           <span v-if="u.role === 'admin'" class="wrow-tag tag-admin">管理员</span>
-          <span v-else-if="u.role === 'operator'" class="wrow-tag tag-op">运维</span>
+          <span v-else-if="u.role === 'member'" class="wrow-tag tag-op">成员</span>
           <span v-if="!u.is_active" class="wrow-tag tag-inactive">已停用</span>
         </div>
         <p v-if="rows.length > visible.length" class="more-hint">

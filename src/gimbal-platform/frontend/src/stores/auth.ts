@@ -73,12 +73,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!accessToken.value)
   // 单一来源 —— 视图 / 抽屉 / 路由 guard 都从这里读。
-  // M2.5:三级单角色(member/operator/admin,权限方案 §1)。role 来自
-  // /auth/me 的 UserPublic;旧快照可能没有 role → 回落 is_admin 布尔位。
-  const role = computed<'member' | 'operator' | 'admin'>(() => {
+  // 三级单角色(user/member/admin,权限方案 §1;2026-09-29 更名:原
+  // member→user、operator→member)。role 来自 /auth/me 的 UserPublic;
+  // 更名前的旧快照/旧 token 响应可能带 'operator' → 就地映射为 member;
+  // 没有 role → 回落 is_admin 布尔位。
+  const role = computed<'user' | 'member' | 'admin'>(() => {
     const r = (currentUser.value as { role?: string } | null)?.role
-    if (r === 'member' || r === 'operator' || r === 'admin') return r
-    return currentUser.value?.is_admin ? 'admin' : 'member'
+    if (r === 'user' || r === 'member' || r === 'admin') return r
+    if (r === 'operator') return 'member' // 更名前的中间档
+    return currentUser.value?.is_admin ? 'admin' : 'user'
   })
   const isAdmin = computed(() => role.value === 'admin')
   const hasRole = (...roles: string[]) => roles.includes(role.value)

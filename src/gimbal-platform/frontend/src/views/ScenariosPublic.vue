@@ -53,7 +53,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in paged" :key="row.meta.scenarioId" class="slib-row" :class="{ 'row-expired': row.meta.expire }">
+          <!-- 整行可点进详情(与「我的场景」同款):行内星标/⋯ 各自 stop 冒泡 -->
+          <tr v-for="row in paged" :key="row.meta.scenarioId" class="slib-row" :class="{ 'row-expired': row.meta.expire }" @click="openDetail(row)">
             <td>
               <div class="sl-name">
                 <StarToggle :starred="!!row.starred" @toggle="toggleStar(row)" />

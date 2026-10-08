@@ -79,7 +79,7 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     expect(w.find('.id-name').text()).toBe('Alice Zhang')
     expect(w.find('.id-welcome').text()).toMatch(/好，欢迎回来$/)
     expect(w.find('.id-user').text()).toBe('@alice')
-    expect(w.find('.id-role').text()).toBe('成员')
+    expect(w.find('.id-role').text()).toBe('用户')
     expect(w.find('.id-joined').exists()).toBe(false)                 // 加入时间已撤
 
     useAuthStore().currentUser = as({ is_admin: true }) as never

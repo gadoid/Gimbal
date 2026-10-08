@@ -157,8 +157,8 @@ describe('UsersAdmin — 创建用户', () => {
     const pw = qAll('input').find((i) => (i as HTMLInputElement).placeholder.includes('8 位'))!
     await new DOMWrapper(pw).setValue('GoodPass123')
     const radios = qAll('[role="radio"]')
-    expect(radios.length).toBe(2)
-    radios[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(radios.length).toBe(3)
+    radios[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     await q('form').trigger('submit')
     await vi.waitFor(() => expect(usersApi.create).toHaveBeenCalled())
@@ -202,11 +202,11 @@ describe('UsersAdmin — 行操作(DropdownMenu 经 Portal 渲染)', () => {
     w.unmount()
   })
 
-  it('升级成员 → patch(is_admin:true);停用用户菜单给「启用」→ patch(is_active:true)', async () => {
+  it('升级管理员 → patch(role:admin);停用用户菜单给「启用」→ patch(is_active:true)', async () => {
     loginAs(1)
     const w = await mountPage()
     await openMenu(w, 2)
-    await clickMenuItem('设为 admin')
+    await clickMenuItem('设为 管理员')
     await vi.waitFor(() => expect(usersApi.patch).toHaveBeenCalledWith(2, { role: 'admin' }))
 
     // bob 是停用态(is_active:false)→ 菜单给的是「启用账号」

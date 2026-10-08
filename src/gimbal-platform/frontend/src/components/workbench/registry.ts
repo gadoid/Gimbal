@@ -131,17 +131,17 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   {
     id: 'service-aliases',
     title: '服务信息管理',
-    description: '服务别名清单与未分组提醒(operator+)',
+    description: '服务别名清单与未分组提醒(member+)',
     accent: 'blue',
-    roles: ['operator', 'admin'],
+    roles: ['member', 'admin'],
     component: () => import('./ServiceAliasCard.vue'),
   },
   {
     id: 'carry',
     title: '默认值',
-    description: '服务级传递默认值,行深链直达定位(operator+)',
+    description: '服务级传递默认值,行深链直达定位(member+)',
     accent: 'blue',
-    roles: ['operator', 'admin'],
+    roles: ['member', 'admin'],
     component: () => import('./CarryDefaultsCard.vue'),
   },
   {

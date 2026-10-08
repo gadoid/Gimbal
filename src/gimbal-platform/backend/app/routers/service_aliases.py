@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser, CurrentUser, OperatorUser
+from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..models.service_alias import ServiceAlias
 from ..services import service_aliases
 from ..services.service_aliases import UnknownBaseService
@@ -88,10 +88,10 @@ async def list_aliases(
 
 @router.post("", response_model=AliasOut, status_code=201)
 async def create_alias(
-    user: OperatorUser, body: AliasCreate, db: DbSession,
+    user: MemberUser, body: AliasCreate, db: DbSession,
 ) -> AliasOut:
     """登记别名(M2.5,权限方案 §1.2 两类归属拆行):
-    团队共享(owner_user_id 空)= operator+;个人默认(owner_user_id
+    团队共享(owner_user_id 空)= member+;个人默认(owner_user_id
     非空,即「归属字段」)= admin —— 人事/内容权不落进技术运营角色。"""
     if body.owner_user_id is not None and user.role != "admin":
         raise HTTPException(
@@ -121,9 +121,9 @@ async def create_alias(
 
 @router.patch("/{alias_name}", response_model=AliasOut)
 async def patch_alias(
-    alias_name: str, user: OperatorUser, body: AliasPatch, db: DbSession,
+    alias_name: str, user: MemberUser, body: AliasPatch, db: DbSession,
 ) -> AliasOut:
-    """改别名:共享行 operator+;个人行 admin(归属域的写权只属 admin)。"""
+    """改别名:共享行 member+;个人行 admin(归属域的写权只属 admin)。"""
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
     )).scalar_one_or_none()
@@ -160,7 +160,7 @@ async def patch_alias(
 
 @router.delete("/{alias_name}", status_code=204)
 async def delete_alias(
-    alias_name: str, user: OperatorUser, db: DbSession
+    alias_name: str, user: MemberUser, db: DbSession
 ) -> None:
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)

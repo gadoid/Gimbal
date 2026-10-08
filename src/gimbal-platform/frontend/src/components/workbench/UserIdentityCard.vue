@@ -10,7 +10,7 @@
         <p class="id-welcome">{{ greeting }}，欢迎回来</p>
         <div class="id-chips">
           <span class="id-user mono">@{{ user.username }}</span>
-          <span class="id-role" :class="auth.role">{{ { member: '成员', operator: '运维', admin: '管理员' }[auth.role] }}</span>
+          <span class="id-role" :class="auth.role">{{ { user: '用户', member: '成员', admin: '管理员' }[auth.role] }}</span>
         </div>
       </div>
       <span class="avatar" :style="{ background: avatarColor(user.id) }" :title="displayName" aria-hidden="true">

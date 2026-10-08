@@ -152,10 +152,10 @@ async def list_batches(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ) -> BatchListOut:
-    """批次列表:operator/admin 全量;member 仅 ``scope=mine``(C13 owner
-    知情视图;M2.5 起技术运营权归 operator,权限方案 §1.2)。M4(§6.3):
+    """批次列表:member/admin 全量;user 仅 ``scope=mine``(C13 owner
+    知情视图;M2.5 起技术运营权归 member 级,权限方案 §1.2)。M4(§6.3):
     status 精确 + Page 信封。"""
-    if scope != "mine" and user.role == "member":
+    if scope != "mine" and user.role == "user":
         from fastapi import status as http_status
 
         raise HTTPException(

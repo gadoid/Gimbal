@@ -9,12 +9,12 @@ export interface UserCreateIn {
   password: string
   display_name?: string
   is_admin?: boolean
-  role?: 'member' | 'operator' | 'admin'
+  role?: 'user' | 'member' | 'admin'
 }
 
 export interface UserPatchIn {
   display_name?: string
-  role?: 'member' | 'operator' | 'admin'
+  role?: 'user' | 'member' | 'admin'
   is_active?: boolean
   new_password?: string
 }

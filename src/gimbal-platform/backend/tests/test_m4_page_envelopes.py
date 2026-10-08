@@ -126,7 +126,7 @@ async def test_users_envelope_q_and_role(client):
     assert (await client.get("/api/users", headers=admin,
                              params={"q": "m4u"})).json()["total"] == 2
     assert (await client.get("/api/users", headers=admin,
-                             params={"role": "member"})).json()["total"] == 2
+                             params={"role": "user"})).json()["total"] == 2
     r = await client.get("/api/users", headers=admin, params={"page_size": 2})
     assert len(r.json()["items"]) == 2 and r.json()["total"] == 3
 

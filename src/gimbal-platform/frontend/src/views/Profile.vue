@@ -91,11 +91,11 @@ import { Switch } from '@/components/ui/switch'
 
 const auth = useAuthStore()
 
-const ROLE_LABELS: Record<string, string> = { member: '成员', operator: '运维', admin: '管理员' }
+const ROLE_LABELS: Record<string, string> = { user: '用户', member: '成员', admin: '管理员' }
 const roleLabel = computed(() => ROLE_LABELS[auth.role] ?? auth.role)
 const roleChipClass = computed(() =>
   auth.role === 'admin' ? 'bg-signal-failed/10 text-signal-failed'
-    : auth.role === 'operator' ? 'bg-blue-500/10 text-blue-600'
+    : auth.role === 'member' ? 'bg-blue-500/10 text-blue-600'
       : 'bg-signal-soft text-signal')
 
 // ── 昵称 ─────────────────────────────────────────────────────

@@ -127,7 +127,7 @@ async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> 
         db.add(User(
             id=uid, username=f"fkuser{uid}", display_name="",
             password_hash=(hash_password(FK_ADMIN_PASSWORD) if admin else "x"),
-            role="admin" if admin else "member",
+            role="admin" if admin else "user",
             is_active=True,
         ))
     await db.commit()

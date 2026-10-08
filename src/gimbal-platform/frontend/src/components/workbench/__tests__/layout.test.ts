@@ -40,7 +40,7 @@ function readV2(): { order: string[]; sizes: Record<string, string> } {
 
 function asUser(username: string): void {
   useAuthStore().currentUser = {
-    id: 1, username, display_name: username, is_admin: false, role: 'member',
+    id: 1, username, display_name: username, is_admin: false, role: 'user',
   } as never
 }
 

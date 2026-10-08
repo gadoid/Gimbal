@@ -65,22 +65,22 @@ async def test_create_user_roles_and_admin_gate(client: AsyncClient) -> None:
     )
     assert r.status_code == 403, r.text
 
-    # admin 开 operator 号 → 201 且 role 直落
+    # admin 开 member 号 → 201 且 role 直落
     r = await client.post(
         "/api/users",
         json={
             "username": "op_one",
             "password": "Test2026!",
             "display_name": "op",
-            "role": "operator",
+            "role": "member",
         },
         headers=_bearer(admin),
     )
     assert r.status_code == 201, r.text
-    assert r.json()["role"] == "operator"
+    assert r.json()["role"] == "member"
     assert r.json()["is_admin"] is False  # 过渡镜像
 
-    # member 读用户列表 → 403(收紧:operator+ 可见)
+    # user 读用户列表 → 403(收紧:member+ 可见)
     r = await client.get("/api/users", headers=_bearer(member))
     assert r.status_code == 403, r.text
     r = await client.get("/api/users", headers=_bearer(admin))
@@ -153,9 +153,9 @@ async def test_member_cannot_escalate_or_demote(client: AsyncClient) -> None:
     )
     assert r.status_code == 403
 
-    # Follow-up: member 角色未变(M2.5:列表已收 operator+,改走 /auth/me)
+    # Follow-up: user 角色未变(M2.5:列表已收 member+,改走 /auth/me)
     me = await client.get("/api/auth/me", headers=member)
-    assert me.json()["user"]["role"] == "member"
+    assert me.json()["user"]["role"] == "user"
     assert me.json()["user"]["is_admin"] is False
 
 

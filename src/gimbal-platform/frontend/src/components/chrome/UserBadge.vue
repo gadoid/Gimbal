@@ -116,7 +116,7 @@ withDefaults(defineProps<{
 const auth = useAuthStore()
 const router = useRouter()
 
-const ROLE_LABELS: Record<string, string> = { member: '成员', operator: '运维', admin: '管理员' }
+const ROLE_LABELS: Record<string, string> = { user: '用户', member: '成员', admin: '管理员' }
 const roleLabel = computed(() => ROLE_LABELS[auth.role] ?? auth.role)
 
 const initial = computed(() =>

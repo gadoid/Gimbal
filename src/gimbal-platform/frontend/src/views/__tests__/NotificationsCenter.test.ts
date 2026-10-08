@@ -32,7 +32,7 @@ const ITEMS = [
     link: null, batchId: null, createdAt: '2026-09-22T10:00:00', readAt: '2026-09-22T12:00:00' },
 ]
 
-async function mountPage(role: 'member' | 'admin') {
+async function mountPage(role: 'user' | 'admin') {
   const { useAuthStore } = await import('@/stores/auth')
   const router = createRouter({
     history: createMemoryHistory(),
@@ -61,7 +61,7 @@ describe('NotificationsCenter', () => {
   })
 
   it('member:只有通知 tab,无审计控件;列表渲染与类型文案', async () => {
-    const w = await mountPage('member')
+    const w = await mountPage('user')
     expect(w.find('[data-testid="nt-tab-notify"]').exists()).toBe(true)
     expect(w.find('[data-testid="nt-tab-audit"]').exists()).toBe(false)
     expect(w.find('[data-testid="audit-panel-stub"]').exists()).toBe(false)
@@ -80,7 +80,7 @@ describe('NotificationsCenter', () => {
   })
 
   it('点未读通知:先标读再跳深链;全部已读走 markRead(null)', async () => {
-    const w = await mountPage('member')
+    const w = await mountPage('user')
     await w.find('[data-testid="nt-item-2"]').trigger('click')
     await flushPromises()
     expect(api.markRead).toHaveBeenCalledWith([2])
@@ -97,7 +97,7 @@ describe('NotificationsCenter', () => {
       .mockResolvedValueOnce({ items: page1, unread: 20, total: 21, page: 1, pageSize: 20 } as never)
       .mockResolvedValueOnce({ items: page2, unread: 1, total: 21, page: 2, pageSize: 20 } as never)
       .mockResolvedValueOnce({ items: page1, unread: 20, total: 21, page: 1, pageSize: 20 } as never)
-    const w = await mountPage('member')
+    const w = await mountPage('user')
 
     expect(api.list).toHaveBeenCalledWith({ page: 1, pageSize: 20 })
     expect(w.find('[data-testid="nt-item-1"]').exists()).toBe(true)

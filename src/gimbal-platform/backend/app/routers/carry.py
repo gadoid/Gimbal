@@ -1,5 +1,5 @@
 """carry 配置面路由(spec §3.2):读 CurrentUser(编排器提示要用),
-写 OperatorUser(M2.5:默认值属技术运营权,权限方案 §1.2)。字段面聚合走 plate /full。"""
+写 MemberUser(M2.5:默认值属技术运营权,权限方案 §1.2)。字段面聚合走 plate /full。"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser, OperatorUser
+from ..core.deps import CurrentUser, MemberUser
 from ..models.carry_binding import CarryServiceBinding
 from ..schemas.carry import (
     BindingsOut,
@@ -43,7 +43,7 @@ async def get_defaults(user: CurrentUser, db=DbSession):
 
 
 @router.put("/defaults", response_model=DefaultsOut)
-async def put_defaults(user: OperatorUser, body: DefaultsIn, db=DbSession):
+async def put_defaults(user: MemberUser, body: DefaultsIn, db=DbSession):
     await carry_store.put_defaults(
         db, body.defaults,
         updated_by_id=user.id,
@@ -74,7 +74,7 @@ async def get_bindings(service: str, user: CurrentUser, db=DbSession):
 
 
 @router.put("/bindings/{service}", response_model=ServiceBindingsOut)
-async def put_bindings(service: str, user: OperatorUser, body: CarryMapIn,
+async def put_bindings(service: str, user: MemberUser, body: CarryMapIn,
                        db=DbSession):
     await carry_store.put_bindings(
         db, service, body.bindings,
@@ -95,7 +95,7 @@ async def put_bindings(service: str, user: OperatorUser, body: CarryMapIn,
 
 
 @router.get("/drift", response_model=DriftReport)
-async def drift(user: OperatorUser, db=DbSession):
+async def drift(user: MemberUser, db=DbSession):
     raw = await carry_store.carry_drift(db)
     return DriftReport(
         plateReachable=raw["plateReachable"],
@@ -103,7 +103,7 @@ async def drift(user: OperatorUser, db=DbSession):
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
-async def service_fields(service: str, user: OperatorUser):
+async def service_fields(service: str, user: MemberUser):
     """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。
     任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,
     配置页整表替换保存会删不可见端点的绑定值,须据此禁存。

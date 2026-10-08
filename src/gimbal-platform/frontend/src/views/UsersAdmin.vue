@@ -19,9 +19,9 @@
         <SelectTrigger data-testid="role-filter"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">全部角色</SelectItem>
-          <SelectItem value="admin">admin</SelectItem>
-          <SelectItem value="operator">运维</SelectItem>
+          <SelectItem value="admin">管理员</SelectItem>
           <SelectItem value="member">成员</SelectItem>
+          <SelectItem value="user">用户</SelectItem>
         </SelectContent>
       </Select>
       <Button data-testid="open-create" @click="openCreate">+ 创建用户</Button>
@@ -191,10 +191,13 @@
               <FormControl>
                 <RadioGroup v-bind="componentField" class="flex gap-5">
                   <label class="flex cursor-pointer items-center gap-1.5 text-body">
+                    <RadioGroupItem value="user" /> 用户
+                  </label>
+                  <label class="flex cursor-pointer items-center gap-1.5 text-body">
                     <RadioGroupItem value="member" /> 成员
                   </label>
                   <label class="flex cursor-pointer items-center gap-1.5 text-body">
-                    <RadioGroupItem value="admin" /> admin
+                    <RadioGroupItem value="admin" /> 管理员
                   </label>
                 </RadioGroup>
               </FormControl>
@@ -390,7 +393,7 @@ const authStore = useAuthStore()
 // ── filters & visible rows(M4:q/角色下推服务端,Page 信封)──────
 // useServerList 观察 params 签名:搜索词/角色任一变化 → 防抖重拉 + 回页 1。
 const searchQuery = ref('')
-const roleFilter = ref<'all' | 'admin' | 'member' | 'operator'>('all')
+const roleFilter = ref<'all' | 'admin' | 'member' | 'user'>('all')
 
 const list = useServerList<UserOut, Record<string, string | number | boolean | undefined>>({
   fetch: (params) => usersApi.list(params),
@@ -422,19 +425,20 @@ function isSelf(row: UserOut): boolean {
   return row.id === authStore.currentUser?.id
 }
 
-type Role = 'member' | 'operator' | 'admin'
-const ROLE_LABELS: Record<Role, string> = { member: '成员', operator: '运维', admin: 'admin' }
-const OTHER_ROLES: Role[] = ['member', 'operator', 'admin']
-/** 行角色:role 缺省(旧缓存)回落 is_admin。 */
+type Role = 'user' | 'member' | 'admin'
+const ROLE_LABELS: Record<Role, string> = { user: '用户', member: '成员', admin: '管理员' }
+const OTHER_ROLES: Role[] = ['user', 'member', 'admin']
+/** 行角色:role 缺省(旧缓存)回落 is_admin;更名前的 operator 就地归并为 member。 */
 function roleOf(u: UserOut): Role {
   const r = (u as { role?: Role }).role
-  if (r === 'member' || r === 'operator' || r === 'admin') return r
-  return u.is_admin ? 'admin' : 'member'
+  if (r === 'user' || r === 'member' || r === 'admin') return r
+  if (r === 'operator') return 'member'
+  return u.is_admin ? 'admin' : 'user'
 }
 function roleLabel(r: Role): string { return ROLE_LABELS[r] }
 function roleChipClass(r: Role): string {
   return r === 'admin' ? 'bg-signal-failed/10 text-signal-failed'
-    : r === 'operator' ? 'bg-blue-500/10 text-blue-600'
+    : r === 'member' ? 'bg-blue-500/10 text-blue-600'
     : 'bg-signal-soft text-signal'
 }
 function canSetRole(row: UserOut, target: Role): boolean {
@@ -546,12 +550,12 @@ const createSchema = toTypedSchema(z.object({
   password: z.string()
     .min(1, '请输入初始密码')
     .refine((v) => v.length >= 8 && /[A-Za-z]/.test(v) && /\d/.test(v), '至少 8 位含字母 + 数字'),
-  role: z.enum(['member', 'admin']),
+  role: z.enum(['user', 'member', 'admin']),
 }))
 
 const { handleSubmit, resetForm, setFieldValue } = useForm({
   validationSchema: createSchema,
-  initialValues: { username: '', display_name: '', password: '', role: 'member' as const },
+  initialValues: { username: '', display_name: '', password: '', role: 'user' as const },
 })
 
 function randomString(len: number): string {
@@ -596,7 +600,7 @@ function openCreate() {
       username: '',
       display_name: '',
       password: randomString(12),
-      role: 'member',
+      role: 'user',
     },
   })
   createOpen.value = true

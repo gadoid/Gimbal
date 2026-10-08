@@ -67,8 +67,9 @@ async def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
-# operator = 技术运营权(适配/别名/默认值/信号);admin 天然包含(§1.1)。
-OperatorUser = Annotated[User, Depends(require_role("operator", "admin"))]
+# member = 技术运营权(适配/别名/默认值/信号);admin 天然包含(§1.1)。
+# (2026-09-29 三级更名:原 operator 级现叫 member,原 member 级现叫 user。)
+MemberUser = Annotated[User, Depends(require_role("member", "admin"))]
 
 
 async def get_owned_execution(

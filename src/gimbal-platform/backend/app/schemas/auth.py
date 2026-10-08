@@ -70,8 +70,9 @@ class UserPublic(BaseModel):
     display_name: str
     # M6-3:物理列已删 —— API 字面保留(前端旧缓存 fallback),由 role 派生
     is_admin: bool = False
-    # 三级角色(M2.5,/auth/me 经 MeOut 包裹 UserPublic 自动下发)
-    role: Literal["member", "operator", "admin"] = "member"
+    # 三级角色(M2.5,/auth/me 经 MeOut 包裹 UserPublic 自动下发;
+    # 2026-09-29 更名:user | member | admin,原 member→user、operator→member)
+    role: Literal["user", "member", "admin"] = "user"
     is_active: bool
     created_at: datetime
     # 通知 unread-count 的 roleVersion 比对源(§1.3 第六轮)

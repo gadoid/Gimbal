@@ -186,12 +186,12 @@ async def test_role_change_notification(client: AsyncClient):
     member = await _mk_user(client, "role_member")  # id=2
 
     r = await client.patch(
-        "/api/users/2", headers=admin, json={"role": "operator"})
+        "/api/users/2", headers=admin, json={"role": "member"})
     assert r.status_code == 200
 
     r = await client.get("/api/notifications", headers=member)
     items = [i for i in r.json()["items"] if i["type"] == "role_changed"]
-    assert items and "operator" in items[0]["title"]
+    assert items and "member" in items[0]["title"]
 
 
 async def test_notify_finished_name_and_id(client: AsyncClient):

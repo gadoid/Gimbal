@@ -10,13 +10,13 @@
     <PageHead
       icon="activity"
       title="适配中心"
-      :count="auth.hasRole('operator', 'admin') && pendingCards.length + anomalies.length
+      :count="auth.hasRole('member', 'admin') && pendingCards.length + anomalies.length
         ? `${pendingCards.length + anomalies.length} 个端点待处理` : undefined"
-      :subtitle="auth.hasRole('operator', 'admin') ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
+      :subtitle="auth.hasRole('member', 'admin') ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
     >
       <template #right>
         <Button
-          v-if="auth.hasRole('operator', 'admin')"
+          v-if="auth.hasRole('member', 'admin')"
           :disabled="adaptations.refreshing"
           data-testid="refresh-all"
           @click="refreshAll"
@@ -24,7 +24,7 @@
       </template>
     </PageHead>
 
-    <template v-if="auth.hasRole('operator', 'admin')">
+    <template v-if="auth.hasRole('member', 'admin')">
       <UnindexedAlert :steps="unindexed" />
 
       <!-- 本批影响面摘要(配套方案 §3.2):pending 端点 → 按服务聚合;
@@ -159,7 +159,7 @@
             <th style="width:14%">创建时间</th>
             <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
                  member 点击只会得 403(死链),故整列不渲染。 -->
-            <th v-if="auth.hasRole('operator', 'admin')" style="width:6%" class="c-center">操作</th>
+            <th v-if="auth.hasRole('member', 'admin')" style="width:6%" class="c-center">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -185,7 +185,7 @@
               >{{ s }} {{ n }}</span>
             </td>
             <td class="muted">{{ row.createdAt }}</td>
-            <td v-if="auth.hasRole('operator', 'admin')" class="c-center">
+            <td v-if="auth.hasRole('member', 'admin')" class="c-center">
               <router-link
                 :to="`/adaptations/batches/${row.batchId}`"
                 class="link"
@@ -208,7 +208,7 @@
     <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
          plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
          契约:plate 挂时 drift 会把全表绑定误报孤儿,防管理员误清空)。 -->
-    <template v-if="auth.hasRole('operator', 'admin')">
+    <template v-if="auth.hasRole('member', 'admin')">
       <div class="section-head">
         <span class="section-title">carry 漂移(值表 vs plate 面)</span>
         <span v-if="carryDrift.length" class="section-count">
@@ -302,11 +302,11 @@ const { pageSize: batchPageSize } = usePagerSize('adaptation-batches', 20)
 const batchPageCount = computed(() =>
   Math.max(1, Math.ceil(batchTotal.value / batchPageSize.value)))
 watch(batchPage, () => {
-  void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+  void loadBatches(auth.hasRole('member', 'admin') ? undefined : 'mine')
 })
 watch(batchPageSize, () => {
   if (batchPage.value !== 1) batchPage.value = 1
-  else void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+  else void loadBatches(auth.hasRole('member', 'admin') ? undefined : 'mine')
 })
 /** M4(§6.3):状态下推服务端;空串 = 全部。 */
 const BATCH_STATUS_OPTS = [
@@ -321,7 +321,7 @@ function setBatchStatus(v: string): void {
   if (batchStatus.value === v) return
   batchStatus.value = v
   if (batchPage.value !== 1) batchPage.value = 1 // watch 拉取
-  else void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+  else void loadBatches(auth.hasRole('member', 'admin') ? undefined : 'mine')
 }
 const batchesLoading = ref(false)
 
