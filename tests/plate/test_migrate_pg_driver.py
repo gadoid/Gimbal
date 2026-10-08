@@ -16,8 +16,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("asyncpg")  # 驱动脚本在 main() 内才 import;测试自身需要
-
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "migrate_legacy_case_pg.py"
 _spec = importlib.util.spec_from_file_location("migrate_legacy_case_pg", _SCRIPT)
 drv = importlib.util.module_from_spec(_spec)
@@ -77,8 +75,8 @@ class FakeConn:
 
 @pytest.fixture()
 def patched_connect(monkeypatch):
-    """X1 后 asyncpg 在 main() 内 import——patch sys.modules 让函数内
-    import 拿到假件(真实 asyncpg 缺席时整个文件按 importorskip 跳过)。"""
+    """O3(第七轮):asyncpg 假件注入 sys.modules——脚本在 main() 内 import,
+    拿到的是假件,真实环境无需安装 asyncpg(CI 里这些测试真跑不跳过)。"""
     conns: list[FakeConn] = []
     fake_mod = types.ModuleType("asyncpg")
 
@@ -122,16 +120,18 @@ def test_write_backup_holds_pre_change_state(tmp_path, patched_connect, monkeypa
 
 def test_write_refuses_to_overwrite_existing_backup(
         tmp_path, patched_connect, monkeypatch):
-    """X6:已有(带时间戳的)备份文件时拒绝运行——冲掉上一份=丢掉唯一旧态。"""
+    """O2/X6:独占创建拒绝覆盖已有备份(时间戳经 _now_stamp 注入固定,
+    稳定构造同名冲突,不依赖两次运行碰巧同秒)。"""
+    import asyncio
+    monkeypatch.setattr(drv, "_now_stamp", lambda: "20260101-000000")
     monkeypatch.setattr(drv, "_REPO", tmp_path)
     conn = FakeConn([("sc-1", _scenario("sc-1", ""))])
     patched_connect.append(conn)
-    import asyncio
-    rc = asyncio.run(drv.main("fake://db", write=True))
-    assert rc == 0
-    first = list(tmp_path.glob("legacy-path-migration-backup-*.json"))[0]
+    assert asyncio.run(drv.main("fake://db", write=True)) == 0
+    first = tmp_path / "legacy-path-migration-backup-20260101-000000.json"
+    assert first.is_file()
     conn2 = FakeConn([("sc-2", _scenario("sc-2", ""))])
     patched_connect.append(conn2)
     with pytest.raises(SystemExit):
-        asyncio.run(drv.main("fake://db", write=True))
+        asyncio.run(drv.main("fake://db", write=True))   # 同名 → 独占创建拒
     assert conn2.executed == []                      # 未动库

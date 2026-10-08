@@ -20,7 +20,6 @@ Otherwise FastAPI matches /systems as dim="systems", or eats action names into {
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -789,11 +788,12 @@ def action_endpoint_find(
 # 200 ok:true 的假绿)。数据根与查询面同源(loader.systems_roots,
 # 认 PLATE_SYSTEMS_PATH)——评审 J2:此前 HTTP 动作用包位置推导,
 # 服务设 PLATE_SYSTEMS_PATH 时会出现「查询读 A 树、发版冻 B 树」。
-_SYSTEM_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+# O4:名字规则单一定义于 loader.SYSTEM_NAME_RE(_resolve_action_system
+# 函数内 import——loader 模块级反向 import 本模块,顶层引用会循环)
 
 
 def _resolve_action_system(request: Any) -> "Path":
-    from gimbal_plate.loader import systems_roots
+    from gimbal_plate.loader import SYSTEM_NAME_RE, systems_roots
 
     system = request.path_params.get("system") or ""
     if not system:
@@ -801,7 +801,7 @@ def _resolve_action_system(request: Any) -> "Path":
             http_status=400, code=ErrorCode.INVALID_ACTION,
             message="system required: use /api/systems/{system}/system/action/{name}",
         )
-    if not _SYSTEM_NAME_RE.match(system):
+    if not SYSTEM_NAME_RE.match(system):
         raise PlateHTTPError(
             http_status=400, code=ErrorCode.INVALID_ACTION,
             message=f"invalid system name {system!r} (expected ^[a-z][a-z0-9_-]*$)",

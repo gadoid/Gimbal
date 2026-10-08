@@ -50,6 +50,12 @@ _spec.loader.exec_module(mig)
 # pytest 收集阶段炸掉——.[dev] 不含 asyncpg,tests/plate 整个中断)
 
 
+def _now_stamp() -> str:
+    """备份文件名的时间戳(独立函数便于测试注入固定值)。"""
+    from datetime import datetime
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
 async def main(db_url: str, *, write: bool) -> int:
     import asyncpg
 
@@ -76,13 +82,14 @@ async def main(db_url: str, *, write: bool) -> int:
         return 0
     # B2/X6:备份先落盘(旧态),更新走单事务;文件名带时间戳且拒绝
     # 覆盖已有备份(冲掉上一份=丢掉唯一旧态)。
-    from datetime import datetime
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = _REPO / f"legacy-path-migration-backup-{stamp}.json"
-    if backup_path.exists():
+    backup_path = _REPO / f"legacy-path-migration-backup-{_now_stamp()}.json"
+    # O2(第七轮/R2):open(x) 独占创建——exists()+write 的两步在秒级时间戳
+    # 下几乎不会触发且存在竞争窗口;独占创建原子地拒绝覆盖。
+    try:
+        with open(backup_path, "x", encoding="utf-8") as f:
+            f.write(json.dumps(backup, ensure_ascii=False, indent=1))
+    except FileExistsError:
         raise SystemExit(f"error: 备份文件已存在,拒绝覆盖: {backup_path}")
-    backup_path.write_text(
-        json.dumps(backup, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"备份(变更前状态)→ {backup_path}")
     async with conn.transaction():
         for sid, d, out in pending:

@@ -257,6 +257,20 @@ def release_system(
         )
 
     # ── 冻结(评审 P0-16:release_id 目录冲突重试防并发覆盖)──
+    # O1(第七轮/R1):freeze_list 与空检查在 mkdir **之前**——空发版被拒
+    # 时不创建目录、不占用 release 号(此前连拒两次会留下 2026.10.1/.2
+    # 空目录,把真实发版的编号挤后,还会让 diff 崩在无 manifest 的目录上)。
+    freeze_list = list(reviewed) + [
+        ("term", common_terms[mid]) for mid in sorted(common_frozen)
+    ]
+    # X3(第六轮):0 个对象的「空 release」拒绝——manifest 无内容、
+    # 序号却被占用,还会把后续真实 release 的编号挤后。
+    if not freeze_list:
+        return ReleaseResult(
+            success=False,
+            message="无可冻结对象(reviewed 块为空且无被引用的 common 词条)"
+                    "——空 release 拒绝发出",
+            report=report)
     releases_dir = artifacts_root / system_root.name / "releases"
     release_id = _next_release_id(releases_dir)
     manifest_dir = releases_dir / release_id
@@ -269,17 +283,6 @@ def release_system(
             manifest_dir = releases_dir / release_id
     else:
         return ReleaseResult(success=False, message="release_id 竞争重试耗尽")
-    freeze_list = list(reviewed) + [
-        ("term", common_terms[mid]) for mid in sorted(common_frozen)
-    ]
-    # X3(第六轮):0 个对象的「空 release」拒绝——manifest 无内容、
-    # 序号却被占用,还会把后续真实 release 的编号挤后。
-    if not freeze_list:
-        return ReleaseResult(
-            success=False,
-            message="无可冻结对象(reviewed 块为空且无被引用的 common 词条)"
-                    "——空 release 拒绝发出",
-            report=report)
     object_entries = _freeze_objects(artifacts_root, freeze_list)
     call_projections = {
         m.id: _call_projection(m)

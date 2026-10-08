@@ -78,6 +78,64 @@ class TestCliNewAndReview:
         assert main(["check", "fin", "--json"]) == 1
 
 
+class TestO4IllegalSystemName:
+    def test_check_blocks_illegal_name(self, capsys):
+        """O4:fin.v2 这类不合规目录名,check 退出码非 0 并说明服务不加载。"""
+        import pytest as _pytest
+        with _pytest.raises(SystemExit) as ei:
+            main(["check", "fin.v2", "--json"])
+        assert ei.value.code == 2
+        err = capsys.readouterr().err
+        assert "不合规" in err and "服务不会加载" in err
+
+    def test_loader_warns_and_skips(self, tmp_path, caplog):
+        """O4:loader 跳过不合规名/逃逸符号链接时留 warning 且不注册。"""
+        import logging
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+        from gimbal_plate.loader import load_registry
+        root = tmp_path / "systems"
+        (root / "good").mkdir(parents=True)
+        (root / "good" / "system.md").write_text("", encoding="utf-8")
+        (root / "fin.v2").mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        try:
+            (root / "linked").symlink_to(outside, target_is_directory=True)
+        except OSError:  # Windows 无符号链接特权:junction 不受限制
+            import subprocess
+            subprocess.run(["cmd", "/c", "mklink", "/J",
+                            str(root / "linked"), str(outside)],
+                           check=True, capture_output=True)
+        with caplog.at_level(logging.WARNING, logger="gimbal_plate.loader"):
+            reg = load_registry([root])
+        msgs = " ".join(r.message for r in caplog.records)
+        assert "fin.v2" in msgs and "名字不合规" in msgs
+        assert "linked" in msgs and "逃出" in msgs
+        assert "good" in reg.list_systems()
+        assert "fin.v2" not in reg.list_systems()
+        assert "linked" not in reg.list_systems()
+
+
+class TestDiffSkipsManifestless:
+    def test_o1_diff_skips_dirs_without_manifest(self, tmp_path, monkeypatch):
+        """O1:diff 遇无 manifest 的半成品目录不崩,跳过并提示。"""
+        import gimbal_plate.cli as cli
+        monkeypatch.setattr(cli, "_REPO", tmp_path)
+        rel = tmp_path / "plate_artifacts" / "fin" / "releases"
+        rel.mkdir(parents=True)
+        for name, with_manifest in (("2026.10.1", True), ("2026.10.2", False),
+                                    ("2026.10.3", True)):
+            d = rel / name
+            d.mkdir()
+            if with_manifest:
+                obj = [{"id": "fin.x", "hash": "h1"}] if name.endswith(".1")                     else [{"id": "fin.x", "hash": "h2"}]
+                (d / "manifest.json").write_text(json.dumps(
+                    {"objects": obj}), encoding="utf-8")
+        from gimbal_plate.cli import main
+        assert main(["diff", "fin", "--json"]) == 0   # 跳过 .2,比 .1→.3
+
+
 class TestG1SelfDescribe:
     def test_type_dim_via_http(self, http_client) -> None:
         resp = http_client.get("/api/type")

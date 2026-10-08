@@ -363,6 +363,34 @@ class TestRelease:
         assert "无可冻结对象" in r.message
         assert not r.report.blocking          # draft 不是阻塞(8v 保持)
 
+    def test_o1_empty_release_occupies_no_number(self, tmp_path: Path) -> None:
+        """O1(第七轮/R1):空发版被拒不得占用 release 号——连拒两次后
+        releases/ 不出现目录;补 reviewed 后真实发版仍从 .1 起。"""
+        systems = tmp_path / "systems"
+        (systems / "fin" / "endpoints").mkdir(parents=True)
+        ep_md = systems / "fin" / "endpoints" / "fin.a.d.md"
+        draft_md = (
+            "---\nid: fin.a.d\ntype: endpoints\nsystem: fin\n---\n"
+            "```gimbal:endpoint\nid: fin.a.d\nsystem: fin\nservice: svc\n"
+            "name: d\nbinding:\n  protocol: http\n  method: GET\n  path: /d\n"
+            "responses:\n  '200': {}\n```\n"  # 无 review → draft(缺省)
+        )
+        ep_md.write_text(draft_md, encoding="utf-8")
+        art = tmp_path / "art"
+        for _ in range(2):
+            r = release_system(systems / "fin", artifacts_root=art, signed_by="t")
+            assert not r.success and "无可冻结对象" in r.message
+        rel = art / "fin" / "releases"
+        assert not rel.exists() or not any(rel.iterdir()), \
+            "被拒的空发版不得留下目录/占用编号"
+        # 加入 reviewed 块后,真实发版从 .1 起
+        ep_md.write_text(
+            draft_md.replace("```gimbal:endpoint\n",
+                             "```gimbal:endpoint\nreview: reviewed\n"),
+            encoding="utf-8")
+        r3 = release_system(systems / "fin", artifacts_root=art, signed_by="t")
+        assert r3.success and r3.release_id.endswith(".1")
+
     def test_x3_common_release_refused(self, tmp_path: Path) -> None:
         """X3/N3:common 不单独发版——被引用的 common 对象随引用系统冻结。"""
         common = tmp_path / "systems" / "common"

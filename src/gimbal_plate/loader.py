@@ -79,6 +79,11 @@ from gimbal_plate.schema.resource import ResourceUnion
 DEFAULT_SYSTEMS_ROOT = "systems"
 SNAPSHOT_WORKING = "working"
 
+# O4(第七轮):系统名规则单一定义点——loader / HTTP 动作 / CLI check
+# 三处共用(routes/cli 从此处 import)。
+import re as _re
+SYSTEM_NAME_RE = _re.compile(r"^[a-z][a-z0-9_-]*$")
+
 
 def systems_roots(explicit: list[Path] | None = None) -> list[Path]:
     """系统目录路径列表（修订四：路径可配置）。
@@ -280,8 +285,8 @@ def load_registry(
     reg = reg if reg is not None else PlateRegistry()
     register_core_dims(reg)
     total = {"endpoints": 0, "deliverables": 0}
-    import re as _re
-    _name_re = _re.compile(r"^[a-z][a-z0-9_-]*$")
+    import logging
+    _log = logging.getLogger("gimbal_plate.loader")
     for root in systems_roots(roots):
         if not root.is_dir():
             continue
@@ -289,11 +294,16 @@ def load_registry(
         for system_dir in sorted(p for p in root.iterdir() if p.is_dir()):
             # X5(第六轮):与动作路由同口径——非法名字不加载、符号链接
             # 逃出根的目录不加载(否则查询面暴露动作侧 404 的树,前后不一)
-            if not _name_re.match(system_dir.name):
+            # O4(第七轮):跳过必须留痕(warning)——静默消失的目录最难排查
+            if not SYSTEM_NAME_RE.match(system_dir.name):
+                _log.warning("跳过系统目录 %s:名字不合规(%s),服务不加载",
+                             system_dir, SYSTEM_NAME_RE.pattern)
                 continue
             try:
                 system_dir.resolve().relative_to(root_resolved)
             except ValueError:
+                _log.warning("跳过系统目录 %s:符号链接逃出数据根 %s",
+                             system_dir, root)
                 continue
             c = _load_system_dir(reg, system_dir)
             total["endpoints"] += c["endpoints"]

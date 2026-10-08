@@ -32,6 +32,13 @@ _TYPES = _REPO / "types" / "types.yaml"
 
 
 def _repo_system(system: str) -> Path:
+    # O4(第七轮):不合规名字独立拦截——目录存在也不让过 CI 的 check
+    # (loader 会静默跳过它,服务里不出现;check 必须替它报出来)
+    from gimbal_plate.loader import SYSTEM_NAME_RE
+    if not SYSTEM_NAME_RE.match(system):
+        print(f"error: 系统名 {system!r} 不合规({SYSTEM_NAME_RE.pattern}),"
+              f"服务不会加载该目录", file=sys.stderr)
+        raise SystemExit(2)
     root = _REPO / "systems" / system
     if not root.is_dir():
         hint = ""
@@ -208,10 +215,17 @@ def cmd_diff(args: argparse.Namespace) -> int:
     与当前树比 shape_hash(G7 简版;字段级 diff 属 B 后续)。"""
     arts = _REPO / "plate_artifacts"
     rel_dir = arts / args.system / "releases"
-    releases = sorted(
+    # O1(第七轮):跳过无 manifest.json 的目录(崩溃/中断留下的半成品,
+    # 或历史上空发版被拒时占号的残留)——此前直接崩在 FileNotFoundError
+    all_dirs = sorted(
         (d.name for d in rel_dir.iterdir() if d.is_dir())) if rel_dir.exists() else []
+    skipped = [n for n in all_dirs
+               if not (rel_dir / n / "manifest.json").is_file()]
+    releases = [n for n in all_dirs if n not in skipped]
+    if skipped and not args.json:
+        print(f"(跳过无 manifest 的目录: {skipped})", file=sys.stderr)
     if len(releases) < 2:
-        print(f"不足两个 release(现有 {releases});diff 需要 ≥2 个 manifest")
+        print(f"不足两个 release(可用 {releases});diff 需要 ≥2 个 manifest")
         return 1
     a_name = args.base if args.base else releases[-2]
     b_name = releases[-1]
