@@ -9,7 +9,7 @@ from twin_generator.schema_source import ColumnCatalog, ColumnInfo
 
 # generated 文件 import gimbal_plate —— conftest 已插路径?本测试自己插:
 REPO = Path(__file__).resolve().parents[5]   # tools/twin_generator/tests → repo
-sys.path.insert(0, str(REPO / "src" / "gimbal-plate"))
+sys.path.insert(0, str(REPO / "src"))
 
 
 def _act():

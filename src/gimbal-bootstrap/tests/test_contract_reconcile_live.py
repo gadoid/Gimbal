@@ -57,12 +57,19 @@ def client():
     return _login(_resolve_env("GIMBAL_SB_USERNAME"), _resolve_env("GIMBAL_SB_PASSWORD"))
 
 
+# A2 已删 Python 接口实例(方言真源取代)——本文件的 fixture 供给旧
+# 实例结构(e.api.*),整体前提已退役;整文件跳过留痕,继任随附录 C。
+try:
+    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as _ALL  # noqa: F401
+except ImportError:  # 含"命名空间包可 import 但属性已删"的残留形态
+    pytest.skip(
+        "A2 已删 Python 接口实例;附录 C 契约工具待重定向",
+        allow_module_level=True,
+    )
+
+
 @pytest.fixture(scope="module")
 def by_route() -> dict:
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
     from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
 
     return {(e.api.method, e.api.path): e for e in ALL_PLATFORM_ENDPOINTS}

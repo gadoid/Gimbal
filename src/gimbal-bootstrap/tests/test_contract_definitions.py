@@ -32,6 +32,17 @@ def generated() -> dict[str, dict]:
     return {spec["id"]: spec for spec in build_specs(fetch_openapi(allow_inprocess_fallback=True))[0]}
 
 
+# A2 已删 Python 接口实例(方言真源取代)——installed fixture 与三处
+# 消费点全部建立在退役结构上;整文件跳过留痕,继任随附录 C。
+try:
+    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as _ALL  # noqa: F401
+except ImportError:  # 含"命名空间包可 import 但属性已删"的残留形态
+    pytest.skip(
+        "A2 已删 Python 接口实例;附录 C 契约工具待重定向",
+        allow_module_level=True,
+    )
+
+
 @pytest.fixture(scope="module")
 def installed() -> dict:
     from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS

@@ -12,7 +12,7 @@ from pathlib import Path
 
 # verify_emit.py → twin_generator → tools → gimbal-plate → src → repo 根
 REPO = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO / "src" / "gimbal-plate"))
+sys.path.insert(0, str(REPO / "src"))
 
 _RE_ID = re.compile(r"^fin\.[a-z0-9_]+\.[a-z0-9_]+$")
 _ENVELOPE_NAMES = {"code", "msg", "data", "request_id", "retCode", "retMsg"}

@@ -34,7 +34,7 @@ from app.services import plate_client
 from app.services.endpoint_declarations import _reset_declared_paths_cache
 
 _REPO = Path(__file__).resolve().parents[4]  # backend/tests → 仓库根
-for _p in (_REPO / "src" / "gimbal-plate",):
+for _p in (_REPO / "src",):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

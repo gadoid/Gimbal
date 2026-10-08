@@ -14,8 +14,18 @@ from __future__ import annotations
 import pytest
 
 from gimbal_bootstrap.contract_gen import fetch_openapi
-from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
-# 实测层挑的端点：全是 GET，admin 才能过，不产生任何写。
+
+# A2 方言迁移删除了 Python 接口实例(gimbal_plate.systems.platform.*
+# 死模块)——本文件整体建立在 retired 结构上,收集期即 ImportError。
+# 整文件跳过留痕;契约对账的继任(真源树 vs OpenAPI)随附录 C 评估。
+try:
+    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS as ALL_PLATFORM_ENDPOINTS
+except ImportError:  # 含"命名空间包可 import 但属性已删"的残留形态
+    pytest.skip(
+        "A2 已删 Python 接口实例(方言真源取代);附录 C 契约工具待重定向",
+        allow_module_level=True,
+    )
+# 实测层挑的端点:全是 GET,admin 才能过,不产生任何写。
 LIVE_PROBES = [
     ("GET", "/api/health"),
     ("GET", "/api/users/roster"),

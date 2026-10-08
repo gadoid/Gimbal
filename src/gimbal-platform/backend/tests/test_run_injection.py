@@ -18,10 +18,11 @@ from .test_scenario_composer_plate_integration import (
 )
 
 # ── 真引擎 / 真 plate(下方「convert 穿越 + 真解析」组)────────────────
-# 平台进程里这两棵树是兄弟源树、非安装包(引擎以子进程运行),backend
-# 测试环境默认不在 sys.path —— 显式挂上。只读,不改任何一行。
+# gimbal/gimbal_plate 自 2026-10-08 起同为 src/ 平级包(原嵌套目录
+# gimbal-plate 已拆);backend 测试环境默认不在 sys.path —— 显式挂上。
+# 只读,不改任何一行。
 _SRC_ROOT = Path(__file__).resolve().parents[3]          # <repo>/src
-for _root in (_SRC_ROOT, _SRC_ROOT / "gimbal-plate"):
+for _root in (_SRC_ROOT,):
     if str(_root) not in sys.path:
         sys.path.insert(0, str(_root))
 

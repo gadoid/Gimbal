@@ -15,7 +15,7 @@ from conftest import FIXTURES
 
 APP2 = FIXTURES / "php" / "app2" / "Application"
 REPO = Path(__file__).resolve().parents[5]
-sys.path.insert(0, str(REPO / "src" / "gimbal-plate"))
+sys.path.insert(0, str(REPO / "src"))
 
 
 def _pipeline():
