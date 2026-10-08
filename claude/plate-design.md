@@ -56,6 +56,7 @@
 > - **O3（R3）**：驱动测试删除 `importorskip("asyncpg")`——假件已注入 `sys.modules`，CI（无 asyncpg）真跑不跳过。
 > - **O4（R4）**：系统名正则单一定义（`loader.SYSTEM_NAME_RE`，routes/CLI 引用）；loader 跳过不合规名字/逃逸符号链接时 `logging.warning` 留痕；CLI `check` 对不合规系统名直接阻塞（exit 2，说明「服务不会加载」），不再静默过 CI。
 > - **拍板**：内容无变化时再次发版**允许**（照常新号、不告警，diff 报 0）——已入 §8.2 N2 行。R5（PLATE_SYSTEMS_PATH 下构件仍写包位置仓库、副本树共用编号序列）登记进 S1.5 路径可配置条目。
+> 2026-10-08 评审存档：feat/plate-s1 的八轮实现评审已收敛并冻结为 **`claude/plate-s1-review.md`**（终态结论 = 建议合入 main；第 1–7 节反映当前状态，附录保留各轮原文）。合入后第一件事：确认真实环境 `plate_artifacts/*/releases/` 无缺 manifest 的空目录；S1.5 按该文档第 4 节的触发点表推进，起点建议「快照 + ref + 路径可配置」。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---
