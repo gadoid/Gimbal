@@ -30,6 +30,7 @@
 > - **M4**：包上移遗留的旧 `sys.path` 修补（bootstrap 三处 + ab_dispatch_dump）统一改指 `src/`；bootstrap 的 contract 工具引用的 `gimbal_plate.systems.platform.endpoint` 模块在 A2 方言迁移时已删（非主线，附录 C），其死引用随尾项登记不单独修。
 > - **M5**：批次 F 的 PG 侧迁移驱动入库为 `scripts/migrate_legacy_case_pg.py`（复用 migrate_payload，幂等、带备份与 dry-run）；执行机仓库根的两份备份（legacy-path-migration-backup.json / order_dispatch-rebind-backup.json，含场景业务数据不入库）位置已在脚本头注明。N6（中间口径戳可能被保守判为「真源已变」）在迁移脚本报告文案中注明。
 > - 小项：YAML 显式 `''` 仍是空串的对照断言补入 test_yaml_core_schema；前端兜底轮询到达终态后收起「按 3 秒轮询」横幅。
+> - **N4 拍板（凭据暴露，2026-10-08 用户裁定 = C 维持现状）**：仓库确认私网——git 历史与 HEAD 少量文件中的 `gimbal:gimbal` 口令仅对应本地 compose 实例（127.0.0.1:15432，仅本机可达）与远端 PG（192.168.22.106，纯内网），暴露面 = 仓库可见者，可接受；不清历史、不轮换。**前置条件成文：仓库若转公开，必须先轮换远端 PG 口令（并使本地/远端口令分离）再公开**——历史不可变，届时清理无效，轮换是唯一治本。
 > - **S1.5 质量尾项（一次性登记，合入后逐个消化）**：S4 缺失、T5 不比较别名与他人 label、T3/T6 对 common 目标误阻塞、F3 finding 行号为 0；YAML 合并键静默成字面量、复合键裸 TypeError、代码块内 `#` 行被当标题切分；`responses` 空集通过校验、列表块不继承 service、P8 嵌套测试恒真；平台侧 hash 显示截断不一致、`open_batch` 空戳、`_ep_key_map`、`baselinedNow` 无界面展示；bootstrap contract 工具——死模块引用已改为按理由跳过（目录可收集，第五轮 review 收口），余 43 项休眠腐化（测试数据已迁 call 形态、fake client 未跟上等，不在任何 CI 路径）随附录 C 整训。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
