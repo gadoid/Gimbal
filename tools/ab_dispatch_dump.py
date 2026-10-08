@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-for _p in (REPO / "src" / "gimbal-plate", REPO / "src" / "gimbal-platform" / "backend"):
+for _p in (REPO / "src", REPO / "src" / "gimbal-platform" / "backend"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

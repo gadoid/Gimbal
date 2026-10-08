@@ -148,6 +148,23 @@ class TestValidationEngine:
         report = validate_consistency([], [s1, s2, s3])
         assert not [f for f in report.corrections if f.rule == "C1"]
 
+    def test_c1_no_consensus_across_three_sources_reports(self) -> None:
+        """修订十二口径钉死(M3 拍板):判「全部来源的交集为空」——三份
+        文档两两有交集、但没有一个 cap 是三方都认可的({del,demote}/
+        {demote,login}/{login,del})时**报**。没有共同事实 = 无一致归属,
+        交矫正裁定;any-pairwise-disjoint 口径会漏掉这种环形分歧。"""
+        def rule(sid, cap, src):
+            s = Statement(id=sid, kind="rule",
+                          slots={"about": cap, "violation": "outcome:u.last"})
+            s._source = src
+            return s
+        r = validate_consistency([], [
+            rule("s1", "cap:del", "prd.md"),
+            rule("s2", "cap:demote", "api.md"),
+            rule("s3", "cap:login", "state.md"),
+        ])
+        assert any(f.rule == "C1" for f in r.corrections)
+
     def test_c3_edge_conflict_and_complement(self) -> None:
         """修订十二不冲突口径(边级):同一 from 去向不相交才报;
         互补边(a→b 与 b→c)= 部分描述,不报。"""

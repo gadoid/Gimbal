@@ -358,14 +358,4 @@ def release_system(
     )
 
 
-class PlateRelease:
-    """兼容旧占位入口的薄壳;真实现见 :func:`release_system`。"""
-
-    def release(self, *, version: str | None = None) -> ReleaseResult:
-        _ = version
-        repo = Path(__file__).resolve().parents[2]
-        return release_system(repo / "systems" / "fin")
-
-
-__all__ = ["DIALECT_VERSION", "M2_VERSION", "PlateRelease", "ReleaseResult",
-           "release_system"]
+__all__ = ["DIALECT_VERSION", "M2_VERSION", "ReleaseResult", "release_system"]

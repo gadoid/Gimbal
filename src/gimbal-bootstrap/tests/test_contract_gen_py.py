@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "gimbal-plate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from gimbal_bootstrap.contract_gen import build_specs  # noqa: E402
 from gimbal_bootstrap.contract_gen_py import (  # noqa: E402

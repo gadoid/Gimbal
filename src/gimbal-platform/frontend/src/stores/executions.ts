@@ -218,9 +218,11 @@ export const useExecutionsStore = defineStore('executions', () => {
       const gen = pollGeneration
       const st = detail.value?.status
       // detail 为 null = 首拍基线拉取失败/尚未返回 → 不能停,继续重试;
-      // 终态才停(此时数据稳定,无需再刷)
+      // 终态才停(此时数据稳定,无需再刷;横幅一并收起——M5 小瑕疵:
+      // 「按 3 秒轮询」的提示不该在轮询已停后继续挂着)
       if (st !== undefined && isTerminalExecutionStatus(st)) {
         _stopFallback()
+        if (pollError.value.includes('按 3 秒')) pollError.value = ''
         return
       }
       void _refreshOnce(id).catch((e) => {

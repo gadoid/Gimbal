@@ -40,6 +40,12 @@ class TestCoreScalars:
         assert d == {"a": None, "b": None, "c": None,
                      "d": [None, "x"], "e": None}
 
+    def test_explicit_empty_string_stays_empty_string(self) -> None:
+        """对照(评审第四轮):显式写的 '' 必须仍是空串——空值(null)与
+        显式空串是两个语义,修 N1 时不得把后者也吞成 null。"""
+        d = strict_yaml_load("a: ''\nb: \"\"\n", source="t.md", line=1)
+        assert d == {"a": "", "b": ""}
+
     def test_refers_left_empty_is_none(self) -> None:
         """后果链守卫:``refers:`` 留空若变 '' 会通过 Optional[str] 校验,
         变成指向空串的悬空引用。"""

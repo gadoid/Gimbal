@@ -439,7 +439,7 @@ def main() -> int:
 
     default_root = (
         Path(__file__).resolve().parents[2]
-        / f"gimbal-plate/gimbal_plate/systems/{SYSTEM}/endpoint"
+        / f"gimbal_plate/systems/{SYSTEM}/endpoint"
     )
     parser = argparse.ArgumentParser(
         description="从平台 OpenAPI 生成 plate 的结构化 py 契约定义"

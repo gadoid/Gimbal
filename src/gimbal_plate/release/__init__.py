@@ -2,7 +2,6 @@
 from gimbal_plate.release.release import (
     DIALECT_VERSION,
     M2_VERSION,
-    PlateRelease,
     ReleaseResult,
     release_system,
 )
@@ -10,7 +9,6 @@ from gimbal_plate.release.release import (
 __all__ = [
     "DIALECT_VERSION",
     "M2_VERSION",
-    "PlateRelease",
     "ReleaseResult",
     "release_system",
 ]

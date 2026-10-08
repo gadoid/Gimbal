@@ -49,7 +49,7 @@ def _load_contract_index() -> dict[str, Any]:
     契约。仓内相对路径 import，与 tests/conftest.py 同一个理由 —— 契约验证该
     贴着这份 checkout 跑，而不是某个已安装的旧版本。
     """
-    plate_dir = Path(__file__).resolve().parents[2] / "gimbal-plate"
+    plate_dir = Path(__file__).resolve().parents[2] / "src"
     if str(plate_dir) not in sys.path:
         sys.path.insert(0, str(plate_dir))
     from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS

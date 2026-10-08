@@ -94,8 +94,10 @@ def load_types(types_path: Path | None = None) -> dict[str, dict[str, Any]]:
 
     候选顺序:CWD types/ → 包位置回溯仓库根 types/(A2 同款双根)。
     显式路径不存在时同样回退——tmp 系统树的测试不依赖调用方位置。
+    一个模板都没加载到时**报错不静默**(评审 M1:此前回退到不存在的
+    路径会静默返回空表,F1 全线失明、/api/type 为空)。
     """
-    _pkg_repo = Path(__file__).resolve().parents[2]
+    _pkg_repo = Path(__file__).resolve().parents[3]
     candidates = [
         types_path,
         Path("types") / "types.yaml",
@@ -113,6 +115,12 @@ def load_types(types_path: Path | None = None) -> dict[str, dict[str, Any]]:
             if types_path.exists() else []
         ) or []
         table = {t["id"]: t for t in data if isinstance(t, dict) and "id" in t}
+        if not table:
+            raise RuntimeError(
+                f"交付物类型模板加载为空: {types_path}"
+                f"(候选: {[str(c) for c in candidates]})——"
+                f"types.yaml 缺失或损坏,CWD 与包位置均未命中仓库根?"
+            )
         table["_mtime"] = mtime  # type: ignore[assignment]
         _TYPES_CACHE[key] = table
     return {k: v for k, v in _TYPES_CACHE[key].items() if k != "_mtime"}

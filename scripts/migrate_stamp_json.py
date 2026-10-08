@@ -157,7 +157,11 @@ async def main(db_url: str, *, dry_run: bool) -> int:
                 if old_ver != _legacy_shape_hash(ep):
                     # 戳既非当前口径、也非旧口径 ⇒ 真源在两次口径之间已
                     # 变化 —— 这是真实待适配,覆盖它等于抹掉一个 pending。
-                    print(f"  ! {eid}: 戳与新旧口径均不符(真源已变化)— 保留")
+                    # 注意(N6):e6a9f4c~77c16eb 之间平台代码写下的中间态
+                    # 戳(binding 带缺省值/键未排序)也会落入本分支——按
+                    # 「真源已变」保守处理,人工确认后再决定是否重落。
+                    print(f"  ! {eid}: 戳与新旧口径均不符(真源已变,或为"
+                          f"中间口径戳)— 保留")
                     diverged += 1
                     continue
             else:

@@ -16,11 +16,18 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-_REPO = Path(__file__).resolve().parents[2]
+# 仓库根:包位置回溯;wheel(非 editable)安装后回溯到 venv,数据目录
+# (systems//types/)不在那里——PLATE_REPO_ROOT 显式覆盖(评审 M2:
+# 让非 editable 安装的 check/gaps/release 在指定 checkout 上可用,
+# CI 的 wheel 冒烟即走此入口)。
+_REPO = (Path(os.environ["PLATE_REPO_ROOT"])
+         if os.environ.get("PLATE_REPO_ROOT")
+         else Path(__file__).resolve().parents[2])
 _TYPES = _REPO / "types" / "types.yaml"
 
 

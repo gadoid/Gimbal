@@ -23,6 +23,14 @@
 > - **打包根因修复**：hatchling 的 packages 多条目不支持嵌套异父路径（`src/gimbal-plate/gimbal_plate` 并列时静默丢包，wheel 零条目）；force-include 可修 wheel 但会泄漏进 editable（site-packages 落物理拷贝遮蔽 dev 路径）。**`gimbal_plate` 提为 `src/` 平级包**（2026-10-08 目录移动），两个平级 packages 为原生支持；CI 增加非 editable 安装冒烟（`pip install .` + `plate --help`）。`plate` / `gimbal` 双入口在 editable 与 wheel 两种安装下均可用。
 > - 前端执行详情（N5）：重连耗尽只停 SSE，**兜底轮询继续**（其存在意义正是 SSE 长期不通的场景），横幅如实写「按 3 秒轮询刷新」；404 处置加代际比对，上一执行迟到的 404 不再误停当前轮询。引擎日志（R11）：多 worker 并行时不再固定回落第一个 worker 的日志（单 worker 才回落，多 worker 无 case 级日志返回 404；彻底修 = 执行行记录槽位，入 S1.5）。`.gitattributes` 收窄到 `systems/**/*.md`。CI 补 `pydantic-settings`（N2）。
 > - S1.5 追加：执行行记录 server 槽位、engine-log 按 case 精确路由；批次 C 自描述契约测试的恒真断言（`hasattr(__file__)` 类）重写为字段级对拍。
+> 2026-10-08 修订十二补（第四轮复核收口——M1 路径深度 / M2 wheel 数据根 / M3 C1 口径钉死 / M4 旧路径修补 / M5 迁移驱动入库）：
+> - **M1**：包上移后 `dialect/validation.py` 与 `release/release.py`（比 cli/loader 深一层）的仓库根推导差一级（`parents[2]` 解析到 `src/`）——CWD 不在仓库根时 `load_types` 静默空表、`/api/type` 为空。已改 `parents[3]`，且**模板加载为空即报错不静默**；`PlateRelease` 占位 shim（必失败：解析 `src/systems/fin` 且不传签发人）删除。
+> - **M2**：wheel（非 editable）安装后包位置回溯到 venv，数据目录不在那里——CLI 增设 **`PLATE_REPO_ROOT`** 环境变量显式给根；CI 的 wheel 冒烟从 `plate --help` 升级为 `PLATE_REPO_ROOT=<checkout> plate check fin`（真跑校验）。修订十二「wheel 下双入口均可用」的准确表述 = 入口与包可用，数据目录须 `PLATE_REPO_ROOT` 指到 checkout（与 S1.5 的路径可配置同向，属其前奏）。
+> - **M3 拍板**：C1 的「没有任何公共值」= **全部来源集合的交集为空**（非 any-pairwise-disjoint）——三份文档两两有交集但无三方一致的公共 cap 时仍报：没有共同事实即无一致归属，环形分歧（{del,demote}/{demote,login}/{login,del}）恰恰是最该交矫正的形态；已配测试钉死。
+> - **M4**：包上移遗留的旧 `sys.path` 修补（bootstrap 三处 + ab_dispatch_dump）统一改指 `src/`；bootstrap 的 contract 工具引用的 `gimbal_plate.systems.platform.endpoint` 模块在 A2 方言迁移时已删（非主线，附录 C），其死引用随尾项登记不单独修。
+> - **M5**：批次 F 的 PG 侧迁移驱动入库为 `scripts/migrate_legacy_case_pg.py`（复用 migrate_payload，幂等、带备份与 dry-run）；执行机仓库根的两份备份（legacy-path-migration-backup.json / order_dispatch-rebind-backup.json，含场景业务数据不入库）位置已在脚本头注明。N6（中间口径戳可能被保守判为「真源已变」）在迁移脚本报告文案中注明。
+> - 小项：YAML 显式 `''` 仍是空串的对照断言补入 test_yaml_core_schema；前端兜底轮询到达终态后收起「按 3 秒轮询」横幅。
+> - **S1.5 质量尾项（一次性登记，合入后逐个消化）**：S4 缺失、T5 不比较别名与他人 label、T3/T6 对 common 目标误阻塞、F3 finding 行号为 0；YAML 合并键静默成字面量、复合键裸 TypeError、代码块内 `#` 行被当标题切分；`responses` 空集通过校验、列表块不继承 service、P8 嵌套测试恒真；平台侧 hash 显示截断不一致、`open_batch` 空戳、`_ep_key_map`、`baselinedNow` 无界面展示；bootstrap contract 工具的死模块引用（随附录 C）。
 > 2026-10-07 修订八：全部定稿（8g / 11 / 12 按触发点延后），正文各节的「待确认」标记已同步翻为「已定」。
 
 ---
@@ -387,7 +395,7 @@ class Term(BaseModel):
 | S2 | 槽位与 Spec 的 capability / consumes / produces 引用全部可解析 | 不存在阻塞；已废弃告警 |
 | S3 | transition 的 from / to 属于同一 attr | 阻塞 |
 | S4 | anchor 符合所在类型的锚点语法；`spec_path` 能解析到接口、声明路径、enum | 告警（按版本升级为阻塞） |
-| C1 | 引用同一 outcome 的 rule / outcome 片段，各来源的 cap 归属集合**没有任何公共值**（修订十二：不冲突口径——子集/有交集 = 部分描述，兼容） | 列入语义矫正 |
+| C1 | 引用同一 outcome 的 rule / outcome 片段，各来源的 cap 归属集合**没有任何公共值**（修订十二：不冲突口径——子集/有交集 = 部分描述，兼容。比较口径 = **全部来源集合的交集**为空：三份文档两两有交集但无三方一致的公共 cap 时仍报——没有共同事实即无一致归属；any-pairwise-disjoint 会漏掉环形分歧） | 列入语义矫正 |
 | C2 | 同一 cap 的 `before` 前置条件在各来源中一致 | 列入语义矫正 |
 | C3 | 同一 (attr, from) 转移各来源的去向集合**没有任何公共值**（修订十二：边级比对——互补边/分支 = 部分描述，兼容） | 列入语义矫正 |
 

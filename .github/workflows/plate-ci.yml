@@ -42,12 +42,15 @@ jobs:
         run: pytest tests/unit tests/integration -q
       # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
       # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
+      # 第四轮 M2:冒烟升级为真实 check——PLATE_REPO_ROOT 指到 checkout
+      # (wheel 装进 venv 后包位置回溯不到数据目录,必须显式给根)。
       - name: 非 editable 安装冒烟
         run: |
           python -m venv /tmp/wheelenv
           /tmp/wheelenv/bin/pip install -q .
           /tmp/wheelenv/bin/plate --help >/dev/null
           /tmp/wheelenv/bin/python -c "import gimbal_plate, gimbal; print('non-editable install OK')"
+          PLATE_REPO_ROOT="$PWD" /tmp/wheelenv/bin/plate check fin --json >/dev/null
   frontend:
     runs-on: ubuntu-latest
     steps:
