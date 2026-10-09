@@ -90,6 +90,39 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
             ).status_code == 200
 
 
+async def test_list_visibility_public(client: AsyncClient) -> None:
+    """visibility=public(§5.1,场景列表同款):显式传时 scope 不叠加,
+    只出公共 Suite —— 公共库页口径(重构方案 D-3 公共 Suite 分区数据源)。"""
+    admin = await register_and_login(client, "vp_admin", "vp_admin_pass123")
+    owner = await register_and_login(client, "vp_owner", "vp_owner_pass123")
+    bob = await register_and_login(client, "vp_bob", "vp_bob_pass123")
+
+    # owner:发布一个公共 suite(成员场景随发布级联公开)
+    await _mk_scenario(client, owner, "sc-vp-1")
+    pub = await _mk_suite(client, owner, "公共回归集")
+    r = await client.post(f"/api/suites/{pub}/members", headers=owner,
+                          json={"scenarioIds": ["sc-vp-1"]})
+    assert r.status_code == 200, r.text
+    r = await client.post(f"/api/suites/{pub}/publish", headers=owner)
+    assert r.status_code == 200, r.text
+
+    # bob 名下有私有 suite:visibility=public 时不得因「自己的」混入
+    await _mk_suite(client, bob, "bob 私有集")
+
+    r = await client.get("/api/suites?visibility=public", headers=bob)
+    assert r.status_code == 200
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+
+    # scope 不叠加:同传 mine 仍只出公共(§5.1 显式 visibility 优先)
+    r = await client.get("/api/suites?visibility=public&scope=mine",
+                         headers=bob)
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+
+    # admin 同口径
+    r = await client.get("/api/suites?visibility=public", headers=admin)
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+
+
 async def test_member_cap_409(client: AsyncClient, monkeypatch) -> None:
     """§6.3 SUITE_MEMBER_CAP:超上限批量加入 → 409,已加入的不留半批
     (异常分支 rollback)。cap 压到 3 验证边界(不必真造 100 个场景)。"""

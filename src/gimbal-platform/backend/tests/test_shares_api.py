@@ -175,6 +175,34 @@ async def test_fork_and_copy(client: AsyncClient) -> None:
     assert detail["memberCount"] == 1
     assert detail["members"][0]["scenarioId"] != "sc-fk-1"  # 是新副本
 
+    # suite ref → fork:forked_from_owner_name 记**原属主**(评审补记修复,
+    # 此前误写转副本人自己)
+    r = await client.post("/api/shares", headers=owner, json={
+        "resourceType": "suite", "resourceId": str(suite_id),
+        "granteeUserId": bob_id, "mode": "ref"})
+    sref_id = r.json()["id"]
+    r = await client.post(f"/api/shares/{sref_id}/fork", headers=bob)
+    assert r.status_code == 201, r.text
+    forked_id = r.json()["suiteId"]
+    from sqlalchemy import select as _sel
+
+    from app.core import db as db_module
+    from app.models.suite import Suite as SuiteRow
+    async with db_module.SessionLocal() as s:
+        src_name = (await s.execute(
+            _sel(SuiteRow.forked_from_owner_name).where(
+                SuiteRow.id == forked_id))).scalar_one()
+    assert src_name == "fk_owner"  # 原属主,而非转副本人 fk_bob
+
+    # direction=in 出参:scenarioName / memberCount 反查(评审补记补齐;
+    # Suite「共享给我的」行「N 个场景」此前空白)
+    r = await client.get("/api/shares?direction=in", headers=bob)
+    items = {i["resourceType"]: i for i in r.json()}
+    assert items["scenario"]["scenarioName"] == "Test"  # make_draft 缺省名
+    assert items["scenario"]["memberCount"] is None
+    assert items["suite"]["memberCount"] == 1
+    assert items["suite"]["scenarioName"] is None
+
 
 async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     """撤销:属主可撤(通知被分享人);admin 可撤(入审计);退订免通知。"""

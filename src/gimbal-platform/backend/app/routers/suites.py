@@ -136,6 +136,7 @@ async def _members_out(
 async def list_suites(
     user: CurrentUser, db: DbSession,
     scope: Literal["mine", "all"] = "all",
+    visibility: str | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> SuitePageOut:
@@ -143,9 +144,13 @@ async def list_suites(
     非 admin 的 all ≡ mine(自己的);admin 的 all = 全量(治理)。"""
     # 浏览镜头口径与场景库一致(§5.1):mine = owner 过滤,admin 同样生效。
     # P2 引用(§7.6):非 admin 的 all = public ∨ 自己的 ∨ 被引用的。
+    # visibility=public(§5.1,场景列表同款):显式传时 scope 不叠加,
+    # 只出公共 Suite —— 公共库页口径(重构方案 D-3 公共 Suite 分区)。
     from sqlalchemy import exists, select as _select
     from ..models.share_ref import ShareRef
-    if scope == "mine":
+    if visibility == "public":
+        clauses = [Suite.visibility == "public"]
+    elif scope == "mine":
         clauses = [Suite.owner_id == user.id]
     elif user.role == "admin":
         clauses = []

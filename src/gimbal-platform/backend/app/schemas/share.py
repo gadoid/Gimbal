@@ -23,6 +23,8 @@ class ShareRefOut(BaseModel):
     scenarioId: str | None = None
     suiteId: int | None = None
     suiteName: str | None = None   # suite 引用的展示名(反查补)
+    scenarioName: str | None = None  # 场景引用的展示名(反查补,评审补记)
+    memberCount: int | None = None   # suite 引用的成员数(共享行「N 个场景」)
     granteeUserId: int
     granteeName: str
     grantedByName: str

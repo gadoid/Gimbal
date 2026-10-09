@@ -166,7 +166,10 @@ async def create_share(
     ref = (await db.execute(select(ShareRef).where(
         ShareRef.grantee_user_id == target.id,
         ShareRef.suite_id == suite.id))).scalar_one()
-    return _ref_out(ref, grantee=target, suite_name=suite.name)
+    mc = int((await db.execute(select(func.count()).select_from(
+        SuiteMember).where(SuiteMember.suite_id == suite.id))).scalar() or 0)
+    return _ref_out(ref, grantee=target, suite_name=suite.name,
+                    member_count=mc)
 
 
 @router.get("", response_model=list[ShareRefOut])
@@ -202,6 +205,22 @@ async def list_shares(
             stmt = stmt.where(ShareRef.suite_id == int(resourceId))
     rows = (await db.execute(stmt.order_by(
         ShareRef.granted_at.desc()))).scalars().all()
+    # 展示名反查(评审补记):场景引用补 scenarioName、suite 引用补
+    # memberCount —— 前端「共享给我的」行两类都已在消费;批查防 N+1。
+    scen_names: dict[str, str] = {}
+    scen_ids = [r.scenario_id for r in rows if r.scenario_id is not None]
+    if scen_ids:
+        scen_names = dict((await db.execute(
+            select(ComposerScenario.scenario_id, ComposerScenario.name)
+            .where(ComposerScenario.scenario_id.in_(scen_ids)))).all())
+    member_counts: dict[int, int] = {}
+    suite_ids = [r.suite_id for r in rows if r.suite_id is not None]
+    if suite_ids:
+        member_counts = {
+            sid: int(n) for sid, n in (await db.execute(
+                select(SuiteMember.suite_id, func.count())
+                .where(SuiteMember.suite_id.in_(suite_ids))
+                .group_by(SuiteMember.suite_id))).all()}
     out = []
     for r in rows:
         suite_name = None
@@ -211,7 +230,12 @@ async def list_shares(
             suite_name = s
         grantee = (await db.execute(select(User).where(
             User.id == r.grantee_user_id))).scalar_one_or_none()
-        out.append(_ref_out(r, grantee=grantee, suite_name=suite_name))
+        out.append(_ref_out(
+            r, grantee=grantee, suite_name=suite_name,
+            scenario_name=(scen_names.get(r.scenario_id)
+                           if r.scenario_id is not None else None),
+            member_count=(member_counts.get(r.suite_id, 0)
+                          if r.suite_id is not None else None)))
     return out
 
 
@@ -296,8 +320,14 @@ async def fork_share(
         Suite.id == ref.suite_id))).scalar_one_or_none()
     if suite is None:
         raise HTTPException(404, "suite_not_found")
+    # 来源属主名 = 原 Suite 属主,不是转副本人自己(评审补记修复:
+    # 此前误把 fork 的人写进 forked_from_owner_name;场景分支本就正确)
+    src_owner = (await db.execute(select(User).where(
+        User.id == suite.owner_id))).scalar_one_or_none()
     out = await _deep_copy_suite(
-        db, suite, user, user.display_name or user.username)
+        db, suite, user,
+        (src_owner.display_name or src_owner.username) if src_owner
+        else f"user-{suite.owner_id}")
     await _record_share_event(
         db, actor_id=user.id, kind="suite.share_fork",
         resource_type="suite", resource_id=str(suite.id),
@@ -414,13 +444,16 @@ async def _notify(db, user_id: int, type_: str, title: str, body: str,
 
 
 def _ref_out(ref: ShareRef, *, grantee, suite_name: str | None = None,
-             scenario_name: str | None = None) -> ShareRefOut:
+             scenario_name: str | None = None,
+             member_count: int | None = None) -> ShareRefOut:
     return ShareRefOut(
         id=ref.id,
         resourceType="scenario" if ref.scenario_id else "suite",
         scenarioId=ref.scenario_id,
         suiteId=ref.suite_id,
         suiteName=suite_name,
+        scenarioName=scenario_name,
+        memberCount=member_count,
         granteeUserId=ref.grantee_user_id,
         granteeName=(getattr(grantee, "display_name", None)
                      or getattr(grantee, "username", "") or ""),
