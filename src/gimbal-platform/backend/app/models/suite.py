@@ -45,10 +45,13 @@ class Suite(Base):
         ForeignKey("users.id"), index=True)
     # 与场景同口径;P1 恒 private(发布入口随 P2)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # aggregate(默认)/1:N/拼接/地图…;P1 只有 aggregate
+    # aggregate(默认)/chain/fanout/compose(重构方案四模式)
     mode: Mapped[str] = mapped_column(String(32), default="aggregate")
     # 按 id 引用成员的模式配置,不存成员清单(§6.2 不双写)
     mode_config: Mapped[dict] = mapped_column(JsonVar, default=dict)
+    # 乐观锁(重构方案:composition 整体保存带 rev,冲突 409);
+    # 任何改动成员或编排的路径都要推进
+    rev: Mapped[int] = mapped_column(Integer, default=0)
     # 副本溯源(P2 的 suite 深拷贝使用;handoff 已有同名字段则复用)
     forked_from_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     forked_from_owner_name: Mapped[str | None] = mapped_column(
@@ -92,6 +95,9 @@ class SuiteMember(Base):
         String(128), primary_key=True)
     # 冗余属主列(组合外键用;与 suite.owner_id / 场景.owner_id 一致)
     owner_id: Mapped[int] = mapped_column(Integer)
+    # 成员角色(重构方案约束 1,推翻 P2 设计 §6.1):main/before/after;
+    # 前置/后置也是成员 —— 属主约束与引用闭包经成员表单一真相源覆盖
+    role: Mapped[str] = mapped_column(String(16), default="main")
     # 组跑的默认顺序(§6.6:按 sort 遍历)
     sort: Mapped[int] = mapped_column(Integer, default=0)
     added_at: Mapped[datetime] = mapped_column(

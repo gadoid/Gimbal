@@ -43,6 +43,15 @@ class Execution(Base):
     scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     # 台账快照:场景删除后仍可读(空串 = 场景已删且名字不可考)
     scenario_name: Mapped[str] = mapped_column(String(255), default="")
+    # 执行形态(重构方案迁移 0014):scenario = 单场景/聚合批次成员;
+    # suite_graph = 编排执行(scenario_id 写占位 suite-<id>,不计入
+    # 任何成员场景的历史)。与队列层 execution_jobs.kind(cases/graph/
+    # debug)同名不同层、值域互斥。存量行 scenario = 既有全部。
+    kind: Mapped[str] = mapped_column(String(32), default="scenario")
+    # 编排执行的归属 Suite(聚合成员执行同样落 suite_id 供 21 页归并)。
+    # 有意不加 FK:执行台账归执行人,历史不随 Suite 删除消失(21 页
+    # 对已删 Suite 降级为纯文本名)。
+    suite_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 台账语义:人走执行留(SET NULL + 姓名快照;权限方案 §4.3)
     owner_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
