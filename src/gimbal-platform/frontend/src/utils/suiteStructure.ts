@@ -118,6 +118,133 @@ export function needsHasCycle(
   return layeredUnits(members, config).hasCycle
 }
 
+// ── 画布结构推断(第 4 步;原型 11/12,交互规则「模式由结构推断」)──
+// 自上而下五条规则,命中第一条即止;「开始」节点的连线不参与。
+
+export interface StructureInference {
+  mode: SuiteMode
+  /** 状态条的一句理由(原型 12 每步的 why)。 */
+  reason: string
+  /** 孤立单元数(规则 5 提示漏连;规则 1 时等于单元数、不提示)。 */
+  isolated: number
+  /** 串联的链路顺序(仅 chain 非空)。 */
+  line: string[] | null
+  /** 扇出的源(仅 fanout 非空)。 */
+  source: string | null
+}
+
+/**
+ * needsOf[B] = [A, …] 表示画布上有 A → B 的连线(B needs A)。
+ * ids 为主体单元的 scenarioId(前置 / 后置不参与)。
+ */
+export function inferStructure(
+  ids: string[], needsOf: Record<string, string[]>,
+): StructureInference {
+  const n = ids.length
+  const needs: Record<string, string[]> = {}
+  for (const id of ids) needs[id] = (needsOf[id] || []).filter((x) => ids.includes(x))
+  const edgeCount = ids.reduce((s, id) => s + needs[id].length, 0)
+  if (n === 0 || edgeCount === 0) {
+    return {
+      mode: 'aggregate', isolated: n, line: null, source: null,
+      reason: n <= 1
+        ? (n === 0 ? '拖入第一个场景开始。' : '只有一个单元,等同聚合。继续拖入或拉线。')
+        : '单元之间互不相连,各跑各的(聚合)。',
+    }
+  }
+  // 链头:唯一无入边的单元;从它沿唯一出边走,能走完 n 个即一条直线
+  const inDeg: Record<string, number> = {}
+  const outTo: Record<string, string[]> = {}
+  for (const id of ids) { inDeg[id] = 0; outTo[id] = [] }
+  for (const id of ids) for (const p of needs[id]) { inDeg[id]++; outTo[p].push(id) }
+  const heads = ids.filter((id) => inDeg[id] === 0)
+  if (edgeCount === n - 1 && heads.length === 1) {
+    const line = [heads[0]]
+    let cur = heads[0]
+    while (outTo[cur].length === 1) { cur = outTo[cur][0]; line.push(cur) }
+    if (line.length === n) {
+      return {
+        mode: 'chain', isolated: 0, line, source: null,
+        reason: '全部单元连成一条直线 → 串联;按链路顺序执行,上游产出自动传给下游。',
+      }
+    }
+  }
+  // 扇出:唯一源指向其余全部,其余之间无连线
+  if (edgeCount === n - 1 && heads.length === 1 && outTo[heads[0]].length === n - 1) {
+    return {
+      mode: 'fanout', isolated: 0, line: null, source: heads[0],
+      reason: '一个单元指向其余全部、它们之间无连线 → 扇出,该单元是源。',
+    }
+  }
+  const isolated = ids.filter((id) => inDeg[id] === 0 && outTo[id].length === 0).length
+  const layers = layeredUnits(
+    ids.map((scenarioId) => ({ scenarioId })),
+    { units: Object.fromEntries(ids.map((id) => [id, { needs: needs[id] }])) },
+  ).layers.length
+  return {
+    mode: 'compose', isolated, line: null, source: null,
+    reason: isolated > 0
+      ? `有分叉 / 汇合 → 依赖编排;另有 ${isolated} 个未连线单元按「无依赖」处理,确认不是漏连。`
+      : `有分叉 / 汇合(共 ${layers} 层)→ 依赖编排,每条连线即一条 needs。`,
+  }
+}
+
+/** 保存时按识别结果写成员顺序:串联按链路先后,扇出把源排在第一位。 */
+export function orderByStructure(
+  inference: StructureInference, currentOrder: string[],
+): string[] {
+  if (inference.mode === 'chain' && inference.line) return inference.line
+  if (inference.mode === 'fanout' && inference.source) {
+    return [inference.source, ...currentOrder.filter((id) => id !== inference.source)]
+  }
+  return currentOrder
+}
+
+/** 已存 Suite → 画布连线(反向合成):串联按成员相邻、扇出以第一位为源、
+ * 依赖编排取 units.needs;聚合无线。画布加载与回归管理页共用。 */
+export function canvasEdgesFromSuite(
+  mode: string,
+  mainIds: string[],
+  units: Record<string, SuiteUnitConfig> | undefined,
+): Record<string, string[]> {
+  const needsOf: Record<string, string[]> = {}
+  const put = (b: string, a: string): void => {
+    (needsOf[b] ||= []).push(a)
+  }
+  if (mode === 'chain') {
+    for (let i = 1; i < mainIds.length; i++) put(mainIds[i], mainIds[i - 1])
+  } else if (mode === 'fanout' && mainIds.length > 1) {
+    for (let i = 1; i < mainIds.length; i++) put(mainIds[i], mainIds[0])
+  } else if (mode === 'compose') {
+    for (const b of mainIds) {
+      for (const a of units?.[b]?.needs || []) {
+        if (mainIds.includes(a)) put(b, a)
+      }
+    }
+  }
+  return needsOf
+}
+
+/** 新连线 producer → consumer 是否成环(本地环拒绝;服务端校验为唯一闸)。 */
+export function edgeMakesCycle(
+  allIds: string[], needsOf: Record<string, string[]>,
+  producer: string, consumer: string,
+): boolean {
+  // consumer 经既有边能否回到 producer
+  const seen = new Set<string>()
+  const stack = [consumer]
+  while (stack.length) {
+    const cur = stack.pop() as string
+    if (cur === producer) return true
+    if (seen.has(cur)) continue
+    seen.add(cur)
+    for (const nxt of allIds) {
+      if ((needsOf[nxt] || []).includes(cur)) stack.push(nxt)
+    }
+  }
+  return false
+}
+
 /** 运行状态 → 展示色(21 页结果条/表格共用)。 */
 export function runStatusTone(status: string): 'ok' | 'bad' | 'run' | 'muted' {
   if (status === 'done' || status === 'passed') return 'ok'

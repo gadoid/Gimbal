@@ -62,6 +62,7 @@ function routerWith() {
       { path: '/suites', component: { template: '<div/>' } },
       { path: '/suites/:id', component: SuiteManage },
       { path: '/suites/:id/compose', component: { template: '<div/>' } },
+      { path: '/suites/new', component: { template: '<div/>' } },
       { path: '/executions/:id(\\d+)', component: { template: '<div/>' } },
       { path: '/executions', component: { template: '<div/>' } },
     ],
@@ -124,7 +125,7 @@ describe('SuiteLibrary — 列表(02)', () => {
     w.unmount()
   })
 
-  it('模式筛选过滤;「+ 新建 Suite」建草稿并跳管理页', async () => {
+  it('模式筛选过滤;「+ 新建 Suite」直进画布(/suites/new,不先落库)', async () => {
     vi.mocked(suitesApi.listSuites).mockResolvedValue({
       items: [
         suiteItem({ suiteId: 1, mode: 'aggregate' }),
@@ -132,8 +133,6 @@ describe('SuiteLibrary — 列表(02)', () => {
       ],
       total: 2, page: 1, pageSize: 100,
     } as never)
-    vi.mocked(suitesApi.createSuite).mockResolvedValue(
-      suiteItem({ suiteId: 7, name: '未命名 Suite', isDraft: true }))
     const router = routerWith()
     const push = vi.spyOn(router, 'push')
     const w = mount(SuiteLibrary, {
@@ -146,8 +145,8 @@ describe('SuiteLibrary — 列表(02)', () => {
 
     await w.find('[data-testid="suite-create"]').trigger('click')
     await flushPromises()
-    expect(suitesApi.createSuite).toHaveBeenCalledWith({})
-    expect(push).toHaveBeenCalledWith('/suites/7')
+    expect(suitesApi.createSuite).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith('/suites/new')
     w.unmount()
   })
 

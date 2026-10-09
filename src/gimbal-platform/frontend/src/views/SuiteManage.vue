@@ -85,7 +85,11 @@
       </TabsList>
 
       <TabsContent value="compose" class="sm-pane">
-        <ModeBar :mode="mode" :readonly="!canEdit" @change="switchMode" />
+        <ModeBar
+          :mode="mode" :readonly="!canEdit"
+          @change="switchMode" @guide="guideOpen = true"
+          @open-canvas="openCanvas"
+        />
         <div class="sm-cols">
           <ScenarioDrawer
             v-if="canEdit"
@@ -161,6 +165,9 @@
       @locate="locateFromPreflight"
     />
 
+    <!-- 四种结构说明(原型 11,画布/管理页共用) -->
+    <StructureGuideDialog v-model="guideOpen" />
+
     <!-- 分享弹窗(P2 已落地组件) -->
     <ShareDialog
       v-model:open="shareOpen"
@@ -179,6 +186,7 @@ import ScenarioDrawer from '@/components/suites/ScenarioDrawer.vue'
 import MemberZone from '@/components/suites/MemberZone.vue'
 import GatesPanel from '@/components/suites/GatesPanel.vue'
 import SuiteRunPreflight from '@/components/suites/SuiteRunPreflight.vue'
+import StructureGuideDialog from '@/components/suites/StructureGuideDialog.vue'
 import SuiteRunsTab from '@/components/suites/SuiteRunsTab.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import {
@@ -207,6 +215,13 @@ const tab = ref((route.query.tab === 'runs' ? 'runs' : 'compose'))
 const menuOpen = ref(false)
 const shareOpen = ref(false)
 const preflightOpen = ref(false)
+const guideOpen = ref(false)
+
+/** 大改依赖结构 → 画布(12);保存后回到管理页。 */
+function openCanvas(): void {
+  if (!detail.value) return
+  void router.push(`/suites/${detail.value.suiteId}/compose`)
+}
 const running = ref(false)
 
 // ── 可编辑本地态(显式突变 → 标脏;load 时整包替换)──────────────

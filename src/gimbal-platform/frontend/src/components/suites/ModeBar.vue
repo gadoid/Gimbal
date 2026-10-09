@@ -1,7 +1,8 @@
 <!-- ModeBar.vue — Suite 管理页模式条(原型 20)。
      四种结构分段选择 + 每模式一句「怎么跑」+ 一句「留意」;
-     只读态(canEdit=false)仅展示不可切。切换交互(确认丢弃 needs /
-     多行方案标出)由父组件 SuiteManage 承担,这里只发 change。 -->
+     只读态(canEdit=false)仅展示不可切。「? 提示」开四种结构说明,
+     「在画布中改结构」进画布(12)。切换交互(确认丢弃 needs /
+     多行方案标出)由父组件 SuiteManage 承担,这里只发事件。 -->
 <template>
   <div class="mbar" data-testid="suite-mode-bar">
     <span class="mbar-tag">模式</span>
@@ -23,13 +24,19 @@
       <p class="mbar-hint">{{ meta.hint }}</p>
     </div>
     <div class="mbar-right">
-      <button type="button" class="mbar-ghost" title="四种结构说明">? 提示</button>
+      <button
+        type="button" class="mbar-ghost"
+        data-testid="suite-mode-guide"
+        title="四种结构说明"
+        @click="$emit('guide')"
+      >? 提示</button>
       <button
         type="button"
         class="mbar-ghost canvas-link"
         data-testid="suite-open-canvas"
-        disabled
-        title="在画布中拖入、连线改结构 —— 画布随下一阶段上线"
+        :disabled="readonly"
+        title="在画布中拖入、连线改结构,保存后回到管理页"
+        @click="$emit('open-canvas')"
       >在画布中改结构 →</button>
     </div>
   </div>
@@ -41,7 +48,11 @@ import type { SuiteMode } from '@/api/suites'
 import { MODES, modeMeta } from '@/utils/suiteStructure'
 
 const props = defineProps<{ mode: string; readonly?: boolean }>()
-defineEmits<{ (e: 'change', mode: SuiteMode): void }>()
+defineEmits<{
+  (e: 'change', mode: SuiteMode): void
+  (e: 'guide'): void
+  (e: 'open-canvas'): void
+}>()
 
 const meta = computed(() => modeMeta(props.mode))
 </script>

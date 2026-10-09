@@ -165,7 +165,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  createSuite, deleteSuite, listSuites, patchSuite, runSuite, suiteErrDetail,
+  deleteSuite, listSuites, patchSuite, runSuite, suiteErrDetail,
   type SuiteLatestRun, type SuiteSummary,
 } from '@/api/suites'
 import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
@@ -240,18 +240,13 @@ function latestRunText(r: SuiteLatestRun): string {
   return `${kind} · ${when}`
 }
 
-// ── 新建(画布随第 4 步上线;先建草稿直进管理页)────────────────
+// ── 新建:直接进画布(原型 02→10);不落库,首次拖入才建草稿 ────
 const creating = ref(false)
 async function onCreate(): Promise<void> {
   if (creating.value) return
   creating.value = true
   try {
-    const s = await createSuite({})
-    toast.success(`已创建草稿「${s.name}」— 加入成员后即可编排运行`)
-    void router.push(`/suites/${s.suiteId}`)
-  } catch (e) {
-    const det = suiteErrDetail(e)
-    toast.error(`新建失败:${(det?.message as string) || (e as Error).message}`)
+    await router.push('/suites/new')
   } finally {
     creating.value = false
   }

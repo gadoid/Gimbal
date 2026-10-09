@@ -13,10 +13,6 @@ import { useAuthStore } from '@/stores/auth'
 const dataSetsFallback = (to: { params: Record<string, string | string[]> }) =>
   `/scenarios/${encodeURIComponent(String(to.params.scenarioId))}/schemes`
 
-/** Suite 画布路由兜底(第 4 步画布落地前的过渡):回管理页。 */
-const suiteComposeFallback = (to: { params: Record<string, string | string[]> }) =>
-  `/suites/${to.params.id}`
-
 const routes = [
   // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
   { path: '/', redirect: '/home' },
@@ -160,17 +156,21 @@ const routes = [
   {
     // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 列表(02);
     // /suites/:id = 管理页(20 编排 / 21 运行记录,含只读态)。
-    // 旧 /suites/composer(一次性 graph 编排)已随重构删除 —— 画布
-    // (10–13)落地前,新建从列表直接建草稿进管理页。
+    // 旧 /suites/composer(一次性 graph 编排)已随重构删除。
     path: '/suites',
     component: () => import('@/views/SuiteLibrary.vue'),
     meta: { requiresAuth: true },
   },
   {
-    // 画布路由(重构方案 12):第 4 步落地前重定向到管理页 ——
-    // 非属主(canEdit=false)本就要求重定向到 20 只读态
+    // 画布(重构方案 10–13):新建(/suites/new,不落库,首次拖入建草稿)
+    // 与改结构(/suites/:id/compose)同一路由记录 —— alias 导航时组件
+    // 实例复用,首次拖入建草稿换 URL 不丢画布状态(vue-router 对静态
+    // 别名缺参的 warn 不影响匹配,已由 SuiteCompose.test 钉住);非属主
+    // 在页面内重定向到 20 只读态。
     path: '/suites/:id(\\d+)/compose',
-    redirect: suiteComposeFallback,
+    alias: '/suites/new',
+    component: () => import('@/views/SuiteCompose.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/suites/:id(\\d+)',
