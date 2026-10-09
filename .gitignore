@@ -39,3 +39,8 @@ plate_artifacts/
 
 # 评审 B2:迁移/改绑的备份文件含场景业务数据,不入库
 *-backup.json
+
+# 第 0 步② 清障(2026-10-09):备份与运行产物不入库(D-4 A:本地副本保留)
+src/gimbal-platform/backend/data.bak*
+logs/
+node_modules/
