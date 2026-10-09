@@ -1,7 +1,7 @@
 # Suite 成员层、引用分享与浏览镜头 — 权限域二期设计方案
 
 > 状态：**定稿**（2026-10-08，经七轮评审收敛，当日定稿）。评审关闭。
-> **实施进度（2026-10-09）：P0 全部落地；P1 落地（余两项 UX 尾巴，见 §12 P1 实施记录）；P2/P3 未开工。** 各期实施要点与偏差记录在 §12 各「实施记录」小节；残留核实项见 §13.4，变更走 §15 修订记录追加。
+> **实施进度（2026-10-09）：P0 全部落地；P1 全部落地（含两项 UX 尾巴，见 §12 P1 实施记录）；P2/P3 未开工。** 各期实施要点与偏差记录在 §12 各「实施记录」小节；残留核实项见 §13.4，变更走 §15 修订记录追加。
 > 作者：Codfish
 
 ## 0. 文档定位
@@ -461,7 +461,7 @@ POST   /api/shares/{id}/fork                  # 被分享人转为副本，原�
 
 ## 12. 分期与验收
 
-P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂在执行器侧能力上。**进度：P0 ✅（2026-10-09）、P1 ✅ 除两项 UX 尾巴、P2/P3 未开工。**
+P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂在执行器侧能力上。**进度：P0 ✅、P1 ✅（含两项 UX 尾巴，2026-10-09 全部收口）、P2/P3 未开工。**
 
 ### P0 浏览镜头 + graph 缺口（无 schema 变更）✅ 已实施（2026-10-09）
 
@@ -479,15 +479,15 @@ P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂�
 - **Runner 选择器与 Runnable 工作台卡**的「我的」口径同步改 `scope=mine`——顺带修复 admin 的「我的可执行」卡此前列全员 private 的同款淹没问题，且 member 现在能选择并运行自己已发布的场景（owner 语义修正）。
 - §13.4 顺手关闭两条（GraphSpec 不落库、draft 前端调用面 = `api/scenario-composer.ts:107` 编辑流）。
 
-### P1 suite 成员层 + 聚合模式运行 + 处置路径 ✅ 已实施（2026-10-09，余两项 UX 尾巴）
+### P1 suite 成员层 + 聚合模式运行 + 处置路径 ✅ 已实施（2026-10-09；两项 UX 尾巴同日收口）
 
 - [x] 迁移：`suites`、`suite_members`、`composer_scenarios` 组合唯一键、来源字段、上限与窗口配置（`SUITE_CAP=50`、`SUITE_MEMBER_CAP=100`、`SUITE_RUN_TOTAL_CAP=1000`、`SUITE_RUN_STALE_HOURS=24`）—— 0012_suites 已落开发 PG
 - [x] suite 的增删改查与成员管理端点、反查端点（`GET /api/scenarios/{id}/suites` 后端就绪）
 - [x] `POST /api/suites/{sid}/run`：循环分发、batch_id（`suite-<sid>-<uid>-<uuid>`）、**循环前物化成员快照与方案参数为纯值**、逐成员 try/except（**except 先 rollback、再按落库事实重查归类：已入库归 started 附警告、未入库归 skipped**）、总量上限（复用 total_runs 计算）、进行中批次 409（按 (suite, 发起人) 判定 + 时效窗口；**不加服务端锁**）；前端运行按钮防抖（disabled 守卫）
 - [x] 处置流程三条路径的 suite 处理（transfer 整体转让、publicize 先删 suite 再置空属主、purge 全部删除）
 - [x] 前端：suite 管理页（列表/新建）+ 详情页（成员/模式两页签、成员选择器 scope=mine、排序/移除）、运行按钮跳转批次视图、路由与侧栏接线
-- [ ] **尾巴①**：场景库批量勾选 →「加入 suite」（多选 + 选组弹窗；加成员能力已由详情页选择器覆盖，此为库侧入口增强）
-- [ ] **尾巴②**：场景详情页「所属 suite」反查展示（后端端点已就绪，前端未接）
+- [x] **尾巴①**：场景库批量勾选 →「加入 suite」（多选 + 选组弹窗；加成员能力已由详情页选择器覆盖，此为库侧入口增强）
+- [x] **尾巴②**：场景详情页「所属 suite」反查展示（后端端点已就绪，前端未接）
 
 **验收**：
 
@@ -507,6 +507,7 @@ P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂�
 - **路由让位**：既有一次性 graph 编排页 SuiteComposer 迁至 `/suites/composer`，`/suites` 让位给用例组管理页（列表 `/suites`、详情 `/suites/:id(\d+)`）；侧栏拆「用例组」「Suite 编排」两入口，后者置灰标注正交待 §13.2-2 拍板。
 - **SQLite 双方言兜底**：`scenario_store.delete` 显式清 `suite_members`（PG 上 CASCADE 已处理，与 user_stars 的 Python 兜底同款理由）。
 - **测试纪律**：函数级 `monkeypatch.undo()` 会把 `fresh_db` 借同一实例做的引擎置换一并撤销（后续请求穿透到全局库）——打补丁一律用独立 `MonkeyPatch.context()`；防重测试用直插在途执行行伪造（测试环境 dispatch 惰性起 worker、执行对 plate 503 秒级终态，真实发起复现不了窗口）。
+- **尾巴①②收口（2026-10-09）**：①库侧批量加入 = `ScenariosMine` 勾选列（仅「我的」镜头开放——全员视角含他人场景，加入自己的 suite 必 404，勾选列整体隐藏）+ `AddToSuiteDialog`（`scope=mine` 单选目标、空态引导去用例组新建、404/409 透出后端人话；挂载即开需 `immediate: true`，否则 watch 不触发）；②详情页 `meta-grid` 增「所属 Suite」徽章行（反查端点并行加载、非属主 403/空集整行不渲染，徽章直达 `/suites/{id}`）。测试 3+1 条（弹窗真实 teleport 按 ScenarioExportMenu 惯例 `attachTo body + document.querySelectorAll`）。
 
 ### P2 分享（场景与 suite 双粒度）⬜ 未开工
 

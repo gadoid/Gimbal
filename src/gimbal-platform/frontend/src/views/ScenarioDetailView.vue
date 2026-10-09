@@ -29,6 +29,21 @@
           <dd v-else>—</dd>
         </div>
         <div><dt>编制人</dt><dd>{{ scenario?.meta?.author || scenario?.meta?.owner || '—' }}</dd></div>
+        <!-- P1 尾巴②:所属 suite 反查(GET /scenarios/{id}/suites,
+             属主/admin 视角)。非属主 403 → 整行不渲染;无 suite 同样不占位。 -->
+        <div v-if="suites.length" data-testid="detail-suites">
+          <dt>所属 Suite</dt>
+          <dd>
+            <button
+              v-for="s in suites"
+              :key="s.suiteId"
+              class="linklike suite-chip"
+              :data-testid="`detail-suite-link-${s.suiteId}`"
+              :title="`${s.name} · ${s.memberCount} 个成员`"
+              @click="router.push(`/suites/${s.suiteId}`)"
+            >{{ s.name }} · {{ s.memberCount}}</button>
+          </dd>
+        </div>
         <div><dt>数据规模</dt><dd>数据集 {{ dataSets.length }} 组 · {{ totalRows }} 行</dd></div>
         <div><dt>最后编辑</dt><dd>{{ updateTimeText }}</dd></div>
       </dl>
@@ -167,6 +182,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getScenario } from '@/api/scenario-composer'
+import { suitesOfScenario, type SuiteLookupItem } from '@/api/suites'
 import { showError } from '@/utils/errorFallback'
 import { composerUrl, scenarioSchemesUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
@@ -333,6 +349,14 @@ function goRun() {
   router.push(composerUrl(scenarioId))
 }
 
+// ── P1 尾巴②:所属 suite 反查(§9)─────────────────────────────
+// 与主数据并行加载、互不阻塞:非属主/admin 403、加载失败 → 行不渲染
+// (增强信息,缺席不打扰正文)。
+const suites = ref<SuiteLookupItem[]>([])
+void suitesOfScenario(scenarioId)
+  .then((items) => { suites.value = items })
+  .catch(() => { /* 非属主或增强失败:静默留白 */ })
+
 onMounted(async () => {
   loading.value = true
   try {
@@ -447,6 +471,17 @@ onMounted(async () => {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* P1 尾巴②:所属 suite 徽章式链接(多个并排,题头 meta 网格内)。 */
+.suite-chip {
+  margin-right: 8px;
+  text-decoration: none;
+  padding: 2px 8px;
+  border: 1px solid rgb(67 56 202 / 35%);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.suite-chip:hover { background: rgb(67 56 202 / 8%); }
 
 /* 摘要 */
 .summary {

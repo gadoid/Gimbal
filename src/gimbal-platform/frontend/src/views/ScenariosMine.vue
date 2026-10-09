@@ -33,6 +33,21 @@
           : '当前:我的——点按切「全员视角」看全部场景'"
         @click="toggleLens"
       >{{ lensAll ? '◉ 全员视角' : '○ 全员视角' }}</button>
+      <!-- P1 尾巴①:批量加入 suite。仅「我的」镜头可选行(成员须是
+           suite 属主自己的场景,§6.3);全员视角(admin)含他人场景,
+           勾选禁用以免必 404。 -->
+      <button
+        type="button"
+        class="slib-addsuite"
+        data-testid="mine-add-to-suite"
+        :disabled="!selectable || !selectedCount"
+        :title="!selectable
+          ? '「全员视角」下含他人场景,不能加入自己的 Suite —— 切回「我的」再操作'
+          : selectedCount
+            ? `把勾选的 ${selectedCount} 个场景加入一个 Suite`
+            : '勾选场景后加入 Suite'"
+        @click="atsOpen = true"
+      >加入 Suite{{ selectedCount ? ` (${selectedCount})` : '' }}</button>
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
 
@@ -55,6 +70,15 @@
       <table class="slib-table">
         <thead>
           <tr>
+            <th v-if="selectable" style="width:30px" class="c-center">
+              <input
+                type="checkbox"
+                data-testid="mine-select-page"
+                :checked="pageAllSelected"
+                title="全选/清空本页"
+                @change="togglePage"
+              />
+            </th>
             <th>场景名</th>
             <th style="width:120px">系统</th>
             <th style="width:90px">模块</th>
@@ -70,6 +94,14 @@
         <tbody>
           <template v-for="row in paged" :key="row.meta.scenarioId">
             <tr class="slib-row" :class="{ 'row-expired': row.meta.expire }" @click="openScenario(row)">
+              <td v-if="selectable" class="c-center" @click.stop>
+                <input
+                  type="checkbox"
+                  :data-testid="`mine-select-${row.meta.scenarioId}`"
+                  :checked="selection.has(row.meta.scenarioId)"
+                  @change="toggleRow(row)"
+                />
+              </td>
               <td>
                 <div class="sl-name">
                   <StarToggle :starred="!!row.starred" @toggle="toggleStar(row)" />
@@ -171,7 +203,7 @@
               </td>
             </tr>
             <tr v-if="expandedId === row.meta.scenarioId" class="scheme-panel-row" @click.stop>
-              <td :colspan="10">
+              <td :colspan="selectable ? 11 : 10">
                 <div v-if="schemesLoadingId === row.meta.scenarioId" class="slib-loading">方案加载中…</div>
                 <div v-else class="scheme-panel">
                   <SchemeCard
@@ -216,6 +248,13 @@
 
     <!-- F1(2026-09-23):分发给…(副本交接;结果面板在弹窗内) -->
     <HandoffDialog v-model:open="handoffOpen" :scenario="handoffTarget" />
+
+    <!-- P1 尾巴①:批量加入 Suite(目标选择弹窗;成功后清勾选) -->
+    <AddToSuiteDialog
+      v-model:open="atsOpen"
+      :scenarios="selectedScenarios"
+      @added="onAddedToSuite"
+    />
   </section>
 </template>
 
@@ -232,6 +271,7 @@ import {
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import HandoffDialog from '@/components/scenario-lib/HandoffDialog.vue'
+import AddToSuiteDialog from '@/components/suites/AddToSuiteDialog.vue'
 import { getHandoffUnread } from '@/api/handoff'
 import { markRead } from '@/api/notifications'
 import { downloadFile } from '@/utils/download'
@@ -275,6 +315,49 @@ const {
 const expandedId = ref<string | null>(null)
 const schemesLoadingId = ref<string | null>(null)
 const schemesByScenario = reactive(new Map<string, SchemeV2[]>())
+
+// ── P1 尾巴①:批量勾选 + 加入 Suite ────────────────────────────
+// 勾选只在「我的」镜头开放(成员须是 suite 属主自己的场景,§6.3);
+// 全员视角(admin)行内含他人场景,勾选列整个隐藏。
+const selectable = computed(() => !lensAll.value)
+const selection = ref(new Set<string>())
+const atsOpen = ref(false)
+const selectedCount = computed(() => selection.value.size)
+const pageAllSelected = computed(() =>
+  selectable.value && paged.value.length > 0
+  && paged.value.every((r) => selection.value.has(r.meta.scenarioId)))
+/** 弹窗入参:勾选的场景(名称从已加载行找,跨页勾选兜底用 id)。 */
+const selectedScenarios = computed(() =>
+  [...selection.value].map((id) => ({
+    id,
+    name: filterableRows.value.find((r) => r.meta.scenarioId === id)
+      ?.meta?.name || id,
+  })))
+
+function toggleRow(row: ScenarioListItem): void {
+  const next = new Set(selection.value)
+  const id = row.meta.scenarioId
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selection.value = next
+}
+
+function togglePage(): void {
+  const ids = paged.value.map((r) => r.meta.scenarioId)
+  const all = ids.every((id) => selection.value.has(id))
+  const next = new Set(selection.value)
+  for (const id of ids) {
+    if (all) next.delete(id)
+    else next.add(id)
+  }
+  selection.value = next
+}
+
+/** 加入成功:清空勾选(下一批从零开始);行内 suite 归属不回显
+ *  (反查在场景详情页,尾巴②)。 */
+function onAddedToSuite(): void {
+  selection.value = new Set()
+}
 
 /** 展开行是否还有在途执行(queued/running)—— 非空即启动轮询。 */
 const expandedInFlight = computed(() => {
@@ -602,4 +685,25 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   border-color: rgb(59 130 246 / 55%);
   background: rgb(59 130 246 / 10%);
 }
+
+/* P1 尾巴①:批量加入 Suite 入口(与镜头/新建同排)。 */
+.slib-addsuite {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #15803d;
+  background: rgb(34 197 94 / 10%);
+  border: 1px solid rgb(34 197 94 / 45%);
+  white-space: nowrap;
+}
+.slib-addsuite:disabled {
+  cursor: not-allowed;
+  color: var(--c-text-tertiary, #94a3b8);
+  background: transparent;
+  border-color: rgb(100 116 139 / 25%);
+}
+.slib-addsuite:not(:disabled):hover { background: rgb(34 197 94 / 18%); }
 </style>

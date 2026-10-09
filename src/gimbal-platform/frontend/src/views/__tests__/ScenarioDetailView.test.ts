@@ -18,6 +18,9 @@ vi.mock('@/api/scenario-composer', () => ({
   getScenario: vi.fn(),
   listDataSets: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('@/api/suites', () => ({
+  suitesOfScenario: vi.fn().mockResolvedValue([]),
+}))
 
 const push = vi.fn()
 vi.mock('vue-router', async (importOriginal) => {
@@ -123,5 +126,33 @@ describe('ScenarioDetailView — 修订小项', () => {
     expect(btns).toContain('编排')
     expect(btns).not.toContain('修改编排')
     w.unmount()
+  })
+
+  it('P1 尾巴②:所属 Suite 反查渲染 + 徽章可点直达 suite 详情;空/失败不渲染', async () => {
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([]) as never)
+    const suitesApi = await import('@/api/suites')
+    vi.mocked(suitesApi.suitesOfScenario).mockResolvedValue([
+      { suiteId: 7, name: '冒烟集', memberCount: 5, ownerName: '' },
+      { suiteId: 3, name: '回归集', memberCount: 12, ownerName: '' },
+    ] as never)
+    const w = await mountPage()
+    const chips = w.findAll('[data-testid^="detail-suite-link-"]')
+    expect(chips.map((c) => c.text())).toEqual(['冒烟集 · 5', '回归集 · 12'])
+    await chips[0].trigger('click')
+    expect(push).toHaveBeenCalledWith('/suites/7')
+    w.unmount()
+
+    // 空:行不渲染
+    vi.mocked(suitesApi.suitesOfScenario).mockResolvedValue([] as never)
+    const w2 = await mountPage()
+    expect(w2.find('[data-testid="detail-suites"]').exists()).toBe(false)
+    w2.unmount()
+
+    // 非属主 403:同样静默留白
+    vi.mocked(suitesApi.suitesOfScenario).mockRejectedValue(
+      new Error('403') as never)
+    const w3 = await mountPage()
+    expect(w3.find('[data-testid="detail-suites"]').exists()).toBe(false)
+    w3.unmount()
   })
 })
