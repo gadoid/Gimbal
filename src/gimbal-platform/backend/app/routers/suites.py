@@ -29,9 +29,9 @@ from ._error_mapping import not_found_404
 from ._ownership import ensure_owner
 from ..schemas.scenario_composer import RunRequest
 from ..schemas.suite import (
-    SuiteCreateIn, SuiteDetailOut, SuiteLookupItem, SuiteMembersAddIn,
-    SuiteMembersOrderIn, SuiteMemberOut, SuitePageOut, SuitePatchIn,
-    SuiteSummaryOut,
+    SuiteCompositionIn, SuiteCreateIn, SuiteDetailOut, SuiteLookupItem,
+    SuiteMembersAddIn, SuiteMembersOrderIn, SuiteMemberOut, SuitePageOut,
+    SuitePatchIn, SuiteSummaryOut,
 )
 from ..services import run_dispatcher, scenario_store, scheme_store
 
@@ -93,13 +93,63 @@ async def _member_count(db: AsyncSession, suite_id: int) -> int:
     )).scalar() or 0)
 
 
+def _is_draft(suite: Suite) -> bool:
+    return bool((suite.mode_config or {}).get("draft"))
+
+
 def _summary(suite: Suite, member_count: int) -> SuiteSummaryOut:
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
         visibility=suite.visibility, mode=suite.mode,
-        memberCount=member_count,
+        memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
     )
+
+
+async def _access_and_caps(
+    db: AsyncSession, user: CurrentUser, suite: Suite,
+) -> dict:
+    """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
+    须已过;access 为 None 仅发生在公共读者,能力位全 False。"""
+    if user.id == suite.owner_id:
+        access = "owner"
+    elif user.role == "admin":
+        access = "admin"
+    elif suite.visibility == "public":
+        access = "public"
+    else:
+        from ._ownership import has_suite_ref
+        access = ("ref" if await has_suite_ref(db, user.id, suite.id)
+                  else None)
+    if access is None:
+        return {}
+    return {
+        "access": access,
+        # 写 = 属主 ∨ admin(治理);public 先复制再跑(不变量 7);
+        # admin 不可代发分享(§8.1)
+        "canEdit": access in ("owner", "admin"),
+        "canRun": access in ("owner", "admin", "ref"),
+        "canShare": access == "owner",
+    }
+
+
+async def _detail_out(
+    db: AsyncSession, user: CurrentUser, suite: Suite,
+    members: list[SuiteMember] | None = None,
+) -> SuiteDetailOut:
+    if members is None:
+        members = await _ordered_members(db, suite.id)
+    out = SuiteDetailOut(
+        suiteId=suite.id, name=suite.name, description=suite.description,
+        visibility=suite.visibility, mode=suite.mode,
+        memberCount=len(members), rev=suite.rev, isDraft=_is_draft(suite),
+        modeConfig=suite.mode_config or {},
+        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+        members=await _members_out(db, members),
+    )
+    for k, v in (await _access_and_caps(db, user, suite)).items():
+        setattr(out, k, v)
+    return out
 
 
 async def _ordered_members(
@@ -126,6 +176,7 @@ async def _members_out(
             name=(meta.name if meta and meta.name else m.scenario_id),
             module=(meta.module or "") if meta else "",
             visibility=(scen.visibility or "private") if scen else "private",
+            role=m.role or "main",
             sort=m.sort, addedAt=_iso(m.added_at),
         ))
     return out
@@ -177,23 +228,40 @@ async def list_suites(
 async def create_suite(
     user: CurrentUser, db: DbSession, body: SuiteCreateIn,
 ) -> SuiteSummaryOut:
-    count = int((await db.execute(
-        select(func.count()).where(Suite.owner_id == user.id)
-    )).scalar() or 0)
-    if count >= settings.SUITE_CAP:
+    # 草稿口径(重构方案):name 缺省 = 画布首次拖入创建草稿,服务端
+    # 生成不重名草稿名;草稿不计入 SUITE_CAP、单独 SUITE_DRAFT_CAP
+    #(团队规模有界,JSON 的 draft 标记在 Python 侧过滤,不进 SQL)
+    own_cfgs = (await db.execute(
+        select(Suite.mode_config).where(Suite.owner_id == user.id)
+    )).all()
+    n_draft = sum(1 for (cfg,) in own_cfgs if (cfg or {}).get("draft"))
+    is_draft = body.name is None
+    if is_draft and n_draft >= settings.SUITE_DRAFT_CAP:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_draft_cap_exceeded",
+            "message": (f"draft cap per user is {settings.SUITE_DRAFT_CAP}"
+                        " (完成编排或清理草稿后再创建)")})
+    if len(own_cfgs) - n_draft >= settings.SUITE_CAP:
         raise HTTPException(status_code=409, detail={
             "code": "suite_cap_exceeded",
             "message": f"suite cap per user is {settings.SUITE_CAP}"})
-    dup = (await db.execute(
-        select(func.count()).where(Suite.owner_id == user.id,
-                                   Suite.name == body.name)
-    )).scalar()
-    if dup:
+    existing = {n for (n,) in (await db.execute(
+        select(Suite.name).where(Suite.owner_id == user.id)))}
+    name = body.name
+    if name is None:
+        base = "未命名 Suite"
+        name = base
+        i = 1
+        while name in existing:
+            i += 1
+            name = f"{base} {i}"
+    elif name in existing:
         raise HTTPException(status_code=409, detail={
             "code": "suite_name_conflict",
             "message": "同名 suite 已存在(属主内唯一)"})
-    suite = Suite(name=body.name, description=body.description,
-                  owner_id=user.id)
+    suite = Suite(name=name, description=body.description,
+                  owner_id=user.id,
+                  mode_config=({"draft": True} if is_draft else {}))
     db.add(suite)
     await db.commit()
     await db.refresh(suite)
@@ -204,14 +272,7 @@ async def create_suite(
 async def get_suite(user: CurrentUser, db: DbSession, suite_id: int) -> SuiteDetailOut:
     suite = await _load_suite(db, suite_id)
     await _require_read_async(db, user, suite)
-    members = await _ordered_members(db, suite.id)
-    return SuiteDetailOut(
-        suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
-        memberCount=len(members),
-        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
-        members=await _members_out(db, members),
-    )
+    return await _detail_out(db, user, suite)
 
 
 @router.patch("/{suite_id}", response_model=SuiteSummaryOut)
@@ -233,6 +294,12 @@ async def patch_suite(
         suite.name = body.name
     if body.description is not None:
         suite.description = body.description
+    if body.clearDraft and _is_draft(suite):
+        # 完成编排:清草稿标记(正式名称同请求落);改的是编排态 → 推进 rev
+        cfg = dict(suite.mode_config or {})
+        cfg["draft"] = False
+        suite.mode_config = cfg
+        suite.rev += 1
     await db.commit()
     await db.refresh(suite)
     return _summary(suite, await _member_count(db, suite.id))
@@ -303,15 +370,13 @@ async def add_members(
         ))
         next_sort += 1
         added += 1
+    if added:
+        suite.rev += 1
     await db.commit()
-    members = await _ordered_members(db, suite.id)
-    return SuiteDetailOut(
-        suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
-        memberCount=len(members),
-        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
-        members=await _members_out(db, members),
-    )
+    # suite 被 UPDATE(rev)→ updated_at(服务端 onupdate)过期,
+    # commit 后访问会触发异步懒加载(MissingGreenlet),显式 refresh
+    await db.refresh(suite)
+    return await _detail_out(db, user, suite)
 
 
 @router.patch("/{suite_id}/members/order", response_model=SuiteDetailOut)
@@ -329,15 +394,10 @@ async def reorder_members(
             "message": "排序清单必须恰为当前成员全集(无遗漏、无多余)"})
     for idx, sid in enumerate(incoming):
         members[sid].sort = idx
+    suite.rev += 1
     await db.commit()
-    ordered = await _ordered_members(db, suite.id)
-    return SuiteDetailOut(
-        suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
-        memberCount=len(ordered),
-        createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
-        members=await _members_out(db, ordered),
-    )
+    await db.refresh(suite)  # updated_at 服务端 onupdate 同上
+    return await _detail_out(db, user, suite)
 
 
 @router.delete("/{suite_id}/members/{scenario_id}", status_code=204)
@@ -349,8 +409,190 @@ async def remove_member(
     m = await db.get(SuiteMember, (suite_id, scenario_id))
     if m is not None:
         await db.delete(m)
+        # 约束 6:移除成员同一事务清理编排配置里的引用(units 条目、
+        # 他单元 needs、横切断言选择器中的字符串清单)并推进 rev;
+        # CASCADE 只删成员行不代劳这些
+        cfg = dict(suite.mode_config or {})
+        units = cfg.get("units") or {}
+        if scenario_id in units:
+            units = {k: v for k, v in units.items() if k != scenario_id}
+        for v in units.values():
+            if isinstance(v, dict) and isinstance(v.get("needs"), list):
+                v["needs"] = [x for x in v["needs"] if x != scenario_id]
+        cfg["units"] = units
+        checks = cfg.get("checks")
+        if isinstance(checks, list):
+            def _scrub(o):
+                if isinstance(o, dict):
+                    return {k: _scrub(x) for k, x in o.items()}
+                if isinstance(o, list):
+                    if o and all(isinstance(x, str) for x in o):
+                        return [x for x in o if x != scenario_id]
+                    return [_scrub(x) for x in o]
+                return o
+            cfg["checks"] = [_scrub(c) for c in checks]
+        suite.mode_config = cfg
+        suite.rev += 1
         await db.commit()
+        await db.refresh(suite)  # updated_at 服务端 onupdate 同上
     return Response(status_code=204)
+
+
+# ── 整体保存(重构方案 composition)───────────────────────────────
+def _bad_cfg(message: str, **extra) -> HTTPException:
+    payload = {"code": "mode_config_invalid", "message": message}
+    payload.update(extra)
+    return HTTPException(status_code=422, detail=payload)
+
+
+def _validate_composition(body: SuiteCompositionIn) -> None:
+    """结构校验(第 1 步口径):引用都是成员、ref 唯一、needs 只给依赖
+    编排且目标为主体成员、map 为 str→str。变量级校验(悬空引用、同名
+    歧义、成环)随第 3 步 validate 接执行器编译,不在这里重复。"""
+    ids = [m.scenarioId for m in body.members]
+    id_set = set(ids)
+    if len(id_set) != len(ids):
+        raise HTTPException(422, detail={
+            "code": "duplicate_member",
+            "message": "一个场景在 Suite 内只出现一次(需要多跑用单元 ×重复)"})
+    main_ids = {m.scenarioId for m in body.members if m.role == "main"}
+    cfg = body.modeConfig or {}
+    units = cfg.get("units")
+    if units is None:
+        units = {}
+    if not isinstance(units, dict):
+        raise _bad_cfg("modeConfig.units 须为对象(按 scenarioId 引用成员)")
+    unknown = [k for k in units if k not in id_set]
+    if unknown:
+        raise HTTPException(422, detail={
+            "code": "unknown_unit",
+            "message": f"units 引用了非成员场景: {unknown}",
+            "unknown": unknown})
+    refs: set[str] = set()
+    for uid, u in units.items():
+        if not isinstance(u, dict):
+            raise _bad_cfg(f"units.{uid} 须为对象")
+        r = u.get("ref")
+        if r is not None:
+            if not isinstance(r, str) or not r:
+                raise _bad_cfg(f"units.{uid}.ref 须为非空字符串")
+            if r in refs:
+                raise HTTPException(422, detail={
+                    "code": "duplicate_ref",
+                    "message": f"单元别名 {r!r} 在 Suite 内不唯一"})
+            refs.add(r)
+        mp = u.get("map")
+        if mp is not None and (
+                not isinstance(mp, dict)
+                or not all(isinstance(k, str) and isinstance(v, str)
+                           for k, v in mp.items())):
+            raise _bad_cfg(
+                f"units.{uid}.map 须为 str→str(上游输出名 → 本地输入名)")
+    needs_edges = [
+        (uid, n) for uid, u in units.items() for n in (u.get("needs") or [])]
+    if needs_edges and body.mode != "compose":
+        raise HTTPException(422, detail={
+            "code": "needs_not_allowed",
+            "message": (f"{body.mode} 模式不携带 needs(顺序即结构;"
+                        f"执行器对非 compose 声明 needs 直接报编译错误)")})
+    before_after = id_set - main_ids
+    for uid, n in needs_edges:
+        if n not in main_ids:
+            raise HTTPException(422, detail={
+                "code": "needs_target_invalid",
+                "message": (f"units.{uid} 的 needs 指向 {n!r}:目标必须是"
+                            f"主体成员(前置/后置不参与连线,约束 7)")})
+        if uid in before_after:
+            raise HTTPException(422, detail={
+                "code": "needs_source_invalid",
+                "message": f"前置/后置单元 {uid!r} 不能连 needs(约束 7)"})
+    for key in ("gates", "checks"):
+        v = cfg.get(key)
+        if v is not None and not isinstance(v, list):
+            raise _bad_cfg(f"modeConfig.{key} 须为数组")
+    for key in ("parallel", "nRuns"):
+        v = cfg.get(key)
+        if v is not None and (isinstance(v, bool) or not isinstance(v, int)):
+            raise _bad_cfg(f"modeConfig.{key} 须为整数")
+
+
+@router.put("/{suite_id}/composition", response_model=SuiteDetailOut)
+async def put_composition(
+    user: CurrentUser, db: DbSession, suite_id: int,
+    body: SuiteCompositionIn,
+) -> SuiteDetailOut:
+    """整体保存:模式、成员及顺序、编排配置一次落库(重构方案,
+    替代 members/order)。rev 乐观锁 —— 冲突 409 附最新内容;任何改
+    成员或编排的路径(本端点、加/移成员、场景删除清理)都推进 rev。"""
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    if body.rev != suite.rev:
+        # 先物化再 rollback:rollback 会过期 suite 实例,事后访问属性
+        # 触发异步懒加载(MissingGreenlet,本仓已文档化的陷阱)
+        current_rev = suite.rev
+        latest = (await _detail_out(db, user, suite)).model_dump(mode="json")
+        await db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_rev_conflict",
+            "message": "Suite 已被修改(他人或其他页面),拉取最新后再保存",
+            "currentRev": current_rev,
+            "latest": latest})
+    _validate_composition(body)
+    if len(body.members) > settings.SUITE_MEMBER_CAP:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_member_cap_exceeded",
+            "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
+
+    # 成员属主校验(§6.3 一刀切)+ 公共不变量(§7.9 第二入口,与
+    # add_members 同一套:无标志 → 409 列出待发布,有标志 → 同事务公开)
+    scen_rows: dict[str, object] = {}
+    pending_publish: list[str] = []
+    for m in body.members:
+        scen = await scenario_store.get_row(db, m.scenarioId)
+        if scen is None or scen.owner_id != suite.owner_id:
+            await db.rollback()
+            raise not_found_404("scenario", m.scenarioId)
+        scen_rows[m.scenarioId] = scen
+        if (suite.visibility == "public"
+                and (scen.visibility or "private") != "public"):
+            pending_publish.append(m.scenarioId)
+    if pending_publish and not body.publishUnpublished:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_member_publish_required",
+            "message": ("suite is public: unpublished members must be "
+                        "published to join (confirm to publish them and "
+                        "their datasets)"),
+            "pendingPublish": pending_publish})
+
+    # 差量重写成员表(保留 added_at;删行交给组合外键语义外的显式删除)
+    incoming_ids = {m.scenarioId for m in body.members}
+    current = {m.scenario_id: m
+               for m in await _ordered_members(db, suite.id)}
+    for sid, row in current.items():
+        if sid not in incoming_ids:
+            await db.delete(row)
+    for idx, m in enumerate(body.members):
+        row = current.get(m.scenarioId)
+        if row is None:
+            db.add(SuiteMember(
+                suite_id=suite.id, scenario_id=m.scenarioId,
+                owner_id=suite.owner_id, role=m.role, sort=idx))
+        else:
+            row.role = m.role
+            row.sort = idx
+    for sid in pending_publish:  # 确认发布:成员随组公开(数据集随场景)
+        scen_rows[sid].visibility = "public"
+
+    suite.mode = body.mode
+    cfg = dict(body.modeConfig or {})
+    if _is_draft(suite):
+        cfg["draft"] = True   # 草稿标记穿越整体保存;完成编排走 clearDraft
+    suite.mode_config = cfg
+    suite.rev += 1
+    await db.commit()
+    await db.refresh(suite)
+    return await _detail_out(db, user, suite)
 
 
 # ── 聚合模式运行(§6.6)───────────────────────────────────────────
@@ -542,6 +784,10 @@ async def publish_suite(
     from ..models.composer_scenario import ComposerScenario
     suite = await _load_suite(db, suite_id)
     _require_write(user, suite)
+    if _is_draft(suite):
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_is_draft",
+            "message": "草稿不可发布(完成编排后可发布)"})
     members = await _ordered_members(db, suite.id)
     unpublished: list[str] = []
     for m in members:

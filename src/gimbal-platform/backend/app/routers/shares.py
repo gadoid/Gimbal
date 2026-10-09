@@ -135,6 +135,11 @@ async def create_share(
         raise HTTPException(404, "suite_not_found")
     if user.id != suite.owner_id:
         raise HTTPException(403, "not_owner")
+    if (suite.mode_config or {}).get("draft"):
+        # 重构方案:草稿不可分享(ref/copy 同拒)
+        raise HTTPException(409, {
+            "code": "suite_is_draft",
+            "message": "草稿不可分享(完成编排后可分享)"})
     target = await _load_grantee(db, body.granteeUserId, user.id)
     if body.mode == "copy":
         out = await _deep_copy_suite(db, suite, target, sharer_disp)

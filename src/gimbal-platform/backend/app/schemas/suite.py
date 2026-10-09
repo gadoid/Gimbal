@@ -12,13 +12,38 @@ from pydantic import BaseModel, Field
 
 
 class SuiteCreateIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
+    """name 可省略:服务端生成不重名的草稿名(「未命名 Suite N」,
+    重构方案:画布首次拖入创建草稿);带 name 的创建不是草稿。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str = Field(default="", max_length=512)
 
 
 class SuitePatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=512)
+    # 完成编排时清除草稿标记(重构方案:正式名称在此填、草稿在此清)
+    clearDraft: bool = False
+
+
+class CompositionMemberIn(BaseModel):
+    """composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/
+    扇出源在首位);role 见 suite_members.role。"""
+
+    scenarioId: str = Field(min_length=1, max_length=128)
+    role: Literal["main", "before", "after"] = "main"
+
+
+class SuiteCompositionIn(BaseModel):
+    """整体保存(重构方案 PUT /suites/{id}/composition):模式、成员
+    及顺序、编排配置一次落库;rev 乐观锁,冲突 409 附最新内容。"""
+
+    rev: int
+    mode: Literal["aggregate", "chain", "fanout", "compose"] = "aggregate"
+    members: list[CompositionMemberIn] = Field(max_length=100)
+    modeConfig: dict = Field(default_factory=dict)
+    # 公共 Suite 加私有成员的发布确认标志(与 add_members 同一套 409)
+    publishUnpublished: bool = False
 
 
 class SuiteMembersAddIn(BaseModel):
@@ -41,6 +66,8 @@ class SuiteSummaryOut(BaseModel):
     visibility: str
     mode: str
     memberCount: int
+    rev: int = 0
+    isDraft: bool = False          # mode_config.draft 投影(列表「草稿」标记)
     createdAt: str | None = None
     updatedAt: str | None = None
     # P2 publish 回执:本次级联发布的成员(数据集一并公开,§7.9)
@@ -59,6 +86,7 @@ class SuiteMemberOut(BaseModel):
     name: str
     module: str
     visibility: str
+    role: Literal["main", "before", "after"] = "main"
     sort: int
     addedAt: str | None = None
 
@@ -70,6 +98,15 @@ class SuiteDetailOut(BaseModel):
     visibility: str
     mode: str
     memberCount: int
+    rev: int = 0
+    isDraft: bool = False
+    # P2/重构:前端不自己推导角色 —— access(owner/admin/ref/public)
+    # 与能力位(§7.6 判定;public 不可运行=不变量 7,ref 不可改)
+    access: str | None = None
+    canEdit: bool | None = None
+    canRun: bool | None = None
+    canShare: bool | None = None
+    modeConfig: dict | None = None
     createdAt: str | None = None
     updatedAt: str | None = None
     members: list[SuiteMemberOut]

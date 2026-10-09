@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     # 每人 suite 数 / 每个 suite 成员数(防 sprawl,超出 409)
     SUITE_CAP: int = 50
     SUITE_MEMBER_CAP: int = 100
+    # 草稿单独上限(重构方案 D 轮拍板):草稿不计入 SUITE_CAP,但 30 天
+    # 清理只清空草稿,非空草稿的积累由本上限兜住
+    SUITE_DRAFT_CAP: int = 20
     # 单次 suite 运行的总 runs 上限:分发前预检(复用 dispatch 的
     # total_runs 同一份计算),防一次点击把单 worker 队列塞满数小时
     SUITE_RUN_TOTAL_CAP: int = 1000
