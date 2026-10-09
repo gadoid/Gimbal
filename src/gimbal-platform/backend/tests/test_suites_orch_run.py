@@ -179,6 +179,57 @@ async def test_orchestration_run_suite_graph(client, monkeypatch):
                   "passed": True}
 
 
+async def test_runs_endpoint_batches(client):
+    """/runs 聚合归并:同批多成员执行合并成一条 batch 项、计数累加、
+    finishedAt 取批内最晚(比较用原始 datetime —— 浏览器验收抓过
+    datetime>str 的 500);单人执行单列。"""
+    from datetime import datetime, timezone
+    from app.models.execution import Execution as Ex
+
+    await register_and_login(client, "rb_boot", "rb_bootpass123")
+    h = await register_and_login(client, "rb_owner", "rb_ownerpass123")
+    await _mk(client, h, "sc-rb-1")
+    await _mk(client, h, "sc-rb-2")
+    r = await client.post("/api/suites", headers=h,
+                          json={"name": "归并集", "description": ""})
+    sid = r.json()["suiteId"]
+    roster = (await client.get("/api/users/roster", headers=h)).json()["items"]
+    uid = next(u["id"] for u in roster if u["username"] == "rb_boot")
+    async with db_module.SessionLocal() as s:
+        from app.models.user import User
+        uid = (await s.execute(sa.select(User.id).where(
+            User.username == "rb_owner"))).scalar_one()
+        base = datetime.now(timezone.utc).replace(tzinfo=None)
+        for i, (sidsc, fin) in enumerate((
+                ("sc-rb-1", base.replace(microsecond=100000)),
+                ("sc-rb-2", base.replace(microsecond=200000)))):
+            s.add(Ex(scenario_id=sidsc, scenario_name=sidsc, kind="scenario",
+                     suite_id=sid, owner_id=uid, owner_name="rb_owner",
+                     status="done", total_runs=1, passed=1, failed=0,
+                     skipped=0, batch_id="suite-batch-1",
+                     created_at=base, finished_at=fin,
+                     config_json={"batchId": "suite-batch-1"}))
+        s.add(Ex(scenario_id="sc-rb-1", scenario_name="sc-rb-1",
+                 kind="scenario", suite_id=sid, owner_id=uid,
+                 owner_name="rb_owner", status="done", total_runs=1,
+                 passed=1, failed=0, skipped=0, batch_id=None,
+                 created_at=base, finished_at=base,
+                 config_json={}))
+        await s.commit()
+
+    r = await client.get(f"/api/suites/{sid}/runs", headers=h)
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    by_kind = {i["kind"]: i for i in items}
+    assert set(by_kind) == {"batch", "single"}
+    b = next(i for i in items if i["kind"] == "batch")
+    assert b["batchId"] == "suite-batch-1" and b["status"] == "done"
+    assert len(b["executions"]) == 2 and b["totalRuns"] == 2 and b["passed"] == 2
+    assert b["finishedAt"] is not None      # 归并比较不再 500
+    single = next(i for i in items if i["kind"] == "single")
+    assert single["executions"] and single["batchId"].startswith("single-")
+
+
 async def test_rerun_intercepted_and_runs_visibility(client, monkeypatch):
     """suite_graph 重跑 409 附链接;/runs 只返回本人发起(不变量 2)。"""
     await register_and_login(client, "rv_boot", "rv_bootpass123")

@@ -973,23 +973,30 @@ async def suite_runs(
             continue
         key = ex.batch_id or f"single-{ex.id}"
         agg = batches.setdefault(key, {
-            "batchId": key, "kind": "batch",
-            "status": "running", "executions": [],
+            "batchId": key,
+            "kind": "batch" if ex.batch_id else "single",
+            "status": "done", "executions": [],
             "totalRuns": 0, "passed": 0, "failed": 0, "skipped": 0,
-            "createdAt": _iso(ex.created_at), "finishedAt": None})
+            "createdAt": _iso(ex.created_at), "finishedAt": None,
+            "_finishedRaw": None})
         agg["executions"].append(ex.id)
         agg["totalRuns"] += ex.total_runs
         agg["passed"] += ex.passed
         agg["failed"] += ex.failed
         agg["skipped"] += ex.skipped
-        if ex.finished_at and (agg["finishedAt"] is None
-                               or ex.finished_at > agg["finishedAt"]):
+        # 比较用原始 datetime(ISO 串与 datetime 不可比,浏览器验收抓出)
+        if ex.finished_at and (agg["_finishedRaw"] is None
+                               or ex.finished_at > agg["_finishedRaw"]):
+            agg["_finishedRaw"] = ex.finished_at
             agg["finishedAt"] = _iso(ex.finished_at)
+        # 状态:任一成员未终态 → 批 running(粘性);否则按计数/取消收口
         if ex.status in ("queued", "running"):
             agg["status"] = "running"
         elif agg["status"] != "running":
             agg["status"] = ("failed" if agg["failed"] else
                              "canceled" if ex.status == "canceled" else "done")
+    for agg in batches.values():
+        agg.pop("_finishedRaw", None)
     items.extend(batches.values())
     items.sort(key=lambda i: i["createdAt"] or "", reverse=True)
     return {"items": items, "total": len(items)}
