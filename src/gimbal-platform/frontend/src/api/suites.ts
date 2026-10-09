@@ -134,6 +134,35 @@ export interface SuiteRunItem {
   skipped?: number
   createdAt: string | null
   finishedAt?: string | null
+  /** 判定门结论(第 3 步):执行器 gates.evaluated 事件的结构化落账;
+   *  {gates: [{metric, op, value, actual, passed}], passed: boolean}。 */
+  gatesEvaluated?: {
+    gates: { metric: string; op: string; value: number; actual?: number; passed?: boolean }[]
+    passed: boolean
+  } | null
+}
+
+/** 预检条目(第 3 步 /suites/{id}/validate)。 */
+export interface ValidateItem {
+  level: 'error' | 'warn' | 'ok'
+  code: string
+  message: string
+  units?: string[]
+  refs?: string[]
+  /** unit = 可直达单元改选;map = 同名输入需改名。 */
+  action?: string
+}
+
+export interface ValidateOut {
+  ok: boolean
+  mode: string
+  unitCount: number
+  estimatedRuns: number
+  runCap: number
+  gates: number
+  degraded: boolean
+  inFlight: { batchId: string } | null
+  items: ValidateItem[]
 }
 
 export interface SuiteLookupItem {
@@ -234,6 +263,13 @@ export async function rerunFailedUnits(
 ): Promise<SuiteOrchRunResult> {
   const { data } = await http.post<SuiteOrchRunResult>(
     `/suites/${suiteId}/runs/${executionId}/rerun-failed`)
+  return data
+}
+
+/** 不入队的预检(第 3 步):服务端权威结论(执行器编译 + 逐成员
+ * _precheck_one + 认证别名 + 在途)。 */
+export async function validateSuite(suiteId: number): Promise<ValidateOut> {
+  const { data } = await http.post<ValidateOut>(`/suites/${suiteId}/validate`)
   return data
 }
 

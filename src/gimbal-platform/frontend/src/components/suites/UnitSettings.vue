@@ -49,11 +49,51 @@
         @change="patch({ nRuns: Math.max(1, Number(($event.target as HTMLInputElement).value) || 1) })"
       />
     </label>
+
+    <!-- 同名改名(map,第 3 步):上游输出名 → 本地输入名 —— 预检报
+         INPUT_AMBIGUOUS(同名歧义)时在此消解;对应执行器 UnitDecl.map。 -->
+    <div
+      v-if="orchestrate"
+      class="uset-map"
+      data-testid="suite-unit-map"
+    >
+      <span class="uset-map-label">同名改名</span>
+      <div
+        v-for="(row, i) in mapRows"
+        :key="i"
+        class="uset-map-row"
+      >
+        <input
+          class="uset-map-in"
+          :value="row[0]"
+          placeholder="上游输出名"
+          @change="onMapRow(i, 0, ($event.target as HTMLInputElement).value)"
+        />
+        <span class="uset-map-arrow">→</span>
+        <input
+          class="uset-map-in"
+          :value="row[1]"
+          placeholder="本地输入名"
+          @change="onMapRow(i, 1, ($event.target as HTMLInputElement).value)"
+        />
+        <button
+          type="button" class="uset-map-x"
+          :data-testid="`suite-unit-map-remove-${i}`"
+          title="删除这行改名"
+          @click="removeMapRow(i)"
+        >×</button>
+      </div>
+      <button
+        type="button" class="uset-map-add"
+        data-testid="suite-unit-map-add"
+        @click="addMapRow"
+      >+ 改名</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { SuiteMemberItem, SuiteUnitConfig } from '@/api/suites'
 
 const props = defineProps<{
@@ -91,6 +131,46 @@ function onRow(ev: Event): void {
 function patch(p: Partial<SuiteUnitConfig>): void {
   emit('patch', p)
 }
+
+// ── 同名改名(map)编辑:本地行态(新加的空行先留在本地,两端都填好
+// 才随 change 提交;空端点的行不落 map)──────────────────────────
+const mapRows = ref<[string, string][]>(Object.entries(props.unit.map ?? {}))
+watch(() => props.unit.map, (m) => {
+  // 外部(如服务端冲突重拉)更新 map 时重同步本地行
+  const next = Object.entries(m ?? {})
+  const same = next.length === mapRows.value.length
+    && next.every(([k, v], i) => mapRows.value[i][0] === k && mapRows.value[i][1] === v)
+  if (!same) mapRows.value = next
+})
+
+function commitMap(): void {
+  const map: Record<string, string> = {}
+  let incomplete = false
+  for (const [k, v] of mapRows.value) {
+    if (k.trim() && v.trim()) map[k.trim()] = v.trim()
+    else if (k.trim() || v.trim()) incomplete = true
+  }
+  // 还有半填的行且 map 为空时不能回传:父级会把 map:{} 流回来,
+  // watch 重同步把正在编辑的半行冲掉(上游名失焦的瞬间行就没了)。
+  // 清空 map 的唯一路径是行被删光(removeMapRow)。
+  if (incomplete && !Object.keys(map).length) return
+  emit('patch', { map })
+}
+
+function addMapRow(): void {
+  mapRows.value = [...mapRows.value, ['', '']]
+}
+
+function removeMapRow(i: number): void {
+  mapRows.value = mapRows.value.filter((_, j) => j !== i)
+  commitMap()
+}
+
+function onMapRow(i: number, pos: 0 | 1, value: string): void {
+  mapRows.value = mapRows.value.map((r, j) =>
+    (j === i ? [...r.slice(0, pos), value, ...r.slice(pos + 1)] as [string, string] : r))
+  commitMap()
+}
 </script>
 
 <style scoped>
@@ -108,4 +188,30 @@ function patch(p: Partial<SuiteUnitConfig>): void {
 }
 .uset input { width: 56px; }
 .uset-note { font-style: normal; font-size: 11px; color: rgb(100 116 139); }
+
+/* 同名改名(map)编辑区 */
+.uset-map {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; border-left: 1px dashed rgb(100 116 139 / 35%);
+  padding-left: 12px; min-width: 250px;
+}
+.uset-map-label { font-size: 11.5px; color: rgb(100 116 139); }
+.uset-map-row { display: flex; align-items: center; gap: 6px; }
+.uset-map-in {
+  width: 110px; padding: 3px 7px; font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+  border-radius: 6px; border: 1px solid rgb(100 116 139 / 35%);
+  background: transparent; color: inherit;
+}
+.uset-map-arrow { color: rgb(100 116 139); font-size: 11px; }
+.uset-map-x {
+  width: 18px; height: 18px; border-radius: 5px; cursor: pointer;
+  border: 1px solid rgb(100 116 139 / 30%); background: transparent;
+  color: inherit; font-size: 11px; line-height: 1; padding: 0;
+}
+.uset-map-add {
+  align-self: flex-start; font-size: 11.5px; padding: 3px 9px;
+  border-radius: 6px; cursor: pointer; color: #2563eb;
+  background: rgb(59 130 246 / 8%); border: 1px solid rgb(59 130 246 / 45%);
+}
 </style>

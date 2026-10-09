@@ -1002,6 +1002,319 @@ async def run_suite(
     }
 
 
+# ── 预检(重构方案第 3 步:validate 接执行器编译)────────────────
+def _vitem(level: str, code: str, message: str, *,
+           units: list[str] | None = None, refs: list[str] | None = None,
+           action: str | None = None) -> dict:
+    """预检条目:level ∈ error(禁跑)/ warn(提示);units 用 scenarioId
+    (前端定位成员),refs 为执行器侧单元别名;action 提示可去的改选处。"""
+    it = {"level": level, "code": code, "message": message}
+    if units:
+        it["units"] = units
+    if refs:
+        it["refs"] = refs
+    if action:
+        it["action"] = action
+    return it
+
+
+async def _default_scheme_of(db, scenario_id: str) -> dict | None:
+    schemes = await scheme_store.list_schemes(db, scenario_id)
+    return next((s for s in schemes if s.get("isDefault")), None)
+
+
+async def _scheme_row_count(db, scheme: dict) -> int:
+    """方案选定的数据行数(rowIndexes 指定数;未指定 = 整表行数)。"""
+    from ..models.composer_data_set import ComposerDataSet
+    n = 0
+    for sel in (scheme.get("dataSetSelection") or []):
+        if not isinstance(sel, dict):
+            continue
+        idx = sel.get("rowIndexes")
+        if idx:
+            n += len(idx)
+            continue
+        row = (await db.execute(
+            select(ComposerDataSet.rows).where(
+                ComposerDataSet.dataset_id == sel.get("datasetId"))
+        )).scalar_one_or_none()
+        n += len(row or []) if row is not None else 1
+    return n
+
+
+def _executor_compile(graph: dict) -> list[dict]:
+    """物化产物 → 执行器编译(环 / needs / 输入供给与歧义)。
+
+    返回 p_validate 形态的条目 ``{code, message, unit?}``(空 = 通过);
+    CompileError 由调用方捕获定位(带 location.unit)。独立成函数是
+    测试边界:单测打桩此函数即可,不必伪造合法 gimbal 场景形状。
+    """
+    from pydantic import TypeAdapter
+    from gimbal.schema.scenario import RunUnion
+    from gimbal.compiler.pipeline import compile_target, p_validate
+    target = TypeAdapter(RunUnion).validate_python(graph)
+    plan = compile_target(target)
+    errs: list[dict] = []
+    for err in p_validate(plan):
+        code, _, msg = err.partition(": ")
+        errs.append({"code": code or "P_VALIDATE",
+                     "message": msg or err, "unit": None})
+    return errs
+
+
+@router.post("/{suite_id}/validate")
+async def validate_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> dict:
+    """不入队的预检(重构方案第 3 步):闸与运行相同(_require_run_async)。
+
+    聚合:逐成员可运行性(复用 ``run_precheck._precheck_one``,失效判定
+    服务端唯一实现)+ 默认方案 runs 总量;编排:物化 + 执行器编译,报
+    环 / needs / 输入无上游供给 / 同名歧义(定位到单元),认证别名按
+    **发起人**名下解析(解不到 → 警告,P2 §13.3-5 已定行为),多行方案
+    只跑一行的提示。执行器编译链路(plate convert / gimbal import)
+    不可用时降级为本地结构检查,并标 ``degraded``(状态条「未校验变量」)。
+    """
+    suite = await _load_suite(db, suite_id)
+    await _require_run_async(db, user, suite)
+    from ._ownership import can_run_scenario as _can_run
+
+    members = await _ordered_members(db, suite_id)
+    cfg = suite.mode_config or {}
+    units_cfg = cfg.get("units") or {}
+    mode = suite.mode or "aggregate"
+    gates_n = len(cfg.get("gates") or [])
+
+    items: list[dict] = []
+    est = 0
+    degraded = False
+
+    if not members:
+        return {"ok": False, "mode": mode, "unitCount": 0, "estimatedRuns": 0,
+                "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
+                "degraded": False, "inFlight": None,
+                "items": [_vitem("error", "suite_empty",
+                                 "Suite 没有成员,无可执行场景")]}
+
+    in_flight_batch = await _in_flight_batch(db, user.id, suite_id)
+
+    if mode == "aggregate":
+        # ── 聚合:逐成员(只 main)+ 默认方案可运行性与总量 ─────────
+        from .run_precheck import PrecheckItem, _precheck_one
+
+        def _name_of(sid: str, scen) -> str:
+            meta = scenario_store._meta_from_row(scen) if scen is not None else None
+            return (meta.name if meta and meta.name else sid)
+
+        for m in members:
+            if m.role != "main":
+                continue
+            scen = await scenario_store.get_row(db, m.scenario_id)
+            if scen is None:
+                items.append(_vitem("warn", "scenario_not_found",
+                                    f"成员「{_name_of(m.scenario_id, None)}」场景已删除,发起时跳过",
+                                    units=[m.scenario_id]))
+                continue
+            if not await _can_run(db, user, scenario_id=m.scenario_id,
+                                  owner_id=scen.owner_id):
+                items.append(_vitem("warn", "not_runnable",
+                                    f"成员「{_name_of(m.scenario_id, scen)}」不可运行,发起时跳过",
+                                    units=[m.scenario_id]))
+                continue
+            scheme = await _default_scheme_of(db, m.scenario_id)
+            if scheme is None:
+                items.append(_vitem("warn", "no_scheme",
+                                    f"「{_name_of(m.scenario_id, scen)}」没有运行方案,将以裸基线发起",
+                                    units=[m.scenario_id]))
+                est += 1
+                continue
+            pc = await _precheck_one(db, scen, PrecheckItem(
+                scenarioId=m.scenario_id, schemeId=scheme["schemeId"]))
+            if not pc.scheme_valid:
+                detail = []
+                if pc.dead_dataset_ids:
+                    detail.append(f"失效数据集 {pc.dead_dataset_ids}")
+                if pc.dangling_entry_ids:
+                    detail.append(f"悬空注入 {pc.dangling_entry_ids}")
+                items.append(_vitem(
+                    "warn", "scheme_invalid",
+                    f"「{_name_of(m.scenario_id, scen)}」默认方案不可跑({';'.join(detail)}),发起时跳过",
+                    units=[m.scenario_id]))
+            elif pc.unbound_services:
+                items.append(_vitem(
+                    "warn", "unbound_services",
+                    f"「{_name_of(m.scenario_id, scen)}」服务未绑定 URL:{pc.unbound_services}(执行期报错)",
+                    units=[m.scenario_id]))
+            try:
+                fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(
+                    db, scen, _req_from_scheme(m.scenario_id, scheme, "precheck"))
+                est += run_dispatcher.fanout_total(fd, inj)
+            except Exception:  # noqa: BLE001 — 总量估算失败不拦预检
+                est += 1
+    else:
+        # ── 编排:逐单元可运行 + 物化 + 执行器编译 ─────────────────
+        from ..services import graph_dispatch as gd
+        graph_spec = _build_graph_spec(suite, members)
+        ref2sid: dict[str, str] = {}
+        for m in members:
+            ref2sid[(units_cfg.get(m.scenario_id) or {}).get("ref")
+                    or m.scenario_id] = m.scenario_id
+
+        # 成员名(场景 meta;行缺失回落 scenarioId,与 _members_out 同口径)
+        names: dict[str, str] = {}
+        for m in members:
+            scen = await scenario_store.get_row(db, m.scenario_id)
+            meta = scenario_store._meta_from_row(scen) if scen is not None else None
+            names[m.scenario_id] = (meta.name if meta and meta.name
+                                    else m.scenario_id)
+
+        not_runnable: list[str] = []
+        for m in members:
+            scen = await scenario_store.get_row(db, m.scenario_id)
+            if scen is None or not await _can_run(
+                    db, user, scenario_id=m.scenario_id,
+                    owner_id=scen.owner_id if scen else None):
+                not_runnable.append(names[m.scenario_id])
+        if not_runnable:
+            # 图不能跳过单元 —— 整体禁跑并列出(重构方案已定)
+            items.append(_vitem("error", "units_not_runnable",
+                                f"编排模式下所有单元都必须可运行,不可运行:"
+                                f"{'、'.join(not_runnable)}"))
+            return {"ok": False, "mode": mode,
+                    "unitCount": len(members), "estimatedRuns": 0,
+                    "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
+                    "degraded": False, "inFlight": None, "items": items}
+
+        est = sum(int((units_cfg.get(m.scenario_id) or {}).get("repeat") or 1)
+                  * int((units_cfg.get(m.scenario_id) or {}).get("nRuns") or 1)
+                  for m in members)
+
+        # 多行方案只跑一行(约束 5):未选行 → 裸基线提示;已选 → 只跑该行
+        for m in members:
+            u = units_cfg.get(m.scenario_id) or {}
+            schemes = await scheme_store.list_schemes(db, m.scenario_id)
+            scheme = (next((s for s in schemes
+                            if s.get("schemeId") == u.get("schemeId")), None)
+                      if u.get("schemeId")
+                      else next((s for s in schemes if s.get("isDefault")), None))
+            if scheme is None:
+                items.append(_vitem(
+                    "warn", "no_scheme",
+                    f"「{names[m.scenario_id]}」无运行方案,该单元将跑裸基线",
+                    units=[m.scenario_id], action="unit"))
+                continue
+            rows = await _scheme_row_count(db, scheme)
+            if rows > 1 and not u.get("row"):
+                items.append(_vitem(
+                    "warn", "row_unselected",
+                    f"「{names[m.scenario_id]}」的方案选了 {rows} 行数据,只会跑所选那行 ——"
+                    f"当前未选行,将跑裸基线",
+                    units=[m.scenario_id], action="unit"))
+            elif rows > 1 and u.get("row"):
+                items.append(_vitem(
+                    "warn", "row_single",
+                    f"「{names[m.scenario_id]}」的方案选了 {rows} 行,只会跑"
+                    f"{u['row']['datasetId']} 第 {u['row']['rowIndex']} 行"))
+
+        # 物化 + 编译(plate convert / gimbal import 不可用 → 降级本地检查)
+        try:
+            all_units = [*graph_spec.get("before", []),
+                         *graph_spec["units"],
+                         *graph_spec.get("after", [])]
+            resolved = await gd.resolve_graph_units(db, all_units, user.id)
+            # 认证别名按发起人解析(不借用属主凭证,P2 §13.3-5)
+            aliases = sorted({
+                alias
+                for r in resolved
+                for b in (r["unit"].get("serviceBindings") or {}).values()
+                for alias in ([b] if isinstance(b, str) and b else
+                              [b.get("authAlias")] if isinstance(b, dict) else [])
+                if alias})
+            if aliases:
+                from .run_dispatcher import _resolve_exec_auths as _ra
+                got = await _ra(db, user.id, aliases)
+                missing = set(aliases) - {a.alias for a in got}
+                if missing:
+                    items.append(_vitem(
+                        "warn", "auth_alias_unresolved",
+                        f"认证别名在你名下解不到(执行期以明确原因失败):"
+                        f"{sorted(missing)}"))
+            graph = await gd.materialize_graph(db, user.id, graph_spec)
+            for e in _executor_compile(graph):
+                items.append(_vitem("error", e["code"], e["message"],
+                                    refs=[e["unit"]] if e.get("unit") else None,
+                                    units=[ref2sid[e["unit"]]]
+                                    if e.get("unit") and e["unit"] in ref2sid
+                                    else None))
+        except Exception as e:  # noqa: BLE001 — 预检不因链路故障 500
+            from gimbal.compiler.errors import CompileError
+            if isinstance(e, CompileError):
+                loc = e.location or {}
+                ref = loc.get("unit")
+                items.append(_vitem(
+                    "error", e.code, str(e),
+                    refs=[ref] if ref else None,
+                    units=[ref2sid[ref]] if ref and ref in ref2sid else None,
+                    action="map" if e.code == "INPUT_AMBIGUOUS" else None))
+            elif isinstance(e, gd.GraphDispatchError):
+                items.append(_vitem("error", "materialize_failed", str(e)))
+            else:
+                # plate convert / gimbal import 等基础设施不可用 → 降级:
+                # 只做本地结构检查(needs ⊆ 成员 + 无环),标「未校验变量」
+                degraded = True
+                needs_map = {
+                    (units_cfg.get(m.scenario_id) or {}).get("ref") or m.scenario_id:
+                    [(units_cfg.get(n) or {}).get("ref") or n
+                     for n in ((units_cfg.get(m.scenario_id) or {}).get("needs") or [])]
+                    for m in members if m.role == "main"}
+                for ref, needs in needs_map.items():
+                    for n in needs:
+                        if n not in needs_map:
+                            items.append(_vitem(
+                                "error", "NEEDS_REF_INVALID",
+                                f"单元 {ref!r} 的 needs 引用了非主体成员: {n!r}"))
+                # 本地环检测(DFS)
+                seen: dict[str, int] = {}
+                def _visit(r: str) -> None:
+                    if seen.get(r) == 1:
+                        items.append(_vitem("error", "CYCLE", f"依赖存在循环(含 {r!r})"))
+                        return
+                    if seen.get(r) == 2:
+                        return
+                    seen[r] = 1
+                    for n in needs_map.get(r, []):
+                        _visit(n)
+                    seen[r] = 2
+                for r in needs_map:
+                    _visit(r)
+                items.append(_vitem(
+                    "warn", "degraded",
+                    f"执行器编译链路不可用({e}),已降级为本地结构检查 —— 未校验变量"))
+
+    if est > settings.SUITE_RUN_TOTAL_CAP:
+        items.append(_vitem(
+            "error", "too_many_runs",
+            f"预计 {est} runs 超过上限 {settings.SUITE_RUN_TOTAL_CAP}"))
+
+    in_flight: dict | None = None
+    if in_flight_batch is not None:
+        in_flight = {"batchId": in_flight_batch}
+        items.append(_vitem(
+            "error", "suite_run_in_progress",
+            "本人在该 Suite 上有未结束的批次或运行(先查看或等它结束)"))
+
+    ok = not any(i["level"] == "error" for i in items)
+    if ok and not any(i["level"] == "warn" for i in items):
+        items.append(_vitem(
+            "ok", "pass",
+            f"预检通过:成员方案有效、依赖图完整"
+            f"{'、每单元只跑所选一行' if mode != 'aggregate' else ''}"))
+    return {"ok": ok, "mode": mode, "unitCount": len(members),
+            "estimatedRuns": est, "runCap": settings.SUITE_RUN_TOTAL_CAP,
+            "gates": gates_n, "degraded": degraded,
+            "inFlight": in_flight, "items": items}
+
+
 @router.get("/{suite_id}/runs")
 async def suite_runs(
     user: CurrentUser, db: DbSession, suite_id: int,
@@ -1031,6 +1344,9 @@ async def suite_runs(
                 "failed": ex.failed, "skipped": ex.skipped,
                 "createdAt": _iso(ex.created_at),
                 "finishedAt": _iso(ex.finished_at),
+                # 判定门结论(第 3 步:21 页实测值;编排通道第 4 处落
+                # config_json.gatesEvaluated,无门 / 未评估 = None)
+                "gatesEvaluated": (ex.config_json or {}).get("gatesEvaluated"),
             })
             continue
         key = ex.batch_id or f"single-{ex.id}"

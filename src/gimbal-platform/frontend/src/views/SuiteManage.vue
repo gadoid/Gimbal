@@ -156,9 +156,7 @@
     <SuiteRunPreflight
       v-model:open="preflightOpen"
       :suite-id="detail.suiteId"
-      :detail0="detail"
       :running="running"
-      :run-cap="runCap"
       @run="onRun"
       @locate="locateFromPreflight"
     />

@@ -88,6 +88,24 @@
             </tr>
             <tr v-if="expanded(r) && r.kind === 'suite_graph'" class="srt-units-row">
               <td colspan="6">
+                <!-- 判定门实测值(第 3 步):执行器 gates.evaluated 的结构化结论 -->
+                <div
+                  v-if="r.gatesEvaluated"
+                  class="srt-gates"
+                  :class="{ bad: !r.gatesEvaluated.passed }"
+                  data-testid="suite-runs-gates"
+                >
+                  <span class="srt-gates-label">判定门:</span>
+                  <span
+                    v-for="(g, gi) in r.gatesEvaluated.gates"
+                    :key="gi"
+                    class="srt-gate-chip"
+                    :class="{ bad: g.passed === false }"
+                  >{{ gateText(g) }}</span>
+                  <span class="srt-gates-sum">
+                    {{ r.gatesEvaluated.passed ? '✓ 全部通过' : '✗ 未通过(整体判失败)' }}
+                  </span>
+                </div>
                 <div v-if="unitsLoading" class="srt-units-loading">逐单元结果加载中…</div>
                 <div v-else-if="!unitsOf(r).length" class="srt-units-loading">
                   没有逐单元台账行(旧数据或尚未落账)
@@ -187,6 +205,28 @@ function fmtTime(v: string | null | undefined): string {
 
 function batchUrl(batchId: string): string {
   return executionsBatchUrl(batchId)
+}
+
+const GATE_METRIC: Record<string, string> = {
+  pass_rate: '通过率', fail_count: '失败数', total: '总单元数',
+  avg_duration_ms: '平均耗时', max_duration_ms: '最长耗时',
+}
+
+const GATE_OP: Record<string, string> = {
+  eq: '=', ne: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤',
+}
+
+/** 判定门实测值文案:通过率 60% ≥ 100% ✗(度量名 实测 符号 阈值)。 */
+function gateText(g: {
+  metric: string; op: string; value: number; actual?: number; passed?: boolean
+}): string {
+  const name = GATE_METRIC[g.metric] ?? g.metric
+  const op = GATE_OP[g.op] ?? g.op
+  const actual = g.actual != null
+    ? (g.metric.includes('rate') ? `${Math.round(g.actual * 100)}%` : g.actual)
+    : '—'
+  const value = g.metric.includes('rate') ? `${Math.round(g.value * 100)}%` : g.value
+  return `${name} ${actual} ${op} ${value} ${g.passed === false ? '✗' : '✓'}`
 }
 
 function expanded(r: SuiteRunItem): boolean {
@@ -303,6 +343,21 @@ void refresh()
 }
 .srt-rerun:disabled { opacity: .5; cursor: not-allowed; }
 .srt-units-row td { background: rgb(100 116 139 / 4%); padding: 8px 10px; }
+.srt-gates {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; margin-bottom: 8px; border-radius: 8px;
+  border: 1px solid rgb(34 197 94 / 35%); background: rgb(34 197 94 / 6%);
+  font-size: 12px;
+}
+.srt-gates.bad { border-color: rgb(220 38 38 / 35%); background: rgb(220 38 38 / 6%); }
+.srt-gates-label { color: rgb(100 116 139); }
+.srt-gate-chip {
+  font-family: ui-monospace, monospace; font-size: 11.5px;
+  padding: 2px 8px; border-radius: 6px;
+  background: rgb(34 197 94 / 10%); color: #15803d;
+}
+.srt-gate-chip.bad { background: rgb(220 38 38 / 10%); color: #dc2626; }
+.srt-gates-sum { font-weight: 600; }
 .srt-units-loading { font-size: 12px; color: rgb(100 116 139); padding: 6px 0; }
 .srt-units { width: 100%; border-collapse: collapse; font-size: 12px; }
 .srt-units th { padding: 4px 8px; }

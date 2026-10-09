@@ -27,6 +27,7 @@ vi.mock('@/api/suites', () => ({
   rerunFailedUnits: vi.fn(),
   forkPublicSuite: vi.fn(),
   suitesOfScenario: vi.fn(),
+  validateSuite: vi.fn(),
   suiteErrDetail: vi.fn((e: unknown) => {
     const resp = (e as { response?: { data?: unknown } })?.response
     return (resp?.data as Record<string, unknown> | undefined) ?? null
@@ -243,12 +244,19 @@ describe('SuiteManage — 管理页(20/21/30)', () => {
     document.body.innerHTML = ''
   })
 
-  it('「运行」先开预检(30),摘要带单元数与判定门数', async () => {
+  it('「运行」先开预检(30):结论取服务端 validate(摘要+条目)', async () => {
     const detail = suiteDetail({
       mode: 'compose',
       modeConfig: { units: {
         'sc-login': {}, 'sc-order': { needs: ['sc-login'] },
       }, gates: [{ metric: 'pass_rate', op: 'gte', value: 1 }] },
+    })
+    vi.mocked(suitesApi.validateSuite).mockResolvedValue({
+      ok: true, mode: 'compose', unitCount: 2, estimatedRuns: 2,
+      runCap: 1000, gates: 1, degraded: false, inFlight: null,
+      items: [
+        { level: 'ok', code: 'pass', message: '预检通过:成员方案有效、依赖图完整' },
+      ],
     })
     const { w } = mountManage(detail)
     await flushPromises()
@@ -257,10 +265,37 @@ describe('SuiteManage — 管理页(20/21/30)', () => {
     await flushPromises()
     // Dialog teleport 到 body;reka 的 attr fallthrough 不落容器 testid,
     // 以摘要行为准(AddToSuiteDialog.test 同款 body 检索惯例)
+    expect(suitesApi.validateSuite).toHaveBeenCalledWith(9)
     const summary = document.querySelector('[data-testid="suite-preflight-summary"]')
     expect(summary?.textContent).toContain('2 个单元')
     expect(summary?.textContent).toContain('判定门 1 条')
+    expect(document.querySelector('[data-testid="suite-preflight-item-0"]')
+      ?.textContent).toContain('预检通过')
     expect(document.querySelector('[data-testid="suite-preflight-run"]')).toBeTruthy()
+    w.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('预检 error 条目(如 CYCLE)禁用「开始运行」', async () => {
+    const detail = suiteDetail({ mode: 'compose' })
+    vi.mocked(suitesApi.validateSuite).mockResolvedValue({
+      ok: false, mode: 'compose', unitCount: 2, estimatedRuns: 2,
+      runCap: 1000, gates: 0, degraded: false, inFlight: null,
+      items: [
+        { level: 'error', code: 'CYCLE', message: '依赖存在循环(含 a)',
+          units: ['sc-login'] },
+      ],
+    })
+    const { w } = mountManage(detail)
+    await flushPromises()
+    await w.find('[data-testid="suite-manage-run"]').trigger('click')
+    await flushPromises()
+    const runBtn = document.querySelector(
+      '[data-testid="suite-preflight-run"]') as HTMLButtonElement | null
+    expect(runBtn).toBeTruthy()
+    expect(runBtn?.disabled).toBe(true)
+    expect(document.querySelector('[data-testid="suite-preflight-item-0"]')
+      ?.textContent).toContain('依赖存在循环')
     w.unmount()
     document.body.innerHTML = ''
   })
