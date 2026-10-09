@@ -90,6 +90,30 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
             ).status_code == 200
 
 
+async def test_member_cap_409(client: AsyncClient, monkeypatch) -> None:
+    """§6.3 SUITE_MEMBER_CAP:超上限批量加入 → 409,已加入的不留半批
+    (异常分支 rollback)。cap 压到 3 验证边界(不必真造 100 个场景)。"""
+    from app.core.config import settings
+    from pytest import MonkeyPatch
+    with MonkeyPatch.context() as mp:
+        mp.setattr(settings, "SUITE_MEMBER_CAP", 3, raising=False)
+        bob = await register_and_login(client, "mc_bob", "mc_bob_pass123")
+        for i in range(4):
+            await _mk_scenario(client, bob, f"sc-mc-{i}")
+        sid = await _mk_suite(client, bob, "上限集")
+        # 3 个正好达线
+        r = await client.post(f"/api/suites/{sid}/members", headers=bob,
+                              json={"scenarioIds": ["sc-mc-0", "sc-mc-1", "sc-mc-2"]})
+        assert r.status_code == 200 and r.json()["memberCount"] == 3
+        # 第 4 个 → 409;前 3 个保持(本批第 4 个未入库,非整批回滚)
+        r = await client.post(f"/api/suites/{sid}/members", headers=bob,
+                              json={"scenarioIds": ["sc-mc-3"]})
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "suite_member_cap_exceeded"
+        r = await client.get(f"/api/suites/{sid}", headers=bob)
+        assert r.json()["memberCount"] == 3
+
+
 async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
     """安全边界(§6.3):他人场景 → 404;admin 也无豁免;幽灵 → 404。"""
     await register_and_login(client, "mb_admin", "mb_admin_pass123")

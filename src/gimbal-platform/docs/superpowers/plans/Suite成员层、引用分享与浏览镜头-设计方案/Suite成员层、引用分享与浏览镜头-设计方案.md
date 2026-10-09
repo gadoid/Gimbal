@@ -189,7 +189,7 @@ suite_members(
 
 **聚合模式（第一期）：平台侧循环分发 + batch_id 归并。** 聚合模式的语义就是「逐个跑成员、没有执行策略」，所以服务端循环分发加 batch_id 归并是它的完整实现，不是过渡方案，也不必等执行器侧的 suite 能力。
 
-- `POST /api/suites/{sid}/run`：先过 `can_run_suite`；读取成员快照，按 `sort` 遍历，对每个成员检查 `can_run_scenario` 后逐个调用 `run_dispatcher.dispatch_run`（复用全部既有校验：数据集、注入条目、step_to、`MAX_RUNS_PER_EXECUTION=200`），共享一个服务端生成的 batch_id（格式见防重条目）。
+- `POST /api/suites/{sid}/run`：先过 `can_run_suite`（P1 期 ≡ `ensure_owner` 属主∨admin——suite 恒 private 下两者严格等价，完整判定式含 share_refs 分支随 P2 落 `_ownership.py`）；读取成员快照，按 `sort` 遍历，对每个成员检查 `can_run_scenario` 后逐个调用 `run_dispatcher.dispatch_run`（复用全部既有校验：数据集、注入条目、step_to、`MAX_RUNS_PER_EXECUTION=200`），共享一个服务端生成的 batch_id（格式见防重条目）。
 - **每成员的执行配置（已核实口径，§13.3-2）**：服务端加载该成员的**默认运行方案**（每场景一个默认方案，`composer_run_schemes`），把方案参数（数据集行选、注入条目、服务绑定、stepTo、nRuns、parallel）内联进该成员的 RunRequest；无默认方案则裸基线（无数据集行、无注入）。这与前端「在场景库直接点击执行」完全同口径——前端正是读默认方案后内联发送。按成员指定方案或数据集的能力，留给模式配置。**服务绑定对被分享人的可用性（已核实，§13.3-5）**：`serviceBindings.authAlias` 与别名表 credential_alias 默认最终都经 `_resolve_exec_auths` 的 owner 过滤按**执行者本人**凭证池解析，解不到即告警跳过、不存在借用属主凭证的通道——被分享人缺某条凭证时，其成员执行照常发起并在运行期以明确原因失败，不连坐他人。
 - **失败语义**：
   - **循环前物化**：成员快照与各成员的默认方案参数在循环开始前**取成纯值**（scenario_id、sort、方案参数 dict），循环内不再触碰 ORM 实例——`rollback()` 会让 Session 内**所有已加载实例过期**（与 `expire_on_commit=False` 无关，rollback 总是触发过期），async 下访问过期属性触发懒加载直接抛 `MissingGreenlet`，一个成员出错会让后续成员**全部连锁失败**。物化同时天然满足 §6.4 的「运行快照」语义。
@@ -398,9 +398,10 @@ GET    /api/scenarios?scope=mine|all          # 默认 all；visibility=public �
 GET    /api/suites?scope=mine|all
 
 # suite 成员层
-GET    /api/suites/{sid}                      # 定义 + 成员摘要
+GET    /api/suites/{sid}                      # 详情(含成员全列表;前端详情页即消费全量)
 POST   /api/suites                            {name, description}                → 201
-PATCH  /api/suites/{sid}                      {name?, description?, mode?, modeConfig?}
+PATCH  /api/suites/{sid}                      {name?, description?}
+       # mode/modeConfig 随 P3 非聚合模式开放(P1 恒 aggregate,无消费方)
 DELETE /api/suites/{sid}                      # 成员行一并删除，场景不动
 POST   /api/suites/{sid}/members              {scenarioIds: [...]}
        # 批量加入；他人场景 → 404；公共 suite 加未发布成员走发布确认框（§7.9）
@@ -593,7 +594,7 @@ P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂�
 
 ### 13.4 待核实（以代码为准，实现期顺手确认，不阻塞开工）
 
-- handoff 是否已经记录副本来源；有则复用，不新增来源字段。**（P2 做 suite 深拷贝前确认）**
+- ~~handoff 是否已经记录副本来源；有则复用，不新增来源字段。~~ → **已核（2026-10-09，实现 review）**：`copy_scenario` 不写来源（仅在 meta.name 加「(副本)」后缀）；`forked_from_*` 三列存在于 `suites` 表但 `composer_scenarios` **无此列**——P2 需为 `composer_scenarios` 补三列（场景副本与 suite 副本共用一套来源字段），随 0013 迁移落地。
 - ~~GraphSpec 是否落库（决定 P0 graph 修复回归面的检查方式）~~ → **已核（2026-10-09，P0 实施时）**：不落库，RunRequest 请求体即全部 —— 无存量可扫，graph 回归靠测试覆盖。
 - ~~定义读取端点 `GET /{id}/draft` 的前端调用面，确认接入 `can_read_scenario` 后无需改前端~~ → **已核（2026-10-09）**：调用面 = `api/scenario-composer.ts:107`（CaseComposer/SchemeWorkbench 编辑流）；P2 接入 `can_read` 时公共读者/引用者的行为面不变，前端无需改动。
 
