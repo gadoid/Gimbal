@@ -204,6 +204,67 @@ async def test_fork_and_copy(client: AsyncClient) -> None:
     assert items["suite"]["scenarioName"] is None
 
 
+async def test_scenario_referrers_includes_indirect(
+    client: AsyncClient,
+) -> None:
+    """§7.11 防误伤名单:直接引用 + 经由所属 Suite 的间接引用(§7.6),
+    同一引用人合并一行;属主治理面(非属主 403、未知场景 404)。"""
+    admin = await register_and_login(client, "rf_admin", "rf_admin_pass123")
+    owner = await register_and_login(client, "rf_owner", "rf_owner_pass123")
+    bob = await register_and_login(client, "rf_bob", "rf_bob_pass123")
+    carol = await register_and_login(client, "rf_carol", "rf_carol_pass123")
+    await _mk(client, owner, "sc-rf-1")
+    await _mk(client, owner, "sc-rf-2")
+    suite_id = await _mk_suite(client, owner, "套件", "sc-rf-1")
+
+    roster = (await client.get(
+        "/api/users/roster", headers=owner)).json()["items"]
+    bob_id = next(u["id"] for u in roster if u["username"] == "rf_bob")
+    carol_id = next(u["id"] for u in roster if u["username"] == "rf_carol")
+
+    # bob:直接引用场景 + 引用所在 Suite(合并一行,direct 且带 viaSuites)
+    for body in (
+        {"resourceType": "scenario", "resourceId": "sc-rf-1",
+         "granteeUserId": bob_id, "mode": "ref"},
+        {"resourceType": "suite", "resourceId": str(suite_id),
+         "granteeUserId": bob_id, "mode": "ref"},
+    ):
+        r = await client.post("/api/shares", headers=owner, json=body)
+        assert r.status_code == 201, r.text
+    # carol:只引用 Suite —— 场景 sc-rf-1 的间接引用人
+    r = await client.post("/api/shares", headers=owner, json={
+        "resourceType": "suite", "resourceId": str(suite_id),
+        "granteeUserId": carol_id, "mode": "ref"})
+    assert r.status_code == 201, r.text
+
+    r = await client.get("/api/shares/referrers?scenarioId=sc-rf-1",
+                         headers=owner)
+    assert r.status_code == 200, r.text
+    items = {i["granteeUserId"]: i for i in r.json()["items"]}
+    assert items[bob_id]["direct"] is True
+    assert items[bob_id]["granteeName"] == "rf_bob"
+    assert [v["suiteName"] for v in items[bob_id]["viaSuites"]] == ["套件"]
+    assert items[carol_id]["direct"] is False
+    assert [v["suiteName"] for v in items[carol_id]["viaSuites"]] == ["套件"]
+
+    # 不在任何被引用 Suite 里的场景:空名单
+    r = await client.get("/api/shares/referrers?scenarioId=sc-rf-2",
+                         headers=owner)
+    assert r.json()["items"] == []
+
+    # 治理面闸:非属主 403;未知场景 404;admin 可查
+    # (rf_admin 是 fresh_db 首个注册者 = 真 admin,M2.5 口径)
+    assert (await client.get(
+        "/api/shares/referrers?scenarioId=sc-rf-1",
+        headers=carol)).status_code == 403
+    assert (await client.get(
+        "/api/shares/referrers?scenarioId=sc-none",
+        headers=owner)).status_code == 404
+    assert (await client.get(
+        "/api/shares/referrers?scenarioId=sc-rf-1",
+        headers=admin)).status_code == 200
+
+
 async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     """撤销:属主可撤(通知被分享人);admin 可撤(入审计);退订免通知。"""
     # fresh_db 下首个注册者 = 真 admin(M2.5 口径);rv_admin 即 admin

@@ -27,7 +27,10 @@ from ..models.composer_scenario import ComposerScenario
 from ..models.share_ref import ShareRef
 from ..models.suite import Suite, SuiteMember
 from ..models.user import User
-from ..schemas.share import ShareCopyOut, ShareCreateIn, ShareRefOut
+from ..schemas.share import (
+    ReferrerViaSuite, ScenarioReferrerOut, ScenarioReferrersOut,
+    ShareCopyOut, ShareCreateIn, ShareRefOut,
+)
 from ..services import audit as audit_svc
 from ..services import notifications as notify_svc
 from ..services import scenario_store
@@ -237,6 +240,61 @@ async def list_shares(
             member_count=(member_counts.get(r.suite_id, 0)
                           if r.suite_id is not None else None)))
     return out
+
+
+@router.get("/referrers", response_model=ScenarioReferrersOut)
+async def scenario_referrers(
+    user: CurrentUser, db: DbSession, scenarioId: str,
+) -> ScenarioReferrersOut:
+    """场景的全部引用人(§7.11 防误伤名单,属主治理面):直接引用 +
+    经由所属 Suite 的间接引用(§7.6 判定式,同一引用人合并成一行)。
+
+    保存提示与「已引用分享」徽标的数据源 —— 此前两者只查直接引用,
+    场景仅因所在 Suite 被分享而间接被引用时名单落空(重构方案补遗)。"""
+    scen = (await db.execute(select(ComposerScenario).where(
+        ComposerScenario.scenario_id == scenarioId))
+    ).scalar_one_or_none()
+    if scen is None:
+        raise HTTPException(404, "scenario_not_found")
+    if user.id != scen.owner_id and user.role != "admin":
+        raise HTTPException(403, "not_owner")
+
+    direct_refs = (await db.execute(select(ShareRef).where(
+        ShareRef.scenario_id == scenarioId))).scalars().all()
+    # 间接引用:场景所在 Suite(组合外键 ⇒ 与属主同源)上的引用行
+    suite_ids = select(SuiteMember.suite_id).where(
+        SuiteMember.scenario_id == scenarioId)
+    indirect_refs = (await db.execute(select(ShareRef).where(
+        ShareRef.suite_id.in_(suite_ids)))).scalars().all()
+    suite_names: dict[int, str] = {}
+    ids = {r.suite_id for r in indirect_refs if r.suite_id is not None}
+    if ids:
+        suite_names = dict((await db.execute(
+            select(Suite.id, Suite.name).where(Suite.id.in_(ids)))).all())
+    uids = {r.grantee_user_id for r in [*direct_refs, *indirect_refs]}
+    names: dict[int, str] = {}
+    if uids:
+        names = {u.id: (u.display_name or u.username)
+                 for u in (await db.execute(
+                     select(User).where(User.id.in_(uids)))).scalars()}
+
+    merged: dict[int, ScenarioReferrerOut] = {}
+
+    def _entry(grantee_id: int) -> ScenarioReferrerOut:
+        if grantee_id not in merged:
+            merged[grantee_id] = ScenarioReferrerOut(
+                granteeUserId=grantee_id,
+                granteeName=names.get(grantee_id, ""),
+                direct=False)
+        return merged[grantee_id]
+
+    for r in direct_refs:
+        _entry(r.grantee_user_id).direct = True
+    for r in indirect_refs:
+        _entry(r.grantee_user_id).viaSuites.append(ReferrerViaSuite(
+            suiteId=r.suite_id, suiteName=suite_names.get(r.suite_id, "")))
+    items = sorted(merged.values(), key=lambda m: m.granteeUserId)
+    return ScenarioReferrersOut(items=items)
 
 
 @router.delete("/{share_id}", status_code=204)

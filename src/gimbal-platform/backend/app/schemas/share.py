@@ -39,3 +39,31 @@ class ShareCopyOut(BaseModel):
     suiteId: int | None = None
     suiteName: str | None = None
     memberCount: int = 0
+
+
+class ReferrerViaSuite(BaseModel):
+    """间接引用的经由 Suite(§7.6 判定式的 suite 分支)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    suiteId: int
+    suiteName: str
+
+
+class ScenarioReferrerOut(BaseModel):
+    """场景的一名引用人:直接引用与经由 Suite 的间接引用合并成一行。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    granteeUserId: int
+    granteeName: str
+    direct: bool                      # 直接引用该场景
+    viaSuites: list[ReferrerViaSuite] = Field(default_factory=list)
+
+
+class ScenarioReferrersOut(BaseModel):
+    """§7.11 防误伤名单:保存提示与「已引用分享」徽标的数据源。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ScenarioReferrerOut]
