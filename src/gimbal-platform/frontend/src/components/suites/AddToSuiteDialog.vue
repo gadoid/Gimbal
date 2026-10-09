@@ -143,7 +143,7 @@ async function submit(): Promise<void> {
   border: 1px solid transparent;
 }
 .ats-item:hover { background: rgb(100 116 139 / 8%); }
-.ats-item.on { border-color: rgb(59 130 246 / 55%); background: rgb(59 130 246 / 10%); }
+.ats-item.on { border-color: var(--accent-soft-border); background: var(--accent-soft); }
 .ats-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ats-empty { padding: 12px 4px; font-size: 13px; color: var(--c-text-secondary, #64748b); }
 .muted { color: var(--c-text-tertiary, #94a3b8); font-size: 12px; }

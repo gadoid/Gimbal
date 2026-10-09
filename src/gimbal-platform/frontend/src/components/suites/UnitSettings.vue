@@ -177,8 +177,8 @@ function onMapRow(i: number, pos: 0 | 1, value: string): void {
 .uset {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   margin: 4px 0 6px 26px; padding: 8px 12px;
-  border: 1px solid rgb(59 130 246 / 30%); border-radius: 8px;
-  background: rgb(59 130 246 / 5%); font-size: 12px;
+  border: 1px solid var(--accent-soft-border); border-radius: 8px;
+  background: var(--accent-soft); font-size: 12px;
 }
 .uset-field { display: flex; align-items: center; gap: 6px; }
 .uset-field > span { color: rgb(100 116 139); }
@@ -211,7 +211,7 @@ function onMapRow(i: number, pos: 0 | 1, value: string): void {
 }
 .uset-map-add {
   align-self: flex-start; font-size: 11.5px; padding: 3px 9px;
-  border-radius: 6px; cursor: pointer; color: #2563eb;
-  background: rgb(59 130 246 / 8%); border: 1px solid rgb(59 130 246 / 45%);
+  border-radius: 6px; cursor: pointer; color: #4338ca; background: var(--accent-soft);
+  background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
 }
 </style>

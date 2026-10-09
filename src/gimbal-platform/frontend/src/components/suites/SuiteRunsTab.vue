@@ -332,10 +332,10 @@ void refresh()
 .srt-status { font-size: 12px; }
 .srt-status.ok { color: #15803d; }
 .srt-status.bad { color: #dc2626; }
-.srt-status.run { color: #2563eb; }
+.srt-status.run { color: #2f6fed; }
 .srt-status.muted { color: rgb(100 116 139); }
 .srt-ops { display: flex; gap: 10px; align-items: center; }
-.srt-ops a { color: #2563eb; text-decoration: none; font-size: 12px; }
+.srt-ops a { color: #4338ca; text-decoration: none; font-size: 12px; }
 .srt-rerun {
   font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
   color: #b45309; background: rgb(245 158 11 / 8%);
@@ -364,7 +364,7 @@ void refresh()
 .srt-units td { padding: 4px 8px; border-bottom: 1px solid rgb(100 116 139 / 10%); }
 .srt-unit-link {
   font-family: ui-monospace, monospace; font-size: 11.5px; cursor: pointer;
-  border: none; background: none; color: #2563eb; padding: 0;
+  border: none; background: none; color: #4338ca; padding: 0;
 }
 .muted { color: rgb(100 116 139); }
 </style>

@@ -144,12 +144,13 @@ watch(() => props.open, (v) => { if (v) void check() })
 .pf-msg { flex: 1; min-width: 0; }
 .pf-go {
   flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 6px; cursor: pointer;
-  color: #2563eb; background: rgb(59 130 246 / 8%); border: 1px solid rgb(59 130 246 / 45%);
+  color: #4338ca; background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
 }
 .btn-ghost, .btn-primary {
   padding: 7px 16px; font-size: 13px; border-radius: 8px; cursor: pointer;
 }
 .btn-ghost { border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit; }
-.btn-primary { font-weight: 600; border: none; color: #fff; background: #2563eb; }
+.btn-primary { font-weight: 600; border: none; color: #fff; background: #4338ca; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 </style>

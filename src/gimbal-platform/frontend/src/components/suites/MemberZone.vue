@@ -394,7 +394,7 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
   border: 1px dashed rgb(100 116 139 / 45%); border-radius: 10px;
   padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;
 }
-.mz-bracket.dragover { border-color: #2563eb; background: rgb(59 130 246 / 8%); }
+.mz-bracket.dragover { border-color: #4338ca; background: var(--accent-soft); }
 .mz-bracket-title { margin: 0; font-size: 12.5px; font-weight: 600; }
 .mz-bracket-hint { margin-left: 8px; font-weight: 400; font-size: 11.5px; color: rgb(100 116 139); }
 .mz-drop { margin: 0; font-size: 12px; color: rgb(100 116 139 / 80%); }
@@ -412,12 +412,12 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
 .mz-chain-num {
   flex: none; width: 22px; height: 22px; margin-top: 6px;
   display: grid; place-items: center; font-size: 11.5px;
-  border: 1px solid rgb(59 130 246 / 45%); border-radius: 999px; color: #2563eb;
+  border: 1px solid var(--accent-soft-border); border-radius: 999px; color: #4338ca;
   position: relative;
 }
 .mz-chain-step:not(:last-child) .mz-chain-num::after {
   content: ''; position: absolute; top: 22px; left: 50%;
-  width: 1px; height: 14px; background: rgb(59 130 246 / 40%);
+  width: 1px; height: 14px; background: var(--accent-soft-border);
 }
 .mz-chain-step { margin-bottom: 10px; }
 .mz-stepto {

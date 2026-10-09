@@ -103,7 +103,7 @@ onMounted(() => void load())
 .sdrw-in { flex: none; font-size: 11px; color: rgb(100 116 139); }
 .sdrw-add {
   flex: none; width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
-  border: 1px solid rgb(59 130 246 / 45%); color: #2563eb; background: transparent;
+  border: 1px solid var(--accent-soft-border); color: #4338ca; background: transparent;
   font-size: 14px; line-height: 1;
 }
 .sdrw-empty { font-size: 12px; color: rgb(100 116 139); padding: 10px 0; text-align: center; }

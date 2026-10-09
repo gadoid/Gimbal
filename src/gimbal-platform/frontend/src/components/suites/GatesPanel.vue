@@ -352,8 +352,8 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
 .gpan-gate { display: flex; align-items: center; gap: 6px; }
 .gpan-gate-chip {
   font-size: 12px; padding: 4px 10px; border-radius: 999px;
-  color: #1d4ed8; background: rgb(59 130 246 / 10%);
-  border: 1px solid rgb(59 130 246 / 40%);
+  color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
 .gpan-x {
   width: 20px; height: 20px; border-radius: 6px; cursor: pointer;
@@ -364,8 +364,8 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
 .gpan-add input { width: 76px; }
 .gpan-add-btn {
   font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
-  color: #2563eb; background: rgb(59 130 246 / 8%);
-  border: 1px solid rgb(59 130 246 / 45%);
+  color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
 .gpan-check {
   display: flex; align-items: flex-start; gap: 8px; font-size: 12px;
@@ -400,8 +400,8 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
 .gpan-ref.on {
-  color: #1d4ed8; background: rgb(59 130 246 / 10%);
-  border-color: rgb(59 130 246 / 45%);
+  color: #4338ca; background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
 }
 .mono { font-family: ui-monospace, monospace; }
 </style>

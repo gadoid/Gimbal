@@ -378,7 +378,7 @@ const flowEdges = computed<Edge[]>(() => {
       if (!mainIds.value.includes(consumer) || !mainIds.value.includes(p)) continue
       out.push({
         id: `${p}->${consumer}`, source: p, target: consumer,
-        style: { stroke: '#94a3b8', strokeWidth: 1.6 },
+        style: { stroke: 'var(--color-text-tertiary)', strokeWidth: 1.6 },
       })
     }
   }
@@ -396,7 +396,7 @@ const flowEdges = computed<Edge[]>(() => {
   for (const r of mainIds.value.filter((id) => inDeg[id] === 0)) {
     out.push({
       id: `start->${r}`, source: 'start', target: r,
-      style: { stroke: '#cbd5e1', strokeWidth: 1.2 },
+      style: { stroke: 'var(--color-border-secondary)', strokeWidth: 1.2 },
     })
   }
   return out
@@ -975,12 +975,17 @@ defineExpose({ addEdge, addUnit })
 </script>
 
 <style scoped>
-.scp { display: flex; flex-direction: column; gap: 12px; }
-.scp-loading { padding: 40px; color: #64748b; }
+/* 容器与管理页/列表页同款节奏(.slib 规范:1480 居中 + 56/32/48) */
+.scp {
+  box-sizing: border-box; max-width: 1480px; min-width: 0;
+  margin: 0 auto; padding: 56px 32px 48px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.scp-loading { padding: 40px; color: var(--color-text-secondary); }
 
 .scp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .scp-head-main { flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px; }
-.scp-back { font-size: 12px; color: #64748b; text-decoration: none; }
+.scp-back { font-size: 12px; color: var(--color-text-secondary); text-decoration: none; }
 .scp-back:hover { text-decoration: underline; }
 .scp-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .scp-name {
@@ -989,14 +994,14 @@ defineExpose({ addEdge, addUnit })
   margin-left: -6px; background: transparent;
 }
 .scp-name:hover, .scp-name:focus { border-color: rgb(199 210 254); background: #fff; }
-.scp-save { font-size: 12px; color: #64748b; }
+.scp-save { font-size: 12px; color: var(--color-text-secondary); }
 .scp-actions { display: flex; gap: 10px; }
 .scp-ghost {
   height: 36px; padding: 0 14px; border: 1px solid rgb(199 210 254);
-  border-radius: 6px; background: #eef2ff; color: #4338ca;
+  border-radius: 6px; background: var(--accent-soft); color: #4338ca;
   font: inherit; font-weight: 600; cursor: pointer;
 }
-.scp-ghost:disabled { border-color: #e2e8f0; background: #fff; color: #94a3b8; cursor: not-allowed; }
+.scp-ghost:disabled { border-color: var(--color-border-tertiary); background: #fff; color: var(--color-text-tertiary); cursor: not-allowed; }
 .scp-primary {
   height: 36px; padding: 0 16px; border: 0; border-radius: 6px;
   background: #4338ca; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
@@ -1008,41 +1013,41 @@ defineExpose({ addEdge, addUnit })
 }
 .scp-center { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .scp-rail {
-  flex: 1 1 260px; max-width: 320px; border: 1px solid #e2e8f0; border-radius: 10px;
+  flex: 1 1 260px; max-width: 320px; border: 1px solid var(--color-border-tertiary); border-radius: 10px;
   padding: 14px; display: flex; flex-direction: column; gap: 10px;
-  background: #fff; color: #1f2933;
+  background: #fff; color: var(--color-text-primary);
 }
 
 .scp-strip {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff;
+  padding: 8px 12px; border: 1px dashed var(--color-border-secondary); border-radius: 8px; background: #fff;
   min-height: 36px;
 }
-.scp-strip-title { font-size: 12px; font-weight: 600; color: #64748b; }
-.scp-strip-hint { font-size: 12px; color: #94a3b8; }
+.scp-strip-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); }
+.scp-strip-hint { font-size: 12px; color: var(--color-text-tertiary); }
 .scp-strip-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px;
-  border-radius: 4px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 12px;
+  border-radius: 4px; background: #f8fafc; border: 1px solid var(--color-border-tertiary); font-size: 12px;
 }
-.scp-strip-chip .mono { color: #64748b; font-size: 11px; }
-.scp-strip-chip button { border: 0; background: none; cursor: pointer; color: #64748b; }
+.scp-strip-chip .mono { color: var(--color-text-secondary); font-size: 11px; }
+.scp-strip-chip button { border: 0; background: none; cursor: pointer; color: var(--color-text-secondary); }
 
 .scp-canvas {
-  position: relative; height: 480px; overflow: hidden;
-  border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
+  position: relative; height: 500px; overflow: hidden;
+  border: 1px solid var(--color-border-tertiary); border-radius: 10px; background: #fff;
 }
 .scp-canvas :deep(.vue-flow__pane) {
-  background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+  background-image: radial-gradient(var(--color-border-tertiary) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 .scp-empty {
   position: absolute; left: 140px; top: 40%; z-index: 4; pointer-events: none;
   width: 260px; padding: 18px; box-sizing: border-box;
-  border: 2px dashed #c7d2fe; border-radius: 10px; background: #eef2ff;
+  border: 2px dashed var(--accent-soft-border); border-radius: 10px; background: var(--accent-soft);
   display: flex; flex-direction: column; align-items: center; gap: 2px; color: #4338ca;
 }
 .scp-empty strong { font-weight: 600; }
-.scp-empty span { font-size: 12px; color: #64748b; }
+.scp-empty span { font-size: 12px; color: var(--color-text-secondary); }
 .scp-cycle {
   position: absolute; right: 14px; bottom: 14px; z-index: 5; max-width: 320px;
   padding: 8px 10px; border-radius: 6px; background: #fee2e2; color: #991b1b;
@@ -1051,7 +1056,7 @@ defineExpose({ addEdge, addUnit })
 
 .scu {
   width: 176px; height: 56px; box-sizing: border-box; padding: 6px 12px;
-  border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1f2933;
+  border: 1px solid var(--color-border-secondary); border-radius: 8px; background: #fff; color: var(--color-text-primary);
   display: flex; flex-direction: column; justify-content: center; cursor: grab;
 }
 .scu.sel { border: 2px solid #4338ca; box-shadow: 0 1px 6px rgb(67 56 202 / 12%); }
@@ -1063,52 +1068,52 @@ defineExpose({ addEdge, addUnit })
 }
 .scu-handle-in {
   width: 8px !important; height: 8px !important; left: -5px !important;
-  border: 2px solid #c7d2fe !important; background: #fff !important;
+  border: 2px solid var(--accent-soft-border) !important; background: #fff !important;
 }
 .scs {
   width: 150px; height: 48px; box-sizing: border-box; padding: 6px 12px;
-  border: 1.5px dashed #4338ca; border-radius: 8px; background: #eef2ff;
+  border: 1.5px dashed #4338ca; border-radius: 8px; background: var(--accent-soft);
   opacity: 0.85; display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 .scs-label { color: #4338ca; font-size: 12.5px; font-weight: 600; }
-.scs-x { border: 0; background: none; color: #94a3b8; cursor: pointer; font-size: 14px; }
+.scs-x { border: 0; background: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; }
 .scstart {
-  width: 88px; height: 40px; border-radius: 9999px; background: #1f2933; color: #f5f3ff;
+  width: 88px; height: 40px; border-radius: 9999px; background: var(--color-text-primary); color: #f5f3ff;
   display: flex; align-items: center; justify-content: center; font-weight: 600;
 }
 
 .scp-status {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-  padding: 10px 14px; border: 1px solid #c7d2fe; border-radius: 8px; background: #fff;
+  padding: 10px 14px; border: 1px solid var(--accent-soft-border); border-radius: 8px; background: #fff;
 }
-.scp-status-label { font-size: 12px; color: #64748b; }
+.scp-status-label { font-size: 12px; color: var(--color-text-secondary); }
 .scp-mode-chip {
-  padding: 2px 10px; border-radius: 4px; background: #eef2ff; color: #4338ca;
+  padding: 2px 10px; border-radius: 4px; background: var(--accent-soft); color: #4338ca;
   font-weight: 600;
 }
 .scp-stats { font-size: 12px; }
-.scp-why { flex: 1 1 240px; font-size: 12px; color: #64748b; }
+.scp-why { flex: 1 1 240px; font-size: 12px; color: var(--color-text-secondary); }
 .scp-q {
-  width: 24px; height: 24px; border: 1px solid #c7d2fe; border-radius: 9999px;
+  width: 24px; height: 24px; border: 1px solid var(--accent-soft-border); border-radius: 9999px;
   background: #fff; color: #4338ca; font-weight: 600; cursor: pointer;
 }
 
 .scp-rail-title { margin: 0; font-size: 14px; font-weight: 600; }
-.scp-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: #64748b; }
-.scp-steps b { color: #1f2933; }
-.scp-rail-note { margin: 0; font-size: 12px; color: #64748b; }
+.scp-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--color-text-secondary); }
+.scp-steps b { color: var(--color-text-primary); }
+.scp-rail-note { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
 .scp-linklike { border: 0; background: none; color: #4338ca; cursor: pointer; padding: 0; font-size: 12px; }
-.scp-rail-cap { font-size: 11px; color: #64748b; }
+.scp-rail-cap { font-size: 11px; color: var(--color-text-secondary); }
 .scp-sel-title { font-size: 14px; font-weight: 600; }
-.scp-sel-sid { font-size: 11px; color: #94a3b8; }
-.scp-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b; }
+.scp-sel-sid { font-size: 11px; color: var(--color-text-tertiary); }
+.scp-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
 .scp-field-label { font-weight: 500; }
 .scp-ref-in, .scp-finish input {
-  height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px;
-  font: inherit; font-size: 12.5px; color: #1f2933;
+  height: 30px; padding: 0 8px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
+  font: inherit; font-size: 12.5px; color: var(--color-text-primary);
 }
 .scp-danger {
-  height: 30px; border: 1px solid #e2e8f0; border-radius: 6px;
+  height: 30px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
   background: #fff; color: #ef4444; font: inherit; font-size: 12px; cursor: pointer;
 }
 
@@ -1117,8 +1122,8 @@ defineExpose({ addEdge, addUnit })
   justify-content: center; background: rgb(15 23 42 / 45%); padding: 16px;
 }
 .scp-finish {
-  width: min(420px, 100%); background: #fff; border: 1px solid #c7d2fe; border-radius: 10px;
-  padding: 16px; display: flex; flex-direction: column; gap: 10px; color: #1f2933;
+  width: min(420px, 100%); background: #fff; border: 1px solid var(--accent-soft-border); border-radius: 10px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--color-text-primary);
   box-shadow: 0 20px 50px rgb(0 0 0 / 12%);
 }
 .scp-finish h2 { margin: 0; font-size: 14px; }
@@ -1129,7 +1134,7 @@ defineExpose({ addEdge, addUnit })
 .scp-fcheck { font-size: 12px; color: #166534; }
 .scp-fcheck.bad { color: #b45309; }
 .scp-fafter { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.scp-fafter legend { font-weight: 500; color: #64748b; margin-bottom: 4px; }
+.scp-fafter legend { font-weight: 500; color: var(--color-text-secondary); margin-bottom: 4px; }
 .scp-facts { display: flex; justify-content: flex-end; gap: 8px; }
 
 .mono { font-family: ui-monospace, Menlo, monospace; }

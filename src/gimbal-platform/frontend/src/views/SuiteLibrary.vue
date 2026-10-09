@@ -363,7 +363,7 @@ onMounted(() => void loadShareBadges())
   border-right: 1px solid rgb(100 116 139 / 18%); white-space: nowrap;
 }
 .slib-mode:last-child { border-right: none; }
-.slib-mode.on { background: #2563eb; color: #fff; font-weight: 600; }
+.slib-mode.on { background: var(--accent-soft); color: #4338ca; font-weight: 600; }
 .slib-lens {
   flex: none; font-size: 12px; padding: 7px 12px; border-radius: 8px;
   cursor: pointer; color: var(--sl-ink-soft, #64748b); background: transparent;
@@ -374,14 +374,15 @@ onMounted(() => void loadShareBadges())
   background: rgb(59 130 246 / 10%);
 }
 .slib-public-link {
-  font-size: 12.5px; color: #2563eb; text-decoration: none; white-space: nowrap;
-  padding: 7px 10px; border-radius: 8px; border: 1px solid rgb(59 130 246 / 35%);
+  font-size: 12.5px; color: #4338ca; text-decoration: none; white-space: nowrap;
+  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
 }
 .slib-create {
   margin-left: auto; padding: 8px 14px; font-size: 13px; font-weight: 600;
   white-space: nowrap; border-radius: 8px; border: none; cursor: pointer;
-  color: #fff; background: #2563eb;
+  color: #fff; background: #4338ca;
 }
+.slib-create:hover { background: var(--accent-hover); }
 .slib-create:disabled { opacity: .5; cursor: not-allowed; }
 .lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; overflow: hidden; }
 .slib-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -432,8 +433,8 @@ onMounted(() => void loadShareBadges())
 .ops { display: flex; gap: 8px; align-items: center; }
 .run-btn {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #2563eb; background: rgb(59 130 246 / 8%);
-  border: 1px solid rgb(59 130 246 / 45%);
+  color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
 .run-btn:disabled { opacity: .4; cursor: not-allowed; }
 .more-btn {
@@ -456,7 +457,7 @@ onMounted(() => void loadShareBadges())
   color: #15803d; background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%); font-weight: 400;
 }
-.cta { color: #2563eb; background: none; border: none; cursor: pointer; font-size: 13px; }
+.cta { color: #4338ca; background: none; border: none; cursor: pointer; font-size: 13px; }
 .unsub-btn {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
   color: #b45309; background: rgb(245 158 11 / 8%);

@@ -65,18 +65,16 @@ const meta = computed(() => modeMeta(props.mode))
 }
 .mbar-tag { font-size: 12px; color: rgb(100 116 139); }
 .mbar-seg {
-  display: inline-flex; border: 1px solid rgb(100 116 139 / 30%);
-  border-radius: 8px; overflow: hidden;
+  display: inline-flex; gap: 6px; flex-wrap: wrap;
 }
 .mbar-opt {
-  padding: 6px 14px; font-size: 12.5px; cursor: pointer;
-  border: none; background: transparent; color: inherit;
-  border-right: 1px solid rgb(100 116 139 / 20%);
-  white-space: nowrap;
+  padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  border: 1px solid var(--color-border-tertiary); background: #fff; color: inherit;
+  border-radius: 8px; white-space: nowrap;
 }
-.mbar-opt:last-child { border-right: none; }
 .mbar-opt.on {
-  background: #2563eb; color: #fff; font-weight: 600;
+  border: 1.5px solid #4338ca; background: var(--accent-soft);
+  color: #4338ca; font-weight: 600;
 }
 .mbar-opt:disabled { cursor: not-allowed; opacity: .55; }
 .mbar-desc { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 2px; }
@@ -89,5 +87,5 @@ const meta = computed(() => modeMeta(props.mode))
   border: 1px solid rgb(100 116 139 / 30%); white-space: nowrap;
 }
 .mbar-ghost:disabled { cursor: not-allowed; opacity: .5; }
-.canvas-link:not(:disabled) { color: #2563eb; border-color: rgb(59 130 246 / 45%); }
+.canvas-link:not(:disabled) { color: #4338ca; border-color: var(--accent-soft-border); }
 </style>

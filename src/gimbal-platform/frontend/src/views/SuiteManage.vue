@@ -15,18 +15,20 @@
     <div class="sm-head">
       <router-link to="/suites" class="sm-back">← Suite</router-link>
       <div class="sm-head-main">
-        <h1 class="sm-title" data-testid="suite-manage-name">
-          {{ detail.name }}
-          <span v-if="detail.isDraft" class="sm-draft-chip" title="草稿:不出现在发布/分享,空草稿 30 天自动清理">草稿</span>
-          <span v-if="detail.visibility === 'public'" class="sm-pub-chip">公共</span>
-          <span v-if="detail.access === 'ref'" class="sm-ref-chip">引用</span>
-        </h1>
-        <p class="sm-meta">
-          {{ detail.members.length }} 个成员 ·
-          <template v-if="saveState === 'saving'">保存中…</template>
-          <template v-else-if="saveState === 'dirty'">未保存的改动…</template>
-          <template v-else>已自动保存 {{ savedAt }}</template>
-        </p>
+        <div class="sm-title-row">
+          <h1 class="sm-title" data-testid="suite-manage-name">
+            {{ detail.name }}
+            <span v-if="detail.isDraft" class="sm-draft-chip" title="草稿:不出现在发布/分享,空草稿 30 天自动清理">草稿</span>
+            <span v-if="detail.visibility === 'public'" class="sm-pub-chip">公共</span>
+            <span v-if="detail.access === 'ref'" class="sm-ref-chip">引用</span>
+          </h1>
+          <p class="sm-meta">
+            {{ detail.members.length }} 个成员 ·
+            <template v-if="saveState === 'saving'">保存中…</template>
+            <template v-else-if="saveState === 'dirty'">未保存的改动…</template>
+            <template v-else>已自动保存 {{ savedAt }}</template>
+          </p>
+        </div>
       </div>
       <div class="sm-head-actions">
         <button
@@ -686,14 +688,25 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 </script>
 
 <style scoped>
-.sm { display: flex; flex-direction: column; gap: 14px; position: relative; }
-.sm-head { display: flex; align-items: flex-start; gap: 14px; }
-.sm-back { font-size: 12.5px; color: #2563eb; text-decoration: none; padding-top: 6px; white-space: nowrap; }
-.sm-head-main { flex: 1; min-width: 0; }
-.sm-title {
-  margin: 0; font-size: 17px; font-weight: 700; display: flex; align-items: center;
-  gap: 8px; flex-wrap: wrap;
+/* 容器与列表/工作台页同款节奏(.slib 规范:1480 居中 + 56/32/48) */
+.sm {
+  box-sizing: border-box; max-width: 1480px; min-width: 0;
+  margin: 0 auto; padding: 56px 32px 48px;
+  display: flex; flex-direction: column; gap: 14px; position: relative;
 }
+.sm-head { display: flex; align-items: flex-start; gap: 14px; }
+.sm-back {
+  font-size: 12px; color: var(--color-text-secondary); text-decoration: none;
+  padding-top: 4px; white-space: nowrap;
+}
+.sm-back:hover { color: #4338ca; }
+.sm-head-main { flex: 1; min-width: 0; }
+.sm-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sm-title {
+  margin: 0; font-size: 22px; font-weight: 600; line-height: 1.25;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.sm-meta { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
 .sm-draft-chip {
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
   color: #b45309; background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%);
@@ -706,19 +719,21 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
   color: #6d28d9; background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
 }
-.sm-meta { margin: 4px 0 0; font-size: 12px; color: rgb(100 116 139); }
 .sm-head-actions { display: flex; align-items: center; gap: 8px; }
+/* 运行主按钮(原型 20):44px 双行 indigo,副行浅 indigo */
 .sm-run {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  padding: 7px 16px; border: none; border-radius: 8px; cursor: pointer;
-  color: #fff; background: #2563eb;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 1px; box-sizing: border-box; height: 44px; padding: 0 18px;
+  border: none; border-radius: 6px; cursor: pointer; line-height: 1.2;
+  color: #fff; background: #4338ca;
 }
+.sm-run:hover:not(:disabled) { background: var(--accent-hover); }
 .sm-run:disabled { opacity: .5; cursor: not-allowed; }
-.sm-run-main { font-size: 13px; font-weight: 700; line-height: 1.2; }
-.sm-run-sub { font-size: 10.5px; opacity: .85; }
+.sm-run-main { font-size: 13px; font-weight: 600; }
+.sm-run-sub { font-size: 11px; color: var(--accent-soft-border); }
 .sm-more {
-  width: 32px; height: 34px; border-radius: 8px; cursor: pointer;
-  border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
+  width: 36px; height: 36px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--color-border-tertiary); background: #fff; color: inherit;
   font-size: 15px;
 }
 .sm-banner {
@@ -744,10 +759,24 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 .sm-banner-ops { margin-left: auto; display: flex; gap: 8px; }
 .sm-banner-ops button, .sm-banner.draft button {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #2563eb; background: rgb(59 130 246 / 8%);
-  border: 1px solid rgb(59 130 246 / 45%);
+  color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
 .sm-tabs { display: flex; flex-direction: column; gap: 12px; }
+/* 页签 = 原型 20 下划线式(灰底胶囊是组件默认样式,按 role 覆写) */
+.sm-tabs :deep([role='tablist']) {
+  display: flex; gap: 20px; border-bottom: 1px solid var(--color-border-tertiary);
+  background: transparent; border-radius: 0; padding: 0;
+}
+.sm-tabs :deep([role='tab']) {
+  padding: 8px 2px; margin-bottom: -1px; border-radius: 0;
+  background: transparent; box-shadow: none;
+  font-size: 13px; color: var(--color-text-secondary);
+}
+.sm-tabs :deep([role='tab'][data-state='active']) {
+  border-bottom: 2px solid #4338ca; font-weight: 600;
+  color: var(--color-text-primary); box-shadow: none;
+}
 .sm-pane { display: flex; flex-direction: column; gap: 12px; }
 .sm-cols {
   display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px;
@@ -759,7 +788,7 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 }
 .sm-menu-mask { position: fixed; inset: 0; z-index: 30; }
 .sm-menu {
-  position: absolute; right: 16px; top: 96px; z-index: 31;
+  position: absolute; right: 32px; top: 132px; z-index: 31;
   display: flex; flex-direction: column; min-width: 170px;
   border: 1px solid rgb(100 116 139 / 30%); border-radius: 10px;
   background: var(--c-bg, #fff); box-shadow: 0 8px 24px rgb(15 23 42 / 14%);
@@ -775,10 +804,10 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 .sm-loading, .sm-empty { padding: 40px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
 .btn-primary {
   padding: 7px 16px; font-size: 13px; font-weight: 600; border: none;
-  border-radius: 8px; cursor: pointer; color: #fff; background: #2563eb;
+  border-radius: 8px; cursor: pointer; color: #fff; background: #4338ca;
 }
 .btn-secondary {
   padding: 7px 14px; font-size: 13px; border-radius: 8px; cursor: pointer;
-  border: 1px solid rgb(59 130 246 / 45%); color: #2563eb; background: rgb(59 130 246 / 8%);
+  border: 1px solid var(--accent-soft-border); color: #4338ca; background: var(--accent-soft);
 }
 </style>
