@@ -1048,7 +1048,12 @@ async def _fanout_graph(
         await ingester.finalize()
         return
 
-    proj = {"unit": None, "status": None, "attempts": 0}
+    # 逐单元事件投影(重构方案第 3 处):unit → {started_at, finished_at,
+    # status};blocked/cancelled 单元不发事件,从 run.finished.details 按
+    # unit id 补齐。总状态不再取「最后一个 scenario.end」—— 后置通过
+    # 会覆盖主体失败、判定门失败只改 exit_code 会被吞。
+    unit_events: dict[str, dict] = {}
+    proj = {"attempts": 0}
     status = "failed"
     result = None
     try:
@@ -1059,23 +1064,40 @@ async def _fanout_graph(
 
         def _on_event(d: dict) -> None:
             et = d.get("event_type")
-            if et == "scenario.end":
-                proj["status"] = d.get("status")
-                proj["unit"] = d.get("unit") or proj["unit"]
+            if et == "scenario.start":
+                u = d.get("unit")
+                if u:
+                    unit_events.setdefault(u, {}).setdefault(
+                        "started_at", d.get("timestamp"))
+            elif et == "scenario.end":
+                u = d.get("unit")
+                if u:
+                    e = unit_events.setdefault(u, {})
+                    e["finished_at"] = d.get("timestamp")
+                    e["status"] = d.get("status")
             elif et == "run.finished":
                 proj["attempts"] = int(d.get("attempts") or 0)
-                proj["unit"] = d.get("unit") or proj["unit"]
+                details = d.get("details")
+                if isinstance(details, list):
+                    for row in details:
+                        if not isinstance(row, dict):
+                            continue
+                        uid = row.get("unit") or row.get("unit_id")
+                        st = row.get("status")
+                        if (uid and st in ("blocked", "canceled",
+                                           "cancelled", "halted")
+                                and uid not in unit_events):
+                            unit_events[uid] = {"status": st}
             ingester.on_event(d)
 
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
             on_event=_on_event, on_log=ingester.on_log, chain=chain)
         if result.launch_status == "ok":
-            if proj["status"] is not None:
-                status = "passed" if proj["status"] == "passed" else "failed"
-            else:
-                status = "passed" if result.exit_code == 0 else (
-                    "gimbal_rejected" if result.exit_code == 2 else "failed")
+            # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
+            # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉
+            status = "passed" if result.exit_code == 0 else (
+                "gimbal_rejected" if result.exit_code == 2 else "failed")
         else:
             status = ("launch_timeout"
                       if result.launch_status == "timeout" else "launch_error")
@@ -1089,46 +1111,83 @@ async def _fanout_graph(
     finally:
         await ingester.finalize()
 
-    # 台账:graph 执行记一个「图行」(unit_id=graph,attempts 取投影)
+    # 台账(重构方案第 3 处):seq=0 图行(与 at-most-once 恢复路径同形)
+    # + seq=1..n 逐单元行(按物化单元清单顺序;×重复变体按 unit 标签
+    # `ref#k` 追加在基座 ref 之后)。无事件且无 details 的单元按
+    # blocked 记(被 control.only 裁剪 / 未跑)。
     finished_ts = _utcnow().isoformat() + "Z"
     _row_states[execution_id] = []   # 无行级 registry;读侧回落 DB
     from ..models.execution import ExecutionRow
-    passed = 1 if status == "passed" else 0
+    ordered_units: list[tuple[str, dict]] = []
+    for u in [*graph_spec.get("before", []),
+              *graph_spec.get("units", []),
+              *graph_spec.get("after", [])]:
+        ref = u.get("ref")
+        if not ref:
+            continue
+        evs = sorted(
+            ((k, v) for k, v in unit_events.items()
+             if k == ref or k.startswith(ref + "#")),
+            key=lambda kv: kv[0])
+        if not evs:
+            evs = [(ref, {"status": "blocked"})]
+        ordered_units.extend(evs)
+    attempts_total = proj["attempts"] or int(
+        getattr(result, "attempts", 0) or 0) or 1
+    rows_to_write: list[dict] = [
+        {"seq": 0, "unit_id": "graph", "status": status,
+         "attempts": attempts_total}]
+    for idx, (uid, ev) in enumerate(ordered_units, start=1):
+        rows_to_write.append({
+            "seq": idx, "unit_id": uid,
+            "status": ev.get("status") or "blocked",
+            "attempts": 1,
+            "started_at": _iso_to_dt(ev["started_at"])
+            if ev.get("started_at") else None,
+            "finished_at": _iso_to_dt(ev["finished_at"])
+            if ev.get("finished_at") else None,
+        })
     try:
         from sqlalchemy.exc import IntegrityError
 
         async with db_factory() as session:
-            session.add(ExecutionRow(
-                execution_id=execution_id, seq=0,
-                unit_id=proj["unit"] or "graph", branch="graph",
-                attempts=proj["attempts"] or int(
-                    getattr(result, "attempts", 0) or 0) or 1,
-                status=status, case_dir="case-graph",
-                started_at=None, finished_at=_iso_to_dt(finished_ts)))
+            for r in rows_to_write:
+                session.add(ExecutionRow(
+                    execution_id=execution_id, seq=r["seq"],
+                    unit_id=r["unit_id"], branch="graph",
+                    attempts=r["attempts"], status=r["status"],
+                    case_dir="case-graph",
+                    started_at=r.get("started_at"),
+                    finished_at=r.get("finished_at")
+                    or _iso_to_dt(finished_ts)))
             try:
                 await session.commit()
             except IntegrityError:
-                # P3.5-2:job 重跑 graph 执行 —— 图行 upsert(恢复时 graph
+                # P3.5-2:job 重跑 graph 执行 —— 行 upsert(恢复时 graph
                 # 整图重放,事件 seq 已由 ingester 续接)
                 await session.rollback()
                 from sqlalchemy import update as _upd
 
-                await session.execute(
-                    _upd(ExecutionRow)
-                    .where(ExecutionRow.execution_id == execution_id,
-                           ExecutionRow.seq == 0)
-                    .values(status=status,
-                            unit_id=proj["unit"] or "graph",
-                            attempts=proj["attempts"] or int(
-                                getattr(result, "attempts", 0) or 0) or 1,
-                            finished_at=_iso_to_dt(finished_ts)))
+                for r in rows_to_write:
+                    await session.execute(
+                        _upd(ExecutionRow)
+                        .where(ExecutionRow.execution_id == execution_id,
+                               ExecutionRow.seq == r["seq"])
+                        .values(status=r["status"], unit_id=r["unit_id"],
+                                attempts=r["attempts"],
+                                finished_at=r.get("finished_at")
+                                or _iso_to_dt(finished_ts)))
                 await session.commit()
     except Exception:  # noqa: BLE001
         pass
-    # 计数与终态
+    # 计数与终态(计数按单元累加;blocked/cancelled 入 skipped)
+    n_pass = sum(1 for _, ev in ordered_units if ev.get("status") == "passed")
+    n_fail = sum(1 for _, ev in ordered_units
+                 if ev.get("status") in ("failed", "error", "halted"))
     await _bump_counters(db_factory, execution_id,
-                         passed=passed, failed=1 - passed,
-                         skipped=int(getattr(result, "skipped", 0) or 0))
+                         passed=n_pass,
+                         failed=n_fail,
+                         skipped=max(len(ordered_units) - n_pass - n_fail, 0))
     await _finalize_execution(db_factory, execution_id)
 
 
@@ -2268,11 +2327,16 @@ async def _create_execution(
     scenario_snapshot: dict | None = None,
     batch_id: str | None = None,
     scenario_name: str = "",
+    kind: str = "scenario",
+    suite_id: int | None = None,
 ) -> Execution:
     """Insert an Execution row(+ 拆表后的快照行)。
 
     M2:scenario_snapshot 大 JSON 移入 execution_snapshots(1:1),
     executions 主表只留台账轻列(scenario_name/owner_name 快照)。
+    重构方案 0014:kind = scenario(默认)/ suite_graph(编排执行,
+    scenario_id 写占位 suite-<id>);suite_id 供 21 页归并,无 FK
+    (执行台账归执行人,历史不随 Suite 删除消失)。
     """
     owner_name = (await db.execute(
         select(User.display_name, User.username).where(User.id == owner_id)
@@ -2280,6 +2344,8 @@ async def _create_execution(
     ex = Execution(
         scenario_id=scenario_id,
         scenario_name=scenario_name,
+        kind=kind,
+        suite_id=suite_id,
         owner_id=owner_id,
         owner_name=(owner_name[0] or owner_name[1]) if owner_name else "",
         status=STATUS_QUEUED,

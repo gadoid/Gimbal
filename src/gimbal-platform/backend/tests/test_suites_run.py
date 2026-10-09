@@ -113,7 +113,8 @@ async def test_run_suite_dup_guard_per_initiator(client: AsyncClient) -> None:
     detail = r.json()["detail"]
     assert detail["code"] == "suite_run_in_progress"
     assert detail["batchId"] == fake_batch
-    assert f"batchId={fake_batch}" in detail["link"]
+    # 重构方案顺手修正:409 深链参数 batchId= -> batch_id=
+    assert f"batch_id={fake_batch}" in detail["link"]
 
     # admin(另一发起人)发起自己的批次:不受 bob 在途批次影响
     admin = await register_and_login(client, "dg_admin", "dg_admin_pass123")

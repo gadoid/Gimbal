@@ -115,12 +115,77 @@ class TestGraphRunEndToEnd:
         assert graph["gates"] == [{"metric": "pass_rate", "op": "gte",
                                    "value": 1.0}]
 
-        # 台账:graph 行(unit/attempts 投影)
+        # 台账(重构方案第 3 处):seq=0 图行(总状态/attempts)+
+        # seq=1.. 逐单元行(a 有事件 → passed;b 无事件 → blocked)
         async with db_module.SessionLocal() as s:
-            row = (await s.execute(sa.select(ExecutionRow).where(
-                ExecutionRow.execution_id == exec_id))).scalar_one()
-            assert row.unit_id == "a" and row.attempts == 3
-            assert row.status == "passed"
+            rows = (await s.execute(sa.select(ExecutionRow).where(
+                ExecutionRow.execution_id == exec_id)
+                .order_by(ExecutionRow.seq))).scalars().all()
+        assert [(r.seq, r.unit_id, r.status) for r in rows] == [
+            (0, "graph", "passed"), (1, "a", "passed"), (2, "b", "blocked")]
+        assert rows[0].attempts == 3
+
+    async def test_total_status_follows_exit_code(self, client, monkeypatch):
+        """总状态取 run.finished 的 exit_code(第 3 处修正):主体失败、
+        后置 teardown 通过时不得被「最后一个 scenario.end」覆盖成通过;
+        计数按单元累累加。"""
+        await register_and_login(client, "ts_boot", "ts_bootpass123")
+        h = await register_and_login(client, "ts_owner", "ts_ownerpass123")
+        await _mk_scenario(client, h, "sc-ts-a")
+        await _mk_scenario(client, h, "sc-ts-b")
+
+        async def _launch(case_path, *, on_event=None, **_kw):
+            for ev in [
+                {"event_type": "scenario.end", "seq": 2, "unit": "main",
+                 "scenario_id": "sc-ts-a", "status": "failed",
+                 "timestamp": "2026-10-09T07:00:00+00:00"},
+                # 后置通过 —— 旧口径会把它当作总状态
+                {"event_type": "scenario.end", "seq": 3, "unit": "teardown",
+                 "scenario_id": "sc-ts-b", "status": "passed",
+                 "timestamp": "2026-10-09T07:00:01+00:00"},
+                {"event_type": "run.finished", "seq": 4, "exit_code": 1,
+                 "attempts": 2},
+            ]:
+                if on_event is not None:
+                    on_event(dict(ev))
+                await asyncio.sleep(0)
+            from app.services.gimbal_launcher import LaunchResult
+            return LaunchResult(launch_status="ok", exit_code=1,
+                                total=2, passed=1, failed=1)
+
+        from app.services import graph_dispatch as gd
+        monkeypatch.setattr(gd, "launch", _launch)
+
+        async def _fake_convert(scenario):
+            return {"consumer": "platform", "converted": dict(scenario)}
+        from app.services import plate_client as pc
+        monkeypatch.setattr(pc, "convert", _fake_convert)
+
+        r = await client.post("/api/runs", headers=h, json={
+            "scenarioId": "sc-ts-a",
+            "graph": {"mode": "compose",
+                      "units": [{"ref": "main", "scenarioId": "sc-ts-a"}],
+                      "after": [{"ref": "teardown", "scenarioId": "sc-ts-b"}]},
+        })
+        assert r.status_code == 201, r.text
+        exec_id = r.json()["executionId"]
+        ex = None
+        for _ in range(400):
+            async with db_module.SessionLocal() as s:
+                ex = await s.get(Execution, exec_id)
+            if ex and ex.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.05)
+        assert ex is not None and ex.status == "failed", ex and ex.status
+        # 计数按单元累加:主体失败 1、后置通过 1(不再整图计 1/0)
+        assert ex.failed == 1 and ex.passed == 1
+        async with db_module.SessionLocal() as s:
+            rows = (await s.execute(sa.select(ExecutionRow).where(
+                ExecutionRow.execution_id == exec_id)
+                .order_by(ExecutionRow.seq))).scalars().all()
+        assert [(r2.unit_id, r2.status) for r2 in rows] == [
+            ("graph", "failed"), ("main", "failed"),
+            ("teardown", "passed")]
 
 
 class TestGraphUnitAuthz:

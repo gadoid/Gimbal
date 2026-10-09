@@ -188,7 +188,10 @@ async def list_executions(
             Execution.scenario_id.in_(live_names.scalar_subquery()),
         ))
     if scenario_id:
-        base = base.where(Execution.scenario_id == scenario_id)
+        # 重构方案:suite_graph 执行的 scenario_id 是占位 suite-<id>,
+        # 理论上永不命中真实场景;显式排除兜底任何前缀/模糊查询遗漏
+        base = base.where(Execution.scenario_id == scenario_id,
+                          Execution.kind != "suite_graph")
     if status_filter:
         if status_filter not in _KNOWN_STATUSES:
             raise HTTPException(
@@ -543,6 +546,16 @@ async def rerun_execution(
     混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,
     不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜
     底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。"""
+    # 重构方案:suite_graph 执行不按 config 重放(现在会只重跑第一个
+    # 场景)→ 409 附 Suite 链接,前端转去重新运行该 Suite(经预检)
+    if (getattr(ex, "kind", None) or "scenario") == "suite_graph":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "suite_graph_rerun_unsupported",
+                "message": "Suite 编排执行不能按配方重放,请重新运行该 Suite",
+                "suiteId": ex.suite_id,
+                "link": f"/suites/{ex.suite_id}"})
     cfg = ex.config_json or {}
     req = RunRequest(
         **{

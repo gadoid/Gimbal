@@ -620,7 +620,147 @@ async def put_composition(
     return await _detail_out(db, user, suite)
 
 
-# ── 聚合模式运行(§6.6)───────────────────────────────────────────
+# ── 运行:模式分流(重构方案)─────────────────────────────────────
+def _build_graph_spec(suite: Suite, members: list[SuiteMember]) -> dict:
+    """Suite(mode + mode_config + 成员)→ GraphRunRequest dict(纯值,
+    入队物化的全部内容 —— worker 不回读 Suite,不变量 5)。needs 存储按
+    scenarioId、下发换 ref;repeat/nRuns/row/schemeId/map/injectionEntryIds
+    从 mode_config.units 取,缺省由拼装层补默认行为。"""
+    cfg = suite.mode_config or {}
+    units_cfg = cfg.get("units") or {}
+
+    def _ref_of(sid: str) -> str:
+        u = units_cfg.get(sid) or {}
+        return u.get("ref") or sid
+
+    def _unit(m: SuiteMember) -> dict:
+        u = dict(units_cfg.get(m.scenario_id) or {})
+        d = {"ref": u.get("ref") or m.scenario_id,
+             "scenarioId": m.scenario_id}
+        for k in ("schemeId", "row", "map", "injectionEntryIds"):
+            if u.get(k) is not None:
+                d[k] = u[k]
+        if u.get("repeat"):
+            d["repeat"] = int(u["repeat"])
+        if u.get("nRuns"):
+            d["nRuns"] = int(u["nRuns"])
+        if u.get("needs"):
+            d["needs"] = [_ref_of(n) for n in u["needs"] if n in units_cfg
+                          or n in {m2.scenario_id for m2 in members}]
+        return d
+
+    by_role: dict[str, list[dict]] = {"before": [], "main": [], "after": []}
+    for m in members:
+        by_role.setdefault(m.role or "main", []).append(_unit(m))
+    gs: dict = {"mode": suite.mode, "units": by_role["main"]}
+    if by_role["before"]:
+        gs["before"] = by_role["before"]
+    if by_role["after"]:
+        gs["after"] = by_role["after"]
+    for key in ("parallel", "nRuns", "gates", "checks"):
+        if cfg.get(key) is not None:
+            gs[key] = cfg[key]
+    return gs
+
+
+async def _in_flight_batch(
+    db: AsyncSession, runner_id: int, suite_id: int,
+) -> str | None:
+    """防重(§6.6):按 (suite, 发起人),时效窗口内的未终态批次。"""
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        hours=settings.SUITE_RUN_STALE_HOURS)
+    rows = (await db.execute(
+        select(Execution.id, Execution.batch_id).where(
+            Execution.owner_id == runner_id,
+            Execution.status.in_(("queued", "running")),
+            Execution.created_at > cutoff,
+        )
+    )).all()
+    prefix = f"suite-{suite_id}-"
+    hit = next((r for r in rows if r.batch_id
+                and r.batch_id.startswith(prefix)), None)
+    return hit.batch_id if hit else None
+
+
+def _in_flight_409(batch_id: str) -> HTTPException:
+    return HTTPException(status_code=409, detail={
+        "code": "suite_run_in_progress",
+        "message": "该 suite 已有你未完成的批次(先查看或取消后再发起)",
+        "batchId": batch_id,
+        "link": f"/executions?batch_id={batch_id}"})
+
+
+async def _run_orchestration(
+    db: AsyncSession, user: CurrentUser, suite: Suite,
+    members: list[SuiteMember], *, control: dict | None = None,
+) -> dict:
+    """编排模式运行(重构方案):逐单元 can_run_scenario(任一不过整体
+    403 —— 图不能像聚合那样跳过单元),入队时把成员 / 编排配置 / 各
+    单元方案与数据行参数全部物化进任务(worker 不回读 Suite,不变量
+    5);快照 = 入队时解析完成的 graph_spec + 当时 rev。"""
+    from ._ownership import can_run_scenario as _can_run
+    not_runnable: list[str] = []
+    for m in members:
+        scen = await scenario_store.get_row(db, m.scenario_id)
+        if scen is None or not await _can_run(
+                db, user, scenario_id=m.scenario_id,
+                owner_id=scen.owner_id if scen else None):
+            not_runnable.append(m.scenario_id)
+    if not_runnable:
+        raise HTTPException(status_code=403, detail={
+            "code": "units_not_runnable",
+            "message": "编排模式下所有单元都必须可运行(图不能跳过单元)",
+            "units": not_runnable})
+
+    graph_spec = _build_graph_spec(suite, members)
+    if control:
+        graph_spec["control"] = control
+    est = sum(int(u.get("repeat") or 1) * int(u.get("nRuns") or 1)
+              for u in [*graph_spec.get("before", []),
+                        *graph_spec["units"],
+                        *graph_spec.get("after", [])])
+    if est > settings.SUITE_RUN_TOTAL_CAP:
+        raise HTTPException(status_code=409, detail={
+            "code": "too_many_runs",
+            "message": (f"suite total runs {est} exceed cap "
+                        f"{settings.SUITE_RUN_TOTAL_CAP} (units x repeat "
+                        f"x nRuns)")})
+
+    from ..services import execution_queue as _eq
+    from ..services.run_dispatcher import _create_execution, _new_run_id
+    chain = str(getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
+    run_id = _new_run_id()
+    batch_id = f"suite-{suite.id}-{user.id}-{uuid4().hex[:12]}"
+    execution = await _create_execution(
+        db,
+        # 占位(非 sc- 前缀,绝不命中真实场景的场景维度查询)
+        scenario_id=f"suite-{suite.id}",
+        owner_id=user.id,
+        total_runs=est,
+        scenario_name=suite.name,
+        batch_id=batch_id,
+        # 入队物化快照(不变量 5 的证据):拼装产物 + 当时 rev
+        scenario_snapshot={"graphSpec": graph_spec, "rev": suite.rev,
+                           "suiteId": suite.id},
+        config_json={"kind": "graph", "suiteId": suite.id,
+                     "rev": suite.rev, "mode": suite.mode,
+                     "runId": run_id, "batchId": batch_id,
+                     "graphSpec": graph_spec, "chain": chain},
+        kind="suite_graph", suite_id=suite.id,
+    )
+    await _eq.enqueue(db, execution.id, kind="graph", payload={
+        "kind": "graph", "chain": chain,
+        "args": {"execution_id": execution.id, "run_id": run_id,
+                 "owner_id": user.id, "graph_spec": graph_spec,
+                 "n_runs": 1, "halt_at": None, "scenario_payload": {}},
+    })
+    _eq.ensure_workers()
+    n_units = (len(graph_spec["units"]) + len(graph_spec.get("before", []))
+               + len(graph_spec.get("after", [])))
+    return {"executionId": execution.id, "batchId": batch_id,
+            "mode": suite.mode, "units": n_units, "estimatedRuns": est}
+
+
 def _req_from_scheme(
     scenario_id: str, scheme: dict, batch_id: str,
 ) -> RunRequest:
@@ -670,11 +810,21 @@ async def run_suite(
     await _require_run_async(db, user, suite)
 
     # ── 循环前物化(纯值):发起人、成员快照、各成员默认方案 ──
+    # suite 纯值同样先行:循环内异常路径的 rollback 会过期 ORM 实例,
+    # 事后访问属性触发异步懒加载(MissingGreenlet,本仓已文档化)
+    suite_id_val = suite.id
     runner_id = user.id
     members = await _ordered_members(db, suite_id)
     if not members:
         raise HTTPException(status_code=409, detail={
             "code": "suite_empty", "message": "suite 没有成员,无可执行场景"})
+
+    # ── 模式分流(重构方案):编排模式走一次编排执行,防重同口径 ──
+    if (suite.mode or "aggregate") in ("chain", "fanout", "compose"):
+        in_flight = await _in_flight_batch(db, runner_id, suite_id)
+        if in_flight is not None:
+            raise _in_flight_409(in_flight)
+        return await _run_orchestration(db, user, suite, members)
 
     scen_rows: dict[str, object] = {}
     default_schemes: dict[str, dict | None] = {}
@@ -693,26 +843,9 @@ async def run_suite(
     await db.commit()  # ensure_default_scheme 的自愈写入先落库
 
     # ── 防重(§6.6):按 (suite, 发起人),时效窗口内的未终态批次 ──
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        hours=settings.SUITE_RUN_STALE_HOURS)
-    rows = (await db.execute(
-        select(Execution.id, Execution.batch_id).where(
-            Execution.owner_id == runner_id,
-            Execution.status.in_(("queued", "running")),
-            Execution.created_at > cutoff,
-        )
-    )).all()
-    prefix = f"suite-{suite_id}-"
-    in_flight = next(
-        (r for r in rows if r.batch_id and r.batch_id.startswith(prefix)),
-        None,
-    )
+    in_flight = await _in_flight_batch(db, runner_id, suite_id)
     if in_flight is not None:
-        raise HTTPException(status_code=409, detail={
-            "code": "suite_run_in_progress",
-            "message": "该 suite 已有你未完成的批次(先查看或取消后再发起)",
-            "batchId": in_flight.batch_id,
-            "link": f"/executions?batchId={in_flight.batch_id}"})
+        raise _in_flight_409(in_flight)
 
     batch_id = f"suite-{suite_id}-{runner_id}-{uuid4().hex[:12]}"
     plain: list[dict] = [
@@ -790,6 +923,14 @@ async def run_suite(
             else:
                 skipped.append({"scenarioId": sid, "reason": "dispatch_error"})
 
+    # 聚合成员执行回挂 suite_id(21 页按 Suite 归并;kind 仍是
+    # scenario —— 它就是该场景按默认方案的一次真实运行)
+    if started:
+        from sqlalchemy import update as _su
+        await db.execute(_su(Execution).where(
+            Execution.id.in_((started))).values(suite_id=suite_id_val))
+        await db.commit()
+
     return {
         "batchId": batch_id,
         "started": started,
@@ -797,6 +938,103 @@ async def run_suite(
         "dispatchWarnings": dispatch_warnings,
         "totalRuns": total_runs,
     }
+
+
+@router.get("/{suite_id}/runs")
+async def suite_runs(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> dict:
+    """该 Suite 的历次运行(重构方案):**只返回本人发起的**(不变量 2:
+    执行台账归执行人,属主 / admin 亦然)。聚合按批次归并,编排执行逐条;
+    供 21 页混排(标明通道)。"""
+    suite = await _load_suite(db, suite_id)
+    await _require_read_async(db, user, suite)
+    rows = (await db.execute(
+        select(Execution).where(
+            Execution.suite_id == suite.id,
+            Execution.owner_id == user.id,
+        ).order_by(Execution.created_at.desc(), Execution.id.desc())
+        .limit(200))).scalars().all()
+
+    items: list[dict] = []
+    batches: dict[str, dict] = {}
+    for ex in rows:
+        if (ex.kind or "scenario") == "suite_graph":
+            items.append({
+                "executionId": ex.id, "kind": "suite_graph",
+                "batchId": ex.batch_id,
+                "mode": (ex.config_json or {}).get("mode"),
+                "status": ex.status,
+                "totalRuns": ex.total_runs, "passed": ex.passed,
+                "failed": ex.failed, "skipped": ex.skipped,
+                "createdAt": _iso(ex.created_at),
+                "finishedAt": _iso(ex.finished_at),
+            })
+            continue
+        key = ex.batch_id or f"single-{ex.id}"
+        agg = batches.setdefault(key, {
+            "batchId": key, "kind": "batch",
+            "status": "running", "executions": [],
+            "totalRuns": 0, "passed": 0, "failed": 0, "skipped": 0,
+            "createdAt": _iso(ex.created_at), "finishedAt": None})
+        agg["executions"].append(ex.id)
+        agg["totalRuns"] += ex.total_runs
+        agg["passed"] += ex.passed
+        agg["failed"] += ex.failed
+        agg["skipped"] += ex.skipped
+        if ex.finished_at and (agg["finishedAt"] is None
+                               or ex.finished_at > agg["finishedAt"]):
+            agg["finishedAt"] = _iso(ex.finished_at)
+        if ex.status in ("queued", "running"):
+            agg["status"] = "running"
+        elif agg["status"] != "running":
+            agg["status"] = ("failed" if agg["failed"] else
+                             "canceled" if ex.status == "canceled" else "done")
+    items.extend(batches.values())
+    items.sort(key=lambda i: i["createdAt"] or "", reverse=True)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/{suite_id}/runs/{execution_id}/rerun-failed", status_code=201)
+async def rerun_failed_units(
+    user: CurrentUser, db: DbSession, suite_id: int, execution_id: int,
+) -> dict:
+    """只重跑某次编排执行里失败的单元:以失败单元为 ``control.only``
+    重新运行**当前** Suite(上游随之重跑;Suite 此后的编排变更随本次
+    生效)。只能对自己发起的执行操作(不变量 2,属主 / admin 同口径)。"""
+    from ..models.execution import ExecutionRow
+    suite = await _load_suite(db, suite_id)
+    await _require_run_async(db, user, suite)
+    ex = await db.get(Execution, execution_id)
+    if (ex is None or ex.suite_id != suite.id
+            or (ex.kind or "scenario") != "suite_graph"):
+        raise not_found_404("execution", str(execution_id))
+    if ex.owner_id != user.id:
+        raise HTTPException(status_code=403, detail={
+            "code": "not_initiator",
+            "message": "只能对自己发起的执行重跑失败单元(不变量 2)"})
+    failed_rows = (await db.execute(
+        select(ExecutionRow.unit_id).where(
+            ExecutionRow.execution_id == execution_id,
+            ExecutionRow.seq > 0,
+            ExecutionRow.status.in_(("failed", "error", "halted")),
+        ).order_by(ExecutionRow.seq))).scalars().all()
+    # ×重复变体(ref#k)归并到基座 ref
+    failed_refs = list(dict.fromkeys(
+        r.split("#")[0] for r in failed_rows if r and r != "graph"))
+    if not failed_refs:
+        raise HTTPException(status_code=409, detail={
+            "code": "no_failed_units",
+            "message": "该执行没有失败单元可重跑"})
+    members = await _ordered_members(db, suite.id)
+    if not members:
+        raise HTTPException(status_code=409, detail={
+            "code": "suite_empty", "message": "suite 没有成员,无可执行场景"})
+    in_flight = await _in_flight_batch(db, user.id, suite_id)
+    if in_flight is not None:
+        raise _in_flight_409(in_flight)
+    return await _run_orchestration(
+        db, user, suite, members, control={"only": failed_refs})
 
 
 # ── P2 §7.9/§9:suite 发布 / 下架 ────────────────────────────────
