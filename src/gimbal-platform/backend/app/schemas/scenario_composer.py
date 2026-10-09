@@ -260,6 +260,17 @@ class ScenarioCopyIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class GraphControlSpec(BaseModel):
+    """编排裁剪控制(重构方案):only = 试跑选中段(所选单元 + 传递
+    上游,make 语义);toNode = 串联只跑到某一步。fromNode 刻意不收 ——
+    执行器 from_node 切片要求被跳过的上游输出由外部提供,平台无从提供。"""
+
+    model_config = _CAMEL
+
+    only: list[str] = Field(default_factory=list)
+    to_node: str | None = Field(default=None, alias="toNode")
+
+
 class GraphUnitSpec(BaseModel):
     """C5:编排单元 —— 一个平台场景在 graph 里的一个节点。"""
     model_config = _CAMEL
@@ -278,6 +289,14 @@ class GraphUnitSpec(BaseModel):
     # 单元粒度服务绑定(与 graph 级合并,单元覆盖同名)
     service_bindings: dict[str, Any] = Field(default_factory=dict,
                                               alias="serviceBindings")
+    # ── 重构方案约束 5/第 6 处(单行内联 + 连线改名)──
+    # 运行方案:空 = 该场景的默认方案
+    scheme_id: str | None = Field(default=None, alias="schemeId")
+    # 选定该单元唯一运行的一行;空 = 裸基线(不带数据集行)
+    row: dict[str, Any] | None = Field(default=None, description=(
+        "{datasetId, rowIndex}(0-based,与编辑器一致;缺省=裸基线)"))
+    # 连线改名(上游输出名 → 本地输入名),对应执行器 UnitDecl.map
+    map: dict[str, str] = Field(default_factory=dict)
 
 
 class GraphSpec(BaseModel):
@@ -296,6 +315,8 @@ class GraphSpec(BaseModel):
     # graph 级服务绑定(单元可覆盖)
     service_bindings: dict[str, Any] = Field(default_factory=dict,
                                               alias="serviceBindings")
+    # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
+    control: GraphControlSpec | None = None
 
 
 class RunRequest(BaseModel):

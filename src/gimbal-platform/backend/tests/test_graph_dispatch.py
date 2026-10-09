@@ -179,3 +179,183 @@ class TestGraphUnitAuthz:
             ]},
         })
         assert r.status_code == 201, r.text
+
+
+class TestGraphCompositionInline:
+    """重构方案 B1:单行内联(schemeId/row)、map / control 透传。
+
+    约束 5:编排单元只跑一行 —— schemeId(空=默认方案)+ row
+    {datasetId, rowIndex} 选定;方案的服务绑定随行合入。
+    第 6 处:map 改名透传到 UnitDecl.map;第 2 处:control 只落
+    only / to_node(执行器 snake_case),fromNode 拼装侧拒绝。
+    """
+
+    STEPS_SVC = [{
+        "kind": "step", "description": "下单",
+        "call": {"service": "fin.order", "method": "POST", "path": "/x"},
+        "request": {"kind": "request", "body": {"amount": 1}},
+        "strategy": [],
+    }]
+
+    async def _mk_svc_scenario(self, client, h, sid) -> None:
+        draft = make_draft(sid, steps=self.STEPS_SVC)
+        draft["definition"]["config"] = {
+            "timePolicy": {"kind": "record"},
+            "vars": {"customer_id": "261"},
+        }
+        r = await client.post("/api/scenarios", headers=h, json=draft)
+        assert r.status_code in (200, 201), r.text
+
+    async def _fake_convert_patch(self, monkeypatch):
+        from app.services import plate_client as pc
+
+        async def _fake_convert(scenario):
+            return {"consumer": "platform", "converted": dict(scenario)}
+        monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    async def test_row_and_scheme_inline(self, client, monkeypatch):
+        await register_and_login(client, "gi_boot", "gi_bootpass123")
+        h = await register_and_login(client, "gi_owner", "gi_ownerpass123")
+        await self._mk_svc_scenario(client, h, "sc-gi-a")
+        r = await client.post("/api/scenarios/sc-gi-a/data-sets", headers=h,
+                              json={"datasetId": "ds-gi-rows", "name": "行集",
+                                    "rows": [{"customer_id": "111"},
+                                             {"customer_id": "222"}]})
+        assert r.status_code == 201, r.text
+        ds_id = r.json()["datasetId"]
+        r = await client.post("/api/scenarios/sc-gi-a/run-schemes", headers=h,
+                              json={"name": "带绑定", "dataSetSelection": [],
+                                    "injectionEntryIds": [],
+                                    "serviceBindings": {
+                                        "fin.order": {"url": "http://fin:1"}},
+                                    "stepTo": None, "nRuns": 1, "parallel": 1})
+        assert r.status_code == 201, r.text
+        scheme_id = r.json()["schemeId"]
+        await self._fake_convert_patch(monkeypatch)
+
+        from app.core import db as db_module
+        from app.models.user import User
+        from app.services import graph_dispatch, scheme_store
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gi_owner"))).scalar_one()
+            await scheme_store.ensure_default_scheme(s, "sc-gi-a")  # 默认分支可查
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-gi-a",
+                           "schemeId": scheme_id,
+                           "row": {"datasetId": ds_id,
+                                   "rowIndex": 1}}],
+            })
+        unit = graph["units"][0]
+        # 单行内联:所选那一行的值合入(默认方案语境)
+        assert str(unit["scenario"]["config"]["vars"]["customer_id"]) == "222"
+        # 方案的服务绑定随行合入(step 引用 fin.order → url 生效;
+        # services 物化值 = url 字符串,run_materialize ① 优先级链)
+        assert unit["scenario"]["config"]["services"]["fin.order"] \
+            == "http://fin:1"
+        # 无 row = 裸基线(此前的唯一行为,保持兼容)
+        async with db_module.SessionLocal() as s:
+            graph0 = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-gi-a"}],
+            })
+        assert str(graph0["units"][0]["scenario"]["config"]
+                   ["vars"]["customer_id"]) == "261"
+
+    async def test_map_and_control_passthrough(self, client, monkeypatch):
+        import pytest
+
+        await register_and_login(client, "gc_boot", "gc_bootpass123")
+        h = await register_and_login(client, "gc_owner", "gc_ownerpass123")
+        await self._mk_svc_scenario(client, h, "sc-gc-1")
+        await self._mk_svc_scenario(client, h, "sc-gc-2")
+        await self._fake_convert_patch(monkeypatch)
+
+        from app.core import db as db_module
+        from app.models.user import User
+        from app.services import graph_dispatch
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gc_owner"))).scalar_one()
+        req = {"mode": "compose",
+               "units": [
+                   {"ref": "auth", "scenarioId": "sc-gc-1",
+                    "map": {"token": "authToken"}},
+                   {"ref": "order", "scenarioId": "sc-gc-2",
+                    "needs": ["auth"]}],
+               "control": {"only": ["order"], "toNode": "order"}}
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, req)
+        by_ref = {u["ref"]: u for u in graph["units"]}
+        assert by_ref["auth"]["map"] == {"token": "authToken"}
+        assert graph["control"] == {"only": ["order"], "to_node": "order"}
+        # fromNode 不透传:拼装侧直接拒绝
+        async with db_module.SessionLocal() as s:
+            with pytest.raises(graph_dispatch.GraphDispatchError):
+                await graph_dispatch.materialize_graph(s, uid, {
+                    "mode": "chain",
+                    "units": [{"ref": "a", "scenarioId": "sc-gc-1"}],
+                    "control": {"fromNode": "a"}})
+
+    async def test_api_accepts_new_unit_fields(self, client, monkeypatch):
+        """GraphSpec/GraphUnitSpec 别名接线:row/schemeId/map/control 经
+        POST /api/runs 可达物化层(launched 产物携带)。"""
+        launched: list[dict] = []
+
+        async def _launch(case_path, **_kw):
+            import pathlib
+            launched.append(json.loads(
+                pathlib.Path(case_path).read_text(encoding="utf-8")))
+            from tests.helpers import launch_ok
+            return launch_ok()
+
+        # 打在调用方模块上(execute_graph 用的是 from-import 绑定,
+        # 只 patch gimbal_launcher.launch 在部分顺序下不生效)
+        from app.services import graph_dispatch as gd
+        monkeypatch.setattr(gd, "launch", _launch)
+        await self._fake_convert_patch(monkeypatch)
+
+        await register_and_login(client, "ga_boot", "ga_bootpass123")
+        h = await register_and_login(client, "ga_owner", "ga_ownerpass123")
+        await self._mk_svc_scenario(client, h, "sc-ga-1")
+        await self._mk_svc_scenario(client, h, "sc-ga-2")
+        r = await client.post("/api/runs", headers=h, json={
+            "scenarioId": "sc-ga-1",
+            "graph": {
+                "mode": "compose",
+                "units": [
+                    {"ref": "auth", "scenarioId": "sc-ga-1",
+                     "map": {"token": "authToken"}},
+                    {"ref": "order", "scenarioId": "sc-ga-2",
+                     "needs": ["auth"]},
+                ],
+                "control": {"only": ["order"]},
+            },
+        })
+        assert r.status_code == 201, r.text
+        exec_id = r.json()["executionId"]
+        for _ in range(400):
+            async with db_module.SessionLocal() as s:
+                ex = await s.get(Execution, exec_id)
+            if ex and ex.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.05)
+        assert ex is not None
+        if not launched:
+            from app.services.run_dispatcher import _run_dir
+            rd = _run_dir(ex.config_json["runId"])
+            logs = []
+            for f in sorted(rd.rglob("*.log")) + sorted(rd.rglob("*.jsonl")):
+                logs.append(f"== {f} ==")
+                try:
+                    logs.append(f.read_text(encoding="utf-8", errors="replace")[-1500:])
+                except Exception as e:
+                    logs.append(f"<{e}>")
+            raise AssertionError(
+                f"graph 未下发 status={ex.status} dir={rd} :: "
+                + " | ".join(logs))
+        assert launched
+        assert launched[0]["control"] == {"only": ["order"]}
+        assert launched[0]["units"][0]["map"] == {"token": "authToken"}

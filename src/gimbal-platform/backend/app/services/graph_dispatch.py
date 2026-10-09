@@ -39,9 +39,18 @@ async def resolve_graph_units(
 ) -> list[dict]:
     """编排单元(ref)→ 物化后的 gimbal 场景 dict 列表。
 
-    单元规格:{ref, scenarioId, dataSetIds?, injectionEntryIds?,
-    serviceBindings?, nRuns?, repeat?, needs?, shared?, inputs?}。
+    单元规格:{ref, scenarioId, schemeId?, row?, dataSetIds?,
+    injectionEntryIds?, serviceBindings?, nRuns?, repeat?, needs?,
+    shared?, inputs?, map?}。
+
+    重构方案约束 5(单行内联):``schemeId``(空 = 默认方案)+ ``row``
+    {datasetId, rowIndex}(空 = 裸基线)选定该单元唯一运行的一行;
+    方案的服务绑定随行合入(单元级覆盖同名)。此前固定
+    ``_compose_scenario(payload, {})`` 只跑裸基线。
     """
+    from .run_dispatcher import _compose_scenario, _find_dataset_by_id
+    from . import scheme_store
+
     resolved: list[dict] = []
     for u in units:
         scen = await scenario_store.get_row(db, u["scenarioId"])
@@ -49,21 +58,57 @@ async def resolve_graph_units(
             raise GraphDispatchError(
                 f"unit {u['ref']!r}: scenario not found: {u['scenarioId']}")
         payload = dict(scen.payload or {})
-        # 行值合入 + 注入条目(单场景链同款 compose,无数据集 = 基线)
-        from .run_dispatcher import _compose_scenario  # 复用行合入
-        composed = _compose_scenario(payload, {})
+
+        # ── 约束 5:方案 + 单行选择 ──────────────────────────────
+        scheme: dict | None = None
+        scheme_id = u.get("schemeId")
+        row_spec = u.get("row")
+        if scheme_id is not None or row_spec is not None:
+            schemes = await scheme_store.list_schemes(db, u["scenarioId"])
+            if scheme_id is not None:
+                scheme = next(
+                    (s for s in schemes if s.get("schemeId") == scheme_id),
+                    None)
+                if scheme is None:
+                    raise GraphDispatchError(
+                        f"unit {u['ref']!r}: scheme not found: {scheme_id}")
+            else:
+                scheme = next(
+                    (s for s in schemes if s.get("isDefault")), None)
+        row_dict: dict = {}
+        if row_spec:
+            ds_id = row_spec.get("datasetId")
+            ri = int(row_spec.get("rowIndex", 0))
+            ds = await _find_dataset_by_id(db, ds_id)
+            if ds is None or ds.scenario_id != u["scenarioId"]:
+                raise GraphDispatchError(
+                    f"unit {u['ref']!r}: dataset not found: {ds_id}")
+            rows = list(ds.rows or [])
+            if ri < 0 or ri >= len(rows):
+                raise GraphDispatchError(
+                    f"unit {u['ref']!r}: rowIndex {ri} out of range for "
+                    f"{ds_id} (0..{len(rows) - 1})")
+            row_dict = rows[ri] or {}
+        composed = _compose_scenario(payload, row_dict)
+
         entries = u.get("injectionEntryIds") or []
         if entries:
             # 注入条目 patch 在 payload.assertion_registry 里取;编排页
-            # 单元粒度注入沿用同一通道
+            # 单元粒度注入沿用同一通道(重构方案:条目 id 来自 mode_config)
             registry = (composed.get("assertion_registry") or {}).get(
                 "entries") or []
             for eid in entries:
                 entry = next((e for e in registry if e.get("id") == eid), None)
                 if entry is not None:
                     composed = compose_injection_scenario(composed, entry)
+        unit = u
+        if scheme and scheme.get("serviceBindings"):
+            # 方案的服务绑定随行合入(单元级覆盖同名)
+            unit = {**u, "serviceBindings": {
+                **(scheme.get("serviceBindings") or {}),
+                **(u.get("serviceBindings") or {})}}
         resolved.append({
-            "unit": u,
+            "unit": unit,
             "scenario_row": scen,
             "composed": composed,
         })
@@ -97,12 +142,17 @@ async def materialize_graph(
     ]
     resolved = await resolve_graph_units(db, all_units, owner_id)
 
-    # 认证与绑定物化(graph 级一次;单元绑定合并到全域)
+    # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。绑定值两种
+    # 形态都收:别名串(旧)与 ServiceBinding dict 的 authAlias 键
+    #(方案绑定的形态,约束 5 随行合入后在此解析)
     auth_aliases: list[str] = sorted({
         alias
         for u in all_units
-        for alias in (u.get("serviceBindings") or {}).values()
-        if alias and isinstance(alias, str)
+        for b in (u.get("serviceBindings") or {}).values()
+        for alias in (
+            [b] if isinstance(b, str) and b else
+            [b.get("authAlias")] if isinstance(b, dict) else [])
+        if alias
     })
     exec_auths = (await _resolve_exec_auths(db, owner_id, auth_aliases)
                   if auth_aliases else [])
@@ -147,6 +197,10 @@ async def materialize_graph(
             d["shared"] = u["shared"]
         if u.get("inputs"):
             d["inputs"] = u["inputs"]
+        if u.get("map"):
+            # 连线改名(重构方案第 6 处):_decl 手工挑键,须显式写出
+            # 才能透到执行器 UnitDecl.map
+            d["map"] = u["map"]
         if u.get("repeat"):
             d["repeat"] = u["repeat"]
         policy_kwargs: dict = {}
@@ -180,6 +234,22 @@ async def materialize_graph(
         graph["gates"] = graph_req["gates"]
     if graph_req.get("checks"):
         graph["checks"] = graph_req["checks"]
+    # 控制透传(重构方案第 2 处):materialize 是手工挑键组装,control
+    # 须显式写进产物 —— 只落 only / to_node(执行器 Control 键为
+    # snake_case);fromNode 刻意不透传,错键在拼装侧直接拒绝
+    ctrl = graph_req.get("control") or {}
+    bad = [k for k in ctrl if k not in ("only", "toNode")]
+    if bad:
+        raise GraphDispatchError(
+            f"control 不支持的字段: {bad}(不透传 fromNode)")
+    only = [x for x in (ctrl.get("only") or []) if x]
+    to_node = ctrl.get("toNode")
+    if only or to_node:
+        graph["control"] = {}
+        if only:
+            graph["control"]["only"] = only
+        if to_node:
+            graph["control"]["to_node"] = to_node
     return graph
 
 
