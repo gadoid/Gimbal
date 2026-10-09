@@ -645,10 +645,10 @@ async def unpublish_scenario(
                         await _ns.create_notification(
                             db, user_id=h.owner_id,
                             type_="scenario_unpublished",
-                            title="你的公共用例组已连带下架",
+                            title="你的公共 Suite 已连带下架",
                             body=(f"管理员 {user.display_name or user.username} "
                                   f"下架了成员场景 {scenario_id},其所属的公共"
-                                  f"用例组已一并下架(现为私有)。"),
+                                  f"所属 Suite 已一并下架(现为私有)。"),
                             link=f"/suites/{h.id}")
                     except Exception:  # noqa: BLE001
                         pass

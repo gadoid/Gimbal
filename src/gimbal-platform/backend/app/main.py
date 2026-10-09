@@ -119,9 +119,24 @@ async def lifespan(app: FastAPI):
         execution_queue.start_workers()
     except Exception as e:  # noqa: BLE001
         logger.error("lifespan: execution queue workers failed to start: {}", e)
+    # 重构方案:草稿 30 天清理(小时级巡检;lifespan 轻量循环任务,
+    # 与 worker 同一模式 —— 平台无周期任务基建,不为此新引调度框架)
+    async def _draft_sweeper() -> None:
+        from .services.suite_maintenance import sweep_stale_drafts
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                n = await sweep_stale_drafts()
+                if n:
+                    logger.info("draft sweeper: removed {} stale draft(s)", n)
+            except Exception as e:  # noqa: BLE001 — 巡检失败下轮再试
+                logger.warning("draft sweeper failed: {}", e)
+
+    draft_sweeper = asyncio.create_task(_draft_sweeper())
     try:
         yield
     finally:
+        draft_sweeper.cancel()
         # C11:优雅停止 worker(当前任务回队;等收口后清 plate 客户端)。
         n_dispatched = await drain_in_flight_dispatches()
         if n_dispatched:

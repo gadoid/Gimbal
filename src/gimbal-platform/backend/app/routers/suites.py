@@ -311,9 +311,52 @@ async def delete_suite(
 ) -> Response:
     suite = await _load_suite(db, suite_id)
     _require_write(user, suite)
+    # 重构方案:有引用者时,删除后通知引用者(与处置路径
+    # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
+    from ..models.share_ref import ShareRef
+    from ..services import notifications as notify_svc
+    referrers = (await db.execute(
+        select(ShareRef.grantee_user_id).where(
+            ShareRef.suite_id == suite.id))).scalars().all()
     await db.delete(suite)  # 成员行随组合外键 CASCADE,场景不受影响
     await db.commit()
+    for uid in referrers:
+        try:
+            await notify_svc.create_notification(
+                db, user_id=uid,
+                type_="share_ref_resource_deleted",
+                title=f"引用失效:suite#{suite.id}",
+                body="该 Suite 已被删除,引用分享随之结束",
+                link=None, resource_type="suite",
+                resource_id=str(suite.id))
+        except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断删除
+            await db.rollback()
     return Response(status_code=204)
+
+
+@router.post("/{suite_id}/fork", status_code=201)
+async def fork_public_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> dict:
+    """公共读者「复制到我的」(重构方案):公共 Suite 深拷贝为自己名下的
+    私有 Suite,含编排配置重映射(约束 8);读闸 + 公共可见(非公共 404)。
+    被引用者的「转为副本」走既有 POST /shares/{id}/fork,不经此端点。"""
+    from ..services import audit as audit_svc
+    from ..services.suite_copy import deep_copy_suite, suite_owner_display
+    suite = await _load_suite(db, suite_id)
+    await _require_read_async(db, user, suite)
+    if suite.visibility != "public":
+        raise not_found_404("suite", str(suite_id))
+    out = await deep_copy_suite(
+        db, suite, user, await suite_owner_display(db, suite))
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="suite.public_fork",
+        resource_type="suite", resource_id=str(suite.id),
+        detail={"copyId": out["suiteId"], "name": out["name"]})
+    return {"suiteId": out["suiteId"], "suiteName": out["name"],
+            "memberCount": out["count"], "mode": out["mode"]}
 
 
 # ── 成员管理 ───────────────────────────────────────────────────────
@@ -409,29 +452,11 @@ async def remove_member(
     m = await db.get(SuiteMember, (suite_id, scenario_id))
     if m is not None:
         await db.delete(m)
-        # 约束 6:移除成员同一事务清理编排配置里的引用(units 条目、
-        # 他单元 needs、横切断言选择器中的字符串清单)并推进 rev;
-        # CASCADE 只删成员行不代劳这些
-        cfg = dict(suite.mode_config or {})
-        units = cfg.get("units") or {}
-        if scenario_id in units:
-            units = {k: v for k, v in units.items() if k != scenario_id}
-        for v in units.values():
-            if isinstance(v, dict) and isinstance(v.get("needs"), list):
-                v["needs"] = [x for x in v["needs"] if x != scenario_id]
-        cfg["units"] = units
-        checks = cfg.get("checks")
-        if isinstance(checks, list):
-            def _scrub(o):
-                if isinstance(o, dict):
-                    return {k: _scrub(x) for k, x in o.items()}
-                if isinstance(o, list):
-                    if o and all(isinstance(x, str) for x in o):
-                        return [x for x in o if x != scenario_id]
-                    return [_scrub(x) for x in o]
-                return o
-            cfg["checks"] = [_scrub(c) for c in checks]
-        suite.mode_config = cfg
+        # 约束 6:移除成员同一事务清理编排配置引用并推进 rev;
+        # CASCADE 只删成员行不代劳这些(清理实现单点在 suite_copy 服务)
+        from ..services.suite_copy import scrub_config_references
+        suite.mode_config = scrub_config_references(
+            dict(suite.mode_config or {}), {scenario_id})
         suite.rev += 1
         await db.commit()
         await db.refresh(suite)  # updated_at 服务端 onupdate 同上
@@ -821,8 +846,8 @@ async def unpublish_suite(
             await notify_svc.create_notification(
                 db, user_id=suite.owner_id,
                 type_="scenario_unpublished",
-                title=f"你的公共用例组已被下架:{suite.name}",
-                body=(f"管理员 {user.display_name or user.username} 将用例组 "
+                title=f"你的公共 Suite 已被下架:{suite.name}",
+                body=(f"管理员 {user.display_name or user.username} 将 Suite "
                       f"「{suite.name}」从公共库下架(现为私有;成员场景的"
                       f"公共状态不受影响)。"),
                 link=f"/suites/{suite.id}")

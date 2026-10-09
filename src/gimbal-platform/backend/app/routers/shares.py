@@ -32,6 +32,8 @@ from ..schemas.share import (
     ShareCopyOut, ShareCreateIn, ShareRefOut,
 )
 from ..services import audit as audit_svc
+from ..services.suite_copy import (
+    deep_copy_suite, suite_owner_display)
 from ..services import notifications as notify_svc
 from ..services import scenario_store
 from ._ownership import ensure_owner
@@ -142,10 +144,10 @@ async def create_share(
             "message": "草稿不可分享(完成编排后可分享)"})
     target = await _load_grantee(db, body.granteeUserId, user.id)
     if body.mode == "copy":
-        out = await _deep_copy_suite(db, suite, target, sharer_disp)
+        out = await deep_copy_suite(db, suite, target, sharer_disp)
         await _notify(db, target.id, "resource_handoff",
                      f"收到副本:{out['name']}",
-                     f"{sharer_disp} 拷贝分享了用例组「{suite.name}」给你({out['count']} 个成员)",
+                     f"{sharer_disp} 拷贝分享了 Suite「{suite.name}」给你({out['count']} 个成员)",
                      link=f"/suites/{out['suiteId']}",
                      resource_id=str(out["suiteId"]))
         await _record_share_event(
@@ -163,8 +165,8 @@ async def create_share(
                         granted_by_name=sharer_disp))
         await db.commit()
         await _notify(db, target.id, "share_ref_received",
-                     f"收到引用:用例组 {suite.name}",
-                     f"{sharer_disp} 把用例组「{suite.name}」以引用分享给你(可读可整组执行)",
+                     f"收到引用:Suite {suite.name}",
+                     f"{sharer_disp} 把 Suite「{suite.name}」以引用分享给你(可读可整组执行)",
                      link=f"/suites/{suite.id}",
                      resource_id=str(suite.id))
         await _record_share_event(
@@ -383,14 +385,9 @@ async def fork_share(
         Suite.id == ref.suite_id))).scalar_one_or_none()
     if suite is None:
         raise HTTPException(404, "suite_not_found")
-    # 来源属主名 = 原 Suite 属主,不是转副本人自己(评审补记修复:
-    # 此前误把 fork 的人写进 forked_from_owner_name;场景分支本就正确)
-    src_owner = (await db.execute(select(User).where(
-        User.id == suite.owner_id))).scalar_one_or_none()
-    out = await _deep_copy_suite(
-        db, suite, user,
-        (src_owner.display_name or src_owner.username) if src_owner
-        else f"user-{suite.owner_id}")
+    # 来源属主名 = 原 Suite 属主,不是转副本人自己(评审补记修复)
+    out = await deep_copy_suite(
+        db, suite, user, await suite_owner_display(db, suite))
     await _record_share_event(
         db, actor_id=user.id, kind="suite.share_fork",
         resource_type="suite", resource_id=str(suite.id),
@@ -418,77 +415,6 @@ async def _ensure_ref_cap(db, sharer_id: int) -> None:
             "code": "share_ref_cap_exceeded",
             "message": f"share ref cap per user is {settings.SHARE_REF_CAP}"})
 
-
-async def _deep_copy_suite(db, suite: Suite, target: User,
-                           sharer_disp: str) -> dict:
-    """suite 单事务深拷贝(§7.8):本体+成员全部复制到接收人名下,
-    每个副本写 forked_from 三件套;任何一步失败整体回滚。"""
-    members = (await db.execute(
-        select(SuiteMember).where(SuiteMember.suite_id == suite.id)
-        .order_by(SuiteMember.sort))).scalars().all()
-    if not members:
-        raise HTTPException(409, {
-            "code": "suite_empty",
-            "message": "suite 没有成员,无可拷贝内容"})
-
-    # SUITE_CAP / SUITE_MEMBER_CAP(§7.8:成员数受上限约束)
-    count = (await db.execute(
-        select(func.count()).select_from(Suite).where(
-            Suite.owner_id == target.id))).scalar() or 0
-    if count >= settings.SUITE_CAP:
-        raise HTTPException(409, {
-            "code": "suite_cap_exceeded",
-            "message": f"suite cap per user is {settings.SUITE_CAP}"})
-    if len(members) > settings.SUITE_MEMBER_CAP:
-        raise HTTPException(409, {
-            "code": "suite_member_cap_exceeded",
-            "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
-
-    # suite 名冲突:计数后缀(scenario resolve 同款策略)
-    name = suite.name
-    existing = {n for (n,) in (await db.execute(
-        select(Suite.name).where(Suite.owner_id == target.id)))}
-    if name in existing:
-        i = 2
-        while f"{name}-{i}" in existing:
-            i += 1
-        name = f"{name}-{i}"
-
-    new_suite = Suite(
-        name=name, description=suite.description, owner_id=target.id,
-        forked_from_id=suite.id,
-        forked_from_owner_name=sharer_disp,
-        forked_from_at=datetime.now(timezone.utc).replace(tzinfo=None),
-    )
-    db.add(new_suite)
-    await db.flush()               # 拿 new_suite.id
-
-    copied = 0
-    sort = 0
-    for m in members:
-        src = (await db.execute(select(ComposerScenario).where(
-            ComposerScenario.scenario_id == m.scenario_id))
-        ).scalar_one_or_none()
-        if src is None:
-            continue               # 瞬态:拷贝窗口内被删 → 跳过
-        resolved, _ = await scenario_store.resolve_name_conflict(
-            db, target.id, src.name or src.scenario_id)
-        out = await scenario_store.copy_scenario(
-            db, src.scenario_id,
-            new_owner=target.display_name or target.username,
-            new_owner_id=target.id, new_name=resolved,
-            activity_kind="scenario.share_copy",
-            activity_detail={"viaSuite": suite.id},
-            origin_id=src.scenario_id,
-            origin_owner_name=src.owner_name or "")
-        db.add(SuiteMember(
-            suite_id=new_suite.id, owner_id=target.id,
-            scenario_id=out.meta.scenario_id, sort=sort))
-        sort += 1
-        copied += 1
-    await db.commit()
-    await db.refresh(new_suite)
-    return {"suiteId": new_suite.id, "name": name, "count": copied}
 
 
 async def _notify(db, user_id: int, type_: str, title: str, body: str,

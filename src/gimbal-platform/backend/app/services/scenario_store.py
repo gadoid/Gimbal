@@ -189,6 +189,21 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     mid-cascade rolls everything back.
     """
     row = await _get_row(db, scenario_id)
+    # 重构方案约束 6(单点):场景删除 → 所有含它的 suite 清理编排配置
+    # 引用并推进 rev,写在此处而非各调用方。成员行随后删除/级联。
+    from sqlalchemy import select as _select
+    from .suite_copy import scrub_config_references
+    from ..models.suite import Suite, SuiteMember as _SuiteMember
+    _suite_ids = (await db.execute(
+        _select(_SuiteMember.suite_id).where(
+            _SuiteMember.scenario_id == scenario_id))).scalars().all()
+    if _suite_ids:
+        _suites = (await db.execute(
+            _select(Suite).where(Suite.id.in_(_suite_ids)))).scalars().all()
+        for _s in _suites:
+            _s.mode_config = scrub_config_references(
+                dict(_s.mode_config or {}), {scenario_id})
+            _s.rev += 1
     # Cascade order: data_sets → scenario (reverse FK).
     await endpoint_ref_index.drop_scenario(db, scenario_id)
     await db.execute(
