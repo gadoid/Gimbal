@@ -339,3 +339,19 @@ P1 与 roadmap 中 task 3（执行器与执行链）的输出、错误分类有�
 - [ ] **平台凭证的管理角色**：只限 operator / admin，还是允许模板 owner 为自己的平台模式任务录入凭证。建议只限 operator / admin，避免个人凭证被当作平台凭证使用。
 - [ ] **与 task 3 的合并**：P1 中执行器输出暴露、错误分类是否并入 task 3c 一起实施。
 - [ ] **MeterSphere 的定位**：持续同步、结果回写，还是一次性迁移来源。这决定 P4 的范围。
+
+## 实施进度
+
+**P1 链路打通(平台模式保活)✅ 已完成(2026-10-10,按评审 2026-10-09 定稿口径实施)**
+
+- **迁移 0015**:`integration_tasks` 两层单表(模板行 template_id NULL / 实例行;评审 E6 预留 `target_type` + `suite_id`,scenario 先行)+ `users.is_system` + 平台系统用户种子(`__platform__`,随机口令 + is_system 登录双保险;登录 401、用户列表/roster 过滤)。迁移前 PG 全量备份(`data.bak-pg-before-0015-*.sql`)。
+- **cron 解析器** `cron_expr.py`:5 段子集(`*`/`*/n`/`a`/`a-b`/`a-b/n`/逗号列表),`next_fire` 分段跳月/日/时(4 年兜底 2/29),`describe_cron` 人话摘要;14 例单测含越界/坏形状。
+- **后台任务注册表** `background_tasks.py`(评审 E8):草稿巡检并入 + 集成调度 15s 一拍,统一 supervisor/异常隔离/优雅停止。
+- **调度循环** `scheduler_tick`:半常驻通道空闲收口(评审 E4-A:执行后保留 5 分钟)→ running 租约超时回收(15 分钟)→ **短持** `pg_try_advisory_lock`(评审 E5:取锁-扫描-释放,固定锁号)→ 条件更新认领 → 准入(全局=通道数 2/单系统/执行人×系统)→ spawn 执行。
+- **integration_runner**(不写执行记录,决策 3):复用 run_dispatcher 公共化零件(`compose_scenario`/`resolve_exec_auths`/`built_in_users`/`find_dataset_by_id`,与 referenced_services 同一处理)→ plate convert → `materialize_run_copy`(方案 serviceBindings URL + 别名链)→ 半常驻 `gimbal run server` 通道执行(case 落临时目录,执行后删除 —— G8 不落明文案卷);结果回写实例:latest/on_change(评审 E7:P1 判定基准 = last_status 翻转)+ fail_streak≥3 通知 admin;outputs/state_vars 过脱敏键表(评审 E1:token 不落库)。
+- **只读护栏**(方案 §3 双闸):保存前 + 执行前,场景全部步骤 method ∈ GET/HEAD/OPTIONS(POST+query_safe 随 P2 接 plate 元数据);P1 只开放平台模式(personal 422 随 P2)。
+- **路由** `/api/integration/*`:模板 CRUD(owner 改/删,平台模式含 admin;软删 removed_at=评审 E7)/ 立即执行(60s 冷却,结果回显)/ 批量卡片 `/cards`(fn:<id> 批量,只回状态摘要)/ 平台凭证 CRUD(admin;挂平台系统用户,复用 auth_sessions 加密)。
+- **前端**:`FunctionCard.vue`(status 模板 S/M/L:状态灯/最近执行/错误摘要/L 档周期+立即执行;状态叠加:未执行/执行中/正常/失败/过期>1h/已移除;30s 批量取数,错误隔离)+ 工作台动态条目(`fn:` 卡进市场与布局,layout 放行 fn: 前缀;模板不可见时合成占位 def 走「已移除」态)+ `IntegrationCenter.vue` 集成页(列表/新建弹层含服务端校验回显/立即执行;平台凭证区 admin-only)+ 侧栏「集成中心」入口。
+- **测试**:后端 `test_integration.py` 14 例(cron/只读闸/脱敏/CRUD/软删/可见性/卡片批量/凭证 admin 闸/手动执行含冷却与 E1 落库断言)+ 前端 FunctionCard 4 例/IntegrationCenter 3 例/Sidebar 计数 +1。回归:后端 **848 绿**、前端 **140 文件 1192 绿**、vue-tsc 干净。
+- **浏览器验收(真 SUT、真引擎)**:GET 探活场景(sc-keepalive)+ 方案 serviceBindings 指向本机后端 → 集成页建功能「平台保活探针」(*/1 分钟、on_change、公共)→ 调度器 15s 内自动首跑 → 补齐场景必填后「立即执行」**真引擎通过**(半常驻通道拉起 gimbal server → convert → 物化 → GET /api/health → passed 回写,last_outputs 落 run_result 摘要)→ 工作台卡片市场上板,状态灯「正常 · 最近执行 刚刚」→ 平台凭证增删(确认挂 `__platform__`)。验收抓到并修 2 个真问题:新建弹层场景下拉 `page_size:200` 超 API 上限 422 置空(改 100);`_iso` 对 aware datetime 产出 `+00:00Z` 双时区后缀致前端解析失败(UTC 归一后拼 Z)。
+- **评审待拍板项的落地选择**:E3 采纳(G2 outputs 暴露移出 P1,随 task 3c/P2);E4-A 半常驻;E7 软删 + on_change=状态翻转;#5 冷却 `max(60s, 周期/10)` 简化为固定 60s(P1);#6 平台凭证限 admin;G7(auth 错误分类)随 task 3c —— P1 失败只计 fail_streak 不暂停。

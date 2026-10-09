@@ -94,7 +94,8 @@ async def get_roster(
     """
     rows = (await db.execute(
         select(User)
-        .where(User.is_active.is_(True), User.id != user.id)
+        .where(User.is_active.is_(True), User.id != user.id,
+               User.is_system.is_(False))
         .order_by(User.display_name, User.username)
         .limit(200)
     )).scalars().all()
@@ -118,7 +119,7 @@ async def list_users(
     """List every user(M2.5 收紧:member+ 可见;原「任何登录用户全量
     可见」的 spec-1 遗留闭合 —— 权限方案 §5.3)。M4(§6.3):q
     (username/display_name 子串)+ role 精确 + Page 信封。"""
-    base = select(User)
+    base = select(User).where(User.is_system.is_(False))
     if q:
         base = base.where(or_(
             User.username.ilike(f"%{q}%"),

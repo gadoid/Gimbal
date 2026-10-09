@@ -41,7 +41,8 @@ function defaultSizeOf(id: string): CardSize {
 function filterKnown(order: unknown): string[] {
   if (!Array.isArray(order)) return []
   const known = new Set(workbenchRegistry.map((d) => d.id))
-  return order.filter((id): id is string => typeof id === 'string' && known.has(id))
+  return order.filter((id): id is string =>
+    typeof id === 'string' && (known.has(id) || id.startsWith('fn:')))
 }
 
 function withSizes(order: string[], raw?: unknown): Record<string, CardSize> {
@@ -149,7 +150,10 @@ export function useWorkbenchLayout(eligibleIds?: Ref<string[]>): {
   const orderedIds = computed(() => pref.value.value.order)
 
   function add(id: string) {
-    if (!workbenchRegistry.some((d) => d.id === id)) return
+    if (!workbenchRegistry.some((d) => d.id === id)
+        && !id.startsWith('fn:')) {
+      return
+    }
     const cur = pref.value.value
     if (cur.order.includes(id)) return
     // 加回时尺寸取注册表 defaultSize(用户曾调过的尺寸不复活 — 与

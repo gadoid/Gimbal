@@ -47,6 +47,9 @@ class User(Base):
     # (is_admin 过渡镜像列已随 M6-3 删除;API 字面由 UserPublic 派生)
     role: Mapped[str] = mapped_column(String(16), default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 外部系统集成 0015:平台系统用户标记 —— 登录拒绝、用户列表过滤;
+    # 它持有平台凭证池(auth_sessions.owner_id),不登录平台本身。
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )

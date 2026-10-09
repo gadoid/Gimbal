@@ -2419,3 +2419,12 @@ class Conflict(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+# ── 外部系统集成 P1:私有件提升为公共(方案 §5,与此前 ─────────────
+# referenced_services 的处理一致 —— integration_runner 复用同一份
+# 组装/解析实现,不在集成路径另开第二份漂移面)。
+compose_scenario = _compose_scenario
+built_in_users = _built_in_users
+resolve_exec_auths = _resolve_exec_auths
+find_dataset_by_id = _find_dataset_by_id

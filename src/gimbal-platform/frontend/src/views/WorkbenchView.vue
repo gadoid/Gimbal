@@ -81,7 +81,7 @@
     <!-- 卡片市场 -->
     <AddCardGallery
       v-model:open="galleryOpen"
-      :registry="visibleRegistry"
+      :registry="galleryRegistry"
       :enabled-ids="orderedIds"
       @add="onAddCard"
     />
@@ -94,6 +94,7 @@ import draggable from 'vuedraggable'
 import ListPage from '@/layouts/ListPage.vue'
 import { workbenchRegistry, type WorkbenchCardDef } from '@/components/workbench/registry'
 import { useWorkbenchLayout } from '@/components/workbench/layout'
+import { listIntegrationTasks } from '@/api/integration'
 import WorkbenchCardSlot from '@/components/workbench/WorkbenchCardSlot.vue'
 import AddCardGallery from '@/components/workbench/AddCardGallery.vue'
 import UserIdentityCard from '@/components/workbench/UserIdentityCard.vue'
@@ -110,6 +111,33 @@ const visibleRegistry = computed(() =>
     || (d.roles && auth.hasRole(...d.roles))),
 )
 
+/** 动态功能卡(外部系统集成 §7):可见模板 → fn:<id> 卡;布局里存过
+ *  但已不可见的 fn: id 合成占位 def(卡内走「已移除」态,可自行删卡)。 */
+const fnDefs = ref<WorkbenchCardDef[]>([])
+void listIntegrationTasks().then((tasks) => {
+  fnDefs.value = tasks.map((t) => ({
+    id: `fn:${t.id}`,
+    title: t.name,
+    description: `功能卡 · ${t.cronText}`,
+    accent: 'gold',
+    component: () => import('@/components/workbench/FunctionCard.vue'),
+    defaultSize: 'M' as const,
+    refreshMs: 30_000,
+  }))
+}).catch(() => { /* 动态卡是增强;失败静默(静态卡不受影响) */ })
+
+const placeholderFnDefs = computed<WorkbenchCardDef[]>(() =>
+  orderedIds.value
+    .filter((id) => id.startsWith('fn:')
+      && !fnDefs.value.some((d) => d.id === id))
+    .map((id) => ({
+      id,
+      title: '功能(已移除)',
+      description: '该功能已移除或不可见',
+      accent: 'gold',
+      component: () => import('@/components/workbench/FunctionCard.vue'),
+    })))
+
 /** 默认板只铺可见集内的卡 —— adminOnly 卡不该出现在 member 的默认布局。
  *  布局存档(服务端 + 本地镜像)由 useUserPreference 统一盯 auth 身份,
  *  不再需要调用方传用户名。 */
@@ -120,7 +148,15 @@ const { orderedIds, add, remove, move, reset, sizeOf, setSize } =
 /** draggable item-key:元素本身是 string id,键 = 自身 */
 const cardKey = (id: string) => id
 
+/** 市场全集 = 静态可见集 + 功能卡(占位不进市场) */
+const galleryRegistry = computed(() =>
+  [...visibleRegistry.value, ...fnDefs.value])
+
 function defOf(id: string): WorkbenchCardDef | undefined {
+  if (id.startsWith('fn:')) {
+    return fnDefs.value.find((d) => d.id === id)
+      ?? placeholderFnDefs.value.find((d) => d.id === id)
+  }
   // 优先可见集;回退全量 registry — 防 admin 降级后布局残留的
   // adminOnly 卡成"幽灵卡"(渲染不出、市场也看不到)
   return visibleRegistry.value.find((d) => d.id === id)

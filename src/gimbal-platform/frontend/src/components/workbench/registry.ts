@@ -35,6 +35,15 @@ export type CardAccent = 'blue' | 'green' | 'gold'
 /** slot → 卡片组件的尺寸注入键(inject 缺省 'M',卡片可独立渲染)。 */
 export const cardSizeKey: InjectionKey<Ref<CardSize>> = Symbol('workbench-card-size')
 
+/** slot → 卡片定义注入键(FunctionCard 等动态卡据 def.id 定位自身)。 */
+export const workbenchCardDefKey: InjectionKey<Ref<WorkbenchCardDef | null>> =
+  Symbol('workbench-card-def')
+
+/** 动态卡(def 注入)侧取自身定义的便捷入口。 */
+export function useCardDef(): Ref<WorkbenchCardDef | null> {
+  return inject(workbenchCardDefKey, null) ?? ref<WorkbenchCardDef | null>(null)
+}
+
 /** 卡片组件侧取尺寸的便捷入口(缺省 M — 组件脱离 slot 也能渲染)。 */
 export function useCardSize(): Ref<CardSize> {
   return inject(cardSizeKey, null) ?? ref<CardSize>('M')

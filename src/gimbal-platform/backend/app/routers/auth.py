@@ -109,6 +109,12 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=code_detail(BAD_CREDENTIALS, "用户名或密码错误"),
         )
+    if getattr(user, "is_system", False):
+        # 0015 平台系统用户:持有凭证池,不可登录平台
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=code_detail(BAD_CREDENTIALS, "用户名或密码错误"),
+        )
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -76,7 +76,10 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onErrorCaptured, onUnmounted, provide, ref, watch } from 'vue'
-import { CARD_SIZE_LABELS, cardSizeKey, type CardSize, type WorkbenchCardDef } from './registry'
+import {
+  CARD_SIZE_LABELS, cardSizeKey, workbenchCardDefKey,
+  type CardSize, type WorkbenchCardDef,
+} from './registry'
 
 const props = defineProps<{
   def: WorkbenchCardDef
@@ -105,6 +108,8 @@ onErrorCaptured(() => {
 
 /** 尺寸注入:卡片组件 useCardSize() 读取,三档密度渲染。 */
 provide(cardSizeKey, computed(() => props.size))
+/** 卡片定义注入(FunctionCard 等动态卡据 def.id 定位自身)。 */
+provide(workbenchCardDefKey, computed(() => props.def))
 
 /** 单一交互语言:⤢ 每次点击按序循环 紧凑(S)→标准(M)→展开(L)。 */
 const SIZE_CYCLE: Record<CardSize, CardSize> = { S: 'M', M: 'L', L: 'S' }

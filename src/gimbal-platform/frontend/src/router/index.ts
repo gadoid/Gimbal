@@ -178,6 +178,13 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // 集成中心(外部系统集成 P1):功能(定时任务 → 工作台卡片)+
+    // 平台凭证(admin)。
+    path: '/integrations',
+    component: () => import('@/views/IntegrationCenter.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // 数据分析(执行设计 §4:本期延后)— 说明页:前置(行级/步骤级结果
     // 落库)+ 已在别处的两个去向。侧边栏入口置灰但可点(§4.4:留个灰
     // 入口,点进来撞上那条说明;本页正常高亮 + 琥珀「延后」小标)。
