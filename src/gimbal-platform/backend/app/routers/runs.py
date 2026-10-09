@@ -59,14 +59,19 @@ async def post_run(
             raise run_dispatcher.NotFound(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
-        ensure_owner(
-            user,
-            scen.owner_id,
-            {
-                "code": "not_owner",
-                "message": "only the scenario's owner (or admin) can run this scenario",
-            },
-        )
+        # §8.2:ensure_owner → can_run_scenario(属主 ∨ admin ∨ 引用,
+        # §7.6;public 不开执行 —— 公共资源跑需先 fork,不变量 7)。
+        from ._ownership import can_run_scenario
+        if not await can_run_scenario(
+                db, user, scenario_id=scen.scenario_id,
+                owner_id=scen.owner_id):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "not_owner",
+                    "message": ("only the scenario's owner (or admin, or a "
+                                "share reference) can run this scenario"),
+                })
         # graph 链 unit 授权(必修缺口,《Suite成员层、引用分享与浏览镜头-
         # 设计方案》§8.2):unit 与 before/after 括号场景此前只在 worker 侧
         # 物化时查存在性、无归属检查——任何登录用户都能经编排跑他人
@@ -89,17 +94,19 @@ async def post_run(
                         "scenario_not_found",
                         f"scenario not found: {unit.scenario_id}",
                     )
-                ensure_owner(
-                    user,
-                    unit_scen.owner_id,
-                    {
-                        "code": "not_owner",
-                        "message": (
-                            "only the scenario's owner (or admin) can run "
-                            f"graph unit: {unit.scenario_id}"
-                        ),
-                    },
-                )
+                if not await can_run_scenario(
+                        db, user, scenario_id=unit_scen.scenario_id,
+                        owner_id=unit_scen.owner_id):
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "not_owner",
+                            "message": (
+                                "only the scenario's owner (or admin, or a "
+                                "share reference) can run graph unit: "
+                                f"{unit.scenario_id}"
+                            ),
+                        })
         return await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,

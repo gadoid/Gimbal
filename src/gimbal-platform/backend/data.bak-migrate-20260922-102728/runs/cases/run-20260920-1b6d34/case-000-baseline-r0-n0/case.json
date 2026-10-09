@@ -1,0 +1,45 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-snap",
+  "meta": {
+    "scenarioId": "sc-snap",
+    "name": "快照版1",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "alice",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-20T05:15:44.509419Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": [
+    {
+      "api": {
+        "view_hints": {
+          "endpoint_id": "fin.order.add"
+        }
+      },
+      "request": {
+        "body": {
+          "customer_id": "${var.customer_id}"
+        }
+      }
+    }
+  ]
+}

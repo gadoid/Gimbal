@@ -1,0 +1,32 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-sem",
+  "meta": {
+    "scenarioId": "sc-sem",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "alice",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-08T08:17:02.482248Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": []
+}

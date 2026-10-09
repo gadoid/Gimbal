@@ -91,9 +91,11 @@ async def list_data_sets(
     """
     if user.role == "admin":
         return await data_set_store.list_summaries(db, scenario_id=scenarioId)
-    own_ids = await scenario_store.owned_scenario_ids(db, user)
+    # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
+    from ._ownership import referenced_scenario_ids
+    own_ids = (await scenario_store.owned_scenario_ids(db, user)) |         await referenced_scenario_ids(db, user.id)
     if scenarioId is not None:
-        # Scope to the requested scenario (still ownership-filtered).
+        # Scope to the requested scenario (still visibility-filtered).
         own_ids = own_ids & {scenarioId}
     # Ownership filter pushed down as a SQL IN (was: full list + Python filter).
     return await data_set_store.list_summaries(db, scenario_ids=own_ids)
@@ -103,9 +105,15 @@ async def list_data_sets(
 async def get_data_set(
     user: CurrentUser, db: DbSession, dataset_id: str
 ) -> DataSet:
-    # Same ownership rule as the write endpoints: full rows are business
-    # data, not a shared library.
-    await _require_dataset_owner(db, user, dataset_id)
+    # P2:读走引用闭包(§7.4 —— 属主/admin/引用者可读,与列表同口径);
+    # 写端点仍走 _require_dataset_owner。
+    row = await data_set_store.get_row(db, dataset_id)
+    if row is None:
+        raise not_found_404("data_set", dataset_id)
+    scen = await _load_scenario(db, row.scenario_id)
+    from ._ownership import can_read_scenario_row
+    if scen is None or not await can_read_scenario_row(db, user, scen):
+        raise not_found_404("data_set", dataset_id)
     try:
         return await data_set_store.get(db, dataset_id)
     except KeyError as e:

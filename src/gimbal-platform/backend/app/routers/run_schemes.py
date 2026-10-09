@@ -46,7 +46,10 @@ async def list_run_schemes(
     user: CurrentUser, db: DbSession, scenario_id: str,
 ) -> list[dict]:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    # P2 引用闭包(§7.4):读 = 属主/admin/引用者;写端点仍 _require_owner。
+    from ._ownership import can_read_scenario_row
+    if not await can_read_scenario_row(db, user, row):
+        raise not_found_404("scenario", scenario_id)
     # 缺失自动物化默认项(spec §5)— 自愈迁移/钩子漏网的存量场景
     await scheme_store.ensure_default_scheme(db, scenario_id)
     return await scheme_store.list_schemes(db, scenario_id)

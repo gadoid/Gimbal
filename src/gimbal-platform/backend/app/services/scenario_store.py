@@ -42,6 +42,9 @@ async def create(
     owner: str = "",
     owner_id: int | None = None,
     visibility: str = "private",
+    forked_from_id: str | None = None,
+    forked_from_owner_name: str | None = None,
+    forked_from_at: "datetime | None" = None,
 ) -> Scenario:
     """Insert a new scenario.  Raises ValueError on duplicate scenarioId.
 
@@ -82,6 +85,9 @@ async def create(
         owner_id=owner_id,
         visibility=visibility,
         payload=payload,
+        forked_from_id=forked_from_id,
+        forked_from_owner_name=forked_from_owner_name,
+        forked_from_at=forked_from_at,
     )
     db.add(row)
     try:
@@ -266,6 +272,8 @@ async def copy_scenario(
     new_name: str | None = None,
     activity_kind: str | None = None,
     activity_detail: dict | None = None,
+    origin_id: str | None = None,
+    origin_owner_name: str | None = None,
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
@@ -298,7 +306,14 @@ async def copy_scenario(
             meta["owner"] = new_owner
             copied_name = meta["name"]
     draft = ScenarioDraft.model_validate(payload)
-    await create(db, draft, owner=new_owner, owner_id=new_owner_id)
+    from datetime import datetime as _dt, timezone as _tz
+    await create(
+        db, draft, owner=new_owner, owner_id=new_owner_id,
+        forked_from_id=origin_id or scenario_id,
+        forked_from_owner_name=origin_owner_name
+        or (src.owner_name or ""),
+        forked_from_at=_dt.now(_tz.utc).replace(tzinfo=None),
+    )
 
     # data_sets 级联拷贝(Case 层已解散,数据集直接挂场景)
     dss = (

@@ -86,6 +86,9 @@ async def handoff_resource(
             activity_kind=KIND_HANDOFF,
             activity_detail={
                 "senderId": user.id, "senderName": sender_disp},
+            # P2 §7.3:副本来源三件套 —— handoff 与分享副本共用(§13.4 债1)
+            origin_id=body.resource_id,
+            origin_owner_name=row.owner_name or "",
         )
     except KeyError as e:
         raise key_error_404(e)

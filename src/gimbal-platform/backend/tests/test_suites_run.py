@@ -138,11 +138,12 @@ async def test_run_suite_gates(client: AsyncClient) -> None:
     r = await client.post(f"/api/suites/{empty_id}/run", headers=bob)
     assert r.status_code == 409 and r.json()["detail"]["code"] == "suite_empty"
 
-    # 非属主发起 → 403
+    # 非属主且无引用发起 → 404(P2 §7.6 can_run_suite;私有 suite 对
+    # carol 不可见 → 404 不泄露存在性,替代 P1 期 _require_write 的 403)
     sid = await _mk_suite_with_members(client, bob, "有货", ["sc-gt-a"])
     carol = await register_and_login(client, "gt_carol", "gt_carol_pass123")
     r = await client.post(f"/api/suites/{sid}/run", headers=carol)
-    assert r.status_code == 403
+    assert r.status_code == 404
 
     # 总量预检:上限压到 0 → 任何成员都超 → 409(未产生执行)
     r = await client.post(f"/api/suites/{sid}/run", headers=bob)

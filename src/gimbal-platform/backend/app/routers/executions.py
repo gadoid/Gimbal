@@ -567,14 +567,19 @@ async def rerun_execution(
                 "message": f"scenario not found: {ex.scenario_id}",
             },
         )
-    ensure_owner(
-        user,
-        scen.owner_id,
-        {
-            "code": "not_owner",
-            "message": "only the scenario's owner (or admin) can run this scenario",
-        },
-    )
+    # §8.2:rerun 的场景检查 ensure_owner → can_run_scenario(§7.6:
+    # 被分享人可 rerun 自己发起的执行;执行属主闸由 OwnedExecution 承担)。
+    from ._ownership import can_run_scenario
+    if not await can_run_scenario(
+            session, user, scenario_id=scen.scenario_id,
+            owner_id=scen.owner_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "not_owner",
+                "message": ("only the scenario's owner (or admin, or a "
+                            "share reference) can run this scenario"),
+            })
     try:
         return await run_dispatcher.dispatch_run(
             session, user_id=user.id, req=req, preloaded_scenario=scen

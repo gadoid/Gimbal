@@ -73,12 +73,25 @@ def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
 
 
 def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
-    """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。"""
+    """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。
+    纯判(属主/admin/public);引用分支由 ``_require_reader_async``
+    承担(P2 §7.6:引用者可读定义)。"""
     if not can_read_scenario(
         user,
-        owner_id=row.owner_id,
+        owner_id=row.owner_id or -1,
         visibility=row.visibility or "private",
     ):
+        raise HTTPException(
+            status_code=404, detail=f"scenario_not_found: {row.scenario_id}"
+        )
+
+
+async def _require_reader_async(
+    db, user: CurrentUser, row: ComposerScenario
+) -> None:
+    """读闸(完整判定 §7.6):public ∨ 属主 ∨ admin ∨ 引用。"""
+    from ._ownership import can_read_scenario_row
+    if not await can_read_scenario_row(db, user, row):
         raise HTTPException(
             status_code=404, detail=f"scenario_not_found: {row.scenario_id}"
         )
@@ -494,12 +507,22 @@ async def list_scenarios(
         db, q=q, system=system, module=module, priority=priority,
         tag=tag, author=author, updated_within=updated_within,
     )
-    readable = [
+    # P2 引用分支(§7.6 SQLite 兜底,与 visibility_clause 同口径):
+    # 纯判先行,不通过者用一次引用集合复核(团队规模有界,取集合可接受)。
+    _pure_readable = [
         r for r in rows
         if can_read_scenario(
-            user, owner_id=r.owner_id, visibility=r.visibility or "private"
-        )
+            user, owner_id=r.owner_id or -1,
+            visibility=r.visibility or "private")
     ]
+    _maybe = [r for r in rows if r not in _pure_readable]
+    if _maybe:
+        from ._ownership import referenced_scenario_ids
+        _ref_ids = await referenced_scenario_ids(db, user.id)
+        readable = _pure_readable + [r for r in _maybe
+                                     if r.scenario_id in _ref_ids]
+    else:
+        readable = _pure_readable
     if scope == "mine":
         readable = [r for r in readable if r.owner_id == user.id]
     if visibility:
@@ -554,7 +577,7 @@ async def star_scenario(
     # Verify the scenario exists AND is readable (404 instead of a
     # silent no-op — and no starring other users' private scenarios).
     row = await _load_row(db, scenario_id)
-    _require_reader(user, row)
+    await _require_reader_async(db, user, row)
     from ..services.user_stars import STAR_CAP, StarCapExceeded
     from ..services import user_stars as user_stars_svc
 
@@ -596,6 +619,40 @@ async def unpublish_scenario(
         result = await scenario_store.set_visibility(db, scenario_id, "private")
     except KeyError as e:
         raise key_error_404(e)
+    # P2 §7.9 连带下架:公共 suite ⇒ 成员全 public。场景下架时,其所
+    # 属的公共 suite 一并下架(属主即 suite 属主——组合外键保证;自
+    # 下架不通知,admin 下架通知 suite 属主,与既有 admin 下架通知口径
+    # 一致)。未发布 suite 里的成员无联动。
+    from ..models.suite import Suite as _Suite, SuiteMember as _SM
+    from sqlalchemy import select as _sel, update as _upd
+    _hit = (await db.execute(
+        _sel(_Suite.id, _Suite.owner_id).join(
+            _SM, _SM.suite_id == _Suite.id)
+        .where(_SM.scenario_id == scenario_id,
+               _Suite.visibility == "public"))).all()
+    if _hit:
+        await db.execute(_upd(_Suite).where(
+            _Suite.id.in_([h.id for h in _hit]))
+            .values(visibility="private"))
+        # 级联 UPDATE 须显式提交(属主自下架不走通知分支的隐式 commit;
+        # set_visibility 内部已提交的是场景行,不含本条 suite UPDATE)
+        await db.commit()
+        if user.role == "admin":
+            from ..services import notifications as _ns
+            for h in _hit:
+                if h.owner_id is not None and h.owner_id != user.id:
+                    try:
+                        await _ns.create_notification(
+                            db, user_id=h.owner_id,
+                            type_="scenario_unpublished",
+                            title="你的公共用例组已连带下架",
+                            body=(f"管理员 {user.display_name or user.username} "
+                                  f"下架了成员场景 {scenario_id},其所属的公共"
+                                  f"用例组已一并下架(现为私有)。"),
+                            link=f"/suites/{h.id}")
+                    except Exception:  # noqa: BLE001
+                        pass
+
     # 通知接线(P1b,权限方案 §3.2):admin 下架**他人** public 场景是
     # 全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
     if user.role == "admin" and row.owner_id is not None and row.owner_id != user.id:
@@ -632,7 +689,7 @@ async def copy_scenario_to_me(
     确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。
     """
     row = await _load_row(db, scenario_id)
-    _require_reader(user, row)
+    await _require_reader_async(db, user, row)
     name = (payload.name if payload is not None else None) or ""
     name = name.strip() or None
     if name is not None:
@@ -663,7 +720,7 @@ async def get_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
     row = await _load_row(db, scenario_id)
-    _require_reader(user, row)
+    await _require_reader_async(db, user, row)
     try:
         return await scenario_store.get(db, scenario_id, user_id=user.id)
     except KeyError as e:
@@ -678,7 +735,7 @@ async def get_scenario_draft(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> ScenarioDraft:
     row = await _load_row(db, scenario_id)
-    _require_reader(user, row)
+    await _require_reader_async(db, user, row)
     # 方案读写唯一面 = /run-schemes CRUD(阶段④:V1 sidecar 读侧回填下线,
     # draft 不再携带 runSchemes 键;存量 payload 中的同键被 extra=ignore
     # 静默忽略)。

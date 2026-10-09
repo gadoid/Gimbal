@@ -1,0 +1,98 @@
+{
+  "launchStatus": "ok",
+  "exitCode": 1,
+  "status": "failed",
+  "total": 1,
+  "passed": 0,
+  "failed": 1,
+  "skipped": 0,
+  "details": [
+    {
+      "scenario_id": "sc-scenario-icxz4vrk3",
+      "status": "halted",
+      "duration_ms": 23550.153000000002,
+      "halted": true,
+      "halt_reason": "cli --step-to=10",
+      "steps": [
+        {
+          "step_id": "step-000",
+          "status": "passed",
+          "duration_ms": 924.8539999999999,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-001",
+          "status": "passed",
+          "duration_ms": 2197.763,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-002",
+          "status": "passed",
+          "duration_ms": 1334.703,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-003",
+          "status": "passed",
+          "duration_ms": 1636.505,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-004",
+          "status": "passed",
+          "duration_ms": 1112.479,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-005",
+          "status": "passed",
+          "duration_ms": 3073.712,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-006",
+          "status": "passed",
+          "duration_ms": 1066.8249999999998,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-007",
+          "status": "passed",
+          "duration_ms": 1083.201,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-008",
+          "status": "passed",
+          "duration_ms": 2746.4300000000003,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-009",
+          "status": "passed",
+          "duration_ms": 7032.188,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "__scenario_halted__",
+          "status": "halted",
+          "duration_ms": 0.0,
+          "error": "halted: cli --step-to=10 (next_step_index=10/12)",
+          "error_phase": "halted"
+        }
+      ]
+    }
+  ],
+  "error": ""
+}

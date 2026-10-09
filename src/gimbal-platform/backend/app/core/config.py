@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     # 50 成员 × MAX_RUNS_PER_EXECUTION=200 的极端量级可能真跑超 24h,
     # 超窗再发起属可接受降级(旧批仍在跑、新批排队,不损正确性)。
     SUITE_RUN_STALE_HOURS: int = 24
+    # 每人发出的引用数上限(§6.3/§4 对冲授权蔓延;团队 ~10 人规模有界)
+    SHARE_REF_CAP: int = 200
     # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
     # server = 每执行一组 gimbal run server 实例(POST /runs + SSE;槽位池
     #   见 EXEC_MAX_SERVER_INSTANCES)—— 2026-09-29 起为默认(P3 收尾:

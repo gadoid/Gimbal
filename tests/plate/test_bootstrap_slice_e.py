@@ -102,7 +102,9 @@ class TestGates:
         assert r.success, r.message
         assert r.manifest["summary"]["endpoints"] == 126
         assert r.manifest["summary"]["statements"] == 10
-        assert r.manifest["summary"]["terms"] == 10
+        # 11 = 原切片 10 + 三级角色更名(0011)补的 value:user.role.user
+        # (fb47a066 更名字典加词条但漏改本期望——拉取侧回弹,此处补齐)
+        assert r.manifest["summary"]["terms"] == 11
         # call 投影含 capability 关联的四个管理动作
         assert "platform.users.post_root" in r.manifest["call_projections"]
 

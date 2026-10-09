@@ -1,0 +1,105 @@
+{
+  "launchStatus": "ok",
+  "exitCode": 0,
+  "status": "passed",
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "skipped": 0,
+  "details": [
+    {
+      "scenario_id": "sc-scenario-icxz4vrk3",
+      "status": "passed",
+      "duration_ms": 31075.361,
+      "halted": false,
+      "halt_reason": null,
+      "steps": [
+        {
+          "step_id": "step-000",
+          "status": "passed",
+          "duration_ms": 942.1239999999999,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-001",
+          "status": "passed",
+          "duration_ms": 2235.204,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-002",
+          "status": "passed",
+          "duration_ms": 1020.9280000000001,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-003",
+          "status": "passed",
+          "duration_ms": 1496.8410000000001,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-004",
+          "status": "passed",
+          "duration_ms": 1071.396,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-005",
+          "status": "passed",
+          "duration_ms": 3201.533,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-006",
+          "status": "passed",
+          "duration_ms": 977.793,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-007",
+          "status": "passed",
+          "duration_ms": 1004.824,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-008",
+          "status": "passed",
+          "duration_ms": 2656.475,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-009",
+          "status": "passed",
+          "duration_ms": 8352.317,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-010",
+          "status": "passed",
+          "duration_ms": 4845.153,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-011",
+          "status": "passed",
+          "duration_ms": 2061.971,
+          "error": null,
+          "error_phase": null
+        }
+      ]
+    }
+  ],
+  "error": ""
+}

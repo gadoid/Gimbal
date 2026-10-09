@@ -23,6 +23,8 @@ AUDIT_ACTIONS = (
     "adaptation.batch.apply",
     "adaptation.batch.rollback",
     "alias.write",        # 别名登记/改/删
+    "share.admin_revoke",  # admin 撤销引用(特权收缩,权限域二期 P2)
+    "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10)
 )
 
 

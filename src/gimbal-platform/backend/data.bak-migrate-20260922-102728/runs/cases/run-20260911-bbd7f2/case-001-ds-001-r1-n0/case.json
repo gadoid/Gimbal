@@ -1,0 +1,34 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-cancel",
+  "meta": {
+    "scenarioId": "sc-cancel",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "alice",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-11T10:26:26.668577Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {
+      "customer_id": "1"
+    },
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": []
+}

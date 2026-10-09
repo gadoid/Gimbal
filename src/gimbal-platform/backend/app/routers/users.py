@@ -434,7 +434,68 @@ async def delete_user(
     # purge:suite 删除(成员行级联),场景照旧走 scenario_store.delete。
     from ..models.suite import Suite, SuiteMember
 
+    # ── 引用处理(权限域二期 P2,§7.10;在级联/删除**之前**通知)──
+    from ..models.share_ref import ShareRef as _ShareRef
+    from ..services.notifications import create_notification as _notify
+
+    async def _notify_refs(ref_rows, copy_text: str) -> None:
+        for r in ref_rows:
+            try:
+                await _notify(
+                    db, user_id=r.grantee_user_id,
+                    type_="share_ref_resource_deleted",
+                    title=f"引用失效:{r.scenario_id or f'suite#{r.suite_id}'}",
+                    body=copy_text,
+                    link=None,
+                    resource_id=r.scenario_id or (
+                        str(r.suite_id) if r.suite_id else None))
+            except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断处置
+                await db.rollback()
+
+    _own_scen_q = select(ComposerScenario.scenario_id).where(
+        ComposerScenario.owner_id == user_id)
+    _own_suite_q = select(Suite.id).where(Suite.owner_id == user_id)
+    _my_refs = (await db.execute(
+        select(_ShareRef).where(or_(
+            _ShareRef.scenario_id.in_(_own_scen_q),
+            _ShareRef.suite_id.in_(_own_suite_q)))
+    )).scalars().all()
+
     if disposal == "publicize":
+        # §7.10:引用删除(场景引用显式删;suite 引用随 suite 删除级联),
+        # 通知文案 = 已公共化(可从公共库访问)
+        await _notify_refs(_my_refs,
+                           "该资源已公开至公共库,可从公共库访问(引用分享随之结束)")
+    elif disposal == "purge":
+        await _notify_refs(_my_refs, "该资源已被删除,引用分享随之结束")
+    elif disposal == "transfer" and _my_refs:
+        # §7.10:transfer 引用随行(无数据改写);两侧通知
+        _t_label = transferee.display_name or transferee.username
+        for r in _my_refs:
+            try:
+                await _notify(
+                    db, user_id=r.grantee_user_id,
+                    type_="share_ref_owner_changed",
+                    title="分享者已变更",
+                    body=f"你引用的资源已转让给 {_t_label},引用继续有效",
+                    resource_id=r.scenario_id or (
+                        str(r.suite_id) if r.suite_id else None))
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+        try:
+            await _notify(
+                db, user_id=transferee.id,
+                type_="share_ref_owner_changed",
+                title=f"你接手了 {len(_my_refs)} 条已分享出去的引用",
+                body="随资源转让而来的引用分享仍然有效,可在各资源的分享列表管理")
+        except Exception:  # noqa: BLE001
+            await db.rollback()
+
+    if disposal == "publicize":
+        # 场景引用显式删除(无主公共资源不挂可执行引用,§7.10 表);
+        # suite 引用已随下方 suite 删除级联(PG)/兜底删除(SQLite)。
+        await db.execute(sa_delete(_ShareRef).where(
+            _ShareRef.scenario_id.in_(_own_scen_q)))
         await db.execute(
             sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
         await db.execute(
@@ -451,6 +512,11 @@ async def delete_user(
             sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
+        # SQLite 兜底:FK 不强制的方言显式清引用(PG 已级联)
+        await db.execute(sa_delete(_ShareRef).where(
+            _ShareRef.scenario_id.in_(_own_scen_q)))
+        await db.execute(sa_delete(_ShareRef).where(
+            _ShareRef.suite_id.in_(_own_suite_q)))
 
     # ── 场景处置(三选一)─────────────────────────────────────────
     scenario_ids = list((await db.execute(

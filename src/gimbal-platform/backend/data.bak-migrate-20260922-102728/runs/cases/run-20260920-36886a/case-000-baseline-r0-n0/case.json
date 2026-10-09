@@ -1,0 +1,47 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-base",
+  "meta": {
+    "scenarioId": "sc-base",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "alice",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-20T04:42:31.476017Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {
+      "customer_id": "261"
+    },
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": [
+    {
+      "api": {
+        "view_hints": {
+          "endpoint_id": "fin.order.add"
+        }
+      },
+      "request": {
+        "body": {
+          "customer_id": "${var.customer_id}"
+        }
+      }
+    }
+  ]
+}

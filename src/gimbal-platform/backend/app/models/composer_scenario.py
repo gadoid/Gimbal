@@ -83,6 +83,14 @@ class ComposerScenario(Base):
         index=True,
     )
     visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # 副本来源三件套(权限域二期 P2,§7.3/§13.4-债1):场景与 suite 的
+    # 副本共用此套字段,「副本 · 来自某人」徽标与将来对比原件的依据。
+    forked_from_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True)
+    forked_from_owner_name: Mapped[str | None] = mapped_column(
+        String(128), nullable=True)
+    forked_from_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True)
     # Full draft container: {definition, orchestration} — the single
     # source of truth for meta/steps/config/resource.  列表侧的 meta 投影
     # 由下方生成列自算(源存果算,DB 物化,应用不可写)。

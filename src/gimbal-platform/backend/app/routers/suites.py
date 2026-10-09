@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
@@ -50,8 +50,28 @@ async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
 
 
 def _require_read(user: CurrentUser, suite: Suite) -> None:
-    """读闸:P1 suite 恒 private → 属主 ∨ admin,否则 404(不泄露)。"""
-    if user.role != "admin" and user.id != suite.owner_id:
+    """读闸(同步快路径):private → 属主 ∨ admin,否则 404(不泄露)。
+    P2 引用/公共读由 ``_require_read_async`` 承担(§7.6)。"""
+    if user.role != "admin" and user.id != suite.owner_id             and suite.visibility != "public":
+        raise not_found_404("suite", str(suite.id))
+
+
+async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
+    """读闸(完整判定,§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
+    if user.role == "admin" or user.id == suite.owner_id             or suite.visibility == "public":
+        return
+    from ._ownership import has_suite_ref
+    if not await has_suite_ref(db, user.id, suite.id):
+        raise not_found_404("suite", str(suite.id))
+
+
+async def _require_run_async(db, user: CurrentUser, suite: Suite) -> None:
+    """运行闸(§7.6 can_run_suite):属主 ∨ admin ∨ suite 引用。
+    写闸(_require_write)不变 —— 成员管理仍是属主 ∨ admin。"""
+    if user.role == "admin" or user.id == suite.owner_id:
+        return
+    from ._ownership import has_suite_ref
+    if not await has_suite_ref(db, user.id, suite.id):
         raise not_found_404("suite", str(suite.id))
 
 
@@ -121,10 +141,22 @@ async def list_suites(
 ) -> SuitePageOut:
     """suite 列表。API 默认 all(向后兼容惯例);P1 无引用分享 →
     非 admin 的 all ≡ mine(自己的);admin 的 all = 全量(治理)。"""
-    # 浏览镜头口径与场景库一致(§5.1):mine = owner 过滤,admin 同样生效
-    clauses = []
-    if scope == "mine" or user.role != "admin":
-        clauses.append(Suite.owner_id == user.id)
+    # 浏览镜头口径与场景库一致(§5.1):mine = owner 过滤,admin 同样生效。
+    # P2 引用(§7.6):非 admin 的 all = public ∨ 自己的 ∨ 被引用的。
+    from sqlalchemy import exists, select as _select
+    from ..models.share_ref import ShareRef
+    if scope == "mine":
+        clauses = [Suite.owner_id == user.id]
+    elif user.role == "admin":
+        clauses = []
+    else:
+        clauses = [or_(
+            Suite.owner_id == user.id,
+            Suite.visibility == "public",
+            exists(_select(ShareRef.id).where(
+                ShareRef.grantee_user_id == user.id,
+                ShareRef.suite_id == Suite.id)).correlate(Suite),
+        )]
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()
@@ -166,7 +198,7 @@ async def create_suite(
 @router.get("/{suite_id}", response_model=SuiteDetailOut)
 async def get_suite(user: CurrentUser, db: DbSession, suite_id: int) -> SuiteDetailOut:
     suite = await _load_suite(db, suite_id)
-    _require_read(user, suite)
+    await _require_read_async(db, user, suite)
     members = await _ordered_members(db, suite.id)
     return SuiteDetailOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
@@ -245,6 +277,21 @@ async def add_members(
                 "code": "suite_member_cap_exceeded",
                 "message": (f"suite member cap is "
                             f"{settings.SUITE_MEMBER_CAP}")})
+        # P2 §7.9(不变量第二入口):公共 suite 加未发布成员不直接拒绝,
+        # 走发布确认 —— 无 publishUnpublished 标志 → 409 列出待发布成员
+        #(前端弹确认框「这些成员及其数据集将一并公开」);有标志 →
+        # 成员发布 + 入组同事务完成(数据集随场景可见性公开)。
+        if (suite.visibility == "public"
+                and (scen.visibility or "private") != "public"):
+            if not body.publishUnpublished:
+                await db.rollback()
+                raise HTTPException(status_code=409, detail={
+                    "code": "suite_member_publish_required",
+                    "message": ("suite is public: unpublished members must "
+                                "be published to join (confirm to publish "
+                                "them and their datasets)"),
+                    "pendingPublish": [sid]})
+            scen.visibility = "public"
         db.add(SuiteMember(
             suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
             sort=next_sort,
@@ -348,7 +395,7 @@ async def run_suite(
       「显示跳过实际在跑」),没有才 skipped。
     """
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_run_async(db, user, suite)
 
     # ── 循环前物化(纯值):发起人、成员快照、各成员默认方案 ──
     runner_id = user.id
@@ -431,10 +478,18 @@ async def run_suite(
     skipped: list[dict] = []
     dispatch_warnings: list[dict] = []
 
+    from ._ownership import can_run_scenario as _can_run
     for entry in plain:
         sid = entry["scenarioId"]
         if entry["req"] is None:
             skipped.append({"scenarioId": sid, "reason": entry["skip_reason"]})
+            continue
+        # §8.2:逐成员 can_run_scenario(属主 ∨ admin ∨ 引用;引用者
+        # 经 suite 引用覆盖全部成员 —— 正常态全过,守边界)。
+        _scen = scen_rows.get(sid)
+        if _scen is not None and not await _can_run(
+                db, user, scenario_id=sid, owner_id=_scen.owner_id):
+            skipped.append({"scenarioId": sid, "reason": "not_runnable"})
             continue
         try:
             # 不传 preloaded_scenario:except 分支的 rollback 会使 ORM
@@ -470,6 +525,65 @@ async def run_suite(
         "dispatchWarnings": dispatch_warnings,
         "totalRuns": total_runs,
     }
+
+
+# ── P2 §7.9/§9:suite 发布 / 下架 ────────────────────────────────
+@router.post("/{suite_id}/publish", response_model=SuiteSummaryOut)
+async def publish_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> SuiteSummaryOut:
+    """发布:级联发布未发布成员(确认框由前端承载;数据集随场景
+    可见性公开,《权限一期》口径)。属主 ∨ admin(§8.1 写 = 治理)。"""
+    from ..models.composer_scenario import ComposerScenario
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    members = await _ordered_members(db, suite.id)
+    unpublished: list[str] = []
+    for m in members:
+        scen = await scenario_store.get_row(db, m.scenario_id)
+        if scen is not None and (scen.visibility or "private") != "public":
+            unpublished.append(m.scenario_id)
+            scen.visibility = "public"
+    suite.visibility = "public"
+    await db.commit()
+    await db.refresh(suite)
+    out = _summary(suite, len(members))
+    out.publishedMembers = unpublished  # 级联清单:确认框的事实面回执
+    return out
+
+
+@router.delete("/{suite_id}/publish", response_model=SuiteSummaryOut)
+async def unpublish_suite(
+    user: CurrentUser, db: DbSession, suite_id: int,
+) -> SuiteSummaryOut:
+    """下架 suite 本体(成员各自的 public 状态独立保留,§9)。admin
+    下架他人 suite → 通知属主 + 入审计(§10;属主自下架不通知不入)。"""
+    from ..services import audit as audit_svc
+    from ..services import notifications as notify_svc
+    suite = await _load_suite(db, suite_id)
+    _require_write(user, suite)
+    suite.visibility = "private"
+    await db.commit()
+    await db.refresh(suite)
+    if user.role == "admin" and suite.owner_id != user.id:
+        try:
+            await notify_svc.create_notification(
+                db, user_id=suite.owner_id,
+                type_="scenario_unpublished",
+                title=f"你的公共用例组已被下架:{suite.name}",
+                body=(f"管理员 {user.display_name or user.username} 将用例组 "
+                      f"「{suite.name}」从公共库下架(现为私有;成员场景的"
+                      f"公共状态不受影响)。"),
+                link=f"/suites/{suite.id}")
+        except Exception:  # noqa: BLE001
+            pass
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="suite.admin_unpublish",
+            resource_type="suite", resource_id=str(suite.id),
+            detail={"name": suite.name})
+    return _summary(suite, await _member_count(db, suite.id))
 
 
 # ── 反查:场景在哪些 suite ─────────────────────────────────────────

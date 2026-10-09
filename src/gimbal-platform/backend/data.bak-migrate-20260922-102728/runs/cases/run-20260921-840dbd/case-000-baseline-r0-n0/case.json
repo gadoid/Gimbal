@@ -1,0 +1,51 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-alias-cred",
+  "meta": {
+    "scenarioId": "sc-alias-cred",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "bob",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-21T07:47:34.856337Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {},
+    "users": {
+      "uat-cred": {
+        "url": "https://uat.internal",
+        "username": "bob-uat",
+        "password": "pw",
+        "token_type": "Bearer",
+        "expires_in": 7200
+      }
+    }
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "api": {
+        "service": "fin-service-uat",
+        "path": "/x",
+        "headers": {
+          "Authorization": "Bearer static"
+        }
+      }
+    }
+  ]
+}

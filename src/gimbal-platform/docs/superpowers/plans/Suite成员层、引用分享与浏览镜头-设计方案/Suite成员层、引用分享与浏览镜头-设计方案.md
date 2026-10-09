@@ -1,7 +1,7 @@
 # Suite 成员层、引用分享与浏览镜头 — 权限域二期设计方案
 
 > 状态：**定稿**（2026-10-08，经七轮评审收敛，当日定稿）。评审关闭。
-> **实施进度（2026-10-09）：P0 全部落地；P1 全部落地（含两项 UX 尾巴，见 §12 P1 实施记录）；P2/P3 未开工。** 各期实施要点与偏差记录在 §12 各「实施记录」小节；残留核实项见 §13.4，变更走 §15 修订记录追加。
+> **实施进度（2026-10-09）：P0/P1 全部落地；P2 后端骨架落地（0013 已上远端 PG、判定式三处同步、分享端点、处置/发布联动、通知审计），前端与 plate 管道产出未做（见 §12 P2 实施记录）；P3 未开工。** 各期实施要点与偏差记录在 §12 各「实施记录」小节；残留核实项见 §13.4，变更走 §15 修订记录追加。
 > 作者：Codfish
 
 ## 0. 文档定位
@@ -510,17 +510,23 @@ P0 与其余各期都无依赖，先做。批量执行随 P1 交付，不再挂�
 - **测试纪律**：函数级 `monkeypatch.undo()` 会把 `fresh_db` 借同一实例做的引擎置换一并撤销（后续请求穿透到全局库）——打补丁一律用独立 `MonkeyPatch.context()`；防重测试用直插在途执行行伪造（测试环境 dispatch 惰性起 worker、执行对 plate 503 秒级终态，真实发起复现不了窗口）。
 - **尾巴①②收口（2026-10-09）**：①库侧批量加入 = `ScenariosMine` 勾选列（仅「我的」镜头开放——全员视角含他人场景，加入自己的 suite 必 404，勾选列整体隐藏）+ `AddToSuiteDialog`（`scope=mine` 单选目标、空态引导去用例组新建、404/409 透出后端人话；挂载即开需 `immediate: true`，否则 watch 不触发）；②详情页 `meta-grid` 增「所属 Suite」徽章行（反查端点并行加载、非属主 403/空集整行不渲染，徽章直达 `/suites/{id}`）。测试 3+1 条（弹窗真实 teleport 按 ScenarioExportMenu 惯例 `attachTo body + document.querySelectorAll`）。
 
-### P2 分享（场景与 suite 双粒度）⬜ 未开工
+### P2 分享（场景与 suite 双粒度）◐ 后端骨架已实施(2026-10-09;前端与 plate 产出未做)
 
 <!-- P2 清单维持原样;开工时逐项勾选并附实施记录。 -->
 
-- [ ] 迁移：`share_refs`（双方言 CHECK）
-- [ ] `_ownership.py` 判定扩展，三处同步（PG 谓词、SQLite 兜底、security_invoker 视图）
-- [ ] §8.2 全部端点检查替换（含定义读取端点；`run_dispatcher` 内部已核实无需改动）
-- [ ] 分享端点、suite 深拷贝、转为副本、退订
-- [ ] 处置流程中引用的处理与通知（§7.10，publicize 双文案）
-- [ ] 发布联动（suite 发布端点、级联确认并提示数据集一并公开、公共 suite 加未发布成员走发布确认框、属主/admin 下架成员连带公共 suite 下架——admin 下架通知属主、属主自下架不通知；admin 下架 suite 本体通知属主并入审计）
-- [ ] 通知类型接线、activity_events、admin 撤销入审计
+- [x] 迁移：`share_refs`（双方言 CHECK）+ composer_scenarios 来源三列(0013,已上远端 PG)
+- [x] `_ownership.py` 判定扩展，三处同步（PG 谓词 visibility_clause 两条 EXISTS、SQLite 兜底引用集复核、security_invoker 视图随 0013 重建）
+- [x] §8.2 全部端点检查替换:runs 入口+graph 闸+rerun → can_run_scenario;draft/详情/另存为读源/star → can_read 异步;datalist/run-schemes 读 → 引用闭包;suites 读/run 闸 → can_read/can_run_suite;run suite 循环逐成员 can_run
+- [x] 分享端点(POST ref/copy + GET direction + DELETE 撤销/退订 + fork 转副本)、suite 深拷贝(单事务,成员逐个复制+来源三件套,copy_scenario 补 origin 参数)
+- [x] 处置三路径引用处理(publicize 先删引用再置空属主+已公共化文案;purge 删前通知已删除文案;transfer 通知新属主+被分享人 share_ref_owner_changed)
+- [x] 发布联动:POST/DELETE /suites/{id}/publish(级联回执 publishedMembers;admin 下架通知属主+入审计);公共 suite 加私有成员 409 suite_member_publish_required → publishUnpublished 确认同事务;场景下架连带公共 suite 下架(级联 UPDATE 显式 commit——属主自下架不走通知分支的隐式 commit,裸 UPDATE 会被回滚)
+- [x] 通知四类型接线(share_ref_received/revoked/resource_deleted 双文案/owner_changed)+activity_events(share_ref/share_copy/share_fork)+审计词表补 share.admin_revoke、suite.admin_unpublish
+**实施记录（2026-10-09，后端骨架）**：
+- **语义迁移两处 403→404**：非读者读 run-schemes/draft 从 owner 闸(403)改 can_read(§7.6)——私有资源不可见 → 404(仓规);非属主无引用 run suite 同理。两条既有测试期望随更新(口径变更而非回归)。
+- **连带下架的隐式 commit 陷阱**：场景下架级联公共 suite 的 UPDATE 必须显式 commit——属主自下架不走通知分支(create_notification commit=True 的隐式提交),裸 UPDATE 在会话结束时被回滚(测试抓出)。
+- **测试基建**：/api/users/roster 信封是 {items} 且排除调用者本人;fresh_db 下**首个注册者才是真 admin**(名字带 admin 不等于角色);fresh_db 每测试清库使 roster 副本干净。
+- 端点细节：GET /data-sets 是顶层路由(/api/data-sets?scenarioId=),非嵌套;copy 回执 meta 字段是 snake_case(scenario_id);audit.record 自己 commit(处置事务里先通知后删除时注意顺序)。
+- 遗留(未做,前端+plate):分享弹窗、徽标、保存提示、「共享给我的」分区、退订入口、plate §11 内容交付——见下方未勾选项。
 - [ ] 前端：分享弹窗、徽标、保存提示（必做）、「共享给我的」分区、退订入口
 - [ ] plate 管道产出（§11）
 

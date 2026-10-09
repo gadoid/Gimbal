@@ -1,0 +1,5401 @@
+{
+ "1": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "Hello",
+    "tags": [],
+    "owner": "Administrator",
+    "author": "",
+    "expire": false,
+    "module": "TEST",
+    "system": [
+     "fin",
+     "logi"
+    ],
+    "version": "v0.1.0",
+    "priority": 1,
+    "createTime": "2026-08-24T02:56:49.015000Z",
+    "scenarioId": "sc-hello-6ndp2hhyz",
+    "description": ""
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "params": {},
+       "page_no": 1,
+       "page_size": 20,
+       "active_tab": "examine_wait",
+       "sort_field": "expedite_num",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "查询待审批记录",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "audit",
+      "method": "POST",
+      "path": "/api/home/audit/auditPage",
+      "headers": {},
+      "view_hints": {
+       "endpoint_id": "fin.audit.audit_page"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {},
+    "retry": null,
+    "setup": [],
+    "users": {},
+    "services": {},
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-hello-6ndp2hhyz"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "查询待审批记录",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  }
+ },
+ "7": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "物流订单查询",
+    "tags": [
+     "订单查询"
+    ],
+    "owner": "Administrator",
+    "author": "Codfish",
+    "expire": false,
+    "module": "订单",
+    "system": [
+     "fin"
+    ],
+    "version": "v0.1.0",
+    "priority": 1,
+    "createTime": "2026-08-25T08:54:39.786000Z",
+    "scenarioId": "sc-scenario-8fj4xj2ez",
+    "updateTime": null,
+    "description": ""
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "params": {},
+       "page_no": "${var.page_no}",
+       "page_size": "${var.page_size}",
+       "sort_field": "${var.sort_field}",
+       "sort_order": "${var.sort_order}"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "step",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      },
+      {
+       "kind": "extract",
+       "scope": "step",
+       "target": "request_body",
+       "required": true,
+       "expression": "$.request_body"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "params": {},
+       "page_no": 1,
+       "page_size": 20,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "step",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service-codfish",
+      "method": "POST",
+      "path": "/api/order/order/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "atd": 1782835200,
+       "del": "ANTING,CHINA",
+       "etd": 1782316800,
+       "num": "1872",
+       "pod": "ANTING,CHINA",
+       "pol": "QINGDAO,CHINA",
+       "pot": "",
+       "teu": "",
+       "voy": "068E",
+       "bulk": "60.000",
+       "audit": [],
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "enable": "1",
+       "packer": "",
+       "pol_cn": "青岛流亭机场",
+       "pot_cn": "",
+       "status": "1",
+       "volume": "",
+       "carrier": "COSCO",
+       "shipper": "",
+       "main_ids": "15,16,1",
+       "notifier": "",
+       "order_id": "",
+       "order_no": "",
+       "order_sn": "",
+       "pay_type": "FREIGHT PREPAID",
+       "supplier": [
+        {
+         "user_id": "336",
+         "order_id": "",
+         "is_manual": "",
+         "isset_fee": "0",
+         "user_name": "闫航",
+         "is_primary": "1",
+         "supplier_id": "805",
+         "service_item": "booking_space",
+         "supplier_name": "青岛雅然国际物流有限公司",
+         "isset_supplier": "1",
+         "settlement_date": null,
+         "supplier_period": null,
+         "settle_object_id": "",
+         "order_supplier_id": "",
+         "service_item_name": "订舱",
+         "supplier_pay_date": null
+        }
+       ],
+       "commodity": "",
+       "consignee": "",
+       "container": [],
+       "create_by": "GIMBAL",
+       "create_id": "828",
+       "fund_code": "",
+       "main_sort": "易汇瀚,易海,易航道",
+       "order_sub": [],
+       "policy_id": "134",
+       "ship_mark": "",
+       "ship_name": "OOCL FRANCE",
+       "track_ata": "0",
+       "track_atd": "0",
+       "track_eta": "0",
+       "update_by": "GIMBAL",
+       "update_id": "828",
+       "audit_type": "",
+       "cargo_type": "",
+       "carrier_id": "16",
+       "country_id": "1",
+       "is_sync_es": "0",
+       "ocean_type": "近洋",
+       "order_file": [],
+       "pay_status": "1",
+       "product_id": "4",
+       "service_id": "55",
+       "track_stcs": "0",
+       "trade_term": "CIF",
+       "cancel_time": "0",
+       "change_type": "0",
+       "create_time": "1782882887",
+       "customer_id": "320",
+       "delete_time": "0",
+       "is_fee_miss": "0",
+       "is_traverse": "0",
+       "operator_id": "336",
+       "period_rule": "0",
+       "pol_country": "CHINA",
+       "policy_name": "【SPV对客】易汇瀚（仅人民币）",
+       "policy_type": "JSZX",
+       "settle_type": "1",
+       "sys_upttime": "2026-07-01 13:14:48",
+       "track_bl_no": "${var.bl_no}",
+       "update_time": "1782882888",
+       "volume_desc": "",
+       "airline_type": "中国",
+       "carrier_name": "中国远洋运输（集团）总公司",
+       "country_name": "CHINA",
+       "delayed_time": "",
+       "deposit_type": "1",
+       "discount_end": "0",
+       "effective_by": "",
+       "effective_id": "0",
+       "finance_date": "1782316800",
+       "gross_margin": "0.00",
+       "gross_weight": "26800.000",
+       "is_financing": "0",
+       "order_sub_no": "",
+       "payment_type": "0",
+       "policy_match": "semi",
+       "product_name": "月结-延长-保证金",
+       "real_pay_cny": "0.00",
+       "real_pay_usd": "0.00",
+       "real_put_cny": "0.00",
+       "real_put_usd": "0.00",
+       "service_name": "曲静霞",
+       "business_time": "0",
+       "business_type": "1",
+       "copy_order_id": "0",
+       "customer_name": "山东悦慕食品有限公司",
+       "discount_rule": "",
+       "exchange_rate": "0.0000",
+       "fee_miss_name": "",
+       "folde_pay_usd": "0.00",
+       "folde_put_usd": "0.00",
+       "main_ids_name": "易汇瀚,易海,易航道",
+       "message_board": [],
+       "operator_name": "闫航",
+       "pay_type_name": "FREIGHT PREPAID",
+       "service_items": [
+        "booking_space"
+       ],
+       "terms_payment": "T/T",
+       "account_status": "0",
+       "confirm_status": "0",
+       "discount_ratio": "",
+       "discount_start": "0",
+       "effective_time": "0",
+       "entrust_status": 1,
+       "finance_status": true,
+       "is_special_pay": "0",
+       "is_usd_project": "2",
+       "pol_country_cn": "中国",
+       "pol_country_id": "1",
+       "real_cost_date": "0",
+       "reverse_status": "0",
+       "sea_trans_cost": "",
+       "terms_shipment": "",
+       "cargo_type_name": "",
+       "country_name_cn": "中国",
+       "customer_period": "120",
+       "discount_status": "2",
+       "fee_lock_status": "0",
+       "folde_pay_total": "0.00",
+       "folde_put_total": "0.00",
+       "loan_pay_status": "",
+       "m_delivery_type": "",
+       "policy_main_arr": [
+        {
+         "main_name": "成都易汇瀚供应链管理有限公司",
+         "fee_main_id": "15"
+        },
+        {
+         "main_name": "青岛易海供应链管理有限公司",
+         "fee_main_id": "16"
+        },
+        {
+         "main_name": "青岛易航道物流科技有限公司",
+         "fee_main_id": "1"
+        }
+       ],
+       "real_fee_locked": false,
+       "real_fee_status": "0",
+       "service_project": {
+        "manifest": false,
+        "trucking": false,
+        "insurance": false,
+        "booking_space": false,
+        "customs_clearance": false
+       },
+       "terms_transport": "CY/CY",
+       "trade_term_name": "CIF",
+       "book_upload_date": "0",
+       "business_main_id": "1",
+       "client_expand_id": "261",
+       "customer_main_id": "15",
+       "period_rule_name": "",
+       "policy_type_name": "",
+       "settle_type_name": "月结",
+       "bl_no_upload_date": "0",
+       "customer_category": ",1,2,",
+       "customer_due_date": "0",
+       "customer_order_sn": "",
+       "customer_put_date": "0",
+       "deposit_type_name": "有",
+       "discount_currency": "",
+       "expect_fee_status": "0",
+       "gross_margin_rate": "0.00",
+       "order_finance_arr": [],
+       "payment_type_name": "空",
+       "period_delay_type": "1",
+       "policy_match_name": "手动选择",
+       "supplier_due_date": "0",
+       "business_main_name": "青岛易航道物流科技有限公司",
+       "business_type_name": "海运整箱",
+       "client_expand_name": "唐欣雨",
+       "customer_file_list": [],
+       "customer_main_name": "成都易汇瀚供应链管理有限公司",
+       "deposit_refund_day": "180",
+       "is_system_generate": "0",
+       "pay_account_status": "0",
+       "policy_status_name": "",
+       "receive_time_limit": "20",
+       "sea_trans_currency": "USD",
+       "terms_payment_name": "T/T",
+       "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
+       "customer_contact_id": "",
+       "customer_tax_number": "91370786MA3D6MW35A",
+       "is_delayed_recovery": "否",
+       "order_main_bank_arr": [],
+       "reverse_status_name": "否",
+       "delayed_recovery_cny": "",
+       "delayed_recovery_usd": "",
+       "m_delivery_type_name": "",
+       "real_discount_status": "0",
+       "terms_transport_name": "CY/CY",
+       "customer_confirm_date": "0",
+       "customer_contact_name": "",
+       "insurance_doc_ok_date": "0",
+       "subsidy_category_name": "—",
+       "supplier_invoice_date": "0",
+       "customer_contact_phone": "",
+       "customer_put_date_desc": "",
+       "expect_discount_status": "0",
+       "financing_apply_amount": "0.00",
+       "is_loan_before_invoice": "0",
+       "period_delay_type_name": "延长",
+       "real_put_discount_rate": "0.00",
+       "service_project_amount": {
+        "manifest": false,
+        "trucking": false,
+        "insurance": false,
+        "booking_space": false,
+        "customs_clearance": false
+       },
+       "deposit_settlement_date": "30",
+       "customer_put_date_manual": "0",
+       "customer_settlement_date": "10",
+       "is_delayed_recovery_name": "否",
+       "expect_policy_status_name": "",
+       "real_discount_status_name": "—",
+       "supplier_invoice_taketime": "",
+       "customer_put_writeoff_date": "",
+       "financing_apply_amount_cny": "0.00",
+       "financing_apply_amount_usd": "0.00",
+       "real_subsidy_category_name": "—",
+       "expect_discount_status_name": "—",
+       "first_financing_doc_ok_date": "0",
+       "proprietary_business_status": "0",
+       "expect_subsidy_category_name": "—",
+       "second_financing_doc_ok_date": "0",
+       "trans_cost_put_preserve_date": "0",
+       "customer_invoice_request_date": "0"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {},
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "atd": 1782835200,
+       "del": "ANTING,CHINA",
+       "etd": 1782316800,
+       "num": "1872",
+       "pod": "ANTING,CHINA",
+       "pol": "QINGDAO,CHINA",
+       "pot": "",
+       "teu": "2",
+       "voy": "068E",
+       "bulk": "60.000",
+       "audit": [],
+       "bl_no": "${var.bl_no}",
+       "del_cn": "",
+       "enable": "1",
+       "packer": "",
+       "pod_cn": "",
+       "pol_cn": "青岛流亭机场",
+       "pot_cn": "",
+       "status": 2,
+       "volume": "1*40HQ",
+       "carrier": "COSCO",
+       "shipper": "Codfish",
+       "main_ids": ",15,16,1,",
+       "notifier": "Codfish",
+       "order_id": "",
+       "order_no": "",
+       "order_sn": "",
+       "pay_type": "FREIGHT PREPAID",
+       "supplier": [
+        {
+         "user_id": "336",
+         "order_id": "",
+         "is_manual": "0",
+         "isset_fee": false,
+         "user_name": "闫航",
+         "is_primary": "1",
+         "supplier_id": "805",
+         "sys_upttime": "2026-07-01 13:14:48",
+         "service_item": "booking_space",
+         "supplier_name": "青岛雅然国际物流有限公司",
+         "isset_supplier": "1",
+         "supplier_label": "青岛雅然国际物流有限公司-订舱",
+         "settlement_date": "20",
+         "supplier_period": "60",
+         "settle_object_id": "1384",
+         "order_supplier_id": "",
+         "service_item_name": "订舱",
+         "supplier_pay_date": "0"
+        }
+       ],
+       "commodity": "Codfish",
+       "consignee": "Codfish",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "40HQ",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": 1
+        }
+       ],
+       "create_by": "GIMBAL",
+       "create_id": "828",
+       "fund_code": "",
+       "main_sort": "易汇瀚,易海,易航道",
+       "order_sub": [],
+       "policy_id": "134",
+       "ship_mark": "Codfish",
+       "ship_name": "OOCL FRANCE",
+       "track_ata": "0",
+       "track_atd": "0",
+       "track_eta": "0",
+       "update_by": "GIMBAL",
+       "update_id": "828",
+       "audit_type": "",
+       "cargo_type": "",
+       "carrier_id": "16",
+       "country_id": "1",
+       "is_sync_es": "0",
+       "ocean_type": "近洋",
+       "order_file": [],
+       "pay_status": "1",
+       "product_id": "4",
+       "service_id": "55",
+       "track_stcs": "0",
+       "trade_term": "CIF",
+       "cancel_time": "0",
+       "change_type": "0",
+       "create_time": "1782882887",
+       "customer_id": "320",
+       "delete_time": "0",
+       "is_fee_miss": "0",
+       "is_traverse": "0",
+       "operator_id": "336",
+       "period_rule": "0",
+       "pol_country": "CHINA",
+       "policy_name": "【SPV对客】易汇瀚（仅人民币）",
+       "policy_type": "JSZX",
+       "settle_type": "1",
+       "sys_upttime": "2026-07-01 13:15:35",
+       "track_bl_no": "${var.bl_no}",
+       "update_time": "1782882935",
+       "volume_desc": "普柜",
+       "airline_type": "中国",
+       "carrier_name": "中国远洋运输（集团）总公司",
+       "country_name": "CHINA",
+       "delayed_time": "",
+       "deposit_type": "1",
+       "discount_end": "0",
+       "effective_by": "",
+       "effective_id": "0",
+       "finance_date": "1782316800",
+       "gross_margin": "0.00",
+       "gross_weight": "26800.000",
+       "is_financing": "0",
+       "order_sub_no": "",
+       "payment_type": "0",
+       "policy_match": "semi",
+       "product_name": "月结-延长-保证金",
+       "real_pay_cny": "0.00",
+       "real_pay_usd": "0.00",
+       "real_put_cny": "0.00",
+       "real_put_usd": "0.00",
+       "service_name": "曲静霞",
+       "business_time": "0",
+       "business_type": "1",
+       "copy_order_id": "0",
+       "customer_name": "山东悦慕食品有限公司",
+       "discount_rule": "",
+       "exchange_rate": "6.8067",
+       "fee_miss_name": "",
+       "folde_pay_usd": "0.00",
+       "folde_put_usd": "0.00",
+       "main_ids_name": "易汇瀚,易海,易航道",
+       "message_board": [],
+       "operator_name": "闫航",
+       "pay_type_name": "FREIGHT PREPAID",
+       "service_items": [
+        "booking_space"
+       ],
+       "terms_payment": "T/T",
+       "account_status": "0",
+       "confirm_status": "0",
+       "discount_ratio": "",
+       "discount_start": "0",
+       "effective_time": "0",
+       "entrust_status": "2",
+       "finance_status": true,
+       "is_special_pay": "0",
+       "is_usd_project": "2",
+       "pol_country_cn": "中国",
+       "pol_country_id": "1",
+       "real_cost_date": "0",
+       "reverse_status": "0",
+       "sea_trans_cost": "1.00",
+       "terms_shipment": "Codfish",
+       "cargo_type_name": "",
+       "country_name_cn": "中国",
+       "customer_period": "120",
+       "discount_status": "2",
+       "fee_lock_status": "0",
+       "folde_pay_total": "0.00",
+       "folde_put_total": "0.00",
+       "loan_pay_status": "",
+       "m_delivery_type": "",
+       "policy_main_arr": [
+        {
+         "main_name": "成都易汇瀚供应链管理有限公司",
+         "fee_main_id": "15"
+        },
+        {
+         "main_name": "青岛易海供应链管理有限公司",
+         "fee_main_id": "16"
+        },
+        {
+         "main_name": "青岛易航道物流科技有限公司",
+         "fee_main_id": "1"
+        }
+       ],
+       "real_fee_locked": false,
+       "real_fee_status": "0",
+       "service_project": {
+        "manifest": false,
+        "trucking": false,
+        "insurance": false,
+        "booking_space": false,
+        "customs_clearance": false
+       },
+       "terms_transport": "CY/CY",
+       "trade_term_name": "CIF",
+       "book_upload_date": "0",
+       "business_main_id": "1",
+       "client_expand_id": "261",
+       "customer_main_id": "15",
+       "period_rule_name": "",
+       "policy_type_name": "结算业务",
+       "settle_type_name": "月结",
+       "bl_no_upload_date": "0",
+       "customer_category": ",1,2,",
+       "customer_due_date": "0",
+       "customer_order_sn": "",
+       "customer_put_date": "0",
+       "deposit_type_name": "有",
+       "discount_currency": "",
+       "expect_fee_status": "0",
+       "gross_margin_rate": "0.00",
+       "order_finance_arr": [],
+       "payment_type_name": "空",
+       "period_delay_type": "1",
+       "policy_match_name": "手动选择",
+       "supplier_due_date": "0",
+       "business_main_name": "青岛易航道物流科技有限公司",
+       "business_type_name": "海运整箱",
+       "client_expand_name": "唐欣雨",
+       "customer_file_list": [],
+       "customer_main_name": "成都易汇瀚供应链管理有限公司",
+       "deposit_refund_day": "180",
+       "is_system_generate": "0",
+       "pay_account_status": "0",
+       "policy_status_name": "",
+       "receive_time_limit": "20",
+       "sea_trans_currency": "USD",
+       "terms_payment_name": "T/T",
+       "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
+       "customer_contact_id": "",
+       "customer_tax_number": "91370786MA3D6MW35A",
+       "is_delayed_recovery": "否",
+       "order_main_bank_arr": [],
+       "reverse_status_name": "否",
+       "delayed_recovery_cny": "",
+       "delayed_recovery_usd": "",
+       "m_delivery_type_name": "",
+       "real_discount_status": "0",
+       "terms_transport_name": "CY/CY",
+       "customer_confirm_date": "0",
+       "customer_contact_name": "",
+       "insurance_doc_ok_date": "0",
+       "subsidy_category_name": "—",
+       "supplier_invoice_date": "0",
+       "customer_contact_phone": "",
+       "customer_put_date_desc": "",
+       "expect_discount_status": "0",
+       "financing_apply_amount": "0.00",
+       "is_loan_before_invoice": "0",
+       "period_delay_type_name": "延长",
+       "real_put_discount_rate": "0.00",
+       "service_project_amount": {
+        "manifest": false,
+        "trucking": false,
+        "insurance": false,
+        "booking_space": false,
+        "customs_clearance": false
+       },
+       "deposit_settlement_date": "30",
+       "customer_put_date_manual": "0",
+       "customer_settlement_date": "10",
+       "is_delayed_recovery_name": "否",
+       "expect_policy_status_name": "",
+       "real_discount_status_name": "—",
+       "supplier_invoice_taketime": "",
+       "customer_put_writeoff_date": "",
+       "financing_apply_amount_cny": "0.00",
+       "financing_apply_amount_usd": "0.00",
+       "real_subsidy_category_name": "—",
+       "expect_discount_status_name": "—",
+       "first_financing_doc_ok_date": "0",
+       "proprietary_business_status": "0",
+       "expect_subsidy_category_name": "—",
+       "second_financing_doc_ok_date": "0",
+       "trans_cost_put_preserve_date": "0",
+       "customer_invoice_request_date": "0"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "提交订舱文件",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {},
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "user2": {
+      "head": "test",
+      "kind": "random_decorated",
+      "length": 8,
+      "charset": "alnum",
+      "separator": "-"
+     },
+     "page_no": 1,
+     "page_size": "21",
+     "sort_field": "update_time",
+     "sort_order": "desc"
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789650",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     },
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com",
+     "fin-service-codfish": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-8fj4xj2ez"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "分页查询委托",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "委托订舱下单",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    }
+   ],
+   "runSchemes": [
+    {
+     "name": "CCC",
+     "logSub": null,
+     "plugins": null,
+     "dataSetIds": [
+      "ds-002"
+     ],
+     "serviceBindings": {
+      "fin-service": {
+       "url": null,
+       "authAlias": "codfish"
+      },
+      "fin-service-codfish": {
+       "url": null,
+       "authAlias": "codfish2"
+      }
+     }
+    }
+   ],
+   "resourceMeta": {}
+  }
+ },
+ "8": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "订单创建",
+    "tags": [
+     "订单"
+    ],
+    "owner": "Administrator",
+    "author": "",
+    "expire": false,
+    "module": "订单创建",
+    "system": [
+     "fin"
+    ],
+    "version": "1.0.0",
+    "priority": 1,
+    "createTime": "2026-09-01T07:40:06.738000Z",
+    "scenarioId": "sc-scenario-icxz4vrk3",
+    "updateTime": null,
+    "description": "委托订单创建"
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "container": [],
+       "customer_id": "",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1",
+       "customer_order_sn": "1111"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.action": "collapse",
+      "$.status": "collapse",
+      "$.container": "collapse",
+      "$.ship_name": "collapse",
+      "$.create_time": "carry",
+      "$.update_time": "carry",
+      "$.entrust_status": "collapse",
+      "$.container.box_no": "form",
+      "$.container.box_num": "form",
+      "$.container.box_type": "carry",
+      "$.container.seal_number": "form",
+      "$.container.sea_trans_unit_price": "form"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "params": {},
+       "page_no": 1,
+       "order_no": "",
+       "page_size": 5,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_no",
+       "required": true,
+       "expression": "$.response_body.data.order_no"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "supplier",
+       "required": true,
+       "expression": "$.response_body.data.supplier"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_container_id",
+       "required": true,
+       "expression": "$.response_body.data.container[0].order_container_id"
+      }
+     ],
+     "description": "订单-查询订单详情",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "container": [
+        {
+         "box_no": [
+          "codfish_test"
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          "codfish_test"
+         ],
+         "sea_trans_unit_price": 100
+        }
+       ],
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "container",
+       "required": true,
+       "expression": "$.request_body.container"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": "354066893969032192",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": "100"
+        }
+       ],
+       "customer_id": "335247043402399744",
+       "policy_type": "JSZX"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      }
+     ],
+     "description": "检查订舱信息",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "data",
+       "required": true,
+       "expression": "$.response_body.data[0]"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+     "field_states": {
+      "$.status": "form",
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.data",
+       "target": "$.request_body.customer_file_list",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "生成子订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "action": "submit",
+       "order_id": "355255812731438080",
+       "to_customer": {
+        "put_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "main_name": "青岛易航道物流科技有限公司",
+           "unique_id": "${var.uuid}",
+           "subsidy_id": "0",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易航道物流科技有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "335247047202439168",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "295502732066816000"
+          }
+         ]
+        }
+       },
+       "to_supplier": {
+        "pay_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "unique_id": "${var.uuid}",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易汇联供应链管理有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "15",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "正常"
+          }
+         ]
+        }
+       },
+       "import_status": 0,
+       "discount_ratio": "",
+       "service_project": "booking_space"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "uuid": {
+      "kind": "uuid"
+     },
+     "bl_no": {
+      "head": "Codfish",
+      "kind": "random_decorated",
+      "tail": "Test",
+      "length": 4,
+      "charset": "alnum",
+      "separator": "-"
+     }
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-icxz4vrk3"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "委托订单创建检查",
+     "enabled": true
+    },
+    {
+     "name": "委托订单创建",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "订单-查询订单详情",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "检查订舱信息",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "生成子订单",
+     "enabled": true
+    },
+    {
+     "name": "订舱实收实付金额配置",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  },
+  "assertion_registry": {
+   "entries": []
+  }
+ },
+ "10": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "订单创建_1",
+    "tags": [
+     "订单"
+    ],
+    "owner": "Administrator",
+    "author": "",
+    "expire": false,
+    "module": "订单创建",
+    "system": [
+     "fin"
+    ],
+    "version": "1.0.0",
+    "priority": 1,
+    "createTime": "2026-09-23T01:07:41.795070Z",
+    "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706",
+    "updateTime": null,
+    "description": "委托订单创建"
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "container": [],
+       "customer_id": "",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1",
+       "customer_order_sn": "1111"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.action": "collapse",
+      "$.status": "collapse",
+      "$.container": "collapse",
+      "$.ship_name": "collapse",
+      "$.create_time": "carry",
+      "$.update_time": "carry",
+      "$.entrust_status": "collapse",
+      "$.container.box_no": "form",
+      "$.container.box_num": "form",
+      "$.container.box_type": "carry",
+      "$.container.seal_number": "form",
+      "$.container.sea_trans_unit_price": "form"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "params": {},
+       "page_no": 1,
+       "order_no": "",
+       "page_size": 5,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_no",
+       "required": true,
+       "expression": "$.response_body.data.order_no"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "supplier",
+       "required": true,
+       "expression": "$.response_body.data.supplier"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_container_id",
+       "required": true,
+       "expression": "$.response_body.data.container[0].order_container_id"
+      }
+     ],
+     "description": "订单-查询订单详情",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "container": [
+        {
+         "box_no": [
+          "codfish_test"
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          "codfish_test"
+         ],
+         "sea_trans_unit_price": 100
+        }
+       ],
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "container",
+       "required": true,
+       "expression": "$.request_body.container"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": "354066893969032192",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": "100"
+        }
+       ],
+       "customer_id": "335247043402399744",
+       "policy_type": "JSZX"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      }
+     ],
+     "description": "检查订舱信息",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "data",
+       "required": true,
+       "expression": "$.response_body.data[0]"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+     "field_states": {
+      "$.status": "form",
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.data",
+       "target": "$.request_body.customer_file_list",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "生成子订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "action": "submit",
+       "order_id": "355255812731438080",
+       "to_customer": {
+        "put_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "main_name": "青岛易航道物流科技有限公司",
+           "unique_id": "${var.uuid}",
+           "subsidy_id": "0",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易航道物流科技有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "335247047202439168",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "295502732066816000"
+          }
+         ]
+        }
+       },
+       "to_supplier": {
+        "pay_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "unique_id": "${var.uuid}",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易汇联供应链管理有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "15",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "正常"
+          }
+         ]
+        }
+       },
+       "import_status": 0,
+       "discount_ratio": "",
+       "service_project": "booking_space"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "uuid": {
+      "kind": "uuid"
+     },
+     "bl_no": {
+      "head": "Codfish",
+      "kind": "random_decorated",
+      "tail": "Test",
+      "length": 4,
+      "charset": "alnum",
+      "separator": "-"
+     }
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "委托订单创建检查",
+     "enabled": true
+    },
+    {
+     "name": "委托订单创建",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "订单-查询订单详情",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "检查订舱信息",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "生成子订单",
+     "enabled": true
+    },
+    {
+     "name": "订舱实收实付金额配置",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  },
+  "assertion_registry": {
+   "entries": []
+  }
+ },
+ "13": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "订单创建 (副本)",
+    "tags": [
+     "订单"
+    ],
+    "owner": "Administrator",
+    "author": "",
+    "expire": false,
+    "module": "订单创建",
+    "system": [
+     "fin"
+    ],
+    "version": "1.0.0",
+    "priority": 1,
+    "createTime": "2026-09-23T05:43:12.686817Z",
+    "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-d835c4",
+    "updateTime": null,
+    "description": "委托订单创建"
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "container": [],
+       "customer_id": "",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1",
+       "customer_order_sn": "1111"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.action": "collapse",
+      "$.status": "collapse",
+      "$.container": "collapse",
+      "$.ship_name": "collapse",
+      "$.create_time": "carry",
+      "$.update_time": "carry",
+      "$.entrust_status": "collapse",
+      "$.container.box_no": "form",
+      "$.container.box_num": "form",
+      "$.container.box_type": "carry",
+      "$.container.seal_number": "form",
+      "$.container.sea_trans_unit_price": "form"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "params": {},
+       "page_no": 1,
+       "order_no": "",
+       "page_size": 5,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_no",
+       "required": true,
+       "expression": "$.response_body.data.order_no"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "supplier",
+       "required": true,
+       "expression": "$.response_body.data.supplier"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_container_id",
+       "required": true,
+       "expression": "$.response_body.data.container[0].order_container_id"
+      }
+     ],
+     "description": "订单-查询订单详情",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "container": [
+        {
+         "box_no": [
+          "codfish_test"
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          "codfish_test"
+         ],
+         "sea_trans_unit_price": 100
+        }
+       ],
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "container",
+       "required": true,
+       "expression": "$.request_body.container"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": "354066893969032192",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": "100"
+        }
+       ],
+       "customer_id": "335247043402399744",
+       "policy_type": "JSZX"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      }
+     ],
+     "description": "检查订舱信息",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "data",
+       "required": true,
+       "expression": "$.response_body.data[0]"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+     "field_states": {
+      "$.status": "form",
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.data",
+       "target": "$.request_body.customer_file_list",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "生成子订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "action": "submit",
+       "order_id": "355255812731438080",
+       "to_customer": {
+        "put_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "main_name": "青岛易航道物流科技有限公司",
+           "unique_id": "${var.uuid}",
+           "subsidy_id": "0",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易航道物流科技有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "335247047202439168",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "295502732066816000"
+          }
+         ]
+        }
+       },
+       "to_supplier": {
+        "pay_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "unique_id": "${var.uuid}",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易汇联供应链管理有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "15",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "正常"
+          }
+         ]
+        }
+       },
+       "import_status": 0,
+       "discount_ratio": "",
+       "service_project": "booking_space"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "uuid": {
+      "kind": "uuid"
+     },
+     "bl_no": {
+      "head": "Codfish",
+      "kind": "random_decorated",
+      "tail": "Test",
+      "length": 4,
+      "charset": "alnum",
+      "separator": "-"
+     }
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com",
+     "fin-service-test": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-d835c4"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "委托订单创建检查",
+     "enabled": true
+    },
+    {
+     "name": "委托订单创建",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "订单-查询订单详情",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "检查订舱信息",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "生成子订单",
+     "enabled": true
+    },
+    {
+     "name": "订舱实收实付金额配置",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  },
+  "assertion_registry": {
+   "entries": []
+  }
+ },
+ "14": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "订单创建_1",
+    "tags": [
+     "订单"
+    ],
+    "owner": "Catfish",
+    "author": "",
+    "expire": false,
+    "module": "订单创建",
+    "system": [
+     "fin"
+    ],
+    "version": "1.0.0",
+    "priority": 1,
+    "createTime": "2026-09-23T01:07:41.795070Z",
+    "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-d45be7",
+    "updateTime": null,
+    "description": "委托订单创建"
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "container": [],
+       "customer_id": "",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1",
+       "customer_order_sn": "1111"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.action": "collapse",
+      "$.status": "collapse",
+      "$.container": "collapse",
+      "$.ship_name": "collapse",
+      "$.create_time": "carry",
+      "$.update_time": "carry",
+      "$.entrust_status": "collapse",
+      "$.container.box_no": "form",
+      "$.container.box_num": "form",
+      "$.container.box_type": "carry",
+      "$.container.seal_number": "form",
+      "$.container.sea_trans_unit_price": "form"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "params": {},
+       "page_no": 1,
+       "order_no": "",
+       "page_size": 5,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_no",
+       "required": true,
+       "expression": "$.response_body.data.order_no"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "supplier",
+       "required": true,
+       "expression": "$.response_body.data.supplier"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_container_id",
+       "required": true,
+       "expression": "$.response_body.data.container[0].order_container_id"
+      }
+     ],
+     "description": "订单-查询订单详情",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "container": [
+        {
+         "box_no": [
+          "codfish_test"
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          "codfish_test"
+         ],
+         "sea_trans_unit_price": 100
+        }
+       ],
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "container",
+       "required": true,
+       "expression": "$.request_body.container"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": "354066893969032192",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": "100"
+        }
+       ],
+       "customer_id": "335247043402399744",
+       "policy_type": "JSZX"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      }
+     ],
+     "description": "检查订舱信息",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "data",
+       "required": true,
+       "expression": "$.response_body.data[0]"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+     "field_states": {
+      "$.status": "form",
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.data",
+       "target": "$.request_body.customer_file_list",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "生成子订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "action": "submit",
+       "order_id": "355255812731438080",
+       "to_customer": {
+        "put_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "main_name": "青岛易航道物流科技有限公司",
+           "unique_id": "${var.uuid}",
+           "subsidy_id": "0",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易航道物流科技有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "335247047202439168",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "295502732066816000"
+          }
+         ]
+        }
+       },
+       "to_supplier": {
+        "pay_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "unique_id": "${var.uuid}",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易汇联供应链管理有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "15",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "正常"
+          }
+         ]
+        }
+       },
+       "import_status": 0,
+       "discount_ratio": "",
+       "service_project": "booking_space"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "uuid": {
+      "kind": "uuid"
+     },
+     "bl_no": {
+      "head": "Codfish",
+      "kind": "random_decorated",
+      "tail": "Test",
+      "length": 4,
+      "charset": "alnum",
+      "separator": "-"
+     }
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-d45be7"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "委托订单创建检查",
+     "enabled": true
+    },
+    {
+     "name": "委托订单创建",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "订单-查询订单详情",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "检查订舱信息",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "生成子订单",
+     "enabled": true
+    },
+    {
+     "name": "订舱实收实付金额配置",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  },
+  "assertion_registry": {
+   "entries": []
+  }
+ },
+ "15": {
+  "definition": {
+   "kind": "scenario",
+   "meta": {
+    "name": "订单创建_1",
+    "tags": [
+     "订单"
+    ],
+    "owner": "Administrator",
+    "author": "",
+    "expire": false,
+    "module": "订单创建",
+    "system": [
+     "fin"
+    ],
+    "version": "1.0.0",
+    "priority": 1,
+    "createTime": "2026-09-23T06:44:51.034810Z",
+    "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-784982",
+    "updateTime": null,
+    "description": "委托订单创建"
+   },
+   "steps": [
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "container": [],
+       "customer_id": "",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1",
+       "customer_order_sn": "1111"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.action": "collapse",
+      "$.status": "collapse",
+      "$.container": "collapse",
+      "$.ship_name": "collapse",
+      "$.create_time": "carry",
+      "$.update_time": "carry",
+      "$.entrust_status": "collapse",
+      "$.container.box_no": "form",
+      "$.container.box_num": "form",
+      "$.container.box_type": "carry",
+      "$.container.seal_number": "form",
+      "$.container.sea_trans_unit_price": "form"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "1"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      }
+     ],
+     "description": "委托订舱下单",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "params": {},
+       "page_no": 1,
+       "order_no": "",
+       "page_size": 5,
+       "sort_field": "update_time",
+       "sort_order": "desc"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_id",
+       "required": true,
+       "expression": "$.response_body.data.data[0].order_id"
+      }
+     ],
+     "description": "分页查询委托订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_page"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_no",
+       "required": true,
+       "expression": "$.response_body.data.order_no"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "supplier",
+       "required": true,
+       "expression": "$.response_body.data.supplier"
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "order_container_id",
+       "required": true,
+       "expression": "$.response_body.data.container[0].order_container_id"
+      }
+     ],
+     "description": "订单-查询订单详情",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_detail"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "1",
+       "order_id": "353806846525441024",
+       "order_no": "YWDD20260903110831",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": 2
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单分发",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_dispatch"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "container": [
+        {
+         "box_no": [
+          "codfish_test"
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          "codfish_test"
+         ],
+         "sea_trans_unit_price": 100
+        }
+       ],
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "container",
+       "required": true,
+       "expression": "$.request_body.container"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": "354066893969032192",
+       "container": [
+        {
+         "box_no": [
+          ""
+         ],
+         "box_num": "1",
+         "box_type": "20GP",
+         "seal_number": [
+          ""
+         ],
+         "order_container_id": "",
+         "sea_trans_unit_price": "100"
+        }
+       ],
+       "customer_id": "335247043402399744",
+       "policy_type": "JSZX"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_container_id",
+       "target": "$.request_body.container[0].order_container_id",
+       "required": true
+      }
+     ],
+     "description": "检查订舱信息",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_entrust.order_customer_container"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "check",
+       "status": "2",
+       "order_id": "",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "extract",
+       "scope": "scenario",
+       "target": "data",
+       "required": true,
+       "expression": "$.response_body.data[0]"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+     "field_states": {
+      "$.status": "form",
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_book"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "bl_no": "${var.bl_no}",
+       "action": "submit",
+       "status": "2",
+       "order_id": "354066893969032192",
+       "order_no": "YWDD20260904110854",
+       "track_bl_no": "${var.bl_no}",
+       "entrust_status": "2"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_no",
+       "target": "$.request_body.order_no",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.data",
+       "target": "$.request_body.customer_file_list",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.supplier",
+       "target": "$.request_body.supplier",
+       "required": true
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.container",
+       "target": "$.request_body.container",
+       "required": true
+      }
+     ],
+     "description": "委托订单确认",
+     "field_states": {
+      "$.create_time": "carry",
+      "$.sys_upttime": "carry",
+      "$.update_time": "carry"
+     },
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.order_add"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "order_id": ""
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "生成子订单",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order.generate_order_sub"
+      }
+     }
+    },
+    {
+     "kind": "step",
+     "request": {
+      "body": {
+       "action": "submit",
+       "order_id": "355255812731438080",
+       "to_customer": {
+        "put_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "main_name": "青岛易航道物流科技有限公司",
+           "unique_id": "${var.uuid}",
+           "subsidy_id": "0",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易航道物流科技有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "335247047202439168",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "295502732066816000"
+          }
+         ]
+        }
+       },
+       "to_supplier": {
+        "pay_amount": {
+         "standard_list": [
+          {
+           "num": "1",
+           "unit": "box",
+           "specs": "20GP",
+           "cost_id": "17",
+           "currency": "USD",
+           "fee_type": 0,
+           "rowIndex": 0,
+           "unique_id": "${var.uuid}",
+           "unit_price": "200",
+           "policy_sub_id": "295502732066816000",
+           "discount_ratio": 100,
+           "init_main_name": "青岛易汇联供应链管理有限公司",
+           "discount_amount": "100.00",
+           "discount_status": "0",
+           "pay_sync_status": 1,
+           "service_project": "booking_space",
+           "settle_object_id": "15",
+           "subsidy_category": "0",
+           "policy_sub_status_name": "正常"
+          }
+         ]
+        }
+       },
+       "import_status": 0,
+       "discount_ratio": "",
+       "service_project": "booking_space"
+      },
+      "kind": "request"
+     },
+     "strategy": [
+      {
+       "kind": "assertion",
+       "soft": false,
+       "target": "$.response_status",
+       "message": "",
+       "expected": 200,
+       "operator": "eq"
+      },
+      {
+       "kind": "assign",
+       "scope": "scenario",
+       "source": "$.order_id",
+       "target": "$.request_body.order_id",
+       "required": true
+      }
+     ],
+     "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+     "call": {
+      "kind": "call",
+      "protocol": "http",
+      "service": "fin-service",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "headers": {
+       "Authorization": "${auth.codfish2.token}"
+      },
+      "view_hints": {
+       "endpoint_id": "fin.order_fee.book_real_amount_edit"
+      }
+     }
+    }
+   ],
+   "config": {
+    "vars": {
+     "uuid": {
+      "kind": "uuid"
+     },
+     "bl_no": {
+      "head": "Codfish",
+      "kind": "random_decorated",
+      "tail": "Test",
+      "length": 4,
+      "charset": "alnum",
+      "separator": "-"
+     }
+    },
+    "retry": null,
+    "setup": [],
+    "users": {
+     "codfish2": {
+      "url": "https://fin-tidb.21eflag.com/",
+      "password": "yhd123456!",
+      "username": "18180789652",
+      "expires_in": 7200,
+      "token_type": "Authorization"
+     }
+    },
+    "services": {
+     "fin-service": "https://fin-tidb.21eflag.com"
+    },
+    "teardown": [],
+    "timePolicy": {
+     "kind": "record"
+    }
+   },
+   "resource": {},
+   "scenarioId": "sc-scenario-icxz4vrk3-copy-91d706-copy-784982"
+  },
+  "orchestration": {
+   "steps": [
+    {
+     "name": "委托订单创建检查",
+     "enabled": true
+    },
+    {
+     "name": "委托订单创建",
+     "enabled": true
+    },
+    {
+     "name": "分页查询委托订单",
+     "enabled": true
+    },
+    {
+     "name": "订单-查询订单详情",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单分发",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "检查订舱信息",
+     "enabled": true
+    },
+    {
+     "name": "提交订舱文件",
+     "enabled": true
+    },
+    {
+     "name": "委托订单确认",
+     "enabled": true
+    },
+    {
+     "name": "生成子订单",
+     "enabled": true
+    },
+    {
+     "name": "订舱实收实付金额配置",
+     "enabled": true
+    }
+   ],
+   "resourceMeta": {}
+  },
+  "assertion_registry": {
+   "entries": []
+  }
+ }
+}

@@ -1,0 +1,72 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-test",
+  "meta": {
+    "scenarioId": "sc-test",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "bob",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-08-27T00:00:00Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {
+      "fin-service": "https://bound"
+    },
+    "users": {
+      "qa1": {
+        "url": "https://qa1-auth/login",
+        "username": "qa1-user",
+        "password": "qa1-pass",
+        "token_type": "Bearer",
+        "expires_in": 7200
+      },
+      "qa2": {
+        "url": "https://qa2-auth/login",
+        "username": "qa2-user",
+        "password": "qa2-pass",
+        "token_type": "Bearer",
+        "expires_in": 7200
+      }
+    }
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "api": {
+        "service": "fin-service",
+        "path": "/x",
+        "headers": {
+          "Authorization": "${auth.qa1.token}",
+          "X-Api-Key": "${auth.qa2.token}"
+        },
+        "view_hints": {
+          "endpoint_id": "fin.ep1"
+        }
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "o-1",
+          "remark": "压测-张三",
+          "appCode": "TRACE-V2"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-test",
+  "meta": {
+    "scenarioId": "sc-test",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "bob",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-09T06:24:10.014570Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "api": {
+        "service": "fin-service",
+        "path": "/x",
+        "view_hints": {
+          "endpoint_id": "fin.settlement.create_order"
+        }
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "o-1"
+        }
+      }
+    }
+  ]
+}

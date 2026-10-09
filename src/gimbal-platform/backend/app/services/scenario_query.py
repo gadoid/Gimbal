@@ -66,9 +66,13 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     if user is not None and is_admin:
         return None
     owner = ComposerScenario.owner_id
-    if user is not None:
-        return or_(ComposerScenario.visibility == "public", owner == user.id)
-    return or_(ComposerScenario.visibility == "public", owner == viewer_id)
+    # P2 引用分支(§7.6):非 admin 的可见性上限 + 引用(直接 ∨ 经
+    # suite 成员)。谓词单点 = _ownership.ref_exists_clauses(禁自写)。
+    from ..routers._ownership import ref_exists_clauses
+    viewer = user.id if user is not None else viewer_id
+    direct, via_suite = ref_exists_clauses(viewer)
+    return or_(ComposerScenario.visibility == "public", owner == viewer,
+               direct, via_suite)
 
 
 def _q_clause(q: str | None):

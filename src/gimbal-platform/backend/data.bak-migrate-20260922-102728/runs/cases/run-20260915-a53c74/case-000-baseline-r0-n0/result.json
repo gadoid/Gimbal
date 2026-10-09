@@ -1,0 +1,28 @@
+{
+  "launchStatus": "ok",
+  "exitCode": 1,
+  "status": "failed",
+  "total": 1,
+  "passed": 0,
+  "failed": 1,
+  "skipped": 0,
+  "details": [
+    {
+      "scenario_id": "sc-scenario-icxz4vrk3",
+      "status": "halted",
+      "duration_ms": 6695.354,
+      "halted": true,
+      "halt_reason": "cli --step-to=0",
+      "steps": [
+        {
+          "step_id": "__scenario_halted__",
+          "status": "halted",
+          "duration_ms": 0.0,
+          "error": "halted: cli --step-to=0 (next_step_index=0/13)",
+          "error_phase": "halted"
+        }
+      ]
+    }
+  ],
+  "error": ""
+}

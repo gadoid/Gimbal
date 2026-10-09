@@ -23,6 +23,9 @@ class SuitePatchIn(BaseModel):
 
 class SuiteMembersAddIn(BaseModel):
     scenarioIds: list[str] = Field(..., min_length=1)
+    # P2 §7.9:公共 suite 加未发布成员的发布确认标志(确认后成员
+    # 发布 + 入组同事务;缺省 False → 409 suite_member_publish_required)
+    publishUnpublished: bool = False
 
 
 class SuiteMembersOrderIn(BaseModel):
@@ -40,6 +43,8 @@ class SuiteSummaryOut(BaseModel):
     memberCount: int
     createdAt: str | None = None
     updatedAt: str | None = None
+    # P2 publish 回执:本次级联发布的成员(数据集一并公开,§7.9)
+    publishedMembers: list[str] | None = None
 
 
 class SuitePageOut(BaseModel):

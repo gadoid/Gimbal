@@ -8,6 +8,7 @@ from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
 from .composer_run_scheme import ComposerRunScheme
 # 权限域二期 P1:suite 成员层(组合外键 = 库层安全边界)
+from .share_ref import ShareRef
 from .suite import Suite, SuiteMember
 from .scenario_endpoint_ref import ScenarioEndpointRef
 from .catalog_version import CatalogVersion
@@ -49,6 +50,7 @@ __all__ = [
     "ActivityEvent",
     "UserPref",
     "UserStar",
+    "ShareRef",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

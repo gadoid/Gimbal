@@ -1,0 +1,32 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-test",
+  "meta": {
+    "scenarioId": "sc-test",
+    "name": "Test",
+    "description": "",
+    "module": "order",
+    "priority": 1,
+    "author": "",
+    "owner": "bob",
+    "tags": [],
+    "system": [
+      "fin"
+    ],
+    "version": "v0.1.0",
+    "expire": false,
+    "createTime": "2026-09-20T06:12:49.997326Z",
+    "updateTime": null,
+    "requirementRef": []
+  },
+  "config": {
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {},
+    "services": {},
+    "users": {}
+  },
+  "resource": {},
+  "steps": []
+}

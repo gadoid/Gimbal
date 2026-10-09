@@ -72,7 +72,9 @@ async def test_owner_enforced(client):
     alice = await _setup(client, "alice")
     await client.post(BASE, headers=alice, json=_body("A"))
     bob = await _member(client, "bob")
-    assert (await client.get(BASE, headers=bob)).status_code == 403
+    # P2 §8.2:读端点从 owner 闸(403)改 can_read(§7.6)—— 私有场景
+    # 对非读者不可见 → 404(仓规:不可见 404、可见不可写才 403)
+    assert (await client.get(BASE, headers=bob)).status_code == 404
     assert (await client.post(BASE, headers=bob, json=_body("B"))).status_code == 403
 
 
