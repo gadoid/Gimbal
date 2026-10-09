@@ -112,6 +112,7 @@
           <GatesPanel
             :config="config"
             :members="mainMembers"
+            :roster="detail.members"
             :mode="mode"
             :readonly="!canEdit"
             :run-cap="runCap"
