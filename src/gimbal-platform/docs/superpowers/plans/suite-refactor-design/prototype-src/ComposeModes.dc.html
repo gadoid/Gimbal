@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>新建 · 四种结构说明</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 1000px; padding: 32px 24px 40px; background: rgba(31, 41, 51, 0.55); color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5;">
+<div role="dialog" aria-labelledby="modes-title" style="max-width: 1240px; margin: 0 auto; background: #ffffff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column;">
+
+<header style="padding: 20px 24px 14px; border-bottom: 1px solid #f1f5f9; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px;">
+<div style="flex: 1 1 480px; display: flex; flex-direction: column; gap: 4px;">
+<h2 id="modes-title" style="margin: 0; font-size: 18px; font-weight: 600;">四种结构,画出来就是模式</h2>
+<p style="margin: 0; color: #64748b;">不用先选。画布上怎么连,Suite 就怎么跑;底部状态条会实时告诉你当前识别成了哪一种。想从某个形状开始,点卡片下方的按钮,画布会放好骨架,你只需把场景拖进空位。</p>
+</div>
+<a href="ComposeEmpty.dc.html" aria-label="关闭说明" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid #e2e8f0; border-radius: 6px; color: #64748b; text-decoration: none;">✕</a>
+</header>
+
+<div style="padding: 20px 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
+<article style="border: 1px solid #e2e8f0; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden;">
+<div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; background: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+<div aria-hidden="true" style="position: relative; width: 240px; height: 110px; flex: none; border-radius: 8px; background-color: #ffffff; background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 12px 12px; border: 1px solid #e2e8f0;">
+<sc-for list="{{m.edges}}" as="e" hint-placeholder-count="3">
+<svg width="{{e.w}}" height="{{e.h}}" viewBox="{{e.vb}}" style="{{e.box}}"><line x1="{{e.x1}}" y1="{{e.y1}}" x2="{{e.x2}}" y2="{{e.y2}}" stroke="#94a3b8" stroke-width="1.5"></line></svg>
+</sc-for>
+<sc-for list="{{m.nodes}}" as="n" hint-placeholder-count="4">
+<div style="{{n.style}}">{{n.label}}</div>
+</sc-for>
+</div>
+<div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 14px; color: #4338ca;">{{m.glyph}}</span>
+<h3 style="margin: 0; font-size: 16px; font-weight: 600;">{{m.label}}</h3>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8;">{{m.id}}</span>
+</div>
+<p style="margin: 0;">{{m.one}}</p>
+<p style="margin: 0; font-size: 12px; color: #64748b;"><b style="color: #1f2933;">怎么画:</b>{{m.draw}}</p>
+</div>
+</div>
+<dl style="margin: 0; padding: 12px 16px; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px 12px; font-size: 12px;">
+<dt style="color: #64748b;">怎么跑</dt><dd style="margin: 0;">{{m.run}}</dd>
+<dt style="color: #64748b;">适合</dt><dd style="margin: 0;">{{m.fit}}</dd>
+<dt style="color: #64748b;">留意</dt><dd style="margin: 0; color: #64748b;">{{m.note}}</dd>
+</dl>
+<div style="margin-top: auto; padding: 0 16px 14px; display: flex; justify-content: flex-end;">
+<a href="Compose.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #c7d2fe; border-radius: 6px; background: #eef2ff; color: #4338ca; text-decoration: none; font-weight: 600; font-size: 12px;">用这个结构开始</a>
+</div>
+</article>
+</sc-for>
+</div>
+
+<section aria-labelledby="infer-title" style="margin: 0 24px 20px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+<div style="padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;">
+<h3 id="infer-title" style="margin: 0; font-size: 14px; font-weight: 600;">识别规则</h3>
+<span style="font-size: 12px; color: #64748b;">自上而下,命中第一条即止;每次拖入或连线后重新识别</span>
+</div>
+<div style="overflow-x: auto;">
+<table style="width: 100%; min-width: 720px; border-collapse: collapse;">
+<thead>
+<tr>
+<th style="text-align: left; padding: 8px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 44%;">画布上的结构</th>
+<th style="text-align: left; padding: 8px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 18%;">识别为</th>
+<th style="text-align: left; padding: 8px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0;">说明</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{rules}}" as="r" hint-placeholder-count="5">
+<tr>
+<td style="padding: 10px 16px; border-bottom: 1px solid #f1f5f9;">{{r.shape}}</td>
+<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9;"><span style="{{r.chip}}">{{r.mode}}</span></td>
+<td style="padding: 10px 16px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #64748b;">{{r.why}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<footer style="padding: 14px 24px 20px; border-top: 1px solid #f1f5f9; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; flex: 1 1 260px;"><input type="checkbox">下次新建时不再自动弹出(状态条旁的「?」随时可再打开)</label>
+<a href="ComposeEmpty.dc.html" style="display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; font-weight: 600;">从空白开始</a>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var NW = 44, NH = 22;
+    var node = function (x, y, label, src) {
+      return { label: label, style: 'position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + NW + 'px; height: ' + NH + 'px; box-sizing: border-box; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, Menlo, monospace; font-size: 10px; ' + (src ? 'border: 1.5px solid #4338ca; background: #eef2ff; color: #4338ca;' : 'border: 1px solid #cbd5e1; background: #ffffff; color: #1f2933;') };
+    };
+    var edge = function (a, b) {
+      var x1 = a[0] + NW, y1 = a[1] + NH / 2, x2 = b[0], y2 = b[1] + NH / 2;
+      var minX = Math.min(x1, x2), minY = Math.min(y1, y2) - 2;
+      var w = Math.max(Math.abs(x2 - x1), 1), h = Math.abs(y2 - y1) + 4;
+      return { w: w, h: h, vb: '0 0 ' + w + ' ' + h,
+        box: 'position: absolute; left: ' + minX + 'px; top: ' + minY + 'px; overflow: visible;',
+        x1: x1 - minX, y1: y1 - minY, x2: x2 - minX, y2: y2 - minY };
+    };
+    var P = {
+      agg: [[40, 20], [150, 20], [40, 68], [150, 68]],
+      chain: [[8, 44], [68, 44], [128, 44], [188, 44]],
+      fan: { s: [16, 44], t: [[170, 8], [170, 44], [170, 80]] },
+      dag: { a: [8, 44], b: [96, 12], c: [96, 76], d: [186, 44] }
+    };
+    var chip = function (fg, bg) { return 'display: inline-flex; padding: 1px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: ' + fg + '; background: ' + bg + ';'; };
+    return {
+      modes: [
+        { id: 'aggregate', glyph: '‖', label: '聚合',
+          one: '一组互不相关的场景,各跑各的。',
+          draw: '只拖入,不连线。',
+          run: '批次通道:每个成员用它的默认运行方案独立发起一次执行(支持多行数据与注入),归入同一批次;某个失败不影响其他。',
+          fit: '冒烟集、回归集这类「把一批场景一起跑一遍」。',
+          note: '没有上下文传递,也不保证先后;要先后就连线。',
+          nodes: P.agg.map(function (p, i) { return node(p[0], p[1], 'S' + (i + 1), false); }), edges: [] },
+        { id: 'chain', glyph: '→', label: '串联',
+          one: '首尾相接的一条链,上一步做完再做下一步。',
+          draw: '一个接一个连成一条直线。',
+          run: '一次编排执行;按链路顺序执行,上游产出自动传给下游,可只跑到某一步;每个单元只跑一行数据。',
+          fit: '下单 → 支付 → 发货 → 退款这类业务流程。',
+          note: '画成一条直线就是串联;依赖编排里画出的直线运行结果相同,串联额外支持「只跑到某一步」。',
+          nodes: P.chain.map(function (p, i) { return node(p[0], p[1], 'S' + (i + 1), false); }),
+          edges: [edge(P.chain[0], P.chain[1]), edge(P.chain[1], P.chain[2]), edge(P.chain[2], P.chain[3])] },
+        { id: 'fanout', glyph: '⋔', label: '扇出',
+          one: '一个源场景,其余场景都依赖它。',
+          draw: '从一个节点拉出多条线,下游之间不再互连。',
+          run: '一次编排执行;源先跑,其余单元在它之后执行,每个单元可设 ×重复 放大,只跑一行数据。',
+          fit: '一次登录后并发打多个接口、同一订单上验证多个分支。',
+          note: '下游之间一旦再连线,就会变成依赖编排。',
+          nodes: [node(P.fan.s[0], P.fan.s[1], '源', true)].concat(P.fan.t.map(function (p, i) { return node(p[0], p[1], 'V' + (i + 1), false); })),
+          edges: P.fan.t.map(function (t) { return edge(P.fan.s, t); }) },
+        { id: 'compose', glyph: '⋈', label: '依赖编排',
+          one: '任意有向无环图:每个单元声明它依赖谁。',
+          draw: '自由连线,允许分叉和汇合;不允许成环。',
+          run: '一次编排执行;执行器按依赖层级调度,同层可并行;每个单元只跑一行数据。',
+          fit: '先准备数据,再多路并行,最后汇总校验。',
+          note: '连出环时连线会被拒绝并提示是哪一条。',
+          nodes: [node(P.dag.a[0], P.dag.a[1], 'A', false), node(P.dag.b[0], P.dag.b[1], 'B', false), node(P.dag.c[0], P.dag.c[1], 'C', false), node(P.dag.d[0], P.dag.d[1], 'D', false)],
+          edges: [edge(P.dag.a, P.dag.b), edge(P.dag.a, P.dag.c), edge(P.dag.b, P.dag.d), edge(P.dag.c, P.dag.d)] }
+      ],
+      rules: [
+        { shape: '没有任何连线(含只有一个单元)', mode: '聚合', chip: chip('#1f2933', '#f1f5f9'), why: '单元之间互不依赖。' },
+        { shape: '所有单元连成一条直线,无分叉无汇合', mode: '串联', chip: chip('#4338ca', '#eef2ff'), why: '执行器把串联编译成按顺序的线性依赖,与画成直线的依赖编排相同,无需选择。' },
+        { shape: '恰有一个单元指向其余全部,其余之间无连线', mode: '扇出', chip: chip('#4338ca', '#eef2ff'), why: '这个单元自动成为源。' },
+        { shape: '其他无环结构(有分叉、汇合或多层)', mode: '依赖编排', chip: chip('#4338ca', '#eef2ff'), why: '每条连线即一条 needs。' },
+        { shape: '部分相连、部分孤立', mode: '依赖编排', chip: chip('#4338ca', '#eef2ff'), why: '孤立单元按「无依赖」处理,状态条提示有几个孤立单元,以免是漏连。' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

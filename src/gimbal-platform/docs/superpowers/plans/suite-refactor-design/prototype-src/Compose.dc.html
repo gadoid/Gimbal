@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>新建 Suite · 编排画布</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 940px; background: #f5f3ee; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5; padding: 16px 24px 32px;">
+<div style="max-width: 1392px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;">
+
+<!-- 原型演示条(不属于产品界面) -->
+<sc-if value="{{showDemo}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 6px; background: #1f2933; color: #cbd5e1; font-size: 12px;">
+<span style="color: #f5f3ff; font-weight: 600;">原型演示</span>
+<span>第 {{step}} / 4 步 · {{stepTitle}}</span>
+<span style="flex: 1;"></span>
+<button type="button" onClick="{{prev}}" style="height: 28px; padding: 0 10px; border: 1px solid #64748b; border-radius: 6px; background: transparent; color: #f5f3ff; font: inherit; cursor: pointer;">上一步</button>
+<button type="button" onClick="{{next}}" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: #4338ca; color: #ffffff; font: inherit; cursor: pointer;">下一步</button>
+</div>
+</sc-if>
+
+<!-- 页头:名称可直接改;首次拖入即落库为草稿 -->
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px;">
+<a href="SuiteList.dc.html" style="font-size: 12px; color: #64748b; text-decoration: none;">← Suite</a>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+<input aria-label="Suite 名称" value="{{suiteName}}" style="font: inherit; font-size: 22px; font-weight: 600; color: #1f2933; border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin-left: -6px; background: transparent; width: 280px;">
+<span style="font-size: 12px; color: #64748b;">{{saveState}}</span>
+</div>
+</div>
+<button type="button" disabled style="height: 36px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; color: #94a3b8; font: inherit; cursor: not-allowed;">试跑选中段</button>
+<a href="ComposeFinish.dc.html" style="display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; font-weight: 600;">完成编排</a>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;">
+
+<!-- 左:场景抽屉 -->
+<aside aria-label="场景" style="flex: 1 1 220px; max-width: 240px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">我的场景</h2>
+<input type="search" aria-label="搜索我的场景" placeholder="名称 / scenarioId" style="height: 32px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; background: #f8fafc;">
+<sc-for list="{{library}}" as="l" hint-placeholder-count="6">
+<div style="{{l.style}}">
+<span aria-hidden="true" style="color: #cbd5e1;">⠿</span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{l.name}}</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #94a3b8;">{{l.sid}}</span>
+</div>
+<span style="font-size: 11px; color: #94a3b8;">{{l.tag}}</span>
+</div>
+</sc-for>
+<span style="font-size: 11px; color: #94a3b8;">拖到画布空白处 = 新单元;拖到某个节点上 = 接在它后面。</span>
+</aside>
+
+<!-- 中:画布 -->
+<section aria-label="编排画布" style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b;">前置区</span>
+<span style="font-size: 12px; color: #94a3b8;">把节点拖进来就成为 setup,先于整个主体执行</span>
+</div>
+
+<div style="overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff; background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 16px 16px;">
+<div style="position: relative; width: 820px; height: 500px;">
+
+<sc-for list="{{edges}}" as="e" hint-placeholder-count="3">
+<svg width="{{e.w}}" height="{{e.h}}" viewBox="{{e.vb}}" style="{{e.box}}" aria-hidden="true"><path d="{{e.d}}" fill="none" stroke="{{e.color}}" stroke-width="{{e.sw}}" stroke-dasharray="{{e.dash}}"></path><path d="{{e.head}}" fill="none" stroke="{{e.color}}" stroke-width="{{e.sw}}"></path></svg>
+</sc-for>
+
+<div style="position: absolute; left: 24px; top: 230px; width: 88px; height: 40px; border-radius: 9999px; background: #1f2933; color: #f5f3ff; display: flex; align-items: center; justify-content: center; font-weight: 600;">开始</div>
+
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="3">
+<div style="{{n.style}}">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #4338ca;">{{n.ref}}</span>
+<span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.name}}</span>
+<span style="position: absolute; right: -6px; top: 22px; width: 10px; height: 10px; border-radius: 9999px; border: 2px solid #4338ca; background: #ffffff;"></span>
+</div>
+</sc-for>
+
+<sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; left: 140px; top: 200px; width: 260px; height: 100px; box-sizing: border-box; border: 2px dashed #c7d2fe; border-radius: 10px; background: #eef2ff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #4338ca;">
+<span style="font-weight: 600;">把入口场景拖到这里</span>
+<span style="font-size: 12px; color: #64748b;">通常是登录、准备数据这类第一步</span>
+</div>
+</sc-if>
+
+<sc-if value="{{showCycle}}" hint-placeholder-val="{{false}}">
+<div role="status" style="position: absolute; left: 560px; top: 300px; width: 250px; padding: 8px 10px; border-radius: 6px; background: #fee2e2; color: #991b1b; font-size: 12px; box-shadow: 0 1px 6px rgba(67, 56, 202, 0.12);">pay → login 会形成环,连线已取消。依赖只能从早的指向晚的。</div>
+</sc-if>
+
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b;">后置区</span>
+<span style="font-size: 12px; color: #94a3b8;">teardown,主体失败也执行</span>
+</div>
+
+<!-- 结构状态条:模式由结构推断 -->
+<div role="status" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; background: #ffffff; border: 1px solid #c7d2fe;">
+<span style="font-size: 12px; color: #64748b;">当前结构</span>
+<span style="padding: 2px 10px; border-radius: 4px; background: #eef2ff; color: #4338ca; font-weight: 600;">{{modeLabel}}</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">{{stats}}</span>
+<span style="flex: 1 1 260px; font-size: 12px; color: #64748b;">{{why}}</span>
+<a href="ComposeModes.dc.html" aria-label="四种结构说明" style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid #c7d2fe; border-radius: 9999px; text-decoration: none; font-weight: 600; font-size: 12px;">?</a>
+</div>
+</section>
+
+<!-- 右:检查器 -->
+<aside aria-label="检查器" style="flex: 1 1 260px; max-width: 300px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+<sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">三个动作搭一个 Suite</h2>
+<ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: #64748b;">
+<li><b style="color: #1f2933;">拖入</b>:左侧场景拖到画布,成为一个单元</li>
+<li><b style="color: #1f2933;">连线</b>:从节点右侧圆点拉到下一个节点,表示「它跑完再跑这个」</li>
+<li><b style="color: #1f2933;">不连</b>:互不相连的单元彼此独立</li>
+</ol>
+<span style="font-size: 12px; color: #64748b;">不用先选模式:画出来的结构就是模式,底部状态条会实时告诉你。</span>
+<a href="ComposeModes.dc.html" style="font-size: 12px;">四种结构分别是什么 →</a>
+</sc-if>
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+<span style="font-size: 11px; color: #64748b;">选中单元</span>
+<div style="display: flex; flex-direction: column;">
+<span style="font-size: 14px; font-weight: 600;">{{selName}}</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8;">{{selSid}}</span>
+</div>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">别名 ref<input value="{{selRef}}" style="height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #1f2933;"></label>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">×重复<input type="number" value="1" min="1" style="height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">runs<input type="number" value="1" min="1" style="height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933;"></label>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+<span style="font-weight: 500; color: #64748b;">依赖</span>
+<span>{{selNeeds}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+<span style="font-weight: 500; color: #64748b;">运行方案</span>
+<span>默认方案 · <a href="#">换一个</a></span>
+</div>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">数据行<select style="height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933; background: #ffffff;"><option>ds-order-basic · 第 1 行</option><option>ds-order-basic · 第 2 行</option><option>不带数据(基线)</option></select><span style="font-weight: 400; color: #94a3b8;">编排模式下每个单元只跑一行</span></label>
+<button type="button" style="height: 30px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; color: #ef4444; font: inherit; font-size: 12px; cursor: pointer;">从画布移除</button>
+</sc-if>
+</aside>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startStep":{"editor":"int","min":1,"max":4,"default":3},"demo":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var self = this;
+    var step = (this.state && this.state.step) || this.props.startStep || 3;
+    var W = 176, H = 56;
+    var pos = {
+      login: { x: 140, y: 222, name: '用户登录', sid: 'sc-user-login-005' },
+      order: { x: 380, y: 112, name: '下单主流程', sid: 'sc-order-create-001' },
+      stock: { x: 380, y: 332, name: '库存校验', sid: 'sc-stock-check-004' },
+      pay: { x: 620, y: 222, name: '支付回调', sid: 'sc-pay-callback-006' }
+    };
+    var start = { x: 24, y: 230, w: 88, h: 40 };
+    var present = { 1: [], 2: ['login'], 3: ['login', 'order', 'stock'], 4: ['login', 'order', 'stock', 'pay'] }[step];
+    var links = { 1: [], 2: [['start', 'login']], 3: [['start', 'login'], ['login', 'order'], ['login', 'stock']], 4: [['start', 'login'], ['login', 'order'], ['login', 'stock'], ['order', 'pay'], ['stock', 'pay']] }[step];
+    var sel = { 1: null, 2: 'login', 3: 'order', 4: 'pay' }[step];
+
+    var box = function (k) {
+      if (k === 'start') return start;
+      var p = pos[k]; return { x: p.x, y: p.y, w: W, h: H };
+    };
+    var mkEdge = function (a, b, color, sw, dash) {
+      var x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2;
+      var minX = x1, minY = Math.min(y1, y2) - 8;
+      var w = Math.max(x2 - x1, 1), h = Math.abs(y2 - y1) + 16;
+      var lx1 = 0, ly1 = y1 - minY, lx2 = w, ly2 = y2 - minY, mx = w / 2;
+      return {
+        w: w, h: h, vb: '0 0 ' + w + ' ' + h,
+        box: 'position: absolute; left: ' + minX + 'px; top: ' + minY + 'px; overflow: visible;',
+        d: 'M' + lx1 + ' ' + ly1 + ' C' + mx + ' ' + ly1 + ' ' + mx + ' ' + ly2 + ' ' + (lx2 - 2) + ' ' + ly2,
+        head: 'M' + (lx2 - 9) + ' ' + (ly2 - 5) + ' L' + (lx2 - 2) + ' ' + ly2 + ' L' + (lx2 - 9) + ' ' + (ly2 + 5),
+        color: color, sw: sw, dash: dash
+      };
+    };
+    var edges = links.map(function (l) { return mkEdge(box(l[0]), box(l[1]), '#94a3b8', 1.6, 'none'); });
+    if (step === 3) {
+      edges.push(mkEdge(box('order'), { x: 620, y: 222, w: W, h: H }, '#4338ca', 1.6, '5 4'));
+    }
+    var nodeStyle = function (k, ghost) {
+      var p = pos[k], s = sel === k;
+      var b = 'position: absolute; left: ' + p.x + 'px; top: ' + p.y + 'px; width: ' + W + 'px; height: ' + H + 'px; box-sizing: border-box; padding: 6px 12px; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; ';
+      if (ghost) return b + 'border: 1.5px dashed #4338ca; background: #eef2ff; opacity: 0.8;';
+      return b + (s ? 'border: 2px solid #4338ca; background: #ffffff; box-shadow: 0 1px 6px rgba(67, 56, 202, 0.12);' : 'border: 1px solid #cbd5e1; background: #ffffff;');
+    };
+    var nodes = present.map(function (k) { return { ref: k, name: pos[k].name, style: nodeStyle(k, false) }; });
+    if (step === 3) nodes.push({ ref: '松开以添加', name: '支付回调', style: nodeStyle('pay', true) });
+
+    var info = {
+      1: { title: '空白起步', mode: '—', stats: '0 单元', why: '拖入第一个场景开始。', save: '未保存 · 拖入第一个场景后自动创建草稿' },
+      2: { title: '拖入入口', mode: '聚合', stats: '1 单元 · 1 run', why: '只有一个单元,等同聚合。继续拖入或从 login 拉线。', save: '草稿 · 已自动保存' },
+      3: { title: '从 login 拉出两条线', mode: '扇出', stats: '3 单元 · 3 runs', why: 'login 指向 2 个单元,且它们之间没有连线 → 识别为扇出,源 = login。', save: '草稿 · 已自动保存' },
+      4: { title: '汇合到支付', mode: '依赖编排', stats: '4 单元 · 3 层 · 4 runs', why: 'pay 同时依赖 order 和 stock(汇合),超出扇出 → 识别为依赖编排。', save: '草稿 · 已自动保存' }
+    }[step];
+    var needs = { login: '无 · 入口', order: 'login', stock: 'login', pay: 'order, stock' };
+    var onCanvas = {}; present.forEach(function (k) { onCanvas[pos[k].sid] = 1; });
+    var lib = [
+      { name: '用户登录', sid: 'sc-user-login-005' }, { name: '下单主流程', sid: 'sc-order-create-001' },
+      { name: '库存校验', sid: 'sc-stock-check-004' }, { name: '支付回调', sid: 'sc-pay-callback-006' },
+      { name: '退款到原路', sid: 'sc-pay-refund-003' }, { name: '撤单', sid: 'sc-order-cancel-002' }
+    ].map(function (l) {
+      var on = !!onCanvas[l.sid];
+      var dragging = step === 3 && l.sid === 'sc-pay-callback-006';
+      return { name: l.name, sid: l.sid, tag: on ? '已在画布' : (dragging ? '拖拽中' : ''),
+        style: 'display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: grab; ' + (on ? 'opacity: 0.5; border: 1px solid #f1f5f9;' : (dragging ? 'border: 1.5px dashed #4338ca; background: #eef2ff;' : 'border: 1px solid #f1f5f9; background: #ffffff;')) };
+    });
+    return {
+      step: step, stepTitle: info.title,
+      showDemo: this.props.demo !== false,
+      prev: function () { self.setState({ step: Math.max(1, step - 1) }); },
+      next: function () { self.setState({ step: Math.min(4, step + 1) }); },
+      suiteName: '未命名 Suite',
+      saveState: info.save,
+      library: lib, edges: edges, nodes: nodes,
+      isEmpty: step === 1, showCycle: step === 4,
+      modeLabel: info.mode, stats: info.stats, why: info.why,
+      hasSel: !!sel,
+      selName: sel ? pos[sel].name : '', selSid: sel ? pos[sel].sid : '', selRef: sel || '',
+      selNeeds: sel ? needs[sel] : ''
+    };
+  }
+}
+</script>
+</body>
+</html>

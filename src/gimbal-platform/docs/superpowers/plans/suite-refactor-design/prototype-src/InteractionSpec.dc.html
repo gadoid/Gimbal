@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Suite 交互说明</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 1600px; padding: 40px 32px 56px; background: #f5f3ee; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5;">
+<div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+
+<header style="display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 11px; color: #64748b; letter-spacing: 0.06em;">GIMBAL PLATFORM · SUITE · 交互说明</span>
+<h1 style="margin: 0; font-size: 26px; line-height: 1.2; font-weight: 700;">一个入口,两条路径:新建走画布,编辑走管理页</h1>
+<p style="margin: 0; max-width: 920px; color: #64748b;">Suite 是「一组场景 + 它们怎么跑」。新建时用户还没有结构,所以给一张画布从零搭,模式由画出来的结构推断;编辑时结构已经存在,用户多是做局部调整(增删成员、改顺序、改参数、看结果),所以给管理页。两条路径共享同一个运行预检。</p>
+</header>
+
+<!-- 一、页面流 -->
+<section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 24px 20px; display: flex; flex-direction: column; gap: 14px;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">一、页面流</h2>
+<sc-for list="{{lanes}}" as="lane" hint-placeholder-count="3">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+<span style="width: 96px; flex: none; font-size: 12px; font-weight: 600; color: #64748b;">{{lane.title}}</span>
+<sc-for list="{{lane.steps}}" as="s" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 8px;">
+<a href="{{s.href}}" style="{{s.style}}"><span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #4338ca;">{{s.n}}</span><span style="font-weight: 600; color: #1f2933;">{{s.title}}</span></a>
+<sc-if value="{{s.arrow}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="color: #94a3b8;">→</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+<p style="margin: 0; font-size: 12px; color: #64748b;">反向入口(已有):场景库勾选 →「加入 Suite」进管理页成员页签;场景详情「所属 Suite」chip → 管理页并高亮该成员。</p>
+</section>
+
+<!-- 二、页面清单 -->
+<section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+<div style="padding: 16px 24px 12px; border-bottom: 1px solid #f1f5f9;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">二、页面清单</h2></div>
+<div style="overflow-x: auto;">
+<table style="width: 100%; min-width: 1100px; border-collapse: collapse;">
+<thead>
+<tr style="background: #f8fafc;">
+<th style="text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 52px;">编号</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 140px;">页面</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 170px;">建议路由</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 220px;">怎么进来</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0;">主要操作</th>
+<th style="text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 220px;">去哪</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{pages}}" as="p" hint-placeholder-count="9">
+<tr>
+<td style="padding: 10px 16px; border-bottom: 1px solid #f1f5f9; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #4338ca; vertical-align: top;">{{p.n}}</td>
+<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-weight: 600; vertical-align: top;">{{p.name}}</td>
+<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-family: ui-monospace, Menlo, monospace; font-size: 12px; vertical-align: top;">{{p.route}}</td>
+<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #64748b; vertical-align: top;">{{p.enter}}</td>
+<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; vertical-align: top;">{{p.ops}}</td>
+<td style="padding: 10px 16px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #64748b; vertical-align: top;">{{p.exit}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 三、关键规则 -->
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+<sc-for list="{{rules}}" as="r" hint-placeholder-count="6">
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 6px;">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600;">{{r.title}}</h3>
+<sc-for list="{{r.items}}" as="it" hint-placeholder-count="3">
+<p style="margin: 0; font-size: 12px; color: #1f2933; padding-left: 12px; border-left: 2px solid #e2e8f0;">{{it}}</p>
+</sc-for>
+</div>
+</sc-for>
+</section>
+
+<!-- 四、后端依赖 与 五、决策记录 -->
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+<div style="padding: 14px 18px 10px; border-bottom: 1px solid #f1f5f9;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">四、后端依赖</h2></div>
+<sc-for list="{{backend}}" as="b" hint-placeholder-count="7">
+<div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #f1f5f9;">
+<span style="{{b.chip}}">{{b.state}}</span>
+<div style="flex: 1; display: flex; flex-direction: column;">
+<span style="font-weight: 500;">{{b.what}}</span>
+<span style="font-size: 12px; color: #64748b;">{{b.for}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+<div style="padding: 14px 18px 10px; border-bottom: 1px solid #f1f5f9;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">五、决策记录</h2></div>
+<sc-for list="{{open}}" as="o" hint-placeholder-count="6">
+<div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #f1f5f9;">
+<span style="flex: none; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 9999px; background: #dcfce7; color: #166534;">{{o.n}}</span>
+<div style="flex: 1; display: flex; flex-direction: column;">
+<span style="font-weight: 500;">{{o.q}}</span>
+<span style="font-size: 12px; color: #64748b;">{{o.rec}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var box = 'display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; text-decoration: none;';
+    var step = function (n, title, href, arrow) { return { n: n, title: title, href: href, arrow: arrow, style: box }; };
+    var chip = function (fg, bg) { return 'flex: none; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 9999px; color: ' + fg + '; background: ' + bg + ';'; };
+    var NEW = chip('#4338ca', '#eef2ff'), HAS = chip('#166534', '#dcfce7'), CHK = chip('#b45309', '#fef3c7');
+    return {
+      lanes: [
+        { title: '新建', steps: [
+          step('02', 'Suite 列表', 'SuiteList.dc.html', true), step('10', '空白画布', 'ComposeEmpty.dc.html', true),
+          step('11', '结构说明(首次自动)', 'ComposeModes.dc.html', true), step('12', '拖入 / 连线', 'Compose.dc.html', true),
+          step('13', '检查与完成', 'ComposeFinish.dc.html', true), step('20', '管理页', 'Workspace.dc.html', false) ] },
+        { title: '编辑', steps: [
+          step('02', 'Suite 列表', 'SuiteList.dc.html', true), step('20', '管理页 · 编排', 'Workspace.dc.html', true),
+          step('21', '管理页 · 运行记录', 'RunHistory.dc.html', false) ] },
+        { title: '运行', steps: [
+          step('02 / 13 / 20', '任一「运行」', 'Workspace.dc.html', true), step('30', '运行预检', 'RunConfirm.dc.html', true),
+          step('—', '批次视图 或 执行详情', 'RunHistory.dc.html', true), step('21', '回挂运行记录', 'RunHistory.dc.html', false) ] }
+      ],
+      pages: [
+        { n: '02', name: 'Suite 列表', route: '/suites', enter: '侧栏「Suite」(合并原「用例组」「Suite 编排」)', ops: '搜索、按模式筛选;行内运行;⋯ 重命名 / 复制 / 删除', exit: '+ 新建 → 10;行点击 → 20(最近一次失败则 → 21);运行 → 30' },
+        { n: '10', name: '空白画布', route: '/suites/new', enter: '列表「+ 新建 Suite」;旧 /suites/composer 重定向至此', ops: '从左侧拖入第一个场景;读三步引导', exit: '首次自动弹出 11;拖入后即为 12' },
+        { n: '11', name: '结构说明', route: '画布上的弹层', enter: '首次新建自动弹出;状态条「?」;空白画布右侧链接', ops: '看四种结构与识别规则;「用这个结构开始」放好骨架', exit: '关闭 / 从空白开始 → 10;选结构 → 12(带骨架)' },
+        { n: '12', name: '搭建中', route: '/suites/:id/compose', enter: '首次拖入即创建草稿 Suite,URL 换成带 id', ops: '拖入、连线、删线、拖入前置 / 后置区;选中单元改 ×重复 / runs / 方案,编排模式下选数据行;试跑选中段', exit: '完成编排 → 13' },
+        { n: '13', name: '检查与完成', route: '同 12,弹层', enter: '「完成编排」', ops: '直线结构识别为串联,可设只跑到某一步;同名输入在连线上改名;看连线传值与悬空引用;填名称、描述;选保存后去向', exit: '保存 → 20 或 30;继续编辑 → 12' },
+        { n: '20', name: '管理页 · 编排', route: '/suites/:id', enter: '列表行点击;新建保存;反向入口', ops: '增删 / 排序成员、显式切换模式(会丢依赖时确认)、运行参数、判定门、横切断言;大改结构可进画布', exit: '运行 → 30;在画布中改结构 → 12;页签 → 21' },
+        { n: '21', name: '管理页 · 运行记录', route: '/suites/:id?tab=runs', enter: '页签;列表行(最近失败);运行完成通知', ops: '看结果条与历次运行;展开看逐单元结果、判定门实测值;只重跑失败单元', exit: '批次视图 / 执行详情;定位到 20 中对应成员' },
+        { n: '30', name: '运行预检', route: '弹窗', enter: '02 / 13 / 20 的任一「运行」', ops: '看单元数、预计 runs、判定门、逐条预检;在途批次或运行 / 超上限 / 多行方案只跑一行 / 部分跳过', exit: '运行 → 批次视图(聚合)或执行详情(其余);取消 → 原页' }
+      ],
+      rules: [
+        { title: '新建:何时成为一个 Suite', items: [
+          '打开 10 时不落库;首次拖入场景即创建草稿 Suite(临时名「未命名 Suite」),之后每次改动自动保存。',
+          '名称在「完成编排」时才填,同名冲突在弹层内提示,不关闭弹层。',
+          '离开画布不丢:草稿出现在列表里,带「草稿」标记,点开回到 12。',
+          '草稿不计入每人 50 个上限;30 天未改动的空草稿自动清理。' ] },
+        { title: '新建:模式由结构推断', items: [
+          '无连线 → 聚合;一条直线 → 串联(与直线的依赖编排运行结果相同,不再让用户选);一个源指向其余 → 扇出;其余无环结构 → 依赖编排。',
+          '每次拖入或连线后重新识别,底部状态条给出识别结果和一句理由。',
+          '连出环时拒绝该连线并就地提示;孤立单元在状态条计数,以免是漏连。',
+          '保存时按结构写成员顺序:串联按链路先后,扇出把源排在第一位;「开始」节点的连线不保存。' ] },
+        { title: '编辑:管理页的模式切换', items: [
+          '管理页保留显式模式切换(结构已存在,用户知道自己要什么)。',
+          '切换不改动成员;会丢弃已有依赖时先弹确认,列出将被丢弃的连线。',
+          '需要大改依赖结构时,用「在画布中改结构」进入 12,保存后回到 20。' ] },
+        { title: '运行:通道与去向', items: [
+          '聚合走平台批次通道(逐成员发起、共用 batch_id,支持多行数据);其余模式走一次编排执行,每个单元只跑一行数据。',
+          '编排执行标为「Suite 运行」,不计入成员场景的历史;执行记录里对它点重跑,改为重新运行该 Suite。',
+          '运行前必经 30 预检;在途批次在预检阶段就发现,按钮直接变「查看该批次」。',
+          '运行结果回挂到 21;部分跳过的原因以页内横幅保留,不只用 toast。' ] },
+        { title: '成员与权限', items: [
+          '只能放自己创建的场景(后端组合外键兜底),左侧抽屉只列「我的场景」。',
+          '一个场景可属于多个 Suite;场景删除后自动退出所有 Suite。',
+          '前置 / 后置单元是模式引用,不计入成员数,但同样受属主约束。' ] },
+        { title: '页面状态', items: [
+          '空:列表空态引导新建;画布空态只有「开始」和放置框;管理页成员空时运行按钮禁用。',
+          '加载 / 失败:沿用平台列表页的加载与重试样式。',
+          '并发编辑:保存带版本号,反向入口加成员也推进版本号;画布自动保存遇冲突先拉取最新成员再合并本地连线,合并不了才提示刷新。' ] }
+      ],
+      backend: [
+        { state: '已有', chip: HAS, what: 'Suite 增删改查、成员增删与排序、聚合运行、场景反查所属 Suite', for: '02、20 的成员操作;聚合运行' },
+        { state: '已有', chip: HAS, what: 'POST /runs {graph}', for: '非聚合模式的运行通道(原 Suite 编排页在用)' },
+        { state: '新增', chip: NEW, what: '保存模式与配置:mode + mode_config(单元设置、needs、前后置、判定门、横切断言)', for: '12 自动保存、20 的模式 / 判定编辑;移除成员时同事务清理引用' },
+        { state: '新增', chip: NEW, what: '从 Suite 生成 graph 并运行(服务端拼装成员 + 配置,每单元内联所选一行)', for: '前端不再自己拼 units,保证与保存的配置一致;聚合仍走现有批次通道' },
+        { state: '新增', chip: NEW, what: '执行记录归属:executions.kind / suite_id', for: '编排执行不计入第一个成员场景的历史;重跑改为重新运行 Suite' },
+        { state: '新增', chip: NEW, what: '运行预检 dry-run(只计算不入队)', for: '30 的预计 runs、跳过项、在途批次' },
+        { state: '新增', chip: NEW, what: 'Suite 草稿状态(或用 mode_config 标记)', for: '10 → 12 首次拖入即创建、列表显示草稿' },
+        { state: '核实', chip: CHK, what: '场景输入 / 输出声明的读取接口', for: '13 连线上的变量传递与悬空引用提示' }
+      ],
+      open: [
+        { n: '已定', q: '运行通道', rec: '聚合保留批次通道;其余模式走编排通道,每个单元只跑一行数据。' },
+        { n: '已核实', q: '串联与依赖编排的执行语义', rec: '无差异:串联即按顺序的线性依赖,直线一律识别为串联。' },
+        { n: '已核实', q: '试跑选中段 / 只重跑失败单元', rec: '执行器 Control.only 支持(所选单元 + 传递上游),三种编排模式通用。' },
+        { n: '已定', q: '前置 / 后置作为成员', rec: 'suite_members 加 role 列,属主约束自动覆盖。' },
+        { n: '已定', q: '管理页「在画布中改结构」', rec: '保留,作为大改结构的出口。' },
+        { n: '已定', q: '对外命名', rec: '统一叫「Suite」,界面不再出现「用例组」。' },
+        { n: '已定', q: '草稿', rec: '不计入上限;30 天未改动的空草稿每日清理。' },
+        { n: '已定', q: '队列与总 runs 上限', rec: '本次不改,保留 1000;上线前按真实数据复核。' },
+        { n: '已定', q: '分享(P2)下的编排运行授权', rec: '本次不改;P2 时换成 can_run_scenario 判定。' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

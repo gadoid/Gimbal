@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>运行预检确认</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 1000px; padding: 48px 32px; background: rgba(31, 41, 51, 0.55); color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5;">
+<div style="max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+<!-- 主状态:可运行 -->
+<div role="dialog" aria-labelledby="rc-title" style="flex: 1 1 520px; max-width: 600px; box-sizing: border-box; background: #ffffff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column;">
+<div style="padding: 20px 24px 14px; border-bottom: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 6px;">
+<h2 id="rc-title" style="margin: 0; font-size: 16px; font-weight: 600;">运行「下单到退款」</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+<span style="padding: 2px 8px; border-radius: 4px; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600;">⋈ 依赖编排</span>
+<span style="font-size: 12px; color: #64748b;">走编排通道 · 1 次执行 · 结果在一条执行详情里按单元展开</span>
+</div>
+</div>
+
+<div style="padding: 16px 24px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+<div style="padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column;">
+<span style="font-size: 11px; color: #64748b;">主体单元</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 600;">5</span>
+</div>
+<div style="padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column;">
+<span style="font-size: 11px; color: #64748b;">预计 runs</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 600;">5 <span style="font-size: 12px; font-weight: 400; color: #94a3b8;">/ 1000</span></span>
+</div>
+<div style="padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column;">
+<span style="font-size: 11px; color: #64748b;">判定门</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 600;">2</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+<div style="padding: 8px 12px; background: #f8fafc; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0;">预检 · 打开弹窗即调用 dry-run(只计算不入队,需新增端点)</div>
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="4">
+<div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9;">
+<span style="{{c.dotStyle}}">{{c.mark}}</span>
+<div style="flex: 1; display: flex; flex-direction: column;">
+<span style="font-weight: 500;">{{c.title}}</span>
+<span style="font-size: 12px; color: #64748b;">{{c.detail}}</span>
+</div>
+<sc-if value="{{c.hasFix}}" hint-placeholder-val="{{false}}">
+<a href="Workspace.dc.html" style="font-size: 12px; white-space: nowrap;">{{c.fix}}</a>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="padding: 14px 24px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid #f1f5f9;">
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; flex: 1 1 220px;"><input type="checkbox" checked>完成后通知我(按执行聚合为一条)</label>
+<button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; font: inherit; cursor: pointer;">取消</button>
+<button type="button" style="height: 36px; padding: 0 18px; border: 0; border-radius: 6px; background: #4338ca; color: #ffffff; font: inherit; font-weight: 600; cursor: pointer;">运行</button>
+</div>
+</div>
+
+<!-- 其他状态:同一弹窗的三种分支 -->
+<div style="flex: 1 1 360px; max-width: 520px; display: flex; flex-direction: column; gap: 12px;">
+<span style="font-size: 12px; font-weight: 600; color: #f5f3ff;">同一弹窗的其他分支</span>
+
+<div style="background: #ffffff; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="padding: 2px 8px; border-radius: 4px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 12px; font-weight: 600;">‖ 聚合</span>
+<span style="font-weight: 600;">已有进行中的批次</span>
+</div>
+<p style="margin: 0; font-size: 12px; color: #64748b;">你在这个 Suite 上还有未完成的批次(启动于 17:58,3/8 完成)。等它结束或逐条取消后才能再发起。</p>
+<div style="display: flex; gap: 8px; justify-content: flex-end;">
+<button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; font: inherit; cursor: pointer;">关闭</button>
+<a href="RunHistory.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; font-weight: 600;">查看该批次</a>
+</div>
+<span style="font-size: 11px; color: #94a3b8;">预检阶段就查出在途批次,运行按钮直接换成「查看该批次」,不等后端 409。</span>
+</div>
+
+<div style="background: #ffffff; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="padding: 1px 8px; border-radius: 9999px; background: #fee2e2; color: #991b1b; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700;">超上限</span>
+<span style="font-weight: 600;">聚合 · 预计 1,240 runs,超过上限 1000</span>
+</div>
+<p style="margin: 0; font-size: 12px; color: #64748b;">最大来源:下单主流程 数据集 40 行 × 注入 3 族 = 120 runs。运行按钮禁用,列出前三大来源并直达对应成员。</p>
+</div>
+
+<div style="background: #ffffff; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="padding: 1px 8px; border-radius: 9999px; background: #fef3c7; color: #b45309; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700;">部分跳过</span>
+<span style="font-weight: 600;">聚合 · 运行后:2 个成员未发起</span>
+</div>
+<p style="margin: 0; font-size: 12px; color: #64748b;">结果以页内横幅留在工作台「运行记录」,逐条写明原因(场景已删除 / 数据集不存在);不再只用一闪而过的 toast。全部跳过时不跳转批次页。</p>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var dot = function (fg, bg) {
+      return 'flex: none; width: 20px; height: 20px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: ' + fg + '; background: ' + bg + ';';
+    };
+    return {
+      checks: [
+        { mark: '✓', dotStyle: dot('#166534', '#dcfce7'), title: '依赖图有效', detail: '无环,无悬空 needs;入口单元 login', hasFix: false, fix: '' },
+        { mark: '✓', dotStyle: dot('#166534', '#dcfce7'), title: '5 个成员均可执行', detail: '均为你创建的场景,默认方案已就绪', hasFix: false, fix: '' },
+        { mark: '!', dotStyle: dot('#b45309', '#fef3c7'), title: '下单主流程 只会跑 1 行数据', detail: '默认方案选了 2 行;编排模式下每个单元只跑所选的第 1 行,需要多行请放进聚合 Suite', hasFix: true, fix: '选数据行' },
+        { mark: '!', dotStyle: dot('#b45309', '#fef3c7'), title: '支付回调 引用的凭证别名你本人没有', detail: 'pay-sandbox 将在运行期告警跳过,该单元可能失败', hasFix: true, fix: '去认证管理' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

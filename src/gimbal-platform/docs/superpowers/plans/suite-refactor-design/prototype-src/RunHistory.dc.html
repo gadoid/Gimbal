@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Suite 工作台 · 运行记录</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 900px; background: #f5f3ee; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5; padding: 20px 24px 40px;">
+<div style="max-width: 1392px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;">
+
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px;">
+<a href="SuiteList.dc.html" style="font-size: 12px; color: #64748b; text-decoration: none;">← Suite</a>
+<div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+<h1 style="margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600;">下单到退款</h1>
+<span style="font-size: 12px; color: #64748b;">5 个成员 · 已自动保存 18:04</span>
+</div>
+</div>
+<a href="RunConfirm.dc.html" style="display: inline-flex; align-items: center; height: 36px; padding: 0 18px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; font-weight: 600;">▶ 运行</a>
+</header>
+
+<div role="tablist" aria-label="工作台" style="display: flex; gap: 20px; border-bottom: 1px solid #e2e8f0;">
+<a href="Workspace.dc.html" role="tab" style="padding: 8px 2px; color: #64748b; text-decoration: none;">编排</a>
+<button type="button" role="tab" aria-selected="true" style="padding: 8px 2px; border: 0; border-bottom: 2px solid #4338ca; margin-bottom: -1px; background: transparent; font: inherit; font-weight: 600; color: #1f2933; cursor: pointer;">运行记录 <span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; padding: 0 6px; border-radius: 9999px; background: #eef2ff; color: #4338ca;">12</span></button>
+<button type="button" role="tab" style="padding: 8px 2px; border: 0; background: transparent; font: inherit; color: #64748b; cursor: pointer;">设置</button>
+</div>
+
+<!-- 健康条:最近 12 次 -->
+<section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+<div style="display: flex; flex-direction: column;">
+<span style="font-size: 11px; color: #64748b;">最近 12 次</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 600;">9 / 12 <span style="font-size: 12px; font-weight: 400; color: #64748b;">判定通过</span></span>
+</div>
+<div aria-label="最近 12 次运行结果,从旧到新" style="display: flex; gap: 4px; align-items: center;">
+<sc-for list="{{spark}}" as="s" hint-placeholder-count="12">
+<span title="{{s.t}}" style="{{s.style}}"></span>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: #64748b; flex: 1 1 260px;">绿 = 判定门全部通过 · 红 = 未过 · 蓝 = 进行中。点任一格定位到下方对应行。</span>
+<div role="group" aria-label="筛选" style="display: flex; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+<button type="button" aria-pressed="true" style="height: 30px; padding: 0 10px; border: 0; background: #eef2ff; color: #4338ca; font: inherit; font-weight: 600; cursor: pointer;">全部</button>
+<button type="button" style="height: 30px; padding: 0 10px; border: 0; border-left: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font: inherit; cursor: pointer;">只看失败</button>
+<button type="button" style="height: 30px; padding: 0 10px; border: 0; border-left: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font: inherit; cursor: pointer;">只看我发起的</button>
+</div>
+</section>
+
+<section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow-x: auto;">
+<table style="width: 100%; min-width: 960px; border-collapse: collapse;">
+<thead>
+<tr style="background: #f8fafc;">
+<th style="text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 130px;">发起时间</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 200px;">当次模式 · 通道</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0;">结果</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 220px;">判定门</th>
+<th style="text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 90px;">发起人</th>
+<th style="text-align: right; padding: 10px 16px; font-size: 12px; font-weight: 500; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 120px;"></th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{runs}}" as="r" hint-placeholder-count="5">
+<tr style="{{r.rowStyle}}">
+<td style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-family: ui-monospace, Menlo, monospace; font-size: 12px;">{{r.when}}</td>
+<td style="padding: 12px; border-bottom: 1px solid #f1f5f9;"><span style="display: flex; flex-direction: column;"><span>{{r.mode}}</span><span style="font-size: 11px; color: #64748b;">{{r.channel}}</span></span></td>
+<td style="padding: 12px; border-bottom: 1px solid #f1f5f9;"><span style="display: flex; align-items: center; gap: 8px;"><span style="{{r.pill}}">{{r.status}}</span><span>{{r.result}}</span></span></td>
+<td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px;">{{r.gate}}</td>
+<td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #64748b;">{{r.who}}</td>
+<td style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; text-align: right;"><a href="#" style="font-size: 12px; text-decoration: none;">{{r.link}}</a></td>
+</tr>
+<sc-if value="{{r.open}}" hint-placeholder-val="{{false}}">
+<tr>
+<td colspan="6" style="padding: 0 16px 14px; border-bottom: 1px solid #e2e8f0; background: #fafbff;">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 10px;">
+<div style="flex: 2 1 480px; display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 12px; font-weight: 500; color: #64748b;">逐单元结果 · 运行快照(当时的成员与依赖,之后编辑不影响)</span>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;">
+<sc-for list="{{units}}" as="u" hint-placeholder-count="5">
+<div style="{{u.style}}">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px;">{{u.ref}}</span>
+<span style="font-weight: 600;">{{u.state}}</span>
+<span style="font-size: 11px; color: #64748b;">{{u.note}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 12px; font-weight: 500; color: #64748b;">判定门</span>
+<span style="padding: 6px 10px; border-radius: 6px; background: #fee2e2; color: #991b1b;">通过率 ≥ 100% · 实际 75%(3/4)</span>
+<span style="padding: 6px 10px; border-radius: 6px; background: #dcfce7; color: #166534;">最长耗时 ≤ 3000 ms · 实际 2140 ms</span>
+<div style="display: flex; gap: 8px; margin-top: 4px;">
+<a href="#" style="font-size: 12px;">打开执行详情</a>
+<a href="Workspace.dc.html" style="font-size: 12px;">在编排中定位 pay</a>
+<a href="#" style="font-size: 12px;">只重跑失败单元</a>
+</div>
+</div>
+</div>
+</td>
+</tr>
+</sc-if>
+</sc-for>
+</tbody>
+</table>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var pill = function (fg, bg) {
+      return 'display: inline-flex; padding: 1px 8px; border-radius: 9999px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700; color: ' + fg + '; background: ' + bg + ';';
+    };
+    var sq = function (c) { return 'width: 12px; height: 20px; border-radius: 3px; background: ' + c + ';'; };
+    var seq = ['ok', 'ok', 'bad', 'ok', 'ok', 'ok', 'bad', 'ok', 'ok', 'ok', 'bad', 'run'];
+    var col = { ok: '#22c55e', bad: '#ef4444', run: '#1d4ed8' };
+    var unitStyle = function (fg, bg) {
+      return 'display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 6px; color: ' + fg + '; background: ' + bg + ';';
+    };
+    return {
+      spark: seq.map(function (k, i) { return { t: '第 ' + (i + 1) + ' 次', style: sq(col[k]) }; }),
+      runs: [
+        { when: '10/09 18:04', mode: '⋈ 依赖编排', channel: '编排执行 · #4127', status: 'running', pill: pill('#1d4ed8', '#dbeafe'), result: '3 / 5 单元完成', gate: '等待结束后判定', who: '我', link: '执行详情 →', open: false, rowStyle: '' },
+        { when: '10/08 18:02', mode: '⋈ 依赖编排', channel: '编排执行 · #4101', status: 'failed', pill: pill('#991b1b', '#fee2e2'), result: '4 / 5 单元通过', gate: '1 / 2 未过 · 通过率', who: '我', link: '收起', open: true, rowStyle: 'background: #fafbff;' },
+        { when: '10/08 11:20', mode: '→ 串联', channel: '编排执行 · #4088', status: 'done', pill: pill('#166534', '#dcfce7'), result: '5 / 5 单元通过', gate: '2 / 2 通过', who: '我', link: '执行详情 →', open: false, rowStyle: '' },
+        { when: '10/07 09:30', mode: '‖ 聚合', channel: '批次 · suite-12-3-a91f…', status: 'done', pill: pill('#166534', '#dcfce7'), result: '5 个执行全部完成', gate: '聚合模式无判定门', who: '我', link: '批次视图 →', open: false, rowStyle: '' },
+        { when: '10/06 16:45', mode: '‖ 聚合', channel: '批次 · suite-12-3-77c0…', status: 'failed', pill: pill('#991b1b', '#fee2e2'), result: '4 完成 · 1 失败 · 0 跳过', gate: '聚合模式无判定门', who: '我', link: '批次视图 →', open: false, rowStyle: '' }
+      ],
+      units: [
+        { ref: 'login', state: '通过', note: '420 ms', style: unitStyle('#166534', '#dcfce7') },
+        { ref: 'order', state: '通过', note: '2 runs · 1.3 s', style: unitStyle('#166534', '#dcfce7') },
+        { ref: 'stock', state: '通过', note: '610 ms', style: unitStyle('#166534', '#dcfce7') },
+        { ref: 'pay', state: '失败', note: '凭证 pay-sandbox 缺失', style: unitStyle('#991b1b', '#fee2e2') },
+        { ref: 'refund', state: '未执行', note: '依赖 pay 失败', style: unitStyle('#64748b', '#f1f5f9') }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

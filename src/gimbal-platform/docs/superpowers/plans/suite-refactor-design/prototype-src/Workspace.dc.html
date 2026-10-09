@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Suite 工作台 · 编排</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 1000px; background: #f5f3ee; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5; padding: 20px 24px 40px;">
+<div style="max-width: 1392px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;">
+
+<!-- 页头:面包屑 / 名称 / 保存状态 / 运行 -->
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px;">
+<a href="SuiteList.dc.html" style="font-size: 12px; color: #64748b; text-decoration: none;">← Suite</a>
+<div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+<h1 style="margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600;">下单到退款</h1>
+<span style="font-size: 12px; color: #64748b;">5 个成员 · 已自动保存 18:04</span>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+<button type="button" style="height: 36px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; color: #1f2933; font: inherit; cursor: pointer;">⋯</button>
+<a href="RunConfirm.dc.html" style="height: 44px; box-sizing: border-box; padding: 0 18px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; line-height: 1.2;">
+<span style="font-weight: 600;">▶ 运行</span>
+<span style="font-size: 11px; color: #c7d2fe;">{{runHint}}</span>
+</a>
+</div>
+</header>
+
+<!-- 页签 -->
+<div role="tablist" aria-label="工作台" style="display: flex; gap: 20px; border-bottom: 1px solid #e2e8f0;">
+<button type="button" role="tab" aria-selected="true" style="padding: 8px 2px; border: 0; border-bottom: 2px solid #4338ca; margin-bottom: -1px; background: transparent; font: inherit; font-weight: 600; color: #1f2933; cursor: pointer;">编排</button>
+<a href="RunHistory.dc.html" role="tab" style="padding: 8px 2px; color: #64748b; text-decoration: none;">运行记录 <span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; padding: 0 6px; border-radius: 9999px; background: #eef2ff; color: #4338ca;">12</span></a>
+<button type="button" role="tab" style="padding: 8px 2px; border: 0; background: transparent; font: inherit; color: #64748b; cursor: pointer;">设置</button>
+</div>
+
+<!-- 模式条:四模式共用一份成员 -->
+<section aria-label="运行模式" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+<span style="font-size: 12px; font-weight: 500; color: #64748b;">模式</span>
+<div role="radiogroup" aria-label="运行模式" style="display: flex; flex-wrap: wrap; gap: 6px;">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="{{m.style}}">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">{{m.glyph}}</span>
+<span style="font-weight: 600;">{{m.label}}</span>
+</button>
+</sc-for>
+</div>
+<span style="flex: 1 1 280px; font-size: 12px; color: #64748b;">{{modeDesc}}</span>
+<span style="font-size: 11px; color: #64748b; padding: 2px 8px; border: 1px dashed #cbd5e1; border-radius: 4px;">切换模式不改动成员;会丢弃依赖时先确认;切到编排模式时多行方案的成员需选定一行</span>
+<a href="Compose.dc.html" style="font-size: 12px; text-decoration: none;">在画布中改结构 →</a>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start;">
+
+<!-- 左:场景抽屉 -->
+<aside aria-label="添加场景" style="flex: 1 1 240px; max-width: 260px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; justify-content: space-between; align-items: baseline;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">我的场景</h2>
+<span style="font-size: 11px; color: #94a3b8;">拖入或点 +</span>
+</div>
+<input type="search" aria-label="搜索我的场景" placeholder="名称 / scenarioId" style="height: 32px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; background: #f8fafc;">
+<sc-for list="{{library}}" as="l" hint-placeholder-count="6">
+<div style="{{l.style}}">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{l.name}}</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #94a3b8;">{{l.sid}}</span>
+</div>
+<sc-if value="{{l.added}}" hint-placeholder-val="{{false}}">
+<span style="font-size: 11px; color: #94a3b8;">已在组内</span>
+</sc-if>
+<sc-if value="{{l.free}}" hint-placeholder-val="{{true}}">
+<button type="button" aria-label="追加到主体末尾" style="width: 26px; height: 26px; border: 1px solid #c7d2fe; border-radius: 4px; background: #eef2ff; color: #4338ca; font: inherit; cursor: pointer;">+</button>
+</sc-if>
+</div>
+</sc-for>
+<span style="font-size: 11px; color: #94a3b8;">只列你创建的场景(组合外键库层兜底)。</span>
+</aside>
+
+<!-- 中:编排区,三条泳道 -->
+<section aria-label="编排" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+
+<div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b; width: 64px;">前置</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 4px; background: #f8fafc; border: 1px solid #e2e8f0;"><span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #64748b;">setup</span>清理测试账号余额</span>
+<button type="button" style="height: 28px; padding: 0 10px; border: 1px dashed #cbd5e1; border-radius: 6px; background: transparent; color: #64748b; font: inherit; font-size: 12px; cursor: pointer;">+ 前置场景</button>
+<span style="font-size: 11px; color: #94a3b8;">模式引用,不计入成员;聚合批次通道暂不支持</span>
+</div>
+
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; align-items: baseline; gap: 8px;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">主体</h2>
+<span style="font-size: 12px; color: #64748b;">{{bodyHint}}</span>
+</div>
+
+<!-- 聚合:有序列表 -->
+<sc-if value="{{isAggregate}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+<sc-for list="{{members}}" as="u" hint-placeholder-count="5">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9;">
+<span aria-hidden="true" style="color: #cbd5e1; cursor: grab;">⠿</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-weight: 600; width: 18px;">{{u.n}}</span>
+<div style="flex: 1 1 220px; display: flex; flex-direction: column;">
+<span style="font-weight: 600;">{{u.name}}</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8;">{{u.sid}}</span>
+</div>
+<span style="font-size: 12px; color: #64748b;">默认方案 · {{u.scheme}}</span>
+<button type="button" aria-label="成员操作" style="width: 28px; height: 28px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; color: #64748b; font: inherit; cursor: pointer;">⋯</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<!-- 串联:线性链,标注上下游 -->
+<sc-if value="{{isChain}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 6px; background: #f8fafc;">
+<span style="font-size: 12px; color: #64748b;">只跑到</span>
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px;"><select aria-label="只跑到某一步 to_node" style="height: 28px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; background: #ffffff;"><option>全部(refund)</option><option>pay</option></select></label>
+<span style="font-size: 11px; color: #94a3b8;">之后的单元不执行;只跑中间某几步请在画布上「试跑选中段」(会带上必要的上游)</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: stretch;">
+<sc-for list="{{members}}" as="u" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; align-items: center;">
+<div style="align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff;">
+<span aria-hidden="true" style="color: #cbd5e1; cursor: grab;">⠿</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 1px 6px; border-radius: 3px; background: #eef2ff; color: #4338ca;">{{u.ref}}</span>
+<span style="flex: 1 1 200px; font-weight: 600;">{{u.name}}</span>
+<span style="font-size: 12px; color: #64748b;">{{u.io}}</span>
+<label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b;">runs<input type="number" value="1" min="1" aria-label="runs" style="width: 44px; height: 26px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; text-align: center;"></label>
+</div>
+<sc-if value="{{u.notLast}}" hint-placeholder-val="{{true}}">
+<span aria-hidden="true" style="color: #94a3b8; font-size: 14px; line-height: 20px;">↓</span>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<!-- 扇出:一个源,多个变体 -->
+<sc-if value="{{isFanout}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; border: 1.5px solid #4338ca; border-radius: 8px; background: #eef2ff;">
+<span style="font-size: 11px; font-weight: 700; color: #4338ca;">源</span>
+<span style="font-weight: 600;">用户登录</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #64748b;">login</span>
+</div>
+<span aria-hidden="true" style="color: #94a3b8;">↓ 产出注入每个变体</span>
+<div style="align-self: stretch; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<sc-for list="{{fanTargets}}" as="u" hint-placeholder-count="4">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff;">
+<span style="flex: 1 1 140px; display: flex; flex-direction: column;"><span style="font-weight: 600;">{{u.name}}</span><span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8;">{{u.ref}}</span></span>
+<label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b;">×<input type="number" value="{{u.repeat}}" min="1" aria-label="重复次数" style="width: 44px; height: 26px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; text-align: center;"></label>
+</div>
+</sc-for>
+</div>
+<span style="font-size: 11px; color: #94a3b8;">排在第一位的成员自动成为源;拖到首位即可换源。</span>
+</div>
+</sc-if>
+
+<!-- 依赖编排:按层排布的 DAG,needs 以 chip 表示 -->
+<sc-if value="{{isCompose}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+<sc-for list="{{levels}}" as="lv" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; background: #f8fafc;">
+<span style="font-size: 11px; color: #64748b;">{{lv.title}}</span>
+<sc-for list="{{lv.nodes}}" as="u" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 1px 6px; border-radius: 3px; background: #eef2ff; color: #4338ca;">{{u.ref}}</span>
+<span style="font-weight: 600;">{{u.name}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11px; color: #64748b;">
+<span>needs</span>
+<sc-for list="{{u.needs}}" as="nd" hint-placeholder-count="1">
+<span style="font-family: ui-monospace, Menlo, monospace; padding: 0 6px; border-radius: 9999px; border: 1px solid #c7d2fe; color: #4338ca;">{{nd}}</span>
+</sc-for>
+<sc-if value="{{u.root}}" hint-placeholder-val="{{false}}"><span style="color: #94a3b8;">无 · 入口</span></sc-if>
+<button type="button" style="height: 20px; padding: 0 6px; border: 1px dashed #cbd5e1; border-radius: 9999px; background: transparent; color: #64748b; font: inherit; font-size: 11px; cursor: pointer;">+ 依赖</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: #fef3c7; color: #b45309; font-size: 12px;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"></path></svg>
+<span>依赖只能指向左侧层级;加依赖时即时校验环与悬空引用,不等到运行时报错。</span>
+</div>
+</sc-if>
+
+</div>
+
+<div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b; width: 64px;">后置</span>
+<button type="button" style="height: 28px; padding: 0 10px; border: 1px dashed #cbd5e1; border-radius: 6px; background: transparent; color: #64748b; font: inherit; font-size: 12px; cursor: pointer;">+ 后置场景</button>
+<span style="font-size: 11px; color: #94a3b8;">teardown,主体失败也执行</span>
+</div>
+</section>
+
+<!-- 右:判定面板 -->
+<aside aria-label="运行参数与判定" style="flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 10px;">
+
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">运行参数</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">并发<input type="number" value="2" min="1" max="64" style="height: 32px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">每单元重复<input type="number" value="1" min="1" max="64" style="height: 32px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933;"></label>
+</div>
+<span style="font-size: 11px; color: #64748b;">本次预计 <b style="font-family: ui-monospace, Menlo, monospace; color: #1f2933;">{{totalRuns}}</b> runs · 上限 1000</span>
+</div>
+
+<div style="{{judgeStyle}}">
+<div style="display: flex; align-items: baseline; justify-content: space-between;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">判定门</h2>
+<span style="font-size: 11px; color: #64748b;">全部满足才算通过</span>
+</div>
+<sc-if value="{{isAggregate}}" hint-placeholder-val="{{false}}">
+<span style="font-size: 12px; color: #b45309; background: #fef3c7; padding: 6px 8px; border-radius: 6px;">聚合模式按批次运行,判定门暂不生效;切到其他模式后启用(见总览「待拍板 1」)。</span>
+</sc-if>
+<div style="display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;">
+<span style="flex: 1;">通过率 <b>≥</b> <span style="font-family: ui-monospace, Menlo, monospace;">100%</span></span>
+<button type="button" aria-label="删除判定门" style="border: 0; background: transparent; color: #94a3b8; cursor: pointer; font: inherit;">✕</button>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;">
+<span style="flex: 1;">最长耗时 <b>≤</b> <span style="font-family: ui-monospace, Menlo, monospace;">3000 ms</span></span>
+<button type="button" aria-label="删除判定门" style="border: 0; background: transparent; color: #94a3b8; cursor: pointer; font: inherit;">✕</button>
+</div>
+<button type="button" style="height: 30px; border: 1px dashed #cbd5e1; border-radius: 6px; background: transparent; color: #64748b; font: inherit; font-size: 12px; cursor: pointer;">+ 判定门</button>
+</div>
+
+<div style="{{judgeStyle}}">
+<div style="display: flex; align-items: baseline; justify-content: space-between;">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600;">横切断言</h2>
+<span style="font-size: 11px; color: #64748b;">编译期注入命中单元</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;">
+<span style="font-size: 11px; color: #64748b;">作用于 · 主体全部单元</span>
+<span><span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">$.call.status</span> 等于 <span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">200</span></span>
+</div>
+<button type="button" style="height: 30px; border: 1px dashed #cbd5e1; border-radius: 6px; background: transparent; color: #64748b; font: inherit; font-size: 12px; cursor: pointer;">+ 横切断言(选择器 + 断言表单)</button>
+</div>
+
+</aside>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startMode":{"editor":"enum","options":["aggregate","chain","fanout","compose"],"default":"compose"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var self = this;
+    var mode = (this.state && this.state.mode) || this.props.startMode || 'compose';
+    var defs = [
+      { id: 'aggregate', glyph: '‖', label: '聚合', desc: '逐个独立运行每个成员(各用默认方案),归入同一批次;单个失败不连坐。', body: '顺序即运行顺序 · 拖拽调整', hint: '聚合 · 5 个独立执行 · 一个批次' },
+      { id: 'chain', glyph: '→', label: '串联', desc: '按顺序首尾相接,上一步的产出可被下一步引用。', body: '顺序即链路 · 拖拽调整上下游', hint: '串联 · 1 次编排执行 · 5 单元' },
+      { id: 'fanout', glyph: '⋔', label: '扇出', desc: '首个成员为源,其余成员都依赖它,可各自重复放大。', body: '首位 = 源 · 其余为变体', hint: '扇出 · 1 次编排执行 · 9 单元' },
+      { id: 'compose', glyph: '⋈', label: '依赖编排', desc: '显式声明每个单元依赖谁(needs),执行器按 DAG 调度。', body: '按依赖层级自动排布', hint: '依赖编排 · 1 次编排执行 · 5 单元' }
+    ];
+    var cur = defs.filter(function (d) { return d.id === mode; })[0] || defs[3];
+    var base = 'display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 6px; font: inherit; cursor: pointer;';
+    var members = [
+      { ref: 'login', name: '用户登录', sid: 'sc-user-login-005', scheme: '默认', io: '产出 token' },
+      { ref: 'order', name: '下单主流程', sid: 'sc-order-create-001', scheme: '双数据集', io: '引用 token · 产出 orderId' },
+      { ref: 'stock', name: '库存校验', sid: 'sc-stock-check-004', scheme: '默认', io: '引用 orderId' },
+      { ref: 'pay', name: '支付回调', sid: 'sc-pay-callback-006', scheme: '默认', io: '引用 orderId · 产出 payId' },
+      { ref: 'refund', name: '退款到原路', sid: 'sc-pay-refund-003', scheme: '默认', io: '引用 payId' }
+    ].map(function (m, i, arr) { return Object.assign({ n: i + 1, notLast: i < arr.length - 1 }, m); });
+    var inSuite = { 'sc-user-login-005': 1, 'sc-order-create-001': 1, 'sc-stock-check-004': 1, 'sc-pay-callback-006': 1, 'sc-pay-refund-003': 1 };
+    var lib = [
+      { name: '用户登录', sid: 'sc-user-login-005' },
+      { name: '下单主流程', sid: 'sc-order-create-001' },
+      { name: '撤单', sid: 'sc-order-cancel-002' },
+      { name: '库存校验', sid: 'sc-stock-check-004' },
+      { name: '优惠券核销', sid: 'sc-coupon-redeem-007' },
+      { name: '发货单生成', sid: 'sc-wms-ship-008' }
+    ].map(function (l) {
+      var added = !!inSuite[l.sid];
+      return { name: l.name, sid: l.sid, added: added, free: !added,
+        style: 'display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; border: 1px solid #f1f5f9; ' + (added ? 'opacity: 0.55;' : 'background: #ffffff; cursor: grab;') };
+    });
+    return {
+      modes: defs.map(function (d) {
+        var on = d.id === mode;
+        return { glyph: d.glyph, label: d.label, on: on ? 'true' : 'false',
+          pick: function () { self.setState({ mode: d.id }); },
+          style: base + (on ? ' border: 1.5px solid #4338ca; background: #eef2ff; color: #4338ca;' : ' border: 1px solid #e2e8f0; background: #ffffff; color: #1f2933;') };
+      }),
+      modeDesc: cur.desc,
+      bodyHint: cur.body,
+      runHint: cur.hint,
+      isAggregate: mode === 'aggregate',
+      isChain: mode === 'chain',
+      isFanout: mode === 'fanout',
+      isCompose: mode === 'compose',
+      members: members,
+      library: lib,
+      fanTargets: [
+        { ref: 'order', name: '下单主流程', repeat: 3 },
+        { ref: 'stock', name: '库存校验', repeat: 3 },
+        { ref: 'pay', name: '支付回调', repeat: 1 },
+        { ref: 'refund', name: '退款到原路', repeat: 1 }
+      ],
+      levels: [
+        { title: '第 1 层 · 入口', nodes: [ { ref: 'login', name: '用户登录', needs: [], root: true } ] },
+        { title: '第 2 层', nodes: [ { ref: 'order', name: '下单主流程', needs: ['login'], root: false }, { ref: 'stock', name: '库存校验', needs: ['login'], root: false } ] },
+        { title: '第 3 层', nodes: [ { ref: 'pay', name: '支付回调', needs: ['order', 'stock'], root: false }, { ref: 'refund', name: '退款到原路', needs: ['pay'], root: false } ] }
+      ],
+      totalRuns: mode === 'fanout' ? 9 : 5,
+      judgeStyle: 'background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;' + (mode === 'aggregate' ? ' opacity: 0.6;' : '')
+    };
+  }
+}
+</script>
+</body>
+</html>

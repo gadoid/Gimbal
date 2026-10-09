@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>新建 Suite · 连线检查与完成</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f3ee}
+a{color:#4338ca}a:hover{color:#3730a3}
+</style>
+</helmet>
+<div style="box-sizing: border-box; width: 100%; min-height: 940px; background: #f5f3ee; color: #1f2933; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; font-size: 13px; line-height: 1.5; padding: 16px 24px 32px;">
+<div style="max-width: 1392px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px;">
+<a href="SuiteList.dc.html" style="font-size: 12px; color: #64748b; text-decoration: none;">← Suite</a>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+<span style="font-size: 22px; font-weight: 600;">未命名 Suite</span>
+<span style="font-size: 12px; color: #64748b;">草稿 · 已自动保存</span>
+</div>
+</div>
+<button type="button" style="height: 36px; padding: 0 12px; border: 1px solid #c7d2fe; border-radius: 6px; background: #eef2ff; color: #4338ca; font: inherit; font-weight: 600; cursor: pointer;">试跑选中段(含上游)</button>
+<button type="button" aria-expanded="true" style="height: 36px; padding: 0 16px; border: 0; border-radius: 6px; background: #4338ca; color: #ffffff; font: inherit; font-weight: 600; cursor: pointer;">完成编排</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;">
+
+<section aria-label="编排画布" style="flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b;">前置区</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 4px; background: #f8fafc; border: 1px solid #e2e8f0;"><span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #64748b;">setup</span>清理测试账号余额</span>
+</div>
+
+<div style="overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff; background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 16px 16px;">
+<div style="position: relative; width: 980px; height: 380px;">
+<div style="position: absolute; left: 20px; top: 166px; width: 72px; height: 40px; border-radius: 9999px; background: #1f2933; color: #f5f3ff; display: flex; align-items: center; justify-content: center; font-weight: 600;">开始</div>
+
+<sc-for list="{{edges}}" as="e" hint-placeholder-count="4">
+<div style="{{e.style}}"></div>
+</sc-for>
+
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="4">
+<div style="{{n.style}}">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #4338ca;">{{n.ref}}</span>
+<span style="font-weight: 600;">{{n.name}}</span>
+<sc-if value="{{n.warn}}" hint-placeholder-val="{{false}}">
+<span style="position: absolute; right: 8px; top: 6px; padding: 0 6px; border-radius: 9999px; background: #fef3c7; color: #b45309; font-size: 10px; font-weight: 700;">1 处悬空引用</span>
+</sc-if>
+</div>
+</sc-for>
+
+<div style="position: absolute; left: 470px; top: 150px; padding: 0 6px; border-radius: 4px; background: #4338ca; color: #ffffff; font-family: ui-monospace, Menlo, monospace; font-size: 10px;">orderId</div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #ffffff;">
+<span style="font-size: 12px; font-weight: 600; color: #64748b;">后置区</span>
+<span style="font-size: 12px; color: #94a3b8;">空</span>
+</div>
+
+<!-- 一条直线 = 串联 -->
+<div role="status" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 8px; background: #ffffff; border: 1px solid #c7d2fe;">
+<span style="font-size: 12px; color: #64748b;">当前结构</span>
+<span style="padding: 2px 10px; border-radius: 4px; background: #eef2ff; color: #4338ca; font-weight: 600;">串联</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">4 单元 · 4 runs</span>
+<span style="flex: 1 1 240px; font-size: 12px; color: #64748b;">全部单元连成一条直线 → 串联;按链路顺序执行,上游产出自动传给下游。</span>
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px;">只跑到<select aria-label="只跑到某一步 to_node" style="height: 28px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; background: #ffffff;"><option>全部(refund)</option><option>pay</option><option>order</option></select></label>
+</div>
+</section>
+
+<div style="flex: 1 1 300px; max-width: 340px; display: flex; flex-direction: column; gap: 12px;">
+
+<!-- 选中连线:变量传递 -->
+<aside aria-label="连线检查" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+<span style="font-size: 11px; color: #64748b;">选中连线</span>
+<span style="font-size: 14px; font-weight: 600;"><span style="font-family: ui-monospace, Menlo, monospace; color: #4338ca;">order</span> → <span style="font-family: ui-monospace, Menlo, monospace; color: #4338ca;">pay</span></span>
+<div style="display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+<div style="padding: 6px 10px; background: #f8fafc; font-size: 12px; font-weight: 500; color: #64748b;">传递的变量</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid #f1f5f9;">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">orderId</span>
+<span style="flex: 1; font-size: 12px; color: #64748b;">order 产出 → pay 的 body.orderId 引用</span>
+<span style="color: #166534;">✓</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid #f1f5f9;">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px;">amount</span>
+<span style="flex: 1; font-size: 12px; color: #94a3b8;">order 产出,下游未引用</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid #f1f5f9; background: #fef3c7;">
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #b45309;">couponId</span>
+<span style="flex: 1; font-size: 12px; color: #b45309;">pay 引用了它,但上游没有单元产出</span>
+</div>
+</div>
+<span style="font-size: 11px; color: #94a3b8;">依赖场景的输入/输出声明;悬空引用在搭建时就提示,不等运行期才失败。</span>
+<button type="button" style="height: 30px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; color: #ef4444; font: inherit; font-size: 12px; cursor: pointer;">删除这条连线</button>
+</aside>
+
+<!-- 完成编排 -->
+<div role="dialog" aria-labelledby="fin-title" style="background: #ffffff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);">
+<h2 id="fin-title" style="margin: 0; font-size: 14px; font-weight: 600;">完成编排</h2>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">名称<input value="下单到退款" style="height: 32px; padding: 0 8px; border: 1px solid #4338ca; border-radius: 6px; box-shadow: 0 0 0 2px #c7d2fe; font: inherit; color: #1f2933;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: #64748b;">描述(可选)<input placeholder="这组场景验证什么" style="height: 32px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; color: #1f2933;"></label>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 6px; background: #f8fafc; font-size: 12px;">
+<span>串联 · 4 单元 + 1 前置 · 预计 4 runs</span>
+<span style="color: #b45309;">1 处悬空引用未解决 · 仍可保存</span>
+</div>
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+<legend style="font-weight: 500; color: #64748b; margin-bottom: 4px;">保存后</legend>
+<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="after" checked>进入管理页</label>
+<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="after">立即运行(先过预检)</label>
+</fieldset>
+<div style="display: flex; justify-content: flex-end; gap: 8px;">
+<button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; font: inherit; cursor: pointer;">继续编辑</button>
+<a href="Workspace.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 6px; background: #4338ca; color: #ffffff; text-decoration: none; font-weight: 600;">保存</a>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var W = 168, H = 56, Y = 158;
+    var xs = { login: 130, order: 360, pay: 590, refund: 800 };
+    var names = { login: '用户登录', order: '下单主流程', pay: '支付回调', refund: '退款到原路' };
+    var keys = ['login', 'order', 'pay', 'refund'];
+    var nodes = keys.map(function (k) {
+      var warn = k === 'pay';
+      return { ref: k, name: names[k], warn: warn,
+        style: 'position: absolute; left: ' + xs[k] + 'px; top: ' + Y + 'px; width: ' + W + 'px; height: ' + H + 'px; box-sizing: border-box; padding: 6px 12px; border-radius: 8px; background: #ffffff; display: flex; flex-direction: column; justify-content: center; ' + (warn ? 'border: 1.5px solid #f59e0b;' : 'border: 1px solid #cbd5e1;') };
+    });
+    var seg = function (x1, x2, on) {
+      return { style: 'position: absolute; left: ' + x1 + 'px; top: ' + (Y + H / 2 - (on ? 1.5 : 1)) + 'px; width: ' + (x2 - x1) + 'px; height: ' + (on ? 3 : 2) + 'px; background: ' + (on ? '#4338ca' : '#94a3b8') + '; border-radius: 2px;' };
+    };
+    return {
+      nodes: nodes,
+      edges: [
+        seg(92, xs.login, false),
+        seg(xs.login + W, xs.order, false),
+        seg(xs.order + W, xs.pay, true),
+        seg(xs.pay + W, xs.refund, false)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
