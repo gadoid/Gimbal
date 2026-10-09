@@ -124,6 +124,21 @@
                     :data-testid="`pub-badge-${row.meta.scenarioId}`"
                     title="已发布到公共库"
                   >公共</span>
+                  <!-- P2 徽标(§7.11):属主「已引用分享」(布尔,不显人数);
+                       引用单场景不带来 suite 访问,故徽标只看 direction=in
+                       的直接引用。 -->
+                  <span
+                    v-if="sharedOutIds.has(row.meta.scenarioId)"
+                    class="ref-badge"
+                    :data-testid="`ref-out-badge-${row.meta.scenarioId}`"
+                    title="此场景正被引用分享(保存后对方立即生效)"
+                  >已引用分享</span>
+                  <span
+                    v-if="sharedInMeta.get(row.meta.scenarioId)"
+                    class="ref-in-badge"
+                    :data-testid="`ref-in-badge-${row.meta.scenarioId}`"
+                    :title="`引用 · 来自 ${sharedInMeta.get(row.meta.scenarioId)}`"
+                  >引用</span>
                   <button
                     v-if="row.schemeCount"
                     type="button"
@@ -161,6 +176,7 @@
                          PUT(name 生成列自动重算,后端零新增);软校验,重名不拦。 -->
                     <DropdownMenuItem class="sl-menu-item" data-testid="rename-menu" @click="renameScenario(row)">重命名</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" data-testid="handoff-menu" @click="openHandoff(row)">分发给…</DropdownMenuItem>
+                    <DropdownMenuItem class="sl-menu-item" data-testid="share-menu" @click="openShare(row)">分享…</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="goSchemes(row)">方案管理</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('export', row)">导出 JSON</DropdownMenuItem>
                     <!-- 按方案导出(2026-09-22 重设计):原「导出 → 弹窗选方案」
@@ -249,6 +265,13 @@
     <!-- F1(2026-09-23):分发给…(副本交接;结果面板在弹窗内) -->
     <HandoffDialog v-model:open="handoffOpen" :scenario="handoffTarget" />
 
+    <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
+    <ShareDialog
+      v-model:open="shareOpen"
+      :resource="shareTarget"
+      @changed="loadShareBadges"
+    />
+
     <!-- P1 尾巴①:批量加入 Suite(目标选择弹窗;成功后清勾选) -->
     <AddToSuiteDialog
       v-model:open="atsOpen"
@@ -272,6 +295,8 @@ import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-dra
 import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import HandoffDialog from '@/components/scenario-lib/HandoffDialog.vue'
 import AddToSuiteDialog from '@/components/suites/AddToSuiteDialog.vue'
+import ShareDialog from '@/components/sharing/ShareDialog.vue'
+import { listShares } from '@/api/shares'
 import { getHandoffUnread } from '@/api/handoff'
 import { markRead } from '@/api/notifications'
 import { downloadFile } from '@/utils/download'
@@ -389,6 +414,7 @@ const formatTime = shortDateTime
 
 onMounted(load)
 onMounted(loadHandoffBadges)
+onMounted(loadShareBadges)
 
 function openScenario(row: ScenarioListItem) {
   void consumeHandoffBadge(row.meta.scenarioId)
@@ -541,6 +567,41 @@ async function renameScenario(row: ScenarioListItem) {
   }
 }
 
+// ── P2:分享弹窗 + 徽标数据(§7.11)─────────────────────────────
+const shareOpen = ref(false)
+const shareTarget = ref<{
+  type: 'scenario' | 'suite'; id: string; name: string
+} | null>(null)
+/** 属主侧:被引用的场景 id 集(「已引用分享」徽标,布尔不显人数)。 */
+const sharedOutIds = ref(new Set<string>())
+/** 被分享人侧:scenarioId → 分享者名(「引用 · 来自 X」徽标)。 */
+const sharedInMeta = ref(new Map<string, string>())
+
+function openShare(row: ScenarioListItem) {
+  shareTarget.value = {
+    type: 'scenario',
+    id: row.meta.scenarioId,
+    name: row.meta.name || row.meta.scenarioId,
+  }
+  shareOpen.value = true
+}
+
+async function loadShareBadges() {
+  // 增强信息:失败静默留白(与 handoff 徽标同口径)
+  try {
+    const [out, inn] = await Promise.all([
+      listShares({ direction: 'out' }).catch(() => []),
+      listShares({ direction: 'in', resourceType: 'scenario' }).catch(() => []),
+    ])
+    sharedOutIds.value = new Set(
+      out.filter((r) => r.resourceType === 'scenario' && r.scenarioId)
+        .map((r) => r.scenarioId as string))
+    sharedInMeta.value = new Map(
+      inn.filter((r) => r.scenarioId)
+        .map((r) => [r.scenarioId as string, r.grantedByName]))
+  } catch { /* 静默 */ }
+}
+
 // ── F1(2026-09-23):分发给… + 「来自 X 的分享」悬浮标签 ──────────
 const handoffOpen = ref(false)
 const handoffTarget = ref<{ id: string; name: string } | null>(null)
@@ -684,6 +745,20 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   color: #1d4ed8;
   border-color: rgb(59 130 246 / 55%);
   background: rgb(59 130 246 / 10%);
+}
+
+/* P2 徽标(§7.11) */
+.ref-badge {
+  flex: none; font-size: 11px; line-height: 1; padding: 3px 8px;
+  border-radius: 999px; color: #6d28d9;
+  background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
+  cursor: help;
+}
+.ref-in-badge {
+  flex: none; font-size: 11px; line-height: 1; padding: 3px 8px;
+  border-radius: 999px; color: #15803d;
+  background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
+  cursor: help;
 }
 
 /* P1 尾巴①:批量加入 Suite 入口(与镜头/新建同排)。 */

@@ -40,12 +40,37 @@
         class="su-row wrow"
         :data-testid="`suite-row-${s.suiteId}`"
       >
-        <span class="su-name" :title="s.name">{{ s.name }}</span>
+        <span class="su-name" :title="s.name">
+          {{ s.name }}
+          <span v-if="sharedOutSuites.has(s.suiteId)"
+            class="ref-badge" title="此用例组正被引用分享">已引用分享</span>
+        </span>
         <span class="su-desc">{{ s.description || '—' }}</span>
         <span class="su-members">{{ s.memberCount }} 个场景</span>
         <span class="su-time">{{ fmt(s.updatedAt) }}</span>
         <span class="su-open">打开 →</span>
       </router-link>
+    </div>
+
+    <!-- P2 §7.11:「共享给我的」分区(suite 引用;引用 ⇒ 可整组执行)。 -->
+    <div v-if="sharedInSuites.length" class="shared-in" data-testid="shared-in-suites">
+      <p class="shared-in-label">共享给我的(引用)</p>
+      <div
+        v-for="r in sharedInSuites"
+        :key="r.id"
+        class="su-row wrow shared-row"
+        :data-testid="`shared-suite-${r.suiteId}`"
+      >
+        <span class="su-name">
+          {{ r.suiteName || `#${r.suiteId}` }}
+          <span class="ref-in-badge">引用 · 来自 {{ r.grantedByName }}</span>
+        </span>
+        <span class="su-members">{{ r.memberCount }} 个场景</span>
+        <button class="cta" :data-testid="`shared-suite-open-${r.suiteId}`"
+                @click="$router.push(`/suites/${r.suiteId}`)">打开</button>
+        <button class="unsub-btn" :data-testid="`shared-suite-unsub-${r.suiteId}`"
+                @click="unsubscribe(r)">退订</button>
+      </div>
     </div>
 
     <!-- 新建对话框 -->
@@ -100,6 +125,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { createSuite, listSuites, type SuiteSummary } from '@/api/suites'
+import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 
@@ -115,6 +141,33 @@ const filtered = computed(() => {
   return items.value.filter((s) => s.name.toLowerCase().includes(needle))
 })
 const subtitle = computed(() => `共 ${filtered.value.length} 个用例组`)
+
+// ── P2 徽标 + 共享给我的(§7.11)────────────────────────────────
+const sharedOutSuites = ref(new Set<number>())
+const sharedInSuites = ref<ShareRefItem[]>([])
+
+async function loadShareBadges() {
+  try {
+    const [out, inn] = await Promise.all([
+      listShares({ direction: 'out' }).catch(() => []),
+      listShares({ direction: 'in', resourceType: 'suite' }).catch(() => []),
+    ])
+    sharedOutSuites.value = new Set(
+      out.filter((r) => r.resourceType === 'suite' && r.suiteId)
+        .map((r) => r.suiteId as number))
+    sharedInSuites.value = inn
+  } catch { /* 静默留白 */ }
+}
+
+async function unsubscribe(r: ShareRefItem) {
+  try {
+    await deleteShare(r.id)
+    sharedInSuites.value = sharedInSuites.value.filter((x) => x.id !== r.id)
+    toast.success('已退订该引用')
+  } catch (e) {
+    toast.error(`退订失败:${(e as Error).message}`)
+  }
+}
 
 function fmt(v: string | null): string {
   return v ? shortDateTime(v) : ''
@@ -159,6 +212,7 @@ async function submitCreate(): Promise<void> {
 }
 
 onMounted(() => void load())
+onMounted(() => void loadShareBadges())
 </script>
 
 <style scoped>
@@ -206,4 +260,27 @@ onMounted(() => void load())
 }
 .card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
 .cta { margin-left: 10px; color: #2563eb; background: none; border: none; cursor: pointer; font-size: 13px; }
+</style>
+
+<style scoped>
+.ref-badge {
+  font-size: 11px; line-height: 1; padding: 2px 8px; border-radius: 999px;
+  color: #6d28d9; background: rgb(139 92 246 / 10%);
+  border: 1px solid rgb(139 92 246 / 40%); margin-left: 6px;
+}
+.ref-in-badge {
+  font-size: 11px; line-height: 1; padding: 2px 8px; border-radius: 999px;
+  color: #15803d; background: rgb(34 197 94 / 10%);
+  border: 1px solid rgb(34 197 94 / 40%); margin-left: 6px;
+}
+.shared-in { margin-top: 20px; }
+.shared-in-label {
+  font-size: 13px; color: rgb(100 116 139); margin: 8px 0;
+}
+.shared-row { cursor: default; }
+.unsub-btn {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  color: #b45309; background: rgb(245 158 11 / 8%);
+  border: 1px solid rgb(245 158 11 / 35%);
+}
 </style>

@@ -123,3 +123,19 @@ export async function suitesOfScenario(
     `/scenarios/${encodeURIComponent(scenarioId)}/suites`)
   return data
 }
+
+/** P2 §7.9:suite 发布(级联发布未发布成员,回执 publishedMembers)。 */
+export async function postSuitePublish(
+  suiteId: number,
+): Promise<SuiteSummary & { publishedMembers?: string[] }> {
+  const { data } = await http.post(`/suites/${suiteId}/publish`)
+  return data
+}
+
+/** P2 §7.9:suite 下架(成员 public 状态独立保留)。 */
+export async function deleteSuitePublish(
+  suiteId: number,
+): Promise<SuiteSummary> {
+  const { data } = await http.delete(`/suites/${suiteId}/publish`)
+  return data
+}

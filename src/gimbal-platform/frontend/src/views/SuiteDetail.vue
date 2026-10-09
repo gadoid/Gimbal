@@ -25,6 +25,27 @@
           :disabled="running"
           @click="onDelete"
         >删除</button>
+        <button
+          type="button"
+          class="btn-primary"
+          data-testid="suite-share"
+          @click="shareOpen = true"
+        >分享…</button>
+        <button
+          v-if="detail?.visibility !== 'public'"
+          type="button"
+          class="btn-primary"
+          data-testid="suite-publish"
+          :disabled="running || !detail?.memberCount"
+          @click="onPublish"
+        >发布到公共库</button>
+        <button
+          v-else
+          type="button"
+          class="btn-danger"
+          data-testid="suite-unpublish"
+          @click="onUnpublish"
+        >下架为私有</button>
       </div>
     </div>
 
@@ -143,6 +164,12 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
+    <ShareDialog
+      v-model:open="shareOpen"
+      :resource="shareResource"
+      @changed="void 0"
+    />
   </section>
 </template>
 
@@ -159,6 +186,7 @@ import {
   reorderSuiteMembers, runSuite, type SuiteDetail,
 } from '@/api/suites'
 import { listScenarioOptions } from '@/api/scenario-composer'
+import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import { executionsBatchUrl } from '@/utils/links'
 import { toast } from '@/utils/toast'
 
@@ -171,6 +199,12 @@ const detail = ref<SuiteDetail | null>(null)
 const tab = ref('members')
 const busy = ref(false)
 const running = ref(false)
+const shareOpen = ref(false)
+const shareResource = computed(() => detail.value ? {
+  type: 'suite' as const,
+  id: String(suiteId.value),
+  name: detail.value.name,
+} : null)
 
 const subtitle = computed(() => detail.value
   ? `${detail.value.memberCount} 个成员 · 聚合模式 · 创建于 ${detail.value.createdAt?.slice(0, 10) ?? '—'}`
@@ -211,6 +245,38 @@ async function remove(scenarioId: string): Promise<void> {
     toast.error('移除失败:' + (e as Error).message)
   } finally {
     busy.value = false
+  }
+}
+
+async function onPublish(): Promise<void> {
+  // §7.9 确认框:级联发布成员及其数据集;后端回执级联清单事实面
+  if (!detail.value) return
+  const ok = window.confirm(
+    '发布用例组到公共库?未发布的成员及其数据集将一并公开。')
+  if (!ok) return
+  try {
+    const { postSuitePublish } = await import('@/api/suites')
+    const out = await postSuitePublish(suiteId.value)
+    const cascaded = (out.publishedMembers ?? []).length
+    toast.success(cascaded
+      ? `已发布(级联公开了 ${cascaded} 个未发布成员)`
+      : '已发布到公共库')
+    await load()
+  } catch (e) {
+    toast.error(`发布失败:${(e as Error).message}`)
+  }
+}
+
+async function onUnpublish(): Promise<void> {
+  if (!detail.value) return
+  if (!window.confirm('下架用例组?成员场景的公共状态独立保留。')) return
+  try {
+    const { deleteSuitePublish } = await import('@/api/suites')
+    await deleteSuitePublish(suiteId.value)
+    toast.success('已下架为私有')
+    await load()
+  } catch (e) {
+    toast.error(`下架失败:${(e as Error).message}`)
   }
 }
 

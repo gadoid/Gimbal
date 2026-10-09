@@ -49,6 +49,7 @@
       </dl>
       <div class="head-actions">
         <button class="btn primary" @click="goRun">▶ 立即运行</button>
+        <button class="btn" data-testid="detail-share" @click="shareOpen = true">分享…</button>
         <button class="btn" @click="goScenario(4)">编排</button>
         <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">方案</button>
         <!-- 断言覆盖率徽标(原型修订 v2.2:整体可点直达注册表,不与
@@ -174,6 +175,8 @@
       场景不存在或无权查看。
       <button class="linklike" @click="router.push('/scenarios')">返回场景库</button>
     </div>
+    <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
+    <ShareDialog v-model:open="shareOpen" :resource="shareResource" />
   </section>
 </template>
 
@@ -183,6 +186,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getScenario } from '@/api/scenario-composer'
 import { suitesOfScenario, type SuiteLookupItem } from '@/api/suites'
+import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import { showError } from '@/utils/errorFallback'
 import { composerUrl, scenarioSchemesUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
@@ -196,6 +200,13 @@ const store = useScenarioComposerStore()
 const scenarioId = route.params.scenarioId as string
 
 const loading = ref(false)
+
+const shareOpen = ref(false)
+const shareResource = computed(() => ({
+  type: 'scenario' as const,
+  id: scenarioId,
+  name: scenario.value?.meta?.name || scenarioId,
+}))
 
 // 详情按 id 直拉单条(store 退位:不再有全量列表可 scenarioById,
 // 也不再有「store 空就全量 fetch」的兜底 —— PG迁移方案 §4.3)。

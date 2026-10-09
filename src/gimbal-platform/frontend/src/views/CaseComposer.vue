@@ -899,7 +899,7 @@ async function saveAs() {
         const ok = await confirmAction(
           `已有同名场景。使用「${suggestion.detail.suggestion}」创建副本?`,
           '重名确认', { type: 'info', confirmButtonText: '使用后缀名' })
-        if (!ok) return
+        if (!ok) return false
         saved = await api.copyScenario(id, suggestion.detail.suggestion)
       } else {
         throw e
@@ -958,6 +958,27 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       if (!silent) showError('加载断言注册表', undefined, (e as Error).message)
       return false
     }
+  }
+  // P2 §7.11 保存提示(必做):引用是 live link,被引用场景保存后对方
+  // 立即生效 —— 属主侧唯一防误伤手段。仅手动保存触发(自动/静默保存
+  // 不弹窗打断;防误伤 = 人在环路,自动保存无人在场)。
+  if (scenario.value && manual && !silent) {
+    const sid = scenario.value.meta.scenarioId
+    try {
+      const { listShares } = await import('@/api/shares')
+      const { confirmAction } = await import('@/utils/confirmAction')
+      const refs = await listShares({
+        direction: 'out', resourceType: 'scenario', resourceId: sid })
+      if (refs.length) {
+        const names = refs.map((r) => r.granteeName).join('、')
+        const ok = await confirmAction(
+          `此场景正被 ${refs.length} 人引用分享(${names}),保存后对方立即生效。继续保存?`,
+          '保存提示',
+          { type: 'warning', confirmButtonText: '继续保存', cancelButtonText: '取消' },
+        )
+        if (!ok) return false
+      }
+    } catch { /* 查询失败不阻断保存(提示是增强,保存是主链) */ }
   }
   saving.value = true
   saveState.value = 'saving'
