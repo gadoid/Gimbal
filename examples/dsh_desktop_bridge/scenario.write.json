@@ -1,0 +1,193 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-dsh-bridge-write",
+  "meta": {
+    "name": "dsh-desktop-bridge 写操作接口测试",
+    "description": "创建会话、发送消息；会在宿主里启动 agent 并追加用户回合，仅在明确授权时运行",
+    "module": "dsh-desktop-bridge",
+    "priority": 1,
+    "author": "gimbal",
+    "owner": "gimbal",
+    "tags": [
+      "dsh",
+      "bridge",
+      "write"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-10-09T00:00:00",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "bridge": "http://127.0.0.1:0"
+    },
+    "users": {},
+    "vars": {
+      "token": "REPLACE_ME",
+      "port": "0",
+      "session_id": "session-00000000-0000-0000-0000-000000000000",
+      "workdir": ".",
+      "message": "gimbal bridge probe: please reply with OK."
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "创建会话（会在宿主里启动一个 agent）→ 201",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cwd": "${var.workdir}",
+          "title": "gimbal bridge probe"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 201,
+          "message": "create 应 201"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.sessionId",
+          "operator": "contains",
+          "expected": "session-"
+        },
+        {
+          "kind": "extract",
+          "expression": "$.response_body.sessionId",
+          "target": "created_session_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "新会话出现在列表中 → 200",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "list 应 200"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.items",
+          "operator": "exists"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "向会话发送一条消息 → 200 accepted",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "text": "${var.message}"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "messages 应 200"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.accepted",
+          "operator": "eq",
+          "expected": true
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.requestId",
+          "operator": "exists"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "消息进入事件日志 → 200",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": 5
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "events 应 200"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.events",
+          "operator": "exists"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1059 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-dsh-bridge-readonly",
+  "meta": {
+    "name": "dsh-desktop-bridge 只读与负向接口测试",
+    "description": "访问控制 / 路由 / 入参校验；除 list 与 events 外不触达 sessionController，对真实桌面端无副作用",
+    "module": "dsh-desktop-bridge",
+    "priority": 1,
+    "author": "gimbal",
+    "owner": "gimbal",
+    "tags": [
+      "dsh",
+      "bridge",
+      "readonly",
+      "security"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-10-09T00:00:00",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "bridge": "http://127.0.0.1:0"
+    },
+    "users": {},
+    "vars": {
+      "token": "REPLACE_ME",
+      "port": "0",
+      "session_id": "session-00000000-0000-0000-0000-000000000000",
+      "kb": {
+        "kind": "random_str",
+        "length": 1024,
+        "charset": "alnum"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "鉴权：缺少 Authorization → 401",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {},
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 401,
+          "message": "无 token 必须 401"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "unauthorized"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "鉴权：错误 token → 401",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer not-the-token"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 401,
+          "message": "错误 token 必须 401"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "unauthorized"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "鉴权：Basic 方案 → 401",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Basic ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 401,
+          "message": "非 Bearer 方案必须 401"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "鉴权：token 多一位 → 401（定长比较）",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}0"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 401,
+          "message": "token 必须精确匹配"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "浏览器 Origin 一律拒绝 → 403",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Origin": "http://127.0.0.1:${var.port}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 403,
+          "message": "带 Origin 必须 403"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "browser origins are not allowed"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "DNS 重绑定：Host 非回环 → 403",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Host": "evil.example:${var.port}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 403,
+          "message": "非回环 Host 必须 403"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "Host header must name the loopback address and port"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "Host 端口不匹配 → 403",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Host": "127.0.0.1:1"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 403,
+          "message": "Host 端口必须等于监听端口"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "Host 用 localhost:port 放行 → 200",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Host": "localhost:${var.port}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "localhost:port 属于允许的回环写法"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "列出会话 → 200 + items + 安全响应头",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "list 应 200"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.items",
+          "operator": "exists"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_headers['content-type']",
+          "operator": "contains",
+          "expected": "application/json"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_headers['cache-control']",
+          "operator": "eq",
+          "expected": "no-store"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_headers['x-content-type-options']",
+          "operator": "eq",
+          "expected": "nosniff"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "读取事件尾部 limit=1 → 200",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": 1
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "events 应 200"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.sessionId",
+          "operator": "eq",
+          "expected": "${var.session_id}"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.events",
+          "operator": "exists"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "读取事件 默认 limit → 200",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "缺省 limit=30 应 200"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "limit=0 越下界 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": 0
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "limit=0 必须 400"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "limit must be 1-100"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "limit=101 越上界 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": 101
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "limit=101 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "limit=1.5 非整数 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": "1.5"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "非整数 limit 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "limit=abc 非数字 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "limit": "abc"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "非数字 limit 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "格式合法但不存在的会话 → 404",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/session-ffffffff-ffff-ffff-ffff-ffffffffffff/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 404,
+          "message": "session/not-found 应映射为 404"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "会话 id 格式非法 → 404",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/not-a-session/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 404,
+          "message": "非法 id 不应进入 controller"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "not found"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "未知路由 → 404",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/unknown",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 404,
+          "message": "未知路由 404"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "DELETE events 方法不允许 → 405",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "DELETE",
+        "path": "/v1/sessions/${var.session_id}/events",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 405,
+          "message": "events 只允许 GET"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "method not allowed"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "GET messages 方法不允许 → 405",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "GET",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 405,
+          "message": "messages 只允许 POST"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：非 JSON Content-Type → 415",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "text/plain"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": "cwd=/tmp"
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 415,
+          "message": "非 JSON 必须 415"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "JSON required"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：JSON 语法错误 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": "{not json"
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "坏 JSON 必须 400"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "invalid JSON"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：缺少 cwd → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "title": "x"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "缺 cwd 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：cwd 为空白 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cwd": "   "
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "空白 cwd 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：cwd 不存在 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cwd": "/gimbal-dsh-bridge-does-not-exist/${var.kb}"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "不存在目录必须 400"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "cwd must be an existing directory"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：title 为空串 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cwd": ".",
+          "title": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "空 title 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "创建会话：title 非字符串 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cwd": ".",
+          "title": 42
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "非字符串 title 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "发消息：非 JSON → 415",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "text/plain"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": "hello"
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 415,
+          "message": "非 JSON 必须 415"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "发消息：缺少 text → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "缺 text 必须 400"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "text must be 1-4096 bytes"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "发消息：text 为空白 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "text": "  "
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "空白 text 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "发消息：text 5120 字节 > 4096 → 400",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "text": "${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 400,
+          "message": "超长 text 必须 400"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "发消息：请求体 > 8KB → 413",
+      "api": {
+        "kind": "api",
+        "service": "bridge",
+        "method": "POST",
+        "path": "/v1/sessions/${var.session_id}/messages",
+        "headers": {
+          "Authorization": "Bearer ${var.token}",
+          "Content-Type": "application/json"
+        },
+        "timeout": 20
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "text": "${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}${var.kb}"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 413,
+          "message": "超大请求体必须 413"
+        },
+        {
+          "kind": "assertion",
+          "target": "$.response_body.error",
+          "operator": "eq",
+          "expected": "request too large"
+        }
+      ]
+    }
+  ]
+}
