@@ -1053,7 +1053,7 @@ async def _fanout_graph(
     # unit id 补齐。总状态不再取「最后一个 scenario.end」—— 后置通过
     # 会覆盖主体失败、判定门失败只改 exit_code 会被吞。
     unit_events: dict[str, dict] = {}
-    proj = {"attempts": 0}
+    proj = {"attempts": 0, "gates": None}
     status = "failed"
     result = None
     try:
@@ -1075,6 +1075,10 @@ async def _fanout_graph(
                     e = unit_events.setdefault(u, {})
                     e["finished_at"] = d.get("timestamp")
                     e["status"] = d.get("status")
+            elif et == "gates.evaluated":
+                # 第 4 处:执行器结构化判定门结论 → 落执行记录
+                proj["gates"] = {"gates": d.get("gates") or [],
+                                 "passed": bool(d.get("passed"))}
             elif et == "run.finished":
                 proj["attempts"] = int(d.get("attempts") or 0)
                 details = d.get("details")
@@ -1188,6 +1192,18 @@ async def _fanout_graph(
                          passed=n_pass,
                          failed=n_fail,
                          skipped=max(len(ordered_units) - n_pass - n_fail, 0))
+    if proj.get("gates"):
+        # 判定门结论(第 4 处):经事件通道落 config_json,21 页实测值来源
+        try:
+            async with db_factory() as session:
+                ex = await session.get(Execution, execution_id)
+                if ex is not None:
+                    cfgj = dict(ex.config_json or {})
+                    cfgj["gatesEvaluated"] = proj["gates"]
+                    ex.config_json = cfgj
+                    await session.commit()
+        except Exception:  # noqa: BLE001 — 结论留档 best-effort
+            pass
     await _finalize_execution(db_factory, execution_id)
 
 

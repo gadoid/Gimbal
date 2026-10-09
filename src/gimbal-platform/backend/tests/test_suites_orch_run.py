@@ -35,8 +35,9 @@ async def _mk(client: AsyncClient, h: dict, sid: str) -> None:
     assert r.status_code in (200, 201), r.text
 
 
-def _events(*units: tuple[str, str]) -> list[dict]:
-    """(ref, status) 列表 → start/end 事件对 + run.finished(exit 0)。"""
+def _events(*units: tuple[str, str], gates: dict | None = None) -> list[dict]:
+    """(ref, status) 列表 → start/end 事件对(+可选 gates.evaluated)
+    + run.finished(exit 0)。"""
     evs: list[dict] = []
     seq = 2
     for ref, st in units:
@@ -47,6 +48,11 @@ def _events(*units: tuple[str, str]) -> list[dict]:
         evs.append({"event_type": "scenario.end", "seq": seq,
                     "unit": ref, "scenario_id": "sc-x", "status": st,
                     "timestamp": f"2026-10-09T07:00:{seq:02d}+00:00"})
+        seq += 1
+    if gates is not None:
+        evs.append({"event_type": "gates.evaluated", "seq": seq,
+                    "gates": [gates], "passed": gates.get("passed", True),
+                    "exit_code": 0})
         seq += 1
     evs.append({"event_type": "run.finished", "seq": seq,
                 "exit_code": 0, "attempts": seq})
@@ -77,7 +83,7 @@ async def _mk_compose_suite(
     cfg = {"units": {
         "sc-or-auth": {"ref": "auth"},
         "sc-or-order": {"ref": "order", "needs": ["sc-or-auth"]},
-    }}
+    }, "gates": [{"metric": "pass_rate", "op": "gte", "value": 1.0}]}
     r = await client.put(f"/api/suites/{sid}/composition", headers=h, json={
         "rev": 0, "mode": "compose",
         "members": [{"scenarioId": "sc-or-auth"},
@@ -122,7 +128,9 @@ async def test_orchestration_run_suite_graph(client, monkeypatch):
     sid, detail = await _mk_compose_suite(client, h, "编排集")
     assert detail["rev"] == 1
     launched = _patch_pipeline(monkeypatch, _events(
-        ("auth", "passed"), ("order", "passed")))
+        ("auth", "passed"), ("order", "passed"),
+        gates={"metric": "pass_rate", "op": "gte", "value": 1.0,
+               "actual": 1.0, "passed": True}))
 
     r = await client.post(f"/api/suites/{sid}/run", headers=h)
     assert r.status_code == 201, r.text
@@ -161,6 +169,14 @@ async def test_orchestration_run_suite_graph(client, monkeypatch):
         (0, "graph", "passed"), (1, "auth", "passed"),
         (2, "order", "passed")]
     assert rows[1].started_at is not None and rows[1].finished_at is not None
+
+    # 判定门结论(第 4 处):执行器事件经通道落 config_json(21 页数据源)
+    async with db_module.SessionLocal() as s:
+        ex2 = await s.get(Execution, ex.id)
+    ge = ex2.config_json.get("gatesEvaluated")
+    assert ge == {"gates": [{"metric": "pass_rate", "op": "gte",
+                             "value": 1.0, "actual": 1.0, "passed": True}],
+                  "passed": True}
 
 
 async def test_rerun_intercepted_and_runs_visibility(client, monkeypatch):

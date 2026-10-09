@@ -282,6 +282,7 @@ class Engine:
             "lt": lambda a, b: a < b, "lte": lambda a, b: a <= b,
         }
         failures = []
+        evaluated: list[dict] = []
         for i, g in enumerate(gates):
             # Plan 透传为 dict 形态(graph.gates 模型 dump)
             metric = g.get("metric") if isinstance(g, dict) else g.metric
@@ -292,6 +293,9 @@ class Engine:
             logger.info("[Engine] gate[{}/{}]: {} {} {} → {} (actual={})",
                         i, len(gates), metric, op, value,
                         "PASS" if ok else "FAIL", actual)
+            evaluated.append({"metric": metric, "op": op,
+                              "value": float(value), "actual": actual,
+                              "passed": bool(ok)})
             if not ok:
                 failures.append(
                     f"gate[{i}] {metric}={actual:.4g} !{op} {value}")
@@ -306,6 +310,19 @@ class Engine:
                 "steps": [],
                 "gates": True,
             }]
+        # 重构方案第 4 处(执行器侧唯一改动):结构化判定门结论事件 ——
+        # 通过与否都发布,平台经事件通道落执行记录(替代解析 halt_reason)
+        bus = self._ictx.event_bus
+        if bus is not None:
+            try:
+                from gimbal.events.types import GatesEvaluatedEvent
+                bus.publish(GatesEvaluatedEvent(
+                    run_id=suite_ctx.run_id, suite_id=suite_ctx.suite_id,
+                    gates=evaluated, passed=not failures,
+                    exit_code=1 if failures else 0,
+                ))
+            except Exception:  # noqa: BLE001
+                logger.debug("[Engine] emit gates.evaluated failed")
 
     def _emit_run_finished(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
         """发布 RunFinishedEvent（带 seq，总线锁内分配）。失败仅记日志。"""

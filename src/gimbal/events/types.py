@@ -168,6 +168,20 @@ class SuiteEndEvent(FrameworkEvent):
     status: str
 
 
+class GatesEvaluatedEvent(FrameworkEvent):
+    """N1(D-6)·重构方案第 4 处:判定门结构化结论。
+
+    此前 gate 明细只进 details 的 __gates__ 行且 halt_reason 是拼接
+    字符串、机器不可读;平台改为经事件通道消费结构化结论(度量/阈值/
+    实测/是否通过),通过与否都发布(21 页判定门实测值的数据源)。"""
+
+    event_type: Literal["gates.evaluated"] = "gates.evaluated"
+    suite_id: str = ""
+    gates: list[dict] = []
+    passed: bool = True
+    exit_code: int = 0
+
+
 class ScenarioStartEvent(FrameworkEvent):
     event_type: Literal["scenario.start"] = "scenario.start"
     # suite_id 由 ContextManager 填充；ScenarioRunner 直接发时为空

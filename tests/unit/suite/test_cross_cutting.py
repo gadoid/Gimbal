@@ -234,6 +234,39 @@ class TestGates:
         assert gate_rows[0]["scenario_id"] == "__gates__"
         assert "pass_rate" in gate_rows[0]["halt_reason"]
 
+    def test_gates_evaluated_event_structured(self):
+        """重构方案第 4 处:结构化判定门结论事件(通过与否都发布)。
+
+        平台经事件通道消费(21 页判定门实测值数据源),替代解析
+        details __gates__ 行的拼接 halt_reason。"""
+        events, _ = _run_graph(_two_unit_graph(
+            gates=[{"metric": "pass_rate", "op": "gte", "value": 1.0}]))
+        evs = [e for e in events if e.event_type == "gates.evaluated"]
+        assert len(evs) == 1 and evs[0].passed is True
+        assert evs[0].exit_code == 0
+        assert evs[0].gates == [{"metric": "pass_rate", "op": "gte",
+                                 "value": 1.0, "actual": 1.0,
+                                 "passed": True}]
+        # 序:gates.evaluated 在 suite.end 之前(判定先行,suite.end 携带终态)
+        seqs = {e.event_type: e.seq for e in events
+                if e.event_type in ("gates.evaluated", "suite.end")}
+        assert seqs["gates.evaluated"] < seqs["suite.end"]
+
+        # 多门求与:一门过一门败 → passed=False,逐门结论分明
+        events, result = _run_graph(_two_unit_graph(gates=[
+            {"metric": "fail_count", "op": "eq", "value": 0},
+            {"metric": "max_duration_ms", "op": "lt", "value": 0.0001},
+        ]))
+        ev = next(e for e in events if e.event_type == "gates.evaluated")
+        assert result.exit_code == 1 and ev.passed is False
+        assert [g["passed"] for g in ev.gates] == [True, False]
+        assert ev.gates[1]["metric"] == "max_duration_ms"
+
+        # 无 gates 不发事件(缺省路径零打扰)
+        events, _ = _run_graph(_two_unit_graph())
+        assert not [e for e in events
+                    if e.event_type == "gates.evaluated"]
+
     def test_max_duration_gate(self):
         events, result = _run_graph(_two_unit_graph(
             gates=[{"metric": "max_duration_ms", "op": "lt", "value": 0.0001}]))
