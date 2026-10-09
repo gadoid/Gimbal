@@ -104,10 +104,25 @@
             <TableCell><code class="mono exec-id">{{ row.id }}</code></TableCell>
             <TableCell>
               <div class="scenario-cell">
-                <span class="scenario-name">{{
-                  row.scenario_display_name || row.scenario_id
-                }}<template v-if="row.scenario_deleted">(已删)</template></span>
-                <span class="mono scenario-sid">{{ row.scenario_id }}</span>
+                <!-- Suite 层重构:suite_graph 执行显示 Suite 名并链到运行记录;
+                     scenario_id 是占位 suite-<id>(非真实场景)。 -->
+                <span class="scenario-name">
+                  <template v-if="isSuiteGraph(row)">
+                    <span class="suite-tag" title="Suite 编排执行(不计入成员场景的历史)">Suite 运行</span>
+                    <router-link
+                      v-if="row.suite_id"
+                      :to="`/suites/${row.suite_id}?tab=runs`"
+                      class="suite-link"
+                      :data-testid="`exec-suite-link-${row.id}`"
+                      @click.stop
+                    >{{ row.scenario_display_name || row.scenario_id }}</router-link>
+                    <template v-else>{{ row.scenario_display_name || row.scenario_id }}</template>
+                  </template>
+                  <template v-else>{{
+                    row.scenario_display_name || row.scenario_id
+                  }}<template v-if="row.scenario_deleted">(已删)</template></template>
+                </span>
+                <span v-if="!isSuiteGraph(row)" class="mono scenario-sid">{{ row.scenario_id }}</span>
               </div>
             </TableCell>
             <TableCell>
@@ -187,8 +202,16 @@
                   <div class="expand-label">下一步</div>
                   <div class="expand-actions">
                     <Button variant="outline" size="sm" class="h-7" @click="open(row.id)">查看详情</Button>
+                    <!-- suite_graph 不按 config 重放(重放只会重跑第一个场景,
+                         后端已 409 拦截)→ 转去运行该 Suite(过预检)。 -->
                     <Button
-                      v-if="row.status !== 'queued' && row.status !== 'running'"
+                      v-if="isSuiteGraph(row) && row.suite_id"
+                      variant="outline" size="sm" class="h-7"
+                      :data-testid="`exec-rerun-suite-${row.id}`"
+                      @click="router.push(`/suites/${row.suite_id}`)"
+                    >重新运行 Suite</Button>
+                    <Button
+                      v-else-if="row.status !== 'queued' && row.status !== 'running'"
                       variant="outline" size="sm" class="h-7" :data-testid="`exec-rerun-${row.id}`"
                       :disabled="rerunningId === row.id"
                       @click="rerun(row)"
@@ -423,6 +446,12 @@ function durationOf(row: ExecutionListItem): string {
 const expanded = ref<Set<number>>(new Set())
 
 const rerunningId = ref<number | null>(null)
+
+/** Suite 层重构:suite_graph = 编排执行(成员场景历史不含它,重跑转去运行 Suite)。 */
+function isSuiteGraph(row: ExecutionListItem): boolean {
+  return row.kind === 'suite_graph'
+}
+
 async function rerun(row: ExecutionListItem) {
   rerunningId.value = row.id
   try {
@@ -571,6 +600,15 @@ onUnmounted(() => {
   font-size: 10.5px; color: #8B93A1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Suite 运行标记 + 链接(重构:suite_graph 执行显示 Suite 名) */
+.suite-tag {
+  font-size: 10.5px; font-weight: 600; padding: 1px 7px; margin-right: 6px;
+  border-radius: 999px; color: #6d28d9;
+  background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
+  vertical-align: 1px;
+}
+.suite-link { color: #2563eb; text-decoration: none; }
+.suite-link:hover { text-decoration: underline; }
 .scheme-cell {
   font-size: 12px; color: #5B6472;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;

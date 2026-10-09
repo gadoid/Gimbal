@@ -34,6 +34,10 @@ class ExecutionOut(BaseModel):
     # deleted = 场景行已删(快照仍是审计权威,不随删消失)。
     scenario_display_name: str = ""
     scenario_deleted: bool = False
+    # Suite 重构:归属标记(suite_graph = 编排执行;聚合成员执行仍是
+    # scenario、只多记 suite_id)。读侧据此区分展示与重跑语义。
+    kind: str = "scenario"
+    suite_id: int | None = None
 
 
 class ExecutionListItemOut(BaseModel):
@@ -62,6 +66,10 @@ class ExecutionListItemOut(BaseModel):
     # G1 读侧投影(同 ExecutionOut 注释)
     scenario_display_name: str = ""
     scenario_deleted: bool = False
+    # Suite 重构:归属标记(同 ExecutionOut 注释;前端据此显示
+    # 「Suite 运行」并把重跑转去运行 Suite)
+    kind: str = "scenario"
+    suite_id: int | None = None
 
 
 class ExecutionListOut(BaseModel):

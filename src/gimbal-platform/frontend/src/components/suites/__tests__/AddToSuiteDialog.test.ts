@@ -13,6 +13,8 @@ import { toast } from '@/utils/toast'
 vi.mock('@/api/suites', () => ({
   listSuites: vi.fn(),
   addSuiteMembers: vi.fn(),
+  // 重构:提交走 suiteErrDetail 透出后端 409 机器面;默认无 detail
+  suiteErrDetail: vi.fn(() => null),
 }))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },

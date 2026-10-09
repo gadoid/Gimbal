@@ -24,6 +24,11 @@ export interface Execution {
   scenario_display_name?: string
   /** 场景行已删(快照仍是审计权威,照常展示)。 */
   scenario_deleted?: boolean
+  /** Suite 层重构:kind=suite_graph = 编排执行(scenario_id 是占位
+   *  suite-<id>,scenario_display_name 是 Suite 名);聚合成员执行仍是
+   *  scenario、只多记 suite_id。 */
+  kind?: string
+  suite_id?: number | null
   config: {
     // V3 dispatcher 写入的配方键(run_dispatcher._create_execution,
     // 与 RunRequest 创建入参一一对应;camelCase)。

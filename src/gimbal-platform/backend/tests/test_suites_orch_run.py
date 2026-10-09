@@ -311,3 +311,52 @@ async def test_rerun_failed_units(client, monkeypatch):
         f"/api/suites/{sid}/runs/{ex2.id}/rerun-failed", headers=owner)
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "no_failed_units"
+
+
+async def test_run_control_only_and_to_node(client, monkeypatch):
+    """第 2 步:run 带 control(only / toNode)透传到下发产物;
+    from_node 刻意不开放(schema extra=forbid 拒收)。"""
+    await register_and_login(client, "rc_boot", "rc_bootpass123")
+    h = await register_and_login(client, "rc_owner", "rc_ownerpass123")
+    sid, _ = await _mk_compose_suite(client, h, "控制集")
+
+    launched = _patch_pipeline(monkeypatch, _events(
+        ("auth", "passed"), ("order", "passed")))
+    r = await client.post(f"/api/suites/{sid}/run", headers=h,
+                          json={"only": ["order"]})
+    assert r.status_code == 201, r.text
+    ex = await _wait_final(r.json()["executionId"])
+    assert ex.status == "done"
+    assert launched[0]["control"] == {"only": ["order"]}
+
+    # from_node 不开放:透传即 422(schema extra=forbid)
+    r = await client.post(f"/api/suites/{sid}/run", headers=h,
+                          json={"fromNode": "auth"})
+    assert r.status_code == 422, r.text
+
+
+async def test_list_latest_run_summary_own_initiated_only(client, monkeypatch):
+    """第 2 步:GET /suites 附最近运行摘要 —— 只算本人发起(不变量 2);
+    编排执行 kind=suite_graph,无本人发起 = null。"""
+    await register_and_login(client, "lr_boot", "lr_bootpass123")
+    h = await register_and_login(client, "lr_owner", "lr_ownerpass123")
+    other = await register_and_login(client, "lr_other", "lr_otherpass123")
+    sid, _ = await _mk_compose_suite(client, h, "摘要集")
+
+    # 本人发起前:latestRun 为 null
+    r = await client.get("/api/suites", headers=h, params={"scope": "mine"})
+    item = next(x for x in r.json()["items"] if x["suiteId"] == sid)
+    assert item["latestRun"] is None
+
+    launched = _patch_pipeline(monkeypatch, _events(
+        ("auth", "passed"), ("order", "passed")))
+    r = await client.post(f"/api/suites/{sid}/run", headers=h)
+    assert r.status_code == 201, r.text
+    await _wait_final(r.json()["executionId"])
+
+    r = await client.get("/api/suites", headers=h, params={"scope": "mine"})
+    item = next(x for x in r.json()["items"] if x["suiteId"] == sid)
+    assert item["latestRun"]["kind"] == "suite_graph"
+    assert item["latestRun"]["status"] == "done"
+    assert item["latestRun"]["executionId"] > 0
+    assert item["latestRun"]["batchId"].startswith(f"suite-{sid}-")

@@ -110,6 +110,8 @@ def execution_out(
         consecutive_failures=consecutive_failures,
         scenario_display_name=scenario_display_name,
         scenario_deleted=scenario_deleted,
+        kind=e.kind or "scenario",
+        suite_id=e.suite_id,
     )
 
 
@@ -155,6 +157,8 @@ def execution_list_item(
         consecutive_failures=consecutive_failures,
         scenario_display_name=scenario_display_name,
         scenario_deleted=scenario_deleted,
+        kind=e.kind or "scenario",
+        suite_id=e.suite_id,
     )
 
 

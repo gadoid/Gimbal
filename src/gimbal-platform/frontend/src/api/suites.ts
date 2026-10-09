@@ -1,9 +1,46 @@
 /**
- * suites.ts — suite 成员层 API client(权限域二期 P1,
- * 《Suite成员层、引用分享与浏览镜头-设计方案》§9 的 P1 子集:
- * CRUD + 成员管理 + 聚合模式运行 + 反查;publish/分享随 P2)。
+ * suites.ts — Suite API client(成员层 P1 + 引用分享 P2 + Suite 层重构
+ * 第 2 步:composition 整体保存 / 模式分流运行 / 运行记录 / 重跑失败
+ * 单元 / 公共复制 / 最近运行摘要)。
  */
 import http from '@/api/http'
+
+export type SuiteMode = 'aggregate' | 'chain' | 'fanout' | 'compose'
+export type MemberRole = 'main' | 'before' | 'after'
+
+/** 单元设置(mode_config.units.<scenarioId>;编排模式消费)。 */
+export interface SuiteUnitConfig {
+  ref?: string
+  needs?: string[]
+  repeat?: number
+  nRuns?: number
+  schemeId?: string | null
+  row?: { datasetId: string; rowIndex: number } | null
+  injectionEntryIds?: string[]
+  map?: Record<string, string>
+}
+
+/** 编排配置(suites.mode_config;draft 标记服务端管理,保存时原样带回)。 */
+export interface SuiteModeConfig {
+  units?: Record<string, SuiteUnitConfig>
+  parallel?: number
+  nRuns?: number
+  gates?: { metric: string; op: string; value: number }[]
+  checks?: { on?: { bracket?: string; refs?: string[] }; strategy?: Record<string, unknown> }[]
+  draft?: boolean
+  [k: string]: unknown
+}
+
+export interface SuiteLatestRun {
+  kind: 'suite_graph' | 'batch'
+  status?: string
+  executionId?: number
+  batchId?: string | null
+  createdAt?: string | null
+  finishedAt?: string | null
+  passed?: number
+  failed?: number
+}
 
 export interface SuiteSummary {
   suiteId: number
@@ -12,8 +49,11 @@ export interface SuiteSummary {
   visibility: string
   mode: string
   memberCount: number
+  rev: number
+  isDraft: boolean
   createdAt: string | null
   updatedAt: string | null
+  latestRun?: SuiteLatestRun | null
 }
 
 export interface SuitePage {
@@ -28,14 +68,21 @@ export interface SuiteMemberItem {
   name: string
   module: string
   visibility: string
+  role: MemberRole
   sort: number
   addedAt: string | null
 }
 
 export interface SuiteDetail extends SuiteSummary {
+  access: 'owner' | 'admin' | 'ref' | 'public' | null
+  canEdit: boolean | null
+  canRun: boolean | null
+  canShare: boolean | null
+  modeConfig: SuiteModeConfig | null
   members: SuiteMemberItem[]
 }
 
+/** 聚合模式运行结果(批次通道)。 */
 export interface SuiteRunResult {
   batchId: string
   started: number[]
@@ -44,6 +91,49 @@ export interface SuiteRunResult {
     scenarioId: string; executionId: number; message: string
   }[]
   totalRuns: number
+}
+
+/** 编排模式运行结果(一次编排执行)。 */
+export interface SuiteOrchRunResult {
+  executionId: number
+  batchId: string
+  mode: string
+  units: number
+  estimatedRuns: number
+}
+
+export interface CompositionMember {
+  scenarioId: string
+  role: MemberRole
+}
+
+export interface CompositionBody {
+  rev: number
+  mode: SuiteMode
+  members: CompositionMember[]
+  modeConfig: SuiteModeConfig
+  publishUnpublished?: boolean
+}
+
+/** 409 suite_rev_conflict 附最新内容(自动保存冲突合并用)。 */
+export interface RevConflict {
+  currentRev: number
+  latest: SuiteDetail
+}
+
+export interface SuiteRunItem {
+  executionId?: number
+  kind: 'suite_graph' | 'batch' | 'single'
+  batchId?: string | null
+  mode?: string | null
+  status: string
+  executions?: number[]
+  totalRuns: number
+  passed: number
+  failed: number
+  skipped?: number
+  createdAt: string | null
+  finishedAt?: string | null
 }
 
 export interface SuiteLookupItem {
@@ -56,6 +146,7 @@ export interface SuiteLookupItem {
 /** 浏览镜头口径与场景库一致(§5.1):前端默认传 mine。 */
 export async function listSuites(params?: {
   scope?: 'mine' | 'all'
+  visibility?: 'public'
   page?: number
   page_size?: number
 }): Promise<SuitePage> {
@@ -63,8 +154,9 @@ export async function listSuites(params?: {
   return data
 }
 
+/** name 省略 = 创建草稿(服务端生成不重名草稿名,画布首次拖入口径)。 */
 export async function createSuite(body: {
-  name: string
+  name?: string
   description?: string
 }): Promise<SuiteSummary> {
   const { data } = await http.post<SuiteSummary>('/suites', body)
@@ -77,7 +169,7 @@ export async function getSuite(suiteId: number): Promise<SuiteDetail> {
 }
 
 export async function patchSuite(
-  suiteId: number, body: { name?: string; description?: string },
+  suiteId: number, body: { name?: string; description?: string; clearDraft?: boolean },
 ): Promise<SuiteSummary> {
   const { data } = await http.patch<SuiteSummary>(`/suites/${suiteId}`, body)
   return data
@@ -87,11 +179,21 @@ export async function deleteSuite(suiteId: number): Promise<void> {
   await http.delete(`/suites/${suiteId}`)
 }
 
+/** 整体保存(重构方案):模式、成员及顺序、编排配置一次落库;rev 乐观锁。 */
+export async function putSuiteComposition(
+  suiteId: number, body: CompositionBody,
+): Promise<SuiteDetail> {
+  const { data } = await http.put<SuiteDetail>(
+    `/suites/${suiteId}/composition`, body)
+  return data
+}
+
 export async function addSuiteMembers(
-  suiteId: number, scenarioIds: string[],
+  suiteId: number, scenarioIds: string[], publishUnpublished = false,
 ): Promise<SuiteDetail> {
   const { data } = await http.post<SuiteDetail>(
-    `/suites/${suiteId}/members`, { scenarioIds })
+    `/suites/${suiteId}/members`,
+    { scenarioIds, publishUnpublished })
   return data
 }
 
@@ -109,9 +211,37 @@ export async function removeSuiteMember(
   await http.delete(`/suites/${suiteId}/members/${encodeURIComponent(scenarioId)}`)
 }
 
-/** 聚合模式运行(§6.6):循环分发 + batch_id 归并;409 附在途批次。 */
-export async function runSuite(suiteId: number): Promise<SuiteRunResult> {
-  const { data } = await http.post<SuiteRunResult>(`/suites/${suiteId}/run`, {})
+/** 运行(模式分流):聚合 → SuiteRunResult(批次);编排 → SuiteOrchRunResult。
+ *  control:only = 试跑选中段(单元 ref);toNode = 串联只跑到某一步。 */
+export async function runSuite(
+  suiteId: number, control?: { only?: string[]; toNode?: string },
+): Promise<SuiteRunResult | SuiteOrchRunResult> {
+  const { data } = await http.post<SuiteRunResult | SuiteOrchRunResult>(
+    `/suites/${suiteId}/run`, control ?? {})
+  return data
+}
+
+/** 该 Suite 的历次运行(只含本人发起,不变量 2):聚合按批次归并、编排逐条。 */
+export async function listSuiteRuns(suiteId: number): Promise<SuiteRunItem[]> {
+  const { data } = await http.get<{ items: SuiteRunItem[]; total: number }>(
+    `/suites/${suiteId}/runs`)
+  return data.items
+}
+
+/** 只重跑某次编排执行里失败的单元(control.only 指向失败单元)。 */
+export async function rerunFailedUnits(
+  suiteId: number, executionId: number,
+): Promise<SuiteOrchRunResult> {
+  const { data } = await http.post<SuiteOrchRunResult>(
+    `/suites/${suiteId}/runs/${executionId}/rerun-failed`)
+  return data
+}
+
+/** 公共读者「复制到我的」:深拷贝为私有 Suite(含编排配置重映射)。 */
+export async function forkPublicSuite(
+  suiteId: number,
+): Promise<{ suiteId: number; suiteName: string; memberCount: number; mode: string }> {
+  const { data } = await http.post(`/suites/${suiteId}/fork`)
   return data
 }
 
@@ -138,4 +268,16 @@ export async function deleteSuitePublish(
 ): Promise<SuiteSummary> {
   const { data } = await http.delete(`/suites/${suiteId}/publish`)
   return data
+}
+
+/** 从 axios 错误里取 409 detail(冲突/在途/上限/发布确认的机器面)。 */
+export function suiteErrDetail(e: unknown): {
+  code?: string; message?: string; [k: string]: unknown
+} | null {
+  const resp = (e as { response?: { status?: number; data?: unknown } })
+    ?.response
+  if (resp && typeof resp.data === 'object' && resp.data !== null) {
+    return resp.data as Record<string, unknown>
+  }
+  return null
 }

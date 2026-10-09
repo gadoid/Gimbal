@@ -13,6 +13,7 @@ export interface ShareRefItem {
   id: number
   resourceType: 'scenario' | 'suite'
   scenarioId: string | null
+  scenarioName: string | null
   suiteId: number | null
   suiteName: string | null
   memberCount: number | null
@@ -20,6 +21,14 @@ export interface ShareRefItem {
   granteeName: string
   grantedByName: string
   grantedAt: string | null
+}
+
+/** 场景引用人(重构方案 D-1:直接 + 经由所属 Suite 的间接,同人合并)。 */
+export interface ScenarioReferrer {
+  granteeUserId: number
+  granteeName: string
+  direct: boolean
+  viaSuites?: { suiteId: number; suiteName: string }[]
 }
 
 export interface ShareCopyResult {
@@ -49,6 +58,15 @@ export function listShares(params: {
   resourceId?: string
 }): Promise<ShareRefItem[]> {
   return http.get<ShareRefItem[]>('/shares', { params }).then((r) => r.data)
+}
+
+/** 场景的全部引用人(直接 + 经由所属 Suite 的间接;属主/admin 闸)。 */
+export function listScenarioReferrers(
+  scenarioId: string,
+): Promise<{ items: ScenarioReferrer[] }> {
+  return http.get<{ items: ScenarioReferrer[] }>('/shares/referrers', {
+    params: { scenarioId },
+  }).then((r) => r.data)
 }
 
 /** 撤销(属主/admin)或退订(被分享人)。 */

@@ -20,6 +20,17 @@
         @input="writeSearch(($event.target as HTMLInputElement).value)"
       />
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
+      <!-- D-3(§7.9):公共场景按所属 Suite 归组 / 筛选 -->
+      <select
+        v-model="suiteFilter"
+        class="pub-suite-filter"
+        data-testid="pub-suite-filter"
+      >
+        <option value="">全部(不按 Suite 筛)</option>
+        <option v-for="s in publicSuites" :key="s.suiteId" :value="String(s.suiteId)">
+          {{ s.name }}({{ s.memberCount }} 个成员)
+        </option>
+      </select>
     </div>
 
     <!-- 筛选分组:公共库同样适用(浏览大池时把常用条件存成入口) -->
@@ -37,7 +48,7 @@
 
     <div v-if="loading" class="slib-loading">加载中…</div>
 
-    <div v-else-if="paged.length" class="lib-card">
+    <div v-else-if="shownRows.length" class="lib-card">
       <table class="slib-table">
         <thead>
           <tr>
@@ -54,7 +65,7 @@
         </thead>
         <tbody>
           <!-- 整行可点进详情(与「我的场景」同款):行内星标/⋯ 各自 stop 冒泡 -->
-          <tr v-for="row in paged" :key="row.meta.scenarioId" class="slib-row" :class="{ 'row-expired': row.meta.expire }" @click="openDetail(row)">
+          <tr v-for="row in shownRows" :key="row.meta.scenarioId" class="slib-row" :class="{ 'row-expired': row.meta.expire }" @click="openDetail(row)">
             <td>
               <div class="sl-name">
                 <StarToggle :starred="!!row.starred" @toggle="toggleStar(row)" />
@@ -65,6 +76,15 @@
                   :title="row.meta.name || row.meta.scenarioId"
                   @click.stop="openDetail(row)"
                 >{{ row.meta.name || row.meta.scenarioId }}</button>
+                <!-- D-3(§7.9):所属公共 Suite 反查 chip(点击进 Suite 管理页只读态) -->
+                <router-link
+                  v-for="s in suitesOfScenario(row.meta.scenarioId)"
+                  :key="s.suiteId"
+                  :to="`/suites/${s.suiteId}`"
+                  class="suite-chip"
+                  :data-testid="`pub-suite-chip-${row.meta.scenarioId}`"
+                  @click.stop
+                >{{ s.name }}</router-link>
               </div>
               <div class="sl-sid">{{ row.meta.scenarioId }}</div>
               <div v-if="row.meta.description" class="sl-desc">{{ row.meta.description }}</div>
@@ -112,6 +132,35 @@
       show-jump
     />
 
+    <!-- D-3(2026-10-09 拍板):「公共 Suite」分区,与公共场景同页;
+         公共读者不可运行(先复制再跑),行内给「复制到我的」与只读打开。 -->
+    <div class="pub-suites" data-testid="public-suites">
+      <p class="pub-suites-label">公共 Suite</p>
+      <div v-if="!publicSuites.length" class="pub-suites-empty">
+        暂无公共 Suite —— 属主在 Suite 管理页「⋯」菜单发布后出现在这里
+      </div>
+      <div
+        v-for="s in publicSuites"
+        v-else
+        :key="s.suiteId"
+        class="pub-suite-row"
+        :data-testid="`public-suite-${s.suiteId}`"
+      >
+        <span class="ps-name">
+          {{ s.name }}
+          <span v-if="s.isDraft" class="ps-chip draft">草稿</span>
+        </span>
+        <span class="ps-mode">{{ MODE_LABEL[s.mode] || s.mode }}</span>
+        <span class="ps-members">{{ s.memberCount }} 个成员</span>
+        <span class="ps-ops">
+          <button type="button" class="ps-open" :data-testid="`public-suite-open-${s.suiteId}`"
+                  @click="router.push(`/suites/${s.suiteId}`)">打开</button>
+          <button type="button" class="ps-copy" :data-testid="`public-suite-copy-${s.suiteId}`"
+                  @click="forkPublic(s)">复制到我的</button>
+        </span>
+      </div>
+    </div>
+
     <p class="slib-note">
       公共场景没有「+ 新建场景」——创建永远发生在我的场景,这里只做浏览/复用,避免两套编排入口混淆。公共场景不暴露「方案」这个概念——直接用 config 里写好的默认配置跑,没有多方案可选。要跑不同参数组合,先「复制到我的」再去方案管理拆场景。「执行」和「复制到我的」都收进「⋯」菜单里——执行只会用这个场景锁死的默认 config 跑,不能改参数,主要用途是验证公共场景里定义的步骤能不能正常跑通(尤其是适配中心提示接口有变更的时候,可以直接在这里跑一次确认),不是替代「复制到我的」之后的正式编排使用。
     </p>
@@ -119,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { listDataSets, runScenario } from '@/api/scenario-composer'
@@ -137,6 +186,8 @@ import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { scenarioDetailUrl } from '@/utils/links'
+import { forkPublicSuite, getSuite, listSuites, type SuiteSummary } from '@/api/suites'
+import { MODE_LABEL } from '@/utils/suiteStructure'
 import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const MAX = 3
@@ -152,7 +203,60 @@ const {
 
 const formatTime = shortDateTime
 
+// ── D-3(§7.9):公共 Suite 分区 + 公共场景按所属 Suite 归组/筛选 ──
+const publicSuites = ref<SuiteSummary[]>([])
+/** scenarioId → 所属公共 Suite(成员反查,公共 Suite 数量小、逐个取成员)。 */
+const suiteByScenario = ref(new Map<string, { suiteId: number; name: string }[]>())
+const suiteFilter = ref('')
+
+async function loadPublicSuites(): Promise<void> {
+  try {
+    const env = await listSuites({ visibility: 'public', page_size: 100 })
+    publicSuites.value = env.items
+    const map = new Map<string, { suiteId: number; name: string }[]>()
+    await Promise.all(env.items.map(async (s) => {
+      try {
+        const d = await getSuite(s.suiteId)
+        for (const m of d.members) {
+          const list = map.get(m.scenarioId) ?? []
+          list.push({ suiteId: s.suiteId, name: s.name })
+          map.set(m.scenarioId, list)
+        }
+      } catch { /* 单个成员读取失败不影响整体 */ }
+    }))
+    suiteByScenario.value = map
+  } catch {
+    publicSuites.value = []
+  }
+}
+
+function suitesOfScenario(id: string): { suiteId: number; name: string }[] {
+  if (!suiteFilter.value) return suiteByScenario.value.get(id) ?? []
+  const sid = Number(suiteFilter.value)
+  return (suiteByScenario.value.get(id) ?? []).filter((s) => s.suiteId === sid)
+}
+
+/** Suite 筛选(D-3):客户端过滤当前页(公共 Suite 与场景交叉面小)。 */
+const shownRows = computed(() => {
+  if (!suiteFilter.value) return paged.value
+  const sid = suiteFilter.value
+  return paged.value.filter(
+    (r) => (suiteByScenario.value.get(r.meta.scenarioId) ?? [])
+      .some((s) => String(s.suiteId) === sid))
+})
+
+async function forkPublic(s: SuiteSummary): Promise<void> {
+  try {
+    const out = await forkPublicSuite(s.suiteId)
+    toast.success(`已复制为我的 Suite「${out.suiteName}」(${out.memberCount} 个成员)`)
+    void router.push(`/suites/${out.suiteId}`)
+  } catch (e) {
+    toast.error(`复制失败:${(e as Error).message}`)
+  }
+}
+
 onMounted(load)
+onMounted(() => void loadPublicSuites())
 
 /** 公共场景定义只读,但详情是可读的 —— 之前这里没有任何入口,想看步骤
  *  只能先「复制到我的」造一份副本,等于逼用户复制才能阅读。 */
@@ -203,4 +307,49 @@ async function toggleStar(row: ScenarioListItem) {
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .author { color: #5b6472; }
 .row-expired td { opacity: 0.55; }
+
+/* D-3:公共 Suite 分区 + 场景行的所属 Suite chip */
+.suite-chip {
+  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  color: #6d28d9; background: rgb(139 92 246 / 8%);
+  border: 1px solid rgb(139 92 246 / 35%); text-decoration: none;
+}
+.suite-chip:hover { background: rgb(139 92 246 / 15%); }
+.pub-suite-filter {
+  padding: 7px 10px; font-size: 12.5px; border-radius: 8px;
+  border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
+  max-width: 240px;
+}
+.pub-suites { margin-top: 24px; }
+.pub-suites-label { font-size: 13px; color: rgb(100 116 139); margin: 8px 0; }
+.pub-suites-empty {
+  font-size: 12.5px; color: rgb(100 116 139);
+  border: 1px dashed rgb(100 116 139 / 35%); border-radius: 10px;
+  padding: 18px; text-align: center;
+}
+.pub-suite-row {
+  display: grid; grid-template-columns: minmax(200px, 1fr) 90px 90px auto;
+  gap: 12px; align-items: center; padding: 9px 14px;
+  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
+  margin-bottom: 6px;
+}
+.ps-name { font-weight: 600; font-size: 13px; }
+.ps-chip.draft {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+  color: #b45309; background: rgb(245 158 11 / 10%);
+  border: 1px solid rgb(245 158 11 / 40%); font-weight: 400;
+}
+.ps-mode { font-size: 12px; color: rgb(100 116 139); }
+.ps-members { font-size: 12px; color: rgb(100 116 139); }
+.ps-ops { display: flex; gap: 8px; }
+.ps-open {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  color: #2563eb; background: rgb(59 130 246 / 8%);
+  border: 1px solid rgb(59 130 246 / 45%);
+}
+.ps-copy {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  color: #15803d; background: rgb(34 197 94 / 8%);
+  border: 1px solid rgb(34 197 94 / 45%);
+}
 </style>

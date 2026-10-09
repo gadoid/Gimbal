@@ -70,6 +70,9 @@ class SuiteSummaryOut(BaseModel):
     isDraft: bool = False          # mode_config.draft 投影(列表「草稿」标记)
     createdAt: str | None = None
     updatedAt: str | None = None
+    # 最近运行摘要(重构方案 02 列):**只算本人发起**(不变量 2),
+    # kind = suite_graph(编排)/ batch(聚合批次);无本人发起 = None。
+    latestRun: dict | None = None
     # P2 publish 回执:本次级联发布的成员(数据集一并公开,§7.9)
     publishedMembers: list[str] | None = None
 

@@ -95,6 +95,13 @@
       <span><strong>系统不匹配:</strong> {{ systemMismatch }}</span>
     </div>
 
+    <!-- D-1(§7.11):被引用 / 公共场景常驻横幅(防误伤;名单含经由
+         所属 Suite 的间接引用)。引用是 live link,自动保存的改动对
+         引用人立即生效。 -->
+    <div v-if="liveEditBanner" class="live-edit-banner" data-testid="scenario-live-banner">
+      {{ liveEditBanner }}
+    </div>
+
     <!-- ═══════ Stepper (glassmorphic sticky) ═══════ -->
     <div class="stepper-bar">
       <div
@@ -342,6 +349,12 @@ async function maybeAutoSave(): Promise<void> {
   if (saving.value) {
     scheduleAutoSave()   // 手动/步进保存进行中 → 顺延一个窗口再试
     return
+  }
+  // D-1(§7.11):被引用 / 公共场景的**首次**改动落盘前弹一次提示
+  // (自动保存同样绕不过防误伤;确认后本会话不再打断)。
+  if (!sessionSharePrompted && liveEditBanner.value) {
+    const ok = await promptFirstLiveEdit()
+    if (!ok) return   // 暂停保存:dirty 保留,下一次编辑再提示
   }
   await saveDraft(false, false, true)
 }
@@ -818,12 +831,56 @@ async function loadScenario() {
     dirty.value = false
     editsDuringSave = false
     saveState.value = 'clean'
+    void loadLiveEditMeta()   // D-1:被引用 / 公共横幅 + 首改提示名单
     await nextTick()    // 等 deep watch 冲完加载赋值,再解除抑制
     suppressDirty = false
   } catch (e) {
     suppressDirty = false
     showError('加载场景', undefined, (e as Error).message)
   }
+}
+
+// ── D-1(§7.11):被引用 / 公共场景的常驻横幅 + 首改提示 ──────────
+// 名单取 /shares/referrers(直接 + 经由所属 Suite 的间接,同人合并)。
+// 自动保存防误伤:首次改动落盘前弹一次(sessionSharePrompted 记会话内
+// 不再打断);公共场景写明「改动立即对所有人可见」。
+const referrerItems = ref<{ granteeName: string; direct: boolean;
+  viaSuites?: { suiteName: string }[] }[]>([])
+let sessionSharePrompted = false
+
+const liveEditBanner = computed<string | null>(() => {
+  if (!scenario.value) return null
+  if (scenario.value.visibility === 'public') {
+    return '此场景已公开,改动立即对所有人可见'
+  }
+  if (!referrerItems.value.length) return null
+  const names = referrerItems.value
+    .map((r) => `${r.granteeName}${r.direct ? '' : '(经 Suite 引用)'}`)
+    .join('、')
+  return `此场景正被 ${referrerItems.value.length} 人引用(${names}),改动保存后立即生效`
+})
+
+async function loadLiveEditMeta(): Promise<void> {
+  const s = scenario.value
+  if (!s) return
+  try {
+    const { listScenarioReferrers } = await import('@/api/shares')
+    const { items } = await listScenarioReferrers(s.meta.scenarioId)
+    referrerItems.value = items
+  } catch {
+    referrerItems.value = []   // 横幅是增强,失败静默
+  }
+}
+
+async function promptFirstLiveEdit(): Promise<boolean> {
+  const { confirmAction } = await import('@/utils/confirmAction')
+  const ok = await confirmAction(
+    `${liveEditBanner.value}。本次编辑会话此后不再提示,自动保存照常进行。继续?`,
+    '首次改动提示',
+    { type: 'warning', confirmButtonText: '继续编辑', cancelButtonText: '暂停保存' },
+  )
+  if (ok) sessionSharePrompted = true
+  return ok
 }
 
 /** 数据集直接挂场景(Case 层已解散)— 只需拉列表,无需自动建 1:1 配套行 */
@@ -959,20 +1016,20 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       return false
     }
   }
-  // P2 §7.11 保存提示(必做):引用是 live link,被引用场景保存后对方
-  // 立即生效 —— 属主侧唯一防误伤手段。仅手动保存触发(自动/静默保存
-  // 不弹窗打断;防误伤 = 人在环路,自动保存无人在场)。
+  // P2 §7.11 保存提示(必做)+ D-1 增强:引用是 live link,被引用场景
+  // 保存后对方立即生效 —— 名单取 /shares/referrers(含经由所属 Suite
+  // 的间接引用;此前只查直接引用,Suite 场景下防误伤落空)。
   if (scenario.value && manual && !silent) {
     const sid = scenario.value.meta.scenarioId
     try {
-      const { listShares } = await import('@/api/shares')
+      const { listScenarioReferrers } = await import('@/api/shares')
       const { confirmAction } = await import('@/utils/confirmAction')
-      const refs = await listShares({
-        direction: 'out', resourceType: 'scenario', resourceId: sid })
-      if (refs.length) {
-        const names = refs.map((r) => r.granteeName).join('、')
+      const { items } = await listScenarioReferrers(sid)
+      if (items.length) {
+        const names = items.map((r) => r.granteeName
+          + (r.direct ? '' : '(经 Suite 引用)')).join('、')
         const ok = await confirmAction(
-          `此场景正被 ${refs.length} 人引用分享(${names}),保存后对方立即生效。继续保存?`,
+          `此场景正被 ${items.length} 人引用分享(${names}),保存后对方立即生效。继续保存?`,
           '保存提示',
           { type: 'warning', confirmButtonText: '继续保存', cancelButtonText: '取消' },
         )
@@ -1441,6 +1498,13 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 }
 .system-warn svg { color: #f59e0b; flex-shrink: 0; }
 .system-warn strong { color: #92400e; }
+
+/* D-1(§7.11):被引用 / 公共场景常驻横幅(与 system-warn 同款形态) */
+.live-edit-banner {
+  background: #fef3c7; border: 1px solid #fbbf24; border-left: 4px solid #f59e0b;
+  color: #92400e; padding: 8px 16px; margin: 8px 24px;
+  border-radius: 8px; font-size: 12.5px;
+}
 
 /* ── 常量池 rail(步骤 0-2 右栏,body-split 布局;步骤 3 挂 Canvas col-info)── */
 /* gap 16px 对齐 ①-③ 页 .c-page 卡片间隔(常量池 rail 与主内容同节奏) */

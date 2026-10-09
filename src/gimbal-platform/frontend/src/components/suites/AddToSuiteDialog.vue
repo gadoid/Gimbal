@@ -20,7 +20,7 @@
       <template v-else>
         <div v-if="!suites.length" class="ats-empty" data-testid="add-to-suite-empty">
           你还没有 Suite —— 先到
-          <RouterLink to="/suites" class="linklike">用例组</RouterLink>
+          <RouterLink to="/suites" class="linklike">Suite</RouterLink>
           新建一个,再回来批量加入。
         </div>
         <div v-else class="ats-list">
@@ -58,8 +58,9 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  addSuiteMembers, listSuites, type SuiteSummary,
+  addSuiteMembers, listSuites, suiteErrDetail, type SuiteSummary,
 } from '@/api/suites'
+import { confirmAction } from '@/utils/confirmAction'
 import { toast } from '@/utils/toast'
 
 const props = defineProps<{
@@ -91,11 +92,30 @@ watch(() => props.open, (open) => {
     .finally(() => { loading.value = false })
 }, { immediate: true })  // 挂载即开(库侧直接带 open=true 挂载)也能加载
 
+/** 提交(重构方案:公共 Suite 加私有成员的发布确认分支,与管理页/
+ * 画布三处一致):409 suite_member_publish_required → 确认框列出
+ * 待公开成员(「这些成员及其数据集将一并公开」)→ 带
+ * publishUnpublished 重提;不确认则不加入。 */
 async function submit(): Promise<void> {
   if (picked.value == null || busy.value) return
   busy.value = true
   try {
-    await addSuiteMembers(picked.value, props.scenarios.map((s) => s.id))
+    const ids = props.scenarios.map((s) => s.id)
+    try {
+      await addSuiteMembers(picked.value, ids)
+    } catch (e) {
+      const det = suiteErrDetail(e)
+      if (det?.code !== 'suite_member_publish_required') throw e
+      const pending = ((det.pendingPublish as string[]) ?? [])
+        .map((id) => props.scenarios.find((s) => s.id === id)?.name ?? id)
+      const ok = await confirmAction(
+        `这是公共 Suite:加入的私有成员及其数据集将一并公开(${pending.join('、')})。确认公开并加入?`,
+        '发布确认',
+        { type: 'warning', confirmButtonText: '公开并加入', cancelButtonText: '不加入' },
+      )
+      if (!ok) return
+      await addSuiteMembers(picked.value, ids, true)
+    }
     const suite = suites.value.find((s) => s.suiteId === picked.value)
     const suiteName = suite?.name ?? `#${picked.value}`
     toast.success(`已把 ${props.scenarios.length} 个场景加入「${suiteName}」`)
@@ -106,7 +126,8 @@ async function submit(): Promise<void> {
     emit('update:open', false)
   } catch (e) {
     // 404 = 含非本人场景(§6.3);409 = 成员上限 —— 后端人话直接透出
-    toast.error(`加入失败:${(e as Error).message}`)
+    const det = suiteErrDetail(e)
+    toast.error(`加入失败:${(det?.message as string) || (e as Error).message}`)
   } finally {
     busy.value = false
   }

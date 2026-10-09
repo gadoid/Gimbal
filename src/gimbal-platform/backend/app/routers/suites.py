@@ -17,6 +17,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,13 +98,51 @@ def _is_draft(suite: Suite) -> bool:
     return bool((suite.mode_config or {}).get("draft"))
 
 
-def _summary(suite: Suite, member_count: int) -> SuiteSummaryOut:
+def _summary(suite: Suite, member_count: int,
+             latest_run: dict | None = None) -> SuiteSummaryOut:
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
         visibility=suite.visibility, mode=suite.mode,
         memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
+        latestRun=latest_run,
     )
+
+
+async def _latest_runs_by_suite(
+    db: AsyncSession, user: CurrentUser, suite_ids: list[int],
+) -> dict[int, dict]:
+    """02 列表「最近运行」摘要:**只算本人发起**(不变量 2,属主/admin
+    亦然)。聚合按 batch_id 归并成一条(与 21 页同口径),编排执行逐条;
+    每 Suite 取最近一次。一次查询取窗口行,内存归并(每人 Suite 数有界)。"""
+    if not suite_ids:
+        return {}
+    rows = (await db.execute(
+        select(Execution).where(
+            Execution.suite_id.in_(suite_ids),
+            Execution.owner_id == user.id,
+        ).order_by(Execution.created_at.desc(), Execution.id.desc())
+        .limit(400))).scalars().all()
+    latest: dict[int, dict] = {}
+    for ex in rows:  # 新→旧:首见即该 Suite 最近一次
+        if ex.suite_id in latest:
+            continue
+        if (ex.kind or "scenario") == "suite_graph":
+            latest[ex.suite_id] = {
+                "kind": "suite_graph", "status": ex.status,
+                "executionId": ex.id, "batchId": ex.batch_id,
+                "createdAt": _iso(ex.created_at),
+                "finishedAt": _iso(ex.finished_at),
+                "passed": ex.passed, "failed": ex.failed,
+            }
+        else:
+            latest[ex.suite_id] = {
+                "kind": "batch", "batchId": ex.batch_id,
+                "createdAt": _iso(ex.created_at),
+                "finishedAt": _iso(ex.finished_at),
+                "passed": ex.passed, "failed": ex.failed,
+            }
+    return latest
 
 
 async def _access_and_caps(
@@ -218,9 +257,12 @@ async def list_suites(
     )).scalars().all()
     total = len(rows)
     start = (page - 1) * page_size
-    items = []
-    for s in rows[start : start + page_size]:
-        items.append(_summary(s, await _member_count(db, s.id)))
+    page_rows = rows[start : start + page_size]
+    latest = await _latest_runs_by_suite(db, user, [s.id for s in page_rows])
+    items = [
+        _summary(s, await _member_count(db, s.id), latest.get(s.id))
+        for s in page_rows
+    ]
     return SuitePageOut(items=items, total=total, page=page, pageSize=page_size)
 
 
@@ -782,9 +824,21 @@ def _req_from_scheme(
     )
 
 
+class _SuiteRunIn(BaseModel):
+    """运行控制(重构方案):only = 试跑选中段(所选单元 + 其上游,
+    编排模式按 ref、聚合按 scenarioId);toNode = 串联只跑到某一步
+    (ref)。from_node 刻意不开放(被跳过的上游输出平台无从提供)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    only: list[str] = Field(default_factory=list, max_length=100)
+    toNode: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 @router.post("/{suite_id}/run", status_code=201)
 async def run_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
+    body: _SuiteRunIn | None = None,
 ) -> dict:
     """聚合模式 = 逐个跑成员、无执行策略(§6.6):服务端循环分发 +
     batch_id 归并,是聚合模式的完整实现,不依赖执行器侧 suite 能力。
@@ -824,7 +878,15 @@ async def run_suite(
         in_flight = await _in_flight_batch(db, runner_id, suite_id)
         if in_flight is not None:
             raise _in_flight_409(in_flight)
-        return await _run_orchestration(db, user, suite, members)
+        control: dict | None = None
+        if body and (body.only or body.toNode):
+            control = {}
+            if body.only:
+                control["only"] = body.only
+            if body.toNode:
+                control["toNode"] = body.toNode
+        return await _run_orchestration(
+            db, user, suite, members, control=control)
 
     scen_rows: dict[str, object] = {}
     default_schemes: dict[str, dict | None] = {}

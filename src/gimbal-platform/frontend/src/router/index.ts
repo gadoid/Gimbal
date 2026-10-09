@@ -13,6 +13,10 @@ import { useAuthStore } from '@/stores/auth'
 const dataSetsFallback = (to: { params: Record<string, string | string[]> }) =>
   `/scenarios/${encodeURIComponent(String(to.params.scenarioId))}/schemes`
 
+/** Suite 画布路由兜底(第 4 步画布落地前的过渡):回管理页。 */
+const suiteComposeFallback = (to: { params: Record<string, string | string[]> }) =>
+  `/suites/${to.params.id}`
+
 const routes = [
   // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
   { path: '/', redirect: '/home' },
@@ -154,23 +158,23 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 权限域二期 P1:用例组(suite 成员层)管理页。/suites = 列表;
-    // /suites/composer = 既有一次性 graph 编排(原 /suites,与用例组
-    // 是正交概念,关系待设计定稿 §13.2-2 拍板);/suites/:id = 详情。
-    // 静态段 composer 必须先于 :id 注册。
+    // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 列表(02);
+    // /suites/:id = 管理页(20 编排 / 21 运行记录,含只读态)。
+    // 旧 /suites/composer(一次性 graph 编排)已随重构删除 —— 画布
+    // (10–13)落地前,新建从列表直接建草稿进管理页。
     path: '/suites',
     component: () => import('@/views/SuiteLibrary.vue'),
     meta: { requiresAuth: true },
   },
   {
-    // C5/P3-05:suite 编排页(graph 编排执行,一次性)
-    path: '/suites/composer',
-    component: () => import('@/views/SuiteComposer.vue'),
-    meta: { requiresAuth: true },
+    // 画布路由(重构方案 12):第 4 步落地前重定向到管理页 ——
+    // 非属主(canEdit=false)本就要求重定向到 20 只读态
+    path: '/suites/:id(\\d+)/compose',
+    redirect: suiteComposeFallback,
   },
   {
     path: '/suites/:id(\\d+)',
-    component: () => import('@/views/SuiteDetail.vue'),
+    component: () => import('@/views/SuiteManage.vue'),
     meta: { requiresAuth: true },
   },
   {
