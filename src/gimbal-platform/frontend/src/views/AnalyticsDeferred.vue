@@ -6,7 +6,7 @@
      前置就一直可见。本页自身正常渲染(当前路由高亮如常)+ 琥珀「延后」小标。
      纪律:不渲染示意性假数据 — 落库后的四块只给名称与理由,不给编造的图。 -->
 <template>
-  <ListPage title="数据分析" width="standard"
+  <ListPage title="数据分析" icon="pie" width="standard"
     subtitle="「最近整体怎么样、问题集中在哪」 — 跨执行聚合。单次执行的问题,执行记录和字段来源分析已经回答得了">
     <template #actions>
       <span class="deferred-badge" data-testid="analytics-deferred-badge">延后 · 等行级落库</span>

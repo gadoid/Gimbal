@@ -9,9 +9,7 @@
 <template>
   <div class="dc-page">
     <div class="dc-head">
-      <button class="ghost-btn" @click="$router.push(`/executions/${execId}`)">
-        ← 执行详情
-      </button>
+      <PageBack :to="`/executions/${execId}`" label="执行详情" />
       <h2>调试台 · 执行 #{{ execId }}</h2>
       <span class="dc-status" :class="{ active: info?.active }">
         {{ info?.active ? '会话进行中' : info ? `已结束(${info.status})` : '加载中…' }}
@@ -73,6 +71,7 @@
 </template>
 
 <script setup lang="ts">
+import PageBack from '@/components/chrome/PageBack.vue'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {

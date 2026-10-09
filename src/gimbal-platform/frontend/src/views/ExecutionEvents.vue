@@ -4,7 +4,7 @@
      搜索;category 聚合计数条。标签值只取执行器写入的(P1 信封),不从
      文本推断。入口:执行详情页头部 + 工作台卡片。 -->
 <template>
-  <ListPage title="日志分析" width="wide"
+  <ListPage title="日志分析" icon="history" width="wide"
     :subtitle="`执行 #${executionId} — 事件与日志按执行上下文标签筛选`">
     <template #actions>
       <Button variant="outline" size="sm" @click="goDetail">← 执行详情</Button>

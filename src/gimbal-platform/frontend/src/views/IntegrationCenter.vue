@@ -5,7 +5,7 @@
      模式;个人模式随 P2。 -->
 <template>
   <section class="slib">
-    <PageHead icon="layers" title="集成中心"
+    <PageHead icon="share" title="集成中心"
       subtitle="把场景封装成功能:定时执行、结果进工作台卡片" />
 
     <div class="slib-toolbar">
@@ -70,7 +70,8 @@
     </table>
 
     <!-- 新建功能 -->
-    <div v-if="createOpen" class="ig-mask" data-testid="ig-create-mask" @click.self="createOpen = false">
+    <Transition name="pop">
+  <div v-if="createOpen" class="ig-mask" data-testid="ig-create-mask" @click.self="createOpen = false">
       <div role="dialog" aria-labelledby="ig-new-title" class="ig-dialog">
         <h2 id="ig-new-title">新建功能(P1 · 平台模式)</h2>
         <label class="ig-field">名称
@@ -124,6 +125,7 @@
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- 平台凭证(admin) -->
     <section v-if="auth.isAdmin" class="ig-creds" data-testid="ig-creds">

@@ -9,8 +9,9 @@
     <!-- 页头:草稿名可改;试跑选中段 + 完成编排(原型 12/13) -->
     <header class="scp-head">
       <div class="scp-head-main">
-        <RouterLink to="/suites" class="scp-back">← Suite</RouterLink>
+        <PageBack to="/suites" label="Suite" testid="suite-compose-back" />
         <div class="scp-title-row">
+          <span class="icon-badge" aria-hidden="true"><SlibIcon name="stack" :size="15" /></span>
           <input
             v-model="name"
             class="scp-name"
@@ -201,7 +202,8 @@
 
     <!-- 完成编排(原型 13 面板) -->
     <Teleport to="body">
-      <div v-if="finishOpen" class="scp-fmask" data-testid="suite-compose-finish-mask" @click.self="finishOpen = false">
+      <Transition name="pop">
+  <div v-if="finishOpen" class="scp-fmask" data-testid="suite-compose-finish-mask" @click.self="finishOpen = false">
         <div role="dialog" aria-labelledby="scp-fin-title" class="scp-finish">
           <h2 id="scp-fin-title">完成编排</h2>
           <label class="scp-field">名称
@@ -228,6 +230,7 @@
           </div>
         </div>
       </div>
+    </Transition>
     </Teleport>
   </div>
   <div v-else class="scp-loading">加载中…</div>
@@ -256,6 +259,8 @@ import {
 import { useSuiteSchemes } from '@/composables/useSuiteSchemes'
 import type { SchemeV2 } from '@/api/scenario-composer'
 import ScenarioDrawer from '@/components/suites/ScenarioDrawer.vue'
+import PageBack from '@/components/chrome/PageBack.vue'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import UnitSettings from '@/components/suites/UnitSettings.vue'
 import StructureGuideDialog from '@/components/suites/StructureGuideDialog.vue'
 import SuiteRunPreflight from '@/components/suites/SuiteRunPreflight.vue'
@@ -985,8 +990,6 @@ defineExpose({ addEdge, addUnit })
 
 .scp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .scp-head-main { flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px; }
-.scp-back { font-size: 12px; color: var(--color-text-secondary); text-decoration: none; }
-.scp-back:hover { text-decoration: underline; }
 .scp-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .scp-name {
   font-size: 22px; font-weight: 600; color: inherit; width: 300px;

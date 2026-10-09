@@ -17,7 +17,7 @@
      * 同配置重跑(POST /executions/{id}/rerun,按 config_json 重建配方)
      * 页尾图例 = 台账定位与信号口径的落地说明 -->
 <template>
-  <ListPage title="执行记录" width="wide"
+  <ListPage title="执行记录" icon="history" width="wide"
     subtitle="跑了什么、跑成什么样、当时用的什么配置 — 台账只记事实,判断留给字段来源分析">
     <!-- ── KPI 带(§3.5;一张白卡,竖线分隔;execution 级量)────────── -->
     <div v-if="summary" class="kpi-band" data-testid="exec-kpi-band">

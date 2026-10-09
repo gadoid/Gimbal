@@ -84,3 +84,42 @@ body {
 .mono { font-family: var(--font-mono, monospace); }
 .dim,
 .muted { color: var(--color-text-secondary); font-size: 11px; }
+
+/* ── 动效层(风格整理轮 2026-10-10):统一节奏 150-200ms ────────────
+ * 原则:动效只做「状态变化的可见性」(进场/悬停/按压),不做装饰性
+ * 常驻动画;所有过渡都可用(prefers-reduced-motion 全局关掉)。 */
+
+/* 路由切换:淡入 + 4px 上移(App.vue RouterView Transition) */
+.page-fade-enter-active,
+.page-fade-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.page-fade-enter-from { opacity: 0; transform: translateY(4px); }
+.page-fade-leave-to { opacity: 0; }
+
+/* 弹层/遮罩(自绘 mask 套 <Transition name="pop">) */
+.pop-enter-active { transition: opacity .16s ease, transform .16s ease; }
+.pop-leave-active { transition: opacity .12s ease; }
+.pop-enter-from { opacity: 0; }
+.pop-enter-from > * { transform: translateY(6px) scale(.985); }
+.pop-enter-active > * { transition: transform .16s ease; }
+
+/* 全站按钮微交互:颜色过渡 + 按压回缩(不动布局) */
+button {
+  transition: background-color .15s ease, border-color .15s ease,
+    color .15s ease, opacity .15s ease, box-shadow .15s ease;
+}
+button:active:not(:disabled) { transform: scale(.97); }
+button:active:not(:disabled) { transition: transform .08s ease; }
+
+/* 列表行悬停过渡(背景已有,补渐变) */
+.slib-table tbody tr, .srt-table tbody tr { transition: background-color .15s ease; }
+
+/* 减弱动效偏好:全关 */
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-enter-active, .page-fade-leave-active,
+  .pop-enter-active, .pop-leave-active,
+  button, .slib-table tbody tr, .srt-table tbody tr {
+    transition: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}

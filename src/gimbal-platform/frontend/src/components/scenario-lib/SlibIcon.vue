@@ -79,13 +79,17 @@
 
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { CounterClockwiseClockIcon, GearIcon, PlayIcon } from '@radix-icons/vue'
+import {
+  BellIcon, CounterClockwiseClockIcon, GearIcon, HomeIcon, PieChartIcon,
+  PlayIcon, Share2Icon, StackIcon,
+} from '@radix-icons/vue'
 
-/** 页头图标名(PageHead 的取值域)+ 卡头独有的三种。 */
+/** 页头图标名(PageHead 的取值域)+ 卡头/页头补充的几种。 */
 export type SlibIconName =
   | 'folder' | 'globe' | 'star' | 'grid' | 'layers' | 'lock' | 'sliders'
   | 'activity' | 'key' | 'network' | 'database' | 'clock'
   | 'history' | 'gear' | 'play'
+  | 'stack' | 'share' | 'pie' | 'home' | 'bell'
 
 const RADIX: Partial<Record<SlibIconName, Component>> = {
   // 执行记录 / 执行器 / 用户管理三页页面上没有图标,全站唯一的一颗就是侧
@@ -94,6 +98,14 @@ const RADIX: Partial<Record<SlibIconName, Component>> = {
   history: CounterClockwiseClockIcon,
   play: PlayIcon,
   gear: GearIcon,
+  // 风格整理轮(2026-10-10):侧栏/页头图标唯一化 —— Suite=堆叠、集成
+  // 中心=互连、数据分析=饼图、工作台=家、通知=铃铛,页头与侧栏渲染
+  // 同一颗组件。
+  stack: StackIcon,
+  share: Share2Icon,
+  pie: PieChartIcon,
+  home: HomeIcon,
+  bell: BellIcon,
 }
 
 withDefaults(defineProps<{

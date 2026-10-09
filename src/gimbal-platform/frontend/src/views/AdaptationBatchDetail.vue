@@ -3,12 +3,13 @@
      → 构造对话框 → 快照折叠。member 直入 → 403「仅管理员」占位(§8);
      页内 isAdmin 只读分支保留作双保险。 -->
 <template>
-  <HubDetailPage v-if="detail" width="wide" :title="`批次 ${detail.batchId}`">
+  <HubDetailPage v-if="detail" width="wide" :title="`批次 ${detail.batchId}`" icon="activity">
     <template #meta>
       <p class="mono m-0">{{ detail.endpointId }} · {{ detail.fromVersion }} → {{ detail.toVersion }}</p>
     </template>
 
     <template #actions>
+      <PageBack to="/adaptations" label="适配中心" />
       <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
       <template v-if="auth.hasRole('member', 'admin')">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
@@ -173,6 +174,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
+import PageBack from '@/components/chrome/PageBack.vue'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/adaptations'

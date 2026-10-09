@@ -10,6 +10,7 @@
   色板/间距/空态。
 -->
 <script setup lang="ts">
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
@@ -94,7 +95,7 @@ const hasUnread = computed(() => unread.value > 0)
 <template>
   <section class="nt-page">
     <header class="nt-head">
-      <h1 class="nt-title">通知</h1>
+      <h1 class="nt-title"><span class="icon-badge" aria-hidden="true"><SlibIcon name="bell" :size="15" /></span>通知</h1>
       <p class="nt-sub">未读 {{ unread }} 条 · 通知类型可在「个人资料 → 通知偏好」按类关闭</p>
     </header>
 

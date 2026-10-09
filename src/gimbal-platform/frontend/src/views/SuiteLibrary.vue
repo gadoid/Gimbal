@@ -6,7 +6,7 @@
      开 30 预检;⋯ 重命名 / 删除。 -->
 <template>
   <section class="slib">
-    <PageHead icon="layers" title="Suite" :subtitle="subtitle" />
+    <PageHead icon="stack" title="Suite" :subtitle="subtitle" />
 
     <div class="slib-toolbar">
       <input

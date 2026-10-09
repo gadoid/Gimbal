@@ -16,7 +16,10 @@
     <!-- ── 题头 ───────────────────────────────────────────── -->
     <header class="head">
       <div class="head-top">
-        <h1 class="title">{{ scenario?.meta?.name || '未命名场景' }}</h1>
+        <h1 class="title">
+          <span class="icon-badge" aria-hidden="true"><SlibIcon name="folder" :size="15" /></span>
+          {{ scenario?.meta?.name || '未命名场景' }}
+        </h1>
         <span class="doc-no mono">{{ shortId }}</span>
       </div>
       <p v-if="scenario?.meta?.description" class="desc">{{ scenario.meta.description }}</p>
@@ -181,6 +184,7 @@
 </template>
 
 <script setup lang="ts">
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'

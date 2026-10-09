@@ -16,7 +16,11 @@
   <template v-else-if="chromeMode === 'collapsed'">
     <CollapsedTopbar />
     <main class="min-h-screen pt-12">
-      <router-view />
+      <RouterView v-slot="{ Component }">
+        <Transition name="page-fade" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </RouterView>
     </main>
   </template>
 
@@ -27,7 +31,11 @@
       class="min-h-screen min-w-0 transition-[margin] duration-200"
       :class="sidebarCollapsed ? 'ml-[56px]' : 'ml-[200px]'"
     >
-      <router-view />
+      <RouterView v-slot="{ Component }">
+        <Transition name="page-fade" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </RouterView>
     </main>
   </template>
 </template>

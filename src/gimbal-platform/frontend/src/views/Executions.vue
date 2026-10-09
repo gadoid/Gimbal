@@ -3,7 +3,7 @@
      1s 轮询刷新；engine.log / result.json 工件按需加载）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
-  <HubDetailPage v-if="execStore.detail" :title="`执行 #${execStore.detail.id}`">
+  <HubDetailPage v-if="execStore.detail" :title="`执行 #${execStore.detail.id}`" icon="history">
     <template #meta>
       <p data-testid="exec-meta" class="m-0">
         {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
@@ -18,6 +18,7 @@
     </template>
 
     <template #actions>
+      <PageBack to="/executions" label="执行记录" />
       <span :class="['status-tag', `status-${execStore.detail.status}`]">
         {{ statusText }}
       </span>
@@ -219,6 +220,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
+import PageBack from '@/components/chrome/PageBack.vue'
 import { toast } from '@/utils/toast'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { cancelExecution, getScenarioSnapshot } from '@/api/executions'

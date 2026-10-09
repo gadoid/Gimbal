@@ -11,7 +11,7 @@
      上下文,可添可删就会让人找不到。
      工作台仍只做两件事:按 registry+layout 渲染,管理布局配置。 -->
 <template>
-  <ListPage title="工作台" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序;高度统一,宽度 S/M/L = 1/4・1/2・1/1,板面自己排。">
+  <ListPage title="工作台" icon="home" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序;高度统一,宽度 S/M/L = 1/4・1/2・1/1,板面自己排。">
     <template #actions>
       <Button
         v-if="orderedIds.length > 0 && layoutDirty"

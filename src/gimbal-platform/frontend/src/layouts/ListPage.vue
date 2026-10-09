@@ -11,7 +11,12 @@
   >
     <header>
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h1 class="m-0 text-display font-semibold text-signal-ink">{{ title }}</h1>
+        <div class="flex items-center gap-2.5">
+          <span v-if="icon" class="icon-badge" aria-hidden="true">
+            <SlibIcon :name="icon" :size="15" />
+          </span>
+          <h1 class="m-0 text-display font-semibold text-signal-ink">{{ title }}</h1>
+        </div>
         <div class="flex items-center gap-2"><slot name="actions" /></div>
       </div>
       <p v-if="subtitle || $slots.subtitle" class="mb-0 mt-1 text-caption text-muted-foreground">
@@ -28,9 +33,13 @@
 </template>
 
 <script setup lang="ts">
+import SlibIcon, { type SlibIconName } from '@/components/scenario-lib/SlibIcon.vue'
+
 defineProps<{
   title: string
   subtitle?: string
+  /** 页头图标(与侧栏同一颗;风格整理轮:每页一图标不重复)。 */
+  icon?: SlibIconName
   /** 容器档位:standard=1200(默认)/ wide=1480(宽表格页) */
   width?: 'standard' | 'wide'
 }>()

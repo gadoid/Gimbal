@@ -4,7 +4,8 @@
      由父级写 localStorage,状态条「?」随时再打开。 -->
 <template>
   <Teleport to="body">
-    <div v-if="modelValue" class="sgd-mask" data-testid="structure-guide-mask" @click.self="close">
+    <Transition name="pop">
+  <div v-if="modelValue" class="sgd-mask" data-testid="structure-guide-mask" @click.self="close">
       <div role="dialog" aria-labelledby="sgd-title" class="sgd">
         <header class="sgd-head">
           <div class="sgd-head-main">
@@ -81,6 +82,7 @@
         </footer>
       </div>
     </div>
+  </Transition>
   </Teleport>
 </template>
 

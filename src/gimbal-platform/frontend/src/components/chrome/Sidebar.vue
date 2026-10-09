@@ -126,7 +126,6 @@ import { useRoute } from 'vue-router'
 import {
   ActivityLogIcon,
   ArchiveIcon,
-  BarChartIcon,
   BellIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -136,10 +135,13 @@ import {
   GridIcon,
   HomeIcon,
   LayersIcon,
+  PieChartIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
   PlayIcon,
+  Share2Icon,
+  StackIcon,
   StarIcon,
 } from '@radix-icons/vue'
 import { useAuthStore } from '@/stores/auth'
@@ -226,10 +228,10 @@ const groups: SidebarGroup[] = [
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
     // Suite(Suite 层重构:成员层 + 编排层合一,原「用例组」与
     // 「Suite 编排」两条入口合并为单入口;重构方案「结论与范围」)
-    { path: '/suites', label: 'Suite', icon: BarChartIcon },
+    { path: '/suites', label: 'Suite', icon: StackIcon },
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
-    { path: '/integrations', label: '集成中心', icon: BarChartIcon },
-    { path: '/analytics', label: '数据分析', icon: BarChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
+    { path: '/integrations', label: '集成中心', icon: Share2Icon },
+    { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
 ]

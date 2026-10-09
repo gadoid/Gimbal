@@ -16,7 +16,7 @@
   * 页尾图例 = 设计理由的落地说明(§1.1/§1.2/§1.6/§1.7)
 -->
 <template>
-  <ListPage width="wide" title="执行器"
+  <ListPage width="wide" title="执行器" icon="play"
     subtitle="发起执行的地方:搭一条队列 — 每条选方案 → 补齐绑定 → 一次启动。以前这是编排页里的运行对话框,只能从单条用例进,独立成页之后队列才成立">
     <template #actions>
       <Button variant="outline" size="sm" data-testid="runner-goto-executions"

@@ -13,9 +13,10 @@
   <section v-else-if="detail" class="sm" data-testid="suite-manage">
     <!-- 页头 -->
     <div class="sm-head">
-      <router-link to="/suites" class="sm-back">← Suite</router-link>
+      <PageBack to="/suites" label="Suite" testid="suite-manage-back" />
       <div class="sm-head-main">
         <div class="sm-title-row">
+          <span class="icon-badge" aria-hidden="true"><SlibIcon name="stack" :size="15" /></span>
           <h1 class="sm-title" data-testid="suite-manage-name">
             {{ detail.name }}
             <span v-if="detail.isDraft" class="sm-draft-chip" title="草稿:不出现在发布/分享,空草稿 30 天自动清理">草稿</span>
@@ -190,6 +191,8 @@ import MemberZone from '@/components/suites/MemberZone.vue'
 import GatesPanel from '@/components/suites/GatesPanel.vue'
 import SuiteRunPreflight from '@/components/suites/SuiteRunPreflight.vue'
 import StructureGuideDialog from '@/components/suites/StructureGuideDialog.vue'
+import PageBack from '@/components/chrome/PageBack.vue'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import SuiteRunsTab from '@/components/suites/SuiteRunsTab.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import {
@@ -695,11 +698,6 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   display: flex; flex-direction: column; gap: 14px; position: relative;
 }
 .sm-head { display: flex; align-items: flex-start; gap: 14px; }
-.sm-back {
-  font-size: 12px; color: var(--color-text-secondary); text-decoration: none;
-  padding-top: 4px; white-space: nowrap;
-}
-.sm-back:hover { color: #4338ca; }
 .sm-head-main { flex: 1; min-width: 0; }
 .sm-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .sm-title {
