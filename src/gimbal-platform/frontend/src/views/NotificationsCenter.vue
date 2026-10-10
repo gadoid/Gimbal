@@ -1,5 +1,8 @@
 <!--
-  NotificationsCenter.vue — 通知中心(F5,2026-09-23 批次)。
+  NotificationsCenter.vue — 通知中心(F5,2026-09-23 批次;2026-10-10
+  风格轮对齐平台规范:根容器复用全站 .slib 三壳标准、页头换 PageHead、
+  主色回归 indigo --accent 系,弃用本页自带的 860px 窄居中布局与
+  shadcn hsl(primary) 色板)。
 
   两个 tab:通知(全员)/ 审计(仅 admin)。审计面板 = AuditLogPanel
   从 /admin/users 原样迁来复用(组件不改,数据口径不变 —— 不做用户
@@ -10,11 +13,11 @@
   色板/间距/空态。
 -->
 <script setup lang="ts">
-import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import {
   list, markRead, NOTIFICATION_TYPE_LABELS,
   type NotificationItem, type SwitchableType,
@@ -93,138 +96,144 @@ const hasUnread = computed(() => unread.value > 0)
 </script>
 
 <template>
-  <section class="nt-page">
-    <header class="nt-head">
-      <h1 class="nt-title"><span class="icon-badge" aria-hidden="true"><SlibIcon name="bell" :size="15" /></span>通知</h1>
-      <p class="nt-sub">未读 {{ unread }} 条 · 通知类型可在「个人资料 → 通知偏好」按类关闭</p>
-    </header>
-
-    <div class="nt-tabs" data-testid="nt-tabs">
-      <button
-        type="button"
-        class="nt-tab"
-        :class="{ active: tab === 'notify' }"
-        data-testid="nt-tab-notify"
-        @click="tab = 'notify'"
-      >通知<span v-if="hasUnread" class="nt-dot">{{ unread }}</span></button>
-      <button
-        v-if="auth.isAdmin"
-        type="button"
-        class="nt-tab"
-        :class="{ active: tab === 'audit' }"
-        data-testid="nt-tab-audit"
-        @click="tab = 'audit'"
-      >审计</button>
-    </div>
-
-    <!-- ── 通知 tab:时间线卡片 ─────────────────────────────── -->
-    <div v-if="tab === 'notify'" class="nt-list">
-      <div class="nt-toolbar">
-        <span class="muted small">按时间倒序,未读优先</span>
-        <span class="flex-1"></span>
+  <section class="slib nt-page">
+    <PageHead icon="bell" title="通知"
+      :subtitle="`未读 ${unread} 条 · 按时间倒序,未读优先 · 通知类型可在「个人资料 → 通知偏好」按类关闭`">
+      <template #right>
         <button
-          v-if="hasUnread"
+          v-if="tab === 'notify' && hasUnread"
           type="button"
-          class="nt-ghost"
+          class="nt-action"
           data-testid="nt-read-all"
           @click="readAll"
         >全部已读</button>
         <button
+          v-if="tab === 'notify'"
           type="button"
-          class="nt-ghost"
+          class="nt-action ghost"
           data-testid="nt-refresh"
           :disabled="loading"
           @click="load"
         >{{ loading ? '加载中…' : '↻ 刷新' }}</button>
+      </template>
+    </PageHead>
+
+    <div class="nt-body">
+      <div class="nt-tabs" data-testid="nt-tabs">
+        <button
+          type="button"
+          class="nt-tab"
+          :class="{ active: tab === 'notify' }"
+          data-testid="nt-tab-notify"
+          @click="tab = 'notify'"
+        >通知<span v-if="hasUnread" class="nt-dot">{{ unread }}</span></button>
+        <button
+          v-if="auth.isAdmin"
+          type="button"
+          class="nt-tab"
+          :class="{ active: tab === 'audit' }"
+          data-testid="nt-tab-audit"
+          @click="tab = 'audit'"
+        >审计</button>
       </div>
 
-      <p v-if="!items.length && !loading" class="nt-empty">
-        还没有通知 —— 执行完成、分享、公告都会出现在这里。
-      </p>
+      <!-- ── 通知 tab:时间线卡片 ─────────────────────────────── -->
+      <div v-if="tab === 'notify'" class="nt-list">
+        <p v-if="!items.length && !loading" class="nt-empty">
+          还没有通知 —— 执行完成、分享、公告都会出现在这里。
+        </p>
 
-      <button
-        v-for="n in items"
-        v-else
-        :key="n.id"
-        type="button"
-        class="nt-card"
-        :class="{ unread: !n.readAt }"
-        :data-testid="`nt-item-${n.id}`"
-        @click="open(n)"
-      >
-        <div class="nt-card-head">
-          <span class="nt-type">{{ typeLabel(n.type) }}</span>
-          <span class="nt-title">{{ n.title }}</span>
-          <span v-if="!n.readAt" class="nt-unread-dot" title="未读"></span>
+        <button
+          v-for="n in items"
+          v-else
+          :key="n.id"
+          type="button"
+          class="nt-card"
+          :class="{ unread: !n.readAt }"
+          :data-testid="`nt-item-${n.id}`"
+          @click="open(n)"
+        >
+          <div class="nt-card-head">
+            <span class="nt-type">{{ typeLabel(n.type) }}</span>
+            <span class="nt-title">{{ n.title }}</span>
+            <span v-if="!n.readAt" class="nt-unread-dot" title="未读"></span>
+          </div>
+          <p v-if="n.body" class="nt-body">{{ n.body }}</p>
+          <span class="nt-time">{{ mediumDateTime(n.createdAt) }}</span>
+        </button>
+
+        <div class="nt-pager">
+          <Pagination
+            v-if="pageCount > 1 || total > 0"
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            show-page-size
+            show-jump
+          />
         </div>
-        <p v-if="n.body" class="nt-body">{{ n.body }}</p>
-        <span class="nt-time">{{ mediumDateTime(n.createdAt) }}</span>
-      </button>
-
-      <div class="nt-pager">
-        <Pagination
-          v-if="pageCount > 1 || total > 0"
-          v-model:page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          show-page-size
-          show-jump
-        />
       </div>
-    </div>
 
-    <!-- ── 审计 tab(仅 admin):复用面板,数据口径不变 ───────── -->
-    <div v-if="tab === 'audit' && auth.isAdmin">
-      <AuditLogPanel />
-      <p class="muted small mt-2">
-        审计只记特权写(角色变更/删号/重置密码/公告/carry/适配/别名);
-        「我的资源发生过什么」看工作台时间线。
-      </p>
+      <!-- ── 审计 tab(仅 admin):复用面板,数据口径不变 ───────── -->
+      <div v-if="tab === 'audit' && auth.isAdmin">
+        <AuditLogPanel />
+        <p class="nt-note">
+          审计只记特权写(角色变更/删号/重置密码/公告/carry/适配/别名);
+          「我的资源发生过什么」看工作台时间线。
+        </p>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.nt-page { padding: 16px; max-width: 860px; margin: 0 auto; }
-.nt-head { margin-bottom: 12px; }
-.nt-title { font-size: 18px; font-weight: 700; margin: 0; }
-.nt-sub { font-size: 12px; color: #64748b; margin: 4px 0 0; }
-.nt-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--c-border, #e2e8f0); margin-bottom: 12px; }
+/* 容器/页头/主色全部走全站规范:根节点挂全局 .slib(1480 三壳标准),
+   主按钮 indigo --accent 系,卡片 lib-card 同款边框与圆角。 */
+.nt-body { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.nt-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgb(100 116 139 / 15%); }
 .nt-tab {
   border: none; background: none; cursor: pointer;
-  padding: 8px 14px; font-size: 13px; font-weight: 600; color: #64748b;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; color: rgb(100 116 139);
   border-bottom: 2px solid transparent;
 }
-.nt-tab.active { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); }
+.nt-tab.active { color: var(--accent, #4338ca); border-bottom-color: var(--accent, #4338ca); }
 .nt-dot {
   margin-left: 6px; font-size: 11px; background: #ef4444; color: #fff;
   border-radius: 999px; padding: 1px 7px;
 }
-.nt-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.nt-ghost {
-  border: 1px solid var(--c-border, #e2e8f0); background: none; border-radius: 6px;
-  font-size: 12px; padding: 4px 10px; cursor: pointer; color: #334155;
+.nt-action {
+  font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
-.nt-ghost:hover { background: rgb(0 0 0 / 4%); }
+.nt-action:hover { background: var(--accent-soft-border); }
+.nt-action.ghost {
+  color: inherit; background: transparent;
+  border: 1px solid rgb(100 116 139 / 30%);
+}
+.nt-action.ghost:hover { background: rgb(0 0 0 / 4%); }
+.nt-action:disabled { opacity: .5; cursor: not-allowed; }
 .nt-list { display: flex; flex-direction: column; gap: 8px; }
 .nt-card {
-  text-align: left; border: 1px solid var(--c-border, #e2e8f0); border-radius: 8px;
-  background: var(--c-surface, #fff); padding: 10px 12px; cursor: pointer;
+  text-align: left; border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
+  background: transparent; padding: 10px 14px; cursor: pointer;
   display: flex; flex-direction: column; gap: 4px;
 }
-.nt-card:hover { border-color: hsl(var(--primary) / 40%); }
-.nt-card.unread { border-left: 3px solid hsl(var(--primary)); }
+.nt-card:hover { border-color: var(--accent-soft-border); background: rgb(59 130 246 / 3%); }
+.nt-card.unread { border-left: 3px solid var(--accent, #4338ca); }
 .nt-card-head { display: flex; align-items: center; gap: 8px; }
 .nt-type {
-  font-size: 11px; flex: none; padding: 1px 8px; border-radius: 999px;
-  background: rgb(100 116 139 / 10%); color: #64748b;
+  font-size: 11px; flex: none; padding: 2px 8px; border-radius: 999px;
+  background: rgb(100 116 139 / 8%); color: rgb(100 116 139);
+  border: 1px solid rgb(100 116 139 / 22%);
 }
-.nt-title { font-weight: 600; font-size: 13px; }
+.nt-title { font-weight: 500; font-size: 13px; }
 .nt-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex: none; }
-.nt-body { font-size: 12px; color: #64748b; margin: 0; }
-.nt-time { font-size: 11px; color: #94a3b8; }
-.nt-empty { color: #94a3b8; text-align: center; padding: 32px 0; }
+.nt-body { font-size: 12px; color: rgb(100 116 139); margin: 0; }
+.nt-time { font-size: 11px; color: rgb(100 116 139 / 70%); }
+.nt-empty {
+  padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px;
+}
 .nt-pager { display: flex; justify-content: flex-end; margin-top: 4px; }
-.muted { color: #64748b; }
-.small { font-size: 12px; }
+.nt-note { font-size: 12px; color: rgb(100 116 139); margin-top: 8px; }
 </style>

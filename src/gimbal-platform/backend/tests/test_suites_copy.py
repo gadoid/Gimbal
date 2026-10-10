@@ -87,7 +87,8 @@ async def test_copy_remaps_orchestration(client: AsyncClient) -> None:
 
 
 async def test_public_fork_endpoint(client: AsyncClient) -> None:
-    """POST /suites/{id}/fork:公共可见才可复制;非公共 404;副本归自己。"""
+    """POST /suites/{id}/fork:公共读者可复制;属主可自复制(02「⋯ 复制」);
+    他人对私有 Suite 404(与「admin 不可代发分享」同原则)。"""
     await register_and_login(client, "pf_admin", "pf_admin_pass123")
     owner = await register_and_login(client, "pf_owner", "pf_owner_pass123")
     carol = await register_and_login(client, "pf_carol", "pf_carol_pass123")
@@ -106,10 +107,28 @@ async def test_public_fork_endpoint(client: AsyncClient) -> None:
                           headers=carol)).json()
     assert d["access"] == "owner" and d["modeConfig"]["units"]
 
-    # 未发布的私有 suite → 404(仅公共可复制)
+    # 列表出参带发布者名(公共用例集页「发布者」列;display_name 缺省
+    # 回落 username —— register_and_login 的 display_name = username)
+    lst = (await client.get(
+        "/api/suites?visibility=public", headers=carol)).json()
+    hit = [i for i in lst["items"] if i["suiteId"] == sid]
+    assert hit and hit[0]["ownerName"] == "pf_owner"
+
+    # 属主自复制私有 Suite(02 ⋯ 菜单「复制」):201,编排随副本重映射,
+    # 名字带计数后缀,成员场景复制为本人的副本场景
     sid2 = await _mk_suite(client, owner, "私有集")
     await client.post(f"/api/suites/{sid2}/members", headers=owner,
                       json={"scenarioIds": ["sc-pf-1"]})
+    r = await client.post(f"/api/suites/{sid2}/fork", headers=owner)
+    assert r.status_code == 201, r.text
+    out2 = r.json()
+    assert out2["suiteName"].startswith("私有集")
+    d2 = (await client.get(f"/api/suites/{out2['suiteId']}",
+                           headers=owner)).json()
+    assert d2["access"] == "owner" and d2["visibility"] == "private"
+    assert [m["scenarioId"] for m in d2["members"]] != ["sc-pf-1"]
+
+    # 他人对私有 Suite → 404(仅公共或属主可复制)
     assert (await client.post(
         f"/api/suites/{sid2}/fork", headers=carol)).status_code == 404
 

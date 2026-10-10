@@ -1,12 +1,13 @@
-<!-- SuiteLibrary.vue — Suite 列表页(原型 02,Suite 层重构第 2 步)。
-     唯一入口:页头 + 浏览镜头(admin 全员视角)/ 搜索 / 模式筛选 +
-     表格(Suite · 模式 · 成员 · 最近运行 · 操作)。草稿带「草稿」标记;
-     「共享给我的」独立分区(§7.11);「公共库」链接到公共页的公共 Suite
-     分区。行点击进 20(本人最近一次发起的运行失败则进 21);行内「运行」
-     开 30 预检;⋯ 重命名 / 删除。 -->
+<!-- SuiteLibrary.vue — 我的用例集(原型 02,Suite 层重构第 2 步;
+     2026-10-10 IA 调整:侧栏「用例集」组,页面更名)。
+     页头 + 浏览镜头(admin 全员视角)/ 搜索 / 模式筛选 + 表格
+     (Suite · 模式 · 成员 · 最近运行 · 操作)。草稿带「草稿」标记;
+     「共享给我的」独立分区(§7.11);「公共用例集」链接到独立公共页。
+     行点击进 20(本人最近一次发起的运行失败则进 21);行内「运行」
+     开 30 预检;⋯ 重命名 / 复制 / 分享 / 发布(下架)/ 删除。 -->
 <template>
   <section class="slib">
-    <PageHead icon="stack" title="Suite" :subtitle="subtitle" />
+    <PageHead icon="stack" title="我的用例集" :subtitle="subtitle" />
 
     <div class="slib-toolbar">
       <input
@@ -37,7 +38,7 @@
           : '当前:我的 —— 点按切「全员视角」看全部 Suite'"
         @click="toggleLens"
       >{{ lensAll ? '◉ 全员视角' : '○ 全员视角' }}</button>
-      <router-link class="slib-public-link" to="/scenarios/public" data-testid="suite-public-link">公共库</router-link>
+      <router-link class="slib-public-link" to="/suites/public" data-testid="suite-public-link">公共用例集</router-link>
       <button
         type="button"
         class="slib-create"
@@ -115,6 +116,35 @@
                 <DropdownMenuTrigger class="more-btn" :data-testid="`suite-row-more-${s.suiteId}`">⋯</DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="sl-menu">
                   <DropdownMenuItem class="sl-menu-item" @click="renameSuite(s)">重命名</DropdownMenuItem>
+                  <DropdownMenuItem
+                    class="sl-menu-item"
+                    :disabled="s.isDraft"
+                    :data-testid="`suite-row-copy-${s.suiteId}`"
+                    :title="s.isDraft ? '草稿无需复制 —— 完成编排后可复制' : '深拷贝为一份自己的副本(含编排)'"
+                    @click="copySuite(s)"
+                  >复制</DropdownMenuItem>
+                  <DropdownMenuItem
+                    v-if="s.visibility !== 'public'"
+                    class="sl-menu-item"
+                    :disabled="s.isDraft"
+                    :data-testid="`suite-row-share-${s.suiteId}`"
+                    :title="s.isDraft ? '草稿不可分享 —— 完成编排后可分享' : ''"
+                    @click="openShare(s)"
+                  >分享…</DropdownMenuItem>
+                  <DropdownMenuItem
+                    v-if="s.visibility !== 'public'"
+                    class="sl-menu-item"
+                    :disabled="s.isDraft"
+                    :data-testid="`suite-row-publish-${s.suiteId}`"
+                    :title="s.isDraft ? '草稿不可发布 —— 完成编排后可发布' : '发布到公共库(成员及其数据集一并公开)'"
+                    @click="publishSuite(s)"
+                  >发布到公共库</DropdownMenuItem>
+                  <DropdownMenuItem
+                    v-else
+                    class="sl-menu-item"
+                    :data-testid="`suite-row-unpublish-${s.suiteId}`"
+                    @click="unpublishSuite(s)"
+                  >下架为私有</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item danger" @click="removeSuite(s)">删除</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -145,13 +175,24 @@
       </div>
     </div>
 
-    <!-- 运行预检(30):从列表行内发起 -->
+    <!-- 运行预检(30):从列表行发起 -->
     <SuiteRunPreflight
       v-model:open="preflightOpen"
       :suite-id="preflightId"
       :running="running"
       @run="onRun"
       @locate="() => preflightOpen = false"
+    />
+
+    <!-- 分享弹窗(P2 组件;changed 后刷新「已引用分享」徽标) -->
+    <ShareDialog
+      v-model:open="shareOpen"
+      :resource="shareTarget ? {
+        type: 'suite' as const,
+        id: String(shareTarget.suiteId),
+        name: shareTarget.name,
+      } : null"
+      @changed="void loadShareBadges"
     />
   </section>
 </template>
@@ -161,11 +202,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import SuiteRunPreflight from '@/components/suites/SuiteRunPreflight.vue'
+import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  deleteSuite, listSuites, patchSuite, runSuite, suiteErrDetail,
+  deleteSuite, deleteSuitePublish, forkPublicSuite, getSuite, listSuites,
+  patchSuite, postSuitePublish, runSuite, suiteErrDetail,
   type SuiteLatestRun, type SuiteSummary,
 } from '@/api/suites'
 import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
@@ -282,6 +325,52 @@ async function removeSuite(s: SuiteSummary): Promise<void> {
   }
 }
 
+/** ⋯ 复制(02 规格):fork 端点属主自复制 —— 深拷贝含编排(约束 8),
+ *  成员场景一并复制为副本;草稿由菜单禁用挡住。 */
+async function copySuite(s: SuiteSummary): Promise<void> {
+  try {
+    const out = await forkPublicSuite(s.suiteId)
+    toast.success(`已复制为「${out.suiteName}」`)
+    void load()
+  } catch (e) {
+    toast.error(`复制失败:${(e as Error).message}`)
+  }
+}
+
+/** ⋯ 发布(2026-10-10 补,对齐管理页口径):确认前按成员 visibility
+ *  列出将被级联公开的成员(§7.9 不做静默级联),再调 publish。 */
+async function publishSuite(s: SuiteSummary): Promise<void> {
+  try {
+    const d = await getSuite(s.suiteId)
+    const privates = d.members.filter((m) => m.visibility !== 'public')
+    const msg = privates.length
+      ? `发布到公共库?以下 ${privates.length} 个未发布成员及其数据集将一并公开:${privates.map((m) => m.name).join('、')}`
+      : '发布到公共库?所有成员均已公开。'
+    const ok = await confirmAction(msg, '发布到公共库',
+      { type: 'warning', confirmButtonText: '发布', cancelButtonText: '取消' })
+    if (!ok) return
+    const out = await postSuitePublish(s.suiteId)
+    const cascaded = (out.publishedMembers ?? []).length
+    toast.success(cascaded ? `已发布(级联公开了 ${cascaded} 个成员)` : '已发布到公共库')
+    s.visibility = 'public'
+  } catch (e) {
+    toast.error(`发布失败:${(e as Error).message}`)
+  }
+}
+
+async function unpublishSuite(s: SuiteSummary): Promise<void> {
+  const ok = await confirmAction('下架 Suite?成员场景的公共状态独立保留。', '下架为私有',
+    { type: 'warning', confirmButtonText: '下架', cancelButtonText: '取消' })
+  if (!ok) return
+  try {
+    await deleteSuitePublish(s.suiteId)
+    toast.success('已下架为私有')
+    s.visibility = 'private'
+  } catch (e) {
+    toast.error(`下架失败:${(e as Error).message}`)
+  }
+}
+
 // ── 运行(预检 → 分流跳转)────────────────────────────────────
 const preflightOpen = ref(false)
 const preflightId = ref(0)
@@ -317,6 +406,15 @@ async function onRun(): Promise<void> {
 // ── P2 徽标 + 共享给我的(§7.11)────────────────────────────────
 const sharedOutSuites = ref(new Set<number>())
 const sharedInSuites = ref<ShareRefItem[]>([])
+
+// ── 分享(列表行直达;口径同管理页 ⋯ 菜单:非公共、草稿禁用)─────
+const shareOpen = ref(false)
+const shareTarget = ref<SuiteSummary | null>(null)
+
+function openShare(s: SuiteSummary): void {
+  shareTarget.value = s
+  shareOpen.value = true
+}
 
 async function loadShareBadges() {
   try {

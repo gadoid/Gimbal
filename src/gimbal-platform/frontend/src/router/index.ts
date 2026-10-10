@@ -154,11 +154,18 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 列表(02);
-    // /suites/:id = 管理页(20 编排 / 21 运行记录,含只读态)。
-    // 旧 /suites/composer(一次性 graph 编排)已随重构删除。
+    // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 我的用例集
+    // (02,2026-10-10 IA 调整:侧栏「场景集」组);/suites/:id = 管理页
+    // (20 编排 / 21 运行记录,含只读态)。旧 /suites/composer 已随重构删除。
     path: '/suites',
     component: () => import('@/views/SuiteLibrary.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 公共用例集(2026-10-10 IA 调整:独立成页,推翻 D-3「与公共场景
+    // 同页」的分区形态;:id 路由带 \d+ 约束,静态段不冲突)。
+    path: '/suites/public',
+    component: () => import('@/views/SuitesPublic.vue'),
     meta: { requiresAuth: true },
   },
   {

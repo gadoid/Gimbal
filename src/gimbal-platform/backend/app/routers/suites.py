@@ -99,13 +99,14 @@ def _is_draft(suite: Suite) -> bool:
 
 
 def _summary(suite: Suite, member_count: int,
-             latest_run: dict | None = None) -> SuiteSummaryOut:
+             latest_run: dict | None = None,
+             owner_name: str | None = None) -> SuiteSummaryOut:
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
         visibility=suite.visibility, mode=suite.mode,
         memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
-        latestRun=latest_run,
+        latestRun=latest_run, ownerName=owner_name,
     )
 
 
@@ -259,8 +260,16 @@ async def list_suites(
     start = (page - 1) * page_size
     page_rows = rows[start : start + page_size]
     latest = await _latest_runs_by_suite(db, user, [s.id for s in page_rows])
+    # 发布者名(公共用例集页「发布者」列):批量取一次,display_name 优先
+    from ..models.user import User
+    owner_rows = (await db.execute(
+        select(User.id, User.display_name, User.username).where(
+            User.id.in_({s.owner_id for s in page_rows}))
+    )).all() if page_rows else []
+    owners = {r.id: (r.display_name or r.username) for r in owner_rows}
     items = [
-        _summary(s, await _member_count(db, s.id), latest.get(s.id))
+        _summary(s, await _member_count(db, s.id), latest.get(s.id),
+                 owners.get(s.owner_id))
         for s in page_rows
     ]
     return SuitePageOut(items=items, total=total, page=page, pageSize=page_size)
@@ -380,21 +389,25 @@ async def delete_suite(
 async def fork_public_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> dict:
-    """公共读者「复制到我的」(重构方案):公共 Suite 深拷贝为自己名下的
-    私有 Suite,含编排配置重映射(约束 8);读闸 + 公共可见(非公共 404)。
-    被引用者的「转为副本」走既有 POST /shares/{id}/fork,不经此端点。"""
+    """深拷贝为自己名下的私有 Suite,含编排配置重映射(约束 8)。
+    两类调用者(读闸后):公共读者「复制到我的」(公共可见);
+    属主「⋯ 复制」自复制(02 页规格,私有 / 公共均可)。他人私有
+    Suite 仍 404 —— 与「admin 不可代发分享」同原则,防借复制转
+    内容。被引用者的「转为副本」走既有 POST /shares/{id}/fork。"""
     from ..services import audit as audit_svc
     from ..services.suite_copy import deep_copy_suite, suite_owner_display
     suite = await _load_suite(db, suite_id)
     await _require_read_async(db, user, suite)
-    if suite.visibility != "public":
+    is_owner = user.id == suite.owner_id
+    if suite.visibility != "public" and not is_owner:
         raise not_found_404("suite", str(suite_id))
     out = await deep_copy_suite(
         db, suite, user, await suite_owner_display(db, suite))
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
-        action="suite.public_fork",
+        action=(is_owner and suite.visibility != "public"
+                and "suite.owner_fork" or "suite.public_fork"),
         resource_type="suite", resource_id=str(suite.id),
         detail={"copyId": out["suiteId"], "name": out["name"]})
     return {"suiteId": out["suiteId"], "suiteName": out["name"],

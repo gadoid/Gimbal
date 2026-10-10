@@ -132,35 +132,6 @@
       show-jump
     />
 
-    <!-- D-3(2026-10-09 拍板):「公共 Suite」分区,与公共场景同页;
-         公共读者不可运行(先复制再跑),行内给「复制到我的」与只读打开。 -->
-    <div class="pub-suites" data-testid="public-suites">
-      <p class="pub-suites-label">公共 Suite</p>
-      <div v-if="!publicSuites.length" class="pub-suites-empty">
-        暂无公共 Suite —— 属主在 Suite 管理页「⋯」菜单发布后出现在这里
-      </div>
-      <div
-        v-for="s in publicSuites"
-        v-else
-        :key="s.suiteId"
-        class="pub-suite-row"
-        :data-testid="`public-suite-${s.suiteId}`"
-      >
-        <span class="ps-name">
-          {{ s.name }}
-          <span v-if="s.isDraft" class="ps-chip draft">草稿</span>
-        </span>
-        <span class="ps-mode">{{ MODE_LABEL[s.mode] || s.mode }}</span>
-        <span class="ps-members">{{ s.memberCount }} 个成员</span>
-        <span class="ps-ops">
-          <button type="button" class="ps-open" :data-testid="`public-suite-open-${s.suiteId}`"
-                  @click="router.push(`/suites/${s.suiteId}`)">打开</button>
-          <button type="button" class="ps-copy" :data-testid="`public-suite-copy-${s.suiteId}`"
-                  @click="forkPublic(s)">复制到我的</button>
-        </span>
-      </div>
-    </div>
-
     <p class="slib-note">
       公共场景没有「+ 新建场景」——创建永远发生在我的场景,这里只做浏览/复用,避免两套编排入口混淆。公共场景不暴露「方案」这个概念——直接用 config 里写好的默认配置跑,没有多方案可选。要跑不同参数组合,先「复制到我的」再去方案管理拆场景。「执行」和「复制到我的」都收进「⋯」菜单里——执行只会用这个场景锁死的默认 config 跑,不能改参数,主要用途是验证公共场景里定义的步骤能不能正常跑通(尤其是适配中心提示接口有变更的时候,可以直接在这里跑一次确认),不是替代「复制到我的」之后的正式编排使用。
     </p>
@@ -186,8 +157,7 @@ import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { scenarioDetailUrl } from '@/utils/links'
-import { forkPublicSuite, getSuite, listSuites, type SuiteSummary } from '@/api/suites'
-import { MODE_LABEL } from '@/utils/suiteStructure'
+import { getSuite, listSuites, type SuiteSummary } from '@/api/suites'
 import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const MAX = 3
@@ -203,7 +173,9 @@ const {
 
 const formatTime = shortDateTime
 
-// ── D-3(§7.9):公共 Suite 分区 + 公共场景按所属 Suite 归组/筛选 ──
+// ── D-3(§7.9)余留:公共场景按所属 Suite 归组 / 筛选。
+// 「公共 Suite」分区已随 2026-10-10 IA 调整迁出到独立页(/suites/public),
+// 此处 publicSuites 仅作筛选下拉的数据源。 ──
 const publicSuites = ref<SuiteSummary[]>([])
 /** scenarioId → 所属公共 Suite(成员反查,公共 Suite 数量小、逐个取成员)。 */
 const suiteByScenario = ref(new Map<string, { suiteId: number; name: string }[]>())
@@ -244,16 +216,6 @@ const shownRows = computed(() => {
     (r) => (suiteByScenario.value.get(r.meta.scenarioId) ?? [])
       .some((s) => String(s.suiteId) === sid))
 })
-
-async function forkPublic(s: SuiteSummary): Promise<void> {
-  try {
-    const out = await forkPublicSuite(s.suiteId)
-    toast.success(`已复制为我的 Suite「${out.suiteName}」(${out.memberCount} 个成员)`)
-    void router.push(`/suites/${out.suiteId}`)
-  } catch (e) {
-    toast.error(`复制失败:${(e as Error).message}`)
-  }
-}
 
 onMounted(load)
 onMounted(() => void loadPublicSuites())
@@ -319,37 +281,5 @@ async function toggleStar(row: ScenarioListItem) {
   padding: 7px 10px; font-size: 12.5px; border-radius: 8px;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
   max-width: 240px;
-}
-.pub-suites { margin-top: 24px; }
-.pub-suites-label { font-size: 13px; color: rgb(100 116 139); margin: 8px 0; }
-.pub-suites-empty {
-  font-size: 12.5px; color: rgb(100 116 139);
-  border: 1px dashed rgb(100 116 139 / 35%); border-radius: 10px;
-  padding: 18px; text-align: center;
-}
-.pub-suite-row {
-  display: grid; grid-template-columns: minmax(200px, 1fr) 90px 90px auto;
-  gap: 12px; align-items: center; padding: 9px 14px;
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  margin-bottom: 6px;
-}
-.ps-name { font-weight: 600; font-size: 13px; }
-.ps-chip.draft {
-  font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
-  color: #b45309; background: rgb(245 158 11 / 10%);
-  border: 1px solid rgb(245 158 11 / 40%); font-weight: 400;
-}
-.ps-mode { font-size: 12px; color: rgb(100 116 139); }
-.ps-members { font-size: 12px; color: rgb(100 116 139); }
-.ps-ops { display: flex; gap: 8px; }
-.ps-open {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #2563eb; background: rgb(59 130 246 / 8%);
-  border: 1px solid rgb(59 130 246 / 45%);
-}
-.ps-copy {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #15803d; background: rgb(34 197 94 / 8%);
-  border: 1px solid rgb(34 197 94 / 45%);
 }
 </style>

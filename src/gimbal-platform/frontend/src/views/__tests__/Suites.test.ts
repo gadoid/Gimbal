@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import SuiteLibrary from '@/views/SuiteLibrary.vue'
 import SuiteManage from '@/views/SuiteManage.vue'
+import SuitesPublic from '@/views/SuitesPublic.vue'
 import * as suitesApi from '@/api/suites'
 import * as sharesApi from '@/api/shares'
 
@@ -44,6 +45,9 @@ vi.mock('@/api/shares', () => ({
   forkShare: vi.fn(),
   listScenarioReferrers: vi.fn().mockResolvedValue({ items: [] }),
 }))
+vi.mock('@/api/handoff', () => ({
+  getRoster: vi.fn().mockResolvedValue({ items: [] }),
+}))
 vi.mock('@/api/executions', () => ({
   getExecutionRows: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 }),
 }))
@@ -60,6 +64,7 @@ function routerWith() {
     history: createMemoryHistory(),
     routes: [
       { path: '/suites', component: { template: '<div/>' } },
+      { path: '/suites/public', component: SuitesPublic },
       { path: '/suites/:id', component: SuiteManage },
       { path: '/suites/:id/compose', component: { template: '<div/>' } },
       { path: '/suites/new', component: { template: '<div/>' } },
@@ -147,6 +152,69 @@ describe('SuiteLibrary — 列表(02)', () => {
     await flushPromises()
     expect(suitesApi.createSuite).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith('/suites/new')
+    w.unmount()
+  })
+
+  it('行菜单「分享…」与「复制」:分享开弹窗、复制走 fork;草稿均禁用、公共不显示分享', async () => {
+    vi.mocked(suitesApi.listSuites).mockResolvedValue({
+      items: [
+        suiteItem({ suiteId: 1, name: '冒烟集' }),
+        suiteItem({ suiteId: 2, name: '草稿集', isDraft: true }),
+        suiteItem({ suiteId: 3, name: '公共集', visibility: 'public' }),
+      ],
+      total: 3, page: 1, pageSize: 100,
+    } as never)
+    vi.mocked(suitesApi.forkPublicSuite).mockResolvedValue({
+      suiteId: 9, suiteName: '冒烟集 (1)', memberCount: 5, mode: 'aggregate',
+    } as never)
+    const router = routerWith()
+    // attachTo body:菜单面板与分享弹窗均 teleport 到 body,用 document 检索
+    const w = mount(SuiteLibrary, {
+      global: { plugins: [router], stubs: { RouterLink: linkStub } },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const q = (sel: string): HTMLElement | null => document.querySelector(sel)
+
+    // 正常行:菜单含「分享…」,点击打开分享弹窗(标题带 Suite 名)
+    await w.find('[data-testid="suite-row-more-1"]').trigger('click')
+    await flushPromises()
+    q('[data-testid="suite-row-share-1"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(q('.share-dialog')?.textContent).toContain('分享用例组:冒烟集')
+
+    // 正常行:「复制」走 fork 端点(属主自复制,02 ⋯ 菜单规格)
+    await w.find('[data-testid="suite-row-more-1"]').trigger('click')
+    await flushPromises()
+    q('[data-testid="suite-row-copy-1"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(suitesApi.forkPublicSuite).toHaveBeenCalledWith(1)
+
+    // 草稿行:复制/分享/发布菜单项均渲染但禁用(设计约束:草稿不可分享/发布、无需复制)
+    await w.find('[data-testid="suite-row-more-2"]').trigger('click')
+    await flushPromises()
+    expect(q('[data-testid="suite-row-copy-2"]')?.getAttribute('data-disabled'))
+      .toBeDefined()
+    expect(q('[data-testid="suite-row-share-2"]')?.getAttribute('data-disabled'))
+      .toBeDefined()
+    expect(q('[data-testid="suite-row-publish-2"]')?.getAttribute('data-disabled'))
+      .toBeDefined()
+
+    // 公共行:不出现分享与发布入口(与 SuiteManage ⋯ 菜单同口径);
+    // 复制保留(自复制)、下架入口在场
+    await w.find('[data-testid="suite-row-more-3"]').trigger('click')
+    await flushPromises()
+    expect(q('[data-testid="suite-row-share-3"]')).toBeNull()
+    expect(q('[data-testid="suite-row-copy-3"]')).not.toBeNull()
+    expect(q('[data-testid="suite-row-unpublish-3"]')).not.toBeNull()
+    expect(q('[data-testid="suite-row-publish-3"]')).toBeNull()
+
+    // 私有非草稿行:「发布到公共库」在场
+    await w.find('[data-testid="suite-row-more-1"]').trigger('click')
+    await flushPromises()
+    expect(q('[data-testid="suite-row-publish-1"]')).not.toBeNull()
     w.unmount()
   })
 
@@ -322,5 +390,79 @@ describe('SuiteManage — 管理页(20/21/30)', () => {
     vi.useRealTimers()
     w.unmount()
     document.body.innerHTML = ''
+  })
+})
+
+describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('列表渲染公共 Suite(含发布者列);搜索与模式筛选客户端过滤;空态提示发布入口', async () => {
+    vi.mocked(suitesApi.listSuites).mockResolvedValue({
+      items: [
+        suiteItem({ suiteId: 7, name: '公共冒烟集', visibility: 'public', mode: 'chain', ownerName: 'alice' }),
+        suiteItem({ suiteId: 8, name: '回归集', visibility: 'public', mode: 'aggregate', ownerName: 'bob' }),
+      ],
+      total: 2, page: 1, pageSize: 100,
+    } as never)
+    const router = routerWith()
+    const w = mount(SuitesPublic, {
+      global: { plugins: [router], stubs: { RouterLink: linkStub } },
+    })
+    await flushPromises()
+
+    // 数据源口径:visibility=public
+    expect(suitesApi.listSuites).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: 'public' }))
+    const row7 = w.find('[data-testid="public-suite-7"]')
+    expect(row7.text()).toContain('公共冒烟集')
+    expect(row7.text()).toContain('串联')
+    expect(row7.text()).toContain('alice')
+    expect(w.find('[data-testid="suites-public-back-mine"]').attributes('href')).toBe('/suites')
+
+    // 模式筛选:只剩聚合
+    await w.find('[data-testid="suites-public-filter-aggregate"]').trigger('click')
+    expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
+    expect(w.find('[data-testid="public-suite-8"]').exists()).toBe(true)
+
+    // 搜索叠加:发布者名可命中
+    await w.find('[data-testid="suites-public-filter-all"]').trigger('click')
+    await w.find('[data-testid="suites-public-search"]').setValue('bob')
+    expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
+    w.unmount()
+
+    vi.mocked(suitesApi.listSuites).mockResolvedValue({
+      items: [], total: 0, page: 1, pageSize: 100,
+    } as never)
+    const w2 = mount(SuitesPublic, {
+      global: { plugins: [routerWith()], stubs: { RouterLink: linkStub } },
+    })
+    await flushPromises()
+    expect(w2.find('[data-testid="suites-public-empty"]').exists()).toBe(true)
+    w2.unmount()
+  })
+
+  it('「复制到我的」走 fork 并跳副本管理页', async () => {
+    vi.mocked(suitesApi.listSuites).mockResolvedValue({
+      items: [suiteItem({ suiteId: 7, visibility: 'public' })],
+      total: 1, page: 1, pageSize: 100,
+    } as never)
+    vi.mocked(suitesApi.forkPublicSuite).mockResolvedValue({
+      suiteId: 9, suiteName: '冒烟集 (1)', memberCount: 5, mode: 'aggregate',
+    } as never)
+    const router = routerWith()
+    const push = vi.spyOn(router, 'push')
+    const w = mount(SuitesPublic, {
+      global: { plugins: [router], stubs: { RouterLink: linkStub } },
+    })
+    await flushPromises()
+
+    await w.find('[data-testid="public-suite-copy-7"]').trigger('click')
+    await flushPromises()
+    expect(suitesApi.forkPublicSuite).toHaveBeenCalledWith(7)
+    expect(push).toHaveBeenCalledWith('/suites/9')
+    w.unmount()
   })
 })

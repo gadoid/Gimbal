@@ -62,27 +62,28 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     } as never)
   })
 
-  it('admin 可见全部条目:工作台置顶 + 四组条目齐备', async () => {
+  it('admin 可见全部条目:工作台置顶 + 六组条目齐备', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
-    // 常量池不占侧边栏坑位;C5 增 Suite 编排 → 权限域二期 P1 再增用例组
-    // → Suite 层重构两入口合一(/suites 单入口)→ 15 条:工作台/通知(F5)/
-    // 我的/公共/关注/认证/传递/适配/画像/服务信息/执行器/Suite/
-    // 执行记录/数据分析/用户。
+    // 常量池不占侧边栏坑位;Suite 层重构两入口合一(/suites 单入口)
+    // → 外部集成 P1 增集成中心 → 2026-10-10 IA 调整:Suite 迁出「执行」
+    // 独立「用例集」组(我的/公共两页)+「集成」组:17 条。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
     // 说明页,置灰可点(§4.4)
-    expect(links.length).toBe(16)
+    expect(links.length).toBe(17)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications',
       '/scenarios/mine', '/scenarios/public', '/scenarios/follows',
+      // 用例集组(2026-10-10 IA 调整):我的用例集 / 公共用例集
+      '/suites', '/suites/public',
       // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
       '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
-      // 执行组:执行器/执行记录;Suite(Suite 层重构单入口,原用例组+
-      // Suite 编排两条合一);集成中心(外部系统集成 P1);数据分析
-      // 置灰保留、可点进说明页
-      '/run', '/executions', '/suites', '/integrations',
-      '/analytics', '/admin/users',
+      // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页);
+      // 集成组:集成中心(从执行组迁出)
+      '/run', '/executions', '/analytics',
+      '/integrations',
+      '/admin/users',
     ])
     w.unmount()
   })
@@ -100,10 +101,10 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     w.unmount()
   })
 
-  it('组标签为纯文本:场景/服务/执行/平台,不是可点页(F-sitemap + 执行设计 §0)', async () => {
+  it('组标签为纯文本:场景/用例集/服务/执行/集成/平台,不是可点页(F-sitemap + 2026-10-10 IA 调整)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '服务', '执行', '平台'])
+    expect(labels).toEqual(['场景', '用例集', '服务', '执行', '集成', '平台'])
     // 组标签不得是链接
     for (const label of w.findAll('.group-label')) {
       expect(label.element.tagName).toBe('SPAN')
@@ -135,13 +136,13 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     } as never)
   })
 
-  it('member 不见 用户管理/传递字段/服务信息管理,其余 13 条可见', async () => {
+  it('member 不见 用户管理/传递字段/服务信息管理,其余 14 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
     expect(hrefs).not.toContain('/carry-config')
     expect(hrefs).not.toContain('/service-admin')
-    expect(hrefs.length).toBe(13)  // +通知(F5,全员);Suite 单入口;集成中心(P1)
+    expect(hrefs.length).toBe(14)  // +通知(F5);公共用例集(2026-10-10 IA)
     w.unmount()
   })
 })
@@ -159,6 +160,22 @@ describe('Sidebar — active 高亮', () => {
     const active = w.findAll('a.nav-item.active')
     expect(active.length).toBe(1)
     expect(active[0].attributes('href')).toBe('/admin/users')
+    w.unmount()
+  })
+
+  it('前缀让位:/suites/public 页只高亮「公共用例集」,「我的用例集」不激活', async () => {
+    const w = await mountSidebar({ isAdmin: true, path: '/suites/public' })
+    const active = w.findAll('a.nav-item.active')
+    expect(active.length).toBe(1)
+    expect(active[0].attributes('href')).toBe('/suites/public')
+    w.unmount()
+  })
+
+  it('前缀让位不影响父路径自身:/suites 页仍高亮「我的用例集」', async () => {
+    const w = await mountSidebar({ isAdmin: true, path: '/suites' })
+    const active = w.findAll('a.nav-item.active')
+    expect(active.length).toBe(1)
+    expect(active[0].attributes('href')).toBe('/suites')
     w.unmount()
   })
 })
@@ -225,9 +242,9 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    // 17 = 16 可点(含置灰可点的数据分析;Suite 单入口+集成中心;F5 +通知)
+    // 18 = 17 可点(含置灰可点的数据分析;2026-10-10 IA:+公共用例集)
     //    + 1 置灰 span(字段来源分析,§4.4)
-    expect(w.findAll('.nav-text').length).toBe(17)
+    expect(w.findAll('.nav-text').length).toBe(18)
     w.unmount()
   })
 
@@ -243,7 +260,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(17)   // 16 可点(Suite 单入口 + 集成中心) + 1 置灰 span
+    expect(rows.length).toBe(18)   // 17 可点 + 1 置灰 span
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -256,11 +273,11 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     w.unmount()
   })
 
-  it('折叠仍保留一级层次组标签(场景/服务/执行中心/平台)', async () => {
+  it('折叠仍保留一级层次组标签(场景/用例集/服务/执行/集成/平台)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '服务', '执行', '平台'])
+    expect(labels).toEqual(['场景', '用例集', '服务', '执行', '集成', '平台'])
     w.unmount()
   })
 
@@ -268,10 +285,10 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(16)
-    // 配套方案 §4.1 服务组排序:画像/服务信息在前,/auths 从索引 5 移到 7(F5 通知占 0/1 位)
-    expect(links[5].attributes('href')).toBe('/services')
-    expect(links[7].attributes('href')).toBe('/auths')
+    expect(links.length).toBe(17)
+    // 用例集组插在场景组后(F5 通知占 0/1 位):suites=5 / services=7
+    expect(links[5].attributes('href')).toBe('/suites')
+    expect(links[7].attributes('href')).toBe('/services')
     expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
     w.unmount()
   })

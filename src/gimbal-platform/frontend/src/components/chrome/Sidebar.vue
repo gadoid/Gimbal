@@ -207,6 +207,16 @@ const groups: SidebarGroup[] = [
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
     ],
   },
+  // 用例集组(2026-10-10 IA 调整):Suite 从「执行」组迁出独立成组,
+  // 「我的用例集」= 原 /suites(02 列表),「公共用例集」= 独立新页
+  // (推翻 D-3「与公共场景同页」的分区形态)。
+  {
+    label: '用例集',
+    entries: [
+      { path: '/suites', label: '我的用例集', icon: StackIcon },
+      { path: '/suites/public', label: '公共用例集', icon: GlobeIcon },
+    ],
+  },
   {
     label: '服务',
     entries: [
@@ -222,16 +232,17 @@ const groups: SidebarGroup[] = [
   // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
   // 置灰不可点;数据分析(延后)置灰但可点 — §4.4:延后的东西藏起来会被
   // 遗忘,留灰入口,点进去撞上那条说明;opacity .42,不加角标。
+  // (2026-10-10 IA 调整:Suite 与集成中心已迁出到各自的组。)
   { label: '执行', entries: [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
-    // Suite(Suite 层重构:成员层 + 编排层合一,原「用例组」与
-    // 「Suite 编排」两条入口合并为单入口;重构方案「结论与范围」)
-    { path: '/suites', label: 'Suite', icon: StackIcon },
+    { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
+  ] },
+  // 集成组(2026-10-10 IA 调整):集成中心从「执行」组迁出独立成组。
+  { label: '集成', entries: [
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
     { path: '/integrations', label: '集成中心', icon: Share2Icon },
-    { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
 ]
@@ -254,7 +265,12 @@ const flatEntries = computed<FlatEntry[]>(() =>
 )
 
 function isActive(path: string): boolean {
-  return route.path === path || route.path.startsWith(path + '/')
+  if (route.path === path) return true
+  if (!route.path.startsWith(path + '/')) return false
+  // 前缀让位:存在更长前缀的入口时让给它(如 /suites 在 /suites/public
+  // 页不激活「我的用例集」,2026-10-10 IA 调整引入的前缀包含关系)。
+  return !flatEntries.value.some(
+    (e) => e.path !== path && e.path.startsWith(path + '/'))
 }
 </script>
 

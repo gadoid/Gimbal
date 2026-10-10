@@ -50,11 +50,10 @@ vi.mock('@/stores/scenario-draft', () => ({
   schemeToOverlay: (s: { serviceBindings: Record<string, unknown> }) => ({ serviceBindings: s.serviceBindings }),
 }))
 vi.mock('@/utils/download', () => ({ downloadFile: vi.fn() }))
-// F1(2026-09-23):分发徽标/销账走独立 api —— mock 掉避免测试环境发真请求
+// 分享徽标/销账走独立 api —— mock 掉避免测试环境发真请求
 vi.mock('@/api/handoff', () => ({
   getHandoffUnread: vi.fn().mockResolvedValue({ items: [] }),
   getRoster: vi.fn().mockResolvedValue({ items: [] }),
-  postHandoff: vi.fn(),
 }))
 vi.mock('@/api/notifications', () => ({ markRead: vi.fn().mockResolvedValue({ marked: 0 }) }))
 

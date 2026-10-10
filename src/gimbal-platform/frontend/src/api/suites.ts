@@ -54,6 +54,8 @@ export interface SuiteSummary {
   createdAt: string | null
   updatedAt: string | null
   latestRun?: SuiteLatestRun | null
+  /** 发布者名(display_name 优先;仅列表端点填充)—— 公共用例集页 */
+  ownerName?: string | null
 }
 
 export interface SuitePage {

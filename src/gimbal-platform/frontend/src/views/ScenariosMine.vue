@@ -175,7 +175,6 @@
                     <!-- F2(2026-09-23):重命名 —— 拉 draft 只改 meta.name 走既有
                          PUT(name 生成列自动重算,后端零新增);软校验,重名不拦。 -->
                     <DropdownMenuItem class="sl-menu-item" data-testid="rename-menu" @click="renameScenario(row)">重命名</DropdownMenuItem>
-                    <DropdownMenuItem class="sl-menu-item" data-testid="handoff-menu" @click="openHandoff(row)">分发给…</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" data-testid="share-menu" @click="openShare(row)">分享…</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="goSchemes(row)">方案管理</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('export', row)">导出 JSON</DropdownMenuItem>
@@ -290,9 +289,6 @@
       「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
     </p>
 
-    <!-- F1(2026-09-23):分发给…(副本交接;结果面板在弹窗内) -->
-    <HandoffDialog v-model:open="handoffOpen" :scenario="handoffTarget" />
-
     <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
     <ShareDialog
       v-model:open="shareOpen"
@@ -321,7 +317,6 @@ import {
 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
-import HandoffDialog from '@/components/scenario-lib/HandoffDialog.vue'
 import AddToSuiteDialog from '@/components/suites/AddToSuiteDialog.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import { listShares, deleteShare, listScenarioReferrers } from '@/api/shares'
@@ -654,9 +649,7 @@ async function unsubscribeScenario(r: { id: number; scenarioName?: string | null
   }
 }
 
-// ── F1(2026-09-23):分发给… + 「来自 X 的分享」悬浮标签 ──────────
-const handoffOpen = ref(false)
-const handoffTarget = ref<{ id: string; name: string } | null>(null)
+// ── 「来自 X 的分享」悬浮标签(未读 resource_handoff;销账走通知)──
 /** scenarioId → 发送方昵称(unread resource_handoff;空 Map = 无标签)。 */
 const handoffSenders = ref(new Map<string, string>())
 
@@ -668,14 +661,6 @@ async function loadHandoffBadges() {
         .filter((i) => i.senderName)
         .map((i) => [i.resourceId, i.senderName as string]))
   } catch { /* 徽标是增强:失败静默留白 */ }
-}
-
-function openHandoff(row: ScenarioListItem) {
-  handoffTarget.value = {
-    id: row.meta.scenarioId,
-    name: row.meta.name || row.meta.scenarioId,
-  }
-  handoffOpen.value = true
 }
 
 /** 进入场景即销账悬浮标签(方案 §1.4 消失时机):乐观摘牌 +
