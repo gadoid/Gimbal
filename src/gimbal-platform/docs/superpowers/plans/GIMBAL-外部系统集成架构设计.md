@@ -355,3 +355,9 @@ P1 与 roadmap 中 task 3（执行器与执行链）的输出、错误分类有�
 - **测试**:后端 `test_integration.py` 14 例(cron/只读闸/脱敏/CRUD/软删/可见性/卡片批量/凭证 admin 闸/手动执行含冷却与 E1 落库断言)+ 前端 FunctionCard 4 例/IntegrationCenter 3 例/Sidebar 计数 +1。回归:后端 **848 绿**、前端 **140 文件 1192 绿**、vue-tsc 干净。
 - **浏览器验收(真 SUT、真引擎)**:GET 探活场景(sc-keepalive)+ 方案 serviceBindings 指向本机后端 → 集成页建功能「平台保活探针」(*/1 分钟、on_change、公共)→ 调度器 15s 内自动首跑 → 补齐场景必填后「立即执行」**真引擎通过**(半常驻通道拉起 gimbal server → convert → 物化 → GET /api/health → passed 回写,last_outputs 落 run_result 摘要)→ 工作台卡片市场上板,状态灯「正常 · 最近执行 刚刚」→ 平台凭证增删(确认挂 `__platform__`)。验收抓到并修 2 个真问题:新建弹层场景下拉 `page_size:200` 超 API 上限 422 置空(改 100);`_iso` 对 aware datetime 产出 `+00:00Z` 双时区后缀致前端解析失败(UTC 归一后拼 Z)。
 - **评审待拍板项的落地选择**:E3 采纳(G2 outputs 暴露移出 P1,随 task 3c/P2);E4-A 半常驻;E7 软删 + on_change=状态翻转;#5 冷却 `max(60s, 周期/10)` 简化为固定 60s(P1);#6 平台凭证限 admin;G7(auth 错误分类)随 task 3c —— P1 失败只计 fail_streak 不暂停。
+
+**信息架构调整(2026-10-10,用户拍板;与 Suite 侧同轮,详见《suite-refactor-design》修订记录「信息架构调整轮」)**
+
+- **集成中心侧栏入口迁出「执行」组**:独立为「集成」组(侧栏组序:场景 → 用例集 → 服务 → 执行 → 集成 → 平台)。此前集成中心挂在「执行」组下,与"执行"域语义不符 —— 集成是独立的运维/外部系统域。
+- 同轮 Suite 侧变更(与本方案相关的联动面):侧栏新增「用例集」组(我的用例集 `/suites`、公共用例集 `/suites/public` 新页);`isActive` 补前缀让位规则(存在更长前缀入口时父路径不激活,通用规则,集成入口不受影响);`Sidebar.test` 六处计数/顺序/组标签断言同步(可点条目 16→17、四组→六组)。
+- 本轮为纯前端 IA 调整,不改任何集成接口与数据模型;前端 vitest 140 文件 1197 绿、vue-tsc 干净。
