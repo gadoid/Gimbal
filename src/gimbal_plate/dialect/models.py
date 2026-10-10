@@ -183,6 +183,14 @@ class EndpointSpec(BaseModel):
                 f"EndpointSpec.id={self.id!r} 必须以 system 字段 "
                 f"'{self.system}' 作为 prefix"
             )
+        # S1.5a(评审质量尾项):空 responses 此前静默通过(成功结果
+        # 检查被 `if self.responses` 短路)——responses 键即 outcome
+        # (N1),一个结果都没声明 = 接口没写完,构造期直接拒绝。
+        if not self.responses:
+            raise ValueError(
+                f"EndpointSpec {self.id}: responses 不得为空"
+                f"（键即 outcome，至少声明一个结果）"
+            )
         # 结果键合法性 + 至少一个成功结果（http：任意 2xx）
         for outcome in self.responses:
             if not self.binding.outcome_is_valid(outcome):
@@ -190,7 +198,7 @@ class EndpointSpec(BaseModel):
                     f"EndpointSpec {self.id}: 非法结果键 {outcome!r}"
                     f"（合法性由 binding 判定）"
                 )
-        if self.responses and not any(
+        if not any(
             self.binding.outcome_is_success(o) for o in self.responses
         ):
             raise ValueError(

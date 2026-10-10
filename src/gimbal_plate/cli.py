@@ -193,6 +193,27 @@ def _check_body(args, text, types, report) -> None:
         d = parse_markdown(text, source="<stdin>")
         validate_deliverable(d, types=types, report=report)
         return
+    # S1.5a(评审质量尾项):--all 遍历 systems 根下全部系统目录——CI
+    # 此前写死系统名清单,多出来的目录(如 fin.v2)能通过 CI 却在服务里
+    # 被 loader 静默跳过;--all 让每个真实存在的目录都过一遍闸门。
+    if getattr(args, "all", False):
+        from gimbal_plate.loader import SYSTEM_NAME_RE
+        systems_root = _REPO / "systems"
+        names = sorted(
+            d.name for d in systems_root.iterdir()
+            if d.is_dir() and SYSTEM_NAME_RE.match(d.name)
+        )
+        illegal = sorted(
+            d.name for d in systems_root.iterdir()
+            if d.is_dir() and not SYSTEM_NAME_RE.match(d.name)
+        )
+        for name in illegal:
+            print(f"error: 系统目录 {name!r} 名字不合规,"
+                  f"服务不会加载该目录", file=sys.stderr)
+        for name in names:
+            validate_system_tree(
+                systems_root / name, types=types, report=report)
+        return
     # 统一 check 引擎(评审 R10):CLI 与 HTTP system/action/check 调同一
     # validate_system_tree(common 参照 + 树级 F3 + C 类,与 release 机械检查同口径)。
     validate_system_tree(_repo_system(args.system), types=types, report=report)
@@ -357,6 +378,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("system", nargs="?", default="fin")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--stdin", action="store_true")
+    sp.add_argument("--all", action="store_true",
+                    help="检查 systems 根下全部系统目录(CI 口径)")
     sp.set_defaults(fn=cmd_check)
 
     sp = sub.add_parser("diff", help="结构化差异(两 manifest 比 hash)")

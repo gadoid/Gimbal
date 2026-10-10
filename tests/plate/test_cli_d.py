@@ -89,11 +89,16 @@ class TestO4IllegalSystemName:
         assert "不合规" in err and "服务不会加载" in err
 
     def test_loader_warns_and_skips(self, tmp_path, caplog):
-        """O4:loader 跳过不合规名/逃逸符号链接时留 warning 且不注册。"""
+        """O4:loader 跳过不合规名/逃逸符号链接时留 warning 且不注册。
+        S1.5a 收紧:sys.path 注入后恢复,不再污染同进程后续测试。"""
         import logging
         import sys as _sys
+        saved_path = list(_sys.path)
         _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-        from gimbal_plate.loader import load_registry
+        try:
+            from gimbal_plate.loader import load_registry
+        finally:
+            _sys.path[:] = saved_path
         root = tmp_path / "systems"
         (root / "good").mkdir(parents=True)
         (root / "good" / "system.md").write_text("", encoding="utf-8")
@@ -118,8 +123,9 @@ class TestO4IllegalSystemName:
 
 
 class TestDiffSkipsManifestless:
-    def test_o1_diff_skips_dirs_without_manifest(self, tmp_path, monkeypatch):
-        """O1:diff 遇无 manifest 的半成品目录不崩,跳过并提示。"""
+    def test_o1_diff_skips_dirs_without_manifest(self, tmp_path, monkeypatch, capsys):
+        """O1:diff 遇无 manifest 的半成品目录不崩,跳过并提示。
+        S1.5a 收紧:此前只断言退出码——跳过提示与基线配对(.1→.3)一并钉住。"""
         import gimbal_plate.cli as cli
         monkeypatch.setattr(cli, "_REPO", tmp_path)
         rel = tmp_path / "plate_artifacts" / "fin" / "releases"
@@ -133,7 +139,13 @@ class TestDiffSkipsManifestless:
                 (d / "manifest.json").write_text(json.dumps(
                     {"objects": obj}), encoding="utf-8")
         from gimbal_plate.cli import main
-        assert main(["diff", "fin", "--json"]) == 0   # 跳过 .2,比 .1→.3
+        assert main(["diff", "fin"]) == 0   # 跳过 .2,比 .1→.3
+        captured = capsys.readouterr()
+        assert "2026.10.2" in captured.err and "跳过" in captured.err, \
+            "应提示跳过了哪个目录"
+        assert "2026.10.1 → 2026.10.3" in captured.out, \
+            "基线配对应为 .1→.3,不含半成品 .2"
+        assert "~ fin.x" in captured.out, "两份 manifest hash 不同,应报 1 处变更"
 
 
 class TestG1SelfDescribe:

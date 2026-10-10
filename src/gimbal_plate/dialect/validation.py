@@ -219,6 +219,7 @@ def validate_deliverable(
     template = types.get(type_id or "", {})
     allowed_blocks = set(template.get("blocks", []))
     allowed_kinds = set(template.get("statement_kinds", []))
+    anchor_grammar = template.get("anchor")
 
     counts: dict[str, int] = {}
     for node in deliverable.nodes:
@@ -237,6 +238,7 @@ def validate_deliverable(
                 counts[f"kind:{model.kind}"] = (
                     counts.get(f"kind:{model.kind}", 0) + 1)
                 _check_statement(model, allowed_kinds, src, block.line, report)
+                _check_anchor(model, anchor_grammar, src, block.line, report)
 
     # F2:required 计数（片段 kind 也计入）
     required: dict[str, int] = template.get("required", {}) or {}
@@ -321,6 +323,76 @@ def _check_statement(
             ))
 
 
+# S4(S1.5a 补实现,告警级):锚点语法按交付物类型的 anchor 分派
+# (设计 6.5 语法表)——section=标题路径(自由文本,无机器语法);
+# table_column=`表.列[=值]`;ui=`页面 / 区块 / 控件`;
+# spec_path=`<endpoint_id> <JSONPath>[@outcome][=value]`(解析目标在
+# validate_system_tree 树级验:接口存在 + @outcome 为已声明键)。
+_ANCHOR_PATTERNS: dict[str, re.Pattern[str]] = {
+    "table_column": re.compile(r"^[^\s.]+\.[^\s=]+(?:=.+)?$"),
+    "ui": re.compile(r"^[^\s/]+ / [^\s/]+ / [^\s=]+(?:=.+)?$"),
+    # path 段排除 @:防止贪婪组把 @outcome 吞进 JSONPath
+    "spec_path": re.compile(r"^(\S+)\s+(\$[^@\s=]+)(?:@([^\s=]+))?(?:=(.+))?$"),
+}
+
+
+def _check_anchor(
+    st: Statement, grammar: str | None, src: str, line: int,
+    report: ValidationReport,
+) -> None:
+    """S4 语法半边:非空 anchor 符合所在类型的锚点语法(告警)。
+
+    anchor 是可选标注,空值不报;grammar 缺失(section 之外的模板漏配)
+    同样不在此报——语法表只认三种机器可验形态。
+    """
+    if not st.anchor:
+        return
+    if grammar in (None, "section"):
+        return
+    pat = _ANCHOR_PATTERNS.get(grammar or "")
+    if pat is not None and not pat.match(st.anchor):
+        report.add(Finding(
+            "S4", "warning",
+            f"片段 {st.id}: anchor {st.anchor!r} 不符 {grammar} 锚点语法",
+            source=src, line=line,
+        ))
+
+
+def _validate_spec_paths(
+    tree: "SystemTree", report: ValidationReport,
+) -> None:
+    """S4 解析半边(树级,告警):spec_path 形状的锚点解析到接口——
+    接口存在 + @outcome 为该接口已声明键(N1:responses 键即真源)。
+
+    深层 JSONPath 与声明树的对拍随批次 C 字段级对拍(S1.5)。匹配按
+    spec_path 语法形状尝试:section 锚点(标题路径)不会撞上
+    ``<id> <$.path>`` 形状,不做归属模板回查。
+    """
+    ep_by_id = {ep.id: ep for ep in tree.endpoints}
+    pat = _ANCHOR_PATTERNS["spec_path"]
+    for st in tree.statements:
+        if not st.anchor or not pat.match(st.anchor):
+            continue
+        ep_id, _path, outcome, _value = pat.match(st.anchor).groups()
+        src = getattr(st, "_source", "")
+        line = getattr(st, "_line", 0)
+        ep = ep_by_id.get(ep_id)
+        if ep is None:
+            report.add(Finding(
+                "S4", "warning",
+                f"片段 {st.id}: spec_path 的接口 {ep_id!r} 不存在",
+                source=src, line=line,
+            ))
+            continue
+        if outcome and outcome not in ep.responses:
+            report.add(Finding(
+                "S4", "warning",
+                f"片段 {st.id}: spec_path 的 @outcome {outcome!r} 不是 "
+                f"{ep_id} 已声明的结果键",
+                source=src, line=line,
+            ))
+
+
 def validate_terms(
     terms: Iterable[Term], *, system_id: str, common_ids: set[str] | None = None,
     report: ValidationReport | None = None,
@@ -330,6 +402,7 @@ def validate_terms(
     common_ids = common_ids or set()
     seen: dict[str, str] = {}       # id → source
     labels: dict[str, str] = {}     # (kind,label) → id
+    label_ids: dict[str, str] = {}  # label → id(T5:alias 与 label 跨词条比较)
     aliases: dict[str, str] = {}    # alias → id
 
     for term in terms:
@@ -375,7 +448,12 @@ def validate_terms(
             ))
         else:
             labels[key] = term.id
-        # T5:alias 冲突(告警)
+        label_ids.setdefault(term.label, term.id)
+    # T5:alias 冲突(告警)——S1.5a 补齐设计口径「alias 与他词条 label /
+    # alias 冲突」:此前只比 alias↔alias,alias 撞他人 label 静默通过。
+    # 两遍收集后比较,顺序无关。
+    for term in terms:
+        src = getattr(term, "_source", system_id)
         for alias in term.aliases:
             if alias in aliases and aliases[alias] != term.id:
                 report.add(Finding(
@@ -383,8 +461,13 @@ def validate_terms(
                     f"alias {alias!r} 与 {aliases[alias]} 冲突",
                     source=src,
                 ))
-            else:
-                aliases[alias] = term.id
+            if alias in label_ids and label_ids[alias] != term.id:
+                report.add(Finding(
+                    "T5", "warning",
+                    f"alias {alias!r} 与词条 {label_ids[alias]} 的 label 冲突",
+                    source=src,
+                ))
+            aliases.setdefault(alias, term.id)
     # T3:replaced_by 存在/同 kind/active/不成环(收全后验)
     all_ids = set(seen) | common_ids
     by_id: dict[str, Term] = {t.id: t for t in terms}
@@ -392,12 +475,18 @@ def validate_terms(
         if term.replaced_by is None:
             continue
         target = by_id.get(term.replaced_by)
-        if term.replaced_by not in all_ids or target is None:
+        # S1.5a:目标在 common(已冻结、全系统可用)时信任其内部一致性,
+        # 跳过深检——此前 target=None 一律报「不存在」,common 目标误阻塞。
+        if term.replaced_by not in all_ids or (
+            target is None and term.replaced_by not in common_ids
+        ):
             report.add(Finding(
                 "T3", "blocking",
                 f"词条 {term.id!r} 的 replaced_by {term.replaced_by!r} 不存在",
             ))
             continue
+        if target is None:
+            continue  # common 目标:存在性已验,深检豁免
         if term_kind_of(term.replaced_by) != term_kind_of(term.id):
             report.add(Finding(
                 "T3", "blocking",
@@ -430,7 +519,15 @@ def validate_terms(
             ))
             continue
         target = by_id.get(term.refers)
-        if target is None or target.status != "active":
+        # S1.5a:common 目标(同 T3)——attr 语义已由 id 语法保证,深检豁免;
+        # 此前 target=None 一律报「须为 active attr」,common 目标误阻塞。
+        if target is None and term.refers not in common_ids:
+            report.add(Finding(
+                "T6", "blocking",
+                f"词条 {term.id!r} 的 refers 目标 {term.refers!r} 不存在",
+            ))
+            continue
+        if target is not None and target.status != "active":
             report.add(Finding(
                 "T6", "blocking",
                 f"词条 {term.id!r} 的 refers 目标 {term.refers!r} 须为 active attr",
@@ -728,13 +825,13 @@ def validate_system_tree(
                 "F3", "blocking",
                 f"接口 {ep.id!r} 的 system 字段 {ep.system!r} 与所在目录 "
                 f"{system_root.name!r} 不一致",
-                source=src,
+                source=src, line=getattr(ep, "_line", 0),
             ))
         if ep.id in ep_seen:
             report.add(Finding(
                 "F3", "blocking",
                 f"接口 id {ep.id!r} 系统内重复(先见于 {ep_seen[ep.id]})",
-                source=src,
+                source=src, line=getattr(ep, "_line", 0),
             ))
         else:
             ep_seen[ep.id] = src
@@ -743,7 +840,7 @@ def validate_system_tree(
             report.add(Finding(
                 "F3", "blocking",
                 f"路由键 {route} 重复({ep.id} 与先见于 {route_seen[route]} 的接口)",
-                source=src,
+                source=src, line=getattr(ep, "_line", 0),
             ))
         else:
             route_seen[route] = ep.id
@@ -754,7 +851,7 @@ def validate_system_tree(
             report.add(Finding(
                 "F3", "blocking",
                 f"片段 id {st.id!r} 系统内重复(先见于 {st_seen[st.id]})",
-                source=src,
+                source=src, line=getattr(st, "_line", 0),
             ))
         else:
             st_seen[st.id] = src
@@ -766,4 +863,5 @@ def validate_system_tree(
         endpoints, statements, tree.terms, common_terms=common_terms, report=report,
     )
     validate_consistency(endpoints, statements, report=report)
+    _validate_spec_paths(tree, report)
     return report

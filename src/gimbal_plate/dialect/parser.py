@@ -43,7 +43,32 @@ class _StrictLoader(_YAML_BASE):
 def _no_dup_keys(loader, node, deep=False):
     seen = set()
     for k_node, _ in node.value:
-        key = loader.construct_object(k_node, deep=True)
+        # S1.5a(评审质量尾项):合并键 << 在 SafeLoader 下会被静默当成
+        # 字面量键 '<<'(merge 语义只在 FullLoader 生效)——显式报错,
+        # 防止 N5 合并冲突残留以这种形态溜进规范形;复合键(? 显式键 /
+        # 序列键)构造时会抛裸 TypeError,同样转方言错误。
+        if getattr(k_node, "tag", "") in (
+            "tag:yaml.org,2002:seq", "tag:yaml.org,2002:map",
+        ):
+            raise DialectError(
+                "YAML 复合键不支持(键须为标量)",
+                source=getattr(loader, "_dialect_source", "<yaml>"),
+                line=getattr(loader, "_dialect_line", node.start_mark.line + 1),
+            )
+        try:
+            key = loader.construct_object(k_node, deep=True)
+        except TypeError as e:
+            raise DialectError(
+                f"YAML 键构造失败(复合键?): {e}",
+                source=getattr(loader, "_dialect_source", "<yaml>"),
+                line=getattr(loader, "_dialect_line", node.start_mark.line + 1),
+            ) from e
+        if key == "<<" or isinstance(key, (list, dict)):
+            raise DialectError(
+                "YAML 合并键 << 不支持(逐键显式写出)",
+                source=getattr(loader, "_dialect_source", "<yaml>"),
+                line=getattr(loader, "_dialect_line", node.start_mark.line + 1),
+            )
         if key in seen:
             raise DialectError(
                 f"YAML 重复键 {key!r}（合并冲突残留?）",
@@ -382,16 +407,27 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
             review = reviews.pop() if reviews else "draft"
             payload_data = data if top_is_list else envelopes[0][1]
             # 6.1:frontmatter.service 公共默认供文件内接口块继承——
-            # 校验前注入缺 service 的 endpoint 载荷(解析期物化,对象自含,P7)
+            # 校验前注入缺 service 的 endpoint 载荷(解析期物化,对象自含,
+            # P7)。列表块同样继承(S1.5a:此前 isinstance(dict) 条件把列表
+            # 分支整个跳过,单块继承、列表块不继承);显式写了 service 的
+            # 条目不覆盖。
             if (
                 deliverable.frontmatter is not None
                 and deliverable.frontmatter.service
                 and block_type == "endpoint"
-                and isinstance(payload_data, dict)
-                and "service" not in payload_data
             ):
-                payload_data = {**payload_data,
-                                "service": deliverable.frontmatter.service}
+                fm_service = deliverable.frontmatter.service
+                if isinstance(payload_data, dict):
+                    if "service" not in payload_data:
+                        payload_data = {**payload_data,
+                                        "service": fm_service}
+                elif isinstance(payload_data, list):
+                    payload_data = [
+                        {**item, "service": fm_service}
+                        if isinstance(item, dict) and "service" not in item
+                        else item
+                        for item in payload_data
+                    ]
             payload = _coerce_payload(
                 block_type, payload_data, source=source, line=i + 1
             )
@@ -399,10 +435,12 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
             # 此前生产路径无人设置 _source、全部片段落入同一 <unknown> 来源，
             # 闸门永不触发。解析期在此记文件路径（pydantic 私有属性，不进
             # 模型序列化 / hash）。词条同理（T 类 finding 的定位信息）；
-            # 接口也记（F3 check 阶段的重复定位）。
+            # 接口也记（F3 check 阶段的重复定位）。_line 记块起始行
+            # （S1.5a:F3 finding 此前行号恒为 0）。
             for m in (payload if isinstance(payload, list) else [payload]):
                 if isinstance(m, (Statement, Term, EndpointSpec)):
                     m._source = source  # noqa: SLF001
+                    m._line = i + 1  # noqa: SLF001
             deliverable.nodes.append(
                 Block(type=block_type, review=review, payload=payload, line=i + 1)
             )

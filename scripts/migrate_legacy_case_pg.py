@@ -89,16 +89,21 @@ async def main(db_url: str, *, write: bool) -> int:
         with open(backup_path, "x", encoding="utf-8") as f:
             f.write(json.dumps(backup, ensure_ascii=False, indent=1))
     except FileExistsError:
+        # S1.5a(评审尾项):退出路径关闭数据库连接——SystemExit 前直接
+        # 拉起连接会留悬挂会话占 PG 连接槽
+        await conn.close()
         raise SystemExit(f"error: 备份文件已存在,拒绝覆盖: {backup_path}")
     print(f"备份(变更前状态)→ {backup_path}")
-    async with conn.transaction():
-        for sid, d, out in pending:
-            d["definition"] = out
-            await conn.execute(
-                "UPDATE composer_scenarios SET payload=$1::jsonb "
-                "WHERE scenario_id=$2",
-                json.dumps(d, ensure_ascii=False), sid)
-    await conn.close()
+    try:
+        async with conn.transaction():
+            for sid, d, out in pending:
+                d["definition"] = out
+                await conn.execute(
+                    "UPDATE composer_scenarios SET payload=$1::jsonb "
+                    "WHERE scenario_id=$2",
+                    json.dumps(d, ensure_ascii=False), sid)
+    finally:
+        await conn.close()
     print(f"已提交 {len(pending)} 个场景(单事务)")
     return 0
 

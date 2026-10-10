@@ -161,19 +161,39 @@ def test_shape_hash_tracks_shape_changes() -> None:
 
 
 def test_p8_nested_model_defaults_keeps_hashes() -> None:
-    """P8 扩展(评审 P0-7):嵌套模型(Binding)加默认字段,hash 不变。"""
+    """P8 扩展(评审 P0-7):嵌套模型(Binding)加默认字段,hash 不变。
 
-    class BindingVNext(HttpBinding.__class__):
-        pass
+    S1.5a 收紧:此前 `BindingVNext` 定义后从未使用,只比了「显式写默认值
+    vs 省略」(实现口径下恒等)——真正的演进场景(模型加一个带默认值的
+    新字段,同一份数据在两个版本上 hash 相等)从没被测过。这里用
+    create_model 动态构造下一版 Binding 真演一遍。
+    """
+    from pydantic import create_model
 
-    # 直接构造:给 binding 显式写默认值 vs 不写 —— object/shape 全等
+    binding_vnext = create_model(
+        "HttpBindingVNext", __base__=HttpBinding,
+        s2_future_flag=(bool, False),
+    )
+
     ep_min = _sample_endpoint()
+    # 直接构造:给 binding 显式写默认值 vs 不写 —— object/shape 全等
     ep_explicit = _sample_endpoint(binding=HttpBinding(
         method="POST", path="/api/order/order/orderAdd", auth="bearer",
         timeout_seconds=30.0, body_type="json", headers={},
     ))
     assert object_hash(ep_explicit) == object_hash(ep_min)
     assert shape_hash(ep_explicit) == shape_hash(ep_min)
+    # 真演进:新默认字段不进 hash(排除缺省值的规范序列化)
+    ep_next = _sample_endpoint(binding=binding_vnext(
+        method="POST", path="/api/order/order/orderAdd", auth="bearer",
+    ))
+    assert object_hash(ep_next) == object_hash(ep_min), \
+        "嵌套模型加默认字段后 object_hash 应不变(P8 加法演进)"
+    assert shape_hash(ep_next) == shape_hash(ep_min), \
+        "嵌套模型加默认字段后 shape_hash 应不变(P8 加法演进)"
+    # 注记:pydantic v2 按字段声明类型(HttpBinding)序列化嵌套模型,
+    # 子类新增字段连同其非默认值都会被剥离——hash 稳定部分由此保证;
+    # 演进字段要真正进 hash 须改父模型本身,不在 P8 语义内。
 
 
 def test_dict_key_order_irrelevant() -> None:

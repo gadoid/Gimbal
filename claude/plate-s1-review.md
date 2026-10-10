@@ -31,7 +31,7 @@
 | B 发布与校验 | 发布闸门四项必检全部强制：机械检查、C 类、闭包、签发；内容寻址的全局对象池，原子写入并校验内容；release 号防并发重号；引用闭包传递；N3 common 子集冻结、common 不能单独发版；空发版拒绝且不占号；F1–F4、T1–T6、S1–S3、C1–C3；check 和 release 共用同一个引擎（`collect_system_tree` + `validate_system_tree`） | manifest 记录 shape_hash、call 投影内容寻址、G7 字段级 diff、release 号数值排序与本地月份、correction 引用台账 |
 | C 框架自描述 | http 协议自描述和契约测试；P4 单向依赖守卫（AST 扫描，静态写法的 import 都能拦住） | 订阅、参数登记、报告、计划、调试的字段级对拍；框架 dim 全局挂载；恒真测试重写 |
 | D CLI 与 CI | `plate` 独立入口，8 个命令；editable 和 wheel 安装（wheel 需要设 `PLATE_REPO_ROOT`）；CI 包括三个系统的 check、方言纪律测试、三侧测试、wheel 冒烟 | `diff --base working/main`、`check --stdin` 补 T/S2、G1 的 HTTP 入口、Agent 编写 skill、N4 单块回写 |
-| E 自举切片 | platform「管理员管理成员」：PRD、用户故事、词典、4 个接口的 capability；管道走通到「编写 → 评审 → 入库 → 编排」 | 从故事派生 Scenario 并执行、step 分支表达力验证（第 9 项）、DELETE 接口的 cap 归位、caps_without_define 收敛 |
+| E 自举切片 | platform「管理员管理成员」：PRD、用户故事、词典、4 个接口的 capability；管道走通到「编写 → 评审 → 入库 → 编排」 | 从故事派生 Scenario 并执行、step 分支表达力验证（第 9 项；✅ 2026-10-10 完成，结论 = 无需改 Step/Strategy 结构，凭据 `claude/plate-step-branch-expressiveness.md`）、DELETE 接口的 cap 归位、caps_without_define 收敛 |
 
 ## 3. 当前质量
 
@@ -62,11 +62,12 @@
 
 **合入时**：在真实环境确认 `plate_artifacts/*/releases/` 里没有以前留下的、缺 manifest 的空目录，有就手工删掉。
 
-**S1.5a，建议合入后马上做（1–2 天，都是小改，直接影响接下来写内容的质量和 CI 的可靠性）**：
-- `plate check --all`，CI 改成检查所有系统目录（防止不合规的目录名通过 CI 却在服务里悄悄消失）；
-- 会悄悄放过错误内容的校验口子：`responses` 为空仍能通过、列表块不继承 service、YAML 合并键被静默当成字面量、复合键抛裸 TypeError、S4 缺失、T5 不比较别名和他人 label、T3/T6 对 common 目标误阻塞；
-- F3 finding 补上行号；
-- 测试收紧：diff 测试补断言、恢复 `sys.path`、P8 嵌套测试改成真正能失败的写法；迁移脚本退出时关闭数据库连接。
+**S1.5a，建议合入后马上做（1–2 天，都是小改，直接影响接下来写内容的质量和 CI 的可靠性）——✅ 已完成（2026-10-10，S1.5a 收口轮；plate 622 passed，真实树 `check --all` 0 blocking / 0 warnings / 0 corrections）**：
+- `plate check --all` ✅：CLI 加 `--all`（遍历 systems 根下全部合规目录、不合规目录名点名报错），CI 入库闸门从写死的 `for s in common fin platform` 切到 `plate check --all --json`（此前多出来的目录能过 CI 却在服务里被 loader 静默跳过）；
+- 校验口子 ✅：`responses` 为空在模型构造期拒绝（此前被 `if self.responses` 短路静默通过）；**列表块继承 frontmatter.service**（此前注入条件 `isinstance(dict)` 把列表分支整个跳过——单块继承、列表块不继承；显式 service 不覆盖）；YAML 合并键 `<<` 与复合键统一转 DialectError（此前 `<<` 被静默当成字面量键、复合键抛裸 TypeError）；**S4 补实现**（告警级：anchor 按类型模板的锚点语法校验 section/table_column/ui/spec_path 四种 + 树级 spec_path 解析——接口存在、`@outcome` 为已声明键；深层 JSONPath 对拍仍留批次 C）；**T5 补齐口径**（alias 与他词条 **label** 冲突此前不比，两遍收集后顺序无关）；**T3/T6 对 common 目标不再误阻塞**（common 词条已冻结全系统可用，存在性已验即跳过深检，此前 `target=None` 一律报「不存在/须 active」）；
+- F3 finding 补上行号 ✅：解析期给 Statement/Term/EndpointSpec 记 `_line`（块起始行），树级 F3 五处 finding（交付物/接口 id/路由键/片段 id/system 字段不一致）全部带上；
+- 测试收紧 ✅：diff 跳过半成品目录的测试补「跳过提示 + `.1→.3` 配对 + 变更明细」断言；`test_loader_warns_and_skips` 的 `sys.path` 注入改为 finally 恢复；P8 嵌套测试从恒真（`BindingVNext` 定义后从未使用）改为 `create_model` 真演进（新默认字段 → object/shape hash 均不变；注记 pydantic v2 按声明类型序列化会剥离子类新增字段，hash 稳定部分由此保证）；迁移脚本退出路径（备份文件冲突的 SystemExit 前与事务 finally）关闭数据库连接。
+- 新增测试 `tests/plate/test_s15a.py` 17 例覆盖以上各口子（含 `--all` 两例：全量遍历 + 不合规目录点名、多系统阻塞聚合）。
 
 **建议尽早做一次的验证**：step 能否表达分支（第 9 项）。它是结构风险：用户故事写多以后再改 M2，存量就要跟着迁移（P8）。在批量写故事之前，先用一条真实带分支的结算流程走一遍。
 
