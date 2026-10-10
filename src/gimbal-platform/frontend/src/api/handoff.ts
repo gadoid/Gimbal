@@ -1,9 +1,8 @@
 /**
- * api/handoff.ts — 资源分发(F1,2026-09-23 批次)。
+ * api/handoff.ts — 分享配套查询(原 F1 资源分发批次遗留)。
  *
- * 分发 = Fork(副本):接收后归接收方,发送方零控制权、不支持撤回;
- * 凭据引用不迁移(副本执行按接收方本人凭证池解析)。
- * 悬浮标签数据源 = GET /notifications/handoff-unread(未读 resource_handoff)。
+ * 「分发给…」入口已并入 ShareDialog 的副本模式(POST /shares,后端同一深拷贝);
+ * 这里只留两个查询:成员选择器 roster、「来自 X 的分享」未读标签。
  */
 import http from './http'
 
@@ -13,28 +12,10 @@ export interface RosterItem {
   display_name: string
 }
 
-export interface HandoffResult {
-  status: string
-  new_resource_id: string
-  new_name: string
-  renamed: boolean
-}
-
 export interface HandoffUnreadItem {
   id: number
   resourceId: string
   senderName: string | null
-}
-
-/** 把场景副本分发给目标用户(仅 owner/admin;后端 403/404/422 分流)。 */
-export function postHandoff(
-  resourceId: string, targetUserId: number,
-): Promise<HandoffResult> {
-  return http.post<HandoffResult>('/handoff', {
-    resource_type: 'scenario',
-    resource_id: resourceId,
-    target_user_id: targetUserId,
-  }).then((r) => r.data)
 }
 
 /** 成员选择器数据(CurrentUser;仅 is_active、已排除自己)。 */

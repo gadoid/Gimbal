@@ -25,7 +25,6 @@ from .routers import (
     carry,
     constants,
     data_sets,
-    handoff,
     integration,
     notifications,
     endpoint_catalog,
@@ -201,7 +200,6 @@ def create_app() -> FastAPI:
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
     app.include_router(notifications.router, prefix="/api")
-    app.include_router(handoff.router, prefix="/api")
     # 外部系统集成 P1:功能(模板/实例)+ 批量卡片 + 平台凭证
     app.include_router(integration.router, prefix="/api")
     # 用户偏好通用读写(工作台布局/常驻席/时间线配色 → user_prefs)
