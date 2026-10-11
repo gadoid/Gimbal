@@ -783,13 +783,19 @@ async function loadScenario() {
     scenario.value = s
     // 顶条面包屑取名(composer 已拿到 meta,顶条零额外请求)
     seedScenarioName(s.meta.scenarioId, s.meta.name)
-    // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)
+    // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)。
+    // meta 先整份铺开再覆盖编排器管理的字段 —— 未知键(尤其 meta.plate
+    // 版本声明)必须原样保留:丢了它,锚点步骤的 call(6.2 已剥离派生
+    // 字段)在 /convert 直通校验必炸(2026-10-12 自举场景导出失效根因),
+    // 保存还会把无版本声明的损坏写回库。scenarioId/updateTime/owner
+    // 等平台键随铺开带回,保存侧 _strip_platform_meta 会剥掉,无碍。
     const prevConfig = definition.value.config
     const prevResource = definition.value.resource
     definition.value = {
       kind: 'scenario',
       scenarioId: s.meta.scenarioId,
       meta: {
+        ...(s.meta as Record<string, unknown>),
         name: s.meta.name,
         description: s.meta.description,
         module: s.meta.module,

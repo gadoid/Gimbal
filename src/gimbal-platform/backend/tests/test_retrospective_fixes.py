@@ -88,3 +88,56 @@ async def test_activity_execution_event_carries_scenario_name(client):
     exec_events = [e for e in r.json()["events"] if e["kind"] == "execution"]
     assert any(e.get("scenarioName") == "下单场景"
                and e.get("scenarioId") == "sc-named" for e in exec_events), exec_events
+
+
+async def test_scenario_export_route(client):
+    """②-6(2026-10-12)导出路由:读闸改对象级判定后恢复可用 ——
+    旧三参 can_read_scenario 调用自权限签名收紧后恒 500(「场景导出
+    失效」根因)。属主 200 + 定义原样;非读者 404(不泄露存在性)。"""
+    h = await register_and_login(client, "retro4", "pw123456")
+    draft = make_draft("sc-retro-exp", steps=[{"kind": "step",
+        "call": {"kind": "call", "protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/p"},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }])
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    r = await client.get("/api/scenarios/sc-retro-exp/export", headers=h)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["scenarioId"] == "sc-retro-exp"
+    assert out["steps"][0]["call"]["path"] == "/p"
+
+    # 非属主非公共 → 404(存在性不泄露;此前是 500)
+    other = await register_and_login(client, "retro5", "pw123456")
+    r = await client.get("/api/scenarios/sc-retro-exp/export", headers=other)
+    assert r.status_code == 404
+
+
+async def test_read_shape_carries_meta_plate(client):
+    """②-7(2026-10-12)读侧 meta 透传 plate:普通 GET /scenarios/{id}
+    此前被 ScenarioMeta 模型剥掉,编排器水合即丢版本声明,导出/保存的
+    草稿在 /convert 直通校验必炸(锚点步骤 call 无派生字段)。"""
+    h = await register_and_login(client, "retro6", "pw123456")
+    draft = make_draft("sc-retro-plate", steps=[{"kind": "step",
+        "endpoint": "fin.a.b",
+        "call": {"kind": "call", "service": "svc", "headers": {}},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }])
+    draft["definition"]["meta"]["plate"] = {"fin": "1.0#1"}
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    # 普通 GET(读侧投影)必须带 plate —— 编排器水合的数据源
+    r = await client.get("/api/scenarios/sc-retro-plate", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["meta"]["plate"] == {"fin": "1.0#1"}
+
+    # 列表行同样透传(行级导出/展示判定同源)
+    r = await client.get("/api/scenarios", headers=h)
+    row = next((i for i in r.json()["items"]
+                if i["meta"]["scenarioId"] == "sc-retro-plate"), None)
+    assert row is not None and row["meta"]["plate"] == {"fin": "1.0#1"}

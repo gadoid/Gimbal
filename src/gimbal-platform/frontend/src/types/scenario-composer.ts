@@ -62,6 +62,10 @@ export interface Scenario {
     createTime?: string
     /** 最后编辑时间（编排态透传；“最后编辑”列已在使用） */
     updateTime?: string
+    /** 版本声明(Release 4.4):{系统: '<line>#<n>' | 'working'}。
+     *  读侧透传 —— 编排器水合必须原样保留(丢它 = 锚点步骤的 call
+     *  在 /convert 直通校验必炸,保存还会把无声明损坏写回库)。 */
+    plate?: Record<string, string>
   }
   /** plate step dicts (读侧透传) */
   steps: Record<string, unknown>[]

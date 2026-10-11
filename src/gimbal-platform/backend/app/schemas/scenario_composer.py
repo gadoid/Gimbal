@@ -62,6 +62,11 @@ class ScenarioMeta(BaseModel):
     # 「最后编辑」— 服务端权威:读侧由 to_read_shape 以 DB 行 updated_at
     # 覆盖(_meta_from_row),draft 里客户端传的值不采信。
     update_time: datetime | None = Field(default=None, alias="updateTime")
+    # 版本声明(Release 4.4):{系统: '<line>#<n>' | 'working'}。读侧必须
+    # 透传 —— 编排器水合靠它保留版本声明;此前本模型缺此字段,普通 GET
+    # 的响应序列化静默剥掉 plate,编排器导出/保存的草稿即失去重投影
+    # 依据(锚点步骤的 call 直通校验必炸,2026-10-12 导出失效根因之二)。
+    plate: dict[str, str] | None = Field(default=None, alias="plate")
 
     @field_validator("tags")
     @classmethod

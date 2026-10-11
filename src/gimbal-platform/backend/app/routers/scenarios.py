@@ -809,7 +809,9 @@ async def export_scenario(
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise HTTPException(404, f"scenario_not_found: {scenario_id}")
-    await can_read_scenario(db, user, row)
+    # 读闸同详情页:public ∨ 属主 ∨ admin ∨ 引用(404 不泄露存在性)。
+    # (旧代码直接调三参 can_read_scenario —— 签名收紧后即 500,2026-10-12)
+    await _require_reader_async(db, user, row)
     from ..services.scenario_store import definition_from_payload
     return definition_from_payload(row.payload or {})
 
