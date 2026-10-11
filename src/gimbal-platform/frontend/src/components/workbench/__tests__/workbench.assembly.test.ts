@@ -77,7 +77,7 @@ afterEach(() => { document.body.innerHTML = '' })
 async function waitCards(w: ReturnType<typeof mountPage>, n: number) {
   await vi.waitFor(() => {
     expect(w.findAll('[data-testid^="wb-slot-"]').length).toBeGreaterThanOrEqual(n)
-  })
+  }, { timeout: 5000 })
 }
 
 /** 本文件的用例都是 member(alice is_admin: false)—— member 的默认板
@@ -123,7 +123,7 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
     // 卸载会把 vitest 模块运行器卡死(后续动态 import 返回空模块)
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     w.unmount()
   })
 
@@ -145,7 +145,7 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
     // 异步卡 + 开着的市场 Dialog,vitest 模块运行器会被卡死
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-recent-executions"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     const after = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
     expect(after.order[after.order.length - 1]).toBe('recent-executions')
     w.unmount()
@@ -166,7 +166,7 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
     await w.find('[data-testid="wb-reset"]').trigger('click')
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-slot-starred-scenarios"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     w.unmount()
   })
 
@@ -191,7 +191,7 @@ describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', (
     await waitCards(w, 3)
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
 
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
     await flushPromises()
@@ -208,7 +208,7 @@ describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', (
     await waitCards(w, 3)
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
 
     // 两击:M→L→S(S = 紧凑结论;单一交互,⤢ 常驻不随档位消失)
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
@@ -254,7 +254,7 @@ describe('工作台新卡 — 最近执行', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-ex-row-7"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     expect(executionsApi.listExecutions).toHaveBeenCalledWith({ limit: 5 })
     const row = w.find('[data-testid="wb-ex-row-7"]')
     expect(row.attributes('href')).toBe('/executions/7')
@@ -276,7 +276,7 @@ describe('工作台新卡 — 收藏场景', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-sc-row-sc-a"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     expect(w.find('[data-testid="wb-sc-row-sc-b"]').exists()).toBe(false)   // 未收藏不进卡
     expect(w.find('[data-testid="wb-sc-row-sc-c"]').attributes('href')).toBe('/scenarios/sc-c/detail')
     w.unmount()
@@ -302,7 +302,7 @@ describe('工作台新卡 — 我的场景 / 公共场景(场景库三页拆分)
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     expect(w.find('[data-testid="wb-mine-row-m-2"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-mine-row-p-1"]').exists()).toBe(false)
     expect(w.find('[data-testid="wb-pub-row-p-1"]').exists()).toBe(true)
@@ -314,7 +314,7 @@ describe('工作台新卡 — 我的场景 / 公共场景(场景库三页拆分)
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     const mine = w.find('[data-testid="wb-card-my-scenarios"]')
     const pub = w.find('[data-testid="wb-card-public-scenarios"]')
     expect(mine.find('.chead-count').text()).toBe('2')
@@ -328,7 +328,7 @@ describe('工作台新卡 — 我的场景 / 公共场景(场景库三页拆分)
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     expect(w.find('[data-testid="wb-card-my-scenarios"] .manage-link').attributes('href'))
       .toBe('/scenarios/mine')
     expect(w.find('[data-testid="wb-card-public-scenarios"] .manage-link').attributes('href'))

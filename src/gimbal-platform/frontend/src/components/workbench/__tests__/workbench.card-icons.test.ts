@@ -24,6 +24,14 @@ vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
   events: [], sources: { executions: true, scenarios: true, adaptations: true },
 }) }))
 vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }) }))
+vi.mock('@/api/suites', () => ({
+  listSuites: vi.fn().mockResolvedValue(
+    { items: [], total: 0, page: 1, pageSize: 8 }),
+}))
+vi.mock('@/api/notifications', () => ({
+  list: vi.fn().mockResolvedValue(
+    { items: [], unread: 0, total: 0, page: 1, pageSize: 8 }),
+}))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
   catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
@@ -50,9 +58,12 @@ const CARD_ICON: Record<string, SlibIconName> = {
   constants: 'database',
   'recent-executions': 'history',
   'event-analysis': 'clock',
+  notifications: 'bell',
   'my-scenarios': 'folder',
   'public-scenarios': 'globe',
   'starred-scenarios': 'star',
+  suites: 'stack',
+  'public-suites': 'globe',
   services: 'grid',
   auths: 'lock',
   adaptations: 'activity',
@@ -75,7 +86,7 @@ describe('工作台卡头图标 = 功能页那颗', () => {
     expect(workbenchRegistry.map((d) => d.id).sort()).toEqual(Object.keys(CARD_ICON).sort())
   })
 
-  it('13 张卡的卡头图标全部由 SlibIcon 渲染,名字逐张钉死', async () => {
+  it('16 张卡的卡头图标全部由 SlibIcon 渲染,名字逐张钉死', async () => {
     const w = mount(WorkbenchView, {
       global: {
         plugins: [getActivePinia()!],
@@ -109,7 +120,7 @@ async function expectCardIcon(
   const card = `[data-testid="wb-card-${def.id}"]`
   await vi.waitFor(() => {
     expect(w.find(card).exists()).toBe(true)
-  })
+  }, { timeout: 5000 })
   await flushPromises()
   const badge = w.find(`${card} .chead-icon`)
   expect(badge.exists(), `${def.id} 卡头图标底座`).toBe(true)

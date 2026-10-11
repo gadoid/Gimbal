@@ -39,7 +39,7 @@
       <p>加载失败</p>
       <button type="button" class="cta" @click="reload">重试</button>
     </div>
-    <div v-else-if="!filtered.length" class="card-empty" data-testid="suites-public-empty">
+    <div v-else-if="!items.length" class="card-empty" data-testid="suites-public-empty">
       <p>{{ filtering ? '没有匹配的公共用例集 — 换个关键词或筛选条件' : '暂无公共用例集 —— 属主在我的用例集「⋯」菜单发布后出现在这里' }}</p>
     </div>
 
@@ -56,7 +56,7 @@
         </thead>
         <tbody>
           <tr
-            v-for="s in filtered"
+            v-for="s in items"
             :key="s.suiteId"
             class="slib-row"
             :data-testid="`public-suite-${s.suiteId}`"
@@ -85,6 +85,15 @@
       </table>
     </div>
 
+    <Pagination
+      v-if="pageCount > 1"
+      v-model:page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      show-page-size
+      show-jump
+    />
+
     <p class="slib-note">
       公共用例集没有「+ 新建」——创建永远发生在我的用例集,这里只做浏览与复用。复制得到的是完整深拷贝:编排结构、成员场景与数据集一并落地为自己的私有副本,与源互不影响;源后续的修改不会同步到副本。
     </p>
@@ -92,10 +101,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import { Pagination } from '@/components/ui/pagination'
 import { forkPublicSuite, listSuites, type SuiteSummary } from '@/api/suites'
+import { usePagerSize } from '@/composables/usePagerSize'
 import { MODE_LABEL } from '@/utils/suiteStructure'
 import { toast } from '@/utils/toast'
 
@@ -105,6 +116,11 @@ const loading = ref(true)
 const error = ref(false)
 const q = ref('')
 const modeFilter = ref('')
+// 服务端分页(搜索含发布者名/模式过滤同样走服务端 —— q 由后端在
+// 分页前匹配 name/description/属主名,客户端不再二次过滤当前页)
+const total = ref(0)
+const page = ref(1)
+const { pageSize } = usePagerSize('suite-public', 20)
 
 const modeFilters = [
   { key: '', label: '全部' },
@@ -117,28 +133,49 @@ const modeFilters = [
 const filtering = computed(() =>
   Boolean(q.value.trim() || modeFilter.value))
 
-const filtered = computed(() => {
-  const needle = q.value.trim().toLowerCase()
-  return items.value
-    .filter((s) => !modeFilter.value || s.mode === modeFilter.value)
-    .filter((s) => !needle
-      || s.name.toLowerCase().includes(needle)
-      || (s.description || '').toLowerCase().includes(needle)
-      || (s.ownerName || '').toLowerCase().includes(needle))
-})
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 async function load(): Promise<void> {
   loading.value = true
   error.value = false
   try {
-    const env = await listSuites({ visibility: 'public', page_size: 100 })
+    const env = await listSuites({
+      visibility: 'public',
+      q: q.value.trim() || undefined,
+      mode: modeFilter.value || undefined,
+      page: page.value, page_size: pageSize.value,
+    })
     items.value = env.items
+    total.value = env.total
+    if (env.items.length === 0 && page.value > 1) {
+      page.value = Math.max(1, Math.ceil(env.total / pageSize.value))
+      return
+    }
   } catch {
     error.value = true
   } finally {
     loading.value = false
   }
 }
+
+// 搜索(防抖)/模式筛选 → 回第 1 页重拉;翻页直接拉
+let qTimer: ReturnType<typeof setTimeout> | undefined
+watch(q, () => {
+  clearTimeout(qTimer)
+  qTimer = setTimeout(() => {
+    if (page.value !== 1) page.value = 1
+    else void load()
+  }, 300)
+})
+watch(modeFilter, () => {
+  if (page.value !== 1) page.value = 1
+  else void load()
+})
+watch(page, () => void load())
+watch(pageSize, () => {
+  if (page.value !== 1) page.value = 1
+  else void load()
+})
 
 function reload(): void {
   void load()

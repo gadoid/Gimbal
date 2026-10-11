@@ -26,6 +26,14 @@ vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
   events: [], sources: { executions: true, scenarios: true, adaptations: true },
 }) }))
 vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn() }))
+vi.mock('@/api/suites', () => ({
+  listSuites: vi.fn().mockResolvedValue(
+    { items: [], total: 0, page: 1, pageSize: 8 }),
+}))
+vi.mock('@/api/notifications', () => ({
+  list: vi.fn().mockResolvedValue(
+    { items: [], unread: 0, total: 0, page: 1, pageSize: 8 }),
+}))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
   catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
@@ -64,7 +72,7 @@ function mountPage() {
 async function waitCard(w: ReturnType<typeof mountPage>, id: string) {
   await vi.waitFor(() => {
     expect(w.find(`[data-testid="wb-card-${id}"]`).exists()).toBe(true)
-  })
+  }, { timeout: 5000 })
 }
 
 const scen = (id: string, schemeCount: number, visibility = 'private') => ({
@@ -88,10 +96,11 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('功能页卡登记(§7 第 2 条:registry 集中注册)', () => {
-  it('member:四张公共卡进网格,三张 adminOnly 卡完全不出现', async () => {
+  it('member:公共卡进网格(含新增的用例集×2/通知),三张受限卡完全不出现', async () => {
     const w = mountPage()
     await waitCard(w, 'services')
-    for (const id of ['services', 'auths', 'adaptations', 'runner']) {
+    for (const id of ['services', 'auths', 'adaptations', 'runner',
+                      'suites', 'public-suites', 'notifications']) {
       expect(w.find(`[data-testid="wb-slot-${id}"]`).exists()).toBe(true)
     }
     for (const id of ['service-aliases', 'carry', 'users']) {

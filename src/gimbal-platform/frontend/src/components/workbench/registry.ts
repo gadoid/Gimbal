@@ -89,6 +89,13 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     component: () => import('./EventAnalysisCard.vue'),
   },
   {
+    id: 'notifications',
+    title: '通知',
+    description: '未读数与最近通知,直达通知中心',
+    accent: 'gold',
+    component: () => import('./NotificationsCard.vue'),
+  },
+  {
     id: 'my-scenarios',
     title: '我的场景',
     description: '私有编排速览 — 最近编辑直达 + 过期提醒',
@@ -108,6 +115,20 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     description: '★ 关注的场景快捷入口,直达场景详情;卡头进关注页',
     accent: 'gold',
     component: () => import('./StarredScenariosCard.vue'),
+  },
+  {
+    id: 'suites',
+    title: '我的用例集',
+    description: '最近的用例集与运行状态,直达管理页',
+    accent: 'blue',
+    component: () => import('./SuitesCard.vue'),
+  },
+  {
+    id: 'public-suites',
+    title: '公共用例集',
+    description: '公共库最新上架的用例集与贡献者,直达只读页',
+    accent: 'green',
+    component: () => import('./PublicSuitesCard.vue'),
   },
   {
     id: 'services',

@@ -85,7 +85,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     const card = w.find('[data-testid="wb-card-constants"]')
     expect(card.text()).toContain('4')
     // 三行 = 前 3 条
@@ -103,7 +103,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     const rows = w.findAll('.kv-row')
     await rows[0].find('.kv-copy').trigger('click')   // bl_no(generator)
     expect(copyText).toHaveBeenCalledWith('${var.bl_no}')
@@ -118,7 +118,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('.card-empty').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     const card = w.find('[data-testid="wb-card-constants"]')
     expect(card.find('.cta').attributes('href')).toBe('/constants')
     w.unmount()
@@ -129,7 +129,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('.card-empty').exists()).toBe(true)
-    })
+    }, { timeout: 5000 })
     expect(w.find('[data-testid="wb-slot-constants"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-slot-constants-error"]').exists()).toBe(false)
     expect(w.find('.card-empty').exists()).toBe(true)

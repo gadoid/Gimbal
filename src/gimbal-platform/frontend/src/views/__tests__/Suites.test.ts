@@ -130,14 +130,18 @@ describe('SuiteLibrary — 列表(02)', () => {
     w.unmount()
   })
 
-  it('模式筛选过滤;「+ 新建 Suite」直进画布(/suites/new,不先落库)', async () => {
-    vi.mocked(suitesApi.listSuites).mockResolvedValue({
-      items: [
+  it('模式筛选过滤(服务端 mode 参数);「+ 新建 Suite」直进画布(/suites/new,不先落库)', async () => {
+    // 筛选已下推服务端:mock 按参数响应(与真实 /suites?mode= 同语义)
+    vi.mocked(suitesApi.listSuites).mockImplementation(async (params?: {
+      mode?: string; q?: string;
+    }) => {
+      const all = [
         suiteItem({ suiteId: 1, mode: 'aggregate' }),
         suiteItem({ suiteId: 2, mode: 'chain' }),
-      ],
-      total: 2, page: 1, pageSize: 100,
-    } as never)
+      ]
+      const items = all.filter((s) => !params?.mode || s.mode === params.mode)
+      return { items, total: items.length, page: 1, pageSize: 20 } as never
+    })
     const router = routerWith()
     const push = vi.spyOn(router, 'push')
     const w = mount(SuiteLibrary, {
@@ -146,7 +150,11 @@ describe('SuiteLibrary — 列表(02)', () => {
     await flushPromises()
 
     await w.find('[data-testid="suite-filter-chain"]').trigger('click')
+    await flushPromises()
     expect(w.findAll('tr[data-testid^="suite-row-"]').length).toBe(1)
+    // 筛选请求带上服务端参数(分页前过滤,不再只过滤当前页)
+    expect(suitesApi.listSuites).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'chain' }))
 
     await w.find('[data-testid="suite-create"]').trigger('click')
     await flushPromises()
@@ -399,14 +407,24 @@ describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
     vi.clearAllMocks()
   })
 
-  it('列表渲染公共 Suite(含发布者列);搜索与模式筛选客户端过滤;空态提示发布入口', async () => {
-    vi.mocked(suitesApi.listSuites).mockResolvedValue({
-      items: [
+  it('列表渲染公共 Suite(含发布者列);搜索/模式筛选走服务端参数;空态提示发布入口', async () => {
+    // 筛选已下推服务端:mock 按参数响应(mode + q 匹配 name/desc/owner)
+    vi.mocked(suitesApi.listSuites).mockImplementation(async (params?: {
+      mode?: string; q?: string;
+    }) => {
+      const all = [
         suiteItem({ suiteId: 7, name: '公共冒烟集', visibility: 'public', mode: 'chain', ownerName: 'alice' }),
         suiteItem({ suiteId: 8, name: '回归集', visibility: 'public', mode: 'aggregate', ownerName: 'bob' }),
-      ],
-      total: 2, page: 1, pageSize: 100,
-    } as never)
+      ]
+      const items = all
+        .filter((s) => !params?.mode || s.mode === params.mode)
+        .filter((s) => {
+          const n = (params?.q || '').toLowerCase()
+          return !n || s.name.toLowerCase().includes(n)
+            || (s.ownerName || '').toLowerCase().includes(n)
+        })
+      return { items, total: items.length, page: 1, pageSize: 20 } as never
+    })
     const router = routerWith()
     const w = mount(SuitesPublic, {
       global: { plugins: [router], stubs: { RouterLink: linkStub } },
@@ -422,15 +440,23 @@ describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
     expect(row7.text()).toContain('alice')
     expect(w.find('[data-testid="suites-public-back-mine"]').attributes('href')).toBe('/suites')
 
-    // 模式筛选:只剩聚合
+    // 模式筛选:请求带 mode=aggregate,只剩聚合
     await w.find('[data-testid="suites-public-filter-aggregate"]').trigger('click')
+    await flushPromises()
     expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
     expect(w.find('[data-testid="public-suite-8"]').exists()).toBe(true)
+    expect(suitesApi.listSuites).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'aggregate' }))
 
-    // 搜索叠加:发布者名可命中
+    // 搜索(防抖 300ms 后发请求):发布者名可命中
     await w.find('[data-testid="suites-public-filter-all"]').trigger('click')
+    await flushPromises()
     await w.find('[data-testid="suites-public-search"]').setValue('bob')
+    await new Promise((r) => setTimeout(r, 350))
+    await flushPromises()
     expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
+    expect(suitesApi.listSuites).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'bob' }))
     w.unmount()
 
     vi.mocked(suitesApi.listSuites).mockResolvedValue({

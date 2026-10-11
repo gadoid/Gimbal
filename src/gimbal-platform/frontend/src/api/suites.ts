@@ -178,6 +178,10 @@ export interface SuiteLookupItem {
 export async function listSuites(params?: {
   scope?: 'mine' | 'all'
   visibility?: 'public'
+  /** 服务端搜索(name/description 子串,大小写不敏感) */
+  q?: string
+  /** 运行模式过滤(aggregate/chain/fanout/compose) */
+  mode?: string
   page?: number
   page_size?: number
 }): Promise<SuitePage> {

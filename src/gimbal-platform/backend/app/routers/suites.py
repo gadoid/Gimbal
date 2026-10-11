@@ -228,6 +228,8 @@ async def list_suites(
     user: CurrentUser, db: DbSession,
     scope: Literal["mine", "all"] = "all",
     visibility: str | None = None,
+    q: str = Query(default="", max_length=128),
+    mode: str = Query(default=""),
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> SuitePageOut:
@@ -256,6 +258,28 @@ async def list_suites(
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()
+    # 搜索/模式过滤在分页前(与场景库 q 同口径:name/description 子串,
+    # 大小写不敏感;公共页搜索面还含发布者名 —— 候选集先批量取属主名
+    # 再一并匹配)。列表页已服务端分页 —— 过滤留在取数侧,客户端不再
+    # 对"当前页"二次过滤(那会跨页丢行)。
+    candidate_owner_names: dict[int, str] = {}
+    if q:
+        from ..models.user import User as _User
+        needle = q.strip().lower()
+        _cand_owner_ids = {s.owner_id for s in rows}
+        _cand_rows = (await db.execute(
+            select(_User.id, _User.display_name, _User.username).where(
+                _User.id.in_(_cand_owner_ids))
+        )).all() if _cand_owner_ids else []
+        candidate_owner_names = {
+            r.id: (r.display_name or r.username or "").lower()
+            for r in _cand_rows}
+        rows = [s for s in rows
+                if needle in (s.name or "").lower()
+                or needle in (s.description or "").lower()
+                or needle in candidate_owner_names.get(s.owner_id, "")]
+    if mode:
+        rows = [s for s in rows if s.mode == mode]
     total = len(rows)
     start = (page - 1) * page_size
     page_rows = rows[start : start + page_size]

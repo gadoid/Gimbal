@@ -123,6 +123,63 @@ async def test_list_visibility_public(client: AsyncClient) -> None:
     assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
 
 
+async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
+    """列表页服务端分页配套:q(name/description/发布者名)与 mode 过滤
+    在分页前生效,total 反映过滤后的全集(客户端不再二次过滤当前页)。"""
+    admin = await register_and_login(client, "qp_admin", "qp_admin_pass123")
+    owner = await register_and_login(client, "qp_owner", "qp_owner_pass123")
+    bob = await register_and_login(client, "qp_bob", "qp_bob_pass123")
+
+    # owner 名下发布一个公共 suite(bob 之后按发布者名搜得到)
+    await _mk_scenario(client, owner, "sc-qp-1")
+    pub = await _mk_suite(client, owner, "公共回归集")
+    r = await client.post(f"/api/suites/{pub}/members", headers=owner,
+                          json={"scenarioIds": ["sc-qp-1"]})
+    assert r.status_code == 200, r.text
+    assert (await client.post(f"/api/suites/{pub}/publish", headers=owner)
+            ).status_code == 200
+
+    # bob 名下:两个 suite(新建默认 aggregate 模式),一个带描述
+    s1 = await _mk_suite(client, bob, "冒烟集")
+    s2 = await _mk_suite(client, bob, "下单链路")
+    r = await client.patch(f"/api/suites/{s2}", headers=bob,
+                           json={"description": "下单主链路的回归"})
+    assert r.status_code == 200, r.text
+
+    # q 按名称命中
+    r = await client.get("/api/suites?q=冒烟", headers=bob)
+    assert r.status_code == 200
+    assert [s["name"] for s in r.json()["items"]] == ["冒烟集"]
+    assert r.json()["total"] == 1
+
+    # q 按描述命中(子串,大小写不敏感)
+    r = await client.get("/api/suites?q=主链路", headers=bob)
+    assert [s["name"] for s in r.json()["items"]] == ["下单链路"]
+
+    # q 按发布者名命中公共页口径(owner 的 display_name/username)
+    r = await client.get(
+        "/api/suites?visibility=public&q=qp_owner", headers=bob)
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+
+    # mode 过滤:bob 名下(镜头 mine)都是默认 aggregate;chain 命中 0
+    r = await client.get("/api/suites?scope=mine&mode=chain", headers=bob)
+    assert r.json()["total"] == 0
+    r = await client.get("/api/suites?scope=mine&mode=aggregate", headers=bob)
+    assert {s["name"] for s in r.json()["items"]} == {"冒烟集", "下单链路"}
+
+    # 分页:page_size=1 翻页,total 不随分页缩水(镜头 mine = bob 的 2 个)
+    r = await client.get("/api/suites?scope=mine&page=1&page_size=1", headers=bob)
+    assert len(r.json()["items"]) == 1 and r.json()["total"] == 2
+    r = await client.get("/api/suites?scope=mine&page=2&page_size=1", headers=bob)
+    assert len(r.json()["items"]) == 1 and r.json()["total"] == 2
+
+    # q × 分页组合:过滤后的全集再分页(只剩 1 条 → 第 2 页空)
+    r = await client.get("/api/suites?q=冒烟&page=2&page_size=1", headers=bob)
+    assert r.json()["items"] == [] and r.json()["total"] == 1
+
+    _ = admin, s1, s2  # noqa: F841 — admin/创建句柄仅用于身份与断言上下文
+
+
 async def test_member_cap_409(client: AsyncClient, monkeypatch) -> None:
     """§6.3 SUITE_MEMBER_CAP:超上限批量加入 → 409,已加入的不留半批
     (异常分支 rollback)。cap 压到 3 验证边界(不必真造 100 个场景)。"""

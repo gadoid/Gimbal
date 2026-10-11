@@ -53,7 +53,7 @@
       <p>加载失败</p>
       <button type="button" class="cta" @click="load">重试</button>
     </div>
-    <div v-else-if="!filtered.length" class="card-empty">
+    <div v-else-if="!items.length" class="card-empty">
       <p>还没有 Suite —— 新建一个,把场景归组并编排它们怎么跑</p>
     </div>
 
@@ -71,7 +71,7 @@
         </thead>
         <tbody>
           <tr
-            v-for="s in filtered"
+            v-for="s in items"
             :key="s.suiteId"
             class="slib-row"
             :data-testid="`suite-row-${s.suiteId}`"
@@ -154,6 +154,15 @@
       </table>
     </div>
 
+    <Pagination
+      v-if="pageCount > 1"
+      v-model:page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      show-page-size
+      show-jump
+    />
+
     <!-- 「共享给我的」独立分区(§7.11:不进镜头) -->
     <div v-if="sharedInSuites.length" class="shared-in" data-testid="shared-in-suites">
       <p class="shared-in-label">共享给我的(引用)</p>
@@ -198,11 +207,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import SuiteRunPreflight from '@/components/suites/SuiteRunPreflight.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
+import { Pagination } from '@/components/ui/pagination'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -213,6 +223,7 @@ import {
 } from '@/api/suites'
 import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
 import { useAuthStore } from '@/stores/auth'
+import { usePagerSize } from '@/composables/usePagerSize'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 import { promptAction, confirmAction } from '@/utils/confirmAction'
@@ -226,12 +237,17 @@ const q = ref('')
 const status = ref<'loading' | 'ready' | 'error'>('loading')
 const items = ref<SuiteSummary[]>([])
 const modeFilter = ref('')
+// 服务端分页(搜索/模式过滤也走服务端 —— 客户端只过滤当前页会跨页丢行)
+const total = ref(0)
+const page = ref(1)
+const { pageSize } = usePagerSize('suite-library', 20)
 
 // 浏览镜头(§5.1):默认我的;admin 可切全员视角(记本地)
 const lensAll = ref(false)
 const lensAvailable = computed(() => !!auth.isAdmin)
 function toggleLens(): void {
   lensAll.value = !lensAll.value
+  page.value = 1
   void load()
 }
 
@@ -243,26 +259,47 @@ const modeFilters = [
   { key: 'compose', label: MODE_LABEL.compose },
 ]
 
-const filtered = computed(() => {
-  const needle = q.value.trim().toLowerCase()
-  return items.value
-    .filter((s) => !modeFilter.value || s.mode === modeFilter.value)
-    .filter((s) => !needle
-      || s.name.toLowerCase().includes(needle)
-      || (s.description || '').toLowerCase().includes(needle))
-})
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 const subtitle = computed(() => lensAll.value
-  ? `一组场景及其运行编排 · 共 ${filtered.value.length} 个 · 全员视角`
-  : `一组场景及其运行编排 · 共 ${filtered.value.length} 个 · 你创建的(草稿也在这里,带「草稿」标记)`)
+  ? `一组场景及其运行编排 · 共 ${total.value} 个 · 全员视角`
+  : `一组场景及其运行编排 · 共 ${total.value} 个 · 你创建的(草稿也在这里,带「草稿」标记)`)
+
+// 搜索(防抖)/模式筛选 → 回第 1 页重拉;翻页直接拉
+let qTimer: ReturnType<typeof setTimeout> | undefined
+watch(q, () => {
+  clearTimeout(qTimer)
+  qTimer = setTimeout(() => {
+    if (page.value !== 1) page.value = 1
+    else void load()
+  }, 300)
+})
+watch(modeFilter, () => {
+  if (page.value !== 1) page.value = 1
+  else void load()
+})
+watch(page, () => void load())
+watch(pageSize, () => {
+  if (page.value !== 1) page.value = 1
+  else void load()
+})
 
 async function load(): Promise<void> {
   status.value = 'loading'
   try {
     const env = await listSuites({
-      scope: lensAll.value ? 'all' : 'mine', page_size: 100,
+      scope: lensAll.value ? 'all' : 'mine',
+      q: q.value.trim() || undefined,
+      mode: modeFilter.value || undefined,
+      page: page.value, page_size: pageSize.value,
     })
     items.value = env.items
+    total.value = env.total
+    // 末页被删空 → 回收到有效页(与 AdaptationCenter 批次表同款)
+    if (env.items.length === 0 && page.value > 1) {
+      page.value = Math.max(1, Math.ceil(env.total / pageSize.value))
+      return
+    }
     status.value = 'ready'
   } catch {
     status.value = 'error'
