@@ -84,7 +84,7 @@
               />
             </span>
           </div>
-          <p class="c-inline-hint">retryOn: {{ local.retry.retryOn.length ? local.retry.retryOn.join(', ') : '(空 — 默认不限定)' }}</p>
+          <p class="c-inline-hint">retryOn: {{ local.retry?.retryOn?.length ? local.retry.retryOn.join(', ') : '(空 — 默认不限定)' }}</p>
         </template>
       </div>
     </div>

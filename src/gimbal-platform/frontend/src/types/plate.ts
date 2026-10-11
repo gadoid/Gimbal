@@ -291,6 +291,8 @@ export type {
   RetryPolicyView, UserAuthView, TimePolicyView,
   ScenarioView, MockView, FileView, ResourceView,
 } from '@/types/m2-bridge'
+// 本文件内的 helper 函数也需要引用这些类型
+import type { StepView, CallView } from '@/types/m2-bridge'
 
 // ─── step 调用信息读取辅助(前端统一入口,call 单读) ───
 
@@ -322,15 +324,15 @@ export function stepHeaders(step: StepLike): Record<string, string> {
 
 /** 从 step 读 service。 */
 export function stepService(step: StepLike): string {
-  return stepCall(step)?.service || ''
+  return String(stepCall(step)?.service ?? '')
 }
 
 /** 从 step 读 method。 */
 export function stepMethod(step: StepLike): string {
-  return stepCall(step)?.method || ''
+  return String(stepCall(step)?.method ?? '')
 }
 
 /** 从 step 读 path。 */
 export function stepPath(step: StepView | Record<string, unknown> | undefined | null): string {
-  return stepCall(step)?.path || ''
+  return String(stepCall(step)?.path ?? '')
 }

@@ -136,7 +136,7 @@
             <CaseComposerMeta
               v-if="stepIdx === 0"
               key="meta"
-              v-model="definition.meta"
+              :model-value="definition.meta as never" @update:model-value="definition.meta = $event"
             />
 
             <!-- ② Resource -->
@@ -308,7 +308,7 @@ import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { useRunAssembly } from '@/composables/useRunAssembly'
-import type { FieldState, ScenarioView, StepView } from '@/types/plate'
+import type { FieldState, MetaView, ScenarioView, StepView } from '@/types/plate'
 import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 
 const STEPS = [

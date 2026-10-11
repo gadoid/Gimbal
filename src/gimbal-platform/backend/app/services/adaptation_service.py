@@ -1274,8 +1274,20 @@ async def _clear_scheme_step_to(db: AsyncSession, scenario_id: str) -> int:
     cleared = 0
     for r in rows:
         p = r.payload or {}
-        if isinstance(p, dict) and p.get("stepTo") is not None:
-            r.payload = {**p, "stepTo": None}
+        if not isinstance(p, dict):
+            continue
+        # M10 RunOptions 迁移后 stepTo 住在 payload.options.step_to;
+        # 旧平铺 stepTo 仍可能存在于未迁移的存量行——两处都查
+        changed = False
+        opts = p.get("options")
+        if isinstance(opts, dict) and opts.get("step_to") is not None:
+            p = {**p, "options": {**opts, "step_to": None}}
+            changed = True
+        if p.get("stepTo") is not None:
+            p = {**p, "stepTo": None}
+            changed = True
+        if changed:
+            r.payload = p
             cleared += 1
     return cleared
 

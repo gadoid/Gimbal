@@ -846,8 +846,16 @@ async def import_scenario(
             "message": e.message}) from e
     from ..schemas.scenario_composer import ScenarioDraft
     draft = ScenarioDraft(definition=definition)
-    created = await scenario_store.create(
-        db, draft, owner=user.display_name or user.username,
-        owner_id=user.id)
+    try:
+        created = await scenario_store.create(
+            db, draft, owner=user.display_name or user.username,
+            owner_id=user.id)
+    except ValueError as e:
+        if "scenario_id_exists" in str(e):
+            raise HTTPException(409, detail={
+                "code": "scenario_id_exists",
+                "message": (f"场景 ID {definition.get('scenarioId', '?')} "
+                            "已存在——修改 scenarioId 后重试")}) from e
+        raise
     return {"scenario_id": created.meta.scenario_id,
             "meta_plate": meta_plate}

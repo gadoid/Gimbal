@@ -29,12 +29,16 @@ import type {
 /** 工具:把 T 的指定键从可选变为必填(平台写入时保证这些字段) */
 type WithRequired<T, K extends keyof T> = T & Required<Pick<T, K>>
 
-/** @deprecated use Meta from '@/types/m2' */
-export type MetaView = Meta
+/** @deprecated use Meta from '@/types/m2'(平台采集面保证 tags/system 在场) */
+export type MetaView = WithRequired<Meta, 'system' | 'tags'>
 /** @deprecated use Config from '@/types/m2'（平台旁挂 var_locks 用交叉类型） */
 export type ConfigView = Omit<WithRequired<Config,
   'services' | 'users' | 'timePolicy' | 'retry' | 'vars'>,
-  'setup' | 'teardown'> & { setup: unknown[]; teardown: unknown[]; var_locks?: string[] }
+  'setup' | 'teardown' | 'users' | 'timePolicy'> & {
+    setup: unknown[]; teardown: unknown[]; var_locks?: string[];
+    users: Record<string, UserAuthView>;
+    timePolicy: TimePolicyView;
+  }
 /** @deprecated use Step from '@/types/m2' */
 export type StepView = Omit<Step, 'call' | 'strategy'> & {
   call: CallView
@@ -54,12 +58,15 @@ export type AssertionView = Assertion
 export type StrategyView = Extract | Assign | Assertion
 /** @deprecated use RetryPolicy from '@/types/m2' */
 export type RetryPolicyView = WithRequired<RetryPolicy, 'maxAttempts' | 'backoffSeconds' | 'retryOn'>
-/** @deprecated use UserCredential from '@/types/m2' */
-export type UserAuthView = UserCredential
+/** @deprecated use UserCredential from '@/types/m2'(expires_in 平台侧无 null) */
+export type UserAuthView = Omit<UserCredential, 'expires_in'> & { expires_in?: number }
 /** @deprecated use (TimeoutPolicy | RecordPolicy) from '@/types/m2' */
 export type TimePolicyView = TimeoutPolicy | RecordPolicy
-/** @deprecated use Scenario from '@/types/m2' */
-export type ScenarioView = WithRequired<Scenario, 'kind'>
+/** @deprecated use Scenario from '@/types/m2'(resource 平台侧=ResourceView 联合) */
+export type ScenarioView = WithRequired<Scenario, 'kind'> & {
+  resource: Record<string, ResourceView>
+  config: ConfigView
+}
 /** @deprecated use Mock from '@/types/m2' */
 export type MockView = WithRequired<Mock, 'kind' | 'name' | 'image' | 'config' | 'portMapping'>
 /** @deprecated use File from '@/types/m2' */

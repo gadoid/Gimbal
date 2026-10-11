@@ -179,7 +179,7 @@ def scenario(
         ctx.obj, source, fmt, expect_kind="scenario",
         env=env, mode=mode, log_level=log_level,
         reporter=reporter, report_dir=report_dir, output=output,
-        step_from=step_from, step_to=step_to, halt_at=halt_at,
+        step_from=step_from, step_to=step_to,
         where=where,
     )
 

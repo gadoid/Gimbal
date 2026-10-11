@@ -650,7 +650,12 @@ def to_list_item_shape(
 
 
 async def _bump_verified_to_effective(db, row: ComposerScenario) -> None:
-    """已验证修订 → 生效修订(版本模型 4.1;调用方已兜异常)。"""
+    """已验证修订 → 生效修订(版本模型 4.1;调用方已兜异常)。
+
+    只在 resolve 报告「全部用到的接口结构一致」时推进——有接口
+    结构变化(changed_endpoints 非空)时保持原值,让用户经适配中心
+    处理(推进会掩盖结构不匹配,执行时报 ENDPOINT_NOT_IN_RELEASE)。
+    """
     from . import plate_client
     payload = row.payload or {}
     definition = definition_from_payload(payload)
@@ -672,6 +677,10 @@ async def _bump_verified_to_effective(db, row: ComposerScenario) -> None:
         resolvable, {s: endpoints[s] for s in resolvable})
     changed = False
     for system, info in resolved.items():
+        # 有结构变化的接口 → 不推进(须先适配;推进会让新接口在
+        # 执行时报 ENDPOINT_NOT_IN_RELEASE)
+        if info.get("changed_endpoints"):
+            continue
         eff = info.get("effective")
         if eff and eff != meta_plate.get(system):
             meta_plate[system] = eff

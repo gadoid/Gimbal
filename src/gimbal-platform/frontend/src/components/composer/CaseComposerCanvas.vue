@@ -129,7 +129,7 @@
                 <span class="pp-name mono" v-text="'{' + n + '}'" />
                 <input
                   class="pp-input"
-                  :value="currentStep.call?.path_params?.[n] ?? ''"
+                  :value="(currentStep.call?.path_params as Record<string, string> | undefined)?.[n] ?? ''"
                   :placeholder="'{' + n + '}'"
                   @input="(e: any) => setPathParam(n, e.target.value)"
                 />
@@ -278,7 +278,7 @@
                   :overlay="fsOf(currentStep)"
                   :query-badges="vsBadges"
                   @strategy-jump="onStrategyJump"
-                  @update:body="(v: unknown) => { if (currentStep.request) currentStep.request.body = v }"
+                  @update:body="(v: unknown) => { if (currentStep.request) (currentStep.request as Record<string, unknown>).body = v }"
                   @field-extract="(f) => onFieldExtract(f, 'request')"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
                   @field-assert="(f) => onFieldAssert(f, 'request')"
@@ -510,7 +510,7 @@
         <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
              消费都发生在本页,就近总览;草稿级数据,无选中 step 也常驻 -->
         <VariableRegistryPanel
-          :steps="local"
+          :steps="local as unknown as never[]"
           :config-vars="draftStore.draft?.definition?.config?.vars"
         />
 
@@ -744,7 +744,7 @@ function setPathParam(name: string, value: string): void {
   const step = currentStep.value
   const call = stepCall(step)
   if (!call) return
-  const params = { ...(call.path_params ?? {}) }
+  const params = { ...(call.path_params ?? {}) } as Record<string, string>
   if (value) params[name] = value
   else delete params[name]
   if (Object.keys(params).length) call.path_params = params
@@ -815,10 +815,10 @@ async function ensureStrategyDetail(kind: string): Promise<StrategyKindDetailVie
 }
 /** 渲染期同步取 detail(缓存未命中返回 placeholder 并触发懒加载,完成后响应式刷新) */
 function strategyDetail(s: StrategyView): StrategyKindDetailView {
-  const hit = strategyDetailCache.value[s.kind]
+  const hit = strategyDetailCache.value[s.kind!]
   if (hit) return hit
-  void ensureStrategyDetail(s.kind)
-  return { kind: s.kind, label: s.kind, phase: 'verifying', fields: [], base_fields: [] }
+  void ensureStrategyDetail(s.kind!)
+  return { kind: s.kind!, label: s.kind!, phase: 'verifying', fields: [], base_fields: [] }
 }
 
 async function addStrategy(step: StepView, kind: string) {
@@ -1049,7 +1049,7 @@ function onFieldAssert(f: IOFieldBinding, domain: 'request' | 'response') {
     kind: 'assertion',
     target: domain === 'request' ? respPathByName(f) : respPathOf(f),
     operator: 'exists',
-    expected: null,
+    expected: undefined,
     message: '',
     soft: false,
   })
@@ -1471,12 +1471,13 @@ function onVsSelect(row: Record<string, unknown>) {
  *  角标与策略卡头(Task 3 tagLabel)共用 → 对应关系可见。 */
 function strategyTagLabels(strategies: StrategyView[]): string[] {
   const count = new Map<string, number>()
-  for (const s of strategies) count.set(s.kind, (count.get(s.kind) ?? 0) + 1)
+  for (const s of strategies) count.set(s.kind!, (count.get(s.kind!) ?? 0) + 1)
   const seq = new Map<string, number>()
   return strategies.map((s) => {
-    const n = (seq.get(s.kind) ?? 0) + 1
-    seq.set(s.kind, n)
-    return (count.get(s.kind) ?? 0) > 1 ? `${s.kind}_${n}` : s.kind
+    const k = s.kind!
+    const n = (seq.get(k) ?? 0) + 1
+    seq.set(k, n)
+    return (count.get(k) ?? 0) > 1 ? `${k}_${n}` : k
   })
 }
 
@@ -1972,11 +1973,11 @@ function onServiceRefChange(step: StepView, value: string) {
   const headers = (call.headers ||= {})
   for (const k of Object.keys(headers)) {
     if (k.toLowerCase() !== 'authorization') continue
-    if (reg?.credentialAlias || String(headers[k]).startsWith('${auth.'))
-      delete headers[k]
+    if (reg?.credentialAlias || String((headers as Record<string, unknown>)[k]).startsWith('${auth.'))
+      delete (headers as Record<string, unknown>)[k]
   }
   if (reg?.credentialAlias) {
-    headers.Authorization = `$\{auth.${reg.credentialAlias}.token}`
+    ;(headers as Record<string, unknown>).Authorization = `$\{auth.${reg.credentialAlias}.token}`
   }
 }
 
@@ -2048,7 +2049,7 @@ async function onParseSample() {
 function buildInitialStrategies(full: EndpointFullView | undefined): StrategyView[] {
   // 保底第一条: HTTP 层状态断言(与旧行为一致)
   const strategies: StrategyView[] = [
-    { kind: 'assertion', target: toScratchPath('$.status'), operator: 'eq', expected: 200, message: '', soft: false },
+    { kind: 'assertion', target: toScratchPath('$.status'), operator: 'eq', expected: 200 as never, message: '', soft: false },
   ]
   if (!full) return strategies
   const r200 = full.responses?.['200']
@@ -2059,7 +2060,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
     const codeTarget = CODE_TARGET_CANDIDATES.find((c) => assertable.includes(c))
     if (codeTarget) {
       strategies.push({
-        kind: 'assertion', target: toScratchPath(codeTarget), operator: 'eq', expected: 0,
+        kind: 'assertion', target: toScratchPath(codeTarget), operator: 'eq', expected: 0 as never,
         message: successCriteria, soft: false,
       })
     }

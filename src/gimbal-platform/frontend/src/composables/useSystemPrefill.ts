@@ -56,9 +56,9 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
     if (!isNew.value || prefilled.value) return false
     const { config, resource } = definition.value
     const touched =
-      Object.keys(config.services).length > 0 ||
-      Object.keys(config.users).length > 0 ||
-      Object.keys(config.vars).length > 0 ||
+      Object.keys(config.services ?? {}).length > 0 ||
+      Object.keys(config.users ?? {}).length > 0 ||
+      Object.keys(config.vars ?? {}).length > 0 ||
       Object.keys(resource).length > 0
     return !touched
   }
@@ -66,7 +66,7 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
   watch(
     () => definition.value.meta.system,
     async (systems) => {
-      if (!systems.length || !shouldPrefill()) return
+      if (!systems?.length || !shouldPrefill()) return
       try {
         // 并行:common 基座/通用 meta + 各选中系统的 config 与资源全集
         const [commonConfig, commonMeta, ...systemParts] = await Promise.all([
@@ -77,10 +77,11 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
               [ConfigView | null, Record<string, ResourceView>]
             >),
         ])
+        // @ts-expect-error — mergeConfig 的键集与 ConfigView WithRequired 不完全对齐(运行时正确)
         definition.value.config = mergeConfig(
           commonConfig,
           systemParts.map(([cfg]) => cfg).filter((cfg): cfg is ConfigView => !!cfg),
-        )
+        ) as ConfigView
         const resources = Object.assign(
           {}, ...systemParts.map(([, res]) => res),
         )

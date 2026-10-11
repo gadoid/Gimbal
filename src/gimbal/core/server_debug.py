@@ -50,6 +50,7 @@ _REAP_TTL_SEC = 600.0
 def _emit_m2_hash_mismatch(m2_info) -> None:
     """M2 §5.1:hash 不同、代际相同 → m2.hash_mismatch 警告事件(非阻塞)。"""
     from ..events.bus import get_event_bus
+    from gimbal.schema import M2_HASH
     bus = get_event_bus()
     bus.publish({
         "event_type": "m2.hash_mismatch",
