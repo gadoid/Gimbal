@@ -1280,6 +1280,35 @@ async def _clear_scheme_step_to(db: AsyncSession, scenario_id: str) -> int:
     return cleared
 
 
+def _draft_field_ops(field_group: dict) -> list[dict]:
+    """从 R7 field_diff 自动起草字段级 op（§5.4「草案」来源）。
+
+    可起草：新增字段（addField 补骨架值）、删除字段（removeField）、
+    path 占位符改名（renamePathParam）；改名一删一增由用户配对
+    （renameField 用户指定）、值域变化 mapValue 给骨架（map 空）——
+    这两类不在自动草案里。
+    """
+    parts = field_group.get("parts") or {}
+    req = parts.get("request") or {}
+    fd = req.get("field_diff") or {}
+    ops: list[dict] = []
+    step, eid = field_group.get("step"), field_group.get("endpoint")
+    for p in fd.get("removed", []):
+        root = p[2:].split(".")[0].split("[")[0] if p.startswith("$.") else p
+        ops.append({"op": "removeField", "step": step, "field": root,
+                    "endpoint": eid})
+    for p in fd.get("added", []):
+        root = p[2:].split(".")[0].split("[")[0] if p.startswith("$.") else p
+        ops.append({"op": "addField", "step": step, "field": root,
+                    "value": "", "endpoint": eid})
+    binding = parts.get("binding") or {}
+    pp = binding.get("path_placeholders") or {}
+    for old, new in zip(pp.get("from") or [], pp.get("to") or []):
+        ops.append({"op": "renamePathParam", "step": step,
+                    "from": old, "to": new, "endpoint": eid})
+    return ops
+
+
 async def compare_scenario(
     db: AsyncSession, *, scenario_id: str, target_revision: str,
     system: str | None = None,
@@ -1332,11 +1361,17 @@ async def compare_scenario(
         else:
             direct.append({"step": i, "endpoint": eid,
                            "reason": "unchanged"})
+    # §5.4:字段级 op 从差异自动起草（新增/删除/占位符改名）;
+    # 向导提交时作为 ops 初稿,用户可增删
+    drafted_ops: list[dict] = []
+    for fg in field:
+        drafted_ops.extend(_draft_field_ops(fg))
     return {
         "scenario_id": scenario_id, "system": sys_,
         "from": from_ref, "to": target_revision,
         "diff": diff,
         "groups": {"direct": direct, "field": field, "structure": structure},
+        "drafted_ops": drafted_ops,
     }
 
 

@@ -53,6 +53,8 @@ export interface CompareResult {
   to: string
   diff: DiffResult
   groups: ImpactGroups
+  /** §5.4 自动起草的字段级 op 初稿（提交时作为 ops） */
+  drafted_ops: Array<Record<string, unknown>>
 }
 
 /** 保存检查结果（POST /adaptations/save-check） */

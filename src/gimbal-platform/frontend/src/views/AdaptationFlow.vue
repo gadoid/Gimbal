@@ -93,6 +93,15 @@
             <span v-for="(c, p) in fd.changed" :key="p" class="fd-chip chg">~ {{ p }}</span>
           </div>
         </div>
+        <div v-if="compareResult.drafted_ops?.length" class="mf-item">
+          <span class="mf-label">自动起草的适配操作（{{ draftedCount }} 项，提交时应用）</span>
+          <label v-for="(op, i) in compareResult.drafted_ops" :key="i" class="issue-line">
+            <input v-model="opEnabled[i]" type="checkbox" />
+            <span class="mono">{{ op.op }}</span>
+            步骤 {{ Number(op.step) + 1 }} ·
+            {{ op.field ?? op.from ?? '' }}{{ op.to ? ` → ${op.to}` : '' }}
+          </label>
+        </div>
         <Button data-testid="adapt-next-check" @click="goSaveCheck">保存检查 →</Button>
       </template>
     </div>
@@ -193,6 +202,10 @@ const submitResult = ref<SubmitResult | null>(null)
 const reviewConfirmed = ref(false)
 
 const comparing = ref(false)
+const opEnabled = ref<boolean[]>([])
+
+const draftedCount = computed(() =>
+  opEnabled.value.filter(Boolean).length)
 const checking = ref(false)
 
 const staleScenarios = ref<
@@ -252,6 +265,7 @@ async function goCompare() {
   try {
     compareResult.value = await compareScenario(
       scenarioId.value, targetRevision.value)
+    opEnabled.value = (compareResult.value?.drafted_ops || []).map(() => true)
   } finally {
     comparing.value = false
   }
@@ -273,7 +287,10 @@ async function goSaveCheck() {
 async function doSubmit(mode: 'direct' | 'copy') {
   try {
     submitResult.value = await submitAdaptation(
-      scenarioId.value, [], targetRevision.value, mode,
+      scenarioId.value,
+      (compareResult.value?.drafted_ops || []).filter(
+        (_, i) => opEnabled.value[i] !== false),
+      targetRevision.value, mode,
       reviewConfirmed.value)
   } catch (e) {
     submitResult.value = {
@@ -291,6 +308,7 @@ function reset() {
   checkResult.value = null
   submitResult.value = null
   reviewConfirmed.value = false
+  opEnabled.value = []
 }
 </script>
 
