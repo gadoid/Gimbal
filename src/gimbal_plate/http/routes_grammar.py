@@ -170,6 +170,34 @@ def _artifacts_root_or_503(request: Request) -> Any:
             message=str(e))
 
 
+@router.get("/system/{system_id}/endpoint")
+def list_endpoint_for_system(
+    system_id: str,
+    request: Request,
+    service: str | None = Query(None),
+    q: str | None = Query(None),
+    per_page: int = Query(500, ge=1, le=1000),
+) -> dict[str, Any]:
+    """系统作用域的接口目录（RS1/Release 6.1:带 ref 按修订过滤）。
+
+    全局路由 ``GET /api/endpoint`` 不带系统，ref 无从解析——本路由
+    用 ``_registry(request, system_id)`` 装载该系统该修订的快照。
+    """
+    reg = _registry(request, system_id)
+    spec = reg.index_for("endpoint")
+    if spec is None:
+        raise PlateHTTPError(
+            http_status=404, code=ErrorCode.DIM_NOT_FOUND,
+            message="unknown dim 'endpoint'")
+    filters: dict[str, Any] = {
+        k: v for k, v in {"service": service, "q": q}.items()
+        if v is not None
+    }
+    raw_items = spec.index.list_global(filters=filters)[:per_page]
+    items = [spec.index.to_view(it) for it in raw_items]
+    return ok_response({"items": items, "total": len(items)}, dim="endpoint")
+
+
 @router.get("/system/{system_id}/lines")
 def system_lines(system_id: str, request: Request) -> dict[str, Any]:
     """版本线列表（版本模型 2.4；`line_scheme` 以线内最新修订为准）。"""

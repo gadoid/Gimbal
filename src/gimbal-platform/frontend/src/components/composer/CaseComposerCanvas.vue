@@ -9,7 +9,7 @@
       v-if="subView === 'catalog'"
       :next-step-idx="local.length + 1"
       :adding="adding"
-      :plate-ref="refOfStep(currentStep) ?? 'working'"
+      :plate-ref-of="props.plateRefOf"
       @add="onAddEndpoint"
       @back="subView = null"
     />
@@ -511,7 +511,7 @@
         <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
              消费都发生在本页,就近总览;草稿级数据,无选中 step 也常驻 -->
         <VariableRegistryPanel
-          :steps="local as unknown as never[]"
+          :steps="local"
           :config-vars="(draftStore.draft?.definition?.config?.vars as Record<string, unknown> | undefined)"
         />
 

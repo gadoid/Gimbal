@@ -246,23 +246,28 @@ async def list_endpoints(
 ) -> dict:
     """接口目录列表（Release 6.1:编排页经平台后端读取,带修订号）。
 
-    ref = 场景声明的修订;缺省 working。按修订过滤——只列出该修订里
-    存在的接口,防止用户加入只在 working 存在的接口(执行时报
-    ENDPOINT_NOT_IN_RELEASE)。
+    带 ref 且指定了 system → 走 plate 的系统作用域路由
+    ``/api/system/{system}/endpoint?ref=``（全局路由不带系统,
+    ref 无从解析、恒返 working）;不带 ref → 全局路由（working）。
     """
     from ..services import plate_client
     client = plate_client.get_client()
     params: dict = {"per_page": 500}
-    if system:
-        params["system"] = system
     if service:
         params["service"] = service
     if q:
         params["q"] = q
-    if ref and ref != "working":
+    if ref and ref != "working" and system:
+        # 系统作用域 + 修订 → 按修订过滤
+        path = f"/api/system/{system}/endpoint"
         params["ref"] = ref
+    else:
+        # working / 无系统 → 全局（忽略 ref,全局路由不解析它）
+        path = "/api/endpoint"
+        if system:
+            params["system"] = system
     try:
-        resp = await client.get("/api/endpoint", params=params, timeout=15.0)
+        resp = await client.get(path, params=params, timeout=15.0)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail={
             "code": "plate_unavailable",

@@ -1248,10 +1248,10 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
     // catalog 列表走原生 fetch(绕 axios /api 前缀)→ stub
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: { items: [{
+      json: async () => ({ items: [{
         id: 'ep-d', system: 'fin', service: 'fin-service', name: '下单',
         description: '创建订单', call: { method: 'POST', path: '/o' },
-      }] } }),
+      }] }),
     }))
     // ep-d 定向覆写(catalog 选中拉 /full 与 Canvas ensureEndpointFull 两拉都命中;
     // 不能用 Once — mount 时 ep-1 首拉就会消费掉共享 mock 的 Once 队列)

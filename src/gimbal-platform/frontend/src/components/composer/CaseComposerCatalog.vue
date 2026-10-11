@@ -256,8 +256,8 @@ import type { EndpointFullView } from '@/types/plate'
 
 const props = defineProps<{
   nextStepIdx?: number; adding?: boolean;
-  /** M1/6.1:场景声明的修订(meta.plate)——目录按修订过滤 */
-  plateRef?: string;
+  /** M1/6.1:系统 → 场景声明的修订(meta.plate)——目录按系统分别取数 */
+  plateRefOf?: (system: string) => string;
 }>()
 const emit = defineEmits<{ back: []; add: [any] }>()
 
@@ -428,42 +428,59 @@ async function onFilterChanged() {
 async function refetch() {
   loading.value = true
   try {
-    // Release 6.1:经平台后端读取接口目录(带修订号)——不再直连
-    // /plate 代理(那永远读 working,会列出目标修订里不存在的接口,
-    // 执行时才报 ENDPOINT_NOT_IN_RELEASE)。
-    const params = new URLSearchParams()
-    if (filterSystem.value) params.set('system', filterSystem.value)
-    if (filterService.value) params.set('service', filterService.value)
-    if (filterQuery.value.trim()) params.set('q', filterQuery.value.trim())
-    if (props.plateRef && props.plateRef !== 'working')
-      params.set('ref', props.plateRef)
-    const url = '/api/endpoint-catalog/list' + (params.toString() ? '?' + params.toString() : '')
+    // Release 6.1:经平台后端按系统分别取修订过滤的接口目录。
+    // 先拉 working 全量(获取系统列表),再对场景声明了精确修订的
+    // 系统逐个调 /list?system=X&ref=Y(只列该修订里存在的接口);
+    // 场景未声明的系统保持 working。
+    const common = new URLSearchParams()
+    if (filterService.value) common.set('service', filterService.value)
+    if (filterQuery.value.trim()) common.set('q', filterQuery.value.trim())
     const token = authStore.accessToken || ''
-    const r = await fetch(url, {
+    const base = '/api/endpoint-catalog/list'
+    const workingUrl = base + '?' + common.toString()
+    const wr = await fetch(workingUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
-    if (r.ok) {
-      const data: any = await r.json()
-      const items = data?.data?.items || data?.items || (Array.isArray(data) ? data : [])
-      // 轻列表条目 = 平铺坐标(method/path/protocol + shape_hash,7.2);
-      // 不再读旧嵌套 e.api / e.version(评审 R7:旧字段恒 undefined →
-      // 按路径搜索搜不到、/full 失败时详情头空白)。
-      all.value = items.map((e: any) => ({
-        id: e.id, system: e.system, service: e.service, name: e.name,
-        description: e.description ?? '',
-        method: e.method ?? '',
-        path: e.path ?? '',
-        protocol: e.protocol ?? 'http',
-        shape_hash: e.shape_hash ?? '',
-      }))
-      // 默认展开第一个 system + 它所有的 services (避免用户多点 6 次)
-      if (systemsInFiltered.value.length > 0 && openSystems.value.length === 0) {
-        const sys = systemsInFiltered.value[0]
-        openSystems.value = [sys]
-        openServices.value = servicesForFilteredSystem(sys).map(svc => `${sys}.${svc}`)
-      }
-    } else {
-      toast.warning('无法加载接口目录: HTTP ' + r.status)
+    const wd: any = wr.ok ? await wr.json() : { items: [] }
+    const workingItems: any[] = wd?.items || []
+    // 从 working 结果提取系统清单(不重复)
+    const systems = [...new Set(workingItems.map((e: any) => e.system))]
+    // 对每个有精确修订的系统,并行取该修订的目录
+    const scopedRefs = systems
+      .map((sys) => ({ sys, ref: props.plateRefOf?.(sys) ?? 'working' }))
+      .filter((s) => s.ref && s.ref !== 'working')
+    const scopedLists = await Promise.all(
+      scopedRefs.map(({ sys, ref }) => {
+        const p = new URLSearchParams(common)
+        p.set('system', sys)
+        p.set('ref', ref)
+        return fetch(`${base}?${p.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        }).then((r) => (r.ok ? r.json() : { items: [] }))
+      }),
+    )
+    // 合并:声明了修订的系统用修订列表,其余用 working 列表
+    const scopedSet = new Set(scopedRefs.map((s) => s.sys))
+    const items = [
+      ...workingItems.filter((e: any) => !scopedSet.has(e.system)),
+      ...scopedLists.flatMap((d: any) => d?.items || []),
+    ]
+    // 轻列表条目 = 平铺坐标(method/path/protocol + shape_hash,7.2);
+    // 不再读旧嵌套 e.api / e.version(评审 R7:旧字段恒 undefined →
+    // 按路径搜索搜不到、/full 失败时详情头空白)。
+    all.value = items.map((e: any) => ({
+      id: e.id, system: e.system, service: e.service, name: e.name,
+      description: e.description ?? '',
+      method: e.method ?? '',
+      path: e.path ?? '',
+      protocol: e.protocol ?? 'http',
+      shape_hash: e.shape_hash ?? '',
+    }))
+    // 默认展开第一个 system + 它所有的 services (避免用户多点 6 次)
+    if (systemsInFiltered.value.length > 0 && openSystems.value.length === 0) {
+      const sys = systemsInFiltered.value[0]
+      openSystems.value = [sys]
+      openServices.value = servicesForFilteredSystem(sys).map(svc => `${sys}.${svc}`)
     }
   } catch (e) {
     toast.error('接口目录加载失败: ' + (e as Error).message)

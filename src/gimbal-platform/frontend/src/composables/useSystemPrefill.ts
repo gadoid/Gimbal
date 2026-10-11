@@ -35,10 +35,11 @@ type CommonMetaFields = Pick<
 >
 
 /** common 基座 + 各系统 config 业务段(services/users/vars)浅合并。 */
-function mergeConfig(base: ConfigView | null, parts: ConfigView[]): ConfigView {
+function mergeConfig(base: ConfigView | null, parts: ConfigView[]): Record<string, unknown> {
   return {
     setup: base?.setup ?? [],
     teardown: base?.teardown ?? [],
+    var_locks: base?.var_locks,
     timePolicy: base?.timePolicy ?? { kind: 'record' },
     retry: base?.retry ?? null,
     services: Object.assign({}, ...parts.map((c) => c.services)),
@@ -77,7 +78,6 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
               [ConfigView | null, Record<string, ResourceView>]
             >),
         ])
-        // @ts-expect-error — mergeConfig 的键集与 ConfigView WithRequired 不完全对齐(运行时正确)
         definition.value.config = mergeConfig(
           commonConfig,
           systemParts.map(([cfg]) => cfg).filter((cfg): cfg is ConfigView => !!cfg),

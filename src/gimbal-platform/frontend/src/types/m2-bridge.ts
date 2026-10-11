@@ -31,14 +31,21 @@ type WithRequired<T, K extends keyof T> = T & Required<Pick<T, K>>
 
 /** @deprecated use Meta from '@/types/m2'(平台采集面保证 tags/system 在场) */
 export type MetaView = WithRequired<Meta, 'system' | 'tags'>
-/** @deprecated use Config from '@/types/m2'（平台旁挂 var_locks 用交叉类型） */
-export type ConfigView = Omit<WithRequired<Config,
-  'services' | 'users' | 'timePolicy' | 'retry' | 'vars'>,
-  'setup' | 'teardown' | 'users' | 'timePolicy'> & {
-    setup: unknown[]; teardown: unknown[]; var_locks?: string[];
-    users: Record<string, UserAuthView>;
-    timePolicy: TimePolicyView;
-  }
+/** @deprecated use Config from '@/types/m2'(平台旁挂 var_locks;直接定义
+ *  避免 WithRequired 交叉类型不自洽——TS 的 Config & Required<Pick<>>
+ *  在赋值检查中 retry 需同时满足 null|undefined 与 null,不可赋值) */
+export type ConfigView = {
+  setup: unknown[]
+  teardown: unknown[]
+  services: Record<string, string>
+  users: Record<string, UserAuthView>
+  timePolicy: TimePolicyView
+  retry: ReturnType<typeof _cfgRetryType> | null
+  vars: Record<string, unknown>
+  var_locks?: string[]
+}
+// 从 m2.ts Config 推断 retry 的元素类型(避免手写重复)
+declare function _cfgRetryType(): Config extends { retry?: infer R } ? R : never
 /** @deprecated use Step from '@/types/m2' */
 export type StepView = Omit<Step, 'call' | 'strategy'> & {
   call: CallView
@@ -63,9 +70,10 @@ export type UserAuthView = Omit<UserCredential, 'expires_in'> & { expires_in?: n
 /** @deprecated use (TimeoutPolicy | RecordPolicy) from '@/types/m2' */
 export type TimePolicyView = TimeoutPolicy | RecordPolicy
 /** @deprecated use Scenario from '@/types/m2'(resource 平台侧=ResourceView 联合) */
-export type ScenarioView = WithRequired<Scenario, 'kind'> & {
+export type ScenarioView = Omit<WithRequired<Scenario, 'kind'>, 'resource' | 'config' | 'meta'> & {
   resource: Record<string, ResourceView>
   config: ConfigView
+  meta: MetaView
 }
 /** @deprecated use Mock from '@/types/m2' */
 export type MockView = WithRequired<Mock, 'kind' | 'name' | 'image' | 'config' | 'portMapping'>

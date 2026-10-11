@@ -14,9 +14,9 @@ export interface SeedVarResult<T> {
 }
 
 export function seedPoolVarIntoDefinition<
-  T extends { config?: { vars?: Record<string, unknown> } | null },
+  T extends { config?: Record<string, unknown> | null },
 >(definition: T, name: string, spec: Record<string, unknown>): SeedVarResult<T> {
-  const config = definition.config ?? { vars: {} as Record<string, unknown> }
+  const config = (definition.config ?? {}) as { vars?: Record<string, unknown> }
   const vars = { ...(config.vars ?? {}) }
   let seeded = false
   if (!Object.prototype.hasOwnProperty.call(vars, name)) {
