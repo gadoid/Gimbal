@@ -275,3 +275,88 @@ class TestHTTPSurface:
         r = http_client.get("/api/systems/fin/endpoint/full?ref=7.7%237")
         assert r.status_code == 404
         assert r.json()["error"]["code"] == "release_not_found"
+
+
+class TestFieldLevelDiff:
+    """R7:diff 的请求/响应字段级差异(适配中心起草 op 的燃料)。"""
+
+    DECL_REQ = (
+        "\nrequest:\n  declarations:\n"
+        "    - name: extra\n      path: $.extra\n"
+        "      type: string\n      state: form\n"
+        "    - name: settle\n      path: $.settle\n"
+        '      type: string\n      state: carry\n      enum: ["2", "3"]')
+    DECL_RESP = (
+        '\nresponses:\n  "200":\n    declarations:\n'
+        "      - name: code\n        path: $.code\n"
+        "        type: string\n        state: form")
+
+    def test_request_field_diff_added(self, tmp_path):
+        repo, fin, art = make_repo(tmp_path)
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        write_endpoint(fin, "a", reviewed=True, path="/a",
+                       extra=self.DECL_REQ)
+        commit(repo, "decl change")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+
+        sa = rr.load_snapshot(art, "fin", "1.0", 1)
+        sb = rr.load_snapshot(art, "fin", "1.0", 2)
+        item = rr.diff_snapshots(sa, sb)
+        fd = (item["changed"]["endpoint.fin.a.a"]["parts"]
+              ["request"]["field_diff"])
+        assert fd["added"] == ["$.extra", "$.settle"]
+        assert fd["removed"] == []
+        assert fd["changed"] == {}
+
+    def test_request_field_diff_removed_and_changed(self, tmp_path):
+        repo, fin, art = make_repo(tmp_path)
+        seed = (
+            "\nrequest:\n  declarations:\n"
+            "    - name: keep\n      path: $.keep\n"
+            "      type: string\n      state: form\n"
+            "    - name: gone\n      path: $.gone\n"
+            "      type: string\n      state: form")
+        write_endpoint(fin, "a", reviewed=True, path="/a", extra=seed)
+        commit(repo, "seed")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        grown = (
+            "\nrequest:\n  declarations:\n"
+            "    - name: keep\n      path: $.keep\n"
+            "      type: string\n      state: carry")
+        write_endpoint(fin, "a", reviewed=True, path="/a", extra=grown)
+        commit(repo, "remove+change")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+
+        sa = rr.load_snapshot(art, "fin", "1.0", 1)
+        sb = rr.load_snapshot(art, "fin", "1.0", 2)
+        parts = rr.diff_snapshots(sa, sb)["changed"]["endpoint.fin.a.a"]["parts"]
+        fd = parts["request"]["field_diff"]
+        assert fd["removed"] == ["$.gone"]
+        assert "$.keep" in fd["changed"]
+        # shape 投影排除缺省值:form 是缺省 → from 侧无 state 键
+        assert "state" not in fd["changed"]["$.keep"]["from"]
+        assert fd["changed"]["$.keep"]["to"]["state"] == "carry"
+
+    def test_responses_field_diff_removed(self, tmp_path):
+        repo, fin, art = make_repo(tmp_path)
+        ep = fin.joinpath("endpoints", "fin.a.a.md")
+        # 首修订:响应 200 带 code 声明(直接写文件——模板已有 responses
+        # 键,extra 注入会与之重复)
+        seeded = _ep_md("a").replace(
+            'responses:\n  "200": {}\n',
+            'responses:\n  "200":\n    declarations:\n'
+            '      - name: code\n        path: $.code\n'
+            '        type: string\n        state: form\n')
+        ep.write_text(seeded, encoding="utf-8")
+        commit(repo, "seed")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        ep.write_text(_ep_md("a"), encoding="utf-8")
+        commit(repo, "drop response decl")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+
+        sa = rr.load_snapshot(art, "fin", "1.0", 1)
+        sb = rr.load_snapshot(art, "fin", "1.0", 2)
+        parts = rr.diff_snapshots(sa, sb)["changed"]["endpoint.fin.a.a"]["parts"]
+        fd = parts["responses"]["field_diff"]["200"]
+        assert fd["removed"] == ["$.code"]
+        assert fd["added"] == []

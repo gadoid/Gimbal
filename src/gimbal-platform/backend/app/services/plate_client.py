@@ -529,6 +529,36 @@ async def resolve(
     return envelope.get("data", {}).get("item", {})
 
 
+async def get_endpoint_full_at(
+    endpoint_id: str, ref: str, *, timeout: float = 15.0,
+) -> "dict[str, Any] | None":
+    """``GET /api/endpoint/{id}/full?ref=`` —— 按修订取契约（4.1 修订快照）。
+
+    与 working 缓存版 :func:`get_endpoint_full` 分离:修订内容不可变,按需
+    取不进 TTL 缓存（RS4a 保存检查的目标修订试算消费方）。404 → None。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(
+            f"/api/endpoint/{endpoint_id}/full",
+            params={"ref": ref}, timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    return envelope.get("data", {}).get("item")
+
+
 async def get_projection(
     endpoint_id: str, ref: str, *, timeout: float = 15.0
 ) -> dict[str, Any] | None:

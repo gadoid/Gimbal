@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
@@ -251,6 +252,7 @@ async def rollback_batch(
     except ValueError as e:
         raise value_error_http(e, codes={
             "batch_not_rollbackable": 409,
+            "not_latest": 409,
         }) from e
     from ..services import audit as audit_svc
 
@@ -262,3 +264,117 @@ async def rollback_batch(
         detail={"skipped": len(getattr(report, "skipped", []) or [])},
     )
     return RollbackReport.model_validate(report)
+
+
+# ─── RS4a 新流程（Release v4.4 §5）：比较 → 保存检查 → 提交 ────────
+
+@router.get("/compare")
+async def compare_revisions(
+    user: CurrentUser, db: DbSession,
+    scenarioId: str = Query(..., min_length=3),
+    target: str = Query(..., min_length=1),
+    system: str | None = Query(default=None),
+) -> dict:
+    """RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。
+
+    R22:读面全员(差异本身不涉编辑权)。
+    """
+    try:
+        item = await adaptation_service.compare_scenario(
+            db, scenario_id=scenarioId, target_revision=target,
+            system=system)
+    except PlateUnavailableError as e:
+        raise _plate_502(e) from e
+    except ValueError as e:
+        raise value_error_http(e, codes={
+            "scenario_not_found": 404,
+            "multi_system_scenario": 422,
+            "no_system_declared": 422,
+            "release_not_found": 404,
+        }) from e
+    return {"item": item}
+
+
+class SaveCheckIn(BaseModel):
+    """RS4a 保存检查入参（§5.6）。"""
+
+    scenarioId: str
+    targetRevision: str
+    system: str | None = None
+
+
+@router.post("/save-check")
+async def save_check(user: CurrentUser, db: DbSession,
+                     body: SaveCheckIn) -> dict:
+    """RS4a 保存检查:①目标修订试算（阻断）②引用检查 ③保存方式推荐。
+
+    R14:review_items 非空时提示确认,未确认提交被拒。
+    """
+    try:
+        return await adaptation_service.save_check(
+            db, scenario_id=body.scenarioId,
+            target_revision=body.targetRevision, system=body.system)
+    except PlateUnavailableError as e:
+        raise _plate_502(e) from e
+    except ValueError as e:
+        raise value_error_http(e, codes={
+            "scenario_not_found": 404,
+            "multi_system_scenario": 422,
+            "no_system_declared": 422,
+        }) from e
+
+
+class SubmitIn(BaseModel):
+    """RS4a 提交入参（§5.7）。"""
+
+    scenarioId: str
+    ops: list[dict] = Field(default_factory=list)
+    targetRevision: str
+    saveMode: str = Field(pattern="^(direct|copy)$")
+    system: str | None = None
+    reviewConfirmed: bool = False
+
+
+@router.post("/submit")
+async def submit_adaptation(user: CurrentUser, db: DbSession,
+                            body: SubmitIn) -> dict:
+    """RS4a 提交:按场景单事务(快照 → 应用 op → meta.plate → 审计/通知)。
+
+    R22:编辑权随场景(_ensure_edit_rights,admin 或 owner)。
+    """
+    try:
+        return await adaptation_service.submit_adaptation(
+            db, scenario_id=body.scenarioId, ops=body.ops,
+            target_revision=body.targetRevision, save_mode=body.saveMode,
+            review_confirmed=body.reviewConfirmed, system=body.system,
+            user=user)
+    except PlateUnavailableError as e:
+        raise _plate_502(e) from e
+    except ValueError as e:
+        raise value_error_http(e, codes={
+            "scenario_not_found": 404,
+            "save_check_failed": 409,
+            "review_items_unconfirmed": 409,
+            "multi_system_scenario": 422,
+            "no_system_declared": 422,
+        }) from e
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001 — _ensure_edit_rights 的 403
+        if "not_scenario_owner" in str(e):
+            raise HTTPException(status_code=403, detail=str(e)) from e
+        raise
+
+
+@router.get("/stale")
+async def stale_scenarios(
+    user: CurrentUser, db: DbSession,
+    scope: str | None = Query(default=None),
+) -> dict:
+    """RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看自己。"""
+    user_id = user.id if (scope == "mine" or user.role != "admin") else None
+    try:
+        items = await adaptation_service.stale_scenarios(db, user_id=user_id)
+    except PlateUnavailableError as e:
+        raise _plate_502(e) from e
+    return {"items": items, "total": len(items)}

@@ -6,15 +6,32 @@ import AdaptationFlow from '@/views/AdaptationFlow.vue'
 
 vi.mock('@/api/adaptationFlow', () => ({
   fetchStaleScenarios: vi.fn().mockResolvedValue([]),
-  compareRevisions: vi.fn().mockResolvedValue({
-    from: 'working', to: '1.0#3',
-    added: ['endpoint.fin.a.new'],
-    removed: [],
-    changed: { 'endpoint.fin.a.b': { type: 'endpoint', parts: { binding: {} } } },
+  compareScenario: vi.fn().mockResolvedValue({
+    scenario_id: 'sc-1', system: 'fin', from: 'working', to: '1.0#3',
+    diff: {
+      from: 'working', to: '1.0#3',
+      added: ['endpoint.fin.a.new'],
+      removed: [],
+      changed: {
+        'endpoint.fin.a.b': { type: 'endpoint',
+          parts: { binding: {}, request: { field_diff: {
+            added: ['$.x'], removed: [], changed: {} } } } },
+      },
+    },
+    groups: {
+      direct: [{ step: 0, endpoint: 'fin.a.c', reason: 'unchanged' }],
+      field: [{ step: 1, endpoint: 'fin.a.b', parts: { request: {} } }],
+      structure: [],
+    },
   }),
-  saveCheck: vi.fn().mockResolvedValue({ ok: true }),
+  saveCheck: vi.fn().mockResolvedValue({
+    ok: true, blocking_issues: [], review_items: [],
+    references: { own: [], others: [] },
+    recommendation: 'direct', from: 'working', to: '1.0#3', system: 'fin',
+  }),
   submitAdaptation: vi.fn().mockResolvedValue({
     success: true, scenario_id: 'sc-1', save_mode: 'direct',
+    batch_id: 'bt-x',
   }),
 }))
 
@@ -72,7 +89,7 @@ describe('AdaptationFlow', () => {
     // 直接设置内部状态到 step 3
     const vm = w.vm as unknown as Record<string, unknown>
     vm.step = 3
-    vm.checkResult = { ok: true }
+    vm.checkResult = { ok: true, blocking_issues: [], review_items: [], references: { own: [], others: [] }, recommendation: 'direct', from: 'working', to: '1.0#3', system: 'fin' }
     vm.checking = false
     await w.vm.$nextTick()
     expect(w.find('[data-testid="check-ok"]').exists()).toBe(true)
@@ -84,7 +101,14 @@ describe('AdaptationFlow', () => {
     const w = mountPage()
     const vm = w.vm as unknown as Record<string, unknown>
     vm.step = 3
-    vm.checkResult = { ok: false, error: 'ENDPOINT_NOT_IN_RELEASE' }
+    vm.checkResult = {
+      ok: false,
+      blocking_issues: [
+        { code: 'trial_rejected',
+          message: 'ENDPOINT_NOT_IN_RELEASE: fin.a.b 不在修订中' }],
+      review_items: [], references: { own: [], others: [] },
+      recommendation: 'copy', from: 'working', to: '1.0#3', system: 'fin',
+    }
     vm.checking = false
     await w.vm.$nextTick()
     expect(w.find('[data-testid="check-fail"]').exists()).toBe(true)

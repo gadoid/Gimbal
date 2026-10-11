@@ -142,6 +142,30 @@ async def materialize_graph(
     ]
     resolved = await resolve_graph_units(db, all_units, owner_id)
 
+    # RS3 §6.3/R25:同一 Suite 内同一系统版本线必须一致,执行统一到
+    # 可用集合交集的最新修订;不一致/无交集 → 拒绝(错误码随
+    # GraphDispatchError 面 4xx)。plate 不可用时跳过检查(resolve 内
+    # 部已按成员降级,与单场景执行同口径)。
+    from .suite_version import check_and_resolve_suite_versions
+    from .scenario_store import definition_from_payload
+    suite_pins: dict[str, str] = {}
+    if any((definition_from_payload(r["composed"]).get("meta") or {})
+           .get("plate") for r in resolved):
+        try:
+            suite_pins = await check_and_resolve_suite_versions(
+                [r["composed"] for r in resolved])
+        except Exception as exc:  # plate 不可达 → 与单场景一致地失败
+            from .plate_client import PlateUnavailableError
+            if isinstance(exc, PlateUnavailableError):
+                raise
+            raise GraphDispatchError(str(exc)) from exc
+        for r in resolved:
+            defn = definition_from_payload(r["composed"])
+            meta_plate = (defn.get("meta") or {}).get("plate") or {}
+            for sys_, eff in suite_pins.items():
+                if sys_ in meta_plate:
+                    meta_plate[sys_] = eff
+
     # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。绑定值两种
     # 形态都收:别名串(旧)与 ServiceBinding dict 的 authAlias 键
     #(方案绑定的形态,约束 5 随行合入后在此解析)

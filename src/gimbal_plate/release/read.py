@@ -251,6 +251,37 @@ def _path_placeholders(path: str) -> set[str]:
     return set(re.findall(r"\{([^}]+)\}", path or ""))
 
 
+
+def _decls_field_diff(da: list, db: list) -> dict[str, Any]:
+    """声明树字段级差异（R7）:按 path 键控,新增/删除/变更。
+
+    变更条目给 from/to 投影(展示用);children 递归展开(路径拼点)。
+    """
+    def _flat(entries: list, prefix: str = "") -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for e in entries or []:
+            if not isinstance(e, dict):
+                continue
+            path = e.get("path")
+            key = path if isinstance(path, str) and path else                 (prefix + "." + str(e.get("name", "")) if prefix
+                 else str(e.get("name", "")))
+            body = {k: v for k, v in e.items() if k != "children"}
+            out[key] = body
+            for ck, cv in _flat(e.get("children") or [], key).items():
+                out[ck] = cv
+        return out
+
+    fa, fb = _flat(da), _flat(db)
+    return {
+        "added": sorted(fb.keys() - fa.keys()),
+        "removed": sorted(fa.keys() - fb.keys()),
+        "changed": {
+            k: {"from": fa[k], "to": fb[k]}
+            for k in sorted(fa.keys() & fb.keys()) if fa[k] != fb[k]
+        },
+    }
+
+
 def _endpoint_changed_parts(a: EndpointSpec, b: EndpointSpec) -> dict[str, Any]:
     """变化部位（Release 4.3）：service / binding / request / responses。"""
     parts: dict[str, Any] = {}
@@ -268,10 +299,25 @@ def _endpoint_changed_parts(a: EndpointSpec, b: EndpointSpec) -> dict[str, Any]:
             }
         parts["binding"] = detail
     if pa.get("request") != pb.get("request"):
-        parts["request"] = {"from": pa.get("request"), "to": pb.get("request")}
+        parts["request"] = {
+            "from": pa.get("request"), "to": pb.get("request"),
+            # R7:字段级差异收归 plate —— 适配中心据此起草 op
+            "field_diff": _decls_field_diff(
+                (pa.get("request") or {}).get("declarations") or [],
+                (pb.get("request") or {}).get("declarations") or []),
+        }
     if pa.get("responses") != pb.get("responses"):
-        parts["responses"] = {"from": pa.get("responses"),
-                              "to": pb.get("responses")}
+        ra = (pa.get("responses") or {})
+        rb = (pb.get("responses") or {})
+        parts["responses"] = {
+            "from": ra, "to": rb,
+            "field_diff": {
+                outcome: _decls_field_diff(
+                    (ra.get(outcome) or {}).get("declarations") or [],
+                    (rb.get(outcome) or {}).get("declarations") or [])
+                for outcome in sorted(set(ra) | set(rb))
+            },
+        }
     if not parts:
         parts["description_only"] = True
     return parts

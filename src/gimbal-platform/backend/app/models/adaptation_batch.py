@@ -24,6 +24,8 @@ class AdaptationBatch(Base):
                                                           nullable=True)
     to_revision: Mapped[str | None] = mapped_column(String(64),
                                                       nullable=True)
+    # §5.9:批次作用的场景/Suite id 列表(0018)
+    scope: Mapped[list | None] = mapped_column(JsonVar, nullable=True)
     save_mode: Mapped[str | None] = mapped_column(String(16),
                                                     nullable=True)
     endpoint_id: Mapped[str] = mapped_column(String(255), nullable=False)

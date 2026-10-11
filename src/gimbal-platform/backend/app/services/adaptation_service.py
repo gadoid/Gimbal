@@ -23,9 +23,13 @@ from ..models.adaptation_op import AdaptationOp
 from ..models.adaptation_snapshot import AdaptationSnapshot
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
+from ..models.environment import Environment
+from ..models.integration_task import IntegrationTask
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
+from ..models.suite import Suite
 from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
 from . import carry_store, data_set_store, endpoint_ref_index, plate_client, scenario_store
+from .scenario_store import definition_from_payload
 from .adaptation_ops import (
     ALL_OPS,
     CARRY_OPS,
@@ -720,8 +724,43 @@ async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
     conflict 跳过不盲写;pending ops → skipped;戳不推进。
     """
     batch = await _get_batch(db, batch_id)
-    if batch.status not in ("open", "applying"):
+    if batch.status not in ("open", "applying", "completed"):
         raise ValueError(f"batch_not_rollbackable: {batch.status}")
+
+    # §5.7:只能回滚场景**最近一次**提交的适配 —— 之后还有更新的 RS4a
+    # 批次触过同一场景时,须先依次回滚后面的(栈序)。
+    if batch.kind in ("cross_line", "correction"):
+        candidates = (await db.execute(
+            select(AdaptationBatch).where(
+                AdaptationBatch.kind.in_(["cross_line", "correction"]),
+                AdaptationBatch.status == "completed",
+                AdaptationBatch.batch_id != batch.batch_id,
+            )
+        )).scalars().all()
+        # 时间比较在 Python 侧做(SQLite CURRENT_TIMESTAMP 与绑定参数的
+        # 字符串格式不同,SQL 侧 >= 会静默失配);同秒创建用快照自增 id
+        # 破平(提交必然先后落 AdaptationSnapshot,id 单调)。
+        involved = candidates + [batch]
+        _snap_min_rows = (await db.execute(
+            select(AdaptationSnapshot.batch_id,
+                   func.min(AdaptationSnapshot.id))
+            .where(AdaptationSnapshot.batch_id.in_(
+                [b.batch_id for b in involved]))
+            .group_by(AdaptationSnapshot.batch_id)
+        )).all()
+        _snap_min = dict(_snap_min_rows)
+
+        def _seq(b: AdaptationBatch) -> tuple:
+            return (b.created_at or _utcnow(), _snap_min.get(b.batch_id) or 0)
+
+        batch_seq = _seq(batch)
+        for other in candidates:
+            if _seq(other) > batch_seq:
+                for sid in (batch.scope or []):
+                    if sid in (other.scope or []):
+                        raise ValueError(
+                            f"not_latest: 批次 {other.batch_id} 在本批次之后"
+                            f"适配了场景 {sid},请先回滚它（§5.7 栈序）")
 
     applied_ops = (await db.execute(
         select(AdaptationOp).where(
@@ -741,6 +780,17 @@ async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
     def _snap(kind: str):
         return [s for s in snapshots if s.entity_type == kind]
 
+    for snap in _snap("scenario_copy"):  # §5.7:副本提交的回滚 = 删除副本
+        row = await scenario_store.get_row(db, snap.entity_id)
+        if row is None:
+            conflicts.append({"entityType": "scenario_copy",
+                              "entityId": snap.entity_id,
+                              "note": "copy already deleted"})
+            continue
+        await db.delete(row)
+        restored.append({"entityType": "scenario_copy",
+                         "entityId": snap.entity_id,
+                         "note": "copy deleted"})
     for snap in _snap("scenario"):  # 场景先恢复
         try:
             await _rollback_scenario(db, batch, snap, applied_ops)
@@ -802,6 +852,16 @@ async def _rollback_scenario(
             "scenario_missing: entity deleted after batch opened"
         )
     before = copy.deepcopy((snap.before_json or {}).get("payload") or {})
+    # RS4a 批次(单事务提交,无 op 行):提交时记录了 after 态 ——
+    # current == after 才还原;否则是提交后被编辑过,列为冲突(§5.7
+    # 「编辑者确认放弃修改后还原」)。
+    if "after_json" in (snap.before_json or {}):
+        after = copy.deepcopy(snap.before_json.get("after_json") or {})
+        if (row.payload or {}) == after:
+            row.payload = before
+            return
+        raise _RollbackConflict(
+            "edited_beyond_batch: current != snapshot after-state")
     expected = copy.deepcopy(before)
     try:
         for op in applied_ops:
@@ -1099,65 +1159,426 @@ async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
                 detail=f'not_scenario_owner: 场景 {sid} 不由当前用户编辑，无权适配（R22）')
 
 
-async def save_check(
-    db, scenario_payload: dict, target_revision: str,
+# ─── RS4a 新流程（Release v4.4 §5）：比较 → 保存检查 → 提交 ────────
+
+def _scenario_systems(definition: dict) -> list[str]:
+    """场景涉及的系统:step.endpoint 前缀优先,回落 meta.system。"""
+    eps: set[str] = set()
+    for st in (definition.get("steps") or []):
+        if isinstance(st, dict) and st.get("endpoint"):
+            eps.add(str(st["endpoint"]).split(".")[0])
+    if eps:
+        return sorted(eps)
+    return sorted((definition.get("meta") or {}).get("system") or [])
+
+
+async def compare_scenario(
+    db: AsyncSession, *, scenario_id: str, target_revision: str,
+    system: str | None = None,
 ) -> dict:
-    """RS4a 保存检查（Release v4.4 §5.6）：目标修订试算（阻断）。"""
-    from ..services import plate_client
-    from copy import deepcopy
+    """RS4a 比较（§5.3）:起点修订 vs 目标修订的 plate 差异 + 三组影响。"""
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise ValueError(f"scenario_not_found: {scenario_id}")
+    payload = row.payload or {}
+    definition = definition_from_payload(payload)
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    systems = [system] if system else _scenario_systems(definition)
+    if len(systems) > 1:
+        raise ValueError(
+            "multi_system_scenario: 场景声明了多个系统，请指定 system 参数分别比较")
+    if not systems:
+        raise ValueError("no_system_declared: 场景未声明任何系统")
 
-    # 1. 深拷贝 + 把 meta.plate 设为目标修订
-    trial = deepcopy(scenario_payload)
-    definition = trial.get("definition") or {}
-    meta = definition.setdefault("meta", {})
-    meta_plate = meta.setdefault("plate", {})
-    # 按系统前缀分派目标修订
-    for step in (definition.get("steps") or []):
-        ep = step.get("endpoint")
-        if ep:
-            system = str(ep).split(".")[0]
-            meta_plate[system] = target_revision
+    sys_ = systems[0]
+    from_ref = meta_plate.get(sys_) or "working"
+    diff = await plate_diff_for_adaptation(sys_, from_ref, target_revision)
 
-    # 2. 调 /convert 校验（重投影 + forbid → 拦截结构不匹配）
+    # 对象键形如 "endpoint.{id}"(id 自身含点,按前缀剥离,不 rsplit)
+    changed = {k[len("endpoint."):] for k in diff.get("changed", {})
+               if k.startswith("endpoint.")}
+    removed = {k[len("endpoint."):] for k in diff.get("removed", [])
+               if k.startswith("endpoint.")}
+
+    # 三组判定（§5.3）
+    direct: list[dict] = []
+    field: list[dict] = []
+    structure: list[dict] = []
+    for i, st in enumerate(definition.get("steps") or []):
+        if not isinstance(st, dict) or not st.get("endpoint"):
+            continue
+        eid = str(st["endpoint"])
+        if eid in removed:
+            structure.append({"step": i, "endpoint": eid,
+                              "reason": "endpoint_removed"})
+        elif eid in changed:
+            parts = (diff.get("changed", {})
+                     .get(f"endpoint.{eid}", {}).get("parts") or {})
+            keys = set(parts or {})
+            if keys and keys <= {"service", "binding"} and not parts.get(
+                    "path_placeholders_changed"):
+                direct.append({"step": i, "endpoint": eid,
+                               "reason": "binding_only"})
+            else:
+                field.append({"step": i, "endpoint": eid, "parts": parts})
+        else:
+            direct.append({"step": i, "endpoint": eid,
+                           "reason": "unchanged"})
+    return {
+        "scenario_id": scenario_id, "system": sys_,
+        "from": from_ref, "to": target_revision,
+        "diff": diff,
+        "groups": {"direct": direct, "field": field, "structure": structure},
+    }
+
+
+def _body_root_keys(body) -> set[str]:
+    """body 一层键(root 段匹配口径)。"""
+    return set(body.keys()) if isinstance(body, dict) else set()
+
+
+def _declared_roots(item, section: str) -> set[str]:
+    """目标修订契约的声明路径根段全集(request/responses)。"""
+    if not isinstance(item, dict):
+        return set()
+    sec = item.get(section)
+    decls = (sec.get("declarations")
+             if isinstance(sec, dict) else None) or []
+    out: set[str] = set()
+    for d in decls:
+        if isinstance(d, dict):
+            p = d.get("path")
+            if isinstance(p, str) and p.startswith("$."):
+                out.add(p[2:].split(".")[0].split("[")[0])
+    return out
+
+
+async def save_check(
+    db: AsyncSession, *, scenario_id: str, target_revision: str,
+    system: str | None = None,
+) -> dict:
+    """RS4a 保存检查（§5.6）：①目标修订试算（阻断）②引用检查 ③保存方式推荐。"""
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise ValueError(f"scenario_not_found: {scenario_id}")
+    payload = copy.deepcopy(row.payload or {})
+    definition = definition_from_payload(payload)
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    systems = [system] if system else _scenario_systems(definition)
+    if len(systems) > 1:
+        raise ValueError("multi_system_scenario: 请指定 system 参数")
+    if not systems:
+        raise ValueError("no_system_declared")
+
+    sys_ = systems[0]
+    from_ref = meta_plate.get(sys_) or "working"
+    issues: list[dict] = []
+    review_items: list[dict] = []
+
+    # ① 目标修订试算:meta.plate 指向目标 → /convert(forbid+重投影)
+    trial = copy.deepcopy(payload)
+    tdef = definition_from_payload(trial)
+    tdef.setdefault("meta", {}).setdefault("plate", {})[sys_] = target_revision
+    convert_result = None
     try:
-        result = await plate_client.convert(trial)
-        return {"ok": True, "convert_result": result}
+        convert_result = await plate_client.convert(trial)
     except plate_client.PlateRejectedError as e:
-        return {"ok": False, "error": str(e),
-                "code": getattr(e, "code", "rejected")}
+        issues.append({"code": "trial_rejected", "message": str(e)})
     except plate_client.PlateUnavailableError as e:
-        return {"ok": False, "error": str(e), "code": "unavailable"}
+        issues.append({"code": "plate_unavailable", "message": str(e.message)})
+
+    # ①b 逐步骤字段比对 + 字段状态定位 + R14 评审项
+    fulls: dict = {}
+    for st in (definition.get("steps") or []):
+        if isinstance(st, dict) and st.get("endpoint"):
+            eid = str(st["endpoint"])
+            if eid not in fulls:
+                try:
+                    fulls[eid] = await plate_client.get_endpoint_full_at(
+                        eid, target_revision)
+                except plate_client.PlateUnavailableError:
+                    fulls[eid] = None
+    req_roots = {eid: _declared_roots(f, "request")
+                 for eid, f in fulls.items()}
+    resp_roots = {eid: _declared_roots(f, "responses")
+                  for eid, f in fulls.items()}
+
+    ui_fs = (payload.get("ui") or {}).get("fieldStates") or {}
+    for i, st in enumerate(definition.get("steps") or []):
+        if not isinstance(st, dict):
+            continue
+        eid = str(st.get("endpoint") or "")
+        if not eid:
+            continue
+        paths = req_roots.get(eid)
+        if paths is None:
+            continue                      # 契约不可得:试算已覆盖该错误面
+        body_keys = _body_root_keys(
+            (st.get("request") or {}).get("body"))
+        for extra in sorted(body_keys - paths):
+            issues.append({
+                "code": "extra_field", "step": i, "field": extra,
+                "message": f"步骤 {i + 1} 字段 {extra} 不在目标修订声明中"})
+        inc = ui_fs.get(str(i)) or {}
+        for p in sorted(inc):
+            root = (p[2:].split(".")[0].split("[")[0]
+                    if isinstance(p, str) and p.startswith("$.") else p)
+            if root not in paths:
+                issues.append({
+                    "code": "field_state_unlocatable", "step": i, "field": p,
+                    "message": f"字段状态 {p} 在目标修订上无法定位"})
+
+    # 断言注册表定位 + R14 评审项(JSONPath 根段无法定位)
+    entries = ((payload.get("assertion_registry") or {})
+               .get("entries")) or []
+    steps = definition.get("steps") or []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        p = e.get("path")
+        if not isinstance(p, dict):
+            continue
+        si = p.get("stepIndex")
+        jp = str(p.get("jsonpath") or "")
+        root = (jp[2:].split(".")[0].split("[")[0]
+                if jp.startswith("$.") else "")
+        if not isinstance(si, int) or not (0 <= si < len(steps)):
+            issues.append({
+                "code": "entry_step_out_of_range", "entry": e.get("id"),
+                "message": f"注入条目 {e.get('id')} 的步骤索引越界"})
+            continue
+        eid = str((steps[si] or {}).get("endpoint") or "")
+        universe = (req_roots.get(eid) or set()) | (resp_roots.get(eid) or set())
+        if root and root not in universe:
+            review_items.append({
+                "entry": e.get("id"), "step": si, "jsonpath": jp,
+                "reason": "root_not_locatable",
+                "message": (f"条目 {e.get('id')} 的 JSONPath 根段 {root} "
+                            "在目标修订上不存在（R14:需确认）"),
+            })
+
+    # ② 引用检查（区分自己/他人）
+    suites = (await db.execute(select(Suite))).scalars().all()
+    refs_own: list[dict] = []
+    refs_others: list[dict] = []
+    for su in suites:
+        if scenario_id in ((su.mode_config or {}).get("units") or {}):
+            entry = {"type": "suite", "id": su.id, "name": su.name,
+                     "owner_id": su.owner_id}
+            (refs_own if su.owner_id == row.owner_id
+             else refs_others).append(entry)
+    tasks = (await db.execute(
+        select(IntegrationTask).where(
+            IntegrationTask.scenario_id == scenario_id)
+    )).scalars().all()
+    for t in tasks:
+        entry = {"type": "integration", "id": t.id, "name": t.name,
+                 "owner_id": t.holder_id or t.owner_id}
+        (refs_own if entry["owner_id"] == row.owner_id
+         else refs_others).append(entry)
+
+    # ③ 保存方式推荐（§5.6 默认规则）
+    from_line = from_ref.split("#")[0]
+    env_declares_old = False
+    envs = (await db.execute(select(Environment))).scalars().all()
+    for env in envs:
+        if (env.lines or {}).get(sys_) == from_line:
+            env_declares_old = True
+            break
+    recommendation = ("copy" if (target_revision == "working"
+                                 or refs_others or env_declares_old)
+                      else "direct")
+
+    return {
+        "ok": not issues and not review_items,
+        "blocking_issues": issues,
+        "review_items": review_items,        # R14:确认后可提交
+        "references": {"own": refs_own, "others": refs_others},
+        "recommendation": recommendation,
+        "from": from_ref, "to": target_revision, "system": sys_,
+        "convert_result": convert_result,
+    }
+
+
+async def submit_adaptation(
+    db: AsyncSession, *, scenario_id: str, ops: list,
+    target_revision: str, save_mode: str,
+    review_confirmed: bool = False, system: str | None = None, user=None,
+) -> dict:
+    """RS4a 提交（§5.7）:按场景单事务 —— 快照 → 应用 op → meta.plate → 审计。"""
+    from .adaptation_ops import apply_to_definition
+    from ..services import activity as activity_svc
+
+    await _ensure_edit_rights(db, user, [scenario_id])
+
+    check = await save_check(db, scenario_id=scenario_id,
+                             target_revision=target_revision, system=system)
+    if check["blocking_issues"]:
+        raise ValueError(
+            "save_check_failed: " + "; ".join(
+                i.get("message", str(i)) for i in check["blocking_issues"]))
+    if check["review_items"] and not review_confirmed:
+        raise ValueError(
+            "review_items_unconfirmed: "
+            f"{len(check['review_items'])} 个 R14 评审项未确认")
+
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise ValueError(f"scenario_not_found: {scenario_id}")
+    payload = row.payload or {}
+    definition = definition_from_payload(payload)
+    sys_ = check["system"]
+    from_ref = check["from"]
+    same_line = from_ref.split("#")[0] == target_revision.split("#")[0]
+    kind = "correction" if same_line else "cross_line"
+
+    operator_name = (getattr(user, "display_name", None)
+                     or getattr(user, "username", None) or "")
+    batch_id = f"bt-{uuid4().hex[:12]}"
+
+    if save_mode == "copy":
+        result = await save_as_copy(
+            db, scenario_id, user=user, ops=ops,
+            target_revision=target_revision, batch_id=batch_id)
+        db.add(AdaptationBatch(
+            batch_id=batch_id, kind=kind,
+            endpoint_id=f"rs4a:{sys_}",
+            from_version=from_ref, to_version=target_revision,
+            from_revisions=[{"scenario_id": scenario_id, "from": from_ref}],
+            to_revision=target_revision, scope=[scenario_id],
+            save_mode="copy", status="completed",
+            operator_id=getattr(user, "id", None),
+            operator_name=operator_name, closed_at=_utcnow()))
+        # 副本回滚即删:快照记录新建的副本 id
+        db.add(AdaptationSnapshot(
+            batch_id=batch_id, entity_type="scenario_copy",
+            entity_id=result["new_scenario_id"],
+            before_json={"source": scenario_id,
+                         "target_revision": target_revision}))
+        await db.commit()
+        await activity_svc.record(
+            db, actor_id=getattr(user, "id", None),
+            kind="scenario.version_change",
+            resource_type="scenario", resource_id=result["new_scenario_id"],
+            detail={"from": from_ref, "to": target_revision,
+                    "batchId": batch_id, "saveMode": "copy",
+                    "sourceScenarioId": scenario_id})
+        return {"success": True, "new_scenario_id": result["new_scenario_id"],
+                "save_mode": "copy", "batch_id": batch_id}
+
+    # 直接保存:单事务(快照 → 应用 op → meta.plate → 引用索引)
+    before = copy.deepcopy(payload)
+    # JSON 列不追踪原地变更 —— 在深拷贝上改,再整包赋回(dirty 可见)
+    new_payload = copy.deepcopy(payload)
+    new_definition = definition_from_payload(new_payload)
+    for op in ops or []:
+        apply_to_definition(new_definition, op)
+    new_definition.setdefault("meta", {}).setdefault(
+        "plate", {})[sys_] = target_revision
+    row.payload = new_payload
+    db.add(AdaptationSnapshot(
+        batch_id=batch_id, entity_type="scenario", entity_id=scenario_id,
+        before_json={"payload": before, "after_json": copy.deepcopy(
+            new_payload), "save_mode": "direct",
+            "from": from_ref, "to": target_revision}))
+    db.add(AdaptationBatch(
+        batch_id=batch_id, kind=kind,
+        endpoint_id=f"rs4a:{sys_}",
+        from_version=from_ref, to_version=target_revision,
+        from_revisions=[{"scenario_id": scenario_id, "from": from_ref}],
+        to_revision=target_revision, scope=[scenario_id],
+        save_mode="direct", status="completed",
+        operator_id=getattr(user, "id", None),
+        operator_name=operator_name, closed_at=_utcnow()))
+    await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
+    await db.commit()
+
+    await activity_svc.record(
+        db, actor_id=getattr(user, "id", None),
+        kind="scenario.version_change",
+        resource_type="scenario", resource_id=scenario_id,
+        detail={"from": from_ref, "to": target_revision,
+                "batchId": batch_id, "saveMode": "direct"})
+    # §5.9:影响他人引用时通知其所有者
+    try:
+        await notify_cross_owner(
+            db, scenario_id, from_rev=from_ref, to_rev=target_revision,
+            batch_id=batch_id)
+    except Exception:  # noqa: BLE001 — 通知失败不阻断提交
+        logger.warning("adaptation: notify_cross_owner failed ({})", scenario_id)
+    return {"success": True, "scenario_id": scenario_id,
+            "save_mode": "direct", "batch_id": batch_id}
 
 
 async def stale_scenarios(
-    db, *, user_id: int | None = None,
+    db: AsyncSession, *, user_id: int | None = None,
 ) -> list[dict]:
-    """RS4a 陈旧清单（Release v4.4 §2.3）：版本线已退役 / 有新版本线
-    / 仍为预览（working）的场景列表。"""
-    from sqlalchemy import select
-    from app.models import ComposerScenario
-
-    stmt = select(ComposerScenario).where(
-        ComposerScenario.archived == False)  # noqa: E712
+    """RS4a 陈旧清单（§2.3）:仍为预览 / 有新版本线 / 定义已修正 / 线已退役。"""
+    stmt = select(ComposerScenario)
     if user_id is not None:
         stmt = stmt.where(ComposerScenario.owner_id == user_id)
+    rows = (await db.execute(stmt)).scalars().all()
 
-    stale = []
-    for scen in (await db.execute(stmt)).scalars():
-        defn = (scen.payload or {}).get("definition") or {}
-        meta_plate = (defn.get("meta") or {}).get("plate") or {}
-        reasons = []
-        for system, ref in meta_plate.items():
-            if ref == "working":
-                reasons.append(f"{system}: 仍为预览(working)")
-            # 有新版本线的提示需要调 plate /lines——此处先标预览
+    envs = (await db.execute(select(Environment))).scalars().all()
+
+    # plate 调用在请求内按系统缓存(stale 是入口页,不让 plate 放大 N 倍)
+    lines_by_system: dict = {}
+    stale: list[dict] = []
+    for scen in rows:
+        definition = definition_from_payload(scen.payload or {})
+        meta_plate = (definition.get("meta") or {}).get("plate") or {}
+        reasons: list[str] = []
+        endpoints_used: dict = {}
+        for st in (definition.get("steps") or []):
+            if isinstance(st, dict) and st.get("endpoint"):
+                eid = str(st["endpoint"])
+                endpoints_used.setdefault(eid.split(".")[0], []).append(eid)
+        resolvable = {s: ref for s, ref in meta_plate.items()
+                      if ref and ref != "working"
+                      and endpoints_used.get(s)}
+        resolved: dict = {}
+        if resolvable:
+            try:
+                resolved = await plate_client.resolve(
+                    resolvable,
+                    {s: endpoints_used[s] for s in resolvable})
+            except Exception:  # noqa: BLE001 — plate 不可达:提示降级
+                resolved = {}
+        for sys_, ref in meta_plate.items():
+            if ref == "working" or not ref:
+                reasons.append(f"{sys_}: 仍为预览(working)")
+                continue
+            line = ref.split("#")[0]
+            if sys_ not in lines_by_system:
+                try:
+                    lines_by_system[sys_] = await plate_client.list_lines(sys_)
+                except Exception:  # noqa: BLE001
+                    lines_by_system[sys_] = None
+            lines = lines_by_system.get(sys_) or []
+            line_names = [l.get("line") for l in lines]
+            # 有新版本线:声明的线之后存在更新的线(按签发序)
+            if line in line_names and line_names.index(line) < len(lines) - 1:
+                newer = lines[-1].get("latest")
+                reasons.append(
+                    f"{sys_}: 有新版本线 {newer}")
+            # 版本线已退役:没有任何环境声明该线
+            declared_envs = [e.name for e in envs
+                             if (e.lines or {}).get(sys_) == line]
+            if not declared_envs and line_names and line in line_names:
+                reasons.append(
+                    f"{sys_}: 版本线 {line} 未被任何环境声明(已退役)")
+            # 定义已修正:生效修订与已验证不同
+            info = resolved.get(sys_) or {}
+            eff = info.get("effective")
+            if eff and eff != ref:
+                reasons.append(
+                    f"{sys_}: 定义已修正(生效修订 {eff} ≠ 已验证 {ref})")
         if not meta_plate:
             reasons.append("无版本声明(过渡期存量)")
         if reasons:
-            meta = defn.get("meta") or {}
             stale.append({
                 "scenario_id": scen.scenario_id,
-                "name": meta.get("name", ""),
+                "name": (definition.get("meta") or {}).get("name", ""),
                 "reasons": reasons,
             })
     return stale
@@ -1183,7 +1604,8 @@ async def save_as_copy(
         activity_detail={"from": scenario_id, "to_revision": target_revision,
                          "batch_id": batch_id},
     )
-    new_row = await scenario_store.get_row(db, copy.scenario_id)
+    new_sid = copy.meta.scenario_id
+    new_row = await scenario_store.get_row(db, new_sid)
     if new_row is None:  # 理论不可达：copy_scenario 刚提交
         raise ValueError(f"copy of {scenario_id} vanished")
 
@@ -1203,7 +1625,7 @@ async def save_as_copy(
 
     new_row.payload = payload
     await db.commit()
-    return {"new_scenario_id": copy.scenario_id,
+    return {"new_scenario_id": new_sid,
             "target_revision": target_revision}
 
 
