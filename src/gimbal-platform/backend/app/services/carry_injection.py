@@ -51,13 +51,18 @@ def _step_service(step: dict) -> Any:
     return call.get("service") if isinstance(call, dict) else None
 
 
-async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContext:
+async def build_carry_context(
+    db: AsyncSession, definition: dict,
+    ui_field_states: dict | None = None,
+) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
     面解析走 ``field_state_resolution.carry_face``(§3.2 单一实现):
-    ``state(path) = step.field_states[path] ?? entry.state ?? 'form'`` —
-    场景显式覆盖即时生效(护栏 §1.3),零发版。
+    ``state(path) = ui.fieldStates[stepIndex][path] ?? entry.state ?? 'form'``
+    —— M4 起 field_states 在 payload.ui.fieldStates(按步骤位置索引),
+    不再存于 step;场景显式覆盖即时生效(护栏 §1.3),零发版。
     """
+    ui_fs: dict = ui_field_states or {}
     # 索引契约:枚举原始列表(跳过非 dict),不用过滤后的下标。
     raw_steps: list = list(definition.get("steps") or [])
 
@@ -82,8 +87,9 @@ async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContex
             # 锚点在即占位:目录拉不到(None 降级)或合法空目录 → 空面
             # = 不注入(fail-closed,spec §4.2.2/D3);降级门控仅限无锚点
             # 存量 step。面 = 解析态投影(join 本 step 的 field_states 增量)
+            inc = ui_fs.get(str(i)) or ui_fs.get(i)
             step_fields[i] = (
-                carry_face(decls, step.get("field_states"))
+                carry_face(decls, inc if isinstance(inc, dict) else None)
                 if decls is not None else {}
             )
 

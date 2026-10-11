@@ -17,7 +17,7 @@ import FieldForm from '@/components/composer/FieldForm.vue'
 import {
   getFullEndpoint, resolveResponsePaths, validateEndpointFieldStates,
 } from '@/api/scenario-composer'
-import type { StepView } from '@/types/plate'
+import type { FieldState, StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { _resetEndpointFullCacheForTest, FULL_TTL_MS } from '@/composables/useEndpointFull'
@@ -301,9 +301,10 @@ function mkStep(over: Partial<StepView> = {}): StepView {
   return {
     kind: 'step',
     description: 'test step',
+    endpoint: 'ep-1',
     call: {
       kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-      headers: {}, view_hints: { endpoint_id: 'ep-1' },
+      headers: {},
     },
     request: {
       kind: 'request',
@@ -343,7 +344,7 @@ function stepOf(service: string): StepView {
   return {
     kind: 'step',
     description: 'ep',
-    call: { kind: 'call', protocol: 'http', service, method: 'GET', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-1' } },
+    call: { kind: 'call', protocol: 'http', service, method: 'GET', path: '/x', headers: {} },
     request: { kind: 'request', body: {} },
     strategy: [],
   } as StepView
@@ -356,10 +357,26 @@ let activePinia: ReturnType<typeof createPinia>
  *  (场景服务声明 dict,spec §1.4 服务引用双显用)。 */
 type CanvasMountOpts = { steps: StepView[]; services?: Record<string, string> }
 
+/** M3 归一:历史种子把锚点写在 call.view_hints —— 就地上提为
+ *  step.endpoint(引用不变,步骤级断言照常工作)。 */
+function normalizeStepAnchors(steps: any[]): void {
+  for (const st of steps) {
+    const vh = st?.call?.view_hints
+    if (vh?.endpoint_id) {
+      delete st.call.view_hints
+      // 显式 view_hints 覆盖 mkStep 的默认 endpoint(种子意图优先)
+      st.endpoint = vh.endpoint_id
+    }
+  }
+}
+
 function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, attach = false) {
   const steps = Array.isArray(stepsOrOpts) ? stepsOrOpts : stepsOrOpts.steps
+  normalizeStepAnchors(steps as any[])
   const services = Array.isArray(stepsOrOpts) ? undefined : stepsOrOpts.services
   const orch = ref<Orchestration>(mkOrch(steps.length))
+  // M4:field_states 出 step —— 增量经 v-model 捕获到 fs(断言面)
+  const fs = ref<Record<string, Record<string, FieldState>>>({})
   // col-info 常驻 ConstantPoolPanel 注入 INSERT_TARGET_KEY —— 挂载 Canvas
   // 的 Parent 必须提供,否则 useSharedInsertTarget 抛错。
   const inserter = useInsertTarget()
@@ -370,8 +387,10 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
         steps: steps,
         orchestration: orch.value,
         services: services,
+        fieldStates: fs.value,
         'onUpdate:steps': () => {},
         'onUpdate:orchestration': () => {},
+        'onUpdate:fieldStates': (v: Record<string, Record<string, FieldState>>) => { fs.value = v },
       })
     },
   })
@@ -381,7 +400,7 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
     global: { plugins: [activePinia] },
     ...(attach ? { attachTo: document.body } : {}),
   })
-  return { w }
+  return { w, fs }
 }
 
 beforeEach(() => {
@@ -405,7 +424,7 @@ beforeEach(() => {
 describe('CaseComposerCanvas — 变量注册表迁入(#1)', () => {
   it('T9: 面板渲染在 col-info;config vars + extract 均展示', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.data.t' } as any] })
-    const { w } = mountCanvas([s0, mkStep()])
+    const { w, fs } = mountCanvas([s0, mkStep()])
     await flushPromises()
     const info = w.find('.col-info')
     expect(info.exists()).toBe(true)
@@ -419,7 +438,7 @@ describe('CaseComposerCanvas — 变量注册表迁入(#1)', () => {
   it('T9b: 同名双产出 → 黄标"后者生效"', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'x', expression: '$.a' } as any] })
     const s1 = mkStep({ strategy: [{ kind: 'extract', target: 'x', expression: '$.b' } as any] })
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     await flushPromises()
     expect(w.find('.col-info').text()).toContain('后者生效')
   })
@@ -428,7 +447,7 @@ describe('CaseComposerCanvas — 变量注册表迁入(#1)', () => {
 describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
   it('T5: 提取该字段(请求侧)→ push extract{expression=$.call.request.body.<path>, scope=scenario}', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -453,7 +472,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
         body: { nested: { oid: '' } },
       },
     })
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     ;(w.vm.$ as any)
     await flushPromises()
     // 选中 step2
@@ -478,7 +497,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     // step2 自己产出 token(产出步 index 1 = 当前步)→ disabled
     const s0 = mkStep()
     const s1 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     await flushPromises()
     const rows = w.findAll('.step-row')
     await rows[1].trigger('click')
@@ -495,7 +514,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
 
   it('T8: 断言该字段 → push assertion{target=assertable 匹配, operator=exists}', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -512,7 +531,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
 describe('CaseComposerCanvas — addExtract scope(#8)', () => {
   it('降级 UI(strategyKinds 拉取失败)手动 extract scope=scenario', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     // 降级 extract UI 与签页无关(策略区共用)
     const btn = w.findAll('button').find((b) => b.text().includes('添加 extract'))
@@ -527,7 +546,7 @@ describe('CaseComposerCanvas — addExtract scope(#8)', () => {
 describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
   it('T13: 切 Response 签 → 全状态码契约渲染;菜单三项;提取落 scratch 域', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))
     await respTab!.trigger('click')
@@ -578,7 +597,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
         { kind: 'assertion', target: '$.call.response.status', operator: 'eq', expected: 200 } as any,
       ],
     })]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     // request 签(默认):三种策略全显示(共用,不按签页过滤)
     expect(w.findAllComponents(StrategyForm).length).toBe(3)
@@ -593,7 +612,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
   })
 
   it('T15: 切 step → 签页重置回 request', async () => {
-    const { w } = mountCanvas([mkStep(), mkStep()])
+    const { w, fs } = mountCanvas([mkStep(), mkStep()])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -609,7 +628,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
 describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
   it('T20: 右栏按签页分流 — request 页请求侧统计,response 页响应契约全状态码', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.call.response.body.data.t' } as any] })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const info = w.find('.col-info')
     // request 签(默认):请求侧统计,无 extracts/响应契约
@@ -629,7 +648,7 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
   })
 
   it('T21: Type C — 请求侧差集随「其他字段」区撤销退场 / 响应侧 trace_id 只读块', async () => {
-    const { w } = mountCanvas([mkStep()])
+    const { w, fs } = mountCanvas([mkStep()])
     await flushPromises()
     // request 签:请求 schema 差集(hidden_req)无编辑面 —「其他字段」区
     // 已撤销(2026-09-14),目录外/差集键不进编排 UI(值仍随 body 透传)
@@ -653,7 +672,7 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
         headers: {}, view_hints: { endpoint_id: 'ep-carry' },
       },
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
     // 请求签整体不出现 remark(编排面零感知,无重复注入入口)
@@ -669,10 +688,10 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     vi.mocked(getDefaults).mockResolvedValueOnce({ '$.remark': '默认备注' })
     const withEid = (svc: string): StepView => {
       const s = stepOf(svc)
-      ;(s.call as any).view_hints = { endpoint_id: 'ep-carry' }
+      ;(s as any).endpoint = 'ep-carry'
       return s
     }
-    const { w } = mountCanvas([withEid('fin-service'), withEid('ghost-svc')])
+    const { w, fs } = mountCanvas([withEid('fin-service'), withEid('ghost-svc')])
     await flushPromises()
     const rows = w.findAll('.step-row')
     expect(rows[0].find('.carry-badge').exists()).toBe(true)   // 对照:显
@@ -731,7 +750,7 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
         view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const chips = w.findAll('.ref-chip')
     expect(chips.length).toBeGreaterThan(0)
@@ -747,7 +766,7 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
         view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const chip = w.findAll('.ref-chip').find((c) => c.text().includes('ghost'))
     expect(chip).toBeTruthy()
@@ -777,6 +796,7 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
       setup() {
         provide(INSERT_TARGET_KEY, inserter)
         const steps = ref(stepList)
+        normalizeStepAnchors(steps.value)
         const orch = ref(mkOrch(0))
         return () =>
           h(CaseComposerCanvas, {
@@ -840,7 +860,7 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
 
 describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §1.4)', () => {
   it('下拉列出目录服务 + 本服务别名;其他声明键置底标跨服务', async () => {
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps: [stepOf('fin-service')],
       services: { 'fin-service': 'https://a', 'fin-service-2': 'https://b', 'order-svc-1': 'https://c' },
     })
@@ -856,7 +876,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
   it('锚点缺失(引用未挂目录键)时,下拉仍列目录名可切回;裸声明键置底不丢', async () => {
     // 步骤引用手写键 fin(不在目录)→ 派生 null → 锚点缺失。
     // 修复点:此前此时目录名完全不出现,裸声明步骤无路切回目录服务。
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps: [stepOf('fin')],
       services: { fin: 'https://a' },
     })
@@ -871,7 +891,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
 
   it('内联创建:后缀+URL → 拼全串双写(update:services + api.service 切换);后缀含 - 拦截', async () => {
     const steps = [stepOf('fin-service')]
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps,
       services: { 'fin-service': 'https://a' },
     })
@@ -912,7 +932,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
         view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' } })
+    const { w, fs } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' } })
     await flushPromises()
     await w.find('.svc-ref-select').setValue('fin-service-uat')
     expect(s0.call?.service).toBe('fin-service-uat')
@@ -940,7 +960,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
         createdAt: '', updatedAt: '',
       },
     ] as never)
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps: [s0],
       services: { 'fin-service': 'https://a' },
     })
@@ -974,7 +994,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
         createdAt: '', updatedAt: '',
       },
     ] as never)
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps: [s0],
       services: { 'fin-service': 'https://a' },
     })
@@ -1002,7 +1022,7 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
         headers: { 'X-Header': 'v' }, view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     return { w, step: s0 }
   }
@@ -1063,7 +1083,7 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
     ] as any)
     const extract = { kind: 'extract', target: 'order_id', expression: '' } as any
     const s0 = mkStep({ strategy: [extract] })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
 
     // 展开样本折叠条 → 填样本 → 解析(mock 只回数组下标路径)
@@ -1098,7 +1118,7 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
     vi.mocked(listStrategyKinds).mockResolvedValueOnce([
       { kind: 'extract', label: '从响应提取变量' },
     ] as any)
-    const { w } = mountCanvas([mkStep()])
+    const { w, fs } = mountCanvas([mkStep()])
     await flushPromises()
     await w.find('.sample-toggle').trigger('click')
     await w.find('.sample-input').setValue('{not json')
@@ -1135,7 +1155,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
       { kind: 'extract', label: '从响应提取变量' },
     ] as any)
     const s0 = mkStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // 解析样本(order_id 数组路径 — 与响应字段 orderId 名字不结尾匹配)
     await w.find('.sample-toggle').trigger('click')
@@ -1164,7 +1184,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
     ] as any)
     // 响应字段 orderId;样本解析出 ['orderId'] 结尾的数组路径 → 样本优先
     const s0 = mkStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.sample-toggle').trigger('click')
     await w.find('.sample-input').setValue('{"data":{"items":[{"orderId":"O1"}]}}')
@@ -1192,7 +1212,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
       call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
       request: { kind: 'request', body: { nested: { oid: '' } } },
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -1217,7 +1237,7 @@ describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)'
 
 describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
   it('desc-1: 编辑页 description 展示 /full 的 description(老草稿显示侧自愈,非 step.description)', async () => {
-    const { w } = mountCanvas([mkStep()])
+    const { w, fs } = mountCanvas([mkStep()])
     await flushPromises()
     // mkStep.description='test step' 是旧的 name 兜底;展示以 plate 事实源优先
     expect(w.find('.desc-readonly').text()).toBe('ep-1 plate 契约描述')
@@ -1247,6 +1267,7 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
       const Parent = defineComponent({
         setup() {
           provide(INSERT_TARGET_KEY, inserter)
+          normalizeStepAnchors([mkStep()] as any[])
           return () => h(CaseComposerCanvas, {
             steps: [mkStep()],
             orchestration: orch.value,
@@ -1289,7 +1310,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
         { kind: 'assertion', target: '$.call.response.body.data.orderId', operator: 'exists', expected: null } as any,
       ],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // request 签(默认):assign 角标挂 orderId 行;extract/assertion 不挂(响应侧)
     const reqTag = w.find('.field-label .strategy-tag')
@@ -1309,7 +1330,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
         { kind: 'extract', target: 'b', expression: '$.call.response.body.nowhere' } as any,
       ],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1322,7 +1343,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
     const s0 = mkStep({
       strategy: [{ kind: 'extract', target: 'oid', expression: '$.data.orderId' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1349,7 +1370,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
           { kind: 'extract', target: 'x', expression: '$.call.response.body.nowhere' } as any,
         ],
       })
-      const { w } = mountCanvas([s0], 0, true)
+      const { w, fs } = mountCanvas([s0], 0, true)
       await flushPromises()
       const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
       await respTab.trigger('click')
@@ -1391,7 +1412,7 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
           { kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any,
         ],
       })
-      const { w } = mountCanvas([s0], 0, true)
+      const { w, fs } = mountCanvas([s0], 0, true)
       await flushPromises()
       // request 签为默认签:assign 角标直接可见(extract 是响应侧,不挂)
       const tag = w.find('.field-label .strategy-tag')
@@ -1418,7 +1439,7 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
     const s0 = mkStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // mkStep body orderId='ord-1':值控件被提示条代替,不再出值输入框
     expect(w.find('.ctl-injected').exists()).toBe(true)
@@ -1435,7 +1456,7 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
 
   it('I2: 无 assign(extract 不锁请求值)→ 常规值控件', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 't', expression: '$.t' } as any] })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     expect(w.find('.ctl-injected').exists()).toBe(false)
     expect(w.find('.field-control input.ctl').exists()).toBe(true)
@@ -1445,7 +1466,7 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
     const s0 = mkStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.orderId' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -1480,7 +1501,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
     const s0 = deepStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.supplier[1].order_supplier_id' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const rows = w.findAll('.arr-row')
     expect(rows).toHaveLength(2)
@@ -1506,7 +1527,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
   it('R1-D2: 数组行菜单注入 → 真 onFieldAssign 落 $.call.request.body.<行实例路径>,注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = deepStep()
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     await flushPromises()
     // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
     const rows = w.findAll('.step-row')
@@ -1557,7 +1578,7 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
   it('RL1: 菜单注入根数组行 → onFieldAssign 落 target=$.call.request.body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = listStep()
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     await flushPromises()
     // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
     const rows = w.findAll('.step-row')
@@ -1588,7 +1609,7 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
     const s0 = listStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body[0].sku' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // 注入只读态:值控件换提示条(同 I1 惯例,title 透出 source → target)
     expect(w.find('.ctl-injected').exists()).toBe(true)
@@ -1623,7 +1644,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
     const s0 = deepStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.call.request.body.supplier' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const head = w.find('.arr-node > .node-head')
     expect(head.find('.node-injected').exists()).toBe(true)
@@ -1641,7 +1662,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
   it('P6-2: 容器菜单注入闭环 — ☰ 注入 → target=$.call.request.body.supplier,徽标/角标即时出现', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = deepStep()
-    const { w } = mountCanvas([s0, s1])
+    const { w, fs } = mountCanvas([s0, s1])
     await flushPromises()
     // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
     const rows = w.findAll('.step-row')
@@ -1682,7 +1703,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
  */
 describe('CaseComposerCanvas — 响应契约树(P7)', () => {
   it('P7-1: 响应签照目录嵌套渲染 — 容器面板 + 一行模板集(无 [i])+ example 只读值 + ✓ 标', async () => {
-    const { w } = mountCanvas([respStep()])
+    const { w, fs } = mountCanvas([respStep()])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1723,7 +1744,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
         { kind: 'assertion', target: '$.call.response.body.data', operator: 'exists', expected: null } as any,
       ],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1738,7 +1759,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
   })
 
   it('P7-3: 响应侧菜单 — 嵌套叶与容器头 ☰ 均三项(提取/加入断言管理/断言)', async () => {
-    const { w } = mountCanvas([respStep()])
+    const { w, fs } = mountCanvas([respStep()])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1770,7 +1791,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
 
   it('P7-4: 响应树叶提取/断言 → expression 落字段自身模板路径(深层字段不再空)', async () => {
     const s0 = respStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
@@ -1822,7 +1843,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
 
   it('N1: 请求容器头提取 → expression=$.call.request.body.supplier;容器头挂 extract 角标', async () => {
     const s0 = deepStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.node-fa .fa-menu-btn').trigger('click')
     await flush()
@@ -1843,7 +1864,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     const s0 = mkStep({
       strategy: [{ kind: 'extract', target: 'orderId', expression: '$.call.request.body.orderId' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // 请求签(默认):orderId 行挂 extract 角标
     expect(w.find('.field-label .strategy-tag').text()).toBe('extract')
@@ -1862,7 +1883,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     const s0 = deepStep({
       strategy: [{ kind: 'extract', target: 'supplier', expression: '$.call.request.body.supplier' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const head = w.find('.arr-node > .node-head')
     expect(head.find('.node-extracted').exists()).toBe(true)
@@ -1879,7 +1900,7 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     const s0 = mkStep({
       strategy: [{ kind: 'extract', target: 'orderId', expression: '$.call.request.body.orderId' } as any],
     })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     // 提取不覆盖值:控件照常(I1 只读条是 assign 专属)
     expect(w.find('.field-control input.ctl').exists()).toBe(true)
@@ -1912,7 +1933,7 @@ describe('CaseComposerCanvas — 容器头值写入项恢复(2026-09-05)', () =>
 
   it('V1: 容器头「设为变量」→ body 整容器替换 + varPromote 上抛原数组 + 模板态闭环', async () => {
     const s0 = deepStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.node-fa .fa-menu-btn').trigger('click')
     await flush()
@@ -1937,7 +1958,7 @@ describe('CaseComposerCanvas — 容器头值写入项恢复(2026-09-05)', () =>
 
   it('V2: 容器头「引用共享变量」→ 整容器整串替换(先清空再写入)', async () => {
     const s0 = deepStep()
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     await w.find('.node-fa .fa-menu-btn').trigger('click')
     await flush()
@@ -1980,7 +2001,7 @@ describe('CaseComposerCanvas — 策略显示名统一(2026-09-05)', () => {
           { kind: 'assign', source: '$.t', target: '$.call.request.body.orderId' } as any,
         ],
       })
-      const { w } = mountCanvas([s0])
+      const { w, fs } = mountCanvas([s0])
       await flushPromises()
       // 策略卡徽标:覆写名(旧 label 不再出现)
       const badges = w.findAll('.sf-badge').map((b) => b.text())
@@ -1997,45 +2018,45 @@ describe('CaseComposerCanvas — 策略显示名统一(2026-09-05)', () => {
 
 /**
  * 字段状态控制门禁(2026-09-05 spec §3.5,Canvas 落地层 onFieldState):
- * 行尾下拉写 step.field_states 稀疏增量 → validateEndpointFieldStates
+ * 行尾下拉写 ui.fieldStates 稀疏增量 → validateEndpointFieldStates
  * 合成态裁决 —— errors 非空 = 拒(回滚本次写入);warnings 仅提示;
  * plate 校验不可达 = 不阻塞编辑(保存链路兜底)。重置(↺)= 清除该条
  * 增量,增量空整键删除(§3.1 稀疏写入)。
  */
 describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
-  it('G1: 下拉切 carry → 稀疏增量落 step.field_states,校验放行不回滚', async () => {
+  it('G1: 下拉切 carry → 稀疏增量落 ui.fieldStates,校验放行不回滚', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     const sel = w.find('.field .fss-sel')
     expect(sel.exists()).toBe(true)
     await sel.setValue('carry')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({ '$.orderId': 'carry' })
+    expect(fs.value['0']).toEqual({ '$.orderId': 'carry' })
     expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-1', { '$.orderId': 'carry' })
   })
 
-  it('G2: 校验 errors 非空 → 回滚本次写入(首次写入 field_states 整键不落)', async () => {
+  it('G2: 校验 errors 非空 → 回滚本次写入(首次写入 fieldStates 整键不落)', async () => {
     vi.mocked(validateEndpointFieldStates).mockResolvedValueOnce({
       errors: [{ path: '$.orderId', message: 'required 字段不可 carry(硬拒)' }],
       warnings: [],
     } as any)
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('.field .fss-sel').setValue('carry')
     await flushPromises()
-    expect(steps[0].field_states).toBeUndefined()
+    expect(fs.value['0']).toBeUndefined()
   })
 
   it('G3: plate 校验不可达 → 不阻塞(增量保留,保存链路兜底)', async () => {
     vi.mocked(validateEndpointFieldStates).mockRejectedValueOnce(new Error('net down'))
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('.field .fss-sel').setValue('collapse')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({ '$.orderId': 'collapse' })
+    expect(fs.value['0']).toEqual({ '$.orderId': 'collapse' })
   })
 
   it('G4: warnings 软警告 → 不回滚(stale 增量等提示透出)', async () => {
@@ -2044,23 +2065,23 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
       warnings: [{ path: '$.ghost', message: '增量路径不在目录宇宙: $.ghost' }],
     } as any)
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('.field .fss-sel').setValue('carry')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({ '$.orderId': 'carry' })
+    expect(fs.value['0']).toEqual({ '$.orderId': 'carry' })
   })
 
   it('G5: ↺ 重置 → 清除该条增量;增量空整键删除(§3.1 稀疏写入)', async () => {
     const steps = [mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     // 用 collapse 写增量(carry 会让行离树 — 翻回入口 = 字段找回搜索框,
     // 2026-09-07 §2 已实现,见 C2);collapse 叶子收进「已折叠字段」区,
     // 区内行尾 ↺ 仍可达
     await w.find('.field .fss-sel').setValue('collapse')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({ '$.orderId': 'collapse' })
+    expect(fs.value['0']).toEqual({ '$.orderId': 'collapse' })
     // overlay 命中 → 折叠区行内 ↺ 可见;点击上抛 (path, null) →
     // 增量清空整键删除,叶子回直接渲染面(折叠区随之消失)
     await w.find('.folded-toggle').trigger('click')
@@ -2068,7 +2089,7 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
     expect(reset.exists()).toBe(true)
     await reset.trigger('click')
     await flushPromises()
-    expect(steps[0].field_states).toBeUndefined()
+    expect(fs.value['0']).toBeUndefined()
     expect(w.find('[data-testid="folded-fields"]').exists()).toBe(false)
   })
 })
@@ -2091,13 +2112,13 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
 
   it('C1: 行尾 carry 容器一次成功(sink 压平子孙,隐性缺陷修复)', async () => {
     const steps = [mkStepOn('ep-deep')]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     // 容器头是文档序首个 FieldStateSelect(supplier 先序;body 无数组行,
     // 叶子行不存在,.field .fss-sel 落空 —— 须找容器头)
     await w.find('.fss-sel').setValue('carry')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({
+    expect(fs.value['0']).toEqual({
       '$.supplier': 'carry',
       '$.supplier.order_supplier_id': 'carry',
     })
@@ -2105,7 +2126,7 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
 
   it('C2: 搜索找回 carry 容器深子(surface 拉起祖先落 collapse)', async () => {
     const steps = [mkStepOn('ep-carry-tree')]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     const input = w.find('input.fss-search-input')
     expect(input.exists()).toBe(true)
@@ -2115,7 +2136,7 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
     expect(sel.exists()).toBe(true)
     await sel.setValue('form')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({
+    expect(fs.value['0']).toEqual({
       '$.supplier.order_supplier_id': 'form',
       '$.supplier': 'collapse',
     })
@@ -2131,24 +2152,24 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
       warnings: [],
     } as any)
     const steps = [mkStepOn('ep-carry-tree')]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('input.fss-search-input').setValue('order_supplier_id')
     await waitForDebounce()
     await w.find('.fss-search-row select.fss-sel').setValue('form')
     await flushPromises()
-    expect(steps[0].field_states).toBeUndefined()
+    expect(fs.value['0']).toBeUndefined()
   })
 
   it('C4: 搜索行 ↺ 仅清自身增量(祖先 surface 意图保留)', async () => {
     const steps = [mkStepOn('ep-carry-tree')]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.find('input.fss-search-input').setValue('order_supplier_id')
     await waitForDebounce()
     await w.find('.fss-search-row select.fss-sel').setValue('form')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({
+    expect(fs.value['0']).toEqual({
       '$.supplier.order_supplier_id': 'form',
       '$.supplier': 'collapse',
     })
@@ -2159,7 +2180,7 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
     expect(reset.exists()).toBe(true)
     await reset.trigger('click')
     await flushPromises()
-    expect(steps[0].field_states).toEqual({ '$.supplier': 'collapse' })
+    expect(fs.value['0']).toEqual({ '$.supplier': 'collapse' })
   })
 })
 
@@ -2183,7 +2204,7 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
 
   it('K1: 控制行「复制」→ 深拷贝插入紧随其后,名称加 (副本) 并选中新卡', async () => {
     const steps = [mkStep(), mkStep()]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     const rows = w.findAll('.step-row')
     expect(rows[0].find('.step-copy').exists()).toBe(true)
@@ -2204,7 +2225,7 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
   })
 
   it('K2: 删除按钮移入功能控制行 — 点击删除该卡', async () => {
-    const { w } = mountCanvas([mkStep(), mkStep()])
+    const { w, fs } = mountCanvas([mkStep(), mkStep()])
     await flushPromises()
     const rows = w.findAll('.step-row')
     expect(rows[1].find('.step-actions .step-del').exists()).toBe(true)
@@ -2221,7 +2242,7 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
     const scrolled: Element[] = []
     Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
     try {
-      const { w } = mountCanvas(Array.from({ length: 8 }, () => mkStep()))
+      const { w, fs } = mountCanvas(Array.from({ length: 8 }, () => mkStep()))
       await flushPromises()
       expect(scrolled).toHaveLength(0)   // 挂载不触发(初始选中第 1 卡本就在顶)
       const rows = w.findAll('.step-row')
@@ -2248,7 +2269,7 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
         headers: {}, view_hints: { endpoint_id: 'ep-carry' },
       },
     })
-    const { w } = mountCanvas([mkStep(), s1])
+    const { w, fs } = mountCanvas([mkStep(), s1])
     await flushPromises()
     // 预拉证据:ep-carry 的 /full 在无任何点击的情况下被请求
     expect(vi.mocked(getFullEndpoint)).toHaveBeenCalledWith('ep-carry')
@@ -2269,7 +2290,7 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
     try {
       const s0 = mkStepOn('ep-empty')  // 当前步:契约空 → JSON 编辑 + "未声明请求字段契约"提示
       const s1 = mkStepOn('ep-fail')   // 另一步预拉失败 — 不得污染当前步占位
-      const { w } = mountCanvas([s0, s1])
+      const { w, fs } = mountCanvas([s0, s1])
       await flushPromises()
       expect(w.text()).toContain('未声明请求字段契约')
       expect(w.text()).not.toContain('plate 不可达')
@@ -2294,7 +2315,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       request: { kind: 'request', body: {} },
     })]
     // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
-    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
+    const { w, fs } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
     // 查询别名 = 当前 step 服务同域 users 键序首命中(修订 10:查询身份 =
     // 执行身份的域内首键)— query-qa 同域命中;backup 异域不取
@@ -2347,7 +2368,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: { fees: [{ cost_id: '', note: 'keep' }] } },
     })]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
       view: 'v2',
@@ -2388,7 +2409,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     const draft = useScenarioDraftStore()
     draft.draft = {
@@ -2428,7 +2449,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
              headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
       request: { kind: 'request', body: {} },
     })]
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps, services: { fin: 'http://fin.example', sysY: 'http://y.example' },
     })
     await flushPromises()
@@ -2483,7 +2504,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
+    const { w, fs } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
     const draft = useScenarioDraftStore()
     draft.draft = {
@@ -2517,11 +2538,12 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     const withHeaders = (headers: Record<string, string>) => mkStep({
       call: {
         kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-        headers, view_hints: { endpoint_id: 'ep-vs' },
+        headers,
       },
+      endpoint: 'ep-vs',
       request: { kind: 'request', body: {} },
     })
-    const { w } = mountCanvas({
+    const { w, fs } = mountCanvas({
       steps: [withHeaders({ Authorization: '${auth.ghost.token}' })],
       services: { fin: 'http://fin.example' },
     })
@@ -2567,7 +2589,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       { name: 'customer_part', query_params: ['customer_id'] },
     ] as any[])
     vi.mocked(fetchQueryViewRows).mockClear()
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     // client_expand_id 查钮(customer_id 的查钮在先)→ 索引定参数面后
     // 打开即参数段;同名约定预填当前 step body 顶层 customer_id 字面量
@@ -2608,7 +2630,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       }],
       truncated: false, fetched_at: 'T3', cached: false, stale: false,
     })
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.findAll('.vs-query-btn')[1].trigger('click')   // client_expand_id 查钮 → 参数段
     await flushPromises()
@@ -2642,7 +2664,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     ] as any[])
     // 首次携参查询失败(§7.5 降级:错误块门控 template v-else,含参数段)
     vi.mocked(fetchQueryViewRows).mockRejectedValueOnce(new Error('上游查询失败'))
-    const { w } = mountCanvas(steps)
+    const { w, fs } = mountCanvas(steps)
     await flushPromises()
     await w.findAll('.vs-query-btn')[1].trigger('click')   // → 参数段
     await flushPromises()
@@ -2681,7 +2703,7 @@ describe('CaseComposerCanvas — 期望提升链退场(spec v2 §2)', () => {
           { kind: 'assertion', target: '$.call.response.body.msg', operator: 'eq', expected: '${var.exp_msg}' } as any,
         ],
       })
-      const { w } = mountCanvas([s0])
+      const { w, fs } = mountCanvas([s0])
       await flushPromises()
       const heads = w.findAll('.sf-head')
       expect(heads.length).toBe(2)
@@ -2719,7 +2741,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
           { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
         ],
       })
-      const { w } = mountCanvas([s0])
+      const { w, fs } = mountCanvas([s0])
       await flushPromises()
       await w.find('.sf-head').trigger('click')   // 展开断言卡
       await flush()
@@ -2864,7 +2886,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
         },
         request: { kind: 'request', body: { a: '${var.q}', b: '${var.q}' } },
       })
-      const { w } = mountCanvas([s0])
+      const { w, fs } = mountCanvas([s0])
       await flushPromises()
       // DOM 通路:字段 a 菜单 → 引用共享变量 → 选 q(varInsert → 软提示)
       await w.findAll('.fa-menu-btn')[0].trigger('click')
@@ -2887,7 +2909,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
 
 describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
   it('REG-MARK: FieldForm registryMark → Canvas 组装 path(stepIndex=activeStepIdx)+ value 直传上抛 registryAdd', async () => {
-    const { w } = mountCanvas([mkStep()])
+    const { w, fs } = mountCanvas([mkStep()])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     // 文档序第一个 FieldForm = 请求体侧(fieldActions=true);strategy=[]
@@ -2906,7 +2928,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
   it('REG-OPEN: 无模板守卫直通 — 非模板字段亦可偏离,上抛 registryAdd(value=字段当前字面量)', async () => {
     // mkStep body orderId='ord-1'(非 ${var} 模板)→ v3 去守卫(spec §5
     // 裁定 2「任意字段可偏离」):path 即注入地址,与模板化解耦,直通
-    const { w } = mountCanvas([mkStep()])
+    const { w, fs } = mountCanvas([mkStep()])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     await w.find('.fa-menu-btn').trigger('click')
@@ -2923,7 +2945,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     // 接线面唯一覆盖:菜单项存在(T13/P7-3)不等于**点在响应侧 FieldForm 上
     // 上抛的是响应域 handler** —— 接错成 onRegistryMark 会静默产出请求侧形状
     // (路径落错域、运行期永不生效),而菜单与条目 UI 都照常。
-    const { w } = mountCanvas([respStep()])
+    const { w, fs } = mountCanvas([respStep()])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
@@ -2943,7 +2965,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
 
   it('REG-CHAIN: 模板化字段全链 DOM 点击 → registryAdd(jsonpath=$.orderId, value=${var.oid} 原样字面量)', async () => {
     const s0 = mkStep({ request: { kind: 'request', body: { orderId: '${var.oid}' } } as any })
-    const { w } = mountCanvas([s0])
+    const { w, fs } = mountCanvas([s0])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     await w.find('.fa-menu-btn').trigger('click')
@@ -2976,7 +2998,7 @@ describe('CaseComposerCanvas — 渲染期取数收口(阶段二 Task 7)', () =>
   it('CANVAS-FETCH-1: 预拉覆盖 stepDecls 会问到的每一个端点', async () => {
     const full = vi.mocked(getFullEndpoint)
     full.mockClear()
-    const { w } = mountCanvas({ steps: [stepWith('ep-a'), stepWith('ep-b'), stepWith('ep-c')] })
+    const { w, fs } = mountCanvas({ steps: [stepWith('ep-a'), stepWith('ep-b'), stepWith('ep-c')] })
     await flushPromises()
     // stepDecls 只在 local 里的 step 上被调用(currentStep 与模板 v-for 同源),
     // 预拉走的正是 local —— 故三者相等即「问得到 ⇒ 已预拉」。
@@ -2988,7 +3010,7 @@ describe('CaseComposerCanvas — 渲染期取数收口(阶段二 Task 7)', () =>
   it('CANVAS-FETCH-2: 渲染不再驱动取数', async () => {
     const full = vi.mocked(getFullEndpoint)
     full.mockClear()
-    const { w } = mountCanvas({ steps: [stepWith('ep-a')] })
+    const { w, fs } = mountCanvas({ steps: [stepWith('ep-a')] })
     await flushPromises()
     const afterMount = full.mock.calls.length
     // 「渲染期零请求」的可执行判据:预拉只在 stepEndpointIds 变化时触发,清空面 +
@@ -3023,6 +3045,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
    *  重跑一次取数 —— 本组用它造「续用旧面」那一格(面到期后的那次刷新失败)。 */
   function mountCanvasLive(initial: StepView[]) {
     const stepsRef = ref<StepView[]>(initial)
+    normalizeStepAnchors(initial as any[])
     const orch = ref<Orchestration>(mkOrch(initial.length))
     const inserter = useInsertTarget()
     const Parent = defineComponent({
@@ -3049,7 +3072,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
         .mockResolvedValue({                                 // 重试时 plate 已恢复
           description: 'ep', request: { declarations: [] }, responses: {},
         } as any)
-      const { w } = mountCanvas([stepWith('ep-a')])
+      const { w, fs } = mountCanvas([stepWith('ep-a')])
       await flushPromises()
       expect(full.mock.calls.length).toBe(1)
       // 失败态可见,且给的是**取数入口**(可点,不是静态说明文字)

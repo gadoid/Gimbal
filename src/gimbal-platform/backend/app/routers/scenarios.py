@@ -198,7 +198,9 @@ async def preview_plate(
     # build 内部降级(不注入,不 5xx);此处再兜一层 — carry 是增强
     # 不是前置条件,任何故障(含 DB)都降级为无 carry,绝不阻塞导出。
     try:
-        carry_ctx = await build_carry_context(db, body.definition)
+        carry_ctx = await build_carry_context(
+            db, body.definition,
+            ui_field_states=(body.ui or {}).get("fieldStates") or {})
     except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
         logger.opt(exception=True).warning(
             "preview_plate: carry context build failed; skipped")

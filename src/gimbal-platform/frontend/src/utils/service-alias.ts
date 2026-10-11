@@ -27,22 +27,22 @@ export function deriveBase(key: string, catalogNames: ReadonlySet<string>): stri
   return catalogNames.has(base) ? base : null
 }
 
-/** deriveSystem 的 step.api 最小结构(StepView.api 的结构性子集)。 */
-interface ApiLike {
+/** deriveSystem 的 step 最小结构(StepView 的结构性子集)。 */
+interface StepLike {
   service?: string
-  view_hints?: { endpoint_id?: string }
+  endpoint?: string
 }
 
-/** step.api → 系统名;无 service 返回 null(调用方跳过该 step)。 */
+/** step(call.service + step.endpoint)→ 系统名;无 service 返回 null。 */
 export function deriveSystem(
-  api: ApiLike | null | null | undefined,
+  api: StepLike | null | null | undefined,
   catalogNames: ReadonlySet<string>,
   systemByService: ReadonlyMap<string, string>,
 ): string | null {
   const svc = ((api?.service ?? '')) || ''
   if (!svc) return null
-  // ① endpoint_id 首段 — step 自带,最权威(点语法 `{system}.{service}.{name}`)
-  const eid = api?.view_hints?.endpoint_id
+  // ① step.endpoint 首段 — 最权威(点语法 `{system}.{service}.{name}`)
+  const eid = api?.endpoint
   if (eid && eid.includes('.')) return eid.split('.')[0]
   // ② 别名归 base 后查目录权威映射(fin-service → fin)
   const base = deriveBase(svc, catalogNames)

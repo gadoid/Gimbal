@@ -302,8 +302,8 @@ export interface CallView {
   timeout?: number
   /** 原生认证标签(v2.1 F-2b:call.user → token/timestamp 头注入) */
   user?: string
-  /** 平台视图扩展(与 ApiView.view_hints 同构;字段设计渲染依赖 endpoint_id) */
-  view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
+  /** RS2/R5b:http 路径参数取值(场景自有字段;模板归 binding) */
+  path_params?: Record<string, string>
   /** 协议自有字段(access=allow 存放于此) */
   [key: string]: unknown
 }
@@ -362,6 +362,8 @@ export type StrategyView = ExtractView | AssignView | AssertionView
  * 注入面在 dispatch 预解析阶段读原始 definition,§3.1)。
  */
 export interface StepView {
+  /** M3:接口锚点(M1 endpoint id)——重投影/影响分析/结构改造的定位键 */
+  endpoint?: string
   kind: 'step'
   description?: string
   /** v2.1 F-2a + api→call 清理:call 是唯一调用形态(api 已退役) */
@@ -374,7 +376,6 @@ export interface StepView {
    * 添加字段 = 增量[path]=form/collapse;移除 = 增量[path]=carry。
    * 解析链见 utils/declarations.ts resolveState(单一实现,§3.2)。
    */
-  field_states?: Record<string, FieldState>
 }
 
 /** plate Meta。对齐 gimbal_plate/schema/scenario.py Meta。 */
@@ -478,10 +479,11 @@ export function stepCall(step: StepLike): CallView | null {
   return c && typeof c === 'object' ? (c as CallView) : null
 }
 
-/** 从 step 读 view_hints.endpoint_id(call 形态携带;缺失返回 undefined)。 */
+/** 从 step 读接口锚点(M3 定稿:step.endpoint 一等字段)。 */
 export function stepEndpointId(step: StepLike): string | undefined {
-  const c = stepCall(step)
-  return c?.view_hints?.endpoint_id || undefined
+  if (!step || typeof step !== 'object') return undefined
+  const eid = (step as Record<string, unknown>).endpoint
+  return typeof eid === 'string' && eid ? eid : undefined
 }
 
 /** 从 step 读 headers(无调用信息返回空对象)。 */

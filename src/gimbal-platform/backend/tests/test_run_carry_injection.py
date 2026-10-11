@@ -171,7 +171,7 @@ async def test_run_completes_when_carry_context_build_fails(
 
     boom_calls = {"n": 0}
 
-    async def _boom(db, definition):
+    async def _boom(db, definition, **kwargs):
         boom_calls["n"] += 1
         raise RuntimeError("carry boom")
 
@@ -220,21 +220,19 @@ async def test_run_step_field_states_overlay_flips_face(
             updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
-    def _step(field_states: dict | None = None) -> dict:
-        step = {"kind": "step",
-                "call": {"service": "fin-service", "path": "/x",
-                        "view_hints": {"endpoint_id":
-                                       "fin.settlement.create_order"}},
+    def _step() -> dict:
+        return {"kind": "step",
+                "endpoint": "fin.settlement.create_order",
+                "call": {"service": "fin-service", "path": "/x"},
                 "request": {"kind": "request", "body": {"order_id": "o-1"}}}
-        if field_states is not None:
-            step["field_states"] = field_states
-        return step
 
     bob = await _member(client, "bob")
-    r = await client.post(
-        "/api/scenarios", headers=bob,
-        json=_draft(steps=[_step(), _step({"$.remark": "form",
-                                           "$.trace": "carry"})]))
+    # M4:字段状态增量在 payload.ui.fieldStates(按步骤位置索引),
+    # 不再写在 step 上
+    draft = _draft(steps=[_step(), _step()])
+    draft["ui"] = {"fieldStates": {
+        "1": {"$.remark": "form", "$.trace": "carry"}}}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
     assert r.status_code in (200, 201), r.text
 
     cases: list[dict] = []

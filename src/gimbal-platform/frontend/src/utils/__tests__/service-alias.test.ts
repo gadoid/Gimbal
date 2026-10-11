@@ -39,13 +39,13 @@ describe('deriveBase — 最后一个 "-" 切分 + 目录名集合成员判定(s
 })
 
 describe('deriveSystem — step 系统派生(权威源优先,杜绝把服务名当系统)', () => {
-  it('endpoint_id 直引:fin.settlement.create_order → fin(step 自带,最权威)', () => {
-    expect(deriveSystem({ service: 'fin-service', view_hints: { endpoint_id: 'fin.settlement.create_order' } }, CAT, SYS)).toBe('fin')
+  it('step.endpoint 直引:fin.settlement.create_order → fin(最权威)', () => {
+    expect(deriveSystem({ service: 'fin-service', endpoint: 'fin.settlement.create_order' }, CAT, SYS)).toBe('fin')
   })
   it('别名步骤:fin-service-codfish2 经 deriveBase 归 fin-service → 目录映射 → fin', () => {
     expect(deriveSystem({ service: 'fin-service-codfish2' }, CAT, SYS)).toBe('fin')
   })
-  it('目录直引步骤:fin-service 无 view_hints → 目录映射 → fin(不再整串当系统)', () => {
+  it('目录直引步骤:fin-service 无锚点 → 目录映射 → fin(不再整串当系统)', () => {
     expect(deriveSystem({ service: 'fin-service' }, CAT, SYS)).toBe('fin')
   })
   it('点语法服务名(无映射命中):fin.settlement → 首段 fin(存量启发式保留)', () => {

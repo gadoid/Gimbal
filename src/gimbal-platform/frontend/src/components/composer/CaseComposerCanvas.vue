@@ -117,9 +117,23 @@
             <!-- 接口事实只读缩略: method/service/path 来自接口目录 (plate), 是选定接口的属性,
                  不是用例配置项。要换接口 → 删 step 从目录重选。 -->
             <div class="api-summary">
-              <span v-if="stepMethod(currentStep)" class="method-badge" :class="`m-${stepMethod(currentStep).toLowerCase()}`">{{ stepMethod(currentStep) }}</span>
+              <span v-if="projMethod" class="method-badge" :class="`m-${projMethod.toLowerCase()}`">{{ projMethod }}</span>
               <span v-if="stepService(currentStep)" class="svc-tag">{{ stepService(currentStep) }}</span>
-              <span v-if="stepPath(currentStep)" class="ep-path">{{ stepPath(currentStep) }}</span>
+              <span v-if="projPath" class="ep-path">{{ projPath }}</span>
+            </div>
+            <!-- RS2/R5b:路径参数(场景自有字段)——模板占位符逐一取值,
+                 模板本身经投影只读展示(binding 派生,不落库)。 -->
+            <div v-if="pathParamNames.length" class="pp-row" data-testid="path-params-editor">
+              <span class="pp-label">路径参数</span>
+              <div v-for="n in pathParamNames" :key="n" class="pp-item">
+                <span class="pp-name mono" v-text="'{' + n + '}'" />
+                <input
+                  class="pp-input"
+                  :value="currentStep.call?.path_params?.[n] ?? ''"
+                  :placeholder="'{' + n + '}'"
+                  @input="(e: any) => setPathParam(n, e.target.value)"
+                />
+              </div>
             </div>
 
             <!-- 运行引用(别名消费点,spec §1.4 双显):目录事实只读,引用可切。
@@ -261,7 +275,7 @@
                   :injected="requestInjected"
                   :extracted="requestExtracted"
                   :state-control="true"
-                  :overlay="currentStep.field_states"
+                  :overlay="fsOf(currentStep)"
                   :query-badges="vsBadges"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => { if (currentStep.request) currentStep.request.body = v }"
@@ -605,6 +619,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
+import { useEndpointProjection } from '@/composables/useEndpointProjection'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import type { RegistryMark } from '@/types/assertion-registry'
 import { parseJson } from '../../utils/json'
@@ -616,10 +631,14 @@ const props = defineProps<{
   services?: Record<string, string>
   /** 跨路由跳转消费(spec §5.3 期望列头→断言卡):挂载后一次性切步+定位 */
   focusJump?: { stepIdx: number; strategyIdx: number } | null
+  /** M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
+   *  field_states 已出 step,Canvas 是唯一写入方(§3.1 稀疏增量)。 */
+  fieldStates?: Record<string, Record<string, FieldState>>
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
+  'update:fieldStates': [Record<string, Record<string, FieldState>>]
   /** 内联创建别名双写的声明面(config.services 整表替换) */
   'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
@@ -631,6 +650,20 @@ const emit = defineEmits<{
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
+// M4:字段状态增量本地镜像(payload.ui.fieldStates,键 = 步骤位置字符串)
+const fsMap = reactive<Record<string, Record<string, FieldState>>>(
+  { ...(props.fieldStates || {}) })
+
+function _syncFs(): void {
+  emit('update:fieldStates', { ...fsMap })
+}
+
+/** step → 该步的字段状态增量(按 local 里的位置索引)。 */
+function fsOf(step: StepView | undefined): Record<string, FieldState> {
+  if (!step) return {}
+  const i = local.indexOf(step)
+  return i >= 0 ? (fsMap[String(i)] || {}) : {}
+}
 const orch = reactive<Orchestration>(
   props.orchestration || { steps: [], resourceMeta: {} }
 )
@@ -666,20 +699,47 @@ function stepDecls(step: StepView | undefined) {
 /** 请求表单面平铺投影(解析态 != carry,先序)— reqTypeC 差集/描述
  *  索引消费;渲染树走 requestNodes(buildTree 值×结构合并,§5)。 */
 function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
-  return formBindings(stepDecls(step), step?.field_states)
+  return formBindings(stepDecls(step), fsOf(step))
 }
 
 /** 请求体渲染树(§5.1 三输入:目录 + 意图 field_states + 值 body)。
  *  行数跟 body、结构跟目录;carry 不进树(值表整包注入零感知)。 */
 const requestNodes = computed<FieldTreeNode[]>(() => {
   const step = currentStep.value
-  return buildTree(stepDecls(step), step?.field_states, step?.request?.body)
+  return buildTree(stepDecls(step), fsOf(step), step?.request?.body)
 })
 
 /** 字段找回搜索语料(2026-09-07 §2.1):全量目录含 carry(carry 正是
  *  搜索语料,09-05 §5.4);仅请求签挂载(响应面 state 无视)。 */
 const fieldSearchCorpus = computed(() =>
-  searchCorpus(stepDecls(currentStep.value), currentStep.value?.field_states))
+  searchCorpus(stepDecls(currentStep.value), fsOf(currentStep.value)))
+
+// M4/4.8:binding 只读展示(method/path 模板)经投影查询 —— call 不存
+// 派生字段;存量步的 call.method/path 仅作拉取失败时的显示兜底。
+const { proj: currentProj, refresh: refreshProj } = useEndpointProjection(
+  () => stepEndpointId(currentStep.value))
+watch(() => stepEndpointId(currentStep.value), () => { void refreshProj() }, { immediate: true })
+const projMethod = computed(() =>
+  currentProj.value?.method || stepMethod(currentStep.value))
+const projPath = computed(() =>
+  currentProj.value?.path || stepPath(currentStep.value))
+
+/** 投影 path 模板里的占位符名(如 /order/{orderId} → orderId)。 */
+const pathParamNames = computed<string[]>(() => {
+  const tpl = currentProj.value?.path || stepPath(currentStep.value) || ''
+  return [...tpl.matchAll(/\{([A-Za-z0-9_]+)\}/g)].map((m) => m[1])
+})
+
+function setPathParam(name: string, value: string): void {
+  const step = currentStep.value
+  const call = stepCall(step)
+  if (!call) return
+  const params = { ...(call.path_params ?? {}) }
+  if (value) params[name] = value
+  else delete params[name]
+  if (Object.keys(params).length) call.path_params = params
+  else delete call.path_params
+}
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
 function hasEndpointRef(step: StepView | undefined): boolean {
@@ -1069,21 +1129,24 @@ function warnMultiViewVar(name: string) {
 async function applyFieldStates(increments: Record<string, FieldState | null>) {
   const step = currentStep.value
   if (!step || !Object.keys(increments).length) return
-  const before = step.field_states ? { ...step.field_states } : undefined
-  const next: Record<string, FieldState> = { ...(step.field_states ?? {}) }
+  const idx = String(activeStepIdx.value)
+  const before = fsMap[idx] ? { ...fsMap[idx] } : undefined
+  const next: Record<string, FieldState> = { ...(fsMap[idx] ?? {}) }
   for (const [p, s] of Object.entries(increments)) {
     if (s === null) delete next[p]
     else next[p] = s
   }
-  if (Object.keys(next).length) step.field_states = next
-  else delete step.field_states
+  if (Object.keys(next).length) fsMap[idx] = next
+  else delete fsMap[idx]
+  _syncFs()
   const eid = stepEndpointId(step)
   if (!eid) return
   try {
-    const verdict = await validateEndpointFieldStates(eid, step.field_states ?? {})
+    const verdict = await validateEndpointFieldStates(eid, { ...next })
     if (verdict.errors.length) {
-      if (before) step.field_states = before
-      else delete step.field_states
+      if (before) fsMap[idx] = before
+      else delete fsMap[idx]
+      _syncFs()
       toast.error(`字段状态被拒:${verdict.errors[0].message}`)
       return
     }
@@ -1108,7 +1171,7 @@ async function onFieldState(path: string, state: FieldState | null) {
     return
   }
   await applyFieldStates(
-    cascadeIncrements(stepDecls(step), step.field_states, path, state))
+    cascadeIncrements(stepDecls(step), fsOf(step), path, state))
 }
 
 /** 搜索框(§2.2):命中行 select/reset —— 与行尾同通路,级联归此。 */
@@ -1430,7 +1493,7 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
   const decls = stepDecls(step)
   if (!decls) return []
-  const fs = step?.field_states
+  const fs = fsOf(step)
   const tree = buildTree(decls, fs, step?.request?.body)
   return [
     ...leafSurface(tree),
@@ -1998,7 +2061,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
  * 从接口目录把 endpoint 加入步骤流:拉 /full 组装初始 step(策略/初始 body)。
  * 契约禁令(spec 2026-08-27 §1.6):目录插入只此一次写 call.service(初值
  * = 规范目录名);任何 plate 拉取驱动的回写不得再触碰该字段 — 它是用户
- * 引用键(可为别名全串),view_hints.endpoint_id 才是目录锚点。
+ * 引用键(可为别名全串),step.endpoint 才是目录锚点(M3)。
  */
 async function onAddEndpoint(ep: any) {
   if (!ep) return
@@ -2016,21 +2079,26 @@ async function onAddEndpoint(ep: any) {
     const strategy = buildInitialStrategies(full)
     // 初始 body:只合成浅层 default/example(carry/契约默认移交注入通道)
     const initialBody = deepDefaults(fields)
+    // M4/Release 6.2:接口步骤只存场景自有字段 —— step.endpoint(M3
+    // 锚点) + call.{protocol, service, headers 追加面, path_params 取值};
+    // method/path 模板/binding headers 等 binding 派生字段不落库,展示经
+    // 投影查询(4.8),执行由 /convert 重投影(4.5)。
+    const pathTpl: string = ep.binding?.path || ep.path || ''
+    const pp: Record<string, string> = {}
+    for (const m of pathTpl.matchAll(/\{([A-Za-z0-9_]+)\}/g)) {
+      pp[m[1]] = pp[m[1]] ?? ''   // 占位符显式占位,编辑器即取即填
+    }
     const newStep: StepView = {
       kind: 'step',
       // plate 契约描述优先(/full → 目录行),name 仅最后兜底
       description: full?.description || ep.description || ep.name,
-      // v2.1 F-2a: 新建步骤产 call 形态(gimbal 唯一调用格式)
+      endpoint: ep.id,
       call: {
         kind: 'call',
         protocol: 'http',
         service: ep.service,
-        // 轻列表行只有平铺坐标(评审 R7):/full 拉取失败时不再落成 GET ''
-        method: ep.binding?.method || ep.method || 'GET',
-        path: ep.binding?.path || ep.path || '',
-        headers: ep.binding?.headers || {},
-        // 接口身份持久化(#2):字段设计渲染/断言候选/数据集绑定都依赖此 key
-        view_hints: { endpoint_id: ep.id },
+        headers: {},
+        ...(Object.keys(pp).length ? { path_params: pp } : {}),
       },
       request: {
         kind: 'request',

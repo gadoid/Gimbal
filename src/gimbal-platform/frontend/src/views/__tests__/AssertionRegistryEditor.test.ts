@@ -294,7 +294,7 @@ it('ARE-10: asserts.target 输入 — 按所选步骤的端点契约给出响应
     },
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await w.findAll('.are-row')[0].trigger('click')      // 选中活条目 → 详情出现
   await flushPromises()
@@ -317,7 +317,7 @@ it('ARE-11: 请求侧候选含契约声明的 carry 字段,并标注状态', asy
     declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   const pathInput = w.findComponent(JsonPathInput)
   expect(pathInput.props('candidates')).toContain('$.customer_id')   // 声明面(body 里没有)
@@ -332,7 +332,7 @@ it('ARE-13: 契约含真值非字符串 path 的声明 → 编辑器不抛、正
     request: { declarations: [{ name: 'bad', path: 7 }, { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' }] },
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await w.find('.jpi-input').setValue('$.')    // 触发建议行渲染 → stateOf 逐条调用
   await flushPromises()
@@ -361,7 +361,7 @@ it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,�
   } as any)
   const ensureSpy = vi.spyOn(endpointFull, 'ensureEndpointFull')
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await flushPromises()
   // 挂载的 ensure() 是**宿主侧**取数口:每端点在面 TTL 内一次(降级后的退避另在组合式内)
@@ -402,7 +402,7 @@ it('ARE-14: 契约在途 → 契约依赖条目不标悬空(与运行面板同�
   // 管理说「悬空」、在运行面板却可勾,正是 C 要消灭的自相矛盾。
   _resetEndpointFullCacheForTest()
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-gate' } }
+  ;(def.steps[0] as any).endpoint = 'ep-gate'
   let release: (v: unknown) => void = () => {}
   vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
   const w = await mountEditor({
@@ -437,7 +437,7 @@ it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)'
     declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call.view_hints = { endpoint_id: 'ep-rg' }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const reg = { entries: [{ id: 'inj-carry', name: 'carry 偏离',
     path: { stepIndex: 0, source: 'body', jsonpath: '$.customer_id' }, value: 1, asserts: [] }] }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: reg })
@@ -458,7 +458,7 @@ it('ARE-16: 契约取数失败 → 降级提示可见 + 可点重试;重试成�
       declared_surface: ['$', '$.carry_x'],
     } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({
     definition: def,
     orchestration: { steps: [], resourceMeta: {} },
@@ -493,7 +493,7 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
       id: 'ep-rg', request: { declarations: [] }, declared_surface: ['$'],
     } as any)
   const def = JSON.parse(JSON.stringify(DEF))
-  def.steps[0].call = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  ;(def.steps[0] as any).endpoint = 'ep-rg'
   const w = await mountEditor({
     definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG,
   })

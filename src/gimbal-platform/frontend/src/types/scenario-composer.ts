@@ -1,3 +1,4 @@
+import type { FieldState } from './plate'
 /**
  * types/scenario-composer.ts — 场景编排的平台容器类型
  *
@@ -39,6 +40,8 @@ export interface ScenarioDraft {
   orchestration: Orchestration
   /** 断言管理注册表(spec v2 §3);缺省 = 空(旧场景/旧客户端) */
   assertion_registry?: AssertionRegistry
+  /** M4/Q18:编辑器状态(定义之外)—— fieldStates 按步骤位置索引 */
+  ui?: { fieldStates?: Record<string, Record<string, FieldState>> }
 }
 
 // ─── 读侧(列表/详情,非草稿)──────────────────────────────────────

@@ -164,6 +164,7 @@
               key="canvas"
               v-model:steps="definition.steps"
               v-model:orchestration="orchestration"
+              v-model:field-states="uiFieldStates"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
               :focus-jump="focusJump"
@@ -306,7 +307,7 @@ import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { useRunAssembly } from '@/composables/useRunAssembly'
-import type { ScenarioView, StepView } from '@/types/plate'
+import type { FieldState, ScenarioView, StepView } from '@/types/plate'
 import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 
 const STEPS = [
@@ -361,6 +362,10 @@ async function maybeAutoSave(): Promise<void> {
 
 const scenario = ref<Scenario | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
+
+// M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
+// field_states 已出 step,Canvas 唯一写入方经 v-model 同步到这里。
+const uiFieldStates = ref<Record<string, Record<string, FieldState>>>({})
 
 // Local draft state — 容器: definition(plate) + orchestration(平台)
 const definition = ref<ScenarioView>({
@@ -819,10 +824,11 @@ async function loadScenario() {
     registryHydrated = false
     try {
       // 归一:旧场景 draft 该键经后端 default 补成 {}(无 entries,truthy,
-      // ?? 兜不住)→ 直灌会在 registry.entries.length 崩配置签渲染
-      registry.value = normalizeRegistry(
-        (await api.getScenarioDraft(scenarioId.value!)).assertion_registry,
-      )
+      // ?? 兜不住)→ 直灌会在 registry.entries.length 崩配置签渲染;
+      // 同一请求顺带水化 ui.fieldStates(M4,读侧 Scenario 不带该键)。
+      const draftPayload = await api.getScenarioDraft(scenarioId.value!)
+      registry.value = normalizeRegistry(draftPayload.assertion_registry)
+      uiFieldStates.value = draftPayload.ui?.fieldStates || {}
       registryHydrated = true
     } catch (e) {
       showError('加载断言注册表', undefined, (e as Error).message)
@@ -1046,6 +1052,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       definition: definition.value,
       orchestration: orchestration.value,
       assertion_registry: registry.value,
+      ui: { fieldStates: uiFieldStates.value },
     }
     let saved: Scenario | undefined
     if (scenario.value) {

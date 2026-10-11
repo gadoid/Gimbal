@@ -484,3 +484,21 @@ export async function getStrategyKindFull(kind: string): Promise<StrategyKindDet
   const { data } = await http.get<StrategyKindDetailView>(`/strategy-catalog/${encodeURIComponent(kind)}/full`)
   return data
 }
+
+/** plate call 投影（4.8）—— binding 只读展示（method/path 模板/timeout）。
+ *  M4/6.2：场景 call 不存 binding 派生字段，展示面由投影提供；
+ *  结果不可变，消费方（useEndpointProjection）会话级缓存。 */
+export interface CallProjectionView {
+  protocol?: string
+  method?: string
+  path?: string
+  timeout?: number
+  headers?: Record<string, string>
+  service?: string
+}
+
+export async function getEndpointProjection(endpointId: string): Promise<CallProjectionView> {
+  const { data } = await http.get<{ item: CallProjectionView }>(
+    `/endpoint-catalog/${encodeURIComponent(endpointId)}/projection`)
+  return data.item ?? {}
+}

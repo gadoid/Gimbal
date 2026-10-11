@@ -1449,9 +1449,12 @@ async def _fanout(
     # (空面/空目录);此处再兜一层 — carry 是增强不是前置条件,任何
     # 故障(含 DB)都降级为无 carry,绝不阻塞执行。
     from .carry_injection import build_carry_context
+    # M4:field_states 增量在 payload.ui.fieldStates(按步骤位置索引)
+    _ui_fs = ((scenario_payload or {}).get("ui") or {}).get("fieldStates") or {}
     try:
         async with db_factory() as _carry_db:
-            carry_ctx = await build_carry_context(_carry_db, definition)
+            carry_ctx = await build_carry_context(
+                _carry_db, definition, ui_field_states=_ui_fs)
     except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
         logger.opt(exception=True).warning(
             "run_dispatcher: carry context build failed; skipped")

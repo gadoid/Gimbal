@@ -40,6 +40,31 @@ class FieldStatesValidateRequest(BaseModel):
     field_states: dict[str, str] = Field(default_factory=dict)
 
 
+@router.get("/{endpoint_id:path}/projection")
+async def get_endpoint_projection(
+    user: CurrentUser,
+    endpoint_id: str,
+    ref: str = '',
+) -> dict:
+    """Proxy ``GET {plate}/api/endpoint/{id}/projection?ref=``（4.8）。
+
+    编排页 binding 只读展示（method/path 模板/timeout）经此查询 ——
+    场景 call 不再存 binding 派生字段（6.2），展示面由投影提供。
+    结果不可变，前端会话级缓存。ref 缺省 = working（新建步骤浏览）。
+    """
+    from ..services import plate_client
+    try:
+        item = await plate_client.get_projection(endpoint_id, ref or "working")
+    except plate_client.PlateUnavailableError as e:
+        raise HTTPException(status_code=502, detail={
+            "code": "plate_unavailable", "message": e.message}) from e
+    if item is None:
+        raise HTTPException(status_code=404, detail={
+            "code": "projection_not_found",
+            "message": f"endpoint {endpoint_id!r} has no call projection"})
+    return {"item": item}
+
+
 @router.get("/{endpoint_id:path}/full")
 async def get_full_endpoint(
     user: CurrentUser,

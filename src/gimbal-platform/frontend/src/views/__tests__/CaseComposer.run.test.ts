@@ -208,10 +208,10 @@ describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {
     const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
     _resetEndpointFullCacheForTest()
     const sc = sampleScenario()
+    ;(sc.steps[0] as any).endpoint = 'ep-cc'
     ;(sc.steps[0] as { call: Record<string, unknown> }).call = {
       kind: 'call', protocol: 'http',
       service: 'fin-service', method: 'POST', path: '/x',
-      view_hints: { endpoint_id: 'ep-cc' },
     }
     vi.spyOn(api, 'getScenario').mockResolvedValue(sc)
     // 在途面 = 「被条目引用到的端点」(useInjectableSurface 的唯一消费面):

@@ -79,6 +79,8 @@ async def create(
         # 注册表随容器重铸透传(spec v2 §3)— 不传则回落 default {}
         # 丢条目(copy 路径经 model_validate 后同样走到这里)。
         assertion_registry=draft.assertion_registry,
+        # M4:编辑器状态(ui.fieldStates)随容器透传
+        ui=draft.ui,
     ).model_dump(by_alias=True, mode="json")
     row = ComposerScenario(
         scenario_id=server_owned.scenario_id,
@@ -161,6 +163,8 @@ async def update(
         # 注册表编辑器整包替换语义(spec v2 §3):PUT 带就存、不带(旧
         # 客户端)回落空 dict — 键归编排器。
         assertion_registry=draft.assertion_registry,
+        # M4:编辑器状态(ui.fieldStates)随容器透传
+        ui=draft.ui,
     ).model_dump(by_alias=True, mode="json")
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()

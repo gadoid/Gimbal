@@ -140,6 +140,10 @@ class ScenarioDraft(BaseModel):
     assertion_registry: dict[str, Any] = Field(
         default_factory=lambda: {"entries": []}
     )
+    # M4/Q18:编辑器状态(UI 侧投影)放定义之外 —— ui.fieldStates 按步骤
+    # 位置索引({"<stepIndex>": {path: state}});与 orchestration 同级,
+    # plate /convert 不感知(定义即纯 M2,Step 不再含 field_states)。
+    ui: dict[str, Any] = Field(default_factory=dict)
 
 
 # ─── data-set ──────────────────────────────────────────────────────

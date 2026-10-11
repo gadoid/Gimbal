@@ -77,7 +77,7 @@ export function useInjectableSurface(
   steps: Ref<any[]>,
   entries: Ref<Array<AssertionEntry | LegacyAssertionEntry>>,
 ): InjectableSurface {
-  /** steps[si] 的契约端点 id(**读,不取数**)——call 唯一形态,读 call.view_hints */
+  /** steps[si] 的契约端点 id(**读,不取数**)——M3:step.endpoint */
   function endpointIdOf(si: number): string | undefined {
     const eid = stepEndpointId(steps.value[si])
     return typeof eid === 'string' && eid ? eid : undefined
