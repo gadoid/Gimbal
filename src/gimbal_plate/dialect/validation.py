@@ -961,3 +961,28 @@ def validate_system_tree(
     validate_consistency(endpoints, statements, report=report)
     _validate_spec_paths(tree, report)
     return report
+
+
+def check_binding_protocols(tree) -> list[Finding]:
+    """I3（Release 2.4/版本模型 3.2）：binding 协议必须在执行器自描述
+    快照的 protocol 表中——否则编排出的用例在执行器上不可执行。
+
+    C 类 finding:按 D-4 分级——涉及已评审对象即阻塞,只涉及草稿降告警。
+    """
+    from gimbal_plate.selfdescribe import ext_snapshot
+    known = {str(e.get("kind") or "") for e in ext_snapshot.protocols()}
+    out: list[Finding] = []
+    seen: set[str] = set()
+    for ep in (tree.endpoints or {}).values():
+        proto = str(ep.binding.protocol or "")
+        if proto and proto not in known and proto not in seen:
+            seen.add(proto)
+            reviewed = getattr(ep, "reviewed", False)
+            out.append(Finding(
+                rule="C10",
+                severity="blocking" if reviewed else "warning",
+                message=(f"协议 {proto!r} 不在执行器自描述快照的 protocol "
+                         "表中（I3 接入即可编排）"),
+                source=ep.id, line=0,
+            ))
+    return out

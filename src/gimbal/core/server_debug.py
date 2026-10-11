@@ -45,6 +45,22 @@ NL = chr(10)
 _REAP_TTL_SEC = 600.0
 
 
+
+
+def _emit_m2_hash_mismatch(m2_info) -> None:
+    """M2 §5.1:hash 不同、代际相同 → m2.hash_mismatch 警告事件(非阻塞)。"""
+    from ..events.bus import get_event_bus
+    bus = get_event_bus()
+    bus.publish({
+        "event_type": "m2.hash_mismatch",
+        "request_hash": m2_info.hash,
+        "built_hash": M2_HASH,
+        "generation": m2_info.generation,
+        "timestamp": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc).isoformat(),
+    })
+
+
 def _m2_generation_gate(m2_info) -> None:
     """M2 §5.1 代际门：三档处理。
 
@@ -66,6 +82,8 @@ def _m2_generation_gate(m2_info) -> None:
             "[M2] hash_mismatch: request={} built={} gen={} "
             "(兼容——放行,读方先升级原则)",
             m2_info.hash[:12], M2_HASH[:12], M2_GENERATION)
+        # §5.1:hash 不同代际相同 → 放行 + m2.hash_mismatch 警告事件
+        _emit_m2_hash_mismatch(m2_info)
         return
     raise HTTPException(
         status_code=409,

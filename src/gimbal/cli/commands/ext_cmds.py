@@ -95,6 +95,16 @@ def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -
             "name": et,
             "fields": payload_fields.get(et, []),
         })
+    # 第七表:param_registry(C 类快照,执行器参数合并代数)
+    from gimbal.schema.param_registry import PARAM_REGISTRY
+    for name, decl in sorted(PARAM_REGISTRY.items()):
+        out.append({
+            "table": "param_registry",
+            "field": name,
+            "level": decl.level,
+            "merge": decl.merge,
+            "sources": list(decl.sources),
+        })
     return out
 
 

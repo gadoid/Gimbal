@@ -1,8 +1,8 @@
 """C 类快照读取（M2 方案 v2.4 §2.1——executor_ext.json 的结构化访问）。
 
 快照由 ``scripts/gen_m2.py gen --targets ext`` 运行 ``gimbal ext list --json``
-生成并入库；plate 读数据文件，不 import 执行器。六张表：
-strategy / protocol / mode / plugin / generator / event。
+生成并入库；plate 读数据文件，不 import 执行器。七张表：
+strategy / protocol / mode / plugin / generator / event / param_registry。
 """
 from __future__ import annotations
 

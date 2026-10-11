@@ -1056,5 +1056,96 @@
     "table": "event",
     "name": "variable.promoted",
     "fields": []
+  },
+  {
+    "table": "param_registry",
+    "field": "retry",
+    "level": "suite",
+    "merge": "override",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "services",
+    "level": "suite",
+    "merge": "deep",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "setup",
+    "level": "suite",
+    "merge": "keyed",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "teardown",
+    "level": "suite",
+    "merge": "keyed",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "timePolicy",
+    "level": "suite",
+    "merge": "override",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "users",
+    "level": "suite",
+    "merge": "deep",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
+  },
+  {
+    "table": "param_registry",
+    "field": "vars",
+    "level": "suite",
+    "merge": "override",
+    "sources": [
+      "source",
+      "suite_patch",
+      "unit_patch",
+      "call_param",
+      "cli_var"
+    ]
   }
 ]

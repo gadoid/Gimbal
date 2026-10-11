@@ -15,25 +15,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from gimbal_plate.schema.strategy import Assertion, Assign, Extract, StrategyBase
+from gimbal_plate.selfdescribe import ext_snapshot
 
-# kind 清单: 显式枚举三个可编排策略。
-_KIND_MODELS: dict[str, type] = {
-    "extract": Extract,
-    "assign": Assign,
-    "assertion": Assertion,
-}
-
-# kind 元数据: (中文 label, phase 归属)。schema 未编码这两者,在此单一维护;
-# 后续想精致可给 strategy.py 的 Field 加 description=,由内省自动带出。
+# kind 清单（§2.1 C 类快照统一出数——含 sleep 等 M2 之外的扩展策略;
+# 原内省实现只见 3 个 kind、漏 sleep,是 M2 方案 §2.1 点名的缺口）
 _KIND_LABELS: dict[str, tuple[str, str]] = {
     "extract": ("从响应提取变量", "after_request"),
-    "assign": ("准备入参赋值", "before_request"),
-    "assertion": ("响应断言", "verifying"),
+    "assign": ("请求前赋值", "before_request"),
+    "assertion": ("断言响应", "after_request"),
+    "sleep": ("等待", "before_request"),
 }
 
+_KIND_MODELS: dict[str, type] = {}
+# 快照表有 params_schema 的策略填入 M2 模型（extract/assign/assertion）;
+# sleep 等执行器扩展策略 params_schema 由快照出（结构权威在执行器）
+from gimbal_plate.schema.strategy import Assertion, Assign, Extract
+_KIND_MODELS.update({
+    "extract": Extract, "assign": Assign, "assertion": Assertion,
+})
+
 # StrategyBase 公共字段名集 —— 用于 base_fields / fields 拆分。
-_BASE_FIELD_NAMES: frozenset[str] = frozenset(StrategyBase.model_fields.keys())
+from gimbal_plate.schema.strategy import StrategyBase as _SB
+_BASE_FIELD_NAMES: frozenset[str] = frozenset(_SB.model_fields.keys())
 
 
 @dataclass(frozen=True)
@@ -149,9 +152,31 @@ class StrategyIndex:
     """
 
     def __init__(self, registry: Any = None) -> None:  # noqa: ARG002
+        # §2.1 C 类:策略清单以快照为准——内省模型只答字段面,kind 覆盖
+        # （含 sleep 等执行器扩展策略）从 executor_ext.json 的 strategy 表出
         self._descriptors: dict[str, _KindDescriptor] = {
             k: d for k in (_KIND_MODELS) if (d := _descriptor_for(k)) is not None
         }
+        for entry in ext_snapshot.strategy_kinds():
+            kind = str(entry.get("kind") or "")
+            if kind and kind not in self._descriptors:
+                # 快照独有（M2 之外的扩展策略,如 sleep）: 由 params_schema
+                # 组装最小描述符（label/phase 用 _KIND_LABELS 或 kind 名）
+                label, phase = _KIND_LABELS.get(kind, (kind, "before_request"))
+                params_schema = entry.get("params_schema") or {}
+                props = (params_schema.get("properties") or {})
+                fields = [
+                    {"name": str(pk), "type": str(pv.get("type") or "string"),
+                     "required": pk in (params_schema.get("required") or []),
+                     "default": pv.get("default"),
+                     "description": str(pv.get("description") or ""),
+                     "enum": pv.get("enum"),
+                     "ui_kind": str(pv.get("ui_kind") or "text")}
+                    for pk, pv in props.items()
+                ]
+                self._descriptors[kind] = _KindDescriptor(
+                    kind=kind, label=label, phase=phase,
+                    fields=fields, base_fields=[])
 
     # ── BaseIndex 契约 ──────────────────────────────────────────────
 

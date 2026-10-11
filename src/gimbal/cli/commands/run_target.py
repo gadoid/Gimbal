@@ -46,12 +46,12 @@ def _run_loaded(cli_ctx, configuration, target, *, expect_kind, output,
 
     from gimbal.core.scenario_runner import RuntimeControl
     runtime_control = None
-    if any(v is not None for v in (step_from, step_to, halt_at)):
+    if any(v is not None for v in (step_from, step_to)):
         runtime_control = RuntimeControl(
-            halt_at=step_to if step_to is not None else halt_at,
+            halt_at=step_to,
             halt_reason=(
                 f"cli --step-to={step_to}" if step_to is not None
-                else (f"cli --halt-at={halt_at}" if halt_at is not None else "user-requested")
+                else (f"cli --step-to={step_to}" if step_to is not None else "user-requested")
             ),
             step_from=step_from,
         )
@@ -153,10 +153,6 @@ def scenario(
     step_to: Annotated[
         int | None,
         typer.Option("--step-to", help="执行到指定 step 停止（0-based）。", rich_help_panel="步骤控制"),
-    ] = None,
-    halt_at: Annotated[
-        int | None,
-        typer.Option("--halt-at", help="执行到指定 step 停止（--step-to 的别名语义）。", rich_help_panel="步骤控制"),
     ] = None,
     var: Annotated[
         list[str] | None,
