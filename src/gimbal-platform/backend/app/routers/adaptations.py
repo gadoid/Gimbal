@@ -384,3 +384,45 @@ async def stale_scenarios(
     except PlateUnavailableError as e:
         raise _plate_502(e) from e
     return {"items": items, "total": len(items)}
+
+class BatchSubmitIn(BaseModel):
+    """批量提交入参（§5.3 直接切换/字段级的多场景聚合）。"""
+
+    scenarioIds: list[str] = Field(min_length=1)
+    targetRevision: str
+    system: str | None = None
+    reviewConfirmed: bool = False
+
+
+@router.post("/submit-batch")
+async def submit_batch(user: CurrentUser, db: DbSession,
+                       body: BatchSubmitIn) -> dict:
+    """批量提交:逐场景走 submit_adaptation(单事务语义保持),聚合结果。
+
+    §5.5「一次编辑作用于所有受影响场景」的最小落地:ops 起草按场景
+    compare 差异各自生成(直接切换场景零 op);单场景失败不回滚已成的
+    (结果按场景报告,失败项重试)。
+    """
+    results: list[dict] = []
+    for sid in body.scenarioIds:
+        try:
+            compare = await adaptation_service.compare_scenario(
+                db, scenario_id=sid, target_revision=body.targetRevision,
+                system=body.system)
+            out = await adaptation_service.submit_adaptation(
+                db, scenario_id=sid, ops=compare.get("drafted_ops") or [],
+                target_revision=body.targetRevision, save_mode="direct",
+                review_confirmed=body.reviewConfirmed,
+                system=body.system, user=user)
+            results.append({"scenario_id": sid, **out})
+        except PlateUnavailableError as e:
+            raise _plate_502(e) from e
+        except ValueError as e:
+            results.append({"scenario_id": sid, "success": False,
+                            "message": str(e)})
+        except HTTPException as e:
+            results.append({"scenario_id": sid, "success": False,
+                            "message": str(e.detail)})
+    ok = sum(1 for r in results if r.get("success"))
+    return {"total": len(results), "succeeded": ok,
+            "failed": len(results) - ok, "items": results}
