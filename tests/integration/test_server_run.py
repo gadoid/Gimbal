@@ -239,6 +239,14 @@ def test_m2_generation_gate():
     r3 = client3.post("/runs", headers=HDRS, json={"target": LEGAL_TARGET})
     assert r3.status_code == 200
 
+    # hash 不同、代际相同 → 放行(兼容;发 m2.hash_mismatch 警告事件)
+    client4 = make_client()
+    r4 = client4.post("/runs", headers=HDRS, json={
+        "target": LEGAL_TARGET,
+        "m2": {"hash": "a" * 64, "generation": M2_GENERATION},
+    })
+    assert r4.status_code == 200
+
 
 # ════════════════════════════════════════════════════════════════
 # [7] 默认端口

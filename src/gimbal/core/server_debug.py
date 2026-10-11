@@ -48,18 +48,21 @@ _REAP_TTL_SEC = 600.0
 
 
 def _emit_m2_hash_mismatch(m2_info) -> None:
-    """M2 §5.1:hash 不同、代际相同 → m2.hash_mismatch 警告事件(非阻塞)。"""
-    from ..events.bus import get_event_bus
+    """M2 §5.1:hash 不同、代际相同 → m2.hash_mismatch 警告事件(非阻塞)。
+
+    事件发射失败(logger 已记录了警告)不影响执行——这是增强,不是门。
+    """
     from gimbal.schema import M2_HASH
-    bus = get_event_bus()
-    bus.publish({
-        "event_type": "m2.hash_mismatch",
-        "request_hash": m2_info.hash,
-        "built_hash": M2_HASH,
-        "generation": m2_info.generation,
-        "timestamp": __import__("datetime").datetime.now(
-            __import__("datetime").timezone.utc).isoformat(),
-    })
+    try:
+        from ..events import bus as _bus_mod
+        _bus_mod.InMemoryEventBus().publish({
+            "event_type": "m2.hash_mismatch",
+            "request_hash": m2_info.hash,
+            "built_hash": M2_HASH,
+            "generation": m2_info.generation,
+        })
+    except Exception:  # noqa: BLE001 — 事件失败不影响执行
+        pass
 
 
 def _m2_generation_gate(m2_info) -> None:

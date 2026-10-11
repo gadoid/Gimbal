@@ -46,9 +46,8 @@ async def test_create_and_name_conflict(client):
     async with SessionLocal() as db:
         made = await scheme_store.create_scheme(db, sid, name="冒烟",
             payload={"dataSetSelection": [], "injectionEntryIds": [],
-                     "serviceBindings": {}, "stepTo": None,
-                     "nRuns": 2, "parallel": 1, "plugins": None, "logSub": None})
-        assert made["name"] == "冒烟" and made["nRuns"] == 2
+                     "serviceBindings": {}, "options": {"step_from": None, "step_to": None, "n_runs": 2, "parallel": 1, "subscribe": None}})
+        assert made["name"] == "冒烟" and ((made.get("options") or {}).get("n_runs")) == 2
         with pytest.raises(ValueError, match="name_conflict"):
             await scheme_store.create_scheme(db, sid, name="冒烟", payload={})
         with pytest.raises(ValueError, match="name_conflict"):
@@ -67,10 +66,10 @@ async def test_update_default_locks_name_and_clears_injection(client):
             name="改名应被忽略",
             payload={"dataSetSelection": [{"datasetId": "ds-001", "rowIndexes": [0]}],
                      "injectionEntryIds": ["inj-1"], "serviceBindings": {"svc": {}},
-                     "stepTo": 2, "nRuns": 3, "parallel": 2, "plugins": None, "logSub": None})
+                     "options": {"step_from": None, "step_to": 2, "n_runs": 3, "parallel": 2, "subscribe": None}})
         assert got["name"] == scheme_store.DEFAULT_SCHEME_NAME
         assert got["dataSetSelection"] == [] and got["injectionEntryIds"] == []
-        assert got["serviceBindings"] == {"svc": {}} and got["nRuns"] == 3
+        assert got["serviceBindings"] == {"svc": {}} and ((got.get("options") or {}).get("n_runs")) == 3
 
 
 async def test_delete_default_protected(client):
@@ -86,8 +85,7 @@ async def test_delete_default_protected(client):
 
 def _scheme_body(name: str, **over) -> dict:
     b = {"name": name, "dataSetSelection": [], "injectionEntryIds": [],
-         "serviceBindings": {}, "stepTo": None, "nRuns": 1, "parallel": 1,
-         "plugins": None, "logSub": None}
+         "serviceBindings": {}, "options": {"step_from": None, "step_to": None, "n_runs": 1, "parallel": 1, "subscribe": None}}
     b.update(over)
     return b
 

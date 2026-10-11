@@ -222,7 +222,7 @@ class RunScheme(BaseModel):
     """场景级运行方案(工作台一等实体,plate 零感知,spec §4)。
 
     /run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;
-    isDefault/stepTo/nRuns/parallel 为工作台键。
+    isDefault/options(M10 RunOptions)为工作台键。
     """
     model_config = _CAMEL
 
@@ -239,10 +239,11 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    step_to: int | None = Field(default=None, alias="stepTo", ge=0)
-    n_runs: int = Field(default=1, alias="nRuns", ge=1, le=1000)
-    parallel: int = Field(default=1, alias="parallel", ge=1, le=200)
-    plugins: Any = None        # 预埋,gimbal 就绪前 no-op
+    # M10 RunOptions 形状(迁移完成,不再收旧平铺键)
+    options: dict[str, Any] = Field(default_factory=lambda: {
+        "step_from": None, "step_to": None,
+        "n_runs": 1, "parallel": 1, "subscribe": None,
+    })
     log_sub: Any = Field(default=None, alias="logSub")  # 预埋,同上
 
 

@@ -14,8 +14,7 @@ async def _setup(client, username="alice"):
 
 def _body(name="冒烟", **over):
     b = {"name": name, "dataSetSelection": [], "injectionEntryIds": [],
-         "serviceBindings": {}, "stepTo": None, "nRuns": 1, "parallel": 1,
-         "plugins": None, "logSub": None}
+         "serviceBindings": {}, "options": {"step_from": None, "step_to": None, "n_runs": 1, "parallel": 1, "subscribe": None}}
     b.update(over)
     return b
 
@@ -44,18 +43,18 @@ async def test_update_renames_and_normalizes_default(client):
     h = await _setup(client)
     made = (await client.post(BASE, headers=h, json=_body("A", nRuns=3))).json()
     r = await client.put(f"{BASE}/{made['schemeId']}", headers=h,
-                         json=_body("B", stepTo=2))
-    assert r.status_code == 200 and r.json()["name"] == "B" and r.json()["stepTo"] == 2
+                         json=_body("B", options={"step_from": None, "step_to": 2, "n_runs": 1, "parallel": 1, "subscribe": None}))
+    assert r.status_code == 200 and r.json()["name"] == "B" and ((r.json().get("options") or {}).get("step_to")) == 2
     # default 行:锁名、清空两键
     d = (await client.get(BASE, headers=h)).json()[0]
     r = await client.put(f"{BASE}/{d['schemeId']}", headers=h,
-                         json=_body("改名无效", nRuns=5,
+                         json=_body("改名无效", options={"step_from": None, "step_to": None, "n_runs": 5, "parallel": 1, "subscribe": None},
                                     injectionEntryIds=["inj-x"],
                                     dataSetSelection=[{"datasetId": "ds-x", "rowIndexes": [0]}]))
     assert r.status_code == 200
     got = r.json()
     assert got["name"] == "默认方案" and got["injectionEntryIds"] == []
-    assert got["dataSetSelection"] == [] and got["nRuns"] == 5
+    assert got["dataSetSelection"] == [] and ((got.get("options") or {}).get("n_runs")) == 5
 
 
 async def test_delete_default_405_and_normal_204(client):

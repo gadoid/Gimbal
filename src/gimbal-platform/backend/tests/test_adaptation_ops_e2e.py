@@ -57,7 +57,7 @@ async def _seed(client, name: str, *, body=None, entries=None,
         s.add(ComposerRunScheme(
             scheme_id=f"rsch-{name}", scenario_id=f"sc-{name}",
             name="调试", is_default=False,
-            payload={"stepTo": step_to, "nRuns": 1, "parallel": 1}))
+            payload={"options": {"step_from": None, "step_to": step_to, "n_runs": 1, "parallel": 1, "subscribe": None}}))
         await s.commit()
     return user
 
@@ -97,7 +97,7 @@ async def _step_to(sid):
     async with db_module.SessionLocal() as s:
         rows = (await s.execute(select(ComposerRunScheme).where(
             ComposerRunScheme.scenario_id == sid))).scalars().all()
-        return [r.payload.get("stepTo") for r in rows]
+        return [((r.payload or {}).get("options") or {}).get("step_to") for r in rows]
 
 
 # ─── 字段改名(renameField)─────────────────────────────────────────

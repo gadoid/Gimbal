@@ -518,6 +518,7 @@ async function refetch() {
     }
   } catch (e) {
     toast.error('接口目录加载失败: ' + (e as Error).message)
+    fetchErrors.value = []   // 外层异常时清空(不残留上一次的错误卡片)
   } finally {
     loading.value = false
   }
