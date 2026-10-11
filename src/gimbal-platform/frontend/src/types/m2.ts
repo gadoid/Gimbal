@@ -25,7 +25,7 @@ export type AssertOperator =
 /**
  * 导出壳：把四个根类型拉进同一份 Schema 的 ``$defs``。不进消费面。
  */
-export interface Tmpipsum0Cv {
+export interface Tmp9JatP1U {
   options?: RunOptions | null;
   report?: ReportDefinition | null;
   run: Scenario | SuiteGraph;

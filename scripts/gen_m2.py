@@ -252,24 +252,23 @@ def _gen_ts(schema_path: Path, out_path: Path) -> None:
 
     # Any 字段(expected: Any)的空 schema 在 json-schema-to-typescript
     # 默认生成 {[k:string]:unknown};实际语义是"任意值"。
-    # 方案:给生成用 schema 副本的 Any 字段加 tsType:"unknown" hint,
-    # 让 json2ts 精确输出 unknown——文本后处理分不开真正的 Any 字段与
-    # Dict[str,Any] 字段(两者生成形状一样),会误伤 6 个字段。
+    # 方案:遍历 schema 副本的**全部** $defs,凡无类型约束(type 缺省
+    # 且无 $ref/items/enum)的属性统一加 tsType:"unknown" hint——
+    # 不硬编码某个模型,后续新增 Any 字段自动覆盖。
+    # Dict[str,Any] 字段有 additionalProperties → 不受影响。
     # 只改生成用副本,入库的 m2.schema.json 不动(m2_hash 不变)。
     schema = _json.loads(schema_path.read_text(encoding="utf-8"))
-    _any_fields: set[str] = set()
-    from gimbal_plate.schema.strategy import Assertion
-    from typing import get_origin
-    for fname, fdef in Assertion.model_fields.items():
-        ann = fdef.annotation
-        if ann is type(None) or (get_origin(ann) is None and str(ann) == "typing.Any"):
-            _any_fields.add(fname)
-    defs = schema.get("$defs", {})
-    if "Assertion" in defs:
-        props = defs["Assertion"].get("properties", {})
-        for fname in _any_fields:
-            if fname in props and not props[fname].get("type"):
-                props[fname]["tsType"] = "unknown"
+    for defn in schema.get("$defs", {}).values():
+        props = defn.get("properties") or {}
+        for pname, pdef in props.items():
+            if not isinstance(pdef, dict):
+                continue
+            has_type = ("type" in pdef or "$ref" in pdef
+                        or "items" in pdef or "enum" in pdef
+                        or "anyOf" in pdef or "oneOf" in pdef
+                        or "allOf" in pdef or "tsType" in pdef)
+            if not has_type and "additionalProperties" not in pdef:
+                pdef["tsType"] = "unknown"
 
     with _tf.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8",

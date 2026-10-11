@@ -267,6 +267,32 @@ class TestHTTPSurface:
         r = http_client.get("/api/query-views?ref=1.0%231")
         assert r.status_code == 400
 
+    def test_system_scoped_endpoint_list_by_revision(
+            self, tmp_path: Path, http_client, monkeypatch) -> None:
+        """Release 6.1:系统作用域接口目录按修订过滤(HTTP 层)。
+
+        修订目录只含发版时冻结的接口——working 里新增的(未发修订)
+        不出现;不存在的修订 → 404。
+        """
+        repo, fin, art = make_repo(tmp_path)
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        # 发版后在 working 新增(未发修订 → 只在 working)
+        write_endpoint(fin, "extra", reviewed=True, path="/extra")
+        commit(repo, "add extra")
+        monkeypatch.setenv("PLATE_ARTIFACTS_PATH", str(art))
+
+        # 修订 1.0#1 → 只有发版时冻结的那个(不含 extra)
+        r = http_client.get("/api/systems/fin/endpoint?ref=1.0%231")
+        assert r.status_code == 200
+        rev_ids = {i["id"] for i in r.json()["data"]["items"]}
+        assert "fin.a.a" in rev_ids
+        assert "fin.a.extra" not in rev_ids  # working-only 接口被过滤
+
+        # 不存在的修订 → 404 release_not_found
+        r = http_client.get("/api/systems/fin/endpoint?ref=9.9%239")
+        assert r.status_code == 404
+        assert "release_not_found" in r.text
+
     def test_ref_unknown_revision_404(self, tmp_path: Path, http_client,
                                       monkeypatch) -> None:
         repo, fin, art = make_repo(tmp_path)

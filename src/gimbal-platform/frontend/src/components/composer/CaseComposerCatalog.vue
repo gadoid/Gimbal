@@ -21,6 +21,17 @@
       <a class="back-link" @click="$emit('back')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:3px;vertical-align:-2px"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>返回步骤编辑</a>
     </header>
 
+    <!-- 失败系统错误提示（Release 6.1:不列接口,防止加入 working-only;
+         显示系统名+修订号+错误码+重试） -->
+    <div v-for="err in fetchErrors" :key="err.sys" class="scoped-error"
+         data-testid="catalog-scoped-error">
+      <span class="err-icon">⚠</span>
+      <span>系统 <b>{{ err.sys }}</b> 按修订 <b>{{ err.ref }}</b> 取数失败
+        （{{ err.code }}）——该系统接口未列出。请检查修订号或
+        <a class="retry-link" data-testid="catalog-retry" @click.prevent="refetch">重试</a>
+      </span>
+    </div>
+
     <div class="filter-row">
       <select v-model="filterSystem" class="filter-sel native-sel" data-testid="catalog-sys" @change="onFilterChanged">
         <option value="">全部系统</option>
@@ -278,6 +289,8 @@ function systemLabel(s: string) { return SYS_LABELS[s] || s }
 type CatalogRow = Pick<EndpointFullView, 'id' | 'system' | 'service' | 'name'> &
   Partial<EndpointFullView>
 const all = ref<CatalogRow[]>([])
+/** 按修订取数失败的系统 → 错误展示(不列接口,显示重试) */
+const fetchErrors = ref<Array<{ sys: string; ref: string; code: string; message: string }>>([])
 const loading = ref(false)
 const filterSystem = ref<string | null>(null)
 const filterService = ref<string | null>(null)
@@ -446,7 +459,9 @@ async function refetch() {
     // 从 working 结果提取系统清单(不重复)
     const systems = [...new Set(workingItems.map((e: any) => e.system))]
     // 对每个有精确修订的系统,并行取该修订的目录;失败(404 修订不存在
-    // 等)不静默空列表——提示系统名+修订号,该系统回退 working 展示
+    // 等)→ 该系统不列出接口(不回退 working——那会列出目标修订里
+    // 不存在的接口,执行时报 ENDPOINT_NOT_IN_RELEASE,正好是
+    // Release 6.1 要防止的),显示错误提示+重试按钮
     const scopedRefs = systems
       .map((sys) => ({ sys, ref: props.plateRefOf?.(sys) ?? 'working' }))
       .filter((s) => s.ref && s.ref !== 'working')
@@ -467,21 +482,23 @@ async function refetch() {
                           code: 'network', message: '网络错误' }))
       }),
     )
-    // 失败系统提示(不阻断整个目录)
-    for (const r of scopedResults) {
-      if (!r.ok) {
-        toast.warning(`系统 ${r.sys} 的目录按修订 ${r.ref} 取数失败（${r.code}）——该系统显示 working 的接口`)
-      }
-    }
-    // 合并:成功的修订列表 + 失败/未声明系统用 working
-    const failedSet = new Set(
-      scopedResults.filter((r: any) => !r.ok).map((r: any) => r.sys))
+    // 合并:成功的修订列表 + 未声明系统用 working;失败系统**不列接口**
+    const failedSystems = scopedResults.filter((r: any) => !r.ok)
+    const failedSet = new Set(failedSystems.map((r: any) => r.sys))
     const scopedSet = new Set(scopedRefs.filter(
       (s) => !failedSet.has(s.sys)).map((s) => s.sys))
     const items = [
-      ...workingItems.filter((e: any) => !scopedSet.has(e.system)),
+      // working 只给「未声明修订」和「修订取数成功」的系统;
+      // 失败系统被 scopedSet 排除 → 也不出现在 working 回退里
+      ...workingItems.filter((e: any) =>
+        !scopedSet.has(e.system) && !failedSet.has(e.system)),
       ...scopedResults.flatMap((r: any) => r.ok ? r.items : []),
     ]
+    // 失败系统 → 错误状态(Release 6.1:不列接口,防止加入
+    // working-only 的接口;显示系统名+修订号+错误码+重试)
+    fetchErrors.value = failedSystems.map((r: any) => ({
+      sys: r.sys, ref: r.ref, code: r.code, message: r.message,
+    }))
     // 轻列表条目 = 平铺坐标(method/path/protocol + shape_hash,7.2);
     // 不再读旧嵌套 e.api / e.version(评审 R7:旧字段恒 undefined →
     // 按路径搜索搜不到、/full 失败时详情头空白)。
@@ -514,6 +531,14 @@ onMounted(refetch)
 .catalog-panel { width: 100%; }
 .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
 .header h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.scoped-error {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; margin-bottom: 8px;
+  border: 1px solid #fde68a; border-radius: 6px;
+  background: #fffbeb; font-size: 12px; color: #92400e;
+}
+.err-icon { font-size: 14px; }
+.retry-link { color: #2563eb; cursor: pointer; text-decoration: underline; }
 .muted { color: var(--c-text-tertiary); font-size: 12px; margin: 0; }
 .muted-count { color: var(--c-accent); font-weight: 600; }
 .back-link { color: var(--c-accent); cursor: pointer; font-size: 13px; }

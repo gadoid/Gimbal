@@ -278,11 +278,17 @@ async def list_endpoints(
             "code": "plate_unavailable",
             "message": f"plate_unavailable: status {resp.status_code}"})
     if resp.status_code >= 400:
-        # plate 4xx 原样透传(release_not_found 等)——不吞成空列表
-        detail = resp.json().get("error", {})
+        # plate 4xx 原样透传(release_not_found 等)——不吞成空列表;
+        # 响应体可能是非 JSON(网关 HTML 错误页),解析失败回退纯文本
+        try:
+            err = resp.json().get("error", {})
+            code = err.get("code", "plate_rejected")
+            message = err.get("message", resp.text[:200])
+        except Exception:
+            code = "plate_rejected"
+            message = resp.text[:200] or f"HTTP {resp.status_code}"
         raise HTTPException(status_code=resp.status_code, detail={
-            "code": detail.get("code", "plate_rejected"),
-            "message": detail.get("message", resp.text[:200])})
+            "code": code, "message": message})
     envelope = resp.json()
     items = (envelope.get("data") or {}).get("items") or []
     return {"items": items, "total": len(items)}
