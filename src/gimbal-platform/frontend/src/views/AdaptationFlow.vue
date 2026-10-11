@@ -91,6 +91,12 @@
             </div>
           </div>
         </div>
+        <!-- RS4b 结构级改造编辑器（§5.4:5 种 op 用户配置） -->
+        <div v-if="compareResult.groups.structure.length" class="mf-item">
+          <span class="mf-label">结构级改造方案（每个步骤选一种方式）</span>
+          <StructureOpEditor :structure="compareResult.groups.structure"
+                             @update:items="structureItems = $event" />
+        </div>
         <!-- 声明级字段差异明细（R7） -->
         <div v-if="fieldDiffEntries.length" class="mf-item">
           <span class="mf-label">字段差异明细</span>
@@ -212,6 +218,8 @@ import { ref, computed, onMounted } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import StructureOpEditor, { toOps } from '@/components/adaptations/StructureOpEditor.vue'
+import type { StructureItem } from '@/components/adaptations/StructureOpEditor.vue'
 import {
   fetchStaleScenarios, compareScenario, saveCheck, submitAdaptation,
   submitBatch,
@@ -237,6 +245,7 @@ const opEnabled = ref<boolean[]>([])
 const batchSelected = ref<string[]>([])
 const batchSubmitting = ref(false)
 const batchResult = ref<BatchSubmitResult | null>(null)
+const structureItems = ref<StructureItem[]>([])
 
 const draftedCount = computed(() =>
   opEnabled.value.filter(Boolean).length)
@@ -340,11 +349,14 @@ async function goSaveCheck() {
 }
 
 async function doSubmit(mode: 'direct' | 'copy') {
+  // 合并 ops:自动起草的字段级(勾选项) + 手动配置的结构级(RS4b)
+  const fieldOps = (compareResult.value?.drafted_ops || []).filter(
+    (_, i) => opEnabled.value[i] !== false)
+  const structOps = toOps(structureItems.value)
   try {
     submitResult.value = await submitAdaptation(
       scenarioId.value,
-      (compareResult.value?.drafted_ops || []).filter(
-        (_, i) => opEnabled.value[i] !== false),
+      [...fieldOps, ...structOps],
       targetRevision.value, mode,
       reviewConfirmed.value)
   } catch (e) {
@@ -365,6 +377,7 @@ function reset() {
   reviewConfirmed.value = false
   opEnabled.value = []
   batchResult.value = null
+  structureItems.value = []
 }
 </script>
 
