@@ -717,7 +717,8 @@ class _RollbackConflict(Exception):
     """回滚乐观冲突:实体被批次外编辑 / 重放失败 / 实体消失。"""
 
 
-async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
+async def rollback_batch(db: AsyncSession, batch_id: str,
+                         *, force: bool = False) -> dict:
     """整批回滚:期望态 = before + applied ops 内存重放(收敛幂等 ⇒ 重放可行)。
 
     场景先于数据集恢复(renameVar 对称序);当前态 ≠ 期望态 → 该实体
@@ -793,7 +794,8 @@ async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
                          "note": "copy deleted"})
     for snap in _snap("scenario"):  # 场景先恢复
         try:
-            await _rollback_scenario(db, batch, snap, applied_ops)
+            await _rollback_scenario(db, batch, snap, applied_ops,
+                                     force=force)
             restored.append(
                 {"entityType": "scenario", "entityId": snap.entity_id}
             )
@@ -833,7 +835,10 @@ async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
     )).scalars():
         op.status = "skipped"
         op.note = "batch rolled back"
-    batch.status = "rolled_back"
+    if restored or not conflicts:
+        # 有实体还原(或本来就无可还原实体)→ 收口 rolled_back;
+        # 全实体冲突且零还原 → 保持可回滚(编辑者 force 确认后重试,M4)
+        batch.status = "rolled_back"
     batch.closed_at = _utcnow()
     await db.commit()
     return {
@@ -845,6 +850,7 @@ async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
 async def _rollback_scenario(
     db: AsyncSession, batch: AdaptationBatch,
     snap: AdaptationSnapshot, applied_ops: list[AdaptationOp],
+    *, force: bool = False,
 ) -> None:
     row = await scenario_store.get_row(db, snap.entity_id)
     if row is None:
@@ -857,11 +863,13 @@ async def _rollback_scenario(
     # 「编辑者确认放弃修改后还原」)。
     if "after_json" in (snap.before_json or {}):
         after = copy.deepcopy(snap.before_json.get("after_json") or {})
-        if (row.payload or {}) == after:
+        if (row.payload or {}) == after or force:
+            # force = R27「编辑者确认放弃修改后按快照还原」(M4)
             row.payload = before
             return
         raise _RollbackConflict(
-            "edited_beyond_batch: current != snapshot after-state")
+            "edited_beyond_batch: current != snapshot after-state"
+            "（确认放弃提交后的修改可带 force 重试）")
     expected = copy.deepcopy(before)
     try:
         for op in applied_ops:
@@ -1172,6 +1180,106 @@ def _scenario_systems(definition: dict) -> list[str]:
     return sorted((definition.get("meta") or {}).get("system") or [])
 
 
+# ─── H1/H2:方案应用与检查顺序 + 场景内引用改写 ────────────────────
+
+def _apply_ops_to_payload(payload: dict, ops: list) -> list[str]:
+    """把 op 列表应用到完整 payload(definition 就地 + 引用联动改写)。
+
+    H2:结构级 op 经 ``op["_payload"]`` 拿到 payload 引用以改写
+    ``assertion_registry`` 与 ``ui.fieldStates``(R30);字段改名/删除
+    的 jsonpath 改写在 ``_rewrite_field_refs``。返回触发的结构级
+    op 名(调用方据此清空 RunScheme stepTo)。
+    """
+    from .adaptation_ops import STRUCTURE_OPS, apply_to_definition
+    definition = definition_from_payload(payload)
+    structure_kinds: list[str] = []
+    for op in ops:
+        kind = str(op.get("op") or "")
+        if kind in STRUCTURE_OPS:
+            structure_kinds.append(kind)
+        apply_to_definition(definition, {**op, "_payload": payload})
+        if kind in ("renameField", "removeField"):
+            _rewrite_field_refs(payload, op)
+    return structure_kinds
+
+
+def _jsonpath_root(path) -> str:
+    """`$.a.b[0]` → `a`;非 $. 前缀原样。"""
+    p = str(path or "")
+    if not p.startswith("$."):
+        return p
+    return p[2:].split(".")[0].split("[")[0]
+
+
+def _rewrite_field_refs(payload: dict, op: dict) -> None:
+    """字段改名/删除 → 注入条目 jsonpath 与字段状态根段同步改写(R30)。
+
+    * renameField:根段 == from 的条目/增量改写为 to;
+    * removeField:根段 == field 的条目标 ``_dangling``(预检可见),
+      字段状态条目删除。
+    """
+    kind = op.get("op")
+    step_i = op.get("step")
+    old = op.get("from") if kind == "renameField" else op.get("field")
+    new = op.get("to")
+    if old is None:
+        return
+    step_key = str(step_i) if isinstance(step_i, int) else None
+
+    reg = payload.get("assertion_registry") or {}
+    if isinstance(reg, dict):
+        for e in (reg.get("entries") or []):
+            if not isinstance(e, dict):
+                continue
+            loc = e.get("path")          # 条目形状:{path:{stepIndex,source,jsonpath}}
+            if not isinstance(loc, dict):
+                continue
+            if step_key is not None and str(loc.get("stepIndex")) != step_key:
+                continue
+            root = _jsonpath_root(loc.get("jsonpath"))
+            if root != old:
+                continue
+            jp = str(loc.get("jsonpath") or "")
+            rest = jp[2 + len(old):] if jp.startswith("$.") else ""
+            if kind == "renameField" and new:
+                loc["jsonpath"] = f"$.{new}{rest}"
+                e.pop("_dangling", None)
+            else:  # removeField:悬空(正式执行 409 可见,预检告警)
+                e["_dangling"] = True
+
+    ui = payload.get("ui") or {}
+    fs = (ui.get("fieldStates") if isinstance(ui, dict) else None) or {}
+    if step_key and isinstance(fs.get(step_key), dict):
+        inc = fs[step_key]
+        if kind == "renameField" and new:
+            for p in [p for p in inc if _jsonpath_root(p) == old]:
+                rest = p[2 + len(old):] if p.startswith("$.") else ""
+                inc[f"$.{new}{rest}"] = inc.pop(p)
+        else:
+            for p in [p for p in inc if _jsonpath_root(p) == old]:
+                del inc[p]
+
+
+async def _clear_scheme_step_to(db: AsyncSession, scenario_id: str) -> int:
+    """R30:步骤位置变化时清空 RunScheme 的执行区间 stepTo。
+
+    调试区间是按步骤序号的参数,不做精确重映射;清空后在批次页提示
+    「调试区间已重置」。返回清空的方案数。
+    """
+    from ..models.composer_run_scheme import ComposerRunScheme
+    rows = (await db.execute(
+        select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == scenario_id)
+    )).scalars().all()
+    cleared = 0
+    for r in rows:
+        p = r.payload or {}
+        if isinstance(p, dict) and p.get("stepTo") is not None:
+            r.payload = {**p, "stepTo": None}
+            cleared += 1
+    return cleared
+
+
 async def compare_scenario(
     db: AsyncSession, *, scenario_id: str, target_revision: str,
     system: str | None = None,
@@ -1257,11 +1365,29 @@ async def save_check(
     db: AsyncSession, *, scenario_id: str, target_revision: str,
     system: str | None = None,
 ) -> dict:
-    """RS4a 保存检查（§5.6）：①目标修订试算（阻断）②引用检查 ③保存方式推荐。"""
+    """RS4a 保存检查（§5.6）——向导第 3 步的**现状**预检。
+
+    检查对象是当前存储的场景(方案起草前的口径:展示「还差什么」)。
+    提交路径(submit_adaptation)检查的是**应用方案之后**的场景
+    (H1)——两处共用 ``_check_payload``。
+    """
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise ValueError(f"scenario_not_found: {scenario_id}")
-    payload = copy.deepcopy(row.payload or {})
+    return await _check_payload(
+        db, row.payload or {}, target_revision, system,
+        scenario_id=scenario_id, owner_id=row.owner_id)
+
+
+async def _check_payload(
+    db: AsyncSession, payload: dict, target_revision: str,
+    system: str | None, *, scenario_id: str, owner_id: int | None,
+) -> dict:
+    """保存检查主体:①目标修订试算（阻断）②引用检查 ③保存方式推荐。
+
+    入参 payload 是待检场景(H1:提交路径传入应用 op 之后的方案态)。
+    """
+    payload = copy.deepcopy(payload)
     definition = definition_from_payload(payload)
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
     systems = [system] if system else _scenario_systems(definition)
@@ -1276,18 +1402,17 @@ async def save_check(
     review_items: list[dict] = []
 
     # ① 目标修订试算:meta.plate 指向目标 → /convert(forbid+重投影)
-    trial = copy.deepcopy(payload)
-    tdef = definition_from_payload(trial)
-    tdef.setdefault("meta", {}).setdefault("plate", {})[sys_] = target_revision
+    definition.setdefault("meta", {}).setdefault(
+        "plate", {})[sys_] = target_revision
     convert_result = None
     try:
-        convert_result = await plate_client.convert(trial)
+        convert_result = await plate_client.convert(payload)
     except plate_client.PlateRejectedError as e:
         issues.append({"code": "trial_rejected", "message": str(e)})
     except plate_client.PlateUnavailableError as e:
         issues.append({"code": "plate_unavailable", "message": str(e.message)})
 
-    # ①b 逐步骤字段比对 + 字段状态定位 + R14 评审项
+    # ①b 逐步骤字段比对(多余/缺失必填/类型不符,M3)+ 字段状态定位
     fulls: dict = {}
     for st in (definition.get("steps") or []):
         if isinstance(st, dict) and st.get("endpoint"):
@@ -1298,10 +1423,30 @@ async def save_check(
                         eid, target_revision)
                 except plate_client.PlateUnavailableError:
                     fulls[eid] = None
-    req_roots = {eid: _declared_roots(f, "request")
-                 for eid, f in fulls.items()}
-    resp_roots = {eid: _declared_roots(f, "responses")
-                  for eid, f in fulls.items()}
+
+    def _roots(item, section: str) -> dict[str, dict]:
+        """根段 → 声明条目(含 required/type/state)。"""
+        if not isinstance(item, dict):
+            return {}
+        sec = item.get(section)
+        decls = (sec.get("declarations")
+                 if isinstance(sec, dict) else None) or []
+        out: dict[str, dict] = {}
+        for d in decls:
+            if isinstance(d, dict):
+                p = d.get("path")
+                if isinstance(p, str) and p.startswith("$."):
+                    root = p[2:].split(".")[0].split("[")[0]
+                    # 深层声明归到根(比对口径 = 根段)
+                    out.setdefault(root, d)
+        return out
+
+    req_roots = {eid: _roots(f, "request") for eid, f in fulls.items()}
+    resp_roots = {eid: _roots(f, "responses") for eid, f in fulls.items()}
+
+    _TYPE_OF: dict[type, str] = {
+        str: "string", bool: "boolean", int: "number", float: "number",
+    }
 
     ui_fs = (payload.get("ui") or {}).get("fieldStates") or {}
     for i, st in enumerate(definition.get("steps") or []):
@@ -1310,20 +1455,36 @@ async def save_check(
         eid = str(st.get("endpoint") or "")
         if not eid:
             continue
-        paths = req_roots.get(eid)
-        if paths is None:
+        roots = req_roots.get(eid)
+        if roots is None:
             continue                      # 契约不可得:试算已覆盖该错误面
-        body_keys = _body_root_keys(
-            (st.get("request") or {}).get("body"))
-        for extra in sorted(body_keys - paths):
+        body = (st.get("request") or {}).get("body")
+        body_keys = set(body.keys()) if isinstance(body, dict) else set()
+        for extra in sorted(body_keys - set(roots)):
             issues.append({
                 "code": "extra_field", "step": i, "field": extra,
                 "message": f"步骤 {i + 1} 字段 {extra} 不在目标修订声明中"})
+        for root, decl in sorted(roots.items()):
+            if root not in body_keys:
+                if decl.get("required"):
+                    issues.append({
+                        "code": "missing_required", "step": i, "field": root,
+                        "message": (f"步骤 {i + 1} 缺必填字段 {root}"
+                                    "(目标修订声明 required)")})
+                continue
+            # 类型不符:字面量值才判(${var}/嵌套容器跳过)
+            want = str(decl.get("type") or "").lower()
+            val = body.get(root)
+            got = _TYPE_OF.get(type(val))
+            if (want and got and got != want
+                    and not (isinstance(val, str) and "${" in val)):
+                issues.append({
+                    "code": "type_mismatch", "step": i, "field": root,
+                    "message": (f"步骤 {i + 1} 字段 {root} 类型不符:"
+                                f"声明 {want},场景 {got}")})
         inc = ui_fs.get(str(i)) or {}
         for p in sorted(inc):
-            root = (p[2:].split(".")[0].split("[")[0]
-                    if isinstance(p, str) and p.startswith("$.") else p)
-            if root not in paths:
+            if _jsonpath_root(p) not in roots:
                 issues.append({
                     "code": "field_state_unlocatable", "step": i, "field": p,
                     "message": f"字段状态 {p} 在目标修订上无法定位"})
@@ -1340,15 +1501,14 @@ async def save_check(
             continue
         si = p.get("stepIndex")
         jp = str(p.get("jsonpath") or "")
-        root = (jp[2:].split(".")[0].split("[")[0]
-                if jp.startswith("$.") else "")
+        root = _jsonpath_root(jp)
         if not isinstance(si, int) or not (0 <= si < len(steps)):
             issues.append({
                 "code": "entry_step_out_of_range", "entry": e.get("id"),
                 "message": f"注入条目 {e.get('id')} 的步骤索引越界"})
             continue
         eid = str((steps[si] or {}).get("endpoint") or "")
-        universe = (req_roots.get(eid) or set()) | (resp_roots.get(eid) or set())
+        universe = set(req_roots.get(eid) or {}) | set(resp_roots.get(eid) or {})
         if root and root not in universe:
             review_items.append({
                 "entry": e.get("id"), "step": si, "jsonpath": jp,
@@ -1365,7 +1525,7 @@ async def save_check(
         if scenario_id in ((su.mode_config or {}).get("units") or {}):
             entry = {"type": "suite", "id": su.id, "name": su.name,
                      "owner_id": su.owner_id}
-            (refs_own if su.owner_id == row.owner_id
+            (refs_own if su.owner_id == owner_id
              else refs_others).append(entry)
     tasks = (await db.execute(
         select(IntegrationTask).where(
@@ -1374,7 +1534,7 @@ async def save_check(
     for t in tasks:
         entry = {"type": "integration", "id": t.id, "name": t.name,
                  "owner_id": t.holder_id or t.owner_id}
-        (refs_own if entry["owner_id"] == row.owner_id
+        (refs_own if entry["owner_id"] == owner_id
          else refs_others).append(entry)
 
     # ③ 保存方式推荐（§5.6 默认规则）
@@ -1405,14 +1565,44 @@ async def submit_adaptation(
     target_revision: str, save_mode: str,
     review_confirmed: bool = False, system: str | None = None, user=None,
 ) -> dict:
-    """RS4a 提交（§5.7）:按场景单事务 —— 快照 → 应用 op → meta.plate → 审计。"""
-    from .adaptation_ops import apply_to_definition
+    """RS4a 提交（§5.7）:按场景单事务 —— 快照 → 应用 op → meta.plate → 审计。
+
+    H1:保存检查的对象是**应用方案之后**的场景(先构造方案态,试算
+    通过才落库);H2:op 应用带 payload 引用,注入条目/字段状态随
+    op 联动改写,结构级 op 清空 RunScheme stepTo(R30)。
+    """
     from ..services import activity as activity_svc
 
     await _ensure_edit_rights(db, user, [scenario_id])
 
-    check = await save_check(db, scenario_id=scenario_id,
-                             target_revision=target_revision, system=system)
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise ValueError(f"scenario_not_found: {scenario_id}")
+    payload = row.payload or {}
+    original_definition = definition_from_payload(payload)
+    sys_candidates = ([system] if system
+                      else _scenario_systems(original_definition))
+    if len(sys_candidates) > 1:
+        raise ValueError("multi_system_scenario: 请指定 system 参数")
+    if not sys_candidates:
+        raise ValueError("no_system_declared")
+    sys_ = sys_candidates[0]
+    from_ref = ((original_definition.get("meta") or {})
+                .get("plate") or {}).get(sys_) or "working"
+
+    # ① 方案态:应用全部 op(含引用改写)+ meta.plate 指向目标
+    planned = copy.deepcopy(payload)
+    structure_kinds = _apply_ops_to_payload(planned, ops or [])
+    definition_from_payload(planned).setdefault(
+        "meta", {}).setdefault("plate", {})[sys_] = target_revision
+    # R30:步骤位置变化 → 清空 RunScheme 执行区间(调试参数不重映射)
+    if structure_kinds:
+        await _clear_scheme_step_to(db, scenario_id)
+
+    # ② 保存检查跑在方案态上(H1)
+    check = await _check_payload(
+        db, planned, target_revision, sys_,
+        scenario_id=scenario_id, owner_id=row.owner_id)
     if check["blocking_issues"]:
         raise ValueError(
             "save_check_failed: " + "; ".join(
@@ -1422,16 +1612,8 @@ async def submit_adaptation(
             "review_items_unconfirmed: "
             f"{len(check['review_items'])} 个 R14 评审项未确认")
 
-    row = await scenario_store.get_row(db, scenario_id)
-    if row is None:
-        raise ValueError(f"scenario_not_found: {scenario_id}")
-    payload = row.payload or {}
-    definition = definition_from_payload(payload)
-    sys_ = check["system"]
-    from_ref = check["from"]
     same_line = from_ref.split("#")[0] == target_revision.split("#")[0]
     kind = "correction" if same_line else "cross_line"
-
     operator_name = (getattr(user, "display_name", None)
                      or getattr(user, "username", None) or "")
     batch_id = f"bt-{uuid4().hex[:12]}"
@@ -1466,21 +1648,14 @@ async def submit_adaptation(
         return {"success": True, "new_scenario_id": result["new_scenario_id"],
                 "save_mode": "copy", "batch_id": batch_id}
 
-    # 直接保存:单事务(快照 → 应用 op → meta.plate → 引用索引)
+    # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)
     before = copy.deepcopy(payload)
-    # JSON 列不追踪原地变更 —— 在深拷贝上改,再整包赋回(dirty 可见)
-    new_payload = copy.deepcopy(payload)
-    new_definition = definition_from_payload(new_payload)
-    for op in ops or []:
-        apply_to_definition(new_definition, op)
-    new_definition.setdefault("meta", {}).setdefault(
-        "plate", {})[sys_] = target_revision
-    row.payload = new_payload
+    row.payload = planned
     db.add(AdaptationSnapshot(
         batch_id=batch_id, entity_type="scenario", entity_id=scenario_id,
-        before_json={"payload": before, "after_json": copy.deepcopy(
-            new_payload), "save_mode": "direct",
-            "from": from_ref, "to": target_revision}))
+        before_json={"payload": before, "after_json": copy.deepcopy(planned),
+                     "save_mode": "direct",
+                     "from": from_ref, "to": target_revision}))
     db.add(AdaptationBatch(
         batch_id=batch_id, kind=kind,
         endpoint_id=f"rs4a:{sys_}",
@@ -1498,7 +1673,8 @@ async def submit_adaptation(
         kind="scenario.version_change",
         resource_type="scenario", resource_id=scenario_id,
         detail={"from": from_ref, "to": target_revision,
-                "batchId": batch_id, "saveMode": "direct"})
+                "batchId": batch_id, "saveMode": "direct",
+                **({"stepToReset": True} if structure_kinds else {})})
     # §5.9:影响他人引用时通知其所有者
     try:
         await notify_cross_owner(
@@ -1593,7 +1769,6 @@ async def save_as_copy(
     （copy_scenario 一并拷贝数据集与方案）。
     """
     from copy import deepcopy
-    from .adaptation_ops import apply_to_definition
 
     # 1. 副本底座：深拷贝场景 + 数据集 + RunScheme + forked_from 三件套
     copy = await scenario_store.copy_scenario(
@@ -1609,11 +1784,10 @@ async def save_as_copy(
     if new_row is None:  # 理论不可达：copy_scenario 刚提交
         raise ValueError(f"copy of {scenario_id} vanished")
 
-    # 2. 在副本上应用方案（ops 就地修改 definition）
+    # 2. 在副本上应用方案（统一路径:引用改写随 op 联动,H2）
     payload = deepcopy(new_row.payload or {})
-    definition = payload.get("definition") or {}
-    for op in ops:
-        apply_to_definition(definition, op)
+    structure_kinds = _apply_ops_to_payload(payload, ops or [])
+    definition = definition_from_payload(payload)
 
     # 3. meta.plate 设为目标修订（按 step.endpoint 的系统前缀分派）
     meta_plate = (definition.setdefault("meta", {}) or {}).setdefault("plate", {})
@@ -1622,6 +1796,8 @@ async def save_as_copy(
         if ep:
             system = str(ep).split(".")[0]
             meta_plate[system] = target_revision
+    if structure_kinds:
+        await _clear_scheme_step_to(db, new_sid)   # R30:副本方案同步清空
 
     new_row.payload = payload
     await db.commit()

@@ -243,10 +243,16 @@ async def patch_op(
 @router.post("/batches/{batch_id}/rollback", response_model=RollbackReport)
 async def rollback_batch(
     user: CurrentUser, batch_id: str, db: DbSession,
+    force: bool = Query(default=False),
 ) -> RollbackReport:
-    """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。"""
+    """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。
+
+    force(M4/R27):RS4a 批次提交后场景被编辑过时,编辑者确认放弃
+    这些修改后带 force 还原快照。
+    """
     try:
-        report = await adaptation_service.rollback_batch(db, batch_id)
+        report = await adaptation_service.rollback_batch(
+            db, batch_id, force=force)
     except KeyError as e:
         raise key_error_404(e) from e
     except ValueError as e:

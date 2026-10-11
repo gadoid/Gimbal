@@ -185,14 +185,18 @@ def _rewrite_position_refs(
             for e in entries:
                 if not isinstance(e, dict):
                     continue
-                old_idx = e.get("stepIndex")
+                loc = e.get("path")   # 条目形状:{path:{stepIndex,source,jsonpath}}
+                if not isinstance(loc, dict):
+                    new_entries.append(e)
+                    continue
+                old_idx = loc.get("stepIndex")
                 if isinstance(old_idx, int):
                     new_idx = index_map.get(old_idx, old_idx)
                     if new_idx is None:
                         # 悬空——保留条目,标记 _dangling(执行预检显示)
                         e["_dangling"] = True
                     else:
-                        e["stepIndex"] = new_idx
+                        loc["stepIndex"] = new_idx
                         e.pop("_dangling", None)
                 new_entries.append(e)
             new_reg[key] = new_entries
