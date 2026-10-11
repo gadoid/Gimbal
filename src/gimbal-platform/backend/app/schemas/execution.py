@@ -38,6 +38,10 @@ class ExecutionOut(BaseModel):
     # scenario、只多记 suite_id)。读侧据此区分展示与重跑语义。
     kind: str = "scenario"
     suite_id: int | None = None
+    # RS3 §6.3(Release v4.4):版本台账面 —— 当时的生效修订表与构建
+    # 身份;重跑将使用的修订由场景当前 meta.plate 决定,前端比对提示。
+    plate_pins: dict | None = None
+    m2_hash: str | None = None
 
 
 class ExecutionListItemOut(BaseModel):
@@ -70,6 +74,10 @@ class ExecutionListItemOut(BaseModel):
     # 「Suite 运行」并把重跑转去运行 Suite)
     kind: str = "scenario"
     suite_id: int | None = None
+    # RS3 §6.3(Release v4.4):版本台账面 —— 当时的生效修订表与构建
+    # 身份;重跑将使用的修订由场景当前 meta.plate 决定,前端比对提示。
+    plate_pins: dict | None = None
+    m2_hash: str | None = None
 
 
 class ExecutionListOut(BaseModel):
