@@ -449,6 +449,21 @@ def cmd_cold_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_m2(args):
+    import json as _json
+    from gimbal_plate.schema import M2_GENERATION
+    from gimbal_plate.schema.migrate import migrate_definition
+    value = _json.loads(Path(args.file).read_text(encoding="utf-8"))
+    migrated = migrate_definition(value, args.from_gen)
+    text = _json.dumps(migrated, ensure_ascii=False, indent=2)
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8", newline=chr(10))
+        print(f"migrated {args.file} gen {args.from_gen} to {M2_GENERATION}")
+    else:
+        print(text)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plate", description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -513,6 +528,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="执行记录钉住修订 JSON 文件")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_cold_archive)
+    sp = sub.add_parser("migrate-m2", help="M2 generation migration")
+    sp.add_argument("file")
+    sp.add_argument("--from-gen", type=int, default=1)
+    sp.add_argument("--output", default="")
+    sp.set_defaults(fn=cmd_migrate_m2)
 
     sp = sub.add_parser("lines", help="列出版本线与修订(版本模型 2.4)")
     sp.add_argument("system", nargs="?", default="fin")

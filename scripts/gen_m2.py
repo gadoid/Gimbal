@@ -430,8 +430,19 @@ def cmd_compat(base_ref: str) -> int:
             f"出现 {len(problems)} 处不兼容变化而 M2_GENERATION 未递增"
             f"（当前 {export.m2_generation}）——递增 _next.M2_GENERATION "
             "并提供迁移函数（M2 §5.2）")
+    # §5.2:代际递增时迁移函数必须存在且对语料跑通
+    base_gen = _base_generation(base_ref)
+    if export.m2_generation > base_gen + 1:
+        return _die(
+            f"M2_GENERATION 从 {base_gen} 直接跳到 "
+            f"{export.m2_generation}——须逐代递增,每代各带迁移函数")
+    from gimbal_plate.schema.migrate import _migrate_map
+    if base_gen not in _migrate_map:
+        return _die(
+            f"代际 {base_gen} → {base_gen + 1} 的迁移函数未注册"
+            "（schema/migrate.py 的 @register_migrate({base_gen})）")
     print(f"compat 通过：{len(problems)} 处不兼容变化已随代际 "
-          f"{export.m2_generation} 递增")
+          f"{export.m2_generation} 递增（迁移函数 gen{base_gen} 已注册）")
     return 0
 
 

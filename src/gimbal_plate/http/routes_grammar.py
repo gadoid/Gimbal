@@ -311,6 +311,48 @@ def m2_current() -> dict[str, Any]:
         dim="m2")
 
 
+@router.post("/m2/action/migrate")
+async def m2_migrate(body: dict) -> dict:
+    """M2 §5.2:代际迁移纯函数——入参 {from_generation, kind, value}。
+
+    kind 当前只支持 "definition"(Scenario dict);返回迁移后的值。
+    迁移函数须随不兼容变更同一提交入库,未注册的代际 422。
+    """
+    from gimbal_plate.schema import M2_GENERATION
+    from gimbal_plate.schema.migrate import migrate_definition
+
+    from_gen = body.get("from_generation")
+    kind = body.get("kind", "definition")
+    value = body.get("value")
+    if not isinstance(from_gen, int) or from_gen < 1:
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=f"from_generation must be int ≥ 1, got {from_gen!r}")
+    if kind != "definition":
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=f"unsupported kind: {kind!r} (only 'definition')")
+    if not isinstance(value, dict):
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message="value must be a dict (M2 Scenario instance)")
+    if from_gen >= M2_GENERATION:
+        return ok_response(
+            {"value": value, "from_generation": from_gen,
+             "to_generation": M2_GENERATION, "migrated": False},
+            dim="m2")
+    try:
+        migrated = migrate_definition(value, from_gen)
+    except ValueError as e:
+        raise PlateHTTPError(
+            http_status=422, code=ErrorCode.INVALID_ACTION,
+            message=str(e)) from e
+    return ok_response(
+        {"value": migrated, "from_generation": from_gen,
+         "to_generation": M2_GENERATION, "migrated": True},
+        dim="m2")
+
+
 @router.get("/m2/{m2_hash}")
 def m2_by_hash(m2_hash: str, request: Request) -> dict[str, Any]:
     """按 hash 取历史 M2（9.5）：进程内当前 → 构件分支检出。"""
