@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ._m2 import GateDecl
+
 
 # ─── helpers ────────────────────────────────────────────────────────
 # `populate_by_name` + alias lets us write `ScenarioMeta(scenario_id="...")`
@@ -314,9 +316,8 @@ class GraphSpec(BaseModel):
     parallel: int = Field(default=1, ge=1, le=64)
     n_runs: int = Field(default=1, ge=1, le=64, alias="nRuns")
     # N1 横切面(D-6 保留):与引擎 GateDecl/CheckDecl 同形
-    # M2 §9.6:gates/checks 待改用生成物类型(_m2 GateDecl/CheckDecl);
-    # forbid 校验比 dict 严,需先对齐测试夹具,暂保持 dict
-    gates: list[dict[str, Any]] = Field(default_factory=list)
+    # M2 §9.6:gates 改用生成物 GateDecl;checks 保持 dict(平台扩展)
+    gates: list[GateDecl] = Field(default_factory=list)
     checks: list[dict[str, Any]] = Field(default_factory=list)
     # graph 级服务绑定(单元可覆盖)
     service_bindings: dict[str, Any] = Field(default_factory=dict,
