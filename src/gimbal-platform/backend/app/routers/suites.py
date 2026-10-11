@@ -1531,3 +1531,31 @@ async def suites_of_scenario(
         )
         for s in rows
     ]
+
+
+@router.get("/{suite_id}/version-distribution")
+async def get_version_distribution(
+    suite_id: int, user: CurrentUser, db: DbSession,
+) -> dict:
+    """Suite 编辑页版本分布（§6.6/R25）：成员场景的系统→版本线映射。"""
+    suite = await db.get(Suite, suite_id)
+    if suite is None:
+        raise HTTPException(404, "suite not found")
+    units = (suite.mode_config or {}).get("units") or {}
+    items: list[dict] = []
+    distribution: dict[str, dict[str, int]] = {}
+    for scen_id in units:
+        row = await scenario_store.get_row(db, scen_id)
+        if row is None:
+            continue
+        defn = scenario_store.definition_from_payload(row.payload or {})
+        plate = (defn.get("meta") or {}).get("plate") or {}
+        lines = {sys_: ref.split("#")[0]
+                 for sys_, ref in plate.items() if ref and ref != "working"}
+        items.append({"scenarioId": scen_id,
+                      "name": (defn.get("meta") or {}).get("name", ""),
+                      "lines": lines})
+        for sys_, line in lines.items():
+            distribution.setdefault(sys_, {})
+            distribution[sys_][line] = distribution[sys_].get(line, 0) + 1
+    return {"items": items, "distribution": distribution}
