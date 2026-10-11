@@ -540,3 +540,18 @@ def export_m2() -> M2Export: ...
 | 执行器 v2「plate 同步」 | setup / teardown 同步为 LifecycleEntry | M8 |
 | 已定原则 | 不新增模块；不留兼容层；plate 以服务形式提供结构定义 | 9.1；第 8、10 节；4.3 |
 | 平台约定 | 平台不 import gimbal | 平台用自己的生成物；现有例外列 Q12 |
+
+
+---
+
+## 附录 C：实施状态（2026-10-11）
+
+| 步骤 | 状态 | 备注 |
+|---|---|---|
+| 0 存量预检 | ✅ | m2_step0_audit.py |
+| 1 定义形态 | ✅ | schema/ 15 文件 + M2_GENERATION |
+| 2 交换形态 | ✅ | export_m2/gen_m2/CI 守卫/构件分支信封 |
+| 3 生成物 | ✅ | 三侧 _m2.py/m2.ts + import 改写 + 代际门 + m2.hash_mismatch 事件 |
+| 4 切换窗口 | ✅ | _next 替换/迁移脚本/fill_plate_defaults 删除/RunOptions |
+| 5 清理 | ○ | export/platform.py 删除;plate.ts→m2.ts 28 文件/GraphSpec gates/_m2.py 平台 0 import 待做 |
+| C 类快照 | ✅ | 7 张表(含 param_registry)+ strategy dim 快照出数含 sleep |

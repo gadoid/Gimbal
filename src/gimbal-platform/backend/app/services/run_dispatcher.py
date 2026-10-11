@@ -690,6 +690,64 @@ def fanout_total(fanout_datasets: list[dict], injections: list) -> int:
 
 
 # ─── main entry point ─────────────────────────────────────────────
+async def _check_env_consistency(
+    db: AsyncSession, scenario_payload: dict,
+    service_bindings: dict[str, ServiceBinding],
+) -> list[str]:
+    """环境告警（Release v4.4 §6.3 / V5-B）：混合环境 + 版本线不一致。
+
+    混合环境：服务别名指向多个环境 → 告警（哪条版本线生效不明确）。
+    版本线不一致：环境声明的版本线 ≠ 场景 meta.plate 的版本线 → 告警。
+    返回告警文本列表（调用方写 config_json 的 environmentWarnings 键）。
+    """
+    from ..models.environment import Environment
+    from ..models.service_alias import ServiceAlias
+
+    if not service_bindings:
+        return []
+
+    # 1. 别名 → 环境（经 service_aliases.environment_id）
+    alias_names = sorted({
+        b.auth_alias for b in service_bindings.values() if b.auth_alias})
+    if not alias_names:
+        return []
+    aliases = (await db.execute(
+        select(ServiceAlias).where(
+            ServiceAlias.alias_name.in_(alias_names))
+    )).scalars().all()
+    env_ids = sorted({a.environment_id for a in aliases if a.environment_id})
+    if not env_ids:
+        return []
+    envs = (await db.execute(
+        select(Environment).where(Environment.id.in_(env_ids))
+    )).scalars().all()
+    if not envs:
+        return []
+
+    warnings: list[str] = []
+
+    # 2. 混合环境告警
+    if len(envs) > 1:
+        warnings.append(
+            f"混合环境:服务绑定指向 {len(envs)} 个环境"
+            f"（{'、'.join(e.name for e in envs)}）——版本线生效优先级不明确")
+
+    # 3. 版本线不一致告警（每个环境 vs 场景 meta.plate）
+    definition = definition_from_payload(scenario_payload)
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    for env in envs:
+        for system, line in (env.lines or {}).items():
+            declared = meta_plate.get(system)
+            if declared and declared != "working":
+                declared_line = declared.split("#")[0]
+                if declared_line != line:
+                    warnings.append(
+                        f"环境不一致:环境「{env.name}」声明 {system}@{line},"
+                        f"场景声明 {system}@{declared_line}——执行将使用场景"
+                        "的版本线,建议适配或调整环境")
+    return warnings
+
+
 async def dispatch_run(
     db: AsyncSession,
     user_id: int,
@@ -746,6 +804,13 @@ async def dispatch_run(
                 "step_to_out_of_range",
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
+
+    # V5-B 环境告警（§6.3）:混合环境 + 版本线不一致 → 写 config_json
+    try:
+        env_warnings = await _check_env_consistency(
+            db, scen.payload or {}, req.service_bindings or {})
+    except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
+        env_warnings = []
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
@@ -862,6 +927,7 @@ async def dispatch_run(
             "parallel": req.parallel,
             # C13:执行链留档（legacy|server;调试恒 server）
             "chain": chain,
+            **({"environmentWarnings": env_warnings} if env_warnings else {}),
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
             # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
             # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
