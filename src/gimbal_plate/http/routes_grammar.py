@@ -1336,11 +1336,24 @@ def action_scenario_convert(
     # ── RS2(Release 4.5):meta.plate 原值重投影 ──
     # 平台入队时已把生效修订写入执行副本的 meta.plate;此处按原值取修订
     # 合并 call(解析只在一处发生)。不带 meta.plate(过渡期/预览)照旧。
+    # REF_REQUIRED(Release 4.2):平台调用带 strict_ref=true 时,meta.plate
+    # 缺失或全部 working → 400 ref_required(浏览器预览不带 strict_ref,
+    # 不受影响;平台已全量传修订,M1)
     meta_plate = None
     if isinstance(raw_scenario, dict):
         meta = raw_scenario.get("meta")
         if isinstance(meta, dict):
             meta_plate = meta.get("plate") or None
+    strict_ref = bool((body.get("strict_ref") or request.query_params.get("strict_ref")))
+    if strict_ref and (not meta_plate or
+                       all(v in (None, "", "working") for v in meta_plate.values())):
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.REF_REQUIRED,
+            message="ref_required: strict_ref=true 而场景未声明精确修订"
+                    "（meta.plate 缺失或全部 working;平台调用须传修订,"
+                    "浏览器预览不传 strict_ref）",
+        )
     used_refs: dict[str, str] | None = None
     if meta_plate:
         from gimbal_plate.release.reproject import (

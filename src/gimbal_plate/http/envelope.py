@@ -36,6 +36,7 @@ class ErrorCode(str, Enum):
     ENDPOINT_NOT_IN_RELEASE = "endpoint_not_in_release"
     HEADER_CONFLICTS_BINDING = "header_conflicts_binding"
     BINDING_FIELD_IN_STORAGE = "binding_field_in_storage"
+    REF_REQUIRED = "ref_required"
     # ── M2 框架 dim（M2 方案 v2.4 §9.5；T1.3）──
     M2_NOT_FOUND = "m2_not_found"
 
