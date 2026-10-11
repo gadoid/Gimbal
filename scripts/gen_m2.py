@@ -270,20 +270,22 @@ def _gen_ts(schema_path: Path, out_path: Path) -> None:
             if not has_type and "additionalProperties" not in pdef:
                 pdef["tsType"] = "unknown"
 
-    with _tf.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8",
-    ) as tmp:
-        _json.dump(schema, tmp, ensure_ascii=False)
-        tmp_path = tmp.name
+    # 临时副本放临时目录、文件名固定 m2.schema.json——schema 根没有
+    # title,json2ts 用文件名当根类型名,随机命名(NamedTemporaryFile)
+    # 会导致每次生成的根类型不同(M2Schema→Tmpxxx),CI 漂移守卫必红
+    tmp_dir = _tf.mkdtemp(prefix="gen_m2_ts_")
+    tmp_path = Path(tmp_dir) / "m2.schema.json"
+    tmp_path.write_text(_json.dumps(schema, ensure_ascii=False),
+                        encoding="utf-8")
 
     npx = shutil.which("npx") or "npx"
     r = _sp.run(
         [npx, "--yes", "json-schema-to-typescript",
-         "--input", tmp_path, "--output", str(out_path)],
+         "--input", str(tmp_path), "--output", str(out_path)],
         capture_output=True, text=True, encoding="utf-8",
         cwd=str(REPO), shell=_sys.platform == "win32")
-    import os as _os
-    _os.unlink(tmp_path)
+    import shutil as _shl
+    _shl.rmtree(tmp_dir, ignore_errors=True)
     if r.returncode != 0:
         raise RuntimeError(
             "json-schema-to-typescript 失败(需 node/npx): "
@@ -387,11 +389,13 @@ def cmd_check(targets: list[str]) -> int:
     return 0
 
 
-def _load_base_schema(ref: str) -> dict:
+def _load_base_schema(ref: str) -> dict | None:
     r = _run(["git", "show",
               f"{ref}:src/gimbal_plate/selfdescribe/m2.schema.json"],
              cwd=REPO)
     if r.returncode != 0:
+        if "exists on disk, but not in" in r.stderr:
+            return None      # 基线还没有 M2 Schema(首次引入)→ 跳过 compat
         raise RuntimeError(
             f"取基线 m2.schema.json 失败({ref}): {r.stderr.strip()[:150]}")
     return json.loads(r.stdout)
@@ -450,6 +454,9 @@ def cmd_compat(base_ref: str) -> int:
         base = _load_base_schema(base_ref)
     except RuntimeError as e:
         return _die(str(e))
+    if base is None:
+        print(f"compat 跳过：基线 {base_ref} 尚无 m2.schema.json(首次引入)")
+        return 0
     problems = _find_incompatibilities(base, export.schema)
     if not problems:
         print(f"compat 通过：对 {base_ref} 无不兼容变化")
