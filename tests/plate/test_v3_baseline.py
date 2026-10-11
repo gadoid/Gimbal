@@ -121,6 +121,7 @@ class TestSchemaInterfaceImportable:
             call=Call(protocol="http", service="sample",
                       method="GET", path="/baseline/sample"),
             request=Request(),
+            strategy=[],
         )
         assert s.call.service == "sample"
 

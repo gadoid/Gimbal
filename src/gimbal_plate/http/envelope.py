@@ -26,6 +26,18 @@ class ErrorCode(str, Enum):
     ADMIN_NOT_IMPLEMENTED = "admin_not_implemented"
     REDACTED_SENSITIVE = "redacted_sensitive"
     INVALID_QUERY_PARAM = "invalid_query_param"
+    # ── 版本模型读取侧（Release v4.4 §4；T1.7）──
+    RELEASE_NOT_FOUND = "release_not_found"
+    RELEASE_CORRUPT = "release_corrupt"
+    RELEASE_M2_INCOMPATIBLE = "release_m2_incompatible"
+    INVALID_REF = "invalid_ref"
+    # ── 重投影（Release v4.4 §4.5；T1.8/RS2）──
+    VERSION_UNDECLARED = "version_undeclared"
+    ENDPOINT_NOT_IN_RELEASE = "endpoint_not_in_release"
+    HEADER_CONFLICTS_BINDING = "header_conflicts_binding"
+    BINDING_FIELD_IN_STORAGE = "binding_field_in_storage"
+    # ── M2 框架 dim（M2 方案 v2.4 §9.5；T1.3）──
+    M2_NOT_FOUND = "m2_not_found"
 
 
 class ErrorPayload(BaseModel):

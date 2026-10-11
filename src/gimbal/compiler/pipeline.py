@@ -24,7 +24,7 @@ from pydantic import TypeAdapter
 from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, unit_policy_from
-from gimbal.schema.scenario import Control, Scenario, SuiteGraph, UnitDecl
+from gimbal.schema import Control, Scenario, SuiteGraph, UnitDecl
 
 logger = get_logger(__name__)
 
@@ -208,7 +208,7 @@ def _validate_call_fields(
                 continue  # 开放协议：注册时未声明参数模型，不做字段校验
             try:
                 params_model.model_validate(
-                    _relax_templates(params_model, call.extra_fields()))
+                    _relax_templates(params_model, dict(call.model_extra or {})))
             except ValidationError as exc:
                 # 字段粒度：loc 直指拼错/类型不符的键（如 metod、headers.x），
                 # 回退到 "call" 仅在拿不到 loc 时
@@ -636,7 +636,7 @@ def _apply_cross_checks(graph: "SuiteGraph", before: list, units: list,
     """
     if not getattr(graph, "checks", None):
         return
-    from gimbal.schema.strategy import StrategyUnion
+    from gimbal.schema import StrategyUnion
     adapter = TypeAdapter(StrategyUnion)
     for i, check in enumerate(graph.checks):
         # 策略形状校验(提前到注入点,报错定位在 check[i])

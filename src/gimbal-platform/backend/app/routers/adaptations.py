@@ -42,7 +42,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.post("/catalog/diff", response_model=CatalogDiffReport)
-async def catalog_diff(user: AdminUser, db: DbSession) -> CatalogDiffReport:
+async def catalog_diff(user: CurrentUser, db: DbSession) -> CatalogDiffReport:
     """拉 plate 目录对戳:待适配 / 异常(C12 忘 bump、下架)/ 本次新落基线数。"""
     try:
         report = await adaptation_service.catalog_diff(db)
@@ -82,7 +82,7 @@ async def impact_bulk(
 
 
 @router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
-async def unindexed_steps(user: AdminUser, db: DbSession) -> list[UnindexedStepOut]:
+async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedStepOut]:
     """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。"""
     return [
         UnindexedStepOut.model_validate({
@@ -95,7 +95,7 @@ async def unindexed_steps(user: AdminUser, db: DbSession) -> list[UnindexedStepO
 
 
 @router.get("/refs-drift", response_model=RefsDriftReport)
-async def refs_drift(user: AdminUser, db: DbSession) -> RefsDriftReport:
+async def refs_drift(user: CurrentUser, db: DbSession) -> RefsDriftReport:
     """倒排索引 vs plate 接口目录 diff(只读):悬空引用 / 全网零引用。"""
     return RefsDriftReport.model_validate(await adaptation_service.refs_drift(db))
 
@@ -116,7 +116,7 @@ async def impact_summary(
 
 @router.post("/batches", response_model=BatchDetail, status_code=201)
 async def open_batch(
-    user: AdminUser, body: OpenBatchIn, db: DbSession,
+    user: CurrentUser, body: OpenBatchIn, db: DbSession,
 ) -> BatchDetail:
     """开批次:校验基线/版本前进 → 存档受影响实体 → 展开自动草案。"""
     try:
@@ -189,7 +189,7 @@ async def get_batch(batch_id: str, user: AdminUser, db: DbSession) -> BatchDetai
 
 @router.post("/batches/{batch_id}/ops", response_model=OpOut, status_code=201)
 async def create_op(
-    user: AdminUser, batch_id: str, body: OpCreateIn, db: DbSession,
+    user: CurrentUser, batch_id: str, body: OpCreateIn, db: DbSession,
 ) -> OpOut:
     """人工补 op(renameVar / 数据集 op —— 自动草案之外,§5.4)。"""
     try:
@@ -209,7 +209,7 @@ async def create_op(
 
 
 @router.post("/ops/{op_id}/apply", response_model=OpOut)
-async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
+async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
     """逐条应用:幂等重放 / C5 冲突标 conflict / 末条完成推戳。"""
     try:
         op = await adaptation_service.apply_op(db, op_id)
@@ -231,7 +231,7 @@ async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
 
 
 @router.post("/ops/{op_id}/skip", response_model=OpOut)
-async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
+async def skip_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
     """跳过一条 pending op(末条跳过同样收敛 completed + 推戳)。"""
     try:
         op = await adaptation_service.skip_op(db, op_id)
@@ -246,7 +246,7 @@ async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
 
 @router.patch("/ops/{op_id}", response_model=OpOut)
 async def patch_op(
-    user: AdminUser, op_id: int, body: OpPatchIn, db: DbSession,
+    user: CurrentUser, op_id: int, body: OpPatchIn, db: DbSession,
 ) -> OpOut:
     """仅 pending 可整包替换 payload(mapValue 骨架补值 / 参数修正)。"""
     try:
@@ -260,7 +260,7 @@ async def patch_op(
 
 @router.post("/batches/{batch_id}/rollback", response_model=RollbackReport)
 async def rollback_batch(
-    user: AdminUser, batch_id: str, db: DbSession,
+    user: CurrentUser, batch_id: str, db: DbSession,
 ) -> RollbackReport:
     """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。"""
     try:

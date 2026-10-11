@@ -166,7 +166,7 @@ print("\n[4] HttpResponseEvent status code defense (#34/#79)")
 
 from gimbal.statemachine import engine as sm_engine
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus, PhaseResult
-from gimbal.schema.strategy import StrategyPhase, FailurePolicy
+from gimbal.schema import StrategyPhase, FailurePolicy
 
 
 class _FakeBus:
@@ -266,7 +266,7 @@ def _make_scenario_run_result(scenario_id: str, step_count: int = 2) -> Scenario
 
 @test("#45.1 graph aggregate details include steps field")
 def _():
-    from gimbal.schema.scenario import SuiteGraph, UnitDecl, Scenario, Meta, Config
+    from gimbal.schema import SuiteGraph, UnitDecl, Scenario, Meta, Config
 
     sc = Scenario(
         scenarioId="sc-1",
@@ -321,9 +321,9 @@ def _():
 # ════════════════════════════════════════════════════════════════════
 print("\n[6b] service_url 兜底删除 (#6)")
 
-from gimbal.schema.call import Call
-from gimbal.schema.request import Request
-from gimbal.schema.step import Step as StepSchema
+from gimbal.schema import Call
+from gimbal.schema import Request
+from gimbal.schema import Step as StepSchema
 
 
 def _make_sm_with_call(service: str, base_url: str, call: Call = None):
@@ -496,7 +496,7 @@ print("\n[9] PreToken mode refresh (#78)")
 
 from gimbal.auth.manager import AuthManager
 from gimbal.auth.registry import AuthRegistry
-from gimbal.schema.auth import AuthSession
+from gimbal.auth.session import AuthSession
 
 
 @test("#78.1 PreToken mode (no url) refresh does not call _login")
@@ -614,7 +614,7 @@ def _build_sm_for_soft_failure(
     step_schema.request.body = {}
     # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
     # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
-    from gimbal.schema.call import Call as _RealCall
+    from gimbal.schema import Call as _RealCall
     step_schema.call = _RealCall(
         protocol="http", service="test-svc", method="GET",
         path="/x", headers={}, timeout=30.0,
@@ -1271,7 +1271,7 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
     step_schema.request.body = {}
     # 协议中立化（批次 0/A）：mock schema 需挂真 Call，
     # _do_call 三段式才能分派到 http（MagicMock 自动属性不是合法协议名）
-    from gimbal.schema.call import Call as _RealCall
+    from gimbal.schema import Call as _RealCall
     step_schema.call = _RealCall(
         protocol="http", service="test-svc", method="GET",
         path="/x", headers={}, timeout=30.0,
@@ -1577,7 +1577,7 @@ def _():
     from unittest.mock import patch, MagicMock
     from gimbal.auth.manager import AuthManager
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.auth import AuthSession
+    from gimbal.auth.session import AuthSession
 
     reg = AuthRegistry()
     auth = AuthSession(
@@ -1628,7 +1628,7 @@ def _():
     from unittest.mock import patch, MagicMock
     from gimbal.auth.manager import AuthManager
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.auth import AuthSession
+    from gimbal.auth.session import AuthSession
 
     reg = AuthRegistry()
     auth = AuthSession(
@@ -1665,7 +1665,7 @@ def _():
     from unittest.mock import patch, MagicMock
     from gimbal.auth.manager import AuthManager
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.auth import AuthSession
+    from gimbal.auth.session import AuthSession
 
     reg = AuthRegistry()
     auth = AuthSession(
@@ -1941,7 +1941,7 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -1977,7 +1977,7 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2027,10 +2027,10 @@ print("\n[26] Business flow: multi-service base_url (B1)")
 
 def _make_step_with_service(service_name: str):
     """Build a Step with given call.service key."""
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
-    from gimbal.schema.strategy import Assertion, AssertOperator
+    from gimbal.schema import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Request
+    from gimbal.schema import Assertion, AssertOperator
 
     return Step(
         kind="step",
@@ -2055,7 +2055,7 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2090,7 +2090,7 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2132,7 +2132,7 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2241,9 +2241,9 @@ def _build_scenario_with_timeout(steps, timeout_seconds=None):
 
 
 def _make_step_with_api():
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
+    from gimbal.schema import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Request
     return Step(
         kind="step",
         call=Call(protocol="http", service="test", method="GET", path="/x",
@@ -2284,11 +2284,11 @@ def _():
     from unittest.mock import patch
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
-    from gimbal.schema.step import Step
-    from gimbal.schema.strategy import Assertion, AssertOperator, StrategyPhase, FailurePolicy
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Call
+    from gimbal.schema import Request
+    from gimbal.schema import Step
+    from gimbal.schema import Assertion, AssertOperator, StrategyPhase, FailurePolicy
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2365,7 +2365,7 @@ def _():
 def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.config.models import BootstrapConfig
-    from gimbal.schema.scenario import Scenario, Meta, Config as ScenarioConfig
+    from gimbal.schema import Scenario, Meta, Config as ScenarioConfig
     from gimbal.auth.registry import AuthRegistry
     from datetime import datetime, timezone
 
@@ -2413,7 +2413,7 @@ def _():
     """Critical B5: header missing template should NOT silently drop — must raise."""
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.call import Call
+    from gimbal.schema import Call
     from gimbal.config.models import BootstrapConfig
     from gimbal.auth.registry import AuthRegistry
 
@@ -2440,7 +2440,7 @@ def _():
 @test("#B5.3 _resolve_call raises when path template is missing")
 def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.call import Call
+    from gimbal.schema import Call
 
     call = Call(protocol="http",
         service="test", method="GET", path="/users/${var.user_id}",
@@ -2460,7 +2460,7 @@ def _():
 @test("#B5.4 _resolve_call succeeds with all templates resolved")
 def _():
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.call import Call
+    from gimbal.schema import Call
 
     call = Call(protocol="http",
         service="test", method="GET", path="/users/${var.user_id}",
@@ -2913,9 +2913,9 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
+    from gimbal.schema import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Request
 
     schema = MagicMock()
     schema.steps = [
@@ -2967,9 +2967,9 @@ def _():
     from unittest.mock import MagicMock
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
+    from gimbal.schema import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Request
 
     schema = MagicMock()
     schema.steps = [

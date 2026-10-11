@@ -61,12 +61,6 @@ from gimbal_plate.export.gimbal import (
     EndpointCaseExporter,
     GimbalScenarioExporter,
 )
-from gimbal_plate.export.platform import (
-    PlatformEndpointView,
-    PlatformScenarioExporter,
-    PlatformScenarioView,
-    PlatformStepView,
-)
 
 __all__ = [
     # 声明式入口
@@ -81,7 +75,6 @@ __all__ = [
     "ExporterCapabilities",
     # 现有 exporter
     "GimbalScenarioExporter",
-    "PlatformScenarioExporter",
     "PlatformScenarioView",
     "PlatformEndpointView",
     "PlatformStepView",

@@ -19,7 +19,7 @@ import threading
 from typing import Iterator, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from gimbal.schema.auth import AuthSession
+    from gimbal.auth.session import AuthSession
 
 
 class AuthRegistry:

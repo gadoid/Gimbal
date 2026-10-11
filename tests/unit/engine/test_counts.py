@@ -38,13 +38,13 @@ from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.result import CallResult
-from gimbal.schema.call import Call
+from gimbal.schema import Call
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, UnitPolicy
-from gimbal.schema.retrypolicy import RetryPolicy
-from gimbal.schema.scenario import (
+from gimbal.schema import RetryPolicy
+from gimbal.schema import (
     Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl,
 )
-from gimbal.schema.step import Step
+from gimbal.schema import Step
 from gimbal.scheduler.plan import PlanScheduler
 from gimbal.strategy.dispatcher import build_default_dispatcher
 

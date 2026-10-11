@@ -161,7 +161,7 @@ def replay(
 
 def _parse_where(pairs: list[str] | None) -> dict[str, str]:
     """--where k=v 对 → dict；键合法性沿用订阅编译的 where 键集。"""
-    from gimbal.schema.subscribe import EVENT_WHERE_FIELDS
+    from gimbal.schema import EVENT_WHERE_FIELDS
     from gimbal.log.exec_context import EXEC_LABEL_NAMES
     valid = set(EXEC_LABEL_NAMES) | set(EVENT_WHERE_FIELDS)
     where: dict[str, str] = {}

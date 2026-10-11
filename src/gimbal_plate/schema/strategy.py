@@ -1,14 +1,20 @@
-"""schema.strategy —— 策略抽象基类与三种实现。"""
+"""M2 策略（M2 方案 v2.4 §3；步骤 1 定义形态）。
+
+与执行器 ``gimbal/schema/strategy.py`` 同构（枚举成员名/值、字段、
+判别联合），差异仅 M1：A 类统一 ``extra="forbid"``。``view_note`` 是
+plate 副本的视图字段，不进定义（M5）。
+"""
 from __future__ import annotations
 
-from typing import Any, Optional, Literal, Union, Annotated, List
 from enum import Enum
-from pydantic import BaseModel, Field
+from typing import Annotated, Any, List, Literal, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Scope(str, Enum):
     FRAMEWORK = "framework"
-    SESSION = "session"
+    SUITE = "suite"        # 历史值 "session" 已退役（与 ContextLayer.SUITE 对齐）
     SCENARIO = "scenario"
     STEP = "step"
     REQUEST = "request"
@@ -32,60 +38,67 @@ class AssertOperator(str, Enum):
 
 
 class StrategyPhase(str, Enum):
-    BEFORE_REQUEST = "before_request"  # SQL 注入数据、Assign 准备入参
-    AFTER_REQUEST = "after_request"  # Extract 提取字段
-    VERIFYING = "verifying"  # Assertion、DBChecker
-    TEARDOWN = "teardown"  # SQL 清理、Chaos 恢复
+    """策略执行阶段（value 沿用历史值，存量场景零迁移）。"""
+
+    PREPARE = "before_request"
+    EXTRACTING = "after_request"
+    VERIFYING = "verifying"
+    TEARDOWN = "teardown"
 
 
 class FailurePolicy(str, Enum):
-    ABORT = "abort"  # 中止整个 step
-    CONTINUE = "continue"  # 记录错误但继续
-    WARN = "warn"  # 仅警告
-    RETRY = "retry"  # 配合 retry 字段
+    ABORT = "abort"
+    CONTINUE = "continue"
+    WARN = "warn"
+    RETRY = "retry"
 
 
 class StrategyBase(BaseModel):
-    name: Optional[str] = None
-    phase: Optional[StrategyPhase] = None  # 处理的阶段
-    order: int = 0  # 执行顺序
-    enabled: bool = True  # 是否启动
-    onFailure: FailurePolicy = FailurePolicy.ABORT  # 失败处理策略
-    timeout: Optional[float] = None  # 策略执行超时
-    tags: List[str] = Field(default_factory=list)  # 标签
+    model_config = ConfigDict(extra="forbid")
 
-    # ── 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2） ────────────────
-    view_note: Optional[str] = Field(
-        default=None,
-        description="[V3.1 平台视图] 人类语言策略摘要,如 'response.code eq 0'",
-    )
+    name: Optional[str] = None
+    phase: Optional[StrategyPhase] = None
+    order: int = 0
+    enabled: bool = True
+    onFailure: FailurePolicy = FailurePolicy.ABORT
+    timeout: Optional[float] = None
+    tags: List[str] = Field(default_factory=list)
 
 
 class Extract(StrategyBase):
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal["extract"] = "extract"
-    expression: str  # JSONPath,在 scratch 上导航
-    target: str  # 写入目标的 key
+    phase: StrategyPhase = StrategyPhase.EXTRACTING
+    expression: str            # JSONPath，在 scratch 上导航
+    target: str                # 写入目标的 key
     scope: Scope = Scope.STEP
     default: Optional[Any] = None
     required: bool = True
 
 
 class Assign(StrategyBase):
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal["assign"] = "assign"
-    source: Any  # 路径或者值
-    target: str  # 模板路径
+    phase: StrategyPhase = StrategyPhase.PREPARE
+    source: Any                # 路径或值
+    target: str                # 模板路径
     scope: Scope = Scope.SCENARIO
-    default: Optional[Any] = None  # 提取失败,注入的默认值
-    required: bool = True  # 注入失败是否抛出异常
+    default: Optional[Any] = None
+    required: bool = True
 
 
 class Assertion(StrategyBase):
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal["assertion"] = "assertion"
-    target: str  # 断言的目标字段
-    operator: AssertOperator  # 断言的比较符
-    expected: Any = None  # 断言的比较值
-    message: Optional[str] = None  # 断言失败信息
-    soft: bool = False  # 软断言
+    phase: StrategyPhase = StrategyPhase.VERIFYING
+    target: str                # 断言目标字段
+    operator: AssertOperator
+    expected: Any = None
+    message: Optional[str] = None
+    soft: bool = False
 
 
 StrategyUnion = Annotated[

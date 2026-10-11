@@ -22,9 +22,25 @@ from typing import Any
 from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.log.category import CATEGORIES, categorize_logger
 from gimbal.log.exec_context import EXEC_LABEL_NAMES, exec_labels
-from gimbal.schema.subscribe import (
-    EVENT_WHERE_FIELDS, SubscribeSpec, normalize_subscribe_spec,
+from gimbal.schema import (
+    SubscribeSpec,
 )
+
+def normalize_subscribe_spec(raw):
+    """裸数据（dict 列表 / None）→ SubscribeRule 列表（M2 §9.1 收编）。"""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("subscribe 规格必须是规则列表（JSON array）")
+    from gimbal.schema import SubscribeRule
+    return [SubscribeRule.model_validate(item) for item in raw]
+
+
+EVENT_WHERE_FIELDS: tuple[str, ...] = (
+    "event_type", "status", "scenario_id", "step_id", "suite_id",
+    "plugin_name", "level",
+)
+
 
 
 def _known_event_types() -> set[str]:

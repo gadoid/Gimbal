@@ -834,7 +834,7 @@ class _ScratchView:
 
 def _real_assign_execute(strategy: dict):
     """真引擎执行一条 Assign(延迟导入:只在真解析用例里加载引擎包)。"""
-    from gimbal.schema.strategy import Assign
+    from gimbal.schema import Assign
     from gimbal.strategy.builtin.assign import AssignExecutor
 
     view = _ScratchView()
@@ -894,7 +894,7 @@ async def test_real_convert_accepts_and_roundtrips_injected_assign():
     import httpx
 
     from app.services import plate_client
-    from gimbal.schema.scenario import Scenario
+    from gimbal.schema import Scenario
 
     cases = [
         ({"a": [1, 2]}, "$", "$.call.request.body"),
@@ -939,7 +939,7 @@ async def test_json_null_value_boundary_is_recorded_not_silently_written():
     import httpx
 
     from app.services import plate_client
-    from gimbal.schema.scenario import Scenario
+    from gimbal.schema import Scenario
 
     composed = _compose(None)
     assert composed["steps"][0]["strategy"][-1]["source"] is None   # compose 原样保留用户值
@@ -965,7 +965,7 @@ def _preprocess(scenario_dict: dict) -> list:
     用例里加载引擎包。"""
     from gimbal.config.models import BootstrapConfig
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.scenario import Scenario
+    from gimbal.schema import Scenario
 
     steps, _base_url, _services = ScenarioPreprocessor(
         scenario_schema=Scenario.model_validate(scenario_dict),

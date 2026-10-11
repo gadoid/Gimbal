@@ -100,18 +100,32 @@ class TestGates:
         assert items["endpoints_with_capability"] == 4
 
     def test_release_freezes_with_term_closure(self, tmp_path) -> None:
-        from gimbal_plate.release.release import release_system
+        """RS0 演练(版本模型 v1.4):真树拷贝进临时 git 仓库,platform
+        声明首条版本线后签发——发版需要 git(3.3/3.6),不再直接发仓库
+        工作树(工作树可能有未提交变更,B1 会拒)。"""
+        import shutil as _sh
 
-        r = release_system(PLAT, artifacts_root=tmp_path / "art",
+        from gimbal_plate.release.release import release_system
+        from tests.plate._release_fx import REPO_ROOT, commit, git
+
+        repo = tmp_path / "repo"
+        _sh.copytree(REPO_ROOT / "systems", repo / "systems")
+        _sh.copytree(REPO_ROOT / "types", repo / "types")
+        # RS3 前置：真源 system.md 已声明 line '1.0'（提交 e45bbe26）
+        git(repo, "init", "-q")
+        commit(repo, "init")
+        r = release_system(repo / "systems" / "platform",
+                           artifacts_root=tmp_path / "art",
                            signed_by="slice-tester")
         assert r.success, r.message
+        assert r.revision == "1.0#1"
         assert r.manifest["summary"]["endpoints"] == 126
         # P2 内容交付后 statements 增多;原切片 10 条作为下限断言
         assert r.manifest["summary"]["statements"] >= 10
         # 11 = 原切片 10 + 三级角色更名(0011)补的 value:user.role.user
         # (fb47a066 更名字典加词条但漏改本期望——拉取侧回弹,此处补齐)
         assert r.manifest["summary"]["terms"] >= 11
-        # call 投影含 capability 关联的四个管理动作
+        # call 投影含 capability 关联的四个管理动作(3.5:投影入池,记 hash)
         assert "platform.users.post_root" in r.manifest["call_projections"]
 
     def test_term_reference_backlink(self) -> None:

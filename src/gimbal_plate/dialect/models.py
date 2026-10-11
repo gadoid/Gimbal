@@ -158,6 +158,13 @@ class EndpointSpec(BaseModel):
     consumes: list[str] = Field(default_factory=list)
     produces: list[str] = Field(default_factory=list)
 
+    # ── 接口取代关系（R32，Release v4.4 §13.1；RS4b 前置）──
+    # status=deprecated + replaced_by=[目标接口 id...] 时，差异接口据此
+    # 自动起草 replaceEndpoint / splitStep 骨架。沿用 Term 的形式
+    # （知识侧加法字段，P8）。
+    status: Literal["active", "deprecated"] = "active"
+    replaced_by: list[str] = Field(default_factory=list)
+
     # ── 协议坐标 ──
     binding: Binding
 
@@ -245,6 +252,17 @@ class Frontmatter(BaseModel):
     # 公共默认值供文件内接口块继承（继承在解析期物化进对象——内容寻址
     # 对象自含，P7）
     service: str | None = None
+    # ── 版本线声明（版本模型 v1.4 2.1/2.4；P8 加法字段，全部可缺省）──
+    # 只在系统入口 system.md 上有意义；未声明的系统 = 缺省 free + manual
+    # （RS0 起始口径）。一旦声明即受 F5 校验：scheme 合法性、
+    # service_version 来源存在（line_service 必填且指向 gimbal:system
+    # 声明的服务）、pattern 正则可编译且与 line 匹配。
+    line: str | None = None
+    predecessor_line: str | None = None   # 首条版本线可省略
+    line_scheme: str | None = None        # semver/iteration/date/free/pattern；缺省 free
+    line_source: str | None = None        # manual/service_version；缺省 manual
+    line_service: str | None = None       # service_version 时必填（gimbal:system 的 name）
+    line_pattern: str | None = None       # pattern 时的正则
 
 
 class Statement(BaseModel):

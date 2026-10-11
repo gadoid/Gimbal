@@ -23,9 +23,9 @@ from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.result import CallResult
-from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph
-from gimbal.schema.step import Step
-from gimbal.schema.call import Call
+from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph
+from gimbal.schema import Step
+from gimbal.schema import Call
 from gimbal.scheduler.plan import PlanScheduler
 from gimbal.core.hooks import HookRegistry
 from gimbal.strategy.dispatcher import build_default_dispatcher
@@ -187,14 +187,14 @@ class TestSharedRuntimeControlPollution:
         from gimbal.compiler.pipeline import compile_target
         from gimbal.core.runner import Engine
         from gimbal.core.scenario_runner import RuntimeControl
-        from gimbal.schema.scenario import SuiteGraph, UnitDecl
+        from gimbal.schema import SuiteGraph, UnitDecl
 
         conf = _make_configuration()
         conf.dispatcher.protocols.register(TimedProtocolExecutor())
         engine = Engine(conf)
 
-        from gimbal.schema.step import Step
-        from gimbal.schema.call import Call
+        from gimbal.schema import Step
+        from gimbal.schema import Call
 
         def _timed_step(msg):
             return Step(call=Call(protocol="timed", message=msg), strategy=[])
@@ -230,9 +230,9 @@ class TestTimeoutJoinBeforeRetry:
         串行、b 1 次、全程同锁并发峰值 = 1。"""
         from gimbal.compiler.pipeline import compile_target
         from gimbal.core.runner import Engine
-        from gimbal.schema.scenario import SuiteGraph, UnitDecl
-        from gimbal.schema.step import Step
-        from gimbal.schema.call import Call
+        from gimbal.schema import SuiteGraph, UnitDecl
+        from gimbal.schema import Step
+        from gimbal.schema import Call
 
         conf = _make_configuration()
         conf.dispatcher.protocols.register(TimedProtocolExecutor())
@@ -300,7 +300,7 @@ class TestAbandonJoinBound:
                 return CallResult.build(
                     protocol=self.protocol, request={}, status=0, body={"ok": True})
 
-        from gimbal.schema.scenario import UnitDecl, SuiteGraph
+        from gimbal.schema import UnitDecl, SuiteGraph
         from gimbal.schema.plan import UnitPolicy
 
         cfg = _make_configuration()

@@ -19,10 +19,10 @@ from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins.loader import PluginLoader
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.registry import ProtocolRegistry, build_default_protocol_registry
-from gimbal.schema.call import Call
-from gimbal.schema.call import Call
-from gimbal.schema.request import Request
-from gimbal.schema.step import Step
+from gimbal.schema import Call
+from gimbal.schema import Call
+from gimbal.schema import Request
+from gimbal.schema import Step
 from gimbal.strategy.builtin.call import CallExecutor
 from gimbal.strategy.dispatcher import build_default_dispatcher
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
@@ -148,7 +148,7 @@ class TestParamsConvergence:
         from datetime import datetime, timezone
 
         from gimbal.compiler.pipeline import CompileError, compile_target
-        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+        from gimbal.schema import Config as ScenarioConfig, Meta, Scenario
 
         scenario = Scenario(
             scenarioId="bad-call",
@@ -169,7 +169,7 @@ class TestParamsConvergence:
         from datetime import datetime, timezone
 
         from gimbal.compiler.pipeline import CompileError, compile_target
-        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+        from gimbal.schema import Config as ScenarioConfig, Meta, Scenario
 
         scenario = Scenario(
             scenarioId="bad-proto",
@@ -189,7 +189,7 @@ class TestParamsConvergence:
         from datetime import datetime, timezone
 
         from gimbal.compiler.pipeline import compile_target
-        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+        from gimbal.schema import Config as ScenarioConfig, Meta, Scenario
 
         scenario = Scenario(
             scenarioId="plugin-proto",
@@ -208,7 +208,7 @@ class TestParamsConvergence:
         from datetime import datetime, timezone
 
         from gimbal.compiler.pipeline import compile_target
-        from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
+        from gimbal.schema import Config as ScenarioConfig, Meta, Scenario
 
         scenario = Scenario(
             scenarioId="ok-call",

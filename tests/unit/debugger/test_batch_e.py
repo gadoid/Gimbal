@@ -26,9 +26,9 @@ from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.result import CallResult
-from gimbal.schema.call import Call
-from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl
-from gimbal.schema.step import Step
+from gimbal.schema import Call
+from gimbal.schema import Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl
+from gimbal.schema import Step
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
 
@@ -207,8 +207,8 @@ class TestStepBeforeAndPatch:
         from unittest.mock import MagicMock, patch
         engine, hooks, _ = _make_engine()
 
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         hooks.register(HookPoint.CALL_BEFORE_SEND, lambda p: Decision(
             action="continue", source="human",

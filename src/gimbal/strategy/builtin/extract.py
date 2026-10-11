@@ -9,7 +9,7 @@ from gimbal.utils.jsonpath import get as jget
 
 if TYPE_CHECKING:
     from gimbal.context.views import StepContextAdapter
-    from gimbal.schema.strategy import Extract
+    from gimbal.schema import Extract
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -53,7 +53,7 @@ class ExtractExecutor(StrategyExecutor):
                     )
 
             # 3. 根据 scope 决定写入目标
-            from gimbal.schema.strategy import Scope
+            from gimbal.schema import Scope
             if spec.scope == Scope.STEP:
                 view.write_scratch(spec.target, value)
                 logger.info(

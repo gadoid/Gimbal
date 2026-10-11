@@ -26,6 +26,16 @@ jobs:
           python-version: "3.12"
       - name: Install (editable, plate entry included)
         run: pip install -e .[dev]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: M2 漂移守卫 — gen_m2 check(生成物与当前定义一致)
+        run: |
+          set -e
+          npx --yes json-schema-to-typescript --version
+          python scripts/gen_m2.py check --targets schema,ext,py,ts
+      - name: M2 兼容性守卫 — gen_m2 compat(不兼容变更须递增代际)
+        run: python scripts/gen_m2.py compat --base origin/main
       - name: 入库闸门 — plate check(规则编号即错误码)
         run: |
           set -e

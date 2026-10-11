@@ -1,6 +1,6 @@
-"""gimbal ext list —— 四张扩展注册表的描述导出（v2 §1，批次 C）。
+"""gimbal ext list —— 六张扩展注册表的描述导出（v2 §1，批次 C）。
 
-``ext list --json`` = strategy + protocol + mode + plugin 四张表
+``ext list --json`` = strategy + protocol + mode + plugin + generator + event 六张表
 describe() 之和：name + 参数 JSON Schema（供平台 G2 生成表单）。
 需要 bootstrap（插件表按激活态导出），但不执行任何用例。
 """
@@ -60,6 +60,41 @@ def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -
             "events": getattr(plugin.ctx, "event_count", 0) if getattr(plugin, "ctx", None) else 0,
             "hooks": getattr(plugin.ctx, "hook_count", 0) if getattr(plugin, "ctx", None) else 0,
         })
+
+    # 生成器表（Q5/M2 §2.4：variable generators 的 spec 模型 + 参数 Schema）
+    from gimbal.generator.specs import (
+        NowSpec, RandomDecimalSpec, RandomDecoratedSpec, RandomIntSpec,
+        RandomStrSpec, SeqSpec, TimeOffsetSpec, TimestampSpec, UuidSpec,
+    )
+    for spec_cls in (UuidSpec, RandomStrSpec, RandomIntSpec,
+                     RandomDecimalSpec, TimestampSpec, NowSpec,
+                     SeqSpec, RandomDecoratedSpec, TimeOffsetSpec):
+        out.append({
+            "table": "generator",
+            "name": spec_cls.model_fields["kind"].default,
+            "params_schema": spec_cls.model_json_schema(),
+        })
+
+    # 事件表（Q5/M2 §2.4：event_type + payload 字段，供报告定义编写检索）
+    from gimbal.events.types import FrameworkEvent, known_event_types
+    payload_fields: dict[str, list[str]] = {}
+    import inspect as _inspect
+    for _name in dir(_inspect.importlib.import_module("gimbal.events.types")):
+        _obj = getattr(_inspect.importlib.import_module("gimbal.events.types"), _name)
+        if (isinstance(_obj, type) and issubclass(_obj, FrameworkEvent)
+                and _obj is not FrameworkEvent):
+            et = getattr(_obj, "event_type", "")
+            if isinstance(et, str) and et:
+                fields = sorted(
+                    f for f in _obj.model_fields
+                    if f not in ("seq",))  # seq 是信封字段
+                payload_fields.setdefault(et, fields)
+    for et in sorted(known_event_types()):
+        out.append({
+            "table": "event",
+            "name": et,
+            "fields": payload_fields.get(et, []),
+        })
     return out
 
 
@@ -69,7 +104,7 @@ def ext_list(
     mode: ModeOpt = "local",
     log_level: LogLevelOpt = LogLevel.error,
     as_json: Annotated[bool, typer.Option("--json", help="机器可读输出")] = False,
-    table: Annotated[Optional[str], typer.Option("--table", help="只看某张表: strategy/protocol/mode/plugin")] = None,
+    table: Annotated[Optional[str], typer.Option("--table", help="只看某张表: strategy/protocol/mode/plugin/generator/event")] = None,
 ) -> None:
     """列出所有扩展注册表条目（四张表之和）。"""
     cli_ctx: CLIContext = ctx.obj

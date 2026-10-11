@@ -1,25 +1,32 @@
-"""schema.time_policy —— 用例时间策略(超时/记录)。"""
+"""M2 TimePolicy（M2 方案 v2.4 §3 M9；步骤 1 定义形态）。
+
+以执行器为准（M9）：``None = 不限时``（plate 副本缺省值与此不一致，
+已漂移）。
+"""
 from __future__ import annotations
 
-from typing import Literal, Annotated, Union
-from pydantic import BaseModel, Field
+from typing import Annotated, Literal, Union
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TimePolicy(BaseModel):
-    """时间策略抽象基类。"""
-
-    pass
+    model_config = ConfigDict(extra="forbid")
 
 
 class TimeoutPolicy(TimePolicy):
-    """超时模式:执行器检查每一步是否超时,超时抛异常。"""
+    """超时模式：执行器检查每一步是否超时，超时抛异常。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     kind: Literal["timeout"] = "timeout"
-    seconds: int = Field(description="超时阈值(秒)")
+    seconds: int = Field(description="超时阈值（秒）")
 
 
 class RecordPolicy(TimePolicy):
-    """记录模式:不检查超时,但记录实际耗时到运行结果。"""
+    """记录模式：不检查超时，但记录实际耗时到运行结果。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     kind: Literal["record"] = "record"
 

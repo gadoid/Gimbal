@@ -2,7 +2,7 @@
 
 覆盖:
     - 两个现役 exporter 均继承自 ``ScenarioExporter``
-    - ``consumer_id`` 唯一且稳定("gimbal" / "platform")
+    - ``consumer_id`` 唯一且稳定("gimbal")
     - ``render()`` 是 ABC 契约的入口,且与 ``to_dict()`` 行为一致
     - ``capabilities`` 声明 sections / needs_endpoints
     - 基类默认 ``supports(request)`` 按 consumer 名匹配
@@ -20,7 +20,6 @@ from gimbal_plate.export._protocol import (
     ScenarioExporter,
 )
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
-from gimbal_plate.export.platform import PlatformScenarioExporter
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 
 
@@ -47,8 +46,7 @@ class TestScenarioExporterABC:
 
     def test_concrete_classes_inherit_from_abc(self) -> None:
         assert issubclass(GimbalScenarioExporter, ScenarioExporter)
-        assert issubclass(PlatformScenarioExporter, ScenarioExporter)
-
+        
 
 class TestGimbalScenarioExporterContract:
     """gimbal exporter 的 ABC 实现。"""
@@ -81,45 +79,8 @@ class TestGimbalScenarioExporterContract:
     def test_supports_self_consumer_name(self) -> None:
         exporter = GimbalScenarioExporter(_make_scenario())
         assert exporter.supports("gimbal") is True
-        assert exporter.supports("platform") is False
+        assert exporter.supports("gimbal") is True
 
-
-class TestPlatformScenarioExporterContract:
-    """platform exporter 的 ABC 实现。"""
-
-    def test_consumer_id_is_platform(self) -> None:
-        exporter = PlatformScenarioExporter(_make_scenario())
-        assert exporter.consumer_id == "platform"
-
-    def test_render_equivalent_to_to_dict(self) -> None:
-        """render(scenario, endpoints=...) 与 to_dict() 在 endpoints 一致时等价。"""
-        sc = _make_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=[])
-        # to_dict() 用 self.endpoints=[],render 显式传 []
-        assert exporter.render(sc, endpoints=[]) == exporter.to_dict()
-
-    def test_render_uses_provided_endpoints_not_self(self) -> None:
-        """render 应当用调用方传入的 endpoints,不依赖 self.endpoints。"""
-        sc = _make_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=[])
-        # render 传 None → 输出应等同于 endpoints=[]
-        a = exporter.render(sc, endpoints=None)
-        b = exporter.render(sc, endpoints=[])
-        assert a == b
-
-    def test_capabilities_declares_sections_and_needs_endpoints(self) -> None:
-        exporter = PlatformScenarioExporter(_make_scenario())
-        caps = exporter.capabilities
-        assert caps.consumer == "platform"
-        assert "endpoints" in caps.sections
-        assert "navigation" in caps.sections
-        assert "config_summary" in caps.sections
-        assert caps.needs_endpoints is True
-
-    def test_supports_self_consumer_name(self) -> None:
-        exporter = PlatformScenarioExporter(_make_scenario())
-        assert exporter.supports("platform") is True
-        assert exporter.supports("gimbal") is False
 
 
 class TestConsumerCapabilitiesDataclass:
@@ -142,14 +103,10 @@ class TestConsumerCapabilitiesDataclass:
     def test_full_construction(self) -> None:
         """C13:description / output_schema_kind 字段可显式声明。"""
         caps = ExporterCapabilities(
-            consumer="platform",
+            consumer="gimbal",
             sections=("endpoints", "navigation", "config_summary"),
             needs_endpoints=True,
-            description="platform 渲染视图",
-            output_schema_kind="platform_scenario",
         )
-        assert caps.description == "platform 渲染视图"
-        assert caps.output_schema_kind == "platform_scenario"
 
     def test_hashable(self) -> None:
         """C11:caps 可 hash(可作 dict key / set 元素)。"""
@@ -179,29 +136,9 @@ class TestInputValidationC3:
         with pytest.raises(TypeError):
             exporter.render(None)  # type: ignore[arg-type]
 
-    def test_platform_rejects_non_scenario(self) -> None:
-        exporter = PlatformScenarioExporter(_make_scenario(), endpoints=[])
-        with pytest.raises(TypeError, match="scenario"):
-            exporter.render("not a scenario", endpoints=[])  # type: ignore[arg-type]
-
 
 class TestEndpointValidationC7:
     """C7:render() endpoints 元素必须是 ``EndpointSpec``(当 needs_endpoints=True)。"""
-
-    def test_platform_rejects_non_endpoint_elements(self) -> None:
-        exporter = PlatformScenarioExporter(_make_scenario(), endpoints=[])
-        with pytest.raises(TypeError, match="endpoints"):
-            exporter.render(
-                _make_scenario(),
-                endpoints=[{"api": "invalid"}],  # type: ignore[list-item]
-            )
-
-    def test_platform_accepts_empty_list(self) -> None:
-        sc = _make_scenario()
-        exporter = PlatformScenarioExporter(sc, endpoints=[])
-        # None 和 [] 都应被接受
-        assert exporter.render(sc, endpoints=None) is not None
-        assert exporter.render(sc, endpoints=[]) is not None
 
 
 class TestOutputSerializationC4:
@@ -214,12 +151,6 @@ class TestOutputSerializationC4:
         # 不抛错即可
         json.dumps(out)
 
-    def test_platform_output_is_serializable(self) -> None:
-        sc = _make_scenario()
-        out = PlatformScenarioExporter(sc, endpoints=[]).render(sc, endpoints=[])
-        import json
-        json.dumps(out)
-
 
 class TestCapabilitiesMetadataC13:
     """C13:description / output_schema_kind 字段在两个现役 exporter 上都已声明。"""
@@ -229,7 +160,3 @@ class TestCapabilitiesMetadataC13:
         assert caps.description != ""
         assert caps.output_schema_kind == "scenario"
 
-    def test_platform_capabilities_description(self) -> None:
-        caps = PlatformScenarioExporter(_make_scenario()).capabilities
-        assert caps.description != ""
-        assert caps.output_schema_kind == "platform_scenario"

@@ -545,7 +545,7 @@ G1–G7 满足路线图「Agent 可消费」的四条验收项：机器可读输
 
 ### 8.3 消费方的版本使用规则（已定）
 
-> **2026-10-10 已取代**：本节由 `claude/plate-version-model.md` 第 4 节（场景声明已验证修订，执行用生效修订）与 `claude/plate-release-design.md` v4.0 第 6 节取代。下表仅作历史参考。
+> **2026-10-10 已取代**：本节由 `claude/plate-version-model.md` 第 4 节（场景声明已验证修订，执行用生效修订）与 `claude/plate-release-design.md` v4.2 第 6 节取代。下表仅作历史参考。
 
 | 场景 | 使用的快照 |
 |---|---|
@@ -575,25 +575,25 @@ ref 的实现口径（已定）：`/convert` 的结果缓存键包含 `ref`；�
 
 ### 9.1 能力接线（plate 重构后 ↔ 平台消费方）
 
-plate 重构后的能力与平台侧需要的功能一一接线如下（查询面均沿用 7.2 的 dim 语法；「解锁批次」指管道就绪点，内容就绪另见备注）。平台侧画像功能（`board_assembler` / `service_profile` 路由 / `ServiceGrid.vue` / `EndpointBoard.vue`）的四象限与 node / edge / trail 形状不变，只是往占位象限里填节点。
+plate 重构后的能力与平台侧需要的功能一一接线如下（查询面均沿用 7.2 的 dim 语法；「解锁批次」指管道就绪点，内容就绪另见备注）。平台侧画像功能（`board_assembler` / `service_profile` 路由 / `ServiceGrid.vue` / `EndpointBoard.vue`）的四象限与 node / edge / trail 形状不变，只是往占位象限里填节点。（2026-10-10 残留收口：表中版本相关的旧口径——值记录关联 release_id、run 级钉住、用例变更插件、plate 不可用降级 convert——已按《Plate 版本模型》v1.2 与 Release v4.2 逐行加「已取代」标注或删除。）
 
 | plate 能力 | 查询面 | 平台侧消费功能 | 现状 | 解锁批次 |
 |---|---|---|---|---|
 | capability 链（endpoint → cap 词条 → rule / outcome / step 片段 → 交付物） | `endpoint/{id}/action/doc`、`term/{id}/references` | 画像需求象限（P2）、网格槽①需求信号与 `noRequirement` 统计 / chip、编排表单的接口业务语境 | 占位（`requirement="unavailable"`、`req=null`） | 管道 B；内容 E（platform 域 PRD 词条标注存量） |
 | `gaps` 判定项（缺 capability 的接口、缺 define 的 cap、无结果片段的结果码、无 user_story 的主干） | `gaps` 动作 | 网格槽①统计（与 8p 交付件清单共用判定项）、平台待办卡、L6 循环起点 | 无 | B |
 | 词条 / 片段（db_design 交付物 + `attr` + `refers` + `表.列` 锚点） | `term` / `statement` dim 过滤、`references` | 画像数据象限（P3）、值语义提示 | 占位 | 管道 B；内容持续标注 |
-| 结构化差异 | `diff --json`、`?ref=` 对比 | 适配中心（判定哪些接口需用例变更插件，替代平台自算 `spec_json` 比对）、画像适配告警链 | 平台自算 stamp 比对 | B |
-| release 快照 + `ref` | `?ref=`、构件 | 值记录关联 release_id（第 12 节第 11 项）、执行 run 级钉住（8.3）、画像执行象限的版本时间轴 | working 单态 | B |
-| call 投影构件 | 构件文件 | 执行链（S3 前经 `/convert`）、plate 不可用时平台降级 convert | 无 | B |
+| 结构化差异 | `diff --json`、`?ref=` 对比 | 适配中心（替代平台自算 `spec_json` 比对；「判定哪些接口需用例变更插件」已取代——R6 撤回插件，结构级改造由适配中心直接承担，Release v4.2 5.4）、画像适配告警链 | 平台自算 stamp 比对 | B |
+| release 快照 + `ref` | `?ref=`、构件 | 值记录关联版本（已取代：`meta.plate` + 执行记录 `plate_pins`，版本模型 4.1 / Release v4.2 6.3）、执行按场景声明的修订进行（已取代：「run 级钉住」（8.3）→ 已验证修订 / 生效修订，版本模型 4.1、4.2）、画像执行象限的版本时间轴 | working 单态 | B |
+| call 投影构件 | 构件文件 | 执行链（S3 前经 `/convert`）；「plate 不可用时平台降级 convert」已否决删除（修订十五，D-6——降级要求平台持第二份投影实现，违反 C1） | 无 | B |
 | `paths` 动作（user_story → 路径） | `paths` | 消费 Agent 生成用例（L6）、业务路径覆盖率 | 无 | B / E |
 | EndpointDoc 投影 | `doc` | 画像主体节点描述增强、编排表单业务说明 | `/full` 无 capability | B（形状）/ E（内容） |
 | `type` dim + 方言自描述（G1） | `type` / `schema` 视图 | Agent 编写、平台前端模板化「新建交付物」入口 | 无 | D |
 | 响应信封 `snapshot`（G5） | 响应信封 | `plate_client` 缓存按快照失效校验、画像降级横幅标注当前快照 | 无 | A2 |
 | NEIGHBOR（延后） | — | 画像拓扑象限、双击换主体跨服务顺链、按变更影响选回归用例 | 占位 | 延后（第 13 节） |
 
-平台侧配套改动：`board_assembler` 主体读 `binding`、subject 的 `version` 槽改填信封 snapshot 标识（批次 A2，轻列表平铺坐标口径已保住 grid 与降级链）；需求象限聚合调 `doc` / `references`、槽①调 `gaps`（画像 P2）；适配中心变更检测改 shape_hash 比较（见对外能力影响评估表的完整修改面行）；node id 扩 `term:` / `st:` 前缀、expand 支持词条二度关联；`affects` 边由 outcome 片段的 `target` 槽位驱动；trails 风险链扩展「C 类不一致 → 矫正告警」语义链。画像读 `working` 快照（属「查看现状」类，按 8.3 与编排 / 执行的 release 钉住分流；`plate_client` 缓存按 G5 的 snapshot 字段做失效校验）。
+平台侧配套改动：`board_assembler` 主体读 `binding`、subject 的 `version` 槽改填信封 snapshot 标识（批次 A2，轻列表平铺坐标口径已保住 grid 与降级链）；需求象限聚合调 `doc` / `references`、槽①调 `gaps`（画像 P2）；适配中心变更检测改 shape_hash 比较（见对外能力影响评估表的完整修改面行）；node id 扩 `term:` / `st:` 前缀、expand 支持词条二度关联；`affects` 边由 outcome 片段的 `target` 槽位驱动；trails 风险链扩展「C 类不一致 → 矫正告警」语义链。画像读 `working` 快照（属「查看现状」类；编排 / 执行的「release 钉住」已取代为按 `meta.plate` / 生效修订分流——版本模型 4.1、4.2；`plate_client` 缓存按 G5 的 snapshot 字段做失效校验）。
 
-**版本 hash 的存储归属（plate ↔ 平台）**（2026-10-10 已取代：平台适配戳 `catalog_versions` 删除，平台只持有场景的 `meta.plate` 与执行记录的 `plate_pins`，见 `claude/plate-release-design.md` v4.0 第 6、11 节）：
+**版本 hash 的存储归属（plate ↔ 平台）**（2026-10-10 已取代：平台适配戳 `catalog_versions` 删除，平台只持有场景的 `meta.plate` 与执行记录的 `plate_pins`，见 `claude/plate-release-design.md` v4.2 第 6、11 节）：
 
 | 持有方 | 存什么 | 存哪 | 性质 |
 |---|---|---|---|

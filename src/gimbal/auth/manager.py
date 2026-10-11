@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..schema.auth import AuthSession
+from .session import AuthSession
 from .authenticator import get_authenticator
 from .exceptions import AuthLoginFailed, AuthSessionNotFound
 

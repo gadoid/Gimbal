@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 import typer
 
 from gimbal.cli.context import CLIContext
+from gimbal.schema import RunOptions  # noqa: F401（RunsRequest 类型引用）
 from gimbal.log import get_logger
 
 logger = get_logger(__name__)
@@ -68,26 +69,22 @@ def _define_models() -> tuple[type, ...]:
         details: list[dict] = Field(default_factory=list)
         runId: str = Field("", description="引擎生成的 run_id")
 
-    class DebugSpec(BaseModel):
-        """POST /runs 的调试段（v2.1 批次 E）。"""
-        pause: str = Field("on_failure", description="none | on_failure | every_step")
-        breakpoints: list[str] = Field(default_factory=list, description="断点地址表")
-        wait_timeout: float | None = Field(None, description="暂停等待上限（秒），超时按 abort")
+    class M2Info(BaseModel):
+        """M2 §5.1 代际门：请求携带的构建身份（plate /convert 响应附带）。"""
+        hash: str = Field("", description="m2_hash")
+        generation: int = Field(0, description="m2_generation")
 
     class RunsRequest(BaseModel):
-        """POST /runs：异步启动 run（立即返回 runId，可调试/订阅事件）。"""
+        """POST /runs（M2 §2.3 M10 改形）：``{target, options, m2?}``。
+
+        执行参数全部收进 ``options: RunOptions``（M2 A 类，D1 落实）；
+        ``halt_at`` 并入 ``options.step_to``。
+        """
         target: dict = Field(..., description="Scenario/Suite/Graph dict（按 kind 分派）")
-        debug: DebugSpec | None = Field(None, description="调试装载（单单元且 n_runs=1）")
-        halt_at: int | None = Field(None)
-        step_from: int | None = Field(None)
-        # C12（P3-02）：乘法参数（N4 同款语义——Scenario 变换为隐式
-        # aggregate graph，SuiteGraph 逐单元/策略覆盖）
-        n_runs: int = Field(1, ge=1, le=64, description="运行期重复次数")
-        parallel: int = Field(1, ge=1, le=64, description="graph 单元级并发上限")
-        # P1-04：声明式订阅（与 CLI --subscribe / graph.subscribe 同款写法；
-        # 请求期校验，非法 422；输出落 server 进程的 sink 通道）
-        subscribe: list[dict] | None = Field(
-            None, description="声明式订阅规格（P1-04）")
+        options: "RunOptions | None" = Field(
+            None, description="执行指令（M2 RunOptions；缺省全默认）")
+        m2: M2Info | None = Field(
+            None, description="构建身份（代际门，M2 §5.1）")
 
     class RunsCreated(BaseModel):
         runId: str
@@ -110,12 +107,12 @@ def _define_models() -> tuple[type, ...]:
         accepted: bool
         output: list[str] = Field(default_factory=list)
 
-    return (RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
+    return (RunsRequest, RunsCreated,
             DebugCommandRequest, DebugCommandResponse, CancelResponse)
 
 
 _MODELS = _define_models()
-(RunRequest, RunResponse, DebugSpec, RunsRequest, RunsCreated,
+(RunsRequest, RunsCreated,
  DebugCommandRequest, DebugCommandResponse, CancelResponse) = _MODELS
 
 
@@ -130,48 +127,8 @@ def create_app(cli_ctx: CLIContext) -> "FastAPI":
     # 引擎设施(EventBus/插件/Reporter)按单 run 设计 → 串行执行
     run_lock = asyncio.Lock()
 
-    @app.post("/run", response_model=RunResponse)
-    async def run(req: RunRequest) -> RunResponse:
-        from gimbal.core.scenario_runner import RuntimeControl
-        from gimbal.schema.scenario import Scenario
-
-        # 校验放锁外:快失败不占执行通道
-        try:
-            scenario = Scenario.model_validate(req.scenario)
-        except Exception as exc:  # noqa: BLE001 - pydantic ValidationError 统一翻译
-            raise HTTPException(status_code=422, detail=f"scenario validation failed: {exc}") from exc
-
-        runtime_control = None
-        if req.halt_at is not None:
-            runtime_control = RuntimeControl(
-                halt_at=req.halt_at, halt_reason=req.halt_reason
-            )
-
-        # bootstrap→run→shutdown 整体放线程(同步代码),锁保证串行
-        def _execute() -> "RunResult":
-            from gimbal.core.bootstrap import bootstrap, shutdown
-            from gimbal.core.runner import Engine, RunResult
-
-            configuration = bootstrap(cli_ctx)
-            engine = Engine(configuration)
-            try:
-                return engine.run(scenario, runtime_control=runtime_control)
-            finally:
-                shutdown(configuration)
-
-        async with run_lock:
-            result = await asyncio.to_thread(_execute)
-
-        return RunResponse(
-            exitCode=result.exit_code,
-            total=result.total,
-            passed=result.passed,
-            failed=result.failed,
-            skipped=result.skipped,
-            halted=result.halted,
-            details=result.details,
-            runId="",
-        )
+    # M10（M2 §3）：POST /run 旧端点已删除——平台已改用 POST /runs，
+    # 第二种参数形状（halt_at 裸传）不留（不为旧端点保留兼容形态）。
 
     # ── v2.1 批次 E：异步 run + 调试会话 + SSE（独立模块，同 app 挂载）──
     from gimbal.core.server_debug import register_debug_endpoints

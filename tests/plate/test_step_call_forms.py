@@ -12,19 +12,19 @@ from gimbal_plate.schema.step import Step
 
 
 def test_step_api_form_rejected():
-    """api 形态已退役:model_validate 期拒绝,错误信息指向迁移脚本。"""
+    """api 形态已退役:model_validate 期拒绝,M2 forbid 拒收。"""
     from pydantic import ValidationError
 
     api = {"kind": "api", "service": "s", "method": "GET", "path": "/x"}
-    with pytest.raises(ValidationError, match=r"step\.api 形态已退役|migrate_legacy_case"):
-        Step.model_validate({"api": api, "request": {"kind": "request", "body": {}}})
+    with pytest.raises(ValidationError, match=r"Extra inputs|extra_forbidden|api"):
+        Step.model_validate({"api": api, "request": {"kind": "request", "body": {}}, "strategy": []})
 
 
 def test_step_call_form_accepted():
     """call 单填合法(唯一调用形态)。"""
     call = {"kind": "call", "protocol": "http", "service": "s",
             "method": "GET", "path": "/x"}
-    step = Step.model_validate({"call": call, "request": {"kind": "request", "body": {}}})
+    step = Step.model_validate({"call": call, "request": {"kind": "request", "body": {}}, "strategy": []})
     assert step.call.protocol == "http"
 
 

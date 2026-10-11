@@ -11,9 +11,9 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from gimbal.schema.call import Call
-from gimbal.schema.request import Request
-from gimbal.schema.step import Step
+from gimbal.schema import Call
+from gimbal.schema import Request
+from gimbal.schema import Step
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 from gimbal.statemachine import engine as sm_engine
 
@@ -114,8 +114,8 @@ def test_preprocessor_run_returns_declared_services():
     from gimbal.auth.registry import AuthRegistry
     from gimbal.config.models import BootstrapConfig
     from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-    from gimbal.schema.scenario import Config as ScenarioConfig
-    from gimbal.schema.scenario import Meta, Scenario
+    from gimbal.schema import Config as ScenarioConfig
+    from gimbal.schema import Meta, Scenario
 
     def _step(service_name: str):
         return Step(

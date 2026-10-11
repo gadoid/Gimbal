@@ -17,9 +17,9 @@ from gimbal.core.hooks import HookRegistry
 from gimbal.core.runner import Engine, Configuration
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
-from gimbal.schema.scenario import Config as SC, Meta, Scenario
-from gimbal.schema.step import Step
-from gimbal.schema.call import Call
+from gimbal.schema import Config as SC, Meta, Scenario
+from gimbal.schema import Step
+from gimbal.schema import Call
 from gimbal.strategy.dispatcher import build_default_dispatcher
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 

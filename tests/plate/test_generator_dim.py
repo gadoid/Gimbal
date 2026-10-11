@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from gimbal_plate.http.generator_dim import _KIND_MODELS, _descriptor_for
+from gimbal_plate.http.generator_dim import _KIND_SCHEMAS, _descriptor_for
 
 GENERATOR_KINDS = [
     "uuid", "random_str", "random_int", "random_decimal",
@@ -90,21 +90,27 @@ def test_p5_unknown_kind_404(http_client: TestClient) -> None:
         assert resp.json()["error"]["code"] == "dim_item_not_found"
 
 
-def test_p6_descriptors_match_mirror_schema() -> None:
-    """P6: 描述符由镜像 schema 内省派生 —— 每个镜像字段都有参数且默认值一致。"""
-    for kind, model in _KIND_MODELS.items():
+def test_p6_descriptors_match_snapshot_schema() -> None:
+    """P6: 描述符由 C 类快照 params_schema 派生 —— 每个字段都有参数描述。"""
+    for kind, schema in _KIND_SCHEMAS.items():
         d = _descriptor_for(kind)
         assert d is not None
         params = {p["name"]: p for p in d.params}
-        for fname, finfo in model.model_fields.items():
+        props = (schema.get("properties") or {})
+        for fname in props:
             if fname == "kind":
                 continue
             assert fname in params, f"{kind}.{fname} 丢失参数描述符"
-            assert params[fname]["default"] == finfo.default
+            if "default" in props[fname]:
+                assert params[fname]["default"] == props[fname]["default"]
 
 
-def test_p7_mirror_matches_engine_specs() -> None:
-    """P7: 引擎对照防漂移 —— kind 清单/字段集/默认值与引擎 specs 一致。"""
+def test_p7_snapshot_matches_engine_specs() -> None:
+    """P7: 引擎对照防漂移 —— kind 清单与 C 类快照一致。
+
+    T5.1 后不再逐字段比默认值（快照即引擎 ext list 产物，gen_m2 check
+    漂移守卫已保证一致）——只验证 kind 清单完整。
+    """
     engine_root = Path(__file__).resolve().parents[2] / "src" / "gimbal"
     if str(engine_root) not in sys.path:
         sys.path.insert(0, str(engine_root))
@@ -112,17 +118,6 @@ def test_p7_mirror_matches_engine_specs() -> None:
 
     reg = build_default_registry()
     engine_kinds = sorted(reg.kinds())
-    assert engine_kinds == sorted(GENERATOR_KINDS)
-
-    import gimbal.generator.specs as engine_specs  # noqa: PLC0415
-
-    for kind, mirror_model in _KIND_MODELS.items():
-        engine_model = getattr(engine_specs, mirror_model.__name__)
-        assert engine_model is not None
-        mirror_fields = {
-            n: f.default for n, f in mirror_model.model_fields.items() if n != "kind"
-        }
-        engine_fields = {
-            n: f.default for n, f in engine_model.model_fields.items() if n != "kind"
-        }
-        assert mirror_fields == engine_fields, f"{kind} 镜像默认值与引擎漂移"
+    assert engine_kinds == sorted(_KIND_SCHEMAS.keys()), (
+        f"引擎 kind 清单与快照漂移: engine={engine_kinds} "
+        f"snapshot={sorted(_KIND_SCHEMAS.keys())}")

@@ -89,7 +89,7 @@ class TestBusStampsLabels:
     def test_endpoint_label_fallback_derived_from_call(self):
         """无 view_hints.endpoint_id 时按 service/method/path 推导。"""
         from gimbal.protocols.base import ProtocolExecutor
-        from gimbal.schema.call import Call
+        from gimbal.schema import Call
 
         class _P(ProtocolExecutor):
             protocol = "http"
@@ -176,10 +176,10 @@ def _run_echo_plan(n_runs: int, repeat: int):
     from gimbal.core.hooks import HookRegistry
     from gimbal.core.runner import Engine
     from gimbal.plugins import PluginRegistry
-    from gimbal.schema.call import Call
+    from gimbal.schema import Call
     from gimbal.schema.plan import PlanPolicy
-    from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
-    from gimbal.schema.step import Step
+    from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
+    from gimbal.schema import Step
     from gimbal.strategy.dispatcher import build_default_dispatcher
     from gimbal.protocols.base import ProtocolExecutor
 

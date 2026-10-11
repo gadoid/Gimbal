@@ -4,10 +4,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 import pytest
 from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
-from gimbal.schema.scenario import Scenario, Config
-from gimbal.schema.step import Step
-from gimbal.schema.request import Request
-from gimbal.schema.call import Call
+from gimbal.schema import Scenario, Config
+from gimbal.schema import Step
+from gimbal.schema import Request
+from gimbal.schema import Call
 from gimbal.generator import Generator, build_default_registry
 from gimbal.config.models import BootstrapConfig
 
@@ -15,7 +15,7 @@ from gimbal.config.models import BootstrapConfig
 def _make_scenario(body, *, vars=None):
     """构造一个最小 scenario 用于测试。"""
     cfg = Config(vars=vars or {})
-    from gimbal.schema.scenario import Meta
+    from gimbal.schema import Meta
     meta = Meta(
         name="test", description="test", module="t", priority=1,
         author="x", owner="x", tags=[], version="1.0.0",

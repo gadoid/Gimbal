@@ -19,7 +19,7 @@ from gimbal.compiler.errors import CompileError
 from gimbal.core.registry import Registry
 from gimbal.log import get_logger
 from gimbal.schema.plan import Unit, unit_policy_from
-from gimbal.schema.scenario import Control, UnitDecl
+from gimbal.schema import Control, UnitDecl
 
 logger = get_logger(__name__)
 

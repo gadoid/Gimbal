@@ -27,7 +27,7 @@ from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.compiler.pipeline import compile_target, p_validate
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan
-from gimbal.schema.scenario import RunUnion
+from gimbal.schema import RunUnion
 
 logger = get_logger(__name__)
 

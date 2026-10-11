@@ -1,16 +1,16 @@
 /**
- * types/plate.ts — gimbal-plate 对外契约的前端完整结构表述。
+ * types/plate.ts — [DEPRECATED] gimbal-plate 对外契约的前端结构表述。
  *
- * 真源(Single Source of Truth)在 plate 侧的 Pydantic schema:
- *   - DeclarationEntry / RequestSpec / ResponseSpec → gimbal_plate/schema/endpoint/io_spec.py
- *   - ApiSpec                                      → gimbal_plate/schema/endpoint/api_spec.py
- *   - EndpointMetadata                             → gimbal_plate/schema/endpoint/metadata.py
- *   - EndpointDetailView(/full 视图)               → gimbal_plate/http/views.py
+ * **T5.1（M2 §7 镜像清理）**：M2 A/B 类的类型已由生成物 `types/m2.ts`
+ * 取代（同一份 JSON Schema → json-schema-to-typescript，禁改）。
+ * 本文件保留两个职责：
+ *   1. **M1 视图类型**（endpoint/dictionary/strategy 描述等）——真源在
+ *      plate 的 dialect 层，无 M2 生成物对应，继续手写；
+ *   2. **平台扩展类型**（FieldState / EndpointFullView / HttpMethod 等）——
+ *      属于平台视图层，不属于 M2 结构。
  *
- * 边界原则(项目已定):plate 输出始终是一个 dict,消费者(本前端)自行建模。
- * 本文件就是前端对该 dict 的建模——它是 plate 契约的"完整结构"表述,
- * 而非投影/选择器/分视图。所有消费 plate endpoint dict 的地方都应引用此处类型,
- * 不要在组件或 api 层再重复声明 endpoint 相关 interface。
+ * **新代码请直接 import from '@/types/m2'**（M2 A/B 类）。
+ * 本文件中与 m2.ts 重合的 View 类型已标注 deprecated。
  *
  * 对齐约束:plate 侧 schema 改字段时,这里必须同步——加字段是契约变更。
  * 若发现与 dict 实际形状不符,以 plate schema 为准并修正本文件。
@@ -391,6 +391,8 @@ export interface MetaView {
   expire: boolean
   requirementRef: unknown[]
   system: string[]
+  /** M11（版本模型 §4.1）：系统 → 已验证修订 "<line>#<n>" | "working" */
+  plate?: Record<string, string>
 }
 
 /** plate 时间策略判别对象。对齐 gimbal_plate/schema/time_policy.py。 */

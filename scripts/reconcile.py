@@ -145,7 +145,7 @@ def main() -> int:
     tmp_cases = [p for p in tmp_cases if not p.endswith(".bak")]
     # 用 RunUnion 校验过滤出合法 case
     from pydantic import TypeAdapter
-    from gimbal.schema.scenario import RunUnion
+    from gimbal.schema import RunUnion
     ta = TypeAdapter(RunUnion)
     valid_tmp = []
     for p in tmp_cases:

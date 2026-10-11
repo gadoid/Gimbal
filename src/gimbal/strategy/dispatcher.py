@@ -17,7 +17,7 @@ from gimbal.log import get_logger
 if TYPE_CHECKING:
     from pydantic import BaseModel
     from gimbal.context.views import StrategyContextView
-    from gimbal.schema.strategy import StrategyBase
+    from gimbal.schema import StrategyBase
 
 logger = get_logger(__name__)
 
@@ -158,7 +158,7 @@ class StrategyDispatcher:
         result.duration_ms = (time.monotonic() - t0) * 1000
         result.strategy_id = result.strategy_id or strategy_id
         # 软失败标记：spec.onFailure != ABORT 时，即使失败也仅记录不中止
-        from gimbal.schema.strategy import FailurePolicy
+        from gimbal.schema import FailurePolicy
         on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
         if result.failed and on_failure != FailurePolicy.ABORT:
             result.soft = True
@@ -188,7 +188,7 @@ class StrategyDispatcher:
         Returns:
             已执行策略的结果列表（包括提前终止前已完成的部分）。
         """
-        from gimbal.schema.strategy import FailurePolicy
+        from gimbal.schema import FailurePolicy
 
         # 过滤出属于当前阶段的策略，按 order 排序
         phase_specs = sorted(
@@ -231,7 +231,7 @@ def build_default_dispatcher(
     from gimbal.strategy.builtin.assign import AssignExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
     from gimbal.strategy.builtin.sleep import SleepExecutor, SleepParams
-    from gimbal.schema.strategy import Assign, Assertion, Extract
+    from gimbal.schema import Assign, Assertion, Extract
     from gimbal.protocols.registry import build_default_protocol_registry
 
     d = StrategyDispatcher(hook_registry=hook_registry)

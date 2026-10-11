@@ -1,51 +1,47 @@
-"""静态描述层 - Pydantic 模型定义"""
-from .states import StepState
-from .resource import Resource, Mock, File, ResourceUnion
-from .call import Call
-from .request import Request, RequestUnion
-from .step import Step, StepUnion
-from .strategy import (
-    StrategyBase, Extract, Assign, Assertion, StrategyUnion,
-    Scope, AssertOperator, StrategyPhase, FailurePolicy,
+"""静态描述层 —— M2 生成物重新导出（Q19：导出名不变）+ D 类保留。
+
+A/B 类自 ``_m2.py``（生成文件，``scripts/gen_m2.py gen`` 产出，禁改）；
+``M2_HASH`` / ``M2_GENERATION`` 是这份构建的身份（代际门，M2 §5.1）。
+D 类（plan / debug / param_registry / states）留在执行器手写。
+UserCredential 取代旧 AuthSession 的定义部分；运行态在
+``gimbal.auth.session.AuthSession``。
+"""
+from ._m2 import (  # noqa: F401
+    M2_GENERATION, M2_HASH,
+    AssertOperator, Assertion, Assign, Call, CheckDecl, CheckSelector,
+    Config, Control, DebugSpec, Extract, FailurePolicy, File, GateDecl,
+    LogSelector,
+    Meta, Mock, NamedParams, PlanPolicy, RecordPolicy, ReportDefinition,
+    ReportPresentation, ReportProjection, ReportSelection, Request,
+    RequestUnion, Resource, ResourceUnion, RetryPolicy, RunOptions,
+    RunUnion, Scope, Setup, SetupUnion, Step, StepUnion, StrategyBase,
+    Scenario, StrategyPhase, StrategyUnion, SubscribeRule, SubscribeSpec,
+    SuiteGraph,
+    Teardown, TeardownUnion, TimePolicy, TimePolicyUnion, TimeoutPolicy,
+    UnitDecl, UserCredential,
 )
-from .timepolicy import TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
-from .retrypolicy import RetryPolicy
-from .scenario import Scenario, Meta, Config
-from .setup import Setup, SetupUnion
-from .teardown import Teardown, TeardownUnion
-from .auth import AuthSession
+from .states import StepState  # noqa: F401
+
+# where 键的合法事件字段（除执行上下文标签外）——与 plate _next 同源
+EVENT_WHERE_FIELDS: tuple[str, ...] = (
+    "event_type", "status", "scenario_id", "step_id", "suite_id",
+    "plugin_name", "level",
+)
 
 __all__ = [
-    "Call",
-    "StepState",
-    "Resource",
-    "Mock",
-    "File",
-    "ResourceUnion",
-    "Request",
-    "RequestUnion",
-    "Step",
-    "StepUnion",
-    "StrategyBase",
-    "Extract",
-    "Assign",
-    "Assertion",
-    "StrategyUnion",
-    "Scope",
-    "AssertOperator",
-    "StrategyPhase",
-    "FailurePolicy",
-    "TimePolicy",
-    "TimeoutPolicy",
-    "RecordPolicy",
-    "TimePolicyUnion",
-    "RetryPolicy",
+    "EVENT_WHERE_FIELDS",
+    "M2_GENERATION", "M2_HASH",
+    "AssertOperator", "Assertion", "Assign", "Call", "CheckDecl",
+    "CheckSelector", "Config", "Control", "DebugSpec", "Extract",
+    "GateDecl",
+    "FailurePolicy", "File", "LogSelector", "Meta", "Mock", "NamedParams",
+    "PlanPolicy", "RecordPolicy", "ReportDefinition", "ReportPresentation",
+    "ReportProjection", "ReportSelection", "Request", "RequestUnion",
+    "Resource", "ResourceUnion", "RetryPolicy", "RunOptions", "RunUnion",
     "Scenario",
-    "Meta",
-    "Config",
-    "Setup",
-    "SetupUnion",
-    "Teardown",
-    "TeardownUnion",
-    "AuthSession",
+    "Scope", "Setup", "SetupUnion", "Step", "StepState", "StepUnion",
+    "StrategyBase", "StrategyPhase", "StrategyUnion", "SubscribeRule",
+    "SubscribeSpec", "SuiteGraph", "Teardown", "TeardownUnion",
+    "TimePolicy", "TimePolicyUnion", "TimeoutPolicy", "UnitDecl",
+    "UserCredential",
 ]

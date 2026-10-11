@@ -189,6 +189,10 @@ class Block:
     review: str = "draft"
     payload: Any = None  # 单对象 | list[对象] | dict(system/defaults)
     line: int = 0
+    # 块结束行（闭合围栏所在行，1-based；含围栏本身）。RS0 第一项
+    # （版本模型 3.2）：finding 只有 source/line，补结束行后才能按
+    # 行号区间 [line, end_line] 映射到块与对象，闸门才能按评审状态分级。
+    end_line: int = 0
 
     def models(self) -> list[Any]:
         """载荷展平为模型列表（多对象块与单对象块统一）。"""
@@ -442,7 +446,8 @@ def parse_markdown(text: str, *, source: str = "<memory>") -> Deliverable:
                     m._source = source  # noqa: SLF001
                     m._line = i + 1  # noqa: SLF001
             deliverable.nodes.append(
-                Block(type=block_type, review=review, payload=payload, line=i + 1)
+                Block(type=block_type, review=review, payload=payload,
+                      line=i + 1, end_line=close + 1)
             )
             i = close + 1
         else:

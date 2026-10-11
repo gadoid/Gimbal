@@ -40,6 +40,7 @@ def client(monkeypatch):
     from debugger.test_batch_e import ProgEcho
     import gimbal.protocols.registry as _preg
     _capture_orig()
+    monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "unit-test")
     monkeypatch.setattr(
         _preg, "build_default_protocol_registry",
         lambda **kw: _registry_with_echo(**kw),
@@ -103,7 +104,8 @@ class TestServerAuth:
 class TestAsyncRun:
 
     def test_run_lifecycle_and_status(self, client):
-        r = client.post("/runs", json={"target": _scenario_dict()})
+        r = client.post("/runs", headers={"X-Gimbal-Token": "unit-test"},
+                        json={"target": _scenario_dict()})
         assert r.status_code == 200
         run_id = r.json()["runId"]
         st = _wait_finished(client, run_id)
@@ -115,7 +117,7 @@ class TestAsyncRun:
         # 用 debug 暂停卡住第一个 run（every_step 暂停 + 不给命令）
         r = client.post("/runs", json={
             "target": _scenario_dict(),
-            "debug": {"pause": "every_step", "wait_timeout": 8},
+            "options": {"debug": {"pause": "every_step", "wait_timeout": 8}},
         }, headers={"X-Gimbal-Token": "t"})
         assert r.status_code == 200
         rid = r.json()["runId"]
@@ -141,7 +143,7 @@ class TestDebugOverServer:
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "tok-1")
         r = client.post("/runs", json={
             "target": _scenario_dict("dbg-sc"),
-            "debug": {"pause": "every_step", "wait_timeout": 10},
+            "options": {"debug": {"pause": "every_step", "wait_timeout": 10}},
         }, headers={"X-Gimbal-Token": "tok-1"})
         assert r.status_code == 200
         rid = r.json()["runId"]
@@ -231,7 +233,7 @@ class TestServerProtection:
 
     def test_debug_rejects_multi_unit(self, client, monkeypatch):
         monkeypatch.delenv("GIMBAL_SERVER_TOKEN", raising=False)
-        from gimbal.schema.scenario import SuiteGraph
+        from gimbal.schema import SuiteGraph
 
         def _unit(ref):
             return {"ref": ref, "scenario": _scenario_dict(ref)}
@@ -241,7 +243,7 @@ class TestServerProtection:
             "units": [_unit("a"), _unit("b")],
         }
         r = client.post("/runs", json={
-            "target": graph, "debug": {"pause": "every_step"},
+            "target": graph, "options": {"debug": {"pause": "every_step"}},
         })
         assert r.status_code == 422
         assert "single-unit" in r.json()["detail"]
@@ -336,7 +338,7 @@ class TestCancelAndMultiplication:
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t3")
         h = {"X-Gimbal-Token": "t3"}
         r = client.post("/runs", json={
-            "target": _scenario_dict("srv-nruns"), "n_runs": 3,
+            "target": _scenario_dict("srv-nruns"), "options": {"n_runs": 3},
         }, headers=h)
         assert r.status_code == 200, r.text
         rid = r.json()["runId"]
@@ -349,8 +351,7 @@ class TestCancelAndMultiplication:
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t4")
         h = {"X-Gimbal-Token": "t4"}
         r = client.post("/runs", json={
-            "target": _scenario_dict(), "n_runs": 3,
-            "debug": {"pause": "every_step"},
+            "target": _scenario_dict(), "options": {"n_runs": 3, "debug": {"pause": "every_step"}},
         }, headers=h)
         assert r.status_code == 422
 
@@ -360,7 +361,7 @@ class TestCancelAndMultiplication:
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t5")
         h = {"X-Gimbal-Token": "t5"}
         r = client.post("/runs", json={
-            "target": _scenario_dict(), "debug": {"pause": "every_step"},
+            "target": _scenario_dict(), "options": {"debug": {"pause": "every_step"}},
         }, headers=h)
         rid = r.json()["runId"]
         # 暂停提示出现在 output（轮询等待 debugger 装载）

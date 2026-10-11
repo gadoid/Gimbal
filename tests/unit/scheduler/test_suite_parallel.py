@@ -32,11 +32,11 @@ from gimbal.core.runner import Engine
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
-from gimbal.schema.call import Call
-from gimbal.schema.scenario import Config as ScenarioConfig
-from gimbal.schema.scenario import Meta, Scenario, SuiteGraph, UnitDecl
+from gimbal.schema import Call
+from gimbal.schema import Config as ScenarioConfig
+from gimbal.schema import Meta, Scenario, SuiteGraph, UnitDecl
 from gimbal.schema.plan import PlanPolicy
-from gimbal.schema.step import Step
+from gimbal.schema import Step
 from gimbal.strategy.dispatcher import build_default_dispatcher
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 from gimbal.scheduler.concurrency import clamp_workers

@@ -31,12 +31,12 @@ from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.result import CallResult
-from gimbal.schema.call import Call
+from gimbal.schema import Call
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, UnitPolicy
-from gimbal.schema.scenario import (
+from gimbal.schema import (
     Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl,
 )
-from gimbal.schema.step import Step
+from gimbal.schema import Step
 from gimbal.scheduler.plan import PlanScheduler
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
@@ -403,9 +403,9 @@ class TestUsersTagValidation:
     config.users 声明（定稿 D3/D-17 挂起项落地）。"""
 
     def _scenario_with_user(self, tag: str, users: dict) -> Scenario:
-        from gimbal.schema.auth import AuthSession
+        from gimbal.schema import UserCredential as AuthSession
         sc = _make_scenario(f"u-{tag}")
-        sc.config = ScenarioConfig(users={k: AuthSession(token="t") for k in users})
+        sc.config = ScenarioConfig(users={k: AuthSession(username="t") for k in users})
         sc.steps = [Step(
             call=Call(protocol="echo", message="m",
                       **{"user": tag}),   # 协议自有字段（extra=allow）
@@ -450,7 +450,7 @@ class TestConcurrentSameOutput:
     """
 
     def _scenario_extracting(self, sid: str, target: str) -> Scenario:
-        from gimbal.schema.strategy import Extract, Scope
+        from gimbal.schema import Extract, Scope
         sc = _make_scenario(sid)
         sc.steps = [Step(
             call=Call(protocol="echo", message=sid),

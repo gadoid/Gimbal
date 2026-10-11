@@ -44,6 +44,7 @@ class FieldStatesValidateRequest(BaseModel):
 async def get_full_endpoint(
     user: CurrentUser,
     endpoint_id: str,
+    ref: str = '',
 ) -> dict:
     """Proxy ``GET {plate}/api/endpoint/{id}/full``.
 
@@ -65,6 +66,28 @@ async def get_full_endpoint(
     item 只要是 dict 就原样透传(**空 item ``{}`` 也算**):它得到一个空声明树
     与 ``["$"]``,不视为错误 —— 不得用真值判等把 ``{}`` 并成 ``None``(§5)。
     """
+    # RS3（Release v4.4 §6.1）：ref = 场景生效修订（4.4）→ 修订快照
+    # 定义；缺省/working → working 注册表（现状不变）。
+    if ref and ref != "working":
+        # 按修订读 plate /full（不命中平台缓存——修订内容不可变,
+        # 前端可长期缓存;后续可加修订级缓存）
+        client = get_client()
+        try:
+            resp = await client.get(
+                f"/api/systems/{endpoint_id.split('.')[0]}/endpoint/{endpoint_id}/full",
+                params={"ref": ref}, timeout=15.0)
+        except httpx.HTTPError:
+            raise unavailable()
+        if resp.status_code == 404:
+            raise HTTPException(404, f"endpoint {endpoint_id} not found at {ref}")
+        if resp.status_code >= 500:
+            raise unavailable()
+        if resp.status_code >= 400:
+            raise proxy_error(resp)
+        item = resp.json().get("data", {}).get("item") or {}
+        surface = declared_paths_of(item.get("request"))
+        return {**item, "declared_surface": surface}
+
     res = await get_endpoint_full(endpoint_id)
     if res.item is None:
         # 状态映射(四种失败各有各的码,不合并 —— §5):404 → 端点不存在;
@@ -162,3 +185,27 @@ async def validate_step_field_states(
         )
     decls = ((item.get("request") or {}).get("declarations")) or []
     return validate_field_states(decls, body.field_states)
+
+
+# ── RS3（Release v4.4 §4.3）：版本线列表（编排页版本下拉）──────────
+
+
+@router.get("/{system_id}/lines")
+async def list_system_lines(
+    user: CurrentUser,
+    system_id: str,
+) -> dict:
+    """版本线列表 + 修订数 + 最新修订 + scheme（编排页版本下拉数据源）。
+
+    调 plate_client.list_lines → plate /api/system/{id}/lines。
+    """
+    from ..services import plate_client
+    from .strategy_catalog import proxy_error, unavailable
+
+    try:
+        items = await plate_client.list_lines(system_id)
+    except plate_client.PlateUnavailableError:
+        raise unavailable()
+    except plate_client.PlateRejectedError as e:
+        raise proxy_error(e)
+    return {"items": items, "total": len(items)}

@@ -19,8 +19,8 @@ import typer
 
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
-from gimbal.schema.scenario import Scenario
-from gimbal.schema.step import Step
+from gimbal.schema import Scenario
+from gimbal.schema import Step
 
 logger = get_logger(__name__)
 

@@ -164,7 +164,7 @@ def validate_payload(payload: dict) -> Optional[str]:
     """迁移产物可过 RunUnion 校验；失败返回错误描述。"""
     try:
         from pydantic import TypeAdapter
-        from gimbal.schema.scenario import RunUnion
+        from gimbal.schema import RunUnion
         TypeAdapter(RunUnion).validate_python(payload)
         return None
     except Exception as exc:  # noqa: BLE001

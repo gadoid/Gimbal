@@ -43,7 +43,7 @@ from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
 
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
-    from gimbal.schema.call import Call
+    from gimbal.schema import Call
 
 from gimbal.log import get_logger
 from gimbal.log.exec_context import exec_context

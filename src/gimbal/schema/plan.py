@@ -18,7 +18,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from gimbal.schema.scenario import Scenario
+from gimbal.schema import Scenario
+from gimbal.schema._m2 import PlanPolicy as _m2_PlanPolicy
 
 
 class UnitPolicy(BaseModel):
@@ -58,11 +59,7 @@ def unit_policy_from(scenario: "Scenario", overrides: Optional[dict] = None) -> 
     return UnitPolicy(**fields)
 
 
-class PlanPolicy(BaseModel):
-    """Plan 级执行策略。"""
-    parallel: int = Field(default=1, ge=1, le=64, description="单元级并发上限；1=串行")
-    fail_fast: Optional[bool] = Field(default=None, description="None=沿用全局配置 cfg.fail_fast")
-    timeout: Optional[float] = Field(default=None, description="整个 Plan 的超时（秒）")
+PlanPolicy = _m2_PlanPolicy  # M2 §9.1：PlanPolicy 从 _m2 引用（单一真源）
 
 
 class Unit(BaseModel):

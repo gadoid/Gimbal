@@ -46,9 +46,9 @@ class TestModeParamsSchema:
         """注册 params 不改变 desugar 行为(注册面只是元数据)。"""
         from datetime import datetime, timezone
         from gimbal.compiler.pipeline import compile_target
-        from gimbal.schema.call import Call
-        from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
-        from gimbal.schema.step import Step
+        from gimbal.schema import Call
+        from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
+        from gimbal.schema import Step
 
         def _scenario(sid):
             return Scenario(

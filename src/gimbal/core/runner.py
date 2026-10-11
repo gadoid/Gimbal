@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from gimbal.schema.scenario import Scenario
+from gimbal.schema import Scenario
 from gimbal.context.manager import ContextManager,FrameworkContext
 
 from .bootstrap import Configuration

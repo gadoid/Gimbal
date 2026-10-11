@@ -1,8 +1,10 @@
-"""认证会话数据类 - 读写一体设计。
+"""AuthSession 运行态（M2 方案 v2.4 §3 M2 / §9.1）。
 
-认证前：填写 url/username/password/expires_in
-认证后：token/expires_at 自动填充
+定义部分（凭证六字段）已进 M2（UserCredential）；本类承载运行态
+(token / expires_at)与认证方法，由 auth 注册表与认证器使用——
+物理迁移自 gimbal/schema/auth.py，行为不变。
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

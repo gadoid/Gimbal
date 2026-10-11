@@ -45,6 +45,10 @@ HTTP_PROTOCOL: dict[str, Any] = {
         "service": {"type": "string", "injected": "执行环境 services 映射"},
         "user": {"type": "string", "injected": "按 user 标签的凭证解析"},
         "view_hints": {"type": "object", "injected": "平台扩展;执行忽略"},
+        # RS2/R5b(Release 4.6):path 占位符取值——场景自有字段,执行器
+        # build_spec 统一代入 {name},缺键 PATH_PARAM_MISSING
+        "path_params": {"type": "object",
+                        "additionalProperties": {"type": "string"}},
     },
     "export_mapping": {
         # binding → call 投影（6.2；timeout_seconds → timeout，service 取外壳）

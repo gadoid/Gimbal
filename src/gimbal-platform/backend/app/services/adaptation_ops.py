@@ -11,14 +11,20 @@ from __future__ import annotations
 from .field_state_resolution import iter_flat
 
 # step 寻址类 op(payload 带 step 索引;应用前须过 check_step_addressable)
-STEP_OPS = ("renameField", "addField", "removeField", "rebindField", "mapValue")
+STEP_OPS = ("renameField", "addField", "removeField", "rebindField", "mapValue",
+            "renamePathParam")
 # 仅数据集类 op(不触场景 definition;执行时 dataset_id 必填)
 DATASET_OPS = ("renameDatasetColumn", "mapDatasetValues")
 # 场景全局 op(改 definition 任意处 + 联动数据集列)
 GLOBAL_OPS = ("renameVar",)
 # carry 值表类 op(触 platform 两张值表;service 缺省 = 全局默认表)
 CARRY_OPS = ("renameCarryPath", "addCarryBinding", "removeCarryBinding")
-ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS + CARRY_OPS
+# 步骤结构级 op(RS4b,Release v4.4 §5.4):改 steps 数组长度/顺序,
+# 同事务内联动改写场景内按步骤位置引用的数据(assertion_registry /
+# ui.fieldStates / RunScheme stepTo,R30)
+STRUCTURE_OPS = ("replaceEndpoint", "splitStep", "mergeSteps",
+                 "insertStep", "removeStep")
+ALL_OPS = (STEP_OPS + DATASET_OPS + GLOBAL_OPS + CARRY_OPS + STRUCTURE_OPS)
 
 
 def _field_map(spec: dict | None) -> dict[str, dict]:
@@ -193,9 +199,158 @@ def apply_to_definition(definition: dict, op: dict) -> dict:
         _apply_step_op(step, op, definition)
     elif kind in GLOBAL_OPS:  # renameVar
         _apply_rename_var(definition, op)
+    elif kind in STRUCTURE_OPS:  # RS4b 步骤结构级
+        _apply_structure_op(definition, op)
     else:
         raise ValueError(f"not_a_scenario_op: {kind}")
     return definition
+
+
+# ── RS4b：步骤结构级 op（Release v4.4 §5.4 / R30）──────────────────
+
+
+def _rewrite_position_refs(
+    definition: dict, payload: dict, *, index_map: dict[int, int | None],
+) -> None:
+    """步骤位置变化后改写场景内按步骤位置引用的数据（R30）。
+
+    index_map: 旧步骤索引 → 新索引（None = 已删除/无法映射 → 标记悬空）。
+    覆盖：``assertion_registry``（{stepIndex, jsonpath}）、
+    ``ui.fieldStates``（按步骤位置索引）；RunScheme ``stepTo`` 由
+    调用方（adaptation_service）在事务内清空（5.4）。
+    """
+    # 1. assertion_registry
+    reg = payload.get("assertion_registry") or {}
+    if isinstance(reg, dict):
+        new_reg = {}
+        for key, entries in reg.items():
+            if not isinstance(entries, list):
+                new_reg[key] = entries
+                continue
+            new_entries = []
+            for e in entries:
+                if not isinstance(e, dict):
+                    continue
+                old_idx = e.get("stepIndex")
+                if isinstance(old_idx, int):
+                    new_idx = index_map.get(old_idx, old_idx)
+                    if new_idx is None:
+                        # 悬空——保留条目,标记 _dangling(执行预检显示)
+                        e["_dangling"] = True
+                    else:
+                        e["stepIndex"] = new_idx
+                        e.pop("_dangling", None)
+                new_entries.append(e)
+            new_reg[key] = new_entries
+        payload["assertion_registry"] = new_reg
+
+    # 2. ui.fieldStates（按步骤位置索引的 dict）
+    ui = payload.get("ui") or {}
+    fs = ui.get("fieldStates") or {}
+    if isinstance(fs, dict):
+        new_fs = {}
+        for key, states in fs.items():
+            try:
+                old_idx = int(key)
+            except (ValueError, TypeError):
+                new_fs[key] = states
+                continue
+            new_idx = index_map.get(old_idx, old_idx)
+            if new_idx is not None:
+                new_fs[str(new_idx)] = states
+            # None → 丢弃（步骤已删）
+        ui["fieldStates"] = new_fs
+        payload["ui"] = ui
+
+
+def _apply_structure_op(definition: dict, op: dict) -> None:
+    """步骤结构级 op 的应用（改 steps 数组 + 联动引用改写）。"""
+    kind = op["op"]
+    steps = definition.setdefault("steps", [])
+    # payload 引用（assertion_registry / ui 在 definition 外层）
+    # 调用方（adaptation_service.apply_to_definition 收到的是 definition，
+    # payload 在外层——此处通过 op["_payload"] 传递（service 层注入）。
+    payload = op.get("_payload") or {}
+
+    if kind == "replaceEndpoint":
+        # 步骤改指向另一个接口（可以属于另一个系统）
+        idx = op["step"]
+        new_endpoint = op["endpoint"]           # 目标接口 id
+        new_step = op.get("newStep") or {}       # 新步骤骨架（含字段映射）
+        if 0 <= idx < len(steps):
+            old = steps[idx]
+            new_step.setdefault("kind", "step")
+            new_step["endpoint"] = new_endpoint
+            new_step.setdefault("call", {"protocol": "http"})
+            new_step.setdefault("strategy", [])
+            steps[idx] = new_step
+            # meta.plate 更新（新系统加入时）
+            system = str(new_endpoint).split(".")[0]
+            meta_plate = (definition.get("meta") or {}).setdefault("plate", {})
+            if system not in meta_plate:
+                meta_plate[system] = op.get("targetRevision", "working")
+
+    elif kind == "splitStep":
+        # 一个步骤替换为 N 个有序步骤
+        idx = op["step"]
+        new_steps = op.get("newSteps") or []
+        if 0 <= idx < len(steps) and new_steps:
+            old = steps[idx]
+            # 步骤间传值:前一步的 extract + 后一步的 ${变量}
+            for i, ns in enumerate(new_steps):
+                ns.setdefault("kind", "step")
+                ns.setdefault("strategy", [])
+            steps[idx:idx + 1] = new_steps
+            # 引用改写:旧 idx → 新的第一步;后续步骤为新索引
+            shift = len(new_steps) - 1
+            index_map = {i: i + shift for i in range(idx + 1, len(steps))}
+            index_map[idx] = idx  # 旧步骤映射到第一个新步骤
+            _rewrite_position_refs(definition, payload, index_map=index_map)
+
+    elif kind == "mergeSteps":
+        # N 个步骤合并为一个
+        indices = sorted(op.get("steps") or [])
+        if indices and all(0 <= i < len(steps) for i in indices):
+            merged = op.get("mergedStep") or {}
+            merged.setdefault("kind", "step")
+            merged.setdefault("strategy", [])
+            first = indices[0]
+            steps[first:first + len(indices)] = [merged]
+            # 引用改写
+            removed_count = len(indices) - 1
+            index_map = {}
+            for i in range(len(steps) + removed_count):
+                if i in indices:
+                    index_map[i] = first  # 被合并的都指向合并后的步骤
+                elif i > indices[-1]:
+                    index_map[i] = i - removed_count
+            _rewrite_position_refs(definition, payload, index_map=index_map)
+
+    elif kind == "insertStep":
+        # 在指定位置插入一个步骤
+        idx = op.get("at", len(steps))
+        new_step = op.get("newStep") or {}
+        new_step.setdefault("kind", "step")
+        new_step.setdefault("call", {"protocol": "http"})
+        new_step.setdefault("strategy", [])
+        steps.insert(idx, new_step)
+        # 引用改写:idx 及之后全部 +1
+        index_map = {i: i + 1 for i in range(idx, len(steps) - 1)}
+        _rewrite_position_refs(definition, payload, index_map=index_map)
+
+    elif kind == "removeStep":
+        # 删除步骤
+        idx = op["step"]
+        if 0 <= idx < len(steps):
+            del steps[idx]
+            # 引用改写:idx → None(悬空);之后全部 -1
+            index_map = {idx: None}
+            for i in range(idx + 1, len(steps) + 1):
+                index_map[i] = i - 1
+            _rewrite_position_refs(definition, payload, index_map=index_map)
+
+
+# ── renamePathParam（Release v4.4 §5.4 新增字段级 op）──────────────
 
 
 def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
@@ -227,6 +382,11 @@ def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
         for c in containers.values():
             if op["field"] in c and str(c[op["field"]]) in mapping:
                 c[op["field"]] = mapping[str(c[op["field"]])]
+    elif kind == "renamePathParam":
+        call = step.get("call") or {}
+        pp = call.get("path_params") or {}
+        if op["from"] in pp and op["to"] not in pp:
+            pp[op["to"]] = pp.pop(op["from"])
     else:  # pragma: no cover - STEP_OPS 已穷举
         raise ValueError(f"unknown_step_op: {kind}")
 

@@ -114,10 +114,16 @@ const routes = [
     meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
-    // P5 适配中心 —— admin 全量视图;member 自动只读 owner 视图(页内 scope=mine)
+    // RS4a（Release v4.4 §5.10 重做）：新适配流程为主体（R22 全员）
+    // + 批次表 + carry 漂移 + 未索引警示
     path: '/adaptations',
     component: () => import('@/views/AdaptationCenter.vue'),
     meta: { requiresAuth: true },
+  },
+  {
+    // 兼容：旧链接 /adaptations/new 重定向到主页
+    path: '/adaptations/new',
+    redirect: '/adaptations',
   },
   {
     path: '/adaptations/batches/:batchId',

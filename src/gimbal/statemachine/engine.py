@@ -51,8 +51,8 @@ from gimbal.strategy.executor_base import PhaseResult, StrategyResult, StrategyS
 
 if TYPE_CHECKING:
     from gimbal.context.views import StepContextAdapter
-    from gimbal.schema.step import Step
-    from gimbal.schema.strategy import StrategyPhase
+    from gimbal.schema import Step
+    from gimbal.schema import StrategyPhase
     from gimbal.strategy.dispatcher import StrategyDispatcher
 
 from gimbal.log import get_logger
@@ -273,7 +273,7 @@ class StepStateMachine:
 
     def _handle_prepare(self) -> StepState:
         """执行前置策略（Assign / SQL 注入等，协议无关）。"""
-        from gimbal.schema.strategy import StrategyPhase
+        from gimbal.schema import StrategyPhase
 
         logger.debug("[SM {}] 进入 PREPARE 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.PREPARE)
@@ -304,7 +304,7 @@ class StepStateMachine:
 
     def _handle_extracting(self) -> StepState:
         """执行后置策略（Extract 提取字段等）。"""
-        from gimbal.schema.strategy import StrategyPhase
+        from gimbal.schema import StrategyPhase
 
         logger.debug("[SM {}] 进入 EXTRACTING 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.EXTRACTING)
@@ -318,7 +318,7 @@ class StepStateMachine:
 
     def _handle_verifying(self) -> StepState:
         """执行断言策略。"""
-        from gimbal.schema.strategy import StrategyPhase
+        from gimbal.schema import StrategyPhase
 
         logger.debug("[SM {}] 进入 VERIFYING 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.VERIFYING)
@@ -358,7 +358,7 @@ class StepStateMachine:
             （teardown 失败只记录到 error_phase="teardown"，不污染业务结果）
           - 业务阶段全通过 + teardown 阶段通过 → PASSED
         """
-        from gimbal.schema.strategy import StrategyPhase
+        from gimbal.schema import StrategyPhase
 
         logger.debug("[SM {}] 进入 TEARDOWN 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.TEARDOWN)

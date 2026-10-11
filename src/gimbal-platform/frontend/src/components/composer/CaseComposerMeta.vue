@@ -103,6 +103,26 @@
           <Switch v-model="local.expire" />
           <span class="switch-label">过期 (expire)</span>
         </div>
+
+        <!-- RS3（Release v4.4 §2.2/§6.1）：版本声明（meta.plate）——
+             每个归属系统一行，下拉选择该系统的版本线修订（或 working 预览）。 -->
+        <div v-if="local.system.length" class="mf-item" data-testid="meta-plate">
+          <span class="mf-label">版本声明 (meta.plate) — 执行按此取定义</span>
+          <div v-for="sys in local.system" :key="sys" class="plate-row">
+            <span class="plate-sys">{{ systemLabel(sys) }}</span>
+            <select
+              class="meta-select plate-select"
+              :value="local.plate?.[sys] ?? 'working'"
+              @change="setPlateRef(sys, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="working">working · 预览（不计入入库标准）</option>
+              <option v-for="ln in plateLines[sys] ?? []" :key="ln.latest" :value="ln.latest">
+                {{ ln.line }} · 最新 {{ ln.latest }}（{{ ln.revisions }} 个修订）
+              </option>
+            </select>
+          </div>
+          <span class="hint">精确修订执行才可入库；改版本线跳转到适配中心处理</span>
+        </div>
       </div>
     </div>
   </div>
@@ -113,8 +133,31 @@ import { reactive, ref, watch, onMounted } from 'vue'
 import TagInput from '@/components/TagInput.vue'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { fetchPlateSystems } from '@/api/plate'
+import { fetchPlateSystems, fetchSystemLines } from '@/api/plate'
 import type { MetaView } from '@/types/plate'
+
+// ── RS3：版本线数据（GET /endpoint-catalog/{system}/lines）──
+interface LineInfo {
+  line: string
+  revisions: number
+  latest: string
+  line_scheme: string | null
+}
+const plateLines = ref<Record<string, LineInfo[]>>({})
+
+async function loadLines(sys: string) {
+  if (plateLines.value[sys]) return
+  try {
+    plateLines.value[sys] = await fetchSystemLines(sys)
+  } catch {
+    plateLines.value[sys] = []   // 静默降级：下拉只有 working
+  }
+}
+
+function setPlateRef(sys: string, value: string) {
+  if (!local.plate) local.plate = {}
+  local.plate[sys] = value
+}
 
 // 下拉选项 = plate 已注册系统 (api/plate 统一查询层拉取),
 // 不再硬编码 fin/logi/wms/mall/common。SYS_LABELS 只做已知系统的中文
@@ -133,11 +176,17 @@ const systemDraft = ref('')
 function toggleSystem(s: string) {
   const i = local.system.indexOf(s)
   if (i >= 0) local.system.splice(i, 1)
-  else local.system.push(s)
+  else {
+    local.system.push(s)
+    loadLines(s)      // RS3：加入系统时加载其版本线
+  }
 }
 function addSystem() {
   const v = systemDraft.value.trim()
-  if (v && !local.system.includes(v)) local.system.push(v)
+  if (v && !local.system.includes(v)) {
+    local.system.push(v)
+    loadLines(v)
+  }
   systemDraft.value = ''
 }
 
@@ -148,6 +197,8 @@ onMounted(async () => {
     // 静默降级:选项为空,下拉 allow-create 手输不受影响
     console.warn('[CaseComposerMeta] plate 系统列表加载失败:', e)
   }
+  // RS3：已有系统也加载版本线（编辑已有场景时）
+  for (const s of local.system) loadLines(s)
 })
 
 // scenarioId 已上移到 definition.scenarioId (顶层),MetaView 不再含该字段。
@@ -203,4 +254,12 @@ watch(local, (v) => {
   font-size: 11.5px; color: #2f6fed; width: 130px;
 }
 .sys-add::placeholder { color: #94a3b8; }
+
+/* RS3 版本声明（meta.plate）*/
+.plate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.plate-sys {
+  min-width: 100px; font-size: 11.5px; font-weight: 600;
+  color: var(--c-text-secondary, #64748b); white-space: nowrap;
+}
+.plate-select { flex: 1; min-width: 0; }
 </style>

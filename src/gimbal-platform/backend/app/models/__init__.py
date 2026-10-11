@@ -11,12 +11,12 @@ from .composer_run_scheme import ComposerRunScheme
 from .share_ref import ShareRef
 from .suite import Suite, SuiteMember
 from .scenario_endpoint_ref import ScenarioEndpointRef
-from .catalog_version import CatalogVersion
 from .adaptation_batch import AdaptationBatch
 from .adaptation_snapshot import AdaptationSnapshot
 from .adaptation_op import AdaptationOp
 from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .board_card import BoardCard
+from .environment import Environment
 from .service_alias import ServiceAlias
 # 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
 from .permission import AuditLog, Notification, UserPref, UserStar
@@ -37,14 +37,13 @@ __all__ = [
     "Suite",
     "SuiteMember",
     "ScenarioEndpointRef",
-    "CatalogVersion",
     "AdaptationBatch",
     "AdaptationSnapshot",
     "AdaptationOp",
     "CarryGlobalDefault",
     "CarryServiceBinding",
     "BoardCard",
-    "ServiceAlias",
+    "Environment", "ServiceAlias",
     "AuditLog",
     "Notification",
     "ActivityEvent",

@@ -107,36 +107,10 @@ def set_client_for_tests(client: httpx.AsyncClient | None) -> None:
 
 
 # ─── plate 契约归一化 ──────────────────────────────────────────────
-def fill_plate_defaults(
-    payload: dict[str, Any], *, owner: str = ""
-) -> dict[str, Any]:
-    """就地补 plate /convert 必填而平台 UI 不采集的字段。
+# fill_plate_defaults 已删除（M2 步骤 4 / Q18）：
+# 新 M2 Meta 只 name 必填（M6），平台无需补默认值——
+# 存储的定义即纯 M2 实例，保存时由 scenario_store 保证不写入平台元数据。
 
-    Plate 的 Scenario 校验要求 meta 若干字段必填(requirementRef 等),
-    平台编辑器不采集它们 —— preview/export 路由一直在发送前补默认,
-    run 执行链曾漏做(存量场景 plate_rejected:meta.requirementRef
-    Field required,2026-08-24 sc-test-5nhvaloj6)。归一化收敛在本
-    模块:plate_client 拥有 plate 契约知识,preview 与 run 两条路径
-    共用同一份默认值,不再各写一套。
-
-    填充项(仅 setdefault 语义,已存在的值一律不动):
-    * kind:"scenario"
-    * scenarioId(顶层,缺失时镜像 meta.scenarioId)
-    * meta.createTime(plate 必填;缺失时取当前时刻)
-    * meta.requirementRef(plate 必填 list;UI 不采集 → [])
-    * meta.owner(为空且调用方给了 owner 时填)
-    """
-    payload.setdefault("kind", "scenario")
-
-    meta = payload.setdefault("meta", {})
-    if not meta.get("createTime"):
-        meta["createTime"] = _now_iso()
-    meta.setdefault("requirementRef", [])
-    if owner and not meta.get("owner"):
-        meta["owner"] = owner
-
-    payload.setdefault("scenarioId", meta.get("scenarioId", ""))
-    return payload
 
 
 def _now_iso() -> str:
@@ -492,3 +466,89 @@ async def aclose() -> None:
     if _client is not None:
         await _client.aclose()
         _client = None
+
+
+# ─── RS3（Release v4.4 §4）：版本模型读取侧方法 ────────────────────
+
+
+async def list_lines(system_id: str, *, timeout: float = 15.0) -> list[dict]:
+    """GET /api/system/{id}/lines（版本线列表，2.4）。
+
+    line_scheme 以线内最新修订为准；环境组版本线下拉用。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(f"/api/system/{system_id}/lines",
+                                timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    return envelope.get("data", {}).get("items", [])
+
+
+async def resolve(
+    meta_plate: dict[str, str],
+    endpoints_used: dict[str, list[str]],
+    *, timeout: float = 15.0,
+) -> dict[str, dict]:
+    """POST /api/system/action/resolve（生效修订解析，4.4）。
+
+    入参：``meta_plate = {系统: "<line>#<n>" | "working"}``，
+    ``endpoints_used = {系统: [endpoint_id, ...]}``。
+    返回：``{系统: {effective, available, changed_endpoints}}``。
+
+    计算只依赖 manifest 的 shape_hash（I-5：plate 不知道谁在用哪个版本），
+    结果对同一组修订不变（可缓存）。
+    """
+    client = get_client()
+    body = {"meta_plate": meta_plate, "endpoints": endpoints_used}
+    try:
+        resp = await client.post("/api/system/action/resolve",
+                                 json=body, timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    return envelope.get("data", {}).get("item", {})
+
+
+async def get_projection(
+    endpoint_id: str, ref: str, *, timeout: float = 15.0
+) -> dict[str, Any] | None:
+    """GET /api/endpoint/{id}/projection?ref=（投影查询，4.8）。
+
+    编排页展示 method/path 等只读信息时调用；结果不可变，前后端可缓存。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(
+            f"/api/endpoint/{endpoint_id}/projection",
+            params={"ref": ref}, timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    return envelope.get("data", {}).get("item")

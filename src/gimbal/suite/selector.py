@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from gimbal.log import get_logger
-from gimbal.schema.scenario import Scenario
+from gimbal.schema import Scenario
 
 logger = get_logger(__name__)
 

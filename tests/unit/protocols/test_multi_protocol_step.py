@@ -23,10 +23,10 @@ from gimbal.core.hooks import HookPoint, HookRegistry
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
 from gimbal.protocols.result import CallResult
-from gimbal.schema.call import Call
-from gimbal.schema.request import Request
-from gimbal.schema.step import Step
-from gimbal.schema.strategy import Assertion, AssertOperator, Extract
+from gimbal.schema import Call
+from gimbal.schema import Request
+from gimbal.schema import Step
+from gimbal.schema import Assertion, AssertOperator, Extract
 from gimbal.statemachine.engine import StepStateMachine
 from gimbal.statemachine.states import StepState
 from gimbal.strategy.dispatcher import build_default_dispatcher
@@ -194,8 +194,8 @@ class TestMultiProtocolStep:
 
     def test_http_sugar_still_routes_via_registry(self):
         """api 糖 → 归一化 call{http} → 注册表分派到 CallExecutor（缺路由显式报错）。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
         step = Step(
             call=Call(protocol="http", service="orphan", method="GET", path="/x"),
             request=Request(body={}),

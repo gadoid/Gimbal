@@ -45,6 +45,35 @@ NL = chr(10)
 _REAP_TTL_SEC = 600.0
 
 
+def _m2_generation_gate(m2_info) -> None:
+    """M2 §5.1 代际门：三档处理。
+
+    - hash 相同 → 放行
+    - hash 不同、代际相同 → 放行，发 m2.hash_mismatch 警告事件
+      （分开部署、版本错开但兼容——读方先升级原则）
+    - 代际不同 → 409 M2_GENERATION_MISMATCH
+    - 未携带 m2 信息（本地文件、开发调试）→ 不做门检查
+    """
+    if m2_info is None or not m2_info.hash:
+        return
+    from gimbal.schema import M2_GENERATION, M2_HASH
+    from fastapi import HTTPException
+
+    if m2_info.hash == M2_HASH:
+        return
+    if m2_info.generation == M2_GENERATION:
+        logger.warning(
+            "[M2] hash_mismatch: request={} built={} gen={} "
+            "(兼容——放行,读方先升级原则)",
+            m2_info.hash[:12], M2_HASH[:12], M2_GENERATION)
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=f"M2_GENERATION_MISMATCH: request gen={m2_info.generation} "
+               f"vs built gen={M2_GENERATION} "
+               f"(hash {m2_info.hash[:12]} vs {M2_HASH[:12]})")
+
+
 def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
     """注册 /runs 家族端点；返回运行注册表（测试可注入/检查）。"""
     from fastapi import HTTPException, Header
@@ -98,9 +127,13 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
         x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
     ) -> Any:
         from pydantic import TypeAdapter
-        from gimbal.schema.scenario import RunUnion
+        from gimbal.schema import RunUnion
 
         _require_start_auth(request, authorization, x_gimbal_token)
+
+        # M2 §5.1 代际门：请求携带 m2 信息时比对构建身份
+        _m2_generation_gate(req.m2)
+
         try:
             target = TypeAdapter(RunUnion).validate_python(req.target)
         except Exception as exc:  # noqa: BLE001
@@ -108,9 +141,18 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 status_code=422, detail=f"target validation failed: {exc}"
             ) from exc
 
+        # M10（M2 §2.3）：执行参数从 options 取——缺省全默认
+        opts = req.options
+        debug = opts.debug if opts is not None else None
+        n_runs = opts.n_runs if opts is not None else 1
+        parallel = opts.parallel if opts is not None else 1
+        halt_at = opts.step_to if opts is not None else None    # halt_at 并入 step_to
+        step_from = opts.step_from if opts is not None else None
+        subscribe_raw = opts.subscribe if opts is not None else None
+
         # C12：乘法参数（N4 同款目标变换；debug 与乘法互斥——单单元且 n_runs=1）
-        if req.n_runs > 1 or req.parallel > 1:
-            if req.debug is not None:
+        if n_runs > 1 or parallel > 1:
+            if debug is not None:
                 raise HTTPException(
                     status_code=422,
                     detail="debug requires n_runs=1 and parallel=1",
@@ -118,14 +160,14 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             from gimbal.cli.commands.run_launch import apply_multiplication
             try:
                 target = apply_multiplication(
-                    target, n_runs=req.n_runs, parallel=req.parallel)
+                    target, n_runs=n_runs, parallel=parallel)
             except Exception as exc:  # noqa: BLE001
                 raise HTTPException(
                     status_code=422,
                     detail=f"multiplication transform failed: {exc}") from exc
 
         # debug 单单元校验（S-6:与 CLI --debug 同一条校验函数）
-        if req.debug is not None:
+        if debug is not None:
             from gimbal.core.debugger import debug_unit_count
             if debug_unit_count(target) != 1:
                 raise HTTPException(
@@ -136,11 +178,13 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
 
         # P1-04：订阅规格请求期编译校验（非法 422），执行线程内挂载
         subscribe_spec = None
-        if req.subscribe is not None:
+        if subscribe_raw is not None:
             from gimbal.compiler.errors import CompileError
             from gimbal.events.subscribe import compile_subscribe
             try:
-                subscribe_spec = compile_subscribe(req.subscribe)
+                subscribe_spec = compile_subscribe(
+                    [r if isinstance(r, dict) else r.model_dump()
+                     for r in subscribe_raw])
             except CompileError as exc:
                 raise HTTPException(status_code=422, detail=exc.to_json()) from exc
 
@@ -154,7 +198,7 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             # 调用方可立即 POST debug 命令，命令入队等暂停点消费
             from gimbal.core.debugger import QueueSession
             session = QueueSession(
-                timeout=req.debug.wait_timeout or 300.0) if req.debug else None
+                timeout=debug.wait_timeout or 300.0) if debug else None
             # C12：外层取消事件 —— POST /runs/{id}/cancel 置位，
             # 经 RuntimeControl.cancel_event 在步骤边界/未启动单元生效
             cancel_event = threading.Event()
@@ -165,10 +209,10 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
         from gimbal.core.scenario_runner import RuntimeControl
         # C12 起恒建 RC（cancel 通道恒在）；其余字段按请求
         runtime_control = RuntimeControl(
-            halt_at=req.halt_at,
+            halt_at=halt_at,
             halt_reason="server-request",
-            step_from=req.step_from,
-            debug_mode=req.debug is not None,   # 调试挂起不计 scenario 超时
+            step_from=step_from,
+            debug_mode=debug is not None,   # 调试挂起不计 scenario 超时
             cancel_event=cancel_event,
         )
 
@@ -192,13 +236,13 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                     attached_subscribe = _attach_sub(
                         subscribe_spec, configuration.event_bus)
                 try:
-                    if req.debug is not None:
+                    if debug is not None:
                         debugger = DebuggerPlugin(
-                            pause=req.debug.pause,
-                            breakpoints=req.debug.breakpoints,
+                            pause=debug.pause,
+                            breakpoints=debug.breakpoints,
                             session=entry["session"],
                             event_bus=configuration.event_bus,
-                            wait_timeout=req.debug.wait_timeout,
+                            wait_timeout=debug.wait_timeout,
                         )
                         debugger.activate(configuration.hook_registry)
                         entry["debugger"] = debugger
@@ -236,7 +280,7 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
 
         threading.Thread(target=_watch, daemon=True,
                          name=f"gimbal-run-{run_id[:8]}").start()
-        return RunsCreated(runId=run_id, debugEnabled=req.debug is not None)
+        return RunsCreated(runId=run_id, debugEnabled=debug is not None)
 
     @app.get("/runs/{run_id}")
     async def run_status(run_id: str) -> dict:

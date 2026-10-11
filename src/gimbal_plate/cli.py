@@ -232,43 +232,55 @@ def _emit_check(args, report) -> None:
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
-    """结构化差异:两 release manifest 比 hash(对象级);--base working 时
-    与当前树比 shape_hash(G7 简版;字段级 diff 属 B 后续)。"""
-    arts = _REPO / "plate_artifacts"
-    rel_dir = arts / args.system / "releases"
-    # O1(第七轮):跳过无 manifest.json 的目录(崩溃/中断留下的半成品,
-    # 或历史上空发版被拒时占号的残留)——此前直接崩在 FileNotFoundError
-    all_dirs = sorted(
-        (d.name for d in rel_dir.iterdir() if d.is_dir())) if rel_dir.exists() else []
-    skipped = [n for n in all_dirs
-               if not (rel_dir / n / "manifest.json").is_file()]
-    releases = [n for n in all_dirs if n not in skipped]
-    if skipped and not args.json:
-        print(f"(跳过无 manifest 的目录: {skipped})", file=sys.stderr)
-    if len(releases) < 2:
-        print(f"不足两个 release(可用 {releases});diff 需要 ≥2 个 manifest")
+    """结构化差异(版本模型 §7 / Release 4.3):对象级 + 变化接口的部位。
+
+    ``plate diff <系统> <a> <b>``——a/b 为 ``<line>#<n>`` / ``<line>``(最新)
+    / ``working``(当前源树);可跨版本线。
+    """
+    from gimbal_plate.release import read as release_read
+    from gimbal_plate.release.release import resolve_artifacts_root
+
+    try:
+        root = resolve_artifacts_root()
+    except RuntimeError as e:
+        print(f"BLOCKED: {e}")
+        return 2
+    a = args.a or args.base
+    if not a:
+        print("用法: plate diff <系统> <a> <b>  (a/b: <line>#<n> | <line> | working)")
         return 1
-    a_name = args.base if args.base else releases[-2]
-    b_name = releases[-1]
-    m_a = json.loads((rel_dir / a_name / "manifest.json").read_text(encoding="utf-8"))
-    m_b = json.loads((rel_dir / b_name / "manifest.json").read_text(encoding="utf-8"))
-    ha = {o["id"]: o["hash"] for o in m_a["objects"]}
-    hb = {o["id"]: o["hash"] for o in m_b["objects"]}
-    changed = sorted(k for k in ha.keys() & hb.keys() if ha[k] != hb[k])
-    added = sorted(hb.keys() - ha.keys())
-    removed = sorted(ha.keys() - hb.keys())
-    out = {"from": a_name, "to": b_name, "changed": changed,
-           "added": added, "removed": removed}
+
+    def _snap(ref: str):
+        if ref == "working":
+            from gimbal_plate.dialect.validation import collect_system_tree
+
+            fin = _repo_system(args.system)
+            tree = collect_system_tree(fin)
+            snap = release_read.RevisionSnapshot(
+                system=args.system, line="working", n=0, manifest={})
+            for ep in tree.endpoints:
+                snap.endpoints[ep.id] = ep
+            return snap
+        line, n, _m = release_read.resolve_revision(root, args.system, ref)
+        return release_read.load_snapshot(root, args.system, line, n)
+
+    try:
+        out = release_read.diff_snapshots(_snap(a), _snap(args.b))
+    except release_read.ReleaseReadError as e:
+        print(f"BLOCKED: {e.message}")
+        return 1
     if args.json:
         print(json.dumps(out, ensure_ascii=False, indent=1))
     else:
-        print(f"{a_name} → {b_name}: {len(changed)} 变更 / "
-              f"{len(added)} 新增 / {len(removed)} 移除")
-        for k in changed:
-            print(f"  ~ {k}")
-        for k in added:
+        print(f"{out['from']} → {out['to']}: {len(out['changed'])} 变更 / "
+              f"{len(out['added'])} 新增 / {len(out['removed'])} 移除")
+        for k, v in out["changed"].items():
+            parts = v.get("parts") or {}
+            tags = ",".join(parts.keys()) or "-"
+            print(f"  ~ {k}  [{tags}]")
+        for k in out["added"]:
             print(f"  + {k}")
-        for k in removed:
+        for k in out["removed"]:
             print(f"  - {k}")
     return 0
 
@@ -338,15 +350,18 @@ def cmd_reload(args: argparse.Namespace) -> int:
 
 
 def cmd_release(args: argparse.Namespace) -> int:
-    from gimbal_plate.release import release_system
+    from gimbal_plate.release import release_system, resolve_artifacts_root
 
-    r = release_system(
-        _repo_system(args.system), artifacts_root=_REPO / "plate_artifacts",
-        signed_by=args.signed_by or "",
-    )
+    try:
+        resolve_artifacts_root()
+    except RuntimeError as e:
+        print(f"BLOCKED: {e}")
+        return 2
+    r = release_system(_repo_system(args.system),
+                       signed_by=args.signed_by or "")
     if args.json:
         print(json.dumps({
-            "success": r.success, "release_id": r.release_id,
+            "success": r.success, "line": r.line, "revision": r.revision,
             "message": r.message,
             "report": r.report.to_dict() if r.report else None,
             "summary": r.manifest["summary"] if r.manifest else None,
@@ -354,6 +369,84 @@ def cmd_release(args: argparse.Namespace) -> int:
     else:
         print(f"{'OK' if r.success else 'BLOCKED'}: {r.message}")
     return 0 if r.success else 1
+
+
+def cmd_lines(args: argparse.Namespace) -> int:
+    """列出版本线与修订(版本模型 2.4;构件根只读)。"""
+    from gimbal_plate.release import (
+        latest_revision_manifest,
+        resolve_artifacts_root,
+    )
+
+    try:
+        root = resolve_artifacts_root()
+    except RuntimeError as e:
+        print(f"BLOCKED: {e}")
+        return 2
+    system_dir = root / args.system / "lines"
+    lines: list[dict] = []
+    if system_dir.is_dir():
+        for line_dir in sorted(system_dir.iterdir()):
+            if not line_dir.is_dir():
+                continue
+            nums = sorted(int(p.name) for p in line_dir.iterdir()
+                          if p.is_dir() and p.name.isdigit())
+            if not nums:
+                continue
+            latest = latest_revision_manifest(root, args.system, line_dir.name)
+            latest_manifest = latest[1] if latest else {}
+            lines.append({
+                "line": line_dir.name,
+                "revisions": len(nums),
+                "latest": f"{line_dir.name}#{nums[-1]}",
+                "line_scheme": latest_manifest.get("line_scheme"),
+                "latest_signed_by": latest_manifest.get("signed_by"),
+            })
+    if args.json:
+        print(json.dumps({"system": args.system, "lines": lines},
+                         ensure_ascii=False, indent=1))
+    elif lines:
+        for l in lines:
+            print(f"{l['line']}\t{l['revisions']} 个修订\t最新 {l['latest']}"
+                  f"\tscheme={l['line_scheme']}")
+    else:
+        print(f"{args.system}: 尚无版本线(构件根 {root})")
+    return 0
+
+
+def cmd_cold_archive(args: argparse.Namespace) -> int:
+    """冷化判定查询（Release v4.4 §9 / RS5）：列出可冷化的修订。"""
+    from gimbal_plate.release.cold_archive import list_cold_archivable
+    from gimbal_plate.release.release import resolve_artifacts_root
+
+    try:
+        root = resolve_artifacts_root()
+    except RuntimeError as e:
+        print(f"BLOCKED: {e}")
+        return 2
+
+    referenced: dict = {}
+    pinned: dict = {}
+    if args.referenced:
+        referenced = json.loads(
+            Path(args.referenced).read_text(encoding="utf-8"))
+    if args.pinned:
+        pinned = json.loads(
+            Path(args.pinned).read_text(encoding="utf-8"))
+
+    items = list_cold_archivable(root, referenced_revisions=referenced,
+                                 pinned_revisions=pinned)
+    if args.json:
+        print(json.dumps({"items": items, "total": len(items)},
+                         ensure_ascii=False, indent=1))
+    elif items:
+        for item in items:
+            print(f"{item['system']}@{item['revision']}  "
+                  f"signed={item['signed_by']}  "
+                  f"at={item['released_at'][:10]}")
+    else:
+        print("无可冷化修订（全部被引用或可能成为生效修订）")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -382,9 +475,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="检查 systems 根下全部系统目录(CI 口径)")
     sp.set_defaults(fn=cmd_check)
 
-    sp = sub.add_parser("diff", help="结构化差异(两 manifest 比 hash)")
+    sp = sub.add_parser(
+        "diff", help="结构化差异(对象级+变化部位;a/b 为 <line>#<n>/<line>/working)")
     sp.add_argument("system", nargs="?", default="fin")
-    sp.add_argument("--base")
+    sp.add_argument("a", nargs="?", default=None)
+    sp.add_argument("b", nargs="?", default="working")
+    sp.add_argument("--base", default=None,
+                    help="(兼容旧写法)等价于位置参数 a")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_diff)
 
@@ -402,11 +499,25 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("system", nargs="?", default=None)
     sp.set_defaults(fn=cmd_reload)
 
-    sp = sub.add_parser("release", help="冻结(发布闸门)")
+    sp = sub.add_parser("release", help="签发修订(版本模型;构件提交到构件分支)")
     sp.add_argument("system", nargs="?", default="fin")
     sp.add_argument("--signed-by", default="")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_release)
+
+    sp = sub.add_parser(
+        "cold-archive", help="冷化判定：列出可冷化的修订(RS5)")
+    sp.add_argument("--referenced",
+                    help="被引用修订 JSON 文件 {系统: [line#n, ...]}")
+    sp.add_argument("--pinned",
+                    help="执行记录钉住修订 JSON 文件")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_cold_archive)
+
+    sp = sub.add_parser("lines", help="列出版本线与修订(版本模型 2.4)")
+    sp.add_argument("system", nargs="?", default="fin")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_lines)
     return p
 
 

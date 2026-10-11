@@ -9,12 +9,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 from gimbal.compiler.errors import CompileError
 from gimbal.compiler.pipeline import compile_target
-from gimbal.schema.call import Call
+from gimbal.schema import Call
 from gimbal.schema.plan import Plan
-from gimbal.schema.scenario import (
+from gimbal.schema import (
     Config as ScenarioConfig, Control, Meta, Scenario, SuiteGraph, UnitDecl,
 )
-from gimbal.schema.step import Step
+from gimbal.schema import Step
 
 
 def _scenario(sid: str, message: str = None, extract_to: str = None, vars=None) -> Scenario:

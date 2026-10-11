@@ -122,30 +122,28 @@ class TestO4IllegalSystemName:
         assert "linked" not in reg.list_systems()
 
 
-class TestDiffSkipsManifestless:
-    def test_o1_diff_skips_dirs_without_manifest(self, tmp_path, monkeypatch, capsys):
-        """O1:diff 遇无 manifest 的半成品目录不崩,跳过并提示。
-        S1.5a 收紧:此前只断言退出码——跳过提示与基线配对(.1→.3)一并钉住。"""
-        import gimbal_plate.cli as cli
-        monkeypatch.setattr(cli, "_REPO", tmp_path)
-        rel = tmp_path / "plate_artifacts" / "fin" / "releases"
-        rel.mkdir(parents=True)
-        for name, with_manifest in (("2026.10.1", True), ("2026.10.2", False),
-                                    ("2026.10.3", True)):
-            d = rel / name
-            d.mkdir()
-            if with_manifest:
-                obj = [{"id": "fin.x", "hash": "h1"}] if name.endswith(".1")                     else [{"id": "fin.x", "hash": "h2"}]
-                (d / "manifest.json").write_text(json.dumps(
-                    {"objects": obj}), encoding="utf-8")
+class TestDiffRevisions:
+    def test_diff_revisions_with_parts(self, tmp_path, monkeypatch, capsys):
+        """plate diff <系统> <a> <b>(版本模型 §7):对象级差异 + 变化部位。
+        取代旧 YYYY.MM.N 目录比对(旧布局随 RS0 删除)。"""
         from gimbal_plate.cli import main
-        assert main(["diff", "fin"]) == 0   # 跳过 .2,比 .1→.3
+        from gimbal_plate.release.release import release_system
+        from tests.plate._release_fx import commit, make_repo, write_endpoint
+
+        repo, fin, art = make_repo(tmp_path)
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        write_endpoint(fin, "a", reviewed=True, path="/a2")
+        commit(repo, "change path")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        monkeypatch.setenv("PLATE_ARTIFACTS_PATH", str(art))
+
+        assert main(["diff", "fin", "1.0#1", "1.0#2"]) == 0
         captured = capsys.readouterr()
-        assert "2026.10.2" in captured.err and "跳过" in captured.err, \
-            "应提示跳过了哪个目录"
-        assert "2026.10.1 → 2026.10.3" in captured.out, \
-            "基线配对应为 .1→.3,不含半成品 .2"
-        assert "~ fin.x" in captured.out, "两份 manifest hash 不同,应报 1 处变更"
+        assert "1.0#1 → 1.0#2" in captured.out
+        assert "~ endpoint.fin.a.a  [binding]" in captured.out
+
+        assert main(["diff", "fin", "1.0#1", "9.9#9"]) == 1
+        assert "BLOCKED" in capsys.readouterr().out
 
 
 class TestG1SelfDescribe:

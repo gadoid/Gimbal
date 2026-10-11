@@ -1,20 +1,22 @@
-"""schema.call —— 协议中立调用描述（plate 镜像，v2.1 批次 F P2）。
+"""M2 Call（M2 方案 v2.4 §3 M1；步骤 1 定义形态）。
 
-与 gimbal.schema.call 同构：开放模型，protocol 之外的字段由协议定义解释。
-Step.call 是唯一调用形态（api 平台形态输入面已随 api→call 清理退役）。
+与执行器 ``gimbal/schema/call.py`` 同构：**唯一保持开放（extra=allow）
+的模型**（M1 的唯一例外）——协议自有字段由协议 ``params_model`` 校验
+（http 已是 forbid）。Release 4.5：场景存储只存场景自有字段，binding
+派生字段由 plate 投影（/convert 合并）；``protocol`` 必填。
 """
 from __future__ import annotations
 
-from typing import Optional, Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class Call(BaseModel):
+    """协议中立调用外壳。"""
+
     model_config = ConfigDict(extra="allow")
 
     kind: Literal["call"] = "call"
-    protocol: str = Field(default="http", description="协议判别；默认 http")
-    # 平台视图扩展(composer 写入,导出 gimbal 时剥离)
-    view_hints: Optional[dict] = Field(default=None, description="平台视图扩展:endpoint_id 等")
-
+    protocol: str = Field(
+        ..., description="协议名（必填）；协议注册表的分派键")

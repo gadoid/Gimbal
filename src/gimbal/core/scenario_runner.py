@@ -16,8 +16,8 @@ from gimbal.context.scenario import ScenarioContext
 from gimbal.context.step import StepStatus
 from gimbal.context.suite import SuiteContext
 from gimbal.context.views import StepContextAdapter
-from gimbal.schema.scenario import Scenario
-from gimbal.schema.step import Step
+from gimbal.schema import Scenario
+from gimbal.schema import Step
 from gimbal.statemachine.engine import StepStateMachine, StepRunResult
 from gimbal.strategy.dispatcher import StrategyDispatcher
 
@@ -649,7 +649,7 @@ class ScenarioRunner:
         返回：全部通过 → None；首个失败条目的 StepRunResult 留痕。
         """
         from datetime import datetime, timezone
-        from gimbal.schema.strategy import FailurePolicy
+        from gimbal.schema import FailurePolicy
         for entry in entries:
             step_id = f"{label}:{entry.kind}:{entry.key or '-'}"
             try:

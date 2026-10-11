@@ -1,28 +1,23 @@
-"""schema.request —— 请求体容器。
+"""M2 Request（步骤 1 定义形态）。
 
-与 ``gimbal.schema.request`` 行为一致;``body`` 支持 ``str | dict | list`` 三种形态,
-由调用方通过 ``api.headers.Content-Type`` 显式声明。
+与执行器 ``gimbal/schema/request.py`` 同构；plate 副本的视图字段
+``fields_meta`` 不进定义（M5——前端只在类型声明出现过，无写入点）。
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Union, Dict, List
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Literal, Union
 
-from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Request(BaseModel):
-    """单步骤的请求体信息。
+    """请求体载体（body 结构由协议定义解释）。"""
 
-    fields_meta 是平台视图扩展(可选,只有 platform 落库 dict 会含此字段);
-    gimbal 导出时由 GimbalScenarioExporter 通过 model_dump(exclude=...) 自动排除,
-    保证 gimbal 可执行 dict 干净。值为 binding 通道声明条目
-    (PlatformScenarioExporter 投影,platform 前端表单渲染用)。
-    """
+    model_config = ConfigDict(extra="forbid")
 
     kind: Literal["request"] = "request"
+    # str: 原始文本；dict: JSON 对象；list: JSON 数组（批量请求）
     body: Union[str, Dict[str, Any], List[Any]] = Field(default_factory=dict)
-    fields_meta: Dict[str, DeclarationEntry] | None = None
 
 
 RequestUnion = Request

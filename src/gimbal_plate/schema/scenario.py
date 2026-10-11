@@ -1,102 +1,67 @@
-"""schema.scenario —— Scenario/Suite 与 Meta/Config。
+"""M2 Scenario / Meta / Config（M2 方案 v2.4 §3 M2/M4/M5/M6/M11；§9.2）。
 
-迁移自 ``gimbal.schema.scenario``,字段命名与可选性保持兼容;
-``Meta`` 中除 ``requirementRef`` 外的字段保留 ``...`` 必填,匹配现有 Scenario
-校验行为。
+- M6：Meta 只有 ``name`` 必填，其余给默认值——需要调用方补默认值才能
+  过校验的字段不是执行必需；``system`` 并入（plate 副本已有）、
+  ``plate`` 新增（M11：系统 → 已验证修订，值随《Plate 版本模型》4.1）。
+- M5：平台视图字段（``endpoints`` / ``navigation`` / ``config_summary``）
+  不进定义。
+- M2：``config.users`` 由 AuthSession 改为 UserCredential（只存凭证）。
+- M9：``timePolicy`` 缺省 None = 不限时（以执行器为准）。
 """
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional, Literal, Annotated, Union
-from pydantic import BaseModel, Field
+from typing import Any, Literal, Optional
 
-from gimbal_plate.schema.auth import AuthSession
-from gimbal_plate.schema.resource import ResourceUnion
-from gimbal_plate.schema.retry_policy import RetryPolicy
-from gimbal_plate.schema.setup import SetupUnion
-from gimbal_plate.schema.step import StepUnion
-from gimbal_plate.schema.teardown import TeardownUnion
-from gimbal_plate.schema.time_policy import TimePolicyUnion, RecordPolicy
+from pydantic import BaseModel, ConfigDict, Field
+
+from .credential import UserCredential
+from .resource import ResourceUnion
+from .retry_policy import RetryPolicy
+from .setup import SetupUnion
+from .step import StepUnion
+from .teardown import TeardownUnion
+from .time_policy import TimePolicyUnion
 
 
 class Meta(BaseModel):
-    """用例信息配置模型。"""
+    model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(..., description="用例名")
-    description: str = Field(..., description="用例信息描述")
-    module: str = Field(..., description="用例所属的业务模块")
-    priority: int = Field(..., description="用例等级描述")
-    author: str = Field(..., description="用例作者")
-    owner: str = Field(..., description="维护人/执行人")
-    tags: list[str] = Field(..., description="用例标签")
-    version: str = Field(description="用例版本号")
-    createTime: datetime = Field(description="创建时间")
-    expire: bool = Field(description="过期标志位")
-    requirementRef: list[str] = Field(description="需求,用例关联链接")
-    # V3 新增:归属被测系统标识。V3 PLATE_V3_DESIGN.md §3 要求"该系统的 Meta
-    # 默认模板",必须携带 system 信息。
-    # V3.2 变更为 list[str]:一条用例可同时归属多个被测系统(如"fin 与 mall
-    # 共用的资金链路用例")。默认空 list 保持向后兼容。
-    system: list[str] = Field(
-        default_factory=list,
-        description="[V3] 归属被测系统标识列表(如 ['fin'] 或 ['fin', 'mall'])",
-    )
+    name: str                                    # 唯一必填（M6）
+    description: str = ""
+    module: str = ""
+    priority: int = 0
+    author: str = ""
+    owner: str = ""
+    tags: list[str] = []
+    version: str = ""
+    createTime: datetime | None = None           # M7：普通 datetime
+    expire: bool = False
+    requirementRef: list[str] = []
+    system: list[str] = []                       # 并入（plate 副本已有）
+    plate: dict[str, str] = {}                   # M11：系统 → "<line>#<n>" | "working"
 
 
 class Config(BaseModel):
-    """用例执行配置模型。"""
+    model_config = ConfigDict(extra="forbid")
 
-    setup: list[SetupUnion] = Field(default_factory=list, description="用例前置动作")
-    teardown: list[TeardownUnion] = Field(default_factory=list, description="用例后置动作")
-    services: dict[str, str] = Field(default_factory=dict, description="服务与URL映射关系")
-    users: dict[str, AuthSession] = Field(
-        default_factory=dict, description="认证信息字典"
-    )
-    timePolicy: TimePolicyUnion = Field(
-        default_factory=RecordPolicy,
-        description="时间处理策略:超时检查或耗时记录",
-    )
+    setup: list[SetupUnion] = Field(default_factory=list)
+    teardown: list[TeardownUnion] = Field(default_factory=list)
+    services: dict[str, str] = Field(default_factory=dict)
+    users: dict[str, UserCredential] = Field(default_factory=dict)   # M2
+    timePolicy: Optional[TimePolicyUnion] = None  # M9：None = 不限时
     retry: Optional[RetryPolicy] = None
     vars: dict[str, Any] = Field(
         default_factory=dict,
-        description="变量声明;字面量或生成式 spec dict;CLI --var 优先级更高",
-    )
+        description="变量声明；字面量或生成式 spec dict；CLI --var 优先级更高")
 
 
 class Scenario(BaseModel):
-    """用例数据模型。
-
-    V3.1 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2）:
-    - endpoints: 平台后端消费的 endpoint 渲染视图列表（PlatformEndpointView dict 列表）
-    - navigation: 平台前端按 service 分组的导航树
-    - config_summary: 配置项分类提示（env_placeholder / scenario_var_placeholder / auth_placeholder / literal）
-    默认值均为 None,不携带时 GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉。
-    """
+    model_config = ConfigDict(extra="forbid")
 
     kind: Literal["scenario"] = "scenario"
-    scenarioId: str = Field(..., description="场景,用例ID,前缀为sc")
-    meta: Meta = Field(..., description="用例的元信息,用于管理用例")
-    config: Config = Field(..., description="本次执行的配置信息")
-    resource: dict[str, ResourceUnion] = Field(
-        description="存放用例需要执行的相关资源信息"
-    )
-    steps: list[StepUnion] = Field(..., description="存放具体的执行过程")
-
-    # ── 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2） ────────────────
-    endpoints: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="[V3.1 平台视图] endpoint 渲染视图列表（PlatformEndpointView dict）",
-    )
-    navigation: dict[str, Any] | None = Field(
-        default=None,
-        description="[V3.1 平台视图] 按 service 分组的导航树",
-    )
-    config_summary: dict[str, Any] | None = Field(
-        default=None,
-        description="[V3.1 平台视图] 配置项分类提示(env_placeholder/var_placeholder/...)",
-    )
-
-
-
-# v2.1 F 收尾:plate 只承载 Scenario(嵌入式 Suite 已删除,编排走 gimbal 侧 SuiteGraph)
-RunUnion = Scenario
+    scenarioId: str = Field(..., description="场景 ID，前缀 sc")
+    meta: Meta
+    config: Config
+    resource: dict[str, ResourceUnion]
+    steps: list[StepUnion]

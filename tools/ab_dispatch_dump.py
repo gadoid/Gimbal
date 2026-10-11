@@ -24,10 +24,10 @@ commit b7d522f);旧树侧对照逻辑随对拍收口移除,仅存 git 历史。
                          面内每 path 按契约类型给值;--values-from 锚定
                          切换时点存量值表 —— 服务级值表跨端点共享,
                          面差路径恰有同路径值即真实改变物化);
-  D. convert_gimbal / convert_platform —— plate /convert 产物
+  D. convert_gimbal —— plate /convert 产物
                          (dispatch 链的 plate 调用:校验 + 剥平台视图字段;
                          platform 产物含 endpoints 定面 = M1 消费方 #3);
-  E. exports          —— dispatch("gimbal"/"platform", Scenario_Test_14)
+  E. exports          —— dispatch("gimbal", Scenario_Test_14)
                          直接导出产物(与 HTTP convert 同源的真源)。
 
 用法:
@@ -152,7 +152,7 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
         }
 
         # D. plate /convert 产物(dispatch 链的 plate 调用)
-        for consumer in ("gimbal", "platform"):
+        for consumer in ("gimbal",):
             resp = client.post("/api/scenario/action/convert",
                                json={"consumer": consumer, "scenario": materialized})
             payload = {"status": resp.status_code}
@@ -168,7 +168,7 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
     sc = Scenario.model_validate(_load_real_scenario())
     out["exports"] = {
         consumer: export_dispatch(consumer, scenario=sc)
-        for consumer in ("gimbal", "platform")
+        for consumer in ("gimbal",)
     }
 
     return out

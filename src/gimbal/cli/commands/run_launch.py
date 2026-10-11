@@ -19,7 +19,7 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
-from gimbal.schema.scenario import Scenario
+from gimbal.schema import Scenario
 
 logger = get_logger(__name__)
 
@@ -314,7 +314,7 @@ def launch(
     #    按 kind 分派：suite 走 Engine._run_suite（支持 execution.parallel 并行分派），
     #    scenario 走单场景路径；runtime_control 仅对 scenario 有意义。
     from pydantic import TypeAdapter
-    from gimbal.schema.scenario import RunUnion
+    from gimbal.schema import RunUnion
     try:
         target = TypeAdapter(RunUnion).validate_python(payload)
     except Exception as exc:
@@ -427,7 +427,7 @@ def apply_multiplication(target, *, n_runs: int = 1, retry: int = 0,
     """
     if n_runs <= 1 and retry <= 0 and parallel <= 1:
         return target
-    from gimbal.schema.scenario import Scenario, SuiteGraph, UnitDecl
+    from gimbal.schema import Scenario, SuiteGraph, UnitDecl
     from gimbal.schema.plan import PlanPolicy
     if isinstance(target, Scenario):
         if n_runs <= 1 and retry <= 0:

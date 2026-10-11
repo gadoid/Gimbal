@@ -39,8 +39,8 @@ from typing import Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from gimbal.config.models import BootstrapConfig
     from gimbal.auth.registry import AuthRegistry
-    from gimbal.schema.scenario import Scenario, Config
-    from gimbal.schema.step import Step, StepUnion
+    from gimbal.schema import Scenario, Config
+    from gimbal.schema import Step, StepUnion
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -133,20 +133,25 @@ class ScenarioPreprocessor:
           - 扫描所有 step 模板，提取实际引用的 auth tag
           - 只登录被引用的 user，未引用的 skip
         """
-        from gimbal.schema.auth import AuthSession
+        from gimbal.auth.session import AuthSession
         from gimbal.auth import AuthManager
+        from gimbal.schema import UserCredential
 
         auth_dict = getattr(self._schema.config, "users", None) or {}
         if not auth_dict:
             logger.debug("[Preprocessor] 无 users，跳过认证")
             return
 
-        # 1. 先把 AuthSession 注入 registry
+        # 1. 把凭证(UserCredential)升级为运行态 AuthSession 注入 registry
+        #    (M2 §3 M2:定义只存凭证,token/expires_at 是运行态)
         for tag, entry in auth_dict.items():
             if isinstance(entry, AuthSession):
                 self._auth_registry.set(tag, entry)
             elif isinstance(entry, dict):
                 self._auth_registry.set(tag, AuthSession(**entry))
+            elif isinstance(entry, UserCredential):
+                self._auth_registry.set(
+                    tag, AuthSession(**entry.model_dump()))
             else:
                 logger.warning(
                     "[Preprocessor] 未知的 users entry 类型: tag={} type={}",
@@ -283,7 +288,7 @@ class ScenarioPreprocessor:
 
     def _resolve_step(self, step: "Step", root: dict, idx: int) -> "Step":
         """展开单个 Step 的所有模板字段，返回新 Step 实例。"""
-        from gimbal.schema.step import Step
+        from gimbal.schema import Step
 
         resolved = Step(
             kind=step.kind,
@@ -297,9 +302,9 @@ class ScenarioPreprocessor:
 
     def _resolve_call(self, call, root: dict):
         """展开协议中立 Call 的模板字段（自定义协议的开放字段递归展开）。"""
-        from gimbal.schema.call import Call
+        from gimbal.schema import Call
 
-        extra = call.extra_fields() if call is not None else {}
+        extra = dict(call.model_extra or {}) if call is not None else {}
         resolved_extra = {
             k: self._resolve_nested(v, root) if isinstance(v, (dict, list)) else self._resolve_value(v, root)
             for k, v in extra.items()
@@ -308,7 +313,7 @@ class ScenarioPreprocessor:
 
     def _resolve_request(self, request, root: dict):
         """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例。"""
-        from gimbal.schema.request import Request
+        from gimbal.schema import Request
 
         return Request(
             kind=request.kind,
@@ -326,7 +331,7 @@ class ScenarioPreprocessor:
         修复 #5：模板变量缺失时 fail-fast，避免 expected=None
         这类误导性断言失败信息。
         """
-        from gimbal.schema.strategy import Extract, Assign, Assertion
+        from gimbal.schema import Extract, Assign, Assertion
 
         base = self._base_strategy_fields(strategy)
         owner = f"{type(strategy).__name__}#{strategy.name or '?'}"

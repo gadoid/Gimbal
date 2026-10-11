@@ -1063,7 +1063,7 @@ def _executor_compile(graph: dict) -> list[dict]:
     测试边界:单测打桩此函数即可,不必伪造合法 gimbal 场景形状。
     """
     from pydantic import TypeAdapter
-    from gimbal.schema.scenario import RunUnion
+    from gimbal.schema import RunUnion
     from gimbal.compiler.pipeline import compile_target, p_validate
     target = TypeAdapter(RunUnion).validate_python(graph)
     plan = compile_target(target)

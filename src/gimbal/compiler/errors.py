@@ -21,6 +21,8 @@ class ErrCode:
     # ── 协议与调用（normalize 期）──────────────────────────
     UNKNOWN_PROTOCOL = "UNKNOWN_PROTOCOL"        # call.protocol 未注册（权威表下）
     CALL_FIELD_INVALID = "CALL_FIELD_INVALID"    # 协议字段未知/类型不符（extra=forbid）
+    PATH_PARAM_MISSING = "PATH_PARAM_MISSING"    # path 占位符缺 path_params 键（RS2/R5b）
+    M2_GENERATION_MISMATCH = "M2_GENERATION_MISMATCH"  # 用例侧 M2 代际不同（M2 §5.1 代际门）
 
     # ── 生命周期条目（normalize 期）────────────────────────
     LIFECYCLE_KIND_UNKNOWN = "LIFECYCLE_KIND_UNKNOWN"

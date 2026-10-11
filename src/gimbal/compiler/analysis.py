@@ -33,8 +33,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gimbal.log import get_logger
-from gimbal.schema.scenario import Scenario
-from gimbal.schema.strategy import Scope
+from gimbal.schema import Scenario
+from gimbal.schema import Scope
 
 logger = get_logger(__name__)
 

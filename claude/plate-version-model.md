@@ -1,11 +1,14 @@
-# Plate 版本模型：版本线、修订与场景的版本声明（v1.1）
+# Plate 版本模型：版本线、修订与场景的版本声明（v1.4）
 
 > 日期：2026-10-10　基线：`feat/plate-s1` @ `87e8a1a`
-> 状态：v1.1（2026-10-10 决策轮收口，Codfish）。本文取代 `claude/plate-design.md` 中关于版本的规则：8.2 的 release_id 命名（N2）、冻结范围（只收 reviewed）与引用闭包（8v）的写法，以及 8.3 消费方版本规则。冻结、内容寻址、发布闸门的检查项、读取机制沿用原设计，不在本文重复。
-> 姊妹文档：《Release：按版本读取、平台消费与场景适配》（`claude/plate-release-design.md` v4.1，消费侧与适配中心）；《Plate M2：用例 / 框架侧结构反转》（`claude/plate-m2-reversal-design.md` v2.3，`meta.plate` 即 M11）。
+> 状态：v1.4（2026-10-10 开工折入，Codfish）。本文取代 `claude/plate-design.md` 中关于版本的规则：8.2 的 release_id 命名（N2）、冻结范围（只收 reviewed）与引用闭包（8v）的写法，以及 8.3 消费方版本规则。冻结、内容寻址、发布闸门的检查项、读取机制沿用原设计，不在本文重复。
+> 姊妹文档：《Release：按版本读取、平台消费与场景适配》（`claude/plate-release-design.md` v4.4，消费侧与适配中心）；《Plate M2：用例 / 框架侧结构反转》（`claude/plate-m2-reversal-design.md` v2.4，`meta.plate` 即 M11）。开发计划：`claude/plate-m2-release-dev-plan.md`。
 > 待定项见第 11 节（已全部收口）。
 >
 > 修订记录
+> - v1.4（2026-10-10）：开工折入（Codfish 指示：新方案不考虑对现状的兼容适配）：3.6 折入可行性评估 B1–B4——发版两步流程与**脏树前置**（`git status --porcelain -- systems/ types/` 为空）、构件根**唯一来源** `PLATE_ARTIFACTS_PATH`（无推导无缺省，现状两处解析随 RS0 删除）、构件分支为**孤儿分支**（M2 步骤 2 前初始化）、中断可重入；2.4 折入 B5——`/lines` 的 `line_scheme` 以线内最新修订为准；§12 代码落点同步。
+> - v1.3（2026-10-10）：C 轮收口（Codfish，可行性评估第 11 节 C1）：3.6 写明构件分支的**两个写入方**——`plate release`（修订对象与 manifest）与 M2 方案的 `gen_m2.py`（M2 信封对象，随 M2 变更提交入库）。M2 对象不以 plate 启动时写入：启动写会在服务的只读构件检出中留下未提交文件，破坏 fast-forward 更新。
+> - v1.2（2026-10-10）：残留收口（Codfish）：构件存放位置定为专用构件分支，与源码分支解耦——此前构件随签发提交落在源码分支上，维护分支发出的修订对 main 检出上的 plate 服务不可见（3.5、3.6、Release 方案 R18）；`line_source: service_version` 补 `line_service` 指定取哪个服务（2.1、2.4）；manifest 增记 `line_scheme` / `line_service`（3.5——plate 服务只见构件，看不到维护分支源树的 frontmatter，而 `/lines` 承诺返回 scheme）；4.2 第二条「生效修订停在变化之前」与可用集合语义矛盾，改为「不会落在结构不同的修订上」（D-5）。
 > - v1.1（2026-10-10）：决策轮收口（Codfish）：L1 定为多模式可配置（新增 2.4）；冻结范围写明 system 进 / defaults 不进（3.1，D-3）；闸门分级补「涉及任一已评审对象即阻塞」与「F3 唯一性不论评审状态一律阻塞」，实现前提（块结束行）记为 RS0 第一项（3.2，D-4）；predecessor「已存在」定义为已发出至少一个修订（3.3）；生效修订与 Suite 交集改「可用集合」语义（4.2、4.4，D-5）；环境承载已定按 B（5）。第 11 节待定项全部收口。
 > - v1.0（2026-10-10）：初稿。
 
@@ -50,18 +53,20 @@ line: "3.2"
 predecessor_line: "3.1"   # 首条版本线可省略
 line_scheme: semver       # 2.4（L1 已定）；缺省 free
 line_source: manual       # 2.4；缺省 manual（另可选 service_version）
+line_service: fin-service # 2.4；line_source: service_version 时必填，其他来源省略
 ---
 ```
 
 - 发版时版本线从源树读出，不由命令行参数指定。
 - 进入下一条版本线 = 修改这两个字段，本身是一次需要评审的变更。
-- `line`、`predecessor_line` 及 2.4 的 `line_scheme` / `line_source`（pattern 口子另加 `line_pattern`）都是知识侧 Frontmatter 的加法字段（P8）。
+- `line`、`predecessor_line` 及 2.4 的 `line_scheme` / `line_source` / `line_service`（pattern 口子另加 `line_pattern`）都是知识侧 Frontmatter 的加法字段（P8）。
 
 ### 2.2 与 git 的关系
 
 - **main 对应最新的版本线**，即正在开发的被测系统版本。
 - **旧版本线的维护在分支上进行**。约定：main 上合入第一个属于下一条版本线的变更（即修改 `line` 的那次变更）之前，先从当前提交拉出该版本线的维护分支，例如 `plate/fin/3.2`。
 - 同一个修正如果几条版本线都需要，用 cherry-pick 同步。内容寻址保证同样的对象在各条线上共享存储。
+- **构件不落在源码分支上**：无论从哪条分支发版，构件统一写入专用构件分支（3.6）——否则 main 检出上的 plate 服务看不到维护分支发出的修订。
 - 一个维护分支只服务一个系统的一条版本线。common 层和 git 分支都是整个仓库共用的，所以在 fin 的维护分支上不得为其他系统发版；第 3.3 节的祖先校验会拦下这种情况。
 
 ### 2.3 顺序与生命周期
@@ -77,10 +82,10 @@ line_source: manual       # 2.4；缺省 manual（另可选 service_version）
 | 项 | 决定 |
 |---|---|
 | 格式 `line_scheme` | 内置 `semver` / `iteration` / `date` / `free`，另加 `pattern`（配合 `line_pattern` 正则）作为自定义口子；缺省 `free` |
-| 来源 `line_source` | 只允许来自源树：`manual`（frontmatter 的 `line` 字段，缺省）或 `service_version`（取 `gimbal:system` 中指定服务的 `version`）；不支持从 git tag 或外部系统取 |
+| 来源 `line_source` | 只允许来自源树：`manual`（frontmatter 的 `line` 字段，缺省）或 `service_version`（取 `gimbal:system` 中 `line_service` 所指服务的 `version`；一个系统可有多个服务，`line_service` 在此来源下必填）；不支持从 git tag 或外部系统取 |
 | 作用范围 | scheme 只影响校验和展示；版本顺序始终由 `predecessor_line` 链决定，模型语义与格式无关 |
 | 单线模式 | 天然支持（持续部署、没有版本的被测系统取 `free` 单线）：所有结构变化表现为线内修正，安全性不变，只是失去「多个版本并存」的能力 |
-| 平台侧 | 只读：`GET /api/system/{id}/lines` 返回版本线时带上 `line_scheme`；环境组里的版本线只能从 plate 已有的版本线中选择，平台不做 scheme 校验 |
+| 平台侧 | 只读：`GET /api/system/{id}/lines` 返回版本线时带上 `line_scheme`；线内 `line_scheme` 以**最新修订**为准（中途改 scheme 走评审，不要求新开版本线，B5）；环境组里的版本线只能从 plate 已有的版本线中选择，平台不做 scheme 校验 |
 | 图形化配置 | 暂不做，随 plate 写入能力（plate-design 8.1 延后项）一并设计。**约束：任何经由界面的写入，都必须产生一次进入评审的变更，不得直接修改 plate 的运行状态**——保证版本线变更可评审、修订沿 git 祖先关系前进、主线流程不被绕开 |
 
 fin / platform 的具体 scheme 选择不阻塞 RS0：RS0 先按 `free + manual` 实现，具体配置在 RS3 前结合两个系统的实际发布节奏确定。
@@ -131,6 +136,7 @@ fin / platform 的具体 scheme 选择不阻塞 RS0：RS0 先按 `free + manual`
 | 字段 | 内容 |
 |---|---|
 | `system`、`line`、`revision` | 定位 |
+| `line_scheme`、`line_service` | 版本线标识的格式与来源配置（2.4）。**必须入 manifest**：plate 服务只从构件装载修订，看不到维护分支源树的 frontmatter，而 `/lines` 接口承诺返回 `line_scheme`（Release 方案 4.3）；`line_source: manual` 时 `line_service` 可省略 |
 | `predecessor_line` | 版本线顺序 |
 | `previous_revision` | 线内上一个修订 |
 | `source_commit` | 3.3 的祖先校验与溯源 |
@@ -145,9 +151,22 @@ fin / platform 的具体 scheme 选择不阻塞 RS0：RS0 先按 `free + manual`
 
 对象文件统一为信封 `{"type": ..., "data": ...}`。不再读取旧格式：至今没有任何正式发版（`plate_artifacts/` 被 `.gitignore` 排除，只有演练时的临时冻结），第一个正式修订直接使用本格式。
 
+**构件不落在源码分支上**：manifest 与对象文件统一写入专用构件分支，存放位置与写入规则见 3.6。
+
 ### 3.6 发版入口
 
 发版只通过 CLI 在 git 工作树中执行（`plate release <系统>`），因为 3.3 需要 git。现有的 HTTP 发版动作（`routes_grammar.py::action_system_release`）删除：它是一项写操作，与 S1「plate 不提供 HTTP 写入」的已定原则不符，也无法做祖先校验。
+
+**构件的存放位置（R18，2026-10-10 残留收口；v1.4 折入 B1–B4 规则）**：构件统一存放在专用的**构件分支**（约定名 `plate/artifacts`），与源码分支解耦——此前「构件随签发提交入库」没有规定入库位置，构件跟着发版所在的源码分支走，维护分支上发出的修订对 main 检出上的 plate 服务不可见，场景声明 `fin@3.2#5` 会得到 `RELEASE_NOT_FOUND`。规则：
+
+- **发版分两步**（B1/B4）：源树变更先经评审入库（PR 合并）；`plate release` 随后在**干净工作树**上执行——`git status --porcelain -- systems/ types/` 须为空，否则拒绝（脏树发版会让 `source_commit` 与冻结内容对不上，溯源与祖先校验都失真）；`source_commit` = 执行时源码分支 HEAD。发版产生的唯一提交是构件分支上的构件提交；中断可重入——对象幂等已落盘，重跑补构件提交。
+- **构件提交**：`plate release` 无论在 main 还是哪条维护分支上执行，都把新增对象与 manifest 提交到构件分支（经临时 worktree 或 git plumbing，不切换源码工作区；提交信息为 `<系统>@<line>#<n>`）。
+- **构件分支的写入方只有两个**：`plate release`（修订对象与 manifest）与 M2 方案的 `gen_m2.py`（M2 信封对象，信封 `type` = `m2`，随 M2 变更的同一提交入库——见 M2 方案 4.1）。除此之外任何流程（包括 plate 服务自身）不得写入构件分支；两个写入方的提交串行，冲突时后到者重试。
+- **构件根的唯一来源是显式配置**（B2）：`PLATE_ARTIFACTS_PATH` 指向构件分支的检出——无推导、无写死缺省，未配置即报错指路配置（与 `PLATE_REPO_ROOT` 同型）。S1.5 规划的「构件目录可配置」即落定于此。现状 CLI 的写死与 `repo_root` 推导两处随 RS0 删除，不作为回退保留。
+- **构件分支为孤儿分支**（B3）：`git checkout --orphan` 创建，不含任何源码历史；初始化与各机检出（`git worktree add`）在 M2 步骤 2 前完成——首个写入方是 M2 信封对象（`gen_m2.py`），早于首个修订。
+- plate 服务**只从构件分支的检出装载修订**：检出的更新 = 对构件分支 fast-forward（时机同 working 重载）。
+- 可行性：对象内容寻址、只追加，不同版本线的构件不会冲突；构件分支永不向任何源码分支合并。发版本就低频，按「仓库内串行发版」约定即可，无需并发协议。
+- 本地演练产物仍写 `plate_artifacts/`（`.gitignore` 继续排除），不进任何分支。
 
 ## 4. 场景侧的版本声明
 
@@ -168,7 +187,7 @@ fin / platform 的具体 scheme 选择不阻塞 RS0：RS0 先按 `free + manual`
 等价表述（已定，D-5）：场景的**可用集合** = 该版本线内、场景用到的接口结构与已验证修订完全相同的全部修订；生效修订 = 可用集合中**最新**的一个。可用集合不一定是连续区间——结构「改了又改回」时，中间那些结构不同的修订不在集合内。
 
 - 只改了评审状态、说明、词条，或新增了与本场景无关的接口的修订，自动生效。
-- 场景用到的某个接口结构发生变化（包括只改 binding），生效修订停在变化之前，平台提示「定义已修正」，由线内修正适配处理（Release 方案 5.2）。
+- 场景用到的某个接口结构发生变化（包括只改 binding）时，生效修订不会落在结构不同的修订上（可用集合语义——结构「改了又改回」时，生效修订可直接越过中间那些结构不同的修订，不停在「变化之前」）；平台提示「定义已修正」，由线内修正适配处理（Release 方案 5.2）。
 - 计算由 plate 提供（Release 方案 4.4），数据只需 manifest 的 `shape_hash` 与场景的接口列表。
 - 解析只在一处发生：平台在入队时解析，并把解析结果作为执行副本的精确修订交给 `/convert`；`/convert` 本身不解析（Release 方案 4.5）。这样单场景与 Suite 使用同一套解析结果。
 
@@ -199,7 +218,7 @@ fin / platform 的具体 scheme 选择不阻塞 RS0：RS0 先按 `free + manual`
 | B | `group_tag` 升级为环境组表，承载各系统部署的版本线 | 语义最清楚；属于新增实体，需单独评估必要性 |
 | C | 只在集成任务上声明期望的版本线 | 最小改动；手动执行时没有依据 |
 
-**已定（2026-10-10，Codfish）：按 B 实现**——环境组表 `environments` 与 `service_aliases.group_tag` → `environment_id` 外键，字段与迁移见 Release 方案 v4.1 第 11 节。环境是本模型中真实存在的概念，分散成字段是妥协。
+**已定（2026-10-10，Codfish）：按 B 实现**——环境组表 `environments` 与 `service_aliases.group_tag` → `environment_id` 外键，字段与迁移见 Release 方案 v4.4 第 11 节（必要性说明见其 13.1 V5 行）。环境是本模型中真实存在的概念，分散成字段是妥协。
 
 ## 6. working 的定位
 
@@ -239,7 +258,7 @@ plate 数据查询的 `ref` 写法：
 | # | 不变量 | 保证方式 |
 |---|---|---|
 | I-1 | plate 发修订不改变任何场景的执行 | 4.2 生效修订规则 |
-| I-2 | 修订不可变 | 内容寻址；构件随签发入库；装载时校验 hash |
+| I-2 | 修订不可变 | 内容寻址；构件随签发提交到构件分支（3.6）；装载时校验 hash |
 | I-3 | 同一版本线的修订沿 git 祖先关系前进 | 3.3 |
 | I-4 | 已评审对象只引用已评审对象 | 3.2 引用闭包 |
 | I-5 | plate 不知道谁在用哪个版本 | 生效修订、入库标准、环境比对所需的计算只依赖 manifest 与调用方传入的信息 |
@@ -261,15 +280,15 @@ plate 数据查询的 `ref` 写法：
 | # | 事项 | 结论 |
 |---|---|---|
 | L1 | 版本线用什么标识 | **已定**：多模式可配置（2.4）——`line_scheme`（semver / iteration / date / free + pattern）、`line_source`（manual / service_version）；缺省 free + manual，RS0 先按缺省实现 |
-| V5 | 环境的版本线声明放在哪里 | **已定**：按 B 环境组表（5；Release 方案 v4.1 第 11、13.1 节） |
+| V5 | 环境的版本线声明放在哪里 | **已定**：按 B 环境组表（5；Release 方案 v4.4 第 11、13.1 节） |
 
 ## 12. 代码落点
 
 | 位置 | 改动 |
 |---|---|
-| `dialect/models.py` Frontmatter | 加 `line`、`predecessor_line`、`line_scheme`、`line_source`（pattern 口子另加 `line_pattern`）——均为加法字段；校验 scheme 合法性与 `service_version` 来源存在 |
+| `dialect/models.py` Frontmatter | 加 `line`、`predecessor_line`、`line_scheme`、`line_source`、`line_service`（pattern 口子另加 `line_pattern`）——均为加法字段；校验 scheme 合法性与 `service_version` 来源存在（此时 `line_service` 必填且须指向 `gimbal:system` 中声明的服务） |
 | `dialect/parser.py` | Block 记录**结束行**——finding 按评审状态分级的实现前提（3.2，RS0 第一项） |
-| `release/release.py` | 冻结范围改为全部通过机械校验的块；闸门阻塞范围按评审状态区分；引用闭包改写；祖先校验；修订编号；manifest 字段（3.5）；`corrections` 计算；对象信封 |
+| `release/release.py` | 冻结范围改为全部通过机械校验的块；闸门阻塞范围按评审状态区分；引用闭包改写；祖先校验；修订编号；manifest 字段（3.5，含 `line_scheme` / `line_service`）；`corrections` 计算；对象信封；构件提交到构件分支 + 脏树检查（3.6）；`artifacts_root` 唯一来源 `PLATE_ARTIFACTS_PATH`（未配置报错；现状 `cli.py` 写死与 `repo_root` 推导两处删除） |
 | `release/` 读取 | 按 `(系统, line, n)` 装载；`<line>` 解析为最新修订；生效修订计算 |
 | `http/routes_grammar.py` | `ref` 的三种写法；删除 HTTP 发版动作；生效修订查询（Release 方案 4.4） |
 | CLI | `plate release <系统>`（版本线取自源树）；`plate lines <系统>`；`plate diff <系统> <a> <b>` |

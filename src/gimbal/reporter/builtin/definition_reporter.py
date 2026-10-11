@@ -19,7 +19,7 @@ from typing import Any
 from gimbal.core.runner import RunResult
 from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
-from gimbal.schema.report_definition import ReportDefinition
+from gimbal.schema import ReportDefinition
 
 logger = get_logger(__name__)
 

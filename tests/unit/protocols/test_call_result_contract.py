@@ -28,9 +28,9 @@ from gimbal.protocols.result import (
     redact_mapping,
     truncate_oversize,
 )
-from gimbal.schema.call import Call
-from gimbal.schema.step import Step
-from gimbal.schema.strategy import AssertOperator, Assertion, Extract, StrategyPhase
+from gimbal.schema import Call
+from gimbal.schema import Step
+from gimbal.schema import AssertOperator, Assertion, Extract, StrategyPhase
 from gimbal.statemachine.engine import StepStateMachine
 from gimbal.statemachine.states import StepState
 from gimbal.strategy.builtin.call import CallExecutor
@@ -133,8 +133,8 @@ class TestDualWriteScratch:
 
     def test_http_call_key_only(self):
         """v2.1 批次 F 定稿：``call`` 是唯一 scratch 证据键（旧键已退役）。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         step = Step(
             call=Call(protocol="http", service="svc", method="POST", path="/o", headers={"X-A": "1"}),
@@ -165,8 +165,8 @@ class TestDualWriteScratch:
 
     def test_new_path_extract_assertion_end_to_end_http(self):
         """新证据路径 ``$.call.response.body.*`` 的 Extract + Assertion 端到端（http）。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         step = Step(
             call=Call(protocol="http", service="svc", method="GET", path="/o"),
@@ -214,8 +214,8 @@ class TestCallBeforePatch:
 
     def test_neutral_hook_patch_modifies_outgoing_request(self):
         """CALL_BEFORE_SEND 钩子原地改写 payload['request']['headers'] 影响真实发送。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         hooks = HookRegistry()
 
@@ -247,8 +247,8 @@ class TestRedactionAndEvidence:
 
     def test_sensitive_headers_redacted_in_evidence(self):
         """Authorization 不进证据出口（CallExchangeEvent）；scratch 存原值（P0-3）。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         bus = InMemoryEventBus()
         got = []
@@ -454,8 +454,8 @@ class TestTransportError:
     def test_http_transport_error_maps_to_error_result(self):
         """传输异常 → ERROR StrategyResult（历史文案 "Request error: ..." 保持）。"""
         import httpx
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         step = Step(call=Call(protocol="http", service="svc", method="GET", path="/p"),
                     request=Request(body={}), strategy=[])
@@ -476,8 +476,8 @@ class TestTransportError:
         StrategyResult.error / CallExchange 不发布）；Debugger 的重发语义
         走 STEP_FAILED 决策的 retry=整步重跑，不再依赖请求侧旧键。"""
         import httpx
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         step = Step(call=Call(protocol="http", service="svc", method="GET", path="/p"),
                     request=Request(body={"b": 1}), strategy=[])
@@ -518,8 +518,8 @@ class TestSummaryCompat:
 
     def test_http_summary_keeps_legacy_format(self):
         """StrategyResult.message 复现历史文案 "HTTP GET url -> 200"。"""
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         step = Step(call=Call(protocol="http", service="svc", method="GET", path="/p"),
                     request=Request(body={}), strategy=[])

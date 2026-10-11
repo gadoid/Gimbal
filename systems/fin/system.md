@@ -1,6 +1,7 @@
 ---
 type: system
 system: fin
+line: "1.0"
 ---
 
 # fin 系统

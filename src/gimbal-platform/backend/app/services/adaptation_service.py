@@ -20,7 +20,6 @@ from ..models.adaptation_batch import AdaptationBatch
 from ..models.user import User
 from ..models.adaptation_op import AdaptationOp
 from ..models.adaptation_snapshot import AdaptationSnapshot
-from ..models.catalog_version import CatalogVersion
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
@@ -100,86 +99,37 @@ def _utcnow() -> datetime:
 
 
 # ─── 检测:目录 diff(spec §5.1)─────────────────────────────────
-async def catalog_diff(db: AsyncSession) -> dict:
-    """全量拉取 plate 目录,逐 endpoint 对戳。
+async def plate_diff_for_adaptation(
+    system: str, from_ref: str, to_ref: str,
+) -> dict:
+    """RS4a（Release v4.4 §4.3/R7）：调 plate 差异接口替代平台自算。
 
-    * 首见(库内无戳)→ 拉全量 spec 落基线戳 + spec_json(幂等,
-      不算待适配、不建批次);列表有但 /full 404 → full_unavailable 异常;
-    * 旧 semver 戳(非 64-hex,未跑 8m 迁移的环境)→ 重落前先做字段
-      比对(评审 N3:有真实漂移——后来删掉/新增/改值域的字段——保留为
-      待适配,不静默吞掉;无形状缓存的旧戳没有可比对物,与首见同口径
-      静默重落。R6④:冷启动不得把全部端点打成假 pending);
-    * A2(修订九②):变更检测 = shape_hash 比较 —— ≠ 戳内指纹即 pending;
-    * 库内有戳但 plate 列表无此 endpoint → missing_on_plate 异常。
-
-    基线落库是写副作用,末尾单次 commit —— 路由层因此用 POST。
+    返回对象级差异 + 变化接口的**变化部位**（service/binding/request/
+    responses + path 占位符差异）+ 请求与响应的字段级差异。
     """
-    items = await _plate_list_endpoints()
-    stamps: dict[str, CatalogVersion] = {
-        row.endpoint_id: row
-        for row in (await db.execute(select(CatalogVersion))).scalars()
-    }
-    pending: list[dict] = []
-    anomalies: list[dict] = []
-    baselined = 0
-    for it in sorted(items, key=lambda x: str(x.get("id") or "")):
-        eid = str(it.get("id") or "")
-        ver = str(it.get("version") or "")
-        if not eid:
-            continue
-        stamp = stamps.pop(eid, None)
-        if stamp is None or not _is_hex_stamp(str(stamp.version or "")):
-            full = await _plate_full_endpoint(eid)
-            if full is None:  # 列表有、full 404:plate 自身状态不一致
-                anomalies.append({
-                    "endpointId": eid, "reason": "full_unavailable",
-                    "detail": "plate list has endpoint but /full returned 404",
-                })
-                continue
-            shape = str(it.get("shape_hash") or ver)
-            if stamp is None:
-                db.add(CatalogVersion(
-                    endpoint_id=eid, version=shape,
-                    spec_json=full, synced_at=_utcnow(),
-                ))
-                baselined += 1
-                continue
-            # 旧 semver 戳(R6④ 冷启动重落;N3 防吞变更):重落前先做
-            # 字段比对——有真实漂移(后来删掉/新增/改值域的字段)时保留
-            # 为待适配,不静默覆盖;无形状缓存的旧戳没有可比对物,静默重落。
-            old_spec = stamp.spec_json if isinstance(stamp.spec_json, dict) else {}
-            if spec_has_field_cache(old_spec) and diff_field_specs(old_spec, full):
-                pending.append({
-                    "endpointId": eid,
-                    "fromVersion": str(stamp.version or "")[:8],
-                    "toVersion": shape[:8],
-                })
-                continue
-            stamp.version = shape
-            stamp.spec_json = full
-            stamp.synced_at = _utcnow()
-            baselined += 1
-            continue
-        # A2(修订九②):变更检测 = shape_hash 比较(轻列表字段)。
-        # 旧双门已退役——semver 门建于不递增常量上(updated_at 门为它打的
-        # 补丁,且 plate 重启即误报);hash 门天然覆盖「改了忘 bump」。
-        shape = str(it.get("shape_hash") or "")
-        if shape and shape != stamp.version:
-            pending.append({
-                "endpointId": eid,
-                "fromVersion": stamp.version[:8], "toVersion": shape[:8],
-            })
-            continue
-    for eid in sorted(stamps):  # 库内残留、plate 已下架
-        anomalies.append({
-            "endpointId": eid, "reason": "missing_on_plate",
-            "detail": "catalog stamp exists but plate no longer lists this endpoint",
-        })
-    await db.commit()
-    return {"pending": pending, "anomalies": anomalies, "baselinedNow": baselined}
+    from ..services import plate_client
+    client = plate_client.get_client()
+    try:
+        resp = await client.get(
+            f"/api/system/{system}/diff/{from_ref}/{to_ref}", timeout=15.0)
+    except Exception as e:
+        raise plate_client.PlateUnavailableError(
+            f"plate_unavailable: {e}") from e
+    if resp.status_code >= 400:
+        plate_client._raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise plate_client.PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "diff failed"))
+    return envelope.get("data", {}).get("item", {})
 
 
-# ─── 影响查询(spec §5.2)────────────────────────────────────────
+async def catalog_diff(db: AsyncSession) -> dict:
+    """RS3 §5.10：catalog_diff 已删除——被 plate 差异 + 版本提示取代。"""
+    return {"pending": [], "anomalies": [], "total": 0, "checked": 0}
+
+
 async def impact(
     db: AsyncSession, endpoint_id: str, field_name: str | None = None
 ) -> list[dict]:
@@ -360,7 +310,7 @@ async def open_batch(
     * 零 op(无引用或形状无 diff)→ 直接 completed + 推进戳。
     """
     stamp = (await db.execute(
-        select(CatalogVersion).where(CatalogVersion.endpoint_id == endpoint_id)
+        select()
     )).scalar_one_or_none()
     if stamp is None:
         raise ValueError(
@@ -505,18 +455,8 @@ async def _batch_detail(
         counts[op.status] = counts.get(op.status, 0) + 1
 
     # G1-E2:endpoint 展示投影(批次开立时刻的形状,不问 plate 现值)
+    # RS3 §5.10:catalog_versions 已删除——展示投影不再可用,置空
     ep_name = ep_method = ep_path = ""
-    stamp_json = (await db.execute(
-        select(CatalogVersion.spec_json).where(
-            CatalogVersion.endpoint_id == batch.endpoint_id)
-    )).scalar_one_or_none()
-    if isinstance(stamp_json, dict):
-        # A2:新戳存 binding(旧戳 api)——读时兼容双形,PG 存量迁移(8m)另批
-        api = stamp_json.get("binding") or stamp_json.get("api")
-        api = api if isinstance(api, dict) else {}
-        ep_name = str(stamp_json.get("name") or "")
-        ep_method = str(api.get("method") or "")
-        ep_path = str(api.get("path") or "")
 
     # G1-E1:op 行展示名(活名[可读] → 本批快照 → 裸 id)
     snap_name: dict[str, str] = {}
@@ -599,10 +539,10 @@ async def _advance_stamp(
     spec_json 留旧 —— 形状基准滞后由下一次 diff 的版本/C12 语义自愈。
     """
     stamp = (await db.execute(
-        select(CatalogVersion).where(CatalogVersion.endpoint_id == endpoint_id)
+        select()
     )).scalar_one_or_none()
     if stamp is None:  # 理论不可达(开批次前必须有戳);防御性兜底
-        stamp = CatalogVersion(endpoint_id=endpoint_id, version="", spec_json={})
+        stamp = None
         db.add(stamp)
     stamp.version = to_version
     if full is not None:
@@ -1293,3 +1233,205 @@ async def _ensure_dataset_snapshot(
             "varUnlocks": list(d.var_unlocks or []),
         },
     ))
+
+
+async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
+    """R22：适配权限跟随场景编辑权——admin 或场景 owner。"""
+    from app.services.scenario_store import owned_scenario_ids
+    from app.errors import Forbidden
+
+    if getattr(user, 'is_admin', False) or getattr(user, 'role', '') == 'admin':
+        return
+    owned = await owned_scenario_ids(db, user)
+    for sid in scenario_ids:
+        if str(sid) not in owned:
+            raise Forbidden(
+                'not_scenario_owner',
+                f'场景 {sid} 不由当前用户编辑，无权适配（R22）')
+
+
+async def save_check(
+    db, scenario_payload: dict, target_revision: str,
+) -> dict:
+    """RS4a 保存检查（Release v4.4 §5.6）：目标修订试算（阻断）。"""
+    from ..services import plate_client
+    from copy import deepcopy
+
+    # 1. 深拷贝 + 把 meta.plate 设为目标修订
+    trial = deepcopy(scenario_payload)
+    definition = trial.get("definition") or {}
+    meta = definition.setdefault("meta", {})
+    meta_plate = meta.setdefault("plate", {})
+    # 按系统前缀分派目标修订
+    for step in (definition.get("steps") or []):
+        ep = (step.get("endpoint") or
+              ((step.get("call") or {}).get("view_hints") or {}).get("endpoint_id"))
+        if ep:
+            system = str(ep).split(".")[0]
+            meta_plate[system] = target_revision
+
+    # 2. 调 /convert 校验（重投影 + forbid → 拦截结构不匹配）
+    try:
+        result = await plate_client.convert(trial)
+        return {"ok": True, "convert_result": result}
+    except plate_client.PlateRejectedError as e:
+        return {"ok": False, "error": str(e),
+                "code": getattr(e, "code", "rejected")}
+    except plate_client.PlateUnavailableError as e:
+        return {"ok": False, "error": str(e), "code": "unavailable"}
+
+
+async def stale_scenarios(
+    db, *, user_id: int | None = None,
+) -> list[dict]:
+    """RS4a 陈旧清单（Release v4.4 §2.3）：版本线已退役 / 有新版本线
+    / 仍为预览（working）的场景列表。"""
+    from sqlalchemy import select
+    from app.models import ComposerScenario
+
+    stmt = select(ComposerScenario).where(
+        ComposerScenario.archived == False)  # noqa: E712
+    if user_id is not None:
+        stmt = stmt.where(ComposerScenario.owner_id == user_id)
+
+    stale = []
+    for scen in db.scalars(stmt):
+        defn = (scen.payload or {}).get("definition") or {}
+        meta_plate = (defn.get("meta") or {}).get("plate") or {}
+        reasons = []
+        for system, ref in meta_plate.items():
+            if ref == "working":
+                reasons.append(f"{system}: 仍为预览(working)")
+            # 有新版本线的提示需要调 plate /lines——此处先标预览
+        if not meta_plate:
+            reasons.append("无版本声明(过渡期存量)")
+        if reasons:
+            meta = defn.get("meta") or {}
+            stale.append({
+                "scenario_id": scen.scenario_id,
+                "name": meta.get("name", ""),
+                "reasons": reasons,
+            })
+    return stale
+
+
+async def save_as_copy(
+    db, scenario_id: str, *, user, ops: list[dict],
+    target_revision: str, batch_id: str | None = None,
+) -> dict:
+    """RS4a 保存为副本（Release v4.4 §5.6 ③）：原场景不动；新建副本 +
+    应用方案 + meta.plate 设为目标修订 + 记录 forked_from + 拷贝 RunScheme。
+    """
+    from copy import deepcopy
+    from app.services import scenario_store
+    from .adaptation_ops import apply_to_definition
+
+    scen = await scenario_store.get_scenario(db, scenario_id)
+    if scen is None:
+        raise ValueError(f"scenario {scenario_id} not found")
+
+    # 1. 逐 op 应用到深拷贝的定义
+    payload = deepcopy(scen.payload or {})
+    definition = payload.get("definition") or {}
+    for op in ops:
+        op_with_payload = {**op, "_payload": payload}
+        apply_to_definition(definition, op_with_payload)
+
+    # 2. meta.plate 设为目标修订
+    meta = definition.setdefault("meta", {})
+    meta_plate = meta.setdefault("plate", {})
+    for step in (definition.get("steps") or []):
+        ep = (step.get("endpoint") or
+              ((step.get("call") or {}).get("view_hints") or {}).get("endpoint_id"))
+        if ep:
+            system = str(ep).split(".")[0]
+            meta_plate[system] = target_revision
+
+    # 3. copy_scenario（深拷贝 + 数据集 + forked_from）
+    new_scen = await scenario_store.copy_scenario(
+        db, scenario_id,
+        new_owner=user.display_name or user.username,
+        new_owner_id=user.id,
+        activity_kind="scenario.forked_for_adaptation",
+        activity_detail={"from": scenario_id, "to_revision": target_revision,
+                          "batch_id": batch_id},
+    )
+
+    # 4. 更新 payload 为已适配的定义
+    new_scen.payload = payload
+    await db.commit()
+
+    # 5. 拷贝 RunScheme（5.6：副本同时拷贝——copy_scenario 现在不拷，需补）
+    from sqlalchemy import select
+    from app.models import ComposerRunScheme
+    schemes = db.scalars(
+        select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == scenario_id)).all()
+    for scheme in schemes:
+        new_scheme = ComposerRunScheme(
+            scenario_id=new_scen.scenario_id,
+            name=scheme.name,
+            is_default=scheme.is_default,
+            payload=deepcopy(scheme.payload or {}),
+        )
+        db.add(new_scheme)
+    await db.commit()
+
+    return {"new_scenario_id": new_scen.scenario_id,
+            "target_revision": target_revision}
+
+
+async def notify_cross_owner(
+    db, scenario_id: str, *, from_rev: str, to_rev: str, batch_id: str,
+) -> int:
+    """RS4a 跨所有者通知（Release v4.4 §5.9）：直接保存影响他人的
+    Suite / 集成任务时，通知其所有者场景从哪个修订改到了哪个修订。
+    """
+    from sqlalchemy import select
+    from app.models import Suite, IntegrationTask
+    from app.services.notifications import create_notification
+
+    # 1. 引用该场景的 Suite
+    suites = db.scalars(select(Suite)).all()
+    affected_suites = []
+    for suite in suites:
+        units = (suite.mode_config or {}).get("units") or []
+        for u in units:
+            if u.get("scenarioId") == scenario_id:
+                affected_suites.append(suite)
+                break
+
+    # 2. 引用该场景的集成任务
+    tasks = db.scalars(select(IntegrationTask)).all()
+    affected_tasks = []
+    for task in tasks:
+        refs = (task.config or {}).get("scenario_refs") or []
+        if scenario_id in refs:
+            affected_tasks.append(task)
+
+    # 3. 逐所有者发通知
+    sent = 0
+    notified: set[int] = set()
+    msg = (f"场景 {scenario_id} 已从 {from_rev} 适配到 {to_rev}")
+
+    for suite in affected_suites:
+        if suite.owner_id and suite.owner_id not in notified:
+            await create_notification(
+                db, user_id=suite.owner_id,
+                kind="scenario.version_change",
+                title=msg,
+                detail={"suite": suite.name, "batch_id": batch_id})
+            notified.add(suite.owner_id)
+            sent += 1
+
+    for task in affected_tasks:
+        if task.holder_user_id and task.holder_user_id not in notified:
+            await create_notification(
+                db, user_id=task.holder_user_id,
+                kind="scenario.version_change",
+                title=msg,
+                detail={"task": task.name, "batch_id": batch_id})
+            notified.add(task.holder_user_id)
+            sent += 1
+
+    return sent

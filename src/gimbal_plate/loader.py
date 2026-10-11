@@ -43,9 +43,9 @@ from gimbal_plate.http.routes_grammar import (
     action_scenario_convert,
     action_system_check,
     action_system_from_service,
+    action_system_resolve,
     action_system_gaps,
     action_system_register,
-    action_system_release,
     action_system_sync,
 )
 from gimbal_plate.http.views import (
@@ -150,10 +150,13 @@ def register_core_dims(reg: PlateRegistry) -> None:
                 # register / sync 已停用（S1-0 B4），保留动作面以返回 410
                 "register": action_system_register,
                 "sync": action_system_sync,
-                # 批次 B：gaps(G6) / check(校验全量) / release(冻结)
+                # 批次 B：gaps(G6) / check(校验全量)。release 动作已删除
+                # (版本模型 3.6):发版只走 CLI(git 祖先校验 + 构件分支提交,
+                # HTTP 写入违反 S1「plate 不提供 HTTP 写入」)。
                 "gaps": action_system_gaps,
                 "check": action_system_check,
-                "release": action_system_release,
+                # Release 4.4:生效修订解析(版本模型 4.2 可用集合语义)
+                "resolve": action_system_resolve,
             },
         ),
     )

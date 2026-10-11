@@ -18,30 +18,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from gimbal_plate.schema.generator import (
-    NowSpec,
-    RandomDecoratedSpec,
-    RandomDecimalSpec,
-    RandomIntSpec,
-    RandomStrSpec,
-    SeqSpec,
-    TimeOffsetSpec,
-    TimestampSpec,
-    UuidSpec,
-)
+# T5.1（M2 §2.1/§7）：生成器 kind 表从 C 类快照读取
+# （executor_ext.json → gimbal ext list --json → gen_m2.py gen --targets ext），
+# 手写镜像 schema/generator.py 已删除。
+from gimbal_plate.selfdescribe.ext_snapshot import generator_kinds as _snapshot_kinds
 
-# kind 清单: 引擎 build_default_registry() 注册的 9 个规范 kind。
-# ``sequence`` 是引擎侧历史别名(SeqSpec 内规范化为 seq),目录只列规范名。
-_KIND_MODELS: dict[str, type] = {
-    "uuid": UuidSpec,
-    "random_str": RandomStrSpec,
-    "random_int": RandomIntSpec,
-    "random_decimal": RandomDecimalSpec,
-    "timestamp": TimestampSpec,
-    "now": NowSpec,
-    "seq": SeqSpec,
-    "random_decorated": RandomDecoratedSpec,
-    "time_offset": TimeOffsetSpec,
+_KIND_SCHEMAS: dict[str, dict] = {
+    g["name"]: g.get("params_schema") or {}
+    for g in _snapshot_kinds()
 }
 
 # kind 元数据: (中文 summary, 说明, 示例 spec)。schema 不编码这三者,
@@ -158,15 +142,15 @@ class _KindDescriptor:
 
 
 def _descriptor_for(kind: str) -> _KindDescriptor | None:
-    model = _KIND_MODELS.get(kind)
-    if model is None:
+    schema = _KIND_SCHEMAS.get(kind)
+    if schema is None:
         return None
     summary, description, example = _KIND_META[kind]
     return _KindDescriptor(
         kind=kind,
         summary=summary,
         description=description,
-        params=_params_from_schema(model.model_json_schema()),
+        params=_params_from_schema(schema),
         example=example,
     )
 
@@ -181,7 +165,7 @@ class GeneratorIndex:
 
     def __init__(self, registry: Any = None) -> None:  # noqa: ARG002
         self._descriptors: dict[str, _KindDescriptor] = {
-            k: d for k in _KIND_MODELS if (d := _descriptor_for(k)) is not None
+            k: d for k in _KIND_SCHEMAS if (d := _descriptor_for(k)) is not None
         }
 
     def list_global(self, *, filters: dict[str, Any] | None = None) -> list[_KindDescriptor]:

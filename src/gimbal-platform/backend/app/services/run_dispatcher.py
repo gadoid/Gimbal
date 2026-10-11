@@ -632,10 +632,20 @@ async def compute_run_fanout(
         await filter_injection_entries(raw_payload, req.injection_entry_ids or [])
     )
     if dangling_ids:
-        logger.warning(
-            "run_dispatcher: dangling injection entries skipped: {}",
-            dangling_ids,
-        )
+        # Release v4.4 §6.3：正式执行悬空注入条目 → 失败（非静默跳过）。
+        # 预览执行（is_preview=True）放行并告警。
+        is_preview = bool(req.debug)
+        if is_preview:
+            logger.warning(
+                "run_dispatcher: dangling injection entries (preview, allowed): {}",
+                dangling_ids,
+            )
+        else:
+            raise Conflict(
+                "dangling_injection_entries",
+                f"正式执行存在悬空注入条目（{len(dangling_ids)} 条）："
+                f"{dangling_ids[:5]}... 请先在编排页修正或移除这些条目",
+            )
 
     # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
     # 数据集 = 隐式空覆盖行(D12 基线语义);rowIndexes 校验对真实行数。
@@ -735,6 +745,8 @@ async def dispatch_run(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
+    # RS3:plate_pins 容器(fanout 内 resolve 写入,dispatch 末尾回填)
+    plate_pins_container: dict[str, str] = {}
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
     (fanout_datasets, injections, selected_entries,
@@ -816,6 +828,8 @@ async def dispatch_run(
         # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
         # setdefault 写穿,不污染快照。
         scenario_snapshot=copy.deepcopy(scen.payload or {}),
+        # RS3：plate_pins 随 fanout 后回填（生效修订在 fanout 内解析）
+        plate_pins=None,
         config_json={
             "runId": run_id,
             "scenarioId": scen.scenario_id,
@@ -898,6 +912,19 @@ async def dispatch_run(
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
     # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
     _eq.ensure_workers()
+    # RS3（Release v4.4 §6.3）：回填 plate_pins（生效修订表）
+    if plate_pins_container:
+        try:
+            from sqlalchemy import update as sa_update
+            await db.execute(
+                sa_update(Execution).where(Execution.id == execution.id)
+                .values(plate_pins=plate_pins_container))
+            await db.commit()
+        except Exception:  # noqa: BLE001 — plate_pins 是台账,失败不阻断
+            import logging
+            logging.getLogger(__name__).warning(
+                'plate_pins 回填失败 (execution=%s)', execution.id)
+
     return RunResponse(runId=run_id, executionId=execution.id)
 
 
@@ -1366,11 +1393,39 @@ async def _fanout(
     # payload(防写穿 ORM 行)后预填一次,compose 内 setdefault 语义
     # 即复用同一值 → 同一行重复输入完全一致。
     scenario_payload = copy.deepcopy(scenario_payload)
-    # 容器解包一次,fill_plate_defaults(就地补 meta)与 build_carry_context
-    # (读 steps)共用 — definition_from_payload 返回的是 payload 内同一
-    # dict 引用,重复解包只是多一次 .get。
+    # M2 步骤 4:fill_plate_defaults 已删除(Q18)——
+    # Meta 只 name 必填(M6),定义即纯 M2,无需补默认值。
     definition = definition_from_payload(scenario_payload)
-    plate_client.fill_plate_defaults(definition)
+
+    # RS3（Release v4.4 §4.4/§6.3）：生效修订解析 + plate_pins 记录
+    # meta.plate = {系统: '<line>#<n>' | 'working'}；入队时调 resolve
+    # 得到各系统生效修订，写入执行副本后 /convert 按原值取修订重投影。
+    meta_plate = (definition.get('meta') or {}).get('plate') or {}
+    plate_pins: dict[str, str] = {}
+    if meta_plate and any(v and v != 'working' for v in meta_plate.values()):
+        # 收集各系统用到的接口（按 endpoint 锚点或 call 协议字段）
+        endpoints_used: dict[str, set[str]] = {}
+        for step in (definition.get('steps') or []):
+            if not isinstance(step, dict):
+                continue
+            ep_id = step.get('endpoint') or                 ((step.get('call') or {}).get('view_hints') or {}).get('endpoint_id')
+            if ep_id:
+                system = str(ep_id).split('.')[0]
+                endpoints_used.setdefault(system, set()).add(str(ep_id))
+        try:
+            resolve_result = await plate_client.resolve(
+                meta_plate,
+                {sys_: sorted(ids) for sys_, ids in endpoints_used.items()})
+            for sys_, info in resolve_result.items():
+                eff = info.get('effective', '')
+                if eff and eff != 'working':
+                    plate_pins_container[sys_] = eff
+                    # 写入执行副本（/convert 按原值取修订）
+                    if sys_ in meta_plate:
+                        meta_plate[sys_] = eff
+        except Exception as exc:  # noqa: BLE001 — plate 不可用时执行失败
+            raise RuntimeError(
+                f'plate_unavailable: 生效修订解析失败: {exc}') from exc
 
     # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
     convert_cache: dict[str, dict] = {}
@@ -1497,6 +1552,8 @@ async def _fanout(
                     # convert_data = {consumer, converted};converted 是
                     # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
                     converted = convert_data.get("converted") or {}
+                    # M2 §5.1:/convert 响应附带的构建身份 → 转交执行器（代际门）
+                    m2_info = convert_data.get("m2") or None
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
                     # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
                     # services 物化(绑定 url > authored;env.baseUrl 补缺层
@@ -1539,7 +1596,8 @@ async def _fanout(
                             # 各占一个实例,不再撞引擎单 run 409
                             result = await server_pool.run_case(
                                 case_path, halt_at=halt_at, n_runs=n_runs,
-                                debug=debug, on_event=_row_on_event)
+                                debug=debug, on_event=_row_on_event,
+                                m2_info=m2_info)
                         else:
                             result = await gimbal_launcher.launch(
                                 case_path,

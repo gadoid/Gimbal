@@ -141,12 +141,15 @@ class ServerSession:
         if self._proc is None:
             raise RuntimeError("ServerSession not started")
         target = json.loads(Path(case_path).read_text(encoding="utf-8"))
-        body: dict[str, Any] = {"target": target, "n_runs": n_runs,
-                                "parallel": parallel}
+        # M10 改形(M2 §2.3):执行参数收进 options
+        options: dict[str, Any] = {"n_runs": n_runs, "parallel": parallel}
         if halt_at is not None:
-            body["halt_at"] = halt_at
+            options["step_to"] = halt_at     # halt_at 并入 step_to
         if debug is not None:
-            body["debug"] = debug
+            options["debug"] = debug
+        body: dict[str, Any] = {"target": target, "options": options}
+        if m2_info is not None:
+            body["m2"] = m2_info            # M2 §5.1 代际门
         to = timeout if timeout is not None else settings.GIMBAL_TIMEOUT_SEC
         counts: "dict[str, Any] | None" = None
         error_text = ""

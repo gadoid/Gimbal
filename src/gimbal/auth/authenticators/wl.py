@@ -4,7 +4,7 @@ import httpx
 from gimbal.auth.authenticator import Authenticator, register_authenticator
 # 导入认证基类 和 装饰器
 from .defaults import DEFAULT_EXPIRES_IN
-from ...schema.auth import AuthSession
+from ..session import AuthSession
 from ...exceptions import AuthError
 from ...log import get_logger
 

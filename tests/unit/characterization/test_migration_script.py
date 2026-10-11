@@ -186,7 +186,7 @@ class TestEndToEndEquivalence:
         assert res.change_count == 1
         # dict → Scenario 模型执行（新路径经引擎跑通 = 迁移语义等价）
         from pydantic import TypeAdapter
-        from gimbal.schema.scenario import RunUnion
+        from gimbal.schema import RunUnion
         scenario = TypeAdapter(RunUnion).validate_python(new_payload)
         engine, *_ = make_engine()
         result = engine.run(scenario)

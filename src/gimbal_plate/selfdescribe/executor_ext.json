@@ -1,0 +1,1074 @@
+[
+  {
+    "table": "strategy",
+    "name": "assertion",
+    "params_schema": {
+      "$defs": {
+        "AssertOperator": {
+          "enum": [
+            "eq",
+            "ne",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "in",
+            "not_in",
+            "contains",
+            "not_contains",
+            "exists",
+            "empty",
+            "length_eq",
+            "schema"
+          ],
+          "title": "AssertOperator",
+          "type": "string"
+        },
+        "FailurePolicy": {
+          "enum": [
+            "abort",
+            "continue",
+            "warn",
+            "retry"
+          ],
+          "title": "FailurePolicy",
+          "type": "string"
+        },
+        "StrategyPhase": {
+          "enum": [
+            "before_request",
+            "after_request",
+            "verifying",
+            "teardown"
+          ],
+          "title": "StrategyPhase",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
+        },
+        "kind": {
+          "const": "assertion",
+          "default": "assertion",
+          "title": "Kind",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "onFailure": {
+          "$ref": "#/$defs/FailurePolicy",
+          "default": "abort"
+        },
+        "operator": {
+          "$ref": "#/$defs/AssertOperator"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "phase": {
+          "$ref": "#/$defs/StrategyPhase",
+          "default": "verifying"
+        },
+        "soft": {
+          "default": false,
+          "title": "Soft",
+          "type": "boolean"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout"
+        }
+      },
+      "required": [
+        "operator",
+        "target"
+      ],
+      "title": "Assertion",
+      "type": "object"
+    }
+  },
+  {
+    "table": "strategy",
+    "name": "assign",
+    "params_schema": {
+      "$defs": {
+        "FailurePolicy": {
+          "enum": [
+            "abort",
+            "continue",
+            "warn",
+            "retry"
+          ],
+          "title": "FailurePolicy",
+          "type": "string"
+        },
+        "Scope": {
+          "enum": [
+            "framework",
+            "suite",
+            "scenario",
+            "step",
+            "request"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "StrategyPhase": {
+          "enum": [
+            "before_request",
+            "after_request",
+            "verifying",
+            "teardown"
+          ],
+          "title": "StrategyPhase",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "assign",
+          "default": "assign",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "onFailure": {
+          "$ref": "#/$defs/FailurePolicy",
+          "default": "abort"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "phase": {
+          "$ref": "#/$defs/StrategyPhase",
+          "default": "before_request"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope",
+          "default": "scenario"
+        },
+        "source": {
+          "title": "Source"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "Assign",
+      "type": "object"
+    }
+  },
+  {
+    "table": "strategy",
+    "name": "extract",
+    "params_schema": {
+      "$defs": {
+        "FailurePolicy": {
+          "enum": [
+            "abort",
+            "continue",
+            "warn",
+            "retry"
+          ],
+          "title": "FailurePolicy",
+          "type": "string"
+        },
+        "Scope": {
+          "enum": [
+            "framework",
+            "suite",
+            "scenario",
+            "step",
+            "request"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "StrategyPhase": {
+          "enum": [
+            "before_request",
+            "after_request",
+            "verifying",
+            "teardown"
+          ],
+          "title": "StrategyPhase",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "expression": {
+          "title": "Expression",
+          "type": "string"
+        },
+        "kind": {
+          "const": "extract",
+          "default": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "onFailure": {
+          "$ref": "#/$defs/FailurePolicy",
+          "default": "abort"
+        },
+        "order": {
+          "default": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "phase": {
+          "$ref": "#/$defs/StrategyPhase",
+          "default": "after_request"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope",
+          "default": "step"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout"
+        }
+      },
+      "required": [
+        "expression",
+        "target"
+      ],
+      "title": "Extract",
+      "type": "object"
+    }
+  },
+  {
+    "table": "strategy",
+    "name": "sleep",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "sleep 的参数模型（编译期校验 / ext 导出）。",
+      "properties": {
+        "seconds": {
+          "default": 1.0,
+          "description": "等待秒数（0-600）",
+          "maximum": 600,
+          "minimum": 0,
+          "title": "Seconds",
+          "type": "number"
+        }
+      },
+      "title": "SleepParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "protocol",
+    "name": "http",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "http 协议 call 字段模型（service/method/path/headers/timeout/user）。",
+      "properties": {
+        "service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "服务键；缺省走 service_base_url",
+          "title": "Service"
+        },
+        "method": {
+          "default": "GET",
+          "description": "HTTP 方法",
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "default": "/",
+          "description": "请求路径（以 / 开头）",
+          "title": "Path",
+          "type": "string"
+        },
+        "path_params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "path 占位符取值（场景自有字段）",
+          "title": "Path Params",
+          "type": "object"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "附加请求头",
+          "title": "Headers",
+          "type": "object"
+        },
+        "timeout": {
+          "default": 30.0,
+          "description": "超时秒数",
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Timeout",
+          "type": "number"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "认证标签；按 AuthRegistry 会话注入头",
+          "title": "User"
+        },
+        "view_hints": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "平台扩展;执行忽略",
+          "title": "View Hints"
+        }
+      },
+      "title": "HttpCallParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "mode",
+    "name": "aggregate",
+    "params_schema": {
+      "description": "aggregate:无依赖并行。parallel 上限由 PlanPolicy 承载,模式自身\n只声明主体列表的编排语义约束(needs 禁用已在 desugar 校验)。",
+      "properties": {},
+      "title": "AggregateModeParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "mode",
+    "name": "chain",
+    "params_schema": {
+      "description": "chain:按声明顺序线性串联;from_node/to_node 切片语义。",
+      "properties": {
+        "from_node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "起始单元 ref(缺省 = 首单元)",
+          "title": "From Node"
+        },
+        "to_node": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "终点单元 ref(缺省 = 末单元)",
+          "title": "To Node"
+        }
+      },
+      "title": "ChainModeParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "mode",
+    "name": "compose",
+    "params_schema": {
+      "description": "compose:显式 needs DAG。依赖关系在 UnitDecl.needs 逐单元声明,\n模式层无可调参数。",
+      "properties": {},
+      "title": "ComposeModeParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "mode",
+    "name": "fanout",
+    "params_schema": {
+      "description": "fanout:首单元为源,其余全部 need 它。",
+      "properties": {},
+      "title": "FanoutModeParams",
+      "type": "object"
+    }
+  },
+  {
+    "table": "plugin",
+    "name": "gimbal-test-report",
+    "params_schema": null,
+    "version": "0.2.0",
+    "capabilities": [
+      "reporter"
+    ],
+    "events": 14,
+    "hooks": 0
+  },
+  {
+    "table": "generator",
+    "name": "uuid",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=uuid：32 位 hex",
+      "properties": {
+        "kind": {
+          "const": "uuid",
+          "default": "uuid",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "UuidSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "random_str",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=random_str：随机字符串",
+      "properties": {
+        "kind": {
+          "const": "random_str",
+          "default": "random_str",
+          "title": "Kind",
+          "type": "string"
+        },
+        "length": {
+          "default": 8,
+          "description": "字符串长度",
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Length",
+          "type": "integer"
+        },
+        "charset": {
+          "default": "alnum",
+          "description": "字符集",
+          "enum": [
+            "alpha",
+            "digit",
+            "alnum"
+          ],
+          "title": "Charset",
+          "type": "string"
+        }
+      },
+      "title": "RandomStrSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "random_int",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=random_int：闭区间整数",
+      "properties": {
+        "kind": {
+          "const": "random_int",
+          "default": "random_int",
+          "title": "Kind",
+          "type": "string"
+        },
+        "min": {
+          "default": 0,
+          "description": "下界（包含）",
+          "title": "Min",
+          "type": "integer"
+        },
+        "max": {
+          "default": 100,
+          "description": "上界（包含）",
+          "title": "Max",
+          "type": "integer"
+        }
+      },
+      "title": "RandomIntSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "random_decimal",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=random_decimal：闭区间小数",
+      "properties": {
+        "kind": {
+          "const": "random_decimal",
+          "default": "random_decimal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "min": {
+          "default": 0.0,
+          "description": "下界",
+          "title": "Min",
+          "type": "number"
+        },
+        "max": {
+          "default": 100.0,
+          "description": "上界",
+          "title": "Max",
+          "type": "number"
+        },
+        "places": {
+          "default": 2,
+          "description": "小数位数",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Places",
+          "type": "integer"
+        }
+      },
+      "title": "RandomDecimalSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "timestamp",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=timestamp：基准时间 + 秒级偏移。",
+      "properties": {
+        "kind": {
+          "const": "timestamp",
+          "default": "timestamp",
+          "title": "Kind",
+          "type": "string"
+        },
+        "format": {
+          "default": "iso",
+          "description": "epoch、iso、compact 或 strftime 格式",
+          "title": "Format",
+          "type": "string"
+        },
+        "offset_seconds": {
+          "default": 0,
+          "description": "相对 base 的偏移（正=未来）",
+          "title": "Offset Seconds",
+          "type": "integer"
+        },
+        "base": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "基准时间；缺省为当前时间",
+          "title": "Base"
+        },
+        "base_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "基准时间的 strptime 格式；缺省自动解析 ISO 或 YYYY-MM-DD HH:MM:SS",
+          "title": "Base Format"
+        }
+      },
+      "title": "TimestampSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "now",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=now：当前时间（无偏移）",
+      "properties": {
+        "kind": {
+          "const": "now",
+          "default": "now",
+          "title": "Kind",
+          "type": "string"
+        },
+        "format": {
+          "default": "iso",
+          "enum": [
+            "epoch",
+            "iso",
+            "compact"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "title": "NowSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "seq",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=seq：自增序号 + 业务前缀",
+      "properties": {
+        "kind": {
+          "const": "seq",
+          "default": "seq",
+          "title": "Kind",
+          "type": "string"
+        },
+        "prefix": {
+          "default": "",
+          "description": "业务前缀，如 'YWDD'",
+          "title": "Prefix",
+          "type": "string"
+        },
+        "width": {
+          "default": 6,
+          "description": "序号位数（不足补 0）",
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        },
+        "start": {
+          "default": 1,
+          "description": "起始值",
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "title": "SeqSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "random_decorated",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=random_decorated：用高基数随机生成器作为内容，前后各加 head/tail，并以 separator 拼接。\n\n用途：例如把一个 random_str 生成为 \"BL-a3kP-CN\"，避免在 body 模板里反复做\n'${var.head}-${var.inner}-${var.tail}' 之类的字符串拼接；以及让\nbl_no / order_no 这类业务编号\"看一眼就能猜到结构\"。\n\n行为：\n  - 若 head / tail 都为空（或未传）→ 等价于 random_str(charset, length)\n  - 否则输出：head + sep + 随机内容 + sep + tail\n  - separator 缺省为空串（直接拼接）；显式传 \"\" 也走同一语义\n\n兼容性：\n  - extra='forbid' 仍然生效\n  - 不传 head/tail → 返回 str，行为退化为普通 random_str",
+      "properties": {
+        "kind": {
+          "const": "random_decorated",
+          "default": "random_decorated",
+          "title": "Kind",
+          "type": "string"
+        },
+        "length": {
+          "default": 8,
+          "description": "随机核心长度",
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Length",
+          "type": "integer"
+        },
+        "charset": {
+          "default": "alnum",
+          "description": "核心字符集",
+          "enum": [
+            "alpha",
+            "digit",
+            "alnum"
+          ],
+          "title": "Charset",
+          "type": "string"
+        },
+        "head": {
+          "default": "",
+          "description": "前置装饰串；可空",
+          "title": "Head",
+          "type": "string"
+        },
+        "tail": {
+          "default": "",
+          "description": "后置装饰串；可空",
+          "title": "Tail",
+          "type": "string"
+        },
+        "separator": {
+          "default": "",
+          "description": "连接符；缺省直接拼接",
+          "title": "Separator",
+          "type": "string"
+        }
+      },
+      "title": "RandomDecoratedSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "generator",
+    "name": "time_offset",
+    "params_schema": {
+      "additionalProperties": false,
+      "description": "kind=time_offset：当前 unix 时间 + 单位化偏移量（输出恒为 int 秒）。\n\n设计目的：\n  - 现存 timestamp(offset_seconds=...) 只支持秒级，且需要心算换算\n  - 新 spec 让用户用业务自然语言写偏移量（30 天 / 2 小时 / 500 毫秒）\n  - 输出固定为 unix 秒（int），不参与字符串格式化\n\n字段语义：\n  - unit        时间单位，含 \"milliseconds\" 以便对接毫秒时间戳（如 JS / 日志）\n  - value       偏移量（int，非零），正数=未来 负数=过去（与 direction 互斥共识方向）\n  - direction   仅作为可读性标识，不影响未来/过去的换算结果\n\nExamples::\n\n    # 30 天后（1755071025 这种 int 秒）\n    {\"kind\":\"time_offset\",\"unit\":\"days\",\"value\":30,\"direction\":\"future\"}\n\n    # 2 小时前\n    {\"kind\":\"time_offset\",\"unit\":\"hours\",\"value\":2,\"direction\":\"past\"}\n\n    # 6 个月后（按日历月，Jan 31 + 6 months = Jul 31）\n    {\"kind\":\"time_offset\",\"unit\":\"months\",\"value\":6,\"direction\":\"future\"}\n\n    # 1 年后（按日历月 = 12 个月，月末日溢出夹到目标月最后一天）\n    {\"kind\":\"time_offset\",\"unit\":\"years\",\"value\":1,\"direction\":\"future\"}\n\n    # 不传 value → 等价于\"现在的 unix 秒\"\n    {\"kind\":\"time_offset\"}",
+      "properties": {
+        "kind": {
+          "const": "time_offset",
+          "default": "time_offset",
+          "title": "Kind",
+          "type": "string"
+        },
+        "unit": {
+          "default": "seconds",
+          "description": "时间单位（含毫秒、月、年）",
+          "enum": [
+            "milliseconds",
+            "seconds",
+            "minutes",
+            "hours",
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "default": 0,
+          "description": "偏移量（int；正数=未来/与 direction 共同描述)",
+          "title": "Value",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "future",
+          "description": "相对 base 的方向标识，仅作可读性，不改 value",
+          "enum": [
+            "future",
+            "past"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "base": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "基准时间；缺省为当前时间",
+          "title": "Base"
+        },
+        "base_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "基准时间的 strptime 格式；缺省自动解析 ISO 或 YYYY-MM-DD HH:MM:SS",
+          "title": "Base Format"
+        }
+      },
+      "title": "TimeOffsetSpec",
+      "type": "object"
+    }
+  },
+  {
+    "table": "event",
+    "name": "call.exchange",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "context.promotion",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "debug.after_input_missing",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "debug.session",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "framework.init",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "framework.teardown",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "gates.evaluated",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "http.request",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "http.response",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "plugin.activated",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "plugin.deactivated",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "plugin.failed",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "run.end",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "run.finished",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "run.meta",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "run.start",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "scenario.end",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "scenario.start",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "step.end",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "step.failed",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "step.start",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "suite.end",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "suite.start",
+    "fields": []
+  },
+  {
+    "table": "event",
+    "name": "variable.promoted",
+    "fields": []
+  }
+]

@@ -36,6 +36,29 @@ export async function fetchPlateSystems(): Promise<string[]> {
   return body.data.items.map((it) => it.id)
 }
 
+/** RS3（Release v4.4 §4.3）：版本线列表条目。 */
+export interface PlateLineInfo {
+  line: string
+  revisions: number
+  latest: string          // "<line>#<n>"
+  line_scheme: string | null
+}
+
+/**
+ * RS3：GET /api/endpoint-catalog/{system}/lines → 版本线列表。
+ * 走平台后端代理（不走 /plate 直连——版本线是平台消费面）。
+ */
+export async function fetchSystemLines(systemId: string): Promise<PlateLineInfo[]> {
+  const token = useAuthStore().accessToken
+  const resp = await fetch(
+    `/api/endpoint-catalog/${encodeURIComponent(systemId)}/lines`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  if (!resp.ok) throw new Error(`lines ${systemId} -> HTTP ${resp.status}`)
+  const body = await resp.json() as { items: PlateLineInfo[] }
+  return body.items
+}
+
 /** plate config 条目(snake_case 原样)。 */
 interface PlateConfigItem {
   setup?: unknown[]

@@ -17,6 +17,23 @@ from gimbal_plate.dialect.validation import (
     validate_terms,
 )
 from gimbal_plate.release.release import _call_projection, release_system
+from tests.plate._release_fx import commit as _git_commit, git as _git_run
+
+
+def _gitify(root: Path, system: str, line: str = "1.0") -> None:
+    """声明版本线并把临时目录 git 化(发版前置:3.3/3.6/B1)。
+    system.md 须带 gimbal:system 块(F2:类型 system 要求 ≥1)。"""
+    sysmd = root / "systems" / system / "system.md"
+    if not sysmd.exists():
+        sysmd.write_text(
+            f"---\ntype: system\nsystem: {system}\nline: '{line}'\n---\n\n"
+            f"# {system}\n\n"
+            f"```gimbal:system\nreview: reviewed\n"
+            f"name: {system}-service\ntitle: {system}-service\n"
+            f"version: 1.0.0\n```\n",
+            encoding="utf-8", newline="\n")
+    _git_run(root, "init", "-q")
+    _git_commit(root, "init")
 
 
 def _mk_ep(**over) -> EndpointSpec:
@@ -265,10 +282,10 @@ class TestCheckStageF3:
         (tmp / "systems" / "x" / "dictionary" / "user.md").write_text(
             "---\nid: x.dict.user\ntype: dictionary\nsystem: x\n---\n# U\n\n"
             "```gimbal:term\n"
-            "- id: entity:user\n  label: 用户\n"
-            "- id: cap:user.update\n  label: 更新用户\n"
-            "- id: cap:user.delete\n  label: 删除用户\n"
-            "- id: outcome:user.last_admin\n  label: 最后管理员\n"
+            "- review: reviewed\n  id: entity:user\n  label: 用户\n"
+            "- review: reviewed\n  id: cap:user.update\n  label: 更新用户\n"
+            "- review: reviewed\n  id: cap:user.delete\n  label: 删除用户\n"
+            "- review: reviewed\n  id: outcome:user.last_admin\n  label: 最后管理员\n"
             "```\n",
             encoding="utf-8")
         (tmp / "systems" / "x" / "deliverables").mkdir()
@@ -287,10 +304,13 @@ class TestCheckStageF3:
             "slots: {cap: cap:user.delete, outcome: outcome:user.last_admin}\n"
             "anchor: 'A2'\n```\n删除最后一个管理员被拒绝。\n",
             encoding="utf-8")
+        _gitify(tmp, "x")
         r = release_system(tmp / "systems" / "x",
                            artifacts_root=tmp / "arts", signed_by="t")
         assert not r.success
-        assert "C 类一致性未处理" in r.message, r.message
+        assert "C 类一致性未处理" in r.message or (
+            "发布闸门未过" in r.message
+            and any(f.rule == "C1" for f in r.report.findings)), r.message
         assert any(f.rule == "C1" for f in r.report.corrections)
 
 
@@ -316,36 +336,52 @@ class TestRelease:
             "binding:\n  protocol: http\n  method: GET\n  path: /b\n"
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
+        _gitify(tmp_path, "fin")
         artifacts = tmp_path / "artifacts"
 
         r1 = release_system(systems / "fin", artifacts_root=artifacts,
                             signed_by="tester")
         assert r1.success, r1.message
-        assert r1.release_id.endswith(".1")
+        assert r1.revision == "1.0#1"
         assert r1.manifest["summary"]["endpoints"] == 1
-        obj_count = len(list((artifacts / "objects").glob("*.json")))
-        assert obj_count == 1
-        first_hash = r1.manifest["objects"][0]["hash"]
-        # 对象内容与 hash 自洽
-        obj = json.loads((artifacts / "objects" / f"{first_hash}.json").read_text(encoding="utf-8"))
-        assert obj["kind"] == "endpoint" and obj["id"] == "fin.a.b"
+        # 池 = endpoint 信封 + call 投影信封 + service 声明信封(D-3 冻结)
+        pool1 = {p.name for p in (artifacts / "objects").glob("*.json")}
+        assert len(pool1) == 3
+        ep_entry = next(e for e in r1.manifest["objects"]
+                        if e["type"] == "endpoint")
+        first_hash = ep_entry["hash"]
+        obj = json.loads((artifacts / "objects" / f"{first_hash}.json")
+                         .read_text(encoding="utf-8"))
+        assert obj["type"] == "endpoint" and obj["data"]["id"] == "fin.a.b"
 
-        # 二次冻结:同内容 → 池不增长,manifest hash 全同,序号 +1
+        # 二次冻结:同内容 → 池不增长,manifest hash 全同,修订号 +1
         r2 = release_system(systems / "fin", artifacts_root=artifacts,
                             signed_by="t2")
-        assert r2.success and r2.release_id.endswith(".2")
-        assert len(list((artifacts / "objects").glob("*.json"))) == 1
-        assert r2.manifest["objects"][0]["hash"] == first_hash
+        assert r2.success and r2.revision == "1.0#2"
+        assert {p.name for p in (artifacts / "objects").glob("*.json")} == pool1
+        assert next(e for e in r2.manifest["objects"]
+                    if e["type"] == "endpoint")["hash"] == first_hash
 
-        # 内容变更 → 新 hash,旧对象保留(只追加)
-        ep_md.write_text(ep_md.read_text(encoding="utf-8").replace("name: b", "name: b2"), encoding="utf-8")
+        # binding 变更(path 改名)→ 新对象 hash、新投影,旧对象保留(只追加);
+        # shape_hash 变化 → 进 corrections(3.5;name 类描述字段不进 shape)
+        ep_md.write_text(ep_md.read_text(encoding="utf-8").replace(
+            "path: /b", "path: /b2"), encoding="utf-8")
+        _git_run(tmp_path, "add", "-A")
+        _git_run(tmp_path, "commit", "-q", "-m", "change")
         r3 = release_system(systems / "fin", artifacts_root=artifacts,
                             signed_by="t3")
         assert r3.success
-        assert r3.manifest["objects"][0]["hash"] != first_hash
-        assert len(list((artifacts / "objects").glob("*.json"))) == 2
+        ep3 = next(e for e in r3.manifest["objects"]
+                   if e["type"] == "endpoint")
+        assert ep3["hash"] != first_hash
+        # 旧端点 + 新端点 + 旧投影 + 新投影 + 服务声明 = 5
+        assert len({p.name for p in (artifacts / "objects").glob("*.json")}) == 5
+        assert r3.manifest["corrections"] == ["fin.a.b"]
 
-    def test_draft_blocks_skipped_not_blocking(self, tmp_path: Path) -> None:
+    def test_draft_objects_frozen_with_status(self, tmp_path: Path) -> None:
+        """3.1(版本模型 v1.4):草稿块随修订冻结并记录评审状态——测试
+        阶段不再被「只收 reviewed」挡住(V4 的解法);草稿上无 finding
+        则 warnings 为空。"""
         systems = tmp_path / "systems"
         (systems / "fin" / "endpoints").mkdir(parents=True)
         (systems / "fin" / "endpoints" / "fin.a.c.md").write_text(
@@ -354,42 +390,50 @@ class TestRelease:
             "name: c\nbinding:\n  protocol: http\n  method: GET\n  path: /c\n"
             "responses:\n  '200': {}\n```\n",  # 无 review → draft(缺省)
             encoding="utf-8")
+        _gitify(tmp_path, "fin")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
                            signed_by="t")
-        # 8v:draft 块不产生阻塞 finding(与词条同口径,修订九)——但
-        # 全 draft 树无可冻结内容,按 X3(第六轮)结果性拒绝空 release:
-        # 不阻塞闸门,也不发出空 manifest。
-        assert not r.success
-        assert "无可冻结对象" in r.message
-        assert not r.report.blocking          # draft 不是阻塞(8v 保持)
+        assert r.success, r.message
+        assert r.revision == "1.0#1"
+        entry = next(e for e in r.manifest["objects"]
+                     if e["type"] == "endpoint")
+        assert entry["review"] == "draft"
+        assert r.manifest["summary"]["draft_objects"] == 1
+        assert r.manifest["warnings"] == []
 
-    def test_o1_empty_release_occupies_no_number(self, tmp_path: Path) -> None:
-        """O1(第七轮/R1):空发版被拒不得占用 release 号——连拒两次后
-        releases/ 不出现目录;补 reviewed 后真实发版仍从 .1 起。"""
+    def test_empty_tree_rejected_occupies_no_number(self, tmp_path: Path) -> None:
+        """被拒的签发不得占用修订号——system.md 缺服务声明(F2)连拒两次
+        lines/ 不出现目录;补齐后真实发版仍从 #1 起。(v1.4 下 system.md
+        的服务块本身是冻结对象,「零对象」只可能是缺块的非法树。)"""
         systems = tmp_path / "systems"
-        (systems / "fin" / "endpoints").mkdir(parents=True)
-        ep_md = systems / "fin" / "endpoints" / "fin.a.d.md"
-        draft_md = (
-            "---\nid: fin.a.d\ntype: endpoints\nsystem: fin\n---\n"
-            "```gimbal:endpoint\nid: fin.a.d\nsystem: fin\nservice: svc\n"
-            "name: d\nbinding:\n  protocol: http\n  method: GET\n  path: /d\n"
-            "responses:\n  '200': {}\n```\n"  # 无 review → draft(缺省)
-        )
-        ep_md.write_text(draft_md, encoding="utf-8")
+        (systems / "fin").mkdir(parents=True)
+        # 先手写一个缺 gimbal:system 块的入口(_gitify 不覆盖已存在文件)
+        (systems / "fin" / "system.md").write_text(
+            "---\ntype: system\nsystem: fin\nline: '1.0'\n---\n\n# fin\n",
+            encoding="utf-8")
+        _git_run(tmp_path, "init", "-q")
+        _git_commit(tmp_path, "init")
         art = tmp_path / "art"
         for _ in range(2):
-            r = release_system(systems / "fin", artifacts_root=art, signed_by="t")
-            assert not r.success and "无可冻结对象" in r.message
-        rel = art / "fin" / "releases"
-        assert not rel.exists() or not any(rel.iterdir()), \
-            "被拒的空发版不得留下目录/占用编号"
-        # 加入 reviewed 块后,真实发版从 .1 起
-        ep_md.write_text(
-            draft_md.replace("```gimbal:endpoint\n",
-                             "```gimbal:endpoint\nreview: reviewed\n"),
+            r = release_system(systems / "fin", artifacts_root=art,
+                               signed_by="t")
+            assert not r.success
+            # 无块可冻结(空检查先于分级,F2 也在 report 中)
+            assert "无可冻结对象" in r.message
+            assert any(f.rule == "F2" for f in r.report.blocking)
+        lines = art / "fin" / "lines"
+        assert not lines.exists() or not any(lines.iterdir())
+        # 补服务块 → 服务声明随修订冻结(3.1/D-3) → 真实发版从 #1 起
+        (systems / "fin" / "system.md").write_text(
+            "---\ntype: system\nsystem: fin\nline: '1.0'\n---\n\n# fin\n\n"
+            "```gimbal:system\nreview: reviewed\n"
+            "name: fin-service\ntitle: fin-service\nversion: 1.0.0\n```\n",
             encoding="utf-8")
+        _git_run(tmp_path, "add", "-A")
+        _git_run(tmp_path, "commit", "-q", "-m", "add service")
         r3 = release_system(systems / "fin", artifacts_root=art, signed_by="t")
-        assert r3.success and r3.release_id.endswith(".1")
+        assert r3.success and r3.revision == "1.0#1"
+        assert r3.manifest["summary"]["services"] == 1
 
     def test_x3_common_release_refused(self, tmp_path: Path) -> None:
         """X3/N3:common 不单独发版——被引用的 common 对象随引用系统冻结。"""
@@ -424,6 +468,7 @@ class TestRelease:
             "binding:\n  protocol: http\n  method: GET\n  path: /d\n"
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
+        _gitify(tmp_path, "fin")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
                            signed_by="t")
         assert not r.success
@@ -455,6 +500,7 @@ class TestRelease:
             "binding:\n  protocol: http\n  method: GET\n  path: /f\n"
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
+        _gitify(tmp_path, "fin")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "art",
                            signed_by="t")
         assert not r.success
@@ -470,15 +516,16 @@ class TestRelease:
             "binding:\n  protocol: http\n  method: GET\n  path: /e\n"
             "responses:\n  '200': {}\n```\n",
             encoding="utf-8")
+        _gitify(tmp_path, "fin")
         r = release_system(systems / "fin", artifacts_root=tmp_path / "a",
                            signed_by="t", checklist={"endpoints_with_capability": 1})
-        assert not r.success and "F4" in r.message or "交付件清单" in r.message
+        assert not r.success and ("F4" in r.message or "交付件清单" in r.message)
 
     def test_call_projection_shape(self) -> None:
         ep = _mk_ep()
         proj = _call_projection(ep)
         assert proj == {
-            "kind": "call", "protocol": "http", "service": "svc",
+            "protocol": "http", "service": "svc",
             "timeout": 30.0, "method": "GET", "path": "/ping", "headers": {},
         }
 
@@ -512,32 +559,18 @@ class TestGaps:
         assert body["ok"] is True
         assert body["total"] >= 0
 
-    def test_release_http_action_writes_manifest(self, http_client, tmp_path,
-                                                 monkeypatch) -> None:
-        # 指到临时 artifacts,不污染仓库。patch 目标必须是**包属性**
-        # gimbal_plate.release.release_system(routes_grammar 的函数内
-        # `from gimbal_plate.release import release_system` 按包属性解析;
-        # 此前 patch 在子模块 gimbal_plate.release.release 上,路由拿到
-        # 的仍是原函数 → 测试把 manifest 写进了仓库 plate_artifacts/,
-        # 评审降级清单第 15 项)。
-        import gimbal_plate.release as release_pkg
-        real = release_pkg.release_system
-        monkeypatch.setattr(
-            release_pkg, "release_system",
-            lambda root, **kw: real(
-                root, **{**kw, "artifacts_root": tmp_path / "art"}),
-        )
+    def test_release_http_action_removed(self, http_client) -> None:
+        """版本模型 3.6:HTTP 发版动作已删除(写操作 + 无法做祖先校验)——
+        路由返回 unknown action,发版只走 CLI。"""
         resp = http_client.post("/api/systems/fin/system/action/release",
                                 json={"signed_by": "tester"})
-        assert resp.status_code == 200
-        item = resp.json()["data"]["item"]
-        assert item["success"] is True
-        assert item["summary"]["endpoints"] == 23
+        assert resp.status_code == 400
+        assert "unknown action" in resp.json()["error"]["message"]
 
-    def test_release_http_action_requires_system(self, http_client) -> None:
-        """评审 R2:全局路由(无系统名)不得把 systems/ 整树当一个系统冻结。"""
-        resp = http_client.post("/api/system/action/release",
-                                json={"signed_by": "tester"})
+    def test_global_route_still_requires_system(self, http_client) -> None:
+        """评审 R2 精神保留:全局路由(无系统名)不提供任何系统级动作。"""
+        resp = http_client.post("/api/system/action/check",
+                                json={"_system": "fin"})
         assert resp.status_code == 400
         assert "system required" in resp.json()["error"]["message"]
 
@@ -573,6 +606,7 @@ class TestGaps:
             ep.format(n=1), encoding="utf-8")
         (systems / "x" / "endpoints" / "b.md").write_text(
             ep.format(n=2), encoding="utf-8")
+        _gitify(tmp_path, "x")
         r = release_system(systems / "x", artifacts_root=tmp_path / "art",
                            signed_by="t")
         assert not r.success

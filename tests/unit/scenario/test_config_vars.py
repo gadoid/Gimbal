@@ -2,7 +2,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from gimbal.schema.scenario import Config
+from gimbal.schema import Config
 
 
 def test_config_vars_default_empty():

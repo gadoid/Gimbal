@@ -93,6 +93,32 @@ class CallExecutor(ProtocolExecutor):
             )
         method = getattr(call, "method", "GET")
         path = getattr(call, "path", "/")
+        # RS2/R5b（Release 4.6）：{name} 占位符代入——模板归 binding（随
+        # 修订版本化），值归场景（path_params）；缺键报 PATH_PARAM_MISSING。
+        path_params = dict(getattr(call, "path_params", None) or {})
+        if path_params:
+            import re as _re
+
+            class _Missing(Exception):
+                pass
+
+            def _sub(m) -> str:
+                key = m.group(1)
+                if key not in path_params:
+                    raise _Missing(
+                        f"path 占位符 {{{key}}} 缺 path_params 取值"
+                        f"（PATH_PARAM_MISSING, path={path!r}）")
+                return str(path_params[key])
+
+            try:
+                path = _re.sub(r"\{([^{}]+)\}", _sub, path)
+            except _Missing as e:
+                logger.error("[SM {}] {}", getattr(pctx, "step_id", "?"), e)
+                return StrategyResult(
+                    status=StrategyStatus.ERROR,
+                    strategy_id="http_call",
+                    message=str(e),
+                )
         headers = dict(getattr(call, "headers", None) or {})
         timeout = float(getattr(call, "timeout", 30) or 30)
         # 默认 body 来自 step.request.body（状态机经 pctx.request_body 传入；

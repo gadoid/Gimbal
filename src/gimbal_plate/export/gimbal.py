@@ -238,15 +238,7 @@ class GimbalScenarioExporter(ScenarioExporter):
     def to_dict(self) -> dict[str, Any]:
         """整 scenario → gimbal 可执行 dict(向后兼容入口)。
 
-        通过 model_dump(exclude=...) 过滤掉平台视图扩展字段
-        (PLATE_V3_DESIGN.md §7.3.2):
-        - Scenario 顶层: endpoints / navigation / config_summary
-        - steps[*].api: view_hints
-        - steps[*]: field_states(字段状态目录增量 — 编辑器覆盖键,
-          gimbal 引擎 Step 模型 extra="forbid" 拒收;carry 物化用的
-          解析面在 convert 前 / 平台侧已消费,导出物不再需要它)
-        - steps[*].request: fields_meta
-        - steps[*].strategy[*]: view_note
+        M2 步骤 4 切换后定义即纯 M2(M4/M5),无需剥离平台视图字段。
         """
         return self.render(self.scenario, endpoints=None)
 
@@ -269,24 +261,10 @@ class GimbalScenarioExporter(ScenarioExporter):
         # set 字面量不能与 dict 字面量混用,所以全部用 dict 表达。
         # 顶层 3 个字段用 {"name": True} 的形式(Pydantic 把 value 当 bool/None,
         # 仍视为排除字段),嵌套层用 dict-of-dict。
-        exclude: dict[str, Any] = {
-            "endpoints": True,
-            "navigation": True,
-            "config_summary": True,
-            "steps": {
-                "__all__": {
-                    "call": {"view_hints": True},
-                    # field_states 是编辑器的状态覆盖键(09-05 字段状态
-                    # 目录):gimbal 引擎 Step 模型 extra="forbid",带出即
-                    # 拒载。carry 物化的面解析(platform 视图渲染/平台侧
-                    # build_carry_context)都发生在 dump 之前,导出物无需
-                    # 再携带(2026-09-14 导出泄漏修复)。
-                    "field_states": True,
-                    "request": {"fields_meta": True},
-                    "strategy": {"__all__": {"view_note": True}},
-                }
-            },
-        }
+        # M2 步骤 4 切换:定义已为纯 M2(M4/M5——平台扩展字段
+        # field_states/view_hints/fields_meta/view_note 不在模型上),
+        # exclude 清单清零,直接 dump。
+        exclude: dict[str, Any] = {}
         out = scenario.model_dump(
             mode="json", exclude_none=True, exclude=exclude
         )

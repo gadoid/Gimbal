@@ -12,7 +12,7 @@ from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
-    from gimbal.schema.strategy import StrategyBase
+    from gimbal.schema import StrategyBase
 
 
 class StrategyStatus(str, Enum):

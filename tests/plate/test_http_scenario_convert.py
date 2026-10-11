@@ -4,13 +4,13 @@
 声明式 dispatch() 暴露到 HTTP 层:
 
     POST /api/scenario/action/convert
-    body: {"consumer": "gimbal" | "platform", "scenario": {...}, ...}
+    body: {"consumer": "gimbal"", "scenario": {...}, ...}
 
 两步处理:
     1. 对象化:Scenario.model_validate(raw_scenario) —— 字段缺失/类型错误
        直接 400 invalid_action。
     2. 转换:交给 export.dispatch(consumer, scenario, **kwargs),复用现成的
-       GimbalScenarioExporter / PlatformScenarioExporter。
+       GimbalScenarioExporter。
 
 本文件覆盖:
     - 端点路由可达 + response shape 正确
@@ -96,36 +96,6 @@ def test_convert_gimbal_default_consumer(client: TestClient) -> None:
     assert "scenarioId" in body["data"]["converted"]
 
 
-def test_convert_platform_default_sections(client: TestClient) -> None:
-    """``consumer=platform`` 默认 sections = 全选,返回 endpoints/navigation/config_summary。"""
-    payload = {"consumer": "platform", "scenario": _load_scenario_dict()}
-
-    resp = client.post("/api/scenario/action/convert", json=payload)
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["data"]["consumer"] == "platform"
-    converted = body["data"]["converted"]
-    assert "endpoints" in converted
-    assert "navigation" in converted
-    assert "config_summary" in converted
-
-
-def test_convert_platform_with_endpoints_kwarg(client: TestClient) -> None:
-    """``endpoints=[]`` 显式传空列表应当被接受(平台渲染视图空集)。"""
-    payload = {
-        "consumer": "platform",
-        "scenario": _load_scenario_dict(),
-        "endpoints": [],
-    }
-
-    resp = client.post("/api/scenario/action/convert", json=payload)
-
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["data"]["converted"]["endpoints"] == []
-
-
-# ── Error: missing required field ─────────────────────────────────
 
 
 def test_convert_missing_scenario_returns_400(client: TestClient) -> None:
@@ -217,23 +187,6 @@ def test_convert_gimbal_with_endpoints_kwarg_returns_400(client: TestClient) -> 
     assert "endpoints" in body["error"]["message"]
 
 
-def test_convert_platform_invalid_section_returns_400(client: TestClient) -> None:
-    """``platform`` consumer 收到非法 section 名 → Pydantic Literal 校验失败 → 400。"""
-    payload = {
-        "consumer": "platform",
-        "scenario": _load_scenario_dict(),
-        "sections": ["bogus"],
-    }
-
-    resp = client.post("/api/scenario/action/convert", json=payload)
-
-    assert resp.status_code == 400, resp.text
-    body = resp.json()
-    assert body["error"]["code"] == "invalid_action"
-
-
-# ── 路由可达性 / 路由注册顺序 ──────────────────────────────────────
-
 
 def test_convert_route_exists_and_matches_dim_node_action(client: TestClient) -> None:
     """确认这个路由是 dim-node action(无 {id} 段),不会撞到 ``/api/scenario/{id}``。
@@ -322,7 +275,7 @@ def test_convert_does_not_bypass_direct_exporter(client: TestClient) -> None:
 
 
 def test_convert_rejects_api_form_steps(client: TestClient) -> None:
-    """api 形态步骤输入 → 400,错误信息指向迁移路径(不静默丢弃)。"""
+    """api 形态步骤输入 → 400,M2 forbid 拒收(旧 api 形态须先经迁移脚本)。"""
     raw = _load_scenario_dict()
     raw["steps"] = [{
         "kind": "step",
@@ -333,13 +286,6 @@ def test_convert_rejects_api_form_steps(client: TestClient) -> None:
     resp = client.post("/api/scenario/action/convert",
                        json={"consumer": "gimbal", "scenario": raw})
     assert resp.status_code == 400, resp.text
-    assert "api" in resp.text and "migrate_legacy_case" in resp.text
+    assert "api" in resp.text and "extra_forbidden" in resp.text
 
 
-def test_convert_platform_steps_render_call(client: TestClient) -> None:
-    """platform 视图步骤渲染 call(不再有 api 字典)。"""
-    payload = {"consumer": "platform", "scenario": _load_scenario_dict()}
-    resp = client.post("/api/scenario/action/convert", json=payload)
-    assert resp.status_code == 200, resp.text
-    steps = resp.json()["data"]["converted"]["steps"]
-    assert steps and all("call" in st and "api" not in st for st in steps)

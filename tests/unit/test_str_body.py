@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 import unittest
 from typing import Any
 
-from gimbal.schema.request import Request
+from gimbal.schema import Request
 
 
 class _StubChannels:

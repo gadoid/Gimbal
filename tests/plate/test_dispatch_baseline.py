@@ -3,7 +3,7 @@
 A/B 对拍收口结论:切换时点存量值表(旧面键集 × 确定性合成值)下,
 旧树(HEAD,channel 时代)与新树(字段状态目录)六段全等 ——
 endpoints / carry_faces(793)/ carry_injected / convert_gimbal /
-convert_platform / exports。本测试把该终态钉为基线:经 importlib 加载
+gimbal consumer。本测试把该终态钉为基线:经 importlib 加载
 tools/ab_dispatch_dump.py 的 build_dump(生成算法单一真源,测试与
 CLI 不漂移),以 fixture 自带的 carry_values 值表重生成,逐段全等比对。
 

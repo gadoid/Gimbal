@@ -1,11 +1,12 @@
-# Plate M2：用例 / 框架侧结构反转——设计与实现方案（v2.3）
+# Plate M2：用例 / 框架侧结构反转——设计与实现方案（v2.4）
 
 > 日期：2026-10-10　基线：`feat/plate-s1` @ `87e8a1a`
-> 状态：定稿（v2.3 勘误后）。第 11 节决策全部收口（Q4 定为流程，结论待步骤 0 的数据）；Q18、Q19 随 v2.2 加入；v2.3 勘误见修订记录。附录 B 为功能点承接核对表。
-> 姊妹文档：《Release 设计与实现方案》（`claude/plate-release-design.md`，v4.1）。两份文档的接口点见第 12 节。
+> 状态：定稿（v2.4 C 轮收口后）。第 11 节决策全部收口（Q4 定为流程，结论待步骤 0 的数据）；Q18、Q19 随 v2.2 加入；v2.3 勘误、v2.4 收口见修订记录。附录 B 为功能点承接核对表。
+> 姊妹文档：《Release 设计与实现方案》（`claude/plate-release-design.md`，v4.4）。两份文档的接口点见第 12 节。
 > 关联：`claude/plate-design.md`（第 2、3、7.1、8.3、11 节）；`GIMBAL-待实现功能与路线图-2026-09-28.md`（2.6 F1–F5、P6、待拍板第 3 项）；`GIMBAL执行能力功能点与归属.md`（D1–D3、E6）；`GIMBAL 执行器重构方案 v2.md`（schema 目录表、「plate 同步」一节）。可行性与实测：`claude/plate-m2-release-feasibility.md`。
 >
 > 修订记录
+> - v2.4（2026-10-10）：C 轮收口（可行性评估第 11 节 C1）：4.1 M2 信封对象的入库时机由「plate 启动时写入对象池」改为「`gen_m2.py` 随 M2 变更提交到构件分支」——启动写会在服务的只读构件检出中留下未提交文件，破坏 fast-forward 更新（构件分支的写入方共两个，见版本模型 v1.3 3.6）；9.4 `gen` 子命令、9.5 `/api/m2/{hash}` 查找顺序、10 步骤 2 随之改写。
 > - v2.3（2026-10-10）：勘误与放行轮：9.2 UserCredential 补 `refresh_token`（执行器 `auth.py:66` 与平台两侧都有；平台物化今天只下发五字段，`run_materialize._apply_users`）；M3 证据链的 endpoint 列在 `execution_events`（`models/execution.py:178`）而非 `execution_rows`；2.3 的 `RunsRequest` 清单复核无误（实无 `step_to`，`core/server.py:77`——RunOptions 的 `step_to` 为新增，取代 `halt_at`）；补记 plate 副本 Scope 取值级漂移（`SESSION="session"` vs 执行器 `SUITE="suite"`，深于 M8/M9，步骤 0 预检须列出 `scope: session` 存量）；**step 分支表达力验证通过（2026-10-10，D-1：Step/Strategy 结构无需改动，`claude/plate-step-branch-expressiveness.md`），步骤 1 定义就此定稿**。
 > - v2.2（2026-10-10）：随《Plate 版本模型》与 Release 方案 v4.0 修订。M11 取值改为精确修订（`<line>#<n>`）。按「不为兼容放弃更好的设计」拆除两处兼容设计：平台元数据不再写入定义、取消提交投影（M4、6、8、9.6，Q18）；执行器 schema 子模块不再保留为重导出，import 统一改写（9.1，Q19）。Q12、Q14 标为欠账。
 > - v2.1（2026-10-10）：随 Release 方案 v3.1 清理：压缩修订记录；切换窗口的批次约束按新的适配批次模型表述。
@@ -147,7 +148,7 @@ pydantic，封闭，带描述       内容寻址，m2_hash  ├─────�
 ### 4.1 各形态的职责
 
 - **定义形态**（plate，pydantic）：唯一可编辑的 M2 真源。plate 用它校验 `gimbal:defaults` 块与 `/convert` 输入。Markdown 只承载 M1 实例（已定）。
-- **交换形态**（JSON Schema）：从定义形态导出的消费投影，语言中立、内容寻址（`m2_hash`，规范序列化后计算）。入库一份当前版本（`gimbal_plate/selfdescribe/m2.schema.json`）供各消费方构建期使用；同时写入全局对象池（信封 `type` = `m2`）以便按 hash 取历史版本。写入时机：plate 启动时写入当前 M2（内容寻址、幂等），而不是只在 release 冻结时写——否则从未伴随过 release 的 M2 版本，即使出现在执行记录的 `m2_hash` 中，也无法经 `/api/m2/{hash}` 取回。
+- **交换形态**（JSON Schema）：从定义形态导出的消费投影，语言中立、内容寻址（`m2_hash`，规范序列化后计算）。入库一份当前版本（`gimbal_plate/selfdescribe/m2.schema.json`）供各消费方构建期使用；同时写入全局对象池（信封 `type` = `m2`）以便按 hash 取历史版本。写入时机（v2.4，C1）：**随 M2 变更提交入库——`gen_m2.py` 在生成运行形态的同一流程里把信封对象提交到构件分支**（版本模型 3.6：构件分支写入方只有 `plate release` 与 `gen_m2.py` 两个）。**不在 plate 启动时写**：启动写会在服务的只读构件检出中留下未提交文件，破坏检出的 fast-forward 更新。这样每个曾出现在执行记录 `m2_hash` 中的 M2 版本（含从未伴随过 release 的）都已在构件分支上，`/api/m2/{hash}` 可取回；plate 启动只登记进程内索引（当前 hash → schema）。
 - **运行形态**（各消费方生成物）：构建期生成、提交入库、文件头记录来源 `m2_hash`、禁止手改。执行器、平台后端、前端各一份，三者互不 import。
 
 **M2 的变更流程**：M2 是代码，走普通代码评审（不走 M1 的「编写 → 评审 → 入库」）。改 plate 定义形态 → 运行 `scripts/gen_m2.py` 重新导出并生成三份运行形态与 C 类快照 → 同一提交入库。CI 的漂移守卫在任一份未重新生成时失败，兼容性检查在不兼容变更未递增代际时失败。
@@ -391,7 +392,7 @@ def export_m2() -> M2Export: ...
 
 | 子命令 | 作用 |
 |---|---|
-| `gen` | 调 `export_m2()` → 写 `m2.schema.json` → 生成执行器、平台后端、前端三份运行形态（文件头写 `m2_hash` / `m2_generation`、「生成文件，禁止手改」）→ 运行 `gimbal ext list --json` 写 `executor_ext.json` |
+| `gen` | 调 `export_m2()` → 写 `m2.schema.json` → 生成执行器、平台后端、前端三份运行形态（文件头写 `m2_hash` / `m2_generation`、「生成文件，禁止手改」）→ 运行 `gimbal ext list --json` 写 `executor_ext.json` → 把 `type=m2` 信封对象提交到构件分支（4.1；构件分支须先于步骤 2 初始化，创建方式见可行性评估 B3，建议孤儿分支） |
 | `check` | 在临时目录重做一遍 `gen`，与入库文件逐字节比对；任一不同即非零退出（漂移守卫） |
 | `compat --base <git ref>` | 取基线提交的 `m2.schema.json` 与当前比对；出现不兼容变化而 `M2_GENERATION` 未递增时非零退出 |
 
@@ -402,7 +403,7 @@ def export_m2() -> M2Export: ...
 | 接口 | 返回 |
 |---|---|
 | `GET /api/m2` | `{schema, m2_hash, m2_generation}`（当前） |
-| `GET /api/m2/{m2_hash}` | 历史版本的 Schema（从对象池读；不存在 404 `M2_NOT_FOUND`） |
+| `GET /api/m2/{m2_hash}` | 历史版本的 Schema（查找顺序：进程内当前索引 → 构件分支检出；不存在 404 `M2_NOT_FOUND`） |
 | `GET /api/ext` | C 类快照全文（strategy / protocol / mode / plugin / generator / event / param_registry 七张表） |
 | `POST /api/scenario/action/convert` | 原有接口；响应 `data` 新增 `m2: {hash, generation}` |
 
@@ -440,7 +441,7 @@ def export_m2() -> M2Export: ...
 |---|---|---|---|
 | 0 存量预检 | 导出第 8 节所列全部「迁移」项，按「修正后的 M2 + forbid」做只读校验，列出未知字段、缺失字段与不合法值；并列出 `scope: session` 的存量策略（Scope 取值级漂移，见第 0 节） | 清单经评审，每类问题有迁移规则或确认可丢弃；导出同时作为步骤 2 的验收语料 | 小 |
 | 1 定义形态 | 在 `schema/_next/` 并行建立新 A / B 类定义，落实第 3 节修正，含 RunOptions、UserCredential（前置已满足：step 分支表达力验证通过，2026-10-10，无需改结构） | 新定义导出的 Schema 与执行器现模型逐项比对，差异只允许是第 3 节列出的修正 | 中 |
-| 2 交换形态 | `export_m2`（E1–E7、`m2_hash`）；对象池写入；`gen_m2.py`；CI 两步；框架 dim | 步骤 0 语料往返对象级一致（扣除已定迁移项）；`compat` 能拦住一次故意的不兼容改动 | 中 |
+| 2 交换形态 | `export_m2`（E1–E7、`m2_hash`）；M2 信封对象经 `gen_m2.py` 提交到构件分支（4.1；构件分支先于本步骤初始化，见可行性评估 B3）；`gen_m2.py`；CI 两步；框架 dim | 步骤 0 语料往返对象级一致（扣除已定迁移项）；`compat` 能拦住一次故意的不兼容改动；`gen` 之后构件分支上能按 hash 取回当前 M2 信封对象 | 中 |
 | 3 生成物 | 执行器、平台后端、前端三份生成物（执行器 import 改为从 `gimbal.schema` 导入，子模块删除）；执行器迁出行为与辅助、拆 AuthSession、代际门；`ext list` 补两张表；调用边界标签改读 `step.endpoint` 的代码可先合入，随 M3 在窗口内生效 | 三侧全量测试零回归；任一侧生成物与定义不一致时 CI 失败 | 中 |
 | 4 切换窗口 | `_next` 替换原定义；`/convert` 与 `gimbal:defaults` 改用新定义；第 8 节数据迁移；平台存储与提交均为纯 M2（M4 迁移、`fill_plate_defaults` 删除）、转交 m2 信息、RunOptions 落地；`/runs` 改形；`/run` 删除 | 三侧全量测试零回归；真实 SUT 浏览器验收（编排 → 执行 → 调试 → Suite → 适配中心回滚）；迁移脚本二次演练结果一致 | 大 |
 | 5 清理 | 删除旧副本、`export/platform.py`、field_states 两处镜像、generator 镜像、手写 TS 类型、平台手写镜像；director skill 改读接口；JSONPath 对拍测试；恒真契约测试改为字段级对拍 | 第 7 节镜像清单清零 | 中 |

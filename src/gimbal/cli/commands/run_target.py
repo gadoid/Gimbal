@@ -22,7 +22,7 @@ from gimbal.cli.commands.run_launch import InputError, normalize_input
 from gimbal.core.bootstrap import bootstrap, shutdown
 from gimbal.core.runner import Engine
 from gimbal.log import get_logger
-from gimbal.schema.scenario import RunUnion
+from gimbal.schema import RunUnion
 
 logger = get_logger(__name__)
 

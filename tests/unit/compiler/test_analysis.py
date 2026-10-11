@@ -13,11 +13,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 from gimbal.compiler.analysis import analyze_scenario
 from gimbal.compiler.pipeline import compile_target
-from gimbal.schema.call import Call
-from gimbal.schema.scenario import (
+from gimbal.schema import Call
+from gimbal.schema import (
     Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl,
 )
-from gimbal.schema.step import Step
+from gimbal.schema import Step
 
 
 def _scenario(steps, vars=None, sid: str = "sc-a") -> Scenario:

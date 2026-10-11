@@ -99,9 +99,9 @@ class TestJsonlSink:
         from gimbal.core.bootstrap import bootstrap, shutdown
         from gimbal.cli.context import CLIContext
         from gimbal.core.runner import Engine
-        from gimbal.schema.scenario import Config as SC, Meta, Scenario
-        from gimbal.schema.step import Step
-        from gimbal.schema.call import Call
+        from gimbal.schema import Config as SC, Meta, Scenario
+        from gimbal.schema import Step
+        from gimbal.schema import Call
         from datetime import datetime, timezone
 
         ictx = bootstrap(CLIContext())

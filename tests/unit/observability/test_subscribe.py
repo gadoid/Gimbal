@@ -168,9 +168,9 @@ def _echo_engine_and_run(tmp_path, spec_provider):
     from gimbal.plugins import PluginRegistry
     from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor
     from gimbal.protocols.result import CallResult
-    from gimbal.schema.call import Call
-    from gimbal.schema.scenario import Config as SC, Meta, Scenario
-    from gimbal.schema.step import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Config as SC, Meta, Scenario
+    from gimbal.schema import Step
     from gimbal.strategy.dispatcher import build_default_dispatcher
 
     class Echo(ProtocolExecutor):
@@ -258,9 +258,9 @@ class TestThreeEntryParity:
         from gimbal.plugins import PluginRegistry
         from gimbal.protocols.base import ProtocolExecutor
         from gimbal.schema.plan import PlanPolicy
-        from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
-        from gimbal.schema.step import Step
-        from gimbal.schema.call import Call
+        from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
+        from gimbal.schema import Step
+        from gimbal.schema import Call
         from gimbal.strategy.dispatcher import build_default_dispatcher
 
         class Echo(ProtocolExecutor):
@@ -311,9 +311,9 @@ class TestThreeEntryParity:
 
     def test_graph_subscribe_invalid_rejected_at_compile(self):
         from gimbal.compiler.pipeline import compile_target, CompileError as CE
-        from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
-        from gimbal.schema.step import Step
-        from gimbal.schema.call import Call
+        from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
+        from gimbal.schema import Step
+        from gimbal.schema import Call
         sc = Scenario(
             scenarioId="sc-bad", meta=Meta(name="s", description="d", module="m",
                                            priority=1, author="a", owner="o", tags=[],

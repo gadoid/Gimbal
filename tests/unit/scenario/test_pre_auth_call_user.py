@@ -14,10 +14,10 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from gimbal.auth.registry import AuthRegistry
-from gimbal.schema.auth import AuthSession
-from gimbal.schema.call import Call
-from gimbal.schema.scenario import Scenario, Config as ScenarioConfig, Meta
-from gimbal.schema.step import Step
+from gimbal.schema import UserCredential as AuthSession
+from gimbal.schema import Call
+from gimbal.schema import Scenario, Config as ScenarioConfig, Meta
+from gimbal.schema import Step
 
 
 def _meta() -> Meta:
@@ -32,8 +32,8 @@ def _scenario_with_call_user(tag: str) -> Scenario:
         scenarioId="sc-pre-auth",
         meta=_meta(),
         config=ScenarioConfig(users={
-            "buyer": AuthSession(token="b"),
-            "seller": AuthSession(token="s"),
+            "buyer": AuthSession(username="buyer"),
+            "seller": AuthSession(username="seller"),
         }),
         resource={},
         steps=[Step(description="d",

@@ -32,6 +32,8 @@ dev = [
     # BaseSettings);CI 只装 .[dev] 时收集阶段即报错(评审 R5/N2)。
     "cryptography>=42.0",
     "pydantic-settings>=2.0",
+    # M2 交换形态生成工具（gen_m2.py；Q8 版本锁定）
+    "datamodel-code-generator==0.28.5",
 ]
 
 [build-system]

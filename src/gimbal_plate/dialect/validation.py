@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -565,27 +566,35 @@ def validate_references(
     pool = dict(terms)
     pool.update(common_terms or {})
 
-    def _check_ref(tid: str, who: str) -> None:
+    def _check_ref(tid: str, who: str, m: Any = None) -> None:
+        # 定位信息取自模型上解析期标注的 _source/_line(块起始行)——
+        # 发布闸门按评审状态分级(D-4/版本模型 3.2)靠行号区间映射到块,
+        # 缺了定位只能当树级阻塞,草稿上的问题会挡住整条线的发版。
+        src = getattr(m, "_source", "") if m is not None else ""
+        line = getattr(m, "_line", 0) if m is not None else 0
         if tid not in pool:
-            report.add(Finding("S2", "blocking", f"{who} 引用的词条 {tid!r} 不存在"))
+            report.add(Finding("S2", "blocking",
+                               f"{who} 引用的词条 {tid!r} 不存在",
+                               source=src, line=line))
         elif pool[tid].status == "deprecated":
             report.add(Finding(
                 "S2", "warning",
                 f"{who} 引用已废弃词条 {tid!r}(replaced_by={pool[tid].replaced_by})",
+                source=src, line=line,
             ))
 
     for ep in endpoints:
         if ep.capability:
-            _check_ref(ep.capability, f"接口 {ep.id}.capability")
+            _check_ref(ep.capability, f"接口 {ep.id}.capability", ep)
         for tid in (*ep.consumes, *ep.produces):
-            _check_ref(tid, f"接口 {ep.id}")
+            _check_ref(tid, f"接口 {ep.id}", ep)
     for st in statements:
         for slot, value in st.slots.items():
             if isinstance(value, int):
                 continue
             for tid in (value if isinstance(value, list) else [value]):
                 if isinstance(value := tid, str):  # noqa: PLW2901
-                    _check_ref(value, f"片段 {st.id}.{slot}")
+                    _check_ref(value, f"片段 {st.id}.{slot}", st)
     return report
 
 
@@ -727,6 +736,11 @@ class SystemTree:
     reviewed: list[tuple[str, Any]] = field(default_factory=list)  # (kind, model),8v
     term_block_review: dict[str, bool] = field(default_factory=dict)  # 含 common
     common_terms: dict[str, Term] = field(default_factory=dict)
+    # 版本线声明（版本模型 v1.4 2.1）：系统入口 system.md 的 frontmatter
+    # 与该系统 gimbal:system 块声明的服务名（F5 校验 line_service 用）。
+    system_frontmatter: "Frontmatter | None" = None
+    system_md_source: str = ""
+    service_names: set[str] = field(default_factory=set)
 
 
 def collect_system_tree(
@@ -743,6 +757,16 @@ def collect_system_tree(
     for md in sorted(system_root.rglob("*.md")):
         d = parse_markdown(md.read_text(encoding="utf-8"), source=str(md))
         tree.deliverables.append(d)
+        # 系统入口 frontmatter（版本线声明，F5）与 gimbal:system 服务名
+        if (tree.system_frontmatter is None and d.frontmatter is not None
+                and d.frontmatter.type == "system"):
+            tree.system_frontmatter = d.frontmatter
+            tree.system_md_source = d.source
+        for b in d.blocks("system"):
+            for item in (b.payload if isinstance(b.payload, list)
+                         else [b.payload]):
+                if isinstance(item, dict) and item.get("name"):
+                    tree.service_names.add(str(item["name"]))
         for b in d.blocks():
             for m in b.models():
                 if isinstance(m, EndpointSpec):
@@ -769,6 +793,72 @@ def collect_system_tree(
                             tree.common_terms[m.id] = m
                             tree.term_block_review[m.id] = (b.review == "reviewed")
     return tree
+
+
+_LINE_SCHEMES = ("semver", "iteration", "date", "free", "pattern")
+_LINE_SOURCES = ("manual", "service_version")
+_SEMVER_RE = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
+
+
+def _check_line_declaration(tree: SystemTree, *, report: ValidationReport) -> None:
+    """F5：版本线声明（system.md frontmatter，版本模型 v1.4 2.1/2.4）。
+
+    P8 加法字段——未声明任何 line 字段的系统不受影响（缺省 free +
+    manual，RS0 起始口径）。一旦声明：
+    - scheme / source 取值合法；pattern 正则可编译且与 line 匹配；
+    - scheme 对 line 的格式校验（semver / iteration / date；free 不校验）；
+    - source=service_version 时 line_service 必填，且须指向本系统
+      gimbal:system 块声明的服务。
+    """
+    fm = tree.system_frontmatter
+    if fm is None:
+        return
+    src = tree.system_md_source or "<system.md>"
+
+    def bad(msg: str) -> None:
+        report.add(Finding("F5", "blocking", msg, source=src, line=1))
+
+    if not any((fm.line, fm.predecessor_line, fm.line_scheme,
+                fm.line_source, fm.line_service, fm.line_pattern)):
+        return
+    if not fm.line:
+        bad("声明了版本线字段但缺少 line（版本模型 2.1）")
+        return
+    scheme = fm.line_scheme or "free"
+    source = fm.line_source or "manual"
+    if fm.line_scheme is not None and fm.line_scheme not in _LINE_SCHEMES:
+        bad(f"line_scheme={fm.line_scheme!r} 非法（合法：{'/'.join(_LINE_SCHEMES)}）")
+        return
+    if fm.line_source is not None and fm.line_source not in _LINE_SOURCES:
+        bad(f"line_source={fm.line_source!r} 非法（合法：{'/'.join(_LINE_SOURCES)}）")
+        return
+    if source == "service_version":
+        if not fm.line_service:
+            bad("line_source=service_version 须声明 line_service（2.4）")
+        elif fm.line_service not in tree.service_names:
+            bad(f"line_service={fm.line_service!r} 未在本系统 gimbal:system 块声明")
+    if scheme == "pattern":
+        if not fm.line_pattern:
+            bad("line_scheme=pattern 须声明 line_pattern")
+            return
+        try:
+            pat = re.compile(fm.line_pattern)
+        except re.error as e:
+            bad(f"line_pattern 正则非法：{e}")
+            return
+        if not pat.fullmatch(fm.line):
+            bad(f"line={fm.line!r} 不匹配 line_pattern={fm.line_pattern!r}")
+    elif scheme == "semver":
+        if not _SEMVER_RE.fullmatch(fm.line):
+            bad(f"line={fm.line!r} 不符合 semver")
+    elif scheme == "date":
+        try:
+            date.fromisoformat(fm.line)
+        except ValueError:
+            bad(f"line={fm.line!r} 不符合 date（ISO 日期）")
+    elif scheme == "iteration":
+        if not fm.line.isdigit():
+            bad(f"line={fm.line!r} 不符合 iteration（数字）")
 
 
 def validate_system_tree(
@@ -855,6 +945,7 @@ def validate_system_tree(
             ))
         else:
             st_seen[st.id] = src
+    _check_line_declaration(tree, report=report)
     validate_terms(
         tree.terms.values(), system_id=system_root.name,
         common_ids=set(common_terms), report=report,

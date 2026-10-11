@@ -26,6 +26,12 @@ class HttpCallParams(BaseModel):
     service: Optional[str] = Field(default=None, description="服务键；缺省走 service_base_url")
     method: str = Field(default="GET", description="HTTP 方法")
     path: str = Field(default="/", description="请求路径（以 / 开头）")
+    # RS2/R5b：path 模板属于 binding（plate 投影），值属于场景——执行器
+    # 统一代入 {name} 占位符；缺键报 PATH_PARAM_MISSING。值可为字面量或
+    # 变量模板（${var} 随变量机制展开）。
+    path_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="path 占位符取值（场景自有字段）")
     headers: dict[str, str] = Field(default_factory=dict, description="附加请求头")
     timeout: float = Field(default=30.0, gt=0, le=600, description="超时秒数")
     user: Optional[str] = Field(default=None, description="认证标签；按 AuthRegistry 会话注入头")

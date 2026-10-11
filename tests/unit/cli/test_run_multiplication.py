@@ -11,10 +11,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
 from gimbal.cli.commands.run_launch import apply_multiplication
-from gimbal.schema.call import Call
+from gimbal.schema import Call
 from gimbal.schema.plan import PlanPolicy
-from gimbal.schema.scenario import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
-from gimbal.schema.step import Step
+from gimbal.schema import Config as SC, Meta, Scenario, SuiteGraph, UnitDecl
+from gimbal.schema import Step
 
 
 def _scenario(sid: str = "sc-n4") -> Scenario:

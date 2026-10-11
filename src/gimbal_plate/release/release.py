@@ -1,111 +1,215 @@
-"""release 冻结（批次 B 真实现，7.1 / 8.2 / 8v）。
+"""release 冻结与发版（版本模型 v1.4 3.1–3.6；开发计划 T1.6 主体）。
 
-发布闸门只检查、不编辑（已定）：
-    ① 机械检查：F/T/S 阻塞级 + F2 模板 required + F4 交付件清单阈值
-    ② 一致性检查：被待冻结内容引用的 draft 词条须已处理（阻塞）；
-       未被引用的孤儿 draft 只是不进本次 release（修订九，与块同口径）
-    ③ 冻结范围与引用闭包（8v）：只收 ``reviewed`` 块；已冻结块只能引用
-       已冻结的块与词条，违反即阻塞
-    ④ 人签发（签发人由调用方传入）
+与 S1 版（YYYY.MM.N、只收 reviewed、零 finding 才能发版）的差异全部按
+版本模型 v1.4 落地：
 
-产物（内容寻址，全局对象池）：
-    plate_artifacts/objects/<hash>.json          每对象一份,跨版本/跨系统共享
-    plate_artifacts/<系统>/releases/<id>/manifest.json
-        对象 hash 清单 + call 投影清单 + 模板/方言/M2 版本
-        (correction_log 已删——零 finding 才能发版,该字段恒空;见修订十一)
+- **冻结范围（3.1）**：通过机械校验的**全部**块（含草稿）逐对象记录
+  评审状态；``gimbal:system``（服务声明）随修订冻结，``gimbal:defaults``
+  不冻结。成熟度由评审状态计算，不由签发人选择。
+- **发布闸门分级（3.2，D-4）**：F0 / F3 / F5 等树级与唯一性检查一律
+  阻塞；其余 finding（含 C 类一致性）按 ``[line, end_line]`` 区间映射到
+  块——只落在草稿块内降为告警（写入 manifest ``warnings``），涉及任一
+  已评审对象即阻塞。
+- **引用闭包（3.2）**：已评审对象只能引用已评审对象；草稿之间可互引
+  （草稿引用的 common 词条随冻结，但不作闸门）。
+- **修订沿 git 祖先关系前进（3.3）**：脏树拒绝（``systems/``、``types/``
+  无未提交变更），``source_commit`` = 执行时 HEAD，上一修订的
+  ``source_commit`` 必须是 HEAD 的祖先；新版本线首修订要求
+  ``predecessor_line`` 已有修订（首条除外）。
+- **编号（3.4）**：``<line>#<n>``，布局 ``<系统>/lines/<line>/<n>/``。
+- **manifest（3.5）**：``line_scheme`` / ``line_service`` 入 manifest
+  （plate 服务只见构件，``/lines`` 承诺返回 scheme）；``corrections``
+  = 与上一修订相比 ``shape_hash`` 变化的接口；对象文件统一信封
+  ``{"type", "data"}``（F1 修复），call 投影入对象池（manifest 记 hash）。
+- **构件分支（3.6，R18/B1–B4）**：构件根唯一来源 = ``PLATE_ARTIFACTS_PATH``
+  （指向构件分支检出；未配置即报错，无推导无缺省）；发版产生的唯一
+  提交是构件分支上的构件提交（提交信息 ``<系统>@<line>#<n>``），
+  artifacts 根若非 git 工作树（本地演练目录）则只写盘不提交。
 
-release_id = ``YYYY.MM.N``（年月 + 当月序号，系统内单调递增，N2 已定）。
-磁盘增长与「变更量」成正比（未变化对象跨版本同 hash,manifest 天然 diff）。
+``m2_hash`` / ``m2_generation``（用例侧，只作溯源）随 M2 方案步骤 2
+（``gen_m2.py`` / ``export_m2``）接线后写入，此处暂缺。
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from gimbal_plate.dialect import EndpointSpec, Statement, Term, object_hash
+from gimbal_plate.dialect import (
+    EndpointSpec,
+    Statement,
+    Term,
+    object_hash,
+    shape_hash,
+)
 from gimbal_plate.dialect.validation import (
     Finding,
     ValidationReport,
+    collect_system_tree,
     load_types,
     validate_system_tree,
 )
 
 DIALECT_VERSION = "1"   # 方言版本(manifest 记录,修订四)
-M2_VERSION = "2"        # M2 schema 代际(1=旧栈 ApiSpec,2=Binding/outcome 键)
+M2_VERSION = "2"        # 知识侧 M2 代际(水合门;用例侧 m2_hash 随 T1.3 接线)
+
+# 树级检查:不论评审状态一律阻塞(3.2 分级规则)。F0=方言错误、F3=唯一性、
+# F5=版本线声明(入口 frontmatter,不属于任何块)。
+_TREE_LEVEL_RULES = {"F0", "F3", "F5"}
 
 
 class ReleaseResult:
-    def __init__(self, *, success: bool, release_id: str | None = None,
-                 message: str = "", manifest: dict[str, Any] | None = None,
+    def __init__(self, *, success: bool, line: str | None = None,
+                 revision: str | None = None, message: str = "",
+                 manifest: dict[str, Any] | None = None,
                  report: ValidationReport | None = None) -> None:
         self.success = success
-        self.release_id = release_id
+        self.line = line
+        self.revision = revision          # "<line>#<n>"
         self.message = message
         self.manifest = manifest
         self.report = report
 
     def __repr__(self) -> str:  # pragma: no cover - 调试便利
         return (f"ReleaseResult(success={self.success}, "
-                f"release_id={self.release_id!r}, message={self.message!r})")
+                f"revision={self.revision!r}, message={self.message!r})")
+
+
+def resolve_artifacts_root(explicit: Path | None = None) -> Path:
+    """构件根唯一来源(3.6/B2):显式参数 > ``PLATE_ARTIFACTS_PATH`` > 报错。
+
+    无推导、无写死缺省——未配置即 fail-fast 指路配置(与
+    ``PLATE_REPO_ROOT`` 同型)。现状 CLI 的写死与 ``repo_root`` 推导随
+    本函数落地删除。
+    """
+    if explicit is not None:
+        return explicit
+    env = os.environ.get("PLATE_ARTIFACTS_PATH", "").strip()
+    if not env:
+        raise RuntimeError(
+            "构件根未配置:设置 PLATE_ARTIFACTS_PATH 指向构件分支"
+            "(plate/artifacts)的检出(版本模型 3.6/B2;本地演练可指向任意目录)"
+        )
+    return Path(env)
+
+
+def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        capture_output=True, text=True, encoding="utf-8",
+    )
 
 
 def _call_projection(ep: EndpointSpec) -> dict[str, Any]:
     """binding → call 投影（6.2 export 映射;timeout_seconds → timeout）。"""
     b = ep.binding
     out: dict[str, Any] = {
-        "kind": "call",
         "protocol": b.protocol,
         "service": ep.service,
         "timeout": b.timeout_seconds,
     }
-    # http 专属字段按协议分派（P5:各协议自有字段原样透传）
     for attr in ("method", "path", "headers"):
         if hasattr(b, attr):
             out[attr] = getattr(b, attr)
     return out
 
 
-def _next_release_id(system_releases_dir: Path) -> str:
-    """YYYY.MM.N(年月 + 当月序号,系统内单调,N2 已定)。"""
-    now = datetime.now(timezone.utc)
-    prefix = f"{now.year}.{now.month:02d}."
-    existing = (
-        [d.name for d in system_releases_dir.iterdir()
-         if d.is_dir() and d.name.startswith(prefix)]
-        if system_releases_dir.exists() else []
-    )
-    seq = max((int(n.rsplit(".", 1)[1]) for n in existing), default=0) + 1
-    return f"{prefix}{seq}"
+def _dict_hash(data: dict[str, Any]) -> str:
+    """普通 dict 的规范 hash（call 投影入池用；键序不携带语义）。"""
+    return hashlib.sha256(
+        json.dumps(data, ensure_ascii=False, separators=(",", ":"),
+                   sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
-def _freeze_objects(
-    artifacts_root: Path, models: list[tuple[str, Any]],
-) -> list[dict[str, Any]]:
-    """对象落全局池（评审 P0-16：临时文件 + rename 原子写；复用前校验）。"""
-    import os
-    import tempfile
-
+def _pool_write(artifacts_root: Path, h: str, type_: str,
+                data: dict[str, Any]) -> None:
+    """信封 ``{"type","data"}`` 落全局池，文件名 = 内容寻址 hash（幂等）。"""
     objects_dir = artifacts_root / "objects"
     objects_dir.mkdir(parents=True, exist_ok=True)
-    entries: list[dict[str, Any]] = []
-    for kind, model in models:
-        h = object_hash(model)
-        obj_path = objects_dir / f"{h}.json"
-        content = json.dumps(
-            {"kind": kind, **model.model_dump(mode="json")},
-            ensure_ascii=False, indent=1,
-        ).encode("utf-8")
-        if not (obj_path.exists() and obj_path.read_bytes() == content):
-            fd, tmp = tempfile.mkstemp(dir=objects_dir, suffix=".tmp")
-            try:
-                os.write(fd, content)
-            finally:
-                os.close(fd)
-            os.replace(tmp, obj_path)   # 原子:截断文件不会被「已存在」掩护
-        entries.append({"kind": kind, "id": getattr(model, "id", ""), "hash": h})
-    return entries
+    path = objects_dir / f"{h}.json"
+    content = json.dumps({"type": type_, "data": data},
+                         ensure_ascii=False, indent=1,
+                         sort_keys=True).encode("utf-8")
+    if not (path.exists() and path.read_bytes() == content):
+        fd, tmp = tempfile.mkstemp(dir=objects_dir, suffix=".tmp")
+        try:
+            os.write(fd, content)
+        finally:
+            os.close(fd)
+        os.replace(tmp, path)   # 原子:截断文件不会被「已存在」掩护
+
+
+def _grade(report: ValidationReport, tree: Any,
+           ) -> tuple[list[Finding], list[Finding]]:
+    """D-4 分级：返回 (阻塞, 告警)。
+
+    树级规则一律阻塞；其余 finding（含 C 类）按行号区间映射到块——只
+    落在草稿块内降为告警，落在已评审块内或映射不到块（frontmatter 等
+    文件级问题）保持阻塞。
+    """
+    ranges: dict[str, list[tuple[int, int, bool]]] = {}
+    for d in tree.deliverables:
+        ranges[d.source] = sorted(
+            (b.line, b.end_line, b.review == "reviewed") for b in d.blocks()
+        )
+    blocking: list[Finding] = []
+    warns: list[Finding] = []
+    for f in report.findings:
+        if f.severity not in ("blocking", "correction"):
+            continue
+        if f.rule in _TREE_LEVEL_RULES:
+            blocking.append(f)
+            continue
+        hits = [r for r in ranges.get(f.source or "", [])
+                if r[0] <= (f.line or 0) <= r[1]]
+        if hits and all(not reviewed for _, _, reviewed in hits):
+            warns.append(f)
+        else:
+            blocking.append(f)
+    return blocking, warns
+
+
+def _lines_dir(artifacts_root: Path, system: str) -> Path:
+    return artifacts_root / system / "lines"
+
+
+def latest_revision_manifest(artifacts_root: Path, system: str, line: str,
+                             ) -> tuple[int, dict[str, Any]] | None:
+    """该版本线最新修订 (n, manifest)；无修订返回 None。"""
+    line_dir = _lines_dir(artifacts_root, system) / line
+    if not line_dir.is_dir():
+        return None
+    nums = sorted(
+        int(p.name) for p in line_dir.iterdir()
+        if p.is_dir() and p.name.isdigit()
+    )
+    if not nums:
+        return None
+    n = nums[-1]
+    m = line_dir / str(n) / "manifest.json"
+    return n, json.loads(m.read_text(encoding="utf-8"))
+
+
+def _commit_artifacts(artifacts_root: Path, message: str) -> str | None:
+    """构件分支提交(3.6):artifacts 根为 git 工作树时 add+commit。
+
+    非工作树(本地演练目录)只写盘不提交——发版本的演练路径。
+    """
+    probe = _git(["rev-parse", "--is-inside-work-tree"], artifacts_root)
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return None
+    ident = ["-c", "user.name=plate-release", "-c", "user.email=release@plate"]
+    _git(ident + ["add", "-A"], artifacts_root)
+    r = _git(ident + ["commit", "-m", message], artifacts_root)
+    if r.returncode != 0:
+        raise RuntimeError(f"构件分支提交失败: {r.stderr.strip()}")
+    return _git(["rev-parse", "HEAD"], artifacts_root).stdout.strip()
 
 
 def release_system(
@@ -115,51 +219,93 @@ def release_system(
     signed_by: str = "",
     checklist: dict[str, int] | None = None,
 ) -> ReleaseResult:
-    """冻结一个系统（发布闸门 + 内容寻址产物）。
+    """冻结一个系统（版本模型 v1.4 的修订签发）。
 
-    ``checklist``：交付件清单阈值（F4；判定项与 gaps 共用）。
-    缺省不设阈值（v0 清单 = 只要机械检查通过）。
+    ``checklist``：交付件清单阈值（F4；按已评审对象计算，3.2）。
     """
-    repo_root = system_root.parent.parent
-    artifacts_root = artifacts_root or (repo_root / "plate_artifacts")
+    artifacts_root = resolve_artifacts_root(artifacts_root)
     if not system_root.is_dir():
-        return ReleaseResult(success=False, message=f"系统目录不存在: {system_root}")
-    # 评审 P0-12:签发人必填(8.2 ④「人签发」,空值拒绝)
-    if not signed_by or not signed_by.strip():
-        return ReleaseResult(success=False, message="签发人(signed_by)不可为空")
-    # X3(第六轮,N3):common 不单独发版——被引用的 common 对象随引用
-    # 系统的 manifest 冻结;common 自身无独立版本语义。
+        return ReleaseResult(success=False,
+                             message=f"系统目录不存在: {system_root}")
     if system_root.name == "common":
         return ReleaseResult(
             success=False,
             message="common 不单独发版(N3):被引用的 common 对象随引用系统的 manifest 冻结")
+    if not signed_by or not signed_by.strip():
+        return ReleaseResult(success=False, message="签发人(signed_by)不可为空")
 
-    # ── 装载 + ① 机械检查(J1,第五轮:与 check 同一引擎)──
-    # 此前 release 自带一套装配,弱于 check(不跑树级 F3/路由键/J3);
-    # 现与 validate_system_tree 共用 collect_system_tree 唯一装配点,
-    # 发布闸门只保留自己特有的步骤(签发/F4/闭包/冻结)。
+    # ── git 前置(3.3/3.6,B1):发版需要 git 工作树 + 干净的源树 ──
+    repo_root = system_root.parent.parent
+    probe = _git(["rev-parse", "--show-toplevel"], repo_root)
+    if probe.returncode != 0:
+        return ReleaseResult(
+            success=False,
+            message="发版需要在 git 工作树中执行(版本模型 3.6;3.3 需要 git)")
+    status = _git(["status", "--porcelain", "--", "systems/", "types/"],
+                  repo_root)
+    if status.stdout.strip():
+        return ReleaseResult(
+            success=False,
+            message=("发版前置失败:源树有未提交变更(systems/ 或 types/)——"
+                     "先经评审入库再发版(版本模型 3.6/B1);首条: "
+                     + status.stdout.strip().splitlines()[0]))
+    head = _git(["rev-parse", "HEAD"], repo_root).stdout.strip()
+
+    # ── 装载 + 机械检查(与 check 同一引擎,J1)──
     from gimbal_plate.dialect.parser import DialectError
-    from gimbal_plate.dialect.validation import collect_system_tree
 
     types = load_types(repo_root / "types" / "types.yaml")
     try:
         tree = collect_system_tree(system_root)
     except DialectError as e:
-        # J5 残留(第六轮):方言错误也带 report(F0 finding),HTTP 422
-        # 的 details 里可见 findings,与 check 的口径一致
         report = ValidationReport()
         report.add(Finding("F0", "blocking", str(e),
                            source=e.source, line=e.line))
-        return ReleaseResult(
-            success=False, message=f"方言错误: {e}", report=report)
+        return ReleaseResult(success=False, message=f"方言错误: {e}",
+                             report=report)
     report = validate_system_tree(system_root, types=types, tree=tree)
-    endpoints, statements = tree.endpoints, tree.statements
-    terms, common_terms = tree.terms, tree.common_terms
-    reviewed, term_block_review = tree.reviewed, dict(tree.term_block_review)
 
-    # F4:交付件清单阈值(判定项与 gaps 共用)
+    # ── 版本线声明(2.1):发版要求 system.md 声明 line ──
+    fm = tree.system_frontmatter
+    if fm is None or not fm.line:
+        return ReleaseResult(
+            success=False,
+            message="system.md 未声明版本线 line(版本模型 2.1)——发版前先声明",
+            report=report)
+
+    # ── 祖先校验(3.3)──
+    latest = latest_revision_manifest(
+        artifacts_root, system_root.name, fm.line)
+    if latest is not None:
+        prev_n, prev = latest
+        prev_commit = str(prev.get("source_commit") or "")
+        if prev_commit:
+            anc = _git(["merge-base", "--is-ancestor", prev_commit, head],
+                       repo_root)
+            if anc.returncode != 0:
+                return ReleaseResult(
+                    success=False,
+                    message=(f"修订必须沿 git 祖先关系前进(3.3):"
+                             f"{fm.line}#{prev_n} 的 source_commit "
+                             f"{prev_commit[:8]} 不是当前 HEAD 的后代——"
+                             "旧版本线的修订须在其维护分支上发"),
+                    report=report)
+    else:
+        prev_n, prev = None, None
+        if fm.predecessor_line:
+            pred = latest_revision_manifest(
+                artifacts_root, system_root.name, fm.predecessor_line)
+            if pred is None:
+                return ReleaseResult(
+                    success=False,
+                    message=(f"predecessor_line {fm.predecessor_line!r} "
+                             "尚未发出任何修订(3.3)"),
+                    report=report)
+
+    # ── F4:交付件清单阈值(按已评审对象计算)──
     from gimbal_plate.dialect.gaps import gap_items
-    items = gap_items(endpoints, statements, terms, common_terms)
+    items = gap_items(tree.endpoints, tree.statements,
+                      tree.terms, tree.common_terms)
     for key, minimum in (checklist or {}).items():
         actual = items.get(key)
         if actual is not None and actual < minimum:
@@ -168,33 +314,50 @@ def release_system(
                 f"交付件清单: {key} = {actual} < 阈值 {minimum}",
             ))
 
-    if report.blocking:
+    # ── 收集冻结对象(3.1:全部块,逐对象记录评审状态)──
+    # D-3:gimbal:system(服务声明)随修订冻结——服务是接口坐标的一部分;
+    # gimbal:defaults 不冻结(偏环境属性,平台读 working)。
+    all_objects: list[tuple[str, Any, bool]] = []   # (kind, model, reviewed)
+    from gimbal_plate.schema.service_definition import ServiceDefinition
+    for d in tree.deliverables:
+        for b in d.blocks():
+            if b.type == "system":
+                items = (b.payload if isinstance(b.payload, list)
+                         else [b.payload])
+                for item in items:
+                    if not isinstance(item, dict) or not item.get("name"):
+                        continue
+                    try:
+                        ServiceDefinition.model_validate(item)
+                    except Exception as e:  # noqa: BLE001
+                        return ReleaseResult(
+                            success=False,
+                            message=f"服务声明非法(3.1/D-3): {e}",
+                            report=report)
+                    all_objects.append(("service", item,
+                                        b.review == "reviewed"))
+                continue
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    all_objects.append(("endpoint", m,
+                                        b.review == "reviewed"))
+                elif isinstance(m, Statement):
+                    all_objects.append(("statement", m,
+                                        b.review == "reviewed"))
+                elif isinstance(m, Term):
+                    all_objects.append(("term", m,
+                                        b.review == "reviewed"))
+    if not all_objects:
         return ReleaseResult(
             success=False,
-            message=f"发布闸门未过: {len(report.blocking)} 条阻塞"
-                    f"(首条: {report.blocking[0].message})",
-            report=report,
-        )
-    # 8.2 ②(评审 P0-13):C 类不一致须经矫正变更处理,否则阻塞发布;
-    # 清零后方可发出(revision-11 拍板:correction_log 字段删除——发布
-    # 闸门只放行零 finding 的 release,该字段在已发布 manifest 里恒为空,
-    # 属死字段;「记录矫正变更引用」随 C 闸门语义成熟再回填,S1.5 清单)。
-    if report.corrections:
-        return ReleaseResult(
-            success=False,
-            message=f"C 类一致性未处理: {len(report.corrections)} 条"
-                    f"(首条: {report.corrections[0].message[:80]})",
-            report=report,
-        )
+            message="无可冻结对象(树中没有任何块)——空修订拒绝发出",
+            report=report)
 
-    # ── ②③ 冻结范围与引用闭包(8v,评审 P0-15 强化:闭包传递)──
-    # 被(传递地)引用到的词条必须 reviewed;沿 refers/父节点/replaced_by
-    # 传递展开。common 词条(N3):只冻结**被引用到的**子集且须 reviewed,
-    # 未被引用的不进 manifest;draft 的 common 词条被引用即阻塞。
+    # ── 引用闭包(3.2):已评审只引用已评审;草稿引用只决定 common 冻结面 ──
     from gimbal_plate.dialect.validation import _parent_of
 
     def _term_edges(tid: str) -> list[str]:
-        t_ = terms.get(tid) or common_terms.get(tid)
+        t_ = tree.terms.get(tid) or tree.common_terms.get(tid)
         if t_ is None:
             return []
         out: list[str] = []
@@ -207,90 +370,132 @@ def release_system(
             out.append(parent)
         return out
 
-    frozen_ids = {m.id for kind, m in reviewed if kind == "term"}
-    common_frozen: set[str] = set()
-    closure: list[tuple[str, str]] = []
-    visited: set[str] = set()
-    queue: list[tuple[str, str]] = []
-    # 闭包起点 = **全部 reviewed 词条**(评审 R4):此前种子只含 reviewed
-    # 块对词条的引用,未被块引用的 reviewed 词条自身 refers 到 draft、
-    # 或父节点是 draft,都漏检照样发版。reviewed 词条自己的边也是待冻结
-    # 内容的引用,同样须闭合。
-    for kind, m in reviewed:
-        refs: list[str] = []
-        if isinstance(m, EndpointSpec):
-            refs = [r for r in (m.capability, *m.consumes, *m.produces) if r]
-        elif isinstance(m, Statement):
+    def _refs_of(kind: str, m: Any) -> list[str]:
+        if kind == "endpoint":
+            return [r for r in (m.capability, *m.consumes, *m.produces) if r]
+        if kind == "statement":
+            out: list[str] = []
             for v in m.slots.values():
                 if isinstance(v, str):
-                    refs.append(v)
+                    out.append(v)
                 elif isinstance(v, list):
-                    refs.extend(x for x in v if isinstance(x, str))
-        elif isinstance(m, Term):
-            refs = _term_edges(m.id)
-        for r in refs:
-            queue.append((getattr(m, "id", "?"), r))
+                    out.extend(x for x in v if isinstance(x, str))
+            return out
+        if kind == "term":
+            return _term_edges(m.id)
+        return []
+
+    closure: list[tuple[str, str]] = []
+    common_frozen: set[str] = set()
+    visited: set[str] = set()
+    queue: list[tuple[str, str]] = []
+    for kind, m, reviewed in all_objects:
+        for r in _refs_of(kind, m):
+            if reviewed:
+                queue.append((getattr(m, "id", "?"), r))
+            elif r in tree.common_terms:
+                # 草稿对象的引用不作闸门,但其指向的 common 词条随冻结
+                common_frozen.add(r)
     while queue:
         owner, tid = queue.pop()
         if tid in visited:
             continue
         visited.add(tid)   # 边始终展开:种子(reviewed)也不例外——传递引用仍要查
-        if tid not in terms and tid not in common_terms:
+        if tid not in tree.terms and tid not in tree.common_terms:
             closure.append((owner, tid))   # 不存在(S2 已报,双保险)
             continue
-        if not term_block_review.get(tid, False):
-            closure.append((owner, tid))   # draft 词条被待冻结内容引用
+        if not tree.term_block_review.get(tid, False):
+            closure.append((owner, tid))   # 草稿词条被已评审内容引用
             continue
-        if tid in common_terms:
+        if tid in tree.common_terms:
             common_frozen.add(tid)
-        else:
-            frozen_ids.add(tid)
         queue.extend((owner, e) for e in _term_edges(tid))
     if closure:
         return ReleaseResult(
             success=False,
-            message=(
-                f"引用闭包(8v)未闭合: {len(closure)} 处待冻结内容引用"
-                f"未冻结词条(首条: {closure[0][0]} → {closure[0][1]})"
-            ),
-            report=report,
-        )
+            message=(f"引用闭包未闭合: {len(closure)} 处已评审内容引用"
+                     f"未评审词条(首条: {closure[0][0]} → {closure[0][1]})"),
+            report=report)
 
-    # ── 冻结(评审 P0-16:release_id 目录冲突重试防并发覆盖)──
-    # O1(第七轮/R1):freeze_list 与空检查在 mkdir **之前**——空发版被拒
-    # 时不创建目录、不占用 release 号(此前连拒两次会留下 2026.10.1/.2
-    # 空目录,把真实发版的编号挤后,还会让 diff 崩在无 manifest 的目录上)。
-    freeze_list = list(reviewed) + [
-        ("term", common_terms[mid]) for mid in sorted(common_frozen)
-    ]
-    # X3(第六轮):0 个对象的「空 release」拒绝——manifest 无内容、
-    # 序号却被占用,还会把后续真实 release 的编号挤后。
-    if not freeze_list:
+    # ── 闸门分级(D-4)──
+    blocking, warns = _grade(report, tree)
+    if blocking:
         return ReleaseResult(
             success=False,
-            message="无可冻结对象(reviewed 块为空且无被引用的 common 词条)"
-                    "——空 release 拒绝发出",
+            message=(f"发布闸门未过: {len(blocking)} 条阻塞"
+                     f"(首条: {blocking[0].rule} {blocking[0].message})"),
             report=report)
-    releases_dir = artifacts_root / system_root.name / "releases"
-    release_id = _next_release_id(releases_dir)
-    manifest_dir = releases_dir / release_id
+
+    # ── 冻结(3.1 全部对象;信封 3.5;hash=对象 hash,池文件按 hash 命名)──
+    review_of = {id(m): reviewed for _, m, reviewed in all_objects}
+    freeze_list: list[tuple[str, Any]] = [(k, m) for k, m, _ in all_objects]
+    freeze_list += [("term", tree.common_terms[mid])
+                    for mid in sorted(common_frozen)]
+
+    def _entry(kind: str, m: Any) -> dict[str, Any]:
+        if kind == "service":
+            h = _dict_hash(m)
+            _pool_write(artifacts_root, h, "service", m)
+            return {"id": m.get("name", ""), "type": "service",
+                    "hash": h,
+                    "review": "reviewed" if review_of.get(id(m)) else "draft"}
+        h = object_hash(m)
+        _pool_write(artifacts_root, h, kind, m.model_dump(mode="json"))
+        e: dict[str, Any] = {
+            "id": getattr(m, "id", ""),
+            "type": kind,
+            "hash": h,
+            "review": "reviewed" if review_of.get(id(m)) else "draft",
+        }
+        if kind == "endpoint":
+            e["shape_hash"] = shape_hash(m)
+        return e
+
+    object_entries = [_entry(kind, m) for kind, m in freeze_list]
+    call_projections: dict[str, str] = {}
+    for kind, m, _ in all_objects:
+        if kind == "endpoint":
+            proj = _call_projection(m)
+            ph = _dict_hash(proj)
+            _pool_write(artifacts_root, ph, "call", proj)
+            call_projections[m.id] = ph
+
+    # ── 编号(3.4)──
+    line_dir = _lines_dir(artifacts_root, system_root.name) / fm.line
+    n = (prev_n or 0) + 1
+    manifest_dir = line_dir / str(n)
     for _attempt in range(8):
         try:
             manifest_dir.mkdir(parents=True)
             break
         except FileExistsError:
-            release_id = _next_release_id(releases_dir)
-            manifest_dir = releases_dir / release_id
+            n += 1
+            manifest_dir = line_dir / str(n)
     else:
-        return ReleaseResult(success=False, message="release_id 竞争重试耗尽")
-    object_entries = _freeze_objects(artifacts_root, freeze_list)
-    call_projections = {
-        m.id: _call_projection(m)
-        for kind, m in reviewed if kind == "endpoint"
-    }
+        return ReleaseResult(success=False, message="修订号竞争重试耗尽")
+
+    # ── corrections(3.5):与上一修订相比 shape_hash 变化的接口 ──
+    corrections: list[str] = []
+    if prev is not None:
+        prev_shapes = {e["id"]: e.get("shape_hash")
+                       for e in prev.get("objects", [])
+                       if e.get("type") == "endpoint"}
+        cur_shapes = {e["id"]: e.get("shape_hash") for e in object_entries
+                      if e["type"] == "endpoint"}
+        corrections = sorted(
+            eid for eid in (prev_shapes.keys() & cur_shapes.keys())
+            if prev_shapes[eid] != cur_shapes[eid]
+        )
+
     manifest = {
         "system": system_root.name,
-        "release_id": release_id,
+        "line": fm.line,
+        "revision": n,
+        "line_scheme": fm.line_scheme or "free",
+        "line_service": fm.line_service,
+        "predecessor_line": fm.predecessor_line,
+        "previous_revision": prev_n,
+        "source_commit": head,
         "released_at": datetime.now(timezone.utc).isoformat(),
         "signed_by": signed_by,
         "dialect_version": DIALECT_VERSION,
@@ -299,28 +504,43 @@ def release_system(
         "checklist_applied": checklist or {},
         "objects": object_entries,
         "call_projections": call_projections,
+        "corrections": corrections,
+        "warnings": [
+            {"rule": f.rule, "severity": f.severity, "message": f.message,
+             "source": f.source, "line": f.line}
+            for f in warns
+        ],
         "summary": {
-            "endpoints": sum(1 for k, _ in reviewed if k == "endpoint"),
-            "statements": sum(1 for k, _ in reviewed if k == "statement"),
-            "terms": sum(1 for k, _ in reviewed if k == "term")
-            + len(common_frozen),
+            "endpoints": sum(1 for k, _ in freeze_list if k == "endpoint"),
+            "statements": sum(1 for k, _ in freeze_list if k == "statement"),
+            "terms": sum(1 for k, _ in freeze_list if k == "term"),
+            "services": sum(1 for k, _ in freeze_list if k == "service"),
             "common_terms_frozen": len(common_frozen),
-            "draft_skipped_endpoints": len(endpoints)
-            - sum(1 for k, _ in reviewed if k == "endpoint"),
+            "draft_objects": sum(1 for _, m in freeze_list
+                                 if not review_of.get(id(m))),
         },
     }
     (manifest_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1),
         encoding="utf-8", newline="\n",
     )
+
+    revision = f"{fm.line}#{n}"
+    commit = _commit_artifacts(
+        artifacts_root, f"{system_root.name}@{revision}")
     return ReleaseResult(
-        success=True, release_id=release_id, manifest=manifest, report=report,
-        message=(
-            f"冻结 {manifest['summary']['endpoints']} 接口 / "
-            f"{manifest['summary']['statements']} 片段 / "
-            f"{manifest['summary']['terms']} 词条"
-        ),
+        success=True, line=fm.line, revision=revision, manifest=manifest,
+        report=report,
+        message=(f"冻结 {manifest['summary']['endpoints']} 接口 / "
+                 f"{manifest['summary']['statements']} 片段 / "
+                 f"{manifest['summary']['terms']} 词条"
+                 + (f"（{len(warns)} 条草稿告警入 warnings）" if warns else "")
+                 + (f"；构件提交 {commit[:8]}" if commit
+                    else "（演练目录，未提交构件分支）")),
     )
 
 
-__all__ = ["DIALECT_VERSION", "M2_VERSION", "ReleaseResult", "release_system"]
+__all__ = [
+    "DIALECT_VERSION", "M2_VERSION", "ReleaseResult",
+    "latest_revision_manifest", "release_system", "resolve_artifacts_root",
+]

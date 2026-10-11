@@ -5,7 +5,7 @@ logger = get_logger(__name__)
 
 def _scope_to_layer(scope):
     """将 schema Scope 映射到 ContextLayer。"""
-    from gimbal.schema.strategy import Scope
+    from gimbal.schema import Scope
     from gimbal.context.base import ContextLayer
     mapping = {
         Scope.FRAMEWORK: ContextLayer.FRAMEWORK,
@@ -58,7 +58,7 @@ def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> An
     - 字面量 -> 直接返回
     """
     from gimbal.utils.jsonpath import get as jsonpath_get
-    from gimbal.schema.strategy import Scope
+    from gimbal.schema import Scope
 
     if not isinstance(source, str):
         return source
@@ -110,7 +110,7 @@ def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> An
 
 def _evaluate(operator, actual: Any, expected: Any) -> tuple[bool, str]:
     """执行比较操作，返回 (是否通过, 描述信息)。"""
-    from gimbal.schema.strategy import AssertOperator
+    from gimbal.schema import AssertOperator
 
     op = operator
     try:

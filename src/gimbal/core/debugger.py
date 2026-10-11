@@ -41,7 +41,7 @@ def debug_unit_count(target) -> int:
 
     CLI `--debug` 与 server debug 请求共用同一条"仅单单元"校验（S-6）。
     """
-    from gimbal.schema.scenario import SuiteGraph
+    from gimbal.schema import SuiteGraph
     if isinstance(target, SuiteGraph):
         return len(target.units) + len(target.before) + len(target.after)
     return 1

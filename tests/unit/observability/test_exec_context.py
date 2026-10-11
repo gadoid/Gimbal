@@ -87,9 +87,9 @@ def _unit(uid: str, *, n_runs: int = 1, retry: int = 0, timeout: float | None = 
     """最小 Unit（真实空场景 + 指定乘法策略；调度器不解读步骤内容）。"""
     from datetime import datetime, timezone
     from gimbal.schema.plan import UnitPolicy
-    from gimbal.schema.scenario import Config as SC, Meta, Scenario
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
+    from gimbal.schema import Config as SC, Meta, Scenario
+    from gimbal.schema import Step
+    from gimbal.schema import Call
     sc = Scenario(
         scenarioId=uid,
         meta=Meta(name=uid, description="d", module="m", priority=1, author="a",

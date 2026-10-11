@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..schema.auth import AuthSession
+    from .session import AuthSession
 
 # ── 注册表 ────────────────────────────────────────────────
 _AUTHENTICATOR_REGISTRY: dict[str, type] = {}

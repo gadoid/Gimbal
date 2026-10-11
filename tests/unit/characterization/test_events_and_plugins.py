@@ -24,12 +24,12 @@ from gimbal.core.plugin import PluginContext
 from gimbal.core.runner import Engine
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
-from gimbal.schema.call import Call
-from gimbal.schema.call import Call
-from gimbal.schema.request import Request
-from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
-from gimbal.schema.step import Step
-from gimbal.schema.strategy import AssertOperator, Assertion
+from gimbal.schema import Call
+from gimbal.schema import Call
+from gimbal.schema import Request
+from gimbal.schema import Config as ScenarioConfig, Meta, Scenario
+from gimbal.schema import Step
+from gimbal.schema import AssertOperator, Assertion
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
 
@@ -245,9 +245,9 @@ class TestPluginsEngineLevel:
         + timestamp 头；无 user 标签不注入。
         """
         import re
-        from gimbal.schema.auth import AuthSession
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.auth.session import AuthSession
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         engine, bus, archive, hooks, dispatcher, auth_registry = make_engine(
             auth_session=("buyer", AuthSession(token="tok-XYZ", token_type="Bearer")),
@@ -276,9 +276,9 @@ class TestPluginsEngineLevel:
     def test_native_injection_signature_varies_with_session(self):
         """签名随会话 token 变化（不同会话 → 不同 token 头）。"""
         import re
-        from gimbal.schema.auth import AuthSession
-        from gimbal.schema.call import Call
-        from gimbal.schema.request import Request
+        from gimbal.auth.session import AuthSession
+        from gimbal.schema import Call
+        from gimbal.schema import Request
 
         def _run_with(token):
             engine, *_ = make_engine(

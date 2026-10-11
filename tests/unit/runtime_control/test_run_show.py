@@ -23,11 +23,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 def _make_scenario():
     """构造一个完整合法的小型 scenario 用于测试。"""
-    from gimbal.schema.scenario import Scenario, Meta, Config
-    from gimbal.schema.step import Step
-    from gimbal.schema.call import Call
-    from gimbal.schema.request import Request
-    from gimbal.schema.strategy import (
+    from gimbal.schema import Scenario, Meta, Config
+    from gimbal.schema import Step
+    from gimbal.schema import Call
+    from gimbal.schema import Request
+    from gimbal.schema import (
         Extract, Assertion, StrategyPhase, Scope, AssertOperator,
     )
 
@@ -71,9 +71,9 @@ def _make_scenario():
                     Assertion(
                         name="check_201",
                         phase=StrategyPhase.VERIFYING,
-                        expression="$.code",
+                        target="$.code",
                         operator=AssertOperator.EQ,
-                        target="201",
+                        expected="201",
                     )
                 ],
             ),

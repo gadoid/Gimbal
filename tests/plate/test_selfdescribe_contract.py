@@ -86,15 +86,15 @@ class TestProtocolContract:
 
 class TestFrameworkSchemaContract:
     def test_gates_shape(self) -> None:
-        from gimbal.schema.scenario import GateDecl
+        from gimbal.schema import GateDecl
 
         fields = set(GateDecl.model_fields)
         assert {"metric", "op", "value"} <= fields
 
     def test_subscribe_schema_keys(self) -> None:
-        from gimbal.schema import subscribe
+        from gimbal.schema import SubscribeRule
 
-        assert hasattr(subscribe, "__file__")
+        assert SubscribeRule is not None
 
     def test_param_registry_schema_keys(self) -> None:
         from gimbal.schema import param_registry
@@ -102,10 +102,11 @@ class TestFrameworkSchemaContract:
         assert hasattr(param_registry, "__file__")
 
     def test_report_and_plan_schema_exist(self) -> None:
-        from gimbal.schema import debug, plan, report_definition
+        from gimbal.schema import debug, plan, ReportDefinition
 
-        for mod in (debug, plan, report_definition):
+        for mod in (debug, plan):
             assert hasattr(mod, "__file__")
+        assert ReportDefinition is not None   # M2 收编(不再有独立子模块)
 
 
 _ = pytest  # 保持 import 语义完整

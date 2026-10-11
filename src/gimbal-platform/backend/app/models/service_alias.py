@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ._types import UtcDateTime
-from sqlalchemy import ( ForeignKey, Index, String, func,
+from sqlalchemy import ( ForeignKey, Integer, Index, String, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,7 +41,9 @@ class ServiceAlias(Base):
     # 的唯一权威(服务器迁移一处改),不在前端/场景 payload 冗余存。
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 横向分组标签(环境只是常见用法之一);可空 = 未分组
-    group_tag: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # V5 已定按 B（Release v4.4 §11）：group_tag 升级为 environment_id 外键
+    environment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("environments.id"), nullable=True)
     # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证
     credential_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 非空 = 个人默认,空 = 团队共享;用户注销时置空(共享化)

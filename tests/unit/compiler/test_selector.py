@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
-from gimbal.schema.scenario import Config as SC, Meta, Scenario
+from gimbal.schema import Config as SC, Meta, Scenario
 from gimbal.suite.selector import matches, parse_where, select
 
 

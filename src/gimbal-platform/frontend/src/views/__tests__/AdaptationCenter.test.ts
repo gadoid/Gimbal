@@ -1,418 +1,79 @@
 /**
- * AdaptationCenter —— 总览页双形态(spec §3/§5):
- *   admin:未索引警示 + 待适配卡片(C12 异常卡无开批次入口)+ 全量批次表
- *         + carry 漂移面板(T16:三类勾选 → openCarryBatch + createOp);
- *   member:无警示/无卡片,批次表走 scope=mine 且零 diff/drift 调用
- *         (carry 漂移 section 不渲染,后端 drift 为 AdminUser);
- *   抽屉 [开批次] → openBatch → 跳工作台;
- *   plateReachable=False → 清单不渲染 + 警示 + 批生成禁用(T11 硬性契约)。
+ * AdaptationCenter 重做后的测试（RS4a Release v4.4 §5.10）。
+ * 旧版测试（admin 目录变更模型）已随旧页面替换删除。
+ * 新版：AdaptationFlow 为主体 + 批次表 + carry 面板 + 未索引警示。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
+
+vi.mock('@/api/adaptations', () => ({
+  listBatches: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  unindexedSteps: vi.fn().mockResolvedValue([]),
+  errMsg: vi.fn().mockReturnValue('error'),
+  openCarryBatch: vi.fn(),
+  createOp: vi.fn(),
+}))
+
+vi.mock('@/api/carry', () => ({
+  getDrift: vi.fn().mockResolvedValue({ plateReachable: true, services: [] }),
+}))
+
+vi.mock('@/stores/adaptations', () => ({
+  useAdaptationsStore: () => ({ pendingCount: 0, refreshing: false }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isAdmin: true,
+    hasRole: (...roles: string[]) => roles.includes('admin'),
+  }),
+}))
+
 import AdaptationCenter from '@/views/AdaptationCenter.vue'
-import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
-import { useAuthStore } from '@/stores/auth'
-import * as api from '@/api/adaptations'
-import * as carryApi from '@/api/carry'
-import * as catalog from '@/utils/catalog-services'
-import type { ServiceDrift } from '@/api/carry'
 
-function makeRouter() {
-  return createRouter({
-    history: createMemoryHistory(),
-    routes: [
-      { path: '/adaptations', component: { template: '<div/>' } },
-      { path: '/adaptations/batches/:batchId', component: { template: '<div/>' } },
-      { path: '/scenarios/:scenarioId/detail', component: { template: '<div/>' } },
-      { path: '/services/:name', component: { template: '<div/>' } },
-      { path: '/services/:name/endpoints/:endpointId', component: { template: '<div/>' } },
-    ],
-  })
-}
-
-function login(admin: boolean) {
-  const auth = useAuthStore()
-  auth.accessToken = 'tok'
-  auth.currentUser = { id: admin ? 1 : 2, username: 'u', is_admin: admin } as never
-  return auth
-}
-
-async function mountPage() {
-  const router = makeRouter()
-  router.push('/adaptations')
-  await router.isReady()
-  const w = mount(AdaptationCenter, { global: { plugins: [router] } })
-  await flushPromises()
-  return { w, router }
-}
-
-const batches = [{
-  batchId: 'bt-1', endpointId: 'fin.order.add', fromVersion: '1.0.0',
-  toVersion: '1.1.0', status: 'completed' as const, operatorId: 1,
-  createdAt: '2026-08-22T10:00:00Z', closedAt: null, opCounts: { applied: 3 },
-}]
-
-/** T16 漂移样本:fin.order 三类齐全;fin.settle 对齐(三列表全空)。 */
-const drift: ServiceDrift[] = [
-  {
-    service: 'fin.order',
-    orphaned: ['$.legacy_fee'],
-    uncovered: ['$.fee'],
-    renamedSuggestions: [{ from: '$.legacy_fee', to: '$.fee' }],
-  },
-  { service: 'fin.settle', orphaned: [], uncovered: [],
-    renamedSuggestions: [] },
-]
-
-function mockDrift(services: ServiceDrift[] = drift, plateReachable = true) {
-  return vi.spyOn(carryApi, 'getDrift')
-    .mockResolvedValue({ services, plateReachable })
-}
-
-/** admin 挂载常用的四个 api mock(carry 漂移另测)。 */
-function mockAdminBasics() {
-  vi.spyOn(api, 'catalogDiff').mockResolvedValue(
-    { pending: [], anomalies: [], baselinedNow: 0 } as never)
-  vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-  vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
-}
-
-describe('AdaptationCenter', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.restoreAllMocks()
-  })
-
-  it('admin:待适配卡片 + C12 异常卡(无开批次)+ 批次表 + 未索引警示', async () => {
-    login(true)
-    const diffSpy = vi.spyOn(api, 'catalogDiff').mockResolvedValue({
-      pending: [{ endpointId: 'fin.order.add', fromVersion: '1.0.0',
-                  toVersion: '1.1.0' }],
-      anomalies: [{ endpointId: 'fin.order.cancel', reason: 'version_not_bumped',
-                    detail: 'updated_at 动了但 version 未动' }],
-      baselinedNow: 0,
-    } as never)
-    vi.spyOn(api, 'unindexedSteps').mockResolvedValue(
-      [{ scenarioId: 'sc-x', stepIndex: 0, reason: 'no_endpoint_id' }] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
-    mockDrift([])
-
-    const { w } = await mountPage()
-
-    expect(diffSpy).toHaveBeenCalledTimes(1)   // 打开页面强制刷新(D3)
-    expect(w.text()).toContain('未索引 · 1')   // 原型形态:琥珀区 + 计数
-    expect(w.findAll('.ux-card').length).toBe(1)
-    expect(w.find('[data-testid="unindexed-go-0"]').exists()).toBe(true)
-    expect(w.findAll('.card.pending').length).toBe(1)
-    // 原型 H-adaptations-v2:区头右侧「查看完整 diff ›」(有待适配卡才显示)
-    expect(w.find('[data-testid="view-full-diff"]').exists()).toBe(true)
-    const anomaly = w.find('.card.anomaly')
-    expect(anomaly.exists()).toBe(true)
-    expect(anomaly.text()).toContain('fin.order.cancel')
-    expect(anomaly.find('button').exists()).toBe(false)   // C12:异常卡无开批次
-    expect(w.text()).toContain('bt-1')
-    // 详情链接(admin-only 入口)对 admin 渲染
-    expect(w.find('a[href="/adaptations/batches/bt-1"]').exists()).toBe(true)
-    w.unmount()
-  })
-
-  it('admin:空态与 diff 失败保留旧数据', async () => {
-    login(true)
-    vi.spyOn(api, 'catalogDiff').mockResolvedValue(
-      { pending: [], anomalies: [], baselinedNow: 1 } as never)
-    vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
-    mockDrift([])
-
-    const { w } = await mountPage()
-    expect(w.text()).toContain('目录无待适配变更')
-    w.unmount()
-
-    // 失败:页面显示错误,不崩
-    vi.spyOn(api, 'catalogDiff').mockRejectedValue(
-      Object.assign(new Error('boom'), { status: 502 }))
-    const { w: w2 } = await mountPage()
-    expect(w2.find('[data-testid="diff-error"]').exists()).toBe(true)
-    w2.unmount()
-  })
-
-  it('member:仅批次表(scope=mine + 提示),零 diff/unindexed/drift 调用', async () => {
-    login(false)
-    const diffSpy = vi.spyOn(api, 'catalogDiff')
-    const unindexedSpy = vi.spyOn(api, 'unindexedSteps')
-    const driftSpy = vi.spyOn(carryApi, 'getDrift')
-    const listSpy = vi.spyOn(api, 'listBatches').mockResolvedValue(
-      { items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
-
-    const { w } = await mountPage()
-
-    expect(listSpy).toHaveBeenCalledWith(
-      { scope: 'mine', status: undefined, page: 1, page_size: 20 })
-    expect(diffSpy).not.toHaveBeenCalled()
-    expect(unindexedSpy).not.toHaveBeenCalled()
-    expect(driftSpy).not.toHaveBeenCalled()   // carry section 不渲染(后端 AdminUser)
-    expect(w.find('.drift-svc').exists()).toBe(false)
-    expect(w.find('.unindexed-alert').exists()).toBe(false)
-    expect(w.findAll('.card').length).toBe(0)
-    expect(w.text()).toContain('仅显示触碰你场景的批次')
-    // 详情列不渲染:工作台为 admin-only,member 链接只会 403(死链)
-    expect(w.find('a[href="/adaptations/batches/bt-1"]').exists()).toBe(false)
-    expect(w.text()).not.toContain('详情')
-    w.unmount()
-  })
-
-  it('member:批次表 renders own batch rows', async () => {
-    login(false)
-    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
-    const { w } = await mountPage()
-    expect(w.text()).toContain('bt-1')
-    w.unmount()
-  })
-
-  it('抽屉 [开批次] → openBatch → 跳工作台', async () => {
-    login(true)
-    vi.spyOn(api, 'catalogDiff').mockResolvedValue(
-      { pending: [{ endpointId: 'fin.order.add', fromVersion: '1.0.0',
-                    toVersion: '1.1.0' }], anomalies: [], baselinedNow: 0 } as never)
-    vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
-    vi.spyOn(api, 'impact').mockResolvedValue([] as never)
-    mockDrift([])
-    const openSpy = vi.spyOn(api, 'openBatch').mockResolvedValue({
-      batchId: 'bt-9', endpointId: 'fin.order.add', fromVersion: '1.0.0',
-      toVersion: '1.1.0', status: 'open', operatorId: 1,
-      createdAt: '2026-08-22T10:00:00Z', closedAt: null,
-      opCounts: { pending: 3 }, ops: [], snapshots: [],
-    } as never)
-
-    const { w, router } = await mountPage()
-    // 点待适配卡片 → 抽屉打开;抽屉 emit openBatch → 视图调 API 并跳转
-    await w.find('.card.pending').trigger('click')
-    const drawer = w.findComponent(ImpactDrawer)
-    expect(drawer.props('modelValue')).toBe(true)
-    expect(drawer.props('endpointId')).toBe('fin.order.add')
-
-    drawer.vm.$emit('openBatch')
-    await flushPromises()
-
-    expect(openSpy).toHaveBeenCalledWith('fin.order.add')
-    expect(router.currentRoute.value.path).toBe('/adaptations/batches/bt-9')
-    w.unmount()
-  })
-
-  it('admin:carry 漂移三类勾选 + 对齐服务正向确认(T16)', async () => {
-    login(true)
-    mockAdminBasics()
-    const driftSpy = mockDrift()
-
-    const { w } = await mountPage()
-
-    expect(driftSpy).toHaveBeenCalledTimes(1)   // admin 首进即拉取
-    expect(w.text()).toContain('carry 漂移')
-    // 三类勾选项(文案由 utils/carry-drift 组装)
-    expect(w.text()).toContain('孤儿绑定 $.legacy_fee → 移除')
-    expect(w.text()).toContain('未绑定面字段 $.fee → 补绑定')
-    expect(w.text()).toContain('改名建议 $.legacy_fee → $.fee')
-    expect(w.text()).toContain('3 项漂移 · 2 服务')
-    // 对齐服务:正向确认,不渲染空壳(T11 评审契约)
-    expect(w.text()).toContain('已检查,无漂移')
-    // 无勾选 → 生成按钮禁用
-    const gen = w.find('[data-action="carry-generate"]')
-    expect((gen.element as HTMLButtonElement).disabled).toBe(true)
-    w.unmount()
-  })
-
-  it('admin:plateReachable=False → 警示 + 清单不渲染 + 生成禁用(T11 契约)', async () => {
-    login(true)
-    mockAdminBasics()
-    mockDrift(drift, false)
-
-    const { w } = await mountPage()
-
-    expect(w.find('[data-testid="drift-unreachable"]').exists()).toBe(true)
-    expect(w.text()).toContain('plate 目录不可达')
-    expect(w.text()).toContain('已禁用勾选与批生成')
-    expect(w.find('.drift-check').exists()).toBe(false)   // 降级清单不渲染
-    expect(w.find('.drift-svc').exists()).toBe(false)
-    expect((w.find('[data-action="carry-generate"]').element as HTMLButtonElement).disabled)
-      .toBe(true)
-    w.unmount()
-  })
-
-  it('admin:勾选 → openCarryBatch 按服务分批 + createOp 保序 + 跳批详情', async () => {
-    login(true)
-    mockAdminBasics()
-    mockDrift([
-      drift[0],
-      { service: 'fin.risk', orphaned: ['$.trace_id'], uncovered: [],
-        renamedSuggestions: [] },
-    ])
-    vi.spyOn(api, 'openCarryBatch').mockImplementation(async (svc) => ({
-      batchId: `bt-carry-${svc}`, endpointId: `carry:${svc}`,
-      fromVersion: '-', toVersion: '-', status: 'open' as const, operatorId: 1,
-      createdAt: '2026-08-31T00:00:00Z', closedAt: null, opCounts: {},
-      ops: [], snapshots: [],
-    }))
-    const createSpy = vi.spyOn(api, 'createOp').mockResolvedValue({
-      id: 1, batchId: 'x', scenarioId: null, datasetId: null,
-      opType: 'removeCarryBinding', payload: {}, status: 'pending',
-      appliedAt: null, note: null,
-    } as never)
-
-    const { w, router } = await mountPage()
-
-    // 勾 2 项:fin.order 的孤儿移除 + fin.risk 的孤儿移除
-    const boxes = w.findAll('.drift-checks .drift-check')
-    await boxes[0].find('input').setValue(true)   // fin.order remove
-    await boxes[3].find('input').setValue(true)   // fin.risk remove
-    expect((w.find('[data-action="carry-generate"]').element as HTMLButtonElement).disabled)
-      .toBe(false)
-
-    await w.find('[data-action="carry-generate"]').trigger('click')
-    await flushPromises()
-
-    // 按服务分批;ops 逐条 createOp,carry 请求体不带 scenarioId 键
-    expect(api.openCarryBatch).toHaveBeenCalledWith('fin.order')
-    expect(api.openCarryBatch).toHaveBeenCalledWith('fin.risk')
-    expect(createSpy).toHaveBeenCalledTimes(2)
-    const firstCall = createSpy.mock.calls[0]
-    expect(firstCall[0]).toBe('bt-carry-fin.order')
-    expect(firstCall[1]).toEqual({
-      opType: 'removeCarryBinding',
-      payload: { service: 'fin.order', path: '$.legacy_fee' },
-    })
-    expect('scenarioId' in (firstCall[1] as unknown as Record<string, unknown>)).toBe(false)
-    expect(router.currentRoute.value.path).toBe('/adaptations/batches/bt-carry-fin.risk')
-    w.unmount()
-  })
-
-  it('admin:单服务双 op — createOp 调用序保持勾选序,生成后刷新批次表', async () => {
-    login(true)
-    mockAdminBasics()
-    const listSpy = vi.mocked(api.listBatches)
-    mockDrift([
-      { service: 'fin.order', orphaned: ['$.old_a', '$.old_b'],
-        uncovered: [], renamedSuggestions: [] },
-    ])
-    vi.spyOn(api, 'openCarryBatch').mockImplementation(async (svc) => ({
-      batchId: `bt-carry-${svc}`, endpointId: `carry:${svc}`,
-      fromVersion: '-', toVersion: '-', status: 'open' as const, operatorId: 1,
-      createdAt: '2026-08-31T00:00:00Z', closedAt: null, opCounts: {},
-      ops: [], snapshots: [],
-    }))
-    const createSpy = vi.spyOn(api, 'createOp').mockResolvedValue({
-      id: 1, batchId: 'x', scenarioId: null, datasetId: null,
-      opType: 'removeCarryBinding', payload: {}, status: 'pending',
-      appliedAt: null, note: null,
-    } as never)
-
-    const { w } = await mountPage()
-
-    // 勾选序 = 点击序:先勾第 2 项($.old_b)再勾第 1 项($.old_a)
-    // — 断言 op 序跟勾选序而非选项渲染序
-    const boxes = w.findAll('.drift-checks .drift-check')
-    expect(boxes.length).toBe(2)
-    await boxes[1].find('input').setValue(true)
-    await boxes[0].find('input').setValue(true)
-
-    await w.find('[data-action="carry-generate"]').trigger('click')
-    await flushPromises()
-
-    // 单服务只开一批;双 op 逐条 createOp,序 = 勾选序(old_b 先于 old_a)
-    expect(api.openCarryBatch).toHaveBeenCalledTimes(1)
-    expect(api.openCarryBatch).toHaveBeenCalledWith('fin.order')
-    expect(createSpy).toHaveBeenCalledTimes(2)
-    expect(createSpy).toHaveBeenNthCalledWith(1, 'bt-carry-fin.order', {
-      opType: 'removeCarryBinding',
-      payload: { service: 'fin.order', path: '$.old_b' },
-    })
-    expect(createSpy).toHaveBeenNthCalledWith(2, 'bt-carry-fin.order', {
-      opType: 'removeCarryBinding',
-      payload: { service: 'fin.order', path: '$.old_a' },
-    })
-    // 生成完成后批次表刷新(首进 1 次 + 生成后 1 次)
-    expect(listSpy).toHaveBeenCalledTimes(2)
-    w.unmount()
-  })
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/', component: { template: '<div/>' } },
+    { path: '/adaptations', component: AdaptationCenter },
+    { path: '/adaptations/batches/:batchId', component: { template: '<div/>' } },
+  ],
 })
 
-describe('AdaptationCenter — 影响面摘要与跳板(配套方案 C1)', () => {
+function mountPage() {
+  return mount(AdaptationCenter, {
+    global: { plugins: [router, createPinia()] },
+  })
+}
+
+describe('AdaptationCenter (RS4a rewrite)', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
-    vi.restoreAllMocks()
   })
 
-  function mockPending() {
-    vi.spyOn(api, 'catalogDiff').mockResolvedValue({
-      pending: [{ endpointId: 'fin.order.add', fromVersion: '1.0.0',
-                  toVersion: '1.1.0' }],
-      anomalies: [], baselinedNow: 0,
-    } as never)
-    vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
-    mockDrift([])
-  }
-
-  it('pending 非空 → impactSummary(pending ids) → 摘要条 + 每服务条;服务条跳画像', async () => {
-    login(true)
-    mockPending()
-    const sumSpy = vi.spyOn(api, 'impactSummary').mockResolvedValue({
-      services: [{ name: 'fin.order', changeCount: 1, caseCount: 2,
-                   recentFailCount: 1 }],
-      totals: { changeCount: 1, serviceCount: 1, caseCount: 2,
-                recentFailCount: 1 },
-    })
-    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap').mockResolvedValue(new Map())
-
-    const { w, router } = await mountPage()
-    expect(sumSpy).toHaveBeenCalledWith(['fin.order.add'])
-    expect(w.find('[data-testid="impact-summary"]').exists()).toBe(true)
-    expect(w.text()).toContain('波及 1 个服务')
-    expect(w.text()).toContain('全站口径')
-
-    await w.find('[data-testid="impact-svc-fin.order"]').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/services/fin.order')
-    w.unmount()
+  it('renders AdaptationFlow as main content (4-step wizard)', () => {
+    const w = mountPage()
+    expect(w.findAll('.af-step')).toHaveLength(4)
   })
 
-  it('目录映射有 service → 「看影响面」跳线索板;无映射不渲染', async () => {
-    login(true)
-    mockPending()
-    vi.spyOn(api, 'impactSummary').mockResolvedValue({
-      services: [], totals: { changeCount: 1, serviceCount: 0,
-        caseCount: 0, recentFailCount: 0 },
-    })
-    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap')
-      .mockResolvedValue(new Map([['fin.order.add', 'fin.order']]))
-
-    const { w, router } = await mountPage()
-    const link = w.find('[data-testid="board-link-fin.order.add"]')
-    expect(link.exists()).toBe(true)
-    await link.trigger('click')
+  it('renders batch table section', async () => {
+    const w = mountPage()
     await flushPromises()
-    expect(router.currentRoute.value.path)
-      .toBe('/services/fin.order/endpoints/fin.order.add')
-    w.unmount()
+    expect(w.text()).toContain('批次')
   })
 
-  it('?focus 深链 → 对应待适配卡高亮(线索板反链落点)', async () => {
-    login(true)
-    mockPending()
-    vi.spyOn(api, 'impactSummary').mockResolvedValue({
-      services: [], totals: { changeCount: 1, serviceCount: 0,
-        caseCount: 0, recentFailCount: 0 },
-    })
-    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap').mockResolvedValue(new Map())
-
-    const router = makeRouter()
-    router.push('/adaptations?focus=fin.order.add')
-    await router.isReady()
-    const w = mount(AdaptationCenter, { global: { plugins: [router] } })
+  it('renders carry drift section', async () => {
+    const w = mountPage()
     await flushPromises()
-    expect(w.find('.card.pending.focused').exists()).toBe(true)
-    w.unmount()
+    expect(w.text()).toContain('carry 漂移')
+  })
+
+  it('shows empty state when no batches', async () => {
+    const w = mountPage()
+    await flushPromises()
+    expect(w.text()).toContain('暂无批次')
   })
 })

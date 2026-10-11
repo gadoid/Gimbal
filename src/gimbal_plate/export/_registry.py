@@ -89,11 +89,11 @@ def _build_default_registry() -> dict[
         PlatformConsumerRequest,
     )
     from gimbal_plate.export.gimbal import GimbalScenarioExporter
-    from gimbal_plate.export.platform import PlatformScenarioExporter
+    # Q11:platform consumer 已删除(2026-10-10)
 
     return {
         "gimbal":   (GimbalConsumerRequest,   GimbalScenarioExporter),
-        "platform": (PlatformConsumerRequest, PlatformScenarioExporter),
+        # "platform" consumer 已删除(Q11)
     }
 
 

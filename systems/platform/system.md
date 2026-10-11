@@ -1,6 +1,7 @@
 ---
 type: system
 system: platform
+line: "1.0"
 ---
 
 # platform 系统(自举被测系统)

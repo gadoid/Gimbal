@@ -54,7 +54,7 @@ class TestSchemaClosed:
         增列后,再修改这里的 EXPECTED_FIELDS。
         """
         expected = {
-            "system",  # V3 新增,V3.2 改为 list[str],默认 []
+            "system", "plate",  # V3 新增,V3.2 改为 list[str],默认 []
             "name",
             "description",
             "module",
@@ -74,12 +74,12 @@ class TestSchemaClosed:
             f"  缺失: {expected - actual}\n"
             f"  多余: {actual - expected}"
         )
-        # V3.2 system 字段使用 default_factory=list,默认值必须为 []
-        assert Meta.model_fields["system"].default_factory is list
-        # default_factory 模式下 .default 应为 PydanticUndefined(Pydantic v2 sentinel)
+        # M2:system 用 default=[] 字面量(P8 加法演进;pydantic 逐实例复制)
+        assert Meta.model_fields["system"].default == []
+        # default 字面量模式下 .default_factory 为 None
         from pydantic_core import PydanticUndefined
 
-        assert Meta.model_fields["system"].default is PydanticUndefined
+        assert Meta.model_fields["system"].default_factory is None
         m = Meta(name="x", description="x", module="x", priority=1, author="x",
                  owner="x", tags=[], version="1.0.0", createTime="2026-01-01T00:00:00",
                  expire=False, requirementRef=[])

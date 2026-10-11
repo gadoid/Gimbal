@@ -19,9 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 from typer.testing import CliRunner
 
 from gimbal.cli.params import starter
-from gimbal.schema.call import Call
-from gimbal.schema.scenario import Scenario, Config as ScenarioConfig, SuiteGraph, UnitDecl, Meta
-from gimbal.schema.step import Step
+from gimbal.schema import Call
+from gimbal.schema import Scenario, Config as ScenarioConfig, SuiteGraph, UnitDecl, Meta
+from gimbal.schema import Step
 
 runner = CliRunner()
 

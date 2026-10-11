@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -33,6 +33,10 @@ STATUS_CANCELED = "canceled"
 
 class Execution(Base):
     __tablename__ = "executions"
+
+    # RS3（Release v4.4 §6.3）：生效修订表与构建身份
+    plate_pins: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    m2_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # (owner_id, id) 复合(0005 升级原单列 owner 索引):列表/汇总/streak
     # 均为 owner 过滤 + id 倒序,前缀吃过滤、后缀吃倒序扫
     __table_args__ = (
