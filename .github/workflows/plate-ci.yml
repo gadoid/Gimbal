@@ -12,6 +12,7 @@ on:
       - "src/gimbal-plate/**"
       - "src/gimbal-platform/**"
       - "tests/**"
+      - "scripts/**"
       - "pyproject.toml"
       - ".github/workflows/plate-ci.yml"
   push:
@@ -20,7 +21,11 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 —— compat 需要读 origin/main 的 m2.schema.json;
+      # 默认浅克隆只有 PR 本身,取不到目标分支(评审第九轮)
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -39,7 +44,7 @@ jobs:
       - name: M2 漂移守卫 — gen_m2 check(生成物与当前定义一致)
         run: |
           set -e
-          npx --yes json-schema-to-typescript --version
+          npx --yes json-schema-to-typescript@16.0.0 --version
           python scripts/gen_m2.py check --targets schema,ext,py,ts
       - name: M2 兼容性守卫 — gen_m2 compat(不兼容变更须递增代际)
         run: python scripts/gen_m2.py compat --base origin/main

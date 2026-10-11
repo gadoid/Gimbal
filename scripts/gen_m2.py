@@ -274,18 +274,19 @@ def _gen_ts(schema_path: Path, out_path: Path) -> None:
     # title,json2ts 用文件名当根类型名,随机命名(NamedTemporaryFile)
     # 会导致每次生成的根类型不同(M2Schema→Tmpxxx),CI 漂移守卫必红
     tmp_dir = _tf.mkdtemp(prefix="gen_m2_ts_")
-    tmp_path = Path(tmp_dir) / "m2.schema.json"
-    tmp_path.write_text(_json.dumps(schema, ensure_ascii=False),
-                        encoding="utf-8")
-
-    npx = shutil.which("npx") or "npx"
-    r = _sp.run(
-        [npx, "--yes", "json-schema-to-typescript",
-         "--input", str(tmp_path), "--output", str(out_path)],
-        capture_output=True, text=True, encoding="utf-8",
-        cwd=str(REPO), shell=_sys.platform == "win32")
-    import shutil as _shl
-    _shl.rmtree(tmp_dir, ignore_errors=True)
+    try:
+        tmp_path = Path(tmp_dir) / "m2.schema.json"
+        tmp_path.write_text(_json.dumps(schema, ensure_ascii=False),
+                            encoding="utf-8")
+        npx = shutil.which("npx") or "npx"
+        r = _sp.run(
+            [npx, "--yes", "json-schema-to-typescript@16.0.0",
+             "--input", str(tmp_path), "--output", str(out_path)],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(REPO), shell=_sys.platform == "win32")
+    finally:
+        import shutil as _shl
+        _shl.rmtree(tmp_dir, ignore_errors=True)
     if r.returncode != 0:
         raise RuntimeError(
             "json-schema-to-typescript 失败(需 node/npx): "
@@ -390,12 +391,20 @@ def cmd_check(targets: list[str]) -> int:
 
 
 def _load_base_schema(ref: str) -> dict | None:
-    r = _run(["git", "show",
-              f"{ref}:src/gimbal_plate/selfdescribe/m2.schema.json"],
-             cwd=REPO)
+    # cat-file -e 稳定判断「对象存在」(不依赖英文报错文本;本地 git
+    # 设成中文时 stderr 匹配会失效,评审第九轮)
+    path = "src/gimbal_plate/selfdescribe/m2.schema.json"
+    exists = _run(["git", "cat-file", "-e", f"{ref}:{path}"], cwd=REPO)
+    if exists.returncode != 0:
+        # ref 本身取不到(浅克隆无 origin/main 等)→ 区分报错
+        ref_ok = _run(["git", "rev-parse", "--verify", ref], cwd=REPO)
+        if ref_ok.returncode != 0:
+            raise RuntimeError(
+                f"取基线 {ref} 失败(ref 不存在;CI 需 fetch-depth:0"
+                f" 或 git fetch origin <目标分支>): {ref_ok.stderr.strip()[:120]}")
+        return None          # ref 存在但文件不存在(首次引入)→ 跳过 compat
+    r = _run(["git", "show", f"{ref}:{path}"], cwd=REPO)
     if r.returncode != 0:
-        if "exists on disk, but not in" in r.stderr:
-            return None      # 基线还没有 M2 Schema(首次引入)→ 跳过 compat
         raise RuntimeError(
             f"取基线 m2.schema.json 失败({ref}): {r.stderr.strip()[:150]}")
     return json.loads(r.stdout)
