@@ -110,44 +110,54 @@ function storeFetched(endpointId: string, clean: EndpointFullView) {
  *  「无人看管时的反复重发」,不是拒绝人的意图 —— 一个点了没反应的「重试」
  *  比没有按钮更糟,所以显式动作不受窗口约束;反复点击的上界由用户的手决定。 */
 export function ensureEndpointFull(
-  endpointId: string, opts?: { force?: boolean },
+  endpointId: string, opts?: { force?: boolean; ref?: string },
 ): Promise<EndpointFullView | undefined> {
   const force = opts?.force === true
-  const entry = fullByEndpoint.get(endpointId)
+  // M1:缓存键含修订(6.1 编排页按场景生效修订读);缺省 working
+  // 与旧键一致,存量调用零变化
+  const key = opts?.ref && opts.ref !== 'working'
+    ? `${endpointId}@${opts.ref}` : endpointId
+  const entry = fullByEndpoint.get(key)
   if (!force && entry && Date.now() - entry.at < FULL_TTL_MS) return Promise.resolve(entry.view)
-  const at = failedAt.get(endpointId)
+  const at = failedAt.get(key)
   if (!force && at !== undefined && Date.now() - at < FAILED_RETRY_MS) {
     return Promise.resolve(undefined)          // 负缓存命中:窗口内不重发(**面到期也不例外**)
   }
-  const pending = inFlight.get(endpointId)
+  const pending = inFlight.get(key)
   if (pending) return pending
-  const p = getFullEndpoint(endpointId)
+  const p = opts?.ref
+    ? getFullEndpoint(endpointId, opts.ref)
+    : getFullEndpoint(endpointId)
     .then((full) => {
       const clean = sanitizeEndpointFull(full)
-      storeFetched(endpointId, clean)
-      failedAt.delete(endpointId)
+      storeFetched(key, clean)
+      failedAt.delete(key)
       return clean
     })
     .catch(() => {
-      failedAt.set(endpointId, Date.now())     // 负缓存:窗口内不再发起;旧面留在缓存里继续服务
+      failedAt.set(key, Date.now())     // 负缓存:窗口内不再发起;旧面留在缓存里继续服务
       return undefined
     })
-    .finally(() => inFlight.delete(endpointId))
-  inFlight.set(endpointId, p)
+    .finally(() => inFlight.delete(key))
+  inFlight.set(key, p)
   return p
 }
 
 /** 同步读缓存(**不看 TTL**:过期也返回缓存里那份 —— 重取期间 UI 不闪空,重取
  *  失败时旧面继续服务);未拉取 → undefined。调用方自行 ensure。 */
-export function getEndpointFull(endpointId: string): EndpointFullView | undefined {
-  return fullByEndpoint.get(endpointId)?.view
+export function getEndpointFull(
+  endpointId: string, ref?: string,
+): EndpointFullView | undefined {
+  const key = ref && ref !== 'working' ? `${endpointId}@${ref}` : endpointId
+  return fullByEndpoint.get(key)?.view
 }
 
 /** 面的版本号:0 = 尚无面(未取 / 取数失败);首取记 1;此后每次**取回的面与
  *  上一份不等** +1(内容相同的重取不动)。消费方(判定面 `pathsOfStep` 的
  *  记忆化键)靠它感知换面 —— 版本一变,按旧面算出的投影即作废重判。 */
-export function surfaceVersion(endpointId: string): number {
-  return fullByEndpoint.get(endpointId)?.rev ?? 0
+export function surfaceVersion(endpointId: string, ref?: string): number {
+  const key = ref && ref !== 'working' ? `${endpointId}@${ref}` : endpointId
+  return fullByEndpoint.get(key)?.rev ?? 0
 }
 
 /** 端点级拉取状态:**上一次取数失败** = 'failed'(即便缓存里还留着上一份面 ——

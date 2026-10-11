@@ -118,8 +118,10 @@ class TestPositionRefRewrite:
     def test_assertion_registry_step_index_rewritten(self) -> None:
         payload = _payload(
             assertion_registry={"grp1": [
-                {"stepIndex": 0, "jsonpath": "$.a"},
-                {"stepIndex": 2, "jsonpath": "$.c"},
+                {"id": "e0", "path": {"stepIndex": 0, "source": "body",
+                                      "jsonpath": "$.a"}},
+                {"id": "e2", "path": {"stepIndex": 2, "source": "body",
+                                      "jsonpath": "$.c"}},
             ]})
         d = payload["definition"]
         d["steps"] = [_step(), _step(), _step()]
@@ -128,12 +130,14 @@ class TestPositionRefRewrite:
               "_payload": payload}
         apply_to_definition(d, op)
         entries = payload["assertion_registry"]["grp1"]
-        assert entries[0]["stepIndex"] == 0   # 在插入点前,不变
-        assert entries[1]["stepIndex"] == 3   # 2 → 3(后移一位)
+        assert entries[0]["path"]["stepIndex"] == 0   # 在插入点前,不变
+        assert entries[1]["path"]["stepIndex"] == 3   # 2 → 3(后移一位)
 
     def test_removed_step_dangling(self) -> None:
         payload = _payload(
-            assertion_registry={"grp": [{"stepIndex": 1, "jsonpath": "$.b"}]})
+            assertion_registry={"grp": [
+                {"id": "e1", "path": {"stepIndex": 1, "source": "body",
+                                      "jsonpath": "$.b"}}]})
         d = payload["definition"]
         d["steps"] = [_step(), _step(), _step()]
         op = {"op": "removeStep", "step": 1, "_payload": payload}

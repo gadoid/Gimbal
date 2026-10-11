@@ -634,6 +634,9 @@ const props = defineProps<{
   /** M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
    *  field_states 已出 step,Canvas 是唯一写入方(§3.1 稀疏增量)。 */
   fieldStates?: Record<string, Record<string, FieldState>>
+  /** M1(6.1):系统 → 场景声明的修订(meta.plate)—— 投影/契约按
+   *  生效修订读取;缺省 working(未声明/旧场景)。 */
+  plateRefOf?: (system: string) => string
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
@@ -693,7 +696,7 @@ function inferProtocol(step: StepView | undefined): string {
 function stepDecls(step: StepView | undefined) {
   const eid = stepEndpointId(step)
   if (!eid) return undefined
-  return getEndpointFull(eid)?.request?.declarations
+  return getEndpointFull(eid, refOfStep(step))?.request?.declarations
 }
 
 /** 请求表单面平铺投影(解析态 != carry,先序)— reqTypeC 差集/描述
@@ -716,8 +719,15 @@ const fieldSearchCorpus = computed(() =>
 
 // M4/4.8:binding 只读展示(method/path 模板)经投影查询 —— call 不存
 // 派生字段;存量步的 call.method/path 仅作拉取失败时的显示兜底。
+/** 步骤所属系统的声明修订(M1)。 */
+function refOfStep(step: StepView | undefined): string | undefined {
+  const eid = stepEndpointId(step)
+  if (!eid) return undefined
+  return props.plateRefOf?.(eid.split('.')[0])
+}
 const { proj: currentProj, refresh: refreshProj } = useEndpointProjection(
-  () => stepEndpointId(currentStep.value))
+  () => stepEndpointId(currentStep.value),
+  () => refOfStep(currentStep.value))
 watch(() => stepEndpointId(currentStep.value), () => { void refreshProj() }, { immediate: true })
 const projMethod = computed(() =>
   currentProj.value?.method || stepMethod(currentStep.value))
@@ -1690,7 +1700,7 @@ async function retryCurrentFull(): Promise<void> {
   const eid = stepEndpointId(currentStep.value)
   if (!eid || fullRetrying.value) return
   fullRetrying.value = true
-  try { await ensureEndpointFull(eid, { force: true }) } finally { fullRetrying.value = false }
+  try { await ensureEndpointFull(eid, { force: true, ref: refOfStep(currentStep.value) }) } finally { fullRetrying.value = false }
 }
 
 /** carry 免抖预拉(2026-09-08):进页即拉全部 step 的 /full — 徽标从进页起
@@ -1699,7 +1709,7 @@ async function retryCurrentFull(): Promise<void> {
 const stepEndpointIds = computed(() =>
   local.map((s) => stepEndpointId(s)).filter((v): v is string => !!v))
 watch(stepEndpointIds, (ids) => {
-  for (const id of ids) void ensureEndpointFull(id)
+  for (const id of ids) void ensureEndpointFull(id, { ref: props.plateRefOf?.(id.split('.')[0]) })
 }, { immediate: true })
 
 /** 当前 step 的断言候选列表;未知/拉取中 → 空(不渲染 ▾)

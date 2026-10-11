@@ -165,6 +165,7 @@
               v-model:steps="definition.steps"
               v-model:orchestration="orchestration"
               v-model:field-states="uiFieldStates"
+              :plate-ref-of="plateRefOf"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
               :focus-jump="focusJump"
@@ -366,6 +367,11 @@ const dataSets = ref<DataSetSummary[]>([])
 // M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
 // field_states 已出 step,Canvas 唯一写入方经 v-model 同步到这里。
 const uiFieldStates = ref<Record<string, Record<string, FieldState>>>({})
+
+/** M1(6.1):系统 → meta.plate 声明的修订 —— Canvas 按它读契约/投影。 */
+function plateRefOf(system: string): string {
+  return definition.value.meta?.plate?.[system] || 'working'
+}
 
 // Local draft state — 容器: definition(plate) + orchestration(平台)
 const definition = ref<ScenarioView>({

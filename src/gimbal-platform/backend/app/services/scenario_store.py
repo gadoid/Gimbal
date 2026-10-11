@@ -169,6 +169,12 @@ async def update(
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
     await db.refresh(row)
+    # 版本模型 4.1(M1):普通保存后,已验证修订 best-effort 升级为
+    # 当时的生效修订 —— plate 不可达时保持原值,绝不阻塞保存主链。
+    try:
+        await _bump_verified_to_effective(db, row)
+    except Exception:  # noqa: BLE001
+        pass
     # F3 事件落账(业务提交后):name 变化 → rename,否则 edit;
     # edit 走短窗合并吸收 autosave(2.5s 防抖全量 PUT)。
     if old_name and server_owned.name and old_name != server_owned.name:
@@ -641,6 +647,39 @@ def to_list_item_shape(
         starred=starred,
         visibility=row.visibility or "private",
     )
+
+
+async def _bump_verified_to_effective(db, row: ComposerScenario) -> None:
+    """已验证修订 → 生效修订(版本模型 4.1;调用方已兜异常)。"""
+    from . import plate_client
+    payload = row.payload or {}
+    definition = definition_from_payload(payload)
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    resolvable: dict[str, str] = {}
+    endpoints: dict[str, list[str]] = {}
+    for st in (definition.get("steps") or []):
+        if isinstance(st, dict) and st.get("endpoint"):
+            eid = str(st["endpoint"])
+            system = eid.split(".")[0]
+            ref = meta_plate.get(system)
+            if ref and ref != "working" and system not in resolvable:
+                resolvable[system] = ref
+            endpoints.setdefault(system, []).append(eid)
+    resolvable = {s: r for s, r in resolvable.items() if endpoints.get(s)}
+    if not resolvable:
+        return
+    resolved = await plate_client.resolve(
+        resolvable, {s: endpoints[s] for s in resolvable})
+    changed = False
+    for system, info in resolved.items():
+        eff = info.get("effective")
+        if eff and eff != meta_plate.get(system):
+            meta_plate[system] = eff
+            changed = True
+    if changed:
+        row.payload = {**payload, "definition": definition}
+        await db.commit()
+
 
 
 # M4/Q18（M2 §3）：平台元数据出定义 —— 这些键只在数据库行的列上，

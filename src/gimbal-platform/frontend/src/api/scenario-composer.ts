@@ -393,8 +393,12 @@ export async function previewPlateDraft(
  *  (含不经共享缓存的 `CaseComposerCatalog` 浏览面板)按构造拿到**路径可用性**
  *  干净的声明树(保证范围与边界见 `sanitizeDeclarations`;`children` 形状未归一)。
  *  容器内未发生改动时返回原对象(对干净响应零扰动)。 */
-export async function getFullEndpoint(endpointId: string): Promise<EndpointFullView> {
-  const { data } = await http.get<EndpointFullView>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
+export async function getFullEndpoint(
+  endpointId: string, ref?: string,
+): Promise<EndpointFullView> {
+  const { data } = await http.get<EndpointFullView>(
+    `/endpoint-catalog/${encodeURIComponent(endpointId)}/full`,
+    { params: ref && ref !== 'working' ? { ref } : {} })
   return sanitizeEndpointFull(data)
 }
 
@@ -497,8 +501,11 @@ export interface CallProjectionView {
   service?: string
 }
 
-export async function getEndpointProjection(endpointId: string): Promise<CallProjectionView> {
+export async function getEndpointProjection(
+  endpointId: string, ref?: string,
+): Promise<CallProjectionView> {
   const { data } = await http.get<{ item: CallProjectionView }>(
-    `/endpoint-catalog/${encodeURIComponent(endpointId)}/projection`)
+    `/endpoint-catalog/${encodeURIComponent(endpointId)}/projection`,
+    { params: ref && ref !== 'working' ? { ref } : {} })
   return data.item ?? {}
 }
