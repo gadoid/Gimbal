@@ -19,7 +19,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter
+from fastapi import Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -794,3 +796,58 @@ async def delete_scenario(
         await scenario_store.delete(db, scenario_id)
     except KeyError as e:
         raise key_error_404(e)
+
+
+# ── R19（Release v4.4 §6.5）:导入导出以 meta.plate 为契约 ──────────
+
+@router.get("/{scenario_id}/export")
+async def export_scenario(
+    scenario_id: str, user: CurrentUser, db: DbSession,
+) -> dict:
+    """导出场景定义（含 meta.plate 精确修订）——可直接被 CLI 与其他
+    平台实例使用（R19:文件自带版本声明）。"""
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise HTTPException(404, f"scenario_not_found: {scenario_id}")
+    await can_read_scenario(db, user, row)
+    from ..services.scenario_store import definition_from_payload
+    return definition_from_payload(row.payload or {})
+
+
+class ImportIn(BaseModel):
+    """R19 导入:场景定义(M2 实例,含 meta.plate)。"""
+
+    definition: dict
+
+
+@router.post("/import", status_code=201)
+async def import_scenario(
+    user: CurrentUser, db: DbSession, body: ImportIn,
+) -> dict:
+    """导入场景（R19）:按 meta.plate 声明的修订经 /convert 校验后
+    入库;无 meta.plate 或声明的修订不存在 → 422(由导入人选修订,
+    不猜测来源版本)。"""
+    from ..services import plate_client as pc
+    definition = body.definition
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    if not meta_plate:
+        raise HTTPException(422, detail={
+            "code": "meta_plate_required",
+            "message": "导入文件缺 meta.plate(R19:须声明精确修订)"})
+    try:
+        await pc.convert({"definition": definition})
+    except pc.PlateRejectedError as e:
+        raise HTTPException(422, detail={
+            "code": "convert_rejected",
+            "message": f"按声明修订校验失败: {e}"}) from e
+    except pc.PlateUnavailableError as e:
+        raise HTTPException(502, detail={
+            "code": "plate_unavailable",
+            "message": e.message}) from e
+    from ..schemas.scenario_composer import ScenarioDraft
+    draft = ScenarioDraft(definition=definition)
+    created = await scenario_store.create(
+        db, draft, owner=user.display_name or user.username,
+        owner_id=user.id)
+    return {"scenario_id": created.meta.scenario_id,
+            "meta_plate": meta_plate}
