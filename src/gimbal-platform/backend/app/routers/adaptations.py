@@ -426,3 +426,86 @@ async def submit_batch(user: CurrentUser, db: DbSession,
     ok = sum(1 for r in results if r.get("success"))
     return {"total": len(results), "succeeded": ok,
             "failed": len(results) - ok, "items": results}
+
+
+class SuiteSubmitIn(BaseModel):
+    """Suite 整体适配入参（§5.8）。"""
+
+    suiteId: int
+    targetRevision: str
+    saveMode: str = Field(pattern="^(direct|copy)$")
+    system: str | None = None
+
+
+@router.post("/submit-suite")
+async def submit_suite(user: CurrentUser, db: DbSession,
+                       body: SuiteSubmitIn) -> dict:
+    """Suite 整体适配（§5.8/R25）:逐成员 compare→submit 聚合。
+
+    R25 闸:direct 模式时同系统成员须一起提交(此处全量提交,天然满足);
+    copy 模式时连 Suite 一起复制(deep_copy_suite + 各成员副本)。
+    """
+    from ..models.suite import Suite
+    from ..services import suite_copy
+
+    suite = await db.get(Suite, body.suiteId)
+    if suite is None:
+        raise HTTPException(404, f"suite_not_found: {body.suiteId}")
+    units = (suite.mode_config or {}).get("units") or {}
+    scenario_ids = sorted(units.keys()) if isinstance(units, dict) else []
+    if not scenario_ids:
+        return {"total": 0, "succeeded": 0, "failed": 0, "items": [],
+                "suite_id": body.suiteId}
+
+    # R25 前置:版本线一致性检查(direct 模式)
+    if body.saveMode == "direct":
+        from ..services.suite_version import check_and_resolve_suite_versions
+        from ..services import scenario_store as ss
+        member_payloads = []
+        for sid in scenario_ids:
+            row = await ss.get_row(db, sid)
+            member_payloads.append(row.payload or {} if row else {})
+        try:
+            await check_and_resolve_suite_versions(member_payloads)
+        except Exception as e:
+            raise HTTPException(409, detail={
+                "code": "SUITE_VERSION_MISMATCH",
+                "message": str(e)}) from e
+
+    # copy 模式:先 fork Suite,再逐成员适配到副本
+    new_suite_id = None
+    if body.saveMode == "copy":
+        forked = await suite_copy.deep_copy_suite(
+            db, suite, owner_id=user.id,
+            owner_name=user.display_name or user.username)
+        new_suite_id = forked.id if forked else None
+        # 适配目标:新 Suite 的成员(副本场景)
+        if new_suite_id:
+            fork = await db.get(Suite, new_suite_id)
+            funits = (fork.mode_config or {}).get("units") or {}
+            scenario_ids = sorted(funits.keys()) if isinstance(funits, dict) else []
+
+    results: list[dict] = []
+    for sid in scenario_ids:
+        try:
+            compare = await adaptation_service.compare_scenario(
+                db, scenario_id=sid, target_revision=body.targetRevision,
+                system=body.system)
+            out = await adaptation_service.submit_adaptation(
+                db, scenario_id=sid, ops=compare.get("drafted_ops") or [],
+                target_revision=body.targetRevision,
+                save_mode="direct",   # Suite 内成员统一 direct(整体已选 copy)
+                system=body.system, user=user)
+            results.append({"scenario_id": sid, **out})
+        except PlateUnavailableError as e:
+            raise _plate_502(e) from e
+        except (ValueError, HTTPException) as e:
+            msg = str(e) if isinstance(e, ValueError) else str(e.detail)
+            results.append({"scenario_id": sid, "success": False,
+                            "message": msg})
+
+    ok = sum(1 for r in results if r.get("success"))
+    return {"total": len(results), "succeeded": ok,
+            "failed": len(results) - ok, "items": results,
+            "suite_id": body.suiteId,
+            **({"new_suite_id": new_suite_id} if new_suite_id else {})}
