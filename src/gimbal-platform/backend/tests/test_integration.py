@@ -101,14 +101,48 @@ class TestCronExpr:
 # ── 只读护栏 + E1 脱敏 ──────────────────────────────────────────
 
 class TestReadOnlyAndScrub:
-    def test_read_only_check(self):
+    @pytest.mark.asyncio
+    async def test_read_only_check(self):
         from app.services.integration_runner import is_scenario_read_only
         payload_get = {"definition": {"steps": STEPS_GET}}
-        ok, offenders = is_scenario_read_only(payload_get)
+        ok, offenders = await is_scenario_read_only(payload_get)
         assert ok and not offenders
         payload_post = {"definition": {"steps": STEPS_GET + STEPS_POST}}
-        ok, offenders = is_scenario_read_only(payload_post)
+        ok, offenders = await is_scenario_read_only(payload_post)
         assert not ok and any("POST" in o for o in offenders)
+
+    @pytest.mark.asyncio
+    async def test_read_only_anchored_method_from_plate(self, monkeypatch):
+        """Release 6.2:锚点步骤不存 method —— 只读闸从 plate 契约解析;
+        契约不可得即 fail-closed(不得放行)。"""
+        from types import SimpleNamespace
+
+        from app.services import plate_client
+        from app.services.integration_runner import is_scenario_read_only
+
+        anchored = {"kind": "step", "call": {"service": "fin"},
+                    "request": {"kind": "request", "body": {}},
+                    "strategy": []}
+
+        async def fake_full(eid: str, **kw):
+            method = "GET" if "report" in eid else "POST"
+            return SimpleNamespace(item={"binding": {"method": method}})
+
+        monkeypatch.setattr(plate_client, "get_endpoint_full", fake_full)
+        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
+            {**anchored, "endpoint": "fin.report.page"}]}})
+        assert ok and not offenders
+        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
+            {**anchored, "endpoint": "fin.order.add"}]}})
+        assert not ok and any("POST" in o for o in offenders)
+
+        async def none_full(eid: str, **kw):
+            return SimpleNamespace(item=None)
+
+        monkeypatch.setattr(plate_client, "get_endpoint_full", none_full)
+        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
+            {**anchored, "endpoint": "fin.report.page"}]}})
+        assert not ok and any("未知" in o for o in offenders)
 
     def test_scrub_sensitive_keys(self):
         from app.services.integration_runner import _scrub

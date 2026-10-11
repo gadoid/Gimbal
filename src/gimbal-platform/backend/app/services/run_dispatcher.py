@@ -2180,11 +2180,18 @@ async def filter_injection_entries(
         eid = step.get("endpoint")
         return eid if isinstance(eid, str) and eid else None
 
+    # Release 4.4 核心约束:已锁定场景的判定面按执行副本 meta.plate 写明
+    # 的修订取,不跟随 working 树漂移(未声明系统的过渡形态回落 working)
+    meta_plate = ((definition_from_payload(raw_payload).get("meta") or {})
+                  .get("plate") or {})
+
     async def _face_of(si: int) -> tuple[int, frozenset[str] | None]:
         eid = _endpoint_id_of(si)
         if eid is None:
             return si, frozenset()            # 无端点 = 真无声明(非得降级)
-        return si, await declared_paths_of(eid)   # None = 降级(**不抹平**,Y)
+        ref = meta_plate.get(str(eid).split(".")[0])
+        # None = 降级(**不抹平**,Y)
+        return si, await declared_paths_of(eid, ref=ref)
 
     face_by_step: dict[int, frozenset[str] | None] = dict(
         await asyncio.gather(*[_face_of(si) for si in sorted(needed_steps)])

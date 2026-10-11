@@ -616,9 +616,10 @@ import {
 import { carryHint } from '@/utils/carry-hint'
 import type { CarrySource, CarryValues } from '@/utils/carry-hint'
 import type {
-  StepView, ExtractView, IOFieldBinding, EndpointFullView,
+  StepView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
+import type { Extract } from '@/types/m2'
 import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
 import { useEndpointProjection } from '@/composables/useEndpointProjection'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
@@ -758,9 +759,9 @@ function hasEndpointRef(step: StepView | undefined): boolean {
 }
 
 /** strategy 里提取 extract 变体 */
-function extractStrategies(step: StepView | undefined): ExtractView[] {
+function extractStrategies(step: StepView | undefined): Extract[] {
   if (!step?.strategy) return []
-  return step.strategy.filter((s): s is ExtractView => s.kind === 'extract')
+  return step.strategy.filter((s): s is Extract => s.kind === 'extract')
 }
 function addExtract(step: StepView) {
   step.strategy.push({
@@ -770,7 +771,7 @@ function addExtract(step: StepView) {
     scope: 'scenario', required: true,
   })
 }
-function removeExtract(step: StepView, ex: ExtractView) {
+function removeExtract(step: StepView, ex: Extract) {
   const idx = step.strategy.indexOf(ex)
   if (idx >= 0) step.strategy.splice(idx, 1)
 }
@@ -2092,9 +2093,10 @@ async function onAddEndpoint(ep: any) {
     // 初始 body:只合成浅层 default/example(carry/契约默认移交注入通道)
     const initialBody = deepDefaults(fields)
     // M4/Release 6.2:接口步骤只存场景自有字段 —— step.endpoint(M3
-    // 锚点) + call.{protocol, service, headers 追加面, path_params 取值};
-    // method/path 模板/binding headers 等 binding 派生字段不落库,展示经
-    // 投影查询(4.8),执行由 /convert 重投影(4.5)。
+    // 锚点) + call.{service, headers 追加面, path_params 取值};
+    // protocol/method/path/timeout/binding headers 等 binding 派生字段
+    // 不落库(存储出现即 plate 重投影拒收),展示经投影查询(4.8),
+    // 执行由 /convert 重投影(4.5)。
     const pathTpl: string = ep.binding?.path || ep.path || ''
     const pp: Record<string, string> = {}
     for (const m of pathTpl.matchAll(/\{([A-Za-z0-9_]+)\}/g)) {
@@ -2107,7 +2109,6 @@ async function onAddEndpoint(ep: any) {
       endpoint: ep.id,
       call: {
         kind: 'call',
-        protocol: 'http',
         service: ep.service,
         headers: {},
         ...(Object.keys(pp).length ? { path_params: pp } : {}),

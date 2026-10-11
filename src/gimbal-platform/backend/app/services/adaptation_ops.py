@@ -231,33 +231,62 @@ def _apply_structure_op(definition: dict, op: dict) -> None:
     payload = op.get("_payload") or {}
 
     if kind == "replaceEndpoint":
-        # 步骤改指向另一个接口（可以属于另一个系统）
+        # 步骤改指向另一个接口（可以属于另一个系统）。
+        # 旧步骤的场景面全部保留（request/strategy/description —— 丢掉
+        # 请求体/提取变量会让下游引用断链）；call 只留场景自有字段
+        # （6.2：service 引用 / 追加 headers / path_params / user），
+        # 派生字段由新接口的投影提供。字段映射（fieldMapping：旧字段 →
+        # 新字段）由 service 层经 renameField 管道应用（body 容器 +
+        # 注入条目 + 字段状态同源改写）。
         idx = op["step"]
         new_endpoint = op["endpoint"]           # 目标接口 id
-        new_step = op.get("newStep") or {}       # 新步骤骨架（含字段映射）
         if 0 <= idx < len(steps):
             old = steps[idx]
-            new_step.setdefault("kind", "step")
-            new_step["endpoint"] = new_endpoint
-            new_step.setdefault("call", {"protocol": "http"})
-            new_step.setdefault("strategy", [])
-            steps[idx] = new_step
-            # meta.plate 更新（新系统加入时）
+            old_call = old.get("call") or {}
+            keep_call = {k: v for k, v in old_call.items()
+                         if k in ("kind", "service", "headers",
+                                  "path_params", "user")}
+            new_call = (op.get("newStep") or {}).get("call") or {}
+            if new_call.get("service"):
+                keep_call["service"] = new_call["service"]  # 显式选的服务优先
+            steps[idx] = {
+                **old,
+                "kind": "step",
+                "endpoint": new_endpoint,
+                "call": keep_call,
+            }
+            # meta.plate 更新（新系统加入时）：修订由 op 显式携带；
+            # 不默认 working —— 未声明会在保存检查被 version_undeclared
+            # 拦下（宁缺毋滥，working 会让锁定场景跟着 working 树漂移）
             system = str(new_endpoint).split(".")[0]
             meta_plate = (definition.get("meta") or {}).setdefault("plate", {})
-            if system not in meta_plate:
-                meta_plate[system] = op.get("targetRevision", "working")
+            if system not in meta_plate and op.get("targetRevision"):
+                meta_plate[system] = op["targetRevision"]
 
     elif kind == "splitStep":
-        # 一个步骤替换为 N 个有序步骤
+        # 一个步骤替换为 N 个有序步骤。新步骤继承旧步骤 call 的场景
+        # 自有字段（同一服务引用是最常见意图；用户可逐字段改）。
         idx = op["step"]
         new_steps = op.get("newSteps") or []
         if 0 <= idx < len(steps) and new_steps:
             old = steps[idx]
-            # 步骤间传值:前一步的 extract + 后一步的 ${变量}
+            old_call = {k: v for k, v in (old.get("call") or {}).items()
+                        if k in ("kind", "service", "headers",
+                                 "path_params", "user")}
             for i, ns in enumerate(new_steps):
-                ns.setdefault("kind", "step")
+                ns_call = dict(old_call)
+                if ns.get("service"):
+                    ns_call["service"] = ns["service"]
+                body = ns.pop("body", None)
+                if body is not None and "request" not in ns:
+                    ns["request"] = {
+                        "kind": "request",
+                        "body": body if body != "" else {},
+                    }
+                ns.setdefault("request", {"kind": "request", "body": {}})
                 ns.setdefault("strategy", [])
+                ns["call"] = ns_call
+                ns.setdefault("kind", "step")
             steps[idx:idx + 1] = new_steps
             # 引用改写:旧 idx → 新的第一步;后续步骤为新索引
             shift = len(new_steps) - 1
@@ -266,30 +295,59 @@ def _apply_structure_op(definition: dict, op: dict) -> None:
             _rewrite_position_refs(definition, payload, index_map=index_map)
 
     elif kind == "mergeSteps":
-        # N 个步骤合并为一个
-        indices = sorted(op.get("steps") or [])
+        # N 个步骤合并为一个（索引可不相邻）。合并结果占据最小索引的
+        # 位置，其余被合并项删除，中间未被合并的步骤保留并相应前移。
+        indices = sorted({int(i) for i in (op.get("steps") or [])})
         if indices and all(0 <= i < len(steps) for i in indices):
-            merged = op.get("mergedStep") or {}
+            merged = dict(op.get("mergedStep") or {})
+            if op.get("endpoint"):
+                merged["endpoint"] = op["endpoint"]    # 合并后的接口指向
+            old_call = steps[indices[0]].get("call") or {}
+            merged_call = {k: v for k, v in old_call.items()
+                           if k in ("kind", "service", "headers",
+                                    "path_params", "user")}
+            if merged.get("service"):
+                merged_call["service"] = merged["service"]
             merged.setdefault("kind", "step")
             merged.setdefault("strategy", [])
+            merged.setdefault(
+                "request", steps[indices[0]].get("request")
+                or {"kind": "request", "body": {}})
+            merged["call"] = merged_call
+            merged.pop("service", None)
             first = indices[0]
-            steps[first:first + len(indices)] = [merged]
-            # 引用改写
+            idx_set = set(indices)
+            steps[:] = [merged if i == first else s
+                        for i, s in enumerate(steps) if i == first or i not in idx_set]
+            # 引用改写:被合并的 → first;first 之后每步前移
+            # (移除数 = 命中数,但 first 位置保留一个合并步)
             removed_count = len(indices) - 1
             index_map = {}
             for i in range(len(steps) + removed_count):
-                if i in indices:
+                if i in idx_set:
                     index_map[i] = first  # 被合并的都指向合并后的步骤
-                elif i > indices[-1]:
-                    index_map[i] = i - removed_count
+                elif i > first:
+                    before = sum(1 for x in indices if x < i)
+                    index_map[i] = i - before + 1
+                else:
+                    index_map[i] = i
             _rewrite_position_refs(definition, payload, index_map=index_map)
 
     elif kind == "insertStep":
-        # 在指定位置插入一个步骤
+        # 在指定位置插入一个步骤。call 只接场景自有字段（service 由
+        # 目录选择的接口带出）；派生字段由投影提供（6.2）。
         idx = op.get("at", len(steps))
         new_step = op.get("newStep") or {}
-        new_step.setdefault("kind", "step")
-        new_step.setdefault("call", {"protocol": "http"})
+        call = {"kind": "call", "headers": {}}
+        if new_step.get("service"):
+            call["service"] = new_step["service"]
+        new_step = {
+            **{k: v for k, v in new_step.items()
+               if k not in ("call", "kind")},
+            "kind": "step",
+            "call": call,
+        }
+        new_step.setdefault("request", {"kind": "request", "body": {}})
         new_step.setdefault("strategy", [])
         steps.insert(idx, new_step)
         # 引用改写:idx 及之后全部 +1

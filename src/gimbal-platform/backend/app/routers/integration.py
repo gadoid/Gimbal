@@ -195,7 +195,7 @@ async def _read_only_with_plate(
     db: AsyncSession, scen: ComposerScenario,
 ) -> tuple[bool, list[str]]:
     """P1 口径 = 全部步骤安全方法(POST+query_safe 随 P2 接 plate 元数据)。"""
-    return integration_runner.is_scenario_read_only(scen.payload)
+    return await integration_runner.is_scenario_read_only(scen.payload)
 
 
 @router.get("/tasks/{task_id}")

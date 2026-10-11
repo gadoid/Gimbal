@@ -125,7 +125,7 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   },
   {
     id: 'adaptations',
-    title: '适配中心',
+    title: '变更适配',
     description: '待适配端点数与最近批次,直达批次详情',
     accent: 'gold',
     component: () => import('./AdaptationCard.vue'),

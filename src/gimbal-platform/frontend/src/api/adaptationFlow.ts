@@ -1,5 +1,5 @@
 /**
- * api/adaptationFlow.ts —— RS4a 适配中心新流程 API（Release v4.4 §5）。
+ * api/adaptationFlow.ts —— RS4a 变更适配新流程 API（Release v4.4 §5）。
  *
  * 流程：比较 → 保存检查 → 提交；两种适配：跨版本线（cross_line）
  * 与线内修正（correction）。后端实现见 routers/adaptations.py 的
@@ -96,6 +96,23 @@ export async function fetchLines(systemId: string): Promise<SystemLine[]> {
   const { data } = await http.get<{ items: SystemLine[] }>(
     `/endpoint-catalog/${encodeURIComponent(systemId)}/lines`)
   return data.items
+}
+
+/** 修订目录里的轻量接口条目（结构级改造的接口选择面） */
+export interface RevisionEndpoint {
+  id: string
+  system: string
+  service: string
+  name: string
+}
+
+/** 目标修订的接口目录（/endpoint-catalog/list?system=&ref=） */
+export async function listRevisionEndpoints(
+  system: string, ref: string,
+): Promise<RevisionEndpoint[]> {
+  const { data } = await http.get<{ items: RevisionEndpoint[] }>(
+    '/endpoint-catalog/list', { params: { system, ref } })
+  return data.items ?? []
 }
 
 /** 比较：场景起点修订 vs 目标修订（差异 + 三组影响） */

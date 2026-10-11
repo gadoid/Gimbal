@@ -46,7 +46,8 @@ from loguru import logger
 
 from ..core.config import settings
 from .field_state_resolution import catalog_paths
-from .plate_client import _reset_full_cache_for_test, get_endpoint_full
+from .plate_client import (
+    _reset_full_cache_for_test, get_endpoint_full, get_endpoint_full_at)
 from .query_view_cache import TtlLruCache
 
 _PROJ_CACHE: TtlLruCache | None = None
@@ -164,11 +165,41 @@ async def declarations_of(endpoint_id: str) -> list | None:
     return None if decls is None else list(decls)
 
 
-async def declared_paths_of(endpoint_id: str) -> frozenset[str] | None:
+async def declarations_of_at(endpoint_id: str, ref: str) -> list | None:
+    """按修订取 ``request.declarations``(Release 4.4 核心约束:已锁定
+    场景的判定面不得跟随 working 树漂移)。
+
+    修订内容不可变 → 不进 TTL 缓存,按需取(plate 404 = 修订里没有该
+    接口 → None 降级,告警键带修订号以区分 working 面的告警)。
+    """
+    item = await get_endpoint_full_at(endpoint_id, ref)
+    if item is None:
+        _warn_once(f"{endpoint_id}@{ref}", "修订取数失败(404/不可达)")
+        return None
+    decls = _decls_of_item(item)
+    if decls is None:
+        _warn_once(
+            f"{endpoint_id}@{ref}",
+            "声明面形状不可解析(request 非 dict 或 declarations 非 list)")
+    return None if decls is None else list(decls)
+
+
+async def declared_paths_of(
+    endpoint_id: str, ref: str | None = None,
+) -> frozenset[str] | None:
     """端点声明的 request body path 全集;取不到 → None(调用方从严降级)。
 
     合法空声明 → 空 frozenset(**非 None**):那是「真无声明」,不是「降级」。
+
+    ``ref``(精确修订,如 ``1.0#1``)→ 按修订取,不进缓存;缺省/``working``
+    → 既有 working 缓存路径(编排浏览/未声明系统的过渡形态)。执行路径
+    一律传执行副本 ``meta.plate`` 写明的修订。
     """
+    if ref and ref != "working":
+        decls = await declarations_of_at(endpoint_id, ref)
+        if decls is None:
+            return None
+        return frozenset(catalog_paths(decls))
     entry, fresh = _proj_cache().lookup(endpoint_id)
     if entry is not None and fresh:
         return entry.payload

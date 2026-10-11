@@ -5,7 +5,7 @@
      模式;个人模式随 P2。 -->
 <template>
   <section class="slib">
-    <PageHead icon="share" title="集成中心"
+    <PageHead icon="share" title="集成"
       subtitle="把场景封装成功能:定时执行、结果进工作台卡片" />
 
     <div class="slib-toolbar">

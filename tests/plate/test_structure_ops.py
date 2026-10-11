@@ -50,14 +50,30 @@ def _payload(assertion_registry: dict | None = None,
 
 class TestReplaceEndpoint:
     def test_basic(self) -> None:
-        d = _definition([_step("fin.a.old")])
+        """新契约(评审 2026-10-12):替换保留旧步骤场景面(request/
+        strategy/description),call 只留场景自有字段 —— 派生字段
+        (protocol/method/path)不落存储,由 /convert 投影提供(6.2)。"""
+        d = _definition([{
+            "kind": "step", "endpoint": "fin.a.old",
+            "call": {"protocol": "http", "method": "GET", "path": "/b",
+                     "service": "fin-service", "headers": {"X": "1"}},
+            "request": {"kind": "request", "body": {"a": 1}},
+            "strategy": [{"kind": "extract", "target": "$.c",
+                          "varName": "v"}],
+            "description": "keep me",
+        }])
         op = {"op": "replaceEndpoint", "step": 0,
               "endpoint": "fin.a.new",
-              "newStep": {"call": {"protocol": "http", "method": "POST",
-                                    "path": "/new"}}}
+              "newStep": {"call": {"service": "svc-2"}}}
         apply_to_definition(d, op)
-        assert d["steps"][0]["endpoint"] == "fin.a.new"
-        assert d["steps"][0]["call"]["method"] == "POST"
+        s = d["steps"][0]
+        assert s["endpoint"] == "fin.a.new"
+        assert s["call"]["service"] == "svc-2"       # 显式 service 优先
+        assert s["call"]["headers"] == {"X": "1"}    # 场景自有字段保留
+        assert "method" not in s["call"]             # 派生字段不落存储
+        assert s["request"]["body"] == {"a": 1}      # 请求体不丢
+        assert s["strategy"][0]["varName"] == "v"    # 提取变量不丢
+        assert s["description"] == "keep me"
 
     def test_cross_system(self) -> None:
         d = _definition([_step("fin.a.old")])
@@ -91,6 +107,17 @@ class TestMergeSteps:
         assert len(d["steps"]) == 2
         assert d["steps"][0]["endpoint"] == "fin.a.merged"
         assert d["steps"][1]["endpoint"] == "fin.a.c"
+
+    def test_non_contiguous(self) -> None:
+        """合并不相邻索引(0/2):中间步骤保留,不得误删(旧连续段替换缺陷)。"""
+        d = _definition([_step(f"fin.a.s{i}") for i in range(4)])
+        op = {"op": "mergeSteps", "step": 0, "steps": [0, 2],
+              "endpoint": "fin.a.merged", "mergedStep": {}}
+        payload = {"definition": d}
+        op["_payload"] = payload
+        apply_to_definition(d, op)
+        assert [s["endpoint"] for s in d["steps"]] == \
+            ["fin.a.merged", "fin.a.s1", "fin.a.s3"]
 
 
 class TestInsertStep:

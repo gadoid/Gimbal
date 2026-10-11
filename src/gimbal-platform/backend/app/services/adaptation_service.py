@@ -865,7 +865,8 @@ async def _rollback_scenario(
         after = copy.deepcopy(snap.before_json.get("after_json") or {})
         if (row.payload or {}) == after or force:
             # force = R27「编辑者确认放弃修改后按快照还原」(M4)
-            row.payload = before
+            # Release 6.2:快照可能是旧存储形态 —— 还原写库前统一剥离
+            row.payload = scenario_store.strip_binding_fields_payload(before)
             return
         raise _RollbackConflict(
             "edited_beyond_batch: current != snapshot after-state"
@@ -1190,7 +1191,8 @@ def _apply_ops_to_payload(payload: dict, ops: list) -> list[str]:
     的 jsonpath 改写在 ``_rewrite_field_refs``。返回触发的结构级
     op 名(调用方据此清空 RunScheme stepTo)。
     """
-    from .adaptation_ops import STRUCTURE_OPS, apply_to_definition
+    from .adaptation_ops import (
+        STRUCTURE_OPS, apply_to_definition, _apply_step_op)
     definition = definition_from_payload(payload)
     structure_kinds: list[str] = []
     for op in ops:
@@ -1200,6 +1202,20 @@ def _apply_ops_to_payload(payload: dict, ops: list) -> list[str]:
         apply_to_definition(definition, {**op, "_payload": payload})
         if kind in ("renameField", "removeField"):
             _rewrite_field_refs(payload, op)
+        if kind == "replaceEndpoint" and op.get("fieldMapping"):
+            # 字段映射（旧 → 新）走既有 renameField 管道：body 容器、
+            # 注入条目 jsonpath、字段状态根段三处同源改写
+            idx = op.get("step")
+            steps_now = definition.get("steps") or []
+            if isinstance(idx, int) and 0 <= idx < len(steps_now):
+                step_now = steps_now[idx]
+                for old_f, new_f in op["fieldMapping"].items():
+                    if not old_f or not new_f or old_f == new_f:
+                        continue
+                    fm = {"op": "renameField", "step": idx,
+                          "from": str(old_f), "to": str(new_f)}
+                    _apply_step_op(step_now, fm, definition)
+                    _rewrite_field_refs(payload, fm)
     return structure_kinds
 
 
@@ -1634,6 +1650,9 @@ async def submit_adaptation(
     structure_kinds = _apply_ops_to_payload(planned, ops or [])
     definition_from_payload(planned).setdefault(
         "meta", {}).setdefault("plate", {})[sys_] = target_revision
+    # Release 6.2:锚点步骤 call 的 binding 派生字段出存储(op 可能带旧
+    # 形态新步骤;行写入与 after_json 快照同用这份,回滚一致性不受影响)
+    planned = scenario_store.strip_binding_fields_payload(planned)
     # R30:步骤位置变化 → 清空 RunScheme 执行区间(调试参数不重映射)
     if structure_kinds:
         await _clear_scheme_step_to(db, scenario_id)
@@ -1838,7 +1857,8 @@ async def save_as_copy(
     if structure_kinds:
         await _clear_scheme_step_to(db, new_sid)   # R30:副本方案同步清空
 
-    new_row.payload = payload
+    # Release 6.2:结构 op 产物可能带 binding 派生字段 —— 写库前剥离
+    new_row.payload = scenario_store.strip_binding_fields_payload(payload)
     await db.commit()
     return {"new_scenario_id": new_sid,
             "target_revision": target_revision}

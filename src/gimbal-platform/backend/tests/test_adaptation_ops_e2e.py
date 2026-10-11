@@ -215,8 +215,7 @@ async def test_e2e_split_step(client, monkeypatch):
         for _ in range(2):
             p["definition"]["steps"].append({
                 "kind": "step", "endpoint": EP,
-                "call": {"protocol": "http", "service": "fin-service",
-                         "headers": {}},
+                "call": {"service": "fin-service", "headers": {}},
                 "request": {"kind": "request", "body": {"amount": 1}},
                 "strategy": []})
         row.payload = p
@@ -227,13 +226,10 @@ async def test_e2e_split_step(client, monkeypatch):
 
     out = await _submit(client, user, "sc-e2esplit", [{
         "op": "splitStep", "step": 1, "newSteps": [
-            {"call": {"protocol": "http", "service": "fin-service",
-                      "headers": {}},
-             "request": {"kind": "request", "body": {"amount": 100}},
-             "strategy": []},
-            {"call": {"protocol": "http", "service": "fin-service",
-                      "headers": {}},
-             "request": {"kind": "request", "body": {"amount": 1}},
+            {"endpoint": EP, "service": "fin-service",
+             "body": {"amount": 100}},
+            {"endpoint": EP, "service": "fin-service",
+             "body": {"amount": 1},
              "strategy": [
                  {"kind": "extract", "target": "$.code",
                   "varName": "c"}]},
@@ -274,8 +270,7 @@ async def test_e2e_remove_step(client, monkeypatch):
         p = deepcopy(row.payload)
         p["definition"]["steps"].append({
             "kind": "step", "endpoint": EP,
-            "call": {"protocol": "http", "service": "fin-service",
-                     "headers": {}},
+            "call": {"service": "fin-service", "headers": {}},
             "request": {"kind": "request", "body": {"amount": 1}},
             "strategy": []})
         row.payload = p

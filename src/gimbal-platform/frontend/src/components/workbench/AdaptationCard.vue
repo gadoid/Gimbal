@@ -1,4 +1,4 @@
-<!-- AdaptationCard.vue — 工作台注册卡:适配中心(→ /adaptations)。
+<!-- AdaptationCard.vue — 工作台注册卡:变更适配(→ /adaptations)。
      两条数据面各自复用既有端点,不另开口子:
        · 待处理数 = adaptations store(侧栏徽章已 ensureBadgeLoaded,
          卡上再调一次是单飞合流,零额外请求;member 侧栏不发,这里也不发)
@@ -10,7 +10,7 @@
       <span class="chead-icon ci-gold">
         <SlibIcon name="activity" :size="14" />
       </span>
-      <span class="chead-title">适配中心</span>
+      <span class="chead-title">变更适配</span>
       <span class="chead-count">{{ headline }}</span>
       <span class="chead-spacer" />
       <router-link to="/adaptations" class="manage-link">全部 →</router-link>
@@ -45,10 +45,10 @@
           还有 {{ batches.length - visible.length }} 个批次 — 到完整页查看
         </p>
       </div>
-      <div v-else-if="error" class="card-empty"><p>{{ error }} — 稍后在适配中心重试</p></div>
+      <div v-else-if="error" class="card-empty"><p>{{ error }} — 稍后在变更适配重试</p></div>
       <div v-else class="card-empty">
         <p>{{ auth.isAdmin ? '目录还没有需要适配的变更' : '你还没有发起过适配批次' }}</p>
-        <router-link to="/adaptations" class="cta">去适配中心 →</router-link>
+        <router-link to="/adaptations" class="cta">去变更适配 →</router-link>
       </div>
     </template>
   </div>

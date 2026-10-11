@@ -1,5 +1,5 @@
 /**
- * api/adaptations.ts —— 适配中心 API client(P5)。
+ * api/adaptations.ts —— 变更适配 API client(P5)。
  *
  * 契约照后端 app/schemas/adaptations.py(camelCase 显式 alias);
  * 错误形状为 http.ts 归一后的 ApiError { status, code }:文案在 Error 继承的

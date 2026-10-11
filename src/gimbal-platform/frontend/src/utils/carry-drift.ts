@@ -1,5 +1,5 @@
 /**
- * carry-drift.ts — 适配中心 carry 漂移面板数据组装的纯核心(T16,spec §7)。
+ * carry-drift.ts — 变更适配 carry 漂移面板数据组装的纯核心(T16,spec §7)。
  *
  * 输入:后端 GET /api/carry/drift 的 ServiceDrift(值表绑定 vs plate 面
  * 三类 diff);输出:漂移勾选项(checkbox 值 = 请求形状的 JSON 串)与

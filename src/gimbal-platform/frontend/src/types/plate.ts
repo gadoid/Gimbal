@@ -282,17 +282,74 @@ export interface StrategyKindDetailView extends StrategyKindView {
   base_fields: StrategyFieldDescView[]
 }
 
-// ─── M2 类型:从生成物桥接(单一真源 = types/m2.ts)────────────────
-// 镜像清理(M2 §7):M2 A/B 类的 View 类型不再独立维护,统一从 m2.ts
-// (生成物)经 m2-bridge.ts 桥接;新代码直接 import from '@/types/m2'。
-export type {
-  MetaView, ConfigView, StepView, CallView, RequestView,
-  ExtractView, AssignView, AssertionView, StrategyView,
-  RetryPolicyView, UserAuthView, TimePolicyView,
-  ScenarioView, MockView, FileView, ResourceView,
-} from '@/types/m2-bridge'
-// 本文件内的 helper 函数也需要引用这些类型
-import type { StepView, CallView } from '@/types/m2-bridge'
+// ─── M2 类型:平台存储/写入面形态(单一真源 = types/m2.ts 生成物)──
+// m2.ts 是 plate 契约的机械投影(可执行 M2 形态);本节的 View 类型是
+// 平台域自有形态,只在此一处定义:
+//   * 存储形态(Release 6.2):锚点步骤 call 不落 binding 派生字段,
+//     执行由 plate /convert 按 meta.plate 投影合并后才成为完整 Call;
+//   * 平台写入保证(WithRequired):平台采集/写入面保证字段在场;
+//   * 命名联合(StrategyView/ResourceView):多个生成类型的联合。
+// 身份别名(ExtractView=Extract 一类)已退役 —— 消费方直接用生成名。
+import type {
+  Meta, Config, Step, Call, Request,
+  Extract, Assign, Assertion, RetryPolicy, UserCredential,
+  TimeoutPolicy, RecordPolicy, Scenario, Mock, File as M2File,
+} from '@/types/m2'
+
+/** 工具:把 T 的指定键从可选变为必填(平台写入时保证这些字段) */
+type WithRequired<T, K extends keyof T> = T & Required<Pick<T, K>>
+
+/** 平台采集面保证 tags/system 在场 */
+export type MetaView = WithRequired<Meta, 'system' | 'tags'>
+/** 平台侧 Config:setup/teardown 平台不建模(opaque 透传);users 为平台表单形态;var_locks 平台旁挂 */
+export type ConfigView = Omit<WithRequired<Config,
+  'services' | 'users' | 'timePolicy' | 'retry' | 'vars'>,
+  'setup' | 'teardown' | 'users' | 'timePolicy'> & {
+    setup: unknown[]; teardown: unknown[]; var_locks?: string[];
+    users: Record<string, UserAuthView>;
+    timePolicy: TimeoutPolicy | RecordPolicy;
+  }
+/** 存储形态 step:call 为存储形态(派生字段可选,6.2);strategy 即生成的策略联合 */
+export type StepView = Omit<Step, 'call'> & { call: CallView }
+/**
+ * 存储形态 call:带 endpoint 锚点的接口步骤,call 不落
+ * protocol/method/path/timeout 等 binding 派生字段(执行由 plate
+ * /convert 按 meta.plate 投影提供,存储出现即被拒收)—— 派生字段
+ * 在编辑器/存储面上可选,读侧经 stepMethod/stepPath 等帮助函数
+ * 兜底或投影查询(4.8);convert 产物(可执行形态)用完整 Call。
+ */
+export type CallView = Omit<
+  Call, 'protocol' | 'method' | 'path' | 'timeout'
+> & {
+  protocol?: Call['protocol']
+  method?: Call['method']
+  path?: Call['path']
+  timeout?: Call['timeout']
+} & { [key: string]: unknown }
+/** 编辑器不建模 body 结构(旧版 body=unknown) */
+export type RequestView = Omit<Request, 'body'> & { body: unknown }
+/** expires_in 平台侧无 null */
+export type UserAuthView = Omit<UserCredential, 'expires_in'> & { expires_in?: number }
+/** 平台写入保证:maxAttempts/backoffSeconds/retryOn 恒在场 */
+export type RetryPolicyView = WithRequired<RetryPolicy, 'maxAttempts' | 'backoffSeconds' | 'retryOn'>
+/** 命名联合:策略条目(生成的 Step.strategy 即此联合) */
+export type StrategyView = Extract | Assign | Assertion
+/** 编辑器定义 = 存储形态:steps 的 call 派生字段可选(6.2) */
+export type ScenarioView = Omit<
+  WithRequired<Scenario, 'kind'>,
+  'resource' | 'config' | 'meta' | 'steps'
+> & {
+  resource: Record<string, ResourceView>
+  config: ConfigView
+  meta: MetaView
+  steps: StepView[]
+}
+/** 平台写入保证(resource 编辑面恒提供这些字段) */
+export type MockView = WithRequired<Mock, 'kind' | 'name' | 'image' | 'config' | 'portMapping'>
+/** 平台写入保证(resource 编辑面恒提供这些字段) */
+export type FileView = WithRequired<M2File, 'kind' | 'name' | 'path'>
+/** 命名联合:resource 条目 */
+export type ResourceView = MockView | FileView
 
 // ─── step 调用信息读取辅助(前端统一入口,call 单读) ───
 

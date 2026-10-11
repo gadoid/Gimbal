@@ -191,7 +191,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 集成中心(外部系统集成 P1):功能(定时任务 → 工作台卡片)+
+    // 集成(外部系统集成 P1):功能(定时任务 → 工作台卡片)+
     // 平台凭证(admin)。
     path: '/integrations',
     component: () => import('@/views/IntegrationCenter.vue'),

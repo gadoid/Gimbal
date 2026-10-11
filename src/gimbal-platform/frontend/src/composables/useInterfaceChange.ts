@@ -1,7 +1,7 @@
 /**
  * useInterfaceChange.ts — 「接口有变更」信号(关注页信号区)。
  *
- * 数据源 = 适配中心:catalogDiff 的 pending 端点 × impact 的受影响场景。
+ * 数据源 = 变更适配:catalogDiff 的 pending 端点 × impact 的受影响场景。
  * 两端点均 admin-only,member 读取 403 → 信号留白(规则驱动、自动展示,
  * 不给配置项)。模块级单例缓存,三页共享同一份计算结果。
  */
@@ -32,7 +32,7 @@ export function useInterfaceChange() {
         changed.value = set
         loaded.value = true
       } catch (e) {
-        // 403 = member 无适配中心读权限,永久留白;其余(网络抖动/5xx)
+        // 403 = member 无变更适配读权限,永久留白;其余(网络抖动/5xx)
         // 不能置 loaded —— 否则一次抖动就把信号永久打死到刷新为止。
         if (httpStatusOf(e) === 403) {
           changed.value = set

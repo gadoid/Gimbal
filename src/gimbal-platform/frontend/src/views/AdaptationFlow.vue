@@ -1,12 +1,7 @@
 <template>
   <section class="slib">
-    <PageHead icon="activity" title="适配中心" :subtitle="stepSubtitle">
-      <template #right>
-        <Button v-if="step > 1 && step < 4" variant="outline"
-                data-testid="adapt-back" @click="step--">← 上一步</Button>
-      </template>
-    </PageHead>
-
+    <!-- 页头在 AdaptationCenter(本组件是它内嵌的主体卡,不再重复带页头);
+         「← 上一步」并入步骤条右端 -->
     <!-- ── 步骤指示器 ── -->
     <div class="af-steps" data-testid="adapt-steps">
       <div v-for="(label, i) in stepLabels" :key="label"
@@ -14,6 +9,8 @@
         <span class="af-step-num">{{ i + 1 }}</span>
         <span class="af-step-label">{{ label }}</span>
       </div>
+      <Button v-if="step > 1 && step < 4" variant="outline" class="af-back"
+              data-testid="adapt-back" @click="step--">← 上一步</Button>
     </div>
 
     <!-- ── Step 1：选择场景与目标 ── -->
@@ -95,6 +92,7 @@
         <div v-if="compareResult.groups.structure.length" class="mf-item">
           <span class="mf-label">结构级改造方案（每个步骤选一种方式）</span>
           <StructureOpEditor :structure="compareResult.groups.structure"
+                             :revision="targetRevision"
                              @update:items="structureItems = $event" />
         </div>
         <!-- 声明级字段差异明细（R7） -->
@@ -217,9 +215,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import PageHead from '@/components/scenario-lib/PageHead.vue'
-import StructureOpEditor, { toOps } from '@/components/adaptations/StructureOpEditor.vue'
+import StructureOpEditor, { toOps, incompleteReason } from '@/components/adaptations/StructureOpEditor.vue'
 import type { StructureItem } from '@/components/adaptations/StructureOpEditor.vue'
+import { toast } from '@/utils/toast'
 import {
   fetchStaleScenarios, compareScenario, saveCheck, submitAdaptation,
   submitBatch,
@@ -254,12 +252,6 @@ const checking = ref(false)
 const staleScenarios = ref<
   Array<{ scenario_id: string; name: string; reasons: string[] }>
 >([])
-
-const stepSubtitle = computed(() => {
-  const labels = ['选择要适配的场景与目标版本', '查看定义差异与影响',
-                  '验证能否直接切换', '完成适配']
-  return `步骤 ${step.value}/4：${labels[step.value - 1]}`
-})
 
 const unconfirmedReview = computed(() =>
   !!checkResult.value?.review_items.length && !reviewConfirmed.value)
@@ -349,6 +341,13 @@ async function goSaveCheck() {
 }
 
 async function doSubmit(mode: 'direct' | 'copy') {
+  // 结构级配置完整性(跨系统缺修订/必填空/JSON 非法)在提交口拦下,
+  // 不让后端静默降级
+  const blocker = incompleteReason(structureItems.value)
+  if (blocker) {
+    toast.error(`结构级改造未完成：${blocker}`)
+    return
+  }
   // 合并 ops:自动起草的字段级(勾选项) + 手动配置的结构级(RS4b)
   const fieldOps = (compareResult.value?.drafted_ops || []).filter(
     (_, i) => opEnabled.value[i] !== false)
@@ -382,11 +381,15 @@ function reset() {
 </script>
 
 <style scoped>
-.af-steps { display: flex; gap: 0; margin: 12px 0 16px; }
+.af-steps { display: flex; gap: 0; margin: 12px 0 16px; align-items: stretch; }
 .af-step {
   flex: 1; display: flex; align-items: center; gap: 6px;
   padding: 8px 12px; font-size: 12px; color: #94a3b8;
   border-bottom: 2px solid #e1e5eb;
+}
+/* 「← 上一步」并入步骤条右端(页头移除后按钮的新家) */
+.af-back {
+  flex: 0 0 auto; align-self: center; margin-left: 12px; height: 28px;
 }
 .af-step.active { color: #2f6fed; border-bottom-color: #2f6fed; font-weight: 600; }
 .af-step.done { color: #10b981; border-bottom-color: #10b981; }

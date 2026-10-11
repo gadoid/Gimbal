@@ -763,9 +763,9 @@ async def test_dispatcher_fetches_declaration_face_only_for_referenced_steps(
     seen: list[str] = []
     _real = _disp.declared_paths_of
 
-    async def _spy(eid):
+    async def _spy(eid, ref=None):
         seen.append(eid)
-        return await _real(eid)
+        return await _real(eid, ref=ref)
 
     monkeypatch.setattr(_disp, "declared_paths_of", _spy)
     cases: list[dict] = []

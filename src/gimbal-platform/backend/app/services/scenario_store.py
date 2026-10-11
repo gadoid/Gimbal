@@ -68,11 +68,12 @@ async def create(
     # updateTime / owner 等平台元数据只在行的列上，不写进定义；
     # 顶层 scenarioId（M2 必填身份字段）由行写入。读侧 _meta_from_row
     # 从行的列组装展示 meta（createTime/updateTime/scenarioId/owner）。
-    stored_definition = {
+    # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
+    stored_definition = strip_binding_fields({
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
         "meta": _strip_platform_meta(def_meta),
-    }
+    })
     payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=draft.orchestration,
@@ -148,11 +149,12 @@ async def update(
         **repaired_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
     # M4/Q18：同 create —— 平台元数据出定义，定义即纯 M2 实例。
-    stored_definition = {
+    # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
+    stored_definition = strip_binding_fields({
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
         "meta": _strip_platform_meta(repaired_meta),
-    }
+    })
     row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
     # 原样落库,方案读写唯一面是 /run-schemes CRUD(scheme_store)。
@@ -700,6 +702,55 @@ def _strip_platform_meta(def_meta: dict) -> dict:
     """定义存储面过滤：meta 只留 M2 字段（含 plate）。"""
     return {k: v for k, v in (def_meta or {}).items()
             if k not in _PLATFORM_META_KEYS}
+
+
+# Release 6.2：接口步骤的 call 只存场景自有字段（service/user/
+# path_params/追加 headers）。protocol/method/path/timeout 是 binding
+# 派生字段，执行由 plate /convert 按 meta.plate 投影提供 —— 存储出现
+# 即被重投影拒收（binding_field_in_storage，口径同 reproject 的
+# _STORAGE_FORBIDDEN）。前端旧草稿仍可能携带，保存侧统一剥离。
+# 前提：该步骤所属系统已在 meta.plate 声明（钉修订或 working ——
+# 投影才有来源）；未声明的存储字段即执行面（/convert 原样透传），
+# 剥了就没有可执行形态，故保留（过渡期旧形态）。无 endpoint 锚点的
+# 手写原始调用不受影响（Release 4.5 原样使用）。
+_BINDING_DERIVED_FIELDS = ("protocol", "method", "path", "timeout")
+
+
+def strip_binding_fields(definition: dict) -> dict:
+    """存储面过滤：已声明系统的锚点步骤 call 去 binding 派生字段。"""
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
+    if not meta_plate:
+        return definition
+    steps = definition.get("steps")
+    if not isinstance(steps, list):
+        return definition
+    out_steps: list | None = None
+    for i, step in enumerate(steps):
+        if (isinstance(step, dict) and step.get("endpoint")
+                and str(step["endpoint"]).split(".")[0] in meta_plate
+                and isinstance(step.get("call"), dict)
+                and any(k in step["call"] for k in _BINDING_DERIVED_FIELDS)):
+            if out_steps is None:
+                out_steps = list(steps)
+            out_steps[i] = {
+                **step,
+                "call": {k: v for k, v in step["call"].items()
+                         if k not in _BINDING_DERIVED_FIELDS},
+            }
+    if out_steps is None:
+        return definition
+    return {**definition, "steps": out_steps}
+
+
+def strip_binding_fields_payload(payload: dict) -> dict:
+    """payload 容器层的同款过滤（adaptation 提交/回滚/副本写库共用）。"""
+    definition = payload.get("definition")
+    if not isinstance(definition, dict):
+        return payload
+    new_def = strip_binding_fields(definition)
+    if new_def is definition:
+        return payload
+    return {**payload, "definition": new_def}
 
 
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:

@@ -143,7 +143,7 @@ it('demote → promote 换椅调用 API 并重载', async () => {
   expect(promote).toHaveBeenCalledWith(1)
 })
 
-it('适配节点详情 → 「去适配中心处理」带 focus 深链(配套方案附录闭环)', async () => {
+it('适配节点详情 → 「去变更适配处理」带 focus 深链(配套方案附录闭环)', async () => {
   const w = await mountBoard()
   await flushPromises()
   // vue-flow 节点点击经 onNodeClick;直接调详情面板路径:先选中适配节点

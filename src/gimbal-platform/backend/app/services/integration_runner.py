@@ -72,15 +72,35 @@ def _scrub(value, key_hint: str = "") -> None:
             _scrub(value[k], lk)
 
 
-def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
-    """平台模式只读护栏(P1 口径):场景每个 step 的 call.method 均为
+async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
+    """平台模式只读护栏(P1 口径):场景每个 step 的请求方法均为
     安全方法(GET/HEAD/OPTIONS)。POST 实现的查询随 P2 接 plate 的
     ``query_safe`` 元数据(方案 §3:保存与执行前双闸,本函数即那一闸)。
+
+    Release 6.2:锚点步骤的 call 不存 method(binding 派生字段,执行由
+    plate 投影)—— 从 plate 契约解析;Release 4.4:钉了修订的场景按
+    meta.plate 的修订取(不随 working 漂移),未声明系统读 working
+    缓存。契约不可得即按不安全处理(fail-closed:只读闸不得因取不到
+    契约而放行)。手写原始调用(无锚点)仍读存储的 call.method。
     """
+    from . import plate_client
+
+    meta_plate = (((definition_from_payload(payload) or {}).get("meta") or {})
+                  .get("plate") or {})
     offenders: list[str] = []
     for i, step in enumerate(steps_from_payload(payload)):
         call = step.get("call") if isinstance(step, dict) else None
         method = str((call or {}).get("method") or "").upper()
+        endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
+        if not method and endpoint:
+            ref = meta_plate.get(endpoint.split(".")[0])
+            if ref and ref != "working":
+                item = await plate_client.get_endpoint_full_at(endpoint, ref)
+            else:
+                item = (await plate_client.get_endpoint_full(endpoint)).item
+            binding = ((item or {}).get("binding")
+                       if isinstance(item, dict) else None) or {}
+            method = str(binding.get("method") or "").upper() or "未知方法"
         if method and method not in _SAFE_METHODS:
             offenders.append(f"步骤 {i}({method})")
     return (not offenders, offenders)
@@ -229,7 +249,7 @@ async def run_instance(instance_id: int) -> dict:
 
         # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸)
         if tpl.identity_mode == "platform":
-            ok, offenders = is_scenario_read_only(scen.payload)
+            ok, offenders = await is_scenario_read_only(scen.payload)
             if not ok:
                 return await _finish(
                     db, inst, tpl, "failed",

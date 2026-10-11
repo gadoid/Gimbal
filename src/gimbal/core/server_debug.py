@@ -32,6 +32,11 @@ from gimbal.log import get_logger
 
 logger = get_logger(__name__)
 
+# 事件基类(types 只依赖 pydantic,无环;Literal 供下方事件声明)
+from typing import Literal  # noqa: E402
+
+from gimbal.events.types import FrameworkEvent  # noqa: E402
+
 # 类型注解需模块级可见（FastAPI get_type_hints 按函数所在模块的全局名解析；
 # server.py 在 create_app() 内延迟导入本模块，此时 server 模块已初始化完毕）
 from gimbal.core.server import (  # noqa: E402
@@ -47,48 +52,49 @@ _REAP_TTL_SEC = 600.0
 
 
 
-def _emit_m2_hash_mismatch(m2_info) -> None:
-    """M2 §5.1:hash 不同、代际相同 → m2.hash_mismatch 警告事件(非阻塞)。
+class M2HashMismatchEvent(FrameworkEvent):
+    """M2 §5.1:hash 不同、代际相同 —— 兼容放行的警告事件(非阻塞)。
 
-    事件发射失败(logger 已记录了警告)不影响执行——这是增强,不是门。
+    必须是 pydantic 事件模型:bus 的 seq 经 ``object.__setattr__`` 盖到
+    事件上、debug 服务器的事件缓冲经 ``model_dump`` 序列化 —— 普通
+    dict 两头都吃不上(无 seq 会被 SSE 续传过滤、序列化只剩类名)。
     """
-    from gimbal.schema import M2_HASH
-    try:
-        from ..events import bus as _bus_mod
-        _bus_mod.InMemoryEventBus().publish({
-            "event_type": "m2.hash_mismatch",
-            "request_hash": m2_info.hash,
-            "built_hash": M2_HASH,
-            "generation": m2_info.generation,
-        })
-    except Exception:  # noqa: BLE001 — 事件失败不影响执行
-        pass
+    event_type: Literal["m2.hash_mismatch"] = "m2.hash_mismatch"  # noqa: RUF012
+    request_hash: str = ""
+    built_hash: str = ""
+    generation: int = 0
 
 
-def _m2_generation_gate(m2_info) -> None:
+def _m2_generation_gate(m2_info) -> "M2HashMismatchEvent | None":
     """M2 §5.1 代际门：三档处理。
 
     - hash 相同 → 放行
-    - hash 不同、代际相同 → 放行，发 m2.hash_mismatch 警告事件
-      （分开部署、版本错开但兼容——读方先升级原则）
+    - hash 不同、代际相同 → 放行，返回 m2.hash_mismatch 警告事件实例
+      （分开部署、版本错开但兼容——读方先升级原则）。事件**不在这里发**:
+      本函数在 run 执行线程 bootstrap 之前跑,真实总线(event_bus 及其
+      SSE 订阅)那时还不存在 —— 实例由调用方在总线建好、订阅挂上后
+      发布,订阅方(平台 SSE/事件缓冲)才收得到。
     - 代际不同 → 409 M2_GENERATION_MISMATCH
     - 未携带 m2 信息（本地文件、开发调试）→ 不做门检查
     """
     if m2_info is None or not m2_info.hash:
-        return
+        return None
     from gimbal.schema import M2_GENERATION, M2_HASH
     from fastapi import HTTPException
 
     if m2_info.hash == M2_HASH:
-        return
+        return None
     if m2_info.generation == M2_GENERATION:
         logger.warning(
             "[M2] hash_mismatch: request={} built={} gen={} "
             "(兼容——放行,读方先升级原则)",
             m2_info.hash[:12], M2_HASH[:12], M2_GENERATION)
         # §5.1:hash 不同代际相同 → 放行 + m2.hash_mismatch 警告事件
-        _emit_m2_hash_mismatch(m2_info)
-        return
+        return M2HashMismatchEvent(
+            request_hash=m2_info.hash,
+            built_hash=M2_HASH,
+            generation=m2_info.generation,
+        )
     raise HTTPException(
         status_code=409,
         detail=f"M2_GENERATION_MISMATCH: request gen={m2_info.generation} "
@@ -153,8 +159,9 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
 
         _require_start_auth(request, authorization, x_gimbal_token)
 
-        # M2 §5.1 代际门：请求携带 m2 信息时比对构建身份
-        _m2_generation_gate(req.m2)
+        # M2 §5.1 代际门：请求携带 m2 信息时比对构建身份。
+        # 失配载荷(兼容放行档)由 _execute 在真实总线上发布。
+        m2_mismatch = _m2_generation_gate(req.m2)
 
         try:
             target = TypeAdapter(RunUnion).validate_python(req.target)
@@ -253,6 +260,15 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 sub_id = configuration.event_bus.subscribe(
                     lambda e: entry["events"].append(_event_dict(e))
                 )
+                # M2 §5.1:代际门的兼容档警告事件 —— 总线与订阅就绪后
+                # 才发布(门检查时总线还不存在,事件实例经闭包带到这里)。
+                # 发事件对象本体:bus 靠 object.__setattr__ 盖 seq、事件
+                # 缓冲靠 model_dump 序列化 —— 转 dict 两头都会失联。
+                if m2_mismatch is not None:
+                    try:
+                        configuration.event_bus.publish(m2_mismatch)
+                    except Exception:  # noqa: BLE001 — 事件失败不影响执行
+                        pass
                 if subscribe_spec is not None:
                     from gimbal.events.subscribe import attach as _attach_sub
                     attached_subscribe = _attach_sub(

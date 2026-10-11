@@ -4,7 +4,7 @@
   <section class="slib">
     <PageHead
       icon="activity"
-      title="适配中心"
+      title="变更适配"
       subtitle="场景版本适配 · 比较 → 检查 → 提交"
     />
 

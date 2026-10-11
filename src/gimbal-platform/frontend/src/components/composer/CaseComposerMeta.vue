@@ -121,7 +121,7 @@
               </option>
             </select>
           </div>
-          <span class="hint">精确修订执行才可入库；改版本线跳转到适配中心处理</span>
+          <span class="hint">精确修订执行才可入库；改版本线跳转到变更适配处理</span>
         </div>
       </div>
     </div>

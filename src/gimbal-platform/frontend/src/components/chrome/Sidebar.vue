@@ -2,7 +2,7 @@
      结构基准 = F-sitemap:工作台入口置顶,场景 / 服务(分组标签,不可点)
      / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
      "管理"深链承接)。沿用 TopNav 的两条既有语义:adminOnly 过滤
-     (用户管理 / 传递字段仅 admin 可见)与适配中心 pendingCount 徽标
+     (用户管理 / 传递字段仅 admin 可见)与变更适配 pendingCount 徽标
      (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
      折叠态(« 钮切换,localStorage 持久化):200px → 56px 图标轨道 —
      brand 只留状态点;一级层次(组标签)保留小字;二级按钮只留图标,
@@ -121,10 +121,9 @@
 
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { computed, watch } from 'vue'
+import { computed, h, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  ActivityLogIcon,
   ArchiveIcon,
   BellIcon,
   ChevronLeftIcon,
@@ -144,6 +143,7 @@ import {
   StackIcon,
   StarIcon,
 } from '@radix-icons/vue'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'
@@ -188,7 +188,14 @@ interface SidebarGroup {
   entries: SidebarEntry[]
 }
 
-// 结构基准 = F-sitemap v2:服务组顺序 认证管理/传递字段/适配中心;
+// 变更适配的跨面图标:页头/工作台卡头都是 SlibIcon('activity') 描线形状,
+// 侧栏渲染同一颗(SlibIcon 唯一性原则:同一功能跨面同形,不留
+// "看起来像但其实两个形状"的双份实现)。attrs(class)显式转发 ——
+// 函数式组件没有自动 attribute 继承。
+const ActivityLineIcon: Component = (_props, { attrs }) =>
+  h(SlibIcon, { name: 'activity', size: 14, ...attrs })
+
+// 结构基准 = F-sitemap v2:服务组顺序 认证管理/传递字段/变更适配;
 // 常量池不进侧边栏(工作台卡片承接,/constants 仅深链可达)。
 const groups: SidebarGroup[] = [
   {
@@ -226,23 +233,23 @@ const groups: SidebarGroup[] = [
       // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
       // 服务信息管理的键详情,本页只剩跨服务兜底层)
       { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['member', 'admin'] },
-      { path: '/adaptations', label: '适配中心', icon: ActivityLogIcon },
+      { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
     ],
   },
   // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
   // 置灰不可点;数据分析(延后)置灰但可点 — §4.4:延后的东西藏起来会被
   // 遗忘,留灰入口,点进去撞上那条说明;opacity .42,不加角标。
-  // (2026-10-10 IA 调整:Suite 与集成中心已迁出到各自的组。)
+  // (2026-10-10 IA 调整:Suite 与集成已迁出到各自的组。)
   { label: '执行', entries: [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
     { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
-  // 集成组(2026-10-10 IA 调整):集成中心从「执行」组迁出独立成组。
+  // 集成组(2026-10-10 IA 调整):集成从「执行」组迁出独立成组。
   { label: '集成', entries: [
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
-    { path: '/integrations', label: '集成中心', icon: Share2Icon },
+    { path: '/integrations', label: '集成', icon: Share2Icon },
   ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
 ]

@@ -5,7 +5,7 @@
  * 结构基准 = F-sitemap v2:
  * - 置顶「工作台」入口;组标签 场景 / 服务 / 执行中心 / 平台;
  * - 常量池**不在**侧边栏(完整页经工作台深链进入,见 WorkbenchView.test);
- * - 沿用语义:adminOnly 过滤(用户管理/传递字段)、适配中心 pendingCount
+ * - 沿用语义:adminOnly 过滤(用户管理/传递字段)、变更适配 pendingCount
  *   徽标(仅 admin 且 >0)、真实 <a href> 导航、active 高亮。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -66,7 +66,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
     // 常量池不占侧边栏坑位;Suite 层重构两入口合一(/suites 单入口)
-    // → 外部集成 P1 增集成中心 → 2026-10-10 IA 调整:Suite 迁出「执行」
+    // → 外部集成 P1 增集成 → 2026-10-10 IA 调整:Suite 迁出「执行」
     // 独立「用例集」组(我的/公共两页)+「集成」组:17 条。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
     // 说明页,置灰可点(§4.4)
@@ -80,7 +80,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
       '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
       // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页);
-      // 集成组:集成中心(从执行组迁出)
+      // 集成组:集成(从执行组迁出)
       '/run', '/executions', '/analytics',
       '/integrations',
       '/admin/users',
@@ -180,7 +180,7 @@ describe('Sidebar — active 高亮', () => {
   })
 })
 
-describe('Sidebar — 适配中心 pendingCount 徽标(沿用 TopNav 语义)', () => {
+describe('Sidebar — 变更适配 pendingCount 徽标(沿用 TopNav 语义)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })

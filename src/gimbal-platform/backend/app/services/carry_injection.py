@@ -22,7 +22,9 @@ from .field_state_resolution import carry_face
 from .run_materialize import CarryContext
 
 
-async def _endpoint_declarations(endpoint_id: str) -> list | None:
+async def _endpoint_declarations(
+    endpoint_id: str, ref: str | None = None,
+) -> list | None:
     """plate /full → request.declarations(目录态);任何失败 → None(降级)。
 
     2026-09-05 目录化(§4):不再在此过滤面 —— 面投影统一走
@@ -32,11 +34,18 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
     打断整单 carry。None(降级)与合法空目录 ``[]`` 在调用侧同为
     空面;类型上分开,留降级遥测的口子。
 
-    2026-09-12 取数合并:本函数保留同名同签名的门面(:77 调用点与
+    2026-09-12 取数合并:本函数保留同名同签名的门面(调用点与
     既有测试不受影响),取数/缓存/在飞收敛统一走
     ``endpoint_declarations.declarations_of`` —— 与悬空判定共用同一份
     进程缓存,不再各打一次 plate。契约(上述 None 语义)逐字不变。
+
+    Release 4.4 核心约束:``ref``(执行副本 meta.plate 写明的修订)→
+    按修订取 —— 锁定场景的 carry 面不跟随 working 树漂移;缺省 =
+    working(未声明系统的过渡形态)。
     """
+    from .endpoint_declarations import declarations_of_at
+    if ref and ref != "working":
+        return await declarations_of_at(endpoint_id, ref)
     return await declarations_of(endpoint_id)
 
 
@@ -65,6 +74,9 @@ async def build_carry_context(
     ui_fs: dict = ui_field_states or {}
     # 索引契约:枚举原始列表(跳过非 dict),不用过滤后的下标。
     raw_steps: list = list(definition.get("steps") or [])
+    # Release 4.4:声明面按 meta.plate 写明的修订取(锁定场景不随
+    # working 漂移;未声明系统回落 working)
+    meta_plate = (definition.get("meta") or {}).get("plate") or {}
 
     # ① 锚点 → 目录声明(按 endpoint_id 去重批量,不逐 step 打 plate)
     endpoint_ids: dict[str, None] = {}
@@ -75,7 +87,9 @@ async def build_carry_context(
         if eid:
             endpoint_ids.setdefault(eid, None)
     decls_by_eid: dict[str, list | None] = {
-        eid: await _endpoint_declarations(eid) for eid in endpoint_ids
+        eid: await _endpoint_declarations(
+            eid, ref=meta_plate.get(str(eid).split(".")[0]))
+        for eid in endpoint_ids
     }
     step_fields: dict[int, dict[str, str]] = {}
     for i, step in enumerate(raw_steps):

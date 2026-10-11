@@ -1,5 +1,5 @@
 /**
- * 工作台补登的功能页卡 —— 服务画像 / 认证管理 / 适配中心 / 执行器,
+ * 工作台补登的功能页卡 —— 服务画像 / 认证管理 / 变更适配 / 执行器,
  * 以及三张 adminOnly 卡(服务信息管理 / 默认值 / 用户管理)。
  * 钉住 §7 的三条契约:
  * - 每张卡复用完整页的取数与判定谓词,不另开口子、不另算一套计数;
@@ -158,7 +158,7 @@ describe('认证管理卡', () => {
   })
 })
 
-describe('适配中心卡', () => {
+describe('变更适配卡', () => {
   it('member 只发 listBatches("mine"),不触发 admin 的 catalogDiff', async () => {
     const w = mountPage()
     await waitCard(w, 'adaptations')

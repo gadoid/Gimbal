@@ -71,7 +71,7 @@
           <div class="signal-area">
             <span class="signal-label">近5次</span>
             <SignalDots :runs="row.trend" />
-            <span v-if="row.changed" class="change-badge" title="适配中心检测到接口变更">⚠ 接口有变更</span>
+            <span v-if="row.changed" class="change-badge" title="变更适配检测到接口变更">⚠ 接口有变更</span>
           </div>
           <router-link class="goto-link" :to="row.isPublic ? '/scenarios/public' : '/scenarios/mine'">↗ 前往场景</router-link>
           <DropdownMenu>

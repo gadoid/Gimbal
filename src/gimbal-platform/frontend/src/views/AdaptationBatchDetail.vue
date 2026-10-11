@@ -9,7 +9,7 @@
     </template>
 
     <template #actions>
-      <PageBack to="/adaptations" label="适配中心" />
+      <PageBack to="/adaptations" label="变更适配" />
       <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
       <template v-if="auth.hasRole('member', 'admin')">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
@@ -159,13 +159,13 @@
   <div v-else-if="adminOnly" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
     <div class="empty-state">
       <p>仅管理员:批次工作台为管理员专用</p>
-      <router-link to="/adaptations" class="link">返回适配中心</router-link>
+      <router-link to="/adaptations" class="link">返回变更适配</router-link>
     </div>
   </div>
   <div v-else-if="loaded" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
     <div class="empty-state">
       <p>批次不存在或已清理</p>
-      <router-link to="/adaptations" class="link">返回适配中心</router-link>
+      <router-link to="/adaptations" class="link">返回变更适配</router-link>
     </div>
   </div>
 </template>

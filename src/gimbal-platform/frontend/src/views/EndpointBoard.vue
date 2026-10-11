@@ -119,7 +119,7 @@
               class="svc-link mt-1"
               data-testid="board-go-adaptations"
               @click="router.push(`/adaptations?focus=${encodeURIComponent(endpointId)}`)"
-            >→ 去适配中心处理</button>
+            >→ 去变更适配处理</button>
           </div>
         </div>
 

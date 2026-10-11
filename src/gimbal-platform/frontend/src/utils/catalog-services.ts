@@ -16,7 +16,7 @@
 import http from '@/api/http'
 
 /** 目录 endpoint 条目中派生所需的字段(id 供 endpoint→service 映射,
- *  如适配中心待适配卡跳接口线索板;个别脏行可缺)。 */
+ *  如变更适配待适配卡跳接口线索板;个别脏行可缺)。 */
 interface CatalogServiceEntry {
   service: string
   system: string
@@ -56,7 +56,7 @@ export function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
     })).filter((e) => e.service && e.system))
 }
 
-/** endpoint_id → service 映射(适配中心「看影响面」跳线索板要用;
+/** endpoint_id → service 映射(变更适配「看影响面」跳线索板要用;
  *  与其他 loader 共享同一次缓存拉取)。 */
 export function loadCatalogEndpointServiceMap(): Promise<Map<string, string>> {
   return loadCatalogEntries().then(

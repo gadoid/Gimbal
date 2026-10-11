@@ -239,13 +239,21 @@ def test_m2_generation_gate():
     r3 = client3.post("/runs", headers=HDRS, json={"target": LEGAL_TARGET})
     assert r3.status_code == 200
 
-    # hash 不同、代际相同 → 放行(兼容;发 m2.hash_mismatch 警告事件)
+    # hash 不同、代际相同 → 放行(兼容;m2.hash_mismatch 警告事件进入
+    # 该 run 的事件流 —— 发布在真实总线上,SSE/事件缓冲收得到)
     client4 = make_client()
     r4 = client4.post("/runs", headers=HDRS, json={
         "target": LEGAL_TARGET,
         "m2": {"hash": "a" * 64, "generation": M2_GENERATION},
     })
     assert r4.status_code == 200
+    rid = r4.json()["runId"]
+    _wait_run(client4, rid)
+    with client4.stream("GET", f"/runs/{rid}/events",
+                        headers=HDRS) as resp:
+        assert resp.status_code == 200
+        body = "".join(resp.iter_text())
+    assert "m2.hash_mismatch" in body
 
 
 # ════════════════════════════════════════════════════════════════

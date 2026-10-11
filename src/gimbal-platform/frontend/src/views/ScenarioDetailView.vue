@@ -195,7 +195,7 @@ import { showError } from '@/utils/errorFallback'
 import { composerUrl, scenarioSchemesUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
-import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
+import type { Extract, Assign, Assertion } from '@/types/m2'
 import type { Scenario } from '@/types/scenario-composer'
 
 const route = useRoute()
@@ -334,14 +334,14 @@ function strategyGroups(s: unknown) {
 }
 function strategyText(t: Record<string, unknown>): string {
   if (t.kind === 'extract') {
-    const e = t as unknown as ExtractView
+    const e = t as unknown as Extract
     return `${e.target} ⇐ ${e.expression}`
   }
   if (t.kind === 'assign') {
-    const a = t as unknown as AssignView
+    const a = t as unknown as Assign
     return `${a.target} = ${typeof a.source === 'object' ? JSON.stringify(a.source) : String(a.source)}`
   }
-  const a = t as unknown as AssertionView
+  const a = t as unknown as Assertion
   const exp = a.expected !== undefined
     ? (typeof a.expected === 'object' ? JSON.stringify(a.expected) : String(a.expected))
     : ''
@@ -350,7 +350,7 @@ function strategyText(t: Record<string, unknown>): string {
 function strategyNote(t: Record<string, unknown>): string {
   const parts: string[] = []
   if (t.name) parts.push(String(t.name))
-  if (t.kind === 'assertion' && (t as unknown as AssertionView).soft) parts.push('soft')
+  if (t.kind === 'assertion' && (t as unknown as Assertion).soft) parts.push('soft')
   if (t.message) parts.push(String(t.message))
   return parts.join(' · ')
 }
