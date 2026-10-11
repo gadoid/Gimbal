@@ -77,10 +77,22 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
     from gimbal_plate.release import read as release_read
     from gimbal_plate.release.release import resolve_artifacts_root
 
+    # 修订快照缓存（容量淘汰,Release 4.1:修订不可变、按修订缓存整个
+    # 快照,超容量 LRU 淘汰最旧条目;设计未定具体数字,取 64）
     cache: dict | None = getattr(request.app.state, "revision_registries", None)
     if cache is None:
         cache = {}
         request.app.state.revision_registries = cache
+    _REVISION_CACHE_MAX = 64
+
+    def _cache_put(key, snap):
+        if len(cache) >= _REVISION_CACHE_MAX:
+            # 简单 FIFO 淘汰(dict 保插入序,删最早条目;修订不可变,
+            # 淘汰只是丢缓存,下次访问重新装载)
+            for oldest in list(cache):
+                cache.pop(oldest)
+                break
+        cache[key] = snap
     try:
         root = resolve_artifacts_root()
     except RuntimeError as e:
@@ -92,7 +104,7 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
         snap = cache.get((system, line, n))
         if snap is None:
             snap = release_read.load_snapshot(root, system, line, n)
-            cache[(system, line, n)] = snap
+            _cache_put((system, line, n), snap)
     except release_read.ReleaseReadError as e:
         raise _read_error(e)
     return snap.registry()

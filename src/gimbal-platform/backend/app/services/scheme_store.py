@@ -15,10 +15,38 @@ from ..models.composer_run_scheme import ComposerRunScheme
 
 DEFAULT_SCHEME_NAME = "默认方案"
 
+# M2 RunOptions 形状(执行参数收进 options 包裹;stepTo/nRuns→
+# step_to/n_runs 蛇形,logSub→subscribe,plugins 删除 Q15)
+_EMPTY_OPTIONS: dict = {
+    "step_from": None, "step_to": None, "n_runs": 1, "parallel": 1,
+    "subscribe": None,
+}
 _EMPTY_PAYLOAD: dict = {
     "dataSetSelection": [], "injectionEntryIds": [], "serviceBindings": {},
-    "stepTo": None, "nRuns": 1, "parallel": 1, "plugins": None, "logSub": None,
+    "options": dict(_EMPTY_OPTIONS),
 }
+
+
+def _migrate_legacy_exec_params(p: dict) -> dict:
+    """旧平铺执行参数(stepTo/nRuns/parallel/logSub/plugins)→ options。
+
+    Q15:plugins 无 RunOptions 对应字段,直接删除;logSub→subscribe。
+    已是 options 形状的 payload 原样返回。
+    """
+    if "options" in p:
+        return p
+    opts = dict(_EMPTY_OPTIONS)
+    if p.get("stepTo") is not None:
+        opts["step_to"] = p.pop("stepTo")
+    if p.get("nRuns") is not None:
+        opts["n_runs"] = p.pop("nRuns")
+    if p.get("parallel") is not None:
+        opts["parallel"] = p.pop("parallel")
+    if p.get("logSub") is not None:
+        opts["subscribe"] = p.pop("logSub")
+    p.pop("plugins", None)  # Q15:执行器插件由部署时注册(C 类),不进 RunOptions
+    p["options"] = opts
+    return p
 
 
 def normalized(payload: dict | None) -> dict:
@@ -26,8 +54,10 @@ def normalized(payload: dict | None) -> dict:
 
     旧形状兼容:只有 dataSetIds(整库语义)而无行级选择时,合成
     dataSetSelection(spec v3 §4 权威键;rowIndexes 空 = 整库)。
+    执行参数:M10 RunOptions 形状(options 包裹),旧平铺键就地迁移。
     """
     p = dict(payload or {})
+    p = _migrate_legacy_exec_params(p)
     out = dict(_EMPTY_PAYLOAD)
     if not p.get("dataSetSelection") and p.get("dataSetIds"):
         out["dataSetSelection"] = [
@@ -55,11 +85,18 @@ async def _next_scheme_id(db: AsyncSession) -> str:
 
 
 def _to_wire(row: ComposerRunScheme) -> dict:
+    p = normalized(row.payload)
+    # 读过渡：options 展开平铺键（前端存量消费方读 stepTo/nRuns 等;
+    # 写路径经 normalized 已收敛为 options 形状,无双轨持久化）
+    opts = p.get("options") or {}
+    p["stepTo"] = opts.get("step_to")
+    p["nRuns"] = opts.get("n_runs", 1)
+    p["parallel"] = opts.get("parallel", 1)
     return {
         "schemeId": row.scheme_id,
         "name": row.name,
         "isDefault": bool(row.is_default),
-        **normalized(row.payload),
+        **p,
     }
 
 
