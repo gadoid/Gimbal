@@ -137,6 +137,27 @@ export async function submitAdaptation(
   return data
 }
 
+/** 批量提交结果（POST /adaptations/submit-batch） */
+export interface BatchSubmitResult {
+  total: number
+  succeeded: number
+  failed: number
+  items: Array<{ scenario_id: string; success: boolean; message?: string;
+                 batch_id?: string }>
+}
+
+/** 批量提交适配：逐场景 compare→submit 聚合（§5.3 直接切换多场景） */
+export async function submitBatch(
+  scenarioIds: string[], targetRevision: string,
+  system?: string,
+): Promise<BatchSubmitResult> {
+  const { data } = await http.post<BatchSubmitResult>(
+    '/adaptations/submit-batch', {
+      scenarioIds, targetRevision, ...(system ? { system } : {}),
+    })
+  return data
+}
+
 /** 陈旧清单：有待处理提示的场景列表 */
 export async function fetchStaleScenarios(scope?: 'mine'): Promise<
   Array<{ scenario_id: string; name: string; reasons: string[] }>

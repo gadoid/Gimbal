@@ -33,19 +33,27 @@
                  data-testid="adapt-target-revision" />
         </div>
         <div v-if="staleScenarios.length" class="mf-item">
-          <span class="mf-label">陈旧清单（点击填入）</span>
+          <span class="mf-label">陈旧清单（勾选批量 / 点击填入单个）</span>
           <div class="stale-list">
-            <button v-for="s in staleScenarios" :key="s.scenario_id"
-                    class="stale-item" data-testid="stale-item"
-                    @click="pickStale(s)">
-              <span class="mono">{{ s.scenario_id }}</span>
+            <label v-for="s in staleScenarios" :key="s.scenario_id"
+                   class="stale-item" data-testid="stale-item">
+              <input v-model="batchSelected" type="checkbox"
+                     :value="s.scenario_id" data-testid="stale-check" />
+              <button type="button" class="stale-pick mono"
+                      @click="pickStale(s)">{{ s.scenario_id }}</button>
               <span class="stale-name">{{ s.name }}</span>
               <span class="stale-reason">{{ s.reasons.join(' · ') }}</span>
-            </button>
+            </label>
           </div>
         </div>
         <Button :disabled="!scenarioId || !targetRevision" data-testid="adapt-next-compare"
                 @click="goCompare">比较差异 →</Button>
+        <Button v-if="batchSelected.length"
+                variant="outline" data-testid="adapt-batch"
+                :disabled="!targetRevision || batchSubmitting"
+                @click="doBatchSubmit">
+          批量直接切换（{{ batchSelected.length }} 个场景）{{ batchSubmitting ? '…' : '' }}
+        </Button>
       </div>
     </div>
 
@@ -177,6 +185,25 @@
       <div v-else class="af-fail">❌ {{ submitResult.message || '提交失败' }}</div>
       <Button variant="outline" data-testid="adapt-restart" @click="reset">开始新适配</Button>
     </div>
+
+    <!-- ── 批量结果（Step 1 原地展示）── -->
+    <div v-if="batchResult" class="c-card mt-3">
+      <div class="c-card-head">
+        <h3>批量切换结果</h3>
+      </div>
+      <div class="af-ok" v-if="batchResult.failed === 0" data-testid="batch-ok">
+        ✅ 全部 {{ batchResult.total }} 个场景已切换到 {{ targetRevision }}
+      </div>
+      <div v-else class="af-warn">
+        {{ batchResult.succeeded }}/{{ batchResult.total }} 成功，
+        {{ batchResult.failed }} 失败——失败项修正后重试
+      </div>
+      <div v-for="r in batchResult.items" :key="r.scenario_id" class="issue-line"
+           :class="{ warn: !r.success }">
+        {{ r.success ? '✅' : '❌' }} <span class="mono">{{ r.scenario_id }}</span>
+        {{ r.message ? `— ${r.message}` : `（批次 ${r.batch_id}）` }}
+      </div>
+    </div>
   </section>
 </template>
 
@@ -187,8 +214,11 @@ import { Input } from '@/components/ui/input'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import {
   fetchStaleScenarios, compareScenario, saveCheck, submitAdaptation,
+  submitBatch,
 } from '@/api/adaptationFlow'
-import type { CompareResult, SaveCheckResult, SubmitResult } from '@/api/adaptationFlow'
+import type {
+  BatchSubmitResult, CompareResult, SaveCheckResult, SubmitResult,
+} from '@/api/adaptationFlow'
 
 const stepLabels = ['选择', '比较', '检查', '提交']
 
@@ -203,6 +233,10 @@ const reviewConfirmed = ref(false)
 
 const comparing = ref(false)
 const opEnabled = ref<boolean[]>([])
+
+const batchSelected = ref<string[]>([])
+const batchSubmitting = ref(false)
+const batchResult = ref<BatchSubmitResult | null>(null)
 
 const draftedCount = computed(() =>
   opEnabled.value.filter(Boolean).length)
@@ -250,6 +284,27 @@ function fieldDiffSummary(endpoint: string): string {
 
 function pickStale(s: { scenario_id: string }): void {
   scenarioId.value = s.scenario_id
+}
+
+async function doBatchSubmit(): Promise<void> {
+  if (!batchSelected.value.length || !targetRevision.value) return
+  batchSubmitting.value = true
+  batchResult.value = null
+  try {
+    batchResult.value = await submitBatch(
+      [...batchSelected.value], targetRevision.value)
+    if (batchResult.value.failed === 0) batchSelected.value = []
+  } catch (e) {
+    batchResult.value = {
+      total: batchSelected.value.length, succeeded: 0,
+      failed: batchSelected.value.length,
+      items: batchSelected.value.map(sid => ({
+        scenario_id: sid, success: false, message: String(e),
+      })),
+    }
+  } finally {
+    batchSubmitting.value = false
+  }
 }
 
 onMounted(async () => {
@@ -309,6 +364,7 @@ function reset() {
   submitResult.value = null
   reviewConfirmed.value = false
   opEnabled.value = []
+  batchResult.value = null
 }
 </script>
 
@@ -377,6 +433,8 @@ function reset() {
   text-align: left; width: 100%;
 }
 .stale-item:hover { border-color: #2f6fed; }
+.stale-pick { background: none; border: none; cursor: pointer;
+              font-size: 12px; color: #2f6fed; padding: 0; }
 .stale-name { color: #374151; font-weight: 500; }
 .stale-reason { color: #f59e0b; font-size: 11px; }
 
