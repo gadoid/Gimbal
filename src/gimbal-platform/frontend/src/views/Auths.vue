@@ -291,7 +291,7 @@
                 :to="`/service-admin/${encodeURIComponent(a.alias_name)}?tab=credential`"
                 class="mono link"
               >{{ a.alias_name }}</router-link>
-              <span class="ref-dim">→ {{ a.base_service }}{{ a.group_tag ? ` · ${a.group_tag}` : '' }}</span>
+              <span class="ref-dim">→ {{ a.base_service }}</span>
             </div>
             <p v-if="!refsData.alias_refs.length" class="ref-dim m-0">无别名绑定</p>
 

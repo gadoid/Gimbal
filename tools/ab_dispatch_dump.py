@@ -10,8 +10,8 @@ M3 A/B 对拍已收口(2026-09-05:切换时点存量值表下新旧树六段全�
 commit b7d522f);旧树侧对照逻辑随对拍收口移除,仅存 git 历史。
 
 批构成(A/B 收口时点同款,由 plate 注册表在线发现):
-  * fin 全端点(排序去重)—— 每端点一个合成 step(view_hints.endpoint_id
-    锚点 + 空 body),构成「AB 批」场景;
+  * fin 全端点(排序去重)—— 每端点一个合成 step(step.endpoint 锚点
+    + 空 body),构成「AB 批」场景;
   * Scenario_Test_14_copy.json(36 步真实转储,plate 既有测试同款)。
 
 六段:
@@ -92,10 +92,9 @@ def _ab_batch_scenario(eids: list[str]) -> dict:
         "resource": {},
         "config": {},
         "steps": [
-            {"kind": "step", "description": f"ab:{eid}",
+            {"kind": "step", "description": f"ab:{eid}", "endpoint": eid,
              "call": {"kind": "call", "protocol": "http", "service": "fin",
-                      "method": "POST", "path": "/ab", "headers": {},
-                      "view_hints": {"endpoint_id": eid}},
+                      "headers": {}},
              "request": {"kind": "request", "body": {}},
              "strategy": []}
             for eid in eids

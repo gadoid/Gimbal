@@ -218,7 +218,7 @@ class TestFetchRows:
         first = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
                                    owner_id=1, query_alias=None, load_credential=None)
         # 修订 11:L1 键 = (view, 凭证);v1 auth=none → 凭证分量 None
-        r._cache._data[("v1", None)].fetched_mono -= 400.0   # 人工老化过 TTL(仍在 stale 窗)
+        r._cache._data[("v1", None, None)].fetched_mono -= 400.0   # 人工老化过 TTL(仍在 stale 窗)
         async def boom(m, u, **kw):
             raise httpx.ConnectError("down")
         monkeypatch.setattr(httpx, "request", boom)

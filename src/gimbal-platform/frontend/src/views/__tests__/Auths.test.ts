@@ -65,7 +65,7 @@ beforeEach(() => {
   vi.spyOn(api, 'remove').mockResolvedValue(undefined)
   vi.spyOn(api, 'getReferences').mockResolvedValue({
     alias_refs: [
-      { alias_name: 'fin-service-uat', base_service: 'fin-service', group_tag: '测试' },
+      { alias_name: 'fin-service-uat', base_service: 'fin-service', environment_id: 1 },
     ],
     scenario_refs: {
       visible: [

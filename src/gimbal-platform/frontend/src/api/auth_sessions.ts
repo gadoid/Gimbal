@@ -20,7 +20,7 @@ export interface AuthSession {
 export interface AliasRefItem {
   alias_name: string
   base_service: string
-  group_tag: string | null
+  environment_id: number | null
 }
 
 /** kinds ⊆ {template, scheme, snapshot}(snake 契约对齐后端 auth schema)。 */

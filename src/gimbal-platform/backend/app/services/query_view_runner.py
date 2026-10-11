@@ -198,8 +198,9 @@ def drop_credential(owner_id: int, alias: str) -> None:
     key = (owner_id, alias)
     _cred_sessions.pop(key, None)
     _cred_dead.discard(key)
-    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 2
-                      and ck[1] == key)
+    # M2:键形 (name, ref, cred) —— 修订分量在中间,凭证分量取末位
+    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 3
+                      and ck[2] == key)
 
 
 def _bump_breaker(name: str) -> None:
@@ -347,6 +348,7 @@ async def fetch_rows(
     load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
     click_params: "dict[str, Any] | None" = None,
     service: "str | None" = None,
+    ref: "str | None" = None,
 ) -> RowsResult:
     """取一行集:L1 缓存 → 熔断 → 单飞锁 → 凭证闸 → SUT 查询 → 缓存回填。"""
     index = await fetch_query_view_index()
@@ -387,7 +389,9 @@ async def fetch_rows(
     cred_id: "tuple[int, str] | None" = (
         (owner_id, query_alias)
         if view.get("auth") != "none" and query_alias is not None else None)
-    cache_key = (name, cred_id)
+    # M2/4.7(D-9):取数属编排期行为,按场景生效修订 —— 修订不可变,
+    # 进缓存键;缺省 working(与旧键同形,存量调用零变化)。
+    cache_key = (name, ref, cred_id) if ref else (name, None, cred_id)
     stale_entry, fresh = None, False
     if not bypass_cache:              # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
         stale_entry, fresh = _cache.lookup(cache_key)
