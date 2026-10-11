@@ -254,7 +254,11 @@ import { assertablePaths, formBindings, responseBindings } from '@/utils/declara
 import { useAuthStore } from '@/stores/auth'
 import type { EndpointFullView } from '@/types/plate'
 
-const props = defineProps<{ nextStepIdx?: number; adding?: boolean }>()
+const props = defineProps<{
+  nextStepIdx?: number; adding?: boolean;
+  /** M1/6.1:场景声明的修订(meta.plate)——目录按修订过滤 */
+  plateRef?: string;
+}>()
 const emit = defineEmits<{ back: []; add: [any] }>()
 
 const authStore = useAuthStore()
@@ -424,16 +428,16 @@ async function onFilterChanged() {
 async function refetch() {
   loading.value = true
   try {
-    // 过滤参数也传到 Plate (M6 grammar 接受 ?service=&q=)
-    // 注意: 必须用原生 fetch 而不是 http.get, 因为 axios baseURL=/api
-    // 会把 /plate/... 拼成 /api/plate/..., 绕过 Vite 的 /plate 代理。
+    // Release 6.1:经平台后端读取接口目录(带修订号)——不再直连
+    // /plate 代理(那永远读 working,会列出目标修订里不存在的接口,
+    // 执行时才报 ENDPOINT_NOT_IN_RELEASE)。
     const params = new URLSearchParams()
     if (filterSystem.value) params.set('system', filterSystem.value)
     if (filterService.value) params.set('service', filterService.value)
     if (filterQuery.value.trim()) params.set('q', filterQuery.value.trim())
-    params.set('per_page', '500')
-    const url = '/plate/api/endpoint' + (params.toString() ? '?' + params.toString() : '')
-    // token 统一取自 auth store(唯一权威),不再手解 localStorage。
+    if (props.plateRef && props.plateRef !== 'working')
+      params.set('ref', props.plateRef)
+    const url = '/api/endpoint-catalog/list' + (params.toString() ? '?' + params.toString() : '')
     const token = authStore.accessToken || ''
     const r = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}

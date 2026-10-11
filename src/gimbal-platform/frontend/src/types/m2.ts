@@ -172,9 +172,7 @@ export interface Config {
   /**
    * 变量声明；字面量或生成式 spec dict；CLI --var 优先级更高
    */
-  vars?: {
-    [k: string]: unknown;
-  };
+  vars?: unknown;
 }
 export interface RetryPolicy {
   /**
@@ -203,9 +201,7 @@ export interface Setup {
    * 要执行的策略 kind（dispatcher 分派键）
    */
   kind: string;
-  params?: {
-    [k: string]: unknown;
-  };
+  params?: unknown;
   scope?: "scenario";
 }
 /**
@@ -220,9 +216,7 @@ export interface Teardown {
    * 要执行的策略 kind（dispatcher 分派键）
    */
   kind: string;
-  params?: {
-    [k: string]: unknown;
-  };
+  params?: unknown;
   scope?: "scenario";
 }
 /**
@@ -402,9 +396,7 @@ export interface Assign {
 }
 export interface Assertion {
   enabled?: boolean;
-  expected?: {
-    [k: string]: unknown;
-  };
+  expected?: unknown;
   kind?: "assertion";
   message?: string | null;
   name?: string | null;
@@ -454,9 +446,7 @@ export interface UnitDecl {
   /**
    * 字面量注入（scenario vars）
    */
-  inputs?: {
-    [k: string]: unknown;
-  };
+  inputs?: unknown;
   /**
    * 连线改名：上游输出名 → 本地输入名
    */
@@ -471,9 +461,7 @@ export interface UnitDecl {
   /**
    * UnitPolicy 覆盖项
    */
-  policy_kwargs?: {
-    [k: string]: unknown;
-  };
+  policy_kwargs?: unknown;
   ref: string;
   /**
    * 编译期展开份数（单元 id=ref#k）
@@ -553,9 +541,7 @@ export interface NamedParams {
   /**
    * 参数（按注册表 params 模型校验）
    */
-  params?: {
-    [k: string]: unknown;
-  };
+  params?: unknown;
 }
 export interface PlanPolicy {
   /**

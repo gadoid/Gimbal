@@ -622,8 +622,8 @@ const showPoolRail = computed(() => stepIdx.value < 3)
 
 /** 常量池播种(生成器 key 插入链): 快照拷贝进 config.vars,已存在不覆盖。 */
 function seedPoolVar(name: string, spec: Record<string, unknown>): void {
-  const result = seedPoolVarIntoDefinition(definition.value, name, spec)
-  definition.value = result.definition
+  const result = seedPoolVarIntoDefinition(definition.value as never, name, spec)
+  definition.value = result.definition as typeof definition.value
   if (!result.seeded) {
     toast.info(`config.vars 已有同名变量 ${name},使用现有值`)
   }

@@ -244,6 +244,7 @@ def _gen_py(schema_path: Path, out_path: Path) -> None:
 
 
 def _gen_ts(schema_path: Path, out_path: Path) -> None:
+    import re as _re
     import shutil
     import subprocess as _sp
     import sys as _sys
@@ -258,12 +259,27 @@ def _gen_ts(schema_path: Path, out_path: Path) -> None:
         raise RuntimeError(
             "json-schema-to-typescript 失败(需 node/npx): "
             f"{r.stderr.strip()[:300]}")
+
+    # 后处理:空 schema(Any 字段)生成的 `{[k:string]: unknown}` → unknown
+    # json-schema-to-typescript 对无类型约束的 schema(如 expected: Any)
+    # 默认生成索引签名对象;实际语义是"任意值",应为 unknown。
+    text = out_path.read_text(encoding="utf-8")
+    # 后处理:空 schema(Any 字段)的 `{[k:string]:unknown}` → unknown
+    NL = chr(10)
+    old_shape = "?: {" + NL + "    [k: string]: unknown;" + NL + "  };"
+    idx = text.find(old_shape)
+    while idx >= 0:
+        head = idx
+        while head > 0 and (text[head - 1].isalnum() or text[head - 1] == "_"):
+            head -= 1
+        text = text[:head] + text[head:idx] + "?: unknown;" + text[idx + len(old_shape):]
+        idx = text.find(old_shape)
     export = _export()
     out_path.write_text(
         f"/* M2 运行形态（生成文件，禁止手改）。"
         f"m2_hash: {export.m2_hash} "
         f"m2_generation: {export.m2_generation} */\n"
-        + out_path.read_text(encoding="utf-8"),
+        + text,
         encoding="utf-8", newline="\n")
 
 

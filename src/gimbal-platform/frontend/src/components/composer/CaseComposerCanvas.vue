@@ -9,6 +9,7 @@
       v-if="subView === 'catalog'"
       :next-step-idx="local.length + 1"
       :adding="adding"
+      :plate-ref="refOfStep(currentStep) ?? 'working'"
       @add="onAddEndpoint"
       @back="subView = null"
     />
@@ -511,7 +512,7 @@
              消费都发生在本页,就近总览;草稿级数据,无选中 step 也常驻 -->
         <VariableRegistryPanel
           :steps="local as unknown as never[]"
-          :config-vars="draftStore.draft?.definition?.config?.vars"
+          :config-vars="(draftStore.draft?.definition?.config?.vars as Record<string, unknown> | undefined)"
         />
 
         <!-- 常量池(编排页常驻;必须保持 aside 最后一个子元素,F12) -->
@@ -941,7 +942,7 @@ const varPickerKey = ref<string | null>(null)
 const varPickerVal = ref<string | null>(null)
 
 const varRegistryEntries = computed(() =>
-  deriveVarRegistry(local, draftStore.draft?.definition?.config?.vars).entries)
+  deriveVarRegistry(local, (draftStore.draft?.definition?.config?.vars as Record<string, unknown> | undefined)).entries)
 
 // ── 字段动作菜单(#4/#5 变量工作台):子列表分流 + 快捷策略骨架 ──────
 
@@ -2049,7 +2050,7 @@ async function onParseSample() {
 function buildInitialStrategies(full: EndpointFullView | undefined): StrategyView[] {
   // 保底第一条: HTTP 层状态断言(与旧行为一致)
   const strategies: StrategyView[] = [
-    { kind: 'assertion', target: toScratchPath('$.status'), operator: 'eq', expected: 200 as never, message: '', soft: false },
+    { kind: 'assertion', target: toScratchPath('$.status'), operator: 'eq', expected: 200, message: '', soft: false },
   ]
   if (!full) return strategies
   const r200 = full.responses?.['200']
@@ -2060,7 +2061,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
     const codeTarget = CODE_TARGET_CANDIDATES.find((c) => assertable.includes(c))
     if (codeTarget) {
       strategies.push({
-        kind: 'assertion', target: toScratchPath(codeTarget), operator: 'eq', expected: 0 as never,
+        kind: 'assertion', target: toScratchPath(codeTarget), operator: 'eq', expected: 0,
         message: successCriteria, soft: false,
       })
     }

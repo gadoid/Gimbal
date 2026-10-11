@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import Query, APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.deps import CurrentUser
@@ -233,4 +233,44 @@ async def list_system_lines(
         raise unavailable()
     except plate_client.PlateRejectedError as e:
         raise proxy_error(e)
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/list")
+async def list_endpoints(
+    user: CurrentUser,
+    system: str = Query(default=""),
+    service: str = Query(default=""),
+    q: str = Query(default="", max_length=128),
+    ref: str = Query(default=""),
+) -> dict:
+    """接口目录列表（Release 6.1:编排页经平台后端读取,带修订号）。
+
+    ref = 场景声明的修订;缺省 working。按修订过滤——只列出该修订里
+    存在的接口,防止用户加入只在 working 存在的接口(执行时报
+    ENDPOINT_NOT_IN_RELEASE)。
+    """
+    from ..services import plate_client
+    client = plate_client.get_client()
+    params: dict = {"per_page": 500}
+    if system:
+        params["system"] = system
+    if service:
+        params["service"] = service
+    if q:
+        params["q"] = q
+    if ref and ref != "working":
+        params["ref"] = ref
+    try:
+        resp = await client.get("/api/endpoint", params=params, timeout=15.0)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail={
+            "code": "plate_unavailable",
+            "message": f"plate_unavailable: {e}"}) from e
+    if resp.status_code >= 500:
+        raise HTTPException(status_code=502, detail={
+            "code": "plate_unavailable",
+            "message": f"plate_unavailable: status {resp.status_code}"})
+    envelope = resp.json()
+    items = (envelope.get("data") or {}).get("items") or []
     return {"items": items, "total": len(items)}
