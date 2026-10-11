@@ -37,7 +37,6 @@ class HttpCallParams(BaseModel):
     user: Optional[str] = Field(default=None, description="认证标签；按 AuthRegistry 会话注入头")
     # 平台视图扩展(plate Call 同款声明):convert 正常会剥离,echo 桩等
     # 绕过 convert 的路径可能残留 —— 引擎侧容忍并忽略(endpoint 身份锚)
-    view_hints: Optional[dict] = Field(default=None, description="平台扩展;执行忽略")
 
 
 __all__ = ["HttpProtocolExecutor", "HttpCallParams"]

@@ -124,7 +124,7 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
 
     契约禁令(spec 2026-08-27 §1.6):任何 plate 目录驱动的回写(适配 ops、
     未来契约同步/导入)不得触碰 ``call.service`` —— 它是用户引用键(可為
-    别名全串),``view_hints.endpoint_id`` 才是目录锚点,两权分立。
+    别名全串),``step.endpoint`` 才是目录锚点,两权分立。
     """
     steps = definition.get("steps")
     if not isinstance(steps, list):
@@ -133,9 +133,8 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
     if not isinstance(i, int) or i < 0 or i >= len(steps):
         return f"step_missing: {i!r}"
     step = steps[i]
-    call = step.get("call") if isinstance(step, dict) else None
-    hints = call.get("view_hints") if isinstance(call, dict) else None
-    bound = hints.get("endpoint_id") if isinstance(hints, dict) else None
+    # M3:锚点唯一 = step.endpoint(view_hints 双读已删)
+    bound = step.get("endpoint") if isinstance(step, dict) else None
     if bound != endpoint_id:
         return (f"endpoint_mismatch: step bound to {bound!r}, "
                 f"batch targets {endpoint_id!r}")

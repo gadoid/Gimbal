@@ -53,7 +53,7 @@ async def check_and_resolve_suite_versions(
             if not isinstance(step, dict):
                 continue
             ep = step.get("endpoint") or \
-                ((step.get("call") or {}).get("view_hints") or {}).get("endpoint_id")
+                step.get("endpoint")
             if ep:
                 endpoints.add(str(ep))
         member_info.append({

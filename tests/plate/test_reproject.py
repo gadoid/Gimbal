@@ -21,7 +21,8 @@ from gimbal_plate.release.reproject import (
 from tests.plate._release_fx import commit, make_repo, write_endpoint
 
 
-def _scenario(call: dict, plate: dict | None = None) -> dict:
+def _scenario(call: dict, plate: dict | None = None,
+              endpoint: str | None = "fin.a.a") -> dict:
     meta: dict = {
         "name": "rs2", "description": "d", "module": "m", "priority": 1,
         "author": "t", "owner": "t", "tags": [], "version": "1",
@@ -38,17 +39,18 @@ def _scenario(call: dict, plate: dict | None = None) -> dict:
         "resource": {},
         "steps": [{"kind": "step", "description": "s", "call": call,
                    "request": {"kind": "request", "body": {}},
-                   "strategy": []}],
+                   "strategy": [],
+                   **({"endpoint": endpoint} if endpoint else {})}],
     }
 
 
+# M3 定稿:锚点在 step.endpoint(不在 call 里);call 只存场景自有字段
 OWN_CALL = {
     "kind": "call",
     "service": "fin-service",
     "user": "tester_a",
     "path_params": {"uid": "u1"},
     "headers": {"X-Extra": "1"},
-    "view_hints": {"endpoint_id": "fin.a.a"},
 }
 
 
@@ -120,9 +122,9 @@ class TestReprojectRaw:
 
     def test_endpoint_not_in_release(self, tmp_path: Path) -> None:
         _, _, art = _released_repo(tmp_path)
-        call = {**OWN_CALL, "view_hints": {"endpoint_id": "fin.a.zz"}}
         with pytest.raises(ReprojectError) as ei:
-            reproject_raw(_scenario(call), {"fin": "1.0#1"}, root=art)
+            reproject_raw(_scenario(dict(OWN_CALL), endpoint="fin.a.zz"),
+                          {"fin": "1.0#1"}, root=art)
         assert ei.value.code == "endpoint_not_in_release"
 
     def test_working_declaration_uses_working_tree(self, tmp_path: Path) -> None:
@@ -164,7 +166,7 @@ class TestHTTPConvert:
         r = http_client.post("/api/scenario/action/convert", json={
             "consumer": "gimbal",
             "scenario": _scenario(
-                {**OWN_CALL, "view_hints": {"endpoint_id": "fin.a.zz"}},
+                dict(OWN_CALL), endpoint="fin.a.zz",
                 plate={"fin": "1.0#1"}),
         })
         assert r.status_code == 422

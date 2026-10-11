@@ -1393,7 +1393,7 @@ async def _fanout(
         for step in (definition.get('steps') or []):
             if not isinstance(step, dict):
                 continue
-            ep_id = step.get('endpoint') or ((step.get('call') or {}).get('view_hints') or {}).get('endpoint_id')
+            ep_id = step.get('endpoint')
             if ep_id:
                 system = str(ep_id).split('.')[0]
                 endpoints_used.setdefault(system, set()).add(str(ep_id))
@@ -2107,9 +2107,8 @@ async def filter_injection_entries(
 
     def _endpoint_id_of(si: int) -> str | None:
         step = _step_at(raw_steps, si)
-        call = step.get("call")
-        hints = (call.get("view_hints") or {}) if isinstance(call, dict) else {}   # B:守齐
-        eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
+        # M3:锚点唯一 = step.endpoint(view_hints 双读已删)
+        eid = step.get("endpoint")
         return eid if isinstance(eid, str) and eid else None
 
     async def _face_of(si: int) -> tuple[int, frozenset[str] | None]:

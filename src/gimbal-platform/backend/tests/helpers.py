@@ -51,7 +51,13 @@ def make_draft(
 
     ``vars_map`` 声明 config.vars(P2/C1 数据集行键须 ⊆ 标量声明变量);
     缺省不写 vars,保持旧调用行为不变。
+
+    M3 定稿:步骤锚点 = ``step.endpoint``。历史种子写在
+    ``call.view_hints.endpoint_id`` 的,这里统一上提为 step.endpoint
+    并剥离 view_hints —— 存量测试不必逐个改。
     """
+    if steps:
+        steps = [_lift_view_hints(dict(st)) for st in steps]
     meta = {
         "scenarioId": scenario_id,
         "name": "Test",
@@ -74,6 +80,17 @@ def make_draft(
         },
         "orchestration": {"steps": [], "resourceMeta": {}},
     }
+
+
+def _lift_view_hints(step: dict) -> dict:
+    """call.view_hints.endpoint_id → step.endpoint(就地,幂等)。"""
+    call = step.get("call")
+    if isinstance(call, dict) and "view_hints" in call:
+        vh = call.pop("view_hints")
+        eid = vh.get("endpoint_id") if isinstance(vh, dict) else None
+        if eid and not step.get("endpoint"):
+            step["endpoint"] = eid
+    return step
 
 
 def launch_ok() -> "Any":

@@ -1113,8 +1113,7 @@ async def save_check(
     meta_plate = meta.setdefault("plate", {})
     # 按系统前缀分派目标修订
     for step in (definition.get("steps") or []):
-        ep = (step.get("endpoint") or
-              ((step.get("call") or {}).get("view_hints") or {}).get("endpoint_id"))
+        ep = step.get("endpoint")
         if ep:
             system = str(ep).split(".")[0]
             meta_plate[system] = target_revision

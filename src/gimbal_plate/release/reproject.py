@@ -13,8 +13,8 @@
 - 系统未声明 → ``version_undeclared``；修订不存在 → ``release_not_found``；
   修订中没有该接口 → ``endpoint_not_in_release``。
 
-端点锚点（M3 过渡口径）：优先 ``step.endpoint``（M3 生效后），否则
-``step.call.view_hints.endpoint_id``（平台现状锚点）；重投影后两者剥离。
+端点锚点（M3 定稿）：``step.endpoint``（M1 接口 id），重投影后剥离
+（执行器标签从 pctx.endpoint 读，不依赖定义内锚点）。
 没有锚点的步骤（手写原始调用）原样使用存储的 call（4.5）。
 """
 from __future__ import annotations
@@ -39,8 +39,7 @@ class ReprojectError(Exception):
 def _merge_call(stored: dict[str, Any], proj: dict[str, Any],
                 endpoint_id: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    own = {k: v for k, v in stored.items()
-           if k not in ("kind", "view_hints")}
+    own = {k: v for k, v in stored.items() if k != "kind"}
     bad = [k for k in _STORAGE_FORBIDDEN if k in own]
     if bad:
         raise ReprojectError(
@@ -120,8 +119,7 @@ def reproject_raw(
             steps_out.append(step)
             continue
         call = step.get("call") or {}
-        vh = call.get("view_hints") or {}
-        endpoint_id = step.get("endpoint") or vh.get("endpoint_id")
+        endpoint_id = step.get("endpoint")
         if not endpoint_id:
             steps_out.append(step)             # 手写原始调用,原样使用
             continue

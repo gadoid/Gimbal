@@ -24,8 +24,8 @@ def _definition() -> dict:
                    "vars": {"amount": 100}},
         "resource": {},
         "steps": [
-            {"call": {"view_hints": {"endpoint_id": EP},
-                     "headers": {"Token": "t"}},
+            {"endpoint": EP,
+             "call": {"headers": {"Token": "t"}},
              "request": {"body": {"amount": "${var.amount}", "fixed": "X",
                                   "settle_type": "1", "cust_id": "7"}}},
         ],
@@ -73,7 +73,7 @@ def test_add_field_creates_containers_on_bodyless_step():
     request.body,addField 的 setdefault 链须自建容器落字段——否则
     open_batch 新生成的那批 op 应用时静默丢失。"""
     d = {"steps": [
-        {"call": {"view_hints": {"endpoint_id": EP}, "headers": {}}},
+        {"endpoint": EP, "call": {"headers": {}}},
     ]}
     op = {"op": "addField", "step": 0, "field": "reason_code", "value": "R1"}
     assert check_step_addressable(d, op, EP) is None

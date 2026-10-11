@@ -10,7 +10,7 @@
     module     场景 meta.module（随 scenario 边界）
     service    调用服务（step.call.service，随 step 边界）
     protocol   协议名（调用边界）
-    endpoint   端点标识（call.view_hints.endpoint_id，调用边界；无则不设）
+    endpoint   端点标识（step.endpoint，调用边界；无则不设）
 
 边界语义（防线程复用串标签）：进入某边界时，**更深层边界的标签全部清空**
 ——单元线程池复用线程时，上一单元残留的 step/scenario 等标签不会泄漏到

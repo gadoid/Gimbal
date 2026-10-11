@@ -19,7 +19,7 @@ class CarryContext:
     """dispatch 阶段预解析的注入上下文(纯值,spec §4.1)。
 
     * step_fields:step 索引 → 该 endpoint 的 carry 面 {path: 契约类型}。
-      键缺席 = 该 step 无锚点(存量无 view_hints)→ 降级门控。
+      键缺席 = 该 step 无锚点(手写调用)→ 降级门控。
     * service_bindings:键 = step.call.service 原始引用串(可含别名前缀);
       值 = 该目录服务的 {path: value};值 None = 服务名解析失败,
       整步跳过(黄警由 dispatch 记)。

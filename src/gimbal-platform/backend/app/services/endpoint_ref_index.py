@@ -69,10 +69,8 @@ def parse_refs(
     refs: list[ScenarioEndpointRef] = []
     unindexed: list[dict] = []
     for i, step in enumerate(_steps(payload)):
-        call = step.get("call")
-        call = call if isinstance(call, dict) else {}
-        hints = call.get("view_hints") if isinstance(call.get("view_hints"), dict) else {}
-        endpoint_id = hints.get("endpoint_id")
+        # M3:锚点唯一 = step.endpoint(view_hints 双读已删)
+        endpoint_id = step.get("endpoint")
         if not endpoint_id:
             unindexed.append({
                 "scenario_id": scenario_id, "step_index": i,
@@ -110,10 +108,7 @@ def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
     """
     out: list[int] = []
     for i, step in enumerate(_steps(payload)):
-        call = step.get("call")
-        call = call if isinstance(call, dict) else {}
-        hints = call.get("view_hints") if isinstance(call.get("view_hints"), dict) else {}
-        if hints.get("endpoint_id") == endpoint_id:
+        if step.get("endpoint") == endpoint_id:
             out.append(i)
     return out
 
@@ -145,7 +140,7 @@ async def rebuild(db: AsyncSession) -> dict:
     """全量重建索引 + 未索引步骤报告(spec §3.2/C10)。
 
     对账 / 灾后重建 / 升级迁移共用。确定性 ≠ 完备性:缺
-    view_hints.endpoint_id 的步骤不进索引,必须在报告里显式可见。
+    step.endpoint 的步骤(手写调用)不进索引,必须在报告里显式可见。
     """
     from sqlalchemy import select  # 局部 import 避免与模块头冲突
 

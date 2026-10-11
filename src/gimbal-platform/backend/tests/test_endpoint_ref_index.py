@@ -10,8 +10,8 @@ from app.services import scenario_store
 from tests.helpers import make_draft
 
 STEPS = [{
+    "endpoint": "fin.order.add",
     "call": {
-        "view_hints": {"endpoint_id": "fin.order.add"},
         "headers": {"X-Token": "${var.tok}"},
     },
     "request": {"body": {
@@ -20,12 +20,13 @@ STEPS = [{
         "mix": "p-${var.amount}-s",       # 内嵌模板
     }},
 }, {
-    # 无 view_hints.endpoint_id → 不进索引,进未索引报告
+    # 无 step.endpoint(手写调用)→ 不进索引,进未索引报告
     "call": {"headers": {}}, "request": {"body": {"x": "1"}},
 }]
 
 STEPS2 = [{
-    "call": {"view_hints": {"endpoint_id": "fin.order.add"}},
+    "endpoint": "fin.order.add",
+    "call": {},
     "request": {"body": {"amount": 5}},   # 数值直填:非 str,via_var None
 }]
 

@@ -41,12 +41,8 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
 
 
 def _endpoint_id(step: dict) -> Any:
-    """step → view_hints.endpoint_id;call/view_hints 非 dict 时 None。"""
-    call = step.get("call")
-    hints = (call.get("view_hints") or {}) if isinstance(call, dict) else {}
-    if not isinstance(hints, dict):
-        return None
-    return hints.get("endpoint_id")
+    """step → step.endpoint(M3 锚点;view_hints 双读已删)。"""
+    return step.get("endpoint")
 
 
 def _step_service(step: dict) -> Any:

@@ -1338,6 +1338,11 @@ def action_scenario_convert(
         # 4.5:响应带回实际使用的修订表(平台写入 plate_pins)
         payload_out["used"] = used_refs
         payload_out["meta_plate"] = meta_plate
+    # M2 §5.1/§9.5:响应附带构建身份(平台随执行请求转交执行器,
+    # 代际门比对「哪份 M2 校验」与「执行器按哪份构建」)
+    _m2 = _cached_m2_export()
+    payload_out["m2"] = {"hash": _m2.m2_hash,
+                         "generation": _m2.m2_generation}
     return ok_response(payload_out, dim="scenario")
 
 

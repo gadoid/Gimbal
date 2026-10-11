@@ -477,20 +477,6 @@
           "default": null,
           "description": "认证标签；按 AuthRegistry 会话注入头",
           "title": "User"
-        },
-        "view_hints": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "平台扩展;执行忽略",
-          "title": "View Hints"
         }
       },
       "title": "HttpCallParams",

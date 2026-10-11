@@ -64,6 +64,9 @@ class ProtocolCallContext:
 
     call: "Call"                       # 归一化后的协议中立调用（开放字段）
     step_id: str = ""
+    # M3：步骤的接口锚点（step.endpoint，M1 接口 id）—— 调用边界
+    # endpoint 标签的唯一来源（view_hints 已删）。
+    endpoint: str = ""
     services: dict = field(default_factory=dict)   # scenario.config.services 查表
     service_base_url: str = ""                     # 兼容回落 base_url
     # step.request.body 的默认值（HTTP 语义：scratch request_body 未被
@@ -202,15 +205,12 @@ class ProtocolExecutor(ABC):
         dispatcher 插装职责）由本模板承担。
 
         P1-01 call 边界：``protocol``（协议名）+ ``endpoint``
-        （call.view_hints.endpoint_id，平台端点标识；无则不设）标签随
+        （step.endpoint，平台端点标识；无则不设）标签随
         进入设置、退出恢复。
         """
         pctx0 = getattr(spec, "pctx", None)
         call = getattr(pctx0, "call", None)
-        vh = getattr(call, "view_hints", None)
-        if not isinstance(vh, dict):
-            vh = (getattr(call, "model_extra", None) or {}).get("view_hints") or {}
-        endpoint_id = vh.get("endpoint_id") if isinstance(vh, dict) else None
+        endpoint_id = getattr(pctx0, "endpoint", None) or ""
         if not endpoint_id:
             # 信封完整(P3 收尾)：无平台端点标识时按调用自有字段推导
             # （http 形如 "fin POST /api/x"；非 http 协议至少带 service）

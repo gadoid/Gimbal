@@ -464,6 +464,7 @@ class StepStateMachine:
         pctx = ProtocolCallContext(
             call=call,
             step_id=self._step_id,
+            endpoint=str(getattr(self._step_schema, "endpoint", "") or ""),
             services=self._services,
             service_base_url=self._service_base_url,
             request_body=getattr(getattr(self._step_schema, "request", None), "body", None),
