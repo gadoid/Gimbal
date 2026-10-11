@@ -194,17 +194,15 @@ class EndpointCaseExporter:
         return _interpolate_params(params, self.variables)
 
     def _render_call(self, case: EndpointCase) -> dict[str, Any]:
-        """v2.1 批次 F：call{protocol:"http"}（gimbal 新形态）。"""
-        binding = self.endpoint.binding
-        return {
-            "kind": "call",
-            "protocol": binding.protocol,
-            "service": self.endpoint.service,
-            "method": binding.method,
-            "path": binding.path,
-            "headers": dict(binding.headers),
-            "timeout": binding.timeout_seconds,
-        }
+        """v2.1 批次 F：call{protocol:"http"}（gimbal 新形态）。
+
+        设计 §3：binding → call 投影只有一份实现 —— 统一走
+        release 的 _call_projection，exporter 不再自行拼装。
+        """
+        from gimbal_plate.release.release import _call_projection
+        out = dict(_call_projection(self.endpoint))
+        out["kind"] = "call"
+        return out
 
 
     def _render_strategy(self, expected: dict[str, Any]) -> list[dict[str, Any]]:

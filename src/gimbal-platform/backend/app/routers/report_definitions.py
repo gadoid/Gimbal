@@ -93,13 +93,33 @@ async def list_definitions(
     return {"items": [_to_out(r).model_dump() for r in rows]}
 
 
+def _validate_m2(definition: dict, name: str) -> None:
+    """M2 §6:保存时按平台生成物(app/schemas/_m2)校验报告定义。
+
+    name 是 M2 必填但存在行的列上 —— 校验时补入,不回写定义。"""
+    from pydantic import ValidationError
+    from ..schemas._m2 import ReportDefinition
+    try:
+        ReportDefinition.model_validate({**definition, "name": name})
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "report_definition_invalid",
+                    "message": f"报告定义不符合 M2 ReportDefinition: {e}"}
+        ) from e
+
+def _validated_definition(body) -> dict:
+    d = body.effective_definition()
+    _validate_m2(d, body.name)
+    return d
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_definition(
     user: CurrentUser, db: DbSession, body: ReportDefinitionCreate,
 ) -> dict:
     row = ReportDefinitionRow(
         name=body.name, description=body.description,
-        definition=body.effective_definition(),
+        definition=_validated_definition(body),
         owner_id=None if body.public else user.id,
     )
     db.add(row)
