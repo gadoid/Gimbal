@@ -17,6 +17,12 @@ STRATEGY_BEFORE 复用 dispatcher 现有 STOP→SKIP）；引擎的三个让步�
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gimbal.schema.debug import DebugCommand
+
+
 import queue
 import threading
 from typing import Any, Optional, Protocol

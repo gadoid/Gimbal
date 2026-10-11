@@ -9,7 +9,6 @@ from app.core import db as db_module
 from app.models.adaptation_batch import AdaptationBatch
 from app.models.adaptation_op import AdaptationOp
 from app.models.adaptation_snapshot import AdaptationSnapshot
-from app.models.catalog_version import CatalogVersion
 from app.models.scenario_endpoint_ref import ScenarioEndpointRef
 
 
@@ -57,31 +56,6 @@ async def test_endpoint_ref_roundtrip_and_pk(fresh_db):
         with pytest.raises(IntegrityError):
             await s.commit()
         await s.rollback()
-
-
-async def test_catalog_batch_snapshot_roundtrip(fresh_db):
-    async with await _session() as s:
-        await _seed_parents(s)
-        s.add(CatalogVersion(
-            endpoint_id="fin.order.add", version="1.0.0",
-            spec_json={"id": "fin.order.add", "version": "1.0.0",
-                       "request": {"declarations": []}},
-        ))
-        s.add(AdaptationBatch(
-            batch_id="bt-1", endpoint_id="fin.order.add",
-            from_version="1.0.0", to_version="1.1.0",
-            status="open", operator_id=1,
-        ))
-        await s.commit()
-        cv = (await s.execute(select(CatalogVersion))).scalar_one()
-        assert cv.spec_json["version"] == "1.0.0"
-        s.add(AdaptationSnapshot(
-            batch_id="bt-1", entity_type="scenario",
-            entity_id="sc-a", before_json={"definition": {"steps": []}},
-        ))
-        await s.commit()
-        snap = (await s.execute(select(AdaptationSnapshot))).scalar_one()
-        assert snap.before_json["definition"]["steps"] == []
 
 
 async def test_adaptation_op_roundtrip(fresh_db):

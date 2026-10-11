@@ -12,6 +12,7 @@ from sqlalchemy import delete as sa_delete, func, or_
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models.environment import Environment
 from ..models.service_alias import ServiceAlias
 from . import service_names
 
@@ -20,12 +21,16 @@ class UnknownBaseService(Exception):
     """别名无法派生回 Plate 目录(裸声明 / plate 不可达)。"""
 
 
-def alias_out(row: ServiceAlias) -> dict:
+def alias_out(
+    row: ServiceAlias, *, environment_name: str | None = None,
+) -> dict:
     return {
         "aliasName": row.alias_name,
         "baseService": row.base_service,
         "baseUrl": row.base_url,
-        "groupTag": row.group_tag,
+        # V5(B):group_tag 已退役,归属环境经外键指向 environments
+        "environmentId": row.environment_id,
+        "environmentName": environment_name,
         "credentialAlias": row.credential_alias,
         "ownerUserId": row.owner_user_id,
         "createdAt": row.created_at.isoformat() if row.created_at else None,
@@ -39,7 +44,9 @@ async def list_aliases(
 ) -> tuple[list[dict], int]:
     """M4(§6.3):q(alias/base 子串)+ base 精确 + Page 信封。
     返回 (当前页 dicts, 全量 total)。"""
-    stmt = select(ServiceAlias)
+    # V5(B):LEFT JOIN environments 带出环境名(展示/筛选用,id 不友好)
+    stmt = select(ServiceAlias, Environment.name).outerjoin(
+        Environment, ServiceAlias.environment_id == Environment.id)
     if base is not None:
         stmt = stmt.where(ServiceAlias.base_service == base)
     if q:
@@ -54,12 +61,12 @@ async def list_aliases(
     rows = (await db.execute(
         stmt.order_by(ServiceAlias.alias_name)
         .offset((page - 1) * page_size).limit(page_size)
-    )).scalars().all()
-    return [alias_out(r) for r in rows], int(total)
+    )).all()
+    return ([alias_out(r, environment_name=n) for r, n in rows], int(total))
 
 
 async def create_alias(
-    db: AsyncSession, *, alias_name: str, group_tag: str | None = None,
+    db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
     base_url: str | None = None,
 ) -> dict:
@@ -70,33 +77,52 @@ async def create_alias(
         raise UnknownBaseService(
             f"unknown_base_service: {alias_name!r} 不落在 plate 服务目录内"
             "(裸声明不猜;plate 不可达时目录为空,恢复后再登记)")
+    if environment_id is not None:
+        env = await db.get(Environment, environment_id)
+        if env is None:
+            raise KeyError(
+                f"environment_not_found: {environment_id}")
     row = ServiceAlias(
-        alias_name=alias_name, base_service=base, group_tag=group_tag,
+        alias_name=alias_name, base_service=base,
+        environment_id=environment_id,
         credential_alias=credential_alias, owner_user_id=owner_user_id,
         base_url=base_url,
     )
     db.add(row)
     await db.commit()
     await db.refresh(row)  # server_default 时间列:刷新防异步懒加载
-    return alias_out(row)
+    env_name = None
+    if row.environment_id is not None:
+        env = await db.get(Environment, row.environment_id)
+        env_name = env.name if env else None
+    return alias_out(row, environment_name=env_name)
 
 
 async def patch_alias(
-    db: AsyncSession, alias_name: str, *, group_tag: str | None = ...,
+    db: AsyncSession, alias_name: str, *, environment_id: int | None = ...,
     credential_alias: str | None = ..., base_url: str | None = ...,
 ) -> dict:
     row = await db.get(ServiceAlias, alias_name)
     if row is None:
         raise KeyError(f"alias_not_found: {alias_name}")
-    if group_tag is not ...:
-        row.group_tag = group_tag
+    if environment_id is not ...:
+        if environment_id is not None:
+            env = await db.get(Environment, environment_id)
+            if env is None:
+                raise KeyError(
+                    f"environment_not_found: {environment_id}")
+        row.environment_id = environment_id
     if credential_alias is not ...:
         row.credential_alias = credential_alias
     if base_url is not ...:
         row.base_url = base_url
     await db.commit()
     await db.refresh(row)
-    return alias_out(row)
+    env_name = None
+    if row.environment_id is not None:
+        env = await db.get(Environment, row.environment_id)
+        env_name = env.name if env else None
+    return alias_out(row, environment_name=env_name)
 
 
 async def delete_alias(db: AsyncSession, alias_name: str) -> None:

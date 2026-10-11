@@ -2,22 +2,26 @@
 
 CRUD + lines 管理。环境声明「每个系统部署的是哪条版本线」——
 版本线只能从 plate 已有的版本线中选择（平台不做 scheme 校验）。
+写面收在 owner/admin（迁移产生的无主行 → admin）：lines 影响所有
+引用该环境的执行语义，是团队共享配置。
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..core.db import get_db
-
-from app.models import Environment, User
-from ..core.deps import CurrentUser
-
+from ..core.deps import CurrentUser, MemberUser
+from ..models import Environment
+from ..models.service_alias import ServiceAlias
 
 router = APIRouter(prefix="/environments", tags=["environments"])
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 class EnvironmentCreate(BaseModel):
@@ -44,73 +48,85 @@ class EnvironmentView(BaseModel):
         from_attributes = True
 
 
+def _require_env_write(env: Environment, user: Any) -> None:
+    if user.role != "admin" and env.owner_id != user.id:
+        raise HTTPException(403, "environment writes are owner/admin only")
+
+
 @router.get("", response_model=list[EnvironmentView])
-def list_environments(
-    user: CurrentUser,
-    db: Session = Depends(get_db),
+async def list_environments(
+    user: CurrentUser, db: DbSession,
 ) -> Any:
-    stmt = select(Environment).order_by(Environment.name)
-    return db.scalars(stmt).all()
+    rows = (await db.execute(
+        select(Environment).order_by(Environment.name)
+    )).scalars().all()
+    return rows
 
 
 @router.post("", response_model=EnvironmentView, status_code=201)
-def create_environment(
+async def create_environment(
     body: EnvironmentCreate,
-    user: CurrentUser,
-    db: Session = Depends(get_db),
+    user: MemberUser, db: DbSession,
 ) -> Any:
-    existing = db.scalar(
-        select(Environment).where(Environment.name == body.name))
+    existing = (await db.execute(
+        select(Environment).where(Environment.name == body.name)
+    )).scalar_one_or_none()
     if existing:
         raise HTTPException(409, f"environment '{body.name}' already exists")
     env = Environment(
         name=body.name, description=body.description,
         lines=body.lines, owner_id=user.id)
     db.add(env)
-    db.commit()
-    db.refresh(env)
+    await db.commit()
+    await db.refresh(env)
     return env
 
 
 @router.get("/{env_id}", response_model=EnvironmentView)
-def get_environment(
+async def get_environment(
     env_id: int,
-    user: CurrentUser,
-    db: Session = Depends(get_db),
+    user: CurrentUser, db: DbSession,
 ) -> Any:
-    env = db.get(Environment, env_id)
+    env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
     return env
 
 
 @router.put("/{env_id}", response_model=EnvironmentView)
-def update_environment(
+async def update_environment(
     env_id: int,
     body: EnvironmentUpdate,
-    user: CurrentUser,
-    db: Session = Depends(get_db),
+    user: MemberUser, db: DbSession,
 ) -> Any:
-    env = db.get(Environment, env_id)
+    env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
+    _require_env_write(env, user)
     if body.description is not None:
         env.description = body.description
     if body.lines is not None:
         env.lines = body.lines
-    db.commit()
-    db.refresh(env)
+    await db.commit()
+    await db.refresh(env)
     return env
 
 
 @router.delete("/{env_id}", status_code=204)
-def delete_environment(
+async def delete_environment(
     env_id: int,
-    user: CurrentUser,
-    db: Session = Depends(get_db),
+    user: MemberUser, db: DbSession,
 ) -> None:
-    env = db.get(Environment, env_id)
+    env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
-    db.delete(env)
-    db.commit()
+    _require_env_write(env, user)
+    # 引用检查：仍有服务别名指向该环境时拒绝删除（悬空外键防患）
+    ref = (await db.execute(select(ServiceAlias.alias_name).where(
+        ServiceAlias.environment_id == env_id).limit(1)
+    )).scalar_one_or_none()
+    if ref:
+        raise HTTPException(
+            409, f"environment is referenced by alias '{ref}'")
+    await db.delete(env)
+    await db.commit()

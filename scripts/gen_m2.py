@@ -49,6 +49,10 @@ _PY_GEN_ARGS = [
     "--use-subclass-enum",                  # G3 枚举基类 (str, Enum)
     "--output-datetime-class", "datetime",  # G4/M7
     "--set-default-enum-member",            # G5 缺省枚举成员
+    # 目标版本钉死 3.12:0.28.5 不认识更新的解释器版本(本机 3.14 会
+    # ValueError: '3.14' is not a valid PythonVersion),产物本就按
+    # 3.12 语法生成,与运行解释器解耦。
+    "--target-python-version", "3.12",
     # G6（E7 清单 → Literal）本版工具只有 all/one 语义且 all 会把全部
     # 枚举降为 Literal、丢成员名（E3 失效）——先保 E3，枚举一律 Enum 类；
     # 升级工具版本后再按 literal_fields 清单收紧。
@@ -204,8 +208,28 @@ def _fix_discriminators(text: str) -> str:
     return text
 
 
+# 0.28.5 的 PythonVersion 枚举只到 3.13,而包在 import 期按**运行解释器**
+# 版本构造缺省值(model/__init__.py:17)—— 3.14+ 解释器上 import 即炸,
+# 任何 CLI 参数都来不及传。前导把 version_info 封顶到 3.13 再进包,
+# 产物版本仍由 --target-python-version 显式钉死(见 _PY_GEN_ARGS)。
+_DMCG_PREAMBLE = (
+    "import sys\n"
+    "if sys.version_info[:2] > (3, 13):\n"
+    # 原生类型不可实例化,用 tuple 子类保住 .major/.minor 属性访问
+    "    class _VI(tuple):\n"
+    "        major = property(lambda s: s[0])\n"
+    "        minor = property(lambda s: s[1])\n"
+    "        micro = property(lambda s: s[2])\n"
+    "        releaselevel = property(lambda s: s[3])\n"
+    "        serial = property(lambda s: s[4])\n"
+    "    sys.version_info = _VI((3, 13, 0, 'final', 0))\n"
+    "from datamodel_code_generator.__main__ import main\n"
+    "sys.exit(main())\n"
+)
+
+
 def _gen_py(schema_path: Path, out_path: Path) -> None:
-    r = _run([sys.executable, "-m", "datamodel_code_generator",
+    r = _run([sys.executable, "-c", _DMCG_PREAMBLE,
               "--input", str(schema_path), "--output", str(out_path),
               *_PY_GEN_ARGS])
     if r.returncode != 0:

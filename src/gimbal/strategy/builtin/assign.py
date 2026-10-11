@@ -7,6 +7,10 @@ from typing import Any, TYPE_CHECKING
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 from .utils import _resolve_source_value
 from gimbal.log import get_logger
+
+if TYPE_CHECKING:
+    from gimbal.context.views import StrategyContextView
+    from gimbal.schema import StrategyBase
 logger = get_logger(__name__)
 
 class AssignExecutor(StrategyExecutor):

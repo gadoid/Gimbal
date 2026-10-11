@@ -131,7 +131,7 @@ async def references(
     return {
         "alias_refs": [
             {"alias_name": a.alias_name, "base_service": a.base_service,
-             "group_tag": a.group_tag}
+             "environment_id": a.environment_id}
             for a in alias_rows
         ],
         "scenario_refs": {

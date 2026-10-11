@@ -100,18 +100,20 @@ async def _require_reader_async(
 def _draft_to_full_scenario_dict(
     draft: ScenarioDraft, owner: str
 ) -> dict:
-    """Build a plate-valid Scenario dict from the platform container.
+    """Build a plate-boundary Scenario dict from the platform container.
 
     definition is already plate-shaped (it's the authoritative structure);
-    this only fills plate-required defaults that the platform UI doesn't
-    collect. orchestration is platform-only and never sent.
-
-    Defaults: see :func:`plate_client.fill_plate_defaults` (shared with
-    the run path — preview/export 与执行链共用同一份 plate 必填默认,
-    防两路漂移).
+    M2 步骤 4(Q18)起定义即纯 M2 —— 不再补 plate 默认值,且与存储同规
+    剥离平台元数据(meta.scenarioId/updateTime/owner 只在行的列上),
+    保证导出产物与执行 case 同形(overlay 黄金等价)。
+    orchestration 是平台侧投影,绝不外发。
     """
-    payload = {k: v for k, v in draft.definition.items()}
-    return plate_client.fill_plate_defaults(payload, owner=owner)
+    from ..services.scenario_store import _strip_platform_meta
+    definition = dict(draft.definition)
+    meta = definition.get("meta")
+    if isinstance(meta, dict):
+        definition["meta"] = _strip_platform_meta(meta)
+    return definition
 
 
 # ── 1) POST /preview-plate (static — must precede /{scenario_id}) ──

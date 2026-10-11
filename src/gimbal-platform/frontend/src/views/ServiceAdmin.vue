@@ -109,8 +109,8 @@
                   <span v-else class="muted" title="存量行未填 URL;编辑补齐后生效">未填</span>
                 </td>
                 <td>
-                  <span v-if="a.groupTag" class="svc-flag">{{ a.groupTag }}</span>
-                  <span v-else class="muted">未分组</span>
+                  <span v-if="a.environmentName" class="svc-flag">{{ a.environmentName }}</span>
+                  <span v-else class="muted">未归属环境</span>
                 </td>
                 <td>
                   <span v-if="a.credentialAlias" class="mono">{{ a.credentialAlias }}</span>
@@ -180,7 +180,14 @@
                 data-testid="alias-name-input"
               />
             </div>
-            <Input v-model="draft.groupTag" class="w-[160px]" placeholder="分组(如:测试)" data-testid="alias-group-input" />
+            <!-- V5(B):groupTag 退役 —— 归属环境从 environments 选,不再自由填 -->
+            <Select v-model="draft.environmentId" :key="`env:${draft.environmentId}`">
+              <SelectTrigger class="w-[160px]" data-testid="alias-env-trigger"><SelectValue placeholder="环境(可选)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">不归属</SelectItem>
+                <SelectItem v-for="e in environments" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
+              </SelectContent>
+            </Select>
             <!-- F4:URL 必填 —— 别名 = 环境端点的登记,该列就是它的本体
                  (引用场景未显式声明/绑定时执行取它)。 -->
             <Input
@@ -228,9 +235,11 @@ import {
   type ServiceAliasRow,
 } from '@/api/service-aliases'
 import { listAll as listMyCredentials, type AuthSession } from '@/api/auth_sessions'
+import { listEnvironments, type EnvironmentRow } from '@/api/environments'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useClientPager } from '@/composables/useClientPager'
 import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 
@@ -240,11 +249,12 @@ const aliases = ref<ServiceAliasRow[]>([])
 const selectedService = ref('')
 const selectedGroup = ref('')
 const myCredentials = ref<AuthSession[]>([])
+const environments = ref<EnvironmentRow[]>([])
 const saving = ref(false)
 const editing = ref<ServiceAliasRow | null>(null)
 
-const draft = ref<{ aliasName: string; baseUrl: string; groupTag: string; credentialAlias: string }>({
-  aliasName: '', baseUrl: '', groupTag: '', credentialAlias: '',
+const draft = ref<{ aliasName: string; baseUrl: string; environmentId: string; credentialAlias: string }>({
+  aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
 })
 
 /** 常驻前缀槽的基服务:登记态 = 左栏点选;编辑态 = 该别名自身所属服务;
@@ -302,18 +312,18 @@ function aliasCount(service: string): number {
   return aliases.value.filter((a) => a.baseService === service).length
 }
 
-// 顶部分组筛选:别名表 groupTag 的去重集合(选服务前跨服务,选后服务内)
+// 顶部环境筛选(V5-B):别名按 environmentId 归属;chips 显示环境名
 const groupChips = computed<string[]>(() => {
   const pool = selectedService.value
     ? aliases.value.filter((a) => a.baseService === selectedService.value)
     : aliases.value
-  return [...new Set(pool.map((a) => a.groupTag).filter((t): t is string => !!t))].sort()
+  return [...new Set(pool.map((a) => a.environmentName).filter((t): t is string => !!t))].sort()
 })
 
 const filtered = computed<ServiceAliasRow[]>(() =>
   aliases.value
     .filter((a) => !selectedService.value || a.baseService === selectedService.value)
-    .filter((a) => !selectedGroup.value || a.groupTag === selectedGroup.value),
+    .filter((a) => !selectedGroup.value || a.environmentName === selectedGroup.value),
 )
 
 // 客户端分页(2026-09-23 批次):全量拉回 + 前端过滤,页内切片渲染;
@@ -343,14 +353,14 @@ function startEdit(a: ServiceAliasRow): void {
   draft.value = {
     aliasName: a.aliasName,
     baseUrl: a.baseUrl ?? '',
-    groupTag: a.groupTag ?? '',
+    environmentId: a.environmentId != null ? String(a.environmentId) : '0',
     credentialAlias: a.credentialAlias ?? '',
   }
 }
 
 function cancelEdit(): void {
   editing.value = null
-  draft.value = { aliasName: '', baseUrl: '', groupTag: '', credentialAlias: '' }
+  draft.value = { aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '' }
 }
 
 async function save(): Promise<void> {
@@ -361,7 +371,7 @@ async function save(): Promise<void> {
     if (editing.value) {
       await patchAlias(editing.value.aliasName, {
         baseUrl: d.baseUrl.trim() || null,
-        groupTag: d.groupTag.trim() || null,
+        environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
         credentialAlias: d.credentialAlias.trim() || null,
       })
       toast.success('已保存')
@@ -369,7 +379,7 @@ async function save(): Promise<void> {
       await createAlias({
         aliasName: d.aliasName.trim(),
         baseUrl: d.baseUrl.trim(),
-        groupTag: d.groupTag.trim() || null,
+        environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
         credentialAlias: d.credentialAlias.trim() || null,
       })
       toast.success('已登记')

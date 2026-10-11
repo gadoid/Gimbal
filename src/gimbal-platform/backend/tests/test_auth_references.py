@@ -94,7 +94,7 @@ async def _seed(owner_ids: dict[str, int]) -> None:
 
         # 别名表绑定(共享配置,不阻断)
         s.add(ServiceAlias(alias_name="fin-service-uat", base_service="fin-service",
-                           group_tag="测试", credential_alias=ALIAS))
+                           environment_id=None, credential_alias=ALIAS))
         await s.commit()
 
 
@@ -118,7 +118,7 @@ async def test_references_four_kinds_and_visibility(client):
     # 别名绑定行
     assert body["alias_refs"] == [
         {"alias_name": "fin-service-uat", "base_service": "fin-service",
-         "group_tag": "测试"}]
+         "environment_id": None}]
     visible = {v["scenario_id"]: v["kinds"] for v in body["scenario_refs"]["visible"]}
     # member:本人 3 + 他人 public 1 可见;他人 private → hidden
     assert visible == {

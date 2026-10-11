@@ -630,9 +630,19 @@ async def test_dispatcher_fans_out_injection_entries(
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
+    # RS3（Release v4.4 §6.3）:正式执行存在悬空注入条目 → 409 拒绝
+    # (死字段锚点 + 旧版形状条目均属悬空);预览执行才放行告警。
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [],
         "injectionEntryIds": ["inj-live", "inj-dead", "inj-old"], "nRuns": 2,
+    })
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "dangling_injection_entries"
+    assert set(r.json()["detail"]["entries"]) == {"inj-dead", "inj-old"}
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [],
+        "injectionEntryIds": ["inj-live"], "nRuns": 2,
     })
     assert r.status_code == 201, r.text
     exec_id = r.json()["executionId"]
@@ -697,21 +707,16 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     st = cases[0]["steps"][0]["strategy"]
     assert {"kind": "assign", "source": 261, "target": "$.call.request.body.customer_id"} in st
 
-    # 降级:声明面不可得 → 同一条目重新被判死(skip),不炸 dispatch
+    # 降级:声明面不可得 → 锚点无法判定 → 悬空,正式执行 409
+    # (v4.3 C2:不给正式执行留静默降级)。
     plate_mock.fulls.pop("ep-carry-x")
     from app.services.endpoint_declarations import _reset_declared_paths_cache
     _reset_declared_paths_cache()
     cases.clear()
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"]})
-    assert r.status_code == 201, r.text
-    # 降级从严:条目仍被判死 → skip;派发的只剩基线 case(无该条目的
-    # Assign 直补)—— 判定退回 body 面,不是"整单不发"。
-    await _wait(lambda: len(cases) >= 1)
-    assert len(cases) == 1
-    assert {"kind": "assign", "source": 261,
-            "target": "$.call.request.body.customer_id"} not in \
-        cases[0]["steps"][0]["strategy"]
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "dangling_injection_entries"
 
 
 async def test_dispatcher_fetches_declaration_face_only_for_referenced_steps(

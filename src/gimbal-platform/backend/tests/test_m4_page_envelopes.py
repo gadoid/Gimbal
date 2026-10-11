@@ -142,16 +142,16 @@ async def test_batches_envelope_status_and_page(client, plate):
         "id": EP, "version": "1.1.0",
         "request": {"declarations": [{"name": "amount", "state": "form"}]},
     }}
-    from .test_adaptation_batches import _seed_scenario, _seed_stamp
-
-    await _seed_scenario("sc-m4-batch")
-    await _seed_stamp()
     from app.core import db as db_module
-    from app.services import adaptation_service
+    from app.models.adaptation_batch import AdaptationBatch
+    from uuid import uuid4
 
     async with db_module.SessionLocal() as s:
-        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
-        assert detail["batchId"]
+        s.add(AdaptationBatch(
+            batch_id=f"bt-{uuid4().hex[:12]}", endpoint_id=EP,
+            from_version="a" * 64, to_version="b" * 64,
+            status="open", operator_id=1, operator_name="m4"))
+        await s.commit()
 
     r = await client.get("/api/adaptations/batches", headers=admin)
     body = r.json()

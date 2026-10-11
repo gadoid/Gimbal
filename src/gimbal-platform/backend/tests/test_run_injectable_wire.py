@@ -101,8 +101,7 @@ async def test_carry_anchored_entry_runs_and_overrides_on_the_wire(
     bob = await _member(client, "bob")
     draft = _draft(
         steps=[{
-            "id": "s1",
-            # 真引擎 Scenario 的两个判别式 + plate 必填 meta:brief 的
+                        # 真引擎 Scenario 的两个判别式 + plate 必填 meta:brief 的
             # echo 桩把 convert 短路了,真 plate 的 GimbalScenarioExporter
             # 平时才会补上这些(step.kind / request.kind / meta.* 必填)。
             # 不补则引擎 Scenario 校验 union_tag_not_found → exit 2
@@ -182,8 +181,7 @@ async def test_carry_anchored_entry_overrides_platform_carried_value(
     bob = await _member(client, "bob")
     draft = _draft(
         steps=[{
-            "id": "s1",
-            "kind": "step",
+                        "kind": "step",
             "call": {"kind": "call", "protocol": "http", "service": "stubsvc", "method": "POST", "path": "/pay",
                     "headers": {"Content-Type": "application/json"},
                     "view_hints": {"endpoint_id": "ep-carry-wire"}},

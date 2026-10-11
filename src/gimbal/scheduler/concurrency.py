@@ -5,6 +5,8 @@ PlanScheduler 自持线程池承担)。
 """
 from __future__ import annotations
 
+from typing import Optional
+
 DEFAULT_MAX_WORKERS = 4
 MAX_WORKERS_LIMIT = 64
 

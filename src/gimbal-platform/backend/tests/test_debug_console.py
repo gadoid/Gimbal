@@ -214,7 +214,7 @@ async def test_server_chain_end_to_end(client, monkeypatch, stub_sut):
     await client.post("/api/scenarios", headers=h, json=make_draft(
         "sc-dbg",
         steps=[{
-            "id": "s1", "kind": "step",
+            "kind": "step",
             "call": {"kind": "call", "protocol": "http", "service": "svc",
                      "method": "GET", "path": "/ping"},
             "request": {"kind": "request", "body": {}},

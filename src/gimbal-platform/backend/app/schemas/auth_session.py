@@ -45,7 +45,7 @@ class AliasRefItem(BaseModel):
 
     alias_name: str
     base_service: str
-    group_tag: str | None = None
+    environment_id: int | None = None
 
 
 class ScenarioRefItem(BaseModel):

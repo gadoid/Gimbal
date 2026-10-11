@@ -5,10 +5,13 @@ exec_runs 子表已随存量数据清理退役(V1 兼容层),删除整单不再�
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Execution, ExecutionSnapshot
+from ..models.execution import ExecutionEvent
 from ..models.composer_scenario import ComposerScenario
 from ..models.execution import STATUS_FAILED
 from ..schemas.execution import ExecutionListItemOut, ExecutionOut
@@ -330,7 +333,6 @@ async def insert_logs(db: AsyncSession, execution_id: int,
 
 
 def _parse_ts(value) -> "datetime | None":
-    from datetime import datetime
     if isinstance(value, datetime):
         return value
     if isinstance(value, str) and value:

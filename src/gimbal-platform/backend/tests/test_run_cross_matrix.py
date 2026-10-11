@@ -96,10 +96,10 @@ async def _seed(client, headers, *, entries=None, rows=None):
 
     draft = _draft(
         steps=[
-            {"id": "s1", "request": {"body": {"amount": "${var.amount}"}},
+            {"request": {"body": {"amount": "${var.amount}"}},
              "strategy": [{"kind": "assertion", "target": "$.response_body.code",
                            "operator": "eq", "expected": "0"}]},
-            {"id": "s2", "strategy": []},
+            {"strategy": []},
         ],
         vars_map={"amount": 100},
     )
@@ -303,8 +303,7 @@ async def test_dispatcher_uses_raw_step_index_base(client, plate_mock, monkeypat
 
     bob = await _member(client, "bob")
     draft = _draft(
-        steps=[{"id": "s1",
-                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+        steps=[{                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-raw"}},
                 "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
         vars_map={"amount": 1},
@@ -343,7 +342,7 @@ async def test_dispatcher_tolerates_non_dict_api(client, plate_mock, monkeypatch
 
     bob = await _member(client, "bob")
     draft = _draft(
-        steps=[{"id": "s1", "call": "svc",                    # ← 非 dict
+        steps=[{"call": "svc",                    # ← 非 dict
                 "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
         vars_map={"amount": 1},
     )
@@ -371,8 +370,7 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
 
     bob = await _member(client, "bob")
     draft = _draft(
-        steps=[{"id": "s1",
-                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+        steps=[{                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-absent"}},   # fulls 里不注册 ⇒ 404
                 "request": {"body": {}}, "strategy": []}])
     draft["assertion_registry"] = {"entries": [{
@@ -383,22 +381,23 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
     assert r.status_code in (200, 201), r.text
     plate_mock.behaviour = "echo"
 
+    # v4.3 C2 / §6.3:声明面不可得(端点 404)与声明缺失,正式执行一律
+    # 悬空 409 —— 不再有"降级静默 skip + 台账标记"的正式通道(降级
+    # skip 只属预览执行)。
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-d"]})
-    assert r.status_code == 201, r.text
-    exec_id = r.json()["executionId"]
-    ex = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
-    cfg = ex.get("config") or {}
-    assert cfg.get("judgeDegraded") is True
-    assert cfg.get("entriesSkippedWhileDegraded") == ["inj-d"]
-    # 正对照:端点**存在**但没有该声明 ⇒ 不是降级,不留标记
-    plate_mock.fulls["ep-absent"] = {"request": {"declarations": []}}
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "dangling_injection_entries"
+    # 正对照:端点存在且声明覆盖锚点字段 ⇒ 条目活,执行放行
+    plate_mock.fulls["ep-absent"] = {"request": {"declarations": [
+        {"name": "customer_id", "path": "$.customer_id", "state": "carry"}]}}
     from app.services.endpoint_declarations import _reset_declared_paths_cache
+    from app.services import plate_client
     _reset_declared_paths_cache()
+    plate_client._reset_full_cache_for_test()
     r2 = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-d"]})
-    ex2 = (await client.get(f"/api/executions/{r2.json()['executionId']}", headers=bob)).json()
-    assert (ex2.get("config") or {}).get("judgeDegraded") is None
+    assert r2.status_code == 201, r2.text
 
 
 async def test_compose_tolerates_non_dict_step_like_out_of_range(client, plate_mock, monkeypatch):
@@ -413,7 +412,7 @@ async def test_compose_tolerates_non_dict_step_like_out_of_range(client, plate_m
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
-    draft = _draft(steps=[{"id": "s1", "request": {"body": {}}, "strategy": []}])
+    draft = _draft(steps=[{"request": {"body": {}}, "strategy": []}])
     draft["definition"]["steps"].insert(0, "GARBAGE")
     draft["assertion_registry"] = {"entries": [{
         "id": "inj-nondict", "name": "根锚在非 dict 步上",

@@ -116,4 +116,4 @@ async def post_run(
     except run_dispatcher.NotFound as e:
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
     except run_dispatcher.Conflict as e:
-        raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message})
+        raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, **e.extra})

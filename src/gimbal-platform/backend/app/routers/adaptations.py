@@ -23,7 +23,6 @@ from ..schemas.adaptations import (
     CatalogDiffReport,
     ImpactItem,
     ImpactSummaryReport,
-    OpenBatchIn,
     OpCreateIn,
     OpOut,
     OpPatchIn,
@@ -112,24 +111,6 @@ async def impact_summary(
     recentFail 全站口径(跨 owner 聚合数,方案 §3.5)。"""
     return ImpactSummaryReport.model_validate(
         await adaptation_service.impact_summary(db, endpoint_ids=endpointIds))
-
-
-@router.post("/batches", response_model=BatchDetail, status_code=201)
-async def open_batch(
-    user: CurrentUser, body: OpenBatchIn, db: DbSession,
-) -> BatchDetail:
-    """开批次:校验基线/版本前进 → 存档受影响实体 → 展开自动草案。"""
-    try:
-        detail = await adaptation_service.open_batch(
-            db, endpoint_id=body.endpoint_id, operator_id=user.id,
-        )
-    except PlateUnavailableError as e:
-        raise _plate_502(e) from e
-    except ValueError as e:
-        raise value_error_http(e, codes={
-            "no_baseline": 409, "no_pending_change": 409,
-        }) from e
-    return BatchDetail.model_validate(detail)
 
 
 @router.post("/carry-batches", response_model=BatchDetail, status_code=201)

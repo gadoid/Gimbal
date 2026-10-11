@@ -4,6 +4,9 @@
  * 读全员 / 写 admin;注册校验强约束(裸声明不猜,plate 宕机期间不能
  * 登记 —— 后端 409)。credentialAlias 引用**执行者本人**的凭证池
  * (auth_sessions.alias,owner 隔离),不是全局凭证名。
+ *
+ * V5(B):groupTag 已退役,归属环境经 environmentId 外键指向
+ * environments 表(展示名 environmentName 由列表接口 join 带出)。
  */
 import http from '@/api/http'
 
@@ -12,7 +15,9 @@ export interface ServiceAliasRow {
   baseService: string
   /** F4 方案 B:环境级端点默认层(NULL = 不提供;唯一权威,改一处全局生效) */
   baseUrl: string | null
-  groupTag: string | null
+  /** V5(B):归属环境(id → environments;NULL = 未归属) */
+  environmentId: number | null
+  environmentName: string | null
   credentialAlias: string | null
   ownerUserId: number | null
   createdAt: string | null
@@ -44,7 +49,7 @@ export function createAlias(input: {
   aliasName: string
   /** 必填(2026-09-23):别名 = 环境端点登记,后端缺省 422 */
   baseUrl: string
-  groupTag?: string | null
+  environmentId?: number | null
   credentialAlias?: string | null
 }): Promise<ServiceAliasRow> {
   return http.post<ServiceAliasRow>('/service-aliases', input)
@@ -53,7 +58,7 @@ export function createAlias(input: {
 
 export function patchAlias(
   aliasName: string,
-  input: { baseUrl?: string | null; groupTag?: string | null; credentialAlias?: string | null },
+  input: { baseUrl?: string | null; environmentId?: number | null; credentialAlias?: string | null },
 ): Promise<ServiceAliasRow> {
   return http
     .patch<ServiceAliasRow>(`/service-aliases/${encodeURIComponent(aliasName)}`, input)

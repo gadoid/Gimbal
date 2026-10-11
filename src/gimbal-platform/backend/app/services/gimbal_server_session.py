@@ -130,6 +130,7 @@ class ServerSession:
         n_runs: int = 1,
         parallel: int = 1,
         debug: "dict | None" = None,
+        m2_info: "dict | None" = None,
         timeout: "float | None" = None,
         on_event: "Callable[[dict], None] | None" = None,
     ) -> LaunchResult:

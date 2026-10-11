@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, JSON
+from sqlalchemy import DateTime, ForeignKey, Integer, String
+
+from ._types import JsonVar, UtcDateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -32,8 +34,8 @@ class Environment(Base):
         Integer, ForeignKey("users.id"), nullable=True)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
     # lines: {系统名: 版本线}（如 {"fin": "1.0", "platform": "1.0"}）
-    lines: Mapped[dict] = mapped_column(JSON, default=dict)
+    lines: Mapped[dict] = mapped_column(JsonVar, default=dict)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow)
+        UtcDateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow)
+        UtcDateTime, default=datetime.utcnow)

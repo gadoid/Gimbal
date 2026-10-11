@@ -899,7 +899,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        baseUrl: 'https://uat.fin.local', groupTag: null,
+        baseUrl: 'https://uat.fin.local', environmentId: null, environmentName: null,
         credentialAlias: 'uat-cred', ownerUserId: null,
         createdAt: '', updatedAt: '',
       },
@@ -929,13 +929,13 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        baseUrl: 'https://uat.fin.local', groupTag: null,
+        baseUrl: 'https://uat.fin.local', environmentId: null, environmentName: null,
         credentialAlias: 'uat-cred', ownerUserId: null,
         createdAt: '', updatedAt: '',
       },
       {
         aliasName: 'fin-service-bare', baseService: 'fin-service',
-        baseUrl: 'https://bare.fin.local', groupTag: null,
+        baseUrl: 'https://bare.fin.local', environmentId: null, environmentName: null,
         credentialAlias: null, ownerUserId: null,
         createdAt: '', updatedAt: '',
       },
@@ -969,7 +969,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-bare', baseService: 'fin-service',
-        baseUrl: 'https://bare.fin.local', groupTag: null,
+        baseUrl: 'https://bare.fin.local', environmentId: null, environmentName: null,
         credentialAlias: null, ownerUserId: null,
         createdAt: '', updatedAt: '',
       },

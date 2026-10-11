@@ -254,11 +254,12 @@ async def test_run_fills_plate_required_meta_defaults(
 
     await wait_until(lambda: len(sent) >= 1)
     meta = sent[0]["meta"]
-    assert meta["requirementRef"] == []      # plate 必填,compose 补默认
-    assert meta["createTime"]                # plate 必填,缺失取当前时刻
+    # M2 步骤 4(Q18):fill_plate_defaults 已删除 —— 定义即纯 M2,
+    # compose 不再补默认值;M6 起只有 name 必填,缺省字段原样缺席。
+    assert "requirementRef" not in meta
+    assert "scenarioId" not in meta      # M4:平台元数据出定义
     assert sent[0]["kind"] == "scenario"
-    # 已有值不被覆盖(setdefault 语义)
-    assert meta["scenarioId"] == "sc-meta-def"
+    assert sent[0]["scenarioId"] == "sc-meta-def"  # 顶层身份字段由行写入
 
 
 async def test_stale_env_key_silently_ignored(client, monkeypatch):

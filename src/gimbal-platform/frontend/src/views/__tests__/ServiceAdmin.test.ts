@@ -13,17 +13,18 @@ import * as api from '@/api/service-aliases'
 import * as authApi from '@/api/auth_sessions'
 import * as catalog from '@/utils/catalog-services'
 import * as confirmModule from '@/utils/confirmAction'
+import * as envApi from '@/api/environments'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
 const aliases: api.ServiceAliasRow[] = [
-  { aliasName: 'fin-service', baseService: 'fin-service', baseUrl: null, groupTag: null,
+  { aliasName: 'fin-service', baseService: 'fin-service', baseUrl: null, environmentId: null, environmentName: null,
     credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'fin-service-uat', baseService: 'fin-service', baseUrl: 'https://uat.fin.local', groupTag: '测试',
+  { aliasName: 'fin-service-uat', baseService: 'fin-service', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
     credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'wms-service-pre', baseService: 'wms-service', baseUrl: null, groupTag: '预发',
+  { aliasName: 'wms-service-pre', baseService: 'wms-service', baseUrl: null, environmentId: 1, environmentName: '预发',
     credentialAlias: null, ownerUserId: 7, createdAt: '', updatedAt: '' },
 ]
 
@@ -33,6 +34,10 @@ beforeEach(() => {
   vi.spyOn(api, 'listAllAliases').mockResolvedValue(aliases)
   vi.spyOn(authApi, 'listAll').mockResolvedValue([
     { alias: 'uat-cred' } as never,
+  ])
+  vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([
+    { id: 1, name: '测试', description: '', visibility: 'public', lines: {}, ownerId: null },
+    { id: 2, name: '预发', description: '', visibility: 'public', lines: {}, ownerId: null },
   ])
   vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
     { service: 'fin-service', system: 'fin' },
@@ -106,14 +111,14 @@ it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);�
   const w = await mountPage()
   await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
   await w.find('[data-testid="alias-name-input"]').setValue('prod2')
-  await w.find('[data-testid="alias-group-input"]').setValue('生产')
+  // V5(B):分组输入已退役(归属环境经下拉选择);未选择 → null
   // URL 必填(2026-09-23):没填时登记钮禁用,不发起请求
   expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
   await w.find('[data-testid="alias-url-input"]').setValue('https://prod.mall.local')
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', groupTag: '生产', credentialAlias: null,
+    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null,
   })
   expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
@@ -150,7 +155,7 @@ it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀�
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', groupTag: null, credentialAlias: null,
+    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null,
   })
   // 编辑态:槽显该别名所属服务,输入框只读展示后缀
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')

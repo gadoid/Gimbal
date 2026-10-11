@@ -38,6 +38,8 @@ NOTIFICATION_TYPES = (
     # resource_transferred(资源转让)语义是所有权转移,留给离职处置线,
     # 与本类型的「副本交接」互不复用。
     "resource_handoff",
+    # RS4a（Release v4.4 §5.9）：直接保存影响他人引用时的版本变更通知。
+    "scenario.version_change",
 )
 
 

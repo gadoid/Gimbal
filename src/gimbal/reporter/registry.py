@@ -10,6 +10,11 @@ factory 形式：``Callable[[dict[str, Any]], Reporter]``，参数是 user_confi
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .protocol import Reporter
+
 from typing import Any, Callable, Optional
 
 from gimbal.exceptions import GimbalError

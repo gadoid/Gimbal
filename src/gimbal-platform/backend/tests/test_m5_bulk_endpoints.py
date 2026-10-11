@@ -107,14 +107,18 @@ async def test_signals_requires_auth_and_ids(client):
 
 async def test_impact_bulk_returns_map(client, plate):
     """impact-bulk:一次请求回全部 pending 端点的受影响清单。"""
-    from tests.test_adaptation_batches import OLD_FULL, _seed_scenario, _seed_stamp
-
     EP = "fin.order.add"
     admin = await register_and_login(client, "m5bulk", "pw123456")
-    plate.items = [{"id": EP, "version": "1.1.0", "updated_at": None}]
-    plate.fulls = {EP: OLD_FULL}
-    await _seed_scenario("sc-m5-imp")
-    await _seed_stamp()
+    from .helpers import make_draft
+    from app.core import db as db_module
+    from app.schemas.scenario_composer import ScenarioDraft
+    from app.services import scenario_store
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(s, ScenarioDraft.model_validate(make_draft(
+            "sc-m5-imp",
+            steps=[{"call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                    "request": {"body": {"amount": 1}}}],
+            vars_map={"amount": 1})), owner="m5bulk", owner_id=1)
 
     r = await client.get(
         "/api/adaptations/impact-bulk", headers=admin,

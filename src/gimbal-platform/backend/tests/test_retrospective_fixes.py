@@ -12,8 +12,7 @@ from tests.helpers import make_draft, register_and_login
 
 
 async def _publish(client, h, sid: str, name: str, systems: list[str]) -> None:
-    draft = make_draft(sid, steps=[{
-        "id": "s1", "kind": "step",
+    draft = make_draft(sid, steps=[{"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "svc",
                  "method": "GET", "path": "/p"},
         "request": {"kind": "request", "body": {}},

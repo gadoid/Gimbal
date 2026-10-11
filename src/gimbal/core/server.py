@@ -12,6 +12,11 @@ run 相互独立)。执行经 ``asyncio.to_thread`` 下放线程,事件循环
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
 import asyncio
 from dataclasses import dataclass, field
 

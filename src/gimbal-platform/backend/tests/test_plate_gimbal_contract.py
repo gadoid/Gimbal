@@ -140,8 +140,7 @@ def isolated_data(tmp_path, monkeypatch):
 
 
 def _step_get_cost() -> dict:
-    return {
-        "id": "s1", "kind": "step",
+    return {"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "fin-service",
                  "method": "GET", "path": "/api/home/cost/amountCostList",
                  "view_hints": {"endpoint_id": "fin.cost.amount_list"}},
@@ -152,8 +151,7 @@ def _step_get_cost() -> dict:
 
 
 def _step_settlement(body: dict, strategies: list | None = None) -> dict:
-    return {
-        "id": "s1", "kind": "step",
+    return {"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "fin-service",
                  "method": "POST", "path": "/api/v1/fin/settlement/orders",
                  "headers": {"Content-Type": "application/json"},

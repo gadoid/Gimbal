@@ -35,7 +35,9 @@ class AliasOut(BaseModel):
     base_service: str = Field(alias="baseService")
     # F4 方案 B:环境级端点默认层(物化优先级链第三档;NULL = 不提供)
     base_url: str | None = Field(default=None, alias="baseUrl")
-    group_tag: str | None = Field(default=None, alias="groupTag")
+    # V5(B):归属环境(group_tag 已退役,外键 → environments)
+    environment_id: int | None = Field(default=None, alias="environmentId")
+    environment_name: str | None = Field(default=None, alias="environmentName")
     credential_alias: str | None = Field(default=None, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
     created_at: str | None = Field(default=None, alias="createdAt")
@@ -53,7 +55,7 @@ class AliasCreate(BaseModel):
     # 2026-09-23 调整:别名 = 环境端点的登记,URL 必填(缺省/空串 422);
     # patch 保持可空兼容(存量行可在触达时补齐)。
     base_url: str = Field(min_length=1, max_length=512, alias="baseUrl")
-    group_tag: str | None = Field(default=None, max_length=64, alias="groupTag")
+    environment_id: int | None = Field(default=None, alias="environmentId")
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
@@ -64,7 +66,7 @@ class AliasPatch(BaseModel):
 
     base_url: str | None = Field(
         default=None, max_length=512, alias="baseUrl")
-    group_tag: str | None = Field(default=None, max_length=64, alias="groupTag")
+    environment_id: int | None = Field(default=None, alias="environmentId")
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
 
@@ -100,7 +102,7 @@ async def create_alias(
         )
     try:
         created = await service_aliases.create_alias(
-            db, alias_name=body.alias_name, group_tag=body.group_tag,
+            db, alias_name=body.alias_name, environment_id=body.environment_id,
             credential_alias=body.credential_alias,
             owner_user_id=body.owner_user_id,
             base_url=body.base_url,
@@ -108,6 +110,9 @@ async def create_alias(
     except UnknownBaseService as e:
         # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    except KeyError as e:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, str(e)) from e
     from ..services import audit as audit_svc
 
     await audit_svc.record(
@@ -133,15 +138,15 @@ async def patch_alias(
             detail="admin_only: personal aliases are managed by admins",
         )
     try:
-        explicit_group = ("group_tag" in body.model_fields_set
-                          or "groupTag" in body.model_fields_set)
+        explicit_env = ("environment_id" in body.model_fields_set
+                        or "environmentId" in body.model_fields_set)
         explicit_cred = ("credential_alias" in body.model_fields_set
                          or "credentialAlias" in body.model_fields_set)
         explicit_url = ("base_url" in body.model_fields_set
                         or "baseUrl" in body.model_fields_set)
         patched = await service_aliases.patch_alias(
             db, alias_name,
-            group_tag=body.group_tag if explicit_group else ...,
+            environment_id=body.environment_id if explicit_env else ...,
             credential_alias=body.credential_alias if explicit_cred else ...,
             base_url=body.base_url if explicit_url else ...,
         )

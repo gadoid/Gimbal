@@ -31,6 +31,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 import shutil
 import time
 from dataclasses import asdict, dataclass
@@ -645,6 +646,7 @@ async def compute_run_fanout(
                 "dangling_injection_entries",
                 f"正式执行存在悬空注入条目（{len(dangling_ids)} 条）："
                 f"{dangling_ids[:5]}... 请先在编排页修正或移除这些条目",
+                extra={"entries": dangling_ids},
             )
 
     # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
@@ -745,8 +747,6 @@ async def dispatch_run(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
-    # RS3:plate_pins 容器(fanout 内 resolve 写入,dispatch 末尾回填)
-    plate_pins_container: dict[str, str] = {}
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
     (fanout_datasets, injections, selected_entries,
@@ -912,18 +912,8 @@ async def dispatch_run(
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
     # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
     _eq.ensure_workers()
-    # RS3（Release v4.4 §6.3）：回填 plate_pins（生效修订表）
-    if plate_pins_container:
-        try:
-            from sqlalchemy import update as sa_update
-            await db.execute(
-                sa_update(Execution).where(Execution.id == execution.id)
-                .values(plate_pins=plate_pins_container))
-            await db.commit()
-        except Exception:  # noqa: BLE001 — plate_pins 是台账,失败不阻断
-            import logging
-            logging.getLogger(__name__).warning(
-                'plate_pins 回填失败 (execution=%s)', execution.id)
+    # RS3 plate_pins 不在此回填：job 经 DB 队列异步驱动，dispatch 返回时
+    # fanout 尚未解析生效修订 —— 由 _fanout 解析出后自行落库。
 
     return RunResponse(runId=run_id, executionId=execution.id)
 
@@ -1387,14 +1377,9 @@ async def _fanout(
 
     sem = asyncio.Semaphore(max(1, parallel))
 
-    # P6:整单固定一次 compose 时间戳 — fill_plate_defaults 对缺失的
-    # meta.createTime 注入"当前时刻"(微秒精度),同一行 n_runs 次重复
-    # 的 convert 输入会逐次不同,memo 键永不命中。deepcopy 隔离存储
-    # payload(防写穿 ORM 行)后预填一次,compose 内 setdefault 语义
-    # 即复用同一值 → 同一行重复输入完全一致。
+    # P6:整单固定一次 compose 时间戳 — deepcopy 隔离存储 payload(防写穿
+    # ORM 行),同一行 n_runs 次重复的 convert 输入完全一致, memo 键才能命中。
     scenario_payload = copy.deepcopy(scenario_payload)
-    # M2 步骤 4:fill_plate_defaults 已删除(Q18)——
-    # Meta 只 name 必填(M6),定义即纯 M2,无需补默认值。
     definition = definition_from_payload(scenario_payload)
 
     # RS3（Release v4.4 §4.4/§6.3）：生效修订解析 + plate_pins 记录
@@ -1408,7 +1393,7 @@ async def _fanout(
         for step in (definition.get('steps') or []):
             if not isinstance(step, dict):
                 continue
-            ep_id = step.get('endpoint') or                 ((step.get('call') or {}).get('view_hints') or {}).get('endpoint_id')
+            ep_id = step.get('endpoint') or ((step.get('call') or {}).get('view_hints') or {}).get('endpoint_id')
             if ep_id:
                 system = str(ep_id).split('.')[0]
                 endpoints_used.setdefault(system, set()).add(str(ep_id))
@@ -1419,13 +1404,27 @@ async def _fanout(
             for sys_, info in resolve_result.items():
                 eff = info.get('effective', '')
                 if eff and eff != 'working':
-                    plate_pins_container[sys_] = eff
+                    plate_pins[sys_] = eff
                     # 写入执行副本（/convert 按原值取修订）
                     if sys_ in meta_plate:
                         meta_plate[sys_] = eff
         except Exception as exc:  # noqa: BLE001 — plate 不可用时执行失败
             raise RuntimeError(
                 f'plate_unavailable: 生效修订解析失败: {exc}') from exc
+        # RS3：生效修订表落库（dispatch 侧无引用可回填 —— job 经 DB
+        # 队列异步驱动，在解析处就地写入；台账性质，失败不阻断执行）。
+        if plate_pins:
+            try:
+                from sqlalchemy import update as sa_update
+                async with db_factory() as _pin_sess:
+                    await _pin_sess.execute(
+                        sa_update(Execution)
+                        .where(Execution.id == execution_id)
+                        .values(plate_pins=plate_pins))
+                    await _pin_sess.commit()
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    'plate_pins 回填失败 (execution={})', execution_id)
 
     # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
     convert_cache: dict[str, dict] = {}
@@ -2187,16 +2186,12 @@ def _compose_scenario(
     * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
       容器化重构后为 ``{definition, orchestration}``;plate 只吃
       ``definition``(orchestration 是平台侧投影,绝不外发)。
-    * plate 必填默认由 :func:`plate_client.fill_plate_defaults` 就地
-      补齐(仅 setdefault,不覆盖已有值)—— 与 preview/export 同源。
+    * M2 步骤 4(Q18):定义即纯 M2,Meta 只 name 必填(M6),不再补
+      plate 默认值 —— fill_plate_defaults 已删除。
     """
     raw = scenario_payload or {}
     # Unwrap the container: plate must never see orchestration.
     out = copy.deepcopy(definition_from_payload(raw))
-    # plate 必填默认(与 preview/export 路径共用同一份):存量场景
-    # meta 可能缺 requirementRef/createTime 等 UI 不采集的字段,
-    # 不补会在 plate /convert 处 4xx(plate_rejected 整单失败)。
-    plate_client.fill_plate_defaults(out)
     cfg = out.setdefault("config", {})
     if not isinstance(cfg, dict):
         cfg = {}
@@ -2403,6 +2398,7 @@ async def _create_execution(
     scenario_name: str = "",
     kind: str = "scenario",
     suite_id: int | None = None,
+    plate_pins: dict | None = None,
 ) -> Execution:
     """Insert an Execution row(+ 拆表后的快照行)。
 
@@ -2428,6 +2424,7 @@ async def _create_execution(
         failed=0,
         config_json=config_json,
         batch_id=batch_id,
+        plate_pins=plate_pins,
     )
     db.add(ex)
     await db.flush()  # 拿 execution.id,快照行同事务写入
@@ -2473,10 +2470,12 @@ class NotFound(Exception):
 
 
 class Conflict(Exception):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str,
+                 extra: dict | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        self.extra = extra or {}
 
 
 # ── 外部系统集成 P1:私有件提升为公共(方案 §5,与此前 ─────────────

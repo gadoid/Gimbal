@@ -112,7 +112,8 @@ async def test_snapshot_endpoint_owner_scoped(
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["definition"]["meta"]["scenarioId"] == "sc-snap-acl"
+    # M4:meta.scenarioId 出定义 —— 身份字段在定义顶层(由行写入)
+    assert body["definition"]["scenarioId"] == "sc-snap-acl"
     assert "orchestration" in body
 
     # 另一个用户:404(与执行详情同款属主收紧)

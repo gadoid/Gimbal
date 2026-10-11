@@ -47,7 +47,7 @@ from app.routers.scenarios import _draft_to_full_scenario_dict
 
 
 def test_draft_to_full_passes_definition_through() -> None:
-    """definition is plate-shaped; translator only adds plate-required defaults."""
+    """M2 步骤 4(Q18):定义即纯 M2 —— 透传,不再补 plate 默认值。"""
     draft = ScenarioDraft.model_validate({
         "definition": {
             "scenarioId": "sc-x",
@@ -63,16 +63,15 @@ def test_draft_to_full_passes_definition_through() -> None:
     assert out["scenarioId"] == "sc-x"
     assert out["config"]["vars"] == {"a": 1}
     assert out["meta"]["name"] == "x"
-    # plate-required defaults filled
-    assert out["kind"] == "scenario"
-    assert out["meta"]["createTime"] == "2026-01-01T00:00:00Z"  # not overwritten
-    assert out["meta"]["requirementRef"] == []
+    # 不补默认值(原有值原样保留;缺省字段不造)
+    assert out["meta"]["createTime"] == "2026-01-01T00:00:00Z"
+    assert "requirementRef" not in out["meta"]
     # orchestration never leaks into plate payload
     assert "orchestration" not in out
     assert "caseMeta" not in out
 
 
-def test_draft_to_full_fills_missing_create_time() -> None:
+def test_draft_to_full_does_not_inject_create_time() -> None:
     draft = ScenarioDraft.model_validate({
         "definition": {
             "scenarioId": "sc-y",
@@ -82,8 +81,9 @@ def test_draft_to_full_fills_missing_create_time() -> None:
         "orchestration": {"steps": [], "resourceMeta": {}},
     })
     out = _draft_to_full_scenario_dict(draft, owner="bob")
-    assert out["meta"]["createTime"]  # some ISO timestamp filled
-    assert out["meta"]["owner"] == "bob"  # owner filled from router
+    # Q18:平台元数据不进定义 —— createTime/owner 不再被注入
+    assert "createTime" not in out["meta"]
+    assert "owner" not in out["meta"]
 
 
 # ── assertion_registry 第三键(spec v2 §3)───────────────────────────

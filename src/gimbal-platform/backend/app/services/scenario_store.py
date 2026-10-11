@@ -64,13 +64,14 @@ async def create(
         "scenarioId": scenario_id,
         "owner": owner or def_meta.get("owner", ""),
     })
-    # Write the server-owned meta back into the stored definition so the
-    # owner override (and any server-side meta normalization) survives a
-    # read-back via _meta_from_row, which reads definition.meta.
+    # M4/Q18（M2 §3）：存储的定义即纯 M2 实例 —— meta.scenarioId /
+    # updateTime / owner 等平台元数据只在行的列上，不写进定义；
+    # 顶层 scenarioId（M2 必填身份字段）由行写入。读侧 _meta_from_row
+    # 从行的列组装展示 meta（createTime/updateTime/scenarioId/owner）。
     stored_definition = {
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
-        "meta": server_owned.model_dump(by_alias=True, mode="json"),
+        "meta": _strip_platform_meta(def_meta),
     }
     payload = ScenarioDraft(
         definition=stored_definition,
@@ -144,13 +145,11 @@ async def update(
     server_owned = ScenarioMeta.model_validate({
         **repaired_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
-    # Write the server-owned meta back into the stored definition so the
-    # owner override (and any server-side meta normalization) survives a
-    # read-back via _meta_from_row, which reads definition.meta.
+    # M4/Q18：同 create —— 平台元数据出定义，定义即纯 M2 实例。
     stored_definition = {
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
-        "meta": server_owned.model_dump(by_alias=True, mode="json"),
+        "meta": _strip_platform_meta(repaired_meta),
     }
     row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
@@ -640,6 +639,17 @@ def to_list_item_shape(
     )
 
 
+# M4/Q18（M2 §3）：平台元数据出定义 —— 这些键只在数据库行的列上，
+# 保存时从 definition.meta 剥掉，避免 M2 forbid（extra_forbidden）拒收。
+_PLATFORM_META_KEYS = frozenset({"scenarioId", "updateTime", "owner"})
+
+
+def _strip_platform_meta(def_meta: dict) -> dict:
+    """定义存储面过滤：meta 只留 M2 字段（含 plate）。"""
+    return {k: v for k, v in (def_meta or {}).items()
+            if k not in _PLATFORM_META_KEYS}
+
+
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     """Meta 投影:唯一权威是 payload.definition.meta。
 
@@ -659,6 +669,8 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     )
     meta_dict["createTime"] = ensure_aware(row.created_at)
     meta_dict["updateTime"] = ensure_aware(row.updated_at)
+    # M4/Q18：owner 也出定义 —— 展示值从行(owner_name)组装。
+    meta_dict.setdefault("owner", row.owner_name or "")
     return ScenarioMeta.model_validate(meta_dict)
 
 

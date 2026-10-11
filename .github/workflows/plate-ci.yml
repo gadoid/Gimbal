@@ -26,6 +26,13 @@ jobs:
           python-version: "3.12"
       - name: Install (editable, plate entry included)
         run: pip install -e .[dev]
+      # 评审 G-2/7.1-7:未定义名称守卫——plate_pins_container / m2_info /
+      # Session 这类一跑就崩的缺陷不再进入提交。只拦 F821(未定义名),
+      # unused 类噪音不在此门。
+      - name: 未定义名称守卫 — pyflakes(undefined names)
+        run: |
+          pip install -q pyflakes
+          python -m pyflakes src/gimbal src/gimbal_plate src/gimbal-platform/backend/app tests 2>&1 | grep -E "undefined name" && exit 1 || true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -51,6 +58,10 @@ jobs:
         run: pytest tests/plate -q
       - name: 执行器全量
         run: pytest tests/unit tests/integration -q
+      # 评审 G-2:回归全部集中在平台后端,而 CI 此前根本没跑它——
+      # 与 plate/执行器/前端并列的第四侧,不许再缺席。
+      - name: 平台后端全量
+        run: pytest src/gimbal-platform/backend/tests -q
       # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
       # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
       # 第四轮 M2:冒烟升级为真实 check——PLATE_REPO_ROOT 指到 checkout

@@ -1,6 +1,6 @@
 <!-- ServiceAliasCard.vue — 工作台注册卡:服务信息管理(adminOnly,→ /service-admin)。
      数据 = listAliases() 全集(与完整页同一端点,不另开口子);未分组判定
-     与完整页同一条谓词(!groupTag)—— §7 第 6 条计数同源。
+     与完整页同一条谓词(未归属环境)—— §7 第 6 条计数同源。
      三档密度(§4):S = 别名数 + 未分组数;M/L = 别名行 5/8。 -->
 <template>
   <div data-testid="wb-card-service-aliases" class="wcard">
@@ -33,8 +33,8 @@
           :data-testid="`wb-sa-row-${a.aliasName}`"
         >
           <span class="wrow-name mono" :title="a.aliasName">{{ a.aliasName }}</span>
-          <span class="wrow-tag" :class="a.groupTag ? '' : 'tag-warn'">
-            {{ a.groupTag || '未分组' }}
+          <span class="wrow-tag" :class="a.environmentName ? '' : 'tag-warn'">
+            {{ a.environmentName || '未分组' }}
           </span>
           <span class="wrow-time mono">{{ a.baseService }}</span>
         </router-link>
@@ -63,8 +63,8 @@ const rows = ref<ServiceAliasRow[]>([])
 const loading = ref(true)
 const error = ref('')
 
-/** 与 ServiceAdmin.vue 左栏同一谓词:没有 groupTag 就是没分组。 */
-const ungroupedCount = computed(() => rows.value.filter((a) => !a.groupTag).length)
+/** 与 ServiceAdmin.vue 左栏同一谓词:未归属环境就是没分组。 */
+const ungroupedCount = computed(() => rows.value.filter((a) => !a.environmentName).length)
 
 /** M = 5 行;L = 8 行 */
 const visible = computed(() =>

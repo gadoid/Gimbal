@@ -33,7 +33,7 @@ async def test_before_json_never_leaks_and_snapshot_ref_is_whitelist(
 
     secret_payload = {
         "payload": {"definition": {"meta": {"name": "机密场景全文"},
-                                   "steps": [{"id": "s1", "secret": "值面"}]}},
+                                   "steps": [{"secret": "值面"}]}},
         "internal_note": "before_json 永不出 API",
     }
     async with db_module.SessionLocal() as s:

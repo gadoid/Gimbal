@@ -16,11 +16,16 @@
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gimbal.schema.param_registry import ValueSourceTrace
+
 from dataclasses import dataclass, field
-from typing import Union
+from typing import Any, Union
 
 from gimbal.compiler.analysis import ScenarioAnalysis, analyze_scenario
-from pydantic import TypeAdapter
+from pydantic import ValidationError, TypeAdapter
 from gimbal.compiler.errors import CompileError, ErrCode
 from gimbal.log import get_logger
 from gimbal.schema.plan import Plan, PlanPolicy, Unit, unit_policy_from

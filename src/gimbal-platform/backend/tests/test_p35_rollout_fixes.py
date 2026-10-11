@@ -30,8 +30,7 @@ from tests.test_debug_console import _engine_available
 
 # ── P3.5-1 / P3.5-3：真引擎（不可用时 skip）────────────────────
 
-_STEPS = [{
-    "id": "s1", "kind": "step",
+_STEPS = [{"kind": "step",
     "call": {"kind": "call", "protocol": "http", "service": "svc",
              "method": "GET", "path": "/ping"},
     "request": {"kind": "request", "body": {}},
@@ -256,8 +255,7 @@ async def test_reconcile_assertion_failure_shape(client, monkeypatch, stub_sut2)
 
     monkeypatch.setattr(pc, "convert", _fake_convert)
     monkeypatch.setattr(settings, "GIMBAL_BIN", "")
-    bad = [{
-        "id": "s1", "kind": "step",
+    bad = [{"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "svc",
                  "method": "GET", "path": "/ping"},
         "request": {"kind": "request", "body": {}},
@@ -288,14 +286,14 @@ async def test_reconcile_multistep_extract_shape(client, monkeypatch, stub_sut2)
     monkeypatch.setattr(pc, "convert", _fake_convert)
     monkeypatch.setattr(settings, "GIMBAL_BIN", "")
     steps = [
-        {"id": "s1", "kind": "step",
+        {"kind": "step",
          "call": {"kind": "call", "protocol": "http", "service": "svc",
                   "method": "GET", "path": "/ping"},
          "request": {"kind": "request", "body": {}},
          "strategy": [{"kind": "extract",
                        "expression": "$.call.response.body.code",
                        "target": "token", "scope": "scenario"}]},
-        {"id": "s2", "kind": "step",
+        {"kind": "step",
          "call": {"kind": "call", "protocol": "http", "service": "svc",
                   "method": "GET", "path": "/ping"},
          "request": {"kind": "request", "body": {}},
@@ -394,8 +392,7 @@ async def test_reconcile_step_timeout_shape(client, monkeypatch, slow_sut):
 
     monkeypatch.setattr(pc, "convert", _fake_convert)
     monkeypatch.setattr(settings, "GIMBAL_BIN", "")
-    steps = [{
-        "id": "s1", "kind": "step",
+    steps = [{"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "svc",
                  "method": "GET", "path": "/slow", "timeout": 2},
         "request": {"kind": "request", "body": {}},

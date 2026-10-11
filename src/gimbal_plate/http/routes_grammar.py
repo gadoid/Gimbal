@@ -20,6 +20,11 @@ Otherwise FastAPI matches /systems as dim="systems", or eats action names into {
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from typing import Any
 
 from fastapi import APIRouter, Query, Request

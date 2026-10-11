@@ -42,12 +42,28 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     admin = await _admin(client)
 
     # 强约束:目录内服务可登记;裸声明(base 不在目录)→ 409
+    # V5(B):先建环境,别名挂 environmentId
+    from app.models import Environment
+    async with db_module.SessionLocal() as s:
+        s.add(Environment(name="测试", lines={}))
+        await s.commit()
+        env_id = (await s.execute(
+            __import__("sqlalchemy").select(Environment.id)
+        )).scalar_one()
+
     r = await client.post("/api/service-aliases", headers=admin, json={
         "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local",
-        "groupTag": "测试", "credentialAlias": "uat-cred",
+        "environmentId": env_id, "credentialAlias": "uat-cred",
     })
     assert r.status_code == 201, r.text
     assert r.json()["baseService"] == "fin-service"  # 派生落库
+    assert r.json()["environmentName"] == "测试"
+    # 不存在的环境 → 404
+    r = await client.post("/api/service-aliases", headers=admin,
+                          json={"aliasName": "fin-service-qa",
+                                "baseUrl": "https://qa.fin.local",
+                                "environmentId": env_id + 999})
+    assert r.status_code == 404
 
     # URL 必填(2026-09-23):缺省在 body 校验层拦 422
     r = await client.post("/api/service-aliases", headers=admin,
@@ -81,7 +97,7 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     r = await client.patch("/api/service-aliases/fin-service-uat",
                            headers=admin, json={"credentialAlias": None})
     assert r.status_code == 200 and r.json()["credentialAlias"] is None
-    assert r.json()["groupTag"] == "测试"
+    assert r.json()["environmentId"] == env_id  # 未显式 patch 的字段不动
     r = await client.delete("/api/service-aliases/fin-service-uat",
                             headers=admin)
     assert r.status_code == 204

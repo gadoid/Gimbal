@@ -80,51 +80,6 @@ def spec_has_field_cache(spec: dict | None) -> bool:
     return bool(req_decls or resp_decls)
 
 
-def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]:
-    """形状 diff → 自动草案 op 列表(spec §5.4 收窄裁定)。
-
-    只产三类:
-    * ``addField``   —— 新增字段(值 = plate default,缺省 "");
-    * ``removeField`` —— 字段消失;
-    * ``mapValue`` 骨架 —— 同名字段两侧值域均可枚举且集合不同,
-      map 留空人工补目标值。
-
-    renameField 不可从形状 diff 推断(旧 {a,b,c} vs 新 {a,b,d} 无法区分
-    "改名"与"删 c 增 d"),自动草案退化为 remove+add 对;其余 op
-    (rebind/renameVar/renameDatasetColumn/mapDatasetValues)由人工经
-    POST /adaptations/batches/{id}/ops 构造。
-    old_spec 为 None(无旧形状缓存)→ 全部按新增处理。
-    """
-    old = _field_map(old_spec)
-    new = _field_map(new_spec)
-    drafts: list[dict] = []
-    for name in sorted(set(new) - set(old)):
-        default = new[name].get("default")
-        draft = {
-            "op": "addField", "field": name,
-            "value": default if default is not None else "",
-        }
-        # path 供 open_batch 做祖先容器匹配(嵌套字段的 step 只持有
-        # 顶层容器键,见 field_match_names);条目无 path 则不携带,
-        # 保持既有草案形状。path 不落 op payload(应用侧不消费)。
-        if new[name].get("path"):
-            draft["path"] = str(new[name]["path"])
-        drafts.append(draft)
-    for name in sorted(set(old) - set(new)):
-        draft = {"op": "removeField", "field": name}
-        if old[name].get("path"):
-            draft["path"] = str(old[name]["path"])
-        drafts.append(draft)
-    for name in sorted(set(old) & set(new)):
-        oe, ne = _enum_set(old[name]), _enum_set(new[name])
-        if oe is not None and ne is not None and oe != ne:
-            draft = {"op": "mapValue", "field": name, "map": {}}
-            if new[name].get("path"):
-                draft["path"] = str(new[name]["path"])
-            drafts.append(draft)
-    return drafts
-
-
 def field_match_names(field: str, path: str | None) -> tuple[str, ...]:
     """removeField/mapValue 的引用行匹配名集合:字段名 + 祖先容器名。
 

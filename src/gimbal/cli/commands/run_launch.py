@@ -457,5 +457,3 @@ def apply_multiplication(target, *, n_runs: int = 1, retry: int = 0,
                 "policy": base.model_copy(update={"parallel": parallel})})
         return target
     return target
-
-    raise typer.Exit(code=result.exit_code)

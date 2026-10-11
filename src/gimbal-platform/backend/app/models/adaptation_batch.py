@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ._types import UtcDateTime
-from sqlalchemy import ForeignKey, Integer, JSON, String, func
+from sqlalchemy import ForeignKey, Integer, String, func
+
+from ._types import JsonVar, UtcDateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -19,7 +20,7 @@ class AdaptationBatch(Base):
                                        default="carry")
     # cross_line/correction 类：from_revisions = 各成员的起点修订数组，
     # to_revision = 目标修订；carry 类沿用 endpoint_id + from/to_version
-    from_revisions: Mapped[list | None] = mapped_column(JSON,
+    from_revisions: Mapped[list | None] = mapped_column(JsonVar,
                                                           nullable=True)
     to_revision: Mapped[str | None] = mapped_column(String(64),
                                                       nullable=True)
