@@ -244,42 +244,58 @@ def _gen_py(schema_path: Path, out_path: Path) -> None:
 
 
 def _gen_ts(schema_path: Path, out_path: Path) -> None:
-    import re as _re
+    import json as _json
     import shutil
     import subprocess as _sp
     import sys as _sys
+    import tempfile as _tf
+
+    # Any 字段(expected: Any)的空 schema 在 json-schema-to-typescript
+    # 默认生成 {[k:string]:unknown};实际语义是"任意值"。
+    # 方案:给生成用 schema 副本的 Any 字段加 tsType:"unknown" hint,
+    # 让 json2ts 精确输出 unknown——文本后处理分不开真正的 Any 字段与
+    # Dict[str,Any] 字段(两者生成形状一样),会误伤 6 个字段。
+    # 只改生成用副本,入库的 m2.schema.json 不动(m2_hash 不变)。
+    schema = _json.loads(schema_path.read_text(encoding="utf-8"))
+    _any_fields: set[str] = set()
+    from gimbal_plate.schema.strategy import Assertion
+    from typing import get_origin
+    for fname, fdef in Assertion.model_fields.items():
+        ann = fdef.annotation
+        if ann is type(None) or (get_origin(ann) is None and str(ann) == "typing.Any"):
+            _any_fields.add(fname)
+    defs = schema.get("$defs", {})
+    if "Assertion" in defs:
+        props = defs["Assertion"].get("properties", {})
+        for fname in _any_fields:
+            if fname in props and not props[fname].get("type"):
+                props[fname]["tsType"] = "unknown"
+
+    with _tf.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8",
+    ) as tmp:
+        _json.dump(schema, tmp, ensure_ascii=False)
+        tmp_path = tmp.name
 
     npx = shutil.which("npx") or "npx"
     r = _sp.run(
         [npx, "--yes", "json-schema-to-typescript",
-         "--input", str(schema_path), "--output", str(out_path)],
+         "--input", tmp_path, "--output", str(out_path)],
         capture_output=True, text=True, encoding="utf-8",
         cwd=str(REPO), shell=_sys.platform == "win32")
+    import os as _os
+    _os.unlink(tmp_path)
     if r.returncode != 0:
         raise RuntimeError(
             "json-schema-to-typescript 失败(需 node/npx): "
             f"{r.stderr.strip()[:300]}")
 
-    # 后处理:空 schema(Any 字段)生成的 `{[k:string]: unknown}` → unknown
-    # json-schema-to-typescript 对无类型约束的 schema(如 expected: Any)
-    # 默认生成索引签名对象;实际语义是"任意值",应为 unknown。
-    text = out_path.read_text(encoding="utf-8")
-    # 后处理:空 schema(Any 字段)的 `{[k:string]:unknown}` → unknown
-    NL = chr(10)
-    old_shape = "?: {" + NL + "    [k: string]: unknown;" + NL + "  };"
-    idx = text.find(old_shape)
-    while idx >= 0:
-        head = idx
-        while head > 0 and (text[head - 1].isalnum() or text[head - 1] == "_"):
-            head -= 1
-        text = text[:head] + text[head:idx] + "?: unknown;" + text[idx + len(old_shape):]
-        idx = text.find(old_shape)
     export = _export()
     out_path.write_text(
         f"/* M2 运行形态（生成文件，禁止手改）。"
         f"m2_hash: {export.m2_hash} "
         f"m2_generation: {export.m2_generation} */\n"
-        + text,
+        + out_path.read_text(encoding="utf-8"),
         encoding="utf-8", newline="\n")
 
 

@@ -35,7 +35,7 @@ type CommonMetaFields = Pick<
 >
 
 /** common 基座 + 各系统 config 业务段(services/users/vars)浅合并。 */
-function mergeConfig(base: ConfigView | null, parts: ConfigView[]): Record<string, unknown> {
+function mergeConfig(base: ConfigView | null, parts: ConfigView[]): ConfigView {
   return {
     setup: base?.setup ?? [],
     teardown: base?.teardown ?? [],
@@ -81,7 +81,7 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
         definition.value.config = mergeConfig(
           commonConfig,
           systemParts.map(([cfg]) => cfg).filter((cfg): cfg is ConfigView => !!cfg),
-        ) as ConfigView
+        )
         const resources = Object.assign(
           {}, ...systemParts.map(([, res]) => res),
         )

@@ -272,6 +272,8 @@ class EndpointPlateMock:
         self.full_down: set[str] = set()
         self.services: list[dict] = []
         self.down = False
+        # (system, ref) → 修订快照的接口列表(GET /api/systems/{s}/endpoint?ref=)
+        self.system_scoped: dict[tuple[str, str], list[dict]] = {}
 
     def install(self) -> None:
         mock = self
@@ -284,6 +286,22 @@ class EndpointPlateMock:
                 return httpx.Response(200, json={
                     "ok": True, "dim": "service",
                     "data": {"items": mock.services, "total": len(mock.services)},
+                })
+            # 系统作用域接口列表(带 ref → 修订快照;无匹配 → 404)
+            if path.startswith("/api/systems/") and path.endswith("/endpoint"):
+                system = path.split("/")[3]
+                ref = request.url.params.get("ref", "")
+                key = (system, ref)
+                if key in mock.system_scoped:
+                    scoped = mock.system_scoped[key]
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "endpoint",
+                        "data": {"items": scoped, "total": len(scoped)},
+                    })
+                return httpx.Response(404, json={
+                    "ok": False,
+                    "error": {"code": "release_not_found",
+                               "message": f"revision {ref!r} not found"},
                 })
             if path == "/api/endpoint":
                 return httpx.Response(200, json={

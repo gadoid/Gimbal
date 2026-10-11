@@ -25,7 +25,7 @@ export type AssertOperator =
 /**
  * 导出壳：把四个根类型拉进同一份 Schema 的 ``$defs``。不进消费面。
  */
-export interface M2Schema {
+export interface Tmpipsum0Cv {
   options?: RunOptions | null;
   report?: ReportDefinition | null;
   run: Scenario | SuiteGraph;
@@ -172,7 +172,9 @@ export interface Config {
   /**
    * 变量声明；字面量或生成式 spec dict；CLI --var 优先级更高
    */
-  vars?: unknown;
+  vars?: {
+    [k: string]: unknown;
+  };
 }
 export interface RetryPolicy {
   /**
@@ -201,7 +203,9 @@ export interface Setup {
    * 要执行的策略 kind（dispatcher 分派键）
    */
   kind: string;
-  params?: unknown;
+  params?: {
+    [k: string]: unknown;
+  };
   scope?: "scenario";
 }
 /**
@@ -216,7 +220,9 @@ export interface Teardown {
    * 要执行的策略 kind（dispatcher 分派键）
    */
   kind: string;
-  params?: unknown;
+  params?: {
+    [k: string]: unknown;
+  };
   scope?: "scenario";
 }
 /**
@@ -446,7 +452,9 @@ export interface UnitDecl {
   /**
    * 字面量注入（scenario vars）
    */
-  inputs?: unknown;
+  inputs?: {
+    [k: string]: unknown;
+  };
   /**
    * 连线改名：上游输出名 → 本地输入名
    */
@@ -461,7 +469,9 @@ export interface UnitDecl {
   /**
    * UnitPolicy 覆盖项
    */
-  policy_kwargs?: unknown;
+  policy_kwargs?: {
+    [k: string]: unknown;
+  };
   ref: string;
   /**
    * 编译期展开份数（单元 id=ref#k）
@@ -541,7 +551,9 @@ export interface NamedParams {
   /**
    * 参数（按注册表 params 模型校验）
    */
-  params?: unknown;
+  params?: {
+    [k: string]: unknown;
+  };
 }
 export interface PlanPolicy {
   /**

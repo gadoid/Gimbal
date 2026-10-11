@@ -258,8 +258,9 @@ async def list_endpoints(
     if q:
         params["q"] = q
     if ref and ref != "working" and system:
-        # 系统作用域 + 修订 → 按修订过滤
-        path = f"/api/system/{system}/endpoint"
+        # 系统作用域 + 修订 → 已有路由 /api/systems/{system}/endpoint
+        # (支持 ref;全局路由不带系统,ref 无从解析)
+        path = f"/api/systems/{system}/endpoint"
         params["ref"] = ref
     else:
         # working / 无系统 → 全局（忽略 ref,全局路由不解析它）
@@ -276,6 +277,12 @@ async def list_endpoints(
         raise HTTPException(status_code=502, detail={
             "code": "plate_unavailable",
             "message": f"plate_unavailable: status {resp.status_code}"})
+    if resp.status_code >= 400:
+        # plate 4xx 原样透传(release_not_found 等)——不吞成空列表
+        detail = resp.json().get("error", {})
+        raise HTTPException(status_code=resp.status_code, detail={
+            "code": detail.get("code", "plate_rejected"),
+            "message": detail.get("message", resp.text[:200])})
     envelope = resp.json()
     items = (envelope.get("data") or {}).get("items") or []
     return {"items": items, "total": len(items)}

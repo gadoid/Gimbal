@@ -445,25 +445,42 @@ async function refetch() {
     const workingItems: any[] = wd?.items || []
     // 从 working 结果提取系统清单(不重复)
     const systems = [...new Set(workingItems.map((e: any) => e.system))]
-    // 对每个有精确修订的系统,并行取该修订的目录
+    // 对每个有精确修订的系统,并行取该修订的目录;失败(404 修订不存在
+    // 等)不静默空列表——提示系统名+修订号,该系统回退 working 展示
     const scopedRefs = systems
       .map((sys) => ({ sys, ref: props.plateRefOf?.(sys) ?? 'working' }))
       .filter((s) => s.ref && s.ref !== 'working')
-    const scopedLists = await Promise.all(
+    const scopedResults = await Promise.all(
       scopedRefs.map(({ sys, ref }) => {
         const p = new URLSearchParams(common)
         p.set('system', sys)
         p.set('ref', ref)
         return fetch(`${base}?${p.toString()}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
-        }).then((r) => (r.ok ? r.json() : { items: [] }))
+        }).then(async (r) => {
+          if (r.ok) return { sys, ok: true, items: (await r.json())?.items || [] }
+          const detail = await r.json().catch(() => ({ detail: {} }))
+          return { sys, ok: false, items: [], ref,
+                   code: detail?.detail?.code || `HTTP ${r.status}`,
+                   message: detail?.detail?.message || `HTTP ${r.status}` }
+        }).catch(() => ({ sys, ok: false, items: [], ref,
+                          code: 'network', message: '网络错误' }))
       }),
     )
-    // 合并:声明了修订的系统用修订列表,其余用 working 列表
-    const scopedSet = new Set(scopedRefs.map((s) => s.sys))
+    // 失败系统提示(不阻断整个目录)
+    for (const r of scopedResults) {
+      if (!r.ok) {
+        toast.warning(`系统 ${r.sys} 的目录按修订 ${r.ref} 取数失败（${r.code}）——该系统显示 working 的接口`)
+      }
+    }
+    // 合并:成功的修订列表 + 失败/未声明系统用 working
+    const failedSet = new Set(
+      scopedResults.filter((r: any) => !r.ok).map((r: any) => r.sys))
+    const scopedSet = new Set(scopedRefs.filter(
+      (s) => !failedSet.has(s.sys)).map((s) => s.sys))
     const items = [
       ...workingItems.filter((e: any) => !scopedSet.has(e.system)),
-      ...scopedLists.flatMap((d: any) => d?.items || []),
+      ...scopedResults.flatMap((r: any) => r.ok ? r.items : []),
     ]
     // 轻列表条目 = 平铺坐标(method/path/protocol + shape_hash,7.2);
     // 不再读旧嵌套 e.api / e.version(评审 R7:旧字段恒 undefined →
