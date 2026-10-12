@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-ref",
+  "id": "st.story.share-ref.2",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.ref",
+   "order": 2
+  },
+  "text": "被分享人在「共享给我的」分区看到资源,可读定义、方案、数据集并执行,但不可写、不可再分享。"
+ },
+ "type": "statement"
+}

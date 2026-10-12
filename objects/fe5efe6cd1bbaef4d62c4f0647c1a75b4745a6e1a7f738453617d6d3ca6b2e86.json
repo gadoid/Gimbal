@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/executions/{execution_id}/events",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。",
+  "id": "platform.executions.get_by_execution_id_events",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "executions",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Get Execution Events",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

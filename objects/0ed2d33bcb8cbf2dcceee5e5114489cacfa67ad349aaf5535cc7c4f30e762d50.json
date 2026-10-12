@@ -1,0 +1,180 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/catalog/services",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "服务目录聚合(30s TTL 缓存)。",
+  "id": "platform.catalog.get_services",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "catalog",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Get Catalog Services",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "id",
+        "path": "$.endpoints.id",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "service",
+        "path": "$.endpoints.service",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "endpoints",
+      "path": "$.endpoints",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "plateReachable",
+      "path": "$.plateReachable",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "boolean",
+      "ui_kind": "boolean",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "endpointCount",
+        "path": "$.services.endpointCount",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "integer",
+        "ui_kind": "number",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "name",
+        "path": "$.services.name",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "system",
+        "path": "$.services.system",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "services",
+      "path": "$.services",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

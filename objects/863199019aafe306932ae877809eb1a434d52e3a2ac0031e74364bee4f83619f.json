@@ -1,0 +1,86 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "DELETE",
+   "path": "/api/users/{user_id}",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": "cap:user.disable",
+  "consumes": [],
+  "description": "Delete ``user_id``(P2-2:资源处置三选一)。\n\nAuthorization: admin only — a member can never delete another account\n(403/4031).  Self-delete is separately refused below (409/code 4091),\nso effectively \"admin deleting someone else\".\n\nConstraints (both 409):\n* caller cannot delete themselves (code 4091).\n* cannot delete the last remaining admin (code 4092).\n\n处置(权限方案 §4.3):``publicize`` 私有场景转公共库(默认,署名\n保留 owner_name 快照)/ ``transfer`` 转让给指定成员(数据集/方案\n随场景走,个人别名转共享,受让人收 resource_transferred 通知)/\n``purge`` 一并删除。执行台账恒保留(outlive 用户:owner_id 置空 +\nowner_name 快照,展示「已注销」);case 目录按 owner 定位 runId\n当场清扫(case.json 含注入后明文凭证,不等 14 天周期)。",
+  "id": "platform.users.delete_by_user_id",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "users",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Delete User",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "disposal",
+     "path": "$.disposal",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "transfer_to",
+     "path": "$.transfer_to",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "integer",
+     "ui_kind": "number",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "成功"
+   },
+   "204": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

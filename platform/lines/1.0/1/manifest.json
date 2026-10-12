@@ -1,0 +1,1814 @@
+{
+ "system": "platform",
+ "line": "1.0",
+ "revision": 1,
+ "line_scheme": "free",
+ "line_service": null,
+ "predecessor_line": null,
+ "previous_revision": null,
+ "source_commit": "b5124556cec8fa0e0b5229849f3ff551979ef992",
+ "released_at": "2026-10-12T10:20:08.272789+00:00",
+ "signed_by": "godoid",
+ "dialect_version": "1",
+ "m2_version": "2",
+ "types_version": 1,
+ "checklist_applied": {},
+ "objects": [
+  {
+   "id": "st.suite.define",
+   "type": "statement",
+   "hash": "c1d9b5d24248a2fa9aa864dfcf98c8cc6e51e5128fc32f906f88f71fd00a8a2d",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.suite-member.define",
+   "type": "statement",
+   "hash": "8bf82b6f56aa73884a03bad70127c0d3597bfe81071bd48e19db84bd31a409b0",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.suite.rule-owner-only",
+   "type": "statement",
+   "hash": "87ba9bb3c8e3fe2449eee4f3f3eca7175051fbb8bef096233171d8b147bc7a30",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.share.define-ref",
+   "type": "statement",
+   "hash": "35c7298e92e2f2c41155a16898724e6535fa4712f978aec4a3da6864b954317e",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.share.rule-owner-initiates",
+   "type": "statement",
+   "hash": "91feface3a30f1d31d9a1bf58d404eb0a7459269ada585d0bd918a84b25b84dc",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.share.rule-revoke",
+   "type": "statement",
+   "hash": "94f582e9d9ef59fb19c989dc526e1b767cc25e652ecee0b2690cfd0e22b5e1b3",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.share.rule-credential",
+   "type": "statement",
+   "hash": "7e9785575027403c1757bd37b519e4ea30f3e010f63fb7a9e9287d105ef2619e",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.user-mgmt.define-member",
+   "type": "statement",
+   "hash": "8d762a60a70e9004b4796954858add2a5a30abdc8424424777a98ae7cb224b69",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.user-mgmt.last-admin",
+   "type": "statement",
+   "hash": "7ae8203ba7413a9a16f14213f26b1667f4d43943718679af68571e6731c8f59a",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.user-mgmt.disable-last-admin",
+   "type": "statement",
+   "hash": "1d5a3bf7c2bb393fb9fe6ed3548e33ecddba54e038d78b436608e1cb83743db5",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.user-mgmt.admin-only",
+   "type": "statement",
+   "hash": "06900582c117580bc2603e033e8872a5760198439650e0bb61a784b16ce02118",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.user-mgmt.create-user",
+   "type": "statement",
+   "hash": "e1480262550c7b6952746883d6a96bf8dda1a883ea106a49c1389bf527dc2165",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.admin.1",
+   "type": "statement",
+   "hash": "82ffcc50aa2e64c49fb4a68eab9a351fc2fabd0f8ec6efaf74b47771626e3775",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.admin.2",
+   "type": "statement",
+   "hash": "3aae3ffdd70148024f731f7d9db327886dbf99f5f0b7a4e95ffd97515c7e4d4d",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.admin.3",
+   "type": "statement",
+   "hash": "6381d35d54258510e2ef832493c3ebc628a63c970afec5743e4898dadd129e72",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.admin.4",
+   "type": "statement",
+   "hash": "a0df351ade7da3cffad1874749a6330b6a0b8bf3e76121d2ba29235e16834506",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.admin.5",
+   "type": "statement",
+   "hash": "db7e6a9c6e14bb473154ef4e059775436152953762761874ec84a93183503da4",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.bind.1",
+   "type": "statement",
+   "hash": "21ca756cbf69aa493618590e00a9fc8159653770ba480f0d8ebaf08bbda137f7",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.bind.2",
+   "type": "statement",
+   "hash": "dca867ee7a429bfe84d12e12b89f945bfd3edc76fdbdbf99df2e77ea5f2d8471",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.bind.3",
+   "type": "statement",
+   "hash": "71eb1b9b751713300d068f4ca896a423727119c950ab938fbf80de8a0a70aa15",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.bind.4",
+   "type": "statement",
+   "hash": "018aa008d5c519322ae27fcdc18e42d5942974b60d8b9a3f5f608c4ea9df0150",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.bind.5",
+   "type": "statement",
+   "hash": "40b27761a353436f70e3f8262e4f18cb4ab54f96d5877e49549af06e97e1461e",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.run-suite.1",
+   "type": "statement",
+   "hash": "e838bdbf282e66cc1af511afab6d65d149408ef9a6df9e61d188ee6ada45ae14",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.run-suite.2",
+   "type": "statement",
+   "hash": "17f11845ae0e997054e8bf96e81c26af94a309102b01c18d4464900afcc4ef2c",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.run-suite.3",
+   "type": "statement",
+   "hash": "23cfde8fda578907e4845d4160a4924517484a992a6653b66046354d23e928fc",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.run-suite.4",
+   "type": "statement",
+   "hash": "b040b71651d7e6417a376bcb28202b5dbb5a15aa30d8a7d0b9660bf31e5e86cc",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-copy.1",
+   "type": "statement",
+   "hash": "8707ffca303965dbfb8ecc274d3d57fe49c7511aef81e2dc1e6e59b4e6bb8321",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-copy.2",
+   "type": "statement",
+   "hash": "3ff3fc314192710902e5f73e5cc7a1e7876d0fb90dfc240bbd5338a03d6272db",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-copy.3",
+   "type": "statement",
+   "hash": "83c391fd4ea160eeb3682e9a8505651dcd762e8ba0a55b80ffc3942bc235c81e",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-copy.4",
+   "type": "statement",
+   "hash": "3daad2ea046b57686c63e5147afce0315c5014bab0b1ba53ccf539622a7554f1",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-ref.1",
+   "type": "statement",
+   "hash": "62f2f9e275f0c71ab7351e28c4a24f1f4135462793e3d68ad19a4ee4f0753664",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-ref.2",
+   "type": "statement",
+   "hash": "52ea7d86a1c2f0dd947f77adc350e340ee98a2bba4186060e5d97a4899817a85",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-ref.3",
+   "type": "statement",
+   "hash": "5d42674aaae24c5a901b87929aa352754d559a6968129c18553e83239caa907a",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-ref.4",
+   "type": "statement",
+   "hash": "93067bb30f9d17c27015c90f66e88599e8f3ff833db125321ed550af5c0e08d9",
+   "review": "reviewed"
+  },
+  {
+   "id": "st.story.share-ref.5",
+   "type": "statement",
+   "hash": "ed19f102a3fe7c9af4a7a8c1a66e6cd773c0a4b1030a17ddea55de7d73760a0c",
+   "review": "reviewed"
+  },
+  {
+   "id": "entity:share",
+   "type": "term",
+   "hash": "899a0ffee6f6f7884f9ea617be75203b512d293a482d1f9868e0e2c1e50161ce",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:share.ref",
+   "type": "term",
+   "hash": "badb08e30a8d64029918551ae2214ed65dedc1419cbf3d9cba141bdb18b6e8cb",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:share.copy",
+   "type": "term",
+   "hash": "7184051b8bc9356c72e864d0c74fc93f6485d5ef0eca892747a1e8a477037eb7",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:share.revoke",
+   "type": "term",
+   "hash": "2cc98fe62e336fbc23cc3285c1f1ae701ca2b8f4852e095ef133021a20b4c6ec",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:share.unsubscribe",
+   "type": "term",
+   "hash": "026ce23a91170e08b6d89a0ccef0b7fb9bf5a132b3f8087c5ac26404ff79088b",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:share.received",
+   "type": "term",
+   "hash": "032aed1f0dd0163926a77d8d3093fa599c0d273bf74a7f16a6e273e9c49be61b",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:share.revoked",
+   "type": "term",
+   "hash": "8175986963c6c232478d01786d185e1515a725bb4b9455a0c4a864237b26880d",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:share.admin_proxy_rejected",
+   "type": "term",
+   "hash": "a511c7984515ea151ab16873073be095cacc902ad20d38e12822518c06cdee86",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:share.credential_missing",
+   "type": "term",
+   "hash": "a2ee9d6b7a39566417a46a6260ed5b449c14e8af2168013efde179d721d72b5c",
+   "review": "reviewed"
+  },
+  {
+   "id": "entity:suite",
+   "type": "term",
+   "hash": "e42886a44d40662da0d22e67eff0cb2507971e8d40e17d7ad49bde6243384e6b",
+   "review": "reviewed"
+  },
+  {
+   "id": "entity:suite_member",
+   "type": "term",
+   "hash": "aeb64930127aa57e07e31d3bca86f914ff857b34296e78e146a7910a2783e9bf",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:suite.create",
+   "type": "term",
+   "hash": "6f95a652497cbde40cd6148f4041bbbbb6e76265574abf962b8946588ee429d7",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:suite.manage_members",
+   "type": "term",
+   "hash": "a10c8ce8a80e570b5a173b7226c27e33ad08c61ca8621bf61b1e60574bfbd1aa",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:suite.run",
+   "type": "term",
+   "hash": "a49b1f6703960cb000623957ec60aa58fbd4cb3d7a8f7a918e584908c2684804",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:suite.member_not_owned",
+   "type": "term",
+   "hash": "85633c81e46b9491103d27fe01220077b737310c2ba1852f774fe8ad6866d3e6",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:suite.run_in_progress",
+   "type": "term",
+   "hash": "25d3003aebde8fb19f3f8ac295fea69c763ead76ee1f0615c956ea08bdbbb10f",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:suite.member_cap_exceeded",
+   "type": "term",
+   "hash": "55b71934f3fdaf0ec692f82f375977e5c384c40a6a96ecb7806e648897902b76",
+   "review": "reviewed"
+  },
+  {
+   "id": "entity:user",
+   "type": "term",
+   "hash": "8f4f2928a85bdf3774385d5daf255bbc77c7e5efc47947f0a875a13381d9d07d",
+   "review": "reviewed"
+  },
+  {
+   "id": "attr:user.role",
+   "type": "term",
+   "hash": "894f70f605d3246e8f65d3dfcad6c2cf0de9062050378e7f566e7ecf95f74d70",
+   "review": "reviewed"
+  },
+  {
+   "id": "value:user.role.user",
+   "type": "term",
+   "hash": "466ed6aff262ab0aa1c17d358464209b2fc10bd8811203828bfa67167734c4a5",
+   "review": "reviewed"
+  },
+  {
+   "id": "value:user.role.member",
+   "type": "term",
+   "hash": "166ba4564ff469470c315d10241d2af3d91a97425f8a433ab3e09e4a45d01ca9",
+   "review": "reviewed"
+  },
+  {
+   "id": "value:user.role.admin",
+   "type": "term",
+   "hash": "e3e33fc82670c2bef59f3f75a18e12a63e79536058c7fdff4b9e95a0be3e9ab3",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:user.create",
+   "type": "term",
+   "hash": "8724d754f82dd49174d60eeb681b2ccfb25fe3e2a7983b7c7f969f8c874e91fb",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:user.update",
+   "type": "term",
+   "hash": "a4171072b7d9addaacae49dd7a544f837716b2e059524d9ec3324d78703c61b1",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:user.disable",
+   "type": "term",
+   "hash": "39b5d704d906b5ff0ae456b801b9e9229833f401c237d2205d6202017362514e",
+   "review": "reviewed"
+  },
+  {
+   "id": "cap:user.reset_password",
+   "type": "term",
+   "hash": "fa0e2c2e0df2e8889e89d71541d5c90d2f24ee29b238a245b9edce2f0f241add",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:user.last_admin",
+   "type": "term",
+   "hash": "47c7c862d88947080c351b1b4ef02d454792a96c3f9b5f97505e619a5bb3288a",
+   "review": "reviewed"
+  },
+  {
+   "id": "outcome:user.created",
+   "type": "term",
+   "hash": "45c19e1f9ba8e713e9cc7a24e7385edbfb3534287272596c01fec6af19e32f1a",
+   "review": "reviewed"
+  },
+  {
+   "id": "platform.activity.get_root",
+   "type": "endpoint",
+   "hash": "004d1618ef6dcb362b4e8f50b7654dc42448e5a1d4b335a5a338de7d4e9a15da",
+   "review": "reviewed",
+   "shape_hash": "25aeb0f7dbd8bef5242705ad1c2827ab60009dd0281b09a9c13666f2dcf64185"
+  },
+  {
+   "id": "platform.adaptations.get_batches",
+   "type": "endpoint",
+   "hash": "117f011fb45c806e53e6e67383a217dd823f32d6a22c7c7e3ca62b3749178c3d",
+   "review": "reviewed",
+   "shape_hash": "dcaca810ebdf8cbe454d862a50951b4541702cb852bdf33301476eff3c6313c5"
+  },
+  {
+   "id": "platform.adaptations.get_batches_by_batch_id",
+   "type": "endpoint",
+   "hash": "447312caf1f9351860bd676eb1d04e235a7a8318d52e54bfaef564b939610e67",
+   "review": "reviewed",
+   "shape_hash": "b063e52d1c6241e8bbdc5572af1b4f8f4475cdaf05c80804bcd6c9ce65c07abe"
+  },
+  {
+   "id": "platform.adaptations.get_compare",
+   "type": "endpoint",
+   "hash": "62695dccd5104a99b6d08afb9c30592756fcfa74e6e2f4957cd4db64a9a60c74",
+   "review": "reviewed",
+   "shape_hash": "9bc9b5f7abe686eccaac30c3cf39f82cda3433c4cec65c97fe356a3ba9b8b2e1"
+  },
+  {
+   "id": "platform.adaptations.get_impact",
+   "type": "endpoint",
+   "hash": "a399c3e687f9dafac8ff62fa7a94d085a0d5c372786e28de9af9f60814b8c7b8",
+   "review": "reviewed",
+   "shape_hash": "c6de44b062fcb2d3188f9cd7e5d800d3d60428e66bd285d8678dbe212b77344f"
+  },
+  {
+   "id": "platform.adaptations.get_impact_bulk",
+   "type": "endpoint",
+   "hash": "99b5690fa2e450fed4719d4ff9c25d05893666a6ee22007bebf92e7d1b5bb64b",
+   "review": "reviewed",
+   "shape_hash": "12bb2f3a0a3967a565be41725694ab742f44bd8ed6b761963823c0353e1f94d7"
+  },
+  {
+   "id": "platform.adaptations.get_impact_summary",
+   "type": "endpoint",
+   "hash": "0b3bc3a807d2fd8b9df3b2326f36341a2f99a9f1d5e191383ba04f696cb30238",
+   "review": "reviewed",
+   "shape_hash": "0267b9bbaf0f8aa3c8217d8ce37eb7f6ac05b290abad0901d5dc090bd8e6f049"
+  },
+  {
+   "id": "platform.adaptations.get_refs_drift",
+   "type": "endpoint",
+   "hash": "4d042fa0b35bba514ed80d1f9813d513c34ed47132377e00bb78569ec9d917cb",
+   "review": "reviewed",
+   "shape_hash": "0309174906e884935546908f78331130c11b3dbaeacaba3bdcab7b95d3898418"
+  },
+  {
+   "id": "platform.adaptations.get_stale",
+   "type": "endpoint",
+   "hash": "744226e6b67fb63a4a7e3589fb4765ea1f189e153df796accc48a39c93d5510a",
+   "review": "reviewed",
+   "shape_hash": "e659c1a0407470e68f1e8ab5cdb488f4d8bc3d1eda0f39e14478a6e11212b471"
+  },
+  {
+   "id": "platform.adaptations.get_unindexed_steps",
+   "type": "endpoint",
+   "hash": "b7d2daf097541ad9fa8449b585461cad0eec97f72e9a777a4ef898755d377a81",
+   "review": "reviewed",
+   "shape_hash": "8239875022067e391739c19b78de209b9c1949ed1716140860e219ad17b24ad3"
+  },
+  {
+   "id": "platform.adaptations.patch_ops_by_op_id",
+   "type": "endpoint",
+   "hash": "cf9ea58fe95a4293b682151f4f088f6692328e42f20d3fd71e3d81647c3a5653",
+   "review": "reviewed",
+   "shape_hash": "14568dee61dc5d14b6a10656e0354998705d4b2204b12c9d758998949573431b"
+  },
+  {
+   "id": "platform.adaptations.post_batches",
+   "type": "endpoint",
+   "hash": "ae80a37ce100dc707d7c0f04b1187592ceb7e3fb6d4f818b037f3b257faef8ec",
+   "review": "reviewed",
+   "shape_hash": "7fa41ef44a64cd802179861ef3ff0c48b93101e6005664533f558ad6eeb50c2c"
+  },
+  {
+   "id": "platform.adaptations.post_batches_by_batch_id_ops",
+   "type": "endpoint",
+   "hash": "2e603ada1d32984949c11d54517f6085f5337a91d5ad564e0f7662a44635b4ba",
+   "review": "reviewed",
+   "shape_hash": "515fac060af25876cd83f0e59c9e798b373e7fe135ddfb5af2561f140f981bc7"
+  },
+  {
+   "id": "platform.adaptations.post_batches_by_batch_id_rollback",
+   "type": "endpoint",
+   "hash": "e1b4d41a4c17bb57e475c8ef8e38bdfaa6e3d115590c58325a30dce47bbc5639",
+   "review": "reviewed",
+   "shape_hash": "fa8e68195a51a385cd30d81f17cc26ae1694b63e11165c7d22e8e83e6c17b77d"
+  },
+  {
+   "id": "platform.adaptations.post_carry_batches",
+   "type": "endpoint",
+   "hash": "e03f76bcbf0478f340c4ba3653f1054891cadd0f132a90642934244c05776306",
+   "review": "reviewed",
+   "shape_hash": "92b0b5d6c4e80732b4f4701852d97c05ee1cbb47e2cf881fefaaa0a2240d21fd"
+  },
+  {
+   "id": "platform.adaptations.post_catalog_diff",
+   "type": "endpoint",
+   "hash": "dfe1880c67eb693fd217a2704b13c22d78f95c31373cf6aede4343b810a97a24",
+   "review": "reviewed",
+   "shape_hash": "dba0c18385a4cc1cf5b046ed32836a7c64dcdd065d225df04e4555e43a4f8eba"
+  },
+  {
+   "id": "platform.adaptations.post_ops_by_op_id_apply",
+   "type": "endpoint",
+   "hash": "e396b62a42f9b81bdc72a134e0468f334548612f2af19e6b79e766f34024808c",
+   "review": "reviewed",
+   "shape_hash": "5ca207d85fadd71f16e3938a9d76d1010794f1ac028b5c2d834b6a93c317e9cc"
+  },
+  {
+   "id": "platform.adaptations.post_ops_by_op_id_skip",
+   "type": "endpoint",
+   "hash": "7307e8f911cedaa13d0bda4f10a0fea73a5120bc6ce85de4ab94522d2d3efa74",
+   "review": "reviewed",
+   "shape_hash": "5b53b4bef7f943425c7c457aa22770c7a8f21ed48d9bc5e32bf53a3dedbae0fa"
+  },
+  {
+   "id": "platform.adaptations.post_save_check",
+   "type": "endpoint",
+   "hash": "78ead637a416e1ca906ed2501be0aeef0f485a9515d8c2f4f48334066c196373",
+   "review": "reviewed",
+   "shape_hash": "f1cb1ceb96f2153af909f11cd22c46c48236516c5f4f24f8c1e4394811c8b864"
+  },
+  {
+   "id": "platform.adaptations.post_submit",
+   "type": "endpoint",
+   "hash": "ed50c0945200be3fd02f56a003e690284d041d19b91b32f0ebfd9e46b56e2989",
+   "review": "reviewed",
+   "shape_hash": "1d83a084ad759e190e6202da63e9f685c5d47dd72dfa267c7853cefdf452b807"
+  },
+  {
+   "id": "platform.adaptations.post_submit_batch",
+   "type": "endpoint",
+   "hash": "665f1b7ff6c78304886ec19e655dab11efea1f04800d9b9b74f242d156278480",
+   "review": "reviewed",
+   "shape_hash": "0df42af589a43bbfbc19194a2967a828157386b3fdac53d994a33803c5ccca2c"
+  },
+  {
+   "id": "platform.adaptations.post_submit_suite",
+   "type": "endpoint",
+   "hash": "bb1cf55e7ab56b1970437b6af225fa2e76fb5fae36fc8f319b6a42f9cd1cd7bd",
+   "review": "reviewed",
+   "shape_hash": "e45dd6286308c2d84a3298990eef4a70473142c0596151fb2e6d33597d57b264"
+  },
+  {
+   "id": "platform.admin.get_audit_logs",
+   "type": "endpoint",
+   "hash": "95a7f4d844e331cfab748096aabab593fbd84c128d7271c8c14806bd27f62ca5",
+   "review": "reviewed",
+   "shape_hash": "c38573e1d77eae88cc646889354ef5bf1d8fb5d95615c19defca3787e1218191"
+  },
+  {
+   "id": "platform.auth.get_me",
+   "type": "endpoint",
+   "hash": "3727ad6914a59e0ea66d7765856d80b2c1695753cfb2826a4d4d8b9695bac58b",
+   "review": "reviewed",
+   "shape_hash": "566ccb8b5dc0836b84d0f1d56fe9cc03d08b2b88ebd7420e495cda073defe0fc"
+  },
+  {
+   "id": "platform.auth.post_change_password",
+   "type": "endpoint",
+   "hash": "5a405053d93f410466a57ff92ceb2ee15be1d4f9dddbf5b5bd7f88061ac8ef79",
+   "review": "reviewed",
+   "shape_hash": "2315398147fab8019be1457b71eb407d841e17ab1b9cbfb69420bb84a34775d2"
+  },
+  {
+   "id": "platform.auth.post_login",
+   "type": "endpoint",
+   "hash": "3e6ef8d4e77c515c34c39e73d7693556815f90030920b27adc2e293e6d4ce623",
+   "review": "reviewed",
+   "shape_hash": "ca2d56cb55307c5db3ee0ea68b2295c5a32d6620c9f75b87da5e303384ab52aa"
+  },
+  {
+   "id": "platform.auth.post_refresh",
+   "type": "endpoint",
+   "hash": "2b7e4257d24f4d1e6f874667204f17ebfe471f772a3e030a64fdf0380862dc10",
+   "review": "reviewed",
+   "shape_hash": "af067bf396738c2de84c0ea96083598fee03628016284bf622e38ceca3b6f5b2"
+  },
+  {
+   "id": "platform.auth.post_register",
+   "type": "endpoint",
+   "hash": "b5abc02e1786c30955500734fa242f68f0e62344325c263788bb89d4b742e72c",
+   "review": "reviewed",
+   "shape_hash": "e9a3d54b6de5dd1e4fa1632a376b85c87bb34c30c31d527efa3131fec29fd43e"
+  },
+  {
+   "id": "platform.auths.delete_by_auth_id",
+   "type": "endpoint",
+   "hash": "7cc8287106c9b12e0e448f6cc87d47e31693d61b7182caafa33e659016c17528",
+   "review": "reviewed",
+   "shape_hash": "23fe6bfb1f8bb3b5199bd197b746f692fd1e5cc60c87228dcdecc189f350e3ec"
+  },
+  {
+   "id": "platform.auths.get_by_alias_references",
+   "type": "endpoint",
+   "hash": "325b35620f5e6258a9b1b6a1654fde54d82b3d1d4daa81ccf624605d1342b815",
+   "review": "reviewed",
+   "shape_hash": "a890a27517dbd8d2c1aaf97e45c12ebb6825b6ce6b442923edb100ec818a32af"
+  },
+  {
+   "id": "platform.auths.get_by_auth_id",
+   "type": "endpoint",
+   "hash": "ee1660ebe914eedd307af7e3880f132dcca842c2aaab288de608a4b889b297ac",
+   "review": "reviewed",
+   "shape_hash": "ba1650d65a6952846ec1a1eee75bc249c53e2bb44312b0d4214b629e428cf81c"
+  },
+  {
+   "id": "platform.auths.get_root",
+   "type": "endpoint",
+   "hash": "92c3358c3f5a013acb670a8833a58e3452f6aff12bb1b9e8c3b3dadf1b41af55",
+   "review": "reviewed",
+   "shape_hash": "f1a8b182860dfd175b108e2fbfbce176b7c02cc60ff76da74205d8663cc5c6fd"
+  },
+  {
+   "id": "platform.auths.patch_by_auth_id",
+   "type": "endpoint",
+   "hash": "853e5d6160371e514d923c857d885449bd6cedcc102410d9e1df1442e20c60fe",
+   "review": "reviewed",
+   "shape_hash": "accc6785acd58386f5d0d578974a2fb90355c44f964c7af123b1489fc6725b5a"
+  },
+  {
+   "id": "platform.auths.post_by_auth_id_test",
+   "type": "endpoint",
+   "hash": "cf0a420cbaec428c64f93a0f66c355bec55bc40d6679c423a6d4b5dd5cc21fed",
+   "review": "reviewed",
+   "shape_hash": "2d0f9381c91e06fd2827341dadc5616a9ca9205f1c02b4a873a9e0dd0b0100fe"
+  },
+  {
+   "id": "platform.auths.post_root",
+   "type": "endpoint",
+   "hash": "32d77d49ada4af956a96d8bc4def53d935d26070e42e8fe5723a2553a3336db4",
+   "review": "reviewed",
+   "shape_hash": "f69247346bea0e25fc18814fd48f30138bed1028da3c640ff2ceb4dee43340d8"
+  },
+  {
+   "id": "platform.board_cards.delete_by_card_id",
+   "type": "endpoint",
+   "hash": "6945643a7afd327c7b17e1db120e4b147694855d4083b82de14f9477e677c80b",
+   "review": "reviewed",
+   "shape_hash": "26306abb585f5b2a50a86ec54873784fd1ae775eb6c328763034ab880ce8e7b0"
+  },
+  {
+   "id": "platform.board_cards.patch_by_card_id",
+   "type": "endpoint",
+   "hash": "731a4d3a850e1e5b4fd77bc7d16c5614d1434b40aa0e38c3a52fb7861fc64027",
+   "review": "reviewed",
+   "shape_hash": "ae65309942344de9cc68765f169b45224af853d56ae691fee24f60cd8e9e1232"
+  },
+  {
+   "id": "platform.board_cards.post_by_card_id_demote",
+   "type": "endpoint",
+   "hash": "3f3d1eda99125bdd7da14372db1ea4ca34934983a1995efb0c827932274f4df3",
+   "review": "reviewed",
+   "shape_hash": "2196d93a2323a5ef65532a019ca5d4ad06a7db344ed82a21c1b69e498e7e144c"
+  },
+  {
+   "id": "platform.board_cards.post_by_card_id_promote",
+   "type": "endpoint",
+   "hash": "14eeeb517e9310cf76c8e602b271591cfa47d16bfe9e5a17680af9ccc99e1f26",
+   "review": "reviewed",
+   "shape_hash": "97969ea32b5e4fa96af1bc92c45284cd30e2b2f62dd0c04d4e4e362eb16f6df8"
+  },
+  {
+   "id": "platform.board_cards.post_root",
+   "type": "endpoint",
+   "hash": "cd5d7ab3a72dd67ebf7fcf78312666b9648efca9beab1b64f1a8310c61ae5bb5",
+   "review": "reviewed",
+   "shape_hash": "0d824a93bc71c8732e7b65bb1464a42ade66ee6ec32c2b3d2b970f0bde82c363"
+  },
+  {
+   "id": "platform.carry.get_bindings",
+   "type": "endpoint",
+   "hash": "022593f54ca1b38c68023ed151e9276282f73f89f140ebd5b9a0c1347b322723",
+   "review": "reviewed",
+   "shape_hash": "be58119e2783290be552d95a37c2dd7de219fe1cab797e8ea3c7304ed0ec8acb"
+  },
+  {
+   "id": "platform.carry.get_bindings_by_service",
+   "type": "endpoint",
+   "hash": "b5cb1c8e46e26b740e91885af888a251464f8334d754f719b9c4061c638800f1",
+   "review": "reviewed",
+   "shape_hash": "581e21dfda15774f7c3be1a87b0d33ab21bd3f1cdb3bcf64263fe49ef811520c"
+  },
+  {
+   "id": "platform.carry.get_bindings_by_service_fields",
+   "type": "endpoint",
+   "hash": "c13917800ff405d22b11411ef027ac4d31ca5035920b151eb98f7f1db16c2ff4",
+   "review": "reviewed",
+   "shape_hash": "de2fb3d87447a30453818a7f4068fe7d58ea147f7102abaced02cfeca0edb082"
+  },
+  {
+   "id": "platform.carry.get_defaults",
+   "type": "endpoint",
+   "hash": "af578beb3a0c981e6b95ef127935687ce595d56c67c38d2f99d15e1923d36139",
+   "review": "reviewed",
+   "shape_hash": "c9d3cbf0fead4cc65f6145b7e9a685af2e1070a0d721f1e4c77a87c8cb46ea88"
+  },
+  {
+   "id": "platform.carry.get_drift",
+   "type": "endpoint",
+   "hash": "399fc7e6877b7d8f59d51deaa78851e5f24195c03a70076e301aa7a4cc374d6e",
+   "review": "reviewed",
+   "shape_hash": "247d0e69347ece3b96ecec7b915a3932c35a45fbcf82b229047010b924351dfb"
+  },
+  {
+   "id": "platform.carry.put_bindings_by_service",
+   "type": "endpoint",
+   "hash": "f120d3d7d12b4c9c08a2a8454952157b5ded6e388bcdd867eabf365eae19143f",
+   "review": "reviewed",
+   "shape_hash": "7d4f381409f0b78ebaf4c314fa68b86479e55fa360f05a03eb5d31227c92cb40"
+  },
+  {
+   "id": "platform.carry.put_defaults",
+   "type": "endpoint",
+   "hash": "fa2a421430a610b63c3b8c6e5d3dcbe7d4a29f65ebd81de3ed79faf949404a6b",
+   "review": "reviewed",
+   "shape_hash": "a6da49c999ca3063f8dd98326b9e60fbebcd9e5effc92d71e5fc6bd20e8cb62a"
+  },
+  {
+   "id": "platform.catalog.get_services",
+   "type": "endpoint",
+   "hash": "0ed2d33bcb8cbf2dcceee5e5114489cacfa67ad349aaf5535cc7c4f30e762d50",
+   "review": "reviewed",
+   "shape_hash": "ddba291fc8f9477f12a974493bd47ebf7b73384f37cdb1f50e9cb292cdb8f9ea"
+  },
+  {
+   "id": "platform.constants.delete_by_entry_id",
+   "type": "endpoint",
+   "hash": "9735c4a8b827d9e30fba2dcb9ec4a9bc80cb8cf509891f0b01a5c5bc487320c0",
+   "review": "reviewed",
+   "shape_hash": "ee598b33dc8d302812a8ec5ea923a42f6abe98724f7950517d10f73fdf50776c"
+  },
+  {
+   "id": "platform.constants.get_by_entry_id",
+   "type": "endpoint",
+   "hash": "3a050e373877b18ac298aa58bb9b1f37a1b3e349fdf5455e72ed07fcb7c3dc42",
+   "review": "reviewed",
+   "shape_hash": "cdd52b557dd23e5b0253c3838b12c77ac465bfd3d4da578a333504a2eaec294e"
+  },
+  {
+   "id": "platform.constants.get_root",
+   "type": "endpoint",
+   "hash": "67ea577e73f37ef0effb7e1e1e5d2eba0fa0eda52ea076206360955cb3a8c294",
+   "review": "reviewed",
+   "shape_hash": "9a03854bc69aa1ca351116384170871a68830074e70d4430f053451364035171"
+  },
+  {
+   "id": "platform.constants.patch_by_entry_id",
+   "type": "endpoint",
+   "hash": "ae06a429fea53629fa9d5aafcec6a833e9297ab397f5b5014215963802b00538",
+   "review": "reviewed",
+   "shape_hash": "9d411a6c9441471907b8ccd73ff8bd7c3adcef902ca8c40be8658a50cc80ad27"
+  },
+  {
+   "id": "platform.constants.post_root",
+   "type": "endpoint",
+   "hash": "4b56d8ec4a116609f6f718b4d6bdf03232594092347b43774ddf6d62cb2e2e3a",
+   "review": "reviewed",
+   "shape_hash": "4ca69b07f664ad08b1aa7b65f30c0e1fa61353411576f4ea8f511c020171c37f"
+  },
+  {
+   "id": "platform.data_sets.delete_by_dataset_id",
+   "type": "endpoint",
+   "hash": "fea0d41218d694e7b9edf433177b3b2bca3107a90d43bfa299123df175234157",
+   "review": "reviewed",
+   "shape_hash": "628399778b52ee183ede1396865e20392bacc8017374cd046338b0accba67afb"
+  },
+  {
+   "id": "platform.data_sets.get_by_dataset_id",
+   "type": "endpoint",
+   "hash": "3214d998ff083be41476a15379026edadd7d7dfc7542615422bcf71dc875cb31",
+   "review": "reviewed",
+   "shape_hash": "fcf6b9f076a22a4d61362dba5fdb2d81608ec33997821454ecca71b43bd4fcdf"
+  },
+  {
+   "id": "platform.data_sets.get_root",
+   "type": "endpoint",
+   "hash": "701685d3ea13aaaecbfbf8045c4bc68504fe5bbaff9b2b8326a73ae803b619dd",
+   "review": "reviewed",
+   "shape_hash": "8b519336126fba3e62ee392995895df2ae058ad714f3f9791d15ed06b8c5a6d6"
+  },
+  {
+   "id": "platform.data_sets.put_by_dataset_id",
+   "type": "endpoint",
+   "hash": "0c772e8b2608d68255209f7be4c57b6c8179ac59198005299d653fb136172682",
+   "review": "reviewed",
+   "shape_hash": "84d714a733aa99149d2c0109bf583c841734d0c6feaa5caec5b5c5d8610532ac"
+  },
+  {
+   "id": "platform.endpoint_catalog.get_by_endpoint_id_full",
+   "type": "endpoint",
+   "hash": "b0fa1849b0bada643ba7eee010a55039909105d94cf5d37934cf998b8ae06f81",
+   "review": "reviewed",
+   "shape_hash": "a707ca8b4b61fefd862ecff0ca6308798326833379f0b8974fa03efab4ea4649"
+  },
+  {
+   "id": "platform.endpoint_catalog.get_by_endpoint_id_projection",
+   "type": "endpoint",
+   "hash": "c7d3cf58a93d1e2ee332d6d0a0e925a6360ffdcc7691e3a5e99e4e3133a791cc",
+   "review": "reviewed",
+   "shape_hash": "506360fac1dd9d11927b22565bf690f0fec1d4c07f19bd2ea41348d364e34529"
+  },
+  {
+   "id": "platform.endpoint_catalog.get_by_system_id_lines",
+   "type": "endpoint",
+   "hash": "3f3f53cee710746f6bd0438945a1b5e853e2125e96b8ffda1a0d5b45bbf14009",
+   "review": "reviewed",
+   "shape_hash": "4b2ed23533a072f41261ef5ffda888a36e2948bb1097580c925a92831159b748"
+  },
+  {
+   "id": "platform.endpoint_catalog.get_list",
+   "type": "endpoint",
+   "hash": "c21d4efbdad61fd84105c5cb99907a75dd8d8be89ff67041f54d91e589f058fe",
+   "review": "reviewed",
+   "shape_hash": "f75322140f6ba2757170b342880cc24c30c1e5cd6364aa3b9575e082557063f2"
+  },
+  {
+   "id": "platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108",
+   "type": "endpoint",
+   "hash": "e5faa744233db99f8a85a3092ac95169bc6194a7cd800f9897998c033c2a75e3",
+   "review": "reviewed",
+   "shape_hash": "b2f3180b542b5776aa99b4fc3eddd265a21f73b78b060f2f9255493eeb5e1db9"
+  },
+  {
+   "id": "platform.endpoint_catalog.post_resolve_paths",
+   "type": "endpoint",
+   "hash": "c11035c4d7d9829d90f694bf76e24b41bf69bd4689b3448b4347cb8ab80b8e18",
+   "review": "reviewed",
+   "shape_hash": "8c1f6655de8714398086b823757ddc2c3876d366c715d2c9bd03a0806a83e347"
+  },
+  {
+   "id": "platform.endpoints.get_by_endpoint_id_board",
+   "type": "endpoint",
+   "hash": "335aea91d47290313ae9923eedc97d6429ff9a0ddfc47b992025ebb458ee8b1f",
+   "review": "reviewed",
+   "shape_hash": "aa55ec9745ba51a2e772490749a6104855f8d451b734b5dc652d6e9a4e3ea912"
+  },
+  {
+   "id": "platform.environments.delete_by_env_id",
+   "type": "endpoint",
+   "hash": "7b660c097576e19400c178be4710098e82fc166ece025a5993bbaf47cc016399",
+   "review": "reviewed",
+   "shape_hash": "7d8fa6ef0df5d947ffa2800064634d146ec76acd344799120312ff80eddd437b"
+  },
+  {
+   "id": "platform.environments.get_by_env_id",
+   "type": "endpoint",
+   "hash": "654ec4c1c64266076dd6cc80842a987acbdceefd69b250b3514569c39ec9766a",
+   "review": "reviewed",
+   "shape_hash": "5163aecd0a73dc27f8c74b4386cecc1f7962db6b954b593dbb8c552892b78d8d"
+  },
+  {
+   "id": "platform.environments.get_root",
+   "type": "endpoint",
+   "hash": "23bbb4bf9374918b459eaa5231d1eb2a57a1ce1b3c8f3da1b1690e675575be8a",
+   "review": "reviewed",
+   "shape_hash": "1a9f4e3228716a53e7404ec699cf72e757524f7c38b6767d86fb005562f78b82"
+  },
+  {
+   "id": "platform.environments.post_root",
+   "type": "endpoint",
+   "hash": "208af03befec8cd4591a1f10bc145ea7c1cdbb1a27f228ee6484855740567d5b",
+   "review": "reviewed",
+   "shape_hash": "bb21632fadd2d1fb30b33cf3c6129d9e64b3e127de9a55a7f2996538becf4f12"
+  },
+  {
+   "id": "platform.environments.put_by_env_id",
+   "type": "endpoint",
+   "hash": "0ecefa92cf2f5fb21c1665f26f6ddbc221c688ed9389e70b2851c8e92634e2e4",
+   "review": "reviewed",
+   "shape_hash": "3d2aba54973e881e9f9ba67723afd9d9b21f44870e1a51935df8b4103b9ec063"
+  },
+  {
+   "id": "platform.executions.delete_by_execution_id",
+   "type": "endpoint",
+   "hash": "8419a4faa7a54846ed77e1fd55258e11010a331c2334fdf3f4831e909db6c40a",
+   "review": "reviewed",
+   "shape_hash": "8933c32b87999d29194de0e92d900991b49ac58730729cf38f1eb1200cf1b7e7"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id",
+   "type": "endpoint",
+   "hash": "e617657ef13d1bf882e555317ddcd395db1e2475c679e62a5ddefb678650e536",
+   "review": "reviewed",
+   "shape_hash": "b11d0b29c11e81898b50395474dd4e03a1ca2e894697fbf72882914c6eee5050"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_case_artifact",
+   "type": "endpoint",
+   "hash": "831abda41c257b9ea5f654985b6dc45e7a5ca84b08b93b8e98ca365d70fa7bc6",
+   "review": "reviewed",
+   "shape_hash": "7f0f7dd714630e013bc014e2cefe3abdca46895655c14d46fb7c3cf6fef8a59a"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_debug",
+   "type": "endpoint",
+   "hash": "1710ee1f1e5175d71ecaf63ea8fa5f90a5b0ef07ded6807ca54e149b2ec5c5d7",
+   "review": "reviewed",
+   "shape_hash": "bb854e3b41f20b52a146988ee49f83e5f13761983e466ad5863179d52a2cab5d"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_debug_output",
+   "type": "endpoint",
+   "hash": "e77be1fd6f320e6cde3690f99b97be6c4aecf5a97b24d7f048228f013713b53a",
+   "review": "reviewed",
+   "shape_hash": "b301ec889871bec164ec77c555accced7137030c371fefbde98a4bcb2237fb6a"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events",
+   "type": "endpoint",
+   "hash": "fe5efe6cd1bbaef4d62c4f0647c1a75b4745a6e1a7f738453617d6d3ca6b2e86",
+   "review": "reviewed",
+   "shape_hash": "9f74240db25d86d4a83aa3845c3debf029dc3bb1312e50b36d4c32d04bfe7dd6"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events_counts",
+   "type": "endpoint",
+   "hash": "01edb1b24955a20d7b0558deb882b547ec4b91e7759f291fad879e799de87d30",
+   "review": "reviewed",
+   "shape_hash": "eabe632671958870af3fb3669eef0e2409fb5db831ee932d98f984dd280315f8"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_events_stream",
+   "type": "endpoint",
+   "hash": "7b8f0ee1b7b29b3c74fb872af389ed2b78cf5b06708bed5a46ddd81c4d240009",
+   "review": "reviewed",
+   "shape_hash": "4d703af4d52ab2319ce5266e8dbba30fd79e24273bf61abcd10113d6c126e379"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_rows",
+   "type": "endpoint",
+   "hash": "1d2e7802cb036c0a76de10c5b6e3d3458e3b161e1d2a25378cd9011c79042ea1",
+   "review": "reviewed",
+   "shape_hash": "df3b9dc4cbba994e066fffb7ea3b2f8ae0b83cf391dbaf2680155ba7ceb45ce5"
+  },
+  {
+   "id": "platform.executions.get_by_execution_id_scenario_snapshot",
+   "type": "endpoint",
+   "hash": "10a5c94b137df38545f3460ae9c39d5ee9ff0cea50a42d1550d5fcf6e344481e",
+   "review": "reviewed",
+   "shape_hash": "6b9c5fbe18b366c915222aca1ae74908874a7db607f98e02aa6488fb261f809b"
+  },
+  {
+   "id": "platform.executions.get_root",
+   "type": "endpoint",
+   "hash": "b3814d450202500de5d47bc93ed58143eab0cb5faf3992173665ab1b3479b22d",
+   "review": "reviewed",
+   "shape_hash": "8c84655f08bae1ee37f8619d30011f4b473662a1b2c1f07686c2445fe3688ea5"
+  },
+  {
+   "id": "platform.executions.get_summary",
+   "type": "endpoint",
+   "hash": "006fb553fa2f3a978462329a78a90c7cc4cb03fa7bc29fa6862529386bf3aeda",
+   "review": "reviewed",
+   "shape_hash": "ee143aea7c6b302835110c598a035241a717f9ae943946985ab43a6ee40b13fb"
+  },
+  {
+   "id": "platform.executions.post_by_execution_id_cancel",
+   "type": "endpoint",
+   "hash": "3401ae6f5761027f187385d9d3fb69ad56807fd77b32716fd3e90842ec6334a0",
+   "review": "reviewed",
+   "shape_hash": "831b52ba98d14cef886e2986098910626dcb827baa0a0292670812a82f89a028"
+  },
+  {
+   "id": "platform.executions.post_by_execution_id_debug_command",
+   "type": "endpoint",
+   "hash": "7ab350a0c86c9558e7063b3cfdf338da4853470377183319033a62a3f852c20d",
+   "review": "reviewed",
+   "shape_hash": "0e64adbb691cd71769332a164fd5929e37e83438acd55309f42164a9dddfa56d"
+  },
+  {
+   "id": "platform.executions.post_by_execution_id_rerun",
+   "type": "endpoint",
+   "hash": "fafcc738de5cf2a9d1b6c8947ddd7faab6930042432dc9ddf527bd801b2ed819",
+   "review": "reviewed",
+   "shape_hash": "300ad1ab6fbf57362497488a635dd4939c570822387b64c39ab2c235595f2171"
+  },
+  {
+   "id": "platform.generator_catalog.get_by_kind_full",
+   "type": "endpoint",
+   "hash": "8aa1e09b5bdde8aa9fadb1d4d73216d2c46b0f0e222b9bef490196cd22c46173",
+   "review": "reviewed",
+   "shape_hash": "af671bdb8cbfd1b5e826f4b6387e2fbe820c2506c694554eba64956d5d1b5b65"
+  },
+  {
+   "id": "platform.generator_catalog.get_root",
+   "type": "endpoint",
+   "hash": "0401d8c58bfcf7c343ecebecd6f566da49c0fce881d992d6ec2a24fb9e74c797",
+   "review": "reviewed",
+   "shape_hash": "3cb8904039c2b1822737aa0bab55f1b3f1e2f4ac7d2a69854fc3818f535a9b21"
+  },
+  {
+   "id": "platform.handoff.post_root",
+   "type": "endpoint",
+   "hash": "20eef680f77515207bfa0784662ca20859503eddf5b95c52ca46703db856fe99",
+   "review": "reviewed",
+   "shape_hash": "d5b405adceee30ab15e7e7e78e7aed4ccbd5827fbf7250fcad0c8e89759fe412"
+  },
+  {
+   "id": "platform.health.get_root",
+   "type": "endpoint",
+   "hash": "b99f33d4fe8c92e47f9dd1d44d4357290afe3a7092025f754dd828e21d610d31",
+   "review": "reviewed",
+   "shape_hash": "576288c0f368e8ba0cce79e39273f48241b3670171be064f42376f06125a0e0a"
+  },
+  {
+   "id": "platform.integration.delete_platform_credentials_by_cred_id",
+   "type": "endpoint",
+   "hash": "e71001d5d93c23146d56ca4e61958e323e5e3080affb7bf3b98684120e5f80b5",
+   "review": "reviewed",
+   "shape_hash": "aed41b224df52be1fadf7aaba273253c8da9318c493275941a99d081e92e8e13"
+  },
+  {
+   "id": "platform.integration.delete_tasks_by_task_id",
+   "type": "endpoint",
+   "hash": "3fea87e8f9283460a892e57019c437cfbb594d8ae5622bb64adbd9f644199b19",
+   "review": "reviewed",
+   "shape_hash": "5dc0a0f11d2ebc30d0e5e6151a59317f933ecf044f91d98b74ddf4a2555565ba"
+  },
+  {
+   "id": "platform.integration.get_platform_credentials",
+   "type": "endpoint",
+   "hash": "698b433a2717b98a9ca2e5c6a2dde29181d1407d47b7027bb6422aa39f4612cd",
+   "review": "reviewed",
+   "shape_hash": "178d7e6346ec84246bb17305d91281d59bba2763d293500719fa2c86f3ce0609"
+  },
+  {
+   "id": "platform.integration.get_tasks",
+   "type": "endpoint",
+   "hash": "346f44533d9119bb1b36b50dabbdfb9bd993c4f988f520eeb25f8cbec70c31e0",
+   "review": "reviewed",
+   "shape_hash": "f3cc800a59862ae73e690b66e6a185cb504c81273dba2a38b4ab9d1135d221e5"
+  },
+  {
+   "id": "platform.integration.get_tasks_by_task_id",
+   "type": "endpoint",
+   "hash": "be955bd05ea50b078d884ede519c01cb44c2c6759e875395fc4d4ff7a1b220e9",
+   "review": "reviewed",
+   "shape_hash": "51d91047b651c2b879813e82a16ba9ab1ff79eb1f69a1101441d7a26ec75aa8d"
+  },
+  {
+   "id": "platform.integration.patch_tasks_by_task_id",
+   "type": "endpoint",
+   "hash": "d6401bbf0855361c19000f29b4fccc8fd1071537153c32fafc5cf0842113ffd2",
+   "review": "reviewed",
+   "shape_hash": "14c4b7161bdb272fbb46b037c29fc4de48dfde9f08e5cbe657a72f13c5699a6e"
+  },
+  {
+   "id": "platform.integration.post_cards",
+   "type": "endpoint",
+   "hash": "061033d918debc4c83beb5de6e5cf460f2107e4eb638924c178c7a11d66b7728",
+   "review": "reviewed",
+   "shape_hash": "fc866db3af9a9051d6712a082c564dac3ac0addbf7800ed96e29fef08ae4e94e"
+  },
+  {
+   "id": "platform.integration.post_platform_credentials",
+   "type": "endpoint",
+   "hash": "6cb476dfbd60b88e98feaa55530a66eb9f101a26aef44cc3da53fbf7b3934041",
+   "review": "reviewed",
+   "shape_hash": "6cf4bed25c17374eb6dfd33e682b6cd61d899649900465cf5a12a943644bff26"
+  },
+  {
+   "id": "platform.integration.post_tasks",
+   "type": "endpoint",
+   "hash": "ef407d214131820bf90d43f0d91c6ac17a306c6cc6eb122ccf777ee49bacf9f2",
+   "review": "reviewed",
+   "shape_hash": "427c990dcd52db814c2046f7f25a2eb74e79faaebba4c02278af698a026efd3d"
+  },
+  {
+   "id": "platform.integration.post_tasks_by_task_id_run",
+   "type": "endpoint",
+   "hash": "f09fcb58f37812e28584caaffb3b3b145b327cdc71ce35fcb10bfd1e11191198",
+   "review": "reviewed",
+   "shape_hash": "2639750ec5e8e9db6db7625f548a4b81ae34040a6f393a3fa995b0cc0cd48bb1"
+  },
+  {
+   "id": "platform.me.get_preferences",
+   "type": "endpoint",
+   "hash": "9bf8eaccee7b981fc2365bdef5b7dcb56cb9d82f853f020e0adee057086bea0b",
+   "review": "reviewed",
+   "shape_hash": "269f50bef88776eb66d6fd62f3f0fa8d70327dceb6466379bb71c2fa5ad2c70a"
+  },
+  {
+   "id": "platform.me.put_preferences_by_key",
+   "type": "endpoint",
+   "hash": "55d2b800ae470473d52a15f80326a01a503bd5df32cd7bfafd58ed0863381c99",
+   "review": "reviewed",
+   "shape_hash": "06effcd55731dd909384125cc0fe29487257ab25d87ded88e192493de7c0c97b"
+  },
+  {
+   "id": "platform.notifications.get_handoff_unread",
+   "type": "endpoint",
+   "hash": "28f3ad88b68b4d3242eac26c65c0d881be69e358b8cc993e9f89e5377852005e",
+   "review": "reviewed",
+   "shape_hash": "d9b2fbe38c6cb374e263ce8bece41f0b5b11ae28f163cc9b1ad33efad8e6c6aa"
+  },
+  {
+   "id": "platform.notifications.get_preferences",
+   "type": "endpoint",
+   "hash": "251795e8dfa14b4acebcaefe9ca0e77960d255d31b513745fd0352e4e6f3132d",
+   "review": "reviewed",
+   "shape_hash": "0b1612629b0c7f6de5a5d3888f0d437d4ddcdc704f5c8e5d369f3504c51d5294"
+  },
+  {
+   "id": "platform.notifications.get_root",
+   "type": "endpoint",
+   "hash": "400d33fcedc10747abed721bf732c20e74c1ef598762919f4302ca6e66b67b90",
+   "review": "reviewed",
+   "shape_hash": "913ee58ad0f69fd96a161f8064ca61d223aca5836dfa31f99e11eecf9ff99738"
+  },
+  {
+   "id": "platform.notifications.get_unread_count",
+   "type": "endpoint",
+   "hash": "9b8ca595b628ae1e687fa6a6b11a8d232ad30218891ec58a487135829da7e197",
+   "review": "reviewed",
+   "shape_hash": "68f1ca91e945a7fccd3101b328b505f4cedf3b9fe70a4129f5ac98ad93f59c7c"
+  },
+  {
+   "id": "platform.notifications.post_announcements",
+   "type": "endpoint",
+   "hash": "9186e55654cddb7e4dc92b2904c74c0d7da02cf3d47931fe3f853e6e9ccdda26",
+   "review": "reviewed",
+   "shape_hash": "c3eece367739a27700b9cea42479b988b9f0dd387db24a5c8c2cb7003b157896"
+  },
+  {
+   "id": "platform.notifications.post_read",
+   "type": "endpoint",
+   "hash": "6101d9fc2a5f9f00606037878b9e19e4d5da13d475c08c7b453dd6f58a9bffa6",
+   "review": "reviewed",
+   "shape_hash": "9ebdede044f098f9abaa179ef6378f5e3df524e6d56d4652581e6c89ff8e0bab"
+  },
+  {
+   "id": "platform.notifications.put_preferences",
+   "type": "endpoint",
+   "hash": "ef85fd7b1ffcf17d0e7ac72fa7abb66dad55fd472b452aeaada2db118189f409",
+   "review": "reviewed",
+   "shape_hash": "5e51270fb7036c1a6f38cc1c0580a9401b3ed5692ce6f5d88d5c566b0c190070"
+  },
+  {
+   "id": "platform.query_views.get_by_name_rows",
+   "type": "endpoint",
+   "hash": "5c305ef85c348f239d67704dbb54cbaddfab4419efc84fa295eed8daa0575c5c",
+   "review": "reviewed",
+   "shape_hash": "edeb1abd3df6cfea5afe060412772fe478e565a00ecaf6d86926b5e5afe28f03"
+  },
+  {
+   "id": "platform.query_views.get_root",
+   "type": "endpoint",
+   "hash": "0d99c711596fcdffc2797654903c248feeed1ffa69029b719beea287b1b3deb3",
+   "review": "reviewed",
+   "shape_hash": "20a40c71e396850e01270a777772cb9c1aebeddfd54ecf38748c69244bdce39d"
+  },
+  {
+   "id": "platform.report_definitions.delete_by_definition_id",
+   "type": "endpoint",
+   "hash": "93d04acd40169f3b91db57089a42a5b73fd40541c69e5dc3483c2a42ea6a5cef",
+   "review": "reviewed",
+   "shape_hash": "36c3a424d618fd54a40979320c176b00cc0ab3f72bd929661da321a0de443e81"
+  },
+  {
+   "id": "platform.report_definitions.get_by_definition_id",
+   "type": "endpoint",
+   "hash": "a95f0fdb02e25867af6737cd9150b424da75422024c80059e9341cd82c05bfa8",
+   "review": "reviewed",
+   "shape_hash": "42b3809d2aa9d331326f1ac45d53fae342c5d01a269c36f28c870b889f342f91"
+  },
+  {
+   "id": "platform.report_definitions.get_root",
+   "type": "endpoint",
+   "hash": "e7462ed0c63566f8354b6ecbbada85022052931cc9d2a4f804527f50d2fa5ac9",
+   "review": "reviewed",
+   "shape_hash": "042c3f0af72ee135aba78133b5087b8ef2c6881e6189cf4b9e8ffa879daa7ed2"
+  },
+  {
+   "id": "platform.report_definitions.post_root",
+   "type": "endpoint",
+   "hash": "2168201d364c2aec429f5f13d3ea2b25fcbe7207a2947a2e2da7b5a368991b49",
+   "review": "reviewed",
+   "shape_hash": "60eca888e71a13b10082ceb8de0c967099aa7e8a76faaf23ce8e6fb6c7e912da"
+  },
+  {
+   "id": "platform.report_definitions.put_by_definition_id",
+   "type": "endpoint",
+   "hash": "7791ba96a49c279050b1eadbf87f9702a1d5acb4c66f64577c3e5579e711fad4",
+   "review": "reviewed",
+   "shape_hash": "875b949bbcdccafa90e22fe46d1790010b24766e0ae5af8fe34149d82e1633ba"
+  },
+  {
+   "id": "platform.run.post_precheck",
+   "type": "endpoint",
+   "hash": "a7171465f5e7b89afd16178d6c1ec7a55843d384538ef32ae0bc1a05940cf631",
+   "review": "reviewed",
+   "shape_hash": "c6334d171521ad0c4b0f3d41f282ca51a0154d7e6959ffc09abb11e5bf4365c0"
+  },
+  {
+   "id": "platform.runs.post_root",
+   "type": "endpoint",
+   "hash": "fb218a60b2a323262fbb3da141bdcc84f1c340337df82886dfbc9fe2261d757a",
+   "review": "reviewed",
+   "shape_hash": "b428749843199f658efdd42588757dbda993b7a37a222e96021f1f2b8b75da3a"
+  },
+  {
+   "id": "platform.scenario_filter_groups.delete_by_bucket_by_group_id",
+   "type": "endpoint",
+   "hash": "c7a375878c268b950d2d179de2b35e2d7696943b9aaa88688ceb662d5139bc60",
+   "review": "reviewed",
+   "shape_hash": "05ca930f594101d7ee314488a76c404c6016b0133757fc264c9b0713ab6a421b"
+  },
+  {
+   "id": "platform.scenario_filter_groups.get_root",
+   "type": "endpoint",
+   "hash": "db5e1763a23167770ac498ce17f562883c6017a24c43fb5dc9609a5b679b345f",
+   "review": "reviewed",
+   "shape_hash": "59266b50eb25c493dc82f56064b2bc3c44aeb69b72146974eac0f4e9565ce2ab"
+  },
+  {
+   "id": "platform.scenario_filter_groups.post_root",
+   "type": "endpoint",
+   "hash": "3b0d80cd3d04e48ca9c7888299858df128e530c65707f877f0adf269f4c51a70",
+   "review": "reviewed",
+   "shape_hash": "cef4a914ed4fca3d21edc36c9fb3429b8337bec16b01002abef299340abc805a"
+  },
+  {
+   "id": "platform.scenarios.delete_by_scenario_id",
+   "type": "endpoint",
+   "hash": "e25a8a6967d00875f534fae1c248a5fd381e2d398b3077f400c8dc2e379c3834",
+   "review": "reviewed",
+   "shape_hash": "0232b6874931e958e1dc4a714312fba3fb7c2ead32d7312fcd398394751cbd58"
+  },
+  {
+   "id": "platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300",
+   "type": "endpoint",
+   "hash": "c9b507556cdf86a4156401efb7695e39950e41efef23410ec9e66ee180ebb704",
+   "review": "reviewed",
+   "shape_hash": "7f40019821ea086dd73698284b9c6d9bd7c98e720f5ae84b0eb556d987b40509"
+  },
+  {
+   "id": "platform.scenarios.get_by_scenario_id",
+   "type": "endpoint",
+   "hash": "2e74a71b70ff8a8df1903bc21a4cafe1536e7d6e85ea070e3b7dd3b7acfd7d95",
+   "review": "reviewed",
+   "shape_hash": "eff7abf152a89a357a73a16b294a01fa3d3ca9776b91a8a933b36dbd13a88aa8"
+  },
+  {
+   "id": "platform.scenarios.get_by_scenario_id_draft",
+   "type": "endpoint",
+   "hash": "c055ae49e987750539abb8c8b8f17a059ef9c2269b67b89138406679b9ae57df",
+   "review": "reviewed",
+   "shape_hash": "fa61155c4e2d5630c3c63ea5f7c8a943c9347ff783e82f2142039d38bc8391e0"
+  },
+  {
+   "id": "platform.scenarios.get_by_scenario_id_export",
+   "type": "endpoint",
+   "hash": "9d8a887fc58ce51cce1f991cecb5d129a3e6f51a99991bed020e1b026fa3f8d6",
+   "review": "reviewed",
+   "shape_hash": "64a0cf668c1a49111dc443ab745cac36aa47634ea46994688ab1e415c153b342"
+  },
+  {
+   "id": "platform.scenarios.get_by_scenario_id_run_schemes",
+   "type": "endpoint",
+   "hash": "db16e697fe84875b72087903c11f0025bbba0303b83313a6aa43ce0b57b8fdfa",
+   "review": "reviewed",
+   "shape_hash": "beb3dc84d2e9ad967f8e6d4ee8553f6ee65ec4aa8647c1f15efeba2a9117421b"
+  },
+  {
+   "id": "platform.scenarios.get_by_scenario_id_suites",
+   "type": "endpoint",
+   "hash": "8ca35926410095eadcf192f98197c0d3acb5ed35942766c7faa625adfade9851",
+   "review": "reviewed",
+   "shape_hash": "e79445cbd4f1401768dfef8949104d54d9e31c8cbf0c11c007cf3fc90b386ca7"
+  },
+  {
+   "id": "platform.scenarios.get_facets",
+   "type": "endpoint",
+   "hash": "307df098ba6a4a636480da90e71d3988ebafdb32a2d498b3cdcdb5cbd211a927",
+   "review": "reviewed",
+   "shape_hash": "66d644c771cebc1901931a0a6c3de1455c4453f02c283fd8a9ff04e7b1d96a56"
+  },
+  {
+   "id": "platform.scenarios.get_root",
+   "type": "endpoint",
+   "hash": "783e73de9317f4e05214a41f01a5214fdca26d804012e2bbfc90b0697fa1622a",
+   "review": "reviewed",
+   "shape_hash": "a01cc27ef0728277b500897f8594607f89cd51a4f23c485fc320b5c14984213b"
+  },
+  {
+   "id": "platform.scenarios.get_signals",
+   "type": "endpoint",
+   "hash": "d1dbddc08faaf6166f77a3797b2051bf436bbb4b4d06c5932bc5a8b6bca579aa",
+   "review": "reviewed",
+   "shape_hash": "39c620956363fc932736d9536d8116de420bdbcdc4eb64fc09103a545e024501"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_copy",
+   "type": "endpoint",
+   "hash": "d42323a009fdc77ca0369ce2a1b5c20419b530abe1da75a5879e6e64949a0c05",
+   "review": "reviewed",
+   "shape_hash": "caa38d8c0b7b7c2d57a8c7c34accf5ffa5a17660f1a542375d18f690e2b9564d"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_data_sets",
+   "type": "endpoint",
+   "hash": "00193683978765443957156bf010f66b546eee175d97562fe35c20f776857d73",
+   "review": "reviewed",
+   "shape_hash": "c10b80b14f0a4b2c68b566c47e85999ab15021443dfd38fffad97a9bf128ca6c"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_publish",
+   "type": "endpoint",
+   "hash": "c9bc4ada7a21cc62ec2f236c021cad3d26bb7ed8c2f2e72e1d8a4c3909e4088d",
+   "review": "reviewed",
+   "shape_hash": "0e0cff6da000289e638e807957680081caf61749e7796bb0b7004d5c0cd9c640"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_run_schemes",
+   "type": "endpoint",
+   "hash": "bc00f8126ef944ecf878fe3f6f51b3f8270c1b4b52a9abf3d5662bd17570d194",
+   "review": "reviewed",
+   "shape_hash": "52c33ecf42af0917159718f50f9c0f7c71840878028d53a0e691ab0c969d3e35"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_star",
+   "type": "endpoint",
+   "hash": "34845ff40a54c8cddd292d8bd393b2064aaf057e6aa04f770fb78df7246f6553",
+   "review": "reviewed",
+   "shape_hash": "983b3980986afa3fcfd671f2979870830b9a057bc14cfe12473900f98483e726"
+  },
+  {
+   "id": "platform.scenarios.post_by_scenario_id_unpublish",
+   "type": "endpoint",
+   "hash": "0c7e1cef4a0d5799490e7d70608d13aee1d92f375919f183ee0dc5ffa8448eb9",
+   "review": "reviewed",
+   "shape_hash": "3f6536982cc9acc28c6ea1fe9d3c681fa1476fdc0ec95e09c73afa934650611e"
+  },
+  {
+   "id": "platform.scenarios.post_import",
+   "type": "endpoint",
+   "hash": "34db9c61b219dfa39bec49a08df1679e75a5714cf6f914bc50b4f463d2be868d",
+   "review": "reviewed",
+   "shape_hash": "2347dc6bdf1469d2700b5c52f1659b61e03bd2cb54225a8f1ce086ea31b94abf"
+  },
+  {
+   "id": "platform.scenarios.post_preview_plate",
+   "type": "endpoint",
+   "hash": "fd775f4824fa7f5ade4df20848fd00e82a6a2f44227c0c9a733a9809dac4325b",
+   "review": "reviewed",
+   "shape_hash": "91d6a885b9f9a1176564efd6192577fe525b470e0c3547c20e3123a265cede30"
+  },
+  {
+   "id": "platform.scenarios.post_root",
+   "type": "endpoint",
+   "hash": "08fd944ac54e8efb249d3f9ea78763be29e46b251fe39e5cf203bb41062d29ac",
+   "review": "reviewed",
+   "shape_hash": "c5822371cd495ad239600821865e5de4da3661f68ed32bb1faf731fe530d2a15"
+  },
+  {
+   "id": "platform.scenarios.put_by_scenario_id",
+   "type": "endpoint",
+   "hash": "eaef15e3b8e0ad0b30e79b720ccfa5f7d29a94a0cb0141f92384bf3108eaa47a",
+   "review": "reviewed",
+   "shape_hash": "2e1590dc8f0c2c990e72d236f85911624b667ac31f6daba0a51807381dc914d1"
+  },
+  {
+   "id": "platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id",
+   "type": "endpoint",
+   "hash": "cd70ef1d63e4dd15afcc1f3ebe97dce871f1c1c7a5228717ee993d2cc2eeba1b",
+   "review": "reviewed",
+   "shape_hash": "a420632ba2f77a29f6fd2c5a9772857537b8d4fb0dd144c4ede0561ca8085b8f"
+  },
+  {
+   "id": "platform.service_aliases.delete_by_alias_name",
+   "type": "endpoint",
+   "hash": "1eb570832f3aa796936b957df08cefa4436b2570b8bc2e266700776a5e7290d7",
+   "review": "reviewed",
+   "shape_hash": "36f732380b135a5b2e1a8c3eed9127d9b3150cc6b316b46a3e927f57caeab336"
+  },
+  {
+   "id": "platform.service_aliases.get_root",
+   "type": "endpoint",
+   "hash": "d9bf3f379372a0ee70728bb3791ed2505f54f90c2733c83ee5e0a61d06f25ed0",
+   "review": "reviewed",
+   "shape_hash": "fd380c1c416f417255074c4056b1eeffee247ff52ee56fd79dfa3a96207869af"
+  },
+  {
+   "id": "platform.service_aliases.patch_by_alias_name",
+   "type": "endpoint",
+   "hash": "f5b706f4bdfb01340f30858e5d880d5896dfbd80a235acd30708e8777bbbdb53",
+   "review": "reviewed",
+   "shape_hash": "84f1961280dac9aebff4c1946fa02f490afd822d09ed4956bc4387df69931f6f"
+  },
+  {
+   "id": "platform.service_aliases.post_root",
+   "type": "endpoint",
+   "hash": "ae0f24ddb83b56e08089f6323dcab93e4680f4dca13a1a6b67a00b05862be75f",
+   "review": "reviewed",
+   "shape_hash": "e16467b676f8ace075680192c562226e0c3efbbbc5c25a4669151b39842de6eb"
+  },
+  {
+   "id": "platform.services.get_by_service_grid",
+   "type": "endpoint",
+   "hash": "373c08f884c79fac5bf2c2cb318fa422dd6d7a941fd14b0cf7febb7e0484b889",
+   "review": "reviewed",
+   "shape_hash": "7e1dfa35743e9a74c67863d07f2014352d3958cbe2ca6ae32e2328161d4e8f41"
+  },
+  {
+   "id": "platform.shares.delete_by_share_id",
+   "type": "endpoint",
+   "hash": "742260b460b11656aa365083ee5183270a67a734ed03362bd951c79b542b60c9",
+   "review": "reviewed",
+   "shape_hash": "7a1d6f7eaab5a41c99e343bc4bb6ae03f4f3f53eeda576b9d6e405b7070704bc"
+  },
+  {
+   "id": "platform.shares.get_referrers",
+   "type": "endpoint",
+   "hash": "603e22bb8a8afc90b5da0ac82612533f350a4c4bf4970af456089d3cd368d305",
+   "review": "reviewed",
+   "shape_hash": "0e6fb6ed3f72ba503d6e0bad61163fe7964fb2a607228868e327018e7252a5b6"
+  },
+  {
+   "id": "platform.shares.get_root",
+   "type": "endpoint",
+   "hash": "44269430919b9d0d211163921b79241bde1335776ab7e73d99ad3b47c481400c",
+   "review": "reviewed",
+   "shape_hash": "82308c3c00edaa0b3523db49dba5115bc82c635aa9d0551eb5782255eab2c6d1"
+  },
+  {
+   "id": "platform.shares.post_by_share_id_fork",
+   "type": "endpoint",
+   "hash": "61c344ffdf7a24693b8dad71b3486cfee7ef4f0583f7bd1c0f1c262e1af4d909",
+   "review": "reviewed",
+   "shape_hash": "43d504b8c8d5dcb79f59b0ec56753ee4d42cb282826cc6efa7fb6098e44a36e0"
+  },
+  {
+   "id": "platform.shares.post_root",
+   "type": "endpoint",
+   "hash": "bc5a908d89576c297bdc7dfd4f32575793450c7d76f40bc00dd1063805a9aeda",
+   "review": "reviewed",
+   "shape_hash": "ef8e68d0020e4a8c2b02063d564bbe4382ed1849178f95f355c651f379aa4bd3"
+  },
+  {
+   "id": "platform.strategy_catalog.get_by_kind_full",
+   "type": "endpoint",
+   "hash": "60fc19a718ba53d32f248655233d335acc792dcc4e5b280887b82086a9802dff",
+   "review": "reviewed",
+   "shape_hash": "47ce6379cd6d0d68d7615c19881b06d9e63cb6ada43c2cb55447a67609b22fa1"
+  },
+  {
+   "id": "platform.strategy_catalog.get_root",
+   "type": "endpoint",
+   "hash": "506da3b79236affa46ae4cfe0a0d3a797243f566cc3362d1c4d26ea32401374e",
+   "review": "reviewed",
+   "shape_hash": "7ffd4fb5e0e2712de7c1d0c6c8b22946501be9df7ad4e367dfc3acfb9eed1718"
+  },
+  {
+   "id": "platform.suites.delete_by_suite_id",
+   "type": "endpoint",
+   "hash": "14e37cb7fbc488fc41b6b479ec2cac20cd442dd503ef1672462bbd03fb8f05b1",
+   "review": "reviewed",
+   "shape_hash": "0366b3d28173a8a67f4d007d04ec4a5b22f202ea4c80f0be0d847d95c0b13939"
+  },
+  {
+   "id": "platform.suites.delete_by_suite_id_members_by_scenario_id",
+   "type": "endpoint",
+   "hash": "da29066c21b64e25e94d6d757c73189f6e1cb575b61203a242cb59dbc73f21de",
+   "review": "reviewed",
+   "shape_hash": "0def7b5d40a54d1e1b4aecb53f2b37222e2e5bf2e6900c9cd225c05d25818850"
+  },
+  {
+   "id": "platform.suites.delete_by_suite_id_publish",
+   "type": "endpoint",
+   "hash": "29561c8a4ef1ca6d618e5ace69a5d1176354cad1ef098d181c221a2b1e88b754",
+   "review": "reviewed",
+   "shape_hash": "3272fbc65530a9d9dada02dce7e854844a2a82db313f16a53fb8c1c2e233b721"
+  },
+  {
+   "id": "platform.suites.get_by_suite_id",
+   "type": "endpoint",
+   "hash": "29b7c350f01c41fb97e033d7f4ce4714f5c7746df18956c270004862262717b4",
+   "review": "reviewed",
+   "shape_hash": "623f631e65f9006d20c32cc6594bc175c20c0f1c2e1b827d192df2e4ad32bea1"
+  },
+  {
+   "id": "platform.suites.get_by_suite_id_runs",
+   "type": "endpoint",
+   "hash": "e07f7fe1bdaad977d9d05d5f4f5d6764edd79c5584238463ad4a84aed03529ed",
+   "review": "reviewed",
+   "shape_hash": "a532a95bdfaaa87ed59724c205bfbb7ba53fb7ecb3989ab6f6a75be641a24ca8"
+  },
+  {
+   "id": "platform.suites.get_by_suite_id_version_distribution",
+   "type": "endpoint",
+   "hash": "a4606dfd9e4a45a4819913da47e33d99f47743e50f0b830e598141ed2d687b73",
+   "review": "reviewed",
+   "shape_hash": "9f03a825ba46bd5564f350d8318b3809866ebf2c272d688490ebc895b7aac6d0"
+  },
+  {
+   "id": "platform.suites.get_root",
+   "type": "endpoint",
+   "hash": "312c4a41def09ef7c2c5ebe1cf68705123a8f02918239cc93c0c3aed86fd36bb",
+   "review": "reviewed",
+   "shape_hash": "16c9c2bc2292b79f2a2ed0892792c361b85cb216ddfa5cdc72d2b619c16ca40c"
+  },
+  {
+   "id": "platform.suites.patch_by_suite_id",
+   "type": "endpoint",
+   "hash": "ca5cff62ce112d2f554beec99cb8be8b7f391a47daab5bac0cde7d9a27c824a1",
+   "review": "reviewed",
+   "shape_hash": "98da878740bc7d0fbcfdbbeec4bb8bc4b454a153d9cfc30f88330eb09b00c0eb"
+  },
+  {
+   "id": "platform.suites.patch_by_suite_id_members_order",
+   "type": "endpoint",
+   "hash": "453c4d9e2fa0682a76dd93395338157325ba4fbd4a7e0a5bd1e4adc1493fb0f2",
+   "review": "reviewed",
+   "shape_hash": "3998a6718420fd70412ffa11d4d702ac1301e3c16e929e4f2c3abd21be2f3b83"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_fork",
+   "type": "endpoint",
+   "hash": "6eb296726ce87db2cb8c586a3b10690413a578ca713a2ba7a2a5a14d60947648",
+   "review": "reviewed",
+   "shape_hash": "771fa63563af3eb43af80e15e37f89349c6b66ad9315384fd60959f1f7d19872"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_members",
+   "type": "endpoint",
+   "hash": "ef29739b219bee5cf16834052e28752e2cf76e8b78973b41e2199c4f6292d6e3",
+   "review": "reviewed",
+   "shape_hash": "3a13ba19f24f1747ed24a81b6afd5b32ef6394ec840c894c5865c43971753928"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_publish",
+   "type": "endpoint",
+   "hash": "628a5dcdca94a9fa9234ba6bdf2876e531235013916b9ca7f29a8ad9a89ccbe5",
+   "review": "reviewed",
+   "shape_hash": "b04641d025fdab63f64fe84b5836eb2cf4a017b099f1cbaacaf400e8894fec64"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_run",
+   "type": "endpoint",
+   "hash": "950c19818507aacf4f27480339d95f602cc9f8a107bd626ba3fe3d5a1ceebcfe",
+   "review": "reviewed",
+   "shape_hash": "bf957e227f1cdd724f6389e10421c87913e2a6f35183918fa85e88c70eaaed7d"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_runs_by_execution_id_rer_beff52",
+   "type": "endpoint",
+   "hash": "69a7828b2f6135c44a23835c1f225b1bb9f826f4ee86aab00ce5c35cd2b4f65c",
+   "review": "reviewed",
+   "shape_hash": "f3f4fac36a227541fcd01a28293ff3c07a5372dca68a56f0fa7c814c34190645"
+  },
+  {
+   "id": "platform.suites.post_by_suite_id_validate",
+   "type": "endpoint",
+   "hash": "5c415987a3271527abefcaee6966c5845d394611e38edd84c9f63ff104e414e5",
+   "review": "reviewed",
+   "shape_hash": "a10d3b96334197debadace8d0f06ab46c0fc8d087865e71cb4333744458e66e1"
+  },
+  {
+   "id": "platform.suites.post_root",
+   "type": "endpoint",
+   "hash": "9d0afa70fbb8866f287aab1530f4faa13910500905c43f79a97a35ff6d17494f",
+   "review": "reviewed",
+   "shape_hash": "f5fa1eb29f7739d408b4cd3610fc4d7e42d2442cb8ebb0813e253c95274e09ac"
+  },
+  {
+   "id": "platform.suites.put_by_suite_id_composition",
+   "type": "endpoint",
+   "hash": "3c4ec840e131c64cfd95c91f005b4f11d435aaf97890f7b37b01a54906c09936",
+   "review": "reviewed",
+   "shape_hash": "6a2c713d4cf7fef14f369bca69085f31504c152dadaaa7c051d04098903f58df"
+  },
+  {
+   "id": "platform.users.delete_by_user_id",
+   "type": "endpoint",
+   "hash": "863199019aafe306932ae877809eb1a434d52e3a2ac0031e74364bee4f83619f",
+   "review": "reviewed",
+   "shape_hash": "df480702b7bbb5a36f651aeba1d999eb54b7a3e43d932bf1f045c4159c810421"
+  },
+  {
+   "id": "platform.users.get_root",
+   "type": "endpoint",
+   "hash": "a19dfd6cdf2be4c2e2ec14c46d032b4c122854e0f9e0689beef47f1d22977387",
+   "review": "reviewed",
+   "shape_hash": "ac9c078acbc422ca87e2ec5ec72cede1f7c1c5adc6ca71de220ba2b7f9eb8c83"
+  },
+  {
+   "id": "platform.users.get_roster",
+   "type": "endpoint",
+   "hash": "c2cd1ca49693fbc563d9e900ff0574f73474b77e7fcd98becd16f1159b9a98fa",
+   "review": "reviewed",
+   "shape_hash": "cccc5b904b73b3c01e79e0ac7f3e534be80d905bad39a025ac74d46d9138961c"
+  },
+  {
+   "id": "platform.users.patch_by_user_id",
+   "type": "endpoint",
+   "hash": "79816b6c8d9421cf1cfdec4cd40eea9a6aa0a23036a4db310ee740a6e429fa8c",
+   "review": "reviewed",
+   "shape_hash": "41f48943394e6091526a07e6bffda8ca5db10be48bdd2196f45ba4e472f978de"
+  },
+  {
+   "id": "platform.users.post_by_user_id_reset_password",
+   "type": "endpoint",
+   "hash": "e3b6796bb1bc707b3fc5b995dc9ed63d944eb7dc0baa853f5547dd8b5b790c5b",
+   "review": "reviewed",
+   "shape_hash": "8240cae14b4d6ea559a3231358d8c8e53d0b07ceb6c9a77c3157882eb2729299"
+  },
+  {
+   "id": "platform.users.post_root",
+   "type": "endpoint",
+   "hash": "7190d98d4f602da0975c170868b73f5bcc6f6ef74d5385ca70f6d092b96a6d0d",
+   "review": "reviewed",
+   "shape_hash": "1ec8cade854d89ab8ad82b2ed67226d2a333d367ed3c6d7abcaaed577bcf77ff"
+  },
+  {
+   "id": "platform-service",
+   "type": "service",
+   "hash": "17a92ae26a8abf3e8e9820b8e34226005e8968aa1deff2c782a2e63f1aef7cc3",
+   "review": "reviewed"
+  }
+ ],
+ "call_projections": {
+  "platform.activity.get_root": "1d8035e3ebf2258cc774c82576ed4da979cb77bb65a1a8e638201328907b9287",
+  "platform.adaptations.get_batches": "e42193f6498b7a0f7a83a114409b0d57e5ae2c96e5ed46869dfd99a6c646003f",
+  "platform.adaptations.get_batches_by_batch_id": "17251a820e81fb78a6b422706119b8ed78da26a91d3c2219c20333090cab5a59",
+  "platform.adaptations.get_compare": "df67f1cab6928122361104de9a6532e5cc845dabd376479bfa3da4ec2a041726",
+  "platform.adaptations.get_impact": "d65f4835fcdb031f62a1628ce7e0697340debe44cac4fa6b87a323eb0e5f4ebd",
+  "platform.adaptations.get_impact_bulk": "7f9d8f5e3324d99d15314e08dd4368f0488dea4b9dd1939d976926d75a8b0ff8",
+  "platform.adaptations.get_impact_summary": "f7cd901dafd9c0c6f0937d92e8ba029ed13543984f42cabafcb224eb0a272e7b",
+  "platform.adaptations.get_refs_drift": "4bf9db81fead59f97caa367561e417711bb2ef6f4a494b1cd3473a4af4e7ac6c",
+  "platform.adaptations.get_stale": "6d055b41d7175237bed920dcb92341e8e72d905548c62f08f0402bc87099c302",
+  "platform.adaptations.get_unindexed_steps": "cdc6c978995e75cdda63a352ddf73d47e23eff4a30e5846b5268cf3530ebeb85",
+  "platform.adaptations.patch_ops_by_op_id": "3ed1afbe60cb47be7b3eca606bb08c4c09de59072f6299f90ae80e5b86d920bc",
+  "platform.adaptations.post_batches": "d9a196b60da289b1ca741133bd0372848f7637473dede0bb3b4e2f05de462781",
+  "platform.adaptations.post_batches_by_batch_id_ops": "b637e380cf734ad5edb60579e0596f8289e8dd462402148a533a9e776fed0808",
+  "platform.adaptations.post_batches_by_batch_id_rollback": "bd11a940d3884f2026592b479a3a46c1adebcfec762fec45153138543a5b132a",
+  "platform.adaptations.post_carry_batches": "b19000f3ea1f5f20a1f8c2afab6ae9abb96aa4ec90db786bb4a189d2ae5e7660",
+  "platform.adaptations.post_catalog_diff": "e099cf2d6a6215da267d8c8a8b5bada0d02e6335dbbfcfaeac524d9e59711173",
+  "platform.adaptations.post_ops_by_op_id_apply": "cab45c5e52c7f90b200d9d577429071620b0ffa1585b2c32cd1fc09d435fb544",
+  "platform.adaptations.post_ops_by_op_id_skip": "f93e684bf0cfcf83edf3fe9e940cb4c39e6e63690c3fe6eff4a345359f7adffe",
+  "platform.adaptations.post_save_check": "245733246b968d74a69ea86351157db4a6d6012b0eae20d46a9009306d53920f",
+  "platform.adaptations.post_submit": "c6b7d055f1ae6b6673c40ae26c9cc6050e8d0f4f43661ed2e0d96135df00339f",
+  "platform.adaptations.post_submit_batch": "d27ef9677d7fdc232baea8e08e4e44755c35e5b49e2a543a66006c96b56c4bf1",
+  "platform.adaptations.post_submit_suite": "142ef0e2161a1672a762616fdba97a6b344b81303e8adda395589c937c1c0b09",
+  "platform.admin.get_audit_logs": "4cbc796bde88241291a10b38abecf970d0cb257afe543f53b4c47bc31f42e4e2",
+  "platform.auth.get_me": "93e31578850a31f86b1033e1ecca1b2b1f529fec320fb648584a682eb16ee772",
+  "platform.auth.post_change_password": "ba63db6900ca50c66621373809c66482f22a8c85315fdd6a2e1a7c87ff807d20",
+  "platform.auth.post_login": "055d319a06c3f98deae88fe842aae9dad1d6d6f59523ec26ced6ec79bc558517",
+  "platform.auth.post_refresh": "fd9ca1fe384e5193741fc23b158890290a9fb2009876e49e59f3a7607a4de5b1",
+  "platform.auth.post_register": "76215dc9a2b9e2fd46067c7e1e861e0a2a3503dc768d1d6ecaedf50090c2e70c",
+  "platform.auths.delete_by_auth_id": "f1bed6f3e1e2c61aa8ec69f5e69783275493207735e638136b7c04bea2abb554",
+  "platform.auths.get_by_alias_references": "e75640cb5e86d1e9df2e12840b792c075c9964031dbd84f72da75253c4af98b8",
+  "platform.auths.get_by_auth_id": "2c2a61f1c81f8ba10b73a7c27d0b96faf1e994883e8081d83f6bee94e6b35bd2",
+  "platform.auths.get_root": "e25747b8bb8f8c2babce7a8e827416c64b55e1a8b5c6493aa61e43577d5ba10e",
+  "platform.auths.patch_by_auth_id": "eefac63d832fd7d7c56625eafe7ff24bfa586313277739e032f850604e88b218",
+  "platform.auths.post_by_auth_id_test": "b7bc29a452f84e43cddaef7de95d2c1ef17eacbd486ba2a63652f38a75985c74",
+  "platform.auths.post_root": "f672039d951be77d8963228ce6583f9e2798a5e8eefc533f085cade36ff43e2c",
+  "platform.board_cards.delete_by_card_id": "5f04692f78d727b9ff085e259ad38deb474ab56eb84b0d18ffbed2342a56634e",
+  "platform.board_cards.patch_by_card_id": "87d1cf6774dee48d9ae7a8ecb35c5ef456c1f536f7fd339d8a8f03d428da2fd3",
+  "platform.board_cards.post_by_card_id_demote": "bd859d271cae4d36ba813f591605d0b0bebbfd02b56f3ca00215d0c5b2efbb61",
+  "platform.board_cards.post_by_card_id_promote": "873ebb9bd9ba59241e8be3f24d23f1f1afc8a3ec44215b030a6340865a86d00f",
+  "platform.board_cards.post_root": "be4009ac5acdb370cddf9c57d6ec9737c2cee1ab7cd3cc71cbf196d2e89567d5",
+  "platform.carry.get_bindings": "284ededbd24ccc3b66f35d0ece8fdd77c0730380746576ef82656a83b47acc85",
+  "platform.carry.get_bindings_by_service": "5a3d532b803d83485fdfdadd40c4c901a419efe1971d2331ff5bac5cdb92120d",
+  "platform.carry.get_bindings_by_service_fields": "78c017bb18e928b228a5dba9e93c7092267166cdb908a632d30049adf3c8eaf2",
+  "platform.carry.get_defaults": "d48e9a62d066f9654d67d161db492ab5575ff0199ad0fecb9467995fae140181",
+  "platform.carry.get_drift": "113d7577200a9a31ccf23ac05121610a1992dcf35c42cf83d04049cb4d55ba9c",
+  "platform.carry.put_bindings_by_service": "d2b84bf003ba988859e58b885961171a7c703b5cee555218b57a4f9dab502d55",
+  "platform.carry.put_defaults": "a72cf537b9521121ebb5d0cd3ee964e236a38ab87fb3b7e09e7b9a3df046c14f",
+  "platform.catalog.get_services": "a202493c7abc239f06cce1c33aed81e80733135da635dbb12d523a8f91f35fec",
+  "platform.constants.delete_by_entry_id": "830304bcda5628eb89d625568fb0243b63238c0782322f408947c6ad46eacfaf",
+  "platform.constants.get_by_entry_id": "91ca91032897ec50e131ca7d172ffe1aaeccfd68b719565d7dc2f019ae3c7b75",
+  "platform.constants.get_root": "2c5a3ad401f66856b5479267bc89b2df70799e4ddc7e0eb953fca55565d46475",
+  "platform.constants.patch_by_entry_id": "e7c7c43f274c56ad740b099ebfa7d22f1965b9dd0abf5ac8e2f34933a7cec54f",
+  "platform.constants.post_root": "4262d98f7a5c1e39514a47cd6ae5167f33ee74f67c73b7acf69bf15a12912728",
+  "platform.data_sets.delete_by_dataset_id": "1f6a1e20124bf15df4d3caf0253d2ba21a0f08c986cc60f8d37b3f8457060ef5",
+  "platform.data_sets.get_by_dataset_id": "fb27bdc0c2e1bc1639c73a1c5fe7f031dd5501738707f2edfd063e40aa42ad46",
+  "platform.data_sets.get_root": "568a6c47d26bb36c3427473bcd6989178a3a2b452addab272f9333f56aa9eea1",
+  "platform.data_sets.put_by_dataset_id": "d0e612bf6d3cf8eeeffab926e301024442c8177407592c8cf4c11bd7bf3dc29f",
+  "platform.endpoint_catalog.get_by_endpoint_id_full": "f7089f8d73afd74d8f1e0cfb1304785f6719b1f0ff1f5bfe8b63ca7d0fe6c998",
+  "platform.endpoint_catalog.get_by_endpoint_id_projection": "fbd2ecfecec654b79a3270ecb1aed3b9e22b57c023e3aa5ce1c5003507e87314",
+  "platform.endpoint_catalog.get_by_system_id_lines": "64f6149b3117673236e65e2a505166420f47a0780eae825d113a2474ee777768",
+  "platform.endpoint_catalog.get_list": "07e2e538826f1511ef530659c115e3bf1f4f20828b4e50159f90c5c2ce37313a",
+  "platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108": "4c5f27ba164ce46c7e8845f10c9a8276d448f039010606cacc29e00034938e64",
+  "platform.endpoint_catalog.post_resolve_paths": "672feb72e14437c15f86137fbc5fb51f0af0d5e6481626fe3ac988d20f9739af",
+  "platform.endpoints.get_by_endpoint_id_board": "e591b59f034485e90642f021cffaeef23d3828227f5fd5d3fadef1278e92fcda",
+  "platform.environments.delete_by_env_id": "91ee73fffc8346ecb7f1f43316853265ebb421bc27d2f52d729ef6acd5bd063f",
+  "platform.environments.get_by_env_id": "1eda1d2e7a618c9ee5e10cfe58dd63f0fcce98f7ff66ab11f3a84c36014fc2d2",
+  "platform.environments.get_root": "90b7cb7cdb6238740f84b3dbc8c0c94a3dbe289046cab4219288eedbafd2d666",
+  "platform.environments.post_root": "1bd08dc77654ea8a3a3612bd0b8c937d16f04f8517ac2827e32e7aa009d95d2e",
+  "platform.environments.put_by_env_id": "2f0362896af5502015e06ecb7e53a48942303c5260d91db99f13504fa5393c55",
+  "platform.executions.delete_by_execution_id": "db59905be53540dd27fa77d3016d8de85d3766f98aade1b6155d02da6c69c3d7",
+  "platform.executions.get_by_execution_id": "14372b8648fda9da612a2555a551fc4c24670893b1c89d1fb2f548cb65643612",
+  "platform.executions.get_by_execution_id_case_artifact": "27cb55fc9ed0f8992ad80ae124980181728308cc1b977213663aceafb3066c3a",
+  "platform.executions.get_by_execution_id_debug": "653f4b3e6154d350bf116cfe9f7099ac7102b4f130840da6d0e2866be1131e90",
+  "platform.executions.get_by_execution_id_debug_output": "76fde5126c6b30c0a8cae39f8464e121ca1b51fa4ecaed182429a3ecb0ca3d3a",
+  "platform.executions.get_by_execution_id_events": "37b58b8463fb318be8fa2e58e84fed6f00f69f6bc828b858418de011431686b8",
+  "platform.executions.get_by_execution_id_events_counts": "d64e41e760bb2eceac2edf5f28da9e51ab0abe2296e352068164301aabcc87c8",
+  "platform.executions.get_by_execution_id_events_stream": "38fa66380d35fc1edb8abe85095ecf8d212254947c66bafcbf0976714503baf6",
+  "platform.executions.get_by_execution_id_rows": "8e6572757a71392e0a7c99e512cadc54f34b4b63b9a9e5f3deab56c11d3f5c9a",
+  "platform.executions.get_by_execution_id_scenario_snapshot": "45340b4edb37ab0251257f92a145184ee4e9d6c17352baf7e6a1dd446df20fe5",
+  "platform.executions.get_root": "26d16b1455c8e60ebfd4ce12d9ed4ee258c292a7e27ebb656a35b06604ed5d29",
+  "platform.executions.get_summary": "484ba875e33a6569444bb87e192a44a1618dd7c9cc555aec9498c7e6dafe025f",
+  "platform.executions.post_by_execution_id_cancel": "e4aee9d2e4331c0f2adcdced666150bf089e3096d7df145c2f0208965cbd5988",
+  "platform.executions.post_by_execution_id_debug_command": "67e51bedd4d13b50392fa41379bb092a7b6f730f13ce0bff2a96838e5f75d020",
+  "platform.executions.post_by_execution_id_rerun": "2eb64b4e671084dc2bd4ef10ce947382a8e63174b148cb2df78213aab998e431",
+  "platform.generator_catalog.get_by_kind_full": "f6ea63c7b81b50cb3d1c427f57212e8582193c49da6699005bb33450274731e7",
+  "platform.generator_catalog.get_root": "13235fd6f038f3ff1d40156006d4d803ce57665e0125f16e5be15bedf2b7bce1",
+  "platform.handoff.post_root": "b2e1ccfcadb22b949cf527e9b19d391a7b1d9faab3783983995ba627b3c440d4",
+  "platform.health.get_root": "382c0b0bfe3fdb28cf72cefbc92c0b03eabf6691b801649da3a7218a01dee9a0",
+  "platform.integration.delete_platform_credentials_by_cred_id": "66530ef9ffada23d5d3f859f2f9d2aef2ab1559e6a3fd2d82b1b7832797fb257",
+  "platform.integration.delete_tasks_by_task_id": "4f9ada7d4946dffd87ba9dfc8665c8651f2f6307949560492ee6adaf2e67321a",
+  "platform.integration.get_platform_credentials": "10e79821aed6a4c0233db841db92262dcf76fbe839b236621b47c694eb84e9d9",
+  "platform.integration.get_tasks": "674c34cb985f65a415c8766e4e28acc73d5edd0c657bdaae4e27afd4e43e9360",
+  "platform.integration.get_tasks_by_task_id": "d8be56b0b53eb4d06d491434de64ba4ff00f5ea3f0a8b59c3a67e3097955d0f5",
+  "platform.integration.patch_tasks_by_task_id": "11f542c1d45a4e037abfa32be2146ae828f0154512903ada3cb62ab80fa182bf",
+  "platform.integration.post_cards": "bc16e4c5b1334a68eabf21bed93e4f3933b9d0e2d7847efd3fb63a90f85b6f15",
+  "platform.integration.post_platform_credentials": "9931621a044d77fbaf4c65cf982b7a14da3984aa1d6e36e75db04861d76eebb5",
+  "platform.integration.post_tasks": "e11b7068ce084e8b902cba20539592e612b6e5b173b7cfb36dc3d91f2e6d37b9",
+  "platform.integration.post_tasks_by_task_id_run": "37b9bd4ac9803749b2b9eb1cf5d126689275d31187d03880b69b25d5bb13a0dc",
+  "platform.me.get_preferences": "6dcd32164c5d73083826228a84cf87917d9b9a89369871d283b74903d6045aa4",
+  "platform.me.put_preferences_by_key": "c5cade6dd6e97430e0d416cacaa8df56ee0b29c377febea42a05e8b6f002f24e",
+  "platform.notifications.get_handoff_unread": "9c8b7b1bc4d7f35724aa06d243033573fca9a7508aec2b2e860a2495d1d7b4d9",
+  "platform.notifications.get_preferences": "188b46f6614e444e5b9981680f09bcc4238fcfc0833fe123a1443cb846ce1aa0",
+  "platform.notifications.get_root": "610419210c9a3565556e0e6f6f601ab56ff4d88f7efb5bc6d68925c7f3ae4423",
+  "platform.notifications.get_unread_count": "aa869825f6b63824a7fd286938bebf986cc08b9404cf3cbff97c09b09fac2752",
+  "platform.notifications.post_announcements": "1c36b5fcde750978c74797ef1729960fdf99400b6728ce7b2d1bb6085fc5d3c3",
+  "platform.notifications.post_read": "101e2a64b264fc337b0ca0e0b6254406c21c79afc9eea6397c90922f31ce0b07",
+  "platform.notifications.put_preferences": "8f3a521fa81bf56bb5e01088136fbddf3fbd4e8371aca2faae7996ab375afaa8",
+  "platform.query_views.get_by_name_rows": "37f1a99f8e43bb46e805ceef595793710aab40410d5b5e0257c00fc157f196a2",
+  "platform.query_views.get_root": "92d162af357df454528c9344ffbe534693d515958f9c96d0eb90506f48f139b9",
+  "platform.report_definitions.delete_by_definition_id": "f446088617d06afb03f2862984c7e8dde5c57b41cbdb152ec2c06dbcb6d0bb01",
+  "platform.report_definitions.get_by_definition_id": "b4c80ffac2350578038f4bd43ade2d2cf6e6ef509e1bd6df23890f1d5c6a2a9d",
+  "platform.report_definitions.get_root": "5c40316c1699fd230e1e75532a957fd862ecf184ecdf3f9ef370e78985a78ae2",
+  "platform.report_definitions.post_root": "965a0be9f893e9258ccac93980436b7fbcf509b02ce20d49d14f2d6f446e8619",
+  "platform.report_definitions.put_by_definition_id": "adf4bbecf1c9b7d73ad29e0e441b95ca3c332f3bd47566d985e42f0ff5c088af",
+  "platform.run.post_precheck": "69f9340da34a2262100cf37954cda600723e563875746f9832698546b0199968",
+  "platform.runs.post_root": "9cc65c77284d85745d341e09ef95fea19fa5f06607204d695618d70329a7355d",
+  "platform.scenario_filter_groups.delete_by_bucket_by_group_id": "734e1faba357310fcc2b89afcadf57dc11a4b411bbc028b7ecc51915b7fdc2ab",
+  "platform.scenario_filter_groups.get_root": "808473999b3f9202673953fdab98756c0a818e7bc325af614af1b597d762f093",
+  "platform.scenario_filter_groups.post_root": "be0b4a7cabfb102a37bbc7cc5fa15ab6930df05dfb6c76e3bdde0bb698208fdc",
+  "platform.scenarios.delete_by_scenario_id": "8869f0d1f916b5cf579d77e969baba5772f497cb1944fbd05c4870313cc31ab7",
+  "platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300": "c4f62d0f48ec4d94fe3763d4a0879ef3df61355b4f8ea0cfad50f25d33862402",
+  "platform.scenarios.get_by_scenario_id": "52f05fe06d0e06bd66fcfdabdfbd262f411fe1971c9ec3de7e3165eb662818a3",
+  "platform.scenarios.get_by_scenario_id_draft": "16bdbe8a0429695f4f483933d644890251d1b885083ba9091460650a24538a16",
+  "platform.scenarios.get_by_scenario_id_export": "ac06cfe81d076fb51d7f492dd30450bb501669fd1f08ac09b91f3b65c1d4ed8e",
+  "platform.scenarios.get_by_scenario_id_run_schemes": "307bdaa515f71f6e662c983054c151d04a20b3f3b6b4f44253e9e8aefcc5f064",
+  "platform.scenarios.get_by_scenario_id_suites": "1770509ce46807dc695613259e0176b5463bce3aa734a7669c781c039b18fefc",
+  "platform.scenarios.get_facets": "65c956d56be82280387941e0f611dfc6c3a064abb66f5450fdaf2aa72d27c585",
+  "platform.scenarios.get_root": "a359ffc217226298a59b113ef7bf8eb4944fe37e5748cd1ed897c4f29d2f8e19",
+  "platform.scenarios.get_signals": "47c0eec39030ed9c99e7716b3b268f18dd431aa4da919730fd512d947830fe81",
+  "platform.scenarios.post_by_scenario_id_copy": "7e0623c658e09e436cdd176345462cf5c1f5eb3f90939ee70edaf6dcb285a208",
+  "platform.scenarios.post_by_scenario_id_data_sets": "3092642eb984c9fffa58d79f5834f7955f451b14557ff58e8262b63d608bd3ff",
+  "platform.scenarios.post_by_scenario_id_publish": "37d7fee1dc001f2549ad0e9e42d2c175e86df2419e05a51e98261db34912454f",
+  "platform.scenarios.post_by_scenario_id_run_schemes": "01953e12ca3646fba67e3d8cd9964e1e4e62d57b64e0d7f7980914e14b35b703",
+  "platform.scenarios.post_by_scenario_id_star": "704fa5ace587f4144eb9acd7d464b5619154c6268cfa7af100aa317e1b069ee6",
+  "platform.scenarios.post_by_scenario_id_unpublish": "74227565dba1b356a4759ae9afd7ccd80d3e65b1933a421c8d1a5038ae0abbb8",
+  "platform.scenarios.post_import": "1d6ca5f0b3db5a60c437751102b3ff571af665eabe98c30a985c250b9cb2a392",
+  "platform.scenarios.post_preview_plate": "046b7b6eaf26c0d78673bd12f19b84e9adc65b5115958064e3d0e43b405a7924",
+  "platform.scenarios.post_root": "a405905aa9a0f5e7b8f41263e00535de03acee27f098bcaf6a14e545544736ec",
+  "platform.scenarios.put_by_scenario_id": "3bc030a57affd12cd278cc7c4bd200122e9cab22888a80f4f9a03c572884c603",
+  "platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id": "aea4b939a2df0b235f24c23f512a00bb1464b8fb4b41de83787287f3babd487e",
+  "platform.service_aliases.delete_by_alias_name": "c866d5b9ab5462d64614beee57d6a9d195c3ff7a73d4520fa3ea8eac1bee60b5",
+  "platform.service_aliases.get_root": "d5db0c2fbfefbd3abb1898bfcb72be5382b68ae0b31667cd0b6e276abe351f94",
+  "platform.service_aliases.patch_by_alias_name": "b1ae8a1cf040b28f306eeef4231c77dc9330c591d84cc1c72c313013bf325b02",
+  "platform.service_aliases.post_root": "dbba3c2fcb1384fedc6e807599229b7afe8fb33aea2051084d2268cb145416ff",
+  "platform.services.get_by_service_grid": "520dd6f583d000defd55fe90dbbd519870ad356ef56214efb1c1fbead5787b45",
+  "platform.shares.delete_by_share_id": "d6d6a628b2adbe8fe0092a4c6210f5058aa1c48d3af5821fccd5bb2694580569",
+  "platform.shares.get_referrers": "fa81df22fd1e42cf51a9c9bc7a4aedb23497f35e6e2133823bcf46b34803b272",
+  "platform.shares.get_root": "2fbe37efebacadeb3575695381ca8b47431d1ea3ce055abaedac58e0f7401b70",
+  "platform.shares.post_by_share_id_fork": "0aff70faa55912fc7298b766572028e51798e5994da58c400d1a2026fce228a3",
+  "platform.shares.post_root": "80ee8bc174eafe4ed6105b275b68fa8624b8fffd870b8ed2026f501e1662a108",
+  "platform.strategy_catalog.get_by_kind_full": "838cb37da25e3633b5487c6c6ffcc24b596a77b25f82669f6c3cec4cf64cbed9",
+  "platform.strategy_catalog.get_root": "927e7b986815e17c47fa71bdc024676c03838af1b1cfe33cab2f9e404605f3cf",
+  "platform.suites.delete_by_suite_id": "ca230c0215fc6f6d4859407aab40cb73875dfb0472ddea73ddf4f2fe5e4b827a",
+  "platform.suites.delete_by_suite_id_members_by_scenario_id": "6dcda76067ab8f37c066697e7465de791c4aff2c447c7c9e0ad47e436245cec9",
+  "platform.suites.delete_by_suite_id_publish": "0eebb5eb4dbacc8903e30a91ff992b49ef41d9eb5cc69b0e5e1ec2d0b0a42fc9",
+  "platform.suites.get_by_suite_id": "e3bd313707bb94d5b0acda7aed3066089fa37bbb60ab209ad366f3c3fca0bd3d",
+  "platform.suites.get_by_suite_id_runs": "95d71af183c1008bef456f02525e0ffdda97ff07ef224b77966c0b032ba9b1a8",
+  "platform.suites.get_by_suite_id_version_distribution": "a8258c52fa51d72c5db14de9ba901f58d3b4b14eb706cea07b9cd4fdd4a32ce3",
+  "platform.suites.get_root": "b4b88d2472d3c49bb9f196157e72d83b9aac3817b378a5d5d84cfd3a80adaeef",
+  "platform.suites.patch_by_suite_id": "2ae451c6eda2484df448dce0e9d829e5398da7482918392d37cef2286a79b82c",
+  "platform.suites.patch_by_suite_id_members_order": "da8ef0d74e08b3bd0905a311e96e8f3f872c803cf43b8c34a8bee84115e7af11",
+  "platform.suites.post_by_suite_id_fork": "2ab11c5d64c219a923d06059803d149d68ba1a5cdc1d313254aab6e81c728710",
+  "platform.suites.post_by_suite_id_members": "e550de85b2aa06b496c701702ee4d74ac4b6863ed93a7d23ac31258b9ce09d00",
+  "platform.suites.post_by_suite_id_publish": "459ecc1c0840c398c4ef4a9431405fa78986766bd90ee6db01815e39caf26c4b",
+  "platform.suites.post_by_suite_id_run": "7885b41b2302a95879e6ce2b276626564e2f2443a3d245db2d4581d2e15d4405",
+  "platform.suites.post_by_suite_id_runs_by_execution_id_rer_beff52": "c1671376e1b7a292df71df283d3ab59496faf191ba5e9636d411a28b75675edc",
+  "platform.suites.post_by_suite_id_validate": "d01e6c5dd14e0c353d700ae0f7d7ed84aa6e51d15f7f8510575fbbdf38efb08a",
+  "platform.suites.post_root": "c139fa67911f9fa0afa135d5d24c817505eccda27bde73b61147040b12466866",
+  "platform.suites.put_by_suite_id_composition": "0fca8bcbf3021160c2f4939a196a8da8a4b81cd4e99dde99a627e28fa1af1b50",
+  "platform.users.delete_by_user_id": "0bc73d0578493171f4c699b0c66c6d528ac2e53e1b19ad41e38e021145b5d3db",
+  "platform.users.get_root": "2fae90704fb3c7fc20eb7c983d7ffef163a9ce74a8ae3e77c19f82584ce8205c",
+  "platform.users.get_roster": "f1662e12fc0f2a58db21a8cb82cca13d75e053fc65b5533c03fbab146fd491fc",
+  "platform.users.patch_by_user_id": "562b35aa726137fa289a2c4f1dd8a0f5b894f8eb1e14db04392f4747c6ef701a",
+  "platform.users.post_by_user_id_reset_password": "6c5415a7051dd4875acbc59a6dd88e2d99ac7691834dfb730a07b4a071608796",
+  "platform.users.post_root": "356aca5fdf23c05e2071e9ab32144d51ed2ebe5c0b5f097482be904249f1b131"
+ },
+ "corrections": [],
+ "warnings": [],
+ "summary": {
+  "endpoints": 175,
+  "statements": 35,
+  "terms": 28,
+  "services": 1,
+  "common_terms_frozen": 0,
+  "draft_objects": 0
+ }
+}

@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/integration/tasks/{task_id}/run",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "立即执行(任意可见者;平台模式冷却 60s —— 方案 §3 操作表)。",
+  "id": "platform.integration.post_tasks_by_task_id_run",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "integration",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Run Task",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/adaptations/compare",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。\n\nR22:读面全员(差异本身不涉编辑权)。",
+  "id": "platform.adaptations.get_compare",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "adaptations",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Compare Revisions",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

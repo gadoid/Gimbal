@@ -1,0 +1,12 @@
+{
+ "data": {
+  "anchor": "A2.3",
+  "id": "st.user-mgmt.admin-only",
+  "kind": "rule",
+  "slots": {
+   "about": "cap:user.update"
+  },
+  "text": "成员管理动作(创建/更新/重置密码/禁用)仅管理员可执行。"
+ },
+ "type": "statement"
+}

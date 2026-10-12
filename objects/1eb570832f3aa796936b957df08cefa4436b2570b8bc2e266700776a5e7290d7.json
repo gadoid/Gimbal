@@ -1,0 +1,53 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "DELETE",
+   "path": "/api/service-aliases/{alias_name}",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "",
+  "id": "platform.service_aliases.delete_by_alias_name",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "service-aliases",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Delete Alias",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "成功"
+   },
+   "204": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

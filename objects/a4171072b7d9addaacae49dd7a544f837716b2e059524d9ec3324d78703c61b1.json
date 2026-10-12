@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "修改成员基本信息与角色(含降级)",
+  "id": "cap:user.update",
+  "label": "更新成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

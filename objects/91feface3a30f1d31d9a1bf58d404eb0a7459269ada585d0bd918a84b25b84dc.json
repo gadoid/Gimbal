@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "S1.2",
+  "id": "st.share.rule-owner-initiates",
+  "kind": "rule",
+  "slots": {
+   "about": "cap:share.ref",
+   "violation": "outcome:share.admin_proxy_rejected"
+  },
+  "text": "只有属主能发起分享;管理员不可代他人分享(防止借分享转移他人内容)。"
+ },
+ "type": "statement"
+}

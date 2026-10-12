@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "属主命名建组;每人上限 SUITE_CAP(409)",
+  "id": "cap:suite.create",
+  "label": "新建用例组",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

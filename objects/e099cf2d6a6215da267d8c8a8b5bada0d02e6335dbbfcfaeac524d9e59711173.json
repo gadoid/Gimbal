@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "POST",
+  "path": "/api/adaptations/catalog/diff",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

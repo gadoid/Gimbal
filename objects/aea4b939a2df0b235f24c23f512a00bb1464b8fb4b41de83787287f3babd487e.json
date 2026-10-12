@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "PUT",
+  "path": "/api/scenarios/{scenario_id}/run-schemes/{scheme_id}",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

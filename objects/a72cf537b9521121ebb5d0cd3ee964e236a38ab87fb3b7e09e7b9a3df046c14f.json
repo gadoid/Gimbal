@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "PUT",
+  "path": "/api/carry/defaults",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

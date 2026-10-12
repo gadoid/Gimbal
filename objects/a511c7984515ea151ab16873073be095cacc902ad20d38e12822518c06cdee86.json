@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "admin 不可替他人分享(§8.1;防止借分享转移他人内容)",
+  "id": "outcome:share.admin_proxy_rejected",
+  "label": "管理员代发被拒",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

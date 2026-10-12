@@ -1,0 +1,16 @@
+{
+ "data": {
+  "anchor": "A2.2",
+  "id": "st.user-mgmt.disable-last-admin",
+  "kind": "outcome",
+  "slots": {
+   "cap": "cap:user.disable",
+   "outcome": "outcome:user.last_admin",
+   "when": [
+    "value:user.role.admin"
+   ]
+  },
+  "text": "禁用管理员账户时,若其为最后一名管理员,操作被拒绝。"
+ },
+ "type": "statement"
+}

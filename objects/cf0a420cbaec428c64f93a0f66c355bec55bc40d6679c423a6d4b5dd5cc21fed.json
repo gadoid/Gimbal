@@ -1,0 +1,98 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/auths/{auth_id}/test",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "Dial the stored credential against ``url`` (probe service).",
+  "id": "platform.auths.post_by_auth_id_test",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "auths",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Test Auth",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "message",
+      "path": "$.message",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "ok",
+      "path": "$.ok",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "boolean",
+      "ui_kind": "boolean",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "status_code",
+      "path": "$.status_code",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

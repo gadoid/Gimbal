@@ -1,0 +1,66 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/endpoint-catalog/{endpoint_id}/field-states/validate",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "§3.5 配置编辑校验:plate 目录 + step.field_states 增量 → 合成态裁决。\n\n编辑器在改字段状态时调用:``errors`` 非空 = 拒(树一致性),\n``warnings`` 仅提示(required 落 carry / DESCRIPTIVE 进 form /\n目录外 stale path)。校验跑在合成态上 —— 目录本身一致但增量\n破坏整传一致性同样拒。目录拉取复用 /full 代理语义(错误映射\n同款:plate 不可达 502 / 404 endpoint_not_found)。",
+  "id": "platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "endpoint-catalog",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Validate Step Field States",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "field_states",
+     "path": "$.field_states",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "object",
+     "ui_kind": "json",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,119 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/executions/{execution_id}/rerun",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "按 ``config_json`` 里的完整配方重建一次发起(设计 §3.4:配方已存,\n重建即可)。语义与 ``POST /api/runs`` 完全同链(dispatch_run):同样过\nowner 闸、总量闸、数据集存在性 — 场景已删 / 数据集已删 / 方案参数\n越界分别 404/409,与新鲜发起一致。\n\n重跑是**新的一次独立发起**:不带原单批次键(原批归并视图不被新单\n混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,\n不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜\n底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。",
+  "id": "platform.executions.post_by_execution_id_rerun",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "executions",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Rerun Execution",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "executionId",
+      "path": "$.executionId",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "runId",
+      "path": "$.runId",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   },
+   "201": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "executionId",
+      "path": "$.executionId",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "runId",
+      "path": "$.runId",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

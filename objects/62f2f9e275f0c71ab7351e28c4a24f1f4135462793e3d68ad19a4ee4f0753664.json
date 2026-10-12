@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-ref",
+  "id": "st.story.share-ref.1",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.ref",
+   "order": 1
+  },
+  "text": "属主打开分享弹窗,选择「引用」模式和接收人。"
+ },
+ "type": "statement"
+}

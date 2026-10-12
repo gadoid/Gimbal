@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "GET",
+  "path": "/api/executions/{execution_id}/events/stream",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

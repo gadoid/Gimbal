@@ -1,0 +1,83 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "PUT",
+   "path": "/api/carry/bindings/{service}",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "",
+  "id": "platform.carry.put_bindings_by_service",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "carry",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Put Bindings",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "bindings",
+     "path": "$.bindings",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "object",
+     "ui_kind": "json",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "bindings",
+      "path": "$.bindings",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "object",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

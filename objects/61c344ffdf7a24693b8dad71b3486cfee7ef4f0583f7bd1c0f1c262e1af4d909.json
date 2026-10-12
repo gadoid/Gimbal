@@ -1,0 +1,215 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/shares/{share_id}/fork",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "转为副本(§7.7):被分享人把引用转成自己的副本,原引用保留。",
+  "id": "platform.shares.post_by_share_id_fork",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "shares",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Fork Share",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "memberCount",
+      "path": "$.memberCount",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "mode",
+      "path": "$.mode",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "scenarioId",
+      "path": "$.scenarioId",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "suiteId",
+      "path": "$.suiteId",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "suiteName",
+      "path": "$.suiteName",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   },
+   "201": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "memberCount",
+      "path": "$.memberCount",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "mode",
+      "path": "$.mode",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "scenarioId",
+      "path": "$.scenarioId",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "suiteId",
+      "path": "$.suiteId",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "suiteName",
+      "path": "$.suiteName",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

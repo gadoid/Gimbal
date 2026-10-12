@@ -1,0 +1,12 @@
+{
+ "data": {
+  "anchor": "S1.1",
+  "id": "st.suite.define",
+  "kind": "define",
+  "slots": {
+   "subject": "entity:suite"
+  },
+  "text": "用例组(suite)是一组用例的管理与绑定实体:属主把若干自己的场景归入组,按顺序整组执行。"
+ },
+ "type": "statement"
+}

@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "深拷贝到接收人名下(场景含数据集/suite 含成员);不可撤回",
+  "id": "cap:share.copy",
+  "label": "拷贝分享",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

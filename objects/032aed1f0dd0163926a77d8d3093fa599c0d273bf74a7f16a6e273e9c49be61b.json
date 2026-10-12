@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "引用(share_ref_received)与副本(resource_handoff)两种通知",
+  "id": "outcome:share.received",
+  "label": "收到分享",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

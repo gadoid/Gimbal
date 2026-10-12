@@ -1,0 +1,229 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/auths/{alias}/references",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "反查面板:谁在用这个凭证名(配套方案 §1.3)。四类引用,读时实时\n扫(单一事实源,不建反向索引);计数照给、场景名按 can_read_scenario\n过滤(admin 全量 / public / owner),剩余 = hidden_count(§1.4)。\n名字命中 ≠ 对象引用 — 引用解析按执行者本人池,文案须如实。",
+  "id": "platform.auths.get_by_alias_references",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "auths",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Get References",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "alias_name",
+        "path": "$.alias_refs.alias_name",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "base_service",
+        "path": "$.alias_refs.base_service",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "group_tag",
+        "path": "$.alias_refs.group_tag",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "alias_refs",
+      "path": "$.alias_refs",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "hidden_count",
+        "path": "$.scenario_refs.hidden_count",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "integer",
+        "ui_kind": "number",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": [
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "kinds",
+          "path": "$.scenario_refs.visible.kinds",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "array",
+          "ui_kind": "json",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "name",
+          "path": "$.scenario_refs.visible.name",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "owner_id",
+          "path": "$.scenario_refs.visible.owner_id",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "integer",
+          "ui_kind": "number",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "scenario_id",
+          "path": "$.scenario_refs.visible.scenario_id",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         }
+        ],
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "visible",
+        "path": "$.scenario_refs.visible",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "scenario_refs",
+      "path": "$.scenario_refs",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "object",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "场景在组内的成员关系(含顺序);库层组合外键保证属主一致",
+  "id": "entity:suite_member",
+  "label": "组成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

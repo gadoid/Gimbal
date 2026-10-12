@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-1",
+  "id": "st.story.admin.1",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:user.create",
+   "order": 1
+  },
+  "text": "管理员创建一个新成员(普通角色)。"
+ },
+ "type": "statement"
+}

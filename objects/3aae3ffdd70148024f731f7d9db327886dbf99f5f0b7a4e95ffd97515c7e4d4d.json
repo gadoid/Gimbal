@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-1",
+  "id": "st.story.admin.2",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:user.update",
+   "order": 2
+  },
+  "text": "管理员更新该成员的角色。"
+ },
+ "type": "statement"
+}

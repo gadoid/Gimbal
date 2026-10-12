@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "组成员数超过 SUITE_MEMBER_CAP 时 409",
+  "id": "outcome:suite.member_cap_exceeded",
+  "label": "成员超上限",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

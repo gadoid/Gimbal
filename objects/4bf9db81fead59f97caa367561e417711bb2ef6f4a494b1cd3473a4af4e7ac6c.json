@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "GET",
+  "path": "/api/adaptations/refs-drift",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

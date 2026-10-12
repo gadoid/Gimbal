@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "S1.1",
+  "id": "st.suite.rule-owner-only",
+  "kind": "rule",
+  "slots": {
+   "about": "cap:suite.run",
+   "violation": "outcome:suite.member_not_owned"
+  },
+  "text": "组只能纳入属主自己的场景;试图加入他人场景被拒绝(不泄露存在性)。"
+ },
+ "type": "statement"
+}

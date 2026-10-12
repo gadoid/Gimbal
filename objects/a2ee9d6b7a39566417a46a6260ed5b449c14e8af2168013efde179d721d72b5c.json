@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "被分享人执行时按本人池解析,缺凭证以明确原因失败(凭证永不跟随)",
+  "id": "outcome:share.credential_missing",
+  "label": "凭证缺失",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

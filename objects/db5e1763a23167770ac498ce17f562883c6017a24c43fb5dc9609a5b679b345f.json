@@ -1,0 +1,147 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/scenario-filter-groups",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "",
+  "id": "platform.scenario_filter_groups.get_root",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "scenario-filter-groups",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "List Groups",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "createdAt",
+        "path": "$.items.createdAt",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "filters",
+        "path": "$.items.filters",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "object",
+        "ui_kind": "json",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "id",
+        "path": "$.items.id",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "name",
+        "path": "$.items.name",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "q",
+        "path": "$.items.q",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "items",
+      "path": "$.items",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,163 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/carry/drift",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "",
+  "id": "platform.carry.get_drift",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "carry",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Drift",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "plateReachable",
+      "path": "$.plateReachable",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "boolean",
+      "ui_kind": "boolean",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "baseService",
+        "path": "$.services.baseService",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "orphaned",
+        "path": "$.services.orphaned",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "renamedSuggestions",
+        "path": "$.services.renamedSuggestions",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "service",
+        "path": "$.services.service",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "uncovered",
+        "path": "$.services.uncovered",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "services",
+      "path": "$.services",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "POST",
+  "path": "/api/endpoint-catalog/{endpoint_id}/field-states/validate",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

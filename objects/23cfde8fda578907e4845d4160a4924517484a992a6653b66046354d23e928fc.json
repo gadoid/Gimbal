@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-run",
+  "id": "st.story.run-suite.3",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.run",
+   "order": 3
+  },
+  "text": "单个成员校验失败时跳过并给出原因;其余成员不受影响。"
+ },
+ "type": "statement"
+}

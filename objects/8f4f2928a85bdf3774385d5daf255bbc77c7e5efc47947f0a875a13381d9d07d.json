@@ -1,0 +1,15 @@
+{
+ "data": {
+  "aliases": [
+   "用户",
+   "账号"
+  ],
+  "gloss": "平台的使用者;由管理员管理其账号、角色与启用状态",
+  "id": "entity:user",
+  "label": "成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

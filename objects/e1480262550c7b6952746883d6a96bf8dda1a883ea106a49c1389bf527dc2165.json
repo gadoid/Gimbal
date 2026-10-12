@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "A2.3",
+  "id": "st.user-mgmt.create-user",
+  "kind": "outcome",
+  "slots": {
+   "cap": "cap:user.create",
+   "outcome": "outcome:user.created"
+  },
+  "text": "管理员创建成员后,新成员可用其账号登录。"
+ },
+ "type": "statement"
+}

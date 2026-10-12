@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "循环分发 + batch_id 归并;防重按 (suite,发起人);总量上限预检",
+  "id": "cap:suite.run",
+  "label": "整组执行",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

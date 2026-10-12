@@ -1,0 +1,212 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/carry/bindings/{service}/fields",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。\n任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,\n配置页整表替换保存会删不可见端点的绑定值,须据此禁存。\n\n键归一(配套方案 §2.3):``service`` 允许传别名全名 —— Plate 只认\n目录服务,先 ``derive_base`` 归一到 base 再过滤。裸声明键(目录内\n无此服务也无其 base)无面可言,返回空面且不标 degraded(空是确定\n结论,不是面不完整);目录本身不可得(services dim 失败 → 空集)时\n无从归一,原样过滤 —— 退化为修复前行为,而不是全局面瘫痪。",
+  "id": "platform.carry.get_bindings_by_service_fields",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "carry",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Service Fields",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "degraded",
+      "path": "$.degraded",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "boolean",
+      "ui_kind": "boolean",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "description",
+        "path": "$.fields.description",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": [
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "id",
+          "path": "$.fields.endpoints.id",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "method",
+          "path": "$.fields.endpoints.method",
+          "required": false,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "name",
+          "path": "$.fields.endpoints.name",
+          "required": false,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "path",
+          "path": "$.fields.endpoints.path",
+          "required": false,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         }
+        ],
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "endpoints",
+        "path": "$.fields.endpoints",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "path",
+        "path": "$.fields.path",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "type",
+        "path": "$.fields.type",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "fields",
+      "path": "$.fields",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

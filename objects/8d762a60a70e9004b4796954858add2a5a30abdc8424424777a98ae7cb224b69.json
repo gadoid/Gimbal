@@ -1,0 +1,12 @@
+{
+ "data": {
+  "anchor": "A2.1",
+  "id": "st.user-mgmt.define-member",
+  "kind": "define",
+  "slots": {
+   "subject": "entity:user"
+  },
+  "text": "成员是平台的使用者,由管理员管理其账号与角色。"
+ },
+ "type": "statement"
+}

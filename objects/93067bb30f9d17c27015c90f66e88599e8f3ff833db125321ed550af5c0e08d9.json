@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-ref",
+  "id": "st.story.share-ref.4",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.revoke",
+   "order": 4
+  },
+  "text": "属主保存被引用的资源;被分享人立即看到新内容(保存提示已告知属主名单)。"
+ },
+ "type": "statement"
+}

@@ -1,0 +1,14 @@
+{
+ "data": {
+  "anchor": "US-run",
+  "id": "st.story.run-suite.4",
+  "kind": "step",
+  "slots": {
+   "branch_on": "outcome:suite.run_in_progress",
+   "cap": "cap:suite.run",
+   "order": 4
+  },
+  "text": "属主在该组有未终态批次时再次发起,收到 409 附本人批次深链(防重按人)。"
+ },
+ "type": "statement"
+}

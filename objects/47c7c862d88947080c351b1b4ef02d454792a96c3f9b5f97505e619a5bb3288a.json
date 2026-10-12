@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "全系统仅剩一名 admin 的状态;对其降级/禁用被拒绝",
+  "id": "outcome:user.last_admin",
+  "label": "最后一名管理员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

@@ -1,0 +1,164 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/shares/referrers",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "场景的全部引用人(§7.11 防误伤名单,属主治理面):直接引用 +\n经由所属 Suite 的间接引用(§7.6 判定式,同一引用人合并成一行)。\n\n保存提示与「已引用分享」徽标的数据源 —— 此前两者只查直接引用,\n场景仅因所在 Suite 被分享而间接被引用时名单落空(重构方案补遗)。",
+  "id": "platform.shares.get_referrers",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "shares",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Scenario Referrers",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": [
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "direct",
+        "path": "$.items.direct",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "boolean",
+        "ui_kind": "boolean",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "granteeName",
+        "path": "$.items.granteeName",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "string",
+        "ui_kind": "text",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": null,
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "granteeUserId",
+        "path": "$.items.granteeUserId",
+        "required": true,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "integer",
+        "ui_kind": "number",
+        "value_source": null
+       },
+       {
+        "assertable": true,
+        "children": [
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "suiteId",
+          "path": "$.items.viaSuites.suiteId",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "integer",
+          "ui_kind": "number",
+          "value_source": null
+         },
+         {
+          "assertable": true,
+          "children": null,
+          "default": null,
+          "description": "",
+          "enum": null,
+          "example": null,
+          "name": "suiteName",
+          "path": "$.items.viaSuites.suiteName",
+          "required": true,
+          "source_kind": "independent",
+          "state": "form",
+          "type": "string",
+          "ui_kind": "text",
+          "value_source": null
+         }
+        ],
+        "default": null,
+        "description": "",
+        "enum": null,
+        "example": null,
+        "name": "viaSuites",
+        "path": "$.items.viaSuites",
+        "required": false,
+        "source_kind": "independent",
+        "state": "form",
+        "type": "array",
+        "ui_kind": "json",
+        "value_source": null
+       }
+      ],
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "items",
+      "path": "$.items",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "array",
+      "ui_kind": "json",
+      "value_source": null
+     }
+    ],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

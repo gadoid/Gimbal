@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-copy",
+  "id": "st.story.share-copy.2",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.copy",
+   "order": 2
+  },
+  "text": "平台深拷贝资源到接收人名下(场景含数据集;suite 含全部成员),副本写来源三件套(「副本 · 来自某人」)。"
+ },
+ "type": "statement"
+}

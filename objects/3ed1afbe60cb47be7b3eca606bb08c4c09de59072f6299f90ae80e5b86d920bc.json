@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "PATCH",
+  "path": "/api/adaptations/ops/{op_id}",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

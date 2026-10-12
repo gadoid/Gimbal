@@ -1,0 +1,9 @@
+{
+ "data": {
+  "description": "gimbal-platform 自身(自举)",
+  "name": "platform-service",
+  "title": "platform-service",
+  "version": "1.0.0"
+ },
+ "type": "service"
+}

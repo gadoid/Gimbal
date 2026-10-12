@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-1",
+  "id": "st.story.admin.3",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:user.reset_password",
+   "order": 3
+  },
+  "text": "管理员为该成员重置密码。"
+ },
+ "type": "statement"
+}

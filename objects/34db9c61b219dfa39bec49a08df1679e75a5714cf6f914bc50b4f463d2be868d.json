@@ -1,0 +1,70 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/scenarios/import",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "导入场景（R19）:按 meta.plate 声明的修订经 /convert 校验后\n入库;无 meta.plate 或声明的修订不存在 → 422(由导入人选修订,\n不猜测来源版本)。",
+  "id": "platform.scenarios.post_import",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "scenarios",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Import Scenario",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "definition",
+     "path": "$.definition",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "object",
+     "ui_kind": "json",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "成功"
+   },
+   "201": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

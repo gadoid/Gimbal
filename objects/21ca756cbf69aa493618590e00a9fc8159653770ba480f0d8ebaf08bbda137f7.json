@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-bind",
+  "id": "st.story.bind.1",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.create",
+   "order": 1
+  },
+  "text": "属主新建一个用例组(命名并描述用途)。"
+ },
+ "type": "statement"
+}

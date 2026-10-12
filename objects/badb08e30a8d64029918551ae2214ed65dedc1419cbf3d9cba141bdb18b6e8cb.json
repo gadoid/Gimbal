@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "仅属主(admin 不可代发);幂等 upsert;每人上限 SHARE_REF_CAP",
+  "id": "cap:share.ref",
+  "label": "发起引用分享",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

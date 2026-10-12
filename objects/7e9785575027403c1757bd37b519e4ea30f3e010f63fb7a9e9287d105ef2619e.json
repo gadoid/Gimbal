@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "S1.2",
+  "id": "st.share.rule-credential",
+  "kind": "rule",
+  "slots": {
+   "about": "cap:share.copy",
+   "violation": "outcome:share.credential_missing"
+  },
+  "text": "凭证永不跟随:被分享人执行时按本人凭证池解析,缺失时告警跳过,不存在借用属主凭证的通道。"
+ },
+ "type": "statement"
+}

@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-copy",
+  "id": "st.story.share-copy.1",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.copy",
+   "order": 1
+  },
+  "text": "属主打开分享弹窗,保持默认「副本」模式,选择接收人。"
+ },
+ "type": "statement"
+}

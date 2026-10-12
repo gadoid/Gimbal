@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-1",
+  "id": "st.story.admin.5",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:user.disable",
+   "order": 5
+  },
+  "text": "管理员禁用一个成员;若其为最后一名管理员则被拒绝。"
+ },
+ "type": "statement"
+}

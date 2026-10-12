@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "S1.2",
+  "id": "st.share.rule-revoke",
+  "kind": "rule",
+  "slots": {
+   "about": "cap:share.revoke",
+   "violation": "outcome:share.revoked"
+  },
+  "text": "属主可撤销引用(被分享人收到通知);被分享人可退订(不通知属主);撤销与退订均即时生效。"
+ },
+ "type": "statement"
+}

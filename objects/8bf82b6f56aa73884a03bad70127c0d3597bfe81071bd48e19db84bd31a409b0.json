@@ -1,0 +1,12 @@
+{
+ "data": {
+  "anchor": "S1.1",
+  "id": "st.suite-member.define",
+  "kind": "define",
+  "slots": {
+   "subject": "entity:suite_member"
+  },
+  "text": "组成员(suite_member)是场景在组内的成员关系(含顺序);成员必须是属主自己的场景。"
+ },
+ "type": "statement"
+}

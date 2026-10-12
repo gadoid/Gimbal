@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "admin 开号(M2.5 收紧后的口径)",
+  "id": "cap:user.create",
+  "label": "创建成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

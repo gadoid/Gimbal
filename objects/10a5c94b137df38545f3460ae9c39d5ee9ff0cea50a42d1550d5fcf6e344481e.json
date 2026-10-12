@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/executions/{execution_id}/scenario-snapshot",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "执行时的场景 draft 容器({definition, orchestration})原样返回。\n\ndispatch 同拍快照(见 run_dispatcher._create_execution)— 场景此后\n被编辑不影响本端点内容。原样透传、不经 ScenarioDraft 重校验:快照是\n历史事实,schema 漂移不应让旧快照不可读(与 GET /scenarios/{id}/draft\n的校验语义不同,那是对\"活草稿\"的校验)。存量行无快照 → 404 带明确\ncode(前端据此区分\"无快照\"与\"无权限\",两者对用户都呈现为不可导出)。",
+  "id": "platform.executions.get_by_execution_id_scenario_snapshot",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "executions",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Get Scenario Snapshot",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

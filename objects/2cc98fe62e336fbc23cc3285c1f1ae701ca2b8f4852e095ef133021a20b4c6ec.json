@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "属主(通知被分享人)/admin(入审计);即时生效",
+  "id": "cap:share.revoke",
+  "label": "撤销引用",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

@@ -1,0 +1,12 @@
+{
+ "data": {
+  "anchor": "S1.2",
+  "id": "st.share.define-ref",
+  "kind": "define",
+  "slots": {
+   "subject": "entity:share"
+  },
+  "text": "引用分享(share_ref)是定向、逐次的访问授权:被分享人可读、可执行,但不可写、不可再分享;属主保存即生效(live link)。"
+ },
+ "type": "statement"
+}

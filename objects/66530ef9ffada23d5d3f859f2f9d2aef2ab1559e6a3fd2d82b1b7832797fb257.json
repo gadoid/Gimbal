@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "DELETE",
+  "path": "/api/integration/platform-credentials/{cred_id}",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

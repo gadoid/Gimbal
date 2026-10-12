@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-copy",
+  "id": "st.story.share-copy.3",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.copy",
+   "order": 3
+  },
+  "text": "副本完全归接收人:可编辑、可再分享;属主的后续修改不同步、不可撤回。"
+ },
+ "type": "statement"
+}

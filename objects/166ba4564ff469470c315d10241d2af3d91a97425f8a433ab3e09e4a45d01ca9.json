@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "更名前的 operator 层;共享别名/carry 默认值/适配处理的读写权",
+  "id": "value:user.role.member",
+  "label": "技术运营成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

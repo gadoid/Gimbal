@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "PUT",
+  "path": "/api/suites/{suite_id}/composition",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

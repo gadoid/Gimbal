@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "被分享人删自己的引用行;不通知属主;可随时重新被分享",
+  "id": "cap:share.unsubscribe",
+  "label": "退订引用",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

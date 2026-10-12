@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-bind",
+  "id": "st.story.bind.2",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.manage_members",
+   "order": 2
+  },
+  "text": "属主从场景库勾选多个自己的场景,批量加入该组。"
+ },
+ "type": "statement"
+}

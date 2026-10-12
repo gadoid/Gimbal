@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "user / member / admin 三级单角色(0011 更名后口径:原 member→user、operator→member,admin 不变);user 为基础用户,member 持技术运营权(共享别名/carry 默认值/适配处理),admin 另持人事与内容权;role 不进 JWT、每请求查库即时生效",
+  "id": "attr:user.role",
+  "label": "成员角色",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "同 suite 同发起人有未终态批次时 409 附本人深链",
+  "id": "outcome:suite.run_in_progress",
+  "label": "本人有在途批次",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

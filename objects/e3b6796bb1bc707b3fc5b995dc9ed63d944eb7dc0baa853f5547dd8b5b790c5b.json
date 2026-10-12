@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/users/{user_id}/reset-password",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": "cap:user.reset_password",
+  "consumes": [],
+  "description": "Generate a fresh random password for ``user_id`` and persist its hash.\n\nAuthorization: admin (any target) or the target user themselves\n(account-takeover fix: a member can no longer reset *someone else's*\npassword and receive the plaintext).  The plaintext password is\nreturned **once** in the response and is never stored on the server.",
+  "id": "platform.users.post_by_user_id_reset_password",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "users",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Reset Password",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

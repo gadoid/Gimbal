@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "试图加入他人场景时 404 拒绝(不泄露存在性;admin 无豁免)",
+  "id": "outcome:suite.member_not_owned",
+  "label": "成员不属组属主",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

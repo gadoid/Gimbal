@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "PUT",
+  "path": "/api/me/preferences/{key}",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

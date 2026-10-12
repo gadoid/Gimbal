@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "一组用例的管理与绑定实体;成员 ⊆ 属主自己的场景,整组顺序执行",
+  "id": "entity:suite",
+  "label": "用例组",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

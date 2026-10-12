@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-bind",
+  "id": "st.story.bind.4",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.manage_members",
+   "order": 4
+  },
+  "text": "属主移除不需要的成员;场景本身不受影响。"
+ },
+ "type": "statement"
+}

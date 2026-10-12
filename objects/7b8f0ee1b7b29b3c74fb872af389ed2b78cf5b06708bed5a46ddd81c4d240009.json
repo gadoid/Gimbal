@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/executions/{execution_id}/events/stream",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "SSE 推送已入库事件(P2-06/C9;替代执行页 1s 轮询)。\n\n* ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);\n* 事件到达即推;无事件时 ~15s 心跳注释帧保活;\n* 终态 + run.finished 已推(或终态但本就无事件流的存量执行)\n  → 发 ``event: done`` 后关流;客户端断开即停。",
+  "id": "platform.executions.get_by_execution_id_events_stream",
+  "metadata": {
+   "business_notes": "responses[200] 为合成占位（OpenAPI 该端点无 2xx 响应体）",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "executions",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Stream Execution Events",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

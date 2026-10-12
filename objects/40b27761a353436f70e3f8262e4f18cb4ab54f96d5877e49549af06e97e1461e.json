@@ -1,0 +1,14 @@
+{
+ "data": {
+  "anchor": "US-bind",
+  "id": "st.story.bind.5",
+  "kind": "step",
+  "slots": {
+   "branch_on": "outcome:suite.member_not_owned",
+   "cap": "cap:suite.manage_members",
+   "order": 5
+  },
+  "text": "属主试图把他人场景拉入组时被拒绝(不泄露他人场景的存在性)。"
+ },
+ "type": "statement"
+}

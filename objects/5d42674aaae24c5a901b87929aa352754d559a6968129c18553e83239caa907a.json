@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-ref",
+  "id": "st.story.share-ref.3",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.run",
+   "order": 3
+  },
+  "text": "被分享人 run 引用的 suite:引用覆盖其全部成员,循环内逐成员检查执行权。"
+ },
+ "type": "statement"
+}

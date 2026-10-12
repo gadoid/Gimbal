@@ -1,0 +1,49 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/endpoint-catalog/{endpoint_id}/projection",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "Proxy ``GET {plate}/api/endpoint/{id}/projection?ref=``（4.8）。\n\n编排页 binding 只读展示（method/path 模板/timeout）经此查询 ——\n场景 call 不再存 binding 派生字段（6.2），展示面由投影提供。\n结果不可变，前端会话级缓存。ref 缺省 = working（新建步骤浏览）。",
+  "id": "platform.endpoint_catalog.get_by_endpoint_id_projection",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "endpoint-catalog",
+   "owner": "gimbal-bootstrap",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "platform"
+   ]
+  },
+  "name": "Get Endpoint Projection",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "Successful Response"
+   }
+  },
+  "service": "platform-service",
+  "status": "active",
+  "system": "platform"
+ },
+ "type": "endpoint"
+}

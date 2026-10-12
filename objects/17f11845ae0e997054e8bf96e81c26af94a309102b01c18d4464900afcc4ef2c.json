@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-run",
+  "id": "st.story.run-suite.2",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.run",
+   "order": 2
+  },
+  "text": "执行跳转到批次视图;全部成员的执行按 batch_id 归并为一条通知。"
+ },
+ "type": "statement"
+}

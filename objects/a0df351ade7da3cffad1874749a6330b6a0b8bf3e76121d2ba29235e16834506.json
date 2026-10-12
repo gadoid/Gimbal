@@ -1,0 +1,14 @@
+{
+ "data": {
+  "anchor": "US-1",
+  "id": "st.story.admin.4",
+  "kind": "step",
+  "slots": {
+   "branch_on": "outcome:user.last_admin",
+   "cap": "cap:user.update",
+   "order": 4
+  },
+  "text": "管理员把成员降级为普通成员;若目标为最后一名管理员则被拒绝。"
+ },
+ "type": "statement"
+}

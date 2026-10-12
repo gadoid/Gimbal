@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "属主把场景或用例组定向分享给他人;引用(live link)与副本(独立拷贝)两种模式",
+  "id": "entity:share",
+  "label": "分享",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

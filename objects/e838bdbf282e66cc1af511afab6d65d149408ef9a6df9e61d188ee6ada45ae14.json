@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-run",
+  "id": "st.story.run-suite.1",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.run",
+   "order": 1
+  },
+  "text": "属主点击「运行整组」,平台按成员顺序逐个发起执行(每成员用其默认方案)。"
+ },
+ "type": "statement"
+}

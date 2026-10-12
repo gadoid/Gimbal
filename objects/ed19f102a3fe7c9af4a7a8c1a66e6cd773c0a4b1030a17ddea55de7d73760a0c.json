@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-ref",
+  "id": "st.story.share-ref.5",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:share.revoke",
+   "order": 5
+  },
+  "text": "属主撤销引用,被分享人收到通知且下一次访问即失效;被分享人也可自行退订(不通知属主)。"
+ },
+ "type": "statement"
+}

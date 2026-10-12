@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "US-bind",
+  "id": "st.story.bind.3",
+  "kind": "step",
+  "slots": {
+   "cap": "cap:suite.manage_members",
+   "order": 3
+  },
+  "text": "属主调整成员顺序(影响整组执行的遍历序)。"
+ },
+ "type": "statement"
+}

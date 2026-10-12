@@ -1,0 +1,13 @@
+{
+ "data": {
+  "anchor": "A2.2",
+  "id": "st.user-mgmt.last-admin",
+  "kind": "rule",
+  "slots": {
+   "about": "attr:user.role",
+   "violation": "outcome:user.last_admin"
+  },
+  "text": "不能降级最后一个管理员。"
+ },
+ "type": "statement"
+}

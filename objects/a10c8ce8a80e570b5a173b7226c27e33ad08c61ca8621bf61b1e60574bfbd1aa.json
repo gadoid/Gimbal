@@ -1,0 +1,12 @@
+{
+ "data": {
+  "aliases": [],
+  "gloss": "批量加入(仅自己的场景)/排序/移除;公共组加私有成员走发布确认",
+  "id": "cap:suite.manage_members",
+  "label": "管理组成员",
+  "refers": null,
+  "replaced_by": null,
+  "status": "active"
+ },
+ "type": "term"
+}

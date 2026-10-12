@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "DELETE",
+  "path": "/api/board-cards/{card_id}",
+  "protocol": "http",
+  "service": "platform-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}
