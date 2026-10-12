@@ -6,6 +6,7 @@ services/endpoint_ref_index.rebuild 重建。写路径由 scenario_store
 """
 from __future__ import annotations
 
+from ._types import JsonVar
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,3 +30,6 @@ class ScenarioEndpointRef(Base):
     endpoint_id: Mapped[str] = mapped_column(String(255), nullable=False)
     # 值含 ${var.NAME} 模板时记 NAME(取第一个匹配);直填为 NULL
     via_var: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 外部接口登记批 X3(D3 拍板):值内全部 ${var.NAME} 列表(JSON 数组,
+    # 按出现序);via_var 首变量保留兼容读,消费方迁移后改读本列
+    via_vars: Mapped[list | None] = mapped_column(JsonVar, nullable=True)

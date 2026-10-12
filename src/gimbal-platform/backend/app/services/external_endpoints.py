@@ -225,6 +225,16 @@ async def list_endpoints(
     return [_to_wire(r) for r in rows]
 
 
+async def get_endpoint_db(
+    db: AsyncSession, alias: str, name: str,
+) -> ExternalEndpoint | None:
+    """ORM 行读取(代理路由就地派生契约视图用)。"""
+    return (await db.execute(select(ExternalEndpoint).where(
+        ExternalEndpoint.alias_name == alias,
+        ExternalEndpoint.name == name,
+    ))).scalar_one_or_none()
+
+
 async def get_endpoint(
     db: AsyncSession, alias: str, name: str,
 ) -> dict | None:

@@ -40,6 +40,12 @@ _SOURCES = ("body", "headers")
 ANCHOR_SOURCE = "anchor"
 ANCHOR_FIELD = ""
 
+# 外部接口登记批 X3:断言侧行的 source 值 —— 断言条目的 jsonpath 指向
+# 的是**响应**(与字段行的 body/headers 请求侧语义不同),独立 source
+# 不混淆;field_name = jsonpath 根段(同根段多条断言合一,行语义 =
+# 「该步骤断言引用了根段 X」,重复无信息 —— PK 四列天然去重)。
+ASSERT_SOURCE = "assertion"
+
 
 def _steps(payload: dict | None) -> list[dict]:
     definition = (payload or {}).get("definition")
@@ -60,14 +66,19 @@ def parse_refs(
 ) -> tuple[list[ScenarioEndpointRef], list[dict]]:
     """payload → 索引行 + 未索引步骤报告(spec §3.2/C10)。
 
-    via_var 取值中**第一个** ``${var.NAME}`` 匹配(多变量内嵌属尾部
-    场景,P2 扩展可改列形状);非字符串值(数值/布尔)恒为直填。
+    X3(D3 拍板):``via_vars`` 收值内**全部** ``${var.NAME}``(按出现序,
+    JSON 列);``via_var`` 保留首变量兼容读,消费方迁移后改读新列。
+    断言条目(assertion_registry.entries[].path.jsonpath 指向响应)发
+    断言侧行(source=ASSERT_SOURCE、field_name=jsonpath 根段;同
+    (step, 根段) 去重)——影响查询对断言引用可见。
 
     锚定但业务字段全空(body/headers 皆空)的 step 发一行锚点行
     (source=ANCHOR_SOURCE),保证影响查询可见;有字段行的 step 不发。
     """
     refs: list[ScenarioEndpointRef] = []
     unindexed: list[dict] = []
+    # X3 断言侧行:同 (step, 根段) 去重(多条断言同根段无新信息)
+    seen_assert_roots: set[tuple[int, str]] = set()
     for i, step in enumerate(_steps(payload)):
         # M3:锚点唯一 = step.endpoint(view_hints 双读已删)
         endpoint_id = step.get("endpoint")
@@ -80,14 +91,14 @@ def parse_refs(
         step_rows = 0
         for source in _SOURCES:
             for name, value in _fields(step, source).items():
-                via_var = None
+                via_vars: list[str] | None = None
                 if isinstance(value, str):
-                    m = _VAR_RE.search(value)
-                    via_var = m.group(1) if m else None
+                    via_vars = _VAR_RE.findall(value) or None
                 refs.append(ScenarioEndpointRef(
                     scenario_id=scenario_id, step_index=i, source=source,
                     field_name=str(name), endpoint_id=str(endpoint_id),
-                    via_var=via_var,
+                    via_var=(via_vars[0] if via_vars else None),
+                    via_vars=via_vars,
                 ))
                 step_rows += 1
         if step_rows == 0:
@@ -96,7 +107,43 @@ def parse_refs(
                 source=ANCHOR_SOURCE, field_name=ANCHOR_FIELD,
                 endpoint_id=str(endpoint_id), via_var=None,
             ))
+        # X3:断言条目(jsonpath 指向响应)→ 断言侧行;锚点含 ext:
+        # (外部接口登记批,影响查询对 external 接口同样可见)
+        reg = (payload or {}).get("assertion_registry") or {}
+        entries = (reg.get("entries") if isinstance(reg, dict) else None) or []
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            loc = e.get("path")
+            if not isinstance(loc, dict):
+                continue
+            try:
+                si = int(loc.get("stepIndex"))
+            except (TypeError, ValueError):
+                continue
+            if si != i:
+                continue
+            root = _jsonpath_root(loc.get("jsonpath"))
+            if not root:
+                continue
+            key = (si, root)
+            if key in seen_assert_roots:
+                continue
+            seen_assert_roots.add(key)
+            refs.append(ScenarioEndpointRef(
+                scenario_id=scenario_id, step_index=si,
+                source=ASSERT_SOURCE, field_name=root,
+                endpoint_id=str(endpoint_id), via_var=None,
+            ))
     return refs, unindexed
+
+
+def _jsonpath_root(path) -> str:
+    """``$.a.b[0]`` → ``a``;非 $. 前缀原样(与注入改写同口径)。"""
+    p = str(path or "")
+    if not p.startswith("$."):
+        return p
+    return p[2:].split(".")[0].split("[")[0]
 
 
 def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:

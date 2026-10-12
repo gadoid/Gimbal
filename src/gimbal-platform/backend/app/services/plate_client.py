@@ -119,6 +119,31 @@ def _now_iso() -> str:
 
 
 # ─── public surface ───────────────────────────────────────────────
+
+def _strip_ext_anchors(scenario_dict: dict[str, Any]) -> dict[str, Any]:
+    """steps[*].endpoint 的 ``ext:`` 前缀锚点剥离(浅拷贝,不改入参)。
+
+    仅剥锚点键;method/path 等场景自有字段原样(external 步骤的调用
+    信息本就内联在步骤里)。非 dict steps / 无锚点场景原样返回。
+    """
+    import copy as _copy
+    definition = scenario_dict.get("definition")
+    if not isinstance(definition, dict):
+        return scenario_dict
+    steps = definition.get("steps")
+    if not isinstance(steps, list):
+        return scenario_dict
+    if not any(isinstance(s, dict)
+               and str(s.get("endpoint") or "").startswith("ext:")
+               for s in steps):
+        return scenario_dict
+    out = _copy.deepcopy(scenario_dict)
+    for s in (out["definition"].get("steps") or []):
+        if isinstance(s, dict) and str(
+                s.get("endpoint") or "").startswith("ext:"):
+            s.pop("endpoint", None)
+    return out
+
 async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     """POST /api/scenario/action/convert(consumer 固定 "gimbal")。
 
@@ -138,6 +163,11 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     success.  Raises :class:`PlateUnavailableError` on connect / 5xx,
     :class:`PlateRejectedError` on 4xx.
     """
+
+    # 外部接口登记批 X2:ext:<alias>.<name> 锚点是平台视图字段(外部
+    # 接口登记目录的引用),plate 侧零感知 —— 发送前统一剥离,与
+    # 「无锚点原样通过 convert」同款出口(设计 v1.0 §3)。
+    scenario_dict = _strip_ext_anchors(scenario_dict)
     body = {"consumer": "gimbal", "scenario": scenario_dict}
     client = get_client()
     try:

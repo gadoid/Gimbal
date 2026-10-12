@@ -13,10 +13,13 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 import httpx
-from fastapi import Query, APIRouter, HTTPException
+from fastapi import Query, APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..services.endpoint_declarations import declared_paths_of, declared_paths_of_item
 from ..services.field_state_resolution import validate_field_states
@@ -70,6 +73,7 @@ async def get_full_endpoint(
     user: CurrentUser,
     endpoint_id: str,
     ref: str = '',
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Proxy ``GET {plate}/api/endpoint/{id}/full``.
 
@@ -91,6 +95,44 @@ async def get_full_endpoint(
     item 只要是 dict 就原样透传(**空 item ``{}`` 也算**):它得到一个空声明树
     与 ``["$"]``,不视为错误 —— 不得用真值判等把 ``{}`` 并成 ``None``(§5)。
     """
+    # ── ext: 锚点分支(外部接口登记批 X2,D1 拍板语法)──────────
+    # external 步骤锚点 ext:<alias>.<name> 的契约视图出自**平台目录**
+    # (plate 零感知);出与 plate /full 同形 item + declared_surface,
+    # 前端 useEndpointFull/表单/消毒链零改动消费。
+    if endpoint_id.startswith("ext:"):
+        from ..services import external_endpoints as ext_svc
+        rest = endpoint_id[4:]
+        alias, _, name = rest.partition(".")
+        if not alias or not name:
+            raise HTTPException(404, f"endpoint {endpoint_id} not found")
+        row = await ext_svc.get_endpoint_db(db, alias, name)
+        if row is None:
+            raise HTTPException(404, f"endpoint {endpoint_id} not found")
+        item = {
+            "id": endpoint_id,
+            "system": f"ext:{alias}",
+            "service": alias,
+            "name": name,
+            "description": row.title or name,
+            "capability": None,
+            "consumes": [],
+            "produces": [],
+            "binding": {
+                "protocol": "http", "method": row.method, "path": row.path,
+                "headers": {}, "timeout_seconds": 30, "auth": row.auth,
+                "body_type": "json",
+            },
+            "request": {"declarations": ext_svc.jsonschema_to_declarations(
+                row.request_schema)},
+            "responses": {},
+            "metadata": {},
+            "shape_hash": "",
+        }
+        paths = declared_paths_of_item(item)
+        surface = None if paths is None else sorted(
+            injectable_universe(None, paths))
+        return {**item, "declared_surface": surface}
+
     # RS3（Release v4.4 §6.1）：ref = 场景生效修订（4.4）→ 修订快照
     # 定义；缺省/working → working 注册表（现状不变）。
     if ref and ref != "working":

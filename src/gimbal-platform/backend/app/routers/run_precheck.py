@@ -68,6 +68,9 @@ class PrecheckResult(BaseModel):
     dangling_entry_ids: list[str] = Field(default_factory=list, alias="danglingEntryIds")
     # steps 引用了、但声明 URL 与绑定 URL 双缺的 service(引擎会显式报错)
     unbound_services: list[str] = Field(default_factory=list, alias="unboundServices")
+    # 外部接口登记批 X2:ext: 锚点步骤 vs 目录 JSON Schema 的告警清单
+    # (D2 拍板:告警不阻塞 —— 不参与 scheme_valid,读侧展示)
+    external_warnings: list[str] = Field(default_factory=list, alias="externalWarnings")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -140,7 +143,52 @@ async def _precheck_one(
         and not (bindings.get(svc) or {}).get("url")
     ]
 
+    # ── external 锚点步骤 vs 目录 schema(X2;D2:告警不阻塞)────
+    try:
+        result.external_warnings = await _external_schema_warnings(
+            db, raw_payload)
+    except Exception:  # noqa: BLE001 — 目录读失败不阻塞预检
+        result.external_warnings = []
+
     result.scheme_valid = not (
         result.dead_dataset_ids or result.dangling_entry_ids
     )
     return result
+
+
+async def _external_schema_warnings(
+    db: AsyncSession, raw_payload: dict,
+) -> list[str]:
+    """ext: 锚点步骤 body vs 目录 JSON Schema → 告警清单。
+
+    未锚定的 external 步骤(无 schema 面)与目录中已删的条目不出告警
+    (登记是增强不是权威;条目被删只意味着回到自由编辑)。
+    """
+    from ..models.external_endpoint import ExternalEndpoint
+    from ..services.external_endpoints import check_body_against_schema
+
+    warns: list[str] = []
+    rows: dict[str, ExternalEndpoint] = {}
+    for i, st in enumerate(definition_from_payload(raw_payload).get("steps") or []):
+        if not isinstance(st, dict):
+            continue
+        ep = str(st.get("endpoint") or "")
+        if not ep.startswith("ext:"):
+            continue
+        rest = ep[4:]
+        alias, _, name = rest.partition(".")
+        key = f"{alias}.{name}"
+        if key not in rows:
+            rows[key] = (await db.execute(
+                select(ExternalEndpoint).where(
+                    ExternalEndpoint.alias_name == alias,
+                    ExternalEndpoint.name == name,
+                ))).scalar_one_or_none()
+        row = rows[key]
+        if row is None or not row.request_schema:
+            continue
+        body = (st.get("request") or {}).get("body") if isinstance(
+            st.get("request"), dict) else None
+        for w in check_body_against_schema(body, row.request_schema):
+            warns.append(f"步骤 {i}({ep}):{w}")
+    return warns
