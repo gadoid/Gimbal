@@ -25,21 +25,27 @@
 - [ ] **P0.4 接入试点 + 运行手册（不全局回填）**：发首修订后，在编排器**手动**把 1–2 个 fin 场景钉到首修订做链路活体验收（版本下拉选修订 → 按修订渲染契约表单 → 执行 → 执行记录带 `plate_pins`）。`rs3_backfill_meta_plate.py` 与 `migrate_strip_binding_fields.py` 保留为**接入工具**，随各系统接入时按系统执行（演练→备份→apply→幂等复跑纪律不变）。沉淀《系统接入运行手册》入库 docs/：注册系统树 → 评审 → 首修订 → 场景钉修订（手动或 rs3）→ strip → 验证清单。
   - 验收门：试点场景按修订渲染、执行带 `plate_pins`；手册入库。
 
+> **状态(2026-10-12)**:P0/P1(W1-W16)全部落地并推送;plate 门 639 绿、
+> 后端 825 绿、前端 1214 绿、vue-tsc 零错。遗留:W10 顺带修复了
+> `_commit_artifacts` 探测过松(祖先杂散 .git 被向上发现)与空提交报错;
+> 141f2b1c 自举批的过期计数/基线/规范形已在 40517dcd 重钉。波次 C/D
+(W17-W26)未动 —— W17(platform 49 端点人工评审+首修订)需用户参与。
+
 ## P1　平台消费侧止血（A 组，代码批）
 
 按数据风险排序；全部与 P0 无依赖、可即做。A-2/A-3/A-4 随本批部署即生效——接入前 working=预览是如实标注（§0 裁定 1）；**P1.0 三态底座先行，P1.3/P1.4/P1.5 的口径都建立在它之上**。
 
-- [ ] **P1.0（先行，新增）第三方服务外部态（external）**：服务接入从两态扩为三态——`managed+钉修订` / `managed+working` / `external（第三方，无版本管理）`。落点 = **平台服务注册表**：`service_aliases` 加 `kind` 列（`plate` | `external`；回填规则 = base_service 出现在任一 plate 系统的 services 声明 → `plate`，否则 → `external`；此后新建别名显式选），alembic 0019（与 A-3 同批）。判定链 = 场景步骤 `service` → 别名 `kind` ∪ `meta.system` 声明；两者皆无 → 保存时告警（unknown service，提示接入 plate 或标注 external）。口径：**external 不触发预览、不阻塞集成**（集成卡本职即验证外部集成），且**不计入可信基线统计、按外部桶单独统计**（入库 = 版本模型 4.3 的**可信基线统计口径**——执行记录照常落库存储、场景照常编排/执行/回放；分桶形态见 P1.5）。UI：编排器/执行详情三态徽标（钉修订 / 当前规格 / 外部·无版本）。external 服务不进 `meta.system`（无 M11 冲突）、其步骤无锚点原样通过 convert——**plate 侧与 M2 形态零改动**。与集成卡 P2「外部系统定义」缺口合流：一次定义，两处消费（执行口径 + 集成卡）。
+- [x] **P1.0（先行，新增）第三方服务外部态（external）**：服务接入从两态扩为三态——`managed+钉修订` / `managed+working` / `external（第三方，无版本管理）`。落点 = **平台服务注册表**：`service_aliases` 加 `kind` 列（`plate` | `external`；回填规则 = base_service 出现在任一 plate 系统的 services 声明 → `plate`，否则 → `external`；此后新建别名显式选），alembic 0019（与 A-3 同批）。判定链 = 场景步骤 `service` → 别名 `kind` ∪ `meta.system` 声明；两者皆无 → 保存时告警（unknown service，提示接入 plate 或标注 external）。口径：**external 不触发预览、不阻塞集成**（集成卡本职即验证外部集成），且**不计入可信基线统计、按外部桶单独统计**（入库 = 版本模型 4.3 的**可信基线统计口径**——执行记录照常落库存储、场景照常编排/执行/回放；分桶形态见 P1.5）。UI：编排器/执行详情三态徽标（钉修订 / 当前规格 / 外部·无版本）。external 服务不进 `meta.system`（无 M11 冲突）、其步骤无锚点原样通过 convert——**plate 侧与 M2 形态零改动**。与集成卡 P2「外部系统定义」缺口合流：一次定义，两处消费（执行口径 + 集成卡）。
   - **接口信息边界**：external 步骤的接口信息现状 = **步骤内联手工维护**（method/path/headers/body 存在步骤定义里，执行经 service_aliases 解析 URL，链路已通，缺的是结构化渲染与校验）；结构化升级路径 = **外部接口登记**（平台侧轻量目录：URL 模式 + method + 可选 JSON Schema，支持 OpenAPI 导入，登记后步骤可锚点化、恢复结构化表单与保存校验）——与集成卡 P2「外部系统定义」同批实现，**不在本计划 P1 范围**。
   - 测试：三态判定链、unknown 告警、kind 回填规则、三态徽标。
 
-- [ ] **P1.1（A-1，高：数据丢失）ScenarioMeta 读侧透传**：`schemas/scenario_composer.py:40` 手写 meta 改为"定义里的 `meta` 原样透传 + 行上列覆盖 `scenarioId`/`updateTime`/`owner`"（或直接用生成物 `Meta`），删除手写字段清单；删除 `update()` 中 `system` 空写 `["default"]`、`module` 空写 `"default"` 的伪系统兜底（与 M11"每个系统必须有 plate 声明"冲突）。测试 = 遍历 M2 `Meta` 全字段断言读写往返不丢（`requirementRef` 实测丢字段案例入测试）。
-- [ ] **P1.2（A-5）M2 对象池写入**：读取点在 `routes_grammar.py:376` 与 `release/read.py:181`（`<构件根>/objects/{hash}.json`），但全仓无写入方。实现 = plate 启动（或 gen_m2）把当前 M2 内容寻址写入 `objects/{hash}.json`，幂等；未配构件根时启动静默跳过 + 计数告警（发版路径仍按 3.6 fail-fast）。写入走 release.py 同款构件分支提交机制，不留脏树。测试 = 写入幂等 + 按 hash 取回 + 未配置时行为。
-- [ ] **P1.3（A-2）预览判定口径**：`run_dispatcher.py:638` `is_preview = bool(req.debug)` 改为版本模型 §6 口径——**任一 managed 系统为 working 即预览**（external 不触发，见 P1.0）；调试执行钉了精确修订则不算预览。
-- [ ] **P1.4（A-4）集成任务拒绝 working**：`integration_runner` 触发前检查场景 `meta.plate`，任一 managed 系统 working → 409（文案指路"钉修订或等回填"）；**external 放行**。只读护栏的回落读取行为保持。
-- [ ] **P1.5（A-3）入库标准记录**：版本模型 4.3——无 managed 系统 working、生效修订中场景用到的接口全部已评审、且无 external 服务。**设计落点（本计划拍板）**：`executions` 加两列——`baseline_eligible`（bool，严格门：自举指标分子）+ `baseline_block`（String，可空，首要阻塞原因 `working` | `unreviewed` | `external`；多因全量记证据事件）——**external 执行按 `baseline_block='external'` 单独分桶统计**（通过率/稳定率可按桶出，不混入基线分母）；`execution_events` 记 `baseline_eligible` 证据事件（未过接口清单 / external 服务清单 / working 系统清单），alembic 0019。本批只做判定+记录，**消费面（自举 Agent 指标、统计报表）另立项**。
-- [ ] **P1.6（A-6）旧适配残留清理**：删 `POST /adaptations/catalog/diff` 空桩 + `stores/adaptations.ts`、`useInterfaceChange.ts` 调用点；"接口变更"提示由 `useVersionHints`（"定义已修正"）承接；`impact`/`refs_drift`/`impact_summary` 三个按 working 全局目录计算的函数按"不保留兼容设计"删除（若有引用面先迁移到生效修订口径再删）。
-- [ ] **P1.7（A-7 + 链路级用例）**：I-1 回归测试补上；新增端到端用例 = `_release_fx` 真 plate + 平台测试客户端，覆盖"按修订编排→保存→执行→执行详情"断言每一步读的是同一修订（拦"单测全绿、链路不通"类——本次 4 个修复提交全是这类）。
+- [x] **P1.1（A-1，高：数据丢失）ScenarioMeta 读侧透传**：`schemas/scenario_composer.py:40` 手写 meta 改为"定义里的 `meta` 原样透传 + 行上列覆盖 `scenarioId`/`updateTime`/`owner`"（或直接用生成物 `Meta`），删除手写字段清单；删除 `update()` 中 `system` 空写 `["default"]`、`module` 空写 `"default"` 的伪系统兜底（与 M11"每个系统必须有 plate 声明"冲突）。测试 = 遍历 M2 `Meta` 全字段断言读写往返不丢（`requirementRef` 实测丢字段案例入测试）。
+- [x] **P1.2（A-5）M2 对象池写入**：读取点在 `routes_grammar.py:376` 与 `release/read.py:181`（`<构件根>/objects/{hash}.json`），但全仓无写入方。实现 = plate 启动（或 gen_m2）把当前 M2 内容寻址写入 `objects/{hash}.json`，幂等；未配构件根时启动静默跳过 + 计数告警（发版路径仍按 3.6 fail-fast）。写入走 release.py 同款构件分支提交机制，不留脏树。测试 = 写入幂等 + 按 hash 取回 + 未配置时行为。
+- [x] **P1.3（A-2）预览判定口径**：`run_dispatcher.py:638` `is_preview = bool(req.debug)` 改为版本模型 §6 口径——**任一 managed 系统为 working 即预览**（external 不触发，见 P1.0）；调试执行钉了精确修订则不算预览。
+- [x] **P1.4（A-4）集成任务拒绝 working**：`integration_runner` 触发前检查场景 `meta.plate`，任一 managed 系统 working → 409（文案指路"钉修订或等回填"）；**external 放行**。只读护栏的回落读取行为保持。
+- [x] **P1.5（A-3）入库标准记录**：版本模型 4.3——无 managed 系统 working、生效修订中场景用到的接口全部已评审、且无 external 服务。**设计落点（本计划拍板）**：`executions` 加两列——`baseline_eligible`（bool，严格门：自举指标分子）+ `baseline_block`（String，可空，首要阻塞原因 `working` | `unreviewed` | `external`；多因全量记证据事件）——**external 执行按 `baseline_block='external'` 单独分桶统计**（通过率/稳定率可按桶出，不混入基线分母）；`execution_events` 记 `baseline_eligible` 证据事件（未过接口清单 / external 服务清单 / working 系统清单），alembic 0019。本批只做判定+记录，**消费面（自举 Agent 指标、统计报表）另立项**。
+- [x] **P1.6（A-6）旧适配残留清理**：删 `POST /adaptations/catalog/diff` 空桩 + `stores/adaptations.ts`、`useInterfaceChange.ts` 调用点；"接口变更"提示由 `useVersionHints`（"定义已修正"）承接；`impact`/`refs_drift`/`impact_summary` 三个按 working 全局目录计算的函数按"不保留兼容设计"删除（若有引用面先迁移到生效修订口径再删）。
+- [x] **P1.7（A-7 + 链路级用例）**：I-1 回归测试补上；新增端到端用例 = `_release_fx` 真 plate + 平台测试客户端，覆盖"按修订编排→保存→执行→执行详情"断言每一步读的是同一修订（拦"单测全绿、链路不通"类——本次 4 个修复提交全是这类）。
   - 验收门：三侧全量零回归；P1.1 往返测试与 P1.7 链路用例绿。
 
 ## P2　platform 评审与收口（人工 + 运营；P2.1 可与 P1 并行）
@@ -81,10 +87,10 @@
 | W6 | A-4 集成拒绝 working | `integration_runner` 触发前检查 → 409（external 放行） | W3 | 409 用例 + external 放行用例 | S |
 | W7 | A-3 baseline 判定+落库 | 执行终态化写入点（`run_dispatcher` fanout 收尾）：写 eligible/block + `execution_events` 证据事件（多因全量） | **W8** | 判定单测三桶（eligible/working/external）+ 事件证据落库 | L |
 | W8 | plate 出参补评审状态 | `get_endpoint_full_at` / `get_projection` 响应带对象 `review`（plate 侧只读加法 + 测试） | — | 平台可按钉定修订取到逐接口 review | S/M |
-| W9 | A-6 旧适配残留清理 | 删 `POST /adaptations/catalog/diff` 空桩 + 前端 `stores/adaptations.ts`、`useInterfaceChange.ts`；`useVersionHints` 承接；删 `impact`/`refs_drift`/`impact_summary` | — | 前端"接口变更"提示消失或由版本提示承接；三侧零回归 | M |
-| W10 | A-5 M2 对象池写入 | plate 启动把当前 M2 内容寻址写 `objects/{hash}.json`（走 release.py 同款构件分支提交；根未配置→跳过+计数） | W13（构件根存在才可全验） | 写入幂等 + 按 hash 取回 + 未配置行为 | M |
-| W11 | 三态徽标 + unknown 告警 | 编排器步骤/执行详情徽标（钉修订/当前规格/外部·无版本）+ 保存 unknown service 告警展示 | W3 | vitest 徽标/告警用例 | M |
-| W12 | I-1 回归 + e2e 链路用例 | 平台测试进程内起 plate app（httpx ASGI）+ `_release_fx` 夹具；"按修订编排→保存→执行→执行详情"同修订断言 | W13 可选（夹具自建则无依赖） | 链路用例绿；能在本地复现"读侧丢字段/缓存键错配"类缺陷 | L |
+| W9 ✅(bff7535e) | A-6 旧适配残留清理 | 删 `POST /adaptations/catalog/diff` 空桩 + 前端 `stores/adaptations.ts`、`useInterfaceChange.ts`；`useVersionHints` 承接；删 `impact`/`refs_drift`/`impact_summary` | — | 前端"接口变更"提示消失或由版本提示承接；三侧零回归 | M |
+| W10 ✅(d14edb23+40517dcd) | A-5 M2 对象池写入 | plate 启动把当前 M2 内容寻址写 `objects/{hash}.json`（走 release.py 同款构件分支提交；根未配置→跳过+计数） | W13（构件根存在才可全验） | 写入幂等 + 按 hash 取回 + 未配置行为 | M |
+| W11 ✅(760925e7) | 三态徽标 + unknown 告警 | 编排器步骤/执行详情徽标（钉修订/当前规格/外部·无版本）+ 保存 unknown service 告警展示 | W3 | vitest 徽标/告警用例 | M |
+| W12 ✅(0e8370c9) | I-1 回归 + e2e 链路用例 | 平台测试进程内起 plate app（httpx ASGI）+ `_release_fx` 夹具；"按修订编排→保存→执行→执行详情"同修订断言 | W13 可选（夹具自建则无依赖） | 链路用例绿；能在本地复现"读侧丢字段/缓存键错配"类缺陷 | L |
 
 提交分组（每组过三侧门：后端 pytest / 前端 vitest / plate pytest）：W1 → (W2+W3+W4) → (W5+W6) → (W8→W7) → W9 → W10 → W11 → W12。
 
