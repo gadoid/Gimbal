@@ -26,13 +26,13 @@ W19(14241574 RunOptions 形状/上限64/Q4 折回)、W20(31e6a894 镜像清零:U
 ## 二、计划外挂账技术项 —— 2026-10-12 逐项核实 + 用户拍板收口
 
 1. ~~**`executions.m2_hash` 派发回填**~~ ✅ 已随 W21 落地（/convert 响应 m2 身份 → executions.m2_hash,整执行一次,台账性质）。
-2. **外部接口登记** → ✅ 已拍板：**下一批排期**（先出设计方案再动工）。范围 = 平台侧轻量目录（URL 模式 + method + 可选 JSON Schema,支持 OpenAPI 导入）,external 步骤锚点化、恢复结构化表单与保存校验；**并随批硬化二.4 两个索引盲区**与集成卡「外部系统定义」（G1 同批）,索引层免改两次。
+2. **外部接口登记** → ✅ **已落地**(2026-10-12 外部接口登记批,设计 `claude/external-interface-registry-design.md` v1.0,X1-X5 五提交):平台目录 external_endpoints 表(0021)+ CRUD + OpenAPI 导入;ext:<alias>.<name> 冒号锚点(D1)经 catalog /full 同形代理(前端零改动);保存校验告警放行(D2);索引两盲区硬化(断言侧行 + via_vars,D3);G1 分派框架 + md5 具名化(auth_signer;完整声明驱动修复挂集成 P2 的 call.auth 透传,与 M2 代际升位耦合);run_plate 配置化。存量 rebuild 2464 行。
 3. **集成卡 P2 缺口** → ✅ 已拍板（按 2026-10-09 架构评审建议切分,现状核实:G1/G2/G7 均属实、personal 422 在位）：
    - **personal 模式**:明确二期（create_task 现 422 personal_not_ready,「随二期开放」在位）；
    - **G1**（执行器认证写死 md5、binding.auth 声明不被执行）:随外部接口登记批一起做（自举线前置）；
    - **G2**（outputs 不出执行器）:随集成 P2（kv/counter/list 模板才真正消费输出;或 task3c,届时二选一记录）；
    - **G7**（认证失败无 error_kind）:并入 task3c。
-4. **倒排索引硬化尾巴** → ✅ 已拍板：**随外部接口登记批一并硬化**（断言侧 jsonpath 进索引 + via_var 收多变量;锚点化后索引面扩大,免改两次）。
+4. **倒排索引硬化尾巴** → ✅ **已落地**(随外部接口登记批 X3):断言侧行(assertion_registry jsonpath 根段,source=assertion,同 step+根段去重,ext: 锚点同收)+ via_vars JSON 列(全部变量按出现序;via_var 首变量兼容保留;json null 语义注记勿用 IS NULL 判空)。
 5. **plate-s1 第四轮评估项** → ✅ 核实后销账（2026-10-12 波次 D 收尾轮）：
    - N1 空值 `''` ✅（dialect/parser.py 已传 `["~","n","N",""]`,注释注明回归）；
    - 冷启动先 diff ✅（adaptation_ops.spec_has_field_cache 已实现）;
