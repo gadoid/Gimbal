@@ -32,13 +32,16 @@ REPO = Path(__file__).resolve().parents[1]
 SELFDESCRIBE = REPO / "src" / "gimbal_plate" / "selfdescribe"
 SCHEMA_JSON = SELFDESCRIBE / "m2.schema.json"
 EXT_JSON = SELFDESCRIBE / "executor_ext.json"
+DEBUG_JSON = SELFDESCRIBE / "executor_debug_command.json"
 EXECUTOR_M2 = REPO / "src" / "gimbal" / "schema" / "_m2.py"
 PLATFORM_M2 = (REPO / "src" / "gimbal-platform" / "backend" / "app"
                / "schemas" / "_m2.py")
+PLATFORM_DEBUG_CMD = (REPO / "src" / "gimbal-platform" / "backend" / "app"
+                      / "schemas" / "_debug_command.py")
 FRONTEND_TS = (REPO / "src" / "gimbal-platform" / "frontend" / "src"
                / "types" / "m2.ts")
 
-ALL_TARGETS = ("schema", "envelope", "ext", "py", "ts")
+ALL_TARGETS = ("schema", "envelope", "ext", "py", "ts", "dbgcmd")
 
 # datamodel-code-generator 参数（附录 A 定稿；G7 手写 RunUnion 追加在生成物后）
 _PY_GEN_ARGS = [
@@ -157,6 +160,28 @@ def _run_ext_to(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         r.stdout if r.stdout.endswith("\n") else r.stdout + "\n",
+        encoding="utf-8", newline="\n")
+    return path
+
+
+def _dump_debug_schema(path: Path) -> Path:
+    """导出执行器 ``DebugCommand.model_json_schema()`` 写 D 类快照
+    （设计 §255：执行器为真源、方向同 C 类；W20 落地——平台侧
+    ``DebugCommandIn`` 手写镜像由本快照生成取代）。"""
+    code = (
+        "from gimbal.schema.debug import DebugCommand; "
+        "import json, sys; "
+        "sys.stdout.write(json.dumps(DebugCommand.model_json_schema(), "
+        "ensure_ascii=False, sort_keys=True))"
+    )
+    r = _run([sys.executable, "-c", code])
+    if r.returncode != 0:
+        raise RuntimeError(
+            f"DebugCommand schema 导出失败: {r.stderr.strip()[:200]}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(json.loads(r.stdout), ensure_ascii=False, indent=1,
+                   sort_keys=True) + "\n",
         encoding="utf-8", newline="\n")
     return path
 
@@ -301,6 +326,57 @@ def _gen_ts(schema_path: Path, out_path: Path) -> None:
         encoding="utf-8", newline="\n")
 
 
+# DebugCommand 跨字段成对红线(write↔variable / patch↔path)是行为语义,
+# JSON Schema 表达不了 —— 生成器只产字段形状,校验以手写子类补回
+# (与 gimbal/schema/debug.py 同语义;平台不 import gimbal,gimbal 侧
+# server_debug 422 仍是最终兜底)。
+_DEBUG_VALIDATOR = '''
+
+class DebugCommand(_DebugCommandFields):
+    """一条调试会话命令(字段形状生成自执行器;成对红线手写)。"""
+
+    @model_validator(mode="after")
+    def _check_payload(self) -> "DebugCommand":
+        if self.kind == "write":
+            if not self.variable:
+                raise ValueError("write 需要 variable（变量名）")
+        elif self.kind == "patch":
+            if not self.path:
+                raise ValueError("patch 需要 path（JSONPath）")
+        else:
+            if self.variable is not None or self.path is not None:
+                raise ValueError(f"{self.kind} 不携带 variable/path")
+        return self
+'''
+
+
+def _gen_debug_py(schema_path: Path, out_path: Path) -> None:
+    r = _run([sys.executable, "-c", _DMCG_PREAMBLE,
+              "--input", str(schema_path), "--output", str(out_path),
+              *_PY_GEN_ARGS])
+    if r.returncode != 0:
+        raise RuntimeError(
+            f"datamodel-code-generator 失败: {r.stderr.strip()[:400]}")
+    export = _export()
+    text = out_path.read_text(encoding="utf-8")
+    # 生成器产出的 DebugCommand(纯字段)收为基类;同名公开类 = 基类 +
+    # 手写成对校验 —— 调用方导入面稳定。
+    if "class DebugCommand(BaseModel):" not in text:
+        raise RuntimeError("生成物中未找到 DebugCommand 类(形状漂移)")
+    text = text.replace("class DebugCommand(BaseModel):",
+                        "class _DebugCommandFields(BaseModel):", 1)
+    text = (_header(export).replace(
+                "M2 运行形态（生成文件，禁止手改）。",
+                "调试命令运行形态（生成文件，禁止手改；真源 = 执行器 "
+                "schema/debug.py,快照 executor_debug_command.json）。")
+            .replace("来源: gimbal_plate/schema → m2.schema.json",
+                     "来源: gimbal schema/debug.py → executor_debug_command.json")
+            + _fix_discriminators(text)
+            + "\nfrom pydantic import model_validator\n"
+            + _DEBUG_VALIDATOR)
+    out_path.write_text(text, encoding="utf-8", newline="\n")
+
+
 def _write_envelope(export) -> str | None:
     """M2 信封对象入构件池 + 提交构件分支（版本模型 3.6 / C1）。"""
     from gimbal_plate.release.release import (
@@ -339,6 +415,11 @@ def cmd_gen(targets: list[str]) -> int:
             FRONTEND_TS.parent.mkdir(parents=True, exist_ok=True)
             _gen_ts(schema_path, FRONTEND_TS)
             print(f"ts       → {_rel(FRONTEND_TS)}")
+        if "dbgcmd" in targets:
+            schema_path = _dump_debug_schema(DEBUG_JSON)
+            PLATFORM_DEBUG_CMD.parent.mkdir(parents=True, exist_ok=True)
+            _gen_debug_py(schema_path, PLATFORM_DEBUG_CMD)
+            print(f"dbgcmd   → {_rel(PLATFORM_DEBUG_CMD)}")
         if "envelope" in targets:
             commit = _write_envelope(export)
             where = (f"构件提交 {commit[:8]}" if commit
@@ -374,6 +455,13 @@ def cmd_check(targets: list[str]) -> int:
             gen = tmp / "ts" / "m2.ts"
             _gen_ts(schema_path, gen)
             repo_files[FRONTEND_TS] = gen
+        if "dbgcmd" in check_targets:
+            schema_path = _dump_debug_schema(tmp / "executor_debug_command.json")
+            if not PLATFORM_DEBUG_CMD.exists():
+                return _die(f"{_rel(PLATFORM_DEBUG_CMD)} 不存在——先运行 gen")
+            gen = tmp / "_debug_command.py"
+            _gen_debug_py(schema_path, gen)
+            repo_files[PLATFORM_DEBUG_CMD] = gen
     except RuntimeError as e:
         return _die(str(e))
     drift = []
@@ -566,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
     p_gen.add_argument("--targets", default=",".join(ALL_TARGETS),
                        help="逗号分隔：schema,envelope,ext,py,ts")
     p_check = sub.add_parser("check", help="漂移守卫（临时重做 gen 比对）")
-    p_check.add_argument("--targets", default="schema,ext,py",
+    p_check.add_argument("--targets", default="schema,ext,py,dbgcmd",
                          help="默认不含 envelope（提交不在 check 面）"
                               "/ts（需 node，CI 显式开启）")
     p_compat = sub.add_parser("compat", help="不兼容变更守卫")

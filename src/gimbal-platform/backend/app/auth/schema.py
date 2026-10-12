@@ -5,13 +5,28 @@
  -本类为 Pydantic 模型,platform 进程内存对象
  - app.models.auth_session.AuthSession 是 SQLAlchemy ORM 模型(数据库行)
  二者字段对齐(字段名 / 类型 / 默认值),但 ORM 那份额外有 id / owner_id。
+
+M2(B-5/W20):凭证六字段(url/username/password/expires_in/token_type/
+refresh_token)不再本类平铺 —— 持有生成物 ``UserCredential``
+(app/schemas/_m2.py,M2 §9.2「M2 只定义凭证;运行态与方法留在各自
+运行时类」)。本类保留运行态(token/expires_at)与全部行为方法;
+平铺 kwargs 构造与属性读写经兼容层委托到 credential,历史构造点与
+消费面无感。
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.schemas._m2 import UserCredential
+
+
+# 平铺凭证键(兼容层的折叠/委托范围;模块级常量 —— pydantic 会把
+# 下划线类属性私有化,类内不可直接迭代)
+_CRED_FIELDS = ("url", "username", "password",
+                "expires_in", "token_type", "refresh_token")
 
 
 def _aware_utc(dt: datetime) -> datetime:
@@ -29,23 +44,78 @@ class AuthSession(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # ── 认证地址和凭证 ──
-    url: str = Field(default="", description="认证接口地址")
-    username: str = Field(default="", description="用户名")
-    password: str = Field(default="", description="密码")
+    # ── 凭证(M2 生成物;值的唯一权威)──────────────────────────
+    credential: UserCredential = Field(default_factory=UserCredential)
 
-    # ── Token 配置 ──
-    expires_in: int | None = Field(
-        default=None,
-        description="Token 有效期(秒),认证前配置。如 7200 表示 2 小时",
-    )
+    # ── 运行态(认证后填充;不进 M2)────────────────────────────
     token: str | None = Field(default=None, description="访问令牌,认证后填充")
-    token_type: str = Field(default="Bearer", description="Token 类型")
     expires_at: datetime | None = Field(default=None, description="过期时间,认证后自动计算")
-    refresh_token: str | None = Field(
-        default=None,
-        description="刷新令牌(独立于 access_token),由认证/刷新接口返回",
-    )
+
+    # ── 平铺凭证键兼容层(构造/读写委托;不另立状态)──────────────
+    @model_validator(mode="before")
+    @classmethod
+    def _fold_flat_credential(cls, data: Any) -> Any:
+        """平铺凭证 kwargs → credential(历史构造形态;显式 credential
+        子键胜出,平铺键只补缺)。"""
+        if not isinstance(data, dict):
+            return data
+        flat = {k: data[k] for k in _CRED_FIELDS if k in data}
+        if not flat:
+            return data
+        explicit = data.get("credential")
+        merged = {**flat, **(explicit if isinstance(explicit, dict) else {})}
+        for k in flat:
+            data.pop(k)
+        data["credential"] = merged
+        return data
+
+    @property
+    def url(self) -> str:
+        return self.credential.url
+
+    @url.setter
+    def url(self, value: str) -> None:
+        self.credential.url = value
+
+    @property
+    def username(self) -> str:
+        return self.credential.username
+
+    @username.setter
+    def username(self, value: str) -> None:
+        self.credential.username = value
+
+    @property
+    def password(self) -> str:
+        return self.credential.password
+
+    @password.setter
+    def password(self, value: str) -> None:
+        self.credential.password = value
+
+    @property
+    def expires_in(self) -> int | None:
+        return self.credential.expires_in
+
+    @expires_in.setter
+    def expires_in(self, value: int | None) -> None:
+        self.credential.expires_in = value
+
+    @property
+    def token_type(self) -> str:
+        return self.credential.token_type
+
+    @token_type.setter
+    def token_type(self, value: str) -> None:
+        self.credential.token_type = value
+
+    @property
+    def refresh_token(self) -> str:
+        return self.credential.refresh_token
+
+    @refresh_token.setter
+    def refresh_token(self, value: str) -> None:
+        self.credential.refresh_token = value
 
     # ── 计算属性 ──
 
@@ -125,16 +195,16 @@ class AuthSession(BaseModel):
             )
         self.token = token
         if expires_in is None:
-            if self.expires_in and self.expires_in > 0:
+            if self.credential.expires_in and self.credential.expires_in > 0:
                 self.expires_at = datetime.now(timezone.utc) + timedelta(
-                    seconds=self.expires_in
+                    seconds=self.credential.expires_in
                 )
             return self
         if expires_in > 0:
-            self.expires_in = expires_in
+            self.credential.expires_in = expires_in
             self.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         else:
-            self.expires_in = 0
+            self.credential.expires_in = 0
             self.expires_at = None
         return self
 
@@ -142,20 +212,20 @@ class AuthSession(BaseModel):
         """清空 token、expires_at 和 expires_in 三个字段。"""
         self.token = None
         self.expires_at = None
-        self.expires_in = None
+        self.credential.expires_in = None
         return self
 
     def is_same_credential(self, other: "AuthSession") -> bool:
         """按 url/username/password 三个字段逐项相等比较。"""
         return (
-            self.url == other.url
-            and self.username == other.username
-            and self.password == other.password
+            self.credential.url == other.credential.url
+            and self.credential.username == other.credential.username
+            and self.credential.password == other.credential.password
         )
 
     def clear_password(self) -> "AuthSession":
         """把 password 字段置空以缩短敏感凭据在内存中的驻留时间。"""
-        self.password = ""
+        self.credential.password = ""
         return self
 
     @classmethod

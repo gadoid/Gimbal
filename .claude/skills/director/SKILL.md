@@ -397,9 +397,13 @@ the printout).
 - `references/script-schema.md` — full field contract for `script.json`,
   shared by `script_init.py`/`script_gap_resolve.py`/`script_lint.py`/
   `script_assemble.py`. Read it before scripting.
-- `references/scenario-schema.md` — final `scenario.json` field shapes
-  (strategy kinds, templating conventions, two-namespace static/dynamic
-  rule). Read it before assembling/reviewing output.
+- `references/scenario-schema.md` — the invariant semantic rules
+  (two-namespace static/dynamic split, templating conventions, sanitizing
+  rules). The **field shapes live in plate at runtime** — fetch the current
+  M2 JSON Schema from `GET http://127.0.0.1:8765/api/m2` (response
+  `data.schema`, all `$defs`) before assembling or reviewing output; never
+  trust a remembered structure (`api`→`call`, `meta.plate` etc. have
+  shifted across generations).
 - `references/noise-keys.json` — field-name exclusion list (key-based, value
   doesn't matter). Extend it when a new transport/audit field shows up.
 - `references/common-values-blacklist.json` — value-match exclusion list

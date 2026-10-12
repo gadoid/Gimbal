@@ -428,3 +428,51 @@ class TestGraphCompositionInline:
         assert launched
         assert launched[0]["control"] == {"only": ["order"]}
         assert launched[0]["units"][0]["map"] == {"token": "authToken"}
+
+
+# ── W20:checks 生成物 CheckDecl(保存时校验)─────────────────────
+async def test_graph_checks_generated_shape_validated(client):
+    """checks 收 CheckDecl(生成物):合法载荷照常过;未知键/缺 strategy
+    422 —— suite 编排面不再收任意 dict(镜像清零的校验收益)。"""
+    h = await register_and_login(client, "gc_chk", "pw123456")
+    for sid in ("sc-gc-a", "sc-gc-b"):
+        r = await client.post("/api/scenarios", headers=h,
+                              json=make_draft(sid))
+        assert r.status_code == 201, r.text
+
+    ok = {
+        "scenarioId": "sc-gc-a",
+        "graph": {
+            "mode": "aggregate",
+            "units": [{"ref": "a", "scenarioId": "sc-gc-a"}],
+            "checks": [{"on": {"refs": ["a"]},
+                        "strategy": {"kind": "assertion",
+                                     "operator": "exists",
+                                     "target": "$.response_status"}}],
+        },
+    }
+    r = await client.post("/api/runs", headers=h, json=ok)
+    assert r.status_code == 201, r.text
+
+    bad_unknown = {
+        "scenarioId": "sc-gc-a",
+        "graph": {
+            "mode": "aggregate",
+            "units": [{"ref": "a", "scenarioId": "sc-gc-a"}],
+            "checks": [{"on": {"refs": ["a"]}, "strategy": {},
+                        "bogus": 1}],
+        },
+    }
+    r = await client.post("/api/runs", headers=h, json=bad_unknown)
+    assert r.status_code == 422, r.text
+
+    bad_missing = {
+        "scenarioId": "sc-gc-a",
+        "graph": {
+            "mode": "aggregate",
+            "units": [{"ref": "a", "scenarioId": "sc-gc-a"}],
+            "checks": [{"on": {"refs": ["a"]}}],
+        },
+    }
+    r = await client.post("/api/runs", headers=h, json=bad_missing)
+    assert r.status_code == 422, r.text

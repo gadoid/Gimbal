@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +37,7 @@ from ..models.execution import (
     STATUS_QUEUED,
     STATUS_RUNNING,
 )
+from ..schemas._debug_command import DebugCommand
 from ..schemas.execution import (
     ExecutionListOut,
     ExecutionOut,
@@ -650,31 +651,10 @@ async def cancel_execution(
 
 # ── C6(P3-04):调试台代理(执行器 token 不出后端)────────────────
 
-class DebugCommandIn(BaseModel):
-    """调试命令(与引擎 schema/debug.py DebugCommand 同形:kind + 键值成对)。
-
-    平台侧本地镜像(平台不 import gimbal);契约由 gimbal 侧
-    server_debug 端点二次校验兜底。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["continue", "step", "abort", "read",
-                  "write", "patch", "retry", "skip"]
-    variable: str | None = None
-    path: str | None = None
-    value: Any = None
-
-    @model_validator(mode="after")
-    def _check_payload(self) -> "DebugCommandIn":
-        if self.kind == "write" and not self.variable:
-            raise ValueError("write 需要 variable")
-        if self.kind == "patch" and not self.path:
-            raise ValueError("patch 需要 path")
-        if self.kind not in ("write", "patch") and (
-                self.variable is not None or self.path is not None):
-            raise ValueError(f"{self.kind} 不携带 variable/path")
-        return self
+# W20(B-5):手写镜像退役 —— 字段形状生成自执行器 DebugCommand 快照
+# (app/schemas/_debug_command.py,gen_m2 dbgcmd 目标;write/patch 成对
+# 红线是行为语义,生成物内手写子类补回,gimbal server_debug 422 兜底)。
+DebugCommandIn = DebugCommand
 
 
 class DebugCommandOut(BaseModel):
@@ -718,6 +698,6 @@ async def debug_session_command(
     """代理结构化调试命令（N6：与引擎 DebugCommand 同形）。"""
     ctx = _debug_ctx(ex)
     session = ctx["session"]
-    result = await session.debug_command(body.model_dump())
+    result = await session.debug_command(body.model_dump(mode="json"))
     return DebugCommandOut(accepted=bool(result.get("accepted")),
                            output=list(result.get("output") or []))

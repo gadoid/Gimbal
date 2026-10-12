@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ._m2 import DebugSpec, GateDecl, RunOptions
+from ._m2 import CheckDecl, DebugSpec, GateDecl, RunOptions
 
 
 # ─── helpers ────────────────────────────────────────────────────────
@@ -336,9 +336,10 @@ class GraphSpec(BaseModel):
     parallel: int = Field(default=1, ge=1, le=64)
     n_runs: int = Field(default=1, ge=1, le=64, alias="nRuns")
     # N1 横切面(D-6 保留):与引擎 GateDecl/CheckDecl 同形
-    # M2 §9.6:gates 改用生成物 GateDecl;checks 保持 dict(平台扩展)
+    # M2 §9.6(W20):gates/checks 均改用生成物(镜像清零;wire 键
+    # 单词无驼峰差,CheckDecl extra=forbid 即保存时校验)
     gates: list[GateDecl] = Field(default_factory=list)
-    checks: list[dict[str, Any]] = Field(default_factory=list)
+    checks: list[CheckDecl] = Field(default_factory=list)
     # graph 级服务绑定(单元可覆盖)
     service_bindings: dict[str, Any] = Field(default_factory=dict,
                                               alias="serviceBindings")

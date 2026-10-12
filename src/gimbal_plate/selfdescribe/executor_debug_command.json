@@ -1,0 +1,56 @@
+{
+ "additionalProperties": false,
+ "description": "一条调试会话命令。\n\nkind 语义与拦截决策一一对应：\n  continue / step —— 放行（step 在 every_step 档位下=步进到下一暂停点，\n                      与 continue 同一 Decision，保留拼写便于前端表达）；\n  abort           —— 终止 run；\n  read            —— 查看最近调用证据（不产生 Decision，继续等下一条）；\n  write           —— 注入 scratch 变量后继续（仅 step.before 暂停点）；\n  patch           —— 补丁待发请求后继续（仅 call.before 暂停点）；\n  retry / skip    —— 仅 step.failed 暂停点。",
+ "properties": {
+  "kind": {
+   "enum": [
+    "continue",
+    "step",
+    "abort",
+    "read",
+    "write",
+    "patch",
+    "retry",
+    "skip"
+   ],
+   "title": "Kind",
+   "type": "string"
+  },
+  "path": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "description": "patch：JSONPath",
+   "title": "Path"
+  },
+  "value": {
+   "default": null,
+   "description": "write/patch：写入值",
+   "title": "Value"
+  },
+  "variable": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "description": "write：变量名",
+   "title": "Variable"
+  }
+ },
+ "required": [
+  "kind"
+ ],
+ "title": "DebugCommand",
+ "type": "object"
+}

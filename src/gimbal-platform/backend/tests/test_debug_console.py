@@ -261,3 +261,36 @@ async def test_server_chain_end_to_end(client, monkeypatch, stub_sut):
             .select_from(ExecutionEvent)
             .where(ExecutionEvent.execution_id == eid))).scalar_one()
     assert n_events > 0                                  # SSE 事件已入库
+
+
+# ── W20:DebugCommandIn 生成物(app/schemas/_debug_command.py)────────
+async def test_debug_command_generated_shape_and_pairing(client):
+    """字段形状生成自执行器快照;write/patch 成对红线在平台侧同样拦截
+    (422 先于 gimbal server_debug 兜底)。"""
+    from app.schemas._debug_command import DebugCommand
+
+    # 生成物可用且形状与执行器同源(快照 executor_debug_command.json)
+    cmd = DebugCommand.model_validate(
+        {"kind": "write", "variable": "qty", "value": 3})
+    assert cmd.kind == "write"
+    with pytest.raises(Exception):
+        DebugCommand.model_validate({"kind": "write", "value": 3})   # 缺 variable
+    with pytest.raises(Exception):
+        DebugCommand.model_validate({"kind": "read", "variable": "x"})
+    with pytest.raises(Exception):
+        DebugCommand.model_validate({"kind": "continue", "bogus": 1})  # forbid
+
+    h = await register_and_login(client, "dbg4", "pw123456")
+    await client.post("/api/scenarios", headers=h, json=make_draft("sc-dbg-cmd"))
+    r = await client.post("/api/runs", headers=h, json={
+        "scenarioId": "sc-dbg-cmd", "dataSetIds": [],
+        "runOptions": {"debug": {"pause": "every_step"}},
+    })
+    assert r.status_code == 201, r.text
+    eid = r.json()["executionId"]
+    # 会话未激活时 409(no_debug_session)先于命令校验 —— 直接打命令端点
+    # 校验面:非法载荷 422(FastAPI 对生成物模型的校验)
+    r = await client.post(f"/api/executions/{eid}/debug/command",
+                          headers=h,
+                          json={"kind": "write", "value": 3})
+    assert r.status_code == 422, r.text
