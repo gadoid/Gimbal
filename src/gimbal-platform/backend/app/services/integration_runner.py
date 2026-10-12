@@ -332,10 +332,24 @@ async def run_instance(instance_id: int) -> dict:
                 "passed", "success", "ok"):
             status = "failed"
             error = str(run_result.get("error") or run_result.get("status") or "")
-        _scrub(run_result)
-        outputs = run_result if isinstance(run_result, dict) else {}
+        # G2/Y2:outputs = 各单元 outputs 合并(场景作用域变量,执行器侧
+        # 已脱敏)—— 不再把整个 run_finished 载荷当 outputs(计数/details
+        # 不是业务输出);G7:任一步 error_kind=auth → 凭证失效信号
+        outputs: dict = {}
+        auth_failed = False
+        details = run_result.get("details") if isinstance(run_result, dict) else None
+        if isinstance(details, list):
+            for d in details:
+                if not isinstance(d, dict):
+                    continue
+                if isinstance(d.get("outputs"), dict):
+                    outputs.update(d["outputs"])
+                for s in d.get("steps") or []:
+                    if isinstance(s, dict) and s.get("error_kind") == "auth":
+                        auth_failed = True
     except Exception as e:  # noqa: BLE001 — plate/通道任何故障 = 失败收口
         status, error, outputs = "failed", str(e)[:500], {}
+        auth_failed = False
 
     async with db_module.SessionLocal() as db:
         inst = await db.get(IntegrationTask, instance_id)
@@ -346,20 +360,31 @@ async def run_instance(instance_id: int) -> dict:
             raise IntegrationRunError("template_gone", "模板已删除")
         return await _finish(
             db, inst, tpl, status, error, outputs=outputs,
-            duration_ms=int((_now() - started).total_seconds() * 1000))
+            duration_ms=int((_now() - started).total_seconds() * 1000),
+            auth_failed=auth_failed)
 
 
 async def _finish(
     db, inst: IntegrationTask, tpl: IntegrationTask, status: str,
     error: str, *, outputs: dict | None = None,
-    duration_ms: int = 0,
+    duration_ms: int = 0, auth_failed: bool = False,
 ) -> dict:
     """结果回写:result_policy=on_change 只在状态翻转时落盘(P1 口径
-    = last_status 变化,评审 E7);通知与 fail_streak。"""
+    = last_status 变化,评审 E7);通知与 fail_streak。
+
+    G7/Y2:auth 类失败(执行器 error_kind=auth)→ 实例暂停
+    (paused_reason=auth_failed),不再按周期重试(防错凭证反复登录
+    锁号,方案 §8);fail_streak 照常累计。通知按身份模式:平台模式
+    → 全体 admin/operator;个人模式 → 实例持有人。
+    """
     now = _now()
     changed = inst.last_status != status
     prev_streak = inst.fail_streak or 0
-    inst.state = "idle"
+    if auth_failed and status != "passed":
+        inst.state = "paused"
+        inst.paused_reason = "auth_failed"
+    else:
+        inst.state = "idle"
     inst.running_since = None
     inst.last_run_at = now
     inst.last_status = status
@@ -374,24 +399,40 @@ async def _finish(
         inst.next_run_at = now + timedelta(hours=1)
     await db.commit()
 
-    # 连续失败通知(平台模式 → 全体 admin;方案 §8)
-    if status == "failed" and inst.fail_streak >= FAIL_STREAK_NOTIFY \
-            and inst.fail_streak % FAIL_STREAK_NOTIFY == 0:
+    # 通知(方案 §8):G7/Y2 auth 类失败 → 立即且按身份模式定向
+    # (个人 = 持有人,平台 = 全体 admin/operator);普通失败 → 连续
+    # FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator)。
+    auth_notify = (status == "failed" and auth_failed)
+    streak_notify = (status == "failed" and not auth_failed
+                     and inst.fail_streak >= FAIL_STREAK_NOTIFY
+                     and inst.fail_streak % FAIL_STREAK_NOTIFY == 0)
+    if auth_notify or streak_notify:
         try:
             from .notifications import create_notification
             async with db_module.SessionLocal() as ndb:
-                admins = (await ndb.execute(
-                    select(User.id).where(User.role == "admin",
-                                          User.is_system == False)  # noqa: E712
-                )).scalars().all()
-                for uid in admins:
+                if auth_notify and tpl.identity_mode == "personal" \
+                        and inst.holder_id:
+                    uids = [inst.holder_id]   # 凭证是持有人自己的
+                else:
+                    uids = (await ndb.execute(
+                        select(User.id).where(User.role.in_(("admin", "operator")),
+                                              User.is_system == False)  # noqa: E712
+                    )).scalars().all()
+                if auth_notify:
+                    title = f"集成任务「{tpl.name}」凭证失效,已暂停"
+                    body = ("认证失败(auth)——请在"
+                            + ("我的凭证" if tpl.identity_mode == "personal"
+                               else "平台凭证")
+                            + "中更新凭证后自动恢复")
+                else:
+                    title = f"集成任务「{tpl.name}」连续失败 {inst.fail_streak} 次"
+                    body = (inst.last_error or "")[:200]
+                for uid in uids:
                     await create_notification(
                         ndb, user_id=uid, type_="integration",
-                        title=f"集成任务「{tpl.name}」连续失败 {inst.fail_streak} 次",
-                        body=(inst.last_error or "")[:200],
-                        link="/integrations")
+                        title=title, body=body, link="/integrations")
         except Exception:  # noqa: BLE001 — 通知是增强
-            logger.warning("integration: fail-streak notify failed")
+            logger.warning("integration: notify failed")
     return {"status": status, "durationMs": duration_ms, "error": error}
 
 
@@ -560,3 +601,37 @@ async def ensure_instance(tpl: IntegrationTask) -> IntegrationTask | None:
                 ))).scalar()
                 return row
         return row
+
+
+async def revive_paused_instances(user_id: int | None = None) -> int:
+    """凭证复活钩子(auth_sessions 路由调用,方案 §8/设计 §3)。
+
+    恢复范围:paused_reason=auth_failed 的实例 —— 个人模式且
+    user_id 匹配 holder;平台模式不受 user_id 过滤(平台凭证池只有
+    operator/admin 能改,改了即视为恢复信号)。恢复 = state=idle +
+    next_run_at=now(下拍调度即重试);paused_reason 清空。
+    manual 暂停的实例不受影响。返回恢复条数(审计/日志用)。
+    """
+    now = _now()
+    async with db_module.SessionLocal() as db:
+        stmt = select(IntegrationTask).where(
+            IntegrationTask.template_id.isnot(None),
+            IntegrationTask.state == "paused",
+            IntegrationTask.paused_reason == "auth_failed",
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        revived = 0
+        for inst in rows:
+            tpl = await db.get(IntegrationTask, inst.template_id)
+            if tpl is None:
+                continue
+            if (tpl.identity_mode == "personal" and user_id is not None
+                    and inst.holder_id != user_id):
+                continue          # 他人更新凭证 ≠ 我的凭证恢复
+            inst.state = "idle"
+            inst.paused_reason = ""   # 列 NOT NULL:空串 = 无暂停原因
+            inst.next_run_at = now
+            revived += 1
+        if revived:
+            await db.commit()
+    return revived

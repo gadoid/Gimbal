@@ -293,7 +293,12 @@ class TestIntegrationRouter:
 
         class _FakeResult:
             launch_status = "ok"
-            run_result = {"status": "passed", "token": "should-be-scrubbed"}
+            # G2/Y2:outputs = details[].outputs(执行器已脱敏);顶层
+            # token 形态不再进 last_outputs(载荷不是业务输出)
+            run_result = {"status": "passed",
+                          "details": [{"scenario_id": "sc-ka", "outputs": {
+                              "token": "should-be-scrubbed",
+                              "order_id": "O1"}}]}
 
         class _FakeChannels:
             async def run_case(self, case_path):
@@ -318,6 +323,7 @@ class TestIntegrationRouter:
             inst = (await db.execute(select(IntegrationTask).where(
                 IntegrationTask.template_id == tid))).scalar()
             assert inst.last_outputs["token"] == "***"
+            assert inst.last_outputs["order_id"] == "O1"
         # 冷却:60s 内再点 → 409
         r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
         assert r.status_code == 409
@@ -384,3 +390,99 @@ class TestIntegrationRouter:
             out = await ir.run_instance(inst.id)
         assert out["status"] == "failed"
         assert "拒绝触发" in (out.get("error") or "")
+
+
+# ── Y2(G7):auth 类失败暂停实例 + 凭证复活钩子 ────────────────────
+
+async def test_auth_failure_pauses_instance_and_revives(client):
+    """error_kind=auth → _finish 暂停(paused/auth_failed,不重试);
+    revive_paused_instances 恢复 idle;manual 暂停不受影响。"""
+    from datetime import datetime, timezone
+
+    from app.core import db as db_module
+    from app.models.integration_task import IntegrationTask
+    from app.services import integration_runner as ir
+
+    admin = await register_and_login(client, "authrev_admin", "pw123456")
+    uid = 1
+
+    async with db_module.SessionLocal() as s:
+        s.add(IntegrationTask(
+            name="平台探针", owner_id=uid, visibility="public",
+            identity_mode="platform", scenario_id="sc-x",
+            target_system="fin", trigger_cron="*/5 * * * *",
+            result_policy="latest", template_id=None))
+        await s.commit()
+        tpl_id = (await s.execute(
+            __import__("sqlalchemy").select(IntegrationTask.id).order_by(
+                IntegrationTask.id.desc()))).scalars().first()
+        s.add(IntegrationTask(
+            name="平台探针", owner_id=uid, holder_id=uid, template_id=tpl_id,
+            enabled=True, state="idle",
+            next_run_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
+        # manual 暂停的对照实例
+        s.add(IntegrationTask(
+            name="手动暂停", owner_id=uid, holder_id=uid + 1,
+            template_id=tpl_id,
+            enabled=True, state="paused", paused_reason="manual"))
+        await s.commit()
+        # 精确取目标实例(holder=uid 的"平台探针"),不按最新 id(后插
+        # 的 manual 行会抢位)
+        from sqlalchemy import select as _sel
+        inst_id = (await s.execute(_sel(IntegrationTask.id).where(
+            IntegrationTask.template_id == tpl_id,
+            IntegrationTask.holder_id == uid))).scalars().first()
+
+    async with db_module.SessionLocal() as s:
+        inst = await s.get(IntegrationTask, inst_id)
+        tpl = await s.get(IntegrationTask, tpl_id)
+        out = await ir._finish(s, inst, tpl, "failed", "401 Unauthorized",
+                               auth_failed=True)
+        assert out["status"] == "failed"
+        assert inst.state == "paused" and inst.paused_reason == "auth_failed"
+        assert inst.fail_streak == 1
+
+    # 复活:平台凭证信号(平台模式不过滤 user_id)
+    assert await ir.revive_paused_instances(user_id=99) >= 1
+    async with db_module.SessionLocal() as s:
+        inst = await s.get(IntegrationTask, inst_id)
+        assert inst.state == "idle" and inst.paused_reason in (None, "")
+        # manual 暂停不受影响
+        manual = (await s.execute(
+            __import__("sqlalchemy").select(IntegrationTask).where(
+                IntegrationTask.paused_reason == "manual"))).scalars().first()
+        assert manual is not None and manual.state == "paused"
+
+    _ = admin
+
+
+async def test_non_auth_failure_keeps_running(client):
+    """普通失败不暂停(照常 idle,fail_streak 累计)——P1 行为不变。"""
+    from app.core import db as db_module
+    from app.models.integration_task import IntegrationTask
+    from app.services import integration_runner as ir
+
+    await register_and_login(client, "authrev2_admin", "pw123456")
+    async with db_module.SessionLocal() as s:
+        s.add(IntegrationTask(
+            name="普通失败", owner_id=1, visibility="public",
+            identity_mode="platform", scenario_id="sc-x",
+            target_system="fin", trigger_cron="*/5 * * * *",
+            result_policy="latest"))
+        await s.commit()
+        tpl_id = (await s.execute(
+            __import__("sqlalchemy").select(IntegrationTask.id).order_by(
+                IntegrationTask.id.desc()))).scalars().first()
+        s.add(IntegrationTask(
+            name="普通失败", owner_id=1, holder_id=1, template_id=tpl_id,
+            enabled=True, state="idle"))
+        await s.commit()
+        inst_id = (await s.execute(
+            __import__("sqlalchemy").select(IntegrationTask.id).order_by(
+                IntegrationTask.id.desc()))).scalars().first()
+
+    async with db_module.SessionLocal() as s:
+        inst = await s.get(IntegrationTask, inst_id)
+        tpl = await s.get(IntegrationTask, tpl_id)
+        await ir._finish(s, inst, tpl, "failed", "断言失败", auth_failed=False)
+        assert inst.state == "idle" and inst.paused_reason in (None, "")

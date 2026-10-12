@@ -176,6 +176,13 @@ async def create_auth(
             detail=f"alias '{payload.alias}' already exists for this user",
         )
     await session.refresh(a)
+    # G7/Y2:新建凭证 = 补齐信号 → auth_failed/缺失凭证暂停的集成实例
+    # 恢复(与 update 同钩;失败不阻断)。
+    try:
+        from ..services import integration_runner as _ir
+        await _ir.revive_paused_instances(user.id)
+    except Exception:  # noqa: BLE001
+        pass
     return _to_out(a)
 
 
@@ -244,6 +251,14 @@ async def patch_auth(
     # 查询凭证复活钩子(§7.5):重存 = 认证页"手动刷新"动作 → 清 runner
     # 缓存会话与 401 拉黑,下次查询重装凭证冷启登录(§6.2 不自动重登不变)
     query_view_runner.drop_credential(user.id, a.alias)
+    # G7/Y2 集成实例复活:凭证更新 → auth_failed 暂停的实例恢复调度
+    # (个人模式匹配持有人;平台模式由 operator/admin 改平台凭证触发)。
+    # 失败不阻断凭证更新(复活是增强,下拍调度前还有别的人口)。
+    try:
+        from ..services import integration_runner as _ir
+        await _ir.revive_paused_instances(user.id)
+    except Exception:  # noqa: BLE001
+        pass
     return _to_out(a)
 
 

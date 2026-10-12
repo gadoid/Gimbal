@@ -329,6 +329,11 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 # C12:P2-05 口径 —— 乘法执行次数单列(平台台账投影源)
                 "attempts": getattr(result, "attempts", 0),
             },
+            # G2/G7(集成 P2/Y2):明细行随 run 暴露 —— 每步 error_kind
+            # (auth 类失败 = 凭证失效信号)+ 每单元 outputs(已脱敏)。
+            # 平台集成链据此暂停实例/续游标,不另起事件消费面。
+            "details": None if result is None else list(
+                getattr(result, "details", []) or []),
         }
 
     @app.post("/runs/{run_id}/debug", response_model=DebugCommandResponse)

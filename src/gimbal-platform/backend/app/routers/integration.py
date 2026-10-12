@@ -390,6 +390,13 @@ async def create_platform_credential(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    # G7/Y2:平台凭证新建 = 恢复信号 → auth_failed 暂停的平台模式实例
+    # 恢复调度(revive 内部平台模式不受 user_id 过滤)。
+    try:
+        from ..services import integration_runner as _ir
+        await _ir.revive_paused_instances(user.id)
+    except Exception:  # noqa: BLE001
+        pass
     return {"id": row.id, "alias": row.alias}
 
 

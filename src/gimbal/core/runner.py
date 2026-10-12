@@ -21,6 +21,7 @@ Engine.run()：
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -514,15 +515,57 @@ class Engine:
 
     # ── 判定（两套历史口径，零回归）────────────────────────────
 
+    # G7(集成 P2/Y2):错误分类。401/403 状态断言失败与登录失败 → auth
+    # (凭证失效信号,平台侧据此暂停实例防锁号);calling 阶段按超时/传输;
+    # 其余(断言/提取/清理失败)→ logic。文本判定 —— 401 响应是"照常返回
+    # + 断言判"的形态(call.py auth_expired 同口径),状态码只在 error 文本。
+    _AUTH_STATUS_RE = re.compile(r"\b40[13]\b")
+
+    @staticmethod
+    def _error_kind_of(step: Any) -> str:
+        error = str(getattr(step, "error", "") or "")
+        if str(getattr(step, "status", "")) == "passed" or not error:
+            return "none"
+        if Engine._AUTH_STATUS_RE.search(error):
+            return "auth"
+        if getattr(step, "error_phase", None) == "calling":
+            low = error.lower()
+            if "登录" in error or "auth" in low or "unauthorized" in low:
+                return "auth"
+            if "timeout" in low or "timed out" in low:
+                return "timeout"
+            return "transport"
+        return "logic"
+
+    @staticmethod
+    def _redact_outputs(value: Any) -> Any:
+        """G2:outputs 过脱敏键表(与 CallResult.to_evidence 同键表口径;
+        深拷贝 —— outputs 是调度器喂下游的共享引用,不就地改)。"""
+        from gimbal.protocols.result import is_sensitive_path
+        if isinstance(value, dict):
+            return {
+                k: ("***redacted***" if is_sensitive_path(k)
+                    else Engine._redact_outputs(v))
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [Engine._redact_outputs(v) for v in value]
+        return value
+
     @staticmethod
     def _detail_row(result: Any) -> dict[str, Any]:
-        """ScenarioRunResult → details 行（历史形状）。"""
+        """ScenarioRunResult → details 行（历史形状）。
+
+        G2/G7(集成 P2/Y2):每步加 ``error_kind``;顶层加 ``outputs``
+        (场景作用域提升变量快照,脱敏后 —— 集成任务据此展示/续游标)。
+        """
         return {
             "scenario_id": result.scenario_id,
             "status":      result.status,
             "duration_ms": result.duration_ms,
             "halted":      result.halted,
             "halt_reason": result.halt_reason,
+            "outputs":     Engine._redact_outputs(result.outputs or {}),
             "steps": [
                 {
                     "step_id":     s.step_id,
@@ -530,6 +573,7 @@ class Engine:
                     "duration_ms": s.duration_ms,
                     "error":       s.error,
                     "error_phase": s.error_phase,
+                    "error_kind":  Engine._error_kind_of(s),
                     **({"repaired": True} if getattr(s, "repaired", False) else {}),
                 }
                 for s in result.step_results
