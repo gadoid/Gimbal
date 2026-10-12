@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/home/audit/auditExecute
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: audit_ids

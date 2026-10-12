@@ -61,6 +61,9 @@ class HttpBinding(_TaggedBindingMixin, BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: float = 30.0
     auth: Literal["none", "bearer", "basic", "cookie", "custom"] = "none"
+    # G1(集成 P2/Y1,P-A=B):custom 时的签名器名(端点级覆盖;缺省
+    # md5sign 由执行器侧兜底 —— 系统级声明待第二个签名器/P4)
+    auth_signer: str | None = None
     body_type: Literal["none", "json", "form", "multipart", "raw", "binary"] = "json"
 
     def locator(self) -> tuple[str, str]:

@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/Customer/Policy/getCustomerPolicy
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: customer_id

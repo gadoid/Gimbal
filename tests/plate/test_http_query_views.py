@@ -30,7 +30,7 @@ def test_route_shape(http_client):
     cl = by_name["cost_list"]
     assert cl["endpoint_id"] == "fin.cost.amount_list"
     assert cl["columns"] == ["cost_name", "cost_id"]
-    assert cl["auth"] == "bearer"
+    assert cl["auth"] == "custom"   # G1 修正(Y1):fin 实为 md5 签名
     # §13 客户域三级链路视图
     assert {"customer_list", "customer_part", "customer_policy"} <= names
     cl1 = by_name["customer_list"]

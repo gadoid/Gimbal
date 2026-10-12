@@ -30,6 +30,8 @@ HTTP_PROTOCOL: dict[str, Any] = {
             "type": "string",
             "enum": ["none", "bearer", "basic", "cookie", "custom"],
         },
+        # G1(集成 P2/Y1):custom 时的签名器名(端点级;缺省 md5sign)
+        "auth_signer": {"type": ["string", "null"]},
         "body_type": {
             "type": "string",
             "enum": ["none", "json", "form", "multipart", "raw", "binary"],

@@ -131,7 +131,7 @@ class TestFrameworkDim:
         assert r.status_code == 200
         data = r.json()["data"]
         h = data["m2_hash"]
-        assert data["m2_generation"] == 1 and len(h) == 64
+        assert data["m2_generation"] == 2 and len(h) == 64   # gen2:Call.auth(Y1)
         # 当前 hash 直取；缺 hash → 404 m2_not_found（构件根指空目录）
         monkeypatch.setenv("PLATE_ARTIFACTS_PATH", str(tmp_path))
         assert http_client.get(f"/api/m2/{h}").status_code == 200

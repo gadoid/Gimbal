@@ -63,7 +63,7 @@ from gimbal_plate.schema.time_policy import (
 )
 
 # M2 构建代际（不兼容变更时递增；P8 加法演进下新增可选字段是兼容变更）
-M2_GENERATION = 1
+M2_GENERATION = 2
 
 # M1 / 框架（非 M2，保持原位）
 from gimbal_plate.schema.endpoint import DeclarationEntry, EndpointMetadata

@@ -19,7 +19,7 @@ binding:
   method: POST
   path: /api/v1/fin/settlement/orders
   timeout_seconds: 10.0
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: order_id

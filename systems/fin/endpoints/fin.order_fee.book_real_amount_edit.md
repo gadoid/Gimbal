@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/order/orderFee/bookRealAmountEdit
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: action

@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/home/audit/auditPage
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: page_no

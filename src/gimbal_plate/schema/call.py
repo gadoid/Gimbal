@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,3 +20,13 @@ class Call(BaseModel):
     kind: Literal["call"] = "call"
     protocol: str = Field(
         ..., description="协议名（必填）；协议注册表的分派键")
+    # G1 认证施加(集成 P2/Y1,gen2):被测接口自身的认证要求,由 plate
+    # binding.auth 透传(四标准值);custom 时 auth_signer 携带签名器名
+    # (缺省 md5sign —— 唯一具名签名器,第二个签名器随 MeterSphere/P4
+    # 再上系统级声明)。none/缺省 = 不注入,旧行为不变。
+    auth: Literal["none", "bearer", "basic", "cookie", "custom"] = Field(
+        default="none",
+        description="认证施加方式（binding.auth 透传；none=不注入）")
+    auth_signer: Optional[str] = Field(
+        default=None,
+        description="custom 时的签名器名（缺省 md5sign）")

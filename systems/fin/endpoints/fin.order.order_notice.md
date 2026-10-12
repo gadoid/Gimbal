@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/order/order/orderNotice
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: order_id

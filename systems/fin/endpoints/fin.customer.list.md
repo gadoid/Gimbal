@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/customer/customer/customerList
-  auth: bearer
+  auth: custom
 request: {}
 responses:
   "200":

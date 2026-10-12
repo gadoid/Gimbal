@@ -92,3 +92,94 @@ def test_session_model_has_auth_signer_default():
     from gimbal.auth.session import AuthSession
     s = AuthSession(url="http://x", username="u", password="p")
     assert s.auth_signer == "md5sign"
+
+
+# ── Y1:call.auth 声明驱动(优先级:声明 > 会话 auth_signer > 遗留 md5)──
+
+class _Call:
+    def __init__(self, user="u1", auth="", auth_signer=None):
+        self.user = user
+        self.auth = auth
+        self.auth_signer = auth_signer
+
+
+class _Pctx:
+    def __init__(self, call):
+        self.call = call
+
+
+def _inject(session, call) -> dict:
+    from gimbal.protocols.builtin.http import HttpProtocolExecutor
+    ex = HttpProtocolExecutor()
+    ex.bind(auth_registry=_Auth(session))
+    headers: dict = {}
+    ex._inject_auth_headers(headers, _Pctx(call))
+    return headers
+
+
+def test_call_auth_bearer_overrides_session():
+    """声明 bearer > 会话 auth_signer=md5sign → Bearer 头。"""
+    h = _inject(_Session(auth_signer="md5sign"),
+               _Call(auth="bearer"))
+    assert h == {"Authorization": "Bearer abc123"}
+
+
+def test_call_auth_custom_default_md5():
+    """custom 无 auth_signer → 遗留 md5(fin 修正后的行为)。"""
+    h = _inject(_Session(), _Call(auth="custom"))
+    assert "timestamp" in h and "Authorization" not in h
+
+
+def test_call_auth_custom_named_signer():
+    h = _inject(_Session(), _Call(auth="custom", auth_signer="standard.basic"))
+    assert h["Authorization"].startswith("Basic ")
+
+
+def test_call_auth_none_keeps_legacy_md5():
+    """auth 缺省(none)且 call.user 在 → 遗留 md5(存量场景零变化)。"""
+    h = _inject(_Session(), _Call())
+    assert "timestamp" in h
+
+
+def test_call_auth_none_no_user_no_injection():
+    assert _inject(_Session(), _Call(user="")) == {}
+
+
+def test_projection_passes_auth_fields():
+    """_call_projection:binding.auth/auth_signer → call 透传(none 不写键)。"""
+    from gimbal_plate.release.release import _call_projection
+
+    class _B:
+        protocol = "http"
+        method = "GET"
+        path = "/x"
+        headers = {}
+        timeout_seconds = 30.0
+        auth = "bearer"
+
+    class _Ep:
+        service = "svc"
+        binding = _B()
+
+    out = _call_projection(_Ep())
+    assert out["auth"] == "bearer" and "auth_signer" not in out
+
+    _B.auth = "custom"
+    _B.auth_signer = "md5sign"
+    out = _call_projection(_Ep())
+    assert out["auth"] == "custom" and out["auth_signer"] == "md5sign"
+
+    _B.auth = "none"
+    out = _call_projection(_Ep())
+    assert "auth" not in out        # none 不写键,存量形状不变
+
+
+def test_m2_gen2_migrate_noop():
+    """gen1→2 迁移为 no-op(Call 加可选字段,存量语料行为等价)。"""
+    from gimbal_plate.schema import M2_GENERATION
+    from gimbal_plate.schema.migrate import _migrate_map, migrate_definition
+    assert M2_GENERATION == 2
+    assert 1 in _migrate_map
+    d = {"kind": "scenario", "meta": {"name": "n"}, "steps": []}
+    out = migrate_definition(d, from_generation=1)
+    assert out == d

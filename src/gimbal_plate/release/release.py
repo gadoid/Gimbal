@@ -116,6 +116,15 @@ def _call_projection(ep: EndpointSpec) -> dict[str, Any]:
     for attr in ("method", "path", "headers"):
         if hasattr(b, attr):
             out[attr] = getattr(b, attr)
+    # G1(集成 P2/Y1):binding.auth → call.auth 透传(四标准值;custom
+    # 另带 auth_signer,binding 级声明优先)。none/缺省不写键 —— 存量
+    # call 形状不变,重投影/比对零扰动。
+    b_auth = getattr(b, "auth", None)
+    if b_auth and b_auth != "none":
+        out["auth"] = b_auth
+        b_signer = getattr(b, "auth_signer", None)
+        if b_auth == "custom" and b_signer:
+            out["auth_signer"] = b_signer
     return out
 
 

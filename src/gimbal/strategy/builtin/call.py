@@ -162,7 +162,8 @@ class CallExecutor(ProtocolExecutor):
 
     # ── 协议侧认证握手（S-2：login 并入适配器）─────────────────
 
-    def login(self, user: str, pctx: Optional[ProtocolCallContext] = None) -> dict:
+    def login(self, user: str, pctx: Optional[ProtocolCallContext] = None,
+              *, signer_override: Optional[str] = None) -> dict:
         """http 握手：按标签取会话，签名 token/timestamp 头（S-2）。
 
         契约与退役插件 auth_headers 逐字节一致（特征化用例钉死）：
@@ -173,15 +174,21 @@ class CallExecutor(ProtocolExecutor):
         registry = getattr(self, "_auth_registry", None)
         if not user or registry is None:
             return {}
-        session = registry.get(str(user))
+        session = registry.get(str(user)) if user else None
         token = getattr(session, "token", None)
-        signer = str(getattr(session, "auth_signer", "md5sign") or "md5sign")
+        # 优先级:call.auth 声明驱动(signer_override)> 会话 auth_signer
+        # (X4)> 遗留 md5。basic 无需会话(直取 username/password)。
+        signer = (signer_override
+                  or str(getattr(session, "auth_signer", "md5sign") or "md5sign"))
         # G1 分派框架(X4):显式 standard.* 签名器 → 标准头;默认
         # md5sign 走遗留签名(与退役插件 auth_headers 逐字节一致)。
         # bearer 分派不按 token_type 形状猜 —— 两侧 AuthSession 的
         # token_type 默认即 "Bearer",形状分派会劫持全部存量 md5 场景;
         # 声明驱动的写入面在集成 P2 的 call.auth 透传。
         if signer == "standard.basic":
+            if session is None:
+                logger.warning("[CallExecutor] call.user={!r} 会话缺失，跳过 Basic 认证头注入", user)
+                return {}
             import base64
             username = getattr(session, "username", "") or ""
             password = getattr(session, "password", "") or ""
@@ -193,7 +200,7 @@ class CallExecutor(ProtocolExecutor):
                 logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
                 return {}
             return {"Authorization": f"Bearer {token}"}
-        if not token:
+        if session is None or not token:
             logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
             return {}
         import hashlib
@@ -204,12 +211,38 @@ class CallExecutor(ProtocolExecutor):
             "timestamp": str(timestamp),
         }
 
+    # G1(集成 P2/Y1):call.auth 枚举 → 签名器名映射。custom 的签名器名
+    # 由 call.auth_signer 携带(缺省 md5sign);cookie 暂无标准头实现
+    # (等真实需求),落回会话级/遗留签名。
+    _AUTH_SIGNER_OF = {
+        "bearer": "standard.bearer",
+        "basic": "standard.basic",
+    }
+
     def _inject_auth_headers(self, headers: dict, pctx) -> None:
-        """按 ``call.user`` 标签注入 login() 签名头（http 语义）。"""
-        user = getattr(getattr(pctx, "call", None), "user", None)
-        if not user:
+        """按 ``call.user`` 标签注入 login() 签名头（http 语义）。
+
+        G1:call.auth(plate binding.auth 透传)非 none 时,签名器按
+        声明分派(声明驱动 > 会话 auth_signer > 遗留 md5);none 且
+        call.user 存在 → 维持遗留 md5(存量场景零变化)。
+        """
+        call = getattr(pctx, "call", None)
+        user = getattr(call, "user", None)
+        call_auth = str(getattr(call, "auth", "") or "")
+        if call_auth == "none":
+            call_auth = ""
+        if not user and not call_auth:
             return
-        signed = self.login(str(user), pctx)
+        signer_override = None
+        if call_auth == "bearer":
+            signer_override = "standard.bearer"
+        elif call_auth == "basic":
+            signer_override = "standard.basic"
+        elif call_auth == "custom":
+            signer_override = (str(getattr(call, "auth_signer", "") or "")
+                               or "md5sign")
+        signed = self.login(str(user) if user else "", pctx,
+                            signer_override=signer_override)
         if not signed:
             return
         headers.update(signed)

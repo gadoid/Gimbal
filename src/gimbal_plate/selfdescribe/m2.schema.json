@@ -204,6 +204,30 @@
    "additionalProperties": true,
    "description": "协议中立调用外壳。",
    "properties": {
+    "auth": {
+     "default": "none",
+     "description": "认证施加方式（binding.auth 透传；none=不注入）",
+     "enum": [
+      "none",
+      "bearer",
+      "basic",
+      "cookie",
+      "custom"
+     ],
+     "type": "string"
+    },
+    "auth_signer": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "custom 时的签名器名（缺省 md5sign）"
+    },
     "kind": {
      "const": "call",
      "default": "call",

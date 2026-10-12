@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: GET
   path: /api/home/cost/amountCostList
-  auth: bearer
+  auth: custom
   body_type: none
 request: {}
 responses:

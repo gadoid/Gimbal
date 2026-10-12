@@ -16,7 +16,7 @@
   ],
   "query_safe": false,
   "missing_required": [],
-  "auth": "bearer",
+  "auth": "custom",
   "timeout_seconds": 30.0
  },
  {
@@ -36,7 +36,7 @@
   ],
   "query_safe": true,
   "missing_required": [],
-  "auth": "bearer",
+  "auth": "custom",
   "timeout_seconds": 30.0
  },
  {
@@ -61,7 +61,7 @@
   "missing_required": [
    "customer_id"
   ],
-  "auth": "bearer",
+  "auth": "custom",
   "timeout_seconds": 30.0
  },
  {
@@ -87,7 +87,7 @@
   "missing_required": [
    "customer_id"
   ],
-  "auth": "bearer",
+  "auth": "custom",
   "timeout_seconds": 30.0
  },
  {
@@ -116,7 +116,7 @@
   ],
   "query_safe": true,
   "missing_required": [],
-  "auth": "bearer",
+  "auth": "custom",
   "timeout_seconds": 30.0
  }
 ]

@@ -43,3 +43,12 @@ def register_migrate(
         _migrate_map[from_gen] = fn
         return fn
     return decorator
+
+
+# ── gen 1 → 2(集成 P2/Y1,P-C 拍板:纯加法也升代际)────────────────
+# 变更内容:Call 加可选字段 auth/auth_signer(bearing.auth 透传)。
+# 存量语料无 auth 键 → 新字段取缺省 none,行为等价 —— 迁移为 no-op;
+# 注册只为满足 M2 §5.2「代际递增必须带迁移函数」的纪律。
+@register_migrate(1)
+def _migrate_1_to_2(d: dict[str, Any]) -> dict[str, Any]:
+    return d

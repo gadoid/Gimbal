@@ -19,7 +19,7 @@ binding:
   method: GET
   path: /api/v1/fin/account/balance
   timeout_seconds: 5.0
-  auth: bearer
+  auth: custom
 responses:
   "200":
     description: 成功

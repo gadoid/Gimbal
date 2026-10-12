@@ -18,7 +18,7 @@ binding:
   protocol: http
   method: POST
   path: /api/order/order/orderBook
-  auth: bearer
+  auth: custom
 request:
   declarations:
   - name: bl_no
