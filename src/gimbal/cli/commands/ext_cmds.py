@@ -19,6 +19,33 @@ from gimbal.log import get_logger
 logger = get_logger(__name__)
 
 
+def _event_payload_fields() -> dict[str, list[str]]:
+    """事件表载荷字段(模块级可测;B-6/W23 修复处)。
+
+    event_type 是 pydantic 字段,类上 getattr 拿到的是 FieldInfo 而非
+    字符串 —— 取默认值的正确姿势 = model_fields 的 get_default()
+    (与 known_event_types() 同源)。context.promotion 是
+    variable.promoted 的旧订阅别名,载荷类同一个,字段同源。
+    """
+    from gimbal.events.types import FrameworkEvent
+    import gimbal.events.types as _event_types
+    payload_fields: dict[str, list[str]] = {}
+    for _obj in list(vars(_event_types).values()):
+        if (isinstance(_obj, type) and issubclass(_obj, FrameworkEvent)
+                and _obj is not FrameworkEvent):
+            _f = _obj.model_fields.get("event_type")
+            et = _f.get_default() if _f is not None else None
+            if isinstance(et, str) and et:
+                fields = sorted(
+                    f for f in _obj.model_fields
+                    if f not in ("seq", "event_type"))  # 信封/判别字段非载荷
+                payload_fields.setdefault(et, fields)
+    if "variable.promoted" in payload_fields:
+        payload_fields.setdefault("context.promotion",
+                                  payload_fields["variable.promoted"])
+    return payload_fields
+
+
 def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -> list[dict]:
     """聚合四张表的 describe()（JSON 安全）。
 
@@ -76,19 +103,8 @@ def describe_extensions(dispatcher, protocols, mode_registry, plugin_registry) -
         })
 
     # 事件表（Q5/M2 §2.4：event_type + payload 字段，供报告定义编写检索）
-    from gimbal.events.types import FrameworkEvent, known_event_types
-    payload_fields: dict[str, list[str]] = {}
-    import inspect as _inspect
-    for _name in dir(_inspect.importlib.import_module("gimbal.events.types")):
-        _obj = getattr(_inspect.importlib.import_module("gimbal.events.types"), _name)
-        if (isinstance(_obj, type) and issubclass(_obj, FrameworkEvent)
-                and _obj is not FrameworkEvent):
-            et = getattr(_obj, "event_type", "")
-            if isinstance(et, str) and et:
-                fields = sorted(
-                    f for f in _obj.model_fields
-                    if f not in ("seq",))  # seq 是信封字段
-                payload_fields.setdefault(et, fields)
+    from gimbal.events.types import known_event_types
+    payload_fields = _event_payload_fields()
     for et in sorted(known_event_types()):
         out.append({
             "table": "event",

@@ -365,6 +365,21 @@ class DebugAfterInputMissingEvent(FrameworkEvent):
     source: str = ""
 
 
+# ── M2 代际门警告（B-6/W23 自 core/server_debug.py 移入;事件类型定义
+#    归 events/,且进 ext 事件表供报告定义检索）──────────────────────
+class M2HashMismatchEvent(FrameworkEvent):
+    """M2 §5.1:hash 不同、代际相同 —— 兼容放行的警告事件(非阻塞)。
+
+    必须是 pydantic 事件模型:bus 的 seq 经 ``object.__setattr__`` 盖到
+    事件上、debug 服务器的事件缓冲经 ``model_dump`` 序列化 —— 普通
+    dict 两头都吃不上(无 seq 会被 SSE 续传过滤、序列化只剩类名)。
+    """
+    event_type: Literal["m2.hash_mismatch"] = "m2.hash_mismatch"
+    request_hash: str = ""
+    built_hash: str = ""
+    generation: int = 0
+
+
 def known_event_types() -> set[str]:
     """全仓已知事件类型集合（P1-04/P1-05 消费）。
 

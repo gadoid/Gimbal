@@ -940,122 +940,531 @@
   {
     "table": "event",
     "name": "call.exchange",
-    "fields": []
+    "fields": [
+      "attempt",
+      "duration_ms",
+      "endpoint",
+      "evidence_keys",
+      "message",
+      "module",
+      "protocol",
+      "result",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "status",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "context.promotion",
-    "fields": []
+    "fields": [
+      "attempt",
+      "by_scenario_id",
+      "by_step_id",
+      "endpoint",
+      "from_layer",
+      "key",
+      "module",
+      "overwrote_previous",
+      "protocol",
+      "reason",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "to_layer",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "debug.after_input_missing",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "input_name",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "source",
+      "step",
+      "timestamp",
+      "unit",
+      "unit_id"
+    ]
   },
   {
     "table": "event",
     "name": "debug.session",
-    "fields": []
+    "fields": [
+      "attempt",
+      "data",
+      "decision",
+      "endpoint",
+      "kind",
+      "module",
+      "point",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "framework.init",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "framework_version",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "framework.teardown",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "gates.evaluated",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "exit_code",
+      "gates",
+      "module",
+      "passed",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "suite_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "http.request",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "method",
+      "module",
+      "protocol",
+      "request_body",
+      "request_headers",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit",
+      "url"
+    ]
   },
   {
     "table": "event",
     "name": "http.response",
-    "fields": []
+    "fields": [
+      "attempt",
+      "duration_ms",
+      "endpoint",
+      "method",
+      "module",
+      "protocol",
+      "response_body",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "status_code",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit",
+      "url"
+    ]
+  },
+  {
+    "table": "event",
+    "name": "m2.hash_mismatch",
+    "fields": [
+      "attempt",
+      "built_hash",
+      "endpoint",
+      "generation",
+      "module",
+      "protocol",
+      "request_hash",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "plugin.activated",
-    "fields": []
+    "fields": [
+      "attempt",
+      "capabilities",
+      "endpoint",
+      "module",
+      "plugin_name",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit",
+      "version"
+    ]
   },
   {
     "table": "event",
     "name": "plugin.deactivated",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "module",
+      "plugin_name",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "plugin.failed",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "error",
+      "module",
+      "plugin_name",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "stage",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "run.end",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "error",
+      "failed",
+      "module",
+      "passed",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "skipped",
+      "step",
+      "timestamp",
+      "total",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "run.finished",
-    "fields": []
+    "fields": [
+      "attempt",
+      "attempts",
+      "blocked",
+      "details",
+      "endpoint",
+      "error",
+      "exit_code",
+      "failed",
+      "halted",
+      "module",
+      "passed",
+      "protocol",
+      "repaired",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "skipped",
+      "step",
+      "timestamp",
+      "total",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "run.meta",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "meta",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "run.start",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "env",
+      "mode",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "scenario.end",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "meta",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "scenario_id",
+      "service",
+      "status",
+      "step",
+      "step_count",
+      "suite_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "scenario.start",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "scenario_id",
+      "scenario_name",
+      "service",
+      "step",
+      "step_count",
+      "suite_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "step.end",
-    "fields": []
+    "fields": [
+      "assertion_count",
+      "assertion_passed",
+      "attempt",
+      "duration_ms",
+      "endpoint",
+      "error_brief",
+      "module",
+      "promotion_count",
+      "protocol",
+      "retry_count",
+      "run",
+      "run_id",
+      "scenario",
+      "scenario_id",
+      "service",
+      "status",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "step.failed",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "error",
+      "module",
+      "phase",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "step_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "step.start",
-    "fields": []
+    "fields": [
+      "attempt",
+      "description",
+      "endpoint",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "scenario_id",
+      "service",
+      "step",
+      "step_id",
+      "step_name",
+      "strategy_kind",
+      "strategy_spec",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "suite.end",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "status",
+      "step",
+      "suite_id",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "suite.start",
-    "fields": []
+    "fields": [
+      "attempt",
+      "endpoint",
+      "module",
+      "protocol",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "suite_id",
+      "suite_name",
+      "timestamp",
+      "unit"
+    ]
   },
   {
     "table": "event",
     "name": "variable.promoted",
-    "fields": []
+    "fields": [
+      "attempt",
+      "by_scenario_id",
+      "by_step_id",
+      "endpoint",
+      "from_layer",
+      "key",
+      "module",
+      "overwrote_previous",
+      "protocol",
+      "reason",
+      "run",
+      "run_id",
+      "scenario",
+      "service",
+      "step",
+      "timestamp",
+      "to_layer",
+      "unit"
+    ]
   },
   {
     "table": "param_registry",

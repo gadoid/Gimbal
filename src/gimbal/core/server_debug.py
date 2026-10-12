@@ -35,7 +35,9 @@ logger = get_logger(__name__)
 # 事件基类(types 只依赖 pydantic,无环;Literal 供下方事件声明)
 from typing import Literal  # noqa: E402
 
-from gimbal.events.types import FrameworkEvent  # noqa: E402
+from gimbal.events.types import (  # noqa: E402
+    FrameworkEvent, M2HashMismatchEvent,
+)
 
 # 类型注解需模块级可见（FastAPI get_type_hints 按函数所在模块的全局名解析；
 # server.py 在 create_app() 内延迟导入本模块，此时 server 模块已初始化完毕）
@@ -52,17 +54,8 @@ _REAP_TTL_SEC = 600.0
 
 
 
-class M2HashMismatchEvent(FrameworkEvent):
-    """M2 §5.1:hash 不同、代际相同 —— 兼容放行的警告事件(非阻塞)。
-
-    必须是 pydantic 事件模型:bus 的 seq 经 ``object.__setattr__`` 盖到
-    事件上、debug 服务器的事件缓冲经 ``model_dump`` 序列化 —— 普通
-    dict 两头都吃不上(无 seq 会被 SSE 续传过滤、序列化只剩类名)。
-    """
-    event_type: Literal["m2.hash_mismatch"] = "m2.hash_mismatch"  # noqa: RUF012
-    request_hash: str = ""
-    built_hash: str = ""
-    generation: int = 0
+# M2HashMismatchEvent 已移入 gimbal/events/types.py(B-6/W23:事件类型
+# 定义归 events/,进 ext 事件表供报告定义检索);本模块经上方导入使用。
 
 
 def _m2_generation_gate(m2_info) -> "M2HashMismatchEvent | None":
