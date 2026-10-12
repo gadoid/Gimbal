@@ -134,26 +134,20 @@ async def update(
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:
         raise ValueError("scenario_id_changed: cannot rename scenarioId")
-    # Repair empty meta fields before validation: legacy / partially-edited
-    # scenarios may carry an empty `module` or empty `system`, and we don't
-    # want a routine save (e.g. baseline / dataset save) to fail on
-    # metadata. ``create()`` mirrors this normalization, so a write
-    # round-trip never widens the surface area of validation.
-    repaired_meta = {
-        **def_meta,
-        "module": (def_meta.get("module") or "").strip() or "default",
-        "system": list(def_meta.get("system") or []) or ["default"],
-    }
+    # A-1(2026-10-12):删「module 空写 default / system 空写 ["default"]」
+    # 修复兜底 —— "default" 伪系统与 M11(meta.system 每系统须有 plate
+    # 声明)冲突,ScenarioMeta 已对齐 M2 空值语义('' / []),存量空值
+    # 原样入校验、原样存储。
     effective_owner = new_owner or def_meta.get("owner") or row.owner_name
     server_owned = ScenarioMeta.model_validate({
-        **repaired_meta, "scenarioId": scenario_id, "owner": effective_owner,
+        **def_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
     # M4/Q18：同 create —— 平台元数据出定义，定义即纯 M2 实例。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
     stored_definition = strip_binding_fields({
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
-        "meta": _strip_platform_meta(repaired_meta),
+        "meta": _strip_platform_meta(def_meta),
     })
     row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器

@@ -38,9 +38,20 @@ _CAMEL = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 
 # ─── scenario meta + steps ─────────────────────────────────────────
 class ScenarioMeta(BaseModel):
-    """Scenario metadata; one Scenario has exactly one Meta."""
+    """Scenario metadata; one Scenario has exactly one Meta.
 
-    model_config = _CAMEL
+    M2 ``Meta`` 的**超集读投影**:声明的字段做校验与别名,其余字段
+    (``requirementRef`` 及 M2 后续新增)经 ``extra="allow"`` 原样透传。
+    读侧由 ``_meta_from_row`` 从 payload.definition.meta 组装 —— 此前
+    手写字段清单对未知键静默丢弃,requirementRef 读侧被剥、编排器水合
+    再保存即丢字段(A-1,2026-10-12);M2 Meta 每加一个字段都会重演。
+    ``module``/``system`` 对齐 M2 空值语义('' / []):旧库存量空值
+    原样保留,不再注入伪系统/模块 "default"(M11:meta.system 每个
+    系统必须有 plate 声明,"default" 永远不合法)。
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True, str_strip_whitespace=True, extra="allow")
 
     scenario_id: str = Field(
         alias="scenarioId",
@@ -50,12 +61,12 @@ class ScenarioMeta(BaseModel):
     )
     name: str = Field(min_length=1, max_length=64)
     description: str = Field(default="", max_length=2048)
-    module: str = Field(min_length=1, max_length=64)
+    module: str = Field(default="", max_length=64)
     priority: int = Field(ge=0, le=3)
     author: str = Field(default="", max_length=128)
     owner: str = Field(default="", max_length=128)
     tags: list[str] = Field(default_factory=list, max_length=32)
-    system: list[str] = Field(default_factory=list, min_length=1)
+    system: list[str] = Field(default_factory=list)
     version: str = Field(default="v0.1.0", max_length=32)
     expire: bool = False
     create_time: datetime | None = Field(default=None, alias="createTime")
@@ -88,8 +99,11 @@ class ScenarioMeta(BaseModel):
     @field_validator("system")
     @classmethod
     def _validate_system(cls, v: list[str]) -> list[str]:
+        # A-1:空表 = 未声明系统,对齐 M2 Meta(List[str] = [])原样放行
+        # ——「至少一个」不再由读模型强制(旧兜底注入的伪系统 "default"
+        # 与 M11 每系统须有 plate 声明冲突,已随兜底一并删除)。
         if not v:
-            raise ValueError("system must contain at least one tag")
+            return []
         cleaned: list[str] = []
         for s in v:
             s = (s or "").strip()

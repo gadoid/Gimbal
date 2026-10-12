@@ -463,3 +463,85 @@ async def test_create_dataset_admin_can_create_under_any_scenario(
     assert r.status_code == 201
 
 
+
+
+# ── A-1 meta 读侧透传(2026-10-12)──────────────────────────────────
+async def test_meta_roundtrip_preserves_all_m2_fields(
+    client: AsyncClient,
+) -> None:
+    """读侧 meta = M2 Meta 超集透传 —— 全字段读写往返不丢。
+
+    手写 ScenarioMeta 曾把 requirementRef 等未声明键静默剥掉:存储有、
+    导出有、普通 GET 没有 —— 编排器按读侧水合再保存即永久丢字段。
+    本用例遍历生成物 ``Meta.model_fields`` 全字段;M2 加字段时断言
+    ``覆盖表 ⊇ 字段集`` 会先失败,迫使本表(与实现)跟着长。"""
+    from app.schemas._m2 import Meta as M2Meta
+
+    values = {
+        "author": "alice",
+        "createTime": "2026-01-01T00:00:00Z",
+        "description": "roundtrip",
+        "expire": True,
+        "module": "订单",
+        "name": "Roundtrip",
+        "owner": "alice",
+        "plate": {"fin": "working"},
+        "priority": 2,
+        "requirementRef": ["REQ-1", "REQ-2"],
+        "system": ["fin"],
+        "tags": ["smoke"],
+        "version": "v1.2.3",
+    }
+    assert set(values) >= set(M2Meta.model_fields)  # M2 新字段必须进本表
+
+    headers = await _register_and_login(client)
+    draft = _make_draft(scenario_id="sc-meta-rt", **values)
+    r = await client.post("/api/scenarios", headers=headers, json=draft)
+    assert r.status_code == 201, r.text
+
+    async def read_meta() -> dict:
+        g = await client.get("/api/scenarios/sc-meta-rt", headers=headers)
+        assert g.status_code == 200, g.text
+        return g.json()["meta"]
+
+    m = await read_meta()
+    # createTime/updateTime 是行上列的服务端权威投影(G3/C3),客户端
+    # 传值不采信 —— 只断言非所传值,不参与往返比对。
+    assert m["createTime"] and m["createTime"] != values["createTime"]
+    for k, v in values.items():
+        if k == "createTime":
+            continue
+        assert m[k] == v, f"create 后读侧丢字段 {k}"
+
+    # 编排器语义的完整回路:读 → 原样 PUT → 再读
+    m.pop("scenarioId", None)          # 平台列字段由服务端回填
+    draft["definition"]["meta"] = m
+    p = await client.put("/api/scenarios/sc-meta-rt", headers=headers, json=draft)
+    assert p.status_code == 200, p.text
+    m2 = await read_meta()
+    for k, v in values.items():
+        if k == "createTime":
+            continue
+        assert m2[k] == v, f"update 后读侧丢字段 {k}"
+
+
+async def test_update_empty_module_system_not_defaulted(
+    client: AsyncClient,
+) -> None:
+    """A-1:删「空 module→default / 空 system→["default"]」兜底。
+
+    "default" 伪系统与 M11(meta.system 每个系统须有 plate 声明)冲突;
+    空值对齐 M2 语义('' / [])原样保留。"""
+    headers = await _register_and_login(client)
+    draft = _make_draft(scenario_id="sc-empty-meta", system=[], module="")
+    r = await client.post("/api/scenarios", headers=headers, json=draft)
+    assert r.status_code == 201, r.text
+
+    p = await client.put("/api/scenarios/sc-empty-meta",
+                         headers=headers, json=draft)
+    assert p.status_code == 200, p.text
+    assert p.json()["meta"]["system"] == []
+    assert p.json()["meta"]["module"] == ""
+    g = await client.get("/api/scenarios/sc-empty-meta", headers=headers)
+    assert g.json()["meta"]["system"] == []
+    assert g.json()["meta"]["module"] == ""
