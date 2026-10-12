@@ -337,6 +337,16 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             continue
         inst = await _tpl_instance(db, tpl.id, user=user, tpl=tpl)
         io = _inst_out(inst)
+        # Y4/方案 §7:卡片输出投影 —— output_mapping {输出键 → 展示键};
+        # 缺省(空 mapping)= 全量 last_outputs(已脱敏)。kv/counter/
+        # list 模板据比渲染。
+        raw_outputs = (getattr(inst, "last_outputs", None) or {}) \
+            if inst is not None else {}
+        om = tpl.output_mapping if isinstance(tpl.output_mapping, dict) else {}
+        card_outputs = {dst: raw_outputs[src]
+                        for src, dst in om.items()
+                        if isinstance(dst, str) and dst and src in raw_outputs} \
+            if om else dict(raw_outputs)
         stale = False
         if io["lastRunAt"]:
             ran = datetime.fromisoformat(io["lastRunAt"].rstrip("Z"))
@@ -347,6 +357,8 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "identityMode": tpl.identity_mode, "stale": stale,
+            "outputs": card_outputs,
+            "cardTemplate": tpl.card_template or "status",
         })
     return {"items": out}
 

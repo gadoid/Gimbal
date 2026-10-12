@@ -44,6 +44,10 @@ export interface FunctionCardData {
   cronText?: string
   identityMode?: string
   stale?: boolean
+  /** Y4:卡片输出投影(output_mapping 投影/空 mapping = 全量;已脱敏) */
+  outputs?: Record<string, unknown>
+  /** Y4:模板(status|kv|counter|list;缺省 status) */
+  cardTemplate?: string
 }
 
 export async function listIntegrationTasks(): Promise<IntegrationTaskItem[]> {

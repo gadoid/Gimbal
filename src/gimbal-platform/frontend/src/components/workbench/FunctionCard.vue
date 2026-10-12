@@ -1,8 +1,10 @@
 <!-- FunctionCard.vue — 集成「功能」通用卡(外部系统集成 §7)。
-     P1 = status 模板(保活/状态):S 状态灯、M +最近执行/错误摘要、
-     L +周期/下次执行 + 立即执行。卡槽注入 def(fn:<id>) → 批量取数
-     接口(30s 轮询,错误隔离);状态叠加:未执行/执行中/正常/失败/
-     凭证失效/缺少凭证/过期(stale>1h)/已移除。 -->
+     模板(Y4):status(S 状态灯/M 摘要/L+操作,缺省)、kv(全部输出
+     键值)、counter(首个数值键大数字)、list(首个数组键,S 条数/
+     M 前 5/L 前 10)。数据 = cards 批量接口的 outputs 投影
+     (output_mapping;已脱敏)。卡槽注入 def(fn:<id>) → 30s 轮询,
+     错误隔离;状态叠加:未执行/执行中/失败/凭证失效/缺少凭证/
+     过期(stale>1h)/已移除。 -->
 <template>
   <div class="wcard fn-card" :data-testid="`wb-card-${cardId}`">
     <header class="chead">
@@ -20,15 +22,26 @@
     </div>
 
     <template v-else-if="data">
-      <!-- S:状态灯 + 结论 -->
+      <!-- S:按模板 —— status 状态灯 / counter 大数字 / kv 首键 / list 条数 -->
       <div v-if="size === 'S'" class="fn-s" :data-testid="t">
-        <span class="fn-dot" :class="tone" />
-        <span class="fn-status">{{ statusText }}</span>
+        <template v-if="tplKind === 'counter'">
+          <span class="fn-counter-num mono">{{ counterText }}</span>
+        </template>
+        <template v-else-if="tplKind === 'kv'">
+          <span class="fn-status">{{ kvEntries[0] ? `${kvEntries[0][0]} ${fmt(kvEntries[0][1])}` : '暂无输出' }}</span>
+        </template>
+        <template v-else-if="tplKind === 'list'">
+          <span class="fn-status">{{ listCount }} 条</span>
+        </template>
+        <template v-else>
+          <span class="fn-dot" :class="tone" />
+          <span class="fn-status">{{ statusText }}</span>
+        </template>
       </div>
 
-      <!-- M/L -->
+      <!-- M/L:按模板分派(Y4:status/kv/counter/list) -->
       <template v-else>
-        <div class="fn-main">
+        <div v-if="tplKind === 'status'" class="fn-main">
           <span class="fn-dot" :class="tone" />
           <div class="fn-main-text">
             <span class="fn-status">{{ statusText }}</span>
@@ -37,6 +50,28 @@
             </span>
             <span v-else class="fn-sub">等待首次执行</span>
           </div>
+        </div>
+        <!-- kv:全部映射键值(S 档 = 第一个键) -->
+        <div v-else-if="tplKind === 'kv'" class="fn-kv-list" :data-testid="`${t}-kv`">
+          <div v-for="e in kvEntries" :key="e[0]" class="fn-kv-row">
+            <span class="fn-kv-key">{{ e[0] }}</span>
+            <span class="fn-kv-val mono">{{ fmt(e[1]) }}</span>
+          </div>
+          <p v-if="!kvEntries.length" class="fn-sub">暂无输出</p>
+        </div>
+        <!-- counter:大数字 + 最近执行 -->
+        <div v-else-if="tplKind === 'counter'" class="fn-counter" :data-testid="`${t}-counter`">
+          <span class="fn-counter-num mono">{{ counterText }}</span>
+          <span class="fn-sub">{{ data.lastRunAt ? `最近执行 ${relTime(data.lastRunAt)}` : '等待首次执行' }}</span>
+        </div>
+        <!-- list:M 前 5 / L 前 10 -->
+        <div v-else-if="tplKind === 'list'" class="fn-list" :data-testid="`${t}-list`">
+          <p class="fn-sub">共 {{ listCount }} 条</p>
+          <ul class="fn-list-items">
+            <li v-for="(item, i) in listItems" :key="i" class="fn-list-item mono">
+              {{ fmt(item) }}
+            </li>
+          </ul>
         </div>
         <p v-if="staleNote" class="fn-note warn">{{ staleNote }}</p>
         <p v-if="data.lastError && data.lastStatus === 'failed'"
@@ -109,6 +144,38 @@ const statusText = computed(() => {
 const staleNote = computed(() =>
   data.value?.stale ? '超过 1 小时未刷新 — 调度器可能已停摆' : '')
 
+// ── Y4:模板渲染面(status|kv|counter|list;缺省 status)──────────
+const tplKind = computed(() =>
+  ['kv', 'counter', 'list'].includes(data.value?.cardTemplate || '')
+    ? (data.value!.cardTemplate as string) : 'status')
+
+/** kv 条目 = outputs 全部键值(S 档只显第一个,CSS 截) */
+const kvEntries = computed<[string, unknown][]>(() =>
+  Object.entries(data.value?.outputs || {}))
+
+const counterText = computed(() => {
+  const outs = data.value?.outputs || {}
+  // 首个数值键;无 → 条目数
+  const first = Object.values(outs)[0]
+  return typeof first === 'number' ? String(first)
+    : Array.isArray(first) ? String(first.length) : (first ?? '—')
+})
+
+const listItems = computed<unknown[]>(() => {
+  const first = Object.values(data.value?.outputs || {})[0]
+  return Array.isArray(first) ? first.slice(0, size.value === 'L' ? 10 : 5) : []
+})
+const listCount = computed(() => {
+  const first = Object.values(data.value?.outputs || {})[0]
+  return Array.isArray(first) ? first.length : 0
+})
+
+function fmt(v: unknown): string {
+  if (v == null) return '—'
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
 async function load(): Promise<void> {
   try {
     const items = await fetchFunctionCards([cardId.value])
@@ -178,4 +245,17 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
   border: 1px solid var(--accent-soft-border, #c7d2fe);
 }
 .fn-run:disabled { opacity: .5; cursor: not-allowed; }
+/* Y4 模板 */
+.fn-kv-list { display: flex; flex-direction: column; gap: 4px; }
+.fn-kv-row { display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12.5px; }
+.fn-kv-key { color: rgb(100 116 139); }
+.fn-kv-val { font-weight: 600; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-width: 60%; }
+.fn-counter { display: flex; align-items: baseline; gap: 10px; }
+.fn-counter-num { font-size: 28px; font-weight: 700; line-height: 1; }
+.fn-list-items { margin: 0; padding: 0 0 0 2px; list-style: none;
+  display: flex; flex-direction: column; gap: 3px; }
+.fn-list-item { font-size: 12px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 </style>

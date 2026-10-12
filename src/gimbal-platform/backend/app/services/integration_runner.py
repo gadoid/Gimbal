@@ -319,10 +319,16 @@ async def run_instance(instance_id: int) -> dict:
 
         scen_payload = scen.payload
         builtins = built_in_users(scen_payload)
+        inst_state_vars = dict(inst.state_vars or {})
 
     # 转换 + 物化 + 执行(DB 会话外跑,避免长事务)
     try:
-        composed = compose_scenario(scen_payload, row_dict)
+        # Y4/方案 §5:跨次状态注入 —— state_vars(上次执行按
+        # state_mapping 回写的游标)先注入,数据集行覆盖(与
+        # 行值 > 场景 vars 同链:显式选择最强)。纯调用点合并,
+        # compose_scenario 公共签名不动。
+        composed = compose_scenario(
+            scen_payload, {**(inst_state_vars or {}), **row_dict})
         converted = (await plate_client.convert(composed)).get("converted") or {}
         async with db_module.SessionLocal() as db2:
             alias_urls = {}
@@ -420,6 +426,15 @@ async def _finish(
         _scrub(outputs or {})
         inst.last_outputs = outputs or {}
     inst.fail_streak = 0 if status == "passed" else prev_streak + 1
+    # Y4/方案 §5:跨次状态回写 —— state_mapping {输出键 → 状态键},
+    # 命中的输出复制进 state_vars(下次执行注入为变量,增量游标)。
+    # outputs 已过脱敏键表,复制继承;mapping 为空 = 不回写。
+    if isinstance(tpl.state_mapping, dict) and tpl.state_mapping and outputs:
+        merged = dict(inst.state_vars or {})
+        for src, dst in tpl.state_mapping.items():
+            if isinstance(dst, str) and dst and src in (outputs or {}):
+                merged[dst] = outputs[src]
+        inst.state_vars = merged
     try:
         inst.next_run_at = next_fire(tpl.trigger_cron, now)
     except Exception:  # noqa: BLE001 — cron 坏 = 顺延一小时,不炸调度

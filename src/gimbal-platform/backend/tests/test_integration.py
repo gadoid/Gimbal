@@ -653,3 +653,116 @@ async def test_missing_credential_pauses_and_revives(client, monkeypatch):
         inst = (await s.execute(_sel(IntegrationTask).where(
             IntegrationTask.template_id == tid))).scalars().one()
         assert inst.state == "idle"
+
+
+# ── Y4:state_mapping 跨次游标 + cards 输出投影 ────────────────────
+
+async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
+    """state_mapping 命中的输出回写 state_vars;下次执行注入为变量
+    (调用点合并 —— 数据集行覆盖优先)。"""
+    from app.core import db as db_module
+    from sqlalchemy import select as _sel
+    from app.models.integration_task import IntegrationTask
+    from app.services import integration_runner as ir
+
+    u = await register_and_login(client, "p4_alice", "pw123456")
+    draft = make_draft("sc-p4", steps=[{
+        "kind": "step",
+        "call": {"protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/x", "headers": {}},
+        "request": {"kind": "request", "body": {}}, "strategy": []}])
+    await client.post("/api/scenarios", headers=u, json=draft)
+    r = await client.post("/api/integration/tasks", headers=u, json=_task_body(
+        "sc-p4", identityMode="personal"))
+    tid = r.json()["id"]
+
+    async with db_module.SessionLocal() as s:
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.state_mapping = {"updated_at": "since"}   # 输出键 → 状态键
+        await s.commit()
+
+    # 直接驱动 _finish:命中键回写、未命中不动
+    async with db_module.SessionLocal() as s:
+        inst = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        tpl = await s.get(IntegrationTask, tid)
+        await ir._finish(s, inst, tpl, "passed", "",
+                         outputs={"updated_at": "2026-10-12T10:00:00Z",
+                                  "other": "x"})
+        assert inst.state_vars == {"since": "2026-10-12T10:00:00Z"}
+
+    # 注入链:run_instance 的组合调用点合并 state_vars(经通道产物断言)
+    seen: dict = {}
+
+    class _FakeResult:
+        launch_status = "ok"
+        run_result = {"status": "passed", "details": [
+            {"scenario_id": "sc-p4", "outputs": {
+                "updated_at": "2026-10-12T11:00:00Z"}}]}
+
+    class _FakeChannels:
+        async def run_case(self, case_path):
+            import json as _json
+            seen["case"] = _json.loads(
+                case_path.read_text(encoding="utf-8"))
+            return _FakeResult()
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+
+    from app.services import plate_client as pc
+    monkeypatch.setattr(ir, "channels", _FakeChannels())
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u)
+    assert r.status_code == 200, r.text
+    # case.json 的 config.vars 带游标(since 注入)
+    vars_ = (seen.get("case") or {}).get("config", {}).get("vars", {})
+    assert vars_.get("since") == "2026-10-12T10:00:00Z"
+    # 新输出回写推进游标
+    async with db_module.SessionLocal() as s:
+        s.expire_all()
+        inst = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        assert inst.state_vars == {"since": "2026-10-12T11:00:00Z"}
+
+
+async def test_cards_output_projection(client):
+    """cards 出参带 outputs:output_mapping 投影;空 mapping = 全量。"""
+    await _seed_platform_user()
+    u = await register_and_login(client, "p5_alice", "pw123456")
+    draft = make_draft("sc-p5", steps=[{
+        "kind": "step",
+        "call": {"protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/x", "headers": {}},
+        "request": {"kind": "request", "body": {}}, "strategy": []}])
+    await client.post("/api/scenarios", headers=u, json=draft)
+    r = await client.post("/api/integration/tasks", headers=u,
+                          json=_task_body("sc-p5"))
+    tid = r.json()["id"]
+
+    from app.core import db as db_module
+    from sqlalchemy import select as _sel
+    from app.models.integration_task import IntegrationTask
+    async with db_module.SessionLocal() as s:
+        inst = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        inst.last_outputs = {"mr_count": 7, "build": "ok", "secret": "***"}
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.output_mapping = {"mr_count": "待评审数"}
+        await s.commit()
+
+    r = await client.post("/api/integration/cards", headers=u,
+                          json={"ids": [f"fn:{tid}"]})
+    assert r.status_code == 200, r.text
+    item = r.json()["items"][0]
+    assert item["outputs"] == {"待评审数": 7}   # mapping 投影
+
+    async with db_module.SessionLocal() as s:
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.output_mapping = {}
+        await s.commit()
+    r = await client.post("/api/integration/cards", headers=u,
+                          json={"ids": [f"fn:{tid}"]})
+    assert r.json()["items"][0]["outputs"] == {
+        "mr_count": 7, "build": "ok", "secret": "***"}   # 空 = 全量

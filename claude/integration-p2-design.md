@@ -1,8 +1,8 @@
 # 集成线 P2 · 设计方案(v1.0 草案)
 
 > 日期:2026-10-12　基线:`feat/plate-s1 @ 71bda0ac`(外部接口登记批已落)
-> 状态:**v1.0;进度:Y1 ✅(abaf8998) / Y2 ✅(3a50d0ef) / Y5 ✅ / Y3 ✅(2026-10-12)**;
-> 余 Y4(卡片模板 kv/counter/list + state_mapping 游标)。
+> 状态:**v1.0 全波次完成(Y1-Y5,2026-10-12)**。P2 收口:G1 声明驱动/
+> G2 outputs/G7 auth 分类/个人模式/卡片模板/跨次游标/外部目录闸全部落地。
 > 拍板:P-A/P-B/P-C 已定(2026-10-12:B / 平台目录 / 升代际 2)。
 > 依据:《GIMBAL-外部系统集成架构设计》§详细设计/分期计划 P2 + 2026-10-09 评审定稿
 > + 2026-10-12 用户拍板(G7 并 task3c→本批顺带;G2 随 P2;G1 声明驱动随本批;
@@ -108,7 +108,7 @@ GitLab/Jenkins **不进 plate**(推翻原设计 §详细设计 1 的落点,依 2
 | Y1 ✅ | G1 全链(M2 call.auth + 导出 + 执行器 + fin 修正 + fin 新修订) | L | 已落:gen2+no-op 迁移;投影透传;执行器声明驱动分派;fin 19 端点修正+1.0#2 已发推;基线重钉(dispatch/query_views);门 1275+865 绿 |
 | Y2 ✅ | G2+G7(outputs/error_kind/暂停/通知/复活) | M | 已落 3a50d0ef |
 | Y3 ✅ | 个人模式(解禁/订阅实例/missing_credential/冷却) | M | 已落(写操作放行;订阅即建;无冷却;缺凭证 paused/missing_credential + 复活) |
-| Y4 | 卡片 kv/counter/list + state_mapping 游标 | M | 增量拉取游标跨次生效;三模板三档渲染 |
+| Y4 ✅ | 卡片 kv/counter/list + state_mapping 游标 | M | 已落(state_vars 注入/回写;cards outputs 投影;三模板三档) |
 | Y5 ✅ | 只读闸 ext: 分支 | S | 已落(登记=运营动作,X1 导入器) |
 
 顺序:Y1 → Y2 → Y5 → Y3 → Y4(Y5 前置 Y1 的 fin 修正不依赖;Y3/Y4 相对独立)。
