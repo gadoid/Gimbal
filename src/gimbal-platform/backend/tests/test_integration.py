@@ -322,3 +322,65 @@ class TestIntegrationRouter:
         r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
         assert r.status_code == 409
         assert r.json()["detail"]["code"] == "cooldown"
+
+    async def test_manual_run_rejects_working_preview(self, client):
+        """A-4/W6(版本模型 §6):任一受管系统 working(含未钉修订)→
+        409 拒触发;钉定后过闸(只验闸,不验执行)。"""
+        await _seed_platform_user()
+        h = await register_and_login(client, "ig_wp", "ig_wppass123")
+        anchored = [{
+            "kind": "step", "description": "查单",
+            "endpoint": "fin.orders.get",
+            "call": {"service": "fin.order", "method": "GET", "path": "/o"},
+            "request": {"kind": "request", "body": {}},
+            "strategy": [],
+        }]
+        await _mk_scenario(client, h, "sc-ig-wp", anchored)
+        tid = (await client.post("/api/integration/tasks", headers=h,
+                                 json=_task_body("sc-ig-wp"))).json()["id"]
+
+        # 未钉修订(锚点系统缺声明)→ 409 working_preview
+        r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "working_preview"
+
+        # 显式 working → 同样 409
+        d = make_draft("sc-ig-wp", steps=anchored, plate={"fin": "working"})
+        assert (await client.put(
+            "/api/scenarios/sc-ig-wp", headers=h, json=d)).status_code == 200
+        r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "working_preview"
+
+        # 钉定 → 过闸(后续执行成败与本闸无关,只断言不再是 working_preview)
+        d = make_draft("sc-ig-wp", steps=anchored, plate={"fin": "1.0#1"})
+        assert (await client.put(
+            "/api/scenarios/sc-ig-wp", headers=h, json=d)).status_code == 200
+        r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+        assert not (r.status_code == 409 and
+                    r.json()["detail"]["code"] == "working_preview"), r.text
+
+    async def test_runner_internal_gate_fails_working_scenario(self, client):
+        """A-4/W6 调度路径兜底闸:绕过路由直调 run_instance,场景 working
+        → 实例 failed + 文案指路(外部服务/无锚点不受影响)。"""
+        await _seed_platform_user()
+        h = await register_and_login(client, "ig_wp2", "ig_wp2pass123")
+        anchored = [{
+            "kind": "step", "description": "查单",
+            "endpoint": "fin.orders.get",
+            "call": {"service": "fin.order", "method": "GET", "path": "/o"},
+            "request": {"kind": "request", "body": {}},
+            "strategy": [],
+        }]
+        await _mk_scenario(client, h, "sc-ig-wp2", anchored)
+        await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body("sc-ig-wp2"))
+        from app.services import integration_runner as ir
+        async with db_module.SessionLocal() as db:
+            tpl = (await db.execute(select(IntegrationTask).where(
+                IntegrationTask.scenario_id == "sc-ig-wp2",
+                IntegrationTask.template_id.is_(None)))).scalar_one()
+            inst = await ir.ensure_instance(tpl)
+            out = await ir.run_instance(inst.id)
+        assert out["status"] == "failed"
+        assert "拒绝触发" in (out.get("error") or "")

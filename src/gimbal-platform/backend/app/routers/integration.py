@@ -24,6 +24,7 @@ from ..models.integration_task import IntegrationTask
 from ..models.user import User
 from ..services import integration_runner
 from ..services.cron_expr import CronError, describe_cron, parse_cron
+from ..services.run_semantics import working_preview
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 router = APIRouter(prefix="/integration", tags=["integration"])
@@ -257,6 +258,16 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
+    # A-4/W6 手动面前置闸(版本模型 §6):working 预览场景 409 拒触发,
+    # 在建实例/占冷却之前;调度路径由 integration_runner 内部同款闸兜底。
+    if tpl.scenario_id:
+        scen_row = (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
+        if scen_row is not None and working_preview(scen_row.payload):
+            raise _bad(
+                "working_preview",
+                "场景声明 working(预览执行),集成任务拒绝触发:"
+                "请先在编排器钉定修订(外部服务不受影响)", 409)
     seeded = await integration_runner.ensure_instance(tpl)
     if seeded is None:
         raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)

@@ -255,6 +255,17 @@ async def run_instance(instance_id: int) -> dict:
                     db, inst, tpl, "failed",
                     f"平台模式只读检查未通过: {'、'.join(offenders)}")
 
+        # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
+        # 不计入入库标准的预览执行不进集成链。external 不受影响
+        # (working_preview 只看锚点系统的钉定状态)。调度路径与手动
+        # 触发路由的双闸之一;手动面在 routers/integration.py 先行 409。
+        from .run_semantics import working_preview
+        if working_preview(scen.payload):
+            return await _finish(
+                db, inst, tpl, "failed",
+                "场景声明 working(预览执行),集成任务拒绝触发:"
+                "请在编排器钉定修订后重试(外部服务不受影响)")
+
         scheme_payload = (scheme.payload if scheme else {}) or {}
         bindings = dict(scheme_payload.get("serviceBindings") or {})
         # P1 取一行:首个选中数据集的首行;未选 = 裸基线

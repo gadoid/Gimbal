@@ -677,13 +677,16 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    # W5/A-2:预览判定改为「任一受管系统 working/未钉即预览」。锚点
+    # ep-carry-x 的系统要判正式,必须在 meta.plate 钉定 —— 否则下面的
+    # 悬空 409(正式执行)会按预览放行。PlateMock 的 /resolve 回原修订。
     draft = _draft(steps=[
         {"id": "s1", "call": {"kind": "call", "protocol": "http", "service": "fin-svc", "method": "POST",
                              "path": "/order", "headers": {},
                              "view_hints": {"endpoint_id": "ep-carry-x"}},
          "request": {"body": {"bl_no": "${var.bl_no}"}}, "strategy": []},
         {"id": "s2", "strategy": []},
-    ], vars_map={"bl_no": "BL1"})
+    ], vars_map={"bl_no": "BL1"}, plate={"ep-carry-x": "t#1"})
     draft["assertion_registry"] = {"entries": [{
         "id": "inj-carry", "name": "carry 偏离",
         "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.customer_id"},

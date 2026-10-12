@@ -101,6 +101,18 @@ class PlateMock:
                     200,
                     json={"ok": True, "dim": "scenario", "data": {"dispatched": True}},
                 )
+            # RS3 生效修订解析(W5 钉定场景的 fanout 前置):钉什么回什么
+            # —— effective = 原修订(不变),available 单元素,零变更。
+            if path.endswith("/api/system/action/resolve"):
+                body = json.loads(request.content)
+                item = {
+                    sys_: {"effective": ref, "available": [ref],
+                           "changed_endpoints": []}
+                    for sys_, ref in (body.get("meta_plate") or {}).items()
+                    if ref and ref != "working"
+                }
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "system", "data": {"item": item}})
             # carry 预解析面(T9):services 目录 + endpoint full(写法对齐
             # conftest.EndpointPlateMock;未知 /full id → 404 = face 降级)。
             if path == "/api/service":

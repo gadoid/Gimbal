@@ -369,7 +369,11 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    # W5/A-2:预览判定 = 任一受管系统 working/未钉即预览。锚点 ep-absent
+    # 的系统钉定后本用例才走「正式执行悬空 409」路径(PlateMock /resolve
+    # 回原修订)。
     draft = _draft(
+        plate={"ep-absent": "t#1"},
         steps=[{                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-absent"}},   # fulls 里不注册 ⇒ 404
                 "request": {"body": {}}, "strategy": []}])

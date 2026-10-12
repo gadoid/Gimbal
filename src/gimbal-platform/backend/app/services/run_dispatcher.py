@@ -634,9 +634,11 @@ async def compute_run_fanout(
     )
     if dangling_ids:
         # Release v4.4 §6.3：正式执行悬空注入条目 → 失败（非静默跳过）。
-        # 预览执行（is_preview=True）放行并告警。
-        is_preview = bool(req.debug)
-        if is_preview:
+        # 预览判定 = 版本模型 §6（A-2/W5）：任一受管系统 working（含未钉
+        # 修订）即预览；调试执行保持宽容（探索性质，悬空面在
+        # /run/precheck 与告警可见）。旧口径 is_preview=bool(req.debug) 废。
+        from .run_semantics import working_preview
+        if working_preview(raw_payload) or req.debug:
             logger.warning(
                 "run_dispatcher: dangling injection entries (preview, allowed): {}",
                 dangling_ids,
