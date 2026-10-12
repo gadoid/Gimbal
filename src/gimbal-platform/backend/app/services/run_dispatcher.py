@@ -1673,6 +1673,23 @@ async def _fanout(
                     converted = convert_data.get("converted") or {}
                     # M2 §5.1:/convert 响应附带的构建身份 → 转交执行器（代际门）
                     m2_info = convert_data.get("m2") or None
+                    # W21/挂账二.1:M2 构建身份派发回填 —— 身份落
+                    # executions.m2_hash(整执行同源,首行一次;台账性质,
+                    # 失败不阻断执行)。
+                    if (m2_info and m2_info.get("hash")
+                            and not plate_state.get("m2_hash_written")):
+                        plate_state["m2_hash_written"] = True
+                        try:
+                            from sqlalchemy import update as sa_update
+                            async with db_factory() as _m2_sess:
+                                await _m2_sess.execute(
+                                    sa_update(Execution)
+                                    .where(Execution.id == execution_id)
+                                    .values(m2_hash=str(m2_info["hash"])))
+                                await _m2_sess.commit()
+                        except Exception:  # noqa: BLE001
+                            logger.warning(
+                                "m2_hash 回填失败 (execution={})", execution_id)
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
                     # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
                     # services 物化(绑定 url > authored;env.baseUrl 补缺层

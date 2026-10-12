@@ -57,19 +57,19 @@
 
 ## P3　B 组（按遗漏检查 D.3 序；P3.3 依赖"已钉修订场景存在"——P0.4 试点即满足）
 
-- [ ] **P3.1（B-4）RunRequest 形状**：Q4 结论已在 dev-plan T1.1 落定（nRuns/parallel 无超 64 存量 → 平台对齐 64），**折回 M2 方案 Q4 行成文**；`RunRequest` 平铺 `stepTo`/`nRuns`(≤1000)/`parallel`(≤200) 改 RunOptions 生成物形状、上限对齐 64；`DebugLaunchSpec` 一并生成物化。
-- [ ] **P3.2（B-5）镜像清零收尾**：平台 `AuthSession` 改持有生成的 `UserCredential`、`DebugCommandIn`、`DebugLaunchSpec`、Suite `checks` dict→生成物、director skill 改读 `/api/m2`（删静态 scenario-schema.md）。
-- [ ] **P3.3（B-1/B-2）执行详情修订台账（前端）**：显示"当时的修订"（`plate_pins`）与"重跑将使用的修订"，不一致时提示；执行趋势图在修订/版本线变化处标切换点。
-- [ ] **P3.4（B-3）RS4b"应用到同类步骤"**（`submit-suite` 已有，补同类步骤批量应用）。
-- [ ] **P3.5（B-6）事件表 payload**：ext 快照 24 个事件的 `fields` 填充；`m2.hash_mismatch` 从 `server_debug.py` 移入 `events/` 并入表。
-- [ ] **P3.6（B-7）plate_client 按修订缓存**：修订条目不设 TTL、只按容量淘汰（与 b4a8bfc0 修订缓存同机制）；`declarations_of_at` 入缓存；删 `strict_ref` 死代码。
+- [x] **P3.1（B-4）RunRequest 形状**（✅ W19/14241574：runOptions 生成物形状 + 上限 64 + DebugLaunchSpec 删;Q4 已折回 M2 方案决策表）：Q4 结论已在 dev-plan T1.1 落定（nRuns/parallel 无超 64 存量 → 平台对齐 64），**折回 M2 方案 Q4 行成文**；`RunRequest` 平铺 `stepTo`/`nRuns`(≤1000)/`parallel`(≤200) 改 RunOptions 生成物形状、上限对齐 64；`DebugLaunchSpec` 一并生成物化。
+- [x] **P3.2（B-5）镜像清零收尾**（✅ W20/31e6a894：AuthSession 持生成物 UserCredential;DebugCommandIn 生成化 gen_m2 dbgcmd 目标;checks→CheckDecl;director skill 改读 /api/m2）：平台 `AuthSession` 改持有生成的 `UserCredential`、`DebugCommandIn`、`DebugLaunchSpec`、Suite `checks` dict→生成物、director skill 改读 `/api/m2`（删静态 scenario-schema.md）。
+- [x] **P3.3（B-1/B-2）执行详情修订台账（前端）**（✅ W21：当时修订/重跑将使用/不一致提示 + 趋势切换点(SignalDots 蓝环) + m2_hash 派发回填 + W11 三态展示并入）：显示"当时的修订"（`plate_pins`）与"重跑将使用的修订"，不一致时提示；执行趋势图在修订/版本线变化处标切换点。
+- [x] **P3.4（B-3）RS4b"应用到同类步骤"**（✅ W22/ccc6db8c：applyToSimilar 按锚点展开,逐 pass 重扫索引,非收敛保护）（`submit-suite` 已有，补同类步骤批量应用）。
+- [x] **P3.5（B-6）事件表 payload**（✅ W23/62d7cbd9：fields 提取缺陷修复(FieldInfo→get_default),25 条全满;m2.hash_mismatch 移入 events/ 入表）：ext 快照 24 个事件的 `fields` 填充；`m2.hash_mismatch` 从 `server_debug.py` 移入 `events/` 并入表。
+- [x] **P3.6（B-7）plate_client 按修订缓存**（✅ W24/63425b6e：三读取面容量 64 FIFO/LRU,无 TTL;strict_ref 死代码删除）：修订条目不设 TTL、只按容量淘汰（与 b4a8bfc0 修订缓存同机制）；`declarations_of_at` 入缓存；删 `strict_ref` 死代码。
   - 验收门：每项自带测试；P3.1 后 CI 三形态重生成守卫绿。
 
 ## P4　测试与文档收尾
 
-- [ ] **P4.1 RS5 冷化测试**：`release/cold_archive.py` 全仓零测试引用——补判定查询测试（被场景引用 / 可能成为生效修订 / 被执行记录 `plate_pins` 引用的修订不在清单中）。
-- [ ] **P4.2 dev-plan v1.0 勾选同步**：T1.1①（api→call 已落）、T1.6 待做项（版本线声明已入库）、T4.1/T4.2（主体已交付）、T5.2（冷化已实现）改勾；本计划状态随批同步。
-- [ ] **P4.3 生产部署清单刷新**：并入 P0.1 构件分支重建步骤（含推远端）与 P1.5 的 alembic 0019。
+- [x] **P4.1 RS5 冷化测试**（✅ W25：test_cold_archive.py 六例——引用闭包/pin/working/多线）：`release/cold_archive.py` 全仓零测试引用——补判定查询测试（被场景引用 / 可能成为生效修订 / 被执行记录 `plate_pins` 引用的修订不在清单中）。
+- [x] **P4.2 dev-plan v1.0 勾选同步**（✅ W26：T1.1/T1.6/T4.1/T4.2/T5.2 改勾）：T1.1①（api→call 已落）、T1.6 待做项（版本线声明已入库）、T4.1/T4.2（主体已交付）、T5.2（冷化已实现）改勾；本计划状态随批同步。
+- [x] **P4.3 生产部署清单刷新**（✅ W26：构件分支重建+必推远端、alembic 0019/0020 已并入 docs/系统接入运行手册.md §0/§4 与 runbook-pg 原地升级记录）：并入 P0.1 构件分支重建步骤（含推远端）与 P1.5 的 alembic 0019。
 
 ## 任务拆分与实现序（2026-10-12，v1.0）
 

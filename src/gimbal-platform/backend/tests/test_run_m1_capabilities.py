@@ -233,3 +233,38 @@ async def test_service_binding_auth_merge_keeps_built_in(
     assert users["qa1"]["url"] == "http://builtin"
     # 所选 qa9 注入
     assert users["qa9"]["username"] == "exec-user"
+
+
+async def test_dispatch_backfills_m2_hash(
+    client: AsyncClient,
+    plate_mock: PlateMock,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """W21/挂账二.1:/convert 响应的 M2 构建身份 → executions.m2_hash 回填。
+
+    整执行同源:多行也只写一次;PlateMock 的 convert 恒带 m2 身份
+    (与真实 plate /convert 响应同形)。"""
+    bob = await _member(client, "bob")
+    await client.post(
+        "/api/scenarios", headers=bob,
+        json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1}),
+    )
+    await _seed_ds(client, bob)
+
+    calls: list[dict] = []
+    _patch_launch_capture(monkeypatch, calls)
+
+    r = await client.post(
+        "/api/runs", headers=bob, json=_run_payload())
+    assert r.status_code == 201, r.text
+    eid = r.json()["executionId"]
+    await _wait(lambda: len(calls) >= 1)
+
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models import Execution
+
+    async with db_module.SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        assert ex.m2_hash == "mock-m2-hash-0001"

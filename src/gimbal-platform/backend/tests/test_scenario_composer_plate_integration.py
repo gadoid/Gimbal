@@ -63,6 +63,10 @@ class PlateMock:
                             "data": {
                                 "consumer": "platform",
                                 "converted": {"kind": "platform_scenario"},
+                                # M2 §5.1:真实 plate 的 convert 恒附构建身份
+                                # (W21:派发链据此回填 executions.m2_hash)
+                                "m2": {"hash": "mock-m2-hash-0001",
+                                       "generation": 1},
                             },
                         },
                     )
@@ -72,7 +76,9 @@ class PlateMock:
                     body = json.loads(request.content)
                     return httpx.Response(200, json={
                         "ok": True, "dim": "scenario",
-                        "data": {"consumer": "gimbal", "converted": body["scenario"]},
+                        "data": {"consumer": "gimbal", "converted": body["scenario"],
+                                 "m2": {"hash": "mock-m2-hash-0001",
+                                        "generation": 1}},
                     })
                 if self.behaviour == "4xx":
                     return httpx.Response(

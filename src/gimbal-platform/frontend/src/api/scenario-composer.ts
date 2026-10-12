@@ -59,6 +59,8 @@ export interface ScenarioFacets {
 /** M5 bulk 信号(债 12):关注页每对象 2 请求的 N+1 消除。 */
 export interface ScenarioSignal {
   trend: string[]
+  /** W21:与 trend 同序的修订钉定签名(null = 该次未钉)——切换点标记 */
+  trendPins?: (string | null)[]
   lastRun: { status: string; at: string | null } | null
   schemeCount: number
   defaultSchemeName: string | null

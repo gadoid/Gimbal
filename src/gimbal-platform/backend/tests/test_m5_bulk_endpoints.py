@@ -106,3 +106,42 @@ async def test_signals_requires_auth_and_ids(client):
     r = await client.get("/api/scenarios/signals", headers=h,
                          params={"ids": "  "})
     assert r.status_code == 422
+
+
+# ── W21:signals trendPins(趋势切换点)─────────────────────────────
+async def test_signals_trend_pins(client):
+    """默认方案两次执行钉定不同修订 → trendPins 反映签名变化(旧→新,
+    未钉 = None);SignalDots 据此标切换点。"""
+    h = await register_and_login(client, "m5pins", "pw123456")
+    uid = 1
+
+    from app.core import db as db_module
+    from app.schemas.scenario_composer import ScenarioDraft
+    from app.services import scenario_store
+
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(
+            s, ScenarioDraft.model_validate(make_draft("sc-m5-pins")), owner="u")
+        # 私有场景趋势锁默认方案(与既有用例同口径)
+        from app.services import scheme_store
+        schemes = await scheme_store.list_schemes(s, "sc-m5-pins")
+        default_sid = next(x["schemeId"] for x in schemes if x["isDefault"])
+        d = {"scenarioId": "sc-m5-pins", "dataSetIds": [],
+             "schemeId": default_sid}
+        from app.models.execution import Execution
+        s.add(Execution(
+            scenario_id="sc-m5-pins", owner_id=uid, status="done",
+            total_runs=1, passed=1, failed=0, config_json=d,
+            plate_pins=None))                       # 旧执行:未钉
+        s.add(Execution(
+            scenario_id="sc-m5-pins", owner_id=uid, status="done",
+            total_runs=1, passed=1, failed=0, config_json=d,
+            plate_pins={"fin": "1.0#1"}))           # 新执行:钉定
+        await s.commit()
+
+    r = await client.get("/api/scenarios/signals",
+                         headers=h, params={"ids": "sc-m5-pins"})
+    assert r.status_code == 200, r.text
+    sig = r.json()["signals"]["sc-m5-pins"]
+    assert sig["trend"] == ["done", "done"]         # 旧→新
+    assert sig["trendPins"] == [None, "fin#1.0#1"]  # 切换点 = 索引 1

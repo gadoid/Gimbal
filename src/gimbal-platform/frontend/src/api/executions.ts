@@ -65,6 +65,13 @@ export interface Execution {
     /** 计数器漂移:passed+failed ≠ total_runs(P8 校账,真值以 JSONL 为准) */
     counterDrift?: boolean
   }
+  /** 修订台账(W21):当时生效修订 {系统: "<line>#<n>"};null = 未钉/预览执行 */
+  plate_pins?: Record<string, string> | null
+  /** M2 构建身份(W21 派发回填;历史执行 = null) */
+  m2_hash?: string | null
+  /** 场景当前声明的 meta.plate(重跑将使用;场景已删 = null) */
+  current_plate?: Record<string, string> | null
+
 }
 
 /** 列表行形态(M1 响应投影,PG迁移方案 §2.2 债 4 补刀):去 config —
@@ -79,6 +86,9 @@ export interface ExecutionListItem extends Omit<Execution, 'config'> {
     stepTo?: number | null
     authFailFast?: { error: string }
   }
+  /** 趋势切换点判定(W21):每次执行的修订钉定表 */
+  plate_pins?: Record<string, string> | null
+
 }
 
 export interface ExecutionListEnvelope {

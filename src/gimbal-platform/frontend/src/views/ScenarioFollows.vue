@@ -70,7 +70,7 @@
           </div>
           <div class="signal-area">
             <span class="signal-label">近5次</span>
-            <SignalDots :runs="row.trend" />
+            <SignalDots :runs="row.trend" :pins="row.trendPins" />
           </div>
           <router-link class="goto-link" :to="row.isPublic ? '/scenarios/public' : '/scenarios/mine'">↗ 前往场景</router-link>
           <DropdownMenu>
@@ -103,7 +103,7 @@
               <span class="src-tag" :class="row.isPublic ? 'public' : 'mine'">{{ row.isPublic ? '公共' : '我的' }}</span>
             </div>
             <div class="e-foot">
-              <SignalDots :runs="row.trend" />
+              <SignalDots :runs="row.trend" :pins="row.trendPins" />
               <button type="button" class="pin-link" @click.stop="pinRow(row.s)">↑ 设为常驻</button>
             </div>
           </div>
@@ -141,6 +141,8 @@ interface FollowRow {
   defaultSchemeName: string | null
   last: RunStamp | null
   trend: string[]
+  /** W21:与 trend 同序的修订钉定签名(切换点标记) */
+  trendPins: (string | null)[]
 }
 
 const store = useScenarioComposerStore()
@@ -166,6 +168,7 @@ const rows = computed<FollowRow[]>(() =>
         defaultSchemeName: sig?.defaultSchemeName ?? null,
         last: sig?.last ?? null,
         trend: sig?.trend ?? [],
+        trendPins: sig?.trendPins ?? [],
       }
     }),
 )
@@ -210,6 +213,7 @@ async function loadSignalsBounded(list: ScenarioListItem[]) {
   const ids = list.map((s) => s.meta.scenarioId)
   let bulk: Record<string, {
     trend: string[]
+    trendPins?: (string | null)[]
     lastRun: RunStamp | null
     schemeCount: number
     defaultSchemeName: string | null
@@ -220,7 +224,8 @@ async function loadSignalsBounded(list: ScenarioListItem[]) {
   for (const s of list) {
     const id = s.meta.scenarioId
     const sig = bulk[id] ?? {
-      trend: [], lastRun: null, schemeCount: 0, defaultSchemeName: null,
+      trend: [], trendPins: [], lastRun: null, schemeCount: 0,
+      defaultSchemeName: null,
     }
     signals.set(id, {
       isPublic: s.visibility === 'public',
@@ -228,6 +233,7 @@ async function loadSignalsBounded(list: ScenarioListItem[]) {
       defaultSchemeName: sig.defaultSchemeName,
       last: sig.lastRun,
       trend: sig.trend,
+      trendPins: sig.trendPins ?? [],
     })
   }
 }

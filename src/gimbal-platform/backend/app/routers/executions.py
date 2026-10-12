@@ -256,11 +256,23 @@ async def get_execution(
 ) -> ExecutionOut:
     disp = await execution_store.scenario_display_map(
         session, user, [ex.scenario_id])
-    return execution_store.execution_out(
+    out = execution_store.execution_out(
         ex,
         has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id),
         **execution_store.display_kwargs(ex, disp),
     )
+    # W21 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
+    # (rerun 按现库场景重建配方);场景已删/不可读 → None(前端只显
+    # 当时修订)。读失败不阻塞详情(台账性质)。
+    try:
+        from ..services import scenario_store as _ss
+        row = await _ss.get_row(session, ex.scenario_id)
+        if row is not None:
+            out.current_plate = ((row.payload or {}).get("definition")
+                                 or {}).get("meta", {}).get("plate") or None
+    except Exception:  # noqa: BLE001
+        out.current_plate = None
+    return out
 
 
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────

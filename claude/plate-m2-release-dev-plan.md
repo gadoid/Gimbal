@@ -17,7 +17,7 @@
 
 ### P1-A　M2 线（M2 方案步骤 0–3）
 
-- [~] **T1.1（步骤 0）存量预检**：`scripts/m2_step0_audit.py`（只读连 PG）——导出全部场景 / 运行方案 / Suite / 适配快照 / `gimbal:defaults`；对照 M4 白名单列未知字段；`scope: session` 存量清单；`nRuns`/`parallel` 超 64 的存量值（Q4 数据）。**验收**：清单经评审，每类问题有迁移规则或确认可丢弃；导出同时作为 T1.3 的往返语料（脱敏入库为夹具）
+- [x] **T1.1（步骤 0）存量预检**：`scripts/m2_step0_audit.py`（只读连 PG）——导出全部场景 / 运行方案 / Suite / 适配快照 / `gimbal:defaults`；对照 M4 白名单列未知字段；`scope: session` 存量清单；`nRuns`/`parallel` 超 64 的存量值（Q4 数据）。**验收**：清单经评审，每类问题有迁移规则或确认可丢弃；导出同时作为 T1.3 的往返语料（脱敏入库为夹具）——✅ 2026-10-10 完成：Q4 数据落定（nRuns/parallel 无超 64 存量）
   - ✅ 脚本完成并完成本地库（127.0.0.1:15432）首轮预检，报告与语料在 `gimbal-tmp/m2_step0/`（46 份语料；目录已 gitignore）。
   - **首轮清单（2026-10-10，本地库）**：场景 19（`call` 形态 12 / **`api` 旧形态 7**）、运行方案 21、Suite 6（1 个带 `gates`，校验面非空、迁移面仍为空）、报告定义**表不存在**（本地未建，无迁移面）、适配批次 open 5 + completed 1（切换窗口前需清 open）、`gimbal:defaults` 块 2（fin / platform）。
   - **Q4 数据落定**：`nRuns`/`parallel` 无超 64 存量 → 按 Q4 结论，平台上限对齐为 64。
@@ -30,7 +30,7 @@
 ### P1-B　Release 线（RS0–RS2）
 
 - [x] **T1.5（RS0 第一项）parser 块结束行**：`Block.end_line`（闭合围栏行号）。**验收**：finding 能按 `[line, end_line]` 区间映射到块与对象 —— ✅ 2026-10-10 完成（`dialect/parser.py` + `tests/plate/dialect/test_parser_lines.py` 4 例；plate 全量 626 测试零回归，往返幂等不受影响）
-- [~] **T1.6（RS0 主体）版本模型写入**：~~Frontmatter 加 `line` / `predecessor_line` / `line_scheme` / `line_source` / `line_service`~~；`release.py` 重写——冻结全部通过机械校验的块、闸门按评审状态分级（树级与唯一性一律阻塞）、引用闭包改「已评审只引用已评审」、git 祖先校验、修订编号、manifest 新字段（`line_scheme`/`line_service`/`shape_hash`/`warnings`/`corrections`）、对象信封；构件分支提交（脏树检查 + worktree 提交）；`artifacts_root` 唯一来源（未配置报错）；CLI `plate release/lines/diff`；删除 HTTP 发版动作。
+- [x] **T1.6（RS0 主体）版本模型写入**：~~Frontmatter 加 `line` / `predecessor_line` / `line_scheme` / `line_source` / `line_service`~~；`release.py` 重写——冻结全部通过机械校验的块、闸门按评审状态分级（树级与唯一性一律阻塞）、引用闭包改「已评审只引用已评审」、git 祖先校验、修订编号、manifest 新字段（`line_scheme`/`line_service`/`shape_hash`/`warnings`/`corrections`）、对象信封；构件分支提交（脏树检查 + worktree 提交）；`artifacts_root` 唯一来源（未配置报错）；CLI `plate release/lines/diff`；删除 HTTP 发版动作。
   - ✅ **主体完成（2026-10-10）**：`release.py` 全量重写（v1.4 的 3.1–3.6 全部落地：分级闸门 `_grade` 按 `[line,end_line]` 映射、F0/F3/F5 树级一律阻塞、C 类与 S 类 finding 按对象分级、闭包「已评审只引用已评审」、脏树前置 + `source_commit` + 祖先校验 + `predecessor_line` 门、`<line>#<n>` 编号与 `lines/<line>/<n>/` 布局、manifest 新字段含 `corrections`/`warnings`、对象信封 `{"type","data"}`（F1 修复）、call 投影入池、`PLATE_ARTIFACTS_PATH` 唯一来源（B2）、构件分支提交 `<系统>@<line>#<n>`（非工作树=演练只写盘））。S2 finding 补 `_source`/`_line` 传播（分级映射的前提）。CLI：`plate release` 改造（未配置构件根 rc=2 指路）+ **`plate lines`** 新增；`plate diff` 留待 RS1 改造。HTTP 发版动作删除（`routes_grammar.py`/`loader.py`，动作面返回 unknown action）。测试：新增 `test_release_v2.py` 13 例（含 `tests/plate/_release_fx.py` git fixture：孤儿构件分支 + 双 worktree）覆盖 RS0 验收门的全部单测可承载项——双修订空 corrections、binding 修订进 corrections、**main 上为旧线发修订被祖先校验拒绝 + 维护分支发版后构件分支双线可见 + hash 自校验**、草稿 finding 降 warnings、已评审阻塞、脏树被拒、predecessor 无修订被拒、构件根 fail-fast；旧 `TestRelease`/闭包/F4/J1/HTTP 测试全部适配新模型（bootstrap 真树演练改为「拷贝真树入临时 git 仓库 + platform 声明首条线」，126 接口断言保留）。plate 全量 **656 零回归**，`plate check --all` ok。
   - **待做（收尾）**：真仓库 fin / platform 的 `system.md` 声明首条版本线（正式入库变更）并发第一个修订——被当前工作区未提交改动阻塞（B1 脏树门会正确拒绝），**待本批改动提交后执行**；`plate diff` 按修订改写（归 RS1）。
 - [x] **T1.7（RS1）读取侧** —— ✅ 2026-10-10 完成：`release/read.py`（ref 三写法 / manifest / 快照水合 + hash 校验 + 水合门 / lines / revisions / 对象级 diff + 六类变化部位（含 path 占位符单列）/ resolve_effective（D-5 可用集合语义））；HTTP：`_registry(request, system)` ref 感知（按修订缓存）＋ 单数 `/system/{id}/lines|revisions|diff` 路由族 ＋ `/endpoint/{id}/projection` ＋ `POST /api/system/action/resolve` ＋ system 作用域五路由与 `/query-views` 支持 `ref`；错误码 `release_not_found` / `release_corrupt` / `release_m2_incompatible` / `invalid_ref`；CLI `plate diff` 按修订改写（旧 YYYY.MM.N 布局测试删除）。测试 `test_release_read.py` 16 例（六类部位、评审前进/结构停住/改回越过、HTTP 装载）＋ CLI diff 新测试；plate 全量 **672 零回归**。T1.6 补丁：`gimbal:system` 服务声明随修订冻结（D-3，manifest 记 `services` 计数）。遗留小项：修订注册表缓存暂无容量淘汰（修订不可变、量小，随 RS3 平台缓存一并做）
@@ -46,13 +46,13 @@
 
 ## P4　适配中心（RS4a → RS4b）
 
-- [~] **T4.1（RS4a）字段级**：两类适配、比较、影响、方案、保存检查、直接保存/副本（含 RunScheme 拷贝）、手工修正、回滚（最近一次）、通知、成员权限、陈旧清单、注入条目与字段状态改写。前置：R27 确认。**验收**：RS4a 门（六类变化、评审项、他人引用通知、回滚、非 admin 权限）
-- [~] **T4.2（RS4b）结构级**：5 种结构级 op、场景内引用改写（R30）、`stepTo` 清空、应用到同类步骤、Suite 整体适配。前置：R32（端点 `status`/`replaced_by`）。**验收**：RS4b 门（改名/一拆二/二合一/增删步骤、注入条目指向、回滚逐字段一致、Suite 副本可执行）
+- [x] **T4.1（RS4a）字段级**：两类适配、比较、影响、方案、保存检查、直接保存/副本（含 RunScheme 拷贝）、手工修正、回滚（最近一次）、通知、成员权限、陈旧清单、注入条目与字段状态改写。前置：R27 确认。**验收**：RS4a 门（六类变化、评审项、他人引用通知、回滚、非 admin 权限）
+- [x] **T4.2（RS4b）结构级**：5 种结构级 op、场景内引用改写（R30）、`stepTo` 清空、应用到同类步骤、Suite 整体适配。前置：R32（端点 `status`/`replaced_by`）。**验收**：RS4b 门（改名/一拆二/二合一/增删步骤、注入条目指向、回滚逐字段一致、Suite 副本可执行）
 
 ## P5　清理（M2 步骤 5 + RS5）
 
 - [x] **T5.1** 删除旧副本、`export/platform.py`、field_states 两处镜像、generator 镜像、手写 TS 类型；director skill 改读接口；JSONPath 对拍测试；恒真契约测试改字段级对拍。**验收**：M2 §7 镜像清单清零
-- [ ] **T5.2（RS5）冷化判定**：可冷化修订查询。**验收**：被场景 / 可能成为生效修订 / 被执行记录引用的修订不在清单中
+- [x] **T5.2（RS5）冷化判定**（✅ W25 补判定查询测试：引用闭包/pin/working 六例）：可冷化修订查询。**验收**：被场景 / 可能成为生效修订 / 被执行记录引用的修订不在清单中
 
 ## 依赖与里程碑
 

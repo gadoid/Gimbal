@@ -42,6 +42,8 @@ class ExecutionOut(BaseModel):
     # 身份;重跑将使用的修订由场景当前 meta.plate 决定,前端比对提示。
     plate_pins: dict | None = None
     m2_hash: str | None = None
+    # W21 修订台账:场景当前声明的 meta.plate(重跑将使用;场景删 = None)
+    current_plate: dict | None = None
     # 入库标准台账(版本模型 4.3 / A-3):严格门 + 首要阻塞原因
     # (working|unreviewed|external;external 按桶单独统计,不入基线
     # 分母)+ 多因证据(阻塞短路时为已收集部分)。

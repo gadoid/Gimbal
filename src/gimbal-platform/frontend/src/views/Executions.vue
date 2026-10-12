@@ -99,6 +99,39 @@
       </template>
     </dl>
 
+    <!-- W21 修订台账:当时修订 vs 重跑将使用的修订(场景当前声明) -->
+    <template v-if="ledgerRows.length">
+      <h3 class="recipe-title">修订台账</h3>
+      <table class="ex-table ledger-table" data-testid="revision-ledger">
+        <thead>
+          <tr><th>系统</th><th>当时修订</th><th>重跑将使用</th><th>一致性</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in ledgerRows" :key="row.system">
+            <td class="mono">{{ row.system }}</td>
+            <td>
+              <span v-if="row.then" class="mono pin-badge pinned">{{ row.then }}</span>
+              <span v-else class="pin-badge working" title="执行时未钉修订(working/预览执行)">未钉 · 预览</span>
+            </td>
+            <td>
+              <span v-if="row.now" class="mono">{{ row.now }}</span>
+              <span v-else-if="row.now === null" class="dim">—</span>
+              <span v-else class="pin-badge working" title="场景当前声明 working">working</span>
+            </td>
+            <td>
+              <span v-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
+              <span v-else class="dim">一致</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="rows-hint">
+        构建身份 m2：<span class="mono" :title="execStore.detail.m2_hash ?? ''">{{
+          execStore.detail.m2_hash ? execStore.detail.m2_hash.slice(0, 12) : '未记录(历史执行)'
+        }}</span>
+      </p>
+    </template>
+
     <h3 class="rows-title">行级明细</h3>
     <div class="rows-head">
       <p class="rows-hint">
@@ -277,6 +310,22 @@ const stepToLabel = computed(() => {
   const n = Number(v)
   if (!Number.isFinite(n) || n < 0) return ''
   return String(Math.floor(n) + 1)
+})
+
+// W21 修订台账行:当时修订(plate_pins)∪ 场景当前声明(current_plate);
+// 不一致 = 重跑按新修订执行,结果不可与本次对比。
+const ledgerRows = computed(() => {
+  const d = execStore.detail
+  if (!d) return []
+  const thenPins = d.plate_pins ?? {}
+  const nowPins = d.current_plate
+  const systems = [...new Set([...Object.keys(thenPins), ...(nowPins ? Object.keys(nowPins) : [])])]
+  return systems.map((sys) => {
+    const thenRev = thenPins[sys] ?? ''
+    const nowRev = nowPins ? (nowPins[sys] ?? '') : null   // null = 场景已删,无从对比
+    const diverged = nowRev !== null && thenRev !== nowRev
+    return { system: sys, then: thenRev, now: nowRev, diverged }
+  })
 })
 
 // V3 dispatcher recipe (config_json) rendered as a definition list —
@@ -531,6 +580,16 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* W21 修订台账 */
+.ledger-table { margin-bottom: 8px; }
+.pin-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 4px;
+  font-size: 12px; border: 1px solid var(--color-border-tertiary);
+}
+.pin-badge.pinned { background: #eff6ff; color: #1d4ed8; }
+.pin-badge.working { background: #fffbeb; color: #b45309; }
+.warn-text { color: #b45309; font-weight: 600; }
+.dim { color: var(--color-text-secondary); }
 .step-to-pill {
   @apply text-micro font-semibold;
   display: inline-flex;

@@ -403,3 +403,30 @@ async def test_precheck_found_and_scheme_found_gates(
     items = r.json()
     assert items[0]["schemeFound"] is False and items[0]["schemeValid"] is False
     assert items[1]["found"] is False
+
+
+# ── W21:详情带 current_plate(重跑将使用的修订)────────────────────
+async def test_execution_detail_current_plate(client: AsyncClient) -> None:
+    """场景当前 meta.plate → detail.currentPlate;场景删除后 = None。"""
+    auth = await _member(client, "alice")
+    draft = _draft(vars_map={"qty": 1})
+    draft["definition"]["meta"]["plate"] = {"fin": "1.0#2"}
+    r = await client.post("/api/scenarios", headers=auth, json=draft)
+    assert r.status_code == 201, r.text
+
+    eid = await _insert_execution(
+        owner_id=await _alice_id(), scenario_id="sc-test", status="passed",
+        plate_pins={"fin": "1.0#1"})
+
+    d = await client.get(f"/api/executions/{eid}", headers=auth)
+    assert d.status_code == 200, d.text
+    body = d.json()
+    assert body["plate_pins"] == {"fin": "1.0#1"}     # 当时修订
+    assert body["current_plate"] == {"fin": "1.0#2"}  # 重跑将使用
+    assert body["m2_hash"] is None
+
+    # 场景删除 → currentPlate = None(只剩当时修订,无对比列)
+    await client.delete("/api/scenarios/sc-test", headers=auth)
+    d = await client.get(f"/api/executions/{eid}", headers=auth)
+    assert d.status_code == 200, d.text
+    assert d.json()["current_plate"] is None

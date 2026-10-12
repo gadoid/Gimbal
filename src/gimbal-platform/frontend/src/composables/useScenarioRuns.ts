@@ -82,10 +82,28 @@ export function useScenarioRuns() {
     return relevant.slice(0, 5).map((e) => e.status).reverse()
   }
 
+  /** W21 趋势切换点:与 trend() 同口径过滤,返回每次执行的修订钉定
+   * 签名(系统#修订 排序拼接;未钉 = null),旧→新。SignalDots 据此
+   * 在相邻两次签名不同处标「修订切换」标记。 */
+  function trendPins(scenarioId: string, defaultSchemeId: string | null, isPublic: boolean): (string | null)[] {
+    const all = bucket(keyOf(scenarioId)).value
+    const relevant = isPublic
+      ? all
+      : defaultSchemeId
+        ? all.filter((e) => e.configSummary?.schemeId === defaultSchemeId)
+        : []
+    return relevant.slice(0, 5).map((e) => {
+      const pins = e.plate_pins
+      if (!pins) return null
+      return Object.keys(pins).sort()
+        .map((sys) => `${sys}#${pins[sys]}`).join(',') || null
+    }).reverse()
+  }
+
   /** 执行发起后作废缓存,下次读重新拉。 */
   function invalidate(scenarioId: string) {
     cache.delete(keyOf(scenarioId))
   }
 
-  return { load, runsOf, lastRunOfScheme, trend, invalidate }
+  return { load, runsOf, lastRunOfScheme, trend, trendPins, invalidate }
 }

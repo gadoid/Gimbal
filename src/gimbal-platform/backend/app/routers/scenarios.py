@@ -327,10 +327,18 @@ async def scenario_signals(
             lock = default_scheme.get(sid)
             execs = [e for e in execs if lock and _scheme_of(e) == lock]
         trend = [e.status for e in execs[:5]][::-1]
+        # W21 趋势切换点:与 trend 同序的修订钉定签名(未钉 = None),
+        # SignalDots 在相邻签名不同处标「修订切换」
+        trend_pins = [
+            ",".join(f"{k}#{v}" for k, v in sorted(
+                (e.plate_pins or {}).items())) or None
+            for e in execs[:5]
+        ][::-1]
         last = execs[0] if execs else None
         own = row.owner_id == user.id
         out[sid] = {
             "trend": trend,
+            "trendPins": trend_pins,
             "lastRun": ({
                 "status": last.status,
                 "at": (last.finished_at or last.started_at or None),

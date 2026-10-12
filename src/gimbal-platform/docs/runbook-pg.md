@@ -97,6 +97,17 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
 
 **原地升级记录**:
 
+- **2026-10-12 19:36 — 0019_service_alias_kind + 0020_execution_baseline 原地升级**
+  (缺口收口计划 W2/W7 三态接入 + 入库标准列): 本机库
+  `gimbal-pg-15432`,先 pg_dump 备份
+  `app-pg-20261012-193602-pre0020.dump`(1.8M,backend 目录)再
+  `alembic upgrade head`;加列 service_aliases.kind(server_default
+  'plate')/executions.baseline_eligible/baseline_block/baseline_evidence;
+  `scripts/p1_backfill_service_kinds.py` 演练 1 行无需变更;后端重启
+  冒烟通过。生产部署清单提示:**本机构件分支 plate/artifacts 重建后
+  必推 origin**(构件只存本机曾导致整链丢失,见 docs/系统接入运行手册
+  §0);alembic 落到 0020 起服。
+
 - **2026-09-22 13:55 — 0005_interaction_fields 原地升级**(交互字段统一轮):
   远端 192.168.22.106 库,2 行数据秒级完成;`row_count` 转生成列后存量值
   自愈(ds-001=1/ds-002=2),六冗余索引消失、owner 复合索引在建、

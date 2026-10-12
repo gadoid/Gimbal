@@ -579,3 +579,64 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
     w.unmount()
   })
 })
+
+// ── W21 修订台账:当时修订 vs 重跑将使用,不一致提示 ────────────────
+describe('Executions.vue — 修订台账 (W21)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  async function mountLedger(detail: Partial<Execution>) {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail, ...detail } as Execution
+    execStore.fetchDetail = vi.fn().mockResolvedValue(execStore.detail)
+    const w = await mountPage(1)
+    await flushPromises()
+    return w
+  }
+
+  it('台账行:一致时显示「一致」;当时未钉显示预览徽标', async () => {
+    const w = await mountLedger({
+      plate_pins: { fin: '1.0#1' },
+      current_plate: { fin: '1.0#1' },
+      m2_hash: '8bbb8d85ccce23a2fdd82f499a4530cf4ea930ff67574e484225f8f6867713ca',
+    })
+    const table = w.find('[data-testid="revision-ledger"]')
+    expect(table.exists()).toBe(true)
+    expect(table.text()).toContain('fin')
+    expect(table.text()).toContain('1.0#1')
+    expect(table.text()).toContain('一致')
+    expect(table.text()).not.toContain('不一致')
+    // m2 构建身份短显(12 位;在台账表下方的说明行,不在表内)
+    expect(w.text()).toContain('8bbb8d85ccce')
+    expect(w.text()).not.toContain('未记录')
+  })
+
+  it('不一致:重跑将使用不同修订 → 提示不可对比', async () => {
+    const w = await mountLedger({
+      plate_pins: { fin: '1.0#1' },
+      current_plate: { fin: '1.0#2' },
+    })
+    const table = w.find('[data-testid="revision-ledger"]')
+    expect(table.text()).toContain('不一致')
+    expect(table.text()).toContain('重跑结果不可与本次对比')
+  })
+
+  it('当时未钉(预览执行)→ 未钉徽标 + m2 未记录;重跑列显示当前声明', async () => {
+    const w = await mountLedger({
+      plate_pins: null,
+      current_plate: { fin: '1.0#1' },
+      m2_hash: null,
+    })
+    const table = w.find('[data-testid="revision-ledger"]')
+    expect(table.text()).toContain('未钉 · 预览')
+    expect(table.text()).toContain('1.0#1')     // 重跑列 = 场景当前声明
+    expect(table.text()).toContain('不一致')    // 预览 → 钉定 = 不可对比
+    expect(w.text()).toContain('未记录(历史执行)')
+  })
+
+  it('无任何版本信息(老执行)→ 台账区不渲染', async () => {
+    const w = await mountLedger({})
+    expect(w.find('[data-testid="revision-ledger"]').exists()).toBe(false)
+  })
+})
