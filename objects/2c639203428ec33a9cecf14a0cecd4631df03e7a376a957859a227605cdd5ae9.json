@@ -1,0 +1,115 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/order/orderFee/toggleRealAmount",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "由 Scenario_Test_14 提取: 切换订单实收实付金额模式",
+  "id": "fin.order_fee.toggle_real_amount",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "切换订单实收实付金额模式",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": "",
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "order_id",
+      "path": "$.data.amount_summary.order_id",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "unknown",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "order_fee_real_id",
+      "path": "$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "unknown",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "order_sub_no",
+      "path": "$.data.to_customer[0].order_sub_no",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "unknown",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

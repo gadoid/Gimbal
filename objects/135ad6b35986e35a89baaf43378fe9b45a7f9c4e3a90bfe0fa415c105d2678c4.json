@@ -1,0 +1,100 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/home/audit/auditExecute",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "由 Scenario_Test_14 提取: 执行审批",
+  "id": "fin.audit.audit_execute",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "执行审批",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": [
+      ""
+     ],
+     "name": "audit_ids",
+     "path": "$.audit_ids",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "array",
+     "ui_kind": "json",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": 2,
+     "name": "audit_status",
+     "path": "$.audit_status",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "integer",
+     "ui_kind": "number",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": null,
+     "name": "audit_remark",
+     "path": "$.audit_remark",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

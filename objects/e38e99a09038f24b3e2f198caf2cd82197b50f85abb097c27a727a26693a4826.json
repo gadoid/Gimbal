@@ -1,0 +1,90 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/customer/customer/customerList",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "客户公司列表;组合期取数源 customer_list 视图挂此(级联链 ①,§13.1)",
+  "id": "fin.customer.list",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": true,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "客户列表(customerList)",
+  "produces": [],
+  "query_views": [
+   {
+    "items": "$.data[*]",
+    "label": "customer_name",
+    "name": "customer_list",
+    "params": null,
+    "query_params": null
+   }
+  ],
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务状态码(200=成功)",
+      "enum": null,
+      "example": null,
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "number",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务提示信息",
+      "enum": null,
+      "example": null,
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

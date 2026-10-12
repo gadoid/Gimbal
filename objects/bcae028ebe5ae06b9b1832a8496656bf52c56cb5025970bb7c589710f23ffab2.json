@@ -1,0 +1,224 @@
+{
+ "data": {
+  "binding": {
+   "auth": "none",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "检查订舱信息",
+  "id": "fin.order_entrust.order_customer_container",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "检查订舱信息",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": "335247043402399744",
+     "name": "customer_id",
+     "path": "$.customer_id",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": "354066893969032192",
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": [
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "order_container_id",
+       "path": "$.container.order_container_id",
+       "required": false,
+       "source_kind": "independent",
+       "state": "form",
+       "type": "string",
+       "ui_kind": "text",
+       "value_source": null
+      },
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "box_type",
+       "path": "$.container.box_type",
+       "required": false,
+       "source_kind": "independent",
+       "state": "form",
+       "type": "string",
+       "ui_kind": "text",
+       "value_source": null
+      },
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "box_num",
+       "path": "$.container.box_num",
+       "required": false,
+       "source_kind": "independent",
+       "state": "form",
+       "type": "string",
+       "ui_kind": "text",
+       "value_source": null
+      },
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "box_no",
+       "path": "$.container.box_no",
+       "required": false,
+       "source_kind": "independent",
+       "state": "collapse",
+       "type": "array",
+       "ui_kind": "unknown",
+       "value_source": null
+      },
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "seal_number",
+       "path": "$.container.seal_number",
+       "required": false,
+       "source_kind": "independent",
+       "state": "collapse",
+       "type": "array",
+       "ui_kind": "unknown",
+       "value_source": null
+      },
+      {
+       "assertable": false,
+       "children": null,
+       "default": null,
+       "description": "",
+       "enum": null,
+       "example": null,
+       "name": "sea_trans_unit_price",
+       "path": "$.container.sea_trans_unit_price",
+       "required": false,
+       "source_kind": "independent",
+       "state": "form",
+       "type": "number",
+       "ui_kind": "number",
+       "value_source": null
+      }
+     ],
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": [
+      {
+       "box_no": [
+        ""
+       ],
+       "box_num": "1",
+       "box_type": "20GP",
+       "order_container_id": "",
+       "sea_trans_unit_price": "100",
+       "seal_number": [
+        ""
+       ]
+      }
+     ],
+     "name": "container",
+     "path": "$.container",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "array",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": "JSZX",
+     "name": "policy_type",
+     "path": "$.policy_type",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": ""
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

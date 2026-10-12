@@ -1,0 +1,9 @@
+{
+ "data": {
+  "description": "财务系统(fin)",
+  "name": "fin-service",
+  "title": "fin-service",
+  "version": "1.1.0"
+ },
+ "type": "service"
+}

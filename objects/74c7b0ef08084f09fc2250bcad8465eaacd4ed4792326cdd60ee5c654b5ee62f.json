@@ -1,0 +1,109 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/customer/customer/customerPart",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "客户单对象详情;组合期取数源 customer_part 视图挂此(级联链 ②,§13.1/§13.4)",
+  "id": "fin.customer.part",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": true,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "客户详情(customerPart)",
+  "produces": [],
+  "query_views": [
+   {
+    "items": "$.data",
+    "label": "customer_service.user_name",
+    "name": "customer_part",
+    "params": null,
+    "query_params": [
+     "customer_id"
+    ]
+   }
+  ],
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "客户ID(点击期参数面供给,§13.2)",
+     "enum": null,
+     "example": null,
+     "name": "customer_id",
+     "path": "$.customer_id",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务状态码(200=成功)",
+      "enum": null,
+      "example": null,
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "number",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务提示信息",
+      "enum": null,
+      "example": null,
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

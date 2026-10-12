@@ -1,0 +1,11 @@
+{
+ "data": {
+  "headers": {},
+  "method": "POST",
+  "path": "/api/customer/customer/customerList",
+  "protocol": "http",
+  "service": "fin-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

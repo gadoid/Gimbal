@@ -1,0 +1,123 @@
+{
+ "data": {
+  "binding": {
+   "auth": "bearer",
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/order/order/orderNotice",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "由 Scenario_Test_14 提取: 应收核销通知",
+  "id": "fin.order.order_notice",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "应收核销通知",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": "",
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": [
+      "check",
+      "submit"
+     ],
+     "example": "check",
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": [
+      "${var.finance_id_0}",
+      "${var.finance_id_1}"
+     ],
+     "name": "finance_ids",
+     "path": "$.finance_ids",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "array",
+     "ui_kind": "json",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "",
+     "enum": null,
+     "example": [
+      "${var.bank_id_0}",
+      "${var.bank_id_1}"
+     ],
+     "name": "bank_ids",
+     "path": "$.bank_ids",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "array",
+     "ui_kind": "json",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}
