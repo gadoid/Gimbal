@@ -117,6 +117,9 @@ def execution_out(
         suite_id=e.suite_id,
         plate_pins=e.plate_pins,
         m2_hash=e.m2_hash,
+        baseline_eligible=bool(e.baseline_eligible),
+        baseline_block=e.baseline_block,
+        baseline_evidence=e.baseline_evidence,
     )
 
 
@@ -166,6 +169,8 @@ def execution_list_item(
         suite_id=e.suite_id,
         plate_pins=e.plate_pins,
         m2_hash=e.m2_hash,
+        baseline_eligible=bool(e.baseline_eligible),
+        baseline_block=e.baseline_block,
     )
 
 

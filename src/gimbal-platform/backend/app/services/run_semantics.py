@@ -28,7 +28,7 @@ def anchored_systems(payload: dict | None) -> set[str]:
 
 
 def working_preview(payload: dict | None) -> bool:
-    """任一受管系统 working（显式声明或未钉修订）→ 预览执行。
+    """任一受管系统 working(显式声明或未钉修订)→ 预览执行。
 
     无锚点步骤 / 全部受管系统都钉了精确修订 → 正式执行。
     """
@@ -40,3 +40,54 @@ def working_preview(payload: dict | None) -> bool:
         if not ref or ref == WORKING:
             return True
     return False
+
+
+async def assess_baseline(
+    db,
+    *,
+    meta_plate: dict,
+    endpoints_used: dict[str, list[str] | set[str]],
+    unanchored_services: list[str],
+    review_lookup=None,
+) -> tuple[bool, str | None, dict]:
+    """入库标准判定(版本模型 4.3 / A-3 / W7)。
+
+    eligible = 无受管系统 working ∧ 钉定修订下用到的接口全部已评审 ∧
+    无 external 服务。返回 ``(eligible, 首要阻塞原因, 证据)``;阻塞
+    短路(working > unreviewed > external),证据只含已收集部分。
+    ``review_lookup(system, ref) -> {对象id: review}`` 可注入(测试);
+    缺省 plate_client.revision_objects(修订 manifest.objects 已带逐
+    对象 review —— plate 侧零改动,W8 侦察结论)。
+
+    unknown 服务(未登记别名)按 external 阻塞(保守:未登记 = 未受管,
+    无契约可验证),证据里单列 ``unknown_services``。
+    """
+    working = sorted(
+        s for s in endpoints_used
+        if not meta_plate.get(s) or meta_plate.get(s) == WORKING)
+    if working:
+        return False, "working", {"working_systems": working}
+
+    if review_lookup is None:
+        from . import plate_client
+        review_lookup = plate_client.revision_objects
+    unreviewed: dict[str, list[str]] = {}
+    for sys_, ids in endpoints_used.items():
+        ref = meta_plate.get(sys_) or ""
+        if not ref or ref == WORKING:
+            continue          # 已被 working 拦,不再触 plate
+        reviews = await review_lookup(sys_, ref)
+        bad = sorted(eid for eid in ids if reviews.get(eid) != "reviewed")
+        if bad:
+            unreviewed[sys_] = bad
+    if unreviewed:
+        return False, "unreviewed", {"unreviewed_endpoints": unreviewed}
+
+    from .service_aliases import classify_services
+    classified = await classify_services(db, unanchored_services)
+    if classified["external"] or classified["unknown"]:
+        return False, "external", {
+            "external_services": classified["external"],
+            "unknown_services": classified["unknown"],
+        }
+    return True, None, {}

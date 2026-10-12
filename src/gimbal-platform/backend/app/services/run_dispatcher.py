@@ -1455,16 +1455,24 @@ async def _fanout(
     # 得到各系统生效修订，写入执行副本后 /convert 按原值取修订重投影。
     meta_plate = (definition.get('meta') or {}).get('plate') or {}
     plate_pins: dict[str, str] = {}
+    # A-3/W7(版本模型 4.3)入库判定的输入:受管系统的在用接口集
+    # (锚点收,system = endpoint 首段)+ 无锚点步骤的服务键(external
+    # 判定;收集外提 —— working 场景(不进 resolve 分支)也要判)。
+    endpoints_used: dict[str, set[str]] = {}
+    unanchored_services: list[str] = []
+    for step in (definition.get('steps') or []):
+        if not isinstance(step, dict):
+            continue
+        ep_id = step.get('endpoint')
+        if ep_id:
+            system = str(ep_id).split('.')[0]
+            endpoints_used.setdefault(system, set()).add(str(ep_id))
+        else:
+            call = step.get('call')
+            svc = call.get('service') if isinstance(call, dict) else None
+            if isinstance(svc, str) and svc:
+                unanchored_services.append(svc)
     if meta_plate and any(v and v != 'working' for v in meta_plate.values()):
-        # 收集各系统用到的接口（按 endpoint 锚点或 call 协议字段）
-        endpoints_used: dict[str, set[str]] = {}
-        for step in (definition.get('steps') or []):
-            if not isinstance(step, dict):
-                continue
-            ep_id = step.get('endpoint')
-            if ep_id:
-                system = str(ep_id).split('.')[0]
-                endpoints_used.setdefault(system, set()).add(str(ep_id))
         try:
             resolve_result = await plate_client.resolve(
                 meta_plate,
@@ -1479,20 +1487,41 @@ async def _fanout(
         except Exception as exc:  # noqa: BLE001 — plate 不可用时执行失败
             raise RuntimeError(
                 f'plate_unavailable: 生效修订解析失败: {exc}') from exc
-        # RS3：生效修订表落库（dispatch 侧无引用可回填 —— job 经 DB
-        # 队列异步驱动，在解析处就地写入；台账性质，失败不阻断执行）。
-        if plate_pins:
-            try:
-                from sqlalchemy import update as sa_update
-                async with db_factory() as _pin_sess:
-                    await _pin_sess.execute(
-                        sa_update(Execution)
-                        .where(Execution.id == execution_id)
-                        .values(plate_pins=plate_pins))
-                    await _pin_sess.commit()
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    'plate_pins 回填失败 (execution={})', execution_id)
+    # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
+    # 失败均不阻断执行(台账性质;留默认值 = 未判定)。
+    baseline: tuple[bool, str | None, dict] | None = None
+    try:
+        from . import run_semantics
+        async with db_factory() as _sem_s:
+            baseline = await run_semantics.assess_baseline(
+                _sem_s, meta_plate=meta_plate,
+                endpoints_used=endpoints_used,
+                unanchored_services=unanchored_services)
+    except Exception:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            'run_dispatcher: 入库标准判定失败 (execution={})', execution_id)
+        baseline = None
+    # RS3：生效修订表落库（dispatch 侧无引用可回填 —— job 经 DB
+    # 队列异步驱动，在解析处就地写入；台账性质，失败不阻断执行）。
+    if plate_pins or baseline is not None:
+        try:
+            from sqlalchemy import update as sa_update
+            async with db_factory() as _pin_sess:
+                _values: dict = {}
+                if plate_pins:
+                    _values['plate_pins'] = plate_pins
+                if baseline is not None:
+                    _values['baseline_eligible'] = baseline[0]
+                    _values['baseline_block'] = baseline[1]
+                    _values['baseline_evidence'] = baseline[2] or None
+                await _pin_sess.execute(
+                    sa_update(Execution)
+                    .where(Execution.id == execution_id)
+                    .values(**_values))
+                await _pin_sess.commit()
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                'plate_pins 回填失败 (execution={})', execution_id)
 
     # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
     convert_cache: dict[str, dict] = {}

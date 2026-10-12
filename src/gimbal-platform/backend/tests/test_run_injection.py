@@ -1016,3 +1016,52 @@ def test_template_value_class_writes_the_vars_value_not_the_literal():
     assert st.source == 100                       # 变量值,不是 "${var.amount}"
     assert st.default == 100                      # default 同样被改写(死重,无害)
     assert st.required is False
+
+
+async def test_baseline_ledger_written_on_dispatch(
+    client, plate_mock: PlateMock, monkeypatch
+):
+    """A-3/W7:入库台账随派发落库 —— 钉定+全评审 → eligible;未钉
+    (working)→ block=working。台账三列(0020)+ plate_pins 同点写。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    steps = [{"kind": "step", "endpoint": "fin.orders.get",
+              "call": {"service": "fin-service", "method": "GET", "path": "/o"},
+              "request": {"kind": "request", "body": {}}, "strategy": []}]
+    plate_mock.behaviour = "echo"
+    plate_mock.revision_reviews = {"fin": {"fin.orders.get": "reviewed"}}
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    # ① 钉定 + 全评审 → eligible(plates_pins 与台账同批落库)
+    draft = _draft(steps=steps, plate={"fin": "1.0#1"})
+    assert (await client.post(
+        "/api/scenarios", headers=bob, json=draft)).status_code in (200, 201)
+    r = await client.post("/api/runs", headers=bob,
+                          json={"scenarioId": "sc-test", "dataSetIds": []})
+    assert r.status_code == 201, r.text
+    eid = r.json()["executionId"]
+    await _wait(lambda: len(cases) >= 1)
+    d = (await client.get(f"/api/executions/{eid}", headers=bob)).json()
+    assert d["plate_pins"] == {"fin": "1.0#1"}
+    assert d["baseline_eligible"] is True
+    assert d["baseline_block"] is None
+
+    # ② 未钉(锚点系统缺声明)→ block=working,证据记系统清单
+    draft2 = _draft("sc-bl-working", steps=steps)
+    assert (await client.post(
+        "/api/scenarios", headers=bob, json=draft2)).status_code in (200, 201)
+    r2 = await client.post("/api/runs", headers=bob,
+                           json={"scenarioId": "sc-bl-working",
+                                 "dataSetIds": []})
+    assert r2.status_code == 201, r2.text
+    eid2 = r2.json()["executionId"]
+    await _wait(lambda: len(cases) >= 2)     # ② 的 fanout 也跑完再读台账
+    d2 = (await client.get(
+        f"/api/executions/{eid2}", headers=bob)).json()
+    assert d2["baseline_eligible"] is False
+    assert d2["baseline_block"] == "working"
+    assert d2["baseline_evidence"] == {"working_systems": ["fin"]}

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -37,6 +37,16 @@ class Execution(Base):
     # RS3（Release v4.4 §6.3）：生效修订表与构建身份
     plate_pins: Mapped[dict | None] = mapped_column(JsonVar, nullable=True)
     m2_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 入库标准(版本模型 4.3 / A-3,0020):执行的定义侧可信度台账。
+    # eligible = 严格门(自举指标分子):无受管系统 working ∧ 钉定修订
+    # 下用到的接口全已评审 ∧ 无 external 服务;block = 首要阻塞原因
+    # working | unreviewed | external(external 按桶单独统计,不入基线
+    # 分母);evidence = 多因全量证据(阻塞短路时为已收集部分)。
+    # 平台侧合成判定,与执行器事件流(execution_events)无关。
+    baseline_eligible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false())
+    baseline_block: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    baseline_evidence: Mapped[dict | None] = mapped_column(JsonVar, nullable=True)
     # (owner_id, id) 复合(0005 升级原单列 owner 索引):列表/汇总/streak
     # 均为 owner 过滤 + id 倒序,前缀吃过滤、后缀吃倒序扫
     __table_args__ = (

@@ -43,6 +43,9 @@ class PlateMock:
         # 既有等价测试行为不变(兼容关键),carry 用例自行注入服务。
         self.fulls: dict[str, dict] = {}   # endpoint_id → full spec(carry 面)
         self.services: list[dict] = []
+        # A-3/W7:修订 manifest.objects 评审面({系统: {对象id: review}});
+        # 未注入 = 空目录(所有对象按未评审计)。
+        self.revision_reviews: dict[str, dict[str, str]] = {}
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -113,6 +116,20 @@ class PlateMock:
                 }
                 return httpx.Response(200, json={
                     "ok": True, "dim": "system", "data": {"item": item}})
+            # A-3/W7 入库判定的评审面:GET /api/system/{s}/revisions/{l}/{n}
+            # → manifest.objects[]({id, review})。revision_reviews 按
+            # {系统: {对象id: review}} 注入;未注入 = 空(全未评审)。
+            if "/api/system/" in path and "/revisions/" in path:
+                seg = [p for p in path.split("/") if p]
+                i = seg.index("system")
+                sysname = seg[i + 1]
+                objs = [
+                    {"id": eid, "type": "endpoint", "review": rev}
+                    for eid, rev in self.revision_reviews.get(sysname, {})
+                    .items()]
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "system",
+                    "data": {"item": {"system": sysname, "objects": objs}}})
             # carry 预解析面(T9):services 目录 + endpoint full(写法对齐
             # conftest.EndpointPlateMock;未知 /full id → 404 = face 降级)。
             if path == "/api/service":

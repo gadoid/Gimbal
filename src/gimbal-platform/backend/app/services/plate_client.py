@@ -582,3 +582,38 @@ async def get_projection(
         _raise_rejected(resp)
     envelope = resp.json()
     return envelope.get("data", {}).get("item")
+
+
+async def revision_objects(
+    system_id: str, ref: str, *, timeout: float = 15.0
+) -> dict[str, str]:
+    """GET /api/system/{id}/revisions/{line}/{n} → manifest.objects。
+
+    返回 ``{对象 id: review 状态}``(端点对象的评审面;W7 入库标准
+    「生效修订中用到的接口全部已评审」的判定数据源)。修订不可变,
+    结果可缓存(B-7 随批)。``ref`` 必须是 ``<line>#<n>`` 精确修订。
+    """
+    if "#" not in ref:
+        raise PlateRejectedError(
+            code="invalid_ref",
+            message=f"revision_objects 需要精确修订 <line>#<n>,得到 {ref!r}")
+    line, _, n = ref.partition("#")
+    client = get_client()
+    try:
+        resp = await client.get(
+            f"/api/system/{system_id}/revisions/{line}/{n}", timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    objects = envelope.get("data", {}).get("item", {}).get("objects", [])
+    return {o["id"]: (o.get("review") or "") for o in objects
+            if isinstance(o, dict) and o.get("id")}
