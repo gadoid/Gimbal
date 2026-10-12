@@ -191,9 +191,26 @@ async def test_executions_envelope_and_config_removed(client, bob):
     row = body["items"][0]
     assert "config" not in row  # 债 4 补刀:config_json 不随行下发
     # 窄投影:五个 UI/信号键在,凭证引用面不在
+    # (本行是 W19 前的旧平铺键形态 — 投影带回退映射)
     assert row["configSummary"] == {"schemeId": "sh-1", "schemeName": "冒烟",
                                     "nRuns": 3, "parallel": 2, "stepTo": 1}
     assert "injectedAuths" not in row["configSummary"]
+
+    # W19 新形态:runOptions dump 内层键 → configSummary 形状不变
+    async with db_module.SessionLocal() as s:
+        s.add(Execution(
+            scenario_id="sc-m1-exec", owner_id=1, status="passed",
+            total_runs=1, passed=1, failed=0,
+            config_json={"schemeId": "sh-2", "schemeName": "新版",
+                         "runOptions": {"n_runs": 5, "parallel": 3,
+                                        "step_to": 2}},
+        ))
+        await s.commit()
+    r = await client.get("/api/executions?page=1&page_size=20", headers=bob)
+    new_row = next(it for it in r.json()["items"]
+                   if it["configSummary"].get("schemeId") == "sh-2")
+    assert new_row["configSummary"] == {"schemeId": "sh-2", "schemeName": "新版",
+                                        "nRuns": 5, "parallel": 3, "stepTo": 2}
 
     # 详情保留完整 config
     ex_id = row["id"]

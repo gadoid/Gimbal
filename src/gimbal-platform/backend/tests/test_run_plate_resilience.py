@@ -75,7 +75,7 @@ async def test_convert_memoized_across_repeats(client, monkeypatch):
         return {"consumer": "platform", "converted": dict(scenario)}
 
     eid = await _run_with_convert(client, monkeypatch, counting_convert,
-                                  body_over={"nRuns": 3})
+                                  body_over={"runOptions": {"n_runs": 3}})
     await _wait_terminal(eid)
     assert calls["n"] == 1          # 同一行 ×3 重复共享一次 convert
 
@@ -115,7 +115,7 @@ async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
     )
 
     eid = await _run_with_convert(client, monkeypatch, passthrough_convert,
-                                  body_over={"nRuns": 3})
+                                  body_over={"runOptions": {"n_runs": 3}})
     await _wait_terminal(eid)
 
     assert calls["n"] == 1          # P2-05:nRuns=3 单 spawn(memo 一次命中)
@@ -153,7 +153,7 @@ async def test_breaker_opens_after_consecutive_unavailable(
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-plate", "dataSetIds": [ds_id],
-        "parallel": 1,
+        "runOptions": {"parallel": 1},
     })
     assert r.status_code == 201, r.text
     eid = r.json()["executionId"]

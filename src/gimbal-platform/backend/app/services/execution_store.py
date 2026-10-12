@@ -127,8 +127,27 @@ def execution_out(
 # 认证快失败信号;useScenarioRuns 的趋势过滤读 schemeId 做方案溯源)。
 # 凭证引用面(injectedAuths/serviceBindings)绝不进列表。
 _CONFIG_SUMMARY_KEYS = (
-    "schemeId", "schemeName", "nRuns", "parallel", "stepTo", "authFailFast",
+    "schemeId", "schemeName", "authFailFast",
 )
+
+
+def _config_summary(cfg: dict) -> dict:
+    """执行参数投影(W19):新行读 runOptions dump 内层键,旧行平铺键
+    回退 —— 对外 configSummary 形状不变(nRuns/parallel/stepTo)。"""
+    summary = {k: cfg[k] for k in _CONFIG_SUMMARY_KEYS if k in cfg}
+    ro = cfg.get("runOptions")
+    if isinstance(ro, dict):
+        if "n_runs" in ro:
+            summary["nRuns"] = ro["n_runs"]
+        if "parallel" in ro:
+            summary["parallel"] = ro["parallel"]
+        if "step_to" in ro:
+            summary["stepTo"] = ro["step_to"]
+    else:   # 旧行平铺键(W19 之前发起的执行)
+        for k in ("nRuns", "parallel", "stepTo"):
+            if k in cfg:
+                summary[k] = cfg[k]
+    return summary
 
 
 def execution_list_item(
@@ -159,7 +178,7 @@ def execution_list_item(
         started_at=e.started_at,
         finished_at=e.finished_at,
         owner_name=owner_name,
-        config_summary={k: cfg[k] for k in _CONFIG_SUMMARY_KEYS if k in cfg},
+        config_summary=_config_summary(cfg),
         has_scenario_snapshot=has_scenario_snapshot,
         batch_id=e.batch_id,
         consecutive_failures=consecutive_failures,

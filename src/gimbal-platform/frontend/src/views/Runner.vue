@@ -236,6 +236,7 @@ import { showError } from '@/utils/errorFallback'
 import { useAuthStore } from '@/stores/auth'
 import { listScenarioOptions, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
 import type { PrecheckResult, SchemeV2, DataSetSelection } from '@/api/scenario-composer'
+import type { RunOptions } from '@/types/m2'
 import type { ScenarioOptionsItem } from '@/types/scenario-composer'
 import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembly'
 import { composerUrl, executionsBatchUrl, scenarioSchemesUrl } from '@/utils/links'
@@ -394,8 +395,8 @@ function schemeMeta(item: QueueItem): string {
   const parts: string[] = []
   parts.push(scheme.dataSetSelection.length ? `${scheme.dataSetSelection.length} 数据集` : '基线')
   if (scheme.injectionEntryIds.length) parts.push(`${scheme.injectionEntryIds.length} 注入条目`)
-  parts.push(`${scheme.nRuns} 次`)
-  if (scheme.parallel > 1) parts.push(`并发 ${scheme.parallel}`)
+  parts.push(`${scheme.options.n_runs ?? 1} 次`)
+  if ((scheme.options.parallel ?? 1) > 1) parts.push(`并发 ${scheme.options.parallel}`)
   return parts.join(' · ')
 }
 
@@ -433,9 +434,9 @@ function payloadOf(item: QueueItem): { selection: DataSetSelection[]; opts: RunC
       opts: {
         schemeId: scheme.schemeId,
         schemeName: scheme.name,
-        ...(scheme.stepTo !== null ? { stepTo: scheme.stepTo } : {}),
-        ...(scheme.nRuns !== 1 ? { nRuns: scheme.nRuns } : {}),
-        ...(scheme.parallel !== 1 ? { parallel: scheme.parallel } : {}),
+        ...(scheme.options.step_to != null ? { stepTo: scheme.options.step_to } : {}),
+        ...(scheme.options.n_runs !== 1 ? { nRuns: scheme.options.n_runs } : {}),
+        ...(scheme.options.parallel !== 1 ? { parallel: scheme.options.parallel } : {}),
         ...(Object.keys(scheme.serviceBindings).length
           ? { serviceBindings: { ...scheme.serviceBindings } } : {}),
         ...(scheme.injectionEntryIds.length
@@ -475,9 +476,13 @@ async function launchQueue() {
         schemeName: opts.schemeName,
         dataSetIds: selection.map((s) => s.datasetId),
         ...(selection.length ? { dataSetSelection: selection } : {}),
-        ...(opts.stepTo != null ? { stepTo: opts.stepTo } : {}),
-        ...(opts.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
-        ...(opts.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
+        ...(() => {
+          const ro: RunOptions = {}
+          if (opts.stepTo != null) ro.step_to = opts.stepTo
+          if (opts.nRuns && opts.nRuns !== 1) ro.n_runs = opts.nRuns
+          if (opts.parallel && opts.parallel !== 1) ro.parallel = opts.parallel
+          return Object.keys(ro).length ? { runOptions: ro } : {}
+        })(),
         ...(opts.serviceBindings && Object.keys(opts.serviceBindings).length
           ? { serviceBindings: opts.serviceBindings } : {}),
         ...(opts.injectionEntryIds?.length ? { injectionEntryIds: opts.injectionEntryIds } : {}),

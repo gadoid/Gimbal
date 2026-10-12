@@ -14,7 +14,7 @@ import type { Scenario } from '@/types/scenario-composer'
 vi.mock('@/api/scenario-composer', () => {
   const sch = (id: string, name: string, isDefault: boolean) => ({
     schemeId: id, name, isDefault, dataSetSelection: [], injectionEntryIds: [],
-    serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
+    serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
   })
   return {
     listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
@@ -26,8 +26,8 @@ vi.mock('@/api/scenario-composer', () => {
     updateRunScheme: vi.fn().mockResolvedValue({}),
     runScenario: vi.fn().mockResolvedValue({ runId: 'run-1' }),
     getScenarioDraft: vi.fn(),
-    schemeToRunRequest: (s: { schemeId: string; name: string; nRuns: number; parallel: number }, id: string) => ({
-      scenarioId: id, schemeId: s.schemeId, schemeName: s.name, nRuns: s.nRuns, parallel: s.parallel,
+    schemeToRunRequest: (s: { schemeId: string; name: string; options: { n_runs: number; parallel: number } }, id: string) => ({
+      scenarioId: id, schemeId: s.schemeId, schemeName: s.name, runOptions: s.options,
     }),
   }
 })
@@ -149,7 +149,7 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     await input.setValue('4')
     await input.trigger('blur')
     await flushPromises()
-    expect(composerApi.updateRunScheme).toHaveBeenCalledWith('sc-a', 's1', expect.objectContaining({ parallel: 4 }))
+    expect(composerApi.updateRunScheme).toHaveBeenCalledWith('sc-a', 's1', expect.objectContaining({ options: expect.objectContaining({ parallel: 4 }) }))
     w.unmount()
   })
 
@@ -187,9 +187,9 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
   it('按方案导出走行菜单子菜单 —— 同名方案以 schemeId 区分不串台', async () => {
     vi.mocked(composerApi.listRunSchemes).mockResolvedValueOnce([
       { schemeId: 'sX', name: '同名方案', isDefault: true, dataSetSelection: [],
-        injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1 },
+        injectionEntryIds: [], serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null } },
       { schemeId: 'sY', name: '同名方案', isDefault: false, dataSetSelection: [],
-        injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 2, parallel: 3 },
+        injectionEntryIds: [], serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 2, parallel: 3, subscribe: null } },
     ] as never)
     const { downloadFile } = await import('@/utils/download')
     const w = mountPage([scen('sc-a', 'private', 2)])

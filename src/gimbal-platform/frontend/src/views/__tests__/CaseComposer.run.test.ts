@@ -58,13 +58,13 @@ vi.mock('@/api/auth_sessions', () => ({
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-dft', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_B: SchemeV2 = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [0] }],
   injectionEntryIds: [], serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 
 function sampleScenario(): Scenario {
@@ -197,7 +197,7 @@ describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {
     await flushPromises()
 
     const body = runScenario.mock.calls[0][0]
-    expect(body.stepTo).toBe(0)
+    expect(body.runOptions?.step_to).toBe(0)
     w.unmount()
   })
 

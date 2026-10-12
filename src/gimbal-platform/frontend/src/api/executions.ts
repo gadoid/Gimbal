@@ -40,10 +40,17 @@ export interface Execution {
     injectedAuths?: string[]
     /** service → {authAlias?, url?}(驼峰 dump,None 键不落) */
     serviceBindings?: Record<string, ServiceBinding>
-    /** 0-based inclusive halt index(V3 写 stepTo) */
+    /** 0-based inclusive halt index(W19 前的旧平铺键;新行读 runOptions) */
     stepTo?: number | null
     nRuns?: number
     parallel?: number
+    /** 执行指令快照(W19:RunOptions 生成物 dump,内层 snake_case) */
+    runOptions?: {
+      step_from?: number | null
+      step_to?: number | null
+      n_runs?: number
+      parallel?: number
+    } | null
     /** 方案溯源(run_dispatcher 写入):本次执行按哪个方案发起;
      *  非方案发起(公共原件验证执行等)为 null/缺省。 */
     schemeId?: string | null

@@ -27,13 +27,13 @@ vi.mock('@/api/auth_sessions', () => ({ list: vi.fn(async () => ({ items: [], to
 const SCHEME_DEFAULT = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_A = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-001', rowIndexes: [0] }],
-  injectionEntryIds: [], serviceBindings: {}, stepTo: null,
-  nRuns: 2, parallel: 1, plugins: null, logSub: null,
+  injectionEntryIds: [], serviceBindings: {},
+  options: { step_from: null, step_to: null, n_runs: 2, parallel: 1, subscribe: null },
 }
 const SCHEME_COPY = { ...SCHEME_A, schemeId: 'rs-009', name: '冒烟 副本' }
 const DS_0 = { datasetId: 'ds-000', scenarioId: 'sc-wb', name: '基线', rowCount: 2, preview: [] }
@@ -78,8 +78,6 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     const opts = rows[0].findAll('option').map((o) => (o.element as HTMLOptionElement).value)
     expect(opts).toEqual(['', 'alias-1', 'bob'])
     expect(w.find('[data-testid="total-preview"]').exists()).toBe(true)
-    expect(w.text()).toContain('插件列表')
-    expect(w.text()).toContain('日志订阅')
   })
 
   it('绑定选择写入 draft.serviceBindings(显式口径)→ 脏态', async () => {
@@ -135,7 +133,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     expect(body).not.toHaveProperty('schemeId')
     expect(body).not.toHaveProperty('isDefault')
     expect(body.dataSetSelection).toEqual([{ datasetId: 'ds-001', rowIndexes: [0] }])
-    expect(body.nRuns).toBe(2)
+    expect(body.options.n_runs).toBe(2)
     expect(w.find('.scheme-item.selected').text()).toContain('冒烟 副本')
   })
 

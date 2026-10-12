@@ -28,6 +28,7 @@ import {
   type DataSetSelection, type RunScenarioResult, type RunRequest,
   type SchemeV2, type ServiceBinding,
 } from '@/api/scenario-composer'
+import type { DebugSpec, RunOptions } from '@/types/m2'
 import type { DataSetSummary, Scenario, ScenarioDraft } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
@@ -45,7 +46,7 @@ export interface RunConfirmOpts {
   serviceBindings?: Record<string, ServiceBinding>
   injectionEntryIds?: string[]
   /** C6:调试执行装载(单 case 且 nRuns=1;发起后进调试台) */
-  debug?: { pause: string; breakpoints?: string[] }
+  debug?: Pick<DebugSpec, 'pause' | 'breakpoints'>
 }
 
 export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
@@ -168,20 +169,24 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
   ): Promise<RunScenarioResult> {
     const sid = scenarioId.value
     if (!sid) throw new Error('scenarioId is not set')
+    // W19:执行参数收进 runOptions(M2 生成物形状,内层 snake_case;
+    // 全默认时不带键)
+    const ro: RunOptions = {}
+    if (opts.stepTo != null) ro.step_to = opts.stepTo
+    if (opts.nRuns && opts.nRuns !== 1) ro.n_runs = opts.nRuns
+    if (opts.parallel && opts.parallel !== 1) ro.parallel = opts.parallel
+    if (opts.debug) ro.debug = opts.debug
     const body: RunRequest = {
       scenarioId: sid,
       schemeId: opts.schemeId,
       schemeName: opts.schemeName,
       dataSetIds: dataSetSelection.map((s) => s.datasetId),
       ...(dataSetSelection.length ? { dataSetSelection } : {}),
-      ...(opts.stepTo != null ? { stepTo: opts.stepTo } : {}),
-      ...(opts.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
-      ...(opts.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
+      ...(Object.keys(ro).length ? { runOptions: ro } : {}),
       ...(opts.serviceBindings && Object.keys(opts.serviceBindings).length
         ? { serviceBindings: opts.serviceBindings } : {}),
       ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
-      ...(opts.debug ? { debug: opts.debug } : {}),
     }
     return runScenario(body)
   }

@@ -48,7 +48,7 @@ async def test_dispatch_rejects_over_cap(client, monkeypatch):
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-cap", "dataSetIds": [ds_id],
-        "nRuns": 2,                      # P2-05:nRuns 不进总量闸;4 行 > 3 触发
+        "runOptions": {"n_runs": 2},      # P2-05:nRuns 不进总量闸;4 行 > 3 触发
     })
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "too_many_runs"
@@ -83,7 +83,7 @@ async def test_worker_serializes_executions_across_queue(client, monkeypatch):
     for _ in range(2):                   # 两个 execution,各 1 行 × nRuns=4
         r = await client.post("/api/runs", headers=headers, json={
             "scenarioId": "sc-sem", "dataSetIds": [],
-            "nRuns": 4, "parallel": 4,
+            "runOptions": {"n_runs": 4, "parallel": 4},
         })
         assert r.status_code == 201, r.text
         eids.append(r.json()["executionId"])

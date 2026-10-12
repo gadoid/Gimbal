@@ -44,7 +44,7 @@ async def test_debug_rejects_multi_case(client):
     ds_id = r.json()["datasetId"]
     r = await client.post("/api/runs", headers=h, json={
         "scenarioId": "sc-dbg", "dataSetIds": [ds_id],
-        "debug": {"pause": "on_failure"},
+        "runOptions": {"debug": {"pause": "on_failure"}},
     })
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "debug_single_case"
@@ -55,7 +55,7 @@ async def test_debug_rejects_n_runs_above_one(client):
     await client.post("/api/scenarios", headers=h, json=make_draft("sc-dbg"))
     r = await client.post("/api/runs", headers=h, json={
         "scenarioId": "sc-dbg", "dataSetIds": [],
-        "nRuns": 3, "debug": {"pause": "every_step"},
+        "runOptions": {"n_runs": 3, "debug": {"pause": "every_step"}},
     })
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "debug_single_run"
@@ -73,7 +73,7 @@ async def test_debug_dispatch_forces_server_chain(client, monkeypatch):
     await client.post("/api/scenarios", headers=h, json=make_draft("sc-dbg"))
     r = await client.post("/api/runs", headers=h, json={
         "scenarioId": "sc-dbg", "dataSetIds": [],
-        "debug": {"pause": "every_step", "breakpoints": ["step-000:before"]},
+        "runOptions": {"debug": {"pause": "every_step", "breakpoints": ["step-000:before"]}},
     })
     assert r.status_code == 201, r.text
     eid = r.json()["executionId"]

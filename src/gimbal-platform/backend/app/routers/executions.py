@@ -557,6 +557,13 @@ async def rerun_execution(
                 "suiteId": ex.suite_id,
                 "link": f"/suites/{ex.suite_id}"})
     cfg = ex.config_json or {}
+    # runOptions(W19):新行存 RunOptions dump;旧行平铺 stepTo/nRuns/
+    # parallel 回退映射(重跑语义不断链 — 历史执行照常按配方重放)。
+    run_options = cfg.get("runOptions") or {
+        "step_to": cfg.get("stepTo"),
+        "n_runs": cfg.get("nRuns") or 1,
+        "parallel": cfg.get("parallel") or 1,
+    }
     req = RunRequest(
         **{
             "scenarioId": ex.scenario_id,
@@ -564,9 +571,7 @@ async def rerun_execution(
             "dataSetSelection": cfg.get("dataSetSelection") or [],
             "serviceBindings": cfg.get("serviceBindings") or {},
             "injectionEntryIds": cfg.get("injectionEntryIds") or [],
-            "stepTo": cfg.get("stepTo"),
-            "nRuns": cfg.get("nRuns") or 1,
-            "parallel": cfg.get("parallel") or 1,
+            "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),
             "schemeName": cfg.get("schemeName"),
         }

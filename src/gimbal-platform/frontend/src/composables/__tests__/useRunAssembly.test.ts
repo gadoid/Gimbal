@@ -30,7 +30,7 @@ vi.mock('@/api/auth_sessions', () => ({
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-dft', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 
 const DRAFT = {
@@ -122,6 +122,27 @@ describe('useRunAssembly — dispatch / 另存(§1.5 收编段)', () => {
     expect('env' in body).toBe(false)
     expect('prefix' in body || 'mergePolicy' in body || 'auths' in body
       || 'injectCredentials' in body).toBe(false)
+    // W19:全默认执行参数 → runOptions 键整个省略
+    expect('runOptions' in body).toBe(false)
+    w_unmount_safe()
+  })
+
+  it('UA-4b dispatch 组装 runOptions(W19):UI 平铺名 → 生成物形状,debug 随包', async () => {
+    const runScenario = vi.fn().mockResolvedValue({ runId: 'r-2', executionId: 4 })
+    vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
+    const { asm } = await mountedAssembly()
+
+    await asm.dispatch(
+      [],
+      { schemeId: 'rs-dft', schemeName: '默认方案', stepTo: 1, nRuns: 3, parallel: 2,
+        debug: { pause: 'every_step', breakpoints: ['s1:before'] } },
+    )
+    const body = runScenario.mock.calls[0][0]
+    expect(body.runOptions).toEqual({
+      step_to: 1, n_runs: 3, parallel: 2, debug: { pause: 'every_step', breakpoints: ['s1:before'] },
+    })
+    // 旧平铺键不再上送
+    expect('stepTo' in body || 'nRuns' in body || 'parallel' in body || 'debug' in body).toBe(false)
     w_unmount_safe()
   })
 
@@ -135,8 +156,7 @@ describe('useRunAssembly — dispatch / 另存(§1.5 收编段)', () => {
 
     await asm.saveAsScheme({
       name: '回归', dataSetSelection: [], injectionEntryIds: [],
-      serviceBindings: {}, stepTo: null, nRuns: 2, parallel: 1,
-      plugins: null, logSub: null,
+      serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 2, parallel: 1, subscribe: null },
     })
     expect(api.createRunScheme).toHaveBeenCalledWith('sc-asm', expect.objectContaining({ name: '回归' }))
     expect(api.listRunSchemes).toHaveBeenCalledTimes(2)

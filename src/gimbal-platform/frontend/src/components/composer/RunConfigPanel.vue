@@ -76,9 +76,9 @@
           <div class="adv-field">
             <span class="adv-name">执行次数 / 并发度</span>
             <div class="num-row">
-              <input type="number" v-model.number="nRuns" class="adv-input" data-testid="n-runs" min="1" max="1000" />
+              <input type="number" v-model.number="nRuns" class="adv-input" data-testid="n-runs" min="1" max="64" />
               <span class="num-sep">次 ×</span>
-              <input type="number" v-model.number="parallel" class="adv-input" data-testid="parallel" min="1" max="200" />
+              <input type="number" v-model.number="parallel" class="adv-input" data-testid="parallel" min="1" max="64" />
               <span class="num-sep">并发</span>
             </div>
           </div>
@@ -160,8 +160,8 @@
         <div class="rd-sum-row">
           <span class="rd-sum-label">参数</span>
           <span class="rd-sum-value">
-            {{ selected.stepTo === null ? '全量步骤' : `停于第 ${selected.stepTo + 1} 步` }} ·
-            {{ selected.nRuns }} 次 × {{ selected.parallel }} 并发
+            {{ selected.options.step_to == null ? '全量步骤' : `停于第 ${selected.options.step_to + 1} 步` }} ·
+            {{ selected.options.n_runs }} 次 × {{ selected.options.parallel }} 并发
           </span>
         </div>
       </section>
@@ -245,6 +245,7 @@ import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { listAllAliases } from '@/api/service-aliases'
 import type { DataSetSelection, ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
+import { EMPTY_RUN_OPTIONS } from '@/api/scenario-composer'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
@@ -422,9 +423,9 @@ function stepName(i: number): string {
 // 选中切换 → 参数/另存名重置:默认方案态 ← default 方案存量值;
 // 自建方案态 ← 方案值(只读展示,confirm 取方案值不取 ref 篡改值)。
 watch(selected, (s) => {
-  stepTo.value = s?.stepTo ?? null
-  nRuns.value = s?.nRuns ?? 1
-  parallel.value = s?.parallel ?? 1
+  stepTo.value = s?.options.step_to ?? null
+  nRuns.value = s?.options.n_runs ?? 1
+  parallel.value = s?.options.parallel ?? 1
   saveAsName.value = ''
 }, { immediate: true })
 
@@ -436,8 +437,9 @@ function onSaveAsScheme() {
   emit('saveAsScheme', {
     name, dataSetSelection: [], injectionEntryIds: [],
     serviceBindings: assembleExplicitBindings(bindings.value, props.serviceRows),
-    stepTo: stepTo.value, nRuns: nRuns.value, parallel: parallel.value,
-    plugins: null, logSub: null,
+    options: { ...EMPTY_RUN_OPTIONS,
+               step_to: stepTo.value, n_runs: nRuns.value,
+               parallel: parallel.value },
   })
 }
 
@@ -461,8 +463,8 @@ function onConfirm() {
   const s = selected.value
   if (!s) return
   // 输入钳位(与后端 schema 上限一致,防 422)
-  nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
-  parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
+  nRuns.value = Math.min(64, Math.max(1, Math.floor(nRuns.value || 1)))
+  parallel.value = Math.min(64, Math.max(1, Math.floor(parallel.value || 1)))
   // 总量闸前置:dispatch 侧 rows × nRuns > 200 整单 409 too_many_runs,
   // 同闸提前拦(后端权威定义:app/core/config.py MAX_RUNS_PER_EXECUTION)。
   // 文案分态:自建方案参数只读 → 指去工作台;默认方案态参数就地可调。
@@ -498,9 +500,9 @@ function onConfirm() {
   // 自建方案:原样展平(不允许运行时篡改,D3)
   emit('confirm', s.dataSetSelection.map((x) => ({ ...x })), {
     ...common,
-    ...(s.stepTo !== null ? { stepTo: s.stepTo } : {}),
-    ...(s.nRuns !== 1 ? { nRuns: s.nRuns } : {}),
-    ...(s.parallel !== 1 ? { parallel: s.parallel } : {}),
+    ...(s.options.step_to != null ? { stepTo: s.options.step_to } : {}),
+    ...(s.options.n_runs !== 1 ? { nRuns: s.options.n_runs } : {}),
+    ...(s.options.parallel !== 1 ? { parallel: s.options.parallel } : {}),
     ...(Object.keys(s.serviceBindings).length ? { serviceBindings: { ...s.serviceBindings } } : {}),
     ...(s.injectionEntryIds.length ? { injectionEntryIds: [...s.injectionEntryIds] } : {}),
   })

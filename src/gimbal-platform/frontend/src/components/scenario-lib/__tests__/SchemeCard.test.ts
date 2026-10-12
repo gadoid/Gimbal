@@ -12,7 +12,13 @@ import type { SchemeV2 } from '@/api/scenario-composer'
 
 const scheme = (over: Partial<SchemeV2> = {}): SchemeV2 => ({
   schemeId: 's1', name: '标准回归', isDefault: true, dataSetSelection: [],
-  injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1, ...over,
+  injectionEntryIds: [], serviceBindings: {},
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
+  ...over,
+})
+/** UI 字段名快捷改写:nRuns/parallel → options 内层键(W19) */
+const opt = (nRuns?: number, parallel?: number): Partial<SchemeV2> => ({
+  options: { step_from: null, step_to: null, n_runs: nRuns ?? 1, parallel: parallel ?? 1, subscribe: null },
 })
 
 function mountCard(s: SchemeV2, lastRun: { status: string; at: string | null } | null, opts = {}) {
@@ -59,7 +65,7 @@ describe('SchemeCard — 方案卡', () => {
   })
 
   it('次数/并发是真按钮且带 aria-label(此前是 span,键盘进不去)', () => {
-    const w = mountCard(scheme({ nRuns: 3, parallel: 2 }), null)
+    const w = mountCard(scheme(opt(3, 2)), null)
     expect(badge(w, '次数').attributes('aria-label')).toContain('修改执行次数')
     expect(badge(w, '次数').text()).toContain('3')
     expect(badge(w, '并发').attributes('aria-label')).toContain('修改并发数')
@@ -68,7 +74,7 @@ describe('SchemeCard — 方案卡', () => {
 
   it('点徽章 → 换成输入框并自动聚焦、原值预填', async () => {
     // attachTo:未挂进 document 的元素 focus() 不改 activeElement
-    const w = mountCard(scheme({ nRuns: 7 }), null, { attachTo: document.body })
+    const w = mountCard(scheme(opt(7)), null, { attachTo: document.body })
     await badge(w, '次数').trigger('click')
     await flushPromises()
     const input = w.find('.mini-badge.editing input')
@@ -79,13 +85,13 @@ describe('SchemeCard — 方案卡', () => {
   })
 
   it('合法值 blur → emit update 带 patch', async () => {
-    const w = mountCard(scheme({ nRuns: 1 }), null)
+    const w = mountCard(scheme(opt(1)), null)
     await edit(w, '次数', '4')
     expect(w.emitted('update')?.[0]).toEqual([expect.objectContaining({ schemeId: 's1' }), { nRuns: 4 }])
   })
 
   it('Enter 提交,Esc 撤销且不 emit', async () => {
-    const w = mountCard(scheme({ parallel: 1 }), null)
+    const w = mountCard(scheme(opt(1, 1)), null)
     await badge(w, '并发').trigger('click')
     const input = w.find('.mini-badge.editing input')
     await input.setValue('6')
@@ -103,17 +109,17 @@ describe('SchemeCard — 方案卡', () => {
   })
 
   it('越界(0 / 9999)拦下并给范围提示,值回原样', async () => {
-    const w = mountCard(scheme({ nRuns: 1, parallel: 1 }), null)
-    await edit(w, '并发', '9999')       // 上限 200
+    const w = mountCard(scheme(opt(1, 1)), null)
+    await edit(w, '并发', '9999')       // 上限 64
     expect(w.emitted('update')).toBeUndefined()
-    expect(toastState.items.some((t) => t.kind === 'error' && t.message.includes('1–200'))).toBe(true)
+    expect(toastState.items.some((t) => t.kind === 'error' && t.message.includes('1–64'))).toBe(true)
     await edit(w, '次数', '0')          // 下限 1
     expect(w.emitted('update')).toBeUndefined()
-    expect(toastState.items.some((t) => t.message.includes('1–500'))).toBe(true)
+    expect(toastState.items.some((t) => t.message.includes('1–64'))).toBe(true)
   })
 
   it('值没变不落 emit(避免空 PUT)', async () => {
-    const w = mountCard(scheme({ nRuns: 5 }), null)
+    const w = mountCard(scheme(opt(5)), null)
     await edit(w, '次数', '5')
     expect(w.emitted('update')).toBeUndefined()
     await edit(w, '次数', 'abc')

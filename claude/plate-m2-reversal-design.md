@@ -267,7 +267,7 @@ Suite 执行时各单元经 `/convert` 得到的 m2 信息相同，平台随 gra
 | 存储 | 内容 | 处理 |
 |---|---|---|
 | `composer_scenarios.payload` | 场景定义（线上 PG 实测 37 个：view_hints 34、field_states 6、`steps[].id` 3、`meta.scenarioId` 37、`meta.updateTime` 36；顶层 `scenarioId` 37——M2 必填字段，非扩展）。`meta.plate` 在本方案步骤 4 只随结构生效、保持缺省，首个修订时由 Release 方案第 8 节的脚本回填 | **迁移**：`view_hints.endpoint_id` → `step.endpoint`；删死字段；`field_states` 移到 `ui.fieldStates`；删除 `steps[].id`；`meta.scenarioId`、`meta.updateTime` 移出定义（值已在行的列上）；顶层 `scenarioId` 由行写入。`scenario_store` 同步改为不再向定义写入平台元数据。步骤 0 预检中出现 M4 清单以外的未知字段时，逐项定迁移规则 |
-| `composer_run_schemes.payload` | 数据集 + 注入 + 绑定 + 执行参数（线上 45 个；执行参数键 `stepTo` / `nRuns` / `parallel`，另有预埋键 `logSub` / `plugins`——平台模型注释「gimbal 就绪前 no-op」） | **迁移**：执行参数部分改为 RunOptions 形状；`logSub` → `subscribe`，`plugins` 在 RunOptions 中无对应字段（Q15）。平台 `nRuns` 上限 1000、`parallel` 上限 200 而 RunOptions 为 64：步骤 0 预检列出超限的存量值，按 Q4 的结论处理 |
+| `composer_run_schemes.payload` | 数据集 + 注入 + 绑定 + 执行参数（线上 45 个；执行参数键 `stepTo` / `nRuns` / `parallel`，另有预埋键 `logSub` / `plugins`——平台模型注释「gimbal 就绪前 no-op」） | **迁移**：执行参数部分改为 RunOptions 形状；`logSub` → `subscribe`，`plugins` 在 RunOptions 中无对应字段（Q15）。平台 `nRuns` 上限 1000、`parallel` 上限 200 而 RunOptions 为 64：步骤 0 预检实测无超限存量 → 上限已对齐 64（Q4 收口，W19 落地）|
 | `suites.mode_config` | 平台编排形态：`units`（按 scenarioId 引用成员，含 ref / repeat / nRuns / needs / schemeId 等）、`canvas`、`draft`，可选 `parallel` / `nRuns` / `gates` / `checks`；派发时由 `_build_graph_spec` 拼成 graph 请求，gates / checks 原样下发 | 平台形态**不迁移**（与 GraphSpec「按 scenarioId 引用单元」同理，9.6）；只有 `gates` / `checks` 子树是 M2 形状，改为保存时用平台生成物校验。线上 2 个 Suite 的 `mode_config` 只有 canvas / draft / units，**迁移面为空** |
 | `report_definitions.definition` | 报告定义（未校验） | **不迁移，只加保存时校验**：字段名均为单词（selection / projection / presentation 等），存储形态与 M2 一致；平台目前不把定义下发给执行器 |
 | `adaptation_snapshots.before_json` | 适配批次的「修改前整像」，回滚时写回 | **迁移**（同一脚本），否则切换前提交的场景回滚会把旧形状写回。未提交批次的 op 载荷（结构级 op 含步骤片段）不迁移，切换窗口要求没有 `draft` / `committing` 状态的批次 |
@@ -457,7 +457,7 @@ def export_m2() -> M2Export: ...
 | Q1 | 反转范围：A、B 进 M2；C、D 留在执行器 | **已定（2026-10-10，按建议）**；如第 2 节 |
 | Q2 | C 类以执行器为真源，plate 收录快照并统一查询；修正 plate-design「框架自描述由 plate 编写」的口径 | **已定（2026-10-10，按建议）**；如 2.1 |
 | Q3 | 批次 C 七项去向 | **已定（2026-10-10，按建议）**；如 2.2 |
-| Q4 | 新增 RunOptions；`halt_at` 并入 `step_to`；覆盖 graph policy 的生效顺序；平台上限对齐；D1「数据集」本次不纳入 | **已定流程（2026-10-10）**：步骤 0 预检列出 45 个运行方案中超过 64 的存量值；没有超限则平台上限对齐为 64，有超限再在「平台拆分派发」与「提高执行器上限」之间定；如 2.3、9.2 |
+| Q4 | 新增 RunOptions；`halt_at` 并入 `step_to`；覆盖 graph policy 的生效顺序；平台上限对齐；D1「数据集」本次不纳入 | **已收口（2026-10-12 折回成文）**：步骤 0 预检实测 `nRuns`/`parallel` 无超 64 存量 → 平台上限对齐为 64（W19 落地：`RunRequest` 收 `runOptions` 生成物形状，`stepTo`/`nRuns`/`parallel`/`debug` 平铺键退役、`DebugLaunchSpec` 手写镜像删除；`step_from`/`subscribe` 生成物收形但平台派发链未接，dispatch 显式 409 不静默丢弃）；如 2.3、9.2 |
 | Q5 | Event 按 C 类处理；`ext list` 新增事件表与生成器表 | **已定（2026-10-10，按建议）**；如 2.1、2.4 |
 | Q6 | 修正 M1–M10 逐条确认；M3、M6、M10 影响平台存储 | **已定（2026-10-10，按建议）**；如第 3 节、9.2 |
 | Q7 | 形态：JSON Schema 交换 + 各消费方构建期生成并入库（F3 的答案） | **已定（2026-10-10，按建议）**；如第 4 节 |

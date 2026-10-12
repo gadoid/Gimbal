@@ -202,7 +202,7 @@ async def test_run_step_to_out_of_range_409(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "stepTo": 5,
+            "runOptions": {"step_to": 5},
         },
     )
     assert r.status_code == 409
@@ -240,7 +240,7 @@ async def test_run_step_to_passes_halt_at(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "stepTo": 1,
+            "runOptions": {"step_to": 1},
         },
     )
     assert r.status_code == 201

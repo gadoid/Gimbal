@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ._m2 import GateDecl
+from ._m2 import DebugSpec, GateDecl, RunOptions
 
 
 # ─── helpers ────────────────────────────────────────────────────────
@@ -381,9 +381,18 @@ class RunRequest(BaseModel):
     # 与数据集行并列生成 case;空 = 不注入。
     injection_entry_ids: list[str] = Field(default_factory=list,
                                            alias="injectionEntryIds")
-    # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
-    # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
-    step_to: int | None = Field(default=None, ge=0, alias="stepTo")
+    # ── M2 RunOptions 生成物形状(W19/B-4;Q4 结论:上限对齐 64)──
+    # 执行参数不再平铺 — ``stepTo``/``nRuns``/``parallel``/``debug``
+    # 四个顶层键退役,统一收进 ``runOptions``(内层键 snake_case,
+    # 与生成物/执行器 ``POST /runs`` options 同形;RunScheme.options
+    # 自 M10 起已是同一形状)。旧客户端多发的平铺键被 pydantic
+    # 静默忽略,仅失效、不 422。
+    # step_from/subscribe 在生成物形状里存在但平台派发链未接
+    # (前者需要被跳过上游的输出由外部提供,后者无消费面)——
+    # dispatch 侧显式 409,不静默丢弃。
+    run_options: RunOptions | None = Field(
+        default=None, alias="runOptions",
+        description="执行指令(M2 RunOptions 生成物;缺省全默认)")
     # C5(P3-05):suite 编排执行 —— 非空时走 graph 链(单元 = 平台场景),
     # 数据集/注入在单元粒度声明;graph 链忽略顶层 dataSetIds/selection。
     graph: "GraphSpec | None" = Field(default=None, description="编排执行规格(C5)")
@@ -391,17 +400,6 @@ class RunRequest(BaseModel):
     report_definition_id: int | None = Field(
         default=None, alias="reportDefinitionId",
         description="报告定义 id(P3-07;None = 默认报告)")
-    # ── M1 执行能力补齐(V1 executor 语义移植)────────────────────
-    # 每行数据的重复执行次数;total_runs = Σ(rows) × nRuns。
-    n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
-    # fan-out 并发度(asyncio.Semaphore 上限)。
-    parallel: int = Field(default=1, ge=1, le=200, alias="parallel")
-    # ── C6(P3-04)调试执行 ──────────────────────────────────────
-    # 调试装载:强制单 case(dataSet 行 × 注入族 = 1)且 nRuns=1、非 graph,
-    # 恒走执行器 server 链;执行中经 /executions/{id}/debug/* 代理交互。
-    debug: "DebugLaunchSpec | None" = Field(
-        default=None,
-        description="调试执行装载(C6;单 case 且 nRuns=1)")
     # 方案溯源(spec §5,阶段③):config_json 快照语义 — 记录本次执行
     # 来自哪个方案(改名不断链:schemeId 权威,name 仅展示)。可选 —
     # 基线/旧客户端不传;纯记录,不参与任何分发语义。
@@ -409,22 +407,32 @@ class RunRequest(BaseModel):
     scheme_name: str | None = Field(default=None, alias="schemeName", max_length=64)
     # 批次键(执行设计 §1.2/§6):前端队列逐条顺序发起时共用一个客户端
     # 生成的 batch_id,Execution.batch_id 落列、执行记录据此归并。可选 —
-    # 单条发起(运行对话框/重跑)不传;纯归并键,不参与分发语义(每条
+    # 单条发起(运行对话框/重跑)不传;纯归并键,不参与任何分发语义(每条
     # 仍是独立 Execution,批级执行策略本期不存在)。
     batch_id: str | None = Field(default=None, alias="batchId", max_length=64)
 
+    # ── 派生读取面(W19):调用方按习惯属性读执行参数 ─────────────
+    # 值的唯一权威 = run_options(缺省 = RunOptions() 全默认);
+    # 这些 property 只是薄投影,不另立状态。
+    @property
+    def opts(self) -> RunOptions:
+        return self.run_options if self.run_options is not None else RunOptions()
 
-class DebugLaunchSpec(BaseModel):
-    """C6:调试执行装载（转发为引擎 DebugSpec;断点地址 = step_id[:before|
-    call_before|after] 形态,与 CLI --breakpoint 同一语法）。"""
+    @property
+    def n_runs(self) -> int:
+        return self.opts.n_runs
 
-    model_config = _CAMEL
+    @property
+    def parallel(self) -> int:
+        return self.opts.parallel
 
-    pause: Literal["none", "on_failure", "every_step"] = "on_failure"
-    breakpoints: list[str] = Field(default_factory=list)
-    wait_timeout: float | None = Field(
-        default=None, ge=1, le=3600, alias="waitTimeout",
-        description="暂停等待上限(秒);超时按 abort")
+    @property
+    def step_to(self) -> int | None:
+        return self.opts.step_to
+
+    @property
+    def debug(self) -> DebugSpec | None:
+        return self.opts.debug
 
 
 class RunResponse(BaseModel):

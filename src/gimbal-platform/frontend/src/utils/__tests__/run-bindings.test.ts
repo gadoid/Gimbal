@@ -74,7 +74,7 @@ describe('run-bindings — 自建方案失效判定', () => {
     schemeId: 'rs-1', name: 'S', isDefault: false,
     dataSetSelection: [{ datasetId: 'ds-1' }],
     injectionEntryIds: ['inj-live', 'inj-dead'],
-    serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
+    serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
   }
 
   it('RB-3 活集 = registry 全集 − 宿主门控死集;悬空 → 失效', () => {
@@ -109,7 +109,7 @@ describe('run-bindings — 概要行数', () => {
         { datasetId: 'ds-empty' },                   // 空库 → 1
         { datasetId: 'ds-gone' },                    // 已删 → rowCount 0 → 1
       ],
-      injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
+      injectionEntryIds: [], serviceBindings: {}, options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
     }, dataSets)).toBe(0 + 2 + 5 + 1 + 1)
   })
 })

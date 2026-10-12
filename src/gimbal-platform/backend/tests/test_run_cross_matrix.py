@@ -186,7 +186,7 @@ async def test_cross_matrix_rows_times_entries(
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test",
         "dataSetSelection": [{"datasetId": ds_id}],
-        "injectionEntryIds": ["inj-live"], "nRuns": 2,
+        "injectionEntryIds": ["inj-live"], "runOptions": {"n_runs": 2},
     })
     assert r.status_code == 201, r.text
     exec_id = r.json()["executionId"]

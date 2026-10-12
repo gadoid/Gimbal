@@ -796,6 +796,23 @@ async def dispatch_run(
     # (旧 env 校验块已随 D2 执行环境退役 — 旧客户端多发的 env 键由
     # pydantic extra=ignore 静默忽略。)
 
+    # RunOptions 未接面显式拒绝(W19):step_from 需要被跳过上游的输出
+    # 由外部提供(同 GraphControlSpec 不开放 fromNode 的理由);subscribe
+    # 平台无消费面。生成物形状收下了这两个键,但派发链静默丢弃它们
+    # 会制造"看似生效"的假象 —— 409 说清楚,不兼容不吞。
+    if req.run_options is not None:
+        if req.run_options.step_from is not None:
+            raise Conflict(
+                "run_options_step_from_unsupported",
+                "step_from 尚未接入平台派发链(被跳过步骤的输出平台无从"
+                "提供);请移除该键",
+            )
+        if req.run_options.subscribe:
+            raise Conflict(
+                "run_options_subscribe_unsupported",
+                "subscribe 尚未接入平台派发链;请移除该键",
+            )
+
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
     steps = steps_from_payload(scen.payload)
     if req.step_to is not None:
@@ -914,7 +931,12 @@ async def dispatch_run(
                 k: b.model_dump(by_alias=True, exclude_none=True)
                 for k, b in req.service_bindings.items()
             },
-            "stepTo": req.step_to,
+            # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
+            # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
+            # 不再写;读侧(rerun/列表投影)带旧行回退映射。
+            "runOptions": (req.run_options.model_dump(mode="json",
+                                                       exclude_none=True)
+                           if req.run_options is not None else None),
             # 原始请求的注入条目 id(悬空过滤**前**):rerun 按配方重建的
             # 唯一来源(执行设计 §3.4)—— 只记录请求,不记录判定结果。
             "injectionEntryIds": req.injection_entry_ids,
@@ -924,9 +946,7 @@ async def dispatch_run(
             # 批次键(执行设计 §1.2):与列同值;rerun 按 config_json 重建
             # 配方时不带旧批(重跑是新的一次独立发起)。
             "batchId": req.batch_id,
-            "nRuns": req.n_runs,
             "reportDefinitionId": getattr(req, "report_definition_id", None),
-            "parallel": req.parallel,
             # C13:执行链留档（legacy|server;调试恒 server）
             "chain": chain,
             **({"environmentWarnings": env_warnings} if env_warnings else {}),
@@ -959,7 +979,7 @@ async def dispatch_run(
         payload = {
             "kind": "cases",
             "chain": chain,
-            "debug": (debug_spec.model_dump(by_alias=True)
+            "debug": (debug_spec.model_dump(mode="json")
                       if debug_spec is not None else None),
             "args": {
                 "execution_id": execution.id, "run_id": run_id,

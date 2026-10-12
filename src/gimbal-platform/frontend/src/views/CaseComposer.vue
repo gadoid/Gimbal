@@ -308,7 +308,7 @@ import type {
 import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry'
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
-import { useRunAssembly } from '@/composables/useRunAssembly'
+import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembly'
 import type { FieldState, MetaView, ScenarioView, StepView } from '@/types/plate'
 import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
 import { classifyServices } from '@/api/service-aliases'
@@ -1227,17 +1227,7 @@ async function onPreview() {
 
 async function onRunConfirm(
   dataSetSelection: DataSetSelection[],
-  opts: {
-    /** 溯源:本次执行按哪个方案发起(默认/自建两态都带) */
-    schemeId: string
-    schemeName: string
-    stepTo?: number
-    nRuns?: number
-    parallel?: number
-    serviceBindings?: Record<string, ServiceBinding>
-    injectionEntryIds?: string[]
-    debug?: { pause: string; breakpoints?: string[] }
-  },
+  opts: RunConfirmOpts,
 ) {
   if (!scenario.value) {
     toast.warning('请先保存草稿')

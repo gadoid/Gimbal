@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /** 方案工作台 · 运行配置区(spec §6):① 服务绑定(声明∪引用行 × 显式
- *  绑定口径)② 运行参数(钳位 + 总量预览)③ 预埋区(插件/日志订阅,
- *  待引擎支持)。纯展示组件:数据进 props、变更出事件;serviceRows/
- *  authOptions 派生与持久化归壳。绑定口径镜像 RunDialog.explicitBindingOf(D3)。 */
+ *  绑定口径)② 运行参数(钳位 + 总量预览)。纯展示组件:数据进 props、
+ *  变更出事件;serviceRows/authOptions 派生与持久化归壳。绑定口径镜像
+ *  RunDialog.explicitBindingOf(D3)。
+ *  ③ 预埋区(plugins/logSub 自由文本)已随 M10/Q15 下线 —— wire 不再
+ *  收这两个键(plugins 删除、logSub→subscribe 结构化),自由文本 UI 写
+ *  的是死键,整区移除。 */
 import { computed } from 'vue'
 import type { ServiceBinding } from '@/api/scenario-composer'
 
@@ -22,9 +25,6 @@ const props = defineProps<{
   stepCount: number
   /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
-  /** 预埋自由文本(字符串/JSON;非字符串按空展示,不回写不丢库值) */
-  plugins?: unknown
-  logSub?: unknown
 }>()
 
 const emit = defineEmits<{
@@ -32,8 +32,6 @@ const emit = defineEmits<{
   'update:stepTo': [v: number | null]
   'update:nRuns': [v: number]
   'update:parallel': [v: number]
-  'update:plugins': [v: string]
-  'update:logSub': [v: string]
 }>()
 
 // ── ① 服务绑定 ─────────────────────────────────────────────────────
@@ -96,26 +94,17 @@ function onStepToChange(raw: string) {
 }
 const nRunsModel = computed<number | undefined>({
   get: () => props.nRuns,
-  set: (v) => emit('update:nRuns', clampInt(v, 1, 1000)),
+  set: (v) => emit('update:nRuns', clampInt(v, 1, 64)),
 })
 const parallelModel = computed<number | undefined>({
   get: () => props.parallel,
-  set: (v) => emit('update:parallel', clampInt(v, 1, 200)),
+  set: (v) => emit('update:parallel', clampInt(v, 1, 64)),
 })
 
 const totalRuns = computed(() =>
-  clampInt(props.nRuns, 1, 1000) * clampInt(props.parallel, 1, 200))
+  clampInt(props.nRuns, 1, 64) * clampInt(props.parallel, 1, 64))
 const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 
-// ── ③ 预埋区(draft.plugins/logSub 字符串/JSON 自由文本)────────────
-const pluginsText = computed({
-  get: () => (typeof props.plugins === 'string' ? props.plugins : ''),
-  set: (v: string) => emit('update:plugins', v),
-})
-const logSubText = computed({
-  get: () => (typeof props.logSub === 'string' ? props.logSub : ''),
-  set: (v: string) => emit('update:logSub', v),
-})
 </script>
 
 <template>
@@ -186,36 +175,12 @@ const logSubText = computed({
       </div>
       <div class="param-row">
         <label>并发度(parallel)</label>
-        <Input v-model="parallelModel" type="number" min="1" max="200" class="h-8 w-[110px]"
+        <Input v-model="parallelModel" type="number" min="1" max="64" class="h-8 w-[110px]"
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
     </section>
 
-    <!-- ③ 预埋区(引擎接入前 no-op,可先配置) -->
-    <section class="wb-section">
-      <header class="zone-head">
-        <span class="zone-name">预埋区</span>
-      </header>
-      <div class="reserve-row">
-        <div class="reserve-head">
-          <span>插件列表</span>
-          <span class="tag-reserve">待引擎支持</span>
-        </div>
-        <textarea v-model="pluginsText" rows="2"
-          data-testid="reserve-plugins" class="w-full rounded-field border border-input bg-transparent p-2 text-body"
-          placeholder="插件配置(字符串/JSON 自由文本,引擎接入后生效)"></textarea>
-      </div>
-      <div class="reserve-row">
-        <div class="reserve-head">
-          <span>日志订阅</span>
-          <span class="tag-reserve">待引擎支持</span>
-        </div>
-        <textarea v-model="logSubText" rows="2"
-          data-testid="reserve-logsub" class="w-full rounded-field border border-input bg-transparent p-2 text-body"
-          placeholder="日志订阅(字符串/JSON 自由文本,引擎接入后生效)"></textarea>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -283,17 +248,6 @@ const logSubText = computed({
 .total-chip.total-over { color: #b91c1c; background: #fef2f2; }
 .total-warn { margin: 0; color: #b91c1c; font-size: 12px; }
 
-/* ③ 预埋区 */
-.reserve-row { display: flex; flex-direction: column; gap: 4px; }
-.reserve-head {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 600; color: var(--color-text-primary);
-}
-/* 「待引擎支持」:平台 muted tag(CaseDataSetsList .tag 同款形制) */
-.tag-reserve {
-  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
-  color: var(--color-text-secondary); background: #f1f5f9; white-space: nowrap;
-}
 .hint { color: var(--color-text-secondary); }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }
 </style>

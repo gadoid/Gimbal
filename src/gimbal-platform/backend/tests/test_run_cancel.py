@@ -106,7 +106,7 @@ async def test_cancel_skips_remaining_rows(client, monkeypatch):
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-cancel", "dataSetIds": [ds_id],
-        "parallel": 1,
+        "runOptions": {"parallel": 1},
     })
     assert r.status_code == 201, r.text
     eid = r.json()["executionId"]

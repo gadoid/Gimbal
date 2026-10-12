@@ -264,11 +264,15 @@ function fmtTime(iso: string | null): string {
 const startedAtLabel = computed(() => fmtTime(execStore.detail?.started_at ?? null))
 const finishedAtLabel = computed(() => fmtTime(execStore.detail?.finished_at ?? null))
 
-// ``stepTo`` is a 0-based inclusive halt index stored in
-// Execution.config_json by the dispatcher (V3 camelCase).
+// ``step_to`` is a 0-based inclusive halt index stored in
+// Execution.config_json.runOptions by the dispatcher (W19 RunOptions 形状;
+// 旧行平铺键 stepTo 回退读)。
 // Display as 1-based "执行到第 N 步" only when present and non-null.
 const stepToLabel = computed(() => {
-  const v = execStore.detail?.config?.stepTo
+  const cfg0 = execStore.detail?.config
+  const ro = cfg0?.runOptions
+  const v = ro && typeof ro === 'object'
+    ? (ro as Record<string, unknown>).step_to : cfg0?.stepTo
   if (v === null || v === undefined) return ''
   const n = Number(v)
   if (!Number.isFinite(n) || n < 0) return ''
@@ -304,7 +308,20 @@ const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift'])
 const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
   const cfg = execStore.detail?.config
   if (!cfg) return []
-  return Object.entries(cfg)
+  const entries: Array<[string, unknown]> = []
+  for (const [k, v] of Object.entries(cfg)) {
+    if (v === undefined) continue
+    if (k === 'runOptions' && v && typeof v === 'object') {
+      // W19:runOptions 展开为三个可读项(其余键无展示价值)
+      const ro = v as Record<string, unknown>
+      if (ro.n_runs !== undefined) entries.push(['nRuns', ro.n_runs])
+      if (ro.parallel !== undefined) entries.push(['parallel', ro.parallel])
+      // step_to 不进 dl:由上方 pill 表达(与旧平铺键同口径)
+      continue
+    }
+    entries.push([k, v])
+  }
+  return entries
     .filter(([k, v]) => v !== undefined && !RECIPE_HIDDEN_KEYS.has(k))
     .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
 })

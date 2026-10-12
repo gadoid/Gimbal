@@ -21,13 +21,13 @@ import type { SchemeV2 } from '@/api/scenario-composer'
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_A: SchemeV2 = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-001', rowIndexes: [0, 1] }],
   injectionEntryIds: ['inj-1'], serviceBindings: { 'svc-a': { authAlias: 'alias-1' } },
-  stepTo: 2, nRuns: 3, parallel: 2, plugins: null, logSub: null,
+  options: { step_from: null, step_to: 2, n_runs: 3, parallel: 2, subscribe: null },
 }
 
 /** 基础 props:ds-001 存在 + inj-1 存活 → rs-002 不失效(失效用例显式覆盖) */
@@ -78,7 +78,7 @@ describe('RunDialog v2 — 两路径', () => {
     await w.find('[data-testid="save-as-scheme"]').trigger('click')
     expect(w.emitted('saveAsScheme')!.at(-1)![0]).toMatchObject({
       name: '新方案', dataSetSelection: [], injectionEntryIds: [],
-      nRuns: 1, parallel: 1,
+      options: expect.objectContaining({ n_runs: 1, parallel: 1 }),
     })
   })
 

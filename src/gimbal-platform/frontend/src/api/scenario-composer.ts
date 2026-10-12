@@ -14,6 +14,7 @@ import type {
 import type {
   EndpointFullView, StrategyKindView, StrategyKindDetailView,
 } from '@/types/plate'
+import type { RunOptions } from '@/types/m2'
 
 // ── scenarios ────────────────────────────────────────────────
 /** 列表筛选参数(M1 服务端化):多值维度收逗号联合字符串(与后端口径
@@ -218,9 +219,11 @@ export interface RunOverlay {
 
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
-  /** C6(P3-04):调试执行装载(单 case 且 nRuns=1;后端强制校验) */
-  debug?: { pause: string; breakpoints?: string[]; waitTimeout?: number }
   scenarioId: string
+  /** 执行指令(M2 RunOptions 生成物形状,W19):stepTo/nRuns/parallel/
+   *  debug 四个顶层平铺键退役,统一收进 runOptions(内层键 snake_case,
+   *  与 RunScheme.options、执行器 POST /runs options 同形) */
+  runOptions?: RunOptions | null
   /** 溯源(方案工作台阶段③,Task 1 后端已接受):本次执行按哪个方案发起 —
    *  默认/自建两态都带(wire camelCase) */
   schemeId?: string
@@ -237,12 +240,6 @@ export interface RunRequest {
    * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
    * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
   serviceBindings?: Record<string, ServiceBinding>
-  /** V1 能力移植:0-based 含端点,透传引擎 halt_at,在该步后停 */
-  stepTo?: number
-  /** M1 执行能力:每行数据的重复执行次数(total = Σrows × nRuns) */
-  nRuns?: number
-  /** M1 执行能力:fan-out 并发度(1–200) */
-  parallel?: number
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
@@ -304,7 +301,15 @@ export async function runScenario(req: RunRequest): Promise<RunScenarioResult> {
 // 旧 PUT /scenarios/{id}/run-schemes 整表替换端点与 orchestration.runSchemes
 // sidecar 已随阶段④清理下线(2026-09)。
 
-/** 方案 wire 形状(阶段② 新 CRUD;阶段③ RunDialog 切换后统一) */
+/** 全默认执行指令(与后端 scheme_store._EMPTY_OPTIONS 同形) */
+export const EMPTY_RUN_OPTIONS: RunOptions = {
+  step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null,
+}
+
+/** 方案 wire 形状(阶段② 新 CRUD;阶段③ RunDialog 切换后统一)。
+ *  执行参数自 M10 起收进 ``options``(RunOptions 生成物形状,与
+ *  RunRequest.runOptions 同形);旧平铺键 stepTo/nRuns/parallel 与
+ *  plugins/logSub 预埋键已随 54c86a05 下线(读不再展开、写不再收)。 */
 export interface SchemeV2 {
   schemeId: string
   name: string
@@ -313,14 +318,10 @@ export interface SchemeV2 {
   dataSetSelection: { datasetId: string; rowIndexes?: number[] }[]
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
-  stepTo: number | null
-  nRuns: number
-  parallel: number
-  plugins?: unknown
-  logSub?: unknown
+  options: RunOptions
 }
 
-/** 方案 → 执行配方:把方案锁定的选择/绑定/次数/并发物化成 RunRequest,
+/** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
  *  供列表页「▶ 执行」直跑(与 RunDialog 装配同源字段,不丢溯源)。 */
 export function schemeToRunRequest(scheme: SchemeV2, scenarioId: string): RunRequest {
   return {
@@ -331,9 +332,7 @@ export function schemeToRunRequest(scheme: SchemeV2, scenarioId: string): RunReq
     dataSetSelection: scheme.dataSetSelection,
     injectionEntryIds: scheme.injectionEntryIds,
     serviceBindings: scheme.serviceBindings,
-    stepTo: scheme.stepTo ?? undefined,
-    nRuns: scheme.nRuns,
-    parallel: scheme.parallel,
+    runOptions: scheme.options,
   }
 }
 

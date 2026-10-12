@@ -74,7 +74,7 @@ async def _dispatch_and_project(client, monkeypatch, *, n_runs=3,
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-p", "dataSetIds": [], "nRuns": n_runs,
+        "scenarioId": "sc-p", "dataSetIds": [], "runOptions": {"n_runs": n_runs},
     })
     assert r.status_code == 201, r.text
 

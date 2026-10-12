@@ -634,7 +634,8 @@ async def test_dispatcher_fans_out_injection_entries(
     # (死字段锚点 + 旧版形状条目均属悬空);预览执行才放行告警。
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [],
-        "injectionEntryIds": ["inj-live", "inj-dead", "inj-old"], "nRuns": 2,
+        "injectionEntryIds": ["inj-live", "inj-dead", "inj-old"],
+        "runOptions": {"n_runs": 2},
     })
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "dangling_injection_entries"
@@ -642,7 +643,7 @@ async def test_dispatcher_fans_out_injection_entries(
 
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [],
-        "injectionEntryIds": ["inj-live"], "nRuns": 2,
+        "injectionEntryIds": ["inj-live"], "runOptions": {"n_runs": 2},
     })
     assert r.status_code == 201, r.text
     exec_id = r.json()["executionId"]

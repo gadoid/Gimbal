@@ -487,7 +487,13 @@ function overflowCount(scenarioId: string): number {
 async function updateScheme(row: ScenarioListItem, scheme: SchemeV2, patch: { nRuns?: number; parallel?: number }) {
   const id = row.meta.scenarioId
   try {
-    const { schemeId, isDefault, ...rest } = { ...scheme, ...patch }
+    // 卡片 patch 键(UI 名)合入 options(W19:wire 只有 options 形状)
+    const options = {
+      ...scheme.options,
+      ...(patch.nRuns != null ? { n_runs: patch.nRuns } : {}),
+      ...(patch.parallel != null ? { parallel: patch.parallel } : {}),
+    }
+    const { schemeId, isDefault, ...rest } = { ...scheme, options }
     await updateRunScheme(id, schemeId, rest)
     schemesByScenario.set(id, await listRunSchemes(id))
     toast.success(`已更新 ${scheme.name}`)

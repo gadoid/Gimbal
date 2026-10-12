@@ -242,7 +242,8 @@ async def test_rerun_rebuilds_recipe_from_config(
 
     r = await client.post("/api/runs", headers=auth, json={
         "scenarioId": "sc-test", "dataSetIds": ["ds-001"], "batchId": "b-org",
-        "nRuns": 2, "parallel": 1, "schemeId": "rs-001", "schemeName": "冒烟",
+        "runOptions": {"n_runs": 2, "parallel": 1},
+        "schemeId": "rs-001", "schemeName": "冒烟",
     })
     assert r.status_code == 201, r.text
     origin = r.json()["executionId"]
@@ -263,7 +264,7 @@ async def test_rerun_rebuilds_recipe_from_config(
         # 配方保真:数据集 / 方案溯源 / 参数逐键还原
         assert cfg.get("dataSetIds") == ["ds-001"]
         assert cfg.get("schemeId") == "rs-001" and cfg.get("schemeName") == "冒烟"
-        assert cfg.get("nRuns") == 2
+        assert cfg.get("runOptions", {}).get("n_runs") == 2
         # 重跑是新的一次独立发起:不带原批
         assert new_ex.batch_id is None and cfg.get("batchId") is None
         assert origin_ex.batch_id == "b-org"
@@ -334,8 +335,9 @@ async def _setup_scenario(
 
 async def _make_scheme(client: AsyncClient, headers: dict, name: str, **over) -> str:
     body = {"name": name, "dataSetSelection": [], "injectionEntryIds": [],
-            "serviceBindings": {}, "stepTo": None, "nRuns": 1, "parallel": 1,
-            "plugins": None, "logSub": None}
+            "serviceBindings": {},
+            "options": {"step_from": None, "step_to": None, "n_runs": 1,
+                        "parallel": 1, "subscribe": None}}
     body.update(over)
     r = await client.post("/api/scenarios/sc-test/run-schemes", headers=headers,
                           json=body)

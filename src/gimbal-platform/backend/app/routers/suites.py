@@ -845,7 +845,11 @@ def _req_from_scheme(
 ) -> RunRequest:
     """默认方案参数 → RunRequest(与前端「直接执行」同口径:读默认
     方案后内联发送,§13.3-2);batchId 必带 —— 执行行据此挂批次键
-    (批次视图/通知聚合的归并面)。"""
+    (批次视图/通知聚合的归并面)。
+
+    执行参数自 M10 起存 ``options``(RunOptions 形状)—— 旧平铺键
+    stepTo/nRuns/parallel 是迁移前残留,读了永远取不到值(W19 修复:
+    直接透传 options;缺省 = 全默认)。"""
     return RunRequest(
         scenarioId=scenario_id,
         batchId=batch_id,
@@ -853,9 +857,7 @@ def _req_from_scheme(
         dataSetSelection=scheme.get("dataSetSelection") or [],
         injectionEntryIds=scheme.get("injectionEntryIds") or [],
         serviceBindings=scheme.get("serviceBindings") or {},
-        stepTo=scheme.get("stepTo"),
-        nRuns=scheme.get("nRuns") or 1,
-        parallel=scheme.get("parallel") or 1,
+        runOptions=scheme.get("options") or None,
         schemeId=scheme.get("schemeId"),
         schemeName=scheme.get("name"),
     )

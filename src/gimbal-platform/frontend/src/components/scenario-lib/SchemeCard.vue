@@ -19,16 +19,16 @@
         v-if="editing !== 'nRuns'"
         type="button"
         class="mini-badge"
-        :aria-label="`修改执行次数(当前 ${scheme.nRuns})`"
+        :aria-label="`修改执行次数(当前 ${scheme.options.n_runs})`"
         @click.stop="startEdit('nRuns')"
-      >次数 <b>{{ scheme.nRuns }}</b></button>
+      >次数 <b>{{ scheme.options.n_runs }}</b></button>
       <span v-else class="mini-badge editing">
         <input
           ref="inputEl"
           v-model="draft"
           type="number"
           min="1"
-          max="500"
+          max="64"
           aria-label="执行次数"
           @blur="commit"
           @keyup.enter="commit"
@@ -39,16 +39,16 @@
         v-if="editing !== 'parallel'"
         type="button"
         class="mini-badge"
-        :aria-label="`修改并发数(当前 ${scheme.parallel})`"
+        :aria-label="`修改并发数(当前 ${scheme.options.parallel})`"
         @click.stop="startEdit('parallel')"
-      >并发 <b>{{ scheme.parallel }}</b></button>
+      >并发 <b>{{ scheme.options.parallel }}</b></button>
       <span v-else class="mini-badge editing">
         <input
           ref="inputEl"
           v-model="draft"
           type="number"
           min="1"
-          max="200"
+          max="64"
           aria-label="并发数"
           @blur="commit"
           @keyup.enter="commit"
@@ -73,6 +73,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   run: [scheme: SchemeV2]
   update: [scheme: SchemeV2, patch: { nRuns?: number; parallel?: number }]
+  // patch 键是 UI 字段名(nRuns/parallel);宿主负责合入 scheme.options(W19)
 }>()
 
 const editing = ref<'nRuns' | 'parallel' | null>(null)
@@ -104,7 +105,7 @@ const chipText = computed(() => {
 
 function startEdit(field: 'nRuns' | 'parallel') {
   editing.value = field
-  draft.value = String(field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel)
+  draft.value = String(field === 'nRuns' ? props.scheme.options.n_runs : props.scheme.options.parallel)
   // 键盘进来就该落在输入框上(否则 Enter 打开后焦点还停在已消失的按钮上)
   void nextTick(() => { inputEl.value?.focus(); inputEl.value?.select() })
 }
@@ -115,7 +116,7 @@ function cancel() {
 
 /** 上界与 input 的 max 同源 —— HTML max 只是原生 spinner 的装饰,
  *  手动键入的越界值必须由 commit 自己拦,否则一路透传到后端。 */
-const MAX: Record<'nRuns' | 'parallel', number> = { nRuns: 500, parallel: 200 }
+const MAX: Record<'nRuns' | 'parallel', number> = { nRuns: 64, parallel: 64 }
 const FIELD_LABEL: Record<'nRuns' | 'parallel', string> = { nRuns: '次数', parallel: '并发' }
 
 function commit() {
@@ -123,7 +124,7 @@ function commit() {
   editing.value = null
   if (!field) return
   const n = Number.parseInt(draft.value, 10)
-  const cur = field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel
+  const cur = field === 'nRuns' ? props.scheme.options.n_runs : props.scheme.options.parallel
   if (Number.isNaN(n) || n === cur) return
   if (n < 1 || n > MAX[field]) {
     toast.error(`${FIELD_LABEL[field]} 取值范围 1–${MAX[field]}`)

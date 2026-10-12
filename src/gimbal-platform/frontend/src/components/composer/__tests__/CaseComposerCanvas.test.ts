@@ -389,7 +389,7 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
   const Parent = defineComponent({
     setup() {
       provide(INSERT_TARGET_KEY, inserter)
-      const opts = Array.isArray(stepsOrOpts) ? {} : stepsOrOpts
+      const opts: Partial<CanvasMountOpts> = Array.isArray(stepsOrOpts) ? {} : stepsOrOpts
       return () => h(CaseComposerCanvas, {
         steps: steps,
         orchestration: orch.value,

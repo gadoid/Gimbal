@@ -21,16 +21,9 @@ describe('SchemeRunConfigSection', () => {
     })
   })
 
-  it('运行参数钳位:nRuns 上限 1000,总量预览 = nRuns×parallel 可见', async () => {
+  it('运行参数钳位:nRuns/parallel 上限 64(Q4 对齐),总量预览 = nRuns×parallel 可见', async () => {
     const w = mount(SchemeRunConfigSection, { props: { ...BASE, nRuns: 5, parallel: 4 }, global: { plugins: [] } })
     expect(w.find('[data-testid="total-preview"]').text()).toContain('20')
-  })
-
-  it('预埋区可见且标注待引擎支持', () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
-    expect(w.text()).toContain('插件列表')
-    expect(w.text()).toContain('日志订阅')
-    expect(w.text()).toContain('待引擎支持')
   })
 
   // ── 显式绑定口径(镜像 RunDialog.explicitBindingOf,D3)──────────────
@@ -65,12 +58,12 @@ describe('SchemeRunConfigSection', () => {
     })
   })
 
-  it('总量超 200 → 红字提示超出上限', () => {
+  it('总量超 200 → 红字提示超出上限(64 上限内即可触发:64×4=256)', () => {
     const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, nRuns: 101, parallel: 2 },
+      props: { ...BASE, nRuns: 64, parallel: 4 },
       global: { plugins: [] },
     })
-    expect(w.find('[data-testid="total-preview"]').text()).toContain('202')
+    expect(w.find('[data-testid="total-preview"]').text()).toContain('256')
     expect(w.text()).toContain('超出单次执行总量上限 200')
   })
 

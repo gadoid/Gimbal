@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import {
   listDataSets, createRunScheme, updateRunScheme,
   deleteRunScheme, updateScenario, deleteDataSet, type SchemeV2,
+  EMPTY_RUN_OPTIONS,
 } from '@/api/scenario-composer'
 import { confirmAction, promptAction } from '@/utils/confirmAction'
 import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
@@ -63,6 +64,21 @@ watch(selected, (s) => {
   dirty.value = false
 }, { immediate: true })
 watch(draft, () => { dirty.value = true }, { deep: true, flush: 'sync' })
+
+// 运行配置区的 v-model 适配层(W19):wire 的 options 内层键是可选的
+// (生成物形状),组件 props 要非空 — 缺省读全默认,写回直落 options。
+const draftStepTo = computed<number | null>({
+  get: () => draft.value?.options.step_to ?? null,
+  set: (v) => { if (draft.value) draft.value.options.step_to = v },
+})
+const draftNRuns = computed<number>({
+  get: () => draft.value?.options.n_runs ?? 1,
+  set: (v) => { if (draft.value) draft.value.options.n_runs = v },
+})
+const draftParallel = computed<number>({
+  get: () => draft.value?.options.parallel ?? 1,
+  set: (v) => { if (draft.value) draft.value.options.parallel = v },
+})
 
 async function saveScheme() {
   if (!draft.value || saving.value) return
@@ -242,7 +258,7 @@ async function onCreate() {
     const made = await createRunScheme(scenarioId, {
       name: `方案 ${schemes.value.length}`, dataSetSelection: [],
       injectionEntryIds: [], serviceBindings: {},
-      stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+      options: { ...EMPTY_RUN_OPTIONS },
     })
     await refresh()
     selectedId.value = made.schemeId
@@ -354,11 +370,9 @@ async function onDeleteDataSet(datasetId: string) {
           <SchemeRunConfigSection
             v-if="draft"
             v-model:service-bindings="draft.serviceBindings"
-            v-model:step-to="draft.stepTo"
-            v-model:n-runs="draft.nRuns"
-            v-model:parallel="draft.parallel"
-            v-model:plugins="draft.plugins"
-            v-model:log-sub="draft.logSub"
+            v-model:step-to="draftStepTo"
+            v-model:n-runs="draftNRuns"
+            v-model:parallel="draftParallel"
             :service-rows="serviceRows"
             :auth-options="authOptions"
             :step-count="stepCount"

@@ -14,13 +14,13 @@ vi.mock('@/api/http', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.f
 const SCHEME_DEFAULT = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_A = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-001', rowIndexes: [0] }],
-  injectionEntryIds: [], serviceBindings: {}, stepTo: null,
-  nRuns: 2, parallel: 1, plugins: null, logSub: null,
+  injectionEntryIds: [], serviceBindings: {},
+  options: { step_from: null, step_to: null, n_runs: 2, parallel: 1, subscribe: null },
 }
 
 describe('SchemeWorkbench', () => {

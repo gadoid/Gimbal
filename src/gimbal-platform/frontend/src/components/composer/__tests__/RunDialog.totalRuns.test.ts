@@ -36,7 +36,7 @@ const scenario = {
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-def', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 /** 整库 3 行 × N 注入条目(注入族撑总量;nRuns 不再乘进) */
 const SCHEME_INJ = (nInj: number): SchemeV2 => ({
@@ -44,7 +44,7 @@ const SCHEME_INJ = (nInj: number): SchemeV2 => ({
   dataSetSelection: [{ datasetId: 'ds-1' }],
   injectionEntryIds: Array.from({ length: nInj }, (_, i) => `inj-${i}`),
   serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 })
 
 function mountDialog(schemes: SchemeV2[]) {
@@ -93,8 +93,8 @@ describe('RunDialog — 总量闸(两态公式 ≤ 200)', () => {
     const scheme: SchemeV2 = {
       schemeId: 'rs-rows', name: '整库', isDefault: false,
       dataSetSelection: [{ datasetId: 'ds-1' }], injectionEntryIds: [],
-      serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
-      plugins: null, logSub: null,
+      serviceBindings: {},
+      options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
     }
     const w = mountDialog([DEFAULT_SCHEME, scheme])
     await w.find('[data-testid="scheme-chip-rs-rows"]').trigger('click')

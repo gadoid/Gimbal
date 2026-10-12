@@ -35,6 +35,13 @@ def _run_payload(**extra: object) -> dict:
         "scenarioId": "sc-test",
         "dataSetIds": ["ds-001"],
     }
+    # W19:执行参数平铺键(nRuns/parallel/stepTo)收进 runOptions
+    flat = {k: extra.pop(k) for k in ("nRuns", "parallel", "stepTo")
+            if k in extra}
+    if flat:
+        snake = {"nRuns": "n_runs", "parallel": "parallel",
+                 "stepTo": "step_to"}
+        payload["runOptions"] = {snake[k]: v for k, v in flat.items()}
     payload.update(extra)
     return payload
 
@@ -112,8 +119,8 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
             .first()
         )
         assert ex.total_runs == 2                # 单元口径(nRuns 不再展开)
-        assert ex.config_json["nRuns"] == 3
-        assert ex.config_json["parallel"] == 2
+        assert ex.config_json["runOptions"]["n_runs"] == 3
+        assert ex.config_json["runOptions"]["parallel"] == 2
 
 
 async def test_parallel_limits_concurrency(

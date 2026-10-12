@@ -21,7 +21,7 @@ import type { SchemeV2 } from '@/api/scenario-composer'
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-def', name: '默认方案', isDefault: true,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
-  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 
 const BASE_PROPS = {

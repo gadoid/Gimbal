@@ -6,7 +6,7 @@ fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
 子进程执行).
 
 The former Case layer was dissolved — the run recipe (dataSetIds /
-serviceBindings / stepTo / nRuns / parallel) lives entirely in
+serviceBindings / runOptions) lives entirely in
 ``RunRequest``; the dispatcher materializes it into ``config_json``
 (injectedAuths = 模板扫描 ∪ serviceBindings 绑定).  The former ``env``
 field was retired (D2) — stale env keys from old clients are silently

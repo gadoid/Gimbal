@@ -295,7 +295,9 @@ class TestGraphCompositionInline:
                                     "injectionEntryIds": [],
                                     "serviceBindings": {
                                         "fin.order": {"url": "http://fin:1"}},
-                                    "stepTo": None, "nRuns": 1, "parallel": 1})
+                                    "options": {"step_from": None, "step_to": None,
+                                                "n_runs": 1, "parallel": 1,
+                                                "subscribe": None}})
         assert r.status_code == 201, r.text
         scheme_id = r.json()["schemeId"]
         await self._fake_convert_patch(monkeypatch)
