@@ -31,5 +31,8 @@ class ScenarioEndpointRef(Base):
     # 值含 ${var.NAME} 模板时记 NAME(取第一个匹配);直填为 NULL
     via_var: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 外部接口登记批 X3(D3 拍板):值内全部 ${var.NAME} 列表(JSON 数组,
-    # 按出现序);via_var 首变量保留兼容读,消费方迁移后改读本列
+    # 按出现序);via_var 首变量保留兼容读,消费方迁移后改读本列。
+    # 注意:显式传 None 落 PG 是 json null 而非 SQL NULL(未传列的行
+    # 才是 SQL NULL)—— ORM 读回两种都是 Python None,应用无感;查询
+    # 面按 JSON contains(@>)消费,勿用 ``IS NULL`` 判空。
     via_vars: Mapped[list | None] = mapped_column(JsonVar, nullable=True)
