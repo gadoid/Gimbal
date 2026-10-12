@@ -45,7 +45,7 @@ jobs:
         run: |
           set -e
           npx --yes json-schema-to-typescript@16.0.0 --version
-          python scripts/gen_m2.py check --targets schema,ext,py,ts
+          python scripts/gen_m2.py check --targets schema,ext,py,ts,dbgcmd
       - name: M2 兼容性守卫 — gen_m2 compat(不兼容变更须递增代际)
         # PR 的目标分支不是 main 时也能正确比对(github.base_ref)
         run: python scripts/gen_m2.py compat --base "origin/${{ github.base_ref || 'main' }}"
