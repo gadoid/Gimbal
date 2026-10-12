@@ -32,12 +32,8 @@ from gimbal.log import get_logger
 
 logger = get_logger(__name__)
 
-# 事件基类(types 只依赖 pydantic,无环;Literal 供下方事件声明)
-from typing import Literal  # noqa: E402
 
-from gimbal.events.types import (  # noqa: E402
-    FrameworkEvent, M2HashMismatchEvent,
-)
+from gimbal.events.types import M2HashMismatchEvent  # noqa: E402
 
 # 类型注解需模块级可见（FastAPI get_type_hints 按函数所在模块的全局名解析；
 # server.py 在 create_app() 内延迟导入本模块，此时 server 模块已初始化完毕）

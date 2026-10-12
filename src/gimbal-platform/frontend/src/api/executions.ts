@@ -271,13 +271,8 @@ export function getExecutionEvents(
 }
 
 
-// ── C6(P3-04):调试台(执行器 token 不出后端;命令与引擎 DebugCommand 同形) ──
-
-export interface DebugLaunchSpec {
-  pause: 'none' | 'on_failure' | 'every_step'
-  breakpoints?: string[]
-  waitTimeout?: number
-}
+// ── C6(P3-04):调试台(执行器 token 不出后端;命令与引擎 DebugCommand 同形;
+//    调试装载形状 = m2.ts 生成物 DebugSpec,W19 起随 RunRequest.runOptions 上送)──
 
 export interface DebugSessionInfo {
   executionId: number
