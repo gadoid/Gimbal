@@ -299,12 +299,23 @@ async def run_instance(instance_id: int) -> dict:
         aliases = _auth_aliases_of(scen.payload, bindings)
         holder = (await get_platform_user_id()) \
             if tpl.identity_mode == "platform" else inst.holder_id
+        # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示去
+        # 配置;凭证补齐后复活钩子恢复),不是普通失败
         try:
             exec_auths = await resolve_exec_auths(
                 db_module.SessionLocal, holder or -1, aliases)
-        except Exception as e:  # noqa: BLE001 — 解析失败 = 凭证问题,失败收口
-            return await _finish(
-                db, inst, tpl, "failed", f"凭证解析失败: {e}")
+        except Exception as e:  # noqa: BLE001
+            if aliases:
+                return await _finish(
+                    db, inst, tpl, "failed", f"凭证解析失败: {e}",
+                    pause_reason="missing_credential")
+            exec_auths = []
+        else:
+            if aliases and not exec_auths:
+                return await _finish(
+                    db, inst, tpl, "failed",
+                    f"缺少凭证: {','.join(aliases)}",
+                    pause_reason="missing_credential")
 
         scen_payload = scen.payload
         builtins = built_in_users(scen_payload)
@@ -382,6 +393,7 @@ async def _finish(
     db, inst: IntegrationTask, tpl: IntegrationTask, status: str,
     error: str, *, outputs: dict | None = None,
     duration_ms: int = 0, auth_failed: bool = False,
+    pause_reason: str | None = None,
 ) -> dict:
     """结果回写:result_policy=on_change 只在状态翻转时落盘(P1 口径
     = last_status 变化,评审 E7);通知与 fail_streak。
@@ -394,9 +406,10 @@ async def _finish(
     now = _now()
     changed = inst.last_status != status
     prev_streak = inst.fail_streak or 0
-    if auth_failed and status != "passed":
+    _pause = pause_reason or ("auth_failed" if auth_failed else None)
+    if _pause and status != "passed":
         inst.state = "paused"
-        inst.paused_reason = "auth_failed"
+        inst.paused_reason = _pause
     else:
         inst.state = "idle"
     inst.running_since = None
@@ -582,13 +595,23 @@ async def scheduler_tick() -> dict:
     return {"claimed": claimed, "reaped": reaped, "stuck": stuck}
 
 
-async def ensure_instance(tpl: IntegrationTask) -> IntegrationTask | None:
-    """模板的平台模式实例(创建模板时同步建;幂等)。"""
-    if tpl.identity_mode != "platform":
-        return None
-    holder = await get_platform_user_id()
-    if holder is None:
-        return None
+async def ensure_instance(
+    tpl: IntegrationTask, *, holder_id: int | None = None,
+) -> IntegrationTask | None:
+    """模板的实例(幂等;Y3 起支持个人模式)。
+
+    platform = 平台系统用户的唯一实例(创建模板时同步建,P1 行为);
+    personal = ``holder_id`` 的订阅实例(不存在则建 —— 订阅即创建,
+    方案 §4;缺 holder 返回 None)。名从模板(NOT NULL;列表只取模板行)。
+    """
+    if tpl.identity_mode == "personal":
+        if holder_id is None:
+            return None
+        holder = holder_id
+    else:
+        holder = await get_platform_user_id()
+        if holder is None:
+            return None
     async with db_module.SessionLocal() as db:
         row = (await db.execute(select(IntegrationTask).where(
             IntegrationTask.template_id == tpl.id,
@@ -620,7 +643,8 @@ async def ensure_instance(tpl: IntegrationTask) -> IntegrationTask | None:
 async def revive_paused_instances(user_id: int | None = None) -> int:
     """凭证复活钩子(auth_sessions 路由调用,方案 §8/设计 §3)。
 
-    恢复范围:paused_reason=auth_failed 的实例 —— 个人模式且
+    恢复范围:paused_reason ∈ {auth_failed, missing_credential} 的实例
+    —— 个人模式且
     user_id 匹配 holder;平台模式不受 user_id 过滤(平台凭证池只有
     operator/admin 能改,改了即视为恢复信号)。恢复 = state=idle +
     next_run_at=now(下拍调度即重试);paused_reason 清空。
@@ -631,7 +655,8 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
         stmt = select(IntegrationTask).where(
             IntegrationTask.template_id.isnot(None),
             IntegrationTask.state == "paused",
-            IntegrationTask.paused_reason == "auth_failed",
+            IntegrationTask.paused_reason.in_(("auth_failed",
+                                               "missing_credential")),
         )
         rows = (await db.execute(stmt)).scalars().all()
         revived = 0

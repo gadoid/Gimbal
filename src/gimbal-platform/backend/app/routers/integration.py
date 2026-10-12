@@ -64,8 +64,15 @@ def _visible(user, tpl: IntegrationTask) -> bool:
         or user.role == "admin")
 
 
-async def _tpl_instance(db: AsyncSession, tpl_id: int):
-    """平台模式的唯一实例(P1 全部模板都是平台模式)。"""
+async def _tpl_instance(db: AsyncSession, tpl_id: int,
+                       user=None, tpl=None):
+    """模板实例:P1 口径 = 平台唯一实例;Y3 起个人模式按当前用户
+    定位/创建(订阅即创建,方案 §4)。user/tpl 缺省时维持旧行为。"""
+    if user is not None and tpl is not None \
+            and tpl.identity_mode == "personal":
+        seeded = await integration_runner.ensure_instance(
+            tpl, holder_id=user.id)
+        return seeded
     return (await db.execute(select(IntegrationTask).where(
         IntegrationTask.template_id == tpl_id,
         IntegrationTask.holder_id.is_not(None),
@@ -148,16 +155,16 @@ async def list_tasks(user: CurrentUser, db: DbSession) -> dict:
     for t in rows:
         if not _visible(user, t):
             continue
-        inst = await _tpl_instance(db, t.id)
+        inst = await _tpl_instance(db, t.id, user=user, tpl=t)
         out.append(_tpl_out(t, inst, user))
     return {"items": out}
 
 
 @router.post("/tasks", status_code=201)
 async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
-    if body.identityMode != "platform":
-        raise _bad("personal_not_ready",
-                   "个人模式随二期开放;本期只支持平台模式")
+    if body.identityMode not in ("platform", "personal"):
+        raise _bad("identity_mode_invalid",
+                   "identityMode ∈ platform | personal")
     try:
         parse_cron(body.triggerCron)
     except CronError as e:
@@ -172,15 +179,17 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
     if scen.owner_id != user.id:
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
-    # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤)
-    ok, offenders = await _read_only_with_plate(db, scen)
-    if not ok:
-        raise _bad("not_read_only",
-                   f"平台模式要求全部步骤为只读(GET/HEAD/OPTIONS): "
-                   f"{'、'.join(offenders)}")
+    # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤);
+    # Y3:个人模式放行写操作(写操作必须个人身份,方案 §3)
+    if body.identityMode == "platform":
+        ok, offenders = await _read_only_with_plate(db, scen)
+        if not ok:
+            raise _bad("not_read_only",
+                       f"平台模式要求全部步骤为只读(GET/HEAD/OPTIONS): "
+                       f"{'、'.join(offenders)}")
     tpl = IntegrationTask(
         name=body.name, owner_id=user.id, visibility=body.visibility,
-        identity_mode="platform", target_type="scenario",
+        identity_mode=body.identityMode, target_type="scenario",
         scenario_id=body.scenarioId, scheme_id=body.schemeId,
         target_system=body.targetSystem or "", trigger_cron=body.triggerCron,
         result_policy=body.resultPolicy, card_template=body.cardTemplate,
@@ -188,7 +197,8 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
     db.add(tpl)
     await db.commit()
     await db.refresh(tpl)
-    inst = await integration_runner.ensure_instance(tpl)
+    inst = await integration_runner.ensure_instance(
+        tpl, holder_id=user.id if body.identityMode == "personal" else None)
     return _tpl_out(tpl, inst, user)
 
 
@@ -204,7 +214,7 @@ async def get_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
-    inst = await _tpl_instance(db, tpl.id)
+    inst = await _tpl_instance(db, tpl.id, user=user, tpl=tpl)
     return _tpl_out(tpl, inst, user)
 
 
@@ -254,7 +264,8 @@ async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
 
 @router.post("/tasks/{task_id}/run")
 async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """立即执行(任意可见者;平台模式冷却 60s —— 方案 §3 操作表)。"""
+    """立即执行:平台模式任意可见者(冷却 60s);个人模式订阅者各自的
+    实例(无冷却,方案 §3 操作表;首次触发即建 = 订阅即创建)。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
@@ -268,13 +279,17 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
                 "working_preview",
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请先在编排器钉定修订(外部服务不受影响)", 409)
-    seeded = await integration_runner.ensure_instance(tpl)
+    seeded = await integration_runner.ensure_instance(
+        tpl, holder_id=user.id if tpl.identity_mode == "personal" else None)
     if seeded is None:
         raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)
     # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
     inst = await db.get(IntegrationTask, seeded.id)
     now = datetime.utcnow()
-    if inst.last_manual_run_at is not None and (
+    # Y3/方案 §3 操作表:冷却只对平台模式(任意订阅者触发需限频);
+    # 个人模式 = 实例持有人自己,无限冷却
+    if tpl.identity_mode == "platform" \
+            and inst.last_manual_run_at is not None and (
             now - inst.last_manual_run_at).total_seconds() \
             < integration_runner.MANUAL_COOLDOWN_SECONDS:
         wait = int(integration_runner.MANUAL_COOLDOWN_SECONDS - (
@@ -320,7 +335,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
         if not _visible(user, tpl):
             out.append({"id": raw, "state": "removed"})
             continue
-        inst = await _tpl_instance(db, tpl.id)
+        inst = await _tpl_instance(db, tpl.id, user=user, tpl=tpl)
         io = _inst_out(inst)
         stale = False
         if io["lastRunAt"]:

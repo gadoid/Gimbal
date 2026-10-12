@@ -184,9 +184,12 @@ class TestIntegrationRouter:
                               json=_task_body("sc-ig-get", triggerCron="bad"))
         assert r.status_code == 422
         assert r.json()["detail"]["code"] == "cron_invalid"
-        # 个人模式 → P1 未开放
+        # Y3:个人模式已解禁(201);坏 identityMode 仍 422
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-get", identityMode="personal"))
+        assert r.status_code == 201, r.text
+        r = await client.post("/api/integration/tasks", headers=h,
+                              json=_task_body("sc-ig-get", identityMode="bogus"))
         assert r.status_code == 422
         # 他人场景 → 拒
         h2 = await register_and_login(client, "ig_mk2", "ig_mk2pass123")
@@ -533,3 +536,120 @@ async def test_read_only_gate_ext_anchor(client):
     p["definition"]["steps"][0]["call"]["method"] = "GET"
     ok, _ = await is_scenario_read_only(p)
     assert ok
+
+
+# ── Y3:个人模式(写操作放行/订阅实例/无冷却/missing_credential)────
+
+async def test_personal_mode_lifecycle(client):
+    """Y3 核心链:personal 模板建即有 owner 订阅实例;另一用户首次
+    触发 = 订阅即建;写操作(POST 步骤)个人模式放行;无冷却。"""
+    from app.core import db as db_module
+    from sqlalchemy import select as _sel
+
+    u1 = await register_and_login(client, "p1_alice", "pw123456")
+    u2 = await register_and_login(client, "p1_bob", "pw123456")
+
+    # 个人模板:场景带 POST 步骤(平台模式会拒)→ 201
+    draft = make_draft("sc-p1", steps=[{
+        "kind": "step",
+        "call": {"protocol": "http", "service": "svc",
+                 "method": "POST", "path": "/push", "headers": {}},
+        "request": {"kind": "request", "body": {}}, "strategy": []}])
+    r = await client.post("/api/scenarios", headers=u1, json=draft)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
+        "sc-p1", identityMode="personal", visibility="public"))
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+
+    async with db_module.SessionLocal() as s:
+        from app.models.integration_task import IntegrationTask
+        rows = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().all()
+        # 创建即订阅:owner 的实例在(个人模式不建平台实例)
+        assert len(rows) == 1 and rows[0].holder_id is not None
+
+    # u2 首次立即执行 = 订阅即建(不等通道真跑,断实例已建)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
+    assert r.status_code in (200, 500), r.text   # 无凭证/场景细节失败皆可
+    async with db_module.SessionLocal() as s:
+        from app.models.integration_task import IntegrationTask
+        rows = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().all()
+        assert len(rows) == 2                     # u1 + u2 各一份
+
+
+async def test_personal_manual_run_no_cooldown(client, monkeypatch):
+    """个人模式手动执行无冷却(方案 §3 操作表);平台模式 60s 冷却不变。"""
+    from app.services import integration_runner as ir
+
+    u = await register_and_login(client, "p2_alice", "pw123456")
+    draft = make_draft("sc-p2", steps=[{
+        "kind": "step",
+        "call": {"protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/x", "headers": {}},
+        "request": {"kind": "request", "body": {}}, "strategy": []}])
+    await client.post("/api/scenarios", headers=u, json=draft)
+    r = await client.post("/api/integration/tasks", headers=u, json=_task_body(
+        "sc-p2", identityMode="personal"))
+    tid = r.json()["id"]
+
+    calls = {"n": 0}
+
+    async def _fake_run(inst_id):
+        calls["n"] += 1
+        # 模拟 _finish 收口:state 回 idle(真链路在独立会话回写)
+        from app.core import db as _dbm
+        from app.models.integration_task import IntegrationTask as _IT
+        async with _dbm.SessionLocal() as s:
+            row = await s.get(_IT, inst_id)
+            if row is not None:
+                row.state = "idle"
+                await s.commit()
+        return {"status": "passed", "durationMs": 1, "error": ""}
+
+    monkeypatch.setattr(ir, "run_instance", _fake_run)
+    for _ in range(2):                       # 连点两次
+        r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u)
+        assert r.status_code == 200, r.text
+    assert calls["n"] == 2                   # 无冷却,两次都跑
+
+
+async def test_missing_credential_pauses_and_revives(client, monkeypatch):
+    """Y3/方案 §8:场景引 ${auth.*} 而订阅者无该凭证 → 实例
+    paused/missing_credential;凭证补齐(复活钩子)→ idle。"""
+    from app.core import db as db_module
+    from sqlalchemy import select as _sel
+    from app.models.integration_task import IntegrationTask
+    from app.services import integration_runner as ir
+
+    u = await register_and_login(client, "p3_alice", "pw123456")
+    draft = make_draft("sc-p3", steps=[{
+        "kind": "step",
+        "call": {"protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/x",
+                 "headers": {"Authorization": "${auth.gitlab.token}"}},
+        "request": {"kind": "request", "body": {}}, "strategy": []}])
+    await client.post("/api/scenarios", headers=u, json=draft)
+    r = await client.post("/api/integration/tasks", headers=u, json=_task_body(
+        "sc-p3", identityMode="personal"))
+    tid = r.json()["id"]
+
+    # run_instance 真跑(resolve 解不到凭证 → missing_credential);
+    # plate/通道不真发(precheck 之前就停在凭证段)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u)
+    assert r.status_code == 200, r.text          # run_instance 内部收口
+
+    async with db_module.SessionLocal() as s:
+        inst = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        assert inst.state == "paused"
+        assert inst.paused_reason == "missing_credential"
+
+    # 凭证补齐 → 复活
+    assert await ir.revive_paused_instances(user_id=1) >= 1
+    async with db_module.SessionLocal() as s:
+        s.expire_all()
+        inst = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        assert inst.state == "idle"
