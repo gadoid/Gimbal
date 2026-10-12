@@ -115,6 +115,8 @@ def execution_out(
         scenario_deleted=scenario_deleted,
         kind=e.kind or "scenario",
         suite_id=e.suite_id,
+        plate_pins=e.plate_pins,
+        m2_hash=e.m2_hash,
     )
 
 
@@ -162,6 +164,8 @@ def execution_list_item(
         scenario_deleted=scenario_deleted,
         kind=e.kind or "scenario",
         suite_id=e.suite_id,
+        plate_pins=e.plate_pins,
+        m2_hash=e.m2_hash,
     )
 
 

@@ -64,6 +64,8 @@ async def _insert_execution(
     created_at: datetime | None = None,
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
+    plate_pins: dict | None = None,
+    m2_hash: str | None = None,
 ) -> int:
     from app.core.db import SessionLocal
     from app.models import Execution
@@ -77,6 +79,8 @@ async def _insert_execution(
             passed=passed,
             failed=failed,
             batch_id=batch_id,
+            plate_pins=plate_pins,
+            m2_hash=m2_hash,
         )
         if created_at is not None:
             ex.created_at = created_at
@@ -172,6 +176,31 @@ async def test_list_filters_status_batch_window(client: AsyncClient) -> None:
     assert r.json()["total"] == 2
     ids = {b1, b1f}
     assert {i["id"] for i in r.json()["items"]} == ids
+
+
+# ── 版本台账面(RS3 §6.3)────────────────────────────────────────
+async def test_version_ledger_pins_surface_list_and_detail(
+    client: AsyncClient,
+) -> None:
+    """plate_pins/m2_hash 库里有、出参必须透出——两个构造器逐字段拼
+    Out 模型,曾漏传这两个字段(2026-10-12 W16 试点实测 detail 恒 null)。
+    键序 dump 用原名(本文件惯例:除 ownerName 手写别名外均 snake,
+    前端 api/executions.ts 同款消费)。"""
+    auth = await _register_and_login(client)
+    alice = await _alice_id()
+    ex_id = await _insert_execution(
+        owner_id=alice, plate_pins={"fin": "1.0#1"}, m2_hash="8bbb8d85ccce",
+    )
+
+    r = await client.get(f"/api/executions/{ex_id}", headers=auth)
+    assert r.status_code == 200, r.text
+    assert r.json()["plate_pins"] == {"fin": "1.0#1"}
+    assert r.json()["m2_hash"] == "8bbb8d85ccce"
+
+    r = await client.get("/api/executions", headers=auth)
+    row = next(it for it in r.json()["items"] if it["id"] == ex_id)
+    assert row["plate_pins"] == {"fin": "1.0#1"}
+    assert row["m2_hash"] == "8bbb8d85ccce"
 
 
 # ── 批次键(§1.2:平台一次只发一条,批只是归并键)─────────────────
