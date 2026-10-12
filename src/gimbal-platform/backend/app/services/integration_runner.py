@@ -82,6 +82,8 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
     meta.plate 的修订取(不随 working 漂移),未声明系统读 working
     缓存。契约不可得即按不安全处理(fail-closed:只读闸不得因取不到
     契约而放行)。手写原始调用(无锚点)仍读存储的 call.method。
+    Y5(设计 §2):``ext:`` 锚点步骤的 method 出**平台外部目录**
+    (条目删/查不到同样 fail-closed)。
     """
     from . import plate_client
 
@@ -92,6 +94,18 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
         call = step.get("call") if isinstance(step, dict) else None
         method = str((call or {}).get("method") or "").upper()
         endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
+        if not method and endpoint and endpoint.startswith("ext:"):
+            # Y5:外部目录锚点 —— method 出平台目录(plate 零感知);
+            # 条目已删/查不到按不安全处理(fail-closed 同款)
+            alias, _, name = endpoint[4:].partition(".")
+            from sqlalchemy import select as _sel
+            from ..models.external_endpoint import ExternalEndpoint
+            async with db_module.SessionLocal() as _db:
+                row = (await _db.execute(_sel(
+                    ExternalEndpoint.method).where(
+                    ExternalEndpoint.alias_name == alias,
+                    ExternalEndpoint.name == name))).scalar_one_or_none()
+            method = str(row or "").upper() or "未知方法(目录无此条目)"
         if not method and endpoint:
             ref = meta_plate.get(endpoint.split(".")[0])
             if ref and ref != "working":

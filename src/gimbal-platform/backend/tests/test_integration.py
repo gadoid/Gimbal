@@ -486,3 +486,50 @@ async def test_non_auth_failure_keeps_running(client):
         tpl = await s.get(IntegrationTask, tpl_id)
         await ir._finish(s, inst, tpl, "failed", "断言失败", auth_failed=False)
         assert inst.state == "idle" and inst.paused_reason in (None, "")
+
+
+# ── Y5:只读闸 ext: 锚点分支 ──────────────────────────────────────
+
+async def test_read_only_gate_ext_anchor(client):
+    """ext: 锚点步骤 method 出外部目录:GET 放行;POST 拒;条目缺
+    fail-closed;ext 步骤带存储 method 的直接用(手写调用同款)。"""
+    from app.core import db as db_module
+    from app.models.external_endpoint import ExternalEndpoint
+    from app.models.service_alias import ServiceAlias
+    from app.services.integration_runner import is_scenario_read_only
+
+    await register_and_login(client, "gate_admin", "pw123456")
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name="gitlab-g", base_service="gitlab",
+                           base_url="https://git", kind="external"))
+        s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-list",
+                               title="MR", method="GET", path="/mr"))
+        s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-create",
+                               title="建MR", method="POST",
+                               path="/mr", request_schema=None))
+        await s.commit()
+
+    def _payload(ep: str | None) -> dict:
+        step = {"kind": "step",
+                "call": {"protocol": "http", "service": "gitlab-g",
+                         "headers": {}},
+                "request": {"kind": "request", "body": {}}, "strategy": []}
+        if ep:
+            step["endpoint"] = ep
+        return {"definition": {"meta": {"name": "n"}, "steps": [step]}}
+
+    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list"))
+    assert ok and offenders == []
+
+    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-create"))
+    assert not ok and "POST" in offenders[0]
+
+    # 条目缺 → fail-closed
+    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.gone"))
+    assert not ok and "未知方法" in offenders[0]
+
+    # ext: 锚点 + 存储了 method(手写调用形态)→ 直接用存储值
+    p = _payload("ext:gitlab-g.mr-create")
+    p["definition"]["steps"][0]["call"]["method"] = "GET"
+    ok, _ = await is_scenario_read_only(p)
+    assert ok
