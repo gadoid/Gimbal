@@ -118,7 +118,7 @@ it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);�
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null,
+    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null, kind: 'plate',
   })
   expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
@@ -155,7 +155,7 @@ it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀�
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null,
+    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null, kind: 'plate',
   })
   // 编辑态:槽显该别名所属服务,输入框只读展示后缀
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')

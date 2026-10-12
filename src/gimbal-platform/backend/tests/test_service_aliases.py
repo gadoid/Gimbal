@@ -229,3 +229,63 @@ async def test_alias_credential_chain_end_to_end(
     assert config_json["serviceBindings"] == {
         "fin-service-uat": {"authAlias": "qa1"},
     }
+
+
+# ─── 三态接入 kind(P1.0/W2-W4)──────────────────────────────────
+async def test_kind_default_plate_and_external_bypasses_catalog(
+        client, fresh_db, plate):
+    """plate 态缺省、目录强约束不变;external 态跳过目录派生(别名
+    即服务本体 base_service=alias_name);非法 kind 422(Literal)。"""
+    plate.services = [{"name": "fin-service"}]
+    admin = await _admin(client)
+
+    # 缺省 kind='plate':目录内派生照旧 + 出参带 kind
+    r = await client.post("/api/service-aliases", headers=admin, json={
+        "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local"})
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "plate"
+    assert r.json()["baseService"] == "fin-service"
+
+    # external:目录外服务可登记(强约束只约束 plate 态)
+    r = await client.post("/api/service-aliases", headers=admin, json={
+        "aliasName": "pay-service", "baseUrl": "https://pay.third.local",
+        "kind": "external"})
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "external"
+    assert r.json()["baseService"] == "pay-service"   # 别名即服务本体
+
+    # 非法 kind → 422
+    r = await client.post("/api/service-aliases", headers=admin, json={
+        "aliasName": "x-svc", "baseUrl": "https://x.local", "kind": "weird"})
+    assert r.status_code == 422
+
+    # 列表出参带 kind
+    r = await client.get("/api/service-aliases", headers=admin)
+    kinds = {i["aliasName"]: i["kind"] for i in r.json()["items"]}
+    assert kinds["fin-service-uat"] == "plate"
+    assert kinds["pay-service"] == "external"
+
+
+async def test_classify_services_three_buckets(fresh_db, plate):
+    """判定链(W3):alias_name 精确 > base_service 精确;未命中 →
+    unknown(保存告警口径的数据源)。"""
+    from app.services import service_aliases as svc
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name="fin-service-uat",
+                           base_service="fin-service", kind="plate"))
+        s.add(ServiceAlias(alias_name="pay-service",
+                           base_service="pay-service", kind="external"))
+        await s.commit()
+    async with db_module.SessionLocal() as s:
+        out = await svc.classify_services(s, [
+            "fin-service-uat", "pay-service", "fin-service",
+            "never-registered"])
+    assert out == {
+        "plate": ["fin-service-uat", "fin-service"],
+        "external": ["pay-service"],
+        "unknown": ["never-registered"],
+    }
+    # 空入参 → 全空桶
+    async with db_module.SessionLocal() as s:
+        assert await svc.classify_services(s, []) == {
+            "plate": [], "external": [], "unknown": []}

@@ -5,6 +5,10 @@
 校验恒失败 → **Plate 宕机期间不能登记新别名**。不做「空集放行 +
 unverified 标记」的松绑 —— 空枪别名会静默漏 carry/凭证注入,比暂时
 登记不了更糟;登记是低频配置操作,等 Plate 恢复再登。
+
+三态接入例外(P1.0/2026-10-12):``kind="external"`` 的第三方服务
+**不经目录派生**(别名即服务本体,base_service = alias_name)——
+强约束只约束受管(plate)态;external 无契约面,不存在空枪问题。
 """
 from __future__ import annotations
 
@@ -33,6 +37,8 @@ def alias_out(
         "environmentName": environment_name,
         "credentialAlias": row.credential_alias,
         "ownerUserId": row.owner_user_id,
+        # 三态接入(P1.0):plate | external(第三方,无版本管理)
+        "kind": row.kind or "plate",
         "createdAt": row.created_at.isoformat() if row.created_at else None,
         "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -68,15 +74,24 @@ async def list_aliases(
 async def create_alias(
     db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
-    base_url: str | None = None,
+    base_url: str | None = None, kind: str = "plate",
 ) -> dict:
-    base = service_names.derive_base(
-        alias_name, await service_names.catalog_service_names())
-    if base is None:
-        # 强约束:含 plate 不可达(空目录)场景,区分两种原因给排查线索
-        raise UnknownBaseService(
-            f"unknown_base_service: {alias_name!r} 不落在 plate 服务目录内"
-            "(裸声明不猜;plate 不可达时目录为空,恢复后再登记)")
+    if kind == "external":
+        # 三态接入(P1.0):external = 第三方服务,不经 plate 目录派生
+        # —— 别名即服务本体(base_service = alias_name),无契约面、
+        # 无版本管理。强约束(derive_base 落回目录)只约束 plate 态。
+        base = alias_name
+    elif kind == "plate":
+        base = service_names.derive_base(
+            alias_name, await service_names.catalog_service_names())
+        if base is None:
+            # 强约束:含 plate 不可达(空目录)场景,区分两种原因给排查线索
+            raise UnknownBaseService(
+                f"unknown_base_service: {alias_name!r} 不落在 plate 服务目录内"
+                "(裸声明不猜;plate 不可达时目录为空,恢复后再登记;"
+                "第三方服务请用 kind=external 登记)")
+    else:
+        raise ValueError(f"invalid_kind: {kind!r} (plate | external)")
     if environment_id is not None:
         env = await db.get(Environment, environment_id)
         if env is None:
@@ -86,7 +101,7 @@ async def create_alias(
         alias_name=alias_name, base_service=base,
         environment_id=environment_id,
         credential_alias=credential_alias, owner_user_id=owner_user_id,
-        base_url=base_url,
+        base_url=base_url, kind=kind,
     )
     db.add(row)
     await db.commit()
@@ -96,6 +111,47 @@ async def create_alias(
         env = await db.get(Environment, row.environment_id)
         env_name = env.name if env else None
     return alias_out(row, environment_name=env_name)
+
+
+async def classify_services(
+    db: AsyncSession, services: list[str],
+) -> dict[str, list[str]]:
+    """步骤 ``service`` 键 → 三态分类(P1.0 判定链;W7 入库分桶/
+    W11 徽标与保存告警的数据源)。
+
+    命中顺序:``alias_name`` 精确命中 → 该行 kind;否则
+    ``base_service`` 精确命中 → 该 base 的 kind(base 维度应同态,
+    混态取 plate 保守)。两边都未命中 → ``unknown``(保存告警口径:
+    提示接入 plate 或登记 external 别名)。
+    """
+    out: dict[str, list[str]] = {"plate": [], "external": [], "unknown": []}
+    if not services:
+        return out
+    uniq = list(dict.fromkeys(services))
+    rows = (await db.execute(
+        select(ServiceAlias.alias_name, ServiceAlias.base_service,
+               ServiceAlias.kind).where(
+            or_(ServiceAlias.alias_name.in_(uniq),
+                ServiceAlias.base_service.in_(uniq))
+        )
+    )).all()
+    by_alias = {a: k for a, _, k in rows}
+    by_base: dict[str, set[str]] = {}
+    for _, b, k in rows:
+        by_base.setdefault(b, set()).add(k or "plate")
+
+    def _one(svc: str) -> str:
+        if svc in by_alias:
+            return by_alias[svc] or "plate"
+        if svc in by_base:
+            # base 维度混态取 plate 保守(external 误标 plate 只影响
+            # 统计口径,反向会静默漏 external 桶)
+            return "plate" if "plate" in by_base[svc] else "external"
+        return "unknown"
+
+    for svc in uniq:
+        out[_one(svc)].append(svc)
+    return out
 
 
 async def patch_alias(

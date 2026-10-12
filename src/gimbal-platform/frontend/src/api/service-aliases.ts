@@ -20,6 +20,9 @@ export interface ServiceAliasRow {
   environmentName: string | null
   credentialAlias: string | null
   ownerUserId: number | null
+  /** 三态接入(P1.0):plate 受管(目录派生强约束)| external 第三方
+   * (无版本管理,别名即服务本体;不触发预览/不阻塞集成,单独统计) */
+  kind: 'plate' | 'external'
   createdAt: string | null
   updatedAt: string | null
 }
@@ -51,6 +54,9 @@ export function createAlias(input: {
   baseUrl: string
   environmentId?: number | null
   credentialAlias?: string | null
+  /** 三态接入(P1.0):缺省 plate(目录派生强约束);external 跳过
+   * 目录校验(第三方服务,别名即服务本体) */
+  kind?: 'plate' | 'external'
 }): Promise<ServiceAliasRow> {
   return http.post<ServiceAliasRow>('/service-aliases', input)
     .then(({ data }) => data)

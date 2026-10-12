@@ -96,7 +96,13 @@
                 <td>
                   <span class="mono svc-key">{{ a.aliasName }}</span>
                   <span
-                    v-if="a.aliasName === a.baseService"
+                    v-if="a.kind === 'external'"
+                    class="svc-flag amber ml-1"
+                    title="第三方服务(无版本管理):不触发预览、不阻塞集成;单独统计不入基线"
+                    data-testid="alias-kind-external"
+                  >外部</span>
+                  <span
+                    v-else-if="a.aliasName === a.baseService"
                     class="svc-flag blue ml-1"
                     title="三层查找的中间层:精确命中别名 → 该服务的默认 → 全局共享默认"
                   >服务级默认</span>
@@ -158,12 +164,30 @@
             <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
+            <!-- 三态接入(P1.0):plate 受管(目录派生强约束)/ external
+                 第三方(跳过目录校验,别名即服务本体)。编辑态不可改
+                 (后端无 kind patch;改态删重建)。 -->
+            <Select v-model="draft.kind" :disabled="!!editing" :key="`kind:${draft.kind}:${!!editing}`">
+              <SelectTrigger class="w-[128px]" data-testid="alias-kind-trigger"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="plate" title="落在 Plate 目录内的受管服务别名">受管服务</SelectItem>
+                <SelectItem value="external" title="第三方服务,无版本管理">第三方</SelectItem>
+              </SelectContent>
+            </Select>
+            <!-- external:无前缀/后缀拆分 —— 别名即服务全名。 -->
+            <Input
+              v-if="draft.kind === 'external' && !editing"
+              v-model="draft.aliasName"
+              class="w-[392px]"
+              placeholder="服务名(如 pay-service)"
+              data-testid="alias-name-full-input"
+            />
             <!-- 常驻只读前缀槽 + 后缀输入(2026-09-23 三次微调):槽恒在
                  (未选服务时占位「服务」),点选服务只换槽内文字,输入框
                  位置零跳动;框内永远只写后缀,完整全串 = 前缀 + 后缀
                  (draft.aliasName 恒为全名,保存逻辑不变)。编辑态槽显
                  该别名自身的所属服务,输入框只读展示后缀。 -->
-            <div class="flex items-center gap-1.5">
+            <div v-if="draft.kind !== 'external' || !!editing" class="flex items-center gap-1.5">
               <span
                 class="mono box-border inline-flex h-9 w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-slate-100 px-2"
                 :class="aliasBase
@@ -213,7 +237,7 @@
             <Button v-if="editing" variant="outline" data-testid="alias-cancel" @click="cancelEdit">取消</Button>
           </div>
           <p class="slib-note">
-            凭证按<b>执行者本人</b>的认证管理池解析(团队共享别名同样各拿各的);URL 必填;登记校验强约束:Plate 目录不可达时暂不能登记。
+            凭证按<b>执行者本人</b>的认证管理池解析(团队共享别名同样各拿各的);URL 必填;受管服务登记强约束:Plate 目录不可达时暂不能登记。<b>第三方</b>不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。
           </p>
         </div>
       </div>
@@ -253,8 +277,12 @@ const environments = ref<EnvironmentRow[]>([])
 const saving = ref(false)
 const editing = ref<ServiceAliasRow | null>(null)
 
-const draft = ref<{ aliasName: string; baseUrl: string; environmentId: string; credentialAlias: string }>({
+const draft = ref<{
+  aliasName: string; baseUrl: string; environmentId: string;
+  credentialAlias: string; kind: 'plate' | 'external';
+}>({
   aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
+  kind: 'plate',
 })
 
 /** 常驻前缀槽的基服务:登记态 = 左栏点选;编辑态 = 该别名自身所属服务;
@@ -276,9 +304,11 @@ const aliasSuffix = computed({
   },
 })
 
-/** 登记完成度:没选服务或后缀为空都不可提交。 */
+/** 登记完成度:受管态没选服务或后缀为空不可提交;external 无
+ * 前缀/后缀拆分,全名非空即可(Button 的通用校验覆盖)。 */
 const aliasIncomplete = computed(() =>
-  !editing.value && (!aliasBase.value || !aliasSuffix.value.trim()))
+  !editing.value && draft.value.kind === 'plate'
+  && (!aliasBase.value || !aliasSuffix.value.trim()))
 
 interface ServiceRow { name: string; system: string; count: number }
 interface ServiceGroup { system: string; services: ServiceRow[] }
@@ -355,12 +385,16 @@ function startEdit(a: ServiceAliasRow): void {
     baseUrl: a.baseUrl ?? '',
     environmentId: a.environmentId != null ? String(a.environmentId) : '0',
     credentialAlias: a.credentialAlias ?? '',
+    kind: a.kind ?? 'plate',
   }
 }
 
 function cancelEdit(): void {
   editing.value = null
-  draft.value = { aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '' }
+  draft.value = {
+    aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
+    kind: 'plate',
+  }
 }
 
 async function save(): Promise<void> {
@@ -381,6 +415,7 @@ async function save(): Promise<void> {
         baseUrl: d.baseUrl.trim(),
         environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
         credentialAlias: d.credentialAlias.trim() || null,
+        kind: d.kind,
       })
       toast.success('已登记')
     }

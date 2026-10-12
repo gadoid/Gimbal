@@ -46,6 +46,13 @@ class ServiceAlias(Base):
         Integer, ForeignKey("environments.id"), nullable=True)
     # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证
     credential_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 三态接入(P1.0/缺口收口计划 §0 裁定 4):plate = 落在 plate 系统
+    # services 声明内(受管,可版本化);external = 第三方服务,无版本
+    # 管理 —— 不触发预览、不阻塞集成,单独统计不入基线。存量行随
+    # 0019 server_default 回填 'plate'(登记强约束保证 base 在 plate
+    # 目录内);审计/纠偏走 scripts/p1_backfill_service_kinds.py。
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="plate")
     # 非空 = 个人默认,空 = 团队共享;用户注销时置空(共享化)
     # NO ACTION DEFERRABLE —— 显式推翻模型旧注释「注销时置空(共享化)」
     # (PG迁移方案第八轮第 3 条):FK 从未生效、该意图从未执行过,且

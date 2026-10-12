@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -40,6 +40,8 @@ class AliasOut(BaseModel):
     environment_name: str | None = Field(default=None, alias="environmentName")
     credential_alias: str | None = Field(default=None, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
+    # 三态接入(P1.0):plate(受管) | external(第三方,无版本管理)
+    kind: str = Field(default="plate", alias="kind")
     created_at: str | None = Field(default=None, alias="createdAt")
     updated_at: str | None = Field(default=None, alias="updatedAt")
 
@@ -59,6 +61,9 @@ class AliasCreate(BaseModel):
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
+    # 三态接入(P1.0):plate 走目录派生强约束;external 跳过(第三方,
+    # 别名即服务本体)。不可 patch —— 改态删重建(base 语义随之变)。
+    kind: Literal["plate", "external"] = "plate"
 
 
 class AliasPatch(BaseModel):
@@ -105,11 +110,14 @@ async def create_alias(
             db, alias_name=body.alias_name, environment_id=body.environment_id,
             credential_alias=body.credential_alias,
             owner_user_id=body.owner_user_id,
-            base_url=body.base_url,
+            base_url=body.base_url, kind=body.kind,
         )
     except UnknownBaseService as e:
         # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
+        # (kind=external 不受此约束 —— 第三方无目录概念)
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     except KeyError as e:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, str(e)) from e

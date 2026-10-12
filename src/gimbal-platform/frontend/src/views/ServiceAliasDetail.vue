@@ -30,6 +30,14 @@
       <!-- 键身份行:是什么键 / 哪个分组 / 凭证绑没绑,扫完再下钻 -->
       <div class="svc-stats">
         <span class="svc-flag" :class="isAliasMode ? 'blue' : 'ink'">{{ isAliasMode ? '别名' : '目录服务' }}</span>
+        <!-- 三态接入(P1.0):external = 第三方(无版本管理,不触发
+             预览/不阻塞集成,单独统计不入基线);plate 受管不标(缺省)。 -->
+        <span
+          v-if="isAliasMode && row!.kind === 'external'"
+          class="svc-flag amber"
+          title="第三方服务(无版本管理);契约信息由步骤内联维护"
+          data-testid="kind-external-flag"
+        >外部</span>
         <span v-if="isAliasMode && row!.environmentName" class="svc-flag">{{ row!.environmentName }}</span>
         <!-- 原型 H-alias-detail:头部直接亮出凭证绑定状态(红字 = 未绑定) -->
         <span
