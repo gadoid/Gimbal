@@ -127,22 +127,26 @@ array + required,与转换器同一套类型映射,不引运行时依赖)。
 plate `binding.auth` 五枚举零消费;评审确认 G1 属实(自举线前置:
 platform 自举端点声明 bearer,执行器只会 md5)。
 
-修法(**按 2026-10-09 架构评审待拍板建议 B**——保留枚举语义,签名器具名):
+修法(**实施修正 2026-10-12**:形状分派有默认值陷阱 —— 执行器/平台两侧
+AuthSession 的 token_type 默认即 "Bearer",纯形状分派会把全部存量 md5
+场景劫持成 Bearer 头。完整修复(声明驱动)需 M2 `call.auth` 透传,与集成
+P2 待拍板「认证施加方式表达 A/B」耦合 —— 本批在 M2 零改动红线下落
+**分派框架 + md5 具名化**,默认行为逐字节不变):
 
-1. **执行器分派**:`login()` 按会话凭证形状分派 —— token_type=bearer →
-   `Authorization: Bearer <token>`;basic → `Authorization: Basic base64(u:p)`;
-   cookie → `Cookie: <token_type>=<token>`(或 session 自带 cookie 字段);
-   无分派命中 → 保留现 md5 签名头(具名 `auth_signer="md5sign"`,
-   特征化用例不破)。
-2. **形状从哪来**:平台物化 users 时已带 UserCredential(url/username/password/
-   token_type/…,M2 生成物)——执行器读会话的 `token_type`/凭证形状即可,
-   **不需要 plate 透传 binding.auth**(M2 零改动的关键:auth 施加由凭证
-   形状驱动,binding.auth 声明仅继续服务画像投影)。
-3. `auth_signer` 记录进明细行(G7 的 error_kind 语义铺垫,但不做 G7——
-   G7 并 task3c)。
+1. **执行器运行时 AuthSession 加 `auth_signer` 字段**(默认
+   `"md5sign"`;gimbal/auth/session.py 是 D 类手写运行时类,非 M2 生成物,
+   加字段零形态影响)。M2 UserCredential forbid 塞不进该键 —— 平台物化
+   不下发,执行器默认恒 md5sign(存量不破)。
+2. **login() 分派框架**:`auth_signer="standard.bearer"` →
+   `Authorization: Bearer <token>`;`"standard.basic"` → Basic base64(u:p);
+   其余(含默认 md5sign)→ 现 md5 签名头逐字节保留。
+3. **启用面挂集成 P2**:call.auth 透传(M2 Call 加字段,代际升位)落地后,
+   plate binding.auth → convert → call → 执行器设 auth_signer;与本批
+   框架直接对接。本批无行为变更,`auth_signer` 值进日志(明细行的
+   error_kind 语义铺垫留给 G7/task3c)。
 
-验收:platform 自举场景(bearer 声明)经凭证 token_type=bearer 执行时
-头为 Bearer;既有 md5 场景(特征化)逐字节不变。
+验收:分派框架三态单测(md5 默认逐字节不变;bearer/basic 显式 signer
+生效);既有特征化用例零回归。
 
 ## 7. plate 启动配置化(X5,pydantic-settings)
 

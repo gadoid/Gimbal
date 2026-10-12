@@ -64,6 +64,13 @@ class AuthSession(BaseModel):
     )
     token: str | None = Field(default=None, description="访问令牌，认证后填充")
     token_type: str = Field(default="Bearer", description="Token 类型")
+    # G1 分派框架(外部接口登记批 X4,设计 §6 实施修正):认证施加的
+    # 签名器名。默认 md5sign = 既有 md5 签名头(存量行为逐字节不变);
+    # standard.bearer / standard.basic = 标准头。写入面在集成 P2 的
+    # call.auth 透传(M2 代际升位)—— 本字段先就位,平台物化不下发
+    # (UserCredential forbid),默认恒 md5sign。
+    auth_signer: str = Field(default="md5sign",
+                             description="认证施加签名器:md5sign(默认,遗留)|standard.bearer|standard.basic")
     expires_at: datetime | None = Field(default=None, description="过期时间，认证后自动计算")
     # 修复 #10：refresh_token 与 access_token 分开存储
     # OAuth2 标准中两者不同；用 access_token 当 refresh_token 发会被多数服务商拒

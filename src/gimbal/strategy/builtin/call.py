@@ -175,6 +175,24 @@ class CallExecutor(ProtocolExecutor):
             return {}
         session = registry.get(str(user))
         token = getattr(session, "token", None)
+        signer = str(getattr(session, "auth_signer", "md5sign") or "md5sign")
+        # G1 分派框架(X4):显式 standard.* 签名器 → 标准头;默认
+        # md5sign 走遗留签名(与退役插件 auth_headers 逐字节一致)。
+        # bearer 分派不按 token_type 形状猜 —— 两侧 AuthSession 的
+        # token_type 默认即 "Bearer",形状分派会劫持全部存量 md5 场景;
+        # 声明驱动的写入面在集成 P2 的 call.auth 透传。
+        if signer == "standard.basic":
+            import base64
+            username = getattr(session, "username", "") or ""
+            password = getattr(session, "password", "") or ""
+            cred = base64.b64encode(
+                f"{username}:{password}".encode("utf-8")).decode("ascii")
+            return {"Authorization": f"Basic {cred}"}
+        if signer == "standard.bearer":
+            if not token:
+                logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
+                return {}
+            return {"Authorization": f"Bearer {token}"}
         if not token:
             logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
             return {}
