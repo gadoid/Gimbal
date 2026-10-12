@@ -8,55 +8,41 @@ service: platform-service
 # Create Share
 
 ```gimbal:endpoint
-review: draft
 id: platform.shares.post_root
 system: platform
 service: platform-service
 name: Create Share
-description: ''
 binding:
   protocol: http
   method: POST
   path: /api/shares
-  timeout_seconds: 30.0
   auth: bearer
-  body_type: json
 request:
   declarations:
   - name: granteeUserId
     path: $.granteeUserId
     type: integer
-    ui_kind: number
-    description: ''
     required: true
-    assertable: false
+    ui_kind: number
   - name: mode
     path: $.mode
     type: string
     ui_kind: text
-    description: ''
-    assertable: false
   - name: resourceId
     path: $.resourceId
     type: string
-    ui_kind: text
-    description: ''
     required: true
-    assertable: false
+    ui_kind: text
   - name: resourceType
     path: $.resourceType
     type: string
-    ui_kind: text
-    description: ''
     required: true
-    assertable: false
+    ui_kind: text
 responses:
-  '201':
+  "201":
     description: Successful Response
-    declarations: []
-  '200':
+  "200":
     description: 成功
-    declarations: []
 metadata:
   module: shares
   tags:

@@ -8,7 +8,6 @@ service: platform-service
 # Run Task
 
 ```gimbal:endpoint
-review: draft
 id: platform.integration.post_tasks_by_task_id_run
 system: platform
 service: platform-service
@@ -18,19 +17,15 @@ binding:
   protocol: http
   method: POST
   path: /api/integration/tasks/{task_id}/run
-  timeout_seconds: 30.0
   auth: bearer
   body_type: none
-request:
-  declarations: []
+request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
-    declarations: []
 metadata:
   module: integration
   tags:
   - platform
   owner: gimbal-bootstrap
-  business_notes: ''
 ```

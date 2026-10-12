@@ -8,28 +8,22 @@ service: platform-service
 # Remove Member
 
 ```gimbal:endpoint
-review: draft
 id: platform.suites.delete_by_suite_id_members_by_scenario_id
 system: platform
 service: platform-service
 name: Remove Member
-description: ''
 binding:
   protocol: http
   method: DELETE
   path: /api/suites/{suite_id}/members/{scenario_id}
-  timeout_seconds: 30.0
   auth: bearer
   body_type: none
-request:
-  declarations: []
+request: {}
 responses:
-  '204':
+  "204":
     description: Successful Response
-    declarations: []
-  '200':
+  "200":
     description: 成功
-    declarations: []
 metadata:
   module: suites
   tags:

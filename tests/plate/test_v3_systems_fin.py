@@ -38,4 +38,5 @@ class TestQueryViews:
         assert eps, "fin 应有挂 query_views 的端点"
 
     def test_endpoint_count_total(self):
-        assert len(ALL_ENDPOINTS) == 149
+        # 149 → 198(141f2b1c 自举端点注册批 +49 platform,2026-10-12 补钉)
+        assert len(ALL_ENDPOINTS) == 198

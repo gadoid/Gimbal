@@ -8,7 +8,6 @@ service: platform-service
 # Fork Share
 
 ```gimbal:endpoint
-review: draft
 id: platform.shares.post_by_share_id_fork
 system: platform
 service: platform-service
@@ -18,79 +17,67 @@ binding:
   protocol: http
   method: POST
   path: /api/shares/{share_id}/fork
-  timeout_seconds: 30.0
   auth: bearer
   body_type: none
-request:
-  declarations: []
+request: {}
 responses:
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: memberCount
       path: $.memberCount
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: mode
       path: $.mode
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: scenarioId
       path: $.scenarioId
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: suiteId
       path: $.suiteId
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: suiteName
       path: $.suiteName
       type: string
       ui_kind: text
-      description: ''
       assertable: true
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: memberCount
       path: $.memberCount
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: mode
       path: $.mode
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: scenarioId
       path: $.scenarioId
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: suiteId
       path: $.suiteId
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: suiteName
       path: $.suiteName
       type: string
       ui_kind: text
-      description: ''
       assertable: true
 metadata:
   module: shares

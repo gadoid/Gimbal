@@ -8,7 +8,6 @@ service: platform-service
 # Cards
 
 ```gimbal:endpoint
-review: draft
 id: platform.integration.post_cards
 system: platform
 service: platform-service
@@ -18,26 +17,20 @@ binding:
   protocol: http
   method: POST
   path: /api/integration/cards
-  timeout_seconds: 30.0
   auth: bearer
-  body_type: json
 request:
   declarations:
   - name: ids
     path: $.ids
     type: array
-    ui_kind: json
-    description: ''
     required: true
-    assertable: false
+    ui_kind: json
 responses:
-  '200':
+  "200":
     description: Successful Response
-    declarations: []
 metadata:
   module: integration
   tags:
   - platform
   owner: gimbal-bootstrap
-  business_notes: ''
 ```

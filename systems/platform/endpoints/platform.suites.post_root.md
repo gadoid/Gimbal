@@ -8,207 +8,173 @@ service: platform-service
 # Create Suite
 
 ```gimbal:endpoint
-review: draft
 id: platform.suites.post_root
 system: platform
 service: platform-service
 name: Create Suite
-description: ''
 binding:
   protocol: http
   method: POST
   path: /api/suites
-  timeout_seconds: 30.0
   auth: bearer
-  body_type: json
 request:
   declarations:
   - name: description
     path: $.description
     type: string
     ui_kind: text
-    description: ''
-    assertable: false
   - name: name
     path: $.name
     type: string
     ui_kind: text
-    description: ''
-    assertable: false
 responses:
-  '201':
+  "201":
     description: Successful Response
     declarations:
     - name: createdAt
       path: $.createdAt
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: description
       path: $.description
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: isDraft
       path: $.isDraft
       type: boolean
       ui_kind: boolean
-      description: ''
       assertable: true
     - name: latestRun
       path: $.latestRun
       type: object
       ui_kind: json
-      description: ''
       assertable: true
     - name: memberCount
       path: $.memberCount
       type: integer
-      ui_kind: number
-      description: ''
       required: true
+      ui_kind: number
       assertable: true
     - name: mode
       path: $.mode
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: name
       path: $.name
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: ownerName
       path: $.ownerName
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: publishedMembers
       path: $.publishedMembers
       type: array
       ui_kind: json
-      description: ''
       assertable: true
     - name: rev
       path: $.rev
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: suiteId
       path: $.suiteId
       type: integer
-      ui_kind: number
-      description: ''
       required: true
+      ui_kind: number
       assertable: true
     - name: updatedAt
       path: $.updatedAt
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: visibility
       path: $.visibility
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
-  '200':
+  "200":
     description: 成功
     declarations:
     - name: createdAt
       path: $.createdAt
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: description
       path: $.description
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: isDraft
       path: $.isDraft
       type: boolean
       ui_kind: boolean
-      description: ''
       assertable: true
     - name: latestRun
       path: $.latestRun
       type: object
       ui_kind: json
-      description: ''
       assertable: true
     - name: memberCount
       path: $.memberCount
       type: integer
-      ui_kind: number
-      description: ''
       required: true
+      ui_kind: number
       assertable: true
     - name: mode
       path: $.mode
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: name
       path: $.name
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
     - name: ownerName
       path: $.ownerName
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: publishedMembers
       path: $.publishedMembers
       type: array
       ui_kind: json
-      description: ''
       assertable: true
     - name: rev
       path: $.rev
       type: integer
       ui_kind: number
-      description: ''
       assertable: true
     - name: suiteId
       path: $.suiteId
       type: integer
-      ui_kind: number
-      description: ''
       required: true
+      ui_kind: number
       assertable: true
     - name: updatedAt
       path: $.updatedAt
       type: string
       ui_kind: text
-      description: ''
       assertable: true
     - name: visibility
       path: $.visibility
       type: string
-      ui_kind: text
-      description: ''
       required: true
+      ui_kind: text
       assertable: true
 metadata:
   module: suites

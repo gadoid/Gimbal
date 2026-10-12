@@ -8,7 +8,6 @@ service: platform-service
 # List Tasks
 
 ```gimbal:endpoint
-review: draft
 id: platform.integration.get_tasks
 system: platform
 service: platform-service
@@ -18,19 +17,15 @@ binding:
   protocol: http
   method: GET
   path: /api/integration/tasks
-  timeout_seconds: 30.0
   auth: bearer
   body_type: none
-request:
-  declarations: []
+request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
-    declarations: []
 metadata:
   module: integration
   tags:
   - platform
   owner: gimbal-bootstrap
-  business_notes: ''
 ```

@@ -8,15 +8,15 @@ service: platform-service
 # Open Batch
 
 ```gimbal:endpoint
-status: deprecated
-replaced_by:
-- platform.adaptations.post_submit_batch
 review: reviewed
 id: platform.adaptations.post_batches
 system: platform
 service: platform-service
 name: Open Batch
 description: 开批次:校验基线/版本前进 → 存档受影响实体 → 展开自动草案。
+status: deprecated
+replaced_by:
+- platform.adaptations.post_submit_batch
 binding:
   protocol: http
   method: POST

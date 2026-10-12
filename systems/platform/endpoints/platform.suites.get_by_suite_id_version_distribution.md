@@ -8,7 +8,6 @@ service: platform-service
 # Get Version Distribution
 
 ```gimbal:endpoint
-review: draft
 id: platform.suites.get_by_suite_id_version_distribution
 system: platform
 service: platform-service
@@ -18,19 +17,15 @@ binding:
   protocol: http
   method: GET
   path: /api/suites/{suite_id}/version-distribution
-  timeout_seconds: 30.0
   auth: bearer
   body_type: none
-request:
-  declarations: []
+request: {}
 responses:
-  '200':
+  "200":
     description: Successful Response
-    declarations: []
 metadata:
   module: suites
   tags:
   - platform
   owner: gimbal-bootstrap
-  business_notes: ''
 ```

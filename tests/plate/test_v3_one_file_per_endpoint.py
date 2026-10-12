@@ -28,7 +28,8 @@ def test_each_endpoint_file_exports_one_endpointspec() -> None:
             models = blocks[0].models()
             assert len(models) == 1 and isinstance(models[0], EndpointSpec)
             count += 1
-    assert count == 149
+    # 149 → 198(141f2b1c 自举端点注册批 +49 platform,2026-10-12 补钉)
+    assert count == 198
 
 
 def test_endpoint_filename_matches_id() -> None:
