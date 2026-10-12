@@ -1,0 +1,170 @@
+{
+ "data": {
+  "binding": {
+   "auth": "custom",
+   "auth_signer": null,
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/home/audit/auditPage",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "由 Scenario_Test_14 提取: 查询待审批记录",
+  "id": "fin.audit.audit_page",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "查询待审批记录",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "页码,从 1 开始",
+     "enum": null,
+     "example": 1,
+     "name": "page_no",
+     "path": "$.page_no",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "integer",
+     "ui_kind": "number",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "每页条数,默认 20",
+     "enum": null,
+     "example": 20,
+     "name": "page_size",
+     "path": "$.page_size",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "integer",
+     "ui_kind": "number",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "审批页签: examine_wait=待审批 / examine_done=已审批",
+     "enum": [
+      "examine_wait",
+      "examine_done"
+     ],
+     "example": "examine_wait",
+     "name": "active_tab",
+     "path": "$.active_tab",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "排序字段,如 expedite_num(催办次数)",
+     "enum": null,
+     "example": "expedite_num",
+     "name": "sort_field",
+     "path": "$.sort_field",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "排序方向: asc / desc",
+     "enum": [
+      "asc",
+      "desc"
+     ],
+     "example": "desc",
+     "name": "sort_order",
+     "path": "$.sort_order",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "业务过滤条件,如单号/客户/日期范围",
+     "enum": null,
+     "example": {},
+     "name": "params",
+     "path": "$.params",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "object",
+     "ui_kind": "json",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "audit_id",
+      "path": "$.data.data[0].audit_id",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "unknown",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

@@ -1,0 +1,12 @@
+{
+ "data": {
+  "auth": "custom",
+  "headers": {},
+  "method": "GET",
+  "path": "/api/v1/fin/account/balance",
+  "protocol": "http",
+  "service": "fin-service",
+  "timeout": 5.0
+ },
+ "type": "call"
+}

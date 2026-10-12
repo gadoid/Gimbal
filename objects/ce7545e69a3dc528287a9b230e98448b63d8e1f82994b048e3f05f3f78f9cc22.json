@@ -1,0 +1,113 @@
+{
+ "data": {
+  "binding": {
+   "auth": "custom",
+   "auth_signer": null,
+   "body_type": "json",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/v1/fin/account/balance",
+   "protocol": "http",
+   "timeout_seconds": 5.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "fin 账户服务查询指定账户的当前余额",
+  "id": "fin.account.query_balance",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "查询账户余额",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": null,
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "account_id",
+      "path": "$.account_id",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "账户余额,单位分",
+      "enum": null,
+      "example": null,
+      "name": "balance",
+      "path": "$.balance",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "integer",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": false,
+      "children": null,
+      "default": "CNY",
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "currency",
+      "path": "$.currency",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "as_of",
+      "path": "$.as_of",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

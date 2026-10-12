@@ -1,0 +1,12 @@
+{
+ "data": {
+  "auth": "custom",
+  "headers": {},
+  "method": "POST",
+  "path": "/api/v1/fin/settlement/orders",
+  "protocol": "http",
+  "service": "fin-service",
+  "timeout": 10.0
+ },
+ "type": "call"
+}

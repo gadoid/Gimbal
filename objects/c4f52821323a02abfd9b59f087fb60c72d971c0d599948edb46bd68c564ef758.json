@@ -1,0 +1,164 @@
+{
+ "data": {
+  "binding": {
+   "auth": "custom",
+   "auth_signer": null,
+   "body_type": "json",
+   "headers": {},
+   "method": "POST",
+   "path": "/api/v1/fin/settlement/orders",
+   "protocol": "http",
+   "timeout_seconds": 10.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "fin 结算服务创建结算订单的核心接口",
+  "id": "fin.settlement.create_order",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "创建结算单",
+  "produces": [],
+  "query_views": null,
+  "replaced_by": [],
+  "request": {
+   "declarations": [
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "业务订单号",
+     "enum": null,
+     "example": null,
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "结算金额,单位分",
+     "enum": null,
+     "example": null,
+     "name": "amount",
+     "path": "$.amount",
+     "required": true,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "integer",
+     "ui_kind": "number",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": "CNY",
+     "description": "币种",
+     "enum": null,
+     "example": null,
+     "name": "currency",
+     "path": "$.currency",
+     "required": false,
+     "source_kind": "independent",
+     "state": "form",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    },
+    {
+     "assertable": false,
+     "children": null,
+     "default": null,
+     "description": "订单备注(carry 传递字段)",
+     "enum": null,
+     "example": null,
+     "name": "remark",
+     "path": "$.remark",
+     "required": false,
+     "source_kind": "independent",
+     "state": "carry",
+     "type": "string",
+     "ui_kind": "text",
+     "value_source": null
+    }
+   ]
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "order_id",
+      "path": "$.order_id",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "status",
+      "path": "$.status",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     },
+     {
+      "assertable": false,
+      "children": null,
+      "default": null,
+      "description": "",
+      "enum": null,
+      "example": null,
+      "name": "created_at",
+      "path": "$.created_at",
+      "required": true,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

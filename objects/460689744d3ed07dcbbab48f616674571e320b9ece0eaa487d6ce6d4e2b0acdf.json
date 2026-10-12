@@ -1,0 +1,12 @@
+{
+ "data": {
+  "auth": "custom",
+  "headers": {},
+  "method": "POST",
+  "path": "/api/order/order/checkGenerateOrderSub",
+  "protocol": "http",
+  "service": "fin-service",
+  "timeout": 30.0
+ },
+ "type": "call"
+}

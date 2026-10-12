@@ -1,0 +1,91 @@
+{
+ "data": {
+  "binding": {
+   "auth": "custom",
+   "auth_signer": null,
+   "body_type": "none",
+   "headers": {},
+   "method": "GET",
+   "path": "/api/home/cost/amountCostList",
+   "protocol": "http",
+   "timeout_seconds": 30.0
+  },
+  "capability": null,
+  "consumes": [],
+  "description": "费用名称/费用ID 字典;组合期取数源 cost_list 视图挂此",
+  "id": "fin.cost.amount_list",
+  "metadata": {
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false,
+   "failed_criteria": [],
+   "module": "fin",
+   "owner": "fin-team",
+   "preconditions": [],
+   "priority": null,
+   "query_safe": false,
+   "success_criteria": "",
+   "tags": [
+    "fin"
+   ]
+  },
+  "name": "费用字典列表(amountCostList)",
+  "produces": [],
+  "query_views": [
+   {
+    "items": "$.data[*]",
+    "label": "cost_name",
+    "name": "cost_list",
+    "params": null,
+    "query_params": null
+   }
+  ],
+  "replaced_by": [],
+  "request": {
+   "declarations": []
+  },
+  "responses": {
+   "200": {
+    "declarations": [
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务状态码(200=成功)",
+      "enum": null,
+      "example": null,
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "number",
+      "ui_kind": "number",
+      "value_source": null
+     },
+     {
+      "assertable": true,
+      "children": null,
+      "default": null,
+      "description": "业务提示信息",
+      "enum": null,
+      "example": null,
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "source_kind": "independent",
+      "state": "form",
+      "type": "string",
+      "ui_kind": "text",
+      "value_source": null
+     }
+    ],
+    "description": "成功"
+   }
+  },
+  "service": "fin-service",
+  "status": "active",
+  "system": "fin"
+ },
+ "type": "endpoint"
+}

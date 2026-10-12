@@ -1,0 +1,240 @@
+{
+ "system": "fin",
+ "line": "1.0",
+ "revision": 2,
+ "line_scheme": "free",
+ "line_service": null,
+ "predecessor_line": null,
+ "previous_revision": 1,
+ "source_commit": "abaf8998396f94b86c932bf542a5404b4c9faddd",
+ "released_at": "2026-10-12T14:40:21.715442+00:00",
+ "signed_by": "godoid",
+ "dialect_version": "1",
+ "m2_version": "2",
+ "types_version": 1,
+ "checklist_applied": {},
+ "objects": [
+  {
+   "id": "fin.account.query_balance",
+   "type": "endpoint",
+   "hash": "ce7545e69a3dc528287a9b230e98448b63d8e1f82994b048e3f05f3f78f9cc22",
+   "review": "reviewed",
+   "shape_hash": "4fd4990bd06ed120c89661d442a50a8b952bd73f16ac9354a065fb08e761ec58"
+  },
+  {
+   "id": "fin.audit.audit_detail",
+   "type": "endpoint",
+   "hash": "e58a0f3dd060095b5883396fe5082174e5b125aff4711adc44739f3cf3e3a6f0",
+   "review": "reviewed",
+   "shape_hash": "c74b589225b4501251a319d160217fe7ad9d73cf7b5ff07ea2785e0a17ae8199"
+  },
+  {
+   "id": "fin.audit.audit_execute",
+   "type": "endpoint",
+   "hash": "7b91deaa91eb5530c7ea89d49c87d407b97489a333f3de5ec57d1e07082d4d15",
+   "review": "reviewed",
+   "shape_hash": "554b1af111db93cdb0313d25adce10fee52704dfaf5b5193273e2f23871bbeac"
+  },
+  {
+   "id": "fin.audit.audit_page",
+   "type": "endpoint",
+   "hash": "b8fbae221b70a6363bfd1ec5f4a693f6b816041c9e5fd26172756b9247b3f357",
+   "review": "reviewed",
+   "shape_hash": "64e6b9ef7613e2aaef75073a55ba3095c3cdc7fee9c0bd331701f20aeaa4be5b"
+  },
+  {
+   "id": "fin.cost.amount_list",
+   "type": "endpoint",
+   "hash": "1c77e5cd57404fae63e30036491fb45143bfc67cece751f78df5fddebb76ff6c",
+   "review": "reviewed",
+   "shape_hash": "b8284c2ce627f1acc82259ce0da609ea068b199429e2e7bbce6e54295e9f5990"
+  },
+  {
+   "id": "fin.customer.list",
+   "type": "endpoint",
+   "hash": "4401c8d4eecc72a756875574b4ca34679110c9fcf0494c799487712e8448c24a",
+   "review": "reviewed",
+   "shape_hash": "e814a4484e1418f6388de01db418d076f15245152ce17195e59ce0fa5be0056a"
+  },
+  {
+   "id": "fin.customer.part",
+   "type": "endpoint",
+   "hash": "232a39f2260112908a86f1fc9f4a083520e270ca2fef1b9a3a16825ab9ef309a",
+   "review": "reviewed",
+   "shape_hash": "f9cf29f6ceb37607648b2dd1e447ee2a532d9c7c7dd68d012aca9c219dbdfed1"
+  },
+  {
+   "id": "fin.customer.policy",
+   "type": "endpoint",
+   "hash": "2ba0647f416195973e11319f9605f4bf27bdf000691d1feb88daca4ff5ed5d71",
+   "review": "reviewed",
+   "shape_hash": "adc32dae54fbf19d59ecc9fc1da4e16f3931fe21c5f60e2bbd3ff97cc54f33c5"
+  },
+  {
+   "id": "fin.order.check_generate_order_sub",
+   "type": "endpoint",
+   "hash": "f33b4204d16e8311df4813395af2e5ad94001b16a4dd8c9b8b58c3e9504efe0c",
+   "review": "reviewed",
+   "shape_hash": "314fbfadd1303588d1987040d782fa951b0977e64e6a2001eb5c12423cced14e"
+  },
+  {
+   "id": "fin.order.generate_order_sub",
+   "type": "endpoint",
+   "hash": "78eaa13c4051995f3c86f3c5dc7bf887188615f10487577cbada334923839409",
+   "review": "reviewed",
+   "shape_hash": "b05eb917c229afe9f7f8f8cbf37e9fa04b996906d72f81b02ded4a7bb6dbd6df"
+  },
+  {
+   "id": "fin.order.order_add",
+   "type": "endpoint",
+   "hash": "18ca2e9b3a6b9574596284b4bd4121a6092a9ddfde45a937e4ea79ad2278300b",
+   "review": "reviewed",
+   "shape_hash": "b3816052c3c6956d3427c947b4a0e3d75a4bf59108b23b22d529c6b5c5ee4596"
+  },
+  {
+   "id": "fin.order.order_book",
+   "type": "endpoint",
+   "hash": "a2a6ca6aa42c5c86a6a499e85679a294fd3d83a28aa9dd0d1fb6e4336fbb46fa",
+   "review": "reviewed",
+   "shape_hash": "bcd970dbb3c8ff77d0834cd6cc99bf6ea80f9256d42eb1924d43caf2ba1d1064"
+  },
+  {
+   "id": "fin.order.order_detail",
+   "type": "endpoint",
+   "hash": "5bc55185843a036ef7c6e8d56f4d9caed22bb335ea34ec794a9c3bbe22ff2499",
+   "review": "reviewed",
+   "shape_hash": "c202d06026e7ee9b79cad74d8e168f45df872e9760ee868a3a23cfe18622fbbd"
+  },
+  {
+   "id": "fin.order.order_notice",
+   "type": "endpoint",
+   "hash": "a11285fe06f2641c788d29cff33def3f4e7575f01e5c51fc8aa2f9e7f92c93a1",
+   "review": "reviewed",
+   "shape_hash": "eea4fdbff7e3ea7ab0be904ff2c4ee0d4bbef3bf928cca016cf532c6e88e87e2"
+  },
+  {
+   "id": "fin.order.order_page",
+   "type": "endpoint",
+   "hash": "1352c65e9a66f91c9e79aff74b0e8377f4ecff7f12532122a1c6571f4f4fdd31",
+   "review": "reviewed",
+   "shape_hash": "ebf08eb49a8c477e707a85f3dcebc2704074f5cf0841cfa7256878ff9dff92fc"
+  },
+  {
+   "id": "fin.order_entrust.order_add",
+   "type": "endpoint",
+   "hash": "9e94316f68de5b85a7a595ecc469b9d7a297372d4479c9ec07562c2484016c5d",
+   "review": "reviewed",
+   "shape_hash": "73b2cee2b495340161573a933d1c32ea4f0f028c27beb9d64476e96f0e038ce0"
+  },
+  {
+   "id": "fin.order_entrust.order_customer_container",
+   "type": "endpoint",
+   "hash": "bcae028ebe5ae06b9b1832a8496656bf52c56cb5025970bb7c589710f23ffab2",
+   "review": "reviewed",
+   "shape_hash": "0dcbf3665678cde547b0e723e1d8265efea8e7dc0e9e8ff4c03522291a455959"
+  },
+  {
+   "id": "fin.order_entrust.order_page",
+   "type": "endpoint",
+   "hash": "ab322c6cbc830664c623d67c002dc3e52d3ef9a6f19a351ff313910a2c355ede",
+   "review": "reviewed",
+   "shape_hash": "f01582b85296a879eb49d89b9296d90ba2b04450776d1f56250542b9c07d1e9d"
+  },
+  {
+   "id": "fin.order_fee.asset_push",
+   "type": "endpoint",
+   "hash": "db6d0a1b1b58670b009a6d9ed659ab8320f5aa5756547446d064cab20a567f99",
+   "review": "reviewed",
+   "shape_hash": "d589b23f32f0bfe4946c4cf6e4e985115b91b59e1702770528457ebf2333a14d"
+  },
+  {
+   "id": "fin.order_fee.book_real_amount_edit",
+   "type": "endpoint",
+   "hash": "52170daf86e480d45471cf994ab25f83e72df25b5fbeb72199a36f823f0df87b",
+   "review": "reviewed",
+   "shape_hash": "c78d531a7190b5f592331d83f2cc7c2813c2a3f94988b4cf153fabf3c3236cba"
+  },
+  {
+   "id": "fin.order_fee.real_amount_lock_submit",
+   "type": "endpoint",
+   "hash": "c0544d8a20880befd7e4d067cf3b6fdb95ee0b79ac565074a617eacdd0aed29e",
+   "review": "reviewed",
+   "shape_hash": "fae31e2caf0687b543d1dcd2b48dcf00f6918a6fe0c25c830541471669bb48a8"
+  },
+  {
+   "id": "fin.order_fee.toggle_real_amount",
+   "type": "endpoint",
+   "hash": "009577f87cff65b792f302fd2601986f3dd1641a2e7fa61154b033662d87ac7f",
+   "review": "reviewed",
+   "shape_hash": "e44d7ea70f909f88902534c571e0633e38abe897715fb7e04ad09b2471085d37"
+  },
+  {
+   "id": "fin.settlement.create_order",
+   "type": "endpoint",
+   "hash": "c4f52821323a02abfd9b59f087fb60c72d971c0d599948edb46bd68c564ef758",
+   "review": "reviewed",
+   "shape_hash": "31be5b35b65e2fd1766f74fdbe4c69b4c5964de7cea74c1fd2f35ad64d664e6a"
+  },
+  {
+   "id": "fin-service",
+   "type": "service",
+   "hash": "3a417b383541597b2d9f03db8dab654354a3b575a197fbcff2fcf31e17ef093a",
+   "review": "reviewed"
+  }
+ ],
+ "call_projections": {
+  "fin.account.query_balance": "7e03999fdfa37f1823563d369440b4147645c91164914943c1b836377dbb863d",
+  "fin.audit.audit_detail": "f61e312695c2d784ffe14a283eea48233be919b0eab10fd1687bfed5710e3500",
+  "fin.audit.audit_execute": "acd3867570a08dfc97ae26b1b8d130daf295194045ffb9ba4ddc369c30dead18",
+  "fin.audit.audit_page": "d6977cd4d08eb7585820413d01565142ab8f39cb66fb020d40c73895eca4f8a2",
+  "fin.cost.amount_list": "0be7f6622e6cb8a20a4ac0ef932dfe4a81d00fafce6082229af9026bafc3b8be",
+  "fin.customer.list": "5716af04767f583fe0421cdc940f18f244beedb090698304fee4ecfebfea3415",
+  "fin.customer.part": "dd81e4913e4bb0d1f4549444cd77922cf8524ad5aea9d38914a0c616d2ada491",
+  "fin.customer.policy": "a5f7de4ccc22eef5cccf83059673c0f3e0e816ece949e7e8fa3b80db30ab6359",
+  "fin.order.check_generate_order_sub": "460689744d3ed07dcbbab48f616674571e320b9ece0eaa487d6ce6d4e2b0acdf",
+  "fin.order.generate_order_sub": "2553f78460f85516599066dde31c240c364eaaece03f062690f8556f3a609072",
+  "fin.order.order_add": "de2f8f8baf5c72a59edf465445025ea1706eaa27b61e7cf290ea9053fdd18883",
+  "fin.order.order_book": "da201e8ff7f9b221ebcf193a23515b2b73a37cfa96749e984997ca1a7b4b0dad",
+  "fin.order.order_detail": "586721a5742b2aa321f485a5ddab6f36793b293762259716ccace84375259100",
+  "fin.order.order_notice": "d00db54dd1be7080a64f130edb530c7773c1225971c56580064a9ff5cab93ae1",
+  "fin.order.order_page": "b299292da4d5b0edfcda3a3eb77a41e6de93193f2fb4206a50d5e29b4839aa79",
+  "fin.order_entrust.order_add": "4bbb0abcfb21ad3de28f6d719064c2c5a99398873774b3257a931925aa5cb62e",
+  "fin.order_entrust.order_customer_container": "c63f521d46398b5f71272f396fac73b9b397a83543c073e8b1c838c65ebc198b",
+  "fin.order_entrust.order_page": "e5c204767e6043edc574b1a4c3f1c443e07149d9ebcfcdbc4bbbc09e70dba537",
+  "fin.order_fee.asset_push": "71126086b364b694d410c1bd0cff72c64a9fd94564c26f7634cb1931527d13e6",
+  "fin.order_fee.book_real_amount_edit": "7ba4a0bdb51bd3727222096304b6c6601fdc890ef4b14fcbcd2a144a4adcfcef",
+  "fin.order_fee.real_amount_lock_submit": "1bcc734b7d14006259de8886ecf941b92dd7594d3d3f4c12fe9c1131b7e12a9f",
+  "fin.order_fee.toggle_real_amount": "26facedc58d9daa932ecea3890079037862d0442365f3a9bd86ababf2134761f",
+  "fin.settlement.create_order": "0693167db133626795c41291b42fc33603c96a3962a854635be3db5fb56edb27"
+ },
+ "corrections": [
+  "fin.account.query_balance",
+  "fin.audit.audit_detail",
+  "fin.audit.audit_execute",
+  "fin.audit.audit_page",
+  "fin.cost.amount_list",
+  "fin.customer.list",
+  "fin.customer.part",
+  "fin.customer.policy",
+  "fin.order.check_generate_order_sub",
+  "fin.order.generate_order_sub",
+  "fin.order.order_book",
+  "fin.order.order_notice",
+  "fin.order.order_page",
+  "fin.order_entrust.order_page",
+  "fin.order_fee.asset_push",
+  "fin.order_fee.book_real_amount_edit",
+  "fin.order_fee.real_amount_lock_submit",
+  "fin.order_fee.toggle_real_amount",
+  "fin.settlement.create_order"
+ ],
+ "warnings": [],
+ "summary": {
+  "endpoints": 23,
+  "statements": 0,
+  "terms": 0,
+  "services": 1,
+  "common_terms_frozen": 0,
+  "draft_objects": 0
+ }
+}

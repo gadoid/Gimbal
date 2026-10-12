@@ -2,6 +2,7 @@
  "data": {
   "binding": {
    "auth": "none",
+   "auth_signer": null,
    "body_type": "json",
    "headers": {},
    "method": "POST",
