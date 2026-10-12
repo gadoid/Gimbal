@@ -319,3 +319,32 @@ async def test_full_uses_the_soft_fetch_timeout(client: AsyncClient) -> None:
         pytest.approx(settings.DECLARED_PATHS_TIMEOUT_SEC)
     ]
     assert settings.DECLARED_PATHS_TIMEOUT_SEC < settings.PLATE_TIMEOUT_SEC
+
+
+async def test_full_with_ref_serves_surface_not_coroutine_500(
+    client: AsyncClient, endpoint_plate_mock: EndpointPlateMock
+) -> None:
+    """带 ref(场景生效修订)的 /full:声明面就地派生,item 并存。
+
+    回归(2026-10-12):ref 分支曾把 request dict 传给按端点 ID 取数的
+    declared_paths_of 且漏 await —— surface 是协程,响应序列化恒 500,
+    编排器按修订取契约即退化为 JSON 文本框。
+    """
+    endpoint_plate_mock.full_envelope = _FULL_ENVELOPE
+    headers = await _auth(client)
+    r = await client.get("/api/endpoint-catalog/fin.ep-1/full",
+                         headers=headers, params={"ref": "1.0#1"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["declared_surface"] == ["$", "$.customer", "$.customer.id"]
+    assert {k: v for k, v in body.items() if k != "declared_surface"} == \
+        _FULL_ENVELOPE["data"]["item"]
+
+    # 垃圾声明形状 → None 降级(与无 ref 路径同口径,不冒充空目录)
+    endpoint_plate_mock.full_envelope = {
+        "ok": True, "data": {"item": {"request": "oops"}},
+    }
+    r = await client.get("/api/endpoint-catalog/fin.ep-1/full",
+                         headers=headers, params={"ref": "1.0#1"})
+    assert r.status_code == 200
+    assert r.json()["declared_surface"] is None

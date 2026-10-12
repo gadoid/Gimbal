@@ -18,7 +18,7 @@ from fastapi import Query, APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.deps import CurrentUser
-from ..services.endpoint_declarations import declared_paths_of
+from ..services.endpoint_declarations import declared_paths_of, declared_paths_of_item
 from ..services.field_state_resolution import validate_field_states
 from ..services.plate_client import get_client, get_endpoint_full
 from ..services.run_injection import injectable_universe
@@ -110,7 +110,13 @@ async def get_full_endpoint(
         if resp.status_code >= 400:
             raise proxy_error(resp)
         item = resp.json().get("data", {}).get("item") or {}
-        surface = declared_paths_of(item.get("request"))
+        # 声明面与无 ref 路径同一套投影(item 已在手,就地派生;垃圾
+        # 形状 → None 降级,前端从严只认 body 面)。此前这里把 request
+        # dict 传给了按端点 ID 取数的 declared_paths_of 且漏 await ——
+        # 响应序列化撞上协程恒 500,编排器带修订取契约即退化为 JSON 框。
+        paths = declared_paths_of_item(item)
+        surface = None if paths is None else sorted(
+            injectable_universe(None, paths))
         return {**item, "declared_surface": surface}
 
     res = await get_endpoint_full(endpoint_id)

@@ -272,3 +272,40 @@ describe('useEndpointFull — /full 会话级缓存', () => {
     vi.useRealTimers()
   })
 })
+
+describe('useEndpointFull — 按修订(ref)取数', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    _resetEndpointFullCacheForTest()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('EF-10(回归 2026-10-12):带 ref 的取数结果必须入缓存 — 三元裸返回原始 promise 曾致渲染读缓存恒空(画布退化 JSON 框)', async () => {
+    const spy = vi.spyOn(api, 'getFullEndpoint')
+      .mockResolvedValue(fullWith(['$.a']))
+    const p = await ensureEndpointFull('ep-1', { ref: '1.0#1' })
+    expect(p?.id).toBe('ep-1')
+    // 请求确实带了 ref
+    expect(spy).toHaveBeenCalledWith('ep-1', '1.0#1')
+    // 取回的面落在修订键上,读口能读到 —— 这正是画布 requestNodes 的来源
+    expect(getEndpointFull('ep-1', '1.0#1')?.id).toBe('ep-1')
+    // working 键不受污染;无 ref 读口仍空
+    expect(getEndpointFull('ep-1')).toBeUndefined()
+    expect(endpointFullState('ep-1', '1.0#1')).toBe('')
+    // 在飞表已清(裸 promise 时代 finally 不挂 ref 分支)
+    await ensureEndpointFull('ep-1', { ref: '1.0#1', force: true })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('EF-11:带 ref 失败 → undefined + 负缓存,不再未捕获拒绝', async () => {
+    vi.spyOn(api, 'getFullEndpoint')
+      .mockRejectedValue(new Error('plate down'))
+    const p = await ensureEndpointFull('ep-2', { ref: '2.0#3' })
+    expect(p).toBeUndefined()
+    expect(endpointFullState('ep-2', '2.0#3')).toBe('failed')
+    expect(getEndpointFull('ep-2', '2.0#3')).toBeUndefined()
+  })
+})

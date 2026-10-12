@@ -1683,15 +1683,18 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
  *  失败记录 → failed(**优先**,即便缓存里还留着上一份面)/
  *  缓存命中 → '' / 其余(未回填)→ loading。 */
 const currentFullState = computed<'loading' | 'failed' | ''>(() => {
-  return endpointFullState(stepEndpointId(currentStep.value))
+  return endpointFullState(stepEndpointId(currentStep.value),
+                           refOfStep(currentStep.value))
 })
 
 /** 当前 step 的 /full 结构契约:**有缓存则照旧返回那份**(读口不看 TTL ——
- *  重取在飞与重取失败都仍供旧面),只有从未取回时才是 undefined。 */
+ *  重取在飞与重取失败都仍供旧面),只有从未取回时才是 undefined。
+ *  读键与取数同口径(6.1:带修订读修订键 —— 裸键读会与 ensure 的
+ *  修订键存错过,画布即退化为 JSON 框)。 */
 const currentFull = computed<EndpointFullView | undefined>(() => {
   const eid = stepEndpointId(currentStep.value)
   if (!eid) return undefined
-  return getEndpointFull(eid)
+  return getEndpointFull(eid, refOfStep(currentStep.value))
 })
 
 /** 失败态的手动重试入口:走与预拉**同一个取数口** —— 渲染期仍零请求,只有这
@@ -1862,7 +1865,7 @@ onMounted(async () => {
 function carryInjectable(step: StepView): Map<string, CarrySource> {
   if (!carryValues.value) return new Map()
   const eid = stepEndpointId(step)
-  const full = eid ? getEndpointFull(eid) : undefined
+  const full = eid ? getEndpointFull(eid, refOfStep(step)) : undefined
   const face = carryPaths(full?.request?.declarations)
   if (!face.length) return new Map()
   const base = deriveBase(stepService(step), catalogNames.value)

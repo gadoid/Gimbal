@@ -184,6 +184,18 @@ async def declarations_of_at(endpoint_id: str, ref: str) -> list | None:
     return None if decls is None else list(decls)
 
 
+def declared_paths_of_item(item: dict[str, Any]) -> frozenset[str] | None:
+    """已取回的契约 item → 声明 path 全集;垃圾形状 → None(降级)。
+
+    供按修订取数的调用方用(修订快照不进缓存,调用方自取 item 后就地
+    派生 —— 代理路由 ``/full?ref=`` 的声明面,与缓存路径同一套投影)。
+    """
+    decls = _decls_of_item(item)
+    if decls is None:
+        return None
+    return frozenset(catalog_paths(decls))
+
+
 async def declared_paths_of(
     endpoint_id: str, ref: str | None = None,
 ) -> frozenset[str] | None:

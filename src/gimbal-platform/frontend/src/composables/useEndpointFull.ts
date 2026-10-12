@@ -125,9 +125,12 @@ export function ensureEndpointFull(
   }
   const pending = inFlight.get(key)
   if (pending) return pending
-  const p = opts?.ref
+  // 括号钉死取数那一半:两个分支都必须走同一条 then/catch/finally 链。
+  // 此前三元裸返回 ref 分支的原始 promise —— 取回的契约从不入缓存
+  // (渲染读缓存恒空 → 画布退化 JSON 框),失败也无负缓存/在飞清理。
+  const p = (opts?.ref
     ? getFullEndpoint(endpointId, opts.ref)
-    : getFullEndpoint(endpointId)
+    : getFullEndpoint(endpointId))
     .then((full) => {
       const clean = sanitizeEndpointFull(full)
       storeFetched(key, clean)
@@ -162,10 +165,15 @@ export function surfaceVersion(endpointId: string, ref?: string): number {
 
 /** 端点级拉取状态:**上一次取数失败** = 'failed'(即便缓存里还留着上一份面 ——
  *  面在服务,但契约没刷新);已缓存且上次取数成功 = '';其余(未回填)= 'loading'。 */
-export function endpointFullState(endpointId: string | undefined): 'loading' | 'failed' | '' {
+export function endpointFullState(
+  endpointId: string | undefined, ref?: string,
+): 'loading' | 'failed' | '' {
   if (!endpointId) return ''
-  if (failedAt.has(endpointId)) return 'failed'
-  return fullByEndpoint.has(endpointId) ? '' : 'loading'
+  // 键口径与 ensure/get 一致(6.1:带修订读修订键);缺省裸键,
+  // 既有调用零变化
+  const key = ref && ref !== 'working' ? `${endpointId}@${ref}` : endpointId
+  if (failedAt.has(key)) return 'failed'
+  return fullByEndpoint.has(key) ? '' : 'loading'
 }
 
 /** 测试钩子:清空缓存(含负缓存与面版本)。仅供单测使用。 */
