@@ -76,3 +76,19 @@ export function deleteAlias(aliasName: string): Promise<void> {
     .delete(`/service-aliases/${encodeURIComponent(aliasName)}`)
     .then(() => undefined)
 }
+
+/** W11 三态分类读面:服务键集 → plate(受管)/external(第三方)/
+ *  unknown(未登记,保存告警口径)。编排器徽标与保存告警的数据源。 */
+export interface ServiceKinds {
+  plate: string[]
+  external: string[]
+  unknown: string[]
+}
+
+export function classifyServices(services: string[]): Promise<ServiceKinds> {
+  return http
+    .get<ServiceKinds>('/service-aliases/classify', {
+      params: services.map((s) => ['services', s]),
+    })
+    .then(({ data }) => data)
+}

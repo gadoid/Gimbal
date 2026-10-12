@@ -289,3 +289,27 @@ async def test_classify_services_three_buckets(fresh_db, plate):
     async with db_module.SessionLocal() as s:
         assert await svc.classify_services(s, []) == {
             "plate": [], "external": [], "unknown": []}
+
+
+async def test_classify_endpoint_read_face(client, fresh_db, plate):
+    """W11 读面:GET /service-aliases/classify(member 可读,编排器徽标
+    + 保存告警的数据源);repeated-param 传服务键集。"""
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name="fin-service-uat",
+                           base_service="fin-service", kind="plate"))
+        s.add(ServiceAlias(alias_name="pay-service",
+                           base_service="pay-service", kind="external"))
+        await s.commit()
+    member = await _member(client, "clfmem")
+    r = await client.get("/api/service-aliases/classify", headers=member,
+                         params=[("services", "fin-service"),
+                                 ("services", "pay-service"),
+                                 ("services", "ghost-svc")])
+    assert r.status_code == 200, r.text
+    assert r.json() == {"plate": ["fin-service"],
+                        "external": ["pay-service"],
+                        "unknown": ["ghost-svc"]}
+    # 未带参数 → 全空桶(不报错)
+    r = await client.get("/api/service-aliases/classify", headers=member)
+    assert r.status_code == 200
+    assert r.json() == {"plate": [], "external": [], "unknown": []}

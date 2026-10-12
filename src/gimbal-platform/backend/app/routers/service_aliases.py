@@ -93,6 +93,31 @@ async def list_aliases(
     )
 
 
+class ServiceKindsOut(BaseModel):
+    """W11 三态分类读面(编排器徽标/保存告警数据源)。
+
+    plate = 受管(可钉修订);external = 第三方(无版本,不计入库
+    标准的分母);unknown = 未登记(保存告警口径:提示接入 plate 或
+    登记 external 别名;执行侧按 external 保守处理)。
+    """
+
+    model_config = _CAMEL
+
+    plate: list[str] = Field(default_factory=list)
+    external: list[str] = Field(default_factory=list)
+    unknown: list[str] = Field(default_factory=list)
+
+
+@router.get("/classify", response_model=ServiceKindsOut)
+async def classify(
+    user: CurrentUser, db: DbSession,
+    services: list[str] = Query(default=[], max_length=64),
+) -> ServiceKindsOut:
+    """步骤 ``service`` 键集 → 三态分类(P1.0 判定链,W11 数据面)。"""
+    out = await service_aliases.classify_services(db, services)
+    return ServiceKindsOut(**out)
+
+
 @router.post("", response_model=AliasOut, status_code=201)
 async def create_alias(
     user: MemberUser, body: AliasCreate, db: DbSession,

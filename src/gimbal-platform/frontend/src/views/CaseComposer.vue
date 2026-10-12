@@ -166,6 +166,7 @@
               v-model:orchestration="orchestration"
               v-model:field-states="uiFieldStates"
               :plate-ref-of="plateRefOf"
+              :service-kinds="serviceKinds"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
               :focus-jump="focusJump"
@@ -310,6 +311,7 @@ import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { useRunAssembly } from '@/composables/useRunAssembly'
 import type { FieldState, MetaView, ScenarioView, StepView } from '@/types/plate'
 import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
+import { classifyServices } from '@/api/service-aliases'
 
 const STEPS = [
   { key: 'meta',     label: '基本信息',    hint: 'scenarioId / name / system / owner' },
@@ -403,6 +405,31 @@ const definition = ref<ScenarioView>({
   resource: {},
   steps: [],
 })
+// W11 三态:无锚步骤的服务键 → kind(external/unknown;后端 classify
+// 读面)。锚定步骤不查 —— 受管与否由 meta.plate 直接表达。读面失败
+// → 静默留空(徽标保守不出,不让告警面故障挡住编排)。
+const serviceKinds = ref<Record<string, 'plate' | 'external' | 'unknown'>>({})
+const unanchoredServices = computed(() => {
+  const set = new Set<string>()
+  for (const s of definition.value.steps || []) {
+    if (stepEndpointId(s)) continue          // 锚定步骤走 meta.plate 口径
+    const svc = stepService(s)
+    if (svc) set.add(svc)
+  }
+  return [...set].sort()
+})
+watch(unanchoredServices, async (svcs) => {
+  if (!svcs.length) { serviceKinds.value = {}; return }
+  try {
+    const out = await classifyServices(svcs)
+    const map: Record<string, 'plate' | 'external' | 'unknown'> = {}
+    for (const s of out.plate) map[s] = 'plate'
+    for (const s of out.external) map[s] = 'external'
+    for (const s of out.unknown) map[s] = 'unknown'
+    serviceKinds.value = map
+  } catch { /* 读面失败 → 徽标/告警静默退场 */ }
+}, { immediate: true })
+
 /** 编排容器(阶段④:V1 runSchemes sidecar 已下线 — 方案唯一读写面是
  *  方案工作台 CRUD,runSchemes ref 直连 listRunSchemes,不经这里)。 */
 const orchestration = ref<Orchestration>({
@@ -1001,6 +1028,15 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   }
   // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
   const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
+  // W11:未接入服务告警(unknown = 别名表未登记;执行按外部处理、不计
+  // 入库标准 —— 与保存告警同款非阻断口径,去服务信息管理登记或接入 plate)。
+  const unknownSvcs = unanchoredServices.value.filter(
+    (s) => serviceKinds.value[s] === 'unknown')
+  if (unknownSvcs.length && manual) {
+    lintWarns.push(`服务 ${unknownSvcs.join('、')} 未接入(未登记别名)——`
+      + '执行将按外部服务处理、不计入入库标准;可在「服务信息管理」'
+      + '登记为第三方(external),或接入 plate 做版本管理')
+  }
   if (lintWarns.length && manual) {
     toast.warning({ message: `草稿提醒:${lintWarns.join(';')}`, duration: 6000 })
   }

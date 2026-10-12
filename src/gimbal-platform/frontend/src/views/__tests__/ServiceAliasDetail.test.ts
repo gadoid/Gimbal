@@ -29,9 +29,9 @@ vi.mock('@/components/carry/ServiceBindingEditor.vue', () => ({
 }))
 
 const aliases: aliasApi.ServiceAliasRow[] = [
-  { aliasName: 'fin-service-uat', baseService: 'fin-service', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
+  { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
     credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'fin-service', baseService: 'fin-service', baseUrl: null, environmentId: null, environmentName: null,
+  { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate', baseUrl: null, environmentId: null, environmentName: null,
     credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
 ]
 

@@ -355,7 +355,13 @@ let activePinia: ReturnType<typeof createPinia>
 
 /** 既有 mount 包装的多态入参:数组 = 仅 steps;对象 = steps + services
  *  (场景服务声明 dict,spec §1.4 服务引用双显用)。 */
-type CanvasMountOpts = { steps: StepView[]; services?: Record<string, string> }
+type CanvasMountOpts = {
+  steps: StepView[]
+  services?: Record<string, string>
+  /** W11 三态:M1 plateRefOf + 无锚服务分类 */
+  plateRefOf?: (system: string) => string
+  serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
+}
 
 /** M3 归一:历史种子把锚点写在 call.view_hints —— 就地上提为
  *  step.endpoint(引用不变,步骤级断言照常工作)。 */
@@ -383,10 +389,13 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
   const Parent = defineComponent({
     setup() {
       provide(INSERT_TARGET_KEY, inserter)
+      const opts = Array.isArray(stepsOrOpts) ? {} : stepsOrOpts
       return () => h(CaseComposerCanvas, {
         steps: steps,
         orchestration: orch.value,
         services: services,
+        plateRefOf: opts.plateRefOf,
+        serviceKinds: opts.serviceKinds,
         fieldStates: fs.value,
         'onUpdate:steps': () => {},
         'onUpdate:orchestration': () => {},
@@ -3126,5 +3135,63 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
     } finally {
       full.mockImplementation(origImpl)
     }
+  })
+})
+
+// ─── W11 三态徽标(钉修订/当前规格/外部·无版本/未接入)─────────────
+describe('CaseComposerCanvas — 步骤三态徽标', () => {
+  it('锚定步骤:meta.plate 有值 → 钉修订 <ref>;无/working → 当前规格', () => {
+    const { w } = mountCanvas({
+      steps: [
+        mkStep({ endpoint: 'fin.order.add' }),
+        mkStep({ endpoint: 'wms.stock.query' }),
+      ],
+      plateRefOf: (sys) => (sys === 'fin' ? '1.0#1' : 'working'),
+    })
+    const badges = w.findAll('.ver-badge')
+    expect(badges).toHaveLength(2)
+    expect(badges[0]!.classes()).toContain('v-pinned')
+    expect(badges[0]!.text()).toBe('钉修订 1.0#1')
+    expect(badges[1]!.classes()).toContain('v-working')
+    expect(badges[1]!.text()).toBe('当前规格')
+    w.unmount()
+  })
+
+  it('无锚步骤:external → 外部·无版本;unknown → 未接入;plate/无键 → 不出', () => {
+    const bare = (service: string) => mkStep({
+      endpoint: undefined as unknown as string,
+      call: { kind: 'call', protocol: 'http', service, method: 'GET',
+              path: '/x', headers: {} },
+    })
+    const { w } = mountCanvas({
+      steps: [bare('pay-service'), bare('ghost-svc'), bare('fin-service')],
+      serviceKinds: {
+        'pay-service': 'external', 'ghost-svc': 'unknown',
+        'fin-service': 'plate',
+      },
+    })
+    const badges = w.findAll('.ver-badge')
+    expect(badges).toHaveLength(2)                    // plate 键不出徽标
+    expect(badges[0]!.classes()).toContain('v-external')
+    expect(badges[0]!.text()).toBe('外部·无版本')
+    expect(badges[1]!.classes()).toContain('v-unknown')
+    expect(badges[1]!.text()).toBe('未接入')
+    w.unmount()
+  })
+
+  it('未传 serviceKinds(读面失败退场):无锚步骤零徽标,锚定步骤不受影响', () => {
+    const { w } = mountCanvas({
+      steps: [
+        mkStep({ endpoint: 'fin.order.add' }),
+        mkStep({ endpoint: undefined as unknown as string,
+                 call: { kind: 'call', protocol: 'http', service: 'pay-service',
+                         method: 'GET', path: '/x', headers: {} } }),
+      ],
+      plateRefOf: () => '1.0#2',
+    })
+    const badges = w.findAll('.ver-badge')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]!.text()).toBe('钉修订 1.0#2')
+    w.unmount()
   })
 })

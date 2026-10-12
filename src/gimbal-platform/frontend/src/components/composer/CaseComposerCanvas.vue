@@ -59,6 +59,9 @@
                   <div class="step-meta">
                     <span v-if="stepMethod(s)" class="method-badge" :class="`m-${stepMethod(s).toLowerCase()}`">{{ stepMethod(s) }}</span>
                     <span v-if="stepService(s)" class="svc-tag">{{ stepService(s) }}</span>
+                    <!-- W11 三态徽标:该步的版本态(锚定=钉修订/当前规格;
+                         无锚=外部·无版本/未接入;见 stepVersionBadge) -->
+                    <span v-if="stepVersionBadge(s)" class="ver-badge" :class="stepVersionBadge(s)!.cls">{{ stepVersionBadge(s)!.text }}</span>
                     <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
                          与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
                     <TooltipProvider :delay-duration="200">
@@ -639,6 +642,10 @@ const props = defineProps<{
   /** M1(6.1):系统 → 场景声明的修订(meta.plate)—— 投影/契约按
    *  生效修订读取;缺省 working(未声明/旧场景)。 */
   plateRefOf?: (system: string) => string
+  /** W11 三态:系统 → plate | external | unknown(后端 classify 读面,
+   *  CaseComposer 按锚定系统集拉取;未拉到/未命中按 plate 展示,
+   *  不让读面故障变成整列红)。 */
+  serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
@@ -661,6 +668,31 @@ const fsMap = reactive<Record<string, Record<string, FieldState>>>(
 
 function _syncFs(): void {
   emit('update:fieldStates', { ...fsMap })
+}
+
+/** W11 三态徽标(与 W5/W7 判定链同口径):
+ *  锚定步骤(有 endpoint)→ 系统受管:meta.plate[sys] 有值 = 「钉修订
+ *  <ref>」;无/working = 「当前规格」(预览执行,不计入库标准)。
+ *  无锚步骤 → 按 call.service 三态:external = 「外部·无版本」(独立
+ *  分桶,不计入库分母);unknown = 「未接入」(保存另有告警);plate
+ *  (受管服务裸用)/无调用 → 不出徽标。 */
+function stepVersionBadge(step: StepView): { cls: string; text: string } | null {
+  const eid = stepEndpointId(step)
+  if (eid) {
+    const sys = eid.split('.')[0]
+    if (!sys) return null
+    const ref = props.plateRefOf?.(sys) || 'working'
+    if (ref === 'working' || !ref) {
+      return { cls: 'v-working', text: '当前规格' }
+    }
+    return { cls: 'v-pinned', text: `钉修订 ${ref}` }
+  }
+  const svc = stepService(step)
+  if (!svc) return null
+  const kind = props.serviceKinds?.[svc]
+  if (kind === 'external') return { cls: 'v-external', text: '外部·无版本' }
+  if (kind === 'unknown') return { cls: 'v-unknown', text: '未接入' }
+  return null
 }
 
 /** step → 该步的字段状态增量(按 local 里的位置索引)。 */
@@ -2287,6 +2319,17 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 }
 .step-handle:active { cursor: grabbing; }
 .step-row:hover .step-handle { color: var(--c-text-tertiary); }
+
+/* W11 三态徽标(与 method/service 同行定高,不推挤布局) */
+.ver-badge {
+  display: inline-flex; align-items: center; height: 16px;
+  padding: 0 6px; border-radius: 3px; white-space: nowrap;
+  font-size: 10.5px; font-weight: 600; line-height: 1;
+}
+.ver-badge.v-pinned { background: rgba(37, 99, 235, .1); color: #1d4ed8; }
+.ver-badge.v-working { background: rgba(217, 119, 6, .12); color: #b45309; }
+.ver-badge.v-external { background: rgba(100, 116, 139, .14); color: #475569; }
+.ver-badge.v-unknown { background: rgba(220, 38, 38, .1); color: #b91c1c; }
 .step-row.sortable-ghost { opacity: 0.4; border-style: dashed; }
 /* 四区卡片(2026-09-08):左把手列 + 右内容列;定高 90px = 8pad + 名称行
    (flex≈20) + 3gap + meta 15 + 3gap + path 13 + 3gap + 控制行 17 + 8pad;
