@@ -39,6 +39,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         load_registry(reg=default_registry)
         # 快照标识(G5/7.1):working 阶段无 release,标 @working
         app.state.snapshot_label = "working"
+        # A-5(2026-10-12):启动即把当前 M2 信封写进构件池(幂等;构件根
+        # 未配置 → 跳过+计数,healthz 暴露)。外注入 registry 的嵌入模式
+        # 不做——caller 控制自身状态。
+        from gimbal_plate.release.release import ensure_m2_pooled
+
+        app.state.m2_pool = ensure_m2_pooled()
     yield
 
 
@@ -129,8 +135,12 @@ def create_app(
         return JSONResponse(status_code=status, content=body)
 
     @app.get("/healthz", include_in_schema=False)
-    async def _healthz() -> dict[str, str]:
-        return {"status": "ok"}
+    async def _healthz() -> dict[str, object]:
+        out: dict[str, object] = {"status": "ok"}
+        pool = getattr(app.state, "m2_pool", None)
+        if pool is not None:
+            out["m2_pool"] = pool
+        return out
 
     app.include_router(grammar_router)
 

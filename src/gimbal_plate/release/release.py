@@ -199,17 +199,64 @@ def latest_revision_manifest(artifacts_root: Path, system: str, line: str,
 def _commit_artifacts(artifacts_root: Path, message: str) -> str | None:
     """构件分支提交(3.6):artifacts 根为 git 工作树时 add+commit。
 
-    非工作树(本地演练目录)只写盘不提交——发版本的演练路径。
+    非工作树(本地演练目录)只写盘不提交——发版本的演练路径。探测按
+    ``rev-parse --show-toplevel`` 且要求 toplevel == artifacts 根:A-5
+    收口(2026-10-12)前用 ``--is-inside-work-tree``,根本身不是仓库时
+    git 会向上发现祖先仓库(如用户主目录的杂散 .git),把整个祖先当
+    工作树 add/commit——既可能污染他人仓库也必然失败。
+    幂等:add 后无暂存变更(对象已在分支上)直接返回当前 HEAD,不造
+    空提交也不报错——plate 启动侧的 ensure_m2_pooled 每次启动都会
+    走到这里,重复启动必须无感。
     """
-    probe = _git(["rev-parse", "--is-inside-work-tree"], artifacts_root)
-    if probe.returncode != 0 or probe.stdout.strip() != "true":
+    probe = _git(["rev-parse", "--show-toplevel"], artifacts_root)
+    if probe.returncode != 0:
+        return None
+    try:
+        if Path(probe.stdout.strip()).resolve() != artifacts_root.resolve():
+            return None
+    except OSError:
         return None
     ident = ["-c", "user.name=plate-release", "-c", "user.email=release@plate"]
     _git(ident + ["add", "-A"], artifacts_root)
+    if _git(["diff", "--cached", "--quiet"], artifacts_root).returncode == 0:
+        return _git(["rev-parse", "HEAD"], artifacts_root).stdout.strip()
     r = _git(ident + ["commit", "-m", message], artifacts_root)
     if r.returncode != 0:
         raise RuntimeError(f"构件分支提交失败: {r.stderr.strip()}")
     return _git(["rev-parse", "HEAD"], artifacts_root).stdout.strip()
+
+
+_M2_POOL_SKIPS = 0    # 构件根未配置的启动跳过计数(A-5;healthz 暴露)
+
+
+def ensure_m2_pooled() -> dict[str, Any]:
+    """plate 启动把当前 M2 信封写进构件池(A-5,版本模型 3.6)。
+
+    工作代码的 ``m2_hash`` 若不在池里,后续 freeze 引用该身份时读取面
+    (routes_grammar 的 /api/m2、release.read 的 load_snapshot)会
+    404 / RELEASE_CORRUPT——启动即写入,保证「运行中的身份必然可回读」。
+
+    * 构件根未配置 → 计数 + 静默跳过(发版路径仍走 resolve_artifacts_root
+      的 fail-fast,不受影响);启动不因未配置而炸。
+    * 已配置 → 幂等写对象(内容寻址,同 hash 不重写);根即工作树时提交
+      构件分支,演练目录只写盘。
+    * 写入/提交失败 → error 状态返回,不阻断启动——working 面服务不
+      依赖池,池的缺口只影响发版回读。
+    """
+    global _M2_POOL_SKIPS
+    try:
+        root = resolve_artifacts_root()
+    except RuntimeError:
+        _M2_POOL_SKIPS += 1
+        return {"status": "unconfigured", "skips": _M2_POOL_SKIPS}
+    try:
+        from ..export.m2_schema import export_m2
+        export = export_m2()
+        _pool_write(root, export.m2_hash, "m2", export.schema)
+        commit = _commit_artifacts(root, f"m2@{export.m2_hash[:12]} (startup)")
+        return {"status": "pooled", "hash": export.m2_hash, "commit": commit}
+    except Exception as e:  # noqa: BLE001 — 启动韧性:池失败不炸服务
+        return {"status": "error", "message": f"{type(e).__name__}: {e}"[:200]}
 
 
 def release_system(
