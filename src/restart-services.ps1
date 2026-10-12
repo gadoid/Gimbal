@@ -4,6 +4,10 @@
 # 挂在自己的树里,与会话 shell 解耦;输出重定向到各目录日志文件。
 $ErrorActionPreference = 'Continue'
 
+# plate 构件根(版本模型 3.6/B2 唯一来源):plate/artifacts 分支的检出,
+# 发版/按修订读取/冷化都从这里取;子进程继承本变量(2026-10-12 W14)。
+$env:PLATE_ARTIFACTS_PATH = 'D:\Gimbal\plate-artifacts'
+
 Start-Process -FilePath 'python' -ArgumentList 'run_plate.py' `
   -WorkingDirectory 'D:\Gimbal\Gimbal\src\gimbal-plate' -WindowStyle Hidden `
   -RedirectStandardOutput 'D:\Gimbal\Gimbal\src\gimbal-plate\plate-out.log' `
