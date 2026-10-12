@@ -66,7 +66,9 @@ def migrate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]
     if not isinstance(meta, dict):
         meta = {}
         defn["meta"] = meta
-    if "plate" not in meta:
+    # 键存在但值为 null/非 dict(如 fork 产物 meta.plate=None)同样回填 ——
+    # plate Scenario 模型要求 dict,只查键缺失会漏(dev 库 id=10 实证)。
+    if not isinstance(meta.get("plate"), dict):
         meta["plate"] = {}
         changes.append("meta.plate 回填 {}")
 
