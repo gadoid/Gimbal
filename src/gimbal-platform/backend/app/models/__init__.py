@@ -17,6 +17,7 @@ from .adaptation_op import AdaptationOp
 from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .board_card import BoardCard
 from .environment import Environment
+from .external_endpoint import ExternalEndpoint
 from .service_alias import ServiceAlias
 # 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
 from .permission import AuditLog, Notification, UserPref, UserStar
@@ -43,7 +44,7 @@ __all__ = [
     "CarryGlobalDefault",
     "CarryServiceBinding",
     "BoardCard",
-    "Environment", "ServiceAlias",
+    "Environment", "ExternalEndpoint", "ServiceAlias",
     "AuditLog",
     "Notification",
     "ActivityEvent",

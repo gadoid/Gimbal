@@ -37,6 +37,7 @@ from .routers import (
     scenario_filter_groups,
     scenarios,
     environments,
+    external_endpoints,
     service_aliases,
     service_profile,
     shares,
@@ -216,6 +217,7 @@ def create_app() -> FastAPI:
     app.include_router(service_profile.cards_router, prefix="/api")
     # 服务别名基础层(§4.1):读全员 / 写 admin;读侧挂 carry/凭证两条解析链
     app.include_router(service_aliases.router, prefix="/api")
+    app.include_router(external_endpoints.router, prefix="/api")
     app.include_router(environments.router, prefix="/api")
     # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
     app.include_router(catalog.router, prefix="/api")
