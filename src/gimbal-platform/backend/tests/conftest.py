@@ -166,6 +166,7 @@ def _isolate_plate_contract_caches():
 
     _reset_declared_paths_cache()
     plate_client._reset_full_cache_for_test()
+    plate_client._reset_revision_cache_for_test()
     # M5 目录聚合的 30s TTL 是模块级 —— 测试间必须重置(否则上个测试的
     # plate mock 目录泄漏到下一个)。
     from app.routers.catalog import reset_catalog_cache_for_tests

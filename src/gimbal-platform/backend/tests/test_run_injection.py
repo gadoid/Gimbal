@@ -716,6 +716,11 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     plate_mock.fulls.pop("ep-carry-x")
     from app.services.endpoint_declarations import _reset_declared_paths_cache
     _reset_declared_paths_cache()
+    # W24 修订缓存:同 ref 的成功结果进程级缓存(修订不可变),本步模拟
+    # 「plate 冷启动后声明面不可得」—— 一并清修订缓存,否则上一轮的
+    # 成功取数会经缓存继续供给,降级路径走不到。
+    from app.services import plate_client as _pc
+    _pc._reset_revision_cache_for_test()
     cases.clear()
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"]})

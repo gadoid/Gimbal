@@ -30,6 +30,7 @@ Run 执行链(V3.2):dispatcher convert 成功后把注入完成的用例落盘,
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -470,6 +471,37 @@ async def aclose() -> None:
 
 # ─── RS3（Release v4.4 §4）：版本模型读取侧方法 ────────────────────
 
+# B-7/W24:按修订读取的不可变结果缓存 —— 修订一经签发内容不变,条目
+# **不设 TTL、只按容量 FIFO 淘汰**(与 plate 侧修订快照缓存同机制,
+# b4a8bfc0;淘汰只是丢缓存,下次访问重新装载)。只缓存成功结果
+# (非 None);404/失败不进缓存,保持「按需取、可重试」语义。
+_REVISION_CACHE_MAX = 64
+_revision_cache: dict[tuple[str, str, str], Any] = {}
+
+
+def _revision_cache_get(key: tuple[str, str, str]) -> Any | None:
+    """命中返回深拷贝(缓存是进程级共享状态,调用方改自己那份不污染)。"""
+    if key in _revision_cache:
+        # 命中即重插 → LRU 语义(淘汰最久未用);dict 保插入序
+        value = _revision_cache.pop(key)
+        _revision_cache[key] = value
+        return copy.deepcopy(value)
+    return None
+
+
+def _revision_cache_put(key: tuple[str, str, str], value: Any) -> None:
+    if value is None:
+        return
+    if len(_revision_cache) >= _REVISION_CACHE_MAX:
+        for oldest in list(_revision_cache):
+            _revision_cache.pop(oldest)
+            break
+    _revision_cache[key] = copy.deepcopy(value)
+
+
+def _reset_revision_cache_for_test() -> None:
+    _revision_cache.clear()
+
 
 async def list_lines(system_id: str, *, timeout: float = 15.0) -> list[dict]:
     """GET /api/system/{id}/lines（版本线列表，2.4）。
@@ -534,9 +566,15 @@ async def get_endpoint_full_at(
 ) -> "dict[str, Any] | None":
     """``GET /api/endpoint/{id}/full?ref=`` —— 按修订取契约（4.1 修订快照）。
 
-    与 working 缓存版 :func:`get_endpoint_full` 分离:修订内容不可变,按需
-    取不进 TTL 缓存（RS4a 保存检查的目标修订试算消费方）。404 → None。
+    与 working 缓存版 :func:`get_endpoint_full` 分离:修订内容不可变,
+    **不进 TTL 缓存、进修订缓存**(B-7/W24:容量 FIFO 淘汰,同 plate 侧
+    修订快照缓存机制;RS4a 保存检查的目标修订试算消费方)。404 → None
+    (不进缓存)。
     """
+    key = ("full", endpoint_id, ref)
+    hit = _revision_cache_get(key)
+    if hit is not None:
+        return hit
     client = get_client()
     try:
         resp = await client.get(
@@ -556,7 +594,9 @@ async def get_endpoint_full_at(
         raise PlateRejectedError(
             code="invalid_action",
             message=envelope.get("error", {}).get("message", "not ok"))
-    return envelope.get("data", {}).get("item")
+    item = envelope.get("data", {}).get("item")
+    _revision_cache_put(key, item)
+    return item
 
 
 async def get_projection(
@@ -564,8 +604,13 @@ async def get_projection(
 ) -> dict[str, Any] | None:
     """GET /api/endpoint/{id}/projection?ref=（投影查询，4.8）。
 
-    编排页展示 method/path 等只读信息时调用；结果不可变，前后端可缓存。
+    编排页展示 method/path 等只读信息时调用；结果不可变 → 修订缓存
+    (B-7/W24,容量 FIFO;404 → None 不进缓存)。
     """
+    key = ("proj", endpoint_id, ref)
+    hit = _revision_cache_get(key)
+    if hit is not None:
+        return hit
     client = get_client()
     try:
         resp = await client.get(
@@ -581,7 +626,9 @@ async def get_projection(
     if resp.status_code >= 400:
         _raise_rejected(resp)
     envelope = resp.json()
-    return envelope.get("data", {}).get("item")
+    item = envelope.get("data", {}).get("item")
+    _revision_cache_put(key, item)
+    return item
 
 
 async def revision_objects(
@@ -590,14 +637,19 @@ async def revision_objects(
     """GET /api/system/{id}/revisions/{line}/{n} → manifest.objects。
 
     返回 ``{对象 id: review 状态}``(端点对象的评审面;W7 入库标准
-    「生效修订中用到的接口全部已评审」的判定数据源)。修订不可变,
-    结果可缓存(B-7 随批)。``ref`` 必须是 ``<line>#<n>`` 精确修订。
+    「生效修订中用到的接口全部已评审」的判定数据源)。修订不可变 →
+    修订缓存(B-7/W24 已随批:容量 FIFO)。``ref`` 必须是
+    ``<line>#<n>`` 精确修订。
     """
     if "#" not in ref:
         raise PlateRejectedError(
             code="invalid_ref",
             message=f"revision_objects 需要精确修订 <line>#<n>,得到 {ref!r}")
     line, _, n = ref.partition("#")
+    key = ("objs", system_id, ref)
+    hit = _revision_cache_get(key)
+    if hit is not None:
+        return hit
     client = get_client()
     try:
         resp = await client.get(
@@ -615,5 +667,7 @@ async def revision_objects(
             code="invalid_action",
             message=envelope.get("error", {}).get("message", "not ok"))
     objects = envelope.get("data", {}).get("item", {}).get("objects", [])
-    return {o["id"]: (o.get("review") or "") for o in objects
-            if isinstance(o, dict) and o.get("id")}
+    result = {o["id"]: (o.get("review") or "") for o in objects
+              if isinstance(o, dict) and o.get("id")}
+    _revision_cache_put(key, result)
+    return result
