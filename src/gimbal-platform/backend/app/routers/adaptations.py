@@ -277,6 +277,9 @@ class SubmitIn(BaseModel):
     saveMode: str = Field(pattern="^(direct|copy)$")
     system: str | None = None
     reviewConfirmed: bool = False
+    # W22/RS4b:可展开的结构级 op(replaceEndpoint/removeStep/splitStep)
+    # 按锚点端点应用到同场景内同类步骤(§5.4)
+    applyToSimilar: bool = False
 
 
 @router.post("/submit")
@@ -291,7 +294,7 @@ async def submit_adaptation(user: CurrentUser, db: DbSession,
             db, scenario_id=body.scenarioId, ops=body.ops,
             target_revision=body.targetRevision, save_mode=body.saveMode,
             review_confirmed=body.reviewConfirmed, system=body.system,
-            user=user)
+            user=user, apply_to_similar=body.applyToSimilar)
     except PlateUnavailableError as e:
         raise _plate_502(e) from e
     except ValueError as e:

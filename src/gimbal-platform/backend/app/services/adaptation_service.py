@@ -1444,16 +1444,92 @@ async def _check_payload(
     }
 
 
+# ─── W22/RS4b:应用到同类步骤 ───────────────────────────────────────
+# 可按锚点展开的结构 op:op 带单一 step 索引、原步骤带 endpoint 锚点,
+# 且应用后锚点计数必然下降(替换→锚点变、删除→步骤没、拆分→新步骤
+# 不再锚原端点)。mergeSteps(多索引)/insertStep(无锚点语义)不展开。
+_SIMILAR_EXPANDABLE_OPS = ("replaceEndpoint", "removeStep", "splitStep")
+
+
+def _anchor_counts(definition: dict) -> dict:
+    """definition → {endpoint: 步骤计数}(同类步骤的判定面)。"""
+    counts: dict[str, int] = {}
+    for st in (definition.get("steps") or []):
+        if isinstance(st, dict) and st.get("endpoint"):
+            e = str(st["endpoint"])
+            counts[e] = counts.get(e, 0) + 1
+    return counts
+
+
+def _expand_ops_to_similar(payload: dict, ops: list) -> tuple[list, int]:
+    """W22/RS4b「应用到同类步骤」:结构级 op 按锚点端点在同类步骤上展开。
+
+    在 deepcopy 语料上模拟应用产出**完整 op 序列**(原 op + 追加的同类
+    pass);每 pass 后重扫当前 steps 取下一个仍锚定原端点的索引 ——
+    splitStep/removeStep 会移动步骤索引,预计算全部索引必错。非收敛
+    保护:单 pass 后锚点计数未降即停(如 splitStep 的 newSteps 仍锚
+    原端点 —— 重复拆分是病态意图,不无限展开)。
+
+    返回 (expanded_ops, similar_applied_count);不可展开(op 缺锚点/
+    类型不在清单)时原样返回。
+    """
+    definition = definition_from_payload(payload)
+    steps = definition.get("steps") or []
+    anchors: list[tuple[dict, str]] = []
+    for op in ops or []:
+        if not isinstance(op, dict):
+            continue
+        if op.get("op") not in _SIMILAR_EXPANDABLE_OPS:
+            continue
+        idx = op.get("step")
+        if not isinstance(idx, int) or not (0 <= idx < len(steps)):
+            continue
+        anchor = steps[idx].get("endpoint") if isinstance(steps[idx], dict) else None
+        if isinstance(anchor, str) and anchor:
+            anchors.append(({**op}, anchor))
+    if not anchors:
+        return list(ops or []), 0
+
+    sim = copy.deepcopy(payload)
+    sim_def = definition_from_payload(sim)
+    expanded: list = [{**op} if isinstance(op, dict) else op for op in (ops or [])]
+    _apply_ops_to_payload(sim, expanded)
+    applied = 0
+    for op, anchor in anchors:
+        while True:
+            counts = _anchor_counts(sim_def)
+            if counts.get(anchor, 0) == 0:
+                break
+            nxt = next(
+                (i for i, st in enumerate(sim_def.get("steps") or [])
+                 if isinstance(st, dict) and str(st.get("endpoint") or "") == anchor),
+                None)
+            if nxt is None:
+                break
+            one = {**op, "step": nxt}
+            _apply_ops_to_payload(sim, [one])
+            expanded.append(one)
+            applied += 1
+            if _anchor_counts(sim_def).get(anchor, 0) >= counts.get(anchor, 0):
+                break   # 非收敛保护:锚点计数未降,不再展开
+    return expanded, applied
+
+
 async def submit_adaptation(
     db: AsyncSession, *, scenario_id: str, ops: list,
     target_revision: str, save_mode: str,
     review_confirmed: bool = False, system: str | None = None, user=None,
+    apply_to_similar: bool = False,
 ) -> dict:
     """RS4a 提交（§5.7）:按场景单事务 —— 快照 → 应用 op → meta.plate → 审计。
 
     H1:保存检查的对象是**应用方案之后**的场景(先构造方案态,试算
     通过才落库);H2:op 应用带 payload 引用,注入条目/字段状态随
     op 联动改写,结构级 op 清空 RunScheme stepTo(R30)。
+
+    W22:``apply_to_similar`` 把可展开的结构级 op(replaceEndpoint /
+    removeStep / splitStep)按锚点端点应用到同场景内的**同类步骤**
+    (§5.4「结构级改造可在一个场景上定好后应用到同类步骤」)。
     """
     from ..services import activity as activity_svc
 
@@ -1475,8 +1551,14 @@ async def submit_adaptation(
                 .get("plate") or {}).get(sys_) or "working"
 
     # ① 方案态:应用全部 op(含引用改写)+ meta.plate 指向目标
+    # W22:apply_to_similar 先在语料副本上模拟展开(同类 pass 的索引
+    # 逐个重定位),产出完整 op 序列 —— direct/copy 两分支与保存检查
+    # 用同一份,展开语义一次定义。
+    effective_ops, similar_applied = (
+        _expand_ops_to_similar(payload, ops) if apply_to_similar
+        else (list(ops or []), 0))
     planned = copy.deepcopy(payload)
-    structure_kinds = _apply_ops_to_payload(planned, ops or [])
+    structure_kinds = _apply_ops_to_payload(planned, effective_ops)
     definition_from_payload(planned).setdefault(
         "meta", {}).setdefault("plate", {})[sys_] = target_revision
     # Release 6.2:锚点步骤 call 的 binding 派生字段出存储(op 可能带旧
@@ -1507,7 +1589,7 @@ async def submit_adaptation(
 
     if save_mode == "copy":
         result = await save_as_copy(
-            db, scenario_id, user=user, ops=ops,
+            db, scenario_id, user=user, ops=effective_ops,
             target_revision=target_revision, batch_id=batch_id)
         db.add(AdaptationBatch(
             batch_id=batch_id, kind=kind,
@@ -1533,7 +1615,8 @@ async def submit_adaptation(
                     "batchId": batch_id, "saveMode": "copy",
                     "sourceScenarioId": scenario_id})
         return {"success": True, "new_scenario_id": result["new_scenario_id"],
-                "save_mode": "copy", "batch_id": batch_id}
+                "save_mode": "copy", "batch_id": batch_id,
+                "similar_applied": similar_applied}
 
     # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)
     before = copy.deepcopy(payload)
@@ -1570,7 +1653,8 @@ async def submit_adaptation(
     except Exception:  # noqa: BLE001 — 通知失败不阻断提交
         logger.warning("adaptation: notify_cross_owner failed ({})", scenario_id)
     return {"success": True, "scenario_id": scenario_id,
-            "save_mode": "direct", "batch_id": batch_id}
+            "save_mode": "direct", "batch_id": batch_id,
+            "similar_applied": similar_applied}
 
 
 async def stale_scenarios(
