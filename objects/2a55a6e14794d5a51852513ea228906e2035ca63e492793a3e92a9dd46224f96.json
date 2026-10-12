@@ -1,0 +1,1681 @@
+{
+ "data": {
+  "$defs": {
+   "AssertOperator": {
+    "enum": [
+     "eq",
+     "ne",
+     "gt",
+     "gte",
+     "lt",
+     "lte",
+     "in",
+     "not_in",
+     "contains",
+     "not_contains",
+     "exists",
+     "empty",
+     "length_eq",
+     "schema"
+    ],
+    "type": "string",
+    "x-enum-varnames": [
+     "EQ",
+     "NE",
+     "GT",
+     "GTE",
+     "LT",
+     "LTE",
+     "IN",
+     "NOT_IN",
+     "CONTAINS",
+     "NOT_CONTAINS",
+     "EXISTS",
+     "EMPTY",
+     "LENGTH_EQ",
+     "SCHEMA"
+    ]
+   },
+   "Assertion": {
+    "additionalProperties": false,
+    "properties": {
+     "enabled": {
+      "default": true,
+      "type": "boolean"
+     },
+     "expected": {
+      "default": null
+     },
+     "kind": {
+      "const": "assertion",
+      "default": "assertion",
+      "type": "string"
+     },
+     "message": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "onFailure": {
+      "$ref": "#/$defs/FailurePolicy",
+      "default": "abort"
+     },
+     "operator": {
+      "$ref": "#/$defs/AssertOperator"
+     },
+     "order": {
+      "default": 0,
+      "type": "integer"
+     },
+     "phase": {
+      "$ref": "#/$defs/StrategyPhase",
+      "default": "verifying"
+     },
+     "soft": {
+      "default": false,
+      "type": "boolean"
+     },
+     "tags": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "target": {
+      "type": "string"
+     },
+     "timeout": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "target",
+     "operator"
+    ],
+    "type": "object"
+   },
+   "Assign": {
+    "additionalProperties": false,
+    "properties": {
+     "default": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "enabled": {
+      "default": true,
+      "type": "boolean"
+     },
+     "kind": {
+      "const": "assign",
+      "default": "assign",
+      "type": "string"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "onFailure": {
+      "$ref": "#/$defs/FailurePolicy",
+      "default": "abort"
+     },
+     "order": {
+      "default": 0,
+      "type": "integer"
+     },
+     "phase": {
+      "$ref": "#/$defs/StrategyPhase",
+      "default": "before_request"
+     },
+     "required": {
+      "default": true,
+      "type": "boolean"
+     },
+     "scope": {
+      "$ref": "#/$defs/Scope",
+      "default": "scenario"
+     },
+     "source": {},
+     "tags": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "target": {
+      "type": "string"
+     },
+     "timeout": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "source",
+     "target"
+    ],
+    "type": "object"
+   },
+   "Call": {
+    "additionalProperties": true,
+    "description": "协议中立调用外壳。",
+    "properties": {
+     "auth": {
+      "default": "none",
+      "description": "认证施加方式（binding.auth 透传；none=不注入）",
+      "enum": [
+       "none",
+       "bearer",
+       "basic",
+       "cookie",
+       "custom"
+      ],
+      "type": "string"
+     },
+     "auth_signer": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "custom 时的签名器名（缺省 md5sign）"
+     },
+     "kind": {
+      "const": "call",
+      "default": "call",
+      "type": "string"
+     },
+     "protocol": {
+      "description": "协议名（必填）；协议注册表的分派键",
+      "type": "string"
+     }
+    },
+    "required": [
+     "protocol"
+    ],
+    "type": "object"
+   },
+   "CheckDecl": {
+    "additionalProperties": false,
+    "description": "横切断言声明——命中单元在编译期追加这条策略到其策略列表尾。",
+    "properties": {
+     "on": {
+      "$ref": "#/$defs/CheckSelector",
+      "default": {
+       "bracket": null,
+       "refs": [],
+       "tags": []
+      }
+     },
+     "strategy": {
+      "additionalProperties": true,
+      "description": "断言策略（StrategyUnion dict 形态）",
+      "type": "object"
+     }
+    },
+    "required": [
+     "strategy"
+    ],
+    "type": "object"
+   },
+   "CheckSelector": {
+    "additionalProperties": false,
+    "description": "横切断言的选择器。",
+    "properties": {
+     "bracket": {
+      "anyOf": [
+       {
+        "enum": [
+         "before",
+         "after",
+         "main"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "限定括号段；None=main 主体"
+     },
+     "refs": {
+      "default": [],
+      "description": "命中的单元 ref",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "tags": {
+      "default": [],
+      "description": "按 meta.tags 命中",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "Config": {
+    "additionalProperties": false,
+    "properties": {
+     "retry": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/RetryPolicy"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "services": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "type": "object"
+     },
+     "setup": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/Setup"
+      },
+      "type": "array"
+     },
+     "teardown": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/Teardown"
+      },
+      "type": "array"
+     },
+     "timePolicy": {
+      "anyOf": [
+       {
+        "discriminator": {
+         "mapping": {
+          "record": "#/$defs/RecordPolicy",
+          "timeout": "#/$defs/TimeoutPolicy"
+         },
+         "propertyName": "kind"
+        },
+        "oneOf": [
+         {
+          "$ref": "#/$defs/TimeoutPolicy"
+         },
+         {
+          "$ref": "#/$defs/RecordPolicy"
+         }
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "users": {
+      "additionalProperties": {
+       "$ref": "#/$defs/UserCredential"
+      },
+      "default": {},
+      "type": "object"
+     },
+     "vars": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "变量声明；字面量或生成式 spec dict；CLI --var 优先级更高",
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "Control": {
+    "additionalProperties": false,
+    "description": "执行控制（only + chain 切片）。",
+    "properties": {
+     "from_node": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "chain 起点（含）"
+     },
+     "only": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "只执行这些 ref 及其传递依赖闭包"
+     },
+     "to_node": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "chain 终点（含）"
+     }
+    },
+    "type": "object"
+   },
+   "DebugSpec": {
+    "additionalProperties": false,
+    "description": "调试装载配置（随 RunOptions 进 M2；会话命令是运行时接口，留在执行器）。",
+    "properties": {
+     "breakpoints": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "pause": {
+      "default": "on_failure",
+      "enum": [
+       "none",
+       "on_failure",
+       "every_step"
+      ],
+      "type": "string"
+     },
+     "wait_timeout": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "暂停等待上限（秒），超时按 abort"
+     }
+    },
+    "type": "object"
+   },
+   "Extract": {
+    "additionalProperties": false,
+    "properties": {
+     "default": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "enabled": {
+      "default": true,
+      "type": "boolean"
+     },
+     "expression": {
+      "type": "string"
+     },
+     "kind": {
+      "const": "extract",
+      "default": "extract",
+      "type": "string"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "onFailure": {
+      "$ref": "#/$defs/FailurePolicy",
+      "default": "abort"
+     },
+     "order": {
+      "default": 0,
+      "type": "integer"
+     },
+     "phase": {
+      "$ref": "#/$defs/StrategyPhase",
+      "default": "after_request"
+     },
+     "required": {
+      "default": true,
+      "type": "boolean"
+     },
+     "scope": {
+      "$ref": "#/$defs/Scope",
+      "default": "step"
+     },
+     "tags": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "target": {
+      "type": "string"
+     },
+     "timeout": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "expression",
+     "target"
+    ],
+    "type": "object"
+   },
+   "FailurePolicy": {
+    "enum": [
+     "abort",
+     "continue",
+     "warn",
+     "retry"
+    ],
+    "type": "string",
+    "x-enum-varnames": [
+     "ABORT",
+     "CONTINUE",
+     "WARN",
+     "RETRY"
+    ]
+   },
+   "File": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "const": "file",
+      "default": "file",
+      "type": "string"
+     },
+     "name": {
+      "description": "资源名称",
+      "type": "string"
+     },
+     "path": {
+      "description": "路径",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "path"
+    ],
+    "type": "object"
+   },
+   "GateDecl": {
+    "additionalProperties": false,
+    "description": "判定门——suite 判定阶段按聚合度量做整体通过/失败。",
+    "properties": {
+     "metric": {
+      "enum": [
+       "pass_rate",
+       "fail_count",
+       "total",
+       "avg_duration_ms",
+       "max_duration_ms"
+      ],
+      "type": "string"
+     },
+     "op": {
+      "default": "gte",
+      "enum": [
+       "eq",
+       "ne",
+       "gt",
+       "gte",
+       "lt",
+       "lte"
+      ],
+      "type": "string"
+     },
+     "value": {
+      "description": "阈值",
+      "type": "number"
+     }
+    },
+    "required": [
+     "metric",
+     "value"
+    ],
+    "type": "object"
+   },
+   "LogSelector": {
+    "additionalProperties": false,
+    "description": "日志选择器：按最低级别与 category 过滤。",
+    "properties": {
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "日志分类或通配（* / ?）"
+     },
+     "level": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "最低日志级别（大小写不敏感）"
+     }
+    },
+    "type": "object"
+   },
+   "Meta": {
+    "additionalProperties": false,
+    "properties": {
+     "author": {
+      "default": "",
+      "type": "string"
+     },
+     "createTime": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "description": {
+      "default": "",
+      "type": "string"
+     },
+     "expire": {
+      "default": false,
+      "type": "boolean"
+     },
+     "module": {
+      "default": "",
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "owner": {
+      "default": "",
+      "type": "string"
+     },
+     "plate": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "type": "object"
+     },
+     "priority": {
+      "default": 0,
+      "type": "integer"
+     },
+     "requirementRef": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "system": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "tags": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "version": {
+      "default": "",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "Mock": {
+    "additionalProperties": false,
+    "properties": {
+     "config": {
+      "additionalProperties": true,
+      "description": "服务配置",
+      "type": "object"
+     },
+     "image": {
+      "description": "容器镜像",
+      "type": "string"
+     },
+     "kind": {
+      "const": "mock",
+      "default": "mock",
+      "type": "string"
+     },
+     "name": {
+      "description": "资源名称",
+      "type": "string"
+     },
+     "portMapping": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "端口映射",
+      "type": "object"
+     }
+    },
+    "required": [
+     "name",
+     "image",
+     "config",
+     "portMapping"
+    ],
+    "type": "object"
+   },
+   "NamedParams": {
+    "additionalProperties": false,
+    "description": "具名参数块（metrics / plugins 声明共享形态）。",
+    "properties": {
+     "name": {
+      "description": "度量/插件名（注册表键）",
+      "type": "string"
+     },
+     "params": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "参数（按注册表 params 模型校验）",
+      "type": "object"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "PlanPolicy": {
+    "additionalProperties": false,
+    "properties": {
+     "fail_fast": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "None=沿用全局配置"
+     },
+     "parallel": {
+      "default": 1,
+      "description": "单元级并发上限；1=串行",
+      "maximum": 64,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "timeout": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "整个 Plan 的超时（秒）"
+     }
+    },
+    "type": "object"
+   },
+   "RecordPolicy": {
+    "additionalProperties": false,
+    "description": "记录模式：不检查超时，但记录实际耗时到运行结果。",
+    "properties": {
+     "kind": {
+      "const": "record",
+      "default": "record",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "ReportDefinition": {
+    "additionalProperties": false,
+    "description": "报告定义：选择 + 投影 + 呈现，声明性可存储复用。",
+    "properties": {
+     "description": {
+      "default": "",
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "presentation": {
+      "$ref": "#/$defs/ReportPresentation",
+      "default": {
+       "format": "html",
+       "template": null
+      }
+     },
+     "projection": {
+      "$ref": "#/$defs/ReportProjection",
+      "default": {
+       "fields": [
+        "seq",
+        "event_type",
+        "message"
+       ],
+       "source": "payload"
+      }
+     },
+     "selection": {
+      "$ref": "#/$defs/ReportSelection",
+      "default": {
+       "events": [
+        "*"
+       ],
+       "where": {}
+      }
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "ReportPresentation": {
+    "additionalProperties": false,
+    "description": "呈现面：格式与模板。",
+    "properties": {
+     "format": {
+      "default": "html",
+      "enum": [
+       "html",
+       "markdown",
+       "table"
+      ],
+      "type": "string"
+     },
+     "template": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "自定义模板（Jinja2；缺省用内置）"
+     },
+     "title": {
+      "default": "执行报告",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "ReportProjection": {
+    "additionalProperties": false,
+    "description": "投影面：从事件 payload 提取哪些字段（JSONPath）。",
+    "properties": {
+     "fields": {
+      "default": [
+       "seq",
+       "event_type",
+       "message"
+      ],
+      "description": "JSONPath 字段清单（按序渲染为报告列/键）",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "source": {
+      "default": "payload",
+      "description": "取值根：payload | event",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "ReportSelection": {
+    "additionalProperties": false,
+    "description": "选择面：哪些事件/日志进报告。",
+    "properties": {
+     "events": {
+      "default": [
+       "*"
+      ],
+      "description": "事件类型/模式（fnmatch；['*'] = 全部）",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "where": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "description": "标签/字段过滤",
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "Request": {
+    "additionalProperties": false,
+    "description": "请求体载体（body 结构由协议定义解释）。",
+    "properties": {
+     "body": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       }
+      ],
+      "default": {}
+     },
+     "kind": {
+      "const": "request",
+      "default": "request",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "RetryPolicy": {
+    "additionalProperties": false,
+    "properties": {
+     "backoffSeconds": {
+      "default": 20,
+      "description": "退避基础时长",
+      "type": "number"
+     },
+     "kind": {
+      "const": "retry_policy",
+      "default": "retry_policy",
+      "type": "string"
+     },
+     "maxAttempts": {
+      "default": 1,
+      "description": "最大尝试次数",
+      "type": "integer"
+     },
+     "retryOn": {
+      "default": [],
+      "description": "触发重试的条件标签",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "RunOptions": {
+    "additionalProperties": false,
+    "description": "执行指令（测试活动语义）。",
+    "properties": {
+     "debug": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/DebugSpec"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "调试装载；约束：单单元且 n_runs=1"
+     },
+     "n_runs": {
+      "default": 1,
+      "description": "对 SuiteGraph 覆盖 graph policy",
+      "maximum": 64,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "parallel": {
+      "default": 1,
+      "maximum": 64,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "step_from": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "step_to": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "subscribe": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/$defs/SubscribeRule"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "type": "object"
+   },
+   "Scenario": {
+    "additionalProperties": false,
+    "properties": {
+     "config": {
+      "$ref": "#/$defs/Config"
+     },
+     "kind": {
+      "const": "scenario",
+      "default": "scenario",
+      "type": "string"
+     },
+     "meta": {
+      "$ref": "#/$defs/Meta"
+     },
+     "resource": {
+      "additionalProperties": {
+       "discriminator": {
+        "mapping": {
+         "file": "#/$defs/File",
+         "mock": "#/$defs/Mock"
+        },
+        "propertyName": "kind"
+       },
+       "oneOf": [
+        {
+         "$ref": "#/$defs/Mock"
+        },
+        {
+         "$ref": "#/$defs/File"
+        }
+       ]
+      },
+      "type": "object"
+     },
+     "scenarioId": {
+      "description": "场景 ID，前缀 sc",
+      "type": "string"
+     },
+     "steps": {
+      "items": {
+       "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "scenarioId",
+     "meta",
+     "config",
+     "resource",
+     "steps"
+    ],
+    "type": "object"
+   },
+   "Scope": {
+    "enum": [
+     "framework",
+     "suite",
+     "scenario",
+     "step",
+     "request"
+    ],
+    "type": "string",
+    "x-enum-varnames": [
+     "FRAMEWORK",
+     "SUITE",
+     "SCENARIO",
+     "STEP",
+     "REQUEST"
+    ]
+   },
+   "Setup": {
+    "additionalProperties": false,
+    "description": "前置动作条目（预处理后、step 循环前顺序执行）。",
+    "properties": {
+     "key": {
+      "default": "",
+      "description": "条目身份（日志/与 teardown 配对）",
+      "type": "string"
+     },
+     "kind": {
+      "description": "要执行的策略 kind（dispatcher 分派键）",
+      "type": "string"
+     },
+     "params": {
+      "additionalProperties": true,
+      "default": {},
+      "type": "object"
+     },
+     "scope": {
+      "const": "scenario",
+      "default": "scenario",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "type": "object"
+   },
+   "Step": {
+    "additionalProperties": false,
+    "properties": {
+     "call": {
+      "$ref": "#/$defs/Call",
+      "description": "协议中立调用：{protocol(必填), ...协议自有字段}"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "步骤说明；非必填"
+     },
+     "endpoint": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "M1 接口 id（M3）：步骤 ↔ plate 接口定义的溯源锚点，系统前缀决定取 meta.plate 的哪一项；无锚点 = 手写原始调用"
+     },
+     "kind": {
+      "const": "step",
+      "default": "step",
+      "type": "string"
+     },
+     "request": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Request"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "请求体信息；body 结构由协议定义"
+     },
+     "strategy": {
+      "description": "策略集",
+      "items": {
+       "discriminator": {
+        "mapping": {
+         "assertion": "#/$defs/Assertion",
+         "assign": "#/$defs/Assign",
+         "extract": "#/$defs/Extract"
+        },
+        "propertyName": "kind"
+       },
+       "oneOf": [
+        {
+         "$ref": "#/$defs/Extract"
+        },
+        {
+         "$ref": "#/$defs/Assign"
+        },
+        {
+         "$ref": "#/$defs/Assertion"
+        }
+       ]
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "call",
+     "strategy"
+    ],
+    "type": "object"
+   },
+   "StrategyPhase": {
+    "description": "策略执行阶段（value 沿用历史值，存量场景零迁移）。",
+    "enum": [
+     "before_request",
+     "after_request",
+     "verifying",
+     "teardown"
+    ],
+    "type": "string",
+    "x-enum-varnames": [
+     "PREPARE",
+     "EXTRACTING",
+     "VERIFYING",
+     "TEARDOWN"
+    ]
+   },
+   "SubscribeRule": {
+    "additionalProperties": false,
+    "description": "单条订阅规则：选择（events/logs）× 过滤（where）× 输出（sink）。",
+    "properties": {
+     "events": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "事件类型或模式（fnmatch 通配）；None=不订阅事件"
+     },
+     "logs": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/LogSelector"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "日志选择器；None=不订阅日志"
+     },
+     "sink": {
+      "description": "输出通道：stdout | stderr | file:<path>",
+      "type": "string"
+     },
+     "where": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "description": "标签或事件字段 → 精确值或通配",
+      "type": "object"
+     }
+    },
+    "required": [
+     "sink"
+    ],
+    "type": "object"
+   },
+   "SuiteGraph": {
+    "additionalProperties": false,
+    "description": "编排套件（kind=graph，唯一 suite 形态）。",
+    "properties": {
+     "after": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/UnitDecl"
+      },
+      "type": "array"
+     },
+     "before": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/UnitDecl"
+      },
+      "type": "array"
+     },
+     "checks": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/CheckDecl"
+      },
+      "type": "array"
+     },
+     "control": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Control"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "gates": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/GateDecl"
+      },
+      "type": "array"
+     },
+     "kind": {
+      "const": "graph",
+      "default": "graph",
+      "type": "string"
+     },
+     "metrics": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/NamedParams"
+      },
+      "type": "array"
+     },
+     "mode": {
+      "default": "compose",
+      "enum": [
+       "aggregate",
+       "compose",
+       "fanout",
+       "chain"
+      ],
+      "type": "string"
+     },
+     "plugins": {
+      "default": [],
+      "items": {
+       "$ref": "#/$defs/NamedParams"
+      },
+      "type": "array"
+     },
+     "policy": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/PlanPolicy"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "subscribe": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "声明式订阅规格（编译期校验）"
+     },
+     "units": {
+      "items": {
+       "$ref": "#/$defs/UnitDecl"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "units"
+    ],
+    "type": "object"
+   },
+   "Teardown": {
+    "additionalProperties": false,
+    "description": "后置动作条目。",
+    "properties": {
+     "key": {
+      "default": "",
+      "description": "条目身份（日志/与 setup 配对）",
+      "type": "string"
+     },
+     "kind": {
+      "description": "要执行的策略 kind（dispatcher 分派键）",
+      "type": "string"
+     },
+     "params": {
+      "additionalProperties": true,
+      "default": {},
+      "type": "object"
+     },
+     "scope": {
+      "const": "scenario",
+      "default": "scenario",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "type": "object"
+   },
+   "TimeoutPolicy": {
+    "additionalProperties": false,
+    "description": "超时模式：执行器检查每一步是否超时，超时抛异常。",
+    "properties": {
+     "kind": {
+      "const": "timeout",
+      "default": "timeout",
+      "type": "string"
+     },
+     "seconds": {
+      "description": "超时阈值（秒）",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "seconds"
+    ],
+    "type": "object"
+   },
+   "UnitDecl": {
+    "additionalProperties": false,
+    "description": "编排套件中的单元声明。",
+    "properties": {
+     "inputs": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "字面量注入（scenario vars）",
+      "type": "object"
+     },
+     "map": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "description": "连线改名：上游输出名 → 本地输入名",
+      "type": "object"
+     },
+     "needs": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "outputs": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "显式输出；None=静态分析推导"
+     },
+     "policy_kwargs": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "UnitPolicy 覆盖项",
+      "type": "object"
+     },
+     "ref": {
+      "type": "string"
+     },
+     "repeat": {
+      "default": 1,
+      "description": "编译期展开份数（单元 id=ref#k）",
+      "maximum": 64,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "scenario": {
+      "$ref": "#/$defs/Scenario"
+     },
+     "shared": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "shared 去重键"
+     }
+    },
+    "required": [
+     "ref",
+     "scenario"
+    ],
+    "type": "object"
+   },
+   "UserCredential": {
+    "additionalProperties": false,
+    "description": "用户凭证（Config.users 的值类型）。",
+    "properties": {
+     "expires_in": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Token 有效期（秒），认证前配置"
+     },
+     "password": {
+      "default": "",
+      "description": "密码",
+      "type": "string"
+     },
+     "refresh_token": {
+      "default": "",
+      "description": "刷新令牌（独立于 access token），由认证/刷新接口返回",
+      "type": "string"
+     },
+     "token_type": {
+      "default": "Bearer",
+      "description": "Token 类型",
+      "type": "string"
+     },
+     "url": {
+      "default": "",
+      "description": "认证接口地址",
+      "type": "string"
+     },
+     "username": {
+      "default": "",
+      "description": "用户名",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  "description": "导出壳：把四个根类型拉进同一份 Schema 的 ``$defs``。不进消费面。",
+  "properties": {
+   "options": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/RunOptions"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "report": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/ReportDefinition"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   },
+   "run": {
+    "discriminator": {
+     "mapping": {
+      "graph": "#/$defs/SuiteGraph",
+      "scenario": "#/$defs/Scenario"
+     },
+     "propertyName": "kind"
+    },
+    "oneOf": [
+     {
+      "$ref": "#/$defs/Scenario"
+     },
+     {
+      "$ref": "#/$defs/SuiteGraph"
+     }
+    ]
+   },
+   "subscribe": {
+    "anyOf": [
+     {
+      "$ref": "#/$defs/SubscribeRule"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null
+   }
+  },
+  "required": [
+   "run"
+  ],
+  "type": "object"
+ },
+ "type": "m2"
+}
