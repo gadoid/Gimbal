@@ -8,6 +8,7 @@ service: platform-service
 # Reorder Members
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.patch_by_suite_id_members_order
 system: platform
 service: platform-service

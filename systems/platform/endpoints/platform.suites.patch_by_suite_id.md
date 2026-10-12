@@ -8,6 +8,7 @@ service: platform-service
 # Patch Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.patch_by_suite_id
 system: platform
 service: platform-service

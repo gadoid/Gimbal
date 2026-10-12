@@ -8,6 +8,7 @@ service: platform-service
 # Stale Scenarios
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.adaptations.get_stale
 system: platform
 service: platform-service

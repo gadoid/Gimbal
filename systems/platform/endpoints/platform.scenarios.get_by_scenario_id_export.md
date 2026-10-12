@@ -8,6 +8,7 @@ service: platform-service
 # Export Scenario
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.scenarios.get_by_scenario_id_export
 system: platform
 service: platform-service

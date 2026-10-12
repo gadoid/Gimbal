@@ -8,6 +8,7 @@ service: platform-service
 # Fork Public Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_by_suite_id_fork
 system: platform
 service: platform-service

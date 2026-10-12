@@ -8,6 +8,7 @@ service: platform-service
 # Remove Member
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.delete_by_suite_id_members_by_scenario_id
 system: platform
 service: platform-service

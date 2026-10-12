@@ -8,6 +8,7 @@ service: platform-service
 # Create Share
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.shares.post_root
 system: platform
 service: platform-service

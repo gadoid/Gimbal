@@ -8,6 +8,7 @@ service: platform-service
 # Run Task
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.post_tasks_by_task_id_run
 system: platform
 service: platform-service

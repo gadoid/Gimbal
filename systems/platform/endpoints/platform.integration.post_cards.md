@@ -8,6 +8,7 @@ service: platform-service
 # Cards
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.post_cards
 system: platform
 service: platform-service

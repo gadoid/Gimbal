@@ -8,6 +8,7 @@ service: platform-service
 # Scenario Referrers
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.shares.get_referrers
 system: platform
 service: platform-service

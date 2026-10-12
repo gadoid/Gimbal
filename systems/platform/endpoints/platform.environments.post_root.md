@@ -8,6 +8,7 @@ service: platform-service
 # Create Environment
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.environments.post_root
 system: platform
 service: platform-service

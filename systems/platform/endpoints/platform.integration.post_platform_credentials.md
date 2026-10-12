@@ -8,6 +8,7 @@ service: platform-service
 # Create Platform Credential
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.post_platform_credentials
 system: platform
 service: platform-service

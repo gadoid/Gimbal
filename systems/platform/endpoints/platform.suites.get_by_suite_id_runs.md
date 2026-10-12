@@ -8,6 +8,7 @@ service: platform-service
 # Suite Runs
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.get_by_suite_id_runs
 system: platform
 service: platform-service

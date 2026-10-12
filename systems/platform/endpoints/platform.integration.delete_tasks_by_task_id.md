@@ -8,6 +8,7 @@ service: platform-service
 # Delete Task
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.delete_tasks_by_task_id
 system: platform
 service: platform-service

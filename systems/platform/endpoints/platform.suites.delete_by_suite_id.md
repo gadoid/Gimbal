@@ -8,6 +8,7 @@ service: platform-service
 # Delete Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.delete_by_suite_id
 system: platform
 service: platform-service

@@ -8,6 +8,7 @@ service: platform-service
 # List Shares
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.shares.get_root
 system: platform
 service: platform-service

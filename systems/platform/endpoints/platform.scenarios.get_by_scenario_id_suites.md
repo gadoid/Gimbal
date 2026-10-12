@@ -8,6 +8,7 @@ service: platform-service
 # Suites Of Scenario
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.scenarios.get_by_scenario_id_suites
 system: platform
 service: platform-service

@@ -8,6 +8,7 @@ service: platform-service
 # Publish Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_by_suite_id_publish
 system: platform
 service: platform-service

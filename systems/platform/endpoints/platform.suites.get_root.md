@@ -8,6 +8,7 @@ service: platform-service
 # List Suites
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.get_root
 system: platform
 service: platform-service

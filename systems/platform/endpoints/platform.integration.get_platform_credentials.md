@@ -8,6 +8,7 @@ service: platform-service
 # List Platform Credentials
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.get_platform_credentials
 system: platform
 service: platform-service

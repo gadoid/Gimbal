@@ -8,6 +8,7 @@ service: platform-service
 # Validate Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_by_suite_id_validate
 system: platform
 service: platform-service

@@ -20,6 +20,9 @@ description: '批量 impact(M5,债 12):一次请求回全部 pending 端点的�
   消除。返回 {endpointId: [ImpactItem...]}(与单端点 /impact 同条目
 
   形状,未命中端点给空数组)。'
+status: deprecated
+replaced_by:
+- platform.adaptations.get_compare
 binding:
   protocol: http
   method: GET

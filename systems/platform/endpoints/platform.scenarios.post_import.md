@@ -8,6 +8,7 @@ service: platform-service
 # Import Scenario
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.scenarios.post_import
 system: platform
 service: platform-service

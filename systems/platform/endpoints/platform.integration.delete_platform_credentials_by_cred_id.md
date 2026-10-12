@@ -8,6 +8,7 @@ service: platform-service
 # Delete Platform Credential
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.delete_platform_credentials_by_cred_id
 system: platform
 service: platform-service

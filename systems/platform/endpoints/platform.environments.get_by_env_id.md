@@ -8,6 +8,7 @@ service: platform-service
 # Get Environment
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.environments.get_by_env_id
 system: platform
 service: platform-service

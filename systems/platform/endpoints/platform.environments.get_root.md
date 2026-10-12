@@ -8,6 +8,7 @@ service: platform-service
 # List Environments
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.environments.get_root
 system: platform
 service: platform-service

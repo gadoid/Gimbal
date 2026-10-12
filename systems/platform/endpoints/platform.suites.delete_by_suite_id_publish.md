@@ -8,6 +8,7 @@ service: platform-service
 # Unpublish Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.delete_by_suite_id_publish
 system: platform
 service: platform-service

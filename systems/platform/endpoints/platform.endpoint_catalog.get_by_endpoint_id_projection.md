@@ -8,6 +8,7 @@ service: platform-service
 # Get Endpoint Projection
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.endpoint_catalog.get_by_endpoint_id_projection
 system: platform
 service: platform-service

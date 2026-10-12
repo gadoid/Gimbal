@@ -8,6 +8,7 @@ service: platform-service
 # Rerun Failed Units
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_by_suite_id_runs_by_execution_id_rer_beff52
 system: platform
 service: platform-service

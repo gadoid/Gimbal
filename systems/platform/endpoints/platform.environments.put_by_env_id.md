@@ -8,6 +8,7 @@ service: platform-service
 # Update Environment
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.environments.put_by_env_id
 system: platform
 service: platform-service

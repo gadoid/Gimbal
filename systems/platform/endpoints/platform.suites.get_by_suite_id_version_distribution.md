@@ -8,6 +8,7 @@ service: platform-service
 # Get Version Distribution
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.get_by_suite_id_version_distribution
 system: platform
 service: platform-service

@@ -8,6 +8,7 @@ service: platform-service
 # List System Lines
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.endpoint_catalog.get_by_system_id_lines
 system: platform
 service: platform-service

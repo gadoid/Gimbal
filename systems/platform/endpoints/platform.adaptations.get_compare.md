@@ -8,6 +8,7 @@ service: platform-service
 # Compare Revisions
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.adaptations.get_compare
 system: platform
 service: platform-service

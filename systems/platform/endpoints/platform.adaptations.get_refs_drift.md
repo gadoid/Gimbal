@@ -14,6 +14,9 @@ system: platform
 service: platform-service
 name: Refs Drift
 description: 倒排索引 vs plate 接口目录 diff(只读):悬空引用 / 全网零引用。
+status: deprecated
+replaced_by:
+- platform.adaptations.get_unindexed_steps
 binding:
   protocol: http
   method: GET

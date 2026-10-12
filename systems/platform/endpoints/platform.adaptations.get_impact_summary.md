@@ -13,7 +13,10 @@ id: platform.adaptations.get_impact_summary
 system: platform
 service: platform-service
 name: Impact Summary
-description: "本批影响面摘要(配套方案 §3.2):pending 端点集(客户端从\ncatalog/diff 拿到后传入)→ 按服务聚合的 波及用例 / 最近失败 数。\n纯读 —— 不复算 diff(catalog_diff 带基线写副作用,不藏进 GET);\nrecentFail 全站口径(跨 owner 聚合数,方案 §3.5)。"
+description: "本批影响面摘要(配套方案 §3.2):pending 端点集(客户端从\ncatalog/diff 拿到后传入)→ 按服务聚合的 波及用例 / 最近失败 数。\n纯读 —— 不复算 diff(catalog_diff 带基线写副作用,不藏进 GET);\nrecentFail 全站口径(跨 owner 聚合数,方案 §3.5)。 退役(2026-10-12 A-6):working 全局目录口径读面删除,由 RS4a 比较/陈旧清单与版本提示承接。"
+status: deprecated
+replaced_by:
+- platform.adaptations.get_compare
 binding:
   protocol: http
   method: GET

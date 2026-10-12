@@ -8,6 +8,7 @@ service: platform-service
 # Delete Share
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.shares.delete_by_share_id
 system: platform
 service: platform-service

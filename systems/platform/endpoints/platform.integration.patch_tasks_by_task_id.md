@@ -8,6 +8,7 @@ service: platform-service
 # Patch Task
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.patch_tasks_by_task_id
 system: platform
 service: platform-service

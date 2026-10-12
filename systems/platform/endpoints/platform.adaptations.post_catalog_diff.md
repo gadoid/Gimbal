@@ -14,6 +14,10 @@ system: platform
 service: platform-service
 name: Catalog Diff
 description: 拉 plate 目录对戳:待适配 / 异常(C12 忘 bump、下架)/ 本次新落基线数。
+status: deprecated
+replaced_by:
+- platform.adaptations.get_stale
+- platform.adaptations.get_compare
 binding:
   protocol: http
   method: POST

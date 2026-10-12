@@ -8,6 +8,7 @@ service: platform-service
 # Submit Batch
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.adaptations.post_submit_batch
 system: platform
 service: platform-service

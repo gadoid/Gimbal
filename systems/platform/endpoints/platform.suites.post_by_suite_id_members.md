@@ -8,6 +8,7 @@ service: platform-service
 # Add Members
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_by_suite_id_members
 system: platform
 service: platform-service

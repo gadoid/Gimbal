@@ -8,6 +8,7 @@ service: platform-service
 # Submit Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.adaptations.post_submit_suite
 system: platform
 service: platform-service

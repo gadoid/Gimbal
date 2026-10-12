@@ -8,6 +8,7 @@ service: platform-service
 # List Endpoints
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.endpoint_catalog.get_list
 system: platform
 service: platform-service

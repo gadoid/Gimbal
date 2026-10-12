@@ -14,6 +14,9 @@ system: platform
 service: platform-service
 name: Impact
 description: endpoint(可选 field)→ 受影响清单(直填/模板、数据集列标注)。
+status: deprecated
+replaced_by:
+- platform.adaptations.get_compare
 binding:
   protocol: http
   method: GET

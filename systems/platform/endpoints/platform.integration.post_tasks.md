@@ -8,6 +8,7 @@ service: platform-service
 # Create Task
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.post_tasks
 system: platform
 service: platform-service

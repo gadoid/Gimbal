@@ -8,6 +8,7 @@ service: platform-service
 # Put Composition
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.put_by_suite_id_composition
 system: platform
 service: platform-service

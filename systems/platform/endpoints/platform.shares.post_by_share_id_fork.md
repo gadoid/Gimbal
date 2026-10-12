@@ -8,6 +8,7 @@ service: platform-service
 # Fork Share
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.shares.post_by_share_id_fork
 system: platform
 service: platform-service

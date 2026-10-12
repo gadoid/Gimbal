@@ -8,6 +8,7 @@ service: platform-service
 # Create Suite
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.suites.post_root
 system: platform
 service: platform-service

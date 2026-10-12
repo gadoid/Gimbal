@@ -8,6 +8,7 @@ service: platform-service
 # Save Check
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.adaptations.post_save_check
 system: platform
 service: platform-service

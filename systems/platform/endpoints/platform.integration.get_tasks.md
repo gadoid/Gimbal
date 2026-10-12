@@ -8,6 +8,7 @@ service: platform-service
 # List Tasks
 
 ```gimbal:endpoint
+review: reviewed
 id: platform.integration.get_tasks
 system: platform
 service: platform-service
