@@ -8,6 +8,9 @@ service: platform-service
 # Open Batch
 
 ```gimbal:endpoint
+status: deprecated
+replaced_by:
+- platform.adaptations.post_submit_batch
 review: reviewed
 id: platform.adaptations.post_batches
 system: platform

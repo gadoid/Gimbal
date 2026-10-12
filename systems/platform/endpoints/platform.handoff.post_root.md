@@ -8,6 +8,7 @@ service: platform-service
 # Handoff Resource
 
 ```gimbal:endpoint
+status: deprecated
 review: reviewed
 id: platform.handoff.post_root
 system: platform
