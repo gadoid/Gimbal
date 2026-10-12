@@ -1,4 +1,7 @@
-"""M5 bulk 端点(signals / impact-bulk,债 12:关注页与适配中心 N+1 消除)。"""
+"""M5 bulk 端点(signals,债 12:关注页 N+1 消除)。
+
+impact-bulk 随 A-6 清理(2026-10-12)删除 —— useInterfaceChange 退役。
+"""
 from __future__ import annotations
 
 from tests.helpers import ensure_fk_users, make_draft, register_and_login
@@ -103,36 +106,3 @@ async def test_signals_requires_auth_and_ids(client):
     r = await client.get("/api/scenarios/signals", headers=h,
                          params={"ids": "  "})
     assert r.status_code == 422
-
-
-async def test_impact_bulk_returns_map(client, plate):
-    """impact-bulk:一次请求回全部 pending 端点的受影响清单。"""
-    EP = "fin.order.add"
-    admin = await register_and_login(client, "m5bulk", "pw123456")
-    from .helpers import make_draft
-    from app.core import db as db_module
-    from app.schemas.scenario_composer import ScenarioDraft
-    from app.services import scenario_store
-    async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, ScenarioDraft.model_validate(make_draft(
-            "sc-m5-imp",
-            steps=[{"call": {"view_hints": {"endpoint_id": EP}, "headers": {}},
-                    "request": {"body": {"amount": 1}}}],
-            vars_map={"amount": 1})), owner="m5bulk", owner_id=1)
-
-    r = await client.get(
-        "/api/adaptations/impact-bulk", headers=admin,
-        params=[("endpointIds", EP), ("endpointIds", "fin.ghost")])
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert set(body) == {EP, "fin.ghost"}
-    assert isinstance(body[EP], list) and len(body[EP]) >= 1
-    assert body["fin.ghost"] == []
-
-
-async def test_impact_bulk_admin_only(client):
-    await register_and_login(client, "m5bulk_root", "pw123456")  # 首注册= admin
-    member = await register_and_login(client, "m5bulk_m", "pw123456")  # member
-    r = await client.get("/api/adaptations/impact-bulk", headers=member,
-                         params=[("endpointIds", "e")])
-    assert r.status_code == 403

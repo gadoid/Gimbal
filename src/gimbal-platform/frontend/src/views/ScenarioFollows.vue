@@ -71,7 +71,6 @@
           <div class="signal-area">
             <span class="signal-label">近5次</span>
             <SignalDots :runs="row.trend" />
-            <span v-if="row.changed" class="change-badge" title="变更适配检测到接口变更">⚠ 接口有变更</span>
           </div>
           <router-link class="goto-link" :to="row.isPublic ? '/scenarios/public' : '/scenarios/mine'">↗ 前往场景</router-link>
           <DropdownMenu>
@@ -105,7 +104,6 @@
             </div>
             <div class="e-foot">
               <SignalDots :runs="row.trend" />
-              <span v-if="row.changed" class="change-badge">⚠ 接口有变更</span>
               <button type="button" class="pin-link" @click.stop="pinRow(row.s)">↑ 设为常驻</button>
             </div>
           </div>
@@ -113,7 +111,7 @@
       </div>
 
       <p class="slib-note">
-        关注页不放「执行」「复制到我的」这类操作按钮——不管来源是我的还是公共,统一只有一个「前往场景」链接,点了跳回原本的列表页(我的场景或公共场景),真要操作在那边完成,该有的权限边界也都留在原地。关注上限 20 个——超过这个量「把最想用的场景排在最前面」这件事本身就失效了,所以强制收敛。前 5 个是常驻区,拖拽把手或旁边的 ▲▼ 都能排序(键盘走 ▲▼),右侧信号区(执行健康趋势 + 接口变更提醒)一个常驻场景通下;其余关注对象收进「堆叠卡片」——常态只露出一张窄条(首字提示,完整名称走原生 title 悬浮),鼠标悬浮展开成完整卡片,这里同样不放操作入口,只看信号和「设为常驻」。信号区也是检测和候选池:20 个以内鼠标扫一遍比敲字搜索更快,堆叠区不做搜索框。「近5次执行」这个趋势只统计我的场景的默认方案、公共原件自身的验证执行,不跨方案聚合——避免像「边界值压测」这类故意测失败边界的方案把整体信号拉低,看着像出问题、其实是预期内。
+        关注页不放「执行」「复制到我的」这类操作按钮——不管来源是我的还是公共,统一只有一个「前往场景」链接,点了跳回原本的列表页(我的场景或公共场景),真要操作在那边完成,该有的权限边界也都留在原地。关注上限 20 个——超过这个量「把最想用的场景排在最前面」这件事本身就失效了,所以强制收敛。前 5 个是常驻区,拖拽把手或旁边的 ▲▼ 都能排序(键盘走 ▲▼),右侧信号区(执行健康趋势)一个常驻场景通下;「定义已修正」类版本提示由场景列表/编排页的版本提示承接(A-6,2026-10-12);其余关注对象收进「堆叠卡片」——常态只露出一张窄条(首字提示,完整名称走原生 title 悬浮),鼠标悬浮展开成完整卡片,这里同样不放操作入口,只看信号和「设为常驻」。信号区也是检测和候选池:20 个以内鼠标扫一遍比敲字搜索更快,堆叠区不做搜索框。「近5次执行」这个趋势只统计我的场景的默认方案、公共原件自身的验证执行,不跨方案聚合——避免像「边界值压测」这类故意测失败边界的方案把整体信号拉低,看着像出问题、其实是预期内。
       </p>
     </template>
   </section>
@@ -128,7 +126,6 @@ import { showError } from '@/utils/errorFallback'
 import { relTime, shortDateTime } from '@/utils/datetime'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { RunStamp } from '@/composables/useScenarioRuns'
-import { useInterfaceChange } from '@/composables/useInterfaceChange'
 import { useFollowLayout, FOLLOW_CAP, PINNED_MAX } from '@/composables/useFollowLayout'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
@@ -144,11 +141,9 @@ interface FollowRow {
   defaultSchemeName: string | null
   last: RunStamp | null
   trend: string[]
-  changed: boolean
 }
 
 const store = useScenarioComposerStore()
-const change = useInterfaceChange()
 const layout = useFollowLayout()
 
 const signals = reactive(new Map<string, Omit<FollowRow, 's'>>())
@@ -171,7 +166,6 @@ const rows = computed<FollowRow[]>(() =>
         defaultSchemeName: sig?.defaultSchemeName ?? null,
         last: sig?.last ?? null,
         trend: sig?.trend ?? [],
-        changed: sig?.changed ?? false,
       }
     }),
 )
@@ -204,8 +198,6 @@ onMounted(async () => {
   // 先回收死席位再播种:prune 无变化时不写盘,所以首访(无 key)仍能播种
   layout.prune(ids)
   layout.seed(ids)
-  // 先等影响面算完再装配信号,否则 hasChange 恒读到空集(竞态)。
-  await change.ensure()
   await loadSignalsBounded(followed.value)
 })
 
@@ -236,7 +228,6 @@ async function loadSignalsBounded(list: ScenarioListItem[]) {
       defaultSchemeName: sig.defaultSchemeName,
       last: sig.lastRun,
       trend: sig.trend,
-      changed: change.hasChange(id),
     })
   }
 }

@@ -2,8 +2,8 @@
  * ScenarioFollows — 关注页契约。
  * 钉住:常驻区只渲染 pinned ∩ 关注集(死席位挂载即回收)、▲▼ 键盘重排
  * (含 move 的「追加末尾」落点)、取消关注失败不得掉席位、方案数/默认方案名
- * 取自信号装配而非列表字段、接口变更信号必须等 ensure() 算完再读(竞态)、
- * 趋势只统计默认方案的执行。
+ * 取自信号装配而非列表字段、趋势只统计默认方案的执行。
+ * 「接口有变更」信号随 A-6 清理(2026-10-12)退役 —— 由版本提示承接。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
@@ -24,16 +24,6 @@ const readPinned = () => JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as str
 vi.mock('@/api/preferences', () => ({
   getPreferences: vi.fn().mockResolvedValue({}),
   putPreference: vi.fn().mockResolvedValue(undefined),
-}))
-
-const ensureSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
-
-vi.mock('@/composables/useInterfaceChange', () => ({
-  useInterfaceChange: () => ({
-    // hasChange 只在 f-c1 上为真 —— 视图必须等 ensure() 完成再读,否则恒 false
-    ensure: ensureSpy,
-    hasChange: (id: string) => id === 'f-c1',
-  }),
 }))
 
 vi.mock('@/api/scenario-composer', () => ({
@@ -208,15 +198,6 @@ describe('ScenarioFollows — 关注页', () => {
     expect(dots.map((d) => d.classes().join(' '))).toEqual(['ok', 'bad'])
     // 默认方案最近一次 = failed → 单点状态与趋势同一口径
     expect(w.find('.status-dot-sm').classes()).toContain('bad')
-    w.unmount()
-  })
-
-  it('接口变更信号先等 ensure() 再装配(此前恒读到空集)', async () => {
-    const w = await mountPage([followed('f-a'), followed('f-c1')])
-    expect(ensureSpy).toHaveBeenCalled()
-    const badges = w.findAll('.change-badge')
-    expect(badges).toHaveLength(1)
-    expect(badges[0]!.text()).toContain('接口有变更')
     w.unmount()
   })
 

@@ -1,8 +1,11 @@
-"""变更适配编排:影响查询 / 批次生命周期 / RS4a 新流程服务。
+"""变更适配编排:批次生命周期 / RS4a 新流程服务。
 
 RS3 §5.10:基线戳(catalog_versions)与按端点开批的旧流程已删除,
-比较/影响走 plate 差异接口(plate_diff_for_adaptation);批次保留
-carry 类与 RS4a 提交语义(存档 → 逐条应用 → 完成/回滚)。
+比较走 plate 差异接口(plate_diff_for_adaptation)。A-6 清理
+(2026-10-12):impact/refs_drift/impact_summary 三个按 working
+全局目录口径的读面一并删除 —— 影响提示由版本提示(生效修订
+口径)承接;引用索引健康检查仅存 C10 unindexed-steps。
+批次保留 carry 类与 RS4a 提交语义(存档 → 逐条应用 → 完成/回滚)。
 """
 from __future__ import annotations
 
@@ -25,7 +28,6 @@ from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..models.environment import Environment
 from ..models.integration_task import IntegrationTask
-from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 from ..models.suite import Suite
 from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
 from . import carry_store, data_set_store, endpoint_ref_index, plate_client, scenario_store
@@ -120,179 +122,6 @@ async def plate_diff_for_adaptation(
             code="invalid_action",
             message=envelope.get("error", {}).get("message", "diff failed"))
     return envelope.get("data", {}).get("item", {})
-
-
-async def catalog_diff(db: AsyncSession) -> dict:
-    """RS3 §5.10：catalog_diff 已删除——被 plate 差异 + 版本提示取代。"""
-    return {"pending": [], "anomalies": [], "total": 0, "checked": 0}
-
-
-async def impact(
-    db: AsyncSession, endpoint_id: str, field_name: str | None = None
-) -> list[dict]:
-    """endpoint(可选再按 field)→ 受影响清单条目(spec §5.2)。
-
-    直填字段同样命中(索引行按字段键存在,与值是否模板无关);
-    via_var 条目按数据集行实际含键(内存列存在性,D5 —— 不建
-    dataset_columns 表)配对;无数据集命中时仍出一条 datasetId=None
-    (变量默认值通路,D9 基线 = 直填 ∪ vars 扁平值)。
-
-    锚点行(source=anchor,零字段锚点 step 的哨兵行)出 {source: None,
-    field: None} 条目 —— 与原全量兜底直扫的产出同形;该直扫已随锚点行
-    上线删除(不再 O(全部场景)/次)。字段过滤天然排除锚点行
-    (field_name=''≠filter),与旧「带 field 不兜底」行为一致。
-    """
-    stmt = select(ScenarioEndpointRef).where(
-        ScenarioEndpointRef.endpoint_id == endpoint_id
-    )
-    if field_name:
-        stmt = stmt.where(ScenarioEndpointRef.field_name == field_name)
-    stmt = stmt.order_by(
-        ScenarioEndpointRef.scenario_id, ScenarioEndpointRef.step_index,
-        ScenarioEndpointRef.source, ScenarioEndpointRef.field_name,
-    )
-    refs = (await db.execute(stmt)).scalars().all()
-    scenario_ids = sorted({r.scenario_id for r in refs})
-    ds_rows = (await db.execute(
-        select(ComposerDataSet).where(
-            ComposerDataSet.scenario_id.in_(scenario_ids)
-        )
-    )).scalars().all()
-    by_scenario: dict[str, list[ComposerDataSet]] = {}
-    for d in ds_rows:
-        by_scenario.setdefault(d.scenario_id, []).append(d)
-
-    out: list[dict] = []
-    for r in refs:
-        is_anchor = r.source == endpoint_ref_index.ANCHOR_SOURCE
-        entry = {
-            "scenarioId": r.scenario_id, "stepIndex": r.step_index,
-            "source": None if is_anchor else r.source,
-            "field": None if is_anchor else r.field_name,
-            "viaVar": r.via_var,
-            "datasetId": None, "datasetColumn": None,
-        }
-        if not r.via_var:  # 直填
-            out.append(entry)
-            continue
-        entry["datasetColumn"] = r.via_var
-        hit_any = False
-        for d in by_scenario.get(r.scenario_id, []):
-            if any(isinstance(row, dict) and r.via_var in row
-                   for row in (d.rows or [])):
-                out.append({**entry, "datasetId": d.dataset_id})
-                hit_any = True
-        if not hit_any:  # 变量默认值通路(vars 扁平值),不挂数据集
-            out.append(entry)
-    return out
-
-
-# ─── 索引 vs 目录漂移(只读;2026-09-20)─────────────────────────
-async def refs_drift(db: AsyncSession) -> dict:
-    """倒排索引 endpoint 面 vs plate 接口清单 diff(结构同 carry_drift)。
-
-    * ``dangling`` — refs 有、plate 目录无(接口改名/下架后的悬空引用行);
-    * ``zeroRef``  — plate 有、refs 无(全网无人引用;网格「无覆盖」的
-      另一种表述,含锚点行口径);
-    * ``plateReachable`` — plate 拉不到时 False 且清单不可信(沿用
-      carry_drift 纪律:面视为空 → dangling=全部 refs 面,调用方须先
-      看信号再渲染,防把不可达误读成漂移)。
-    """
-    ref_ids = set((await db.execute(
-        select(ScenarioEndpointRef.endpoint_id).distinct()
-    )).scalars())
-    reachable = True
-    try:
-        items = await _plate_list_endpoints()
-    except PlateUnavailableError:
-        items = []
-        reachable = False
-    plate_ids = {str(i["id"]) for i in items if i.get("id")}
-    return {
-        "dangling": sorted(ref_ids - plate_ids),
-        "zeroRef": sorted(plate_ids - ref_ids),
-        "plateReachable": reachable,
-    }
-
-
-# ─── 本批影响面摘要(只读;配套方案 §3.2,2026-09-20)──────────────
-async def impact_summary(db: AsyncSession, *, endpoint_ids: list[str]) -> dict:
-    """pending 端点集 → 按服务聚合的影响面摘要(适配中心顶部条)。
-
-    * ``endpoint_ids`` 由客户端传入(它刚从 catalog/diff 拿到的 pending
-      清单)—— 本函数**不复算 diff**:catalog_diff 有基线落库写副作用,
-      挂在 GET 上会把写副作用藏进读路径;
-    * 服务归组键 = **端点自身的目录 service**(plate 轻列表自带,唯一
-      权威),不扫场景 payload 推服务 —— 更便宜且确定;
-    * ``caseCount`` = 该服务 pending 端点经倒排索引命中的 distinct 场景
-      数(锚点行含);跨服务的场景在多个服务条各计一次,totals 去重;
-    * ``recentFailCount`` = 受影响场景的**最近一次**执行终态为 failed
-      的数量。执行记录严格 owner 作用域,此处按**全站口径**跨 owner
-      统计(方案 §3.5:同一批变更不能因人而异)—— 只取聚合数,不回
-      执行详情/场景标题,不越 visibility 边界;
-    * 端点不在 plate 轻列表(下架/传入异常 id)→ 不进任何服务条
-      (无 service 可归组),也不计入 totals.changeCount。
-    """
-    from ..models.execution import Execution, STATUS_FAILED
-
-    totals = {"changeCount": 0, "serviceCount": 0,
-              "caseCount": 0, "recentFailCount": 0}
-    if not endpoint_ids:
-        return {"services": [], "totals": totals}
-
-    items = await _plate_list_endpoints()
-    svc_by_eid = {
-        str(it.get("id")): str(it.get("service") or "")
-        for it in items if it.get("id")
-    }
-    eids = [e for e in dict.fromkeys(endpoint_ids)
-            if svc_by_eid.get(e)]  # 去重 + 只留可归组的
-
-    scen_by_service: dict[str, set[str]] = {}
-    if eids:
-        rows = (await db.execute(
-            select(ScenarioEndpointRef.endpoint_id, ScenarioEndpointRef.scenario_id)
-            .where(ScenarioEndpointRef.endpoint_id.in_(eids))
-            .distinct()
-        )).all()
-        for eid, sid in rows:
-            scen_by_service.setdefault(svc_by_eid[eid], set()).add(sid)
-
-    # 最近一次执行(跨 owner,按 id 倒序首见即最新)→ failed 终态集
-    all_sids = set().union(*scen_by_service.values()) if scen_by_service else set()
-    latest_failed: set[str] = set()
-    if all_sids:
-        exec_rows = (await db.execute(
-            select(Execution.scenario_id, Execution.status)
-            .where(Execution.scenario_id.in_(all_sids))
-            .order_by(Execution.id.desc())
-        )).all()
-        seen: set[str] = set()
-        for sid, st in exec_rows:
-            if sid in seen:
-                continue
-            seen.add(sid)
-            if st == STATUS_FAILED:
-                latest_failed.add(sid)
-
-    services = []
-    for name in sorted(scen_by_service):
-        sids = scen_by_service[name]
-        services.append({
-            "name": name,
-            "changeCount": sum(1 for e in eids if svc_by_eid[e] == name),
-            "caseCount": len(sids),
-            "recentFailCount": len(sids & latest_failed),
-        })
-    totals = {
-        "changeCount": len(eids),
-        "serviceCount": len(services),
-        "caseCount": len(all_sids),
-        "recentFailCount": len(all_sids & latest_failed),
-    }
-    return {"services": services, "totals": totals}
-
-
 # ─── 批次生命周期:开批次(spec §5.3)────────────────────────────
 async def _get_batch(db: AsyncSession, batch_id: str) -> AdaptationBatch:
     batch = (await db.execute(

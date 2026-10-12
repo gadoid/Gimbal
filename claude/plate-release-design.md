@@ -306,9 +306,10 @@
 
 | 现有机制 | 处理 |
 |---|---|
-| `catalog_versions`、`POST /adaptations/catalog/diff`、首见落基线、`_advance_stamp` | 切换窗口内删除 |
-| `GET /impact`、`/impact-bulk`、`/impact-summary` | 改造为 5.3 的影响查询 |
-| `GET /unindexed-steps`、`/refs-drift` | 保留：引用索引的健康检查 |
+| `catalog_versions`、`POST /adaptations/catalog/diff`、首见落基线、`_advance_stamp` | 切换窗口内删除 ✓（A-6，2026-10-12） |
+| `GET /impact`、`/impact-bulk`、`/impact-summary` | 已删除（A-6，2026-10-12）——原计划"改造为 5.3 影响查询"，实际由 RS4a compare/影响面与版本提示承接，ImpactDrawer/useInterfaceChange 无生产挂载点一并退役 |
+| `GET /unindexed-steps` | 保留：引用索引的健康检查 |
+| `GET /refs-drift` | 已删除（A-6，2026-10-12）——按 working 全局目录对戳在新模型下口径错误（应按各场景生效修订），且前端零消费；健康检查由 unindexed-steps 承担 |
 | carry 批次与 3 种 carry op | 保留 |
 | `diff_field_specs` | 删除，改调 plate 差异接口 |
 | `rollback_batch` 的快照与重放 | 保留；判定规则按 5.7 |

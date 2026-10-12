@@ -20,10 +20,6 @@ vi.mock('@/api/carry', () => ({
   getDrift: vi.fn().mockResolvedValue({ plateReachable: true, services: [] }),
 }))
 
-vi.mock('@/stores/adaptations', () => ({
-  useAdaptationsStore: () => ({ pendingCount: 0, refreshing: false }),
-}))
-
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAdmin: true,

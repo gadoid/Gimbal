@@ -1,7 +1,8 @@
-"""adaptations 路由 API 测试（RS3 后收窄）。
+"""adaptations 路由 API 测试（RS3 后收窄 + A-6 清理）。
 
 RS3 §5.10：按端点开批的旧流程（基线戳 / POST /batches / 草案展开）
-已删除，本文件只覆盖存续的读面：catalog/diff 空报告、impact、
+已删除；A-6(2026-10-12) 再删 catalog/diff、impact、impact-bulk、
+impact-summary、refs-drift 五读面。本文件只覆盖存续读面：
 unindexed-steps。批次生命周期经 carry 批（见 test_carry_*）与新
 RS4a 流程（随批次三重建）测试。
 """
@@ -52,27 +53,16 @@ async def _seed_unindexed_scenario(sid: str = "sc-unbound"):
         )
 
 
-# ─── catalog/diff（空报告：机制已删，路由保留给旧客户端）─────────
-async def test_diff_requires_login(client, plate):
-    r = await client.post("/api/adaptations/catalog/diff")
-    assert r.status_code == 401
-
-
-async def test_diff_returns_empty_report(client, plate):
-    member = await register_and_login(client, "peon", "peonpass123")
-    r = await client.post("/api/adaptations/catalog/diff", headers=member)
-    assert r.status_code == 200
-    assert r.json() == {"pending": [], "anomalies": [], "baselinedNow": 0}
-
-
-# ─── impact（admin 门控保留；读面无版本依赖）────────────────────
-async def test_impact_admin_read_empty(client, plate):
-    await register_and_login(client, "boss", "bosspass123")
+# ─── 已删读面(2026-10-12 A-6):catalog/diff、impact、impact-bulk、
+#     impact-summary、refs-drift 一并 404 —— 存量客户端升级提示 ──────
+async def test_legacy_read_faces_removed(client, plate):
     admin = await register_and_login(client, "boss", "bosspass123")
-    r = await client.get("/api/adaptations/impact",
-                         params={"endpointId": EP}, headers=admin)
-    assert r.status_code == 200
-    assert r.json() == []
+    assert (await client.post("/api/adaptations/catalog/diff",
+                              headers=admin)).status_code == 404
+    for path in ("impact?endpointId=fin.order.add", "impact-bulk",
+                 "refs-drift", "impact-summary"):
+        r = await client.get(f"/api/adaptations/{path}", headers=admin)
+        assert r.status_code == 404, path
 
 
 # ─── unindexed-steps（CurrentUser；C10 只读警示）────────────────

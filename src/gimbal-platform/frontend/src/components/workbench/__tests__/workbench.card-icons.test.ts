@@ -34,7 +34,6 @@ vi.mock('@/api/notifications', () => ({
 }))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
-  catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
   errMsg: (_e: unknown, d: string) => d,
 }))
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))

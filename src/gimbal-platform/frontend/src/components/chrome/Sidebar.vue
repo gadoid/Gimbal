@@ -96,16 +96,6 @@
         >
           <component :is="entry.icon" class="nav-icon h-3.5 w-3.5 shrink-0" />
           <span v-if="!collapsed" class="nav-text flex-1 whitespace-nowrap">{{ entry.label }}</span>
-          <span
-            v-if="!collapsed && entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
-            class="nav-badge h-[18px] min-w-[18px] rounded-full bg-signal-failed px-1.5 text-center text-caption leading-[18px] text-white"
-          >{{ adaptations.pendingCount }}</span>
-          <!-- 折叠态徽标退化为图标右上角红点(title 带数值) -->
-          <span
-            v-if="collapsed && entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
-            class="nav-badge-dot absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-signal-failed"
-            :title="`${adaptations.pendingCount} 条适配待处理`"
-          ></span>
         </span>
       </component>
     </nav>
@@ -121,7 +111,7 @@
 
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { computed, h, watch } from 'vue'
+import { computed, h } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ArchiveIcon,
@@ -145,25 +135,13 @@ import {
 } from '@radix-icons/vue'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useAdaptationsStore } from '@/stores/adaptations'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 import UserBadge from '@/components/chrome/UserBadge.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
 
-const adaptations = useAdaptationsStore()
-
 const { collapsed, toggle } = useSidebarCollapse()
-
-// D3:admin 登录/刷新后静默拉一次 diff(幂等,冷启动落基线属预期副作用)
-watch(
-  () => auth.role,
-  (role) => {
-    if (role !== 'user') void adaptations.ensureBadgeLoaded()
-  },
-  { immediate: true },
-)
 
 interface SidebarEntry {
   path: string

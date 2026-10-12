@@ -36,7 +36,6 @@ vi.mock('@/api/notifications', () => ({
 }))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
-  catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
   errMsg: (_e: unknown, d: string) => d,
 }))
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
@@ -168,11 +167,10 @@ describe('认证管理卡', () => {
 })
 
 describe('变更适配卡', () => {
-  it('member 只发 listBatches("mine"),不触发 admin 的 catalogDiff', async () => {
+  it('member 只发 listBatches("mine") —— A-6 后卡上无 admin 目录面', async () => {
     const w = mountPage()
     await waitCard(w, 'adaptations')
     expect(adaptationsApi.listBatches).toHaveBeenCalledWith({ scope: 'mine' })
-    expect(adaptationsApi.catalogDiff).not.toHaveBeenCalled()
     w.unmount()
   })
 
@@ -188,9 +186,6 @@ describe('变更适配卡', () => {
     expect(row.text()).toContain('待处理')
     expect(row.text()).toContain('v1→v2')
     expect(row.attributes('href')).toBe('/adaptations/batches/b1')
-    // admin 侧徽章走 store 的单飞合流,卡上不会重复拉
-    await flushPromises()
-    expect(adaptationsApi.catalogDiff).toHaveBeenCalledTimes(1)
     w.unmount()
   })
 })

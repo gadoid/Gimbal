@@ -5,8 +5,8 @@
  * 结构基准 = F-sitemap v2:
  * - 置顶「工作台」入口;组标签 场景 / 服务 / 执行中心 / 平台;
  * - 常量池**不在**侧边栏(完整页经工作台深链进入,见 WorkbenchView.test);
- * - 沿用语义:adminOnly 过滤(用户管理/传递字段)、变更适配 pendingCount
- *   徽标(仅 admin 且 >0)、真实 <a href> 导航、active 高亮。
+ * - 沿用语义:adminOnly 过滤(用户管理/传递字段)、真实 <a href> 导航、
+ *   active 高亮。变更适配 pendingCount 徽标随 A-6 清理(2026-10-12)删除。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -15,7 +15,6 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import Sidebar from '@/components/chrome/Sidebar.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'
-import * as adaptationsApi from '@/api/adaptations'
 
 function makeRouter() {
   return createRouter({
@@ -57,9 +56,6 @@ async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
 describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [], anomalies: [], baselinedNow: 0,
-    } as never)
   })
 
   it('admin 可见全部条目:工作台置顶 + 六组条目齐备', async () => {
@@ -131,9 +127,6 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
 describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [], anomalies: [], baselinedNow: 0,
-    } as never)
   })
 
   it('member 不见 用户管理/传递字段/服务信息管理,其余 14 条可见', async () => {
@@ -150,9 +143,6 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
 describe('Sidebar — active 高亮', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [], anomalies: [], baselinedNow: 0,
-    } as never)
   })
 
   it('当前路由高亮唯一条目', async () => {
@@ -180,34 +170,9 @@ describe('Sidebar — active 高亮', () => {
   })
 })
 
-describe('Sidebar — 变更适配 pendingCount 徽标(沿用 TopNav 语义)', () => {
+describe('Sidebar — 身份徽章', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-  })
-
-  it('admin:pending>0 显示徽标数', async () => {
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [{ endpointId: 'e', fromVersion: '1', toVersion: '2' }],
-      anomalies: [],
-      baselinedNow: 0,
-    } as never)
-    const w = await mountSidebar({ isAdmin: true, path: '/scenarios/mine' })
-    expect(w.find('.nav-badge').exists()).toBe(true)
-    expect(w.find('.nav-badge').text()).toBe('1')
-    w.unmount()
-  })
-
-  it('member:不发 diff,手工置数也不显示(admin-only 徽标)', async () => {
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [], anomalies: [], baselinedNow: 0,
-    } as never)
-    const w = await mountSidebar({ isAdmin: false, path: '/scenarios/mine' })
-    useAuthStore() // pinia 已就绪
-    const { useAdaptationsStore } = await import('@/stores/adaptations')
-    useAdaptationsStore().pendingCount = 3
-    await flushPromises()
-    expect(w.find('.nav-badge').exists()).toBe(false)
-    w.unmount()
   })
 
   it('身份徽章在场(P2-1 起登出收进下拉;compact 态保留快捷登出)', async () => {
@@ -222,9 +187,6 @@ describe('Sidebar — 变更适配 pendingCount 徽标(沿用 TopNav 语义)', (
 describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
-      pending: [], anomalies: [], baselinedNow: 0,
-    } as never)
     // 折叠态是模块级共享 ref + localStorage:每组用例前归位展开态
     localStorage.clear()
     const { collapsed } = useSidebarCollapse()

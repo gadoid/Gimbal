@@ -1,8 +1,10 @@
 """适配中心路由(spec §5/§7 P3+P4 裁定):admin-only,唯 ``GET /batches?scope=mine``
 member 可访问(C13 owner 知情视图)。
 
-* ``POST /adaptations/catalog/diff`` —— 冷启动基线是写副作用,POST 如实承载;
-* ``GET  /adaptations/impact`` —— 只读影响查询。
+A-6 清理(2026-10-12):catalog/diff、impact、impact-bulk、
+impact-summary、refs-drift 五个 working 全局目录口径的读面已删除
+(影响提示由版本提示/生效修订口径承接);引用索引健康检查仅存
+C10 unindexed-steps。
 
 批次生命周期端点(batches / ops / apply / rollback)在 Task 10 追加到本文件。
 """
@@ -21,13 +23,9 @@ from ..schemas.adaptations import (
     BatchListOut,
     BatchOut,
     CarryBatchIn,
-    CatalogDiffReport,
-    ImpactItem,
-    ImpactSummaryReport,
     OpCreateIn,
     OpOut,
     OpPatchIn,
-    RefsDriftReport,
     RollbackReport,
     UnindexedStepOut,
 )
@@ -41,46 +39,6 @@ router = APIRouter(prefix="/adaptations", tags=["adaptations"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-@router.post("/catalog/diff", response_model=CatalogDiffReport)
-async def catalog_diff(user: CurrentUser, db: DbSession) -> CatalogDiffReport:
-    """拉 plate 目录对戳:待适配 / 异常(C12 忘 bump、下架)/ 本次新落基线数。"""
-    try:
-        report = await adaptation_service.catalog_diff(db)
-    except PlateUnavailableError as e:
-        raise _plate_502(e) from e
-    return CatalogDiffReport.model_validate(report)
-
-
-@router.get("/impact", response_model=list[ImpactItem])
-async def impact(
-    user: AdminUser,
-    db: DbSession,
-    endpointId: str = Query(min_length=1),
-    field: str | None = Query(default=None),
-) -> list[ImpactItem]:
-    """endpoint(可选 field)→ 受影响清单(直填/模板、数据集列标注)。"""
-    items = await adaptation_service.impact(db, endpointId, field or None)
-    return [ImpactItem.model_validate(i) for i in items]
-
-
-@router.get("/impact-bulk")
-async def impact_bulk(
-    user: AdminUser,
-    db: DbSession,
-    endpointIds: list[str] = Query(default=[]),
-) -> dict:
-    """批量 impact(M5,债 12):一次请求回全部 pending 端点的受影响
-    清单 —— 前端 useInterfaceChange 的「每端点一次 × 限并发 4」N+1
-    消除。返回 {endpointId: [ImpactItem...]}(与单端点 /impact 同条目
-    形状,未命中端点给空数组)。"""
-    out: dict[str, list] = {}
-    for eid in endpointIds[:50]:  # 防御上限:适配面单批不会超
-        items = await adaptation_service.impact(db, eid, None)
-        out[eid] = [ImpactItem.model_validate(i).model_dump(by_alias=True)
-                    for i in items]
-    return out
-
-
 @router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
 async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedStepOut]:
     """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。"""
@@ -92,26 +50,6 @@ async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedSte
         })
         for i in await collect_unindexed(db)
     ]
-
-
-@router.get("/refs-drift", response_model=RefsDriftReport)
-async def refs_drift(user: CurrentUser, db: DbSession) -> RefsDriftReport:
-    """倒排索引 vs plate 接口目录 diff(只读):悬空引用 / 全网零引用。"""
-    return RefsDriftReport.model_validate(await adaptation_service.refs_drift(db))
-
-
-@router.get("/impact-summary", response_model=ImpactSummaryReport)
-async def impact_summary(
-    user: AdminUser,
-    db: DbSession,
-    endpointIds: list[str] = Query(default=[]),
-) -> ImpactSummaryReport:
-    """本批影响面摘要(配套方案 §3.2):pending 端点集(客户端从
-    catalog/diff 拿到后传入)→ 按服务聚合的 波及用例 / 最近失败 数。
-    纯读 —— 不复算 diff(catalog_diff 带基线写副作用,不藏进 GET);
-    recentFail 全站口径(跨 owner 聚合数,方案 §3.5)。"""
-    return ImpactSummaryReport.model_validate(
-        await adaptation_service.impact_summary(db, endpoint_ids=endpointIds))
 
 
 @router.post("/carry-batches", response_model=BatchDetail, status_code=201)

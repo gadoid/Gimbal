@@ -1,9 +1,8 @@
 <!-- AdaptationCard.vue — 工作台注册卡:变更适配(→ /adaptations)。
-     两条数据面各自复用既有端点,不另开口子:
-       · 待处理数 = adaptations store(侧栏徽章已 ensureBadgeLoaded,
-         卡上再调一次是单飞合流,零额外请求;member 侧栏不发,这里也不发)
-       · 批次列表 = listBatches(admin 全量 / member 'mine'),与完整页同口径
-     三档密度(§4):S = 待处理 + 批次数结论;M/L = 批次行 5/8。 -->
+     数据面 = listBatches(admin 全量 / member 'mine'),与完整页同口径。
+     A-6 清理(2026-10-12):待处理数(catalog/diff)已随旧读面删除,
+     「该适配了」提示由场景版本提示(生效修订口径)承接。
+     三档密度(§4):S = 批次数结论;M/L = 批次行 5/8。 -->
 <template>
   <div data-testid="wb-card-adaptations" class="wcard">
     <header class="chead">
@@ -19,9 +18,6 @@
     <!-- S 档:只出结论 -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
       <div class="s-stats">
-        <p v-if="auth.isAdmin" class="s-stat" :class="{ 'st-warn': store.pendingCount > 0 }">
-          <b>{{ store.pendingCount }}</b>待适配
-        </p>
         <p class="s-stat"><b>{{ batches.length }}</b>个批次</p>
       </div>
     </div>
@@ -47,7 +43,7 @@
       </div>
       <div v-else-if="error" class="card-empty"><p>{{ error }} — 稍后在变更适配重试</p></div>
       <div v-else class="card-empty">
-        <p>{{ auth.isAdmin ? '目录还没有需要适配的变更' : '你还没有发起过适配批次' }}</p>
+        <p>还没有适配批次</p>
         <router-link to="/adaptations" class="cta">去变更适配 →</router-link>
       </div>
     </template>
@@ -58,24 +54,20 @@
 import { computed, onMounted, ref } from 'vue'
 import { useCardSize } from './registry'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
-import { useAdaptationsStore } from '@/stores/adaptations'
 import { useAuthStore } from '@/stores/auth'
 import { BATCH_LABEL } from '@/composables/useActivityTimeline'
 import { listBatches, type BatchOut } from '@/api/adaptations'
 import { relTime } from '@/utils/datetime'
 
 const size = useCardSize()
-const store = useAdaptationsStore()
 const auth = useAuthStore()
 
 const batches = ref<BatchOut[]>([])
 const loading = ref(true)
 const error = ref('')
 
-/** 卡头计数与 S 档结论同一个数:admin 看待处理,member 看自己的批次。 */
-const headline = computed(() =>
-  auth.isAdmin ? `${store.pendingCount} 个待处理` : `${batches.value.length} 个批次`,
-)
+/** 卡头计数与 S 档结论同一个数:批次总数(admin 全量 / member 自己的)。 */
+const headline = computed(() => `${batches.value.length} 个批次`)
 
 /** M = 5 行;L = 8 行(按发起时间倒序,最近在先) */
 const visible = computed(() => batches.value.slice(0, size.value === 'L' ? 8 : 5))
@@ -83,7 +75,6 @@ const visible = computed(() => batches.value.slice(0, size.value === 'L' ? 8 : 5
 const wbT = (suffix: string) => `wb-card-adaptations-${suffix}`
 
 onMounted(async () => {
-  if (auth.isAdmin) void store.ensureBadgeLoaded()
   try {
     const env = await listBatches({ scope: auth.isAdmin ? undefined : 'mine' })
     const list = env.items
@@ -97,8 +88,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 形制在基座;这里只给行列宽、版本箭头灰阶与"有事要做"的琥珀。 */
+/* 形制在基座;这里只给行列宽与版本箭头灰阶。 */
 .ad-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
 .ad-ver { color: var(--sl-ink-3); white-space: nowrap; }
-.st-warn b { color: var(--sl-warn); }
 </style>

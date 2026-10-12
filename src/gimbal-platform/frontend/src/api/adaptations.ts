@@ -4,36 +4,11 @@
  * 契约照后端 app/schemas/adaptations.py(camelCase 显式 alias);
  * 错误形状为 http.ts 归一后的 ApiError { status, code }:文案在 Error 继承的
  * .message 上(运行时不赋 .msg)。
+ *
+ * A-6 清理(2026-10-12):catalogDiff / impact / impactBulk /
+ * impactSummary / openBatch(POST /batches 旧流程)已随旧读面删除。
  */
 import http, { ApiError } from '@/api/http'
-
-export interface PendingChange {
-  endpointId: string
-  fromVersion: string
-  toVersion: string
-}
-
-export interface CatalogAnomaly {
-  endpointId: string
-  reason: string
-  detail: string
-}
-
-export interface CatalogDiffReport {
-  pending: PendingChange[]
-  anomalies: CatalogAnomaly[]
-  baselinedNow: number
-}
-
-export interface ImpactItem {
-  scenarioId: string
-  stepIndex: number
-  source: 'body' | 'headers' | null
-  field: string | null
-  viaVar: string | null
-  datasetId: string | null
-  datasetColumn: string | null
-}
 
 export interface OpOut {
   id: number
@@ -92,26 +67,6 @@ export interface UnindexedStep {
   reason: string
 }
 
-/** impact-summary 单服务条(配套方案 §3.2):pending 归组 + 波及面。 */
-export interface ImpactSummaryService {
-  name: string
-  changeCount: number
-  caseCount: number
-  recentFailCount: number
-}
-
-export interface ImpactSummaryTotals {
-  changeCount: number
-  serviceCount: number
-  caseCount: number
-  recentFailCount: number
-}
-
-export interface ImpactSummaryReport {
-  services: ImpactSummaryService[]
-  totals: ImpactSummaryTotals
-}
-
 export interface OpCreateIn {
   opType: string
   /** 场景 op 必填;CARRY_OPS 免(后端 OpCreateIn 已可空)—— carry 请求体不带该键。 */
@@ -132,39 +87,6 @@ export function errMsg(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message || fallback
   const msg = (e as { msg?: string } | null)?.msg
   return msg || fallback
-}
-
-export async function catalogDiff(): Promise<CatalogDiffReport> {
-  const { data } = await http.post<CatalogDiffReport>('/adaptations/catalog/diff')
-  return data
-}
-
-/** M5(债 12):批量 impact —— 一次请求回全部端点的受影响清单。 */
-export async function impactBulk(
-  endpointIds: string[],
-): Promise<Record<string, ImpactItem[]>> {
-  const { data } = await http.get<Record<string, ImpactItem[]>>(
-    '/adaptations/impact-bulk',
-    { params: endpointIds.map((e) => ['endpointIds', e]) },
-  )
-  return data
-}
-
-export async function impact(endpointId: string, field?: string): Promise<ImpactItem[]> {
-  const { data } = await http.get<ImpactItem[]>('/adaptations/impact', {
-    params: { endpointId, field: field || undefined },
-  })
-  return data
-}
-
-/** 本批影响面摘要(配套方案 §3.2):传入客户端已拿到的 pending 端点集,
- *  纯读聚合。数组参数手工拼 query —— axios 默认序列化带 ``[]`` 后缀,
- *  FastAPI 的 repeated-param 不认。 */
-export async function impactSummary(endpointIds: string[]): Promise<ImpactSummaryReport> {
-  const qs = endpointIds.map((e) => `endpointIds=${encodeURIComponent(e)}`).join('&')
-  const { data } = await http.get<ImpactSummaryReport>(
-    `/adaptations/impact-summary${qs ? `?${qs}` : ''}`)
-  return data
 }
 
 export async function unindexedSteps(): Promise<UnindexedStep[]> {
@@ -195,13 +117,6 @@ export async function listBatches(params?: {
 export async function getBatch(batchId: string): Promise<BatchDetail> {
   const { data } = await http.get<BatchDetail>(
     `/adaptations/batches/${encodeURIComponent(batchId)}`)
-  return data
-}
-
-export async function openBatch(endpointId: string): Promise<BatchDetail> {
-  const { data } = await http.post<BatchDetail>('/adaptations/batches', {
-    endpointId,
-  })
   return data
 }
 
