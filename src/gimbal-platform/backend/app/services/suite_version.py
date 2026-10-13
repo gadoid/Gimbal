@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services import plate_client
+from app.services.plate_client import PlateUnavailableError
 
 
 class SuiteVersionError(Exception):
@@ -101,12 +102,25 @@ async def check_and_resolve_suite_versions(
                     {system: sorted(endpoints_union)},
                 )
                 info = result.get(system, {})
-                avail = info.get("available") or []
-                available_sets.append(set(avail))
+                # B-1:available 语义 = 修订号列表(版本模型 4.2,plate 回
+                # int)。字符串回显一律数值化,防 "#1.0#1" 型拼接事故。
+                avail = {int(v) for v in (info.get("available") or [])
+                         if str(v).isdigit()}
+                available_sets.append(avail)
                 line = ref.rsplit("#", 1)[0]
-            except Exception:
-                # plate 不可用时由上层统一处理
-                continue
+            except PlateUnavailableError:
+                # plate 不可用:上层统一处理(materialize 链转执行失败)
+                raise
+            except Exception as exc:
+                # B-1(2026-10-13):成员声明了不存在的修订等 resolve 拒绝
+                # —— 此前 except Exception: continue 把该成员的约束静默
+                # 剔出交集,Suite 照常执行且台账无痕。必须显式报错。
+                raise SuiteVersionError(
+                    "SUITE_REVISION_RESOLVE_FAILED",
+                    f"成员 #{member_idx} 的系统 {system!r} 修订 {ref!r} "
+                    f"解析失败: {exc}",
+                    {"system": system, "member": member_idx, "ref": ref},
+                ) from exc
 
         if not available_sets:
             continue

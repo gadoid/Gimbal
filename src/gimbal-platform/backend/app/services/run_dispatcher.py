@@ -1017,7 +1017,11 @@ async def run_job_from_payload(job: dict) -> None:
     p = job["payload"]
     args = dict(p["args"])
     if p["kind"] == "graph":
-        await _fanout_graph(db_factory=_session_factory, **args)
+        # B-1(2026-10-13):graph 分支此前丢掉 chain 选择 —— cases 分支
+        # 透传 p["chain"] 而 graph 恒走缺省 legacy,EXEC_CHAIN=server /
+        # chain_override 对 suite 执行完全不生效。
+        await _fanout_graph(db_factory=_session_factory,
+                            chain=p.get("chain") or "legacy", **args)
         return
     bindings = args.get("service_bindings") or {}
     args["service_bindings"] = {
@@ -1161,11 +1165,56 @@ async def _fanout_graph(
     proj = {"attempts": 0, "gates": None}
     status = "failed"
     result = None
+    graph_sem: dict = {}
     try:
         async with db_factory() as session:
-            graph = await graph_dispatch.materialize_graph(
-                session, owner_id, graph_spec)
+            graph_bundle = await graph_dispatch.materialize_graph(
+                session, owner_id, graph_spec, full=True)
+        graph = graph_bundle["graph"]
+        graph_sem = graph_bundle
         await _mark_running(db_factory, execution_id)
+        # B-1(2026-10-13):suite 执行接入版本模型 —— 台账三件套与单场景
+        # dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效
+        # 修订],baseline 判定输入同口径;m2_hash 取 /convert 附带身份,
+        # 随台账一次写)。台账性质:判定/写库失败不阻断执行。
+        _g_pins = {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
+                   if v and v != "working"}
+        _g_baseline = None
+        try:
+            from . import run_semantics
+            async with db_factory() as _g_sem_s:
+                _g_baseline = await run_semantics.assess_baseline(
+                    _g_sem_s,
+                    meta_plate=graph_sem.get("meta_plate") or {},
+                    endpoints_used=graph_sem.get("endpoints_used") or {},
+                    unanchored_services=(
+                        graph_sem.get("unanchored_services") or []))
+        except Exception:  # noqa: BLE001
+            logger.opt(exception=True).warning(
+                "run_dispatcher: graph 入库标准判定失败 (execution={})",
+                execution_id)
+        _g_m2 = (graph_sem.get("m2_info") or {}).get("hash")
+        if _g_pins or _g_baseline is not None or _g_m2:
+            try:
+                from sqlalchemy import update as sa_update
+                _g_values: dict = {}
+                if _g_pins:
+                    _g_values["plate_pins"] = _g_pins
+                if _g_m2:
+                    _g_values["m2_hash"] = str(_g_m2)
+                if _g_baseline is not None:
+                    _g_values["baseline_eligible"] = _g_baseline[0]
+                    _g_values["baseline_block"] = _g_baseline[1]
+                    _g_values["baseline_evidence"] = _g_baseline[2] or None
+                async with db_factory() as _g_pin_sess:
+                    await _g_pin_sess.execute(
+                        sa_update(Execution)
+                        .where(Execution.id == execution_id)
+                        .values(**_g_values))
+                    await _g_pin_sess.commit()
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "graph plate_pins 回填失败 (execution={})", execution_id)
 
         def _on_event(d: dict) -> None:
             et = d.get("event_type")
@@ -1201,7 +1250,8 @@ async def _fanout_graph(
 
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
-            on_event=_on_event, on_log=ingester.on_log, chain=chain)
+            on_event=_on_event, on_log=ingester.on_log, chain=chain,
+            m2_info=graph_sem.get("m2_info"))
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
             # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉

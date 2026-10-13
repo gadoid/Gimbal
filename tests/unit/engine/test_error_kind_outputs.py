@@ -1,7 +1,9 @@
 """集成 P2/Y2:G7 error_kind 分类 + G2 outputs 脱敏(明细行暴露)。
 
-- 401/403 状态断言失败与 calling 阶段登录失败 → auth(凭证失效信号,
-  平台侧据此暂停集成实例);
+- auth 只认结构化来源(B-2,2026-10-13 收紧):响应状态断言失败且实际
+  401/403 时断言执行器追加的 "[auth_status:NNN]" 标记,与 calling 阶段
+  的登录失败词表/亲历 40x(凭证失效信号,平台侧据此暂停集成实例);
+  业务值恰好 401 的普通断言/提取失败不再误判;
 - calling 阶段按超时/传输;其余(断言/提取失败)→ logic;通过 → none;
 - _detail_row:每步 error_kind;顶层 outputs 过脱敏键表(与
   CallResult.to_evidence 同键表口径),深拷贝不就地改。
@@ -22,11 +24,30 @@ def _step(error=None, phase=None, status=None) -> SimpleNamespace:
 
 # ── _error_kind_of ───────────────────────────────────────────────
 
-def test_auth_by_401_403_in_error_text():
+def test_auth_by_structured_marker_and_calling_status():
+    # ① 断言执行器产出的结构化标记(唯一 verifying 面 auth 来源)
     assert Engine._error_kind_of(
-        _step(error="期望 status 200,实际 401", phase="verifying")) == "auth"
+        _step(error="FAIL: expected 200 eq 401 [auth_status:401]",
+              phase="verifying")) == "auth"
+    # ② calling 阶段亲历的 40x(登录器/传输层)
     assert Engine._error_kind_of(
         _step(error="[calling] 403 Forbidden", phase="calling")) == "auth"
+
+
+def test_business_401_no_longer_misclassified():
+    """B-2 回归(2026-10-13 检查文档 B-2 实测反例):业务值恰好含
+    401/403 的错误文本不得判 auth —— 误判会把正常集成实例暂停,
+    且要人工复活。"""
+    assert Engine._error_kind_of(
+        _step(error="FAIL: expected 42 eq 401",
+              phase="verifying")) == "logic"
+    assert Engine._error_kind_of(
+        _step(error="订单号 401-2026 提取失败",
+              phase="after_request")) == "logic"
+    # 无标记的裸状态断言失败同样不算(标记只能由断言执行器产出)
+    assert Engine._error_kind_of(
+        _step(error="期望 status 200,实际 401",
+              phase="verifying")) == "logic"
 
 
 def test_auth_by_login_failure_in_calling():
@@ -78,7 +99,7 @@ def test_detail_row_outputs_redacted_and_isolated():
 
 def test_detail_row_steps_carry_error_kind():
     row = Engine._detail_row(_result(steps=[
-        _step(error="期望 200 实际 401", phase="verifying"),
+        _step(error="期望 200 实际 401 [auth_status:401]", phase="verifying"),
         _step(),
     ]))
     assert row["steps"][0]["error_kind"] == "auth"

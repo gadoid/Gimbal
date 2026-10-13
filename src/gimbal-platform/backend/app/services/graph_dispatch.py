@@ -123,11 +123,18 @@ async def materialize_graph(
     db: AsyncSession,
     owner_id: int,
     graph_req: dict,
+    *,
+    full: bool = False,
 ) -> dict:
     """GraphRunRequest dict → gimbal SuiteGraph dict(不执行)。
 
     graph_req:{mode, units:[{ref,scenarioId,...}], before?, after?,
     parallel?, gates?, checks?, nRuns?}。
+
+    ``full=True``(B-1,2026-10-13)返回台账 bundle:
+    ``{graph, m2_info, meta_plate, endpoints_used, unanchored_services}``
+    —— 版本模型三件套(plate_pins/baseline_*/m2_hash)对 suite 执行
+    与单场景同口径;此前 graph 分支完全不记台账、不传 m2 代际门。
     """
     from .run_dispatcher import _resolve_exec_auths, _built_in_users
 
@@ -146,22 +153,26 @@ async def materialize_graph(
     # 可用集合交集的最新修订;不一致/无交集 → 拒绝(错误码随
     # GraphDispatchError 面 4xx)。plate 不可用时跳过检查(resolve 内
     # 部已按成员降级,与单场景执行同口径)。
-    from .suite_version import check_and_resolve_suite_versions
-    from .scenario_store import definition_from_payload
+    # B-1(2026-10-13 勘误):r["composed"] 是 _compose_scenario 的产物
+    # —— 已解包的 definition 本体,不再是容器;此前此处按容器调
+    # definition_from_payload 恒得 {},R25 版本统一(含 check_and_
+    # resolve_suite_versions 调用)在真实 graph 路径从未生效(死代码)。
+    from .suite_version import (
+        check_and_resolve_suite_versions,)
     suite_pins: dict[str, str] = {}
-    if any((definition_from_payload(r["composed"]).get("meta") or {})
-           .get("plate") for r in resolved):
+    if any(((r["composed"].get("meta") or {}).get("plate"))
+           for r in resolved):
+        # check_and_resolve 按容器形状读 definition.meta —— 包一层
         try:
             suite_pins = await check_and_resolve_suite_versions(
-                [r["composed"] for r in resolved])
+                [{"definition": r["composed"]} for r in resolved])
         except Exception as exc:  # plate 不可达 → 与单场景一致地失败
             from .plate_client import PlateUnavailableError
             if isinstance(exc, PlateUnavailableError):
                 raise
             raise GraphDispatchError(str(exc)) from exc
         for r in resolved:
-            defn = definition_from_payload(r["composed"])
-            meta_plate = (defn.get("meta") or {}).get("plate") or {}
+            meta_plate = (r["composed"].get("meta") or {}).get("plate") or {}
             for sys_, eff in suite_pins.items():
                 if sys_ in meta_plate:
                     meta_plate[sys_] = eff
@@ -188,10 +199,14 @@ async def materialize_graph(
         alias_urls = {}
 
     unit_payloads: dict[str, dict] = {}
+    m2_info: dict | None = None
     for r in resolved:
         composed = r["composed"]
         # plate convert(gimbal 形态)
         convert = await plate_client.convert(composed)
+        # M2 §5.1:/convert 响应附带构建身份(全部单元同源,取首个)
+        if m2_info is None and convert.get("m2"):
+            m2_info = convert["m2"]
         converted = (convert.get("converted") or {})
         bindings = r["unit"].get("serviceBindings") or {}
         merged_bindings = {**(graph_req.get("serviceBindings") or {}),
@@ -274,7 +289,36 @@ async def materialize_graph(
             graph["control"]["only"] = only
         if to_node:
             graph["control"]["to_node"] = to_node
-    return graph
+    if not full:
+        return graph
+    # 台账输入(与单场景 dispatcher 同口径):成员声明的合并 meta.plate
+    # (suite_pins 改写后即生效修订;working 系统保持 working → 判定
+    # block=working)+ 锚定接口集 + 无锚服务键集。
+    meta_plate: dict[str, str] = {}
+    endpoints_used: dict[str, set[str]] = {}
+    unanchored_services: list[str] = []
+    for r in resolved:
+        defn = r["composed"]          # definition 本体(见上方勘误注)
+        meta_plate.update((defn.get("meta") or {}).get("plate") or {})
+        for step in (defn.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            ep_id = step.get("endpoint")
+            if ep_id:
+                endpoints_used.setdefault(
+                    str(ep_id).split(".")[0], set()).add(str(ep_id))
+            else:
+                call = step.get("call")
+                svc = call.get("service") if isinstance(call, dict) else None
+                if isinstance(svc, str) and svc:
+                    unanchored_services.append(svc)
+    return {
+        "graph": graph,
+        "m2_info": m2_info,
+        "meta_plate": meta_plate,
+        "endpoints_used": endpoints_used,
+        "unanchored_services": unanchored_services,
+    }
 
 
 def _all_referenced_services(resolved: list[dict]) -> list[str]:
@@ -290,6 +334,7 @@ def _all_referenced_services(resolved: list[dict]) -> list[str]:
 async def execute_graph(
     db_factory, execution_id: int, run_dir: Path, graph: dict,
     *, on_event=None, on_log=None, chain: str = "legacy",
+    m2_info: dict | None = None,
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
     LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
@@ -308,7 +353,8 @@ async def execute_graph(
         await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir)
         try:
             return await ss.run_case(
-                case_path, n_runs=n_runs, on_event=on_event)
+                case_path, n_runs=n_runs, on_event=on_event,
+                m2_info=m2_info)
         finally:
             await ss.close()
     return await launch(

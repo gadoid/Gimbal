@@ -64,6 +64,16 @@ class AssertionExecutor(StrategyExecutor):
                     else f"FAIL: expected {masked} {spec.operator.value} {masked}"
                 )
             human_msg = spec.message or msg
+            # B-2(2026-10-13):响应状态断言失败且实际值 401/403 → 追加
+            # 结构化标记(引擎 _error_kind_of 据此判 auth,平台集成侧
+            # 暂停实例)。此前引擎对**任意**错误文本做 40[13] 正则,
+            # 业务值恰好 401("expected 42 eq 401"/订单号 401-2026)会被
+            # 误判成凭证失效 → 正常实例被暂停。标记只由本执行器产出。
+            if (not passed
+                    and str(spec.target) in (
+                        "$.call.response.status", "$.response_status")
+                    and str(actual) in ("401", "403")):
+                human_msg = f"{human_msg} [auth_status:{actual}]"
 
             from gimbal.context.step import AssertionResult
             view.record_assertion(AssertionResult(

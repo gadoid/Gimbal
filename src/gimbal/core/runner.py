@@ -515,20 +515,28 @@ class Engine:
 
     # ── 判定（两套历史口径，零回归）────────────────────────────
 
-    # G7(集成 P2/Y2):错误分类。401/403 状态断言失败与登录失败 → auth
-    # (凭证失效信号,平台侧据此暂停实例防锁号);calling 阶段按超时/传输;
-    # 其余(断言/提取/清理失败)→ logic。文本判定 —— 401 响应是"照常返回
-    # + 断言判"的形态(call.py auth_expired 同口径),状态码只在 error 文本。
-    _AUTH_STATUS_RE = re.compile(r"\b40[13]\b")
+    # G7(集成 P2/Y2)+ B-2(2026-10-13 收紧):错误分类。
+    # auth(凭证失效信号,平台侧据此暂停实例防锁号)只认两个结构化来源:
+    #   ① 断言执行器对响应状态目标($.call.response.status / legacy
+    #      $.response_status)失败且实际 401/403 时追加的
+    #      "[auth_status:NNN]" 标记(assertion.py 同批);
+    #   ② calling 阶段的登录失败词表 + 状态码(登录器/传输层亲历的 40x)。
+    # 此前对任意错误文本做 40[13] 正则 —— 业务值恰好 401
+    # ("expected 42 eq 401"、"订单号 401-2026 提取失败")被误判 auth,
+    # 正常集成实例遭暂停且需人工复活。
+    _AUTH_MARKER = "[auth_status:"
+    _CALLING_STATUS_RE = re.compile(r"\b40[13]\b")
 
     @staticmethod
     def _error_kind_of(step: Any) -> str:
         error = str(getattr(step, "error", "") or "")
         if str(getattr(step, "status", "")) == "passed" or not error:
             return "none"
-        if Engine._AUTH_STATUS_RE.search(error):
+        if Engine._AUTH_MARKER in error:
             return "auth"
         if getattr(step, "error_phase", None) == "calling":
+            if Engine._CALLING_STATUS_RE.search(error):
+                return "auth"
             low = error.lower()
             if "登录" in error or "auth" in low or "unauthorized" in low:
                 return "auth"

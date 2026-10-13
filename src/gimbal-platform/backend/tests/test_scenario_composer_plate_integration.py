@@ -114,8 +114,12 @@ class PlateMock:
             # —— effective = 原修订(不变),available 单元素,零变更。
             if path.endswith("/api/system/action/resolve"):
                 body = json.loads(request.content)
+                def _avail(ref: str) -> list:
+                    n = ref.rsplit("#", 1)[-1]
+                    return [int(n)] if n.isdigit() else []
+
                 item = {
-                    sys_: {"effective": ref, "available": [ref],
+                    sys_: {"effective": ref, "available": _avail(ref),
                            "changed_endpoints": []}
                     for sys_, ref in (body.get("meta_plate") or {}).items()
                     if ref and ref != "working"
