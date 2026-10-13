@@ -302,7 +302,10 @@
             <div v-else-if="activeIoTab === 'request' && currentFullState === 'loading' && hasEndpointRef(currentStep)" class="cf-item"><span class="cf-label">请求体</span>
               <p class="resp-spec-empty">正在从 plate 拉取接口字段契约…</p>
             </div>
-            <div v-else-if="activeIoTab === 'request'" class="cf-item"><span class="cf-label">body (JSON)</span>
+            <div v-else-if="activeIoTab === 'request'" class="cf-item">
+              <!-- C 组(2026-10-14):GET/HEAD 的 body 引擎按 query 参数发,
+                   标签随方法切换,不再让用户以为在写请求体 -->
+              <span class="cf-label">{{ ['GET', 'HEAD'].includes(stepMethod(currentStep) || '') ? 'query 参数 (JSON)' : 'body (JSON)' }}</span>
               <textarea
                 :value="JSON.stringify(currentStep.request?.body || {}, null, 2)"
                 rows="5"
@@ -454,17 +457,9 @@
             <h3>step 信息</h3>
           </div>
           <div v-if="currentStep" class="info-body">
-            <div class="info-block">
-              <div class="info-k">HTTP</div>
-              <div class="info-v">
-                <span v-if="stepMethod(currentStep)" class="method-badge" :class="`m-${stepMethod(currentStep).toLowerCase()}`">{{ stepMethod(currentStep) }}</span>
-                <code>{{ stepPath(currentStep) || '—' }}</code>
-              </div>
-            </div>
-            <div class="info-block">
-              <div class="info-k">service</div>
-              <div class="info-v"><code>{{ stepService(currentStep) || '—' }}</code></div>
-            </div>
+            <!-- C 组去重(2026-10-14):HTTP(method/path)与 service 已由
+                 中栏步骤头承载,右栏复述只会两处不同步(锚点步骤 path 已
+                 剥离,右栏显示"—"造成"中栏有右栏无"的矛盾)—— 删除。 -->
             <div class="info-block">
               <div class="info-k">kind</div>
               <div class="info-v"><span class="badge">{{ inferProtocol(currentStep) }}</span></div>

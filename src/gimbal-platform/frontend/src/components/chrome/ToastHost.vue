@@ -1,14 +1,13 @@
 <!-- ToastHost.vue — toast.ts 的渲染端(App.vue 挂载的页面级单例)。
      Signal 样式:card 底 + line 描边 + sig-float 阴影,左侧状态点;
-     右上角堆叠(2026-09-22 修正:原顶部居中以视口为锚,侧边栏让内容
-     区左移后视觉偏离页面中轴,且与页头重叠 —— 改锚右上,右对齐,
-     top 避开收拢顶条 48px)。preflight 关闭环境下全部用显式 Tailwind
-     utility,不依赖 reset。 -->
+     右下角堆叠(2026-10-14 C 组修复:top-14 右上堆叠仍压页头操作按钮
+     与对话框标题 —— 移右下,与页头/对话框/收拢顶条三者都不再重叠)。
+     preflight 关闭环境下全部用显式 Tailwind utility,不依赖 reset。 -->
 <template>
   <teleport to="body">
     <div
       v-if="toastState.items.length"
-      class="fixed right-4 top-14 z-[3000] flex flex-col items-end gap-2"
+      class="fixed bottom-4 right-4 z-[3000] flex flex-col items-end gap-2"
       role="status"
       aria-live="polite"
     >

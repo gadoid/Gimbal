@@ -25,7 +25,9 @@
           </svg>
         </button>
         <div class="title-block">
-          <div class="crumb">
+          <!-- C 组去重(2026-10-14):收拢模式下统一面包屑由 CollapsedTopbar
+               承载,页面级 crumb 与之逐字重复 —— 收拢态隐藏,保留标题。 -->
+          <div v-if="chromeMode !== 'collapsed'" class="crumb">
             <span @click="$router.push('/scenarios')">场景库</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
             <span class="scenario-id">{{ meta.name || definition.scenarioId }}</span>
@@ -329,6 +331,8 @@ const stepIdx = ref(0)
  *  解析产物,Canvas 挂载后一次性消费;null = 无跳转意图 */
 const focusJump = ref<{ stepIdx: number; strategyIdx: number } | null>(null)
 const scenarioId = computed(() => route.params.scenarioId as string | undefined)
+/** 收拢态判定(C 组去重):统一面包屑在 CollapsedTopbar,页面 crumb 隐藏 */
+const chromeMode = computed(() => (route.meta?.chromeMode as 'full' | 'collapsed' | undefined) ?? 'full')
 const saving = ref(false)
 const dirty = ref(false)
 const lastSavedAt = ref<Date | null>(null)
