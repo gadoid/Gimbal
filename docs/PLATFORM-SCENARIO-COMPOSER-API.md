@@ -780,6 +780,9 @@ rows:
 
 ### 5.4 存储可迁移性约束（SQLite → PostgreSQL）
 
+> 2026-10-14 注:SQLite 方言已退役(后端 PG-only),本节为迁移期设计
+> 记录;其中「判定与投影基于 Set」等纪律仍然有效。
+
 下面三条与判定面 / 取数缓存 / JSON 列有关。改存储引擎时必须保持
 （出处：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §4）。
 

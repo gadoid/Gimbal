@@ -98,6 +98,13 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
 
 **原地升级记录**:
 
+- **2026-10-14 01:1x — 回滚/升级演练(第 10 类必修收口)**:取 pre-0022
+  备份 `app-pg-20261013-225931-pre0022.dump` → pg_restore 进临时库
+  `gimbal_rb_drill`(0021,55 场景完整)→ `alembic upgrade head` 回放
+  0022+0023 → 0023 终态,数据无损、`external_endpoints.request_schema`
+  正确落 json。验证了两条路:备份可整体恢复(§5 回滚姿势)与「上一
+  发布点 → head」原地升级(§4)。演练库已删。
+
 - **2026-10-12 19:36 — 0019_service_alias_kind + 0020_execution_baseline 原地升级**
   (缺口收口计划 W2/W7 三态接入 + 入库标准列): 本机库
   `gimbal-pg-15432`,先 pg_dump 备份

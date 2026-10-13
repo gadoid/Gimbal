@@ -113,7 +113,8 @@ Gimbal 已有的数据契约（`gimbal/schema/`）直接成为本平台的数据
                 ┌──────────────────────────────────────────────────┐
                 │           FastAPI Backend (uvicorn)              │
                 │   • JWT 鉴权（access + refresh）                 │
-                │   • SQLAlchemy + SQLite (V0.1) / Postgres (V1)   │
+                │   • SQLAlchemy + PostgreSQL(PG-only,2026-10-14   │
+│     SQLite 方言已退役)                            │
                 │   • 用户 / 认证 / 用例仓库 / 执行任务 4 个域    │
                 │   • ShellOut → `gimbal run launch <yaml>`        │
                 │   • 后台任务: APScheduler (or asyncio Task)      │
@@ -131,7 +132,7 @@ Gimbal 已有的数据契约（`gimbal/schema/`）直接成为本平台的数据
 |---|---|
 | 后端框架 | FastAPI 0.115+，依赖 SQLAlchemy 2.x、Pydantic v2 |
 | 鉴权 | JWT（HS256，签名密钥 env `JWT_SECRET`），access 60min / refresh 14d |
-| 存储 | SQLite + `data/` 目录（V0.1 内嵌）；Postgres（V1 可换驱动） |
+| 存储 | PostgreSQL(PG-only,SQLite 方言 2026-10-14 退役;`data/` 目录留 case 案卷/JSONL 运维索引) |
 | YAML 解析 | `PyYAML`（与 Gimbal 一致） |
 | 执行触发 | 后端 `subprocess.run(["gimbal", "run", "launch", "<abs_path>"], …)` ；并发用 `asyncio.gather` + `Semaphore` |
 | 前端构建 | Vite 5 + Vue 3 + TypeScript + Vue Router 4 + Pinia |
@@ -734,7 +735,7 @@ gimbal-platform/
 │   │   │   └── crypto.py             # Fernet
 │   │   └── core/config.py
 │   ├── tests/
-│   ├── data/                         # sqlite / cases / reports / tmp
+│   ├── data/                         # cases / reports / tmp(库在 PG)
 │   ├── pyproject.toml
 │   └── README.md
 ├── frontend/                         # Vue 3 + Vite
