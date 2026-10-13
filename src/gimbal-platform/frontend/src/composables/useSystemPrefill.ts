@@ -34,6 +34,21 @@ type CommonMetaFields = Pick<
   'version' | 'priority' | 'expire' | 'requirementRef'
 >
 
+/** plate ConfigView 的视图专有键(认证状态投影,非 M2 UserCredential 字段) —
+ *  预填进 definition 前必须剥掉,否则 /convert 按 extra_forbid 拒收
+ *  (A-1 根因收口,2026-10-14:实测 is_authenticated 落库即 plate_rejected)。 */
+const USER_VIEW_KEYS = new Set(['is_authenticated', 'remaining_seconds'])
+
+function sanitizeUsers(users: ConfigView['users']): ConfigView['users'] {
+  const out: Record<string, Record<string, unknown>> = {}
+  for (const [tag, u] of Object.entries(users ?? {})) {
+    out[tag] = Object.fromEntries(
+      Object.entries(u as Record<string, unknown>)
+        .filter(([k]) => !USER_VIEW_KEYS.has(k)))
+  }
+  return out as ConfigView['users']
+}
+
 /** common 基座 + 各系统 config 业务段(services/users/vars)浅合并。 */
 function mergeConfig(base: ConfigView | null, parts: ConfigView[]): ConfigView {
   return {
@@ -43,7 +58,7 @@ function mergeConfig(base: ConfigView | null, parts: ConfigView[]): ConfigView {
     timePolicy: base?.timePolicy ?? { kind: 'record' },
     retry: base?.retry ?? null,
     services: Object.assign({}, ...parts.map((c) => c.services)),
-    users: Object.assign({}, ...parts.map((c) => c.users)),
+    users: sanitizeUsers(Object.assign({}, ...parts.map((c) => c.users))),
     vars: Object.assign({}, ...parts.map((c) => c.vars)),
   }
 }

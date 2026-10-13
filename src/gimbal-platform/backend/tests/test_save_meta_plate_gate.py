@@ -163,3 +163,22 @@ async def test_dispatcher_labels_rejected_not_unavailable(
     err = cfg.get("dispatcherError") or ""
     assert "plate_rejected" in err, err
     assert "plate_unavailable" not in err, err
+
+
+async def test_user_view_keys_stripped_on_save(client, plate_mock: PlateMock):
+    """A-1 根因收口(2026-10-14):plate ConfigView 的视图专有键
+    (is_authenticated/remaining_seconds)不得落库 —— 落库即 /convert
+    extra_forbidden 拒收。保存闸统一剥(UI 预填之外的直写路径同守)。"""
+    h = await register_and_login(client, "c2gatevk", "pw123456")
+    draft = make_draft("sc-c2-viewkeys", steps=_steps(), plate={"fin": "working"})
+    draft["definition"]["config"]["users"] = {
+        "tester_a": {"url": "", "username": "tester_a",
+                     "token_type": "Bearer", "is_authenticated": False,
+                     "remaining_seconds": 300}}
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code == 201, r.text
+    stored = (await client.get("/api/scenarios/sc-c2-viewkeys/draft",
+                               headers=h)).json()
+    users = stored["definition"]["config"]["users"]["tester_a"]
+    assert "is_authenticated" not in users and "remaining_seconds" not in users, users
+    assert users["username"] == "tester_a" and users["token_type"] == "Bearer"

@@ -211,6 +211,19 @@ watch(() => props.modelValue, (v) => {
   Object.assign(local, v)
 }, { deep: true })
 
+// A-1 收尾(2026-10-14):系统加入即写 meta.plate[sys] 默认 'working'
+// —— 此前下拉显示 working 但只在用户改动时才写,新建场景不碰下拉就
+// 存出 plate:null,保存被 C1 闸 422 拒(界面显示 ≠ 存储值)。现在的
+// 不变式:显示什么存什么;用户选了修订即覆盖,移除系统不清声明
+// (后端闸按 meta.system 逐系统校验,残留键无害)。
+watch(() => local.system, (systems) => {
+  if (!systems?.length) return
+  if (!local.plate) local.plate = {}
+  for (const sys of systems) {
+    if (local.plate[sys] === undefined) local.plate[sys] = 'working'
+  }
+}, { immediate: true, deep: true })
+
 watch(local, (v) => {
   emit('update:modelValue', { ...v })
 }, { deep: true })

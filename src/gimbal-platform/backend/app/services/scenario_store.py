@@ -35,6 +35,34 @@ from . import scheme_store
 
 
 # ─── write side ───────────────────────────────────────────────────
+# A-1 根因收口(2026-10-14):plate ConfigView 的 users 附带视图专有键
+# (is_authenticated/remaining_seconds — 认证状态投影,非 M2
+# UserCredential 字段)。UI 预填(useSystemPrefill)已剥,此处是保存闸
+# 的第二道:手写载荷/API 直写路径同样不得把视图键落库 —— 落库即
+# /convert extra_forbidden 拒收(执行 plate_rejected)。
+_USER_VIEW_KEYS = ("is_authenticated", "remaining_seconds")
+
+
+def _strip_user_view_keys(definition: dict) -> dict:
+    users = ((definition.get("config") or {}).get("users")) \
+        if isinstance(definition.get("config"), dict) else None
+    if not isinstance(users, dict) or not users:
+        return definition
+    cleaned: dict = {}
+    dirty = False
+    for tag, u in users.items():
+        if isinstance(u, dict) and any(k in u for k in _USER_VIEW_KEYS):
+            cleaned[tag] = {k: v for k, v in u.items()
+                            if k not in _USER_VIEW_KEYS}
+            dirty = True
+        else:
+            cleaned[tag] = u
+    if not dirty:
+        return definition
+    return {**definition,
+            "config": {**definition["config"], "users": cleaned}}
+
+
 async def enforce_meta_plate(definition: dict,
                              prev_meta_plate: dict | None = None) -> None:
     """版本声明闸(⑥下沉,2026-10-13;create/update/导入/适配提交共用)。
@@ -111,11 +139,11 @@ async def create(
     # 顶层 scenarioId（M2 必填身份字段）由行写入。读侧 _meta_from_row
     # 从行的列组装展示 meta（createTime/updateTime/scenarioId/owner）。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
-    stored_definition = strip_binding_fields({
+    stored_definition = _strip_user_view_keys(strip_binding_fields({
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
         "meta": _strip_platform_meta(def_meta),
-    })
+    }))
     payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=draft.orchestration,
@@ -190,11 +218,11 @@ async def update(
     })
     # M4/Q18：同 create —— 平台元数据出定义，定义即纯 M2 实例。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
-    stored_definition = strip_binding_fields({
+    stored_definition = _strip_user_view_keys(strip_binding_fields({
         **draft.definition,
         "scenarioId": server_owned.scenario_id,
         "meta": _strip_platform_meta(def_meta),
-    })
+    }))
     row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
     # 原样落库,方案读写唯一面是 /run-schemes CRUD(scheme_store)。
