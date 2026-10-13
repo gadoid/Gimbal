@@ -45,6 +45,9 @@ class StrategyResult:
     error: Optional[str] = None
     duration_ms: float = 0.0
     soft: bool = False
+    # ③(2026-10-13)类型化错误分类(auth|timeout|transport;空=未分类,
+    # 引擎回退文本启发——仅 calling 阶段协议执行器会填)
+    error_kind: str = ""
 
     @property
     def passed(self) -> bool:

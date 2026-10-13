@@ -15,23 +15,34 @@ from types import SimpleNamespace
 from gimbal.core.runner import Engine
 
 
-def _step(error=None, phase=None, status=None) -> SimpleNamespace:
+def _step(error=None, phase=None, status=None, kind="") -> SimpleNamespace:
     return SimpleNamespace(step_id="s1", error=error, error_phase=phase,
                            status=status or ("passed" if error is None
                                              else "failed"),
-                           duration_ms=1.0, repaired=False)
+                           error_kind=kind, duration_ms=1.0, repaired=False)
 
 
 # ── _error_kind_of ───────────────────────────────────────────────
 
-def test_auth_by_structured_marker_and_calling_status():
+def test_auth_by_structured_marker_and_typed_calling():
     # ① 断言执行器产出的结构化标记(唯一 verifying 面 auth 来源)
     assert Engine._error_kind_of(
         _step(error="FAIL: expected 200 eq 401 [auth_status:401]",
               phase="verifying")) == "auth"
-    # ② calling 阶段亲历的 40x(登录器/传输层)
+    # ② calling 阶段**类型化**分类(协议执行器按异常类型写入 error_kind;
+    #    ③ 2026-10-13 重做,文本不再猜)
     assert Engine._error_kind_of(
-        _step(error="[calling] 403 Forbidden", phase="calling")) == "auth"
+        _step(error="[calling] Login failed", phase="calling",
+              kind="auth")) == "auth"
+    assert Engine._error_kind_of(
+        _step(error="[calling] Request timeout", phase="calling",
+              kind="timeout")) == "timeout"
+    # 无类型的 403 文本(代理隧道回显)→ transport,不再误判 auth
+    assert Engine._error_kind_of(
+        _step(error="[calling] 403 Forbidden", phase="calling")) == "transport"
+    # 旧形态回退词表:登录/unauthorized 仍认 auth
+    assert Engine._error_kind_of(
+        _step(error="[calling] 登录失败: 密码错误", phase="calling")) == "auth"
 
 
 def test_business_401_no_longer_misclassified():
@@ -58,6 +69,12 @@ def test_auth_by_login_failure_in_calling():
     # verifying 阶段的普通"auth"字样不算(断言文本常见词,防误判)
     assert Engine._error_kind_of(
         _step(error="字段 authorization_id 不匹配", phase="verifying")) != "auth"
+    # ③ 回归:calling 文本含 author/auth 域名不误判
+    assert Engine._error_kind_of(
+        _step(error="[calling] connect to auth-gw.corp.local refused",
+              phase="calling")) == "transport"
+    assert Engine._error_kind_of(
+        _step(error="[calling] unauthorized", phase="calling")) == "auth"
 
 
 def test_timeout_transport_logic_none():

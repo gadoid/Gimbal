@@ -695,6 +695,8 @@ async def _rollback_scenario(
         if (row.payload or {}) == after or force:
             # force = R27「编辑者确认放弃修改后按快照还原」(M4)
             # Release 6.2:快照可能是旧存储形态 —— 还原写库前统一剥离
+            await scenario_store.enforce_meta_plate(
+                (before or {}).get("definition") or {})
             row.payload = scenario_store.strip_binding_fields_payload(before)
             return
         raise _RollbackConflict(
@@ -1620,6 +1622,8 @@ async def submit_adaptation(
 
     # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)
     before = copy.deepcopy(payload)
+    await scenario_store.enforce_meta_plate(
+        (planned or {}).get("definition") or {})
     row.payload = planned
     db.add(AdaptationSnapshot(
         batch_id=batch_id, entity_type="scenario", entity_id=scenario_id,
@@ -1771,6 +1775,8 @@ async def save_as_copy(
         await _clear_scheme_step_to(db, new_sid)   # R30:副本方案同步清空
 
     # Release 6.2:结构 op 产物可能带 binding 派生字段 —— 写库前剥离
+    await scenario_store.enforce_meta_plate(
+        (payload or {}).get("definition") or {})
     new_row.payload = scenario_store.strip_binding_fields_payload(payload)
     await db.commit()
     return {"new_scenario_id": new_sid,

@@ -1554,6 +1554,12 @@ async def _fanout(
                     # 写入执行副本（/convert 按原值取修订）
                     if sys_ in meta_plate:
                         meta_plate[sys_] = eff
+        except plate_client.PlateRejectedError as exc:
+            # ⑥(2026-10-13):plate 的 4xx 是对**声明**的裁决(修订不存在/
+            # 线不存在等)—— 归 plate_rejected,不再冒充 plate_unavailable
+            # 把运维引去查一个并不存在的目录故障。
+            raise RuntimeError(
+                f'plate_rejected: 生效修订解析被拒: {exc}') from exc
         except Exception as exc:  # noqa: BLE001 — plate 不可用时执行失败
             raise RuntimeError(
                 f'plate_unavailable: 生效修订解析失败: {exc}') from exc

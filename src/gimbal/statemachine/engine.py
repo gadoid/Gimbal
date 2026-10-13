@@ -94,6 +94,9 @@ class StepRunResult:
     # 方便 reporter 区分"调用失败"vs"断言失败"vs"清理失败"
     # （value 保持 "calling" 不变——报告/台账的历史口径）
     error_phase: Optional[str] = None
+    # ③(2026-10-13):calling 阶段协议执行器的类型化分类(auth|timeout|
+    # transport;空=未分类,引擎回退文本启发)
+    error_kind: str = ""
     # v2.1 批次 E：人工 retry（debugger 会话）后通过的标记——不计正常通过率
     repaired: bool = False
 
@@ -159,6 +162,7 @@ class StepStateMachine:
         self._phase_results: list[PhaseResult] = []
         self._error: Optional[str] = None
         self._error_phase: Optional[str] = None  # 修复 #5
+        self._error_kind: str = ""  # ③:calling 阶段协议执行器类型化分类
 
         # handler 表：状态 → 处理函数，返回下一个状态
         # （键用中立名；历史别名是同一成员，查表互通）
@@ -266,6 +270,7 @@ class StepStateMachine:
             phase_results=self._phase_results,
             error=self._error,
             error_phase=self._error_phase,  # 修复 #5
+            error_kind=self._error_kind,
             duration_ms=duration_ms,
         )
 
@@ -296,6 +301,8 @@ class StepStateMachine:
             # 避免 reporter 把调用失败错误归因到"断言失败"
             self._error_phase = "calling"
             self._error = f"[calling] {result.message or 'protocol call failed'}"
+            # ③(2026-10-13):协议执行器的类型化分类随行携带(空=未分类)
+            self._error_kind = getattr(result, "error_kind", "") or ""
             logger.warning("[SM {}] 协议调用失败: status={} message={}，进入 TEARDOWN",
                           self._step_id, result.status, result.message)
             return StepState.TEARDOWN

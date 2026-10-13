@@ -20,6 +20,39 @@ import pytest
 _BACKEND = Path(__file__).resolve().parents[1]
 
 
+def _assert_head_and_no_drift(engine):
+    from alembic.runtime.migration import MigrationContext
+    from alembic.autogenerate import compare_metadata
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect
+    from app.core.db import Base
+
+    with engine.connect() as conn:
+        diff = compare_metadata(
+            MigrationContext.configure(conn), Base.metadata)
+        # ⑤(2026-10-13):PG 面的 JSON/JSONB 同义比较 —— sa.JSON 与
+        # JSONB 在 compare 里报类型差;漂移收口(0022)后按字面等价
+        def _same(d):
+            if not isinstance(d, tuple) or len(d) < 4:
+                return False
+            change = d[3]
+            if isinstance(change, list) and change and isinstance(change[0], tuple):
+                old, new = change[0][2], change[0][3]
+                return str(old).startswith("JSON") and str(new).startswith("JSON")
+            return False
+        real = [d for d in diff if not _same(d)]
+        assert real == [], f"迁移终态与模型漂移: {real[:5]}"
+        current = MigrationContext.configure(conn).get_current_revision()
+        head = ScriptDirectory(
+            str(_BACKEND / "alembic")).get_current_head()
+        assert current == head, f"{current} != {head}"
+        names = set(inspect(conn).get_table_names())
+        for required in ("users", "composer_scenarios", "executions",
+                         "share_refs", "suites", "integration_tasks",
+                         "external_endpoints"):
+            assert required in names, f"缺表 {required}"
+
+
 def test_empty_db_bootstraps_to_head(tmp_path, monkeypatch):
     # app.core.config 的 settings 在 import 期读 .env;env.py 已改为
     # Config URL 优先,但保险起见把 settings.DATABASE_URL 也指到临时库
@@ -63,3 +96,81 @@ def test_empty_db_bootstraps_to_head(tmp_path, monkeypatch):
                 assert required in names, f"缺表 {required}"
     finally:
         engine.dispose()
+
+
+def test_empty_db_pg_face():
+    """⑤(2026-10-13):空库门 PG 面 —— 仅 TEST_DATABASE_URL 提供时跑。
+
+    SQLite 两态同型看不出 json/jsonb 漂移,PG 面是唯一能拦 0022 类
+    回归的门。gimbal 用户通常无 CREATEDB 权限 → 用业务库内**临时
+    schema**(search_path 单指)等价"空库";结束 DROP SCHEMA。
+    """
+    import asyncio
+    import os
+
+    url = os.environ.get("TEST_DATABASE_URL", "")
+    if not url.startswith("postgresql"):
+        import pytest
+        pytest.skip("TEST_DATABASE_URL 未提供(设 postgresql+asyncpg://… 启用 PG 面)")
+
+    import secrets as _secrets
+    schema = f"t_emptydb_{_secrets.token_hex(4)}"
+
+    async def _admin(stmt: str) -> None:
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy import text
+        eng = create_async_engine(url, isolation_level="AUTOCOMMIT")
+        try:
+            async with eng.connect() as c:
+                await c.execute(text(stmt))
+        finally:
+            await eng.dispose()
+
+    asyncio.run(_admin(f'CREATE SCHEMA "{schema}"'))
+    try:
+        from urllib.parse import quote
+        from app.core.migrations import ensure_schema_sync, _sync_url
+
+        sync_target = (_sync_url(url)
+                       + "?options=" + quote(f"-csearch_path={schema}"))
+        ensure_schema_sync(sync_target)
+
+        from sqlalchemy import create_engine
+        engine = create_engine(sync_target)
+        # PG 面专项断言(全量 compare 由 SQLite 面把守;PG 的既有非阻断
+        # 噪音 = trgm 索引未进模型 + environments 可空性,不属本门)
+        from alembic.runtime.migration import MigrationContext
+        from alembic.autogenerate import compare_metadata
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import inspect
+        import app.models  # noqa: F401 注册元数据
+        from app.core.db import Base
+        with engine.connect() as conn:
+            diff = compare_metadata(
+                MigrationContext.configure(conn), Base.metadata)
+            type_drift = [
+                d for d in diff
+                if isinstance(d, tuple) and len(d) >= 4 and isinstance(d[3], list)
+                and any(str(getattr(x[2], 'name', x[2])) != str(getattr(x[3], 'name', x[3]))
+                        for x in d[3] if isinstance(x, tuple) and len(x) >= 4)
+            ]
+            assert type_drift == [], f"PG 类型漂移(json/jsonb 等): {type_drift[:4]}"
+            current = MigrationContext.configure(conn).get_current_revision()
+            head = ScriptDirectory(
+                str(_BACKEND / "alembic")).get_current_head()
+            assert current == head, f"{current} != {head}"
+            names = set(x for x in inspect(conn).get_table_names())
+        for required in ("users", "composer_scenarios", "executions",
+                         "integration_tasks", "external_endpoints"):
+            assert required in names, f"缺表 {required}"
+        # ⑤ 核心回归面:JSON 列必须是 jsonb(不是 json)
+        with engine.connect() as conn:
+            rows = conn.exec_driver_sql(
+                "select table_name, column_name from information_schema.columns "
+                "where table_schema = %s and data_type = 'json'",
+                (schema,)).fetchall()
+        assert rows == [], f"仍是 json 的列: {rows[:6]}"
+        engine.dispose()
+    finally:
+        asyncio.run(_admin(
+            f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

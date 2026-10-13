@@ -289,3 +289,31 @@ def test_convert_rejects_api_form_steps(client: TestClient) -> None:
     assert "api" in resp.text and "extra_forbidden" in resp.text
 
 
+def test_convert_anchored_without_meta_plate_rejected(client: TestClient) -> None:
+    """⑥(2026-10-13):「不带 meta.plate 照旧」过渡分支退役 —— 锚定场景
+    必须声明(platform 保存闸已唯一写入口收口),旁路载荷 422。"""
+    raw = _load_scenario_dict()
+    raw["steps"] = [{
+        "kind": "step", "endpoint": "fin.a.query_balance",
+        "call": {"protocol": "http", "service": "fin-service",
+                 "method": "GET", "path": "/a", "headers": {}},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }]
+    r = client.post("/api/scenario/action/convert",
+                    json={"consumer": "gimbal", "scenario": raw})
+    assert r.status_code == 422, r.text
+    assert "version_undeclared" in r.text
+    # 声明 working = 合法声明:越过 undeclared 关卡(本测试注册表未挂
+    # fin 系统,后续报 endpoint_not_in_release 属预期终点,不再是
+    # version_undeclared)
+    raw["meta"]["plate"] = {"fin": "working"}
+    r2 = client.post("/api/scenario/action/convert",
+                     json={"consumer": "gimbal", "scenario": raw})
+    assert "version_undeclared" not in r2.text, r2.text
+    # ext: 外部锚点豁免(无版本语义)
+    raw["meta"].pop("plate")
+    raw["steps"][0]["endpoint"] = "ext:pay.list"
+    r3 = client.post("/api/scenario/action/convert",
+                     json={"consumer": "gimbal", "scenario": raw})
+    assert r3.status_code == 200, r3.text

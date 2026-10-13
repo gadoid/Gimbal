@@ -21,18 +21,21 @@ def upgrade() -> None:
     if bind.dialect.name != "postgresql":
         return
     # gimbal 用户是库 owner(docker compose POSTGRES_USER),可建扩展
+    # 扩展是库级唯一且 relocatable:false 场景下不可重装到任意 schema ——
+    # 统一装在 public,索引算子类显式 public. 限定(⑤ 2026-10-13:空库门
+    # PG 面在临时 schema 单搜索路径下建库时,不限定会解析不到算子类)
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_composer_name_trgm "
-        "ON composer_scenarios USING gin (name gin_trgm_ops)"
+        "ON composer_scenarios USING gin (name public.gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_composer_description_trgm "
-        "ON composer_scenarios USING gin (description gin_trgm_ops)"
+        "ON composer_scenarios USING gin (description public.gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_composer_sid_trgm "
-        "ON composer_scenarios USING gin (scenario_id gin_trgm_ops)"
+        "ON composer_scenarios USING gin (scenario_id public.gin_trgm_ops)"
     )
 
 

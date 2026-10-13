@@ -1343,6 +1343,25 @@ def action_scenario_convert(
         meta = raw_scenario.get("meta")
         if isinstance(meta, dict):
             meta_plate = meta.get("plate") or None
+    # ⑥(2026-10-13):「不带 meta.plate 照旧」的过渡期兼容分支退役 ——
+    # 平台保存闸(scenario_store 唯一写入口)已强制锚定系统声明,所有
+    # 正常入库场景都带声明;不带声明的锚定场景只剩绕过写入口的旁路,
+    # 按版本模型 I 系不变量必须拒绝,不再按存储 binding 静默放行。
+    if meta_plate is None and isinstance(raw_scenario, dict):
+        anchored = {
+            str(st.get("endpoint")).split(".")[0]
+            for st in (raw_scenario.get("steps") or [])
+            if isinstance(st, dict) and st.get("endpoint")
+            and not str(st.get("endpoint")).startswith("ext:")
+        }
+        anchored.discard("")
+        if anchored:
+            raise PlateHTTPError(
+                http_status=422,
+                code=ErrorCode("version_undeclared"),
+                message=(f"锚定系统 {sorted(anchored)} 未声明 meta.plate —— "
+                         "平台保存闸已强制声明,不带声明的载荷属旁路写入"),
+            )
     used_refs: dict[str, str] | None = None
     if meta_plate:
         from gimbal_plate.release.reproject import (

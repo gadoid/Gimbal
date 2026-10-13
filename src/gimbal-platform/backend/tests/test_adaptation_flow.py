@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from app.core import db as db_module
+from app.models.composer_scenario import ComposerScenario
 from app.schemas.scenario_composer import ScenarioDraft
 from app.services import adaptation_service, plate_client, scenario_store
 
@@ -26,12 +27,18 @@ async def _seed(scenario_id: str, *, owner_id: int = 1, plate_ref="1.0#1"):
          "strategy": []},
     ]
     draft = make_draft(scenario_id, steps=steps, system=["fin"])
-    # C-1/C-2 后 make_draft 缺省补 working 声明;本测试的 plate_ref=None
-    # 意图是「无版本声明(过渡期存量)」分支 —— 显式剥掉缺省声明。
-    if plate_ref:
-        draft["definition"]["meta"]["plate"] = {"fin": plate_ref}
-    else:
+    # ⑥(2026-10-13):store 写入口已收口(未声明锚定系统拒写)——
+    # plate_ref=None 的「无版本声明(过渡期存量)」形态只能 ORM 直插
+    # 模拟闸前旧数据;带声明的形态仍走 store 正规链。
+    if not plate_ref:
         draft["definition"]["meta"].pop("plate", None)
+        async with db_module.SessionLocal() as s:
+            s.add(ComposerScenario(
+                scenario_id=scenario_id, owner_name=f"u{owner_id}",
+                owner_id=owner_id, payload=draft))
+            await s.commit()
+        return
+    draft["definition"]["meta"]["plate"] = {"fin": plate_ref}
     async with db_module.SessionLocal() as s:
         await scenario_store.create(
             s, ScenarioDraft.model_validate(draft),

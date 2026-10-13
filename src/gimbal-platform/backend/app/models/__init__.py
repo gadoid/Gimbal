@@ -19,6 +19,10 @@ from .board_card import BoardCard
 from .environment import Environment
 from .external_endpoint import ExternalEndpoint
 from .service_alias import ServiceAlias
+# ⑤(2026-10-13)补注册:此前未进 __init__ —— 空库 baseline 的
+# create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落下
+# json(模型口径 JsonVar=jsonb),SQLite 面看不出漂移。
+from .integration_task import IntegrationTask
 # 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
 from .permission import AuditLog, Notification, UserPref, UserStar
 # 场景域事件日志(2026-09-23 批次 F3:时间线唯一数据源)
@@ -45,6 +49,7 @@ __all__ = [
     "CarryServiceBinding",
     "BoardCard",
     "Environment", "ExternalEndpoint", "ServiceAlias",
+    "IntegrationTask",
     "AuditLog",
     "Notification",
     "ActivityEvent",

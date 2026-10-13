@@ -525,7 +525,6 @@ class Engine:
     # ("expected 42 eq 401"、"订单号 401-2026 提取失败")被误判 auth,
     # 正常集成实例遭暂停且需人工复活。
     _AUTH_MARKER = "[auth_status:"
-    _CALLING_STATUS_RE = re.compile(r"\b40[13]\b")
 
     @staticmethod
     def _error_kind_of(step: Any) -> str:
@@ -535,10 +534,16 @@ class Engine:
         if Engine._AUTH_MARKER in error:
             return "auth"
         if getattr(step, "error_phase", None) == "calling":
-            if Engine._CALLING_STATUS_RE.search(error):
-                return "auth"
+            # ③(2026-10-13)重做:calling 面优先**类型化**分类(协议执行器
+            # 按异常类型写入 error_kind)。文本启发只作旧形态回退,且收窄
+            # —— 撤掉 40[13] 正则(代理 403/亲历 40x 已按类型归位)与
+            # "auth" 子串(域名带 auth、错误含 "author" 全被误判,进而
+            # 错停集成实例)。
+            typed = str(getattr(step, "error_kind", "") or "")
+            if typed in ("auth", "timeout", "transport"):
+                return typed
             low = error.lower()
-            if "登录" in error or "auth" in low or "unauthorized" in low:
+            if "登录" in error or "unauthorized" in low:
                 return "auth"
             if "timeout" in low or "timed out" in low:
                 return "timeout"

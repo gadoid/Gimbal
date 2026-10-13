@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional, Union
 
 from gimbal.protocols.base import (
-    ProtocolCallContext, ProtocolExecutor, ProtocolTransportError,
+    ProtocolAuthError, ProtocolCallContext, ProtocolExecutor,
+    ProtocolTransportError,
 )
 from gimbal.protocols.result import CallResult
 from gimbal.strategy.executor_base import StrategyResult, StrategyStatus
@@ -353,15 +354,24 @@ class CallExecutor(ProtocolExecutor):
         except ProtocolTransportError:
             raise
         except Exception as exc:
-            # httpx.TimeoutException / RequestError 与其它异常统一翻译为传输失败
+            # ③(2026-10-13)翻译带类型:认证族 → auth;httpx 超时 → timeout;
+            # 其余(含代理/连接/DNS)→ transport。代理隧道 403 是 ProxyError
+            # (RequestError 族),按类型归 transport —— 此前按文本判会误 auth。
+            from gimbal.exceptions import AuthError
+            if isinstance(exc, AuthError):
+                raise ProtocolAuthError(str(exc)) from exc
             logger.exception("[CallExecutor] 异常: {} {}", method, url)
             tb = traceback.format_exc()
             try:
                 import httpx as _httpx
                 if isinstance(exc, _httpx.TimeoutException):
-                    raise ProtocolTransportError(f"Request timeout: {exc}", traceback_str=tb) from exc
+                    raise ProtocolTransportError(
+                        f"Request timeout: {exc}", traceback_str=tb,
+                        kind="timeout") from exc
                 if isinstance(exc, _httpx.RequestError):
-                    raise ProtocolTransportError(f"Request error: {exc}", traceback_str=tb) from exc
+                    raise ProtocolTransportError(
+                        f"Request error: {exc}", traceback_str=tb,
+                        kind="transport") from exc
             except ImportError:
                 pass
             raise ProtocolTransportError(str(exc), traceback_str=tb) from exc

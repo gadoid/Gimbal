@@ -35,6 +35,47 @@ from . import scheme_store
 
 
 # ─── write side ───────────────────────────────────────────────────
+async def enforce_meta_plate(definition: dict,
+                             prev_meta_plate: dict | None = None) -> None:
+    """版本声明闸(⑥下沉,2026-10-13;create/update/导入/适配提交共用)。
+
+    * 锚定系统(endpoint 首段,``ext:`` 外部锚点豁免)必须声明 —— 未声明
+      = 绕开 plate 按陈旧存储 binding 执行的过渡形态(C-2),唯一写入口
+      收口后由本闸关闭;
+    * 声明引用须有效(线/修订存在;working 豁免);
+    * ``prev_meta_plate`` 提供且声明未变 → 跳过引用校验(防抖自动保存
+      不放大 plate 调用);
+    * plate 不可达 → 引用校验跳过(保存不因目录故障阻断;执行期门仍在),
+      「必须声明」是本地判定,恒生效。
+
+    Raises:
+        ValueError: ``meta_plate_missing_system`` / ``meta_plate_invalid_ref``。
+    """
+    from . import plate_client, run_semantics
+
+    meta = (definition or {}).get("meta") or {}
+    meta_plate = meta.get("plate")
+    meta_plate = meta_plate if isinstance(meta_plate, dict) else {}
+    anchored = {
+        s for s in run_semantics.anchored_systems({"definition": definition})
+        if not s.startswith("ext:")}
+    undeclared = sorted(s for s in anchored if not meta_plate.get(s))
+    if undeclared:
+        raise ValueError(
+            f"meta_plate_missing_system: 锚定系统 {undeclared} 未声明版本"
+            "(meta.plate 须给 <line>#<n> 或 working)")
+    if prev_meta_plate is not None and prev_meta_plate == meta_plate:
+        return          # 声明未变:跳过引用校验
+    try:
+        await plate_client.validate_meta_plate_refs(meta_plate)
+    except plate_client.PlateUnavailableError:
+        pass            # 目录故障不阻断保存(执行期门仍在)
+    except plate_client.PlateRejectedError as e:
+        raise ValueError(
+            f"meta_plate_invalid_ref: 版本声明校验被 plate 拒绝: {e}") from e
+    # validate_meta_plate_refs 自身的 ValueError 已带 meta_plate_invalid_ref 前缀
+
+
 async def create(
     db: AsyncSession,
     draft: ScenarioDraft,
@@ -59,6 +100,7 @@ async def create(
     """
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
+    await enforce_meta_plate(draft.definition)      # ⑥:唯一写入口收口
     server_owned = ScenarioMeta.model_validate({
         **def_meta,
         "scenarioId": scenario_id,
@@ -130,6 +172,10 @@ async def update(
     # F3:旧名快照(提交后判 rename/edit;在 payload 覆盖前取)
     old_name = (((row.payload or {}).get("definition") or {})
                 .get("meta") or {}).get("name")
+    await enforce_meta_plate(
+        draft.definition,
+        prev_meta_plate=(((row.payload or {}).get("definition") or {})
+                         .get("meta") or {}).get("plate"))
     def_meta = draft.definition.get("meta") or {}
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:

@@ -6,7 +6,9 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "sqlalchemy>=2.0",
+    # [asyncio] extras 钉 greenlet(sqlalchemy 2.1 起不再自带传递依赖,
+    # 干净 venv 里 async engine 一 collect 即崩;A-2 残留,2026-10-13)
+    "sqlalchemy[asyncio]>=2.0",
     "pydantic>=2.6",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0",
@@ -15,6 +17,8 @@ dependencies = [
     "passlib[bcrypt]>=1.7",
     "bcrypt>=3.1,<4.1",  # passlib 1.7.4 incompatible with bcrypt 4.1+ (no __about__)
     "python-multipart>=0.0.9",
+    # 平台自身代码消费(plate_client/ServerSession);A-2 残留同族缺口
+    "httpx>=0.28",
     "aiosqlite>=0.20",
     # PG 驱动（PG迁移方案 §3.1）：asyncpg 运行时；alembic 双方言迁移必经
     # （SQLite 本地/测试启动自动 upgrade head 依赖它，M2 起 lifespan 引用）。

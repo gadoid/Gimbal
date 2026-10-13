@@ -233,69 +233,24 @@ async def preview_plate(
     )
 
 
-async def _enforce_meta_plate(body: ScenarioDraft, prev_payload: dict | None = None) -> None:
-    """保存端版本声明闸(C-1/C-2,2026-10-13;对齐 R19 导入口径)。
-
-    * 锚定系统必须声明(C-2:未声明=绕开 plate 按陈旧存储 binding 执行
-      的过渡形态,rs3 全量回填后关闭该入口);
-    * 声明引用须有效(线/修订存在;working 豁免);
-    * PUT 且声明未变 → 跳过引用校验(防抖自动保存不放大 plate 调用);
-    * plate 不可达 → 引用校验跳过(保存不因目录故障阻断,执行期门仍在),
-      但「锚定系统必须声明」是本地判定,恒生效。
-    """
-    from ..services import plate_client, run_semantics
-
-    definition = body.definition if isinstance(body.definition, dict) else {}
-    meta = definition.get("meta") or {}
-    meta_plate = meta.get("plate") or {}
-    anchored = {
-        s for s in run_semantics.anchored_systems({"definition": definition})
-        # ext: 前缀 = 外部接口登记锚点(X2),无版本语义,不要求 plate 声明
-        if not s.startswith("ext:")}
-    # 声明缺失 = 无值;显式 "working" 是合法声明
-    undeclared = sorted(
-        s for s in anchored
-        if not (isinstance(meta_plate, dict) and meta_plate.get(s)))
-    if undeclared:
-        raise HTTPException(422, detail={
-            "code": "meta_plate_missing_system",
-            "message": (f"锚定系统 {undeclared} 未声明版本"
-                        "(meta.plate 须给 <line>#<n> 或 working)")})
-    if not isinstance(meta_plate, dict):
-        return
-    if prev_payload is not None:
-        prev_meta = ((prev_payload.get("definition") or {}).get("meta")
-                     or {}).get("plate") or {}
-        if prev_meta == meta_plate:
-            return          # 声明未变:跳过引用校验
-    try:
-        await plate_client.validate_meta_plate_refs(meta_plate)
-    except plate_client.PlateUnavailableError:
-        logger.warning("save_meta_plate: plate 不可达,引用校验跳过")
-    except plate_client.PlateRejectedError as e:
-        # plate 的 4xx 是对声明的裁决(系统无版本线等)—— 同 422 口径
-        raise HTTPException(422, detail={
-            "code": "meta_plate_invalid_ref",
-            "message": f"版本声明校验被 plate 拒绝: {e}"}) from e
-    except ValueError as e:
-        raise HTTPException(422, detail={"code": str(e).split(":")[0],
-                                         "message": str(e)}) from e
-
-
 # ── 2) POST / (create) ─────────────────────────────────────────────
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)
 async def create_scenario(
     user: CurrentUser, db: DbSession, body: ScenarioDraft
 ) -> Scenario:
     owner = user.display_name or user.username
-    await _enforce_meta_plate(body)
     try:
         return await scenario_store.create(
             db, body, owner=owner, owner_id=user.id
         )
     except ValueError as e:
         # Pydantic validation errors already translated to 422 by FastAPI.
-        raise value_error_http(e, {"scenario_id_exists": 409})
+        raise value_error_http(e, {
+            "scenario_id_exists": 409,
+            # ⑥:store 级版本声明闸的两种裁定 → 422(输入被拒)
+            "meta_plate_missing_system": 422,
+            "meta_plate_invalid_ref": 422,
+        })
 
 
 # ── 3a0) GET /signals(M5,债 12:关注页 N+1 消除)─────────────────────
@@ -827,7 +782,6 @@ async def put_scenario(
 ) -> Scenario:
     row = await _load_row(db, scenario_id)
     _require_owner(user, row)
-    await _enforce_meta_plate(body, prev_payload=dict(row.payload or {}))
     try:
         return await scenario_store.update(
             db,
@@ -839,7 +793,11 @@ async def put_scenario(
     except KeyError as e:
         raise key_error_404(e)
     except ValueError as e:
-        raise value_error_http(e, {"scenario_id_changed": 409})
+        raise value_error_http(e, {
+            "scenario_id_changed": 409,
+            "meta_plate_missing_system": 422,
+            "meta_plate_invalid_ref": 422,
+        })
 
 
 # ── 7) DELETE /{id} ────────────────────────────────────────────────

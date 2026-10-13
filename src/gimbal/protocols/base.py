@@ -82,10 +82,21 @@ class ProtocolTransportError(Exception):
     traceback_str 进 StrategyResult.error。
     """
 
-    def __init__(self, message: str, *, traceback_str: Optional[str] = None) -> None:
+    def __init__(self, message: str, *, traceback_str: Optional[str] = None,
+                 kind: str = "transport") -> None:
         super().__init__(message)
         self.message = message
         self.traceback_str = traceback_str
+        # ③(2026-10-13)类型化分类:auth(登录/握手失败)| timeout | transport。
+        # 引擎 error_kind 按类型取值,不再对错误文本做正则/子串猜测。
+        self.kind = kind
+
+
+class ProtocolAuthError(ProtocolTransportError):
+    """认证握手/登录失败(凭证面错误)—— error_kind=auth 的权威来源。"""
+
+    def __init__(self, message: str, *, traceback_str: Optional[str] = None) -> None:
+        super().__init__(message, traceback_str=traceback_str, kind="auth")
 
 
 class ProtocolExecutor(ABC):
@@ -286,14 +297,16 @@ class ProtocolExecutor(ABC):
                 break
         except ProtocolTransportError as exc:
             logger.warning(
-                "[Protocol {}] 传输失败: step_id={} protocol={} message={}",
-                step_id, step_id, self.protocol, exc.message,
+                "[Protocol {}] 传输失败: step_id={} protocol={} kind={} message={}",
+                step_id, step_id, self.protocol, exc.kind, exc.message,
             )
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 strategy_id=self.kind,
                 message=exc.message,
                 error=exc.traceback_str,
+                # 类型化错误分类随结果行携带(③:引擎按类型判定 auth)
+                error_kind=getattr(exc, "kind", "transport"),
                 duration_ms=(time.monotonic() - t0) * 1000,
             )
         except Exception as exc:  # noqa: BLE001 — 原 dispatcher 兜底职责

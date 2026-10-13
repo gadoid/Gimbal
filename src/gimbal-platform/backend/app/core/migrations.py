@@ -41,7 +41,9 @@ def _sync_url(url: str) -> str:
 def _alembic_config(sync_url: str) -> Config:
     cfg = Config(str(_BACKEND_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", sync_url)
+    # configparser 插值语义:URL 里的 % 必须转义(带 query 参数的 URL
+    # 如 ?options=-csearch_path=... 含 %xx 编码,⑤ PG 面实测踩中)
+    cfg.set_main_option("sqlalchemy.url", sync_url.replace("%", "%%"))
     return cfg
 
 

@@ -75,6 +75,9 @@ def _load_real_scenario() -> dict:
     raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"
+    # ⑥(2026-10-13):convert 锚定场景必须声明(无声明兼容分支退役);
+    # 该转储场景 steps 无锚点,working 声明仅为口径一致
+    raw["meta"].setdefault("plate", {"fin": "working"})
     return raw
 
 
@@ -88,6 +91,9 @@ def _ab_batch_scenario(eids: list[str]) -> dict:
             "description": "", "tags": [], "version": "v0.1.0",
             "requirementRef": [], "module": "ab", "priority": 1,
             "createTime": "2026-09-05T00:00:00Z", "expire": False,
+            # ⑥(2026-10-13):锚定场景必须声明;working = 按当前树(与
+            # 无声明旧行为同投影结果)
+            "plate": {"fin": "working"},
         },
         "resource": {},
         "config": {},
