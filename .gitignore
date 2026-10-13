@@ -44,3 +44,8 @@ plate_artifacts/
 src/gimbal-platform/backend/data.bak*
 logs/
 node_modules/
+# 泄密处置(2026-10-13):数据库备份/转储永不入库(pg-init 的初始化
+# 脚本除外);历史已用 git filter-repo 清除
+*.sql
+*.dump
+!pg-init/*.sql
