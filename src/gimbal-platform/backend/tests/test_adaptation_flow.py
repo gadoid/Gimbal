@@ -26,8 +26,12 @@ async def _seed(scenario_id: str, *, owner_id: int = 1, plate_ref="1.0#1"):
          "strategy": []},
     ]
     draft = make_draft(scenario_id, steps=steps, system=["fin"])
+    # C-1/C-2 后 make_draft 缺省补 working 声明;本测试的 plate_ref=None
+    # 意图是「无版本声明(过渡期存量)」分支 —— 显式剥掉缺省声明。
     if plate_ref:
         draft["definition"]["meta"]["plate"] = {"fin": plate_ref}
+    else:
+        draft["definition"]["meta"].pop("plate", None)
     async with db_module.SessionLocal() as s:
         await scenario_store.create(
             s, ScenarioDraft.model_validate(draft),

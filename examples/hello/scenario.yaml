@@ -1,0 +1,32 @@
+# 最小可执行场景(README 快速开始的目标文件,D4,2026-10-13)。
+# 单步 HTTP GET + 状态断言,无认证/无数据集依赖。
+# 运行:gimbal run launch examples/hello/scenario.yaml
+kind: scenario
+scenarioId: sc-hello
+meta:
+  name: hello-http
+  module: examples
+  priority: 1
+config:
+  services:
+    httpbin: https://httpbin.org
+  users: {}
+  timePolicy:
+    kind: record
+resource: {}
+steps:
+  - kind: step
+    description: GET /get 并断言 200
+    call:
+      protocol: http
+      service: httpbin
+      method: GET
+      path: /get
+    request:
+      kind: request
+      body: {}
+    strategy:
+      - kind: assertion
+        target: $.call.response.status
+        operator: eq
+        expected: 200

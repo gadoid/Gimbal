@@ -1350,7 +1350,14 @@ def action_scenario_convert(
             reproject_raw,
         )
 
-        root = _artifacts_root_or_503(request)
+        # C 批修带(2026-10-13):构件根只在存在**非 working**修订时必需
+        # —— reproject_raw 对 working 声明只用当前树。此前 meta.plate
+        # 非空即 503,全 working 场景(保存闸 C-2 起缺省声明)在未配
+        # 构件根的环境(进程内 plate/新检出)一律拒转。
+        _needs_root = any(
+            str(v) and str(v) != "working"
+            for v in (meta_plate or {}).values())
+        root = (_artifacts_root_or_503(request) if _needs_root else None)
         try:
             raw_scenario, used_refs = reproject_raw(
                 raw_scenario, meta_plate,

@@ -132,13 +132,6 @@ class ServerSession:
             await _quiet(task)
 
 
-async def _quiet(task: "asyncio.Task") -> None:
-    """等 stderr 泵收尾并吞掉已预期的异常(管道 EOF/取消)。"""
-    try:
-        await asyncio.wait_for(task, timeout=3.0)
-    except Exception:  # noqa: BLE001 — 进程被杀后泵的收尾异常皆预期
-        pass
-
     @property
     def run_id(self) -> "str | None":
         return self._run_id
@@ -299,6 +292,14 @@ async def _quiet(task: "asyncio.Task") -> None:
                 return []
             r.raise_for_status()
             return r.json().get("output") or []
+
+
+async def _quiet(task: "asyncio.Task") -> None:
+    """等 stderr 泵收尾并吞掉已预期的异常(管道 EOF/取消)。"""
+    try:
+        await asyncio.wait_for(task, timeout=3.0)
+    except Exception:  # noqa: BLE001 — 进程被杀后泵的收尾异常皆预期
+        pass
 
 
 class ServerSessionPool:

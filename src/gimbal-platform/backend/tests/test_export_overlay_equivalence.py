@@ -56,17 +56,21 @@ _STEP = {"kind": "step",
 
 
 def _eq_draft() -> dict:
-    return _draft(steps=[_STEP], vars_map={}, **_META)
+    # plate=False:等价性两路都按内联 binding 形态走(C-1/C-2 后缺省
+    # working 声明会在保存侧剥 path,金样不再逐字段相等)
+    return _draft(steps=[_STEP], vars_map={}, plate=False, **_META)
 
 
 # carry 形态 step(spec §4.3):同 _STEP 的 qa1/qa2 headers 并集锚 +
 # view_hints.endpoint_id(carry 面)+ request.body(注入载体)。
 def _carry_step() -> dict:
-    return {"kind": "step",
-            "call": {"service": "fin-service", "path": "/x",
+    # C-1/C-2 后按「存储形态」编写:锚点一等字段 + 无内联 binding 派生
+    # 字段(path/method)—— 已声明系统(缺省 working)在保存侧会被剥离,
+    # 草稿与存储不同形会让金样等价性两边输入不对称。
+    return {"kind": "step", "endpoint": "fin.ep1",
+            "call": {"service": "fin-service",
                     "headers": {"Authorization": "${auth.qa1.token}",
-                                "X-Api-Key": "${auth.qa2.token}"},
-                    "view_hints": {"endpoint_id": "fin.ep1"}},
+                                "X-Api-Key": "${auth.qa2.token}"}},
             "request": {"kind": "request", "body": {"order_id": "o-1"}}}
 
 
