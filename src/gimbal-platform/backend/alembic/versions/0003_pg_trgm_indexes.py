@@ -23,8 +23,10 @@ def upgrade() -> None:
     # gimbal 用户是库 owner(docker compose POSTGRES_USER),可建扩展
     # 扩展是库级唯一且 relocatable:false 场景下不可重装到任意 schema ——
     # 统一装在 public,索引算子类显式 public. 限定(⑤ 2026-10-13:空库门
-    # PG 面在临时 schema 单搜索路径下建库时,不限定会解析不到算子类)
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    # PG 面在临时 schema 单搜索路径下建库时,不限定会解析不到算子类)。
+    # 扩展侧必须 WITH SCHEMA public:不指定时装进 search_path 首位(临时
+    # schema),public.gin_trgm_ops 在干净库上不存在,CI postgres:16 一跑即红
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public")
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_composer_name_trgm "
         "ON composer_scenarios USING gin (name public.gin_trgm_ops)"

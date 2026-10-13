@@ -68,6 +68,48 @@ def test_declarations_array_items_and_empty_shapes():
     assert jsonschema_to_declarations({"type": "object"}) == []
 
 
+def test_declarations_nested_x_order():
+    # 2-3:嵌套层同样按 x-order 取序 —— 载荷模拟 JSONB 键长序重排后
+    # 的存储形状(键序 a,zeta 是重排产物,盖章序 zeta,a 才是原始意图),
+    # 读侧若不传子层 x-order,嵌套字段序仍会依赖存储层行为
+    schema = {"type": "object", "x-order": ["zeta", "a"], "properties": {
+        "a": {"type": "string"},
+        "zeta": {"type": "object", "x-order": ["nested_long", "n"],
+                 "properties": {"n": {"type": "string"},
+                                "nested_long": {"type": "string"}}},
+    }}
+    decls = jsonschema_to_declarations(schema)
+    assert [d["name"] for d in decls] == ["zeta", "a"]
+    assert [c["name"] for c in decls[0]["children"]] == ["nested_long", "n"]
+
+
+def test_declarations_array_items_x_order():
+    # 2-3:items 层的 x-order 同样生效(JSONB 重排把 alpha_longer 排前)
+    schema = {"type": "object", "properties": {
+        "list": {"type": "array", "items": {
+            "type": "object", "x-order": ["sku", "alpha_longer"],
+            "properties": {"alpha_longer": {"type": "string"},
+                           "sku": {"type": "string"}}}}}}
+    decls = jsonschema_to_declarations(schema)
+    assert [c["name"] for c in decls[0]["children"]] == ["sku", "alpha_longer"]
+
+
+def test_ensure_order_stamps_every_layer():
+    # 2-3:盖章覆盖每一层 —— 顶层/嵌套 object 经 properties 递归,
+    # array items 层是独立入口,必须显式覆盖
+    from app.services.external_endpoints import _ensure_order
+    schema = {"type": "object", "properties": {
+        "zeta": {"type": "object", "properties": {
+            "b": {"type": "string"}, "a": {"type": "string"}}},
+        "a": {"type": "array", "items": {"type": "object", "properties": {
+            "y": {"type": "string"}, "x": {"type": "string"}}}},
+    }}
+    out = _ensure_order(schema)
+    assert out["x-order"] == ["zeta", "a"]
+    assert out["properties"]["zeta"]["x-order"] == ["b", "a"]
+    assert out["properties"]["a"]["items"]["x-order"] == ["y", "x"]
+
+
 # ── 告警校验(纯函数,D2:告警不阻塞)────────────────────────────
 
 def test_check_body_warns_on_extra_missing_type():

@@ -58,7 +58,18 @@ def _ensure_order(schema: dict | None) -> dict | None:
         for spec in props.values():
             if isinstance(spec, dict):
                 _ensure_order(spec)
+    # array items 层同为「键序敏感面」,一并盖章(2-3:顶层之外的嵌套
+    # object 经上面 spec 递归已覆盖,items 是独立入口)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _ensure_order(items)
     return schema
+
+
+def _x_order_of(spec: dict) -> list | None:
+    # 2-3:取层内 x-order(写侧 _ensure_order 每层盖章);非法形状按缺省
+    order = spec.get("x-order")
+    return order if isinstance(order, list) else None
 
 
 def jsonschema_to_declarations(schema: dict | None) -> list[dict]:
@@ -79,9 +90,7 @@ def jsonschema_to_declarations(schema: dict | None) -> list[dict]:
     if not isinstance(props, dict) or not props:
         return []
     required = set(schema.get("required") or [])
-    order = schema.get("x-order")
-    order = order if isinstance(order, list) else None
-    return _props_to_nodes(props, required, prefix="$", x_order=order)
+    return _props_to_nodes(props, required, prefix="$", x_order=_x_order_of(schema))
 
 
 def _props_to_nodes(props: dict, required: set, prefix: str,
@@ -105,10 +114,13 @@ def _props_to_nodes(props: dict, required: set, prefix: str,
             "required": str(name) in required,
         }
         if js_type == "object":
+            # 2-3:子层 x-order 一并传入(此前只顶层生效,嵌套层顺序
+            # 仍依赖存储层保序,json 列兜底在,但前提不成立)
             children = _props_to_nodes(
                 spec.get("properties") or {},
                 set(spec.get("required") or []),
                 prefix=path,
+                x_order=_x_order_of(spec),
             )
             if children:
                 node["children"] = children
@@ -120,6 +132,7 @@ def _props_to_nodes(props: dict, required: set, prefix: str,
                     items.get("properties") or {},
                     set(items.get("required") or []),
                     prefix=f"{path}[0]",
+                    x_order=_x_order_of(items),
                 )
         nodes.append(node)
     return nodes

@@ -257,7 +257,7 @@ async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
         raise _bad("not_found", "功能不存在", 404)
     if not _can_manage(user, tpl):
         raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能删除", 403)
-    tpl.removed_at = datetime.utcnow()
+    tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
     return {"removed": True}
 
@@ -286,9 +286,10 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
     inst = await db.get(IntegrationTask, seeded.id)
     # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
-    # (SQLite 读回 naive 一直没暴露)—— 统一 ensure_aware。
+    # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC(utcnow
+    # 3.12 起废弃);DB 读回仍按 ensure_aware 归一(两方言形状不同)。
     from ..core.timeutil import ensure_aware
-    now = ensure_aware(datetime.utcnow())
+    now = datetime.now(timezone.utc)
     _last_manual = (ensure_aware(inst.last_manual_run_at)
                     if inst.last_manual_run_at is not None else None)
     # Y3/方案 §3 操作表:冷却只对平台模式(任意订阅者触发需限频);
@@ -367,8 +368,9 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             if om else dict(raw_outputs)
         stale = False
         if io["lastRunAt"]:
-            ran = datetime.fromisoformat(io["lastRunAt"].rstrip("Z"))
-            stale = (datetime.utcnow() - ran) > timedelta(hours=1)
+            # 3.11+ fromisoformat 原生吃 Z → aware,与 aware now 相减安全
+            ran = datetime.fromisoformat(io["lastRunAt"])
+            stale = (datetime.now(timezone.utc) - ran) > timedelta(hours=1)
         out.append({
             "id": raw, "name": tpl.name, "state": io["state"],
             "enabled": io["enabled"], "lastStatus": io["lastStatus"],
