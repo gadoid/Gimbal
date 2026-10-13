@@ -20,7 +20,7 @@ import asyncio
 import json
 import re
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -57,7 +57,8 @@ _AUTH_TEMPLATE = re.compile(r"\$\{auth\.([A-Za-z0-9_.\-]+)\.")
 
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    # aware UTC(utcnow 3.12 起废弃;与 UtcDateTime/ensure_aware 口径同向)
+    return datetime.now(timezone.utc)
 
 
 # D3(2026-10-13):跨次游标键豁免(与引擎 Engine._CURSOR_KEYS 同表)——

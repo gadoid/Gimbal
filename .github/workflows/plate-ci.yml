@@ -57,8 +57,6 @@ jobs:
           # editable 装后端包带齐运行件;constraints 钉 bcrypt/asyncpg/
           # alembic 与后端 pyproject 同口径。
           pip install -e src/gimbal-platform/backend "pytest-asyncio>=0.24"             -c src/gimbal-platform/backend/requirements-platform-constraints.txt
-          # psycopg 仅空库门(同步 engine 走 alembic)/ETL 脚本需要
-          pip install -c src/gimbal-platform/backend/requirements-platform-constraints.txt "psycopg[binary]"
       # 评审 G-2/7.1-7:未定义名称守卫——plate_pins_container / m2_info /
       # Session 这类一跑就崩的缺陷不再进入提交。只拦 F821(未定义名),
       # unused 类噪音不在此门。

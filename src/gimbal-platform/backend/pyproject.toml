@@ -20,11 +20,15 @@ dependencies = [
     # 平台自身代码消费(plate_client/ServerSession);A-2 残留同族缺口
     "httpx>=0.28",
     # PG 驱动（PG迁移方案 §3.1）：asyncpg 运行时；alembic 迁移必经
-    # （空库建库/版本校验，M2 起 lifespan 引用）。psycopg 仅 ETL/
-    # preccheck 脚本用（同步 engine），按需安装见 constraints。
+    # （空库建库/版本校验，M2 起 lifespan 引用）。
+    # psycopg[binary]：同步引擎 —— lifespan 的 ensure_schema_sync 与
+    # 空库门测试都走它（A-3 根治：按依赖声明装好的环境必须能起 PG，
+    # "仅 ETL 按需装"的说法随首启路径进 sync 引擎而失效）；ETL/
+    # preccheck 脚本同源复用。版本钉准见 constraints。
     # SQLite 方言已退役（2026-10-14）：aiosqlite 依赖随之下架。
     "asyncpg>=0.29",
     "alembic>=1.13",
+    "psycopg[binary]>=3.1",
     "python-dotenv>=1.0",
     "loguru>=0.7",
 ]
