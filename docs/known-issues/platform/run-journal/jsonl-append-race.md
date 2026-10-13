@@ -1,7 +1,7 @@
 # 执行日志 JSONL 的写侧并发竞态（`_append_jsonl`）
 
 > **模块**：`gimbal-platform/backend`（`app/services/run_dispatcher.py` 执行日志）
-> **状态**：已知未修复
+> **状态**：**已修复(进程内面)** — 2026-10-13 收口,见文末[修复记录](#修复记录);跨进程双写者面保持原状(见记录边界)
 > **来源**：架构收敛执行会话自查（非 spec 条目）
 > **证据级别**：机制已读源 + **现场物证**（见 §1 的撕裂行）
 
@@ -90,3 +90,22 @@ async def _append_log(path: Path, payload: dict) -> None:
 2. **JSONL 成为下游权威数据源**（对账 / 合规 / 计费）⇒ 立即按 P0 处理；
 3. **fan-out 并发度调大**（`parallel` 默认值上调）或**部署形态变为多进程写同一 `DATA_DIR`**；
 4. **引入结构化日志 / 入库**（spec §4.5 已把「JSONL 是否随之入库」记为独立议题）—— 那一轮顺手收口最省。
+
+---
+
+## 修复记录（2026-10-13）
+
+**方案**：§3 方向 1 + 2 组合 —— 模块级 `threading.Lock` 串行化同进程写,
+`os.open(O_APPEND|O_CREAT|O_WRONLY|O_BINARY)` + 单次 `os.write` 二进制
+追加取代文本模式 open/write(`run_dispatcher._append_jsonl`)。
+
+**守护**：`tests/test_append_jsonl_concurrency.py` —— 8 线程 × 50 行并发
+打点,行数与逐行 `json.loads` 双断言,撕裂即红(不依赖时序)。
+
+**边界(未修复面,保留观察)**：
+
+- **跨进程双写者**(live server + 测试同写当日文件)仍非内核级原子 ——
+  Windows 的 append 语义是「定位末尾再写」,锁只在本进程内。该面与修复
+  前相同,未变差;唯一证据源仍是 per-case `result.json`,JSONL 定位不变
+  (counts-only 运维索引)。
+- §5 的重开条件 3/4(多进程部署形态、日志入库)触发时,再评估单写者模型。

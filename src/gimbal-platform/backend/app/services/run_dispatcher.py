@@ -32,7 +32,9 @@ import copy
 import hashlib
 import json
 import logging
+import os
 import shutil
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -2584,10 +2586,24 @@ def _coerce_row_value(base_val: Any, row_val: Any) -> Any:
         return row_val
 
 
+# P1 收口(known-issues/run-journal/jsonl-append-race):fan-out 行协程经
+# to_thread 并发 append 同一 JSONL,文本模式「定位到末尾再写」在 Windows
+# 上非原子,实测出撕裂行 —— 进程内串行化(锁)+ 单次 os.write 二进制追加。
+# 跨进程双写者(live server + 测试同日文件)仍非内核级原子,与修复前同
+# 面,不承诺;唯一证据源是 per-case result.json,JSONL 是运维索引。
+_jsonl_lock = threading.Lock()
+
+
 def _append_jsonl(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+    with _jsonl_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY
+                     | getattr(os, "O_BINARY", 0))
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
 
 
 async def _create_execution(
