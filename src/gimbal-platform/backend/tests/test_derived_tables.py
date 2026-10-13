@@ -18,7 +18,7 @@ async def _session():
 
 async def _seed_parents(s) -> None:
     """垫 FK 父行:operator_id=1(users)与 scenario_id=sc-a
-    (composer_scenarios)—— SQLite 不校验 FK、PG 校验,双方言同垫。"""
+    (composer_scenarios)—— PG 强制 FK,先垫父行。"""
     from app.schemas.scenario_composer import ScenarioDraft
     from app.services import scenario_store
 

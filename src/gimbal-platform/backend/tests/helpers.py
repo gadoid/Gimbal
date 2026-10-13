@@ -144,8 +144,8 @@ FK_ADMIN_PASSWORD = "FkAdmin-Pw-123"
 async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> None:
     """垫底 FK 用户:直插 owner_id=N 的业务行前保证 users.id=N 存在。
 
-    SQLite 默认不强制 FK,PG(M2 起)强制 —— 同一批测试在 PG 上会以
-    IntegrityError 落马(且被 create 的契约掩码成 scenario_id_exists)。
+    PG(M2 起)强制 FK —— 直插业务行前不垫 users 会以 IntegrityError
+    落马(且被 create 的契约掩码成 scenario_id_exists)。
     存在即跳过(先注册后插的测试路径不受影响,不挪自增序);PG 显式
     id 插入后把序列推到 max 之后,后续 API 注册不再撞号。
 

@@ -2,7 +2,7 @@
 
 Hits the store functions directly (bypassing the HTTP layer) so a
 regression in the service code surfaces without going through the whole
-FastAPI stack.  Per-test SQLite isolation is provided by the
+FastAPI stack.  Per-test PG schema isolation is provided by the
 ``fresh_db`` fixture (explicitly requested) in conftest.
 
 The Case layer was dissolved — datasets hang directly off scenarios,
