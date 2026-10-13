@@ -415,6 +415,10 @@ async def test_auth_failure_pauses_instance_and_revives(client):
 
     admin = await register_and_login(client, "authrev_admin", "pw123456")
     uid = 1
+    # PG 强制 holder 外键 —— uid+1 的对照实例持有人垫底
+    from tests.helpers import ensure_fk_users
+    async with db_module.SessionLocal() as s:
+        await ensure_fk_users(s, uid + 1)
 
     async with db_module.SessionLocal() as s:
         s.add(IntegrationTask(
@@ -512,6 +516,8 @@ async def test_read_only_gate_ext_anchor(client):
     async with db_module.SessionLocal() as s:
         s.add(ServiceAlias(alias_name="gitlab-g", base_service="gitlab",
                            base_url="https://git", kind="external"))
+        # PG 强制 external_endpoints.alias_name 外键 —— 别名先落库
+        await s.flush()
         s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-list",
                                title="MR", method="GET", path="/mr"))
         s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-create",

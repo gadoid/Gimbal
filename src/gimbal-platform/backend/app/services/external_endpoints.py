@@ -39,6 +39,28 @@ _TYPE_MAP = {
 
 # ─── JSON Schema → declarations 树(单一转换点)────────────────────
 
+def _ensure_order(schema: dict | None) -> dict | None:
+    """2-4(2026-10-13):顺序显式承载 —— 每个 object 层写 ``x-order``
+    (本层 properties 的键序,过滤只剩实际存在的键)。
+
+    JSONB 会按键长/字节序重排对象键;表单 declarations 的字段顺序源
+    自 properties 键序。写入前统一盖章,读取侧(_props_to_nodes)按
+    x-order 排序 —— 顺序不再依赖存储层行为;列本身也回 json(0023)
+    保插入序兜底。
+    """
+    if not isinstance(schema, dict):
+        return schema
+    props = schema.get("properties")
+    if isinstance(props, dict) and props:
+        order = [k for k in props if isinstance(k, str)]
+        if order:
+            schema["x-order"] = order
+        for spec in props.values():
+            if isinstance(spec, dict):
+                _ensure_order(spec)
+    return schema
+
+
 def jsonschema_to_declarations(schema: dict | None) -> list[dict]:
     """标准 JSON Schema(object 根)→ plate 目录树同形 declarations。
 
@@ -57,12 +79,20 @@ def jsonschema_to_declarations(schema: dict | None) -> list[dict]:
     if not isinstance(props, dict) or not props:
         return []
     required = set(schema.get("required") or [])
-    return _props_to_nodes(props, required, prefix="$")
+    order = schema.get("x-order")
+    order = order if isinstance(order, list) else None
+    return _props_to_nodes(props, required, prefix="$", x_order=order)
 
 
-def _props_to_nodes(props: dict, required: set, prefix: str) -> list[dict]:
+def _props_to_nodes(props: dict, required: set, prefix: str,
+                    x_order: list | None = None) -> list[dict]:
+    # 2-4:x-order 显式序优先(写侧 _ensure_order 盖章);缺省按插入序
+    # (json 列保序;兼容未盖章的历史/手工载荷)
+    names = [n for n in (x_order or []) if n in props]
+    names += [n for n in props if n not in names]
     nodes: list[dict] = []
-    for name, spec in props.items():
+    for name in names:
+        spec = props[name]
         if not isinstance(spec, dict):
             continue
         path = f"{prefix}.{name}"
@@ -282,7 +312,8 @@ async def create_endpoint(
         raise ValueError(f"name_conflict: {alias_name} 下已登记 {name}")
     row = ExternalEndpoint(
         alias_name=alias_name, name=name, title=title or name,
-        method=method.upper(), path=path, request_schema=request_schema,
+        method=method.upper(), path=path,
+        request_schema=_ensure_order(request_schema),   # 2-4:盖章 x-order
         auth=auth, notes=notes,
     )
     db.add(row)
@@ -317,7 +348,7 @@ async def update_endpoint(
     if request_schema is not None:
         if not isinstance(request_schema, dict):
             raise ValueError("invalid_schema: requestSchema 须为 JSON 对象")
-        row.request_schema = request_schema
+        row.request_schema = _ensure_order(request_schema)  # 2-4:盖章
     if auth is not None:
         if auth not in AUTH_VALUES:
             raise ValueError(f"invalid_auth: {auth}")
@@ -445,7 +476,7 @@ async def import_openapi(
             db.add(ExternalEndpoint(
                 alias_name=alias_name, name=e["name"], title=e["title"],
                 method=e["method"], path=e["path"],
-                request_schema=e["request_schema"],
+                request_schema=_ensure_order(e["request_schema"]),  # 2-4
             ))
     if apply:
         # 别名 base_url 缺失且文档带 servers.url → 补默认层(登记增强)

@@ -1788,8 +1788,3804 @@
   "$.voy": "ab:$.voy"
  },
  "convert_gimbal": {
-  "errors": null,
-  "status": 422
+  "converted": {
+   "config": {
+    "services": {},
+    "setup": [],
+    "teardown": [],
+    "users": {},
+    "vars": {}
+   },
+   "kind": "scenario",
+   "meta": {
+    "author": "ab",
+    "createTime": "2026-09-05T00:00:00Z",
+    "description": "",
+    "expire": false,
+    "module": "ab",
+    "name": "ab-batch",
+    "owner": "ab",
+    "plate": {
+     "fin": "working",
+     "platform": "working"
+    },
+    "priority": 1,
+    "requirementRef": [],
+    "system": [
+     "fin",
+     "platform"
+    ],
+    "tags": [],
+    "version": "v0.1.0"
+   },
+   "resource": {},
+   "scenarioId": "ab-batch",
+   "steps": [
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/v1/fin/account/balance",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 5.0
+     },
+     "description": "ab:fin.account.query_balance",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/home/audit/auditDetail",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.audit.audit_detail",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/home/audit/auditExecute",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.audit.audit_execute",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/home/audit/auditPage",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.audit.audit_page",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/home/cost/amountCostList",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.cost.amount_list",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/customer/customer/customerList",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.customer.list",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/customer/customer/customerPart",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.customer.part",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/Customer/Policy/getCustomerPolicy",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.customer.policy",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/checkGenerateOrderSub",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.check_generate_order_sub",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.generate_order_sub",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.order_add",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.order_book",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.order_detail",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/orderNotice",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.order_notice",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/order/orderPage",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order.order_page",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_entrust.order_add",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/OrderEntrust/checkOrderCustomerContainer",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_entrust.order_customer_container",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_entrust.order_page",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderFee/assetPush",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_fee.asset_push",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_fee.book_real_amount_edit",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_fee.real_amount_lock_submit",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:fin.order_fee.toggle_real_amount",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/v1/fin/settlement/orders",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 10.0
+     },
+     "description": "ab:fin.settlement.create_order",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/activity",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.activity.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/batches",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_batches",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/batches/{batch_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_batches_by_batch_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/compare",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_compare",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/impact",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_impact",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/impact-bulk",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_impact_bulk",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/impact-summary",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_impact_summary",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/refs-drift",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_refs_drift",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/stale",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_stale",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/adaptations/unindexed-steps",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.get_unindexed_steps",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/adaptations/ops/{op_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.patch_ops_by_op_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/batches",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_batches",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/batches/{batch_id}/ops",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_batches_by_batch_id_ops",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/batches/{batch_id}/rollback",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_batches_by_batch_id_rollback",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/carry-batches",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_carry_batches",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/catalog/diff",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_catalog_diff",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/ops/{op_id}/apply",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_ops_by_op_id_apply",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/ops/{op_id}/skip",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_ops_by_op_id_skip",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/save-check",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_save_check",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/submit",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_submit",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/submit-batch",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_submit_batch",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/adaptations/submit-suite",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.adaptations.post_submit_suite",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/admin/audit-logs",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.admin.get_audit_logs",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/auth/me",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auth.get_me",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auth/change-password",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auth.post_change_password",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auth.post_login",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auth.post_refresh",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auth/register",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auth.post_register",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/auths/{auth_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.delete_by_auth_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/auths/{alias}/references",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.get_by_alias_references",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/auths/{auth_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.get_by_auth_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/auths",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/auths/{auth_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.patch_by_auth_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auths/{auth_id}/test",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.post_by_auth_id_test",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/auths",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.auths.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/board-cards/{card_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.board_cards.delete_by_card_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/board-cards/{card_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.board_cards.patch_by_card_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/board-cards/{card_id}/demote",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.board_cards.post_by_card_id_demote",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/board-cards/{card_id}/promote",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.board_cards.post_by_card_id_promote",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/board-cards",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.board_cards.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/carry/bindings",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.get_bindings",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/carry/bindings/{service}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.get_bindings_by_service",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/carry/bindings/{service}/fields",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.get_bindings_by_service_fields",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/carry/defaults",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.get_defaults",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/carry/drift",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.get_drift",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/carry/bindings/{service}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.put_bindings_by_service",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/carry/defaults",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.carry.put_defaults",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/catalog/services",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.catalog.get_services",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/constants/{entry_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.constants.delete_by_entry_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/constants/{entry_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.constants.get_by_entry_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/constants",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.constants.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/constants/{entry_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.constants.patch_by_entry_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/constants",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.constants.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/data-sets/{dataset_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.data_sets.delete_by_dataset_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/data-sets/{dataset_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.data_sets.get_by_dataset_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/data-sets",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.data_sets.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/data-sets/{dataset_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.data_sets.put_by_dataset_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/endpoint-catalog/{endpoint_id}/full",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.get_by_endpoint_id_full",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/endpoint-catalog/{endpoint_id}/projection",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.get_by_endpoint_id_projection",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/endpoint-catalog/{system_id}/lines",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.get_by_system_id_lines",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/endpoint-catalog/list",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.get_list",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/endpoint-catalog/{endpoint_id}/field-states/validate",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.post_by_endpoint_id_field_state_60b108",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/endpoint-catalog/resolve-paths",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoint_catalog.post_resolve_paths",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/endpoints/{endpoint_id}/board",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.endpoints.get_by_endpoint_id_board",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/environments/{env_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.environments.delete_by_env_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/environments/{env_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.environments.get_by_env_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/environments",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.environments.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/environments",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.environments.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/environments/{env_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.environments.put_by_env_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/executions/{execution_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.delete_by_execution_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/case-artifact",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_case_artifact",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/debug",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_debug",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/debug/output",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_debug_output",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/events",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/events/counts",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_counts",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/events/stream",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_events_stream",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/rows",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_rows",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/scenario-snapshot",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_scenario_snapshot",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/summary",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_summary",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/executions/{execution_id}/cancel",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.post_by_execution_id_cancel",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/executions/{execution_id}/debug/command",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.post_by_execution_id_debug_command",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/executions/{execution_id}/rerun",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.post_by_execution_id_rerun",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/generator-catalog/{kind}/full",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.generator_catalog.get_by_kind_full",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/generator-catalog",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.generator_catalog.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/handoff",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.handoff.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/health",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.health.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/integration/platform-credentials/{cred_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.delete_platform_credentials_by_cred_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/integration/tasks/{task_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.delete_tasks_by_task_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/integration/platform-credentials",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.get_platform_credentials",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/integration/tasks",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.get_tasks",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/integration/tasks/{task_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.get_tasks_by_task_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/integration/tasks/{task_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.patch_tasks_by_task_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/integration/cards",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.post_cards",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/integration/platform-credentials",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.post_platform_credentials",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/integration/tasks",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.post_tasks",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/integration/tasks/{task_id}/run",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.integration.post_tasks_by_task_id_run",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/me/preferences",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.me.get_preferences",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/me/preferences/{key}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.me.put_preferences_by_key",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/notifications/handoff-unread",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.get_handoff_unread",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/notifications/preferences",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.get_preferences",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/notifications",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/notifications/unread-count",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.get_unread_count",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/notifications/announcements",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.post_announcements",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/notifications/read",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.post_read",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/notifications/preferences",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.notifications.put_preferences",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/query-views/{name}/rows",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.query_views.get_by_name_rows",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/query-views",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.query_views.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/report-definitions/{definition_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.report_definitions.delete_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/report-definitions/{definition_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.report_definitions.get_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/report-definitions",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.report_definitions.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/report-definitions",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.report_definitions.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/report-definitions/{definition_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.report_definitions.put_by_definition_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/run/precheck",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.run.post_precheck",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/runs",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.runs.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/scenario-filter-groups/{bucket}/{group_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenario_filter_groups.delete_by_bucket_by_group_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenario-filter-groups",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenario_filter_groups.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenario-filter-groups",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenario_filter_groups.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/scenarios/{scenario_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.delete_by_scenario_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/scenarios/{scenario_id}/run-schemes/{scheme_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.delete_by_scenario_id_run_schemes_by_s_6a5300",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/{scenario_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_by_scenario_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/{scenario_id}/draft",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_by_scenario_id_draft",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/{scenario_id}/export",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_by_scenario_id_export",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/{scenario_id}/run-schemes",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_by_scenario_id_run_schemes",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/{scenario_id}/suites",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_by_scenario_id_suites",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/facets",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_facets",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/scenarios/signals",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.get_signals",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/copy",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_copy",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/data-sets",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_data_sets",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/publish",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_publish",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/run-schemes",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_run_schemes",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/star",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_star",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/{scenario_id}/unpublish",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_by_scenario_id_unpublish",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/import",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_import",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios/preview-plate",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_preview_plate",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/scenarios",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/scenarios/{scenario_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.put_by_scenario_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/scenarios/{scenario_id}/run-schemes/{scheme_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.scenarios.put_by_scenario_id_run_schemes_by_scheme_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/service-aliases/{alias_name}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.service_aliases.delete_by_alias_name",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/service-aliases",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.service_aliases.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/service-aliases/{alias_name}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.service_aliases.patch_by_alias_name",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/service-aliases",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.service_aliases.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/services/{service}/grid",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.services.get_by_service_grid",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/shares/{share_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.shares.delete_by_share_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/shares/referrers",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.shares.get_referrers",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/shares",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.shares.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/shares/{share_id}/fork",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.shares.post_by_share_id_fork",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/shares",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.shares.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/strategy-catalog/{kind}/full",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.strategy_catalog.get_by_kind_full",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/strategy-catalog",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.strategy_catalog.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/suites/{suite_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.delete_by_suite_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/suites/{suite_id}/members/{scenario_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.delete_by_suite_id_members_by_scenario_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/suites/{suite_id}/publish",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.delete_by_suite_id_publish",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/suites/{suite_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.get_by_suite_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/suites/{suite_id}/runs",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.get_by_suite_id_runs",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/suites/{suite_id}/version-distribution",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.get_by_suite_id_version_distribution",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/suites",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/suites/{suite_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.patch_by_suite_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/suites/{suite_id}/members/order",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.patch_by_suite_id_members_order",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/fork",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_fork",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/members",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_members",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/publish",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_publish",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/run",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_run",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/runs/{execution_id}/rerun-failed",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_runs_by_execution_id_rer_beff52",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites/{suite_id}/validate",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_by_suite_id_validate",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/suites",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PUT",
+      "path": "/api/suites/{suite_id}/composition",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.suites.put_by_suite_id_composition",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "DELETE",
+      "path": "/api/users/{user_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.delete_by_user_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/users",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.get_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/users/roster",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.get_roster",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "PATCH",
+      "path": "/api/users/{user_id}",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.patch_by_user_id",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/users/{user_id}/reset-password",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.post_by_user_id_reset_password",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "POST",
+      "path": "/api/users",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.users.post_root",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    }
+   ]
+  },
+  "status": 200
  },
  "endpoints": [
   "fin.account.query_balance",

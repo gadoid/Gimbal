@@ -1056,6 +1056,11 @@ async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
             if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
                 ex.status = STATUS_FAILED
                 ex.finished_at = _utcnow()
+                # 2-3(2026-10-13):派发期被拒/崩溃的执行此前 failed=0 而
+                # 状态 failed —— 计数与状态矛盾(上一轮 C-1 后半)。整单
+                # 未分发行按 failed=total 计(auth fail-fast 同款口径)。
+                if not ex.failed and not ex.passed:
+                    ex.failed = max(int(ex.total_runs or 0), 1)
                 cfg = dict(ex.config_json or {})
                 cfg["dispatcherError"] = str(error)[:512]
                 ex.config_json = cfg

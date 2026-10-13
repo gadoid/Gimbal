@@ -1347,7 +1347,10 @@ def action_scenario_convert(
     # 平台保存闸(scenario_store 唯一写入口)已强制锚定系统声明,所有
     # 正常入库场景都带声明;不带声明的锚定场景只剩绕过写入口的旁路,
     # 按版本模型 I 系不变量必须拒绝,不再按存储 binding 静默放行。
-    if meta_plate is None and isinstance(raw_scenario, dict):
+    if isinstance(raw_scenario, dict):
+        # 2-3(2026-10-13):逐系统校验,与平台 enforce_meta_plate 同口径
+        # —— 此前只拦"整个 meta.plate 缺失",声明了 fin 但步骤还锚定
+        # abc 的部分声明载荷仍被放行(只剩旁路可达)。
         anchored = {
             str(st.get("endpoint")).split(".")[0]
             for st in (raw_scenario.get("steps") or [])
@@ -1355,12 +1358,14 @@ def action_scenario_convert(
             and not str(st.get("endpoint")).startswith("ext:")
         }
         anchored.discard("")
-        if anchored:
+        declared = meta_plate or {}
+        undeclared = sorted(s for s in anchored if not declared.get(s))
+        if undeclared:
             raise PlateHTTPError(
                 http_status=422,
                 code=ErrorCode("version_undeclared"),
-                message=(f"锚定系统 {sorted(anchored)} 未声明 meta.plate —— "
-                         "平台保存闸已强制声明,不带声明的载荷属旁路写入"),
+                message=(f"锚定系统 {undeclared} 未声明 meta.plate —— "
+                         "平台保存闸已强制声明,不带/缺声明的载荷属旁路写入"),
             )
     used_refs: dict[str, str] | None = None
     if meta_plate:

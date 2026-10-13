@@ -285,15 +285,20 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
         raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)
     # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
     inst = await db.get(IntegrationTask, seeded.id)
-    now = datetime.utcnow()
+    # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
+    # (SQLite 读回 naive 一直没暴露)—— 统一 ensure_aware。
+    from ..core.timeutil import ensure_aware
+    now = ensure_aware(datetime.utcnow())
+    _last_manual = (ensure_aware(inst.last_manual_run_at)
+                    if inst.last_manual_run_at is not None else None)
     # Y3/方案 §3 操作表:冷却只对平台模式(任意订阅者触发需限频);
     # 个人模式 = 实例持有人自己,无限冷却
     if tpl.identity_mode == "platform" \
             and inst.last_manual_run_at is not None and (
-            now - inst.last_manual_run_at).total_seconds() \
+            now - _last_manual).total_seconds() \
             < integration_runner.MANUAL_COOLDOWN_SECONDS:
         wait = int(integration_runner.MANUAL_COOLDOWN_SECONDS - (
-            now - inst.last_manual_run_at).total_seconds())
+            now - _last_manual).total_seconds())
         raise _bad("cooldown", f"手动执行冷却中,约 {wait}s 后可再试", 409)
     # C-4(2026-10-13):占用判定改条件更新(CAS) —— 此前"读 state → 写
     # running"两步,与调度器并发或个人模式(无冷却)连点会把同一实例执行

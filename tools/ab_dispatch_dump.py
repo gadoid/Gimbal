@@ -83,23 +83,27 @@ def _load_real_scenario() -> dict:
 
 def _ab_batch_scenario(eids: list[str]) -> dict:
     """AB 批场景:每端点一个合成 step(锚点 + 空 body,注入后成物化终值)。"""
+    # 锚定系统按端点首段推导(fin+platform…),逐系统给 working 声明
+    # (⑥:锚定场景必须声明;working = 按当前树,与无声明旧行为同投影)
+    systems = sorted({eid.split(".")[0] for eid in eids if eid})
     return {
         "kind": "scenario",
         "scenarioId": "ab-batch",
         "meta": {
-            "name": "ab-batch", "system": ["fin"], "owner": "ab", "author": "ab",
+            "name": "ab-batch", "system": systems, "owner": "ab", "author": "ab",
             "description": "", "tags": [], "version": "v0.1.0",
             "requirementRef": [], "module": "ab", "priority": 1,
             "createTime": "2026-09-05T00:00:00Z", "expire": False,
-            # ⑥(2026-10-13):锚定场景必须声明;working = 按当前树(与
-            # 无声明旧行为同投影结果)
-            "plate": {"fin": "working"},
+            "plate": {s: "working" for s in systems},
         },
         "resource": {},
         "config": {},
         "steps": [
+            # 2-2(2026-10-13):已声明系统的存储形态禁带 binding 派生字段
+            # (protocol/method/path/timeout,Release 6.2)——合成 step 按
+            # 存储形态编写(service 不在禁带表,物化链消费,保留)。
             {"kind": "step", "description": f"ab:{eid}", "endpoint": eid,
-             "call": {"kind": "call", "protocol": "http", "service": "fin",
+             "call": {"kind": "call", "service": "fin",
                       "headers": {}},
              "request": {"kind": "request", "body": {}},
              "strategy": []}
@@ -156,16 +160,26 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
             for eid, step in zip(eids, materialized.get("steps") or [])
         }
 
-        # D. plate /convert 产物(dispatch 链的 plate 调用)
+        # D. plate /convert 产物(dispatch 链的 plate 调用)。
+        # 2-2(2026-10-13)两修:
+        # ① 输入用**声明形态**(batch 深拷贝)而非 materialized —— 生产链
+        #    是 convert(composed) → materialize(converted);materialized
+        #    的 call 已合并 binding 派生字段,过重投影存储校验必拒;
+        # ② 非 200 直接报错退出 —— 此前把 422 写进金样,convert 回归网
+        #    就此失效(errors 键还取错了)。
         for consumer in ("gimbal",):
             resp = client.post("/api/scenario/action/convert",
-                               json={"consumer": consumer, "scenario": materialized})
-            payload = {"status": resp.status_code}
-            if resp.status_code == 200:
-                payload["converted"] = resp.json()["data"]["converted"]
-            else:
-                payload["errors"] = resp.json().get("errors")
-            out[f"convert_{consumer}"] = payload
+                               json={"consumer": consumer,
+                                     "scenario": json.loads(json.dumps(batch))})
+            if resp.status_code != 200:
+                err = (resp.json().get("error") or {})
+                raise RuntimeError(
+                    f"convert {consumer} 失败 status={resp.status_code}: "
+                    f"{err.get('code')}: {err.get('message')}")
+            out[f"convert_{consumer}"] = {
+                "status": 200,
+                "converted": resp.json()["data"]["converted"],
+            }
 
     # E. 直接导出真源(dispatch 装配;真实转储场景)
     from gimbal_plate.export import dispatch as export_dispatch

@@ -617,7 +617,11 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
                               "entityId": snap.entity_id,
                               "note": "copy already deleted"})
             continue
-        await db.delete(row)
+        # 2-5(2026-10-13)真缺陷:裸 db.delete(row) 撞 run_schemes/
+        # data_sets 外键(PG 强制;SQLite 默认不强制所以一直没暴露)。
+        # 走 scenario_store.delete 的同款级联面(套引用清理 + 依赖表
+        # 先删),复用单一删除语义。
+        await scenario_store.delete(db, snap.entity_id)
         restored.append({"entityType": "scenario_copy",
                          "entityId": snap.entity_id,
                          "note": "copy deleted"})

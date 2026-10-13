@@ -16,6 +16,10 @@ async def _seed_exec(owner_id: int, status: str = "queued") -> int:
     from datetime import datetime, timezone
 
     async with db_module.SessionLocal() as s:
+        # 2-5(2026-10-13):PG 强制 FK —— owner 用户与 job 的 execution
+        # 行都必须真实存在(SQLite 默认不强制,此前裸 id 一直假绿)。
+        from tests.helpers import ensure_fk_users
+        await ensure_fk_users(s, owner_id)
         ex = Execution(scenario_id="sc-q", owner_id=owner_id, status=status,
                        total_runs=1, config_json={})
         s.add(ex)
@@ -25,7 +29,32 @@ async def _seed_exec(owner_id: int, status: str = "queued") -> int:
 
 async def _seed_job(execution_id: int, *, status: str = "queued",
                     attempts: int = 0, cancel: bool = False,
-                    heartbeat=None, payload: dict | None = None) -> int:
+                    heartbeat=None, payload: dict | None = None,
+                    with_exec: bool = True) -> int:
+    if with_exec:
+        # PG:execution_jobs.execution_id 外键 —— 先确保对应行存在
+        # (已由 _seed_exec 建过则跳过)
+        from sqlalchemy import select as _sel
+        async with db_module.SessionLocal() as s:
+            exists = (await s.execute(
+                _sel(Execution.id).where(Execution.id == execution_id))
+            ).scalar_one_or_none()
+        if exists is None:
+            from tests.helpers import ensure_fk_users
+            async with db_module.SessionLocal() as s:
+                await ensure_fk_users(s, 1)
+                s.add(Execution(scenario_id="sc-q", owner_id=1,
+                                id=execution_id, status="running",
+                                total_runs=1, config_json={}))
+                await s.commit()
+    return await _seed_job_orig(execution_id, status=status, attempts=attempts,
+                                cancel=cancel, heartbeat=heartbeat,
+                                payload=payload)
+
+
+async def _seed_job_orig(execution_id: int, *, status: str = "queued",
+                         attempts: int = 0, cancel: bool = False,
+                         heartbeat=None, payload: dict | None = None) -> int:
     async with db_module.SessionLocal() as s:
         job = ExecutionJob(execution_id=execution_id, status=status,
                            kind="cases", attempts=attempts,
@@ -37,6 +66,11 @@ async def _seed_job(execution_id: int, *, status: str = "queued",
 
 
 async def test_enqueue_claim_lifecycle(client):
+    await _seed_job(1, with_exec=True)   # PG:FK 需 executions 行(占位)
+    from sqlalchemy import delete as _del
+    async with db_module.SessionLocal() as s:
+        await s.execute(_del(ExecutionJob).where(ExecutionJob.execution_id == 1))
+        await s.commit()
     async with db_module.SessionLocal() as s:
         await eq.enqueue(s, 1, kind="cases",
                          payload={"kind": "cases", "args": {"n_runs": 3}})

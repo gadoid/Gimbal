@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import JSON
 from ._types import JsonVar, UtcDateTime
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,7 +50,12 @@ class ExternalEndpoint(Base):
     # URL 模式;花括号段为路径参数(/orders/{id})
     path: Mapped[str] = mapped_column(String(512), nullable=False)
     # 标准 JSON Schema(可空 = 无形状约束,表单自由编辑)
-    request_schema: Mapped[dict | None] = mapped_column(JsonVar, nullable=True)
+    # 2-4(2026-10-13):顺序敏感列 —— properties 键序派生编排表单
+    # declarations 顺序;JSONB 会按键长/字节序重排(0022 曾误转,0023 回转)。
+    # 显式承载 = 写侧盖章 x-order(external_endpoints._ensure_order),
+    # 读侧按 x-order 排序;列留 JSON 保插入序兜底。勿改回 JsonVar。
+    request_schema: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSON(), "postgresql"), nullable=True)
     # none|bearer|basic|cookie|custom —— 对齐 plate binding.auth 语义
     auth: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="none")

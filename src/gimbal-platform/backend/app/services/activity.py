@@ -18,10 +18,10 @@ kind 取值域(写入点唯一清单,勿在别处另开):
 """
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timezone
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.timeutil import ensure_aware, utcnow
@@ -53,6 +53,11 @@ async def record(
     try:
         merge = kind == KIND_EDIT if coalesce is None else coalesce
         if merge:
+            # 2-5(2026-10-13):age 以**库时钟**为锚(now() 标量与
+            # created_at 同源同时区,Python 只做差)—— 此前 Python
+            # utcnow() 与列的 server_default now() 混比,库时区非 UTC
+            # 的 PG 上 age 恒负(本地 +8 → -8h),短窗合并永远不触发、
+            # edit 事件翻倍。SQLite 的 now() 是 UTC 字符串,解析后同源。
             hit = (await db.execute(
                 select(ActivityEvent)
                 .where(
@@ -65,14 +70,22 @@ async def record(
                 .limit(1)
             )).scalar_one_or_none()
             if hit is not None:
-                age = (
-                    utcnow().replace(tzinfo=timezone.utc)
-                    - ensure_aware(hit.created_at)
-                ).total_seconds()
-                if 0 <= age < EDIT_COALESCE_SECONDS:
-                    hit.created_at = utcnow()
-                    await db.commit()
-                    return
+                db_now = (await db.execute(select(func.now()))).scalar()
+                if isinstance(db_now, str):     # SQLite: "YYYY-MM-DD HH:MM:SS"
+                    db_now = datetime.strptime(db_now, "%Y-%m-%d %H:%M:%S")
+                hit_at = hit.created_at
+                if isinstance(db_now, datetime) and db_now.tzinfo is not None                         and (hit_at is None or hit_at.tzinfo is None):
+                    hit_at = hit_at.replace(tzinfo=timezone.utc) if hit_at else None
+                if hit_at is not None and db_now >= hit_at:
+                    age = (ensure_aware(db_now)
+                           - ensure_aware(hit_at)).total_seconds()
+                    if 0 <= age < EDIT_COALESCE_SECONDS:
+                        await db.execute(
+                            sa_update(ActivityEvent)
+                            .where(ActivityEvent.id == hit.id)
+                            .values(created_at=func.now()))
+                        await db.commit()
+                        return
         db.add(ActivityEvent(
             actor_id=actor_id,
             kind=kind,

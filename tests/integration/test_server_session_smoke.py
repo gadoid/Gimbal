@@ -64,3 +64,39 @@ async def test_server_chain_smoke(tmp_path: Path) -> None:
     # D1 回归面:close 后泵任务已收编(None)且进程引用清空
     assert ss._stderr_task is None
     assert ss._proc is None
+
+
+@pytest.mark.asyncio
+async def test_server_chain_smoke_failure_path(tmp_path: Path) -> None:
+    """冒烟失败路径:必败断言(状态 404≠200)→ exit_code=1(此前只覆盖
+    通过路径,复核 2-5 指出)。"""
+    from app.services.gimbal_server_session import ServerSession
+
+    case = {
+        "kind": "scenario", "scenarioId": "sc-smoke-f",
+        "meta": {"name": "smoke-fail"},
+        "config": {"services": {"dead": "http://127.0.0.1:9"},
+                   "users": {}, "timePolicy": {"kind": "record"}},
+        "resource": {},
+        "steps": [{
+            "kind": "step",
+            "call": {"protocol": "http", "service": "dead",
+                     "method": "GET", "path": "/ping"},
+            "request": {"kind": "request", "body": {}},
+            "strategy": [{"kind": "assertion",
+                          "target": "$.call.response.status",
+                          "operator": "eq", "expected": 200}],
+        }],
+    }
+    case_path = tmp_path / "case.json"
+    case_path.write_text(json.dumps(case, ensure_ascii=False),
+                         encoding="utf-8")
+    import asyncio
+    ss = ServerSession()
+    await ss.start(engine_log_path=tmp_path / "engine.log", cwd=tmp_path)
+    try:
+        result = await ss.run_case(case_path, n_runs=1)
+        assert result.launch_status == "ok"
+        assert result.exit_code == 1, result.run_result
+    finally:
+        await asyncio.wait_for(ss.close(), timeout=15.0)
