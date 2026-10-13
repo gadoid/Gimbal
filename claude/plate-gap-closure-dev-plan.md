@@ -19,10 +19,10 @@
 
 ## P0　启用链（运营先行；产出 = fin 首修订上线）
 
-- [ ] **P0.1 重建构件底座**：`git checkout --orphan plate/artifacts`（空树提交）→ `git worktree add D:\Gimbal\plate-artifacts plate/artifacts` → **立即推远端**（上次丢失的根因 = 构件只存在作者本机，从未 push）→ 重跑 `scripts/gen_m2.py` 使 M2 信封重入构件分支（3.6 第二写入方）。
-- [ ] **P0.2 配置注入**：`PLATE_ARTIFACTS_PATH=D:\Gimbal\plate-artifacts` 注入 plate 服务进程（restart-services.ps1 启动行加环境变量，或系统级；run_plate.py 自身不读 dotenv）→ 重启 → 探针 `GET :8765/api/system/fin/lines` 从 `registry_unavailable` 变 200。
-- [ ] **P0.3 fin 发首修订**：fin 树 0 draft / 24 reviewed，无评审阻塞。`plate release`（先演练看 findings，再正式）；验证 manifest（corrections/warnings）、`/diff`、resolve_effective 生效修订解析。
-- [ ] **P0.4 接入试点 + 运行手册（不全局回填）**：发首修订后，在编排器**手动**把 1–2 个 fin 场景钉到首修订做链路活体验收（版本下拉选修订 → 按修订渲染契约表单 → 执行 → 执行记录带 `plate_pins`）。`rs3_backfill_meta_plate.py` 与 `migrate_strip_binding_fields.py` 保留为**接入工具**，随各系统接入时按系统执行（演练→备份→apply→幂等复跑纪律不变）。沉淀《系统接入运行手册》入库 docs/：注册系统树 → 评审 → 首修订 → 场景钉修订（手动或 rs3）→ strip → 验证清单。
+- [x] **P0.1 重建构件底座**：`git checkout --orphan plate/artifacts`（空树提交）→ `git worktree add D:\Gimbal\plate-artifacts plate/artifacts` → **立即推远端**（上次丢失的根因 = 构件只存在作者本机，从未 push）→ 重跑 `scripts/gen_m2.py` 使 M2 信封重入构件分支（3.6 第二写入方）。
+- [x] **P0.2 配置注入**：`PLATE_ARTIFACTS_PATH=D:\Gimbal\plate-artifacts` 注入 plate 服务进程（restart-services.ps1 启动行加环境变量，或系统级；run_plate.py 自身不读 dotenv）→ 重启 → 探针 `GET :8765/api/system/fin/lines` 从 `registry_unavailable` 变 200。
+- [x] **P0.3 fin 发首修订**：fin 树 0 draft / 24 reviewed，无评审阻塞。`plate release`（先演练看 findings，再正式）；验证 manifest（corrections/warnings）、`/diff`、resolve_effective 生效修订解析。
+- [x] **P0.4 接入试点 + 运行手册（不全局回填）**：发首修订后，在编排器**手动**把 1–2 个 fin 场景钉到首修订做链路活体验收（版本下拉选修订 → 按修订渲染契约表单 → 执行 → 执行记录带 `plate_pins`）。`rs3_backfill_meta_plate.py` 与 `migrate_strip_binding_fields.py` 保留为**接入工具**，随各系统接入时按系统执行（演练→备份→apply→幂等复跑纪律不变）。沉淀《系统接入运行手册》入库 docs/：注册系统树 → 评审 → 首修订 → 场景钉修订（手动或 rs3）→ strip → 验证清单。
   - 验收门：试点场景按修订渲染、执行带 `plate_pins`；手册入库。
 
 > **状态(2026-10-12)**:P0/P1(W1-W16)全部落地并推送;plate 门 639 绿、
@@ -50,10 +50,12 @@
 
 ## P2　platform 评审与收口（人工 + 运营；P2.1 可与 P1 并行）
 
-- [ ] **P2.1 49 端点人工评审**：141f2b1c 自举批 49 个 `review: draft` 端点逐个过（人工动作；自举文档在 `gimbal-tmp/bootstrap/` 本机留存可参照）。
-- [ ] **P2.2 platform 发首修订**：**评审完成后**再发（draft 状态发版只会带 warnings 进修订，评完再发可避免修订语义噪音；这也与"评审过的定义才可信"的入库标准口径一致）。
-- [ ] **P2.3 platform 接入**：对该系统的场景执行 rs3 两脚本（幂等）或编排器手动钉修订，按 P0.4 手册流程走。
+- [x] **P2.1 49 端点人工评审**：141f2b1c 自举批 49 个 `review: draft` 端点逐个过（人工动作；自举文档在 `gimbal-tmp/bootstrap/` 本机留存可参照）。
+- [x] **P2.2 platform 发首修订**：**评审完成后**再发（draft 状态发版只会带 warnings 进修订，评完再发可避免修订语义噪音；这也与"评审过的定义才可信"的入库标准口径一致）。
+- [x] **P2.3 platform 接入**：对该系统的场景执行 rs3 两脚本（幂等）或编排器手动钉修订，按 P0.4 手册流程走。
   - 验收门：fin/platform 两个已接入系统的场景零 working；已接入系统的执行记录 `plate_pins` 全量有值。
+
+> **状态(2026-10-13 补记)**:P2 全部落地 —— P2.1 49 端点 2026-10-12 评审清零(plate-s1-review §3a);P2.2 `platform@1.0#1` 已签发推远端(构件 739941c2);P2.3 rs3 两脚本已跑(36 场景钉修订,33 剥离派生字段,复跑 0),验收门过(见《系统接入运行手册》§3/§3a)。本节框当时漏勾,非未做。
 
 ## P3　B 组（按遗漏检查 D.3 序；P3.3 依赖"已钉修订场景存在"——P0.4 试点即满足）
 
