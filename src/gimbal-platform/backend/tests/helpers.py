@@ -45,6 +45,7 @@ def make_draft(
     *,
     steps: list | None = None,
     vars_map: dict | None = None,
+    plate: dict | None | object = None,
     **meta_over: Any,
 ) -> dict:
     """Minimal plate-valid ScenarioDraft container (meta via ``meta_over``).
@@ -66,6 +67,22 @@ def make_draft(
         "system": ["fin"],
     }
     meta.update(meta_over)
+    # C-2(2026-10-13)保存端强制声明:缺省为锚定系统 ∪ meta.system 补
+    # "working" 声明(与未声明同语义:预览执行);显式传 plate=dict 用之;
+    # plate=False 表示刻意不声明(测保存闸本身的用例)。
+    if plate is None and "plate" not in meta_over:
+        systems = {
+            *(str(st.get("endpoint", "")).split(".")[0]
+              for st in (steps or [])
+              if isinstance(st, dict) and st.get("endpoint")
+              and not str(st.get("endpoint")).startswith("ext:")),
+            *(str(s) for s in meta.get("system", [])),
+        }
+        systems.discard("")
+        if systems:
+            meta["plate"] = {s: "working" for s in sorted(systems)}
+    elif isinstance(plate, dict):
+        meta["plate"] = plate
     config: dict = {"timePolicy": {"kind": "record"}}
     if vars_map is not None:
         config["vars"] = vars_map

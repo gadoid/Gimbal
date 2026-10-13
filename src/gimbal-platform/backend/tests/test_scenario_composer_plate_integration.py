@@ -46,6 +46,8 @@ class PlateMock:
         # A-3/W7:修订 manifest.objects 评审面({系统: {对象id: review}});
         # 未注入 = 空目录(所有对象按未评审计)。
         self.revision_reviews: dict[str, dict[str, str]] = {}
+        # C-1:/lines 回放({系统: [线条目]};缺省 1.0×1)
+        self.lines: dict[str, list[dict]] = {}
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -110,6 +112,16 @@ class PlateMock:
                     200,
                     json={"ok": True, "dim": "scenario", "data": {"dispatched": True}},
                 )
+            # C-1 保存端引用校验面:版本线列表(缺省每系统一条 1.0
+            # 线/1 修订;用例按需注入 self.lines)。
+            if path.startswith("/api/system/") and path.endswith("/lines"):
+                sysname = path.split("/api/system/", 1)[1].rsplit("/", 1)[0]
+                items = self.lines.get(
+                    sysname, [{"line": "1.0", "revisions": 1,
+                               "latest": "1.0#1"}])
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "system",
+                    "data": {"items": items, "total": len(items)}})
             # RS3 生效修订解析(W5 钉定场景的 fanout 前置):钉什么回什么
             # —— effective = 原修订(不变),available 单元素,零变更。
             if path.endswith("/api/system/action/resolve"):

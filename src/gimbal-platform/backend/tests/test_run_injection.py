@@ -671,6 +671,7 @@ async def test_dispatcher_fans_out_injection_entries(
 async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     client, plate_mock: PlateMock, monkeypatch
 ):
+    plate_mock.lines = {"ep-carry-x": [{"line": "t", "revisions": 1, "latest": "t#1"}]}
     """契约声明了 $.customer_id(carry,body 无)→ 条目不再被 skip;
     plate 不可得声明面时该条目仍被 skip(降级从严)。"""
     from .helpers import make_draft as _draft, wait_until as _wait

@@ -701,3 +701,39 @@ async def revision_objects(
               if isinstance(o, dict) and o.get("id")}
     _revision_cache_put(key, result)
     return result
+
+
+async def validate_meta_plate_refs(meta_plate: dict[str, str]) -> None:
+    """保存端 meta.plate 引用校验(C-1,2026-10-13;与 R19 导入同口径)。
+
+    每个声明须是 ``<line>#<n>``(working 豁免):线存在且 ``1 <= n <=
+    线内修订数``。此前保存不校验 —— "1.0"(只有线)/"1.0#9"(修订不
+    存在)/"2.0#1"(线不存在)全部入库,执行期才炸且错误被误归为
+    plate_unavailable。plate 不可达时**跳过**(保存是定义面动作,
+    不因目录故障阻断;执行期门仍在)。
+
+    Raises:
+        ValueError: ``meta_plate_invalid_ref`` 带具体系统与原因。
+    """
+    for sysname, ref in (meta_plate or {}).items():
+        if not ref or ref == "working":
+            continue
+        if "#" not in ref:
+            raise ValueError(
+                f"meta_plate_invalid_ref: {sysname}={ref!r} 缺修订号"
+                "(须 <line>#<n> 或 working)")
+        line, _, num = ref.rpartition("#")
+        if not line or not num.isdigit():
+            raise ValueError(
+                f"meta_plate_invalid_ref: {sysname}={ref!r} 形状非法")
+        items = await list_lines(sysname)
+        info = next((x for x in items if x.get("line") == line), None)
+        if info is None:
+            raise ValueError(
+                f"meta_plate_invalid_ref: {sysname} 声明的版本线 "
+                f"{line!r} 不存在")
+        total = int(info.get("revisions") or 0)
+        if not 1 <= int(num) <= total:
+            raise ValueError(
+                f"meta_plate_invalid_ref: {sysname}={ref!r} 修订不存在"
+                f"(线内共 {total} 个修订,latest={info.get('latest')})")

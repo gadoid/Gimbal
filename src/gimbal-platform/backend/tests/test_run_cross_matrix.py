@@ -364,6 +364,7 @@ async def test_dispatcher_tolerates_non_dict_api(client, plate_mock, monkeypatch
 
 
 async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkeypatch):
+    plate_mock.lines = {"ep-absent": [{"line": "t", "revisions": 1, "latest": "t#1"}]}
     """Y:声明面**取数失败**导致的跳过与"端点本无声明"可区分 —— 前者在 run 记录里留标记。"""
     from .helpers import make_draft as _draft
     from .test_scenario_visibility_and_copy import _member
