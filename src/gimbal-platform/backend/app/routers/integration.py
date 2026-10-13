@@ -295,16 +295,29 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
         wait = int(integration_runner.MANUAL_COOLDOWN_SECONDS - (
             now - inst.last_manual_run_at).total_seconds())
         raise _bad("cooldown", f"手动执行冷却中,约 {wait}s 后可再试", 409)
-    if inst.state == "running":
+    # C-4(2026-10-13):占用判定改条件更新(CAS) —— 此前"读 state → 写
+    # running"两步,与调度器并发或个人模式(无冷却)连点会把同一实例执行
+    # 两次;且手动路径不计入 _inflight 上限。CAS 失败 = 已被占用,409。
+    if not integration_runner._inflight_ok(tpl, inst.holder_id):
+        raise _bad("inflight_limit", "在飞实例数已达上限,稍后再试", 429)
+    from sqlalchemy import update as sa_update
+    claimed = (await db.execute(
+        sa_update(IntegrationTask)
+        .where(IntegrationTask.id == inst.id,
+               IntegrationTask.state != "running")
+        .values(last_manual_run_at=now, state="running",
+                running_since=now)
+        .returning(IntegrationTask.id))).scalar()
+    if claimed is None:
         raise _bad("running", "该功能正在执行", 409)
-    inst.last_manual_run_at = now
-    inst.state = "running"
-    inst.running_since = now
     await db.commit()
+    integration_runner._inflight_add(tpl, inst.holder_id, 1)
     try:
         result = await integration_runner.run_instance(inst.id)
     except Exception as e:  # noqa: BLE001 — run_instance 内部已收口;兜一层
         raise _bad("run_failed", str(e)[:300], 500) from None
+    finally:
+        integration_runner._inflight_add(tpl, inst.holder_id, -1)
     fresh = await db.get(IntegrationTask, inst.id)
     if fresh is not None:
         await db.refresh(fresh)   # run_instance 在独立会话回写,穿透本会话缓存

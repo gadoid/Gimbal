@@ -56,7 +56,7 @@ class ServerSession:
                   if engine_log_path else None)
 
         try:
-            self._proc = await asyncio.create_subprocess_exec(
+            proc = await asyncio.create_subprocess_exec(
                 *argv,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
@@ -67,17 +67,22 @@ class ServerSession:
             if log_fh:
                 log_fh.close()
             raise RuntimeError(f"server spawn failed: {e}") from e
+        self._proc = proc
 
-        async def _drain_stderr() -> None:
-            assert self._proc and self._proc.stderr
+        # D1(2026-10-13):泵闭包捕获本地 proc/stderr —— 不再触碰
+        # self._proc(close() 置空后泵仍能收尾,engine.log 尾部不丢)。
+        async def _drain_stderr(
+                stderr=proc.stderr, log=log_fh) -> None:
+            if stderr is None:
+                return
             while True:
-                raw = await self._proc.stderr.readline()
+                raw = await stderr.readline()
                 if not raw:
                     break
-                if log_fh:
-                    log_fh.write(raw.decode("utf-8", errors="replace"))
-            if log_fh:
-                log_fh.close()
+                if log:
+                    log.write(raw.decode("utf-8", errors="replace"))
+            if log:
+                log.close()
 
         self._stderr_task = asyncio.get_event_loop().create_task(_drain_stderr())
         self._base = f"http://127.0.0.1:{self._port}"
@@ -100,21 +105,39 @@ class ServerSession:
         raise RuntimeError("server not ready within timeout")
 
     async def close(self) -> None:
-        """终止进程树（terminate → wait → kill；无残留）。"""
-        proc, self._proc = self._proc, None
+        """终止进程树（terminate → wait → kill；无残留）。
+
+        D1(2026-10-13):先收 stderr 泵任务再置空 _proc —— 此前先
+        ``self._proc = None``,泵的 ``assert self._proc`` 随即 AttributeError,
+        每次关会话记一条 "Task exception was never retrieved",engine.log
+        尾部(进程终止前的 stderr 突发)可能丢、log 句柄不关。
+        """
+        proc = self._proc
+        task, self._stderr_task = self._stderr_task, None
+        self._proc = None
         if proc is None:
+            if task is not None:
+                await _quiet(task)
             return
         try:
             proc.terminate()
             await asyncio.wait_for(proc.wait(), timeout=5.0)
-            return
         except Exception:  # noqa: BLE001
-            pass
-        try:
-            proc.kill()
-            await proc.wait()
-        except Exception:  # noqa: BLE001
-            pass
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:  # noqa: BLE001
+                pass
+        if task is not None:
+            await _quiet(task)
+
+
+async def _quiet(task: "asyncio.Task") -> None:
+    """等 stderr 泵收尾并吞掉已预期的异常(管道 EOF/取消)。"""
+    try:
+        await asyncio.wait_for(task, timeout=3.0)
+    except Exception:  # noqa: BLE001 — 进程被杀后泵的收尾异常皆预期
+        pass
 
     @property
     def run_id(self) -> "str | None":

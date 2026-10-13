@@ -959,4 +959,48 @@ def p_validate(plan: Plan, *, auth_tags: "set[str] | None" = None) -> list[str]:
                 f"{ErrCode.USERS_TAG_UNKNOWN}: 单元 {u.id!r} 引用了未在 config.users "
                 f"声明的标签: {sorted(missing)}"
             )
+        # 7. auth 声明自洽(C-3,2026-10-13):声明了 call.auth 但无
+        # call.user = 运行期 login("") 恒空 → **静默发出无认证请求**;
+        # custom 签名器名不在已知集 = 拼错时静默回落 md5 签名。两者都
+        # 在编译期报错,不留给运行期 warning。
+        # D2(2026-10-13):assign 旧路径拒收 —— request_body/$.request_body.*
+        # 只是 scratch 键,不进实际请求(call 只认 $.call.request.body);
+        # 此前编译通过、执行"成功",实测发出的还是 rid=,属静默失效。
+        for si, step in enumerate(sc.steps):
+            for st in (getattr(step, "strategy", None) or []):
+                if str(getattr(st, "kind", "") or "") != "assign":
+                    continue
+                target = str(getattr(st, "target", "") or "")
+                if target == "request_body" or target.startswith("$.request_body"):
+                    errors.append(
+                        f"{ErrCode.ASSIGN_TARGET_RETIRED}: 单元 {u.id!r} "
+                        f"step[{si}] assign target {target!r} 是已退役旧路径"
+                        "(只是 scratch 键,不进实际请求)"
+                        "—— 请用 $.call.request.body(.字段)"
+                    )
+        _known_signers = {"md5sign", "standard.bearer", "standard.basic"}
+        for si, step in enumerate(sc.steps):
+            call = getattr(step, "call", None)
+            if call is None:
+                continue
+            _auth_raw = getattr(call, "auth", None)
+            call_auth = (getattr(_auth_raw, "value", None)
+                         or str(_auth_raw or ""))
+            if call_auth in ("", "none"):
+                continue
+            if not (getattr(call, "user", None) or ""):
+                errors.append(
+                    f"{ErrCode.AUTH_DECL_INVALID}: 单元 {u.id!r} "
+                    f"step[{si}] 声明了 call.auth={call_auth!r} 但缺 "
+                    "call.user —— 运行期会静默发出无认证请求"
+                )
+            if call_auth == "custom":
+                signer = str(getattr(call, "auth_signer", "") or "")
+                if signer and signer not in _known_signers:
+                    errors.append(
+                        f"{ErrCode.AUTH_DECL_INVALID}: 单元 {u.id!r} "
+                        f"step[{si}] custom 签名器名 {signer!r} 未知"
+                        f"(已知: {sorted(_known_signers)}) —— 拼错会静默"
+                        "回落 md5 签名"
+                    )
     return errors

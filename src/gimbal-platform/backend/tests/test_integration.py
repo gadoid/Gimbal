@@ -22,6 +22,9 @@ from app.models.integration_task import IntegrationTask
 from app.models.user import User
 from app.services.cron_expr import CronError, next_fire, parse_cron
 from tests.helpers import make_draft, register_and_login
+from tests.test_scenario_composer_plate_integration import (  # noqa: F401
+    plate_mock,
+)
 
 STEPS_GET = [{
     "kind": "step", "description": "探活",
@@ -332,7 +335,7 @@ class TestIntegrationRouter:
         assert r.status_code == 409
         assert r.json()["detail"]["code"] == "cooldown"
 
-    async def test_manual_run_rejects_working_preview(self, client):
+    async def test_manual_run_rejects_working_preview(self, client, plate_mock):
         """A-4/W6(版本模型 §6):任一受管系统 working(含未钉修订)→
         409 拒触发;钉定后过闸(只验闸,不验执行)。"""
         await _seed_platform_user()
@@ -344,6 +347,9 @@ class TestIntegrationRouter:
             "request": {"kind": "request", "body": {}},
             "strategy": [],
         }]
+        # C-1/C-2 后 make_draft 缺省声明 working → 保存剥离 call.method →
+        # Y5 只读闸的 method 权威 = plate 工作面(/full);注入条目供判定。
+        plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
         await _mk_scenario(client, h, "sc-ig-wp", anchored)
         tid = (await client.post("/api/integration/tasks", headers=h,
                                  json=_task_body("sc-ig-wp"))).json()["id"]
@@ -369,7 +375,7 @@ class TestIntegrationRouter:
         assert not (r.status_code == 409 and
                     r.json()["detail"]["code"] == "working_preview"), r.text
 
-    async def test_runner_internal_gate_fails_working_scenario(self, client):
+    async def test_runner_internal_gate_fails_working_scenario(self, client, plate_mock):
         """A-4/W6 调度路径兜底闸:绕过路由直调 run_instance,场景 working
         → 实例 failed + 文案指路(外部服务/无锚点不受影响)。"""
         await _seed_platform_user()
@@ -381,6 +387,7 @@ class TestIntegrationRouter:
             "request": {"kind": "request", "body": {}},
             "strategy": [],
         }]
+        plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
         await _mk_scenario(client, h, "sc-ig-wp2", anchored)
         await client.post("/api/integration/tasks", headers=h,
                           json=_task_body("sc-ig-wp2"))

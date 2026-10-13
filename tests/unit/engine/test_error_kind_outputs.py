@@ -106,3 +106,18 @@ def test_detail_row_steps_carry_error_kind():
     assert row["steps"][1]["error_kind"] == "none"
     # 历史字段原样(error/error_phase/duration_ms)
     assert row["steps"][0]["error_phase"] == "verifying"
+
+
+def test_redact_outputs_cursor_keys_exempt():
+    """D3(2026-10-13):分页游标键(nextToken/pageToken/cursor)豁免脱敏
+    —— Y4 state_mapping 跨次注入依赖原值;真实凭证键仍脱敏。"""
+    outputs = {"nextToken": "CUR-1", "pageToken": "PT-9",
+               "next_cursor": "c1", "access_token": "s3cret",
+               "authToken": "t2", "order_id": "O1"}
+    out = Engine._redact_outputs(outputs)
+    assert out["nextToken"] == "CUR-1"
+    assert out["pageToken"] == "PT-9"
+    assert out["next_cursor"] == "c1"
+    assert out["access_token"] == "***redacted***"
+    assert out["authToken"] == "***redacted***"
+    assert out["order_id"] == "O1"

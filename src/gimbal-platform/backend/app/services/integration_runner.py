@@ -60,13 +60,20 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+# D3(2026-10-13):跨次游标键豁免(与引擎 Engine._CURSOR_KEYS 同表)——
+# nextToken/pageToken 命中 "token" 子串会被脱敏,Y4 state_mapping 跨次
+# 注入的即 ***redacted***,游标失效。仅精确键名豁免。
+_CURSOR_KEYS = frozenset({"nexttoken", "pagetoken", "cursor", "next_cursor"})
+
+
 def _scrub(value, key_hint: str = "") -> None:
     """就地脱敏 dict 的敏感键(评审 E1:同键表口径,子串不敏感处理)。"""
     if not isinstance(value, dict):
         return
     for k in list(value.keys()):
         lk = str(k).lower()
-        if any(rk in lk for rk in _REDACT_KEYS):
+        if (any(rk in lk for rk in _REDACT_KEYS)
+                and lk not in _CURSOR_KEYS):
             value[k] = "***"
         else:
             _scrub(value[k], lk)

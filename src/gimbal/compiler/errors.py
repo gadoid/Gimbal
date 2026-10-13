@@ -48,6 +48,8 @@ class ErrCode:
 
     # ── users 标签（validate 期）──────────────────────────
     USERS_TAG_UNKNOWN = "USERS_TAG_UNKNOWN"      # 引用了未在 config.users 声明的标签（P0-11 S1）
+    AUTH_DECL_INVALID = "AUTH_DECL_INVALID"      # call.auth 声明但无 call.user / custom 签名器名未知（C-3,2026-10-13）
+    ASSIGN_TARGET_RETIRED = "ASSIGN_TARGET_RETIRED"  # assign 写已退役旧路径 request_body/$.request_body.*（D2,2026-10-13）
 
     # ── 订阅规格（P1-04）──────────────────────────────────
     SUBSCRIBE_INVALID = "SUBSCRIBE_INVALID"      # --subscribe/graph.subscribe 规格非法

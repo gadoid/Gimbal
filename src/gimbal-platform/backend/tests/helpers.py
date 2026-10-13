@@ -118,13 +118,24 @@ def launch_ok() -> "Any":
 
 
 async def wait_until(
-    predicate: Callable[[], bool], timeout_s: float = 5.0, interval: float = 0.05
+    predicate: Callable[[], bool], timeout_s: float = 5.0, interval: float = 0.05,
+    msg: str = "",
 ) -> None:
-    """Poll ``predicate`` until true or timeout (async fan-out tests)."""
-    for _ in range(int(timeout_s / interval)):
+    """Poll ``predicate`` until true;**超时抛 TimeoutError**(C-5,2026-10-13)。
+
+    此前超时静默返回 —— 断言"某事没有发生"或断言写得宽松的用例会变成
+    空断言(等待形同虚设)。测"预期不发生"的用例请用显式 sleep + 反断言,
+    不要借 wait_until 的静默超时。
+    """
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while asyncio.get_event_loop().time() < deadline:
         if predicate():
             return
         await asyncio.sleep(interval)
+    raise TimeoutError(
+        f"wait_until: {timeout_s}s 内条件未满足"
+        f"{' — ' + msg if msg else ''} "
+        f"[{getattr(predicate, '__qualname__', predicate)!r}]")
 
 
 FK_ADMIN_PASSWORD = "FkAdmin-Pw-123"

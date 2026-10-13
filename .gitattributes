@@ -3,3 +3,24 @@
 # render(parse(x))==x —— 方言文件钉死 LF。只匹配 *.md:systems/ 以后
 # 放截图/PDF 等二进制时不得被当文本改写换行(评审 N8)。
 systems/**/*.md text eol=lf
+# D5(2026-10-13):py 源码钉 LF —— release.py 等曾以 CRLF 入库,一次
+# 修改带出上千行无效 diff;顺手覆盖全仓文本源码面(排除 md 方言文件
+# 已单独钉死)。二进制不列。
+*.py text eol=lf
+*.ts text eol=lf
+*.vue text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+# 非源码资产不归一化(备份/数据/二进制)
+*.bak -text
+*.sql -text
+*.png -text
+*.jpg -text
+*.zip -text
+*.ndjson -text
+*.log -text

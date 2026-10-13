@@ -545,14 +545,24 @@ class Engine:
             return "transport"
         return "logic"
 
+    # D3(2026-10-13):跨次游标键豁免 —— nextToken/pageToken 这类分页
+    # 游标按子串表会被 "token" 命中脱敏,集成任务(Y4 state_mapping)跨次
+    # 注入的就是 ***redacted***,游标失效。仅**精确键名**(大小写不敏感)
+    # 豁免;authToken/access_token 等真实凭证键仍脱敏。
+    _CURSOR_KEYS = frozenset(
+        {"nexttoken", "pagetoken", "cursor", "next_cursor"})
+
     @staticmethod
     def _redact_outputs(value: Any) -> Any:
         """G2:outputs 过脱敏键表(与 CallResult.to_evidence 同键表口径;
-        深拷贝 —— outputs 是调度器喂下游的共享引用,不就地改)。"""
+        深拷贝 —— outputs 是调度器喂下游的共享引用,不就地改)。
+        游标键豁免见 _CURSOR_KEYS(D3)。"""
         from gimbal.protocols.result import is_sensitive_path
         if isinstance(value, dict):
             return {
-                k: ("***redacted***" if is_sensitive_path(k)
+                k: ("***redacted***"
+                    if (is_sensitive_path(k)
+                        and str(k).lower() not in Engine._CURSOR_KEYS)
                     else Engine._redact_outputs(v))
                 for k, v in value.items()
             }

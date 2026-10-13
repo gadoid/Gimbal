@@ -144,14 +144,30 @@ class TestAssignValueFlow:
         ])]
         assert run_steps("assign-precall", steps).passed == 1
 
-    def test_assign_writes_request_body_visible_same_step(self):
-        """B2.1 契约（step 内可见性面）：assign 写 scratch.request_body。"""
-        steps = [Step(call=Call(protocol="echo", message="m"), strategy=[
-            {"kind": "assign", "name": "a", "source": "B", "target": "request_body"},
-            {"kind": "assertion", "name": "c", "target": "$.request_body",
-             "operator": "eq", "expected": "B"},
-        ])]
-        assert run_steps("assign-reqbody", steps).passed == 1
+    def test_assign_old_request_body_path_now_rejected_at_compile(self):
+        """D2(2026-10-13):request_body/$.request_body.* 是已退役旧路径 ——
+        此前编译通过且 scratch 语义"自洽",但不进实际请求(实测发出
+        rid=)。旧特征化用例(写 request_body + 断言 $.request_body)钉的
+        正是这个已退役契约,改钉编译期拒收。新路径见 run_injection 的
+        $.call.request.body 用例。"""
+        from gimbal.compiler.errors import CompileError
+        from gimbal.schema import Scenario
+
+        sc = Scenario.model_validate({
+            "kind": "scenario", "scenarioId": "sc-d2",
+            "meta": {"name": "d2"}, "config": {}, "resource": {},
+            "steps": [{"kind": "step",
+                       "call": {"protocol": "echo", "message": "m"},
+                       "request": {"kind": "request", "body": {}},
+                       "strategy": [
+                           {"kind": "assign", "name": "a", "source": "B",
+                            "target": "$.request_body.rid"}]}],
+        })
+        import pytest
+        with pytest.raises(CompileError) as ei:
+            from gimbal.compiler.pipeline import compile_plan
+            compile_plan(sc)
+        assert "ASSIGN_TARGET_RETIRED" in str(ei.value)
 
     def test_var_template_resolved_from_config_vars(self):
         steps = [Step(call=Call(protocol="echo", message="m"), strategy=[
