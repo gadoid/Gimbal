@@ -126,10 +126,15 @@ async def test_carry_anchored_entry_runs_and_overrides_on_the_wire(
     assert r.status_code in (200, 201), r.text
 
     plate_mock.behaviour = "echo"           # convert 原样回灌 → case 保留 Assign
-    plate_mock.fulls["ep-carry-wire"] = {"request": {"declarations": [
-        {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
-        {"name": "customer_id", "path": "$.customer_id", "state": "carry", "required": True},
-    ]}}
+    # binding 是 echo 模式锚点投影的来源(缺了 protocol,真 CLI 必拒:
+    # Call.protocol 必填 —— 存储侧 Release 6.2 已剥派生字段,执行形态
+    # 由 convert 投影提供,桩与真 convert 同契约)
+    plate_mock.fulls["ep-carry-wire"] = {
+        "binding": {"protocol": "http", "method": "POST", "path": "/pay"},
+        "request": {"declarations": [
+            {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
+            {"name": "customer_id", "path": "$.customer_id", "state": "carry", "required": True},
+        ]}}
 
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"],
@@ -208,10 +213,12 @@ async def test_carry_anchored_entry_overrides_platform_carried_value(
     async with _db_module.SessionLocal() as db:
         await carry_store.put_bindings(db, "stubsvc", {"$.customer_id": "999"}, updated_by_id=None, updated_by_name="bob")
         await db.commit()
-    plate_mock.fulls["ep-carry-wire"] = {"request": {"declarations": [
-        {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
-        {"name": "customer_id", "path": "$.customer_id", "state": "carry", "required": True},
-    ]}}
+    plate_mock.fulls["ep-carry-wire"] = {
+        "binding": {"protocol": "http", "method": "POST", "path": "/pay"},
+        "request": {"declarations": [
+            {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
+            {"name": "customer_id", "path": "$.customer_id", "state": "carry", "required": True},
+        ]}}
 
     r = await client.post("/api/runs", headers=bob, json={
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"],

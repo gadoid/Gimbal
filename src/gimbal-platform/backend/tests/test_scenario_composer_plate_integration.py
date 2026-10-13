@@ -74,11 +74,32 @@ class PlateMock:
                     )
                 if self.behaviour == "echo":
                     # scenario 原样回灌为 converted — 供 services/users 物化断言用
-                    # (默认 ok 桩的 converted 是 {"kind": "platform_scenario"},无 steps)
+                    # (默认 ok 桩的 converted 是 {"kind": "platform_scenario"},无 steps)。
+                    # 锚点步骤例外:声明形态进 → 执行形态出 —— 派生字段
+                    # (protocol/method/path/timeout)按 fulls[eid].binding 投影
+                    # 补回,同真 convert 的 reproject._merge_call 契约;缺 binding
+                    # 保持原样(其余 echo 用例不受影响)。真 CLI 校验 Call.protocol
+                    # 必填,不投影则 case.json 恒被 gimbal_rejected(exit 2)。
                     body = json.loads(request.content)
+                    converted = body["scenario"]
+                    for st in converted.get("steps") or []:
+                        if not (isinstance(st, dict) and st.get("endpoint")
+                                and isinstance(st.get("call"), dict)):
+                            continue
+                        binding = ((self.fulls.get(str(st["endpoint"])) or {})
+                                   .get("binding"))
+                        if not isinstance(binding, dict):
+                            continue
+                        proj = {k: binding[k] for k in
+                                ("protocol", "method", "path", "timeout")
+                                if k in binding}
+                        own = {k: v for k, v in st["call"].items()
+                               if k not in proj}
+                        st["call"] = {"kind": st["call"].get("kind", "call"),
+                                      **proj, **own}
                     return httpx.Response(200, json={
                         "ok": True, "dim": "scenario",
-                        "data": {"consumer": "gimbal", "converted": body["scenario"],
+                        "data": {"consumer": "gimbal", "converted": converted,
                                  "m2": {"hash": "mock-m2-hash-0001",
                                         "generation": 1}},
                     })
