@@ -27,6 +27,9 @@ from ..core.db import Base
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
+        # role 索引:0002/baseline 直建,模型侧补声明(2026-10-13 A-1
+        # 空库门 compare_metadata 漂移收口)
+        Index("ix_users_role", "role"),
         # 未设昵称(空串)不参与唯一 —— 与应用层查重跳过空值的语义一致
         Index(
             "uq_users_display_name",

@@ -412,6 +412,10 @@ def launch(
         # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)
+    # 进程退出码 = 执行结果退出码(A-3,2026-10-13):此前 typer.Exit 误放在
+    # apply_multiplication 的 return 之后(死代码),pyflakes 守卫清理时删掉
+    # 而未挪回 —— CLI/CI 用法下失败场景进程退出码恒 0。
+    raise typer.Exit(code=result.exit_code)
 
 
 def apply_multiplication(target, *, n_runs: int = 1, retry: int = 0,

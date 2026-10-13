@@ -13,11 +13,22 @@ revision = "0019_service_alias_kind"
 down_revision = "0018_adaptation_scope"
 
 
+def _has_table(name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(name)
+
+
+def _has_column(table: str, column: str) -> bool:
+    return column in {
+        c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
 def upgrade() -> None:
-    op.add_column(
-        "service_aliases",
-        sa.Column("kind", sa.String(16), nullable=False,
-                  server_default="plate"))
+    # fresh 链守卫(2026-10-13 A-1):baseline 已含本列 → 空转。
+    if not _has_column("service_aliases", "kind"):
+        op.add_column(
+            "service_aliases",
+            sa.Column("kind", sa.String(16), nullable=False,
+                      server_default="plate"))
 
 
 def downgrade() -> None:

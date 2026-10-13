@@ -23,18 +23,33 @@ branch_labels = None
 depends_on = None
 
 
+
+def _has_table(name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(name)
+
+
+def _has_column(table: str, column: str) -> bool:
+    return column in {
+        c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
 def upgrade() -> None:
-    with op.batch_alter_table("suite_members") as batch:
-        batch.add_column(sa.Column("role", sa.String(16), nullable=False,
-                                   server_default="main"))
-    with op.batch_alter_table("suites") as batch:
-        batch.add_column(sa.Column("rev", sa.Integer, nullable=False,
-                                   server_default="0"))
-    with op.batch_alter_table("executions") as batch:
-        batch.add_column(sa.Column("kind", sa.String(32), nullable=False,
-                                   server_default="scenario"))
-        batch.add_column(sa.Column("suite_id", sa.Integer, nullable=True))
-    op.create_index("ix_executions_suite", "executions", ["suite_id"])
+    if not _has_column("suite_members", "role"):
+        with op.batch_alter_table("suite_members") as batch:
+            batch.add_column(sa.Column("role", sa.String(16), nullable=False,
+                                       server_default="main"))
+    if not _has_column("suites", "rev"):
+        with op.batch_alter_table("suites") as batch:
+            batch.add_column(sa.Column("rev", sa.Integer, nullable=False,
+                                       server_default="0"))
+    if not _has_column("executions", "kind"):
+        with op.batch_alter_table("executions") as batch:
+            batch.add_column(sa.Column("kind", sa.String(32), nullable=False,
+                                       server_default="scenario"))
+            batch.add_column(sa.Column("suite_id", sa.Integer, nullable=True))
+    if not any(ix["name"] == "ix_executions_suite"
+               for ix in sa.inspect(op.get_bind()).get_indexes("executions")):
+        op.create_index("ix_executions_suite", "executions", ["suite_id"])
 
 
 def downgrade() -> None:

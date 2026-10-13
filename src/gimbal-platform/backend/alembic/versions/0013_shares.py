@@ -23,45 +23,58 @@ def _is_pg() -> bool:
     return op.get_bind().dialect.name == "postgresql"
 
 
+def _has_table(name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(name)
+
+
+def _has_column(table: str, column: str) -> bool:
+    return column in {
+        c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
 def upgrade() -> None:
-    op.create_table(
-        "share_refs",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("grantee_user_id", sa.Integer,
-                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        # 可空双外键 + CHECK(§7.2):恰好指向一种资源,级联保留
-        sa.Column("scenario_id", sa.String(128), nullable=True),
-        sa.Column("suite_id", sa.Integer, nullable=True),
-        sa.Column("granted_by_name", sa.String(128), nullable=False),
-        sa.Column("granted_at", sa.DateTime(timezone=True), nullable=False,
-                  server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(
-            ["scenario_id"], ["composer_scenarios.scenario_id"],
-            ondelete="CASCADE", name="fk_share_refs_scenario"),
-        sa.ForeignKeyConstraint(
-            ["suite_id"], ["suites.id"],
-            ondelete="CASCADE", name="fk_share_refs_suite"),
-        sa.CheckConstraint(
-            "(scenario_id IS NULL) <> (suite_id IS NULL)",
-            name="ck_share_refs_exactly_one"),
-        sa.UniqueConstraint("grantee_user_id", "scenario_id",
-                            name="uq_share_refs_user_scenario"),
-        sa.UniqueConstraint("grantee_user_id", "suite_id",
-                            name="uq_share_refs_user_suite"),
-    )
-    op.create_index("ix_share_refs_grantee", "share_refs",
-                    ["grantee_user_id"])
-    op.create_index("ix_share_refs_scenario", "share_refs", ["scenario_id"])
-    op.create_index("ix_share_refs_suite", "share_refs", ["suite_id"])
+    # fresh 链守卫(2026-10-13 A-1):baseline 空库 create_all 按当前模型
+    # 已含本表/本列 → 内省后空转(同 0006/0007/0012 口径)。
+    if not _has_table("share_refs"):
+        op.create_table(
+            "share_refs",
+            sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+            sa.Column("grantee_user_id", sa.Integer,
+                      sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+            # 可空双外键 + CHECK(§7.2):恰好指向一种资源,级联保留
+            sa.Column("scenario_id", sa.String(128), nullable=True),
+            sa.Column("suite_id", sa.Integer, nullable=True),
+            sa.Column("granted_by_name", sa.String(128), nullable=False),
+            sa.Column("granted_at", sa.DateTime(timezone=True), nullable=False,
+                      server_default=sa.func.now()),
+            sa.ForeignKeyConstraint(
+                ["scenario_id"], ["composer_scenarios.scenario_id"],
+                ondelete="CASCADE", name="fk_share_refs_scenario"),
+            sa.ForeignKeyConstraint(
+                ["suite_id"], ["suites.id"],
+                ondelete="CASCADE", name="fk_share_refs_suite"),
+            sa.CheckConstraint(
+                "(scenario_id IS NULL) <> (suite_id IS NULL)",
+                name="ck_share_refs_exactly_one"),
+            sa.UniqueConstraint("grantee_user_id", "scenario_id",
+                                name="uq_share_refs_user_scenario"),
+            sa.UniqueConstraint("grantee_user_id", "suite_id",
+                                name="uq_share_refs_user_suite"),
+        )
+        op.create_index("ix_share_refs_grantee", "share_refs",
+                        ["grantee_user_id"])
+        op.create_index("ix_share_refs_scenario", "share_refs", ["scenario_id"])
+        op.create_index("ix_share_refs_suite", "share_refs", ["suite_id"])
 
     # composer_scenarios 副本来源三列(§13.4 债1 收口)
-    with op.batch_alter_table("composer_scenarios") as batch:
-        batch.add_column(sa.Column("forked_from_id",
-                                   sa.String(128), nullable=True))
-        batch.add_column(sa.Column("forked_from_owner_name",
-                                   sa.String(128), nullable=True))
-        batch.add_column(sa.Column("forked_from_at",
-                                   sa.DateTime(timezone=True), nullable=True))
+    if not _has_column("composer_scenarios", "forked_from_id"):
+        with op.batch_alter_table("composer_scenarios") as batch:
+            batch.add_column(sa.Column("forked_from_id",
+                                       sa.String(128), nullable=True))
+            batch.add_column(sa.Column("forked_from_owner_name",
+                                       sa.String(128), nullable=True))
+            batch.add_column(sa.Column("forked_from_at",
+                                       sa.DateTime(timezone=True), nullable=True))
 
     # G5 轻档视图补引用分支(§7.6 第三处;security_invoker 直连消费)
     if _is_pg():

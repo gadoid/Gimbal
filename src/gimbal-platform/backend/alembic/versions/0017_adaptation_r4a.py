@@ -12,20 +12,31 @@ revision = "0017_adaptation_r4a"
 down_revision = "0016_environments"
 
 
-def upgrade() -> None:
-    # ── adaptation_batches 新列 ──
-    op.add_column("adaptation_batches",
-                  sa.Column("kind", sa.String(16), nullable=False,
-                            server_default="carry"))
-    op.add_column("adaptation_batches",
-                  sa.Column("from_revisions", sa.JSON(), nullable=True))
-    op.add_column("adaptation_batches",
-                  sa.Column("to_revision", sa.String(64), nullable=True))
-    op.add_column("adaptation_batches",
-                  sa.Column("save_mode", sa.String(16), nullable=True))
+def _has_table(name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(name)
 
-    # ── catalog_versions 删除（Release §8）──
-    op.drop_table("catalog_versions")
+
+def _has_column(table: str, column: str) -> bool:
+    return column in {
+        c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
+def upgrade() -> None:
+    # ── adaptation_batches 新列(fresh 链守卫,2026-10-13 A-1) ──
+    if not _has_column("adaptation_batches", "kind"):
+        op.add_column("adaptation_batches",
+                      sa.Column("kind", sa.String(16), nullable=False,
+                                server_default="carry"))
+        op.add_column("adaptation_batches",
+                      sa.Column("from_revisions", sa.JSON(), nullable=True))
+        op.add_column("adaptation_batches",
+                      sa.Column("to_revision", sa.String(64), nullable=True))
+        op.add_column("adaptation_batches",
+                      sa.Column("save_mode", sa.String(16), nullable=True))
+
+    # ── catalog_versions 删除（Release §8;fresh 链无此表）──
+    if _has_table("catalog_versions"):
+        op.drop_table("catalog_versions")
 
 
 def downgrade() -> None:

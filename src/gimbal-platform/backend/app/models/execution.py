@@ -51,6 +51,8 @@ class Execution(Base):
     # 均为 owner 过滤 + id 倒序,前缀吃过滤、后缀吃倒序扫
     __table_args__ = (
         Index("ix_executions_owner_id", "owner_id", "id"),
+        # suite 归属查询索引:0014 迁移建,模型侧补声明(2026-10-13 A-1)
+        Index("ix_executions_suite", "suite_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

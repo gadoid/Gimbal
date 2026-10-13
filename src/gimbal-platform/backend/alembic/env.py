@@ -26,7 +26,13 @@ target_metadata = Base.metadata
 
 
 def _sync_url() -> str:
-    url = settings.DATABASE_URL
+    # URL 优先级:Config 显式携带(ensure_schema_sync / 测试注入的目标库)
+    # > settings.DATABASE_URL(CLI `alembic upgrade` 直跑)。此前无条件
+    # 用 settings —— ensure_schema_sync(url) 的入参被静默吞掉,空库门
+    # 测试跑到了 .env 指向的库上(2026-10-13 A-1)。
+    url = context.config.get_main_option("sqlalchemy.url")
+    if not url:
+        url = settings.DATABASE_URL
     url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
     url = url.replace("sqlite+aiosqlite://", "sqlite://")
     return url

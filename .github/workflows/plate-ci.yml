@@ -17,6 +17,9 @@ on:
       - ".github/workflows/plate-ci.yml"
   push:
     branches: [main]
+  # 手动触发(A-2,2026-10-13):分支不走 PR 流时 CI 从未跑过 ——
+  # 至少允许一键全量验证(四侧 + 闸门),不必等开 PR。
+  workflow_dispatch:
 jobs:
   gate:
     runs-on: ubuntu-latest
@@ -30,7 +33,15 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install (editable, plate entry included)
-        run: pip install -e .[dev]
+        run: |
+          pip install -e .[dev]
+          # 平台后端侧依赖(A-2,2026-10-13):后端是独立 pyproject,根
+          # [dev] 不含其运行件(sqlalchemy/alembic/passlib/python-jose/
+          # aiosqlite)与 pytest-asyncio —— 只装 .[dev] 时后端测试在
+          # conftest 收集阶段即崩(No module named 'sqlalchemy')。
+          # editable 装后端包带齐运行件;constraints 钉 bcrypt/asyncpg/
+          # alembic 与后端 pyproject 同口径。
+          pip install -e src/gimbal-platform/backend "pytest-asyncio>=0.24"             -c src/gimbal-platform/backend/requirements-platform-constraints.txt
       # 评审 G-2/7.1-7:未定义名称守卫——plate_pins_container / m2_info /
       # Session 这类一跑就崩的缺陷不再进入提交。只拦 F821(未定义名),
       # unused 类噪音不在此门。
