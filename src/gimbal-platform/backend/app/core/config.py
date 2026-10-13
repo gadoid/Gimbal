@@ -36,12 +36,11 @@ class Settings(BaseSettings):
 
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
-    # 默认 SQLite 仅让「导入可完成 + pytest 可跑」(测试引擎每测试换库);
-    # 服务启动(lifespan)对 sqlite 显式 fail-fast 指路 .env —— 生产
-    # 事实源是远端 PG(复盘 2026-09-29),不再维护 SQLite 运行链。
-    DATABASE_URL: str = (
-        f"sqlite+aiosqlite:///{(_BACKEND_ROOT / 'data' / 'app.db').as_posix()}"
-    )
+    # SQLite 已退役(2026-10-14):不再有本地默认回退 URL —— 空值/
+    # sqlite:// 一律 fail-fast(core/db.py 引擎构造即拒),环境必须
+    # 显式给 postgresql+asyncpg://...(pytest 侧同口径,conftest 要求
+    # TEST_DATABASE_URL)。历史切换/回滚纪律见 runbook-pg.md。
+    DATABASE_URL: str = ""
 
     # ── Data dir ──────────────────────────────────────────
     # Resolved to absolute at startup so JSONL run-log / DB paths

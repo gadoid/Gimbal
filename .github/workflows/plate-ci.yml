@@ -23,6 +23,21 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # 2-5(2026-10-13)+SQLite 退役(2026-10-14):后端测试 PG-only
+    # (conftest 要求 TEST_DATABASE_URL,SQLite 方言已删)—— 后端全量
+    # 与空库门都吃这个 service;FK 种子/时区混比/JSONB 键序/扩展 schema
+    # 类问题只有 PG 面能拦(原 backend-pg job 并入本 job)。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gimbal
+          POSTGRES_PASSWORD: gimbal
+          POSTGRES_DB: gimbal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gimbal"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       # fetch-depth: 0 —— compat 需要读 origin/main 的 m2.schema.json;
       # 默认浅克隆只有 PR 本身,取不到目标分支(评审第九轮)
@@ -37,11 +52,13 @@ jobs:
           pip install -e .[dev]
           # 平台后端侧依赖(A-2,2026-10-13):后端是独立 pyproject,根
           # [dev] 不含其运行件(sqlalchemy/alembic/passlib/python-jose/
-          # aiosqlite)与 pytest-asyncio —— 只装 .[dev] 时后端测试在
+          # asyncpg)与 pytest-asyncio —— 只装 .[dev] 时后端测试在
           # conftest 收集阶段即崩(No module named 'sqlalchemy')。
           # editable 装后端包带齐运行件;constraints 钉 bcrypt/asyncpg/
           # alembic 与后端 pyproject 同口径。
           pip install -e src/gimbal-platform/backend "pytest-asyncio>=0.24"             -c src/gimbal-platform/backend/requirements-platform-constraints.txt
+          # psycopg 仅空库门(同步 engine 走 alembic)/ETL 脚本需要
+          pip install -c src/gimbal-platform/backend/requirements-platform-constraints.txt "psycopg[binary]"
       # 评审 G-2/7.1-7:未定义名称守卫——plate_pins_container / m2_info /
       # Session 这类一跑就崩的缺陷不再进入提交。只拦 F821(未定义名),
       # unused 类噪音不在此门。
@@ -77,8 +94,18 @@ jobs:
         run: pytest tests/unit tests/integration -q
       # 评审 G-2:回归全部集中在平台后端,而 CI 此前根本没跑它——
       # 与 plate/执行器/前端并列的第四侧,不许再缺席。
-      - name: 平台后端全量
+      # SQLite 退役(2026-10-14):PG-only,conftest 无 TEST_DATABASE_URL
+      # 即中止 —— env 必给。
+      - name: 平台后端全量(PG)
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
         run: pytest src/gimbal-platform/backend/tests -q
+      # 空库门 PG 面(原 backend-pg job 并入):临时 schema 单搜索路径
+      # 等价干净空库,0003 扩展/0022 jsonb 类漂移只有这面能拦。
+      - name: 空库门 PG 面
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
+        run: pytest src/gimbal-platform/backend/tests/test_empty_db_bootstrap.py -q
       # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
       # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
       # 第四轮 M2:冒烟升级为真实 check——PLATE_REPO_ROOT 指到 checkout
@@ -90,40 +117,6 @@ jobs:
           /tmp/wheelenv/bin/plate --help >/dev/null
           /tmp/wheelenv/bin/python -c "import gimbal_plate, gimbal; print('non-editable install OK')"
           PLATE_REPO_ROOT="$PWD" /tmp/wheelenv/bin/plate check fin --json >/dev/null
-  backend-pg:
-    # 2-5(2026-10-13):后端 PG 面 —— SQLite 默认不强制外键、json/jsonb
-    # 同型,一侧 SQLite 看不出的问题(FK 种子/时区混比/JSONB 键序)只有
-    # 这道门能拦。conftest 走 TEST_DATABASE_URL 的 schema-per-test 模式。
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: gimbal
-          POSTGRES_PASSWORD: gimbal
-          POSTGRES_DB: gimbal
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U gimbal"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install
-        run: |
-          pip install -e .[dev]
-          pip install -e src/gimbal-platform/backend "pytest-asyncio>=0.24"             -c src/gimbal-platform/backend/requirements-platform-constraints.txt
-      - name: 后端全量(PG)
-        env:
-          TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
-        run: pytest src/gimbal-platform/backend/tests -q
-      - name: 空库门 PG 面
-        env:
-          TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
-        run: pytest src/gimbal-platform/backend/tests/test_empty_db_bootstrap.py -q
-
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -1,7 +1,8 @@
-"""Alembic 环境(M2:双方言统一,async 驱动 → 同步驱动执行)。
+"""Alembic 环境(M2;SQLite 方言 2026-10-14 退役后 PG-only,async 驱动
+→ 同步驱动执行)。
 
-* 连接串来自 ``settings.DATABASE_URL``,asyncpg/aiosqlite 翻译为
-  psycopg/sqlite3(迁移用同步连接即可);
+* 连接串来自 ``settings.DATABASE_URL``,asyncpg 翻译为 psycopg
+  (迁移用同步连接即可);
 * ``target_metadata`` 指向 app 模型 —— 只服务 autogenerate 起草,
   revision 一经定稿即自带全部 DDL(冻结于落笔时)。
 """
@@ -33,9 +34,7 @@ def _sync_url() -> str:
     url = context.config.get_main_option("sqlalchemy.url")
     if not url:
         url = settings.DATABASE_URL
-    url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    url = url.replace("sqlite+aiosqlite://", "sqlite://")
-    return url
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
 
 
 def run_migrations_offline() -> None:
@@ -63,8 +62,6 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            # SQLite 的 ALTER 面窄:统一 batch(建新表→拷数据→换名)
-            render_as_batch=connection.dialect.name == "sqlite",
         )
         with context.begin_transaction():
             context.run_migrations()

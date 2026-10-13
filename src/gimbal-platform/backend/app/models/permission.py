@@ -22,7 +22,6 @@ from sqlalchemy import (
     BigInteger,
     ForeignKey,
     Index,
-    Integer,
     String,
     Text,
     func,
@@ -34,8 +33,7 @@ from ..core.db import Base
 from ._types import JsonVar, UtcDateTime
 
 # SQLite 只对 INTEGER PRIMARY KEY 做 rowid 自增;BIGINT 主键在本地/测试
-# 方言不自动生成 → sqlite 侧降为 INTEGER,PG 保持 BIGINT。
-BigIntPK = BigInteger().with_variant(Integer, "sqlite")
+BigIntPK = BigInteger()   # SQLite 方言退化已随其退役移除(2026-10-14)
 
 
 class UserStar(Base):
@@ -66,7 +64,6 @@ class Notification(Base):
             "type",
             "batch_id",
             unique=True,
-            sqlite_where=text("batch_id IS NOT NULL"),
             postgresql_where=text("batch_id IS NOT NULL"),
         ),
     )

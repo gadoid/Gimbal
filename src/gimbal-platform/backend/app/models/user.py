@@ -35,7 +35,6 @@ class User(Base):
             "uq_users_display_name",
             "display_name",
             unique=True,
-            sqlite_where=text("display_name <> ''"),
             postgresql_where=text("display_name <> ''"),
         ),
     )

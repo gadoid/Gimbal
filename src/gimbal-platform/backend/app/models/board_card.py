@@ -33,7 +33,6 @@ class BoardCard(Base):
             "uq_board_cards_root",
             "subject_kind", "subject_id",
             unique=True,
-            sqlite_where=text("is_root = 1"),
             postgresql_where=text("is_root IS TRUE"),
         ),
     )

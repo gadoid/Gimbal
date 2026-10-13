@@ -1,14 +1,14 @@
 """Pytest configuration: per-test isolated DB + ASGI client fixture.
 
 The spec-1 tests share an ``AsyncClient``-per-test instance but the ``engine``
-in :mod:`app.core.db` is module-global and points at ``./data/app.db``.  Without
-isolation, consecutive tests in the same ``pytest`` invocation will collide on
-unique-username and similar constraints.
+in :mod:`app.core.db` is module-global.  Without isolation, consecutive tests
+in the same ``pytest`` invocation will collide on unique-username and similar
+constraints.
 
-This conftest swaps ``app.core.db.engine`` and ``SessionLocal`` for a per-test
-in-memory-style SQLite engine (backed by a tempfile in ``tmp_path`` so the
-file is cleaned up automatically) and runs ``Base.metadata.create_all`` to
-provision the schema before each test.
+This conftest swaps ``app.core.db.engine`` and ``SessionLocal`` for a
+per-test PG schema (``TEST_DATABASE_URL``, created/dropped automatically)
+and runs ``Base.metadata.create_all`` to provision the schema before each
+test. SQLite 方言已退役(2026-10-14)。
 """
 from __future__ import annotations
 
@@ -25,21 +25,35 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app import models  # noqa: F401  register all models on Base.metadata
-from app.models import AuthSession  # noqa: F401  explicit re-export to register table
-from app.core import db as db_module
-from app.core.db import Base
-from app.main import create_app
+# PG 测试隔离(PG迁移方案 §3.4,M0-3 选型定案:schema-per-test):
+# 每测试 CREATE SCHEMA + 钉 search_path + create_all,结束 DROP SCHEMA
+# CASCADE —— 语义贴近原「每测试一个临时 SQLite 库」,不碰被测代码的
+# 事务/commit 语义(事务回滚路线与 run_dispatcher 后台线程的独立
+# session 相冲,未选)。
+# SQLite 已退役(2026-10-14):不再有 sqlite 回退方言 —— 未提供
+# TEST_DATABASE_URL(postgresql+asyncpg://...)即中止整个会话,与
+# core/db.py 的运行时口径一致。**必须在任何 app 导入之前执行**:
+# app.core.db 在 import 期校验 DATABASE_URL(空/非 PG 即 RuntimeError),
+# CI 等无 .env 环境由这里把 DATABASE_URL 兜底指到测试库。
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+if not TEST_DATABASE_URL.startswith("postgresql"):
+    pytest.exit(
+        "后端测试需要 TEST_DATABASE_URL=postgresql+asyncpg://..."
+        "(每测试独立 schema,自动建删)。SQLite 方言已于 2026-10-14 "
+        "退役 —— 本地示例:TEST_DATABASE_URL=postgresql+asyncpg://"
+        "gimbal:gimbal@127.0.0.1:15432/gimbal(docker compose -f "
+        "compose.pg.yml 起库)。", returncode=3)
+
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+
+from app import models  # noqa: E402,F401  register all models on Base.metadata
+from app.models import AuthSession  # noqa: E402,F401  explicit re-export to register table
+from app.core import db as db_module  # noqa: E402
+from app.core.db import Base  # noqa: E402
+from app.main import create_app  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# PG 测试隔离(PG迁移方案 §3.4,M0-3 选型定案:schema-per-test):
-# 设 TEST_DATABASE_URL(postgresql+asyncpg://...)时,每测试 CREATE SCHEMA +
-# 钉 search_path + create_all,结束 DROP SCHEMA CASCADE——语义最贴近现行
-# 「每测试一个临时 SQLite 库」,不碰被测代码的事务/commit 语义(事务回滚
-# 路线与 run_dispatcher 后台线程的独立 session 相冲,未选)。不设则维持
-# sqlite 临时文件路径,双方言自律。
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
 
 
 async def _make_pg_engine(dsn: str, search_path: str | None = None):
@@ -51,11 +65,12 @@ async def _make_pg_engine(dsn: str, search_path: str | None = None):
 
 
 @pytest.fixture
-async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
-    """Swap the global DB engine for a per-test isolated DB + create schema.
+async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
+    """Swap the global DB engine for a per-test isolated schema + create_all.
 
-    sqlite(默认): 每测试一个临时文件库;PG(设 TEST_DATABASE_URL 时):
-    每测试一个独立 schema,连进来的会话 search_path 钉在该 schema 上。
+    PG-only(SQLite 已退役):每测试一个独立 schema,连进来的会话
+    search_path 钉在该 schema 上;TEST_DATABASE_URL 缺失在 conftest
+    导入期即中止会话。
     """
     # P3.6:默认链已切 server(生产),测试钉回 legacy —— 大量用例按
     # legacy 假引擎(monkeypatch gimbal_launcher.launch)编写,默认拉真
@@ -65,85 +80,46 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
     monkeypatch.setattr(_settings, "EXEC_CHAIN", "legacy", raising=True)
 
-    if TEST_DATABASE_URL.startswith("postgresql"):
-        import uuid
+    import uuid
 
-        schema = f"t_{uuid.uuid4().hex}"
-        admin = await _make_pg_engine(TEST_DATABASE_URL)
-        async with admin.begin() as conn:
-            await conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-        await admin.dispose()
+    schema = f"t_{uuid.uuid4().hex}"
+    admin = await _make_pg_engine(TEST_DATABASE_URL)
+    async with admin.begin() as conn:
+        await conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    await admin.dispose()
 
-        test_engine = await _make_pg_engine(
-            TEST_DATABASE_URL, search_path=f"{schema},public"
-        )
-        test_session_factory = async_sessionmaker(
-            test_engine, expire_on_commit=False, class_=AsyncSession
-        )
-        monkeypatch.setattr(db_module, "engine", test_engine, raising=True)
-        monkeypatch.setattr(db_module, "SessionLocal", test_session_factory,
-                            raising=True)
-
-        async with test_engine.begin() as conn:
-            # checkfirst 必须关:search_path 含 public 时,checkfirst 会把
-            # public 里的同名表误判为"已存在"→ 一张不建 → 读写全部穿透
-            # 到 public(生产表)。全新 schema 无需 checkfirst。
-            await conn.run_sync(
-                lambda ddl: Base.metadata.create_all(ddl, checkfirst=False),
-            )
-
-        try:
-            yield
-        finally:
-            # dispatcher 后台行落库与 DROP SCHEMA 的互锁防御:先等收尾
-            from app.services.run_dispatcher import wait_dispatchers_quiescent
-
-            await wait_dispatchers_quiescent()
-            await test_engine.dispose()
-            cleaner = await _make_pg_engine(TEST_DATABASE_URL)
-            try:
-                async with cleaner.begin() as conn:
-                    await conn.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
-            finally:
-                await cleaner.dispose()
-        return
-
-    db_file = tmp_path / "test.db"
-    # C11 起 dispatch 请求与队列 worker 在同一库上并发读写(SQLite 单写锁)
-    # ——busy timeout 让后到写者等待而非立刻 database is locked;WAL 进一步
-    # 放开读并发(生产是 PG,无此语义)。
-    test_engine = create_async_engine(
-        f"sqlite+aiosqlite:///{db_file}",
-        echo=False,
-        future=True,
-        connect_args={"timeout": 30, "check_same_thread": False},
+    test_engine = await _make_pg_engine(
+        TEST_DATABASE_URL, search_path=f"{schema},public"
     )
-
-    # C11 复盘(2026-09-29):默认 rollback journal 下,队列 worker 与请求
-    # 各持连接、读事务升级写时互相阻塞,busy timeout 只是等 30s 后炸
-    # 「database is locked」(test_run_cross_matrix 偶发三连红)。WAL 让
-    # 读写不再互斥(单写多读),锁竞争面收敛为写-写,30s 足够消化。
-    from sqlalchemy import event as _event
-
-    @_event.listens_for(test_engine.sync_engine, "connect")
-    def _sqlite_wal(dbapi_conn, _record):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA journal_mode=WAL")
-        cur.execute("PRAGMA synchronous=NORMAL")
-        cur.close()
     test_session_factory = async_sessionmaker(
         test_engine, expire_on_commit=False, class_=AsyncSession
     )
     monkeypatch.setattr(db_module, "engine", test_engine, raising=True)
-    monkeypatch.setattr(db_module, "SessionLocal", test_session_factory, raising=True)
+    monkeypatch.setattr(db_module, "SessionLocal", test_session_factory,
+                        raising=True)
 
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # checkfirst 必须关:search_path 含 public 时,checkfirst 会把
+        # public 里的同名表误判为"已存在"→ 一张不建 → 读写全部穿透
+        # 到 public(生产表)。全新 schema 无需 checkfirst。
+        await conn.run_sync(
+            lambda ddl: Base.metadata.create_all(ddl, checkfirst=False),
+        )
 
     try:
         yield
     finally:
+        # dispatcher 后台行落库与 DROP SCHEMA 的互锁防御:先等收尾
+        from app.services.run_dispatcher import wait_dispatchers_quiescent
+
+        await wait_dispatchers_quiescent()
         await test_engine.dispose()
+        cleaner = await _make_pg_engine(TEST_DATABASE_URL)
+        try:
+            async with cleaner.begin() as conn:
+                await conn.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+        finally:
+            await cleaner.dispose()
 
 
 @pytest.fixture(autouse=True)

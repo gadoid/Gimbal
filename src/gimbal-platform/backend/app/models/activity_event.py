@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..core.db import Base
 from ._types import JsonVar, UtcDateTime
 
-BigIntPK = BigInteger().with_variant(Integer, "sqlite")
+BigIntPK = BigInteger()   # SQLite 方言退化已随其退役移除(2026-10-14)
 
 
 class ActivityEvent(Base):

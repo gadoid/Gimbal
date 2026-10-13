@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Execution, Notification, User, UserPref
@@ -91,7 +90,8 @@ async def create_notification(
 
 
 def _upsert_stmt_factory(dialect_name: str):
-    return pg_insert if dialect_name == "postgresql" else sqlite_insert
+    # SQLite 已退役(2026-10-14):恒 PG insert,签名保留免动调用点
+    return pg_insert
 
 
 async def upsert_execution_finished(
@@ -106,8 +106,7 @@ async def upsert_execution_finished(
     """
     if await type_disabled(db, user_id, "execution_finished"):
         return
-    dialect = db.bind.dialect.name if db.bind else "postgresql"
-    insert_ = pg_insert if dialect == "postgresql" else sqlite_insert
+    insert_ = pg_insert   # SQLite 退役后不再分派方言
 
     # 聚合计数在 UPDATE 语句内现算(§3.3 第七轮:Python 先算后写会被
     # 并发终态用旧读数覆盖)。batch_id 是服务端值(非用户输入),内插

@@ -245,10 +245,9 @@ async def delete_execution(session: AsyncSession, ex: Execution) -> None:
 # ── P2-02/C2:事件与日志落库(统一表)─────────────────────────────
 
 def _dialect_insert(db: AsyncSession):
-    """双方言 insert(PG/SQLite;照 notifications.py 的自律模式)。"""
+    """PG insert(SQLite 已退役 2026-10-14,双方言分派随之退役)。"""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-    return pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
+    return pg_insert
 
 
 async def insert_events(db: AsyncSession, execution_id: int,

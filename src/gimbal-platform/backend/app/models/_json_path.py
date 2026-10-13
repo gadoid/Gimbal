@@ -56,25 +56,11 @@ def _text_pg(element, compiler, **kw):
     return f"({col}->{head}->>{last})" if head else f"({col}->>{last})"
 
 
-@compiles(json_path_text, "sqlite")
-def _text_sqlite(element, compiler, **kw):
-    col = _col_name(list(element.clauses)[0])
-    path = ".".join(_keys(element))
-    return f"json_extract({col}, '$.{path}')"
-
-
 @compiles(json_path_json, "postgresql")
 def _json_pg(element, compiler, **kw):
     col = _col_name(list(element.clauses)[0])
     path = "->".join(f"'{k}'" for k in _keys(element))
     return f"({col}->{path})"
-
-
-@compiles(json_path_json, "sqlite")
-def _json_sqlite(element, compiler, **kw):
-    col = _col_name(list(element.clauses)[0])
-    path = ".".join(_keys(element))
-    return f"json_extract({col}, '$.{path}')"
 
 
 class json_array_len(FunctionElement):
@@ -94,12 +80,6 @@ def _arrlen_pg(element, compiler, **kw):
     col = _col_name(list(element.clauses)[0])
     return (f"(CASE WHEN jsonb_typeof({col}) = 'array' "
             f"THEN jsonb_array_length({col}) ELSE 0 END)")
-
-
-@compiles(json_array_len, "sqlite")
-def _arrlen_sqlite(element, compiler, **kw):
-    col = _col_name(list(element.clauses)[0])
-    return f"json_array_length({col})"
 
 
 __all__ = ["json_path_text", "json_path_json", "json_array_len", "literal"]

@@ -78,9 +78,10 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
   备份 `data/app.db.bak-switch-20260921-233107`(回滚快照,只读保留);
   ETL 报告 `backend/gimbal-tmp-etl-switch-2026-09-21.json`(与演练报告逐项全等);
   三条高危面冒烟全过(生成列对拍/删测试用户/旧执行详情);浏览器终验正常。
-- 回滚姿势:`.env` 的 DATABASE_URL 改回 sqlite 注释行(或删除该行,默认即 sqlite)
+- 回滚姿势(当时):`.env` 的 DATABASE_URL 改回 sqlite 注释行(或删除该行,默认即 sqlite)
   → 重启后端。`data/app.db` 已被 legacy-adapt 适配到新结构,直接指向即可;
   切换后新产生的数据不回灌(切换点之后的数据以 PG 为准)。
+  *(2026-10-14 注:SQLite 已退役,此路不通;现行回滚 = §5 的 PG 备份恢复。)*
 
 ### 存量 PG 库原地升级(版本化变更,如 0005)
 
@@ -123,11 +124,16 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
   不变,无迁移),元数据不变量测试加「时间列必须 UtcDateTime」门禁;
   后端重启后线上探针 ORM 写入偏移 +0.000s、WHERE 绑定无偏移。
 
-## 5. 回滚
+## 5. 回滚（SQLite 退役后重写,2026-10-14）
 
-- `.env` 切回 sqlite + 旧库文件，**不回退代码**（M2 同车代码不读任何新列）。
-- 回滚库是 pre-alembic 存量库：启动分支识别后跳过 upgrade、打告警直跑。
-- 切换后新产生的数据**不回灌**（内部平台可接受；靠低峰窗口 + 提前公告缓解）。
+- ~~`.env` 切回 sqlite + 旧库文件~~ —— **SQLite 方言已退役**：运行时
+  （core/db.py import 期）与测试（conftest）对非 postgresql URL 一律
+  fail-fast,不存在 sqlite 回退路。
+- 回滚姿势 = **恢复 PG 备份**：用 §3 的 pg_dump 备份整库还原
+  （`pg_restore -C` 或 DROP/重建后恢复）→ 代码可停在任一早于迁移的
+  revision,但**不跨 schema 变更点回滚代码**(库已含新列时旧代码可跑,
+  反向不可)。
+- 备份窗口纪律不变：任何 alembic 升级前先 pg_dump(§4 原地升级流程)。
 
 ## 6. 常见故障
 

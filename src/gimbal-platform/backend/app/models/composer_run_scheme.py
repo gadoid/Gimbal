@@ -29,7 +29,6 @@ class ComposerRunScheme(Base):
             "uq_run_scheme_default",
             "scenario_id",
             unique=True,
-            sqlite_where=text("is_default = 1"),
             postgresql_where=text("is_default IS TRUE"),
         ),
     )

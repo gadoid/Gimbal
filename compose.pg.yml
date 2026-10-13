@@ -1,7 +1,9 @@
 # PG 16 for the platform backend (PG迁移方案 §3.1).
 # 开发机与生产共用同一份文件；凭据/端口用环境变量覆盖，不改本文件。
 #   POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB 可在 shell 里 export 后再 up。
-# 本地默认库仍是 SQLite（DATABASE_URL 默认不变），PG 是 .env 显式 opt-in。
+# SQLite 已退役(2026-10-14):本文件即本地库唯一形态 —— backend/.env
+# 必须指向 PG(core/db.py 对非 postgresql URL fail-fast),测试侧设
+# TEST_DATABASE_URL(conftest 同口径)。
 #
 #   起库:  docker compose -f compose.pg.yml up -d
 #   健康:  docker compose -f compose.pg.yml ps   (healthy)
