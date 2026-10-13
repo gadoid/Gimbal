@@ -120,6 +120,9 @@ def execution_out(
         baseline_eligible=bool(e.baseline_eligible),
         baseline_block=e.baseline_block,
         baseline_evidence=e.baseline_evidence,
+        # B-3:失败原因顶层化(config.dispatcherError 是唯一写点)
+        error=(e.config_json or {}).get("dispatcherError")
+        if e.status == "failed" else None,
     )
 
 

@@ -18,6 +18,31 @@ export function executionStatusText(s: string): string {
   return EXECUTION_STATUS_LABELS[s] ?? s
 }
 
+/**
+ * 行级状态 → 人话(B-3,2026-10-14):内部码直接外露用户看不懂
+ * (plate_rejected 什么意思?去哪修?)。映射只做「是什么 + 去哪看」,
+ * 具体原因在 error 字段/行工件里。未收录码原样显示(不吞信息)。
+ */
+export const ROW_STATUS_LABELS: Record<string, string> = {
+  queued: '排队',
+  dispatched: '已分发',
+  passed: '通过',
+  failed: '失败',
+  canceled: '取消',
+  skipped: '跳过',
+  gimbal_rejected: '定义被引擎拒绝',
+  plate_unavailable: 'plate 不可达',
+  plate_rejected: '定义校验未通过(plate)',
+  launch_timeout: '启动超时',
+  launch_error: '引擎启动失败',
+  dispatcher_error: '调度失败',
+  auth_failed: '认证失败',
+}
+
+export function rowStatusText(s: string): string {
+  return ROW_STATUS_LABELS[s] ?? s
+}
+
 /** canceled 与 done/failed 同为终态(轮询停止条件)。 */
 export function isTerminalExecutionStatus(s: string): boolean {
   return s === 'done' || s === 'failed' || s === 'canceled'

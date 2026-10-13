@@ -575,7 +575,8 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
     // 未手点 exec-row-7,行级表已展开并拉取
     expect(getExecutionRows).toHaveBeenCalledWith(7)
     expect(w.findAll('.ex-table-row')).toHaveLength(1)
-    expect(w.text()).toContain('failed')
+    // B-3:行状态显示人话文案(裸 'failed' 内部码已映射,title 保留原码)
+    expect(w.text()).toContain('失败')
     w.unmount()
   })
 })

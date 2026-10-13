@@ -71,6 +71,8 @@ export interface Execution {
   m2_hash?: string | null
   /** 场景当前声明的 meta.plate(重跑将使用;场景已删 = null) */
   current_plate?: Record<string, string> | null
+  /** B-3:失败原因(终态失败单 = dispatcherError;成功/运行中 null) */
+  error?: string | null
 
 }
 

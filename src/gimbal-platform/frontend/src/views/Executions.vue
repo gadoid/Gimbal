@@ -83,6 +83,13 @@
       <AlertTitle>{{ execStore.pollError }}</AlertTitle>
     </Alert>
 
+    <!-- B-3(2026-10-14):失败原因首屏化 —— 此前只藏在 config.dispatcherError,
+         用户打开频率最高的页面第一屏只有"失败"两个字。结论先行;
+         具体到行/步骤的原因在行级明细的引擎日志与步骤明细里。 -->
+    <Alert v-if="execStore.detail.status === 'failed'" variant="destructive" class="sys-alert" data-testid="exec-failure-reason">
+      <AlertTitle>执行失败 — {{ failureReason }}</AlertTitle>
+    </Alert>
+
     <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
     <Alert v-if="execStore.detail.config?.reconciled" class="sys-alert">
       <AlertTitle>后端重启：本单由启动期 reconcile 收敛为 failed（详见执行信息外的 reconciled 记录）</AlertTitle>
@@ -181,7 +188,7 @@
               <td class="mono">{{ row.rowIndex }}</td>
               <td class="mono">{{ row.rep }}</td>
               <td>
-                <span :class="['row-tag', rowStatusClass(row.status)]">{{ row.status }}</span>
+                <span :class="['row-tag', rowStatusClass(row.status)]" :title="row.status">{{ rowStatusText(row.status) }}</span>
               </td>
               <td class="mono">{{ rowDuration(row) }}</td>
               <td class="mono dim">{{ row.caseDir || '—' }}</td>
@@ -255,7 +262,7 @@ import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import PageBack from '@/components/chrome/PageBack.vue'
 import { toast } from '@/utils/toast'
-import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { executionStatusText, isTerminalExecutionStatus, rowStatusText } from '@/utils/executionStatus'
 import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import type { ExecutionRow } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
@@ -280,6 +287,18 @@ const executionId = computed(() => Number(route.params.id))
 const statusText = computed(() => {
   const s = execStore.detail?.status
   return s ? executionStatusText(s) : ''
+})
+
+/** B-3:失败单首屏原因 —— 顶层 error(dispatcherError)缺省时按已知
+ *  信号归因(reconcile/认证快失败),再缺省指路行级明细。 */
+const failureReason = computed(() => {
+  const d = execStore.detail
+  if (!d) return ''
+  if (d.error) return d.error
+  const cfg = d.config ?? {}
+  if (cfg.reconciled) return `后端重启收敛:${cfg.reconciled.reason ?? '未知原因'}`
+  if (cfg.authFailFast) return `认证快速失败:${cfg.authFailFast.error ?? '未知原因'}`
+  return '未记录顶层原因 — 展开行级明细查看各行失败原因(引擎日志/步骤明细)'
 })
 
 // P4 协作式取消:queued/running 可取消(running 由在飞 fanout 行边界
@@ -352,7 +371,7 @@ const RECIPE_LABELS: Record<string, string> = {
   prefix: '提单号前缀',
   mergePolicy: '认证合并',
 }
-const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift'])
+const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift', 'dispatcherError', 'authFailFast'])
 
 const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
   const cfg = execStore.detail?.config

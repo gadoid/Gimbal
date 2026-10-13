@@ -50,6 +50,10 @@ class ExecutionOut(BaseModel):
     baseline_eligible: bool = False
     baseline_block: str | None = None
     baseline_evidence: dict | None = None
+    # B-3(2026-10-14):失败原因提到顶层 —— 此前只藏在 config.dispatcherError,
+    # 详情页首屏看不到。终态失败单 = dispatcherError;reconcile 收敛单
+    # 由 config.reconciled 表达(前端已有专项提示);成功/运行中为 None。
+    error: str | None = None
 
 
 class ExecutionListItemOut(BaseModel):
