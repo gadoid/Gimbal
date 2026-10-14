@@ -22,7 +22,8 @@ from datetime import datetime
 
 from sqlalchemy import JSON
 from ._types import JsonVar, UtcDateTime
-from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (Boolean, ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint, func)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -59,6 +60,12 @@ class ExternalEndpoint(Base):
     # none|bearer|basic|cookie|custom —— 对齐 plate binding.auth 语义
     auth: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="none")
+    # 集成线 v2(I4,方案 §3.2):平台模式只读口径的目录级标记 ——
+    # POST 查询标了它即可进平台模式。admin 显式标记/撤销(审计动作
+    # external_endpoint.query_safe);OpenAPI 导入不自动标记(误标 =
+    # 平台账号可能执行写操作)。
+    query_safe: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

@@ -298,13 +298,16 @@ class TestIntegrationRouter:
         monkeypatch.setattr(pc, "convert", _fake_convert)
 
         class _FakeResult:
+            # I2:与 LaunchResult 真实字段对齐(launch_status/exit_code/
+            # details;旧 run_result counts-only 投影没有 status/details)
             launch_status = "ok"
+            exit_code = 0
+            error = ""
             # G2/Y2:outputs = details[].outputs(执行器已脱敏);顶层
             # token 形态不再进 last_outputs(载荷不是业务输出)
-            run_result = {"status": "passed",
-                          "details": [{"scenario_id": "sc-ka", "outputs": {
-                              "token": "should-be-scrubbed",
-                              "order_id": "O1"}}]}
+            details = [{"scenario_id": "sc-ka", "outputs": {
+                "token": "should-be-scrubbed",
+                "order_id": "O1"}}]
 
         class _FakeChannels:
             async def run_case(self, case_path):
@@ -323,7 +326,9 @@ class TestIntegrationRouter:
         assert r.status_code == 200, r.text
         out = r.json()
         assert out["result"]["status"] == "passed"
-        assert out["instance"]["lastStatus"] == "passed"
+        # I3.5:旧 lastStatus 出参已删,新字段判 run/check
+        assert out["instance"]["runStatus"] == "ok"
+        assert out["instance"]["checkStatus"] == "none"
         # E1:outputs 内敏感键被脱敏
         async with db_module.SessionLocal() as db:
             inst = (await db.execute(select(IntegrationTask).where(
@@ -450,11 +455,11 @@ async def test_auth_failure_pauses_instance_and_revives(client):
     async with db_module.SessionLocal() as s:
         inst = await s.get(IntegrationTask, inst_id)
         tpl = await s.get(IntegrationTask, tpl_id)
-        out = await ir._finish(s, inst, tpl, "failed", "401 Unauthorized",
-                               auth_failed=True)
-        assert out["status"] == "failed"
+        out = await ir._finish(s, inst, tpl, "auth", "401 Unauthorized")
+        assert out["status"] == "failed"          # D11 投影:auth → failed
         assert inst.state == "paused" and inst.paused_reason == "auth_failed"
         assert inst.fail_streak == 1
+        assert inst.run_status == "auth"
 
     # 复活:平台凭证信号(平台模式不过滤 user_id)
     assert await ir.revive_paused_instances(user_id=99) >= 1
@@ -498,8 +503,9 @@ async def test_non_auth_failure_keeps_running(client):
     async with db_module.SessionLocal() as s:
         inst = await s.get(IntegrationTask, inst_id)
         tpl = await s.get(IntegrationTask, tpl_id)
-        await ir._finish(s, inst, tpl, "failed", "断言失败", auth_failed=False)
+        await ir._finish(s, inst, tpl, "transport", "connect refused")
         assert inst.state == "idle" and inst.paused_reason in (None, "")
+        assert inst.run_status == "transport"
 
 
 # ── Y5:只读闸 ext: 锚点分支 ──────────────────────────────────────
@@ -699,7 +705,8 @@ async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
         inst = (await s.execute(_sel(IntegrationTask).where(
             IntegrationTask.template_id == tid))).scalars().one()
         tpl = await s.get(IntegrationTask, tid)
-        await ir._finish(s, inst, tpl, "passed", "",
+        await ir._finish(s, inst, tpl, "ok", "",
+                         check_status="pass",
                          outputs={"updated_at": "2026-10-12T10:00:00Z",
                                   "other": "x"})
         assert inst.state_vars == {"since": "2026-10-12T10:00:00Z"}
@@ -709,9 +716,10 @@ async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
 
     class _FakeResult:
         launch_status = "ok"
-        run_result = {"status": "passed", "details": [
-            {"scenario_id": "sc-p4", "outputs": {
-                "updated_at": "2026-10-12T11:00:00Z"}}]}
+        exit_code = 0
+        error = ""
+        details = [{"scenario_id": "sc-p4", "outputs": {
+            "updated_at": "2026-10-12T11:00:00Z"}}]
 
     class _FakeChannels:
         async def run_case(self, case_path):

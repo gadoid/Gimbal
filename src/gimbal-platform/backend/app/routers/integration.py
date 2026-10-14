@@ -7,7 +7,7 @@ auth_sessions(决策 9,复用加密与连通测试,只限 admin 管理)。
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -105,13 +105,18 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
 
 def _inst_out(inst: IntegrationTask | None) -> dict:
     if inst is None:
-        return {"state": "none", "enabled": False, "lastStatus": "",
+        return {"state": "none", "enabled": False,
                 "lastRunAt": None, "lastError": "", "pausedReason": "",
-                "nextRunAt": None, "failStreak": 0}
+                "nextRunAt": None, "failStreak": 0,
+                "runStatus": "", "checkStatus": "", "checkMessage": "",
+                "checkChangedAt": None}
     return {
         "state": inst.state,
         "enabled": inst.enabled,
-        "lastStatus": inst.last_status,
+        "runStatus": inst.run_status or "",
+        "checkStatus": inst.check_status or "",
+        "checkMessage": inst.check_message or "",
+        "checkChangedAt": _iso(inst.check_changed_at),
         "lastRunAt": _iso(inst.last_run_at),
         "lastError": inst.last_error,
         "pausedReason": inst.paused_reason,
@@ -185,7 +190,8 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
         ok, offenders = await _read_only_with_plate(db, scen)
         if not ok:
             raise _bad("not_read_only",
-                       f"平台模式要求全部步骤为只读(GET/HEAD/OPTIONS): "
+                       f"平台模式要求全部步骤为只读"
+                       f"(GET/HEAD/OPTIONS 或已标 query_safe): "
                        f"{'、'.join(offenders)}")
     tpl = IntegrationTask(
         name=body.name, owner_id=user.id, visibility=body.visibility,
@@ -368,12 +374,18 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             if om else dict(raw_outputs)
         stale = False
         if io["lastRunAt"]:
-            # 3.11+ fromisoformat 原生吃 Z → aware,与 aware now 相减安全
-            ran = datetime.fromisoformat(io["lastRunAt"])
-            stale = (datetime.now(timezone.utc) - ran) > timedelta(hours=1)
+            # I2 双触发过期(D10,取代固定 1h):错过两次应有的触发才过期;
+            # cron 坏/无 cron 由 is_stale 内部回退 1h(fail-open 到旧行为)
+            stale = integration_runner.is_stale(
+                tpl.trigger_cron, inst.last_run_at
+                if inst is not None else None)
         out.append({
             "id": raw, "name": tpl.name, "state": io["state"],
-            "enabled": io["enabled"], "lastStatus": io["lastStatus"],
+            "enabled": io["enabled"],
+            "runStatus": io["runStatus"], "checkStatus": io["checkStatus"],
+            "checkMessage": io["checkMessage"],
+            "checkChangedAt": io["checkChangedAt"],
+            "pausedReason": io["pausedReason"],
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "identityMode": tpl.identity_mode, "stale": stale,

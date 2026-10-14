@@ -81,14 +81,29 @@ class IntegrationTask(Base):
     paused_reason: Mapped[str] = mapped_column(String(32), default="")
     running_since: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
-    # passed / failed / timeout
-    last_status: Mapped[str] = mapped_column(String(16), default="")
+    # 集成线 v2:I2 双出过渡的 last_status 投影列已随 I3.5 删除
+    # (D11;前端已切 run/check 新字段)
     last_error: Mapped[str] = mapped_column(Text, default="")
     last_outputs: Mapped[dict] = mapped_column(JsonVar, default=dict)
     state_vars: Mapped[dict] = mapped_column(JsonVar, default=dict)
     last_manual_run_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True)
     fail_streak: Mapped[int] = mapped_column(Integer, default=0)
+    # ── 集成线 v2(I2,方案 §2.4):运行状态与检查结论分立 ──────────
+    # run:这次集成能不能正常跑完 ok/auth/timeout/transport/contract/channel
+    run_status: Mapped[str] = mapped_column(String(16), default="")
+    # check:被检对象是否健康 pass/fail/none(无断言)/unknown(运行异常
+    # 未获结论;行值保留上次,卡片标「结论可能过期」)
+    check_status: Mapped[str] = mapped_column(String(16), default="")
+    check_message: Mapped[str] = mapped_column(Text, default="")
+    check_changed_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True)
+    # D9:结论通知边沿合并的双回写位 —— check_notified_status 为 ''/
+    # unknown 时静默回写不发(防迁移/新建首跑全量通知风暴);
+    # check_notified_at 不落 = 间隔按已满足(静默回写后首拍翻转不被挡)
+    check_notified_status: Mapped[str] = mapped_column(String(16), default="")
+    check_notified_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

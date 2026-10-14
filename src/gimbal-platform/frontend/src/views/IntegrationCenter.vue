@@ -28,7 +28,7 @@
       <thead>
         <tr>
           <th>功能</th><th>场景</th><th>周期</th><th>结果策略</th>
-          <th>最近执行</th><th>状态</th><th style="text-align:right">操作</th>
+          <th>最近执行</th><th>检查结论</th><th>运行状态</th><th style="text-align:right">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -50,7 +50,10 @@
             <template v-else>—</template>
           </td>
           <td>
-            <span class="ig-status" :class="toneOf(t)">{{ statusText(t) }}</span>
+            <span class="ig-status" :class="checkTone(t)" :title="t.instance?.checkMessage || ''">{{ checkText(t) }}</span>
+          </td>
+          <td>
+            <span class="ig-status" :class="runTone(t)">{{ runText(t) }}</span>
           </td>
           <td class="ig-ops">
             <button
@@ -163,6 +166,7 @@ import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
   runIntegrationTask, listPlatformCredentials, createPlatformCredential,
   deletePlatformCredential, integrationErr,
+  RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf,
   type IntegrationTaskItem, type PlatformCredential,
 } from '@/api/integration'
 import { listScenarioOptions, listRunSchemes } from '@/api/scenario-composer'
@@ -194,22 +198,47 @@ async function load(): Promise<void> {
   }
 }
 
-function statusText(t: IntegrationTaskItem): string {
-  const st = t.instance?.state
-  if (st === 'running') return '执行中'
-  if (!t.instance?.lastRunAt) return '未执行'
-  if (t.instance.lastStatus === 'passed') return '正常'
-  if (t.instance.lastStatus === 'failed') return '失败'
-  if (t.instance.lastStatus === 'timeout') return '超时'
-  return t.instance.lastStatus || '—'
+/** ── 集成线 v2(I3,§2.5):「状态」拆「检查结论」「运行状态」两列 ── */
+
+function checkText(t: IntegrationTaskItem): string {
+  const i = t.instance
+  if (!i) return '—'
+  if (!i.lastRunAt) return '未执行'
+  const cs = i.checkStatus || ''
+  const label = CHECK_TEXT[cs] ?? '—'
+  // 运行异常时结论是上次保留的(§2.3),标注「上次·」
+  const abnormal = !!i.runStatus && i.runStatus !== 'ok'
+  return abnormal && (cs === 'pass' || cs === 'fail') ? `上次·${label}` : label
 }
 
-function toneOf(t: IntegrationTaskItem): string {
-  const st = t.instance?.state
-  if (st === 'running') return 'run'
-  if (!t.instance?.lastRunAt) return 'muted'
-  if (t.instance.lastStatus === 'passed') return 'ok'
-  return 'bad'
+function checkTone(t: IntegrationTaskItem): string {
+  const cs = t.instance?.checkStatus
+  const abnormal = runAbnormalOf(t.instance?.runStatus)
+  if (cs === 'pass') return abnormal ? 'muted' : 'ok'
+  if (cs === 'fail') return abnormal ? 'muted' : 'bad'
+  return 'muted'
+}
+
+function runText(t: IntegrationTaskItem): string {
+  const i = t.instance
+  if (!i) return '—'
+  if (i.state === 'running') return '执行中'
+  if (i.state === 'paused') {
+    if (i.pausedReason === 'auth_failed') return '凭证失效'
+    if (i.pausedReason === 'missing_credential') return '缺凭证'
+    return '已暂停'
+  }
+  if (i.enabled === false) return '已停用'
+  if (!i.lastRunAt) return '未执行'
+  return RUN_BADGE_TEXT[i.runStatus || ''] || '—'
+}
+
+function runTone(t: IntegrationTaskItem): string {
+  const i = t.instance
+  if (!i) return 'muted'
+  if (i.state === 'running') return 'run'
+  if (i.state === 'paused' || i.enabled === false || !i.lastRunAt) return 'muted'
+  return i.runStatus === 'ok' ? 'ok' : 'bad'
 }
 
 function fmtTime(iso: string): string {
@@ -221,8 +250,19 @@ async function runNow(t: IntegrationTaskItem): Promise<void> {
   runningId.value = t.id
   try {
     const out = await runIntegrationTask(t.id)
+    // 两段式回显:运行状态 · 检查结论(§2.5)
+    const inst = out.instance
+    const runTxt = inst?.runStatus
+      ? RUN_BADGE_TEXT[inst.runStatus] || '执行失败'
+      : (out.result.status === 'passed' ? '运行正常' : '执行失败')
+    let checkTxt = ''
+    if (inst?.checkStatus === 'fail') {
+      checkTxt = ` · 检查不通过${inst.checkMessage ? `:${inst.checkMessage.slice(0, 60)}` : ''}`
+    } else if (inst?.checkStatus === 'pass') {
+      checkTxt = ' · 检查通过'
+    }
     toast.success(
-      `「${t.name}」${out.result.status === 'passed' ? '通过' : '失败'}`
+      `「${t.name}」${runTxt}${checkTxt}`
       + `(${Math.round(out.result.durationMs / 100) / 10}s)`)
     await load()
   } catch (e) {

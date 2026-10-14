@@ -22,6 +22,7 @@ import re
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import select, text, update
@@ -46,7 +47,7 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 GLOBAL_INFLIGHT_CAP = 2        # = 通道数
 PER_SYSTEM_CAP = 2
 PER_HOLDER_SYSTEM_CAP = 2
-# 运行租约:超时回收(running_since 超过 → idle + last_status=timeout)
+# 运行租约:超时回收(running_since 超过 → idle + run_status=timeout)
 RUN_LEASE_SECONDS = 15 * 60
 # 半常驻通道空闲收口
 CHANNEL_IDLE_SECONDS = 5 * 60
@@ -59,6 +60,13 @@ _AUTH_TEMPLATE = re.compile(r"\$\{auth\.([A-Za-z0-9_.\-]+)\.")
 def _now() -> datetime:
     # aware UTC(utcnow 3.12 起废弃;与 UtcDateTime/ensure_aware 口径同向)
     return datetime.now(timezone.utc)
+
+
+def _json_of(value: Any) -> str:
+    """D8:on_change 的 outputs 比较口径 —— 脱敏后序列化比较
+    (sort_keys 键序稳定、深度覆盖、实现一行)。"""
+    return json.dumps(value or {}, sort_keys=True, ensure_ascii=False,
+                      default=str)
 
 
 # D3(2026-10-13):跨次游标键豁免(与引擎 Engine._CURSOR_KEYS 同表)——
@@ -81,17 +89,22 @@ def _scrub(value, key_hint: str = "") -> None:
 
 
 async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
-    """平台模式只读护栏(P1 口径):场景每个 step 的请求方法均为
-    安全方法(GET/HEAD/OPTIONS)。POST 实现的查询随 P2 接 plate 的
-    ``query_safe`` 元数据(方案 §3:保存与执行前双闸,本函数即那一闸)。
+    """平台模式只读护栏 —— I4(集成线 v2 §3.1)补全 query_safe 口径,
+    与取数视图消费**同一个真源**(plate 契约元数据 / 外部目录条目):
 
-    Release 6.2:锚点步骤的 call 不存 method(binding 派生字段,执行由
-    plate 投影)—— 从 plate 契约解析;Release 4.4:钉了修订的场景按
-    meta.plate 的修订取(不随 working 漂移),未声明系统读 working
-    缓存。契约不可得即按不安全处理(fail-closed:只读闸不得因取不到
-    契约而放行)。手写原始调用(无锚点)仍读存储的 call.method。
-    Y5(设计 §2):``ext:`` 锚点步骤的 method 出**平台外部目录**
-    (条目删/查不到同样 fail-closed)。
+    一个步骤满足任一即视为只读:
+    * 方法 ∈ GET / HEAD / OPTIONS;
+    * plate 锚点:端点 ``metadata.query_safe = true``(钉修订场景按
+      meta.plate 修订取,与 method 同路径;R-E 已核实 /full 投影带
+      metadata);
+    * ``ext:`` 锚点:外部目录条目 ``query_safe = true``(同形状的
+      第二来源);
+    * 无锚点手写原始调用:只认 method,fail-closed(存了 method 的
+      ext 锚点同此口径 —— 手写即自担)。
+
+    契约/条目不可得即按不安全处理(fail-closed:只读闸不得因取不到
+    契约而放行)。不满足时列出判定依据「步骤 i(POST,未标
+    query_safe)」。
     """
     from . import plate_client
 
@@ -102,18 +115,23 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
         call = step.get("call") if isinstance(step, dict) else None
         method = str((call or {}).get("method") or "").upper()
         endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
+        query_safe = False
         if not method and endpoint and endpoint.startswith("ext:"):
-            # Y5:外部目录锚点 —— method 出平台目录(plate 零感知);
-            # 条目已删/查不到按不安全处理(fail-closed 同款)
+            # Y5:外部目录锚点 —— method/query_safe 出平台目录
+            # (plate 零感知);条目已删/查不到按不安全处理(fail-closed)
             alias, _, name = endpoint[4:].partition(".")
             from sqlalchemy import select as _sel
             from ..models.external_endpoint import ExternalEndpoint
             async with db_module.SessionLocal() as _db:
                 row = (await _db.execute(_sel(
-                    ExternalEndpoint.method).where(
+                    ExternalEndpoint.method, ExternalEndpoint.query_safe).where(
                     ExternalEndpoint.alias_name == alias,
-                    ExternalEndpoint.name == name))).scalar_one_or_none()
-            method = str(row or "").upper() or "未知方法(目录无此条目)"
+                    ExternalEndpoint.name == name))).one_or_none()
+            if row is not None:
+                method = str(row[0] or "").upper()
+                query_safe = bool(row[1])
+            else:
+                method = "未知方法(目录无此条目)"
         if not method and endpoint:
             ref = meta_plate.get(endpoint.split(".")[0])
             if ref and ref != "working":
@@ -122,9 +140,17 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
                 item = (await plate_client.get_endpoint_full(endpoint)).item
             binding = ((item or {}).get("binding")
                        if isinstance(item, dict) else None) or {}
+            meta = ((item or {}).get("metadata")
+                    if isinstance(item, dict) else None) or {}
             method = str(binding.get("method") or "").upper() or "未知方法"
-        if method and method not in _SAFE_METHODS:
-            offenders.append(f"步骤 {i}({method})")
+            query_safe = bool(meta.get("query_safe"))
+        if method and method not in _SAFE_METHODS and not query_safe:
+            # 判定依据(§3.2)只给锚点步骤(可去标 query_safe);
+            # 手写原始调用无锚点可标、契约不可得同理,只报方法
+            offenders.append(
+                f"步骤 {i}({method},未标 query_safe)"
+                if endpoint and "未知" not in method
+                else f"步骤 {i}({method})")
     return (not offenders, offenders)
 
 
@@ -136,6 +162,131 @@ async def get_platform_user_id() -> int | None:
             select(User.id).where(User.is_system == True)  # noqa: E712
         )).scalar()
     return row
+
+
+# ── 集成线 v2(I2):运行状态 × 检查结论 分立(方案 §2.2/§2.3)─────
+
+# 规则 3:单元超时(plan.py)与协作取消(scenario_runner)的标记 —— 不经
+# calling 阶段类型化,error_kind 是 logic,不补会落兜底错判 contract
+_TIMEOUT_PHASES = frozenset({"timeout", "cancelled"})
+# 规则 4:提取/前置失败 = 契约不符(被检系统结构变了);双拼写兼容
+# before_request/after_request(引擎 StrategyPhase 值)
+_CONTRACT_PHASES = frozenset({
+    "preparing", "extracting", "before_request", "after_request"})
+
+
+def _steps_of(details: Any) -> list[dict]:
+    """details[](LaunchResult 行,与 _detail_row 同形)摊平成 step 行。"""
+    steps: list[dict] = []
+    for d in details or []:
+        if isinstance(d, dict):
+            steps.extend(s for s in d.get("steps") or [] if isinstance(s, dict))
+    return steps
+
+
+def classify_outcome(
+    *, launch_status: str, exit_code: int | None,
+    details: Any, has_assertions: bool,
+) -> tuple[str, str, str]:
+    """§2.2 分类算法(纯函数,表驱动可测)→ (run, check, check_message)。
+
+    输入为 LaunchResult 的真实字段(launch_status / exit_code / details),
+    不经 ``run_result`` counts-only 投影。按序判定命中即停:
+    检查规则的唯一来源是场景断言 —— run 面(能不能跑完)与 check 面
+    (被检对象是否健康)分立,断言失败 = run ok + check fail。
+    """
+    steps = _steps_of(details)
+    # 1 通道/平台面。launch=timeout 是真实的「超时」(墙钟);error/
+    # 其余 launch 故障、M2 校验拒绝(exit 2,case 形态问题,与被检系统
+    # 无关)、调试链 halted → channel
+    if launch_status == "timeout":
+        return "timeout", "unknown", ""
+    if launch_status != "ok":
+        return "channel", "unknown", ""
+    if any(bool(d.get("halted")) for d in details or []
+           if isinstance(d, dict)):
+        return "channel", "unknown", ""
+    overall = "passed" if exit_code == 0 else (
+        "gimbal_rejected" if exit_code == 2 else "failed")
+    if overall == "gimbal_rejected":
+        return "channel", "unknown", ""
+    # 2 auth(先于 verifying:响应 401 断言的 [auth_status:] 标记在此归位,
+    # 凭证失效暂停的面)
+    if any(s.get("error_kind") == "auth" for s in steps):
+        return "auth", "unknown", ""
+    # 3 超时与网络分立(v1.3,不可再合并 —— 并入 timeout 会让角标
+    # 「网络异常」永远出不来)
+    if any(s.get("error_kind") == "timeout"
+           or s.get("error_phase") in _TIMEOUT_PHASES for s in steps):
+        return "timeout", "unknown", ""
+    if any(s.get("error_kind") == "transport" for s in steps):
+        return "transport", "unknown", ""
+    # 4 契约不符:提取/前置失败(依赖 I1 执行器修复)
+    if any(s.get("error_phase") in _CONTRACT_PHASES for s in steps):
+        return "contract", "unknown", ""
+    # 5 断言失败:运行正常,检查不通过
+    for s in steps:
+        if s.get("error_phase") == "verifying" and s.get("error"):
+            return "ok", "fail", str(s.get("error"))[:500]
+    # 6 全部通过:有断言 pass / 无断言 none(仅软失败按通过计,D6)
+    if overall == "passed":
+        return ("ok", "pass" if has_assertions else "none", "")
+    # 7 兜底:logic 未归类 → 宁报运行异常,不误报检查不通过
+    return "contract", "unknown", ""
+
+
+def _has_assertions(case: dict | None) -> bool:
+    """编译后 case 是否存在 verifying 阶段断言(§2.2 规则 6 输入)。
+    集成链不注入断言注册表条目(那是执行队列的 injection 面),
+    步骤 strategy 里的 assertion 即唯一来源;disabled 不计。"""
+    for step in (case or {}).get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        for st in step.get("strategy") or []:
+            if (isinstance(st, dict) and st.get("kind") == "assertion"
+                    and st.get("enabled", True)):
+                return True
+    return False
+
+
+STALE_GRACE_SECONDS = 120   # 调度节拍 15s + 准入顺延余量(§2.3)
+
+
+def is_stale(tpl_cron: str, last_run_at: datetime | None,
+             now: datetime | None = None) -> bool:
+    """§2.3 双触发法(D10):``now > next_fire(cron, next_fire(cron,
+    last_run_at)) + 2min`` 判过期(错过两次应有的触发)。
+
+    取代旧「now - last_run_at > 1h」:*/1 保活任务停摆 1h 才变灰、
+    每天一次的任务每天误报;双触发对不规则 cron(仅工作日)同样成立。
+    无 cron / 解析失败 / 从未跑过 → 回退旧口径 fail-open(1h / 不过期)。
+    """
+    from ..core.timeutil import ensure_aware
+
+    now = now or _now()
+    if last_run_at is None:
+        return False
+    lr = ensure_aware(last_run_at)
+    try:
+        nf1 = next_fire(tpl_cron, lr)
+        nf2 = next_fire(tpl_cron, nf1)
+        return now > ensure_aware(nf2) + timedelta(seconds=STALE_GRACE_SECONDS)
+    except Exception:  # noqa: BLE001 — cron 坏 = 回退旧行为
+        return (now - lr) > timedelta(hours=1)
+
+
+def _period_seconds(cron: str, anchor: datetime | None) -> float:
+    """通知节流间隔 = 周期(§2.3,口径同过期计算:从上次运行锚点
+    推下一个触发,差值即周期;运行发生在触发点上,锚点近似成立)。
+    解析失败回退 1 小时。下限 60s 防畸形 cron。"""
+    from ..core.timeutil import ensure_aware
+
+    try:
+        base = ensure_aware(anchor) if anchor is not None else _now()
+        nf = ensure_aware(next_fire(cron, base))
+        return max(60.0, (nf - base).total_seconds())
+    except Exception:  # noqa: BLE001
+        return 3600.0
 
 
 # ── 半常驻通道(评审 E4-A)───────────────────────────────────────
@@ -269,13 +420,14 @@ async def run_instance(instance_id: int) -> dict:
                     ComposerRunScheme.scenario_id == scen.scenario_id)
             )).scalars().first()
 
-        # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸)
+        # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
+        # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀
         if tpl.identity_mode == "platform":
             ok, offenders = await is_scenario_read_only(scen.payload)
             if not ok:
                 return await _finish(
-                    db, inst, tpl, "failed",
-                    f"平台模式只读检查未通过: {'、'.join(offenders)}")
+                    db, inst, tpl, "channel",
+                    f"只读检查未通过: {'、'.join(offenders)}")
 
         # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
         # 不计入入库标准的预览执行不进集成链。external 不受影响
@@ -284,7 +436,7 @@ async def run_instance(instance_id: int) -> dict:
         from .run_semantics import working_preview
         if working_preview(scen.payload):
             return await _finish(
-                db, inst, tpl, "failed",
+                db, inst, tpl, "channel",
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请在编排器钉定修订后重试(外部服务不受影响)")
 
@@ -315,13 +467,13 @@ async def run_instance(instance_id: int) -> dict:
         except Exception as e:  # noqa: BLE001
             if aliases:
                 return await _finish(
-                    db, inst, tpl, "failed", f"凭证解析失败: {e}",
+                    db, inst, tpl, "auth", f"凭证解析失败: {e}",
                     pause_reason="missing_credential")
             exec_auths = []
         else:
             if aliases and not exec_auths:
                 return await _finish(
-                    db, inst, tpl, "failed",
+                    db, inst, tpl, "auth",
                     f"缺少凭证: {','.join(aliases)}",
                     pause_reason="missing_credential")
 
@@ -360,35 +512,37 @@ async def run_instance(instance_id: int) -> dict:
                 json.dumps(case, ensure_ascii=False, default=str),
                 encoding="utf-8")
             result = await channels.run_case(case_path)
-        status = "passed"
-        error = ""
-        run_result = getattr(result, "run_result", None) or {}
-        launch_status = getattr(result, "launch_status", "ok")
-        if launch_status != "ok":
-            status = "failed"
-            error = f"通道故障({launch_status}): {getattr(result, 'error', '')}"
-        elif str(run_result.get("status") or "passed").lower() not in (
-                "passed", "success", "ok"):
-            status = "failed"
-            error = str(run_result.get("error") or run_result.get("status") or "")
+        # I2:直接消费 LaunchResult 真实字段 —— 旧代码读 run_result 投影
+        # 的 .get("status")/.get("details"),而该投影按设计 counts-only,
+        # 真实链路失败跑不出 failed/auth/outputs(测试桩伪造的形状掩盖
+        # 了这一点);分类函数据此判定 run/check(§2.2)
+        launch_status = str(getattr(result, "launch_status", "ok") or "ok")
+        exit_code = getattr(result, "exit_code", None)
+        details = list(getattr(result, "details", None) or [])
+        chan_error = str(getattr(result, "error", "") or "")
         # G2/Y2:outputs = 各单元 outputs 合并(场景作用域变量,执行器侧
-        # 已脱敏)—— 不再把整个 run_finished 载荷当 outputs(计数/details
-        # 不是业务输出);G7:任一步 error_kind=auth → 凭证失效信号
+        # 已脱敏);分类(§2.2)用同一个 details
         outputs: dict = {}
-        auth_failed = False
-        details = run_result.get("details") if isinstance(run_result, dict) else None
-        if isinstance(details, list):
-            for d in details:
-                if not isinstance(d, dict):
-                    continue
-                if isinstance(d.get("outputs"), dict):
-                    outputs.update(d["outputs"])
-                for s in d.get("steps") or []:
-                    if isinstance(s, dict) and s.get("error_kind") == "auth":
-                        auth_failed = True
+        for d in details:
+            if isinstance(d, dict) and isinstance(d.get("outputs"), dict):
+                outputs.update(d["outputs"])
+        run_status, check_status, check_message = classify_outcome(
+            launch_status=launch_status, exit_code=exit_code,
+            details=details, has_assertions=_has_assertions(case))
+        if launch_status == "timeout":
+            error = f"执行超时: {chan_error}"
+        elif launch_status != "ok":
+            error = f"通道故障({launch_status}): {chan_error}"
+        elif run_status == "channel":
+            error = f"case 校验拒绝(exit {exit_code}): {chan_error}"
+        else:
+            error = next(
+                (str(s["error"]) for s in _steps_of(details) if s.get("error")),
+                "") or (chan_error if run_status != "ok" else "")
     except Exception as e:  # noqa: BLE001 — plate/通道任何故障 = 失败收口
-        status, error, outputs = "failed", str(e)[:500], {}
-        auth_failed = False
+        # 平台内部异常(含 plate convert)→ channel(§2.2 规则 1)
+        run_status, check_status, check_message = "channel", "unknown", ""
+        error, outputs = str(e)[:500], {}
 
     async with db_module.SessionLocal() as db:
         inst = await db.get(IntegrationTask, instance_id)
@@ -398,46 +552,81 @@ async def run_instance(instance_id: int) -> dict:
         if tpl is None:
             raise IntegrationRunError("template_gone", "模板已删除")
         return await _finish(
-            db, inst, tpl, status, error, outputs=outputs,
-            duration_ms=int((_now() - started).total_seconds() * 1000),
-            auth_failed=auth_failed)
+            db, inst, tpl, run_status, error,
+            check_status=check_status, check_message=check_message,
+            outputs=outputs,
+            duration_ms=int((_now() - started).total_seconds() * 1000))
 
 
 async def _finish(
-    db, inst: IntegrationTask, tpl: IntegrationTask, status: str,
-    error: str, *, outputs: dict | None = None,
-    duration_ms: int = 0, auth_failed: bool = False,
+    db, inst: IntegrationTask, tpl: IntegrationTask, run_status: str,
+    error: str, *, check_status: str = "unknown", check_message: str = "",
+    outputs: dict | None = None, duration_ms: int = 0,
     pause_reason: str | None = None,
 ) -> dict:
-    """结果回写:result_policy=on_change 只在状态翻转时落盘(P1 口径
-    = last_status 变化,评审 E7);通知与 fail_streak。
+    """结果回写(集成线 v2 §2.3 重写):run/check 分立落库。
 
-    G7/Y2:auth 类失败(执行器 error_kind=auth)→ 实例暂停
-    (paused_reason=auth_failed),不再按周期重试(防错凭证反复登录
-    锁号,方案 §8);fail_streak 照常累计。通知按身份模式:平台模式
-    → 全体 admin/operator;个人模式 → 实例持有人。
+    - **暂停只看 run**:`run=auth` 立即暂停(auth_failed,不按周期重试,
+      防错凭证反复登录锁号,方案 §8);missing_credential 原样;
+    - **fail_streak / 运维通知**只在 `run ≠ ok` 时累加(D2:check=fail
+      不累加、不通知、不暂停);
+    - **check**:run ≠ ok(unknown)保留上次结论与文案(卡片标「结论
+      可能过期」);run = ok 写新结论,`check_changed_at` 记翻转时刻;
+    - **结论变化通知 = 边沿合并**(D9):仅 pass↔fail 翻转发送,
+      none↔有结论不发;`check_notified_status ∈ {'', unknown}` 静默
+      回写(不落 `check_notified_at` = 间隔按已满足,首拍真翻转不被
+      节流挡);被节流的翻转下次执行自动补发;
+    - **outputs**:run ≠ ok 不覆盖(卡片继续显示上次数据);run = ok
+      无论 check 都写入(fail 的输出本身就是证据)。on_change 落盘
+      基准 = 结论翻转**或** outputs 序列化变化(D8);
+    - 通知对象:auth 面按身份模式定向(个人=持有人,平台=全体
+      admin/operator);结论通知按 D3(个人=持有人,平台=模板 owner)。
     """
+    from ..core.timeutil import ensure_aware
+
     now = _now()
-    changed = inst.last_status != status
-    prev_streak = inst.fail_streak or 0
-    _pause = pause_reason or ("auth_failed" if auth_failed else None)
-    if _pause and status != "passed":
+    prev_check = inst.check_status or ""
+    prev_outputs_json = _json_of(inst.last_outputs)
+    prev_last_run = inst.last_run_at
+
+    if run_status == "auth" and pause_reason is None:
+        pause_reason = "auth_failed"
+    if pause_reason:
         inst.state = "paused"
-        inst.paused_reason = _pause
+        inst.paused_reason = pause_reason
     else:
         inst.state = "idle"
     inst.running_since = None
     inst.last_run_at = now
-    inst.last_status = status
+    inst.run_status = run_status
     inst.last_error = (error or "")[:500]
-    if tpl.result_policy != "on_change" or changed or not inst.last_outputs:
-        _scrub(outputs or {})
-        inst.last_outputs = outputs or {}
-    inst.fail_streak = 0 if status == "passed" else prev_streak + 1
+
+    # check:run=ok 写新结论;run≠ok 保留上次(§2.3)
+    if run_status == "ok":
+        if check_status != (inst.check_status or ""):
+            inst.check_changed_at = now
+        inst.check_status = check_status
+        inst.check_message = (check_message or "")[:500]
+
+    # outputs + on_change 基准(§2.3)
+    new_outputs = dict(outputs or {})
+    _scrub(new_outputs)
+    if run_status == "ok":
+        changed_out = _json_of(new_outputs) != prev_outputs_json
+        if (tpl.result_policy != "on_change"
+                or check_status != prev_check or changed_out
+                or not inst.last_outputs):
+            inst.last_outputs = new_outputs
+
+    # fail_streak 只看 run(check=fail 不累加,§2.3)
+    inst.fail_streak = 0 if run_status == "ok" else (inst.fail_streak or 0) + 1
+
     # Y4/方案 §5:跨次状态回写 —— state_mapping {输出键 → 状态键},
     # 命中的输出复制进 state_vars(下次执行注入为变量,增量游标)。
-    # outputs 已过脱敏键表,复制继承;mapping 为空 = 不回写。
-    if isinstance(tpl.state_mapping, dict) and tpl.state_mapping and outputs:
+    # 仅 run=ok 推进(失败跑的一半数据不前移游标);outputs 已过脱敏
+    # 键表,复制继承;mapping 为空 = 不回写。
+    if (run_status == "ok" and isinstance(tpl.state_mapping, dict)
+            and tpl.state_mapping and outputs):
         merged = dict(inst.state_vars or {})
         for src, dst in tpl.state_mapping.items():
             if isinstance(dst, str) and dst and src in (outputs or {}):
@@ -447,22 +636,46 @@ async def _finish(
         inst.next_run_at = next_fire(tpl.trigger_cron, now)
     except Exception:  # noqa: BLE001 — cron 坏 = 顺延一小时,不炸调度
         inst.next_run_at = now + timedelta(hours=1)
+
+    # ── 结论通知边沿合并(D9)── 状态机在 commit 前算好,发送在 commit 后
+    notify_check: str | None = None
+    if run_status == "ok" and inst.check_status in ("pass", "fail"):
+        prev_notified = inst.check_notified_status or ""
+        if prev_notified in ("pass", "fail"):
+            period = _period_seconds(tpl.trigger_cron, prev_last_run)
+            last_notified = ensure_aware(inst.check_notified_at)
+            due = last_notified is None or (
+                (now - last_notified).total_seconds() >= period)
+            if inst.check_status != prev_notified and due:
+                notify_check = inst.check_status
+                inst.check_notified_status = inst.check_status
+                inst.check_notified_at = now
+        else:
+            # 初始化静默:只回写状态,不落通知时间(= 间隔已满足)。
+            # 已知取舍:存量迁移后首跑直接 fail 这次不发 —— 此类实例
+            # 改造前一直在走 fail_streak 运维通知,不存在「没人知道」。
+            inst.check_notified_status = inst.check_status
     await db.commit()
 
-    # 通知(方案 §8):G7/Y2 auth 类失败 → 立即且按身份模式定向
-    # (个人 = 持有人,平台 = 全体 admin/operator);普通失败 → 连续
-    # FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator)。
-    auth_notify = (status == "failed" and auth_failed)
-    streak_notify = (status == "failed" and not auth_failed
+    # 通知(方案 §8):auth 面立即且按身份模式定向;普通运行失败 →
+    # 连续 FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator);
+    # 结论翻转通知(D9/D3)。
+    auth_notify = (run_status == "auth")
+    streak_notify = (run_status not in ("ok", "auth")
                      and inst.fail_streak >= FAIL_STREAK_NOTIFY
                      and inst.fail_streak % FAIL_STREAK_NOTIFY == 0)
-    if auth_notify or streak_notify:
+    if auth_notify or streak_notify or notify_check is not None:
         try:
             from .notifications import create_notification
             async with db_module.SessionLocal() as ndb:
                 if auth_notify and tpl.identity_mode == "personal" \
                         and inst.holder_id:
                     uids = [inst.holder_id]   # 凭证是持有人自己的
+                elif notify_check is not None:
+                    # D3:结论通知 —— 个人=持有人;平台=模板 owner
+                    # (平台实例的 holder 是系统用户,不是收件人)
+                    uids = [inst.holder_id if tpl.identity_mode == "personal"
+                            else tpl.owner_id]
                 else:
                     uids = (await ndb.execute(
                         select(User.id).where(User.role.in_(("admin", "operator")),
@@ -474,6 +687,14 @@ async def _finish(
                             + ("我的凭证" if tpl.identity_mode == "personal"
                                else "平台凭证")
                             + "中更新凭证后自动恢复")
+                elif notify_check is not None:
+                    if notify_check == "fail":
+                        title = f"集成任务「{tpl.name}」检查不通过"
+                        body = (inst.check_message
+                                or "断言未通过,详见卡片")[0:200]
+                    else:
+                        title = f"集成任务「{tpl.name}」检查已恢复"
+                        body = "检查结论由不通过恢复为通过"
                 else:
                     title = f"集成任务「{tpl.name}」连续失败 {inst.fail_streak} 次"
                     body = (inst.last_error or "")[:200]
@@ -483,7 +704,8 @@ async def _finish(
                         title=title, body=body, link="/integrations")
         except Exception:  # noqa: BLE001 — 通知是增强
             logger.warning("integration: notify failed")
-    return {"status": status, "durationMs": duration_ms, "error": error}
+    return {"status": "passed" if run_status == "ok" else "failed",
+            "durationMs": duration_ms, "error": error}
 
 
 # ── 调度(评审 E5:短持 advisory lock)────────────────────────────
@@ -524,7 +746,7 @@ async def _recover_stuck(db) -> int:
     for r in rows:
         r.state = "idle"
         r.running_since = None
-        r.last_status = "timeout"
+        r.run_status = "timeout"     # 租约超时是真实的「超时」面
         r.last_error = "运行租约超时,调度器回收"
         try:
             r.next_run_at = next_fire(

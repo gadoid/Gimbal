@@ -112,6 +112,38 @@ async def update_endpoint(
         raise _err(e) from e
 
 
+class QuerySafeIn(BaseModel):
+    """I4(集成线 v2 §3.2):只读标记开关 —— 标记/撤销均写审计。"""
+
+    on: bool
+
+
+@router.post("/{alias_name}/{name}/query-safe")
+async def set_query_safe(
+    admin: AdminUser, db: DbSession,
+    alias_name: str, name: str, body: QuerySafeIn,
+) -> dict:
+    """平台模式只读口径的目录级标记(误标 = 平台账号可能执行写操作,
+    故 admin 显式 + 审计;OpenAPI 导入不自动标记)。"""
+    from ..services import audit as audit_svc
+
+    try:
+        row = await svc.set_query_safe(
+            db, alias_name=alias_name, name=name, on=body.on)
+    except ValueError as e:
+        raise _err(e) from e
+    await audit_svc.record(
+        db, actor_id=admin.id,
+        actor_name=admin.display_name or admin.username,
+        action="external_endpoint.query_safe",
+        resource_type="external_endpoint", resource_id=str(row.id),
+        resource_name=f"{row.alias_name}.{row.name}",
+        detail={"aliasName": row.alias_name, "name": row.name,
+                "querySafe": body.on},
+    )
+    return svc._to_wire(row)
+
+
 @router.delete("/{alias_name}/{name}", status_code=204)
 async def delete_endpoint(
     admin: AdminUser, db: DbSession, alias_name: str, name: str,

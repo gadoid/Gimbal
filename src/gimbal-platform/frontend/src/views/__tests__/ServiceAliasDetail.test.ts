@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import ServiceAliasDetail from '@/views/ServiceAliasDetail.vue'
 import * as aliasApi from '@/api/service-aliases'
@@ -52,7 +53,9 @@ async function makeRouter(path: string): Promise<Router> {
 
 async function mountDetail(path: string) {
   const router = await makeRouter(path)
-  const w = mount(ServiceAliasDetail, { global: { plugins: [router] } })
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const w = mount(ServiceAliasDetail, { global: { plugins: [router, pinia] } })
   await flushPromises()
   return { w, router }
 }

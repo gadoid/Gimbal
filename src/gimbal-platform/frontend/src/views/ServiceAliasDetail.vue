@@ -57,6 +57,8 @@
         <TabsList>
           <TabsTrigger value="fields">字段默认值</TabsTrigger>
           <TabsTrigger v-if="isAliasMode" value="credential">凭证</TabsTrigger>
+          <!-- I4(集成线 v2 §3.2):外部接口登记 + 只读标记开关(admin) -->
+          <TabsTrigger v-if="isExternalAlias" value="endpoints">外部接口</TabsTrigger>
         </TabsList>
 
         <TabsContent value="fields">
@@ -92,6 +94,56 @@
             </div>
           </div>
         </TabsContent>
+
+        <TabsContent v-if="isExternalAlias" value="endpoints">
+          <div class="svc-panel">
+            <div class="svc-panel-head">
+              <span class="svc-panel-title">外部接口目录</span>
+              <span class="svc-panel-desc">ext:{{ key }}.&lt;name&gt; 锚点的结构定义来源;query_safe = 平台模式只读标记(POST 查询标了即可进平台模式)</span>
+            </div>
+            <div v-if="endpointsLoading" class="ext-note">加载中…</div>
+            <p v-else-if="!endpoints.length" class="ext-note">
+              该别名下还没有登记外部接口 — OpenAPI 导入与登记走管理 API(/external-endpoints)。
+            </p>
+            <table v-else class="ext-table">
+              <thead>
+                <tr>
+                  <th>接口</th><th>方法</th><th>路径</th><th>只读标记</th>
+                  <th v-if="auth.isAdmin" style="text-align:right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="ep in endpoints" :key="ep.name">
+                  <td>
+                    <span class="mono">{{ ep.name }}</span>
+                    <span v-if="ep.title" class="ext-title">{{ ep.title }}</span>
+                  </td>
+                  <td>
+                    <span class="ext-method" :class="ep.method">{{ ep.method }}</span>
+                  </td>
+                  <td><code class="mono ext-path">{{ ep.path }}</code></td>
+                  <td>
+                    <span class="ext-qs" :class="ep.querySafe ? 'on' : 'off'"
+                          :data-testid="`ext-qs-${ep.name}`">
+                      {{ ep.querySafe ? 'query_safe' : '未标记' }}
+                    </span>
+                  </td>
+                  <td v-if="auth.isAdmin" class="ext-ops">
+                    <button
+                      type="button" class="ext-toggle"
+                      :data-testid="`ext-toggle-${ep.name}`"
+                      :disabled="qsBusy === ep.name"
+                      @click="toggleQuerySafe(ep)"
+                    >{{ ep.querySafe ? '撤销只读' : '标记只读' }}</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="ext-warn">
+              标记即授权平台账号执行该接口 — 仅 admin 可操作,标记/撤销均写审计;误标可能让平台执行写操作。
+            </p>
+          </div>
+        </TabsContent>
       </Tabs>
     </template>
   </section>
@@ -104,18 +156,25 @@
  * 服务模式;都 miss → missing(不猜)。?tab=credential 支持外部深链
  * (认证管理反查面板的别名 chip)。
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import {
+  listExternalEndpoints, setExternalQuerySafe,
+  type ExternalEndpointItem,
+} from '@/api/external-endpoints'
+import { useAuthStore } from '@/stores/auth'
+import { toast } from '@/utils/toast'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const key = computed(() => String(route.params.alias ?? ''))
 const loading = ref(true)
@@ -124,6 +183,7 @@ const catalogNames = ref<string[]>([])
 
 const row = computed(() => aliases.value.find((a) => a.aliasName === key.value) ?? null)
 const isAliasMode = computed(() => row.value !== null)
+const isExternalAlias = computed(() => isAliasMode.value && row.value?.kind === 'external')
 const missing = computed(() =>
   !loading.value && row.value === null && !catalogNames.value.includes(key.value))
 const baseService = computed(() => row.value?.baseService ?? key.value)
@@ -136,7 +196,49 @@ const pageSubtitle = computed(() =>
     ? `绑定键 = 别名全名;运行时解析:精确命中本别名 → ${baseService.value} 服务级默认 → 全局默认 → 无行 = 不注入`
     : '绑定键 = 服务名(服务级默认层);运行时解析:精确命中本服务 → 全局默认 → 无行 = 不注入')
 
-const activeTab = ref(route.query.tab === 'credential' ? 'credential' : 'fields')
+const activeTab = ref(
+  route.query.tab === 'credential' ? 'credential'
+  : route.query.tab === 'endpoints' ? 'endpoints' : 'fields')
+
+// ── I4(集成线 v2 §3.2):外部接口目录 + query_safe 只读标记开关 ──
+const endpoints = ref<ExternalEndpointItem[]>([])
+const endpointsLoading = ref(false)
+const qsBusy = ref('')
+
+async function loadEndpoints(): Promise<void> {
+  if (!isExternalAlias.value) return
+  endpointsLoading.value = true
+  try {
+    endpoints.value = await listExternalEndpoints(key.value)
+  } catch (e) {
+    showError('外部接口目录', e)
+    endpoints.value = []
+  } finally {
+    endpointsLoading.value = false
+  }
+}
+
+async function toggleQuerySafe(ep: ExternalEndpointItem): Promise<void> {
+  const turningOn = !ep.querySafe
+  if (turningOn && !window.confirm(
+    `标记「${ep.name}」为只读查询(query_safe)?\n标记即授权平台账号执行该接口,请确认它没有写副作用。`)) {
+    return
+  }
+  qsBusy.value = ep.name
+  try {
+    const out = await setExternalQuerySafe(key.value, ep.name, turningOn)
+    ep.querySafe = out.querySafe
+    toast.success(turningOn ? `已标记 ${ep.name} 只读(审计已记录)` : `已撤销 ${ep.name} 只读标记`)
+  } catch (e) {
+    showError('只读标记', e)
+  } finally {
+    qsBusy.value = ''
+  }
+}
+
+watch(isExternalAlias, (v) => {
+  if (v) void loadEndpoints()
+}, { immediate: true })
 
 onMounted(async () => {
   try {
@@ -164,5 +266,35 @@ onMounted(async () => {
   font-size: 11px;
   line-height: 1.7;
   color: var(--sl-ink-3);
+}
+/* I4:外部接口目录 + query_safe 开关 */
+.ext-note { margin: 8px 0; font-size: 12px; color: var(--sl-ink-3); }
+.ext-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ext-table th {
+  text-align: left; font-weight: 500; font-size: 11.5px;
+  color: var(--sl-ink-3); padding: 6px 8px; border-bottom: 1px solid #e2e8f0;
+}
+.ext-table td { padding: 7px 8px; border-bottom: 1px solid rgb(226 232 240 / 60%); }
+.ext-title { margin-left: 6px; color: var(--sl-ink-3); font-size: 11.5px; }
+.ext-method {
+  font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+  color: #4338ca; background: rgb(67 56 202 / 8%);
+}
+.ext-method.POST, .ext-method.PUT, .ext-method.PATCH, .ext-method.DELETE {
+  color: #b45309; background: rgb(245 158 11 / 12%);
+}
+.ext-path { font-size: 11.5px; color: var(--sl-ink-2, #475569); }
+.ext-qs { font-size: 11px; padding: 1px 8px; border-radius: 999px; }
+.ext-qs.on { color: #15803d; background: rgb(34 197 94 / 12%); }
+.ext-qs.off { color: var(--sl-ink-3); border: 1px solid rgb(100 116 139 / 30%); }
+.ext-ops { text-align: right; white-space: nowrap; }
+.ext-toggle {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  color: #4338ca; background: var(--accent-soft, #eef2ff);
+  border: 1px solid var(--accent-soft-border, #c7d2fe);
+}
+.ext-toggle:disabled { opacity: .5; cursor: not-allowed; }
+.ext-warn {
+  margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #b45309;
 }
 </style>

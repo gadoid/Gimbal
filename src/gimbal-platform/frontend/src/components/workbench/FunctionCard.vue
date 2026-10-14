@@ -3,8 +3,12 @@
      键值)、counter(首个数值键大数字)、list(首个数组键,S 条数/
      M 前 5/L 前 10)。数据 = cards 批量接口的 outputs 投影
      (output_mapping;已脱敏)。卡槽注入 def(fn:<id>) → 30s 轮询,
-     错误隔离;状态叠加:未执行/执行中/失败/凭证失效/缺少凭证/
-     过期(stale>1h)/已移除。 -->
+     错误隔离。
+     集成线 v2(I3,方案 §2.5):主状态灯显示检查结论(pass 绿/fail 红/
+     none 无灯只显运行状态/unknown 灰);运行异常角标(凭证失效/超时/
+     网络异常/契约不符/通道故障)+ 主结论置灰 +「上次结论 · N 前」;
+     角标优先级 D13:暂停 > 停用 > 过期(高优先级在场不叠加过期);
+     kv/counter/list 数据区按 §2.3 保留上次数据,运行异常只置灰不清空。 -->
 <template>
   <div class="wcard fn-card" :data-testid="`wb-card-${cardId}`">
     <header class="chead">
@@ -25,56 +29,67 @@
       <!-- S:按模板 —— status 状态灯 / counter 大数字 / kv 首键 / list 条数 -->
       <div v-if="size === 'S'" class="fn-s" :data-testid="t">
         <template v-if="tplKind === 'counter'">
-          <span class="fn-counter-num mono">{{ counterText }}</span>
+          <span class="fn-counter-num mono" :class="{ 'fn-dim': runAbnormal }">{{ counterText }}</span>
         </template>
         <template v-else-if="tplKind === 'kv'">
-          <span class="fn-status">{{ kvEntries[0] ? `${kvEntries[0][0]} ${fmt(kvEntries[0][1])}` : '暂无输出' }}</span>
+          <span class="fn-status" :class="{ 'fn-dim': runAbnormal }">{{ kvEntries[0] ? `${kvEntries[0][0]} ${fmt(kvEntries[0][1])}` : '暂无输出' }}</span>
         </template>
         <template v-else-if="tplKind === 'list'">
-          <span class="fn-status">{{ listCount }} 条</span>
+          <span class="fn-status" :class="{ 'fn-dim': runAbnormal }">{{ listCount }} 条</span>
         </template>
         <template v-else>
-          <span class="fn-dot" :class="tone" />
+          <!-- none(无断言)无灯,只显运行状态(§2.5) -->
+          <span v-if="data.checkStatus !== 'none'" class="fn-dot" :class="tone" />
           <span class="fn-status">{{ statusText }}</span>
         </template>
+        <span v-if="badge" class="fn-badge">{{ badge }}</span>
       </div>
 
       <!-- M/L:按模板分派(Y4:status/kv/counter/list) -->
       <template v-else>
         <div v-if="tplKind === 'status'" class="fn-main">
-          <span class="fn-dot" :class="tone" />
+          <span v-if="data.checkStatus !== 'none'" class="fn-dot" :class="tone" />
           <div class="fn-main-text">
-            <span class="fn-status">{{ statusText }}</span>
+            <span class="fn-status" :class="{ 'fn-dim': runAbnormal && data.checkStatus !== 'none' }">{{ statusText }}</span>
             <span v-if="data.lastRunAt" class="fn-sub">
               最近执行 {{ relTime(data.lastRunAt) }}
             </span>
             <span v-else class="fn-sub">等待首次执行</span>
           </div>
+          <span v-if="badge" class="fn-badge">{{ badge }}</span>
         </div>
         <!-- kv:全部映射键值(S 档 = 第一个键) -->
-        <div v-else-if="tplKind === 'kv'" class="fn-kv-list" :data-testid="`${t}-kv`">
+        <div v-else-if="tplKind === 'kv'" class="fn-kv-list" :class="{ 'fn-dim': runAbnormal }" :data-testid="`${t}-kv`">
           <div v-for="e in kvEntries" :key="e[0]" class="fn-kv-row">
             <span class="fn-kv-key">{{ e[0] }}</span>
             <span class="fn-kv-val mono">{{ fmt(e[1]) }}</span>
           </div>
           <p v-if="!kvEntries.length" class="fn-sub">暂无输出</p>
+          <span v-if="badge" class="fn-badge">{{ badge }}</span>
         </div>
         <!-- counter:大数字 + 最近执行 -->
         <div v-else-if="tplKind === 'counter'" class="fn-counter" :data-testid="`${t}-counter`">
-          <span class="fn-counter-num mono">{{ counterText }}</span>
+          <span class="fn-counter-num mono" :class="{ 'fn-dim': runAbnormal }">{{ counterText }}</span>
           <span class="fn-sub">{{ data.lastRunAt ? `最近执行 ${relTime(data.lastRunAt)}` : '等待首次执行' }}</span>
+          <span v-if="badge" class="fn-badge">{{ badge }}</span>
         </div>
         <!-- list:M 前 5 / L 前 10 -->
-        <div v-else-if="tplKind === 'list'" class="fn-list" :data-testid="`${t}-list`">
+        <div v-else-if="tplKind === 'list'" class="fn-list" :class="{ 'fn-dim': runAbnormal }" :data-testid="`${t}-list`">
           <p class="fn-sub">共 {{ listCount }} 条</p>
           <ul class="fn-list-items">
             <li v-for="(item, i) in listItems" :key="i" class="fn-list-item mono">
               {{ fmt(item) }}
             </li>
           </ul>
+          <span v-if="badge" class="fn-badge">{{ badge }}</span>
         </div>
         <p v-if="staleNote" class="fn-note warn">{{ staleNote }}</p>
-        <p v-if="data.lastError && data.lastStatus === 'failed'"
+        <!-- M 档 check=fail 显示 checkMessage;运行异常显示 lastError 摘要 -->
+        <p v-if="data.checkStatus === 'fail' && data.checkMessage && !runAbnormal"
+           class="fn-note err" :title="data.checkMessage">
+          {{ data.checkMessage.slice(0, 120) }}
+        </p>
+        <p v-if="runAbnormal && data.lastError"
            class="fn-note err" :title="data.lastError">
           {{ data.lastError.slice(0, 120) }}
         </p>
@@ -101,6 +116,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import {
   fetchFunctionCards, runIntegrationTask, integrationErr,
+  runAbnormalOf, RUN_BADGE_TEXT,
   type FunctionCardData,
 } from '@/api/integration'
 import { useCardSize, useCardDef } from './registry'
@@ -120,29 +136,67 @@ const t = computed(() => `fn-card-${cardId.value}`)
 const removed = computed(() => data.value?.state === 'removed')
 const runningState = computed(() => data.value?.state === 'running')
 
+// ── 集成线 v2(§2.5):状态叠加层 ─────────────────────────────────
+
+/** run ≠ ok:主结论置灰 + 角标 + lastError 摘要 */
+const runAbnormal = computed(() => runAbnormalOf(data.value?.runStatus))
+
+/** 角标(D13 优先级:暂停 > 停用 > 过期;运行异常角标与暂停语义
+    合并呈现 —— auth 暂停即「凭证失效」)。run=ok 不出角标。 */
+const badge = computed(() => {
+  const d = data.value
+  if (!d) return ''
+  if (d.state === 'paused') {
+    if (d.pausedReason === 'auth_failed') return '凭证失效'
+    if (d.pausedReason === 'missing_credential') return '缺凭证'
+    return '已暂停'
+  }
+  if (d.enabled === false) return '已停用'
+  return runAbnormal.value ? (RUN_BADGE_TEXT[d.runStatus || ''] || '') : ''
+})
+
 const tone = computed<'ok' | 'bad' | 'run' | 'muted'>(() => {
   if (removed.value || !data.value) return 'muted'
   if (runningState.value) return 'run'
   if (!data.value.lastRunAt) return 'muted'
-  if (data.value.stale) return 'muted'
-  if (data.value.lastStatus === 'passed') return 'ok'
-  if (data.value.lastStatus) return 'bad'
+  if (runAbnormal.value) return 'muted'          // 主结论置灰
+  if (data.value.checkStatus === 'pass') return 'ok'
+  if (data.value.checkStatus === 'fail') return 'bad'
   return 'muted'
 })
 
-const statusText = computed(() => {
-  if (removed.value) return '已移除'
-  if (runningState.value) return '执行中'
-  if (!data.value?.lastRunAt) return '未执行'
-  if (data.value.stale) return '数据可能过期'
-  if (data.value.lastStatus === 'passed') return '正常'
-  if (data.value.lastStatus === 'failed') return '失败'
-  if (data.value.lastStatus === 'timeout') return '超时'
-  return data.value.lastStatus || '—'
+const lastCheckAgo = computed(() => {
+  const iso = data.value?.checkChangedAt
+  return iso ? ` · ${relTime(iso)}` : ''
 })
 
-const staleNote = computed(() =>
-  data.value?.stale ? '超过 1 小时未刷新 — 调度器可能已停摆' : '')
+const statusText = computed(() => {
+  const d = data.value
+  if (!d) return '—'
+  if (removed.value) return '已移除'
+  if (runningState.value) return '执行中'
+  if (!d.lastRunAt) return '未执行'
+  const cs = d.checkStatus || ''
+  if (cs === 'none') {
+    // 无断言:无灯,只显运行状态(§2.5)
+    return d.runStatus === 'ok' ? '运行正常' : (RUN_BADGE_TEXT[d.runStatus || ''] || '—')
+  }
+  if (cs === 'pass') {
+    return runAbnormal.value ? `上次结论:通过${lastCheckAgo.value}` : '检查通过'
+  }
+  if (cs === 'fail') {
+    return runAbnormal.value ? `上次结论:不通过${lastCheckAgo.value}` : '检查不通过'
+  }
+  return runAbnormal.value ? (RUN_BADGE_TEXT[d.runStatus || ''] || '运行异常') : '结论未知'
+})
+
+const staleNote = computed(() => {
+  const d = data.value
+  if (!d?.stale || removed.value) return ''
+  // D13:高优先级角标在场时不叠加过期提示
+  if (badge.value) return ''
+  return '错过两次触发未刷新 — 调度器可能已停摆'
+})
 
 // ── Y4:模板渲染面(status|kv|counter|list;缺省 status)──────────
 const tplKind = computed(() =>
@@ -192,7 +246,18 @@ async function runNow(): Promise<void> {
   running.value = true
   try {
     const out = await runIntegrationTask(tid)
-    toast.success(`已执行:${out.result.status === 'passed' ? '通过' : '失败'}`)
+    // 两段式回显:运行状态 · 检查结论(§2.5)
+    const inst = out.instance
+    const runTxt = inst?.runStatus
+      ? RUN_BADGE_TEXT[inst.runStatus] || '执行失败'
+      : (out.result.status === 'passed' ? '运行正常' : '执行失败')
+    let checkTxt = ''
+    if (inst?.checkStatus === 'fail') {
+      checkTxt = ` · 检查不通过${inst.checkMessage ? `:${inst.checkMessage.slice(0, 60)}` : ''}`
+    } else if (inst?.checkStatus === 'pass') {
+      checkTxt = ' · 检查通过'
+    }
+    toast.success(`已执行:${runTxt}${checkTxt}`)
     await load()
   } catch (e) {
     toast.error(integrationErr(e))
@@ -228,8 +293,15 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
 .fn-dot.muted { background: rgb(100 116 139 / 40%); }
 @keyframes fn-pulse { 50% { opacity: .35; } }
 .fn-status { font-size: 13px; font-weight: 600; }
+.fn-dim { opacity: .55; }
+.fn-badge {
+  font-size: 10.5px; font-weight: 500; flex: none;
+  padding: 1px 7px; border-radius: 999px; color: #b45309;
+  background: rgb(245 158 11 / 12%); border: 1px solid rgb(245 158 11 / 35%);
+  white-space: nowrap;
+}
 .fn-main { display: flex; align-items: center; gap: 10px; }
-.fn-main-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fn-main-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .fn-sub { font-size: 11.5px; color: rgb(100 116 139); }
 .fn-note { margin: 0; font-size: 11.5px; }
 .fn-note.warn { color: #b45309; }

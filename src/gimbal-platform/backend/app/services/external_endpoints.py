@@ -247,6 +247,7 @@ def _to_wire(row: ExternalEndpoint) -> dict:
         "path": row.path,
         "requestSchema": row.request_schema,
         "auth": row.auth,
+        "querySafe": bool(row.query_safe),
         "notes": row.notes,
         "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -371,6 +372,23 @@ async def update_endpoint(
     await db.commit()
     await db.refresh(row)
     return _to_wire(row)
+
+
+async def set_query_safe(
+    db: AsyncSession, *, alias_name: str, name: str, on: bool,
+) -> ExternalEndpoint:
+    """I4(集成线 v2 §3.2):只读标记 admin 显式写。返回 ORM 行(调用方
+    落审计:动作 external_endpoint.query_safe,detail 带接口名与别名)。"""
+    row = (await db.execute(select(ExternalEndpoint).where(
+        ExternalEndpoint.alias_name == alias_name,
+        ExternalEndpoint.name == name,
+    ))).scalar_one_or_none()
+    if row is None:
+        raise ValueError(f"not_found: {alias_name}.{name}")
+    row.query_safe = bool(on)
+    await db.commit()
+    await db.refresh(row)
+    return row
 
 
 async def delete_endpoint(

@@ -4,12 +4,16 @@ import http from '@/api/http'
 export interface IntegrationInstance {
   state: 'idle' | 'running' | 'paused' | 'none' | 'removed'
   enabled: boolean
-  lastStatus: string
   lastRunAt: string | null
   lastError: string
   pausedReason: string
   nextRunAt: string | null
   failStreak: number
+  /** 集成线 v2(I2 双出过渡):运行状态 × 检查结论分立 */
+  runStatus: string
+  checkStatus: string
+  checkMessage: string
+  checkChangedAt: string | null
 }
 
 export interface IntegrationTaskItem {
@@ -38,7 +42,6 @@ export interface FunctionCardData {
   name?: string
   state?: string
   enabled?: boolean
-  lastStatus?: string
   lastRunAt?: string | null
   lastError?: string
   cronText?: string
@@ -48,6 +51,38 @@ export interface FunctionCardData {
   outputs?: Record<string, unknown>
   /** Y4:模板(status|kv|counter|list;缺省 status) */
   cardTemplate?: string
+  /** 集成线 v2(I2):run/check 分立出参 */
+  runStatus?: string
+  checkStatus?: string
+  checkMessage?: string
+  checkChangedAt?: string | null
+  /** 暂停原因(D13 角标:auth_failed/missing_credential) */
+  pausedReason?: string
+}
+
+/** ── 集成线 v2(I3,方案 §2.5):run/check 人话映射(卡片与集成中心共用)── */
+
+/** 运行状态角标文案;ok = 无角标(主结论直接呈现) */
+export const RUN_BADGE_TEXT: Record<string, string> = {
+  ok: '运行正常',
+  auth: '凭证失效',
+  timeout: '超时',
+  transport: '网络异常',
+  contract: '契约不符',
+  channel: '通道故障',
+}
+
+/** 检查结论文案(主状态灯:pass 绿 / fail 红 / none 无灯 / unknown 灰) */
+export const CHECK_TEXT: Record<string, string> = {
+  pass: '检查通过',
+  fail: '检查不通过',
+  none: '无断言',
+  unknown: '结论未知',
+}
+
+/** run ≠ ok 即运行异常(主结论置灰 + 角标 + lastError 摘要) */
+export function runAbnormalOf(runStatus?: string | null): boolean {
+  return !!runStatus && runStatus !== 'ok'
 }
 
 export async function listIntegrationTasks(): Promise<IntegrationTaskItem[]> {

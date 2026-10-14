@@ -285,6 +285,15 @@ class StepStateMachine:
         self._phase_results.append(pr)
 
         if pr.hard_failed:
+            # 对齐 verifying 的写法(340-345):前置失败必须落 error_phase/_error,
+            # 否则 _error_kind_of 首行 not error → none,集成侧无法归类为 contract
+            failed_strategy = next((r for r in pr.results if r.failed), None)
+            self._error_phase = "preparing"
+            self._error = (
+                f"[preparing] {failed_strategy.message}"
+                if failed_strategy and failed_strategy.message
+                else "[preparing] strategy failed"
+            )
             logger.warning("[SM {}] PREPARE 阶段 hard_failed，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN   # 跳过协议调用，直接清理
         logger.debug("[SM {}] PREPARE 阶段完成 all_passed={}，进入 INVOKING", self._step_id, pr.all_passed)
@@ -318,6 +327,14 @@ class StepStateMachine:
         self._phase_results.append(pr)
 
         if pr.hard_failed:
+            # 同 _handle_prepare:提取失败(契约不符)需可归类、可读
+            failed_strategy = next((r for r in pr.results if r.failed), None)
+            self._error_phase = "extracting"
+            self._error = (
+                f"[extracting] {failed_strategy.message}"
+                if failed_strategy and failed_strategy.message
+                else "[extracting] strategy failed"
+            )
             logger.warning("[SM {}] EXTRACTING 阶段 hard_failed，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN
         logger.debug("[SM {}] EXTRACTING 阶段完成 all_passed={}，进入 VERIFYING", self._step_id, pr.all_passed)
