@@ -53,7 +53,7 @@ async def _dispatch_and_project(client, monkeypatch, *, n_runs=3,
 
     async def _launch(case_path, *, step_to=None, report_dir=None, cwd=None,
                       timeout=None, engine_log_path=None,
-                      on_event=None, on_log=None, n_runs=1, retry=0):
+                      on_event=None, on_log=None, log_counters=None, n_runs=1, retry=0):
         spawn_kwargs.append({"n_runs": n_runs, "retry": retry})
         for ev in events:
             if on_event is not None:

@@ -32,7 +32,7 @@ async def _wait_terminal(execution_id: int, timeout_s: float = 5.0):
 
 async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
     from tests.helpers import launch_ok
     return launch_ok()

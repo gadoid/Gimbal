@@ -104,6 +104,10 @@ class _FakeSession:
     async def commit(self):
         pass
 
+    async def execute(self, *a, **kw):
+        # S9:快照 jsonb_set 走 session.execute —— fake 只需吞掉
+        return None
+
 
 def _fake_db_factory():
     return lambda: _FakeSession()
@@ -187,8 +191,10 @@ async def test_logs_buffer_cap_drops_oldest_on_persistent_failure(monkeypatch):
     assert ing._logs[0]["message"] == "m-300"
     assert ing._logs[-1]["message"] == f"m-{ing._LOGS_BUF_CAP + 299}"
     assert ing.logs_dropped_overflow == 300
-    # events 侧不设上限(台账不可丢)——本次只喂了日志,events 恒空
-    assert ing._events == []
+    # events 侧不设上限(台账不可丢)。S9 后持续失败会留**一条**
+    # flush_failed 事件(连续失败去重,不无界膨胀);业务事件仍恒不裁剪
+    assert [e["event_type"] for e in ing._events] == ["ingest.flush_failed"]
+    assert ing.flush_errors >= 1
 
 
 async def test_flush_success_flushes_both_axes(monkeypatch):

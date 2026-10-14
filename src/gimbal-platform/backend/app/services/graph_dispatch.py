@@ -333,7 +333,8 @@ def _all_referenced_services(resolved: list[dict]) -> list[str]:
 
 async def execute_graph(
     db_factory, execution_id: int, run_dir: Path, graph: dict,
-    *, on_event=None, on_log=None, chain: str = "legacy",
+    *, on_event=None, on_log=None, log_counters: dict | None = None,
+    chain: str = "legacy",
     m2_info: dict | None = None,
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
@@ -364,6 +365,7 @@ async def execute_graph(
         engine_log_path=case_dir / "engine.log",
         on_event=on_event,
         on_log=on_log,
+        log_counters=log_counters,
         n_runs=n_runs,
     )
 

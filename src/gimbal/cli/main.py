@@ -84,6 +84,16 @@ def main(
         no_color=no_color,
         log_level=log_level
     )
+    # AD8(批5):CLI 入口前置早期日志初始化 —— start_server 等命令在
+    # bootstrap 之前打的行不再走 loguru 默认彩色 sink(server spawn 的
+    # stderr 是管道,ANSI 只是乱码);NO_COLOR 由配置层自读(与 loguru
+    # 版本无关)。setup_logging 先 remove 再装,幂等,bootstrap 阶段会
+    # 用最终配置(JSON 模式)重设。
+    from gimbal.log.integration import configure_logging_from_cli
+    try:
+        configure_logging_from_cli(ctx.obj)
+    except Exception:  # noqa: BLE001 — 日志初始化失败不阻断 CLI
+        pass
 
 
 

@@ -94,7 +94,7 @@ class TestExecutionIntegration:
         async def _launch_with_report(case_path, *, step_to=None,
                                       report_dir=None, cwd=None,
                                       timeout=None, engine_log_path=None,
-                                      on_event=None, on_log=None,
+                                      on_event=None, on_log=None, log_counters=None,
                                       n_runs=1, retry=0):
             Path(report_dir).mkdir(parents=True, exist_ok=True)
             (Path(report_dir) / "report-run-def.html").write_text(

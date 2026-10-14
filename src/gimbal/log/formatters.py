@@ -24,7 +24,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import traceback
 from datetime import timezone
 from typing import Any, TYPE_CHECKING
 
@@ -174,13 +176,37 @@ class JsonSink:
 
         exc = record.get("exception")
         if exc is not None:
-            exc_type, exc_val, _ = exc
-            payload["exception"] = {
+            exc_type, exc_val, tb = exc
+            exc_payload: dict[str, Any] = {
                 "type":    exc_type.__name__ if exc_type else None,
                 "message": str(exc_val) if exc_val else None,
             }
+            # S12 精简堆栈帧(可选,默认关防噪声/性能):配置门控
+            # GIMBAL_LOG_STACK_FRAMES(帧数,非数字真值取默认 8);或该条
+            # 记录为 DEBUG 级自动开。平台零改动 —— payload 自动携带。
+            frames_n = _stack_frames_gate(record)
+            if frames_n and tb is not None:
+                exc_payload["frames"] = [
+                    {"file": f.filename, "line": f.lineno, "function": f.name}
+                    for f in traceback.extract_tb(tb)[-frames_n:]
+                ]
+            payload["exception"] = exc_payload
 
         return _try_orjson_dumps(payload) + "\n"
+
+
+def _stack_frames_gate(record: "Record") -> int:
+    """S12:返回本条异常应带的堆栈帧数(0 = 关)。"""
+    raw = os.environ.get("GIMBAL_LOG_STACK_FRAMES")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 8
+    # DEBUG 级自动开 —— 排障会话要堆栈,常态 INFO 不带
+    if record["level"].no <= 10:
+        return 8
+    return 0
 
 
 # 向后兼容别名

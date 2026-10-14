@@ -40,7 +40,7 @@ async def test_baseline_run_without_datasets(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         path = Path(case_path)
         case_paths.append(path)
@@ -119,7 +119,7 @@ async def test_selected_dataset_with_zero_rows_runs_baseline_once(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         cases.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
@@ -189,7 +189,7 @@ async def test_dataset_row_string_values_coerced_to_baseline_types(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         cases.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
@@ -235,7 +235,7 @@ async def test_run_fills_plate_required_meta_defaults(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         return _ok()
 
@@ -269,7 +269,7 @@ async def test_stale_env_key_silently_ignored(client, monkeypatch):
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                            cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         return _ok()
 

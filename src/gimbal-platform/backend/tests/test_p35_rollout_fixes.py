@@ -471,7 +471,7 @@ async def test_recovery_skips_terminal_rows_and_continues_seq(
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                            cwd=None, timeout=None, engine_log_path=None,
-                           on_event=None, on_log=None, n_runs=1):
+                           on_event=None, on_log=None, log_counters=None, n_runs=1):
         calls["n"] += 1
         if on_event is not None:
             on_event({"event_type": "run.meta", "unit": f"u{calls['n']}"})

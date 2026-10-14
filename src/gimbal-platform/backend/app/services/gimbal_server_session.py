@@ -32,7 +32,8 @@ _LOG_LEVEL_ORDER = ("TRACE", "DEBUG", "INFO", "SUCCESS",
 
 
 async def _pump_stderr(stderr, log, on_log: "Callable[[dict], None] | None",
-                       min_level: str) -> None:
+                       min_level: str,
+                       counters: "dict | None" = None) -> None:
     """stderr 泵:逐行落文件(全量原始字节) + 解析 JSON 行回调 on_log。
 
     结构化日志设计 AD2/AD3:
@@ -40,6 +41,11 @@ async def _pump_stderr(stderr, log, on_log: "Callable[[dict], None] | None",
     - 入库面:仅 JsonSink 的 JSON 行且级别 ≥ min_level 才回调;非 JSON
       (早期彩色/uvicorn/reporter 汇总等)与低于门槛的行不入库;
     - 回调异常捕获记日志,不阻断泵(on_event 同惯例)。
+
+    S9 泵侧计数(对账公式的两个丢弃项,这些行不进 ingester 缓冲):
+    ``counters['logs_dropped_unparsable']``(非 JSON/解析失败/无有效
+    级别)与 ``counters['logs_below_level']``(低于门槛)——调用方把
+    同一 dict 交给 ingester 做快照落库(尾部只剩丢弃行时计数脏即写)。
     可独立单测(fake stderr 的 readline)。
     """
     if stderr is None:
@@ -57,15 +63,23 @@ async def _pump_stderr(stderr, log, on_log: "Callable[[dict], None] | None",
             continue
         line = text.strip()
         if not line.startswith("{"):
+            if counters is not None:
+                counters["logs_dropped_unparsable"] += 1
             continue
         try:
             d = json.loads(line)
         except ValueError:
+            if counters is not None:
+                counters["logs_dropped_unparsable"] += 1
             continue
         lv = str(d.get("level") or "").upper()
         if lv not in _LOG_LEVEL_ORDER:
+            if counters is not None:
+                counters["logs_dropped_unparsable"] += 1
             continue
         if _LOG_LEVEL_ORDER.index(lv) < min_idx:
+            if counters is not None:
+                counters["logs_below_level"] += 1
             continue
         try:
             on_log(d)
@@ -92,7 +106,8 @@ class ServerSession:
 
     async def start(self, *, engine_log_path: "Path | None" = None,
                     cwd: "Path | str | None" = None,
-                    on_log: "Callable[[dict], None] | None" = None) -> None:
+                    on_log: "Callable[[dict], None] | None" = None,
+                    log_counters: "dict | None" = None) -> None:
         import socket as _s
         with _s.socket() as sk:
             sk.bind(("127.0.0.1", 0))
@@ -125,7 +140,7 @@ class ServerSession:
         # self._proc(close() 置空后泵仍能收尾,engine.log 尾部不丢)。
         self._stderr_task = asyncio.get_event_loop().create_task(
             _pump_stderr(proc.stderr, log_fh, on_log,
-                         settings.EXEC_INGEST_LOG_LEVEL))
+                         settings.EXEC_INGEST_LOG_LEVEL, log_counters))
         self._base = f"http://127.0.0.1:{self._port}"
 
         deadline = time.monotonic() + self.START_TIMEOUT_SEC
@@ -363,6 +378,7 @@ class ServerSessionPool:
         # 结构化日志 AD2:池生命周期=执行生命周期(决策 15),回调绑定本执行
         # 的 ingester 不存在跨执行路由错配;懒启动槽位在 _spawn 透传
         self._on_log: "Callable[[dict], None] | None" = None
+        self._log_counters: "dict | None" = None
         self._lock = asyncio.Lock()
 
     @property
@@ -381,7 +397,8 @@ class ServerSessionPool:
 
     async def start(self, *, engine_log_path: "Path | None" = None,
                     cwd: "Path | str | None" = None,
-                    on_log: "Callable[[dict], None] | None" = None) -> None:
+                    on_log: "Callable[[dict], None] | None" = None,
+                    log_counters: "dict | None" = None) -> None:
         """冷启动槽位 0（引擎不可用在此 fail-fast，与 C12 行为一致）。
 
         占位 ``_started=1`` —— 不占位的话首个 ``_acquire`` 会再起一个
@@ -392,6 +409,7 @@ class ServerSessionPool:
         self._engine_log_path = engine_log_path
         self._cwd = cwd
         self._on_log = on_log
+        self._log_counters = log_counters
         async with self._lock:
             if self._started > 0:
                 return                    # 已预热(幂等)
@@ -407,7 +425,7 @@ class ServerSessionPool:
     async def _spawn(self, slot: int) -> ServerSession:
         s = ServerSession()
         await s.start(engine_log_path=self._log_path(slot), cwd=self._cwd,
-                      on_log=self._on_log)
+                      on_log=self._on_log, log_counters=self._log_counters)
         self._live.append(s)
         return s
 

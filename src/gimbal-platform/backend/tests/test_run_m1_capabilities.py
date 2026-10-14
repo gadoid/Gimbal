@@ -53,7 +53,7 @@ def _patch_launch_capture(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
@@ -90,7 +90,7 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
 
     async def _capture_nruns(case_path, *, step_to=None, report_dir=None,
                              cwd=None, timeout=None, engine_log_path=None,
-                             on_event=None, on_log=None, n_runs=1, retry=0):
+                             on_event=None, on_log=None, log_counters=None, n_runs=1, retry=0):
         calls.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         kw.append({"n_runs": n_runs, "retry": retry})
         return _ok()
@@ -149,7 +149,7 @@ async def test_parallel_limits_concurrency(
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
         nonlocal in_flight, max_in_flight, done
         in_flight += 1

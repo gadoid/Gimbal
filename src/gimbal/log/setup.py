@@ -80,8 +80,13 @@ def _install_intercept() -> None:
 
 
 def _silence_noisy_loggers() -> None:
-    """将 httpx / urllib3 / asyncio 等高频三方库的 DEBUG/INFO 日志静默到 WARNING。"""
-    for name in ["httpx", "httpcore", "httpcore.connection", "httpcore.http11", "urllib3", "asyncio"]:
+    """将 httpx / urllib3 / asyncio 等高频三方库的 DEBUG/INFO 日志静默到 WARNING。
+
+    uvicorn.access（AD8）：引擎 server 的每次 HTTP 请求一行 INFO ——
+    平台/调试台的状态轮询会让它远超业务日志量,压到 WARNING。
+    """
+    for name in ["httpx", "httpcore", "httpcore.connection", "httpcore.http11",
+                 "urllib3", "asyncio", "uvicorn.access"]:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 

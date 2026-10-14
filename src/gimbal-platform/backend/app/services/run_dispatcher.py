@@ -33,17 +33,19 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy import func, select
+from sqlalchemy import text as sa_text
 from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -329,9 +331,24 @@ class _EventIngester:
         # 分 id、按提交时刻可见,先分 id 后提交的批次会落在已推进的
         # id cursor 之下(SSE 日志流 tail 漏行的 id 版)。锁内串行 =
         # 「执行内 id 按提交序单调」成为机制保证(tail 游标的地基)。
+        # single-flight(AD2/AD5):阈值 task / ticker / finalize / 回填重试
+        # 四条路径共用此锁 —— 换缓冲+落库+提交全程串行,执行内 id 按提交
+        # 序单调;并发入口在锁上排队,各自换出排队期间积累的新缓冲。
         self._flush_lock = asyncio.Lock()
+        # S9 自监控五计数(累计快照,随 flush jsonb_set 写 config_json.
+        # ingest_stats;对账公式:文件行数 ≈ logs_ingested + dropped_
+        # unparsable + below_level,崩失败量差是诚实边界):
+        #   logs_ingested / logs_dropped_overflow / flush_errors 在本类累计;
+        #   logs_dropped_unparsable / logs_below_level 在泵里计数(行不进
+        # 缓冲)—— 同一 dict 传给池/launcher,start 时透传到 stderr 泵。
+        self.pump_counters = {"logs_dropped_unparsable": 0,
+                              "logs_below_level": 0}
+        self.logs_ingested = 0
+        self.flush_errors = 0
         # 超限丢最旧计数(S9 批 5 接入 ingest_stats 快照;先行内存累计)
         self.logs_dropped_overflow = 0
+        # 上次已落库快照(None = 尚未写过;ticker 以「计数脏」触发冲刷)
+        self._stats_written: "dict | None" = None
         # C12 修正：execution 级单调 seq 分配器——引擎 seq 是进程内
         # 计数，多 case（每 case 一个进程/run）会从 1 重来，直接落库
         # 会撞 (execution_id, seq) 唯一约束被静默丢弃（多行执行丢事件）。
@@ -346,7 +363,10 @@ class _EventIngester:
         async def _tick() -> None:
             while not self._stopped:
                 await asyncio.sleep(self._FLUSH_INTERVAL_SEC)
-                if self._events or self._logs:
+                # S9:泵侧计数脏即写 —— below_level/unparsable 在泵里计数、
+                # 这些行不进缓冲,尾部只剩丢弃行时也得有 flush 把计数带出去
+                if (self._events or self._logs
+                        or self._stats_snapshot() != self._stats_written):
                     await self._flush()
         if self._ticker is None:
             self._ticker = asyncio.create_task(_tick())
@@ -378,6 +398,7 @@ class _EventIngester:
         self._maybe_flush()
 
     def on_log(self, d: dict) -> None:
+        self.logs_ingested += 1
         self._logs.append(d)
         # AD2:超限丢最旧(保最新;丢弃计数供 S9 对账)
         if len(self._logs) > self._LOGS_BUF_CAP:
@@ -385,6 +406,16 @@ class _EventIngester:
             del self._logs[:drop]
             self.logs_dropped_overflow += drop
         self._maybe_flush()
+
+    def _stats_snapshot(self) -> dict:
+        """S9 五计数当前快照(泵侧两项从共享 dict 现读)。"""
+        return {
+            "logs_ingested": self.logs_ingested,
+            "logs_dropped_unparsable": self.pump_counters["logs_dropped_unparsable"],
+            "logs_below_level": self.pump_counters["logs_below_level"],
+            "flush_errors": self.flush_errors,
+            "logs_dropped_overflow": self.logs_dropped_overflow,
+        }
 
     def _maybe_flush(self) -> None:
         if len(self._events) + len(self._logs) < self._FLUSH_EVERY:
@@ -417,7 +448,20 @@ class _EventIngester:
                     await execution_store.insert_logs(
                         session, self._execution_id, logs,
                         seq_base=log_seq_base)
+                    # S9:快照随本批 flush 同事务落库(jsonb_set 键级原子
+                    # 更新 —— config_json 有 counterDrift 等多写入者,整读
+                    # 整写会互相覆盖;设值快照幂等,禁止 SQL +N 形态)。
+                    # 快照与已入库行严格一致,对账不存在「行入了计数没加」
+                    # 的窗口。空缓冲也写(finalize 终值唯一写入点在此)。
+                    snap = self._stats_snapshot()
+                    await session.execute(sa_text(
+                        "UPDATE executions SET config_json = jsonb_set("
+                        "COALESCE(config_json, '{}'::jsonb), '{ingest_stats}',"
+                        " CAST(:stats AS jsonb)) WHERE id = :eid"),
+                        {"stats": json.dumps(snap),
+                         "eid": self._execution_id})
                     await session.commit()
+                    self._stats_written = snap
             except BaseException as e:  # noqa: BLE001
                 # 失败/取消都要回填缓冲(下次冲刷重试),不丢这批事件/日志。
                 # P3.5-3 对账实测:finalize 取消 ticker 时批次可能正在 DB
@@ -427,12 +471,30 @@ class _EventIngester:
                 self._events = events + self._events
                 self._logs = logs + self._logs
                 self._log_seq += len(logs)
-                if not isinstance(e, Exception):
+                if isinstance(e, Exception):
+                    # S9:flush_failed 双写 —— 事件面(下次冲刷入库,DB 恢复
+                    # 后可见)+ 后端自身日志(DB 不可用时唯一幸存面)。取消
+                    # 不算 flush 失败(进程收口语义,批次已回填重试)。连续
+                    # 失败只留一条待刷事件(避免持续失败下 events 无界膨胀;
+                    # 每次失败都计数、都打日志,信息不丢)。
+                    self.flush_errors += 1
+                    if not (self._events
+                            and self._events[-1].get("event_type")
+                            == "ingest.flush_failed"):
+                        self._events.append({
+                            "event_type": "ingest.flush_failed",
+                            "seq": self._next_seq,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "error": repr(e)[:500],
+                        })
+                        self._next_seq += 1
+                    logger.error(
+                        "run_dispatcher: event flush {}/{} failed "
+                        "(re-buffered): {}",
+                        self._execution_id, len(events) + len(logs), e,
+                    )
+                else:
                     raise      # CancelledError 照常传播(取消语义不变)
-                logger.warning(
-                    "run_dispatcher: event flush {}/{} failed (re-buffered): {}",
-                    self._execution_id, len(events) + len(logs), e,
-                )
 
     async def finalize(self) -> None:
         """gather 收口后冲刷余量并等待在飞冲刷完成。"""
@@ -1277,7 +1339,8 @@ async def _fanout_graph(
 
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
-            on_event=_on_event, on_log=ingester.on_log, chain=chain,
+            on_event=_on_event, on_log=ingester.on_log,
+            log_counters=ingester.pump_counters, chain=chain,
             m2_info=graph_sem.get("m2_info"))
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
@@ -1490,7 +1553,8 @@ async def _fanout(
         try:
             await server_pool.start(
                 engine_log_path=run_dir / "server-engine.log", cwd=run_dir,
-                on_log=ingester.on_log)   # AD2:stderr 泵 → 本执行 ingester
+                on_log=ingester.on_log,   # AD2:stderr 泵 → 本执行 ingester
+                log_counters=ingester.pump_counters)  # S9:泵侧丢弃计数
         except Exception as e:  # noqa: BLE001
             await _teardown()
             raise
@@ -1827,6 +1891,7 @@ async def _fanout(
                                 engine_log_path=case_dir / "engine.log",
                                 on_event=_row_on_event,
                                 on_log=ingester.on_log,
+                                log_counters=ingester.pump_counters,
                                 n_runs=n_runs,
                             )
                     log_line["runResult"] = result.run_result
@@ -2208,6 +2273,101 @@ async def _finalize_execution(
     _row_states.pop(execution_id, None)
 
 
+# ── S6/S11:失败通知根因摘要(两行式)+ 出口打码 ────────────────────
+# 出口打码(窄防护):通知摘要是日志内容**唯一对外出口**,入 body 前做
+# 轻量正则打码 —— 只打「键名=值 / Bearer 串」的取值形态;引擎侧红线
+# (凭证不入 message,S11A 抽查测试)是主防线,这里是双保险。
+# 单遍 alternation(Bearer 分支优先;pair 值排除 ``Bearer`` 字面 —— 否则
+# ``Authorization: "Bearer x"`` 会被 pair 分支吞掉 ``Bearer`` 当值、真值裸奔)
+_MASK_RE = re.compile(
+    r"(\bbearer\s+)[^\s'\"]{3,}"
+    r"|(\b(?:password|passwd|secret|token|authorization|api[_-]?key)\b"
+    r"\s*[=:]\s*['\"]?)(?!bearer\b)[^\s'\"]{3,}",
+    re.IGNORECASE,
+)
+
+
+def _mask_secrets(text: str) -> str:
+    return _MASK_RE.sub(lambda m: (m.group(1) or m.group(2)) + "***", text)
+
+
+def _clip(s: str, n: int) -> str:
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+async def _failure_digest(db: AsyncSession, execution_id: int) -> "str | None":
+    """失败执行的两行式根因摘要(D6 定稿)。
+
+    锚点 = ``step.failed`` 事件(每失败 unit 最新一条,最多 3 组);
+    组内两行(混合时间轴 (ts,id) 上锚点之前,同 unit —— 并行多行时
+    不串行噪声;unit 为 NULL 的边界外日志视为全局行,对任一 unit 可见):
+      1. 最近 WARNING/ERROR 日志行;
+      2. 其前同 unit、同 step(锚事件 step)最近一行 —— #304 实证根因
+         细节常是 INFO(``expression=`` 在 INFO 里,WARNING 只有泛化句)。
+    回退:无 WARNING/ERROR → 锚前最后两条日志行;无日志 → 该组无产出。
+    全部组无产出 → None(通知回落现状文案)。消息过 ``_mask_secrets``。
+
+    竞态前置不变量:调用方顺序必须是 ``ingester.finalize()`` →
+    ``_finalize_execution`` → 本函数(§7 四步收口)—— 失败行日志刚进
+    缓冲即终态的场景,摘要靠 finalize 先冲刷余量才取得到(防回归用例
+    钉住该顺序)。
+    """
+    from sqlalchemy import and_, or_, select as _select
+
+    from ..models.execution import ExecutionEvent as EE
+
+    failed_rows = (await db.execute(
+        _select(EE).where(
+            EE.execution_id == execution_id,
+            EE.kind == "event", EE.event_type == "step.failed")
+        .order_by(EE.ts.desc(), EE.id.desc()).limit(50))).scalars().all()
+    anchors: dict[str, ExecutionEvent] = {}   # 倒序首见 = 该 unit 最新
+    for r in failed_rows:
+        anchors.setdefault(r.unit or "", r)
+    groups: list[str] = []
+    for unit, anchor in list(anchors.items())[:3]:
+        def _before(ts, id_):
+            return or_(EE.ts < ts, and_(EE.ts == ts, EE.id < id_))
+
+        def _in_unit():
+            # 同 unit + 全局行(unit NULL,边界外日志)
+            return or_(EE.unit == anchor.unit,
+                       EE.unit.is_(None)) if anchor.unit else True
+
+        l1 = l2 = None
+        warn = (await db.execute(
+            _select(EE).where(
+                EE.execution_id == execution_id, EE.kind == "log",
+                EE.level.in_(("WARNING", "ERROR", "CRITICAL")),
+                _in_unit(), _before(anchor.ts, anchor.id))
+            .order_by(EE.ts.desc(), EE.id.desc()).limit(1))).scalars().first()
+        if warn is not None:
+            l1 = warn
+            l2 = (await db.execute(
+                _select(EE).where(
+                    EE.execution_id == execution_id, EE.kind == "log",
+                    _in_unit(), EE.step == anchor.step,
+                    _before(warn.ts, warn.id))
+                .order_by(EE.ts.desc(), EE.id.desc()).limit(1))).scalars().first()
+        else:
+            # 回退:锚前最后两条日志行
+            last2 = (await db.execute(
+                _select(EE).where(
+                    EE.execution_id == execution_id, EE.kind == "log",
+                    _in_unit(), _before(anchor.ts, anchor.id))
+                .order_by(EE.ts.desc(), EE.id.desc()).limit(2))).scalars().all()
+            if last2:
+                l1 = last2[0]
+                l2 = last2[1] if len(last2) > 1 else None
+        if l1 is None or not (l1.message or "").strip():
+            continue
+        text = f"{unit or '?'}: " + _clip(_mask_secrets(l1.message), 120)
+        if l2 is not None and (l2.message or "").strip():
+            text += "\n↳ " + _clip(_mask_secrets(l2.message), 80)
+        groups.append(text)
+    return "\n".join(groups) if groups else None
+
+
 async def _notify_finished(ex: Execution, final_status: str) -> None:
     """execution_finished 通知(独立会话;任何失败只记日志)。
 
@@ -2232,13 +2392,26 @@ async def _notify_finished(ex: Execution, final_status: str) -> None:
                     run_label=label,
                 )
             else:
+                body = f"{ex.scenario_id} · {ex.passed} 通过 / {ex.failed} 失败"
+                if final_status == STATUS_FAILED:
+                    # S6:失败带两行式根因摘要(best-effort —— 摘要失败
+                    # 不影响通知本身;无日志执行回落现状文案)
+                    try:
+                        digest = await _failure_digest(s2, ex.id)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "run_dispatcher: failure digest for {} failed: {}",
+                            ex.id, e)
+                        digest = None
+                    if digest:
+                        body = body + "\n" + digest
                 await notify_svc.create_notification(
                     s2,
                     user_id=ex.owner_id,
                     type_="execution_finished",
                     title=("执行完成:" if final_status == STATUS_DONE
                            else "执行失败:") + label,
-                    body=f"{ex.scenario_id} · {ex.passed} 通过 / {ex.failed} 失败",
+                    body=body,
                     link=f"/executions/{ex.id}"
                          + ("?rows=failed" if final_status == STATUS_FAILED else ""),
                 )

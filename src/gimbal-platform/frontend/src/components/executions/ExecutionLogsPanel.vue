@@ -1,5 +1,6 @@
 /**
- * ExecutionLogsPanel — 执行详情页行内实时日志面板(结构化日志批 3/AD7)。
+ * ExecutionLogsPanel — 执行详情页行内实时日志面板(结构化日志批 3/AD7;
+ * 批 5/S7 窗口化渲染)。
  *
  * 形态:行内抽屉(D3 拍板)—— 展开即 tail `/logs/stream`,**收起即断开
  * 日志流**(连接数预算 §8:详情页已有事件流,日志流只在面板展开期间存在)。
@@ -11,10 +12,11 @@
  * - 自动滚动贴底;用户向上滚动即暂停自动滚动,回到底部恢复;
  * - 级别/类别/step 服务端筛选(变更重连流,backfill 回看最近窗口);
  * - done 帧 → 状态徽标收口;断线指数退避重连(Last-Event-ID 精确续传);
- * - 虚拟滚动不做(批 3 范围单执行数千行 DOM 可承受;万行级优化挂 S7)。
+ * - S7 窗口化:行高恒定(ROW_H),只渲染视口 ±overscan —— 万行级缓冲
+ *   DOM 不膨胀(jsdom/零高容器兜底:至少渲染 30 行)。
  */
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { executionLogsStreamUrl } from '@/api/executions'
 import { readSseStream } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
@@ -47,6 +49,33 @@ let abort: AbortController | null = null
 let reconnects = 0
 let generation = 0             // 筛选/收起换流时作废在飞泵
 
+// ── S7 窗口化渲染:行高恒定,只渲染视口 ±overscan ──────────────
+const ROW_H = 22               // 与 .log-row 的 height 保持一致(样式注释互指)
+const OVERSCAN = 12
+const win = reactive({ start: 0, end: 30 })
+const visibleRows = computed(() => rows.value.slice(win.start, win.end))
+
+function updateWindow(): void {
+  const el = scrollBox.value
+  const total = rows.value.length
+  if (!el) { win.start = 0; win.end = Math.min(total, 30); return }
+  const start = Math.max(0, Math.floor(el.scrollTop / ROW_H) - OVERSCAN)
+  const end = Math.ceil((el.scrollTop + el.clientHeight) / ROW_H) + OVERSCAN
+  win.start = start
+  // 零高容器兜底(jsdom/ detached):至少渲染 30 行,单测断言与冷开可见
+  win.end = Math.min(total, Math.max(start + 30, end))
+}
+
+// 行数变化(插入/裁剪)后:自动滚动贴底 + 重算窗口(scrollTop 赋值在
+// 部分环境不派发 scroll 事件,显式收口)
+watch(() => rows.value.length, () => {
+  void nextTick(() => {
+    const el = scrollBox.value
+    if (el && autoScroll) el.scrollTop = el.scrollHeight
+    updateWindow()
+  })
+})
+
 /** (ts,id) 插入排序(排序轴;tail 到达序不保证 ts 序)。 */
 function insertRow(row: LogRow): void {
   const arr = rows.value
@@ -65,17 +94,24 @@ function insertRow(row: LogRow): void {
 function withViewportAnchor(mutate: () => void): void {
   const el = scrollBox.value
   if (!el || autoScroll) { mutate(); return }
+  // 窗口化后实际行挂在撑高容器(inner)下;top spacer 无 data-row-id,过滤掉
+  const kids = Array.from(el.firstElementChild?.children ?? []).filter(
+    (n) => (n as HTMLElement).dataset.rowId !== undefined)
   const key = (node: Element) => (node as HTMLElement).dataset.rowId
-  const firstVisible = Array.from(el.children).find(
+  const firstVisible = kids.find(
     (n) => (n as HTMLElement).offsetTop >= el.scrollTop)
   const anchorKey = firstVisible ? key(firstVisible) : null
   const anchorTop = firstVisible ? (firstVisible as HTMLElement).offsetTop : 0
   mutate()
   void nextTick(() => {
-    if (anchorKey === null) return
-    const restored = Array.from(el.children).find((n) => key(n) === anchorKey)
-    if (restored) el.scrollTop = (restored as HTMLElement).offsetTop - anchorTop + el.scrollTop
-    else el.scrollTop = el.scrollTop   // 锚行被上限裁掉:保持现位置
+    if (anchorKey !== null) {
+      const restored = kids.find((n) => key(n) === anchorKey)
+      if (restored) {
+        el.scrollTop = (restored as HTMLElement).offsetTop - anchorTop + el.scrollTop
+      }
+      // 锚行被窗口裁掉/上限裁掉:保持现位置
+    }
+    updateWindow()
   })
 }
 
@@ -83,7 +119,7 @@ function onScroll(): void {
   const el = scrollBox.value
   if (!el) return
   autoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 24
-  if (autoScroll) void nextTick(() => { el.scrollTop = el.scrollHeight })
+  updateWindow()
 }
 
 async function pump(gen: number): Promise<void> {
@@ -114,12 +150,7 @@ async function pump(gen: number): Promise<void> {
       if (frame.event !== 'log' || frame.data === undefined) return
       try {
         const d = JSON.parse(frame.data) as LogRow
-        if (d.id !== undefined) {
-          withViewportAnchor(() => insertRow(d))
-          if (autoScroll) void nextTick(() => {
-            if (scrollBox.value) scrollBox.value.scrollTop = scrollBox.value.scrollHeight
-          })
-        }
+        if (d.id !== undefined) withViewportAnchor(() => insertRow(d))
       } catch { /* 坏帧忽略,流继续 */ }
     })
     if (connState.value !== ('done' as typeof connState.value) && gen === generation) {
@@ -181,15 +212,19 @@ onUnmounted(stop)
       <span class="logs-count dim mono">{{ rows.length }} 行</span>
     </div>
     <div ref="scrollBox" class="logs-scroll mono" @scroll.passive="onScroll">
-      <div
-        v-for="r in rows" :key="r.id" :data-row-id="r.id"
-        :class="['log-row', `lv-${(r.level || 'INFO').toLowerCase()}`]"
-      >
-        <span class="log-ts dim">{{ r.ts.slice(11, 23) }}</span>
-        <span class="log-lv">{{ r.level }}</span>
-        <span v-if="r.category" class="log-cat">{{ r.category }}</span>
-        <span v-if="r.step" class="log-step dim">{{ r.step }}</span>
-        <span class="log-msg">{{ r.message }}</span>
+      <!-- S7 窗口化:外层撑总高,顶部 spacer 抬偏移;行高恒定 ROW_H -->
+      <div :style="{ height: rows.length * ROW_H + 'px' }">
+        <div :style="{ height: win.start * ROW_H + 'px' }"></div>
+        <div
+          v-for="r in visibleRows" :key="r.id" :data-row-id="r.id"
+          :class="['log-row', `lv-${(r.level || 'INFO').toLowerCase()}`]"
+        >
+          <span class="log-ts dim">{{ r.ts.slice(11, 23) }}</span>
+          <span class="log-lv">{{ r.level }}</span>
+          <span v-if="r.category" class="log-cat">{{ r.category }}</span>
+          <span v-if="r.step" class="log-step dim">{{ r.step }}</span>
+          <span class="log-msg">{{ r.message }}</span>
+        </div>
       </div>
       <div v-if="rows.length === 0" class="logs-empty dim">
         {{ connState === 'live' ? '暂无匹配日志行…' : '等待日志…' }}
@@ -218,8 +253,9 @@ onUnmounted(stop)
 .logs-count { font-size: 11px; margin-left: auto; }
 .logs-scroll { height: 300px; overflow-y: auto; padding: 4px 0; background: #fff; }
 .log-row {
-  display: flex; gap: 8px; padding: 1px 10px; font-size: 12px;
-  line-height: 1.55; white-space: nowrap; align-items: baseline;
+  /* S7:行高恒定(窗口化渲染的前提)—— 改此值须同步 script 里 ROW_H */
+  display: flex; gap: 8px; padding: 0 10px; font-size: 12px;
+  height: 22px; line-height: 22px; white-space: nowrap; align-items: baseline;
 }
 .log-row:hover { background: #f1f5f9; }
 .log-ts { color: #94a3b8; flex: none; width: 86px; }

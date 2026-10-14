@@ -55,7 +55,12 @@ class ConsoleReporter(ReporterBase):
         self._verbosity: str = "normal"
 
     def begin(self, ctx) -> None:
-        self._no_color = bool(getattr(ctx.config, "no_color", False)) or bool(ctx.user("no_color", False))
+        # AD8 兜底:reporter 的 no_color 链路(ctx.config/user)不吃
+        # NO_COLOR 环境变量 —— 平台 spawn 已设 NO_COLOR=1,但该链路拿不到;
+        # 非 tty(重定向到 stderr 管道)时 ANSI 序列只是乱码,直接压掉
+        self._no_color = (bool(getattr(ctx.config, "no_color", False))
+                          or bool(ctx.user("no_color", False))
+                          or not sys.stderr.isatty())
         self._verbosity = str(ctx.user("verbosity", "normal"))
         if self._verbosity == "verbose":
             for et in ("http.request", "http.response"):

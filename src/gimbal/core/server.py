@@ -175,5 +175,10 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
         # 引擎单请求串行,多 worker 只会复制进程不带来吞吐,默认 1。
         workers=1,
         log_level="info",
+        # AD8:不装 uvicorn 自带彩色 logging 配置 —— 其日志改经 root →
+        # InterceptHandler 桥进 loguru,输出 JSON 行(顺带可入库)。桥接行
+        # 无 exec_context,category 落 core,按 unit/step 过滤时自然排除。
+        # access log 由 _silence_noisy_loggers 压到 WARNING。
+        log_config=None,
     )
     return 0

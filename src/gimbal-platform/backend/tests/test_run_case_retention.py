@@ -6,7 +6,7 @@ import time
 # ─── 测试基座(同 test_run_baseline:mock launch/convert 走 /api/runs 全链)──
 async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
-                       on_event=None, on_log=None,
+                       on_event=None, on_log=None, log_counters=None,
                        n_runs=1, retry=0):
     from tests.helpers import launch_ok
 

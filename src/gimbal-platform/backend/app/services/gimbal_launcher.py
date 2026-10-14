@@ -196,6 +196,7 @@ async def launch(
     engine_log_path: Path | None = None,
     on_event: "Callable[[dict], None] | None" = None,
     on_log: "Callable[[dict], None] | None" = None,
+    log_counters: "dict | None" = None,
     n_runs: int = 1,
     retry: int = 0,
 ) -> LaunchResult:
@@ -283,16 +284,20 @@ async def launch(
             # P2-03:stderr JSON 日志行即时回调(执行上下文标签/category 已在)
             if on_log is not None:
                 line = text.strip()
+                d = None
                 if line.startswith("{"):
                     try:
                         d = json.loads(line)
                     except (json.JSONDecodeError, ValueError):
                         d = None
-                    if isinstance(d, dict) and d.get("message") is not None:
-                        try:
-                            on_log(d)
-                        except Exception:  # noqa: BLE001
-                            logger.warning("gimbal_launcher: on_log 回调异常(已忽略)")
+                if isinstance(d, dict) and d.get("message") is not None:
+                    try:
+                        on_log(d)
+                    except Exception:  # noqa: BLE001
+                        logger.warning("gimbal_launcher: on_log 回调异常(已忽略)")
+                elif log_counters is not None:
+                    # S9 泵侧丢弃计数(legacy 链无级别门槛,仅非 JSON/畸形行)
+                    log_counters["logs_dropped_unparsable"] += 1
 
     # P2-03:stdout 逐行流式读取(on_event 边运行边回调;整流仍在内存,
     # 供 run.finished 双读与退化分支)。行级解析失败不阻断读取。

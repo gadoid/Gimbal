@@ -1,11 +1,15 @@
-<!-- ExecutionEvents.vue — 日志分析页(P2-07/C10;批 3/批 4 增强)。
+<!-- ExecutionEvents.vue — 日志分析页(P2-07/C10;批 3/批 4/批 5 增强)。
      单执行的事件与日志组合筛选:标签列/级别下限/事件类型/全文搜索;
-     category 聚合计数条(下拉同源驱动)。入口:执行详情页 + 工作台卡片。
+     category 聚合计计条(下拉同源驱动)。入口:执行详情页 + 工作台卡片。
      批 3:counts 驱动下拉;行点击右侧 Sheet(kv+payload);加载更多。
      批 4:S3 视图切换(日志/事件/混合时间轴 —— 混合=kind 不发,(ts,id)
      统一排序,事件与日志 interleaved 真实执行现场);S4 过滤态 URL 双向
      同步(进入读/变更 replace;深链分享);S1/S2 落地:around 深链
-     (失败事件锚点,来自详情页「查看日志」),锚行高亮。 -->
+     (失败事件锚点,来自详情页「查看日志」),锚行高亮。
+     批 5:S5 连续重复折叠(调用点键 (step,function,line,level),仅折叠
+     视图呈现,不影响数据/导出;#304 实证 (step,message) 精确匹配可折
+     行 0 —— 消息带插值变量,按调用点合并才是循环体);S7 行高恒定
+     (消息列单行省略,全文走右抽屉)。 -->
 <template>
   <ListPage title="日志分析" icon="history" width="wide"
     :subtitle="`执行 #${executionId} — 事件与日志按执行上下文标签筛选`">
@@ -51,6 +55,10 @@
       <input v-if="viewMode !== 'log'" v-model="filters.event_type" class="f-input" placeholder="事件类型" />
       <input v-model="filters.search" data-testid="f-search" class="f-input grow"
              placeholder="message 全文搜索…" />
+      <label class="fold-toggle" data-testid="f-fold">
+        <input type="checkbox" v-model="foldOn" />
+        折叠重复(调用点)
+      </label>
       <Button size="sm" @click="reload" data-testid="f-apply">筛选</Button>
       <Button variant="outline" size="sm" @click="reset">重置</Button>
       <Button v-if="aroundActive" variant="outline" size="sm"
@@ -89,26 +97,50 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="it in items" :key="it.id"
-              :class="['row-click', `row-${it.kind}`,
-                       { 'row-anchor': it.id === aroundId }]"
-              :data-testid="`ev-${it.seq}`"
-              :title="'点击查看完整字段'"
-              @click="openRow(it)">
-            <td class="mono">{{ it.seq }}</td>
-            <td class="mono ts">{{ shortTs(it.ts) }}</td>
-            <td><span class="kind-badge" :class="it.kind">{{ it.kind === 'log' ? '日志' : '事件' }}</span></td>
-            <td><span v-if="it.level" class="lv" :class="lvClass(it.level)">{{ it.level }}</span></td>
-            <td>{{ it.category ?? '—' }}</td>
-            <td>{{ it.module ?? '—' }}</td>
-            <td>{{ it.service ?? '—' }}</td>
-            <td>{{ it.unit ?? '—' }}</td>
-            <td>{{ it.step ?? '—' }}</td>
-            <td class="msg">
-              <span v-if="it.event_type" class="et mono">{{ it.event_type }}</span>
-              {{ it.message ?? '' }}
-            </td>
-          </tr>
+          <template v-for="d in displayItems" :key="d.kind === 'fold' ? `fold-${d.first.id}` : d.it.id">
+            <tr v-if="d.kind === 'single'"
+                :class="['row-click', `row-${d.it.kind}`,
+                         { 'row-anchor': d.it.id === aroundId }]"
+                :data-testid="`ev-${d.it.seq}`"
+                :title="'点击查看完整字段'"
+                @click="openRow(d.it)">
+              <td class="mono">{{ d.it.seq }}</td>
+              <td class="mono ts">{{ shortTs(d.it.ts) }}</td>
+              <td><span class="kind-badge" :class="d.it.kind">{{ d.it.kind === 'log' ? '日志' : '事件' }}</span></td>
+              <td><span v-if="d.it.level" class="lv" :class="lvClass(d.it.level)">{{ d.it.level }}</span></td>
+              <td>{{ d.it.category ?? '—' }}</td>
+              <td>{{ d.it.module ?? '—' }}</td>
+              <td>{{ d.it.service ?? '—' }}</td>
+              <td>{{ d.it.unit ?? '—' }}</td>
+              <td>{{ d.it.step ?? '—' }}</td>
+              <td class="msg">
+                <span v-if="d.it.event_type" class="et mono">{{ d.it.event_type }}</span>
+                {{ d.it.message ?? '' }}
+              </td>
+            </tr>
+            <!-- S5 折叠组:首行概览 + ×N;展开走右抽屉(行高恒定,S7) -->
+            <tr v-else
+                :class="['row-click', 'row-fold',
+                         { 'row-anchor': d.members.some((m) => m.id === aroundId) }]"
+                :data-testid="`fold-${d.first.id}`"
+                :title="`同调用点连续 ${d.count} 行 —— 点击查看明细`"
+                @click="openFold(d)">
+              <td class="mono dim">…</td>
+              <td class="mono ts">{{ shortTs(d.first.ts) }}</td>
+              <td><span class="kind-badge log">日志</span></td>
+              <td><span v-if="d.first.level" class="lv" :class="lvClass(d.first.level)">{{ d.first.level }}</span></td>
+              <td>{{ d.first.category ?? '—' }}</td>
+              <td>{{ d.first.module ?? '—' }}</td>
+              <td>{{ d.first.service ?? '—' }}</td>
+              <td>{{ d.first.unit ?? '—' }}</td>
+              <td>{{ d.first.step ?? '—' }}</td>
+              <td class="msg">
+                <span class="fold-badge" data-testid="fold-count">×{{ d.count }}</span>
+                {{ d.first.message ?? '' }}
+                <span class="fold-note dim">{{ foldCallSite(d.first) }}</span>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
       <div v-if="!aroundActive && hasMore" class="load-more">
@@ -122,32 +154,52 @@
       </div>
     </template>
 
-    <!-- 行详情(右侧 Sheet:展开外移,列表行高恒定) -->
+    <!-- 行详情/折叠组成员(右侧 Sheet:展开外移,列表行高恒定) -->
     <Sheet :open="rowOpen" @update:open="rowOpen = $event">
       <SheetContent side="right" class="w-[440px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[440px]">
         <SheetHeader class="border-b border-signal-line px-4 py-3">
-          <SheetTitle class="text-left mono text-sm">
+          <SheetTitle v-if="detailFold" class="text-left mono text-sm">
+            折叠组 · ×{{ detailFold.count }} 行
+          </SheetTitle>
+          <SheetTitle v-else class="text-left mono text-sm">
             {{ detailRow?.kind === 'log' ? '日志行' : '事件行' }} · #{{ detailRow?.id }}
           </SheetTitle>
           <SheetDescription class="text-left">
-            {{ detailRow?.level ?? detailRow?.event_type ?? '' }}
-            {{ detailRow?.category ? `· ${detailRow.category}` : '' }}
-            {{ detailRow?.step ? `· ${detailRow.step}` : '' }}
+            <template v-if="detailFold">
+              同调用点连续 {{ detailFold.count }} 行(近似折叠 —— 变量值合并
+              展示,点成员看全文/全字段):{{ foldCallSite(detailFold.first) }}
+            </template>
+            <template v-else>
+              {{ detailRow?.level ?? detailRow?.event_type ?? '' }}
+              {{ detailRow?.category ? `· ${detailRow.category}` : '' }}
+              {{ detailRow?.step ? `· ${detailRow.step}` : '' }}
+            </template>
           </SheetDescription>
         </SheetHeader>
         <div class="flex-1 overflow-y-auto p-4">
-          <table class="kv-table" v-if="detailRow">
-            <tbody>
-              <tr v-for="[k, v] in detailEntries" :key="k">
-                <td class="k mono">{{ k }}</td>
-                <td class="v mono">{{ v }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-if="detailRow?.payload && Object.keys(detailRow.payload).length" class="mt-3">
-            <div class="section-title">payload 全字段</div>
-            <pre class="payload-pre mono">{{ JSON.stringify(detailRow.payload, null, 2) }}</pre>
+          <!-- S5 折叠组成员明细 -->
+          <div v-if="detailFold" class="fold-members">
+            <button v-for="m in detailFold.members" :key="m.id"
+                    class="fold-member row-click" :data-testid="`fold-member-${m.id}`"
+                    @click="openRow(m)">
+              <span class="mono dim">{{ shortTs(m.ts) }}</span>
+              <span class="mono msg-line">{{ m.message ?? '' }}</span>
+            </button>
           </div>
+          <template v-else>
+            <table class="kv-table" v-if="detailRow">
+              <tbody>
+                <tr v-for="[k, v] in detailEntries" :key="k">
+                  <td class="k mono">{{ k }}</td>
+                  <td class="v mono">{{ v }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="detailRow?.payload && Object.keys(detailRow.payload).length" class="mt-3">
+              <div class="section-title">payload 全字段</div>
+              <pre class="payload-pre mono">{{ JSON.stringify(detailRow.payload, null, 2) }}</pre>
+            </div>
+          </template>
         </div>
       </SheetContent>
     </Sheet>
@@ -206,6 +258,84 @@ const categories = computed(() => Object.keys(counts.value).sort())
 /** 行详情(右抽屉) */
 const rowOpen = ref(false)
 const detailRow = ref<ExecutionEventItem | null>(null)
+/** S5 折叠组展开态(同一抽屉;点成员切回行详情) */
+const detailFold = ref<FoldGroup | null>(null)
+
+type FoldGroup = {
+  kind: 'fold'
+  count: number
+  first: ExecutionEventItem
+  members: ExecutionEventItem[]
+}
+type DisplayItem = { kind: 'single'; it: ExecutionEventItem } | FoldGroup
+
+/** S5 折叠开关(仅折叠视图呈现,不影响数据/导出/URL)。 */
+const foldOn = ref(true)
+
+/** 折叠键 = 调用点 (step,function,line,level):JsonSink 已序列化
+ * function/line(payload 携带),同调用点的连续行即循环体 —— #304 实证
+ * (step,message) 精确匹配可折行 0(消息带插值变量),按调用点才折得动。
+ * 近似折叠:同调用点不同变量值合并展示,明细走抽屉。 */
+function foldKey(it: ExecutionEventItem): string | null {
+  if (it.kind !== 'log') return null
+  const p = it.payload as Record<string, unknown> | null | undefined
+  const fn = p?.function
+  const ln = p?.line
+  if (typeof fn !== 'string' || !fn) return null
+  if (typeof ln !== 'number') return null
+  return `${it.step ?? ''}\u0000${fn}\u0000${ln}\u0000${it.level ?? ''}`
+}
+
+const displayItems = computed<DisplayItem[]>(() => {
+  if (!foldOn.value) {
+    return items.value.map((it) => ({ kind: 'single' as const, it }))
+  }
+  const out: DisplayItem[] = []
+  let cur: FoldGroup | null = null
+  let curKey: string | null = null
+  const flush = (): void => {
+    // 组结束:≥2 行才是折叠组;单次出现的调用点保持普通行(×1 无信息)
+    if (cur) out.push(cur.count > 1 ? cur : { kind: 'single', it: cur.first })
+    cur = null
+    curKey = null
+  }
+  for (const it of items.value) {
+    const k = foldKey(it)
+    if (k !== null && cur !== null && k === curKey) {
+      cur.count += 1
+      cur.members.push(it)
+      continue
+    }
+    flush()
+    if (k !== null) {
+      cur = { kind: 'fold', count: 1, first: it, members: [it] }
+      curKey = k
+    } else {
+      out.push({ kind: 'single', it })
+    }
+  }
+  flush()
+  return out
+})
+
+function foldCallSite(it: ExecutionEventItem): string {
+  const p = it.payload as Record<string, unknown> | null | undefined
+  const fn = typeof p?.function === 'string' ? p.function : ''
+  const ln = typeof p?.line === 'number' ? p.line : ''
+  return `${fn}:${ln}`
+}
+
+function openRow(it: ExecutionEventItem): void {
+  detailFold.value = null
+  detailRow.value = it
+  rowOpen.value = true
+}
+
+function openFold(g: FoldGroup): void {
+  detailRow.value = null
+  detailFold.value = g
+  rowOpen.value = true
+}
 const detailEntries = computed<[string, string][]>(() => {
   const r = detailRow.value
   if (!r) return []
@@ -217,11 +347,6 @@ const detailEntries = computed<[string, string][]>(() => {
     .filter((k) => r[k] !== null && r[k] !== undefined && r[k] !== '')
     .map((k) => [k, String(r[k])])
 })
-
-function openRow(it: ExecutionEventItem): void {
-  detailRow.value = it
-  rowOpen.value = true
-}
 
 const hasMore = computed(() => !aroundActive.value
   && items.value.length >= PAGE_SIZE
@@ -418,8 +543,32 @@ watch(() => route.query, () => {
 .kind-badge.log { background: #fefce8; color: #a16207; }
 .lv.warn { color: #b91c1c; font-weight: 600; }
 .et { margin-right: 6px; color: #71717a; }
-.msg { max-width: 420px; word-break: break-all; }
+.msg {
+  /* S7 行高恒定:单行省略,全文走右抽屉 */
+  max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .row-log { background: #fffbeb; }
+.row-fold { background: #fefce8; }
+.fold-badge {
+  font-size: 11px; background: #fde68a; color: #92400e;
+  padding: 0 6px; border-radius: 4px; margin-right: 6px;
+}
+.fold-note { font-size: 11px; margin-left: 8px; }
+.dim { color: #71717a; }
+.fold-toggle {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 13px;
+  white-space: nowrap; cursor: pointer; color: var(--muted-fg, #5B6472);
+}
+.fold-members { display: flex; flex-direction: column; gap: 2px; }
+.fold-member {
+  display: flex; gap: 8px; text-align: left; font-size: 12px;
+  border: none; background: #f8fafc; border-radius: 6px; padding: 4px 8px;
+  cursor: pointer;
+}
+.fold-member:hover { background: #eff6ff; }
+.fold-member .msg-line {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .row-anchor { outline: 2px solid #f59e0b; outline-offset: -2px; }
 .row-click { cursor: pointer; }
 .row-click:hover { outline: 1px solid #93c5fd; outline-offset: -1px; }
