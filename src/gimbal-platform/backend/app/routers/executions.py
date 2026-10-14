@@ -418,6 +418,118 @@ async def stream_execution_events(
     )
 
 
+def _log_sse_line(ev) -> str:
+    """日志行 → SSE 帧(AD5/§7:tail 游标=入库 id;展示序由前端 (ts,id) 排)。"""
+    import json as _json
+    payload = {
+        "id": ev.id, "ts": ev.ts.isoformat(), "kind": "log",
+        "level": ev.level, "category": ev.category,
+        "module": ev.module, "service": ev.service,
+        "unit": ev.unit, "attempt": ev.attempt, "step": ev.step,
+        "message": ev.message,
+    }
+    return ("id: " + str(ev.id) + "\n" + "event: log" + "\n" +
+            "data: " + _json.dumps(payload, ensure_ascii=False, default=str)
+            + "\n" + "\n")
+
+
+@router.get("/{execution_id}/logs/stream")
+async def stream_execution_logs(
+    ex: OwnedExecution,
+    request: Request,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+    backfill: Annotated[int, Query(ge=0, le=2000)] = 200,
+    level: str | None = None,
+    level_min: Annotated[str | None, Query(
+        description="最低日志级别(warning 以上口径)")] = None,
+    category: str | None = None,
+    module: str | None = None,
+    service: str | None = None,
+    unit: str | None = None,
+    step: str | None = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+) -> StreamingResponse:
+    """日志行 SSE 流(结构化日志设计 AD5/§7)。
+
+    * **tail 游标 = 入库序 ``id``**(Last-Event-ID 精确续传,不丢不重;
+      不用 (ts,id) —— ts 与入库先后不一致会稳态漏行);
+    * ``backfill`` 仅服务**首次打开回看**(无 Last-Event-ID 时先推最近
+      N 行,0 关闭);重连不走 backfill;
+    * 服务端筛选参数(与 /events 同面)——tail 只收过滤后的行;
+    * 无新行 ~15s 心跳注释帧;终态且已排空 → ``event: done`` 收口
+      (§7 四步协议保证终态前日志已全部落库,done 后不会再有行);
+    * 权限跟随执行可见性(§4 权限总则,OwnedExecution 同款)。
+    """
+    import asyncio as _asyncio
+
+    from ..core import db as db_module
+    from ..models.execution import STATUS_CANCELED, STATUS_DONE, STATUS_FAILED
+    from ..services import execution_store
+
+    try:
+        cursor = int(last_event_id) if last_event_id else 0
+    except ValueError:
+        cursor = 0
+    execution_id = ex.id
+    terminal = (STATUS_DONE, STATUS_FAILED, STATUS_CANCELED)
+    filters = dict(level=level, level_min=level_min, category=category,
+                   module=module, service=service, unit=unit, step=step,
+                   search=search)
+
+    async def _tail(after_id: int, limit: int):
+        async with db_module.SessionLocal() as session:
+            rows = await execution_store.query_events(
+                session, execution_id, kind="log", after_id=after_id,
+                order="id", limit=limit, **filters)
+            ex_row = await session.get(Execution, execution_id)
+            return rows, (ex_row.status if ex_row else STATUS_CANCELED)
+
+    async def _gen():
+        nonlocal cursor
+        idle_ticks = 0
+        waited = 0.0
+        # 首连 backfill:最近 N 行(id 倒取再正放),游标推进到最大 id
+        if not last_event_id and backfill > 0:
+            async with db_module.SessionLocal() as session:
+                recent = await execution_store.query_events(
+                    session, execution_id, kind="log", order="id_desc",
+                    limit=backfill, **filters)
+                recent.reverse()          # id 升序输出
+            for ev in recent:
+                cursor = ev.id
+                yield _log_sse_line(ev)
+        while waited < 3600.0:
+            if await request.is_disconnected():
+                return
+            rows, ex_status = await _tail(cursor, 500)
+            if rows:
+                idle_ticks = 0
+                for ev in rows:
+                    cursor = ev.id
+                    yield _log_sse_line(ev)
+            else:
+                idle_ticks += 1
+                if idle_ticks >= 15:
+                    idle_ticks = 0
+                    yield ": ping\n"
+            # 终态收敛:§7 四步协议 —— 日志全量落库先于终态状态,
+            # 终态且本轮排空即 done(之后不会再有行)
+            if ex_status in terminal and not rows:
+                import json as _json
+                yield ("event: done\n" + "data: " + _json.dumps(
+                    {"status": ex_status, "lastCursor": str(cursor)})
+                    + "\n" + "\n")
+                return
+            await _asyncio.sleep(1.0)
+            waited += 1.0
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/{execution_id}/events")
 async def get_execution_events(
     ex: OwnedExecution,

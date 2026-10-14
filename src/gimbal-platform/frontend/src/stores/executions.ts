@@ -17,6 +17,7 @@ import type { Execution, ExecutionListItem, ExecutionRow } from '@/api/execution
 import { executionEventsStreamUrl } from '@/api/executions'
 import { httpStatusOf } from '@/api/http'
 import { isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { readSseStream } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
 
 const REFRESH_THROTTLE_MS = 300
@@ -288,19 +289,6 @@ export const useExecutionsStore = defineStore('executions', () => {
     }, REFRESH_THROTTLE_MS)
   }
 
-  /** SSE 帧 → {id, event, data}(注释/心跳帧返回 null)。 */
-  function _parseFrame(frame: string): { id?: string; event?: string; data?: string } | null {
-    const out: { id?: string; event?: string; data?: string } = {}
-    for (const raw of frame.split('\n')) {
-      const line = raw.replace(/\r$/, '')
-      if (!line || line.startsWith(':')) continue
-      if (line.startsWith('id:')) out.id = line.slice(3).trim()
-      else if (line.startsWith('event:')) out.event = line.slice(6).trim()
-      else if (line.startsWith('data:')) out.data = line.slice(5).trim()
-    }
-    return out.id || out.event || out.data ? out : null
-  }
-
   async function _pump(id: number, gen: number = pollGeneration): Promise<void> {
     // 代际检查:stopPolling 递增了 pollGeneration → 本次重连是残留的,
     // 自行退出(不建新 SSE 连接,避免组件卸载后的僵尸流)
@@ -330,27 +318,15 @@ export const useExecutionsStore = defineStore('executions', () => {
         throw Object.assign(new Error(`stream ${resp.status}`), { status: resp.status })
       }
       reconnects = 0
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        let sep = buf.indexOf('\n\n')
-        while (sep >= 0) {
-          const frame = _parseFrame(buf.slice(0, sep))
-          buf = buf.slice(sep + 2)
-          sep = buf.indexOf('\n\n')
-          if (!frame) continue
-          if (frame.id) lastSeq = Math.max(lastSeq, Number(frame.id) || 0)
-          if (frame.event === 'done') {
-            await _refreshOnce(id).catch(() => { /* 终收敛尽力 */ })
-            return
-          }
-          if (frame.data !== undefined) _scheduleRefresh(id)
+      // AD7:帧解析收敛到共享 util(事件流/日志流同源;chunk 边界任意)
+      await readSseStream(resp, (frame) => {
+        if (frame.id) lastSeq = Math.max(lastSeq, Number(frame.id) || 0)
+        if (frame.event === 'done') {
+          void _refreshOnce(id).catch(() => { /* 终收敛尽力 */ })
+          return false          // 停读
         }
-      }
+        if (frame.data !== undefined) _scheduleRefresh(id)
+      })
       // 服务端关流但执行未终态(如网关空闲断链)→ 走重连路径
       if (!isTerminalExecutionStatus(detail.value?.status ?? '')) {
         throw new Error('stream closed before terminal')

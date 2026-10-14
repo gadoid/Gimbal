@@ -386,28 +386,43 @@ async def query_events(
     event_type: "str | None" = None,
     search: "str | None" = None,
     after_seq: "int | None" = None,
+    after_id: "int | None" = None,
+    order: "str | None" = None,
     limit: int = 500,
 ) -> list[ExecutionEvent]:
     """事件/日志组合筛选(P2-07 日志分析页与 SSE 续传共用读面)。
 
     标签精确匹配 + message 全文 search(ILIKE);``after_seq`` 支撑
     Last-Event-ID 续传语义;命中 (execution_id, seq) 索引。
+
+    游标与排序(结构化日志设计 AD5):
+    - ``after_seq``:事件轴游标(seq > ?);
+    - ``after_id`` + ``order="id"``:日志流 tail 模式 —— 入库序游标
+      (id > ?)按 id 排序。tail 必须用入库序而非 (ts,id):ts 是引擎
+      打点时间、入库先后由 flush 时机决定,(ts,id) 游标会稳态漏行
+      (先 ts 后入库的行落在已推进的 cursor 之下);
+    - 默认排序(未传 order)走 AD4 语义:event=seq,log/混合=(ts,id)。
     """
     from ..models.execution import ExecutionEvent as EE
 
     stmt = select(EE).where(EE.execution_id == execution_id)
     if after_seq is not None:
         stmt = stmt.where(EE.seq > after_seq)
+    if after_id is not None:
+        stmt = stmt.where(EE.id > after_id)
     if kind is not None:
         stmt = stmt.where(EE.kind == kind)
     if level is not None:
         stmt = stmt.where(EE.level == level)
     if level_min is not None:
         # 最低级别过滤(日志分析页「warning 以上」口径):按严重度序比较
-        order = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING",
-                 "ERROR", "CRITICAL")
-        rank = order.index(level_min.upper()) if level_min.upper() in order else 0
-        stmt = stmt.where(EE.level.in_(order[rank:]))
+        # (局部名避开同名参数 order —— 排序模式;曾因此被遮蔽致
+        # order="id_desc" 失效、backfill 走了 ts 序重复投递)
+        severity = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING",
+                    "ERROR", "CRITICAL")
+        rank = (severity.index(level_min.upper())
+                if level_min.upper() in severity else 0)
+        stmt = stmt.where(EE.level.in_(severity[rank:]))
     if category is not None:
         stmt = stmt.where(EE.category == category)
     if module is not None:
@@ -422,10 +437,15 @@ async def query_events(
         stmt = stmt.where(EE.event_type == event_type)
     if search:
         stmt = stmt.where(EE.message.ilike(f"%{search}%"))
-    # 排序轴(结构化日志设计 AD4):事件单查保持 seq(执行域语义序,SSE
-    # 续传依赖);日志/混合查按 (ts,id) 统一时间轴 —— 负数 seq 对 log 行
-    # 无序语义(跨批递减,仅唯一性令牌),禁止再按 seq 排日志。
-    if kind == "event":
+    # 排序轴(结构化日志设计 AD4/AD5):默认 event=seq(执行域语义序,SSE
+    # 续传依赖)/日志与混合=(ts,id) 统一时间轴;order="id" 为日志流 tail
+    # 模式(入库序,负数 seq 对 log 行无序语义,禁止再按 seq 排日志);
+    # order="id_desc" 仅供日志流 backfill 取最近 N 行(取后调用方反转)。
+    if order == "id":
+        stmt = stmt.order_by(EE.id.asc())
+    elif order == "id_desc":
+        stmt = stmt.order_by(EE.id.desc())
+    elif kind == "event":
         stmt = stmt.order_by(EE.seq.asc())
     else:
         stmt = stmt.order_by(EE.ts.asc(), EE.id.asc())

@@ -247,6 +247,18 @@ export function executionEventsStreamUrl(id: number): string {
   return `/api/executions/${id}/events/stream`
 }
 
+/** 日志流地址(AD5:tail 游标=入库 id;backfill 仅首次回看;服务端筛选)。 */
+export function executionLogsStreamUrl(
+  id: number,
+  params: Record<string, string | number | undefined> = {},
+): string {
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join('&')
+  return `/api/executions/${id}/logs/stream${qs ? `?${qs}` : ''}`
+}
+
 export interface ExecutionEventsQuery {
   kind?: 'event' | 'log'
   level?: string
