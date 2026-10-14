@@ -48,6 +48,9 @@ class PlateMock:
         self.revision_reviews: dict[str, dict[str, str]] = {}
         # C-1:/lines 回放({系统: [线条目]};缺省 1.0×1)
         self.lines: dict[str, list[dict]] = {}
+        # 场景导入 v2.3(W3):/lines/{line}/revisions 回放
+        # ({系统: {线: [修订条目]}});缺省每线 [#1, #2]。
+        self.line_revisions: dict[str, dict[str, list[dict]]] = {}
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -140,6 +143,17 @@ class PlateMock:
                 items = self.lines.get(
                     sysname, [{"line": "1.0", "revisions": 1,
                                "latest": "1.0#1"}])
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "system",
+                    "data": {"items": items, "total": len(items)}})
+            # 场景导入 v2.3(W3):线内修订列表(availableRevisions 组装面)
+            if ("/api/system/" in path and "/lines/" in path
+                    and path.endswith("/revisions")):
+                seg = [p for p in path.split("/") if p]
+                i = seg.index("system")
+                sysname, line = seg[i + 1], seg[i + 3]
+                items = self.line_revisions.get(sysname, {}).get(
+                    line, [{"ref": f"{line}#1"}, {"ref": f"{line}#2"}])
                 return httpx.Response(200, json={
                     "ok": True, "dim": "system",
                     "data": {"items": items, "total": len(items)}})

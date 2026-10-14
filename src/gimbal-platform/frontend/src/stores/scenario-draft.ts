@@ -46,10 +46,17 @@ export function schemeToOverlay(
 
 /** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。
  *  overlay(按方案导出)不传 → 凭证/服务绑定零注入;carry 物化无条件
- *  (spec §4.3 勘误:默认导出与按方案导出同源)。 */
+ *  (spec §4.3 勘误:默认导出与按方案导出同源)。
+ *  working 声明提示(R2/P8 收口):本函数是全部导出路径的统一汇合点,
+ *  预览态场景提示先钉修订 —— 不改写声明,可继续导出(导入侧有黄条兜底)。 */
 export async function convertDraftToExecutable(
   draft: ScenarioDraft, overlay?: RunOverlay,
 ): Promise<Record<string, any>> {
+  const plate = ((draft.definition as Record<string, any>)?.meta as
+    { plate?: Record<string, string> } | undefined)?.plate || {}
+  if (Object.values(plate).some((r) => r === 'working')) {
+    toast.warning('预览态场景(声明 working)——建议先钉修订再导出,文件将按 working 原样携带')
+  }
   const res = await previewPlateDraft(draft, overlay)
   if (!res.ok) {
     const errMsg = res.errors?.length

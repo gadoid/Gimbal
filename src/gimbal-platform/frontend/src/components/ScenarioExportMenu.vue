@@ -27,13 +27,18 @@
       </button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" class="sl-menu">
+      <!-- 统一导出(v2.3 收口/P8):可执行形态 = 唯一文件格式,同一产物
+           既可执行也可导入(同源测试钉死),不再区分「可导入/可执行」
+           两个入口 —— /export(服务端权威产物)留给 API/CLI 消费。 -->
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('json')">导出 JSON</DropdownMenuItem>
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('yaml')">导出 YAML</DropdownMenuItem>
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('copy')">复制 JSON</DropdownMenuItem>
       <!-- 按方案导出(spec §8):方案的 serviceBindings 物化进导出(envId 已退役)。
            形态与场景库行菜单同款(2026-09-22 重设计):方案平铺为子菜单项,
            闭包持方案对象(同名方案以身份区分不串台);加载中 / 无方案有
-           置灰说明;Separator 与上方三动作分组。菜单面板走 sl-menu 体系。 -->
+           置灰说明;Separator 与上方三动作分组。菜单面板走 sl-menu 体系。
+           P8 注:overlay 产物含导出人明文凭证 —— 可导入(导入侧 P2 清空
+           users)但不适合当传递文件,提示写在触发器 title。 -->
       <DropdownMenuSeparator />
       <DropdownMenuSub>
         <DropdownMenuSubTrigger class="sl-menu-item" :disabled="schemesLoading" data-testid="export-sub-trigger">

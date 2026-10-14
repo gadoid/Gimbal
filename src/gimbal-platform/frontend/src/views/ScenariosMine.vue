@@ -48,8 +48,35 @@
             : '勾选场景后加入 Suite'"
         @click="atsOpen = true"
       >加入 Suite{{ selectedCount ? ` (${selectedCount})` : '' }}</button>
+      <!-- 场景导入入口(v2.3 方案 §3.2,W5):member+ 可见(后端 403 为
+           权威);选 JSON 文件 → 本地解析 → 确认对话框(析出映射/认证
+           引用/ID 冲突)。MemberUser 收紧见 routers/scenario_import.py。 -->
+      <button
+        v-if="auth.hasRole('member', 'admin')"
+        type="button"
+        class="slib-import"
+        data-testid="mine-import"
+        title="导入「导出 JSON」产物(可执行形态,同一文件既可执行也可导入)"
+        @click="importFileInput?.click()"
+      >导入场景</button>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept="application/json,.json"
+        class="hidden"
+        data-testid="mine-import-file"
+        @change="onImportFile"
+      />
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
+
+    <!-- 导入确认单(纯展示,配置由 ImportScenarioDialog 承载) -->
+    <ImportScenarioDialog
+      :open="importOpen"
+      :bundle="importBundle"
+      @close="importOpen = false"
+      @imported="onImported"
+    />
 
     <!-- 筛选分组:当前搜索/筛选存为命名分组,点名 = 以分组名搜索(存服务端) -->
     <FilterGroups
@@ -319,6 +346,7 @@ import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-dra
 import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import AddToSuiteDialog from '@/components/suites/AddToSuiteDialog.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
+import ImportScenarioDialog from '@/components/ImportScenarioDialog.vue'
 import { listShares, deleteShare, listScenarioReferrers } from '@/api/shares'
 import { getHandoffUnread } from '@/api/handoff'
 import { markRead } from '@/api/notifications'
@@ -445,6 +473,44 @@ function openScenario(row: ScenarioListItem) {
 }
 function onCreate() {
   router.push('/composer/new?step=1')
+}
+
+// ── 场景导入(v2.3 方案 §3.2,W5)─────────────────────────────────
+const importFileInput = ref<HTMLInputElement | null>(null)
+const importOpen = ref(false)
+const importBundle = ref<Record<string, unknown> | null>(null)
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024
+
+function onImportFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 同名文件可重复选择
+  if (!file) return
+  if (file.size > IMPORT_MAX_BYTES) {
+    toast.error('文件超过 5MB 上限')
+    return
+  }
+  file.text().then((text) => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      toast.error('文件不是合法 JSON(YAML 请先转存 JSON)')
+      return
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      toast.error('文件顶层必须是 JSON 对象 —— 请使用「导出场景(可导入)」产物')
+      return
+    }
+    importBundle.value = parsed as Record<string, unknown>
+    importOpen.value = true
+  })
+}
+
+async function onImported(scenarioId: string) {
+  importOpen.value = false
+  // 导入成功即引导先跑执行预检(toast 已提示);跳详情页让用户接手配置
+  router.push(scenarioDetailUrl(scenarioId))
 }
 function goSchemes(row: ScenarioListItem) {
   router.push(scenarioSchemesUrl(row.meta.scenarioId))
@@ -824,6 +890,22 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   border-color: rgb(100 116 139 / 25%);
 }
 .slib-addsuite:not(:disabled):hover { background: rgb(34 197 94 / 18%); }
+
+/* 场景导入入口(与 addsuite 同排同尺,蓝系以示「流入」;member+ 可见) */
+.slib-import {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #2f6fed;
+  background: rgb(47 111 237 / 8%);
+  border: 1px solid rgb(47 111 237 / 40%);
+  white-space: nowrap;
+}
+.slib-import:hover { background: rgb(47 111 237 / 16%); }
+.hidden { display: none; }
 
 /* 「共享给我的(引用)」区块(与 Suite 列表同款样式口径) */
 .shared-in { margin-top: 22px; }

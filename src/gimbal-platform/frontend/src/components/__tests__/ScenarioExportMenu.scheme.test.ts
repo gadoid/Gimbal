@@ -139,7 +139,8 @@ describe('ScenarioExportMenu — 按方案导出(新 CRUD 取数)', () => {
     listRunSchemesMock.mockResolvedValue([])
     const w = mountMenu()
     const items = await openMenu(w)
-    // 主菜单:三动作 + 子菜单触发器;子菜单本体给置灰说明而不是消失
+    // 主菜单:三动作 + 子菜单触发器(P8 收口:统一导出,单一概念);
+    // 子菜单本体给置灰说明而不是消失
     expect(items).toHaveLength(4)
     expect(items.some((i) => i.textContent!.includes('按方案导出'))).toBe(true)
 

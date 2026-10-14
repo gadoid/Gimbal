@@ -180,6 +180,7 @@ async def create_user(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="user.create", resource_type="user", resource_id=str(new_user.id),
+        resource_name=new_user.display_name or new_user.username,
         detail={"username": new_user.username, "role": new_user.role},
     )
     return _user_out(new_user)
@@ -212,6 +213,9 @@ async def patch_user(
         )
 
     data = payload.model_dump(exclude_unset=True)
+    # 审计前值快照:role/is_active 的旧值在改写前留底(读侧渲染
+    # 「从 X 改为 Y」,事后资源/记录不可追)
+    prev_role, prev_active = target.role, target.is_active
 
     # ── authorization (privilege-escalation fix) ──
     if caller.role != "admin":
@@ -278,8 +282,10 @@ async def patch_user(
         db, actor_id=caller.id,
         actor_name=caller.display_name or caller.username,
         action="user.role_change", resource_type="user", resource_id=str(target.id),
+        resource_name=target.display_name or target.username,
         detail={"username": target.username, "changed": sorted(data.keys()),
-                "role": target.role, "is_active": target.is_active},
+                "role": target.role, "is_active": target.is_active,
+                "role_from": prev_role, "is_active_from": prev_active},
     )
     return _user_out(target)
 
@@ -326,6 +332,7 @@ async def reset_password(
         actor_name=caller.display_name or caller.username,
         action="user.reset_password", resource_type="user",
         resource_id=str(user_id),
+        resource_name=target.display_name or target.username,
         detail={"username": target.username, "self": caller.id == target.id},
     )
     return {
@@ -596,10 +603,14 @@ async def delete_user(
         actor_id=caller.id, actor_name=caller_label,
         action="user.delete",
         resource_type="user", resource_id=str(user_id),
+        resource_name=target.display_name or target.username,
         detail={
             "username": target.username,
             "disposal": disposal,
             "transfer_to": transferee.id if transferee else None,
+            "transfer_to_name": (
+                transferee.display_name or transferee.username
+            ) if transferee else None,
             "scenarios": len(scenario_ids),
         },
     )

@@ -217,6 +217,7 @@ async def post_announcement(
         db, actor_id=admin.id,
         actor_name=admin.display_name or admin.username,
         action="announcement.publish", resource_type="announcement",
-        resource_id=None, detail={"title": body.title, "delivered": n},
+        resource_id=None, resource_name=body.title,
+        detail={"title": body.title, "delivered": n},
     )
     return {"delivered": n}

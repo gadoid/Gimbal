@@ -23,6 +23,9 @@ AUDIT_ACTIONS = (
     "adaptation.batch.apply",
     "adaptation.batch.rollback",
     "alias.write",        # 别名登记/改/删
+    # I4(集成线 v2 §3.2):外部目录只读标记 admin 写(误标 = 平台账号
+    # 可能执行写操作,须留痕)
+    "external_endpoint.query_safe",
     "share.admin_revoke",  # admin 撤销引用(特权收缩,权限域二期 P2)
     "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10)
 )
@@ -36,16 +39,24 @@ async def record(
     action: str,
     resource_type: str | None = None,
     resource_id: str | None = None,
+    resource_name: str | None = None,
     detail: dict | None = None,
 ) -> None:
-    """落一条审计记录(best-effort:失败仅记日志,不抛)。"""
+    """落一条审计记录(best-effort:失败仅记日志,不抛)。
+
+    ``resource_name``:资源名称快照,与 actor_name 同理 —— 资源事后被删,
+    审计仍可读(读侧优先展示名称,旧记录回落 ``type:id``)。
+    """
     from loguru import logger
 
+    merged = dict(detail or {})
+    if resource_name:
+        merged.setdefault("resource_name", resource_name)
     try:
         db.add(AuditLog(
             actor_id=actor_id, actor_name=actor_name or "", action=action,
             resource_type=resource_type, resource_id=resource_id,
-            detail=detail or {},
+            detail=merged,
         ))
         await db.commit()
     except Exception as e:  # noqa: BLE001

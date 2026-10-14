@@ -35,6 +35,7 @@ from .routers import (
     runs,
     run_schemes,
     scenario_filter_groups,
+    scenario_import,
     scenarios,
     environments,
     external_endpoints,
@@ -221,6 +222,8 @@ def create_app() -> FastAPI:
     app.include_router(run_schemes.router, prefix="/api")
     # 场景库筛选分组(存 user_prefs,零迁移):命名的搜索/筛选条件入口
     app.include_router(scenario_filter_groups.router, prefix="/api")
+    # 场景导入流水线(v2.3):/scenarios/import 两端点,先于 catch-all 注册
+    app.include_router(scenario_import.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
     app.include_router(report_definitions_router, prefix="/api")
 

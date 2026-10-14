@@ -7,6 +7,9 @@
   * 时间列原用 toISOString(UTC),+8 时区早上会显示成前一天下午;
     统一走 mediumDateTime(本地时区)。
   对象列 = resourceType + resourceId(原来丢 resourceType,只剩裸 id)。
+  2026-10-14 可读性收口:动作/对象/详情三列人话化 —— 动作走
+  auditText 中文标签表;对象优先 resource_name 快照(无名称老记录回落
+  type:id);详情按动作渲染中文模板,原始 JSON 收进 <details> 展开区。
 -->
 <template>
   <div class="lib-card p-4">
@@ -21,8 +24,9 @@
         class="audit-chip"
         :class="{ active: action === a }"
         :data-testid="`audit-chip-${a}`"
+        :title="a"
         @click="setAction(action === a ? '' : a)"
-      >{{ a }}</button>
+      >{{ auditActionLabel(a) }}</button>
       <button
         type="button"
         class="audit-refresh"
@@ -38,7 +42,7 @@
         <TableRow>
           <TableHead class="w-[160px]">时间</TableHead>
           <TableHead class="w-[140px]">操作者</TableHead>
-          <TableHead class="w-[200px]">动作</TableHead>
+          <TableHead class="w-[130px]">动作</TableHead>
           <TableHead class="w-[200px]">对象</TableHead>
           <TableHead>详情</TableHead>
         </TableRow>
@@ -47,12 +51,20 @@
         <TableRow v-for="row in rows" :key="row.id" :data-testid="`audit-row-${row.id}`">
           <TableCell class="muted">{{ mediumDateTime(row.createdAt) }}</TableCell>
           <TableCell>{{ row.actorName || (row.actorId ? `#${row.actorId}` : '系统') }}</TableCell>
-          <TableCell><span class="audit-chip static">{{ row.action }}</span></TableCell>
-          <TableCell class="mono">
-            <template v-if="row.resourceType || row.resourceId">{{ row.resourceType ?? '' }}{{ row.resourceType && row.resourceId ? ':' : '' }}{{ row.resourceId ?? '' }}</template>
+          <TableCell><span class="audit-chip static" :title="row.action">{{ auditActionLabel(row.action) }}</span></TableCell>
+          <TableCell>
+            <template v-if="row.resourceType || row.resourceId">
+              <span :class="{ mono: !auditResourceName(row) }">{{ auditResourceText(row) }}</span>
+            </template>
             <template v-else>—</template>
           </TableCell>
-          <TableCell class="mono audit-detail">{{ JSON.stringify(row.detail) }}</TableCell>
+          <TableCell>
+            <div class="audit-detail-text">{{ describeAuditDetail(row) }}</div>
+            <details v-if="Object.keys(row.detail ?? {}).length" class="audit-raw" :data-testid="`audit-raw-${row.id}`">
+              <summary>原始数据</summary>
+              <pre>{{ JSON.stringify(row.detail, null, 2) }}</pre>
+            </details>
+          </TableCell>
         </TableRow>
       </TableBody>
     </Table>
@@ -70,6 +82,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { listAuditLogs, type AuditLogRow } from '@/api/admin'
 import { mediumDateTime } from '@/utils/datetime'
+import {
+  auditActionLabel, auditResourceName, auditResourceText, describeAuditDetail,
+} from './auditText'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
@@ -140,7 +155,26 @@ onMounted(() => { void load() })
 }
 .audit-refresh:hover:not(:disabled) { color: #2f6fed; border-color: #2f6fed; }
 .audit-refresh:disabled { color: #c4c9d2; cursor: default; }
-.audit-detail { font-size: 11px; color: #64748b; word-break: break-all; }
+.audit-detail-text { font-size: 12px; color: #334155; }
+.audit-raw { margin-top: 4px; }
+.audit-raw summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #94a3b8;
+  user-select: none;
+}
+.audit-raw summary:hover { color: #2f6fed; }
+.audit-raw pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  color: #64748b;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 .muted { color: #64748b; }
 .mono { font-family: ui-monospace, monospace; font-size: 11.5px; }
 </style>

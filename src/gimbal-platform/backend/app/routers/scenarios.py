@@ -31,6 +31,7 @@ from ._ownership import can_read_scenario, ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
+    ExportOverlay,
     PreviewPlateError,
     PreviewPlateIn,
     PreviewPlateResponse,
@@ -118,6 +119,94 @@ def _draft_to_full_scenario_dict(
     return definition
 
 
+async def _materialized_executable(
+    db: AsyncSession,
+    *,
+    definition: dict,
+    ui: dict | None,
+    owner_id: int,
+    overlay: ExportOverlay | None = None,
+) -> dict:
+    """plate /convert + 执行同源物化 —— preview-plate 与 /export 共用(W1)。
+
+    输入任意来源的 definition(草稿或落库行;平台 meta 剥离幂等),输出
+    gimbal 可执行形态:overlay=None(默认导出)时凭证/服务绑定零注入,
+    carry 无条件物化(spec §4.3);overlay 携带 serviceBindings 时按 spec
+    §8 注入凭证。plate 拒收/不可达原样上抛,由调用方映射 422/502。
+    """
+    from ..services.scenario_store import _strip_platform_meta as _spm
+
+    clean = dict(definition)
+    _meta = clean.get("meta")
+    if isinstance(_meta, dict):
+        clean["meta"] = _spm(_meta)
+    data = await plate_client.convert(clean)
+    converted = (data or {}).get("converted") or {}
+    # Optional export overlay (spec §8): convert 之后、返回之前物化
+    # (POST-convert 位点,明文绑定/凭证不过 plate)。物化语义与
+    # run 执行链(run_dispatcher._fanout)同源 — 黄金等价:同场景同
+    # overlay 下产物 ≡ 基线单行 case.json,逐字段相等。
+    if overlay is not None:
+        # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
+        # scan_auth_aliases(definition steps)∪ 绑定 authAlias(去重即可)。
+        scanned = scan_auth_aliases(clean.get("steps") or [])
+        bound = [b.auth_alias for b in overlay.service_bindings.values()
+                 if b.auth_alias]
+        aliases = sorted(set([*scanned, *bound]))
+        try:
+            exec_auths = await run_dispatcher._resolve_exec_auths(
+                run_dispatcher.session_factory, owner_id=owner_id,
+                aliases=aliases)
+        except run_dispatcher._AuthResolveError as e:
+            # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
+            # 副作用,直接拒答 422 而非 500)。
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "auth_resolve_failed", "message": str(e)},
+            )
+        # built_in 基座与 dispatch 同源:场景 definition.config.users
+        # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
+        def_cfg = (clean.get("config") or {})
+        built_in = (def_cfg.get("users")
+                    if isinstance(def_cfg.get("users"), dict) else {})
+        service_bindings = {k: b.model_dump(by_alias=True)
+                            for k, b in overlay.service_bindings.items()}
+    else:
+        # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
+        # 的唯一开关;carry 见下方无条件物化。
+        exec_auths = []
+        built_in = {}
+        service_bindings = {}
+    # carry 同源注入(spec §4.3 勘误):与 dispatch 共用 build_carry_context
+    # → 导出产物 = 绑定状态的当时快照。无条件执行 — 默认导出与按方案
+    # 导出走同一套 carry 物化。plate 故障在 build 内部降级(不注入,
+    # 不 5xx);此处再兜一层 — carry 是增强不是前置条件。
+    try:
+        carry_ctx = await build_carry_context(
+            db, clean, ui_field_states=(ui or {}).get("fieldStates") or {})
+    except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
+        logger.opt(exception=True).warning(
+            "materialized_executable: carry context build failed; skipped")
+        carry_ctx = None
+    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— 与 dispatch 同一
+    # helper、同一物化组装点(执行/导出同源);查表失败降级空表。
+    try:
+        alias_urls = await service_aliases.base_urls_for(
+            db, referenced_services(clean.get("steps") or []))
+    except Exception:  # noqa: BLE001 — 别名默认绝不阻塞导出
+        logger.opt(exception=True).warning(
+            "materialized_executable: alias base_url lookup failed; skipped")
+        alias_urls = {}
+    return materialize_run_copy(
+        converted,
+        service_bindings=service_bindings,
+        resolved_auths=exec_auths,
+        built_in_users=dict(built_in or {}),
+        carry_context=carry_ctx,
+        alias_base_urls=alias_urls,
+    )
+
+
 # ── 1) POST /preview-plate (static — must precede /{scenario_id}) ──
 @router.post(
     "/preview-plate", response_model=PreviewPlateResponse
@@ -136,7 +225,9 @@ async def preview_plate(
         body, owner=user.display_name or user.username
     )
     try:
-        data = await plate_client.convert(scenario_dict)
+        converted = await _materialized_executable(
+            db, definition=scenario_dict, ui=body.ui,
+            owner_id=user.id, overlay=body.overlay)
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(
             status_code=502,
@@ -154,77 +245,9 @@ async def preview_plate(
                 "errors": list(e.errors or []),
             },
         )
-    # Plate returns ``{consumer, converted}`` on success.  Treat any
-    # ``errors[]`` inside ``converted`` as field-level issues.  We pass
-    # the full ``converted`` dict back so the frontend can use it as the
-    # canonical "gimbal-executable" structure for export.
-    converted = (data or {}).get("converted") or {}
-    # Optional export overlay (spec §8): convert 之后、返回之前物化
-    # (POST-convert 位点,明文绑定/凭证不过 plate)。物化语义与
-    # run 执行链(run_dispatcher._fanout)同源 — 黄金等价:同场景同
-    # overlay 下 preview-plate 产物 ≡ 基线单行 case.json,逐字段相等。
-    # (旧执行环境覆盖键已随 D2 退役;overlay 只收 serviceBindings。)
-    if body.overlay is not None:
-        # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
-        # scan_auth_aliases(definition steps)∪ 绑定 authAlias。预览侧
-        # 无需保序,去重即可(dispatch 侧 dict.fromkeys 保序仅为一稳定日志序)。
-        scanned = scan_auth_aliases(body.definition.get("steps") or [])
-        bound = [b.auth_alias for b in body.overlay.service_bindings.values()
-                 if b.auth_alias]
-        aliases = sorted(set([*scanned, *bound]))
-        try:
-            exec_auths = await run_dispatcher._resolve_exec_auths(
-                run_dispatcher.session_factory, owner_id=user.id, aliases=aliases)
-        except run_dispatcher._AuthResolveError as e:
-            # 凭证路径 fail-fast 的预览侧形态(dispatch 整单失败同语义;
-            # preview 无执行副作用,直接拒答 422 而非 500)。
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "auth_resolve_failed", "message": str(e)},
-            )
-        # built_in 基座与 dispatch 同源:场景 definition.config.users
-        # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
-        def_cfg = (body.definition.get("config") or {})
-        built_in = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
-        service_bindings = {k: b.model_dump(by_alias=True)
-                            for k, b in body.overlay.service_bindings.items()}
-    else:
-        # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
-        # 的唯一开关;carry 见下方无条件物化。
-        exec_auths = []
-        built_in = {}
-        service_bindings = {}
-    # carry 同源注入(spec §4.3 勘误):与 dispatch 共用 build_carry_context
-    # → 导出产物 = 绑定状态的当时快照。无条件执行 — 默认导出与按方案
-    # 导出走同一套 carry 物化(执行/导出不再系统性漂移)。plate 故障在
-    # build 内部降级(不注入,不 5xx);此处再兜一层 — carry 是增强
-    # 不是前置条件,任何故障(含 DB)都降级为无 carry,绝不阻塞导出。
-    try:
-        carry_ctx = await build_carry_context(
-            db, body.definition,
-            ui_field_states=(body.ui or {}).get("fieldStates") or {})
-    except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
-        logger.opt(exception=True).warning(
-            "preview_plate: carry context build failed; skipped")
-        carry_ctx = None
-    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— 与 dispatch 同一
-    # helper、同一物化组装点(执行/导出同源);别名默认是增强不是前置
-    # 条件,查表失败降级空表。
-    try:
-        alias_urls = await service_aliases.base_urls_for(
-            db, referenced_services(body.definition.get("steps") or []))
-    except Exception:  # noqa: BLE001 — 别名默认绝不阻塞导出
-        logger.opt(exception=True).warning(
-            "preview_plate: alias base_url lookup failed; skipped")
-        alias_urls = {}
-    converted = materialize_run_copy(
-        converted,
-        service_bindings=service_bindings,
-        resolved_auths=exec_auths,
-        built_in_users=dict(built_in or {}),
-        carry_context=carry_ctx,
-        alias_base_urls=alias_urls,
-    )
+    # ``errors[]`` inside ``converted`` = 字段级问题,原样透传;
+    # ``converted`` 即 "gimbal-executable" 结构(W1 起与 /export 同源,
+    # 组装收敛在 _materialized_executable)。
     inner_errors = converted.get("errors") or []
     return PreviewPlateResponse(
         ok=True,
@@ -821,8 +844,10 @@ async def delete_scenario(
 async def export_scenario(
     scenario_id: str, user: CurrentUser, db: DbSession,
 ) -> dict:
-    """导出场景定义（含 meta.plate 精确修订）——可直接被 CLI 与其他
-    平台实例使用（R19:文件自带版本声明）。"""
+    """导出**可执行形态**(W1,场景导入 v2.3 方案):plate 转换 + carry/
+    别名 URL 无条件物化,与 preview-plate 默认导出同源(overlay 黄金
+    等价)——Gimbal CLI 可直接执行,亦是导入流水线的唯一文件格式。
+    带方案导出(凭证注入)走 preview-plate 的 overlay。"""
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise HTTPException(404, f"scenario_not_found: {scenario_id}")
@@ -830,51 +855,32 @@ async def export_scenario(
     # (旧代码直接调三参 can_read_scenario —— 签名收紧后即 500,2026-10-12)
     await _require_reader_async(db, user, row)
     from ..services.scenario_store import definition_from_payload
-    return definition_from_payload(row.payload or {})
-
-
-class ImportIn(BaseModel):
-    """R19 导入:场景定义(M2 实例,含 meta.plate)。"""
-
-    definition: dict
-
-
-@router.post("/import", status_code=201)
-async def import_scenario(
-    user: CurrentUser, db: DbSession, body: ImportIn,
-) -> dict:
-    """导入场景（R19）:按 meta.plate 声明的修订经 /convert 校验后
-    入库;无 meta.plate 或声明的修订不存在 → 422(由导入人选修订,
-    不猜测来源版本)。"""
-    from ..services import plate_client as pc
-    definition = body.definition
-    meta_plate = (definition.get("meta") or {}).get("plate") or {}
-    if not meta_plate:
-        raise HTTPException(422, detail={
-            "code": "meta_plate_required",
-            "message": "导入文件缺 meta.plate(R19:须声明精确修订)"})
+    payload = row.payload or {}
     try:
-        await pc.convert({"definition": definition})
-    except pc.PlateRejectedError as e:
-        raise HTTPException(422, detail={
-            "code": "convert_rejected",
-            "message": f"按声明修订校验失败: {e}"}) from e
-    except pc.PlateUnavailableError as e:
-        raise HTTPException(502, detail={
-            "code": "plate_unavailable",
-            "message": e.message}) from e
-    from ..schemas.scenario_composer import ScenarioDraft
-    draft = ScenarioDraft(definition=definition)
-    try:
-        created = await scenario_store.create(
-            db, draft, owner=user.display_name or user.username,
-            owner_id=user.id)
-    except ValueError as e:
-        if "scenario_id_exists" in str(e):
-            raise HTTPException(409, detail={
-                "code": "scenario_id_exists",
-                "message": (f"场景 ID {definition.get('scenarioId', '?')} "
-                            "已存在——修改 scenarioId 后重试")}) from e
-        raise
-    return {"scenario_id": created.meta.scenario_id,
-            "meta_plate": meta_plate}
+        return await _materialized_executable(
+            db,
+            definition=definition_from_payload(payload),
+            ui=payload.get("ui") or {},
+            owner_id=user.id,
+        )
+    except plate_client.PlateUnavailableError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "plate_unavailable", "message": e.message},
+        )
+    except plate_client.PlateRejectedError as e:
+        # 落库行的定义被拒 = 数据与声明修订不匹配(存量漂移),422 指向
+        # 数据问题而非网关故障,与 preview-plate 的裁定口径一致。
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "plate_rejected",
+                "message": e.message,
+                "errors": list(e.errors or []),
+            },
+        )
+
+
+# ── R19 导入端点已退役(W3/W4,场景导入 v2.3 方案):可执行形态 +
+# 析出映射 + 单事务落库的新端点在 routers/scenario_import.py
+# (MemberUser + precheck 两阶段),注册先于本模块的 /{scenario_id}。

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from tests.helpers import make_draft, register_and_login
+from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 
 
 async def _publish(client, h, sid: str, name: str, systems: list[str]) -> None:
@@ -90,10 +91,13 @@ async def test_activity_execution_event_carries_scenario_name(client):
                and e.get("scenarioId") == "sc-named" for e in exec_events), exec_events
 
 
-async def test_scenario_export_route(client):
+async def test_scenario_export_route(client, plate_mock):
     """②-6(2026-10-12)导出路由:读闸改对象级判定后恢复可用 ——
     旧三参 can_read_scenario 调用自权限签名收紧后恒 500(「场景导出
-    失效」根因)。属主 200 + 定义原样;非读者 404(不泄露存在性)。"""
+    失效」根因)。属主 200;非读者 404(不泄露存在性)。
+    W1(场景导入 v2.3):/export 现返回**可执行形态**(经 plate /convert,
+    PlateMock echo 直通)—— 顶层 scenarioId 与 steps 形状保留即等价。"""
+    plate_mock.behaviour = "echo"
     h = await register_and_login(client, "retro4", "pw123456")
     draft = make_draft("sc-retro-exp", steps=[{"kind": "step",
         "call": {"kind": "call", "protocol": "http", "service": "svc",

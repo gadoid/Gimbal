@@ -433,6 +433,7 @@ async def fork_public_suite(
         action=(is_owner and suite.visibility != "public"
                 and "suite.owner_fork" or "suite.public_fork"),
         resource_type="suite", resource_id=str(suite.id),
+        resource_name=suite.name,
         detail={"copyId": out["suiteId"], "name": out["name"]})
     return {"suiteId": out["suiteId"], "suiteName": out["name"],
             "memberCount": out["count"], "mode": out["mode"]}
@@ -1520,6 +1521,7 @@ async def unpublish_suite(
             actor_name=user.display_name or user.username,
             action="suite.admin_unpublish",
             resource_type="suite", resource_id=str(suite.id),
+            resource_name=suite.name,
             detail={"name": suite.name})
     return _summary(suite, await _member_count(db, suite.id))
 

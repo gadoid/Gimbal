@@ -557,6 +557,35 @@ async def list_lines(system_id: str, *, timeout: float = 15.0) -> list[dict]:
     return envelope.get("data", {}).get("items", [])
 
 
+async def list_line_revisions(
+    system_id: str, line: str, *, timeout: float = 15.0,
+) -> list[dict]:
+    """GET /api/system/{id}/lines/{line}/revisions(修订列表,2.4)。
+
+    场景导入 v2.3 §3.1:声明修订本机缺失时组装 availableRevisions
+    (错误信息给可选集,不把导入人卡死在 422)。plate 端点已有,平台侧
+    此前只有线级 list_lines(count+latest,不含完整修订集)。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(
+            f"/api/system/{system_id}/lines/{line}/revisions",
+            timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    return envelope.get("data", {}).get("items", [])
+
+
 async def resolve(
     meta_plate: dict[str, str],
     endpoints_used: dict[str, list[str]],

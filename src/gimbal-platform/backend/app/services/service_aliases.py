@@ -71,19 +71,33 @@ async def list_aliases(
     return ([alias_out(r, environment_name=n) for r, n in rows], int(total))
 
 
-async def create_alias(
+async def create_alias_in_transaction(
     db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
     base_url: str | None = None, kind: str = "plate",
-) -> dict:
+    catalog_names: "set[str] | None" = None,
+) -> ServiceAlias:
+    """Insert a new alias **without committing**(导入 W2/T2:建别名+写
+    carry+建场景单事务落库,场景导入 v2.3 方案 §6)。
+
+    校验行为与 :func:`create_alias` 一致(kind/derive_base/environment);
+    **提交与错误映射是调用方的责任**——alias_name 是主键,撞车的
+    IntegrityError 在事务边界由调用方统一映射(如 ``alias_name_taken``)
+    并回滚。返回**未 refresh** 的 row。
+
+    ``catalog_names``:调用方在**事务外**预取的 plate 目录集合
+    (P7-④:plate 调用不进事务);None = 本函数自取(提交包装器路径,
+    行为等价旧版)。
+    """
     if kind == "external":
         # 三态接入(P1.0):external = 第三方服务,不经 plate 目录派生
         # —— 别名即服务本体(base_service = alias_name),无契约面、
         # 无版本管理。强约束(derive_base 落回目录)只约束 plate 态。
         base = alias_name
     elif kind == "plate":
-        base = service_names.derive_base(
-            alias_name, await service_names.catalog_service_names())
+        names = (catalog_names if catalog_names is not None
+                 else await service_names.catalog_service_names())
+        base = service_names.derive_base(alias_name, names)
         if base is None:
             # 强约束:含 plate 不可达(空目录)场景,区分两种原因给排查线索
             raise UnknownBaseService(
@@ -104,6 +118,20 @@ async def create_alias(
         base_url=base_url, kind=kind,
     )
     db.add(row)
+    return row
+
+
+async def create_alias(
+    db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
+    credential_alias: str | None = None, owner_user_id: int | None = None,
+    base_url: str | None = None, kind: str = "plate",
+) -> dict:
+    """提交包装器(W2/T2):既有调用方(别名路由/迁移脚本)行为零变化;
+    导入流水线走 :func:`create_alias_in_transaction` 自管事务。"""
+    row = await create_alias_in_transaction(
+        db, alias_name=alias_name, environment_id=environment_id,
+        credential_alias=credential_alias, owner_user_id=owner_user_id,
+        base_url=base_url, kind=kind)
     await db.commit()
     await db.refresh(row)  # server_default 时间列:刷新防异步懒加载
     env_name = None

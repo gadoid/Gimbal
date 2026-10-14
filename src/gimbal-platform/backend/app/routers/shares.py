@@ -320,15 +320,18 @@ async def delete_share(
         return
     # 撤销:资源属主 ∨ admin
     owned = False
+    res_name: str | None = None  # 资源名快照(资源删除后审计仍可读)
     if ref.scenario_id is not None:
         row = (await db.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == ref.scenario_id))
         ).scalar_one_or_none()
         owned = row is not None and row.owner_id == user.id
+        res_name = row.name if row is not None else None
     else:
         s = (await db.execute(select(Suite).where(
             Suite.id == ref.suite_id))).scalar_one_or_none()
         owned = s is not None and s.owner_id == user.id
+        res_name = s.name if s is not None else None
     if not owned and user.role != "admin":
         raise HTTPException(403, "not_owner")
     await db.delete(ref)
@@ -346,6 +349,7 @@ async def delete_share(
             action="share.admin_revoke",
             resource_type=ref.scenario_id and "scenario" or "suite",
             resource_id=ref.scenario_id or str(ref.suite_id),
+            resource_name=res_name,
             detail={"granteeUserId": ref.grantee_user_id})
 
 

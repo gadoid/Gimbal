@@ -104,7 +104,7 @@ async def enforce_meta_plate(definition: dict,
     # validate_meta_plate_refs 自身的 ValueError 已带 meta_plate_invalid_ref 前缀
 
 
-async def create(
+async def create_in_transaction(
     db: AsyncSession,
     draft: ScenarioDraft,
     *,
@@ -114,17 +114,17 @@ async def create(
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
     forked_from_at: "datetime | None" = None,
-) -> Scenario:
-    """Insert a new scenario.  Raises ValueError on duplicate scenarioId.
+) -> ComposerScenario:
+    """Insert a new scenario **without committing**(导入 W2/T1:建别名 +
+    写 carry + 建场景单事务落库,场景导入 v2.3 方案 §6)。
 
-    Server-side override: ``owner`` is always taken from the router's
-    ``owner`` parameter (the authenticated user's display_name), so a
-    caller cannot spoof the owner field by sending a different value in
-    the request body.  ``owner_id`` 同理由路由层传入(int user.id,
-    P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
-    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
-    普通创建恒为 private;``visibility`` 参数仅供 P2 迁移复用(公共
-    目录导入 → public)。
+    写入行为与 :func:`create` 的写入部分一致(enforce_meta_plate /
+    服务端 owner 覆盖 / 存储归一化 / endpoint 索引同步);**提交与错误
+    映射是调用方的责任**——``sync_scenario`` 的 DELETE 会 autoflush
+    待插行,重复 scenario_id 的 IntegrityError 在此浮出,调用方在事务
+    边界统一 except 并映射(如 ``ValueError("scenario_id_exists: ...")``)
+    后回滚整单。返回**未 refresh** 的 row(server_default 列需调用方
+    在 commit 后 refresh)。
     """
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
@@ -164,10 +164,47 @@ async def create(
         forked_from_at=forked_from_at,
     )
     db.add(row)
+    # sync 的 DELETE 会 autoflush 待插行,重复 scenario_id 的
+    # IntegrityError 在此浮出 —— 由调用方在事务边界映射(见 docstring)。
+    await endpoint_ref_index.sync_scenario(db, server_owned.scenario_id, payload)
+    return row
+
+
+async def create(
+    db: AsyncSession,
+    draft: ScenarioDraft,
+    *,
+    owner: str = "",
+    owner_id: int | None = None,
+    visibility: str = "private",
+    forked_from_id: str | None = None,
+    forked_from_owner_name: str | None = None,
+    forked_from_at: "datetime | None" = None,
+) -> Scenario:
+    """Insert a new scenario.  Raises ValueError on duplicate scenarioId.
+
+    Server-side override: ``owner`` is always taken from the router's
+    ``owner`` parameter (the authenticated user's display_name), so a
+    caller cannot spoof the owner field by sending a different value in
+    the request body.  ``owner_id`` 同理由路由层传入(int user.id,
+    P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
+    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
+    普通创建恒为 private;``visibility`` 参数仅供 P2 迁移复用(公共
+    目录导入 → public)。
+
+    提交包装器(W2/T1):常规创建/copy/fork/迁移脚本等既有调用方行为
+    零变化;导入流水线走 :func:`create_in_transaction` 自管事务
+    (别名/carry/场景单事务,场景导入 v2.3 方案 §6)。
+    """
+    scenario_id = (draft.definition.get("scenarioId")
+                   or (draft.definition.get("meta") or {}).get("scenarioId")
+                   or "")
     try:
-        # 挂钩在 try 内:sync 的 DELETE 会 autoflush 待插行,重复
-        # scenario_id 的 IntegrityError 由此仍映射为 ValueError(契约不变)。
-        await endpoint_ref_index.sync_scenario(db, server_owned.scenario_id, payload)
+        row = await create_in_transaction(
+            db, draft, owner=owner, owner_id=owner_id,
+            visibility=visibility, forked_from_id=forked_from_id,
+            forked_from_owner_name=forked_from_owner_name,
+            forked_from_at=forked_from_at)
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
@@ -175,7 +212,7 @@ async def create(
     await db.refresh(row)
     # 场景创建即物化默认方案(工作台 spec §4.3/§5;
     # GET /run-schemes 侧的 ensure_default 是自愈兜底)。
-    await scheme_store.ensure_default_scheme(db, server_owned.scenario_id)
+    await scheme_store.ensure_default_scheme(db, row.scenario_id)
     return await to_read_shape(db, row)
 
 

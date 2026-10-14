@@ -145,7 +145,9 @@ async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="adaptation.op.apply", resource_type="adaptation_op",
-        resource_id=str(op_id), detail={"status": op.get("status")},
+        resource_id=str(op_id),
+        resource_name=op.get("scenario_display_name") or None,
+        detail={"status": op.get("status"), "op_type": op.get("op_type")},
     )
     return OpOut.model_validate(op)
 
