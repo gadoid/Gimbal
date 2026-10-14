@@ -2057,10 +2057,30 @@ async def _fanout(
         for seq, (ds, row_idx, _, inj, rep) in enumerate(entries)
     ]
     try:
-        await asyncio.gather(
-            *(_row(ds, i, row, r, seq, inj)
-              for seq, (ds, i, row, inj, r) in enumerate(entries))
-        )
+        try:
+            await asyncio.gather(
+                *(_row(ds, i, row, r, seq, inj)
+                  for seq, (ds, i, row, inj, r) in enumerate(entries))
+            )
+        except BaseException:
+            # gather 异常兜底(2026-10-13 复审):_row 全路径吞 Exception,
+            # 走到这里的是防御面之外的问题(取消/意外)。不变量在异常
+            # 路径同样成立 —— 关池排空泵 → finalize 冲刷已入缓冲的事件/
+            # 日志,再放行异常(终态由 worker 的 finalize_execution_if_stuck
+            # 兜,取消路径由租约回收重跑)。此前只走 _teardown:缓冲静默
+            # 丢失、ticker 任务泄漏。best-effort,收尾失败不吞原始异常。
+            try:
+                if server_pool is not None:
+                    try:
+                        await server_pool.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                await ingester.finalize()
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "run_dispatcher: fanout exception-path finalize failed "
+                    "for {}", execution_id)
+            raise
         # 尾部日志阻断修复(2026-10-13):server 链进程不随 run 结束退出,
         # stderr 泵在 run_case 返回后仍会读到滞留管道的行(最后一步
         # WARNING / uvicorn 收尾)。finalize 之后的 on_log 只进**已停止**

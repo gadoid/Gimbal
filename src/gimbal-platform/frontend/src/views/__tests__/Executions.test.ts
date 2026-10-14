@@ -434,22 +434,29 @@ describe('Executions.vue — S1 失败根因深链(锚点限定本 unit)', () =>
     return { w, router }
   }
 
-  it('锚点查询带 unit=本行 unit;命中 → around 深链带 unit', async () => {
+  it('锚点查询带 unit=本行 unit;命中 → 取最终那次失败(末条)around 深链', async () => {
+    // seq 升序两条(重试):第一次失败 id=20,最终失败 id=25 —— 锚须取末条
     vi.mocked(getExecutionEvents).mockResolvedValue({
-      items: [{ id: 20, seq: 5, ts: '2026-10-14T01:02:03', kind: 'event',
-                level: 'ERROR', category: null, module: null, service: null,
-                protocol: null, unit: 'u2', attempt: '1.1', step: 'step-002',
-                event_type: 'step.failed', message: null }],
-      count: 1,
+      items: [
+        { id: 20, seq: 5, ts: '2026-10-14T01:02:03', kind: 'event',
+          level: 'ERROR', category: null, module: null, service: null,
+          protocol: null, unit: 'u2', attempt: '1.1', step: 'step-002',
+          event_type: 'step.failed', message: null },
+        { id: 25, seq: 9, ts: '2026-10-14T01:03:03', kind: 'event',
+          level: 'ERROR', category: null, module: null, service: null,
+          protocol: null, unit: 'u2', attempt: '2.1', step: 'step-002',
+          event_type: 'step.failed', message: null },
+      ],
+      count: 2,
     })
     const { w, router } = await mountWithFailedRow()
 
     // 查询限定本 unit(不按全局前 50 条找锚)
     expect(getExecutionEvents).toHaveBeenCalledWith(7, expect.objectContaining(
       { kind: 'event', event_type: 'step.failed', unit: 'u2' }))
-    // 深链:锚点 + unit 过滤
+    // 深链:锚点取末条(最终失败)+ unit 过滤
     expect(router.currentRoute.value.query).toMatchObject({
-      view: 'mixed', unit: 'u2', around_id: '20', n: '80',
+      view: 'mixed', unit: 'u2', around_id: '25', n: '80',
     })
     w.unmount()
   })

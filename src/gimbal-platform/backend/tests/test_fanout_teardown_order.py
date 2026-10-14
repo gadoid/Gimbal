@@ -153,3 +153,64 @@ async def test_server_chain_trailing_logs_flushed_before_terminal(
     assert stats.get("logs_ingested") == len(msgs) == 2, (stats, msgs)
     assert stats.get("logs_dropped_unparsable") == 0
     assert stats.get("logs_below_level") == 0
+
+
+async def test_gather_exception_still_closes_pump_and_finalizes(
+        client, monkeypatch):
+    """gather 抛出未捕获异常 → 关池排空泵 + finalize 冲刷后再放行异常。
+
+    修复前此路径只走 _teardown:teardown 的 close 把尾行送进**无人冲刷**
+    的 ingester 缓冲(静默丢失),ticker 任务泄漏。终态不在此处写 ——
+    worker 的 finalize_execution_if_stuck 兜(异常)/租约回收重跑(取消)。
+    直调 _fanout(compose 打爆模拟行任务外的意外异常),断言紧随异常
+    立即查库 —— 赶在 ticker 的 0.5s 首拍之前,修复前必为 0 行。
+    """
+    import pytest
+
+    from app.services import gimbal_server_session
+    from app.services import plate_client as pc
+    from app.services import run_dispatcher as rd
+
+    async def _fake_convert(scenario: dict) -> dict:
+        return {"consumer": "gimbal", "converted": scenario}
+
+    def _boom(scenario_payload, row_dict):
+        raise RuntimeError("compose-boom")
+
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    monkeypatch.setattr(gimbal_server_session, "ServerSessionPool",
+                        _TrailingLogPool)
+    monkeypatch.setattr(rd, "_compose_scenario", _boom)
+
+    h = await register_and_login(client, "trail2", "pw123456")
+    async with db_module.SessionLocal() as s:
+        user = (await s.execute(
+            sa.select(User).where(User.username == "trail2"))).scalar_one()
+        ex = Execution(scenario_id="sc-trail2", owner_id=user.id,
+                       status="running", total_runs=1, scenario_name="t")
+        s.add(ex)
+        await s.commit()
+        eid = ex.id
+
+    with pytest.raises(RuntimeError, match="compose-boom"):
+        await rd._fanout(
+            db_factory=db_module.SessionLocal, execution_id=eid,
+            run_id="run-trail2",
+            scenario_payload={"scenarioId": "sc-trail2", "definition": {}},
+            datasets=[{"datasetId": None, "rows": [(0, {})]}],
+            injections=[None], owner_id=user.id, auth_aliases=[],
+            chain="server")
+
+    # 异常路径的 close(吐尾行+EOF)→ finalize 冲刷:紧随异常查库,
+    # 行已在、对账一致(ticker 0.5s 首拍前,修复前此处必为空)
+    async with db_module.SessionLocal() as s:
+        msgs = (await s.execute(
+            sa.select(ExecutionEvent.message).where(
+                ExecutionEvent.execution_id == eid,
+                ExecutionEvent.kind == "log"))).scalars().all()
+        ex_row = await s.get(Execution, eid)
+    assert msgs == ["trailing-after-run"], msgs
+    stats = (ex_row.config_json or {}).get("ingest_stats") or {}
+    assert stats.get("logs_ingested") == 1, stats
+    # teardown 照常收尾:行状态注册表已注销
+    assert eid not in rd._row_states

@@ -587,7 +587,9 @@ async function gotoRowLogs(row: ExecutionRow): Promise<void> {
       kind: 'event', event_type: 'step.failed', limit: 50,
       ...(uid ? { unit: uid } : {}),
     })
-    const hit = r.items[0]
+    // 取最后一条(接口按 seq 升序):有重试时窗口锚在**最终那次**失败
+    // (第一次失败的根因上下文已被后续重试日志推远)
+    const hit = r.items[r.items.length - 1]
     const query: Record<string, string> = { view: 'mixed' }
     if (hit) {
       query.around_ts = hit.ts
