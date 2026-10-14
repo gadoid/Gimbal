@@ -232,6 +232,103 @@ class TestTsPagination:
         assert r.status_code == 400
 
 
+class TestAroundWindow:
+    """S2 失败上下文窗口:锚行 + (ts,id) 轴前后各 N 行(混合时间轴)。"""
+
+    @staticmethod
+    async def _seed_timeline(eid: int) -> None:
+        base = datetime(2026, 10, 14, 5, 0, 0, tzinfo=timezone.utc)
+        async with db_module.SessionLocal() as s:
+            # 10 条日志(ts 0..9s,id 递增),锚=第 5 行
+            await execution_store.insert_logs(s, eid, [
+                {"timestamp": (base + timedelta(seconds=i)).isoformat(),
+                 "level": "INFO", "message": f"L{i}"} for i in range(10)
+            ], seq_base=0)
+            # 夹两条事件(不同 ts 制造混合)
+            await execution_store.insert_events(s, eid, [
+                _ev(1, timestamp=(base + timedelta(seconds=4)).isoformat()),
+                _ev(2, timestamp=(base + timedelta(seconds=6)).isoformat()),
+            ])
+            await s.commit()
+
+    async def test_around_returns_anchor_and_both_windows(self, client):
+        import urllib.parse
+        headers = await register_and_login(client)
+        eid = await _seed_execution(status="done")
+        await _own_execution(eid)
+        await self._seed_timeline(eid)
+        # 取锚:L5(id 由静态查询)
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "log"})
+        anchor = {i["message"]: (i["ts"], i["id"]) for i in r.json()["items"]}["L5"]
+
+        q = urllib.parse.urlencode({
+            "around_ts": anchor[0], "around_id": anchor[1],
+            "n_before": 2, "n_after": 2})
+        r2 = await client.get(f"/api/executions/{eid}/events?{q}",
+                              headers=headers)
+        got = [(i["kind"], i["message"] or i["event_type"])
+               for i in r2.json()["items"]]
+        # 前窗 n_before=2 =(ts,id) 轴最近的 2 行:L4 与 ts=4s 的事件;后窗
+        # n_after=2 = L6 与 ts=6s 事件。混合时间轴:窗口含事件行。
+        kinds = [g[0] for g in got]
+        assert kinds.count("event") == 2, f"混合时间轴事件行数: {kinds}"
+        msgs = [g[1] for g in got if g[0] == "log"]
+        assert msgs == ["L4", "L5", "L6"], msgs
+        ts_list = [i["ts"] for i in r2.json()["items"]]
+        assert ts_list == sorted(ts_list), "窗口按 (ts,id) 升序"
+
+    async def test_around_filter_applies_to_all_segments(self, client):
+        import urllib.parse
+        headers = await register_and_login(client)
+        eid = await _seed_execution(status="done")
+        await _own_execution(eid)
+        await self._seed_timeline(eid)
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "log"})
+        anchor = {i["message"]: (i["ts"], i["id"]) for i in r.json()["items"]}["L5"]
+        # 服务端筛选 kind=log:窗口不含事件行
+        q = urllib.parse.urlencode({
+            "around_ts": anchor[0], "around_id": anchor[1],
+            "n_before": 3, "n_after": 3, "kind": "log"})
+        r2 = await client.get(f"/api/executions/{eid}/events?{q}",
+                              headers=headers)
+        items = r2.json()["items"]
+        assert all(i["kind"] == "log" for i in items)
+        assert [i["message"] for i in items] == ["L2", "L3", "L4", "L5", "L6", "L7", "L8"],             [i["message"] for i in items]
+
+    async def test_around_anchor_survives_level_filter(self, client):
+        """回归闸:锚=事件行(level=NULL)+ level_min=INFO —— 锚行必须
+        无条件在场(NULL 不被级别筛排除;S1 锚点=失败事件)。"""
+        import urllib.parse
+        headers = await register_and_login(client)
+        eid = await _seed_execution(status="done")
+        await _own_execution(eid)
+        await self._seed_timeline(eid)
+        # 锚取事件行:ts=4s 的 step.end
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "event"})
+        a = r.json()["items"][0]
+
+        q = urllib.parse.urlencode({
+            "around_ts": a["ts"], "around_id": a["id"],
+            "n_before": 2, "n_after": 2, "level_min": "INFO"})
+        r2 = await client.get(f"/api/executions/{eid}/events?{q}",
+                              headers=headers)
+        items = r2.json()["items"]
+        assert any(i["id"] == a["id"] for i in items), (
+            "锚行(事件,level=NULL)被 level_min 筛掉 —— 失败事件锚点丢失")
+
+    async def test_around_bad_pair_rejected(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution()
+        await _own_execution(eid)
+        r = await client.get(
+            f"/api/executions/{eid}/events", headers=headers,
+            params={"around_ts": "2026-10-14T05:00:05+00:00"})   # 缺 around_id
+        assert r.status_code == 400
+
+
 class TestLogsStream:
     """日志流(批 2/AD5):tail 游标=入库 id,backfill 仅首连,服务端筛选,
     终态 done;「先 ts 后入库不缺行」回归闸。"""

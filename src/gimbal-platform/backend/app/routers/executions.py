@@ -549,25 +549,47 @@ async def get_execution_events(
         description="(ts,id) 时间轴翻页锚(ISO 时间,与 after_id 成对)")] = None,
     after_id: Annotated[int | None, Query(
         description="(ts,id) 时间轴翻页锚(行 id,与 after_ts 成对)")] = None,
+    around_ts: Annotated[str | None, Query(
+        description="S2 上下文窗口锚(ISO 时间,与 around_id 成对;失败事件"
+                    "的 (ts,id))")] = None,
+    around_id: Annotated[int | None, Query(
+        description="S2 上下文窗口锚(行 id,与 around_ts 成对)")] = None,
+    n_before: Annotated[int, Query(ge=1, le=500)] = 50,
+    n_after: Annotated[int, Query(ge=1, le=500)] = 50,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> dict:
     """事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。
 
     ``after_ts``+``after_id``:静态时间轴翻页锚(严格大于该 (ts,id));
-    ``after_seq``:事件轴续传锚(seq > ?)。
+    ``after_seq``:事件轴续传锚(seq > ?);``around_ts``+``around_id``:
+    S2 失败上下文窗口(锚行 + 前后各 N 行,混合时间轴)。
     """
     from ..services import execution_store
 
     ts_anchor: "datetime | None" = None
-    if after_ts is not None:
+    around_anchor: "tuple[datetime, int] | None" = None
+    for prefix, holder in (("after", "ts"), ("around", "around")):
+        ts_raw = after_ts if prefix == "after" else around_ts
+        id_raw = after_id if prefix == "after" else around_id
+        if ts_raw is None and id_raw is None:
+            continue
+        if ts_raw is None or id_raw is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": f"bad_{prefix}_pair",
+                        "message": f"{prefix}_ts 与 {prefix}_id 须成对提供"})
         from datetime import datetime as _dt
         try:
-            ts_anchor = _dt.fromisoformat(after_ts.replace("Z", "+00:00"))
+            parsed = _dt.fromisoformat(ts_raw.replace("Z", "+00:00"))
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "bad_after_ts",
-                        "message": "after_ts 须为 ISO 时间"})
+                detail={"code": f"bad_{prefix}_ts",
+                        "message": f"{prefix}_ts 须为 ISO 时间"})
+        if holder == "ts":
+            ts_anchor = parsed
+        else:
+            around_anchor = (parsed, id_raw)
     rows = await execution_store.query_events(
         session, ex.id, kind=kind, level=level, level_min=level_min,
         category=category,
@@ -575,6 +597,7 @@ async def get_execution_events(
         event_type=event_type, search=search, after_seq=after_seq,
         ts_after=(ts_anchor, after_id)
             if ts_anchor is not None and after_id is not None else None,
+        around=around_anchor, n_before=n_before, n_after=n_after,
         limit=limit)
     import json as _json
 

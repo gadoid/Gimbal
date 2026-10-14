@@ -205,6 +205,12 @@
               <td>
                 <span class="row-actions">
                   <Button
+                    v-if="row.status === 'failed'"
+                    variant="link" size="sm" class="h-6 px-1.5"
+                    :data-testid="`row-view-logs-${row.seq}`"
+                    @click="gotoRowLogs(row)"
+                  >查看日志</Button>
+                  <Button
                     variant="link"
                     size="sm"
                     class="h-6 px-1.5"
@@ -289,7 +295,7 @@ import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import PageBack from '@/components/chrome/PageBack.vue'
 import { toast } from '@/utils/toast'
 import { executionStatusText, isTerminalExecutionStatus, rowStatusText } from '@/utils/executionStatus'
-import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
+import { cancelExecution, getExecutionEvents, getScenarioSnapshot } from '@/api/executions'
 import type { ExecutionRow } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
@@ -435,6 +441,11 @@ function formatRecipeValue(v: unknown): string {
 
 // ── 行级明细(spec §9.1)───────────────────────────────────
 const rows = computed<ExecutionRow[]>(() => execStore.rowsByExecution[executionId.value] ?? [])
+/** 行 unit 标签(S1 深链维度;registry snake_case / 回放 camelCase 双键)。 */
+function rowUnitId(row: ExecutionRow): string {
+  const r = row as unknown as Record<string, unknown>
+  return String(r.unitId ?? r.unit_id ?? '') || ''
+}
 const rowsLoading = computed(() => execStore.rowsByExecution[executionId.value] === undefined)
 const isExpanded = computed(() => execStore.expanded.has(executionId.value))
 // 客户端分页(2026-09-23 批次):rows 端点单页 500 上限,视图侧切片;
@@ -559,6 +570,33 @@ function toggleLogsPanel(): void {
 
 function gotoEvents(): void {
   void router.push(`/executions/${execStore.detail?.id}/events`)
+}
+
+/** S1 失败根因直达:失败行 → 该 unit 的 step.failed 事件 (ts,id) 为锚,
+ *  深链进混合时间轴上下文窗口(根因几乎总在失败点之前,设计 S1/S2)。 */
+async function gotoRowLogs(row: ExecutionRow): Promise<void> {
+  const exId = execStore.detail?.id
+  if (!exId) return
+  try {
+    // unit 过滤(多行区分)+ 失败事件优先锚点;无事件锚(旧执行)退化
+    // 为 unit 过滤的日志视图(不带 around)
+    const q: Record<string, string | number> = { view: 'mixed', kind: '' }
+    const r = await getExecutionEvents(exId, {
+      kind: 'event', event_type: 'step.failed', limit: 50 })
+    const uid = rowUnitId(row)
+    const hit = (uid ? r.items.find((it) => it.unit === uid) : undefined)
+      ?? r.items[0]
+    const query: Record<string, string> = { view: 'mixed' }
+    if (hit) {
+      query.around_ts = hit.ts
+      query.around_id = String(hit.id)
+      query.n = '80'
+    }
+    if (uid) query.unit = uid
+    void router.push({ path: `/executions/${exId}/events`, query })
+  } catch {
+    void router.push(`/executions/${exId}/events`)
+  }
 }
 
 async function refreshNow() {

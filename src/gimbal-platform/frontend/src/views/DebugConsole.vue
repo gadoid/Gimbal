@@ -65,6 +65,18 @@
             </div>
           </div>
         </section>
+
+        <!-- S8:实时日志 tail(批 1 泵接线覆盖调试实例,同组件胶水) -->
+        <section class="dc-panel dc-logs">
+          <ExecutionLogsPanel
+            v-if="logsOpen" :execution-id="execId" :running="!!info?.active"
+            data-testid="debug-logs-panel"
+          />
+          <button v-else class="ghost-btn dc-logs-toggle"
+                  data-testid="debug-logs-open" @click="logsOpen = true">
+            展开实时日志
+          </button>
+        </section>
       </div>
     </div>
   </div>
@@ -72,6 +84,7 @@
 
 <script setup lang="ts">
 import PageBack from '@/components/chrome/PageBack.vue'
+import ExecutionLogsPanel from '@/components/executions/ExecutionLogsPanel.vue'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -82,6 +95,8 @@ import {
 
 const route = useRoute()
 const execId = Number(route.params.id)
+// S8:日志 tail 面板(默认收起——连接数预算;展开即连 /logs/stream)
+const logsOpen = ref(false)
 
 const info = ref<DebugSessionInfo | null>(null)
 const events = ref<ExecutionEventItem[]>([])

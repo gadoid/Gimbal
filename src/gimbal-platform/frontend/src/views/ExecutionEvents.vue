@@ -1,27 +1,40 @@
-<!-- ExecutionEvents.vue — 日志分析页(P2-07/C10;结构化日志批 3 增强)。
-     单执行的事件与日志组合筛选:标签列(category/module/service/protocol/
-     unit/attempt/step)、级别下限("warning 以上")、事件类型、message 全文
-     搜索;category 聚合计数条。标签值只取执行器写入的(P1 信封),不从
-     文本推断。入口:执行详情页头部 + 工作台卡片。
-     批 3 修订:①分类下拉改 counts 驱动(消除与引擎词表的双源漂移——
-     硬编码词表已缺 step/resolve/context);②行点击右侧 Sheet 展开
-     payload 全字段(S7:展开外移,列表行不变形);③(ts,id) 时间轴下的
-     「加载更多」长尾翻页。 -->
+<!-- ExecutionEvents.vue — 日志分析页(P2-07/C10;批 3/批 4 增强)。
+     单执行的事件与日志组合筛选:标签列/级别下限/事件类型/全文搜索;
+     category 聚合计数条(下拉同源驱动)。入口:执行详情页 + 工作台卡片。
+     批 3:counts 驱动下拉;行点击右侧 Sheet(kv+payload);加载更多。
+     批 4:S3 视图切换(日志/事件/混合时间轴 —— 混合=kind 不发,(ts,id)
+     统一排序,事件与日志 interleaved 真实执行现场);S4 过滤态 URL 双向
+     同步(进入读/变更 replace;深链分享);S1/S2 落地:around 深链
+     (失败事件锚点,来自详情页「查看日志」),锚行高亮。 -->
 <template>
   <ListPage title="日志分析" icon="history" width="wide"
     :subtitle="`执行 #${executionId} — 事件与日志按执行上下文标签筛选`">
     <template #actions>
       <Button variant="outline" size="sm" @click="goDetail">← 执行详情</Button>
+      <Button variant="outline" size="sm" data-testid="copy-link" @click="copyLink">
+        复制链接
+      </Button>
     </template>
+
+    <!-- 视图切换(S3):日志 / 事件 / 混合时间轴 -->
+    <div class="view-tabs" role="tablist" aria-label="视图">
+      <button
+        v-for="v in (['log', 'event', 'mixed'] as const)" :key="v"
+        role="tab" :aria-selected="viewMode === v"
+        :class="['view-tab', { active: viewMode === v }]"
+        :data-testid="`view-${v}`"
+        @click="switchView(v)"
+      >{{ { log: '日志', event: '事件', mixed: '混合时间轴' }[v] }}</button>
+    </div>
 
     <!-- 筛选栏 -->
     <div class="filters">
-      <select v-model="filters.kind" data-testid="f-kind" class="f-select">
+      <select v-if="viewMode !== 'mixed'" v-model="filters.kind" data-testid="f-kind" class="f-select">
         <option value="">全部类型</option>
         <option value="event">事件</option>
         <option value="log">日志</option>
       </select>
-      <select v-if="filters.kind !== 'event'" v-model="filters.level_min"
+      <select v-if="viewMode === 'log'" v-model="filters.level_min"
               data-testid="f-level" class="f-select">
         <option value="">全部级别</option>
         <option v-for="lv in LEVELS" :key="lv" :value="lv">{{ lv }} 以上</option>
@@ -35,14 +48,18 @@
       <input v-model="filters.service" class="f-input" placeholder="service" />
       <input v-model="filters.unit" class="f-input" placeholder="unit" />
       <input v-model="filters.step" class="f-input" placeholder="step" />
-      <input v-model="filters.event_type" class="f-input" placeholder="事件类型" />
+      <input v-if="viewMode !== 'log'" v-model="filters.event_type" class="f-input" placeholder="事件类型" />
       <input v-model="filters.search" data-testid="f-search" class="f-input grow"
              placeholder="message 全文搜索…" />
       <Button size="sm" @click="reload" data-testid="f-apply">筛选</Button>
       <Button variant="outline" size="sm" @click="reset">重置</Button>
+      <Button v-if="aroundActive" variant="outline" size="sm"
+              data-testid="exit-around" @click="exitAround">
+        退出上下文窗口
+      </Button>
     </div>
 
-    <!-- category 聚合(P2-07 验收);批 3:下拉同源驱动 -->
+    <!-- category 聚合(P2-07 验收);下拉同源驱动 -->
     <div class="counts" data-testid="category-counts">
       <span v-for="(n, c) in counts" :key="c"
             class="count-chip" :class="{ active: filters.category === c }"
@@ -52,7 +69,13 @@
       <span v-if="!Object.keys(counts).length" class="count-empty">暂无事件</span>
     </div>
 
-    <!-- 结果表(批 3:行点击 → 右侧 Sheet 展开 payload) -->
+    <!-- 上下文窗口提示(S1/S2:失败事件锚点深链的落点) -->
+    <div v-if="aroundActive" class="around-banner" data-testid="around-banner">
+      以失败事件为中心的上下文窗口(前 {{ aroundN }} 行 · 后 {{ aroundN }} 行)
+      —— 根因几乎总在失败点之前。
+    </div>
+
+    <!-- 结果表 -->
     <div v-if="error" class="state error">{{ error }}</div>
     <div v-else-if="loading && !items.length" class="state">加载中…</div>
     <div v-else-if="!items.length" class="state empty">无匹配记录</div>
@@ -67,7 +90,8 @@
         </thead>
         <tbody>
           <tr v-for="it in items" :key="it.id"
-              :class="['row-click', `row-${it.kind}`]"
+              :class="['row-click', `row-${it.kind}`,
+                       { 'row-anchor': it.id === aroundId }]"
               :data-testid="`ev-${it.seq}`"
               :title="'点击查看完整字段'"
               @click="openRow(it)">
@@ -87,20 +111,20 @@
           </tr>
         </tbody>
       </table>
-      <div v-if="hasMore" class="load-more">
+      <div v-if="!aroundActive && hasMore" class="load-more">
         <Button variant="outline" size="sm" data-testid="load-more"
                 :disabled="loadingMore" @click="loadMore">
           {{ loadingMore ? '加载中…' : `加载更多(已 ${items.length} 行)` }}
         </Button>
       </div>
-      <div v-else-if="items.length >= PAGE_SIZE" class="load-more dim">
+      <div v-else-if="!aroundActive && items.length >= PAGE_SIZE" class="load-more dim">
         已全部加载({{ items.length }} 行)
       </div>
     </template>
 
-    <!-- 行详情(批 3/S7:展开统一走右侧 Sheet,列表行高恒定) -->
+    <!-- 行详情(右侧 Sheet:展开外移,列表行高恒定) -->
     <Sheet :open="rowOpen" @update:open="rowOpen = $event">
-      <SheetContent side="right" class="w-[440px] sm:max-w-[440px] p-0 flex flex-col">
+      <SheetContent side="right" class="w-[440px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[440px]">
         <SheetHeader class="border-b border-signal-line px-4 py-3">
           <SheetTitle class="text-left mono text-sm">
             {{ detailRow?.kind === 'log' ? '日志行' : '事件行' }} · #{{ detailRow?.id }}
@@ -131,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
 import { Button } from '@/components/ui/button'
@@ -142,6 +166,7 @@ import {
   getExecutionEvents, getExecutionEventCounts,
   type ExecutionEventItem,
 } from '@/api/executions'
+import { toast } from '@/utils/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -149,6 +174,9 @@ const executionId = computed(() => Number(route.params.id))
 
 const LEVELS = ['TRACE', 'DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR', 'CRITICAL']
 const PAGE_SIZE = 200
+
+type ViewMode = 'log' | 'event' | 'mixed'
+const viewMode = ref<ViewMode>('log')
 
 const filters = reactive({
   kind: '' as '' | 'event' | 'log',
@@ -162,13 +190,17 @@ const filters = reactive({
   search: '',
 })
 
+/** S1/S2:上下文窗口锚(深链 around_ts/around_id 带 unit) */
+const aroundTs = ref('')
+const aroundId = ref<number | null>(null)
+const aroundN = ref(50)
+const aroundActive = computed(() => aroundTs.value !== '' && aroundId.value !== null)
+
 const items = ref<ExecutionEventItem[]>([])
 const counts = ref<Record<string, number>>({})
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref('')
-/** 分类下拉 = counts 出现过的类别(批 3:消除与引擎词表的双源漂移,
- *  未知类别自然出现;硬编码时代已缺 step/resolve/context) */
 const categories = computed(() => Object.keys(counts.value).sort())
 
 /** 行详情(右抽屉) */
@@ -191,13 +223,66 @@ function openRow(it: ExecutionEventItem): void {
   rowOpen.value = true
 }
 
-const hasMore = computed(() => items.value.length >= PAGE_SIZE
+const hasMore = computed(() => !aroundActive.value
+  && items.value.length >= PAGE_SIZE
   && items.value.length % PAGE_SIZE === 0)
+
+// ── S4:过滤态 URL 双向同步 ─────────────────────────────────
+const URL_KEYS = ['kind', 'level_min', 'category', 'module', 'service',
+  'unit', 'step', 'event_type', 'search'] as const
+
+function readFiltersFromUrl(): void {
+  const q = route.query
+  const v = q.view as ViewMode | undefined
+  if (v === 'log' || v === 'event' || v === 'mixed') viewMode.value = v
+  for (const k of URL_KEYS) {
+    const val = q[k]
+    if (typeof val === 'string') (filters as Record<string, string>)[k] = val
+  }
+  const ats = q.around_ts, aid = q.around_id
+  aroundTs.value = typeof ats === 'string' ? ats : ''
+  aroundId.value = aid !== undefined && aid !== null ? Number(aid) : null
+  const n = q.n
+  if (n !== undefined && !Number.isNaN(Number(n))) aroundN.value = Math.min(500, Math.max(1, Number(n)))
+}
+
+function syncFiltersToUrl(): void {
+  const q: Record<string, string> = { view: viewMode.value }
+  for (const k of URL_KEYS) {
+    const v = (filters as Record<string, string>)[k]
+    if (v !== '') q[k] = v
+  }
+  if (aroundActive.value) {
+    q.around_ts = aroundTs.value
+    q.around_id = String(aroundId.value)
+    q.n = String(aroundN.value)
+  }
+  void router.replace({ query: q })
+}
+
+function switchView(v: ViewMode): void {
+  viewMode.value = v
+  // 视图即 kind 的语义层:log/event 固定 kind;mixed 不发 kind
+  filters.kind = v === 'mixed' ? '' : v
+  void reload()
+}
+
+function exitAround(): void {
+  aroundTs.value = ''
+  aroundId.value = null
+  void reload()
+}
 
 function _query(): Record<string, string | number> {
   const q: Record<string, string | number> = { limit: PAGE_SIZE }
   for (const [k, v] of Object.entries(filters)) {
     if (v !== '') (q as Record<string, string>)[k] = v
+  }
+  if (aroundActive.value) {
+    q.around_ts = aroundTs.value
+    q.around_id = aroundId.value as number
+    q.n_before = aroundN.value
+    q.n_after = aroundN.value
   }
   return q
 }
@@ -208,6 +293,7 @@ async function reload(): Promise<void> {
   try {
     const r = await getExecutionEvents(executionId.value, _query())
     items.value = r.items
+    syncFiltersToUrl()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '查询失败'
   } finally {
@@ -216,16 +302,13 @@ async function reload(): Promise<void> {
 }
 
 async function loadMore(): Promise<void> {
-  if (loadingMore.value) return
+  if (loadingMore.value || aroundActive.value) return
   loadingMore.value = true
   try {
-    // (ts,id) 时间轴翻页:after_ts/after_id 锚在末行(批 4 S2 的同源参数;
-    // 本页先按服务端已支持的同面查询推进)
     const q = _query()
     const last = items.value[items.value.length - 1]
     if (last) { q.after_ts = last.ts; q.after_id = last.id }
     const r = await getExecutionEvents(executionId.value, q)
-    // 服务端按过滤条件重查(含 after 锚);防重:过滤 id
     const seen = new Set(items.value.map((i) => i.id))
     items.value.push(...r.items.filter((i) => !seen.has(i.id)))
   } catch { /* 翻页失败保留现状 */ } finally {
@@ -244,6 +327,8 @@ function reset(): void {
     kind: '', level_min: '', category: '', module: '',
     service: '', unit: '', step: '', event_type: '', search: '',
   })
+  aroundTs.value = ''
+  aroundId.value = null
   void reload()
 }
 
@@ -256,6 +341,16 @@ function goDetail(): void {
   void router.push(`/executions/${executionId.value}`)
 }
 
+/** S4:复制当前过滤态链接(权限跟随执行可见性,§4 总则)。 */
+async function copyLink(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    toast.success('链接已复制 — 过滤态完整保留,打开即同视图')
+  } catch {
+    toast.error('复制失败,请手动复制地址栏')
+  }
+}
+
 function shortTs(ts: string): string {
   return ts.replace('T', ' ').replace('Z', '').slice(11, 23)
 }
@@ -265,12 +360,33 @@ function lvClass(lv: string): string {
 }
 
 onMounted(() => {
+  readFiltersFromUrl()
+  // 初始视图语义:log/event 固定 kind(冷开未带 kind query 时保持默认
+  // 视图的筛选语义;URL 显式带了 kind 则以 URL 为准)
+  if (!route.query.kind && viewMode.value !== 'mixed' && !filters.kind) {
+    filters.kind = viewMode.value
+  }
   void reload()
   void reloadCounts()
+})
+
+// 深链参数外部变化(浏览器前进/后退)重新应用
+watch(() => route.query, () => {
+  const ats = route.query.around_ts
+  if (typeof ats === 'string' && ats !== aroundTs.value) {
+    readFiltersFromUrl()
+    void reload()
+  }
 })
 </script>
 
 <style scoped>
+.view-tabs { display: inline-flex; gap: 2px; margin-bottom: 10px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; padding: 2px; }
+.view-tab {
+  border: none; background: transparent; padding: 4px 14px; font-size: 13px;
+  border-radius: 6px; cursor: pointer; color: var(--muted-fg, #5B6472);
+}
+.view-tab.active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
 .f-select, .f-input {
   border: 1px solid var(--border, #d4d4d8); border-radius: 6px;
@@ -285,6 +401,10 @@ onMounted(() => {
 }
 .count-chip.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
 .count-empty { font-size: 12px; color: #71717a; }
+.around-banner {
+  font-size: 12px; background: #fef9c3; color: #a16207;
+  border: 1px solid #fde68a; border-radius: 6px; padding: 6px 12px; margin-bottom: 10px;
+}
 .ev-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ev-table th {
   text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #e4e4e7);
@@ -300,6 +420,7 @@ onMounted(() => {
 .et { margin-right: 6px; color: #71717a; }
 .msg { max-width: 420px; word-break: break-all; }
 .row-log { background: #fffbeb; }
+.row-anchor { outline: 2px solid #f59e0b; outline-offset: -2px; }
 .row-click { cursor: pointer; }
 .row-click:hover { outline: 1px solid #93c5fd; outline-offset: -1px; }
 .load-more { display: flex; justify-content: center; padding: 12px 0; }

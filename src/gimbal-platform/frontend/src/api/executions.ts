@@ -271,6 +271,13 @@ export interface ExecutionEventsQuery {
   event_type?: string
   search?: string
   after_seq?: number
+  // (ts,id) 翻页锚(批 3)与 S2 上下文窗口锚(批 4)
+  after_ts?: string
+  after_id?: number
+  around_ts?: string
+  around_id?: number
+  n_before?: number
+  n_after?: number
   limit?: number
 }
 

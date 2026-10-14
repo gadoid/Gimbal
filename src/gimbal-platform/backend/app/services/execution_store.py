@@ -388,6 +388,9 @@ async def query_events(
     after_seq: "int | None" = None,
     after_id: "int | None" = None,
     ts_after: "tuple[datetime, int] | None" = None,
+    around: "tuple[datetime, int] | None" = None,
+    n_before: int = 50,
+    n_after: int = 50,
     order: "str | None" = None,
     limit: int = 500,
 ) -> list[ExecutionEvent]:
@@ -404,9 +407,20 @@ async def query_events(
       (先 ts 后入库的行落在已推进的 cursor 之下);
     - ``ts_after``:静态 (ts,id) 时间轴**翻页**锚(严格大于该组合,
       (ts > ?) OR (ts = ? AND id > ?)),与 tail 游标语义无关;
+    - ``around``:(ts,id) **上下文窗口**锚(设计 S2)—— 锚点行本身
+      + 按 (ts,id) 轴取前 ``n_before`` 行与后 ``n_after`` 行(混合
+      时间轴,事件与日志同窗),结果按 (ts,id) 升序;根因几乎总在
+      失败事件之前,调用方以失败事件 (ts,id) 为锚;
     - 默认排序(未传 order)走 AD4 语义:event=seq,log/混合=(ts,id)。
     """
     from ..models.execution import ExecutionEvent as EE
+
+    if around is not None:
+        return await _query_events_around(
+            db, execution_id, around, n_before=n_before, n_after=n_after,
+            kind=kind, level=level, level_min=level_min, category=category,
+            module=module, service=service, unit=unit, step=step,
+            event_type=event_type, search=search)
 
     stmt = select(EE).where(EE.execution_id == execution_id)
     if after_seq is not None:
@@ -459,6 +473,89 @@ async def query_events(
         stmt = stmt.order_by(EE.ts.asc(), EE.id.asc())
     stmt = stmt.limit(limit)
     return list((await db.execute(stmt)).scalars().all())
+
+
+async def _query_events_around(
+    db: AsyncSession, execution_id: int, anchor: "tuple[datetime, int]", *,
+    n_before: int, n_after: int,
+    kind: "str | None" = None,
+    level: "str | None" = None, level_min: "str | None" = None,
+    category: "str | None" = None, module: "str | None" = None,
+    service: "str | None" = None, unit: "str | None" = None,
+    step: "str | None" = None, event_type: "str | None" = None,
+    search: "str | None" = None,
+) -> list[ExecutionEvent]:
+    """S2 失败上下文窗口:锚点行 + (ts,id) 轴前后各 N 行(混合时间轴)。
+
+    三段式:前窗(严格小于锚,**倒序**取 n_before 再反转)+ 锚段(命中
+    筛选的锚行)+ 后窗(严格大于锚,升序取 n_after)——筛选条件对三段
+    同面应用。合并按 (ts,id) 升序。
+    """
+    from ..models.execution import ExecutionEvent as EE
+
+    anchor_ts, anchor_id = anchor
+
+    def _filters(s, *, for_anchor=False):
+        if kind is not None:
+            s = s.where(EE.kind == kind)
+        if for_anchor:
+            # 锚段不应用 level/level_min:锚行多为事件行(level=NULL),
+            # 按级别筛会被 NULL 语义排除 —— S1 锚点=失败事件,必须无条件
+            # 在场;其余维度对锚段同面应用。
+            return s
+        if level is not None:
+            s = s.where(EE.level == level)
+        if level_min is not None:
+            severity = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING",
+                        "ERROR", "CRITICAL")
+            rank = (severity.index(level_min.upper())
+                    if level_min.upper() in severity else 0)
+            s = s.where(EE.level.in_(severity[rank:]))
+        if category is not None:
+            s = s.where(EE.category == category)
+        if module is not None:
+            s = s.where(EE.module == module)
+        if service is not None:
+            s = s.where(EE.service == service)
+        if unit is not None:
+            s = s.where(EE.unit == unit)
+        if step is not None:
+            s = s.where(EE.step == step)
+        if event_type is not None:
+            s = s.where(EE.event_type == event_type)
+        if search:
+            s = s.where(EE.message.ilike(f"%{search}%"))
+        return s
+
+    def _strictly_after(s):
+        return s.where(or_(
+            EE.ts > anchor_ts,
+            and_(EE.ts == anchor_ts, EE.id > anchor_id)))
+
+    def _before(s):
+        return s.where(or_(
+            EE.ts < anchor_ts,
+            and_(EE.ts == anchor_ts, EE.id < anchor_id)))
+
+    # 前窗 n_before 行 + 锚段(ts,id 恰等于锚且命中筛选) + 后窗 n_after 行
+    after_stmt = _filters(_strictly_after(
+        select(EE).where(EE.execution_id == execution_id))
+    ).order_by(EE.ts.asc(), EE.id.asc()).limit(n_after)
+    after_rows = list((await db.execute(after_stmt)).scalars().all())
+
+    anchor_stmt = _filters(
+        select(EE).where(EE.execution_id == execution_id,
+                         EE.ts == anchor_ts, EE.id == anchor_id),
+        for_anchor=True)
+    anchor_rows = list((await db.execute(anchor_stmt)).scalars().all())
+
+    before_stmt = _filters(_before(
+        select(EE).where(EE.execution_id == execution_id))
+    ).order_by(EE.ts.desc(), EE.id.desc()).limit(n_before)
+    before_rows = list((await db.execute(before_stmt)).scalars().all())
+    before_rows.reverse()
+
+    return before_rows + anchor_rows + after_rows
 
 
 async def event_counts_by_category(
