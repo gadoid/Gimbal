@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     # legacy = run launch 子进程(stdout jsonl)——回滚路径,稳定一段
     #   时间后删除(不留兼容层)。
     EXEC_CHAIN: str = "server"
+    # ── 执行结构化日志(设计 AD3:入库级别门槛)────────────────
+    # server 链 stderr 泵的入库级别:低于此级别的日志行不入库不缓冲
+    # (server-engine.log 文件不受影响,全量保留);DEBUG 排障走文件。
+    # 级别序:TRACE<DEBUG<INFO<SUCCESS<WARNING<ERROR<CRITICAL。
+    EXEC_INGEST_LOG_LEVEL: str = "INFO"
     # ── Gimbal 插件注入(透传给执行子进程;空值 = 现状零变化) ──
     # GIMBAL_PLUGINS_DIR:文件系统插件目录(绝对路径;空 = 引擎默认 base_dir/plugins)
     GIMBAL_PLUGINS_DIR: str = ""

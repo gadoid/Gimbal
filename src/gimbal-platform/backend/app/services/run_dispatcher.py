@@ -312,6 +312,9 @@ class _EventIngester:
 
     _FLUSH_EVERY = 200
     _FLUSH_INTERVAL_SEC = 0.5
+    # 结构化日志设计 AD2:logs 缓冲上限 —— DB 长时间不可用时回填重试会让
+    # 缓冲无界增长,超限丢最旧(诊断面可丢;events 不设上限,台账不可丢)。
+    _LOGS_BUF_CAP = 50_000
 
     def __init__(self, db_factory: Any, execution_id: int) -> None:
         self._db_factory = db_factory
@@ -321,6 +324,14 @@ class _EventIngester:
         self._pending: "set[asyncio.Task] | None" = None
         self._ticker: "asyncio.Task | None" = None
         self._stopped = False
+        # 结构化日志设计 AD2/AD5:_flush 全路径 single-flight 锁 ——
+        # 阈值 task 与 ticker 直调曾可并发开两个事务,PG 按 INSERT 时刻
+        # 分 id、按提交时刻可见,先分 id 后提交的批次会落在已推进的
+        # id cursor 之下(SSE 日志流 tail 漏行的 id 版)。锁内串行 =
+        # 「执行内 id 按提交序单调」成为机制保证(tail 游标的地基)。
+        self._flush_lock = asyncio.Lock()
+        # 超限丢最旧计数(S9 批 5 接入 ingest_stats 快照;先行内存累计)
+        self.logs_dropped_overflow = 0
         # C12 修正：execution 级单调 seq 分配器——引擎 seq 是进程内
         # 计数，多 case（每 case 一个进程/run）会从 1 重来，直接落库
         # 会撞 (execution_id, seq) 唯一约束被静默丢弃（多行执行丢事件）。
@@ -368,6 +379,11 @@ class _EventIngester:
 
     def on_log(self, d: dict) -> None:
         self._logs.append(d)
+        # AD2:超限丢最旧(保最新;丢弃计数供 S9 对账)
+        if len(self._logs) > self._LOGS_BUF_CAP:
+            drop = len(self._logs) - self._LOGS_BUF_CAP
+            del self._logs[:drop]
+            self.logs_dropped_overflow += drop
         self._maybe_flush()
 
     def _maybe_flush(self) -> None:
@@ -379,40 +395,44 @@ class _EventIngester:
             except RuntimeError:
                 return   # 无运行循环(同步上下文兜底):留给 finalize
         if any(not t.done() for t in self._pending):
-            return   # 在飞冲刷未收口,余量并入下一轮
+            return   # 在飞冲刷未收口,余量并入下一轮(锁兜底;此检查免排队)
         t = asyncio.create_task(self._flush())
         self._pending.add(t)
         t.add_done_callback(self._pending.discard)
 
     async def _flush(self) -> None:
-        events, self._events = self._events, []
-        logs, self._logs = self._logs, []
-        log_seq_base = self._log_seq - len(logs)
-        self._log_seq = log_seq_base
-        try:
-            from . import execution_store
-            async with self._db_factory() as session:
-                await execution_store.insert_events(
-                    session, self._execution_id, events)
-                await execution_store.insert_logs(
-                    session, self._execution_id, logs,
-                    seq_base=log_seq_base)
-                await session.commit()
-        except BaseException as e:  # noqa: BLE001
-            # 失败/取消都要回填缓冲(下次冲刷重试),不丢这批事件/日志。
-            # P3.5-3 对账实测:finalize 取消 ticker 时批次可能正在 DB
-            # 往返中,CancelledError 不是 Exception 子类,旧 except
-            # Exception 会放行 → 整批静默丢失(批已换出,final flush
-            # 拿到空缓冲)。回填后由 finalize 的收尾 flush 重试。
-            self._events = events + self._events
-            self._logs = logs + self._logs
-            self._log_seq += len(logs)
-            if not isinstance(e, Exception):
-                raise          # CancelledError 照常传播(取消语义不变)
-            logger.warning(
-                "run_dispatcher: event flush {}/{} failed (re-buffered): {}",
-                self._execution_id, len(events) + len(logs), e,
-            )
+        # single-flight(AD2/AD5):阈值 task / ticker / finalize / 回填重试
+        # 四条路径共用此锁 —— 换缓冲+落库+提交全程串行,执行内 id 按提交
+        # 序单调;并发入口在锁上排队,各自换出排队期间积累的新缓冲。
+        async with self._flush_lock:
+            events, self._events = self._events, []
+            logs, self._logs = self._logs, []
+            log_seq_base = self._log_seq - len(logs)
+            self._log_seq = log_seq_base
+            try:
+                from . import execution_store
+                async with self._db_factory() as session:
+                    await execution_store.insert_events(
+                        session, self._execution_id, events)
+                    await execution_store.insert_logs(
+                        session, self._execution_id, logs,
+                        seq_base=log_seq_base)
+                    await session.commit()
+            except BaseException as e:  # noqa: BLE001
+                # 失败/取消都要回填缓冲(下次冲刷重试),不丢这批事件/日志。
+                # P3.5-3 对账实测:finalize 取消 ticker 时批次可能正在 DB
+                # 往返中,CancelledError 不是 Exception 子类,旧 except
+                # Exception 会放行 → 整批静默丢失(批已换出,final flush
+                # 拿到空缓冲)。回填后由 finalize 的收尾 flush 重试。
+                self._events = events + self._events
+                self._logs = logs + self._logs
+                self._log_seq += len(logs)
+                if not isinstance(e, Exception):
+                    raise      # CancelledError 照常传播(取消语义不变)
+                logger.warning(
+                    "run_dispatcher: event flush {}/{} failed (re-buffered): {}",
+                    self._execution_id, len(events) + len(logs), e,
+                )
 
     async def finalize(self) -> None:
         """gather 收口后冲刷余量并等待在飞冲刷完成。"""
@@ -1469,7 +1489,8 @@ async def _fanout(
         # P3.5-1:槽位 1..N-1 在行执行按需冷启动(锁外并行)
         try:
             await server_pool.start(
-                engine_log_path=run_dir / "server-engine.log", cwd=run_dir)
+                engine_log_path=run_dir / "server-engine.log", cwd=run_dir,
+                on_log=ingester.on_log)   # AD2:stderr 泵 → 本执行 ingester
         except Exception as e:  # noqa: BLE001
             await _teardown()
             raise

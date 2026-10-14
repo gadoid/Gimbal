@@ -35,7 +35,11 @@ def test_server_session_api_surface_on_class():
 
 @pytest.mark.asyncio
 async def test_server_chain_smoke(tmp_path: Path) -> None:
-    """真拉起 server 子进程跑一单:启动健康检查 + run_case + 退出码。"""
+    """真拉起 server 子进程跑一单:启动健康检查 + run_case + 退出码。
+
+    结构化日志批 1:同时携带 on_log —— stderr 泵必须把 JsonSink 的
+    JSON 行解析回调出来(server 链日志入库的传输面活体闸)。
+    """
     import asyncio
 
     from app.services.gimbal_server_session import ServerSession
@@ -52,8 +56,10 @@ async def test_server_chain_smoke(tmp_path: Path) -> None:
     case_path.write_text(json.dumps(case, ensure_ascii=False),
                          encoding="utf-8")
 
+    logs: "list[dict]" = []
     ss = ServerSession()
-    await ss.start(engine_log_path=tmp_path / "engine.log", cwd=tmp_path)
+    await ss.start(engine_log_path=tmp_path / "engine.log", cwd=tmp_path,
+                   on_log=logs.append)
     try:
         result = await ss.run_case(case_path, n_runs=1)
         assert result.launch_status == "ok", (
@@ -64,6 +70,13 @@ async def test_server_chain_smoke(tmp_path: Path) -> None:
     # D1 回归面:close 后泵任务已收编(None)且进程引用清空
     assert ss._stderr_task is None
     assert ss._proc is None
+    # 泵活体:引擎 bootstrap 后的 stderr 是 JsonSink JSON 行,on_log 应收到
+    # 结构化日志(带 level;入库行零 ANSI——泵只回调解析成功的 dict)
+    assert logs, "stderr 泵未回调任何日志行 —— server 链日志入库链路断裂"
+    for d in logs:
+        assert isinstance(d.get("level"), str) and d["level"], d
+    raw = (tmp_path / "engine.log").read_text(encoding="utf-8")
+    assert raw, "engine.log 文件面必须全量保留(审计兜底)"
 
 
 @pytest.mark.asyncio

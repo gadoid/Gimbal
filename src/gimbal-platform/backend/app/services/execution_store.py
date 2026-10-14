@@ -422,7 +422,14 @@ async def query_events(
         stmt = stmt.where(EE.event_type == event_type)
     if search:
         stmt = stmt.where(EE.message.ilike(f"%{search}%"))
-    stmt = stmt.order_by(EE.seq.asc()).limit(limit)
+    # 排序轴(结构化日志设计 AD4):事件单查保持 seq(执行域语义序,SSE
+    # 续传依赖);日志/混合查按 (ts,id) 统一时间轴 —— 负数 seq 对 log 行
+    # 无序语义(跨批递减,仅唯一性令牌),禁止再按 seq 排日志。
+    if kind == "event":
+        stmt = stmt.order_by(EE.seq.asc())
+    else:
+        stmt = stmt.order_by(EE.ts.asc(), EE.id.asc())
+    stmt = stmt.limit(limit)
     return list((await db.execute(stmt)).scalars().all())
 
 

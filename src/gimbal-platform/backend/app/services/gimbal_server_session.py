@@ -25,6 +25,55 @@ from loguru import logger
 from ..core.config import settings
 from .gimbal_launcher import LaunchResult, _base_argv
 
+# 入库级别序(与 execution_store.query_events 的 level_min 同一序;泵处
+# 只做门槛比较,读侧序表独立维护)
+_LOG_LEVEL_ORDER = ("TRACE", "DEBUG", "INFO", "SUCCESS",
+                    "WARNING", "ERROR", "CRITICAL")
+
+
+async def _pump_stderr(stderr, log, on_log: "Callable[[dict], None] | None",
+                       min_level: str) -> None:
+    """stderr 泵:逐行落文件(全量原始字节) + 解析 JSON 行回调 on_log。
+
+    结构化日志设计 AD2/AD3:
+    - 文件面:所有行原样写入(审计兜底,含未入库级别与非 JSON 行);
+    - 入库面:仅 JsonSink 的 JSON 行且级别 ≥ min_level 才回调;非 JSON
+      (早期彩色/uvicorn/reporter 汇总等)与低于门槛的行不入库;
+    - 回调异常捕获记日志,不阻断泵(on_event 同惯例)。
+    可独立单测(fake stderr 的 readline)。
+    """
+    if stderr is None:
+        return
+    min_idx = (_LOG_LEVEL_ORDER.index(min_level.upper())
+               if min_level.upper() in _LOG_LEVEL_ORDER else 2)
+    while True:
+        raw = await stderr.readline()
+        if not raw:
+            break
+        text = raw.decode("utf-8", errors="replace")
+        if log:
+            log.write(text)
+        if on_log is None:
+            continue
+        line = text.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        lv = str(d.get("level") or "").upper()
+        if lv not in _LOG_LEVEL_ORDER:
+            continue
+        if _LOG_LEVEL_ORDER.index(lv) < min_idx:
+            continue
+        try:
+            on_log(d)
+        except Exception:  # noqa: BLE001
+            logger.warning("ServerSession: on_log 回调异常(已忽略)")
+    if log:
+        log.close()
+
 
 class ServerSession:
     """一次执行一个执行器 server 实例（总案决策 15）。"""
@@ -42,15 +91,18 @@ class ServerSession:
     # ── 进程生命周期 ────────────────────────────────────────
 
     async def start(self, *, engine_log_path: "Path | None" = None,
-                    cwd: "Path | str | None" = None) -> None:
+                    cwd: "Path | str | None" = None,
+                    on_log: "Callable[[dict], None] | None" = None) -> None:
         import socket as _s
         with _s.socket() as sk:
             sk.bind(("127.0.0.1", 0))
             self._port = sk.getsockname()[1]
         argv = [*_base_argv(), "run", "server",
                 "--host", "127.0.0.1", "--port", str(self._port)]
+        # NO_COLOR=1(AD8):引擎两条日志初始化路径由 gimbal 配置层自读该
+        # 环境变量(与 loguru 版本无关)——stderr 文件面的 ANSI 乱码源头
         env = {**os.environ, "PYTHONIOENCODING": "utf-8",
-               "GIMBAL_SERVER_TOKEN": self.token}
+               "GIMBAL_SERVER_TOKEN": self.token, "NO_COLOR": "1"}
         creationflags = 0x08000000 if sys.platform == "win32" else 0
         log_fh = (engine_log_path.open("w", encoding="utf-8", newline="")
                   if engine_log_path else None)
@@ -71,20 +123,9 @@ class ServerSession:
 
         # D1(2026-10-13):泵闭包捕获本地 proc/stderr —— 不再触碰
         # self._proc(close() 置空后泵仍能收尾,engine.log 尾部不丢)。
-        async def _drain_stderr(
-                stderr=proc.stderr, log=log_fh) -> None:
-            if stderr is None:
-                return
-            while True:
-                raw = await stderr.readline()
-                if not raw:
-                    break
-                if log:
-                    log.write(raw.decode("utf-8", errors="replace"))
-            if log:
-                log.close()
-
-        self._stderr_task = asyncio.get_event_loop().create_task(_drain_stderr())
+        self._stderr_task = asyncio.get_event_loop().create_task(
+            _pump_stderr(proc.stderr, log_fh, on_log,
+                         settings.EXEC_INGEST_LOG_LEVEL))
         self._base = f"http://127.0.0.1:{self._port}"
 
         deadline = time.monotonic() + self.START_TIMEOUT_SEC
@@ -319,6 +360,9 @@ class ServerSessionPool:
         self._started = 0            # 已冷启动槽位数（含失败回退）
         self._engine_log_path: "Path | None" = None
         self._cwd: "Path | str | None" = None
+        # 结构化日志 AD2:池生命周期=执行生命周期(决策 15),回调绑定本执行
+        # 的 ingester 不存在跨执行路由错配;懒启动槽位在 _spawn 透传
+        self._on_log: "Callable[[dict], None] | None" = None
         self._lock = asyncio.Lock()
 
     @property
@@ -336,14 +380,18 @@ class ServerSessionPool:
             f"{self._engine_log_path.stem}-{slot}{self._engine_log_path.suffix}")
 
     async def start(self, *, engine_log_path: "Path | None" = None,
-                    cwd: "Path | str | None" = None) -> None:
+                    cwd: "Path | str | None" = None,
+                    on_log: "Callable[[dict], None] | None" = None) -> None:
         """冷启动槽位 0（引擎不可用在此 fail-fast，与 C12 行为一致）。
 
         占位 ``_started=1`` —— 不占位的话首个 ``_acquire`` 会再起一个
         slot 0 实例,两个实例同写 server-engine.log("w" 互截)。
+        ``on_log``(AD2)在池启动处传入(绑定本执行 ingester),懒启动
+        槽位经 ``_spawn`` 透传。
         """
         self._engine_log_path = engine_log_path
         self._cwd = cwd
+        self._on_log = on_log
         async with self._lock:
             if self._started > 0:
                 return                    # 已预热(幂等)
@@ -358,7 +406,8 @@ class ServerSessionPool:
 
     async def _spawn(self, slot: int) -> ServerSession:
         s = ServerSession()
-        await s.start(engine_log_path=self._log_path(slot), cwd=self._cwd)
+        await s.start(engine_log_path=self._log_path(slot), cwd=self._cwd,
+                      on_log=self._on_log)
         self._live.append(s)
         return s
 

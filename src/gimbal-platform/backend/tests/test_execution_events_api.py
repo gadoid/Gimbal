@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import sqlalchemy as sa
 
@@ -34,6 +34,16 @@ async def _seed_execution(headers_owner=None, *, client=None, status="done") -> 
         s.add(ex)
         await s.commit()
         return ex.id
+
+
+async def _own_execution(eid: int) -> None:
+    """把执行收归当前注册用户(OwnedExecution 鉴权前提)。"""
+    from app.models.user import User
+    async with db_module.SessionLocal() as s:
+        me = (await s.execute(sa.select(User).order_by(User.id.desc())
+                              )).scalars().first()
+        (await s.get(Execution, eid)).owner_id = me.id
+        await s.commit()
 
 
 class TestQueryApi:
@@ -86,47 +96,78 @@ class TestQueryApi:
 
 
 class TestSseStream:
+    """SSE 帧结构断言(AD6:按帧解析 id/event/data 字段,禁子串匹配——
+    字面量 \\n 缺陷正是靠子串断言逃过 CI 的)。"""
+
+    @staticmethod
+    def _parse_frames(text: str) -> list[dict]:
+        """按 SSE 线协议切帧:真 \\n\\n 分帧 → 解析 id/event/data 字段。"""
+        frames = []
+        for block in text.split("\n\n"):
+            frame: dict = {}
+            for line in block.split("\n"):
+                if line.startswith("id:"):
+                    frame["id"] = line[3:].strip()
+                elif line.startswith("event:"):
+                    frame["event"] = line[6:].strip()
+                elif line.startswith("data:"):
+                    frame["data"] = json.loads(line[5:].strip())
+            if frame:
+                frames.append(frame)
+        return frames
+
+    @classmethod
+    async def _collect(cls, client, url: str, headers: dict) -> list[dict]:
+        chunks: list[str] = []
+        async with client.stream("GET", url, headers=headers) as resp:
+            assert resp.status_code == 200
+            assert resp.headers["content-type"].startswith("text/event-stream")
+            async for chunk in resp.aiter_text():
+                chunks.append(chunk)
+                if "event: done" in chunk:
+                    break
+        return cls._parse_frames("".join(chunks))
 
     async def test_stream_delivers_events_then_done(self, client):
         headers = await register_and_login(client)
         eid = await _seed_execution(status="done")
-        from app.models.user import User
+        await _own_execution(eid)
         async with db_module.SessionLocal() as s:
-            me = (await s.execute(sa.select(User).order_by(User.id.desc())
-                                  )).scalars().first()
-            (await s.get(Execution, eid)).owner_id = me.id
             await execution_store.insert_events(s, eid, [
                 _ev(1), _ev(2),
                 {"event_type": "run.finished", "seq": 3, "exit_code": 0,
                  "total": 1, "passed": 1, "attempts": 1,
                  "timestamp": datetime.now(timezone.utc).isoformat()},
             ])
+            # 夹带一条日志行(负数 seq):事件流显式 kind=event,不得混入
+            await execution_store.insert_logs(s, eid, [
+                {"timestamp": datetime.now(timezone.utc).isoformat(),
+                 "level": "INFO", "message": "log-row", "category": "core"},
+            ], seq_base=0)
             await s.commit()
 
-        lines: list[str] = []
-        async with client.stream("GET",
-                                 f"/api/executions/{eid}/events/stream",
-                                 headers=headers) as resp:
-            assert resp.status_code == 200
-            assert resp.headers["content-type"].startswith("text/event-stream")
-            async for chunk in resp.aiter_text():
-                lines.append(chunk)
-                if "event: done" in "".join(lines):
-                    break
-        text = "".join(lines)
-        assert "id: 1" in text and "id: 2" in text and "id: 3" in text
-        assert '"event_type": "step.end"' in text
-        assert "event: done" in text
+        frames = await self._collect(
+            client, f"/api/executions/{eid}/events/stream", headers)
+        ev_frames = [f for f in frames if f.get("event") == "ev"]
+        done = [f for f in frames if f.get("event") == "done"]
+
+        # 帧结构:两事件帧 + run.finished + 终态 done;id 递增;data 合法 JSON
+        assert [f["id"] for f in ev_frames] == ["1", "2", "3"]
+        for f in ev_frames[:2]:
+            assert f["data"]["kind"] == "event"
+            assert f["data"]["event_type"] == "step.end"
+        assert ev_frames[2]["data"]["event_type"] == "run.finished"
+        assert len(done) == 1
+        assert done[0]["data"]["status"] == "done"
+        # 日志行(kind=log)不出现在事件流(AD5 显式 kind=event)
+        assert all(f["data"].get("message") != "log-row" for f in ev_frames)
 
     async def test_last_event_id_resume(self, client):
         """Last-Event-ID=2 → 只推 seq>2 的事件(断线续传不重复)。"""
         headers = await register_and_login(client)
         eid = await _seed_execution(status="done")
-        from app.models.user import User
+        await _own_execution(eid)
         async with db_module.SessionLocal() as s:
-            me = (await s.execute(sa.select(User).order_by(User.id.desc())
-                                  )).scalars().first()
-            (await s.get(Execution, eid)).owner_id = me.id
             await execution_store.insert_events(s, eid, [
                 _ev(1), _ev(2), _ev(3),
                 {"event_type": "run.finished", "seq": 4, "exit_code": 0,
@@ -135,35 +176,73 @@ class TestSseStream:
             ])
             await s.commit()
 
-        lines: list[str] = []
-        async with client.stream(
-                "GET", f"/api/executions/{eid}/events/stream",
-                headers={**headers, "Last-Event-ID": "2"}) as resp:
-            async for chunk in resp.aiter_text():
-                lines.append(chunk)
-                if "event: done" in "".join(lines):
-                    break
-        text = "".join(lines)
-        assert "id: 1" not in text and "id: 2" not in text
-        assert "id: 3" in text and "id: 4" in text
+        frames = await self._collect(
+            client, f"/api/executions/{eid}/events/stream",
+            {**headers, "Last-Event-ID": "2"})
+        ids = [f["id"] for f in frames if f.get("event") == "ev"]
+        assert ids == ["3", "4"], f"续传不得重复/丢失: {ids}"
 
     async def test_legacy_execution_without_events_closes_done(self, client):
         """终态但无事件流的存量执行:首轮空轮即 done,不悬挂。"""
         headers = await register_and_login(client)
         eid = await _seed_execution(status="done")
-        from app.models.user import User
+        await _own_execution(eid)
+        frames = await self._collect(
+            client, f"/api/executions/{eid}/events/stream", headers)
+        assert any(f.get("event") == "done" for f in frames)
+        assert [f for f in frames if f.get("event") == "ev"] == []
+
+
+class TestOrderingAxes:
+    """排序轴(AD4):事件=seq 语义序;日志/混合=(ts,id) 统一时间轴。"""
+
+    @staticmethod
+    async def _seed_mixed(eid: int) -> None:
+        base = datetime(2026, 10, 14, 1, 0, 0, tzinfo=timezone.utc)
         async with db_module.SessionLocal() as s:
-            me = (await s.execute(sa.select(User).order_by(User.id.desc())
-                                  )).scalars().first()
-            (await s.get(Execution, eid)).owner_id = me.id
+            # 事件:seq 1..3(ts 乱序制造 —— seq 才是事件语义序)
+            await execution_store.insert_events(s, eid, [
+                _ev(1, timestamp=(base + timedelta(seconds=30)).isoformat()),
+                _ev(2, timestamp=(base + timedelta(seconds=10)).isoformat()),
+                _ev(3, timestamp=(base + timedelta(seconds=20)).isoformat()),
+            ])
+            # 日志两批:先入库的批 ts 晚、后入库的批 ts 早 —— 按 seq 是
+            # 跨批倒序的(负数轴),按 (ts,id) 应为正序
+            await execution_store.insert_logs(s, eid, [
+                {"timestamp": (base + timedelta(seconds=50)).isoformat(),
+                 "level": "INFO", "message": "late-batch"},
+            ], seq_base=0)
+            await execution_store.insert_logs(s, eid, [
+                {"timestamp": (base + timedelta(seconds=5)).isoformat(),
+                 "level": "INFO", "message": "early-batch"},
+            ], seq_base=-10)
             await s.commit()
 
-        lines: list[str] = []
-        async with client.stream("GET",
-                                 f"/api/executions/{eid}/events/stream",
-                                 headers=headers) as resp:
-            async for chunk in resp.aiter_text():
-                lines.append(chunk)
-                if "event: done" in "".join(lines):
-                    break
-        assert "event: done" in "".join(lines)
+    async def test_event_axis_is_seq(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution()
+        await _own_execution(eid)
+        await self._seed_mixed(eid)
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "event"})
+        assert [i["seq"] for i in r.json()["items"]] == [1, 2, 3]
+
+    async def test_log_axis_is_ts(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution()
+        await _own_execution(eid)
+        await self._seed_mixed(eid)
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "log"})
+        msgs = [i["message"] for i in r.json()["items"]]
+        # ts 升序:early(05s) 在前,late(50s) 在后 —— 与入库/seq 顺序相反
+        assert msgs == ["early-batch", "late-batch"], msgs
+
+    async def test_mixed_axis_is_ts(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution()
+        await _own_execution(eid)
+        await self._seed_mixed(eid)
+        r = await client.get(f"/api/executions/{eid}/events", headers=headers)
+        ts_list = [i["ts"] for i in r.json()["items"]]
+        assert ts_list == sorted(ts_list), "混合时间轴必须 ts 单调"

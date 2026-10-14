@@ -328,7 +328,11 @@ _ARTIFACTS = {"engine-log": "engine.log", "result": "result.json"}
 # ── P2-06/C9:事件流 SSE + P2-07/C10:事件/日志查询 ──────────────
 
 def _event_sse_line(ev) -> str:
-    """ExecutionEvent → SSE 帧(id=seq 续传锚;data=行投影)。"""
+    """ExecutionEvent → SSE 帧(id=seq 续传锚;data=行投影)。
+
+    帧分隔符是真换行(AD6;历史缺陷:曾用字面量 ``\\n`` 两字符 —— 前端按
+    真 ``\\n\\n`` 切帧永远失败,SSE 帧路径静默失效,页面更新全靠兜底轮询)。
+    """
     import json as _json
     payload = {
         "id": ev.id, "seq": ev.seq, "ts": ev.ts.isoformat(),
@@ -337,10 +341,9 @@ def _event_sse_line(ev) -> str:
         "unit": ev.unit, "attempt": ev.attempt, "step": ev.step,
         "event_type": ev.event_type, "message": ev.message,
     }
-    _nl = chr(92) + "n"
-    return ("id: " + str(ev.seq) + _nl + "event: ev" + _nl +
+    return ("id: " + str(ev.seq) + "\n" + "event: ev" + "\n" +
             "data: " + _json.dumps(payload, ensure_ascii=False, default=str)
-            + _nl + _nl)
+            + "\n" + "\n")
 
 
 @router.get("/{execution_id}/events/stream")
@@ -374,14 +377,17 @@ async def stream_execution_events(
         idle_ticks = 0
         finished_seen = cursor > 0   # 续传流:已消费过事件的按已见处理
         deadline = 3600.0
-        _nl2 = chr(92) + "n"
         waited = 0.0
         while waited < deadline:
             if await request.is_disconnected():
                 return
             async with db_module.SessionLocal() as session:
+                # AD5:显式 kind=event —— 此前无 kind 过滤,日志(负数 seq)
+                # 只是恰好被 after_seq 恒正滤掉;显式化后语义不再依赖巧合,
+                # 日志走 /logs/stream(批 2)
                 events = await execution_store.query_events(
-                    session, execution_id, after_seq=cursor, limit=500)
+                    session, execution_id, kind="event",
+                    after_seq=cursor, limit=500)
                 ex_row = await session.get(Execution, execution_id)
                 ex_status = ex_row.status if ex_row else STATUS_CANCELED
             if events:
@@ -395,12 +401,12 @@ async def stream_execution_events(
                 idle_ticks += 1
                 if idle_ticks >= 15:
                     idle_ticks = 0
-                    yield ": ping" + _nl2
+                    yield ": ping\n"
             # 终态收敛:run.finished 已推(新链)或终态执行本就无事件(存量)
             if ex_status in terminal and (finished_seen or not events):
                 import json as _json
-                yield ("event: done" + _nl2 + "data: " + _json.dumps(
-                    {"status": ex_status, "lastSeq": cursor}) + _nl2 + _nl2)
+                yield ("event: done\n" + "data: " + _json.dumps(
+                    {"status": ex_status, "lastSeq": cursor}) + "\n" + "\n")
                 return
             await _asyncio.sleep(1.0)
             waited += 1.0

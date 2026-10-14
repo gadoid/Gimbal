@@ -181,6 +181,9 @@ class ExecutionEvent(Base):
     execution_id: Mapped[int] = mapped_column(
         ForeignKey("executions.id", ondelete="CASCADE")
     )
+    # event:执行域单调语义序(SSE 续传锚);log:负数轴跨批递减,仅为
+    # (execution_id, seq) 唯一性令牌 + 恢复重跑续接,**无序语义** ——
+    # 日志排序读侧一律用 (ts, id),勿再按 seq 排(结构化日志设计 AD4)
     seq: Mapped[int] = mapped_column(Integer)
     ts: Mapped[datetime] = mapped_column(UtcDateTime)
     kind: Mapped[str] = mapped_column(String(8))          # event | log
