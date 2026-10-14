@@ -24,7 +24,7 @@ import Executions from '@/views/Executions.vue'
 import ExecutionsList from '@/views/ExecutionsList.vue'
 import { listExecutions } from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
-import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot } from '@/api/executions'
+import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot, getExecutionEvents } from '@/api/executions'
 import { previewPlateDraft } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { Execution } from '@/api/executions'
@@ -38,6 +38,8 @@ vi.mock('@/api/executions', async (importOriginal) => {
     // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
     getExecutionRows: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 }),
     getCaseArtifact: vi.fn().mockResolvedValue(''),
+    // S1 深链锚点查询(gotoRowLogs);各用例按需覆写返回
+    getExecutionEvents: vi.fn().mockResolvedValue({ items: [], count: 0 }),
     // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
     getScenarioSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
   }
@@ -397,6 +399,72 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
     expect(dtTexts).toContain('注入凭证')        // 新键标签(injectedAuths)
     expect(dtTexts).toContain('提单号前缀')      // 旧键标签保留(历史记录可读)
     expect(w.text()).not.toContain('[object Object]')  // 对象值序列化可读
+    w.unmount()
+  })
+})
+
+describe('Executions.vue — S1 失败根因深链(锚点限定本 unit)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  function failedRow(): Record<string, unknown> {
+    return { seq: 1, datasetId: 'ds-1', rowIndex: 0, rep: 0, status: 'failed',
+             unitId: 'u2', caseDir: 'case-001-ds-1-r0-n0',
+             startedAt: 't1', finishedAt: 't3' }
+  }
+
+  async function mountWithFailedRow() {
+    vi.mocked(getExecutionRows).mockResolvedValue({
+      items: [failedRow()] as never, total: 1, page: 1, pageSize: 500 })
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+    const router = makeRouter()
+    router.push('/executions/7')
+    await router.isReady()
+    const w = mount(Executions, { global: { plugins: [router] } })
+    await flushPromises()
+    await w.find('[data-testid="exec-row-7"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="row-view-logs-1"]').trigger('click')
+    await flushPromises()
+    return { w, router }
+  }
+
+  it('锚点查询带 unit=本行 unit;命中 → around 深链带 unit', async () => {
+    vi.mocked(getExecutionEvents).mockResolvedValue({
+      items: [{ id: 20, seq: 5, ts: '2026-10-14T01:02:03', kind: 'event',
+                level: 'ERROR', category: null, module: null, service: null,
+                protocol: null, unit: 'u2', attempt: '1.1', step: 'step-002',
+                event_type: 'step.failed', message: null }],
+      count: 1,
+    })
+    const { w, router } = await mountWithFailedRow()
+
+    // 查询限定本 unit(不按全局前 50 条找锚)
+    expect(getExecutionEvents).toHaveBeenCalledWith(7, expect.objectContaining(
+      { kind: 'event', event_type: 'step.failed', unit: 'u2' }))
+    // 深链:锚点 + unit 过滤
+    expect(router.currentRoute.value.query).toMatchObject({
+      view: 'mixed', unit: 'u2', around_id: '20', n: '80',
+    })
+    w.unmount()
+  })
+
+  it('本 unit 无失败事件 → 退化 unit 视图,不跨 unit 回落锚点', async () => {
+    // 返回空(别的 unit 的失败事件不该被拿来当本行锚点)
+    vi.mocked(getExecutionEvents).mockResolvedValue({ items: [], count: 0 })
+    const { w, router } = await mountWithFailedRow()
+
+    expect(getExecutionEvents).toHaveBeenCalledWith(7, expect.objectContaining(
+      { unit: 'u2' }))
+    const q = router.currentRoute.value.query
+    expect(q).toMatchObject({ view: 'mixed', unit: 'u2' })
+    expect(q.around_ts).toBeUndefined()
+    expect(q.around_id).toBeUndefined()
     w.unmount()
   })
 })

@@ -1557,6 +1557,9 @@ async def _fanout(
                 log_counters=ingester.pump_counters)  # S9:泵侧丢弃计数
         except Exception as e:  # noqa: BLE001
             await _teardown()
+            # 池启动失败但 ingester 已 start(含启动期可能入缓冲的行):
+            # finalize 收口,否则 ticker 任务泄漏(0.5s 周期冲刷永不停止)。
+            await ingester.finalize()
             raise
         if debug is not None:
             debug_sessions[execution_id] = {"session": server_pool.first}
@@ -1579,6 +1582,14 @@ async def _fanout(
         )
         total_rows = (sum(len(ds["rows"]) for ds in datasets)
                       * len(injections or [None]))
+        # §7 顺序不变量在异常路径同样成立:先排空泵(关池)再冲刷 ingester,
+        # 最后才写终态 —— server 启动期已入缓冲的日志行不丢、ticker 不泄漏。
+        if server_pool is not None:
+            try:
+                await server_pool.close()
+            except Exception:  # noqa: BLE001
+                pass
+        await ingester.finalize()
         await _fail_whole_execution(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
@@ -2050,6 +2061,18 @@ async def _fanout(
             *(_row(ds, i, row, r, seq, inj)
               for seq, (ds, i, row, inj, r) in enumerate(entries))
         )
+        # 尾部日志阻断修复(2026-10-13):server 链进程不随 run 结束退出,
+        # stderr 泵在 run_case 返回后仍会读到滞留管道的行(最后一步
+        # WARNING / uvicorn 收尾)。finalize 之后的 on_log 只进**已停止**
+        # ingester 的缓冲,永远不落库,却已计入 logs_ingested —— S9 对账
+        # 失真、S6 摘要漏最尾证据。先关池(close = terminate 进程树并等
+        # 泵读到 EOF,幂等 —— _teardown 再关无害),泵排空后再 finalize。
+        # launch 链无此问题:进程退出即管道 EOF,泵在 launch 返回前读完。
+        if server_pool is not None:
+            try:
+                await server_pool.close()
+            except Exception:  # noqa: BLE001
+                pass
         # P2-02:冲刷事件/日志余量(先于终态落库 —— SSE/日志页在 done 后仍可读全量)
         await ingester.finalize()
 

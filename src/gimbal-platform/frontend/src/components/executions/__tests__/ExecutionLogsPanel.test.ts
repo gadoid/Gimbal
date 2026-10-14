@@ -93,4 +93,46 @@ describe('ExecutionLogsPanel', () => {
     expect(w.find('[data-testid="logs-state"]').text()).toContain('连接失败')
     w.unmount()
   })
+
+  it('断线重连带 Last-Event-ID 头精确续传;重叠行按 id 去重', async () => {
+    // 首连:ids 1,2 后流断(无 done 帧)→ 指数退避重连;
+    // 重连:请求头须带 Last-Event-ID: 2、不再 backfill;服务端重叠重推
+    // id=2 → 按 id 去重不重复插入
+    const headersSeen: Record<string, unknown>[] = []
+    let call = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      call += 1
+      URLs.push(url)
+      headersSeen.push(init.headers as Record<string, unknown>)
+      if (call === 1) {
+        return sseResp([
+          logFrame(1, '2026-10-14T01:00:01Z', 'first'),
+          logFrame(2, '2026-10-14T01:00:02Z', 'second'),
+        ])   // 流结束但无 done → 组件判定断线
+      }
+      return sseResp([
+        logFrame(2, '2026-10-14T01:00:02Z', 'second'),   // 重叠重推
+        logFrame(3, '2026-10-14T01:00:03Z', 'third'),
+        'id: 4\nevent: done\ndata: {"status":"done"}\n\n',
+      ])
+    }))
+    const w = mount(ExecutionLogsPanel, { props: { executionId: 9, running: true } })
+    w.vm.open()
+    await flushPromises()
+    // 首连带 backfill;重连发生在 ~1s 退避后,轮询等第二次 fetch
+    expect(URLs[0]).toContain('backfill=200')
+    for (let i = 0; i < 200 && call < 2; i++) {
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    await flushPromises()
+    expect(call).toBe(2)
+    // 重连:精确续传 —— 带 Last-Event-ID 头、不带 backfill
+    expect(headersSeen[1]).toMatchObject({ 'Last-Event-ID': '2' })
+    expect(URLs[1]).not.toContain('backfill=')
+    // 重叠的 id=2 不重复;三行按序
+    const msgs = w.findAll('.log-msg').map((n) => n.text())
+    expect(msgs).toEqual(['first', 'second', 'third'])
+    expect(w.find('[data-testid="logs-state"]').text()).toContain('已收口')
+    w.unmount()
+  })
 })

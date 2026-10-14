@@ -351,7 +351,12 @@ async def execute_graph(
     if chain == "server":
         from .gimbal_server_session import ServerSession
         ss = ServerSession()
-        await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir)
+        # 日志入库接线(与 cases 链同面):server 分支此前漏传 on_log/
+        # log_counters,graph 执行的引擎日志只落 engine.log 文件、不入
+        # execution_events。顺序安全:ss.close() 在本函数 finally 收口
+        # (泵排空后才返回),调用方 _fanout_graph 随后 finalize。
+        await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir,
+                       on_log=on_log, log_counters=log_counters)
         try:
             return await ss.run_case(
                 case_path, n_runs=n_runs, on_event=on_event,

@@ -48,6 +48,10 @@ let autoScroll = true
 let abort: AbortController | null = null
 let reconnects = 0
 let generation = 0             // 筛选/收起换流时作废在飞泵
+// 断线续传游标(§7/AD5):已收到最大行 id。重连带 Last-Event-ID 头
+// 精确续传(不 backfill、不丢不重);筛选变更走 start() 重置 —— 服务端
+// 筛选对 backfill+tail 都生效,旧游标下的过滤行会被跳过,必须重回看。
+let lastId = 0
 
 // ── S7 窗口化渲染:行高恒定,只渲染视口 ±overscan ──────────────
 const ROW_H = 22               // 与 .log-row 的 height 保持一致(样式注释互指)
@@ -86,6 +90,9 @@ function insertRow(row: LogRow): void {
     if (m.ts < row.ts || (m.ts === row.ts && m.id < row.id)) lo = mid + 1
     else hi = mid
   }
+  // 按 id 去重:重连窗口重叠(服务端重发/竞态)不重复插入
+  if ((lo > 0 && arr[lo - 1]!.id === row.id)
+      || (lo < arr.length && arr[lo]!.id === row.id)) return
   arr.splice(lo, 0, row)
   if (arr.length > MAX_ROWS) arr.splice(0, arr.length - MAX_ROWS)
 }
@@ -128,13 +135,20 @@ async function pump(gen: number): Promise<void> {
   const ctrl = new AbortController()
   abort = ctrl
   connState.value = 'connecting'
-  const params: Record<string, string | number> = { backfill: 200 }
+  // 首连回看最近窗口;重连(游标在手)不带 backfill,只带 Last-Event-ID
+  // 精确续传 —— 服务端语义:有头即从 id>cursor tail,backfill 被忽略
+  const params: Record<string, string | number> = {}
+  if (lastId === 0) params.backfill = 200
   if (levelMin.value !== 'ALL') params.level_min = levelMin.value
   if (category.value) params.category = category.value
   if (step.value.trim()) params.step = step.value.trim()
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${auth.accessToken}`,
+  }
+  if (lastId > 0) headers['Last-Event-ID'] = String(lastId)
   try {
     const resp = await fetch(executionLogsStreamUrl(props.executionId, params), {
-      headers: { Authorization: `Bearer ${auth.accessToken}` },
+      headers,
       signal: ctrl.signal,
     })
     if (resp.status === 404) { connState.value = 'failed'; return }
@@ -150,7 +164,10 @@ async function pump(gen: number): Promise<void> {
       if (frame.event !== 'log' || frame.data === undefined) return
       try {
         const d = JSON.parse(frame.data) as LogRow
-        if (d.id !== undefined) withViewportAnchor(() => insertRow(d))
+        if (d.id !== undefined) {
+          lastId = Math.max(lastId, d.id)
+          withViewportAnchor(() => insertRow(d))
+        }
       } catch { /* 坏帧忽略,流继续 */ }
     })
     if (connState.value !== ('done' as typeof connState.value) && gen === generation) {
@@ -170,6 +187,7 @@ async function pump(gen: number): Promise<void> {
 function start(): void {
   generation += 1
   rows.value = []
+  lastId = 0
   connState.value = 'connecting'
   void pump(generation)
 }

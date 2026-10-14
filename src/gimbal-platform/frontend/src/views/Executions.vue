@@ -577,15 +577,17 @@ function gotoEvents(): void {
 async function gotoRowLogs(row: ExecutionRow): Promise<void> {
   const exId = execStore.detail?.id
   if (!exId) return
+  const uid = rowUnitId(row)
   try {
-    // unit 过滤(多行区分)+ 失败事件优先锚点;无事件锚(旧执行)退化
-    // 为 unit 过滤的日志视图(不带 around)
-    const q: Record<string, string | number> = { view: 'mixed', kind: '' }
+    // 锚点查询限定本 unit(S1 修正):按全局前 50 条 step.failed 找锚会
+    // 锚到别的 unit 的失败时间点(around 窗口与本 unit 过滤条件错位),
+    // 且失败超 50 条时本 unit 的事件永远翻不进前 50。查不到 → 退化为
+    // unit 过滤视图(不带 around),不跨 unit 回落。
     const r = await getExecutionEvents(exId, {
-      kind: 'event', event_type: 'step.failed', limit: 50 })
-    const uid = rowUnitId(row)
-    const hit = (uid ? r.items.find((it) => it.unit === uid) : undefined)
-      ?? r.items[0]
+      kind: 'event', event_type: 'step.failed', limit: 50,
+      ...(uid ? { unit: uid } : {}),
+    })
+    const hit = r.items[0]
     const query: Record<string, string> = { view: 'mixed' }
     if (hit) {
       query.around_ts = hit.ts
