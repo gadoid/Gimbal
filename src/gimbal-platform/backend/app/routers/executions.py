@@ -545,16 +545,36 @@ async def get_execution_events(
     event_type: str | None = None,
     search: Annotated[str | None, Query(description="message 全文搜索")] = None,
     after_seq: Annotated[int | None, Query(ge=None)] = None,
+    after_ts: Annotated[str | None, Query(
+        description="(ts,id) 时间轴翻页锚(ISO 时间,与 after_id 成对)")] = None,
+    after_id: Annotated[int | None, Query(
+        description="(ts,id) 时间轴翻页锚(行 id,与 after_ts 成对)")] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> dict:
-    """事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。"""
+    """事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。
+
+    ``after_ts``+``after_id``:静态时间轴翻页锚(严格大于该 (ts,id));
+    ``after_seq``:事件轴续传锚(seq > ?)。
+    """
     from ..services import execution_store
 
+    ts_anchor: "datetime | None" = None
+    if after_ts is not None:
+        from datetime import datetime as _dt
+        try:
+            ts_anchor = _dt.fromisoformat(after_ts.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "bad_after_ts",
+                        "message": "after_ts 须为 ISO 时间"})
     rows = await execution_store.query_events(
         session, ex.id, kind=kind, level=level, level_min=level_min,
         category=category,
         module=module, service=service, unit=unit, step=step,
         event_type=event_type, search=search, after_seq=after_seq,
+        ts_after=(ts_anchor, after_id)
+            if ts_anchor is not None and after_id is not None else None,
         limit=limit)
     import json as _json
 

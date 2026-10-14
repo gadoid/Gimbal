@@ -50,6 +50,10 @@
       >取消</Button>
       <Button variant="link" size="sm" class="h-7 px-2" data-testid="goto-events"
               @click="gotoEvents">日志分析</Button>
+      <Button
+        variant="link" size="sm" class="h-7 px-2" data-testid="toggle-logs-panel"
+        @click="toggleLogsPanel"
+      >{{ logsPanelOpen ? '收起实时日志' : '实时日志' }}</Button>
       <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
       <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
     </template>
@@ -140,6 +144,12 @@
     </template>
 
     <h3 class="rows-title">行级明细</h3>
+    <!-- 批 3/AD7:实时日志面板(行内抽屉;展开即 tail,收起即断流 —— 连接数预算) -->
+    <ExecutionLogsPanel
+      v-if="logsPanelOpen" ref="logsPanelRef"
+      :execution-id="executionId" :running="!isTerminalDetail"
+      data-testid="logs-panel-mount"
+    />
     <div class="rows-head">
       <p class="rows-hint">
         每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
@@ -220,10 +230,26 @@
             >
               <td colspan="9">
                 <div class="artifact-head">
-                  <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志）' : 'result.json（步骤明细）' }}</span>
-                  <span class="mono dim">{{ row.caseDir }}</span>
+                  <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志，原始文件 — 含未入库级别）' : 'result.json（步骤明细）' }}</span>
+                  <div class="artifact-tools">
+                    <label
+                      v-if="a.file === 'engine-log' && a.hasAnsi"
+                      class="raw-toggle"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="rawAnsiKeys.has(a.key)"
+                        @change="toggleRawAnsi(a.key, ($event.target as HTMLInputElement).checked)"
+                      />
+                      显示原始(含颜色码)
+                    </label>
+                    <span class="mono dim">{{ row.caseDir }}</span>
+                  </div>
                 </div>
-                <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{ a.content }}</pre>
+                <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{
+                  a.file === 'engine-log' && !rawAnsiKeys.has(a.key)
+                    ? stripAnsi(a.content) : a.content
+                }}</pre>
               </td>
             </tr>
           </template>
@@ -257,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import PageBack from '@/components/chrome/PageBack.vue'
@@ -277,6 +303,8 @@ import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Pagination } from '@/components/ui/pagination'
 import { useClientPager } from '@/composables/useClientPager'
+import ExecutionLogsPanel from '@/components/executions/ExecutionLogsPanel.vue'
+import { hasAnsi, stripAnsi } from '@/utils/ansi'
 
 const route = useRoute()
 const router = useRouter()
@@ -424,8 +452,19 @@ type ArtifactFile = (typeof ARTIFACT_FILES)[number]
 
 interface RowArtifactView {
   file: ArtifactFile
+  key: string
   content: string
   isError: boolean
+  hasAnsi: boolean
+}
+
+// 工件查看器 ANSI 感知(AD8 层 4):默认剥除 ESC 序列显示纯文本,
+// 「显示原始」按工件粒度保留原样(存量文件立即受益)
+const rawAnsiKeys = ref(new Set<string>())
+function toggleRawAnsi(key: string, on: boolean): void {
+  const s = new Set(rawAnsiKeys.value)
+  if (on) { s.add(key) } else { s.delete(key) }
+  rawAnsiKeys.value = s
 }
 
 /** 工件视图展开/收起(展开重拉最新;收起藏视图,缓存留在 store)。 */
@@ -445,12 +484,13 @@ function loadedArtifacts(row: ExecutionRow): RowArtifactView[] {
     if (!isArtifactShown(row, file)) continue
     const err = execStore.artifactError[key]
     if (err !== undefined) {
-      out.push({ file, content: err, isError: true })
+      out.push({ file, key, content: err, isError: true, hasAnsi: false })
       continue
     }
     const text = execStore.artifactText[key]
     if (text !== undefined) {
-      out.push({ file, content: text === '' ? '(空)' : prettyArtifact(file, text), isError: false })
+      const content = text === '' ? '(空)' : prettyArtifact(file, text)
+      out.push({ file, key, content, isError: false, hasAnsi: hasAnsi(content) })
     }
   }
   return out
@@ -504,6 +544,18 @@ function refreshRowsIfExpanded(): void {
 
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
+
+// 实时日志面板(批 3):行内抽屉,展开即 tail、收起即断流(D3/§8)。
+// 展开态是页面局部 ref(非 store):离开详情页 = 断流,天然符合连接预算。
+const logsPanelOpen = ref(false)
+const logsPanelRef = ref<InstanceType<typeof ExecutionLogsPanel> | null>(null)
+const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.detail?.status ?? ''))
+
+function toggleLogsPanel(): void {
+  logsPanelOpen.value = !logsPanelOpen.value
+  if (logsPanelOpen.value) void nextTick(() => logsPanelRef.value?.open())
+  else logsPanelRef.value?.close()
+}
 
 function gotoEvents(): void {
   void router.push(`/executions/${execStore.detail?.id}/events`)
@@ -794,6 +846,21 @@ onUnmounted(() => {
   align-items: baseline;
   margin-bottom: 6px;
   color: var(--color-text-secondary);
+}
+.artifact-tools {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin-left: auto;
+}
+.raw-toggle {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted-fg, #71717a);
+  cursor: pointer;
+  user-select: none;
 }
 
 .artifact-pre {

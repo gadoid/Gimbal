@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Execution, ExecutionSnapshot
@@ -387,6 +387,7 @@ async def query_events(
     search: "str | None" = None,
     after_seq: "int | None" = None,
     after_id: "int | None" = None,
+    ts_after: "tuple[datetime, int] | None" = None,
     order: "str | None" = None,
     limit: int = 500,
 ) -> list[ExecutionEvent]:
@@ -395,12 +396,14 @@ async def query_events(
     标签精确匹配 + message 全文 search(ILIKE);``after_seq`` 支撑
     Last-Event-ID 续传语义;命中 (execution_id, seq) 索引。
 
-    游标与排序(结构化日志设计 AD5):
+    游标与排序(结构化日志设计 AD4/AD5):
     - ``after_seq``:事件轴游标(seq > ?);
     - ``after_id`` + ``order="id"``:日志流 tail 模式 —— 入库序游标
       (id > ?)按 id 排序。tail 必须用入库序而非 (ts,id):ts 是引擎
       打点时间、入库先后由 flush 时机决定,(ts,id) 游标会稳态漏行
       (先 ts 后入库的行落在已推进的 cursor 之下);
+    - ``ts_after``:静态 (ts,id) 时间轴**翻页**锚(严格大于该组合,
+      (ts > ?) OR (ts = ? AND id > ?)),与 tail 游标语义无关;
     - 默认排序(未传 order)走 AD4 语义:event=seq,log/混合=(ts,id)。
     """
     from ..models.execution import ExecutionEvent as EE
@@ -410,6 +413,11 @@ async def query_events(
         stmt = stmt.where(EE.seq > after_seq)
     if after_id is not None:
         stmt = stmt.where(EE.id > after_id)
+    if ts_after is not None:
+        anchor_ts, anchor_id = ts_after
+        stmt = stmt.where(or_(
+            EE.ts > anchor_ts,
+            and_(EE.ts == anchor_ts, EE.id > anchor_id)))
     if kind is not None:
         stmt = stmt.where(EE.kind == kind)
     if level is not None:

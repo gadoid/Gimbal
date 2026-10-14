@@ -193,6 +193,45 @@ class TestSseStream:
         assert [f for f in frames if f.get("event") == "ev"] == []
 
 
+class TestTsPagination:
+    """(ts,id) 静态翻页锚(批 3:分析页「加载更多」;S2 around 的同源地基)。"""
+
+    async def test_after_ts_id_strict_pagination(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution(status="done")
+        await _own_execution(eid)
+        base = datetime(2026, 10, 14, 4, 0, 0, tzinfo=timezone.utc)
+        async with db_module.SessionLocal() as s:
+            # 3 行同 ts(id 1<2<3)+2 行更晚:锚在中间行,应取同 ts 后者+晚行
+            await execution_store.insert_logs(s, eid, [
+                {"timestamp": base.isoformat(), "level": "INFO", "message": "same-a"},
+                {"timestamp": base.isoformat(), "level": "INFO", "message": "same-b"},
+                {"timestamp": base.isoformat(), "level": "INFO", "message": "same-c"},
+                {"timestamp": (base + timedelta(seconds=1)).isoformat(),
+                 "level": "INFO", "message": "next-sec"},
+            ], seq_base=0)
+            await s.commit()
+        r = await client.get(f"/api/executions/{eid}/events",
+                             headers=headers, params={"kind": "log"})
+        items = r.json()["items"]
+        assert [i["message"] for i in items] == ["same-a", "same-b", "same-c", "next-sec"]
+        anchor = items[0]     # same-a 的 (ts,id)
+
+        r2 = await client.get(
+            f"/api/executions/{eid}/events", headers=headers,
+            params={"kind": "log", "after_ts": anchor["ts"], "after_id": anchor["id"]})
+        assert [i["message"] for i in r2.json()["items"]] == ["same-b", "same-c", "next-sec"]
+
+    async def test_after_ts_invalid_rejected(self, client):
+        headers = await register_and_login(client)
+        eid = await _seed_execution()
+        await _own_execution(eid)
+        r = await client.get(
+            f"/api/executions/{eid}/events", headers=headers,
+            params={"after_ts": "not-a-time", "after_id": 1})
+        assert r.status_code == 400
+
+
 class TestLogsStream:
     """日志流(批 2/AD5):tail 游标=入库 id,backfill 仅首连,服务端筛选,
     终态 done;「先 ts 后入库不缺行」回归闸。"""
