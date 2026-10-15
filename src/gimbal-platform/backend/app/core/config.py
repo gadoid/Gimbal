@@ -38,10 +38,11 @@ class Settings(BaseSettings):
     # 与 DATABASE_URL 必填同级);仅测试/一次性本地环境显式置 1。
     ALLOW_EPHEMERAL_SECRETS: bool = False
 
-    # ── 注册(整体评审 2026-10-15 #5)────────────────────────
-    # False(默认):仅「库内尚无真人用户」时放行注册(引导首个 admin),
-    # 其后由 admin 在用户管理开号;True:开放自助注册(新号 role=user)。
-    REGISTRATION_OPEN: bool = False
+    # ── 注册(整体评审 2026-10-15 #5;默认改开 2026-10-15)────
+    # True(默认):开放自助注册(新号 role=user)。False:仅「库内尚无
+    # 真人用户」时放行注册(引导首个 admin),其后由 admin 在用户管理
+    # 开号 —— 对外/生产部署应显式置 false。
+    REGISTRATION_OPEN: bool = True
 
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。

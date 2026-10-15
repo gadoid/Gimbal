@@ -57,6 +57,14 @@ async def test_registration_open_gives_user_role(client, monkeypatch):
     assert bob.role == "user"
 
 
+def test_registration_open_default_is_true(monkeypatch):
+    # 2026-10-15 拍板:默认开放自助注册。空 env + 空 .env 键构造
+    # Settings 必须得到 True —— 防止日后误翻回 False 而无测试报警。
+    monkeypatch.delenv("REGISTRATION_OPEN", raising=False)
+    from app.core.config import Settings
+    assert Settings().REGISTRATION_OPEN is True
+
+
 @pytest.mark.parametrize("jwt_eph,fernet_eph,allow,raises", [
     (False, False, False, False),
     (True, False, False, True),
