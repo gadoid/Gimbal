@@ -152,4 +152,46 @@ describe('ImportScenarioDialog 状态机', () => {
     expect(tds[3].text()).toContain('1')
     w.unmount()
   })
+
+  it('锚定提示:未锚步骤列原因与 carry 降级后果;已锚只给计数(#323 前端补)', async () => {
+    importPrecheck.mockResolvedValue(pre({
+      anchoring: {
+        anchored: [
+          { index: 1, service: 'fin-service', method: 'POST', path: '/ok',
+            endpoint: 'fin.ok', reason: null },
+        ],
+        unresolved: [
+          // 漂移条目:endpoint 带被拒候选 —— 展示为排查信息,不是已锚
+          { index: 0, service: 'fin-service', method: 'POST',
+            path: '/api/order/orderEntrust/orderPage',
+            endpoint: 'fin.order_entrust.order_page',
+            reason: 'not_in_revision' },
+          { index: 2, service: null, method: 'GET', path: '/x',
+            endpoint: null, reason: 'not_in_catalog' },
+        ],
+      },
+    }))
+    const w = mountDialog()
+    await flushPromises()
+    const sec = w.find('[data-testid="import-anchoring"]')
+    expect(sec.exists()).toBe(true)
+    expect(sec.text()).toContain('已回填锚点 1 步')
+    expect(sec.text()).toContain('步骤1')                     // index 0 → 步骤1
+    expect(sec.text()).toContain('/api/order/orderEntrust/orderPage')
+    expect(sec.text()).toContain('钉定修订内 method/path 已漂移')
+    expect(sec.text()).toContain('working 曾命中 fin.order_entrust.order_page')
+    expect(sec.text()).toContain('carry 降级注入')
+    expect(sec.text()).toContain('步骤3')                     // index 2
+    expect(sec.text()).toContain('端点清单中无匹配')
+    w.unmount()
+  })
+
+  it('锚定提示:无可锚步骤时区块不出现(旧负载缺省同)', async () => {
+    importPrecheck.mockResolvedValue(
+      pre({ anchoring: { anchored: [], unresolved: [] } }))
+    const w = mountDialog()
+    await flushPromises()
+    expect(w.find('[data-testid="import-anchoring"]').exists()).toBe(false)
+    w.unmount()
+  })
 })

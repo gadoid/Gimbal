@@ -27,6 +27,18 @@ export interface ImportAuthRef {
   inMyPool: boolean
 }
 
+/** 重锚定报告条目(#323):reason 为 null 才是已锚。not_in_revision 等
+ *  未锚原因时 endpoint 携带被拒的命中候选,仅供排查,不代表已锚。 */
+export interface ImportAnchorEntry {
+  index: number
+  service: string | null
+  method: string | null
+  path: string | null
+  endpoint: string | null
+  reason: 'not_in_catalog' | 'ambiguous' | 'not_in_revision'
+    | 'catalog_unavailable' | null
+}
+
 export interface ImportPrecheck {
   blocking: boolean
   formatError: { code: string } | null
@@ -38,6 +50,8 @@ export interface ImportPrecheck {
   services: ImportServiceRow[]
   authRefs: ImportAuthRef[]
   workingDeclarations: string[]
+  /** 步骤锚定(可执行形态反查);旧负载/阻断路径可能缺省。 */
+  anchoring?: { anchored: ImportAnchorEntry[]; unresolved: ImportAnchorEntry[] }
 }
 
 /** 落库映射项(P7-⑥:无值覆盖字段 —— 敏感值无输入口)。 */

@@ -9,6 +9,8 @@
   * 服务映射行:复用/映射/新建可切换;新建可换名 + 挂自己的认证配置;
     文案说清全局副作用(base_url/carry 平台全局生效);
   * 认证引用栏(P7-③):${auth.*} × 你本人凭证池,只展示不阻塞;
+  * 步骤锚定(#323):可执行形态反查 —— 已回填计数 + 未锚黄条(原因与
+    carry 降级后果),只警示不阻塞(手写裸调用是合法形态);
   * 409 自愈:scenario_id_exists/alias_name_taken/mapping_stale → 自动
     重新预检刷新建议,无需重选文件。
 -->
@@ -41,6 +43,22 @@
             <p v-if="workingDeclarations.length" class="imp-warn" data-testid="import-working">
               ⚠ {{ workingDeclarations.join('、') }} 声明为 working(源平台工作区)——本机同名 working 内容可能不同,建议先钉修订。
             </p>
+          </div>
+
+          <!-- 步骤锚定(#323):可执行形态反查;未锚步骤落库后执行将走
+               carry 降级门控(服务绑定全表字段可能注入请求体) -->
+          <div v-if="anchorUnresolved.length || anchorAnchored.length" class="imp-section" data-testid="import-anchoring">
+            <p class="imp-sec-title">步骤锚定(可执行形态反查)</p>
+            <p v-if="anchorAnchored.length" class="text-caption text-slate-500">
+              已回填锚点 {{ anchorAnchored.length }} 步(与编排器保存形态一致)。
+            </p>
+            <div v-if="anchorUnresolved.length" class="imp-warn">
+              <p v-for="a in anchorUnresolved" :key="a.index" class="imp-warn-line">
+                ⚠ 步骤{{ a.index + 1 }} <span class="mono">{{ a.method }} {{ a.path }}</span><span v-if="a.service">({{ a.service }})</span>
+                未锚:{{ anchorReasonLabel(a.reason) }}<span v-if="a.reason === 'not_in_revision' && a.endpoint">(working 曾命中 {{ a.endpoint }})</span>
+                —— 执行时该步将走 carry 降级注入,服务绑定全表字段可能进入请求体。
+              </p>
+            </div>
           </div>
 
           <!-- ID 冲突区 -->
@@ -133,6 +151,7 @@ import { toast } from '@/utils/toast'
 import {
   importPrecheck, importScenario,
   type ImportPrecheck, type ImportServiceRow, type ImportMapping,
+  type ImportAnchorEntry,
 } from '@/api/scenario-import'
 import { listAll } from '@/api/auth_sessions'
 
@@ -153,6 +172,12 @@ const fatal = computed(() => !!precheck.value?.blocking)
 const rows = computed(() => precheck.value?.services || [])
 const createRows = computed(() => rows.value.filter((r) => decision(r) === 'create'))
 const workingDeclarations = computed(() => precheck.value?.workingDeclarations || [])
+// 锚定判定只看 reason(#323 口径):not_in_revision 条目的 endpoint 是被拒
+// 候选的排查信息,不代表已锚;缺省键(旧负载/阻断路径)按空处理
+const anchorUnresolved = computed(
+  () => precheck.value?.anchoring?.unresolved || [])
+const anchorAnchored = computed(
+  () => precheck.value?.anchoring?.anchored || [])
 const inconsistentMap = computed<Record<string, string[]>>(() => {
   const out: Record<string, string[]> = {}
   for (const r of rows.value) {
@@ -185,6 +210,15 @@ function createNameOk(row: ImportServiceRow): boolean {
 }
 function suggestionLabel(s: string): string {
   return s === 'reuse' ? '复用(值一致)' : s === 'map' ? '映射(本机为准)' : '新建'
+}
+function anchorReasonLabel(r: ImportAnchorEntry['reason']): string {
+  switch (r) {
+    case 'not_in_catalog': return '声明修订的端点清单中无匹配(method+path 未命中)'
+    case 'ambiguous': return '多个候选端点匹配,无法唯一确定'
+    case 'not_in_revision': return 'working 命中但钉定修订内 method/path 已漂移'
+    case 'catalog_unavailable': return 'plate 端点清单不可用,未能反查'
+    default: return '未知原因'
+  }
 }
 // 计数按当前决策取(复盘 2026-10-15:切换决策接管面不同,确认内容必须
 // 与实际执行一致);旧负载无 countsByDecision 时回落顶层建议计数
@@ -309,6 +343,8 @@ watch(() => props.open, (v) => {
   margin-top: 6px; font-size: 11.5px; color: #b45309;
   background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 8px;
 }
+.imp-warn-line { font-size: 12px; line-height: 1.5; }
+.imp-warn-line + .imp-warn-line { margin-top: 2px; }
 .imp-fatal {
   border: 1px solid #fecaca; background: #fef2f2; border-radius: 8px;
   padding: 12px;
