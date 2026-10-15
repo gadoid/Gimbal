@@ -276,15 +276,18 @@ def is_stale(tpl_cron: str, last_run_at: datetime | None,
 
 
 def _period_seconds(cron: str, anchor: datetime | None) -> float:
-    """通知节流间隔 = 周期(§2.3,口径同过期计算:从上次运行锚点
-    推下一个触发,差值即周期;运行发生在触发点上,锚点近似成立)。
-    解析失败回退 1 小时。下限 60s 防畸形 cron。"""
+    """通知节流间隔 = 周期(§2.3,口径同过期计算的双触发法:nf2 -
+    nf1)。两步前瞻的触发间距与锚点落点无关 —— 手动执行发生在周期内
+    任意时刻(如整点 cron 前两分钟),旧「nf - 锚点」口径会把周期算
+    成 2 分钟、节流随之偏松;nf2 - nf1 恒为真实周期。解析失败回退
+    1 小时。下限 60s 防畸形 cron。"""
     from ..core.timeutil import ensure_aware
 
     try:
         base = ensure_aware(anchor) if anchor is not None else _now()
-        nf = ensure_aware(next_fire(cron, base))
-        return max(60.0, (nf - base).total_seconds())
+        nf1 = ensure_aware(next_fire(cron, base))
+        nf2 = ensure_aware(next_fire(cron, nf1))
+        return max(60.0, (nf2 - nf1).total_seconds())
     except Exception:  # noqa: BLE001
         return 3600.0
 

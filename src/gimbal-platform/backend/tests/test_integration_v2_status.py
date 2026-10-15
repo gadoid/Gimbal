@@ -466,3 +466,23 @@ class TestLegacyMapSql:
                 "SELECT run_status FROM integration_tasks "
                 "WHERE id=:i").bindparams(i=tpl_id))).scalar()
             assert tpl_row == ""
+
+
+# ── 节流周期口径(合入评估 §3-4:nf2-nf1,与过期判定双触发法同口径)──
+
+
+class TestPeriodSeconds:
+    def test_manual_run_mid_interval_not_shortened(self):
+        """手动执行落在周期尾部不再把周期算短:整点 cron 前两分钟跑,
+        旧「nf - 锚点」口径得 2 分钟(节流偏松),nf2 - nf1 恒为真实周期。"""
+        anchor = datetime(2026, 10, 15, 10, 58, tzinfo=timezone.utc)
+        assert ir._period_seconds("0 * * * *", anchor) == 3600.0
+        # 锚点恰在触发点上:两种口径等价,不回归
+        on_fire = datetime(2026, 10, 15, 11, 0, tzinfo=timezone.utc)
+        assert ir._period_seconds("0 * * * *", on_fire) == 3600.0
+
+    def test_daily_and_fallback(self):
+        anchor = datetime(2026, 10, 15, 15, 30, tzinfo=timezone.utc)
+        assert ir._period_seconds("0 3 * * *", anchor) == 86400.0
+        assert ir._period_seconds("bogus-cron", anchor) == 3600.0   # 回退
+        assert ir._period_seconds("0 * * * *", None) >= 60.0

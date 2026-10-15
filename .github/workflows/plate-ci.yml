@@ -63,7 +63,7 @@ jobs:
       - name: 未定义名称守卫 — pyflakes(undefined names)
         run: |
           pip install -q pyflakes
-          python -m pyflakes src/gimbal src/gimbal_plate src/gimbal-platform/backend/app tests 2>&1 | grep -E "undefined name" && exit 1 || true
+          python -m pyflakes src/gimbal src/gimbal_plate src/gimbal-platform/backend/app src/gimbal-platform/backend/tests scripts 2>&1 | grep -E "undefined name" && exit 1 || true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -104,6 +104,14 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
         run: pytest src/gimbal-platform/backend/tests/test_empty_db_bootstrap.py -q
+      # 增量升级门(合入评估 §2-2):空库门只覆盖 fresh 路径(create_all
+      # = 模型);本门走完整迁移链 0001→head 建库再与模型比对 —— 0024
+      # DateTime/timestamptz 漂移当时只有这条路能拦。白名单仅 trgm 索引。
+      # service 容器里 gimbal 是超级用户,脚本默认建临时库 gimbal_chain。
+      - name: 增量升级门(迁移链建库 vs 模型)
+        run: >
+          python scripts/check_migration_drift.py
+          --url postgresql://gimbal:gimbal@localhost:5432/gimbal
       # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
       # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
       # 第四轮 M2:冒烟升级为真实 check——PLATE_REPO_ROOT 指到 checkout

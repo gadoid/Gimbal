@@ -470,8 +470,19 @@ async def test_precheck_inconsistent_listed_for_ui(client, plate_mock: PlateMock
 
 
 class _FakeRequest:
-    def __init__(self, headers: dict, body: bytes):
+    """体积门桩:headers + chunk 列表(stream() 逐块产出,记录已消费
+    块数以断言「超限即中止」);body() 兼容旧的整读路径。"""
+
+    def __init__(self, headers: dict, body: bytes, chunk_size: int = 1024):
         self.headers, self._body = headers, body
+        self.chunks = [body[i:i + chunk_size]
+                       for i in range(0, len(body), chunk_size)] or [b""]
+        self.consumed = 0
+
+    async def stream(self):
+        for c in self.chunks:
+            self.consumed += 1
+            yield c
 
     async def body(self) -> bytes:
         return self._body
@@ -484,10 +495,76 @@ async def test_read_bundle_size_gate():
         raise AssertionError("expected payload_too_large")
     except scenario_import.ImportRejected as e:
         assert (e.code, e.http) == ("payload_too_large", 413)
-    # 无 content-length 头时按实际 body 长度复核
-    req2 = _FakeRequest({}, b"x" * (5 * 1024 * 1024 + 1))
+    # 无 content-length 头时按流式累计复核(超限即弃读中止)
+    req2 = _FakeRequest({}, b"x" * (7 * 1024 * 1024), chunk_size=1024 * 1024)
     try:
         await scenario_import.read_bundle(req2)
         raise AssertionError("expected payload_too_large")
     except scenario_import.ImportRejected as e:
         assert e.code == "payload_too_large"
+    assert req2.consumed < len(req2.chunks)   # 第 6 块越限后不再读(共 7 块)
+
+
+async def test_read_bundle_small_stream_ok():
+    req = _FakeRequest({}, b'{"bundle": 1}')
+    assert await scenario_import.read_bundle(req) == {"bundle": 1}
+    assert req.consumed == len(req.chunks)
+
+
+# ── 落库竞态与复验(合入评估 §3)────────────────────────────────────
+
+
+async def test_land_alias_name_race_409(client, plate_mock: PlateMock):
+    """§3-1:别名主键冲突(同请求内两服务同名双建 / 预检后被人抢注)
+    → 409 alias_name_taken(前端自愈链已挂该 code),事务回滚零残留。"""
+    _mock_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    # land 对 alias_names 快照的占用检查挡不住「同一请求内」的两条同名
+    # create 映射:首插未提交即撞主键,IntegrityError 须映射 409 而非 500
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": _bundle(),
+        "mappings": [
+            {"serviceKey": "fin-service-qa", "decision": "create",
+             "createName": "fin-service-qa"},
+            {"serviceKey": "fin-service", "decision": "create",
+             "createName": "fin-service-qa"},
+        ]})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "alias_name_taken"
+    # 整体回滚:场景无残留、首插的别名也随回滚消失
+    async with db_module.SessionLocal() as db:
+        assert (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == _SCENARIO_ID))
+        ).scalar_one_or_none() is None
+        assert (await db.execute(select(ServiceAlias).where(
+            ServiceAlias.alias_name == "fin-service-qa"))
+        ).scalar_one_or_none() is None
+
+
+async def test_land_rechecks_rewritten_definition(client, plate_mock: PlateMock,
+                                                  monkeypatch):
+    """§3-3:改写后的 definition 落库前再 convert 复验 —— 第二次 convert
+    被拒 → 422 convert_rejected,零落库。"""
+    _mock_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    calls = {"n": 0}
+    real_convert = scenario_import.plate_client.convert
+
+    async def _convert(definition, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 2:   # 复验那次:改写后的形态
+            raise scenario_import.plate_client.PlateRejectedError(
+                code="invalid_action", message="rewritten shape rejected")
+        return await real_convert(definition, *a, **kw)
+
+    monkeypatch.setattr(scenario_import.plate_client, "convert", _convert)
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": _bundle(), "mappings": []})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "convert_rejected"
+    assert "接管改写后校验失败" in r.json()["detail"]["message"]
+    assert calls["n"] == 2   # 原文件一次 + 改写后复验一次
+    async with db_module.SessionLocal() as db:
+        assert (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == _SCENARIO_ID))
+        ).scalar_one_or_none() is None

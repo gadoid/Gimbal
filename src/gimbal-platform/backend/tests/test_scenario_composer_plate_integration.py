@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
 from httpx import AsyncClient
+
+if TYPE_CHECKING:   # 仅供 _wait_execution_final 的返回注解
+    from app.models import Execution
 
 
 # ── shared fixture: register + login + seed scenario/case/ds ───────

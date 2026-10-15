@@ -55,17 +55,23 @@ class ImportRejected(Exception):
 
 
 async def read_bundle(request) -> dict:
-    """读请求体并解析出 bundle dict:Content-Length 预检 + 限长读 + len 复核。
+    """读请求体并解析出 bundle dict:Content-Length 预检 + 限长流式读
+    + len 复核。
 
     两个端点(precheck/import)共用;pydantic 不经手请求体,超大文件在
-    json.loads 之前被拒(413 不做形式作用)。
+    json.loads 之前被拒(413 不做形式作用)。分块无 Content-Length 的
+    请求按 ``request.stream()`` 累计,超限即弃读中止(不把整个请求体
+    读进内存再判)。
     """
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
         raise ImportRejected("payload_too_large", 413, "请求体超 5MB 上限")
-    raw = await request.body()
-    if len(raw) > MAX_BODY_BYTES:
-        raise ImportRejected("payload_too_large", 413, "请求体超 5MB 上限")
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf += chunk
+        if len(buf) > MAX_BODY_BYTES:
+            raise ImportRejected("payload_too_large", 413, "请求体超 5MB 上限")
+    raw = bytes(buf)
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
@@ -528,23 +534,52 @@ async def land(
     config["services"] = services_cfg
     defn["config"] = config
 
+    # ── 复验:改写后的 definition 再过一次 convert(合入评估 §3)──
+    # 首次 convert 验的是原始文件;落库的是改写后的形态(剥 config.users/
+    # 清字面值/换服务名)。校验输入镜像 create_in_transaction 的存储管线
+    # (剥平台 meta.scenarioId 等非 M2 键与 binding 派生字段)—— 真
+    # plate 的 Scenario 禁 meta extra 键,不剥会把落库前的过渡形态误报
+    # 为拒收(回环测试真 plate 面抓到过)。仍在事务外(P7-④)。
+    check_defn = scenario_store._strip_user_view_keys(
+        scenario_store.strip_binding_fields({
+            **defn,
+            "meta": scenario_store._strip_platform_meta(
+                defn.get("meta") or {}),
+        }))
+    try:
+        await plate_client.convert(check_defn)
+    except plate_client.PlateRejectedError as e:
+        raise ImportRejected(
+            "convert_rejected", 422,
+            f"接管改写后校验失败: {e}") from e
+    except plate_client.PlateUnavailableError as e:
+        raise ImportRejected("plate_unavailable", 502, e.message) from e
+
     # ── 单事务本地写(P7-④ 之后:无 plate 调用)───────────────────
     created_aliases: list[str] = []
-    for key, m in by_key.items():
-        if m["decision"] != "create":
-            continue
-        name = eff_key[key]
-        await alias_svc.create_alias_in_transaction(
-            db, alias_name=name, owner_user_id=user.id,
-            credential_alias=m.get("credentialAlias"),
-            catalog_names=catalog)
-        alias_names.add(name)
-        created_aliases.append(name)
-        # carry 写接管集内的一致字面值(P7-②:敏感/不一致路径不落)
-        entries = {p: v for p, v in plan_by_key[key]["consistent"].items()
-                   if p in provider_by_key[key]}
-        if entries:
-            await carry_store_put(db, name, entries, user)
+    try:
+        for key, m in by_key.items():
+            if m["decision"] != "create":
+                continue
+            name = eff_key[key]
+            await alias_svc.create_alias_in_transaction(
+                db, alias_name=name, owner_user_id=user.id,
+                credential_alias=m.get("credentialAlias"),
+                catalog_names=catalog)
+            alias_names.add(name)
+            created_aliases.append(name)
+            # carry 写接管集内的一致字面值(P7-②:敏感/不一致路径不落)
+            entries = {p: v for p, v in plan_by_key[key]["consistent"].items()
+                       if p in provider_by_key[key]}
+            if entries:
+                await carry_store_put(db, name, entries, user)
+    except IntegrityError as e:
+        # 预检后到落库前的建名竞态:主键撞车映射 409(前端自愈链自动
+        # 重预检);回滚保证部分写入的别名/carry 不残留
+        await db.rollback()
+        raise ImportRejected(
+            "alias_name_taken", 409,
+            f"别名 {eff_key.get(key, '')!r} 已被占用(重预检)") from e
 
     draft = ScenarioDraft(definition=defn)
     try:
