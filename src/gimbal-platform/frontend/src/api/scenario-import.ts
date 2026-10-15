@@ -7,8 +7,14 @@ export interface ImportServiceRow {
   serviceKey: string
   suggestion: 'reuse' | 'map' | 'create'
   localAlias: string | null
+  /** 建议决策下的计数(顶层便捷位);界面按当前决策优先读 countsByDecision。 */
   fieldsToAlias: number
   fieldsKeptLiteral: number
+  /** 三种决策各自的接管计数(切换决策后接管面不同,确认内容=实际执行)。 */
+  countsByDecision?: Partial<Record<'create' | 'map' | 'reuse', {
+    fieldsToAlias: number
+    fieldsKeptLiteral: number
+  }>>
   /** 各步骤取值不一致的路径(Codfish 规则):不交别名接管,保留文件原值。 */
   inconsistentPaths: string[]
   createNameAvailable: boolean

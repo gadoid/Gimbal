@@ -63,8 +63,8 @@
                 <tr v-for="row in rows" :key="row.serviceKey" :data-testid="`import-svc-${row.serviceKey}`">
                   <td class="mono">{{ row.serviceKey }}</td>
                   <td>{{ suggestionLabel(row.suggestion) }}</td>
-                  <td>{{ row.fieldsToAlias }}</td>
-                  <td>{{ row.fieldsKeptLiteral }}<span v-if="row.sensitivePaths.length" class="text-caption text-slate-500">(含敏感 {{ row.sensitivePaths.length }})</span><span v-if="row.inconsistentPaths.length" class="text-caption text-slate-500">(取值不一致 {{ row.inconsistentPaths.length }})</span></td>
+                  <td>{{ toAliasCount(row) }}</td>
+                  <td>{{ keptLiteralCount(row) }}<span v-if="row.sensitivePaths.length" class="text-caption text-slate-500">(含敏感 {{ row.sensitivePaths.length }})</span><span v-if="row.inconsistentPaths.length" class="text-caption text-slate-500">(取值不一致 {{ row.inconsistentPaths.length }})</span></td>
                   <td>
                     <template v-if="exists(row)">
                       <label class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="reuse" :checked="decision(row) !== 'create'" @change="setDecision(row, 'map')" />映射到已有</label>
@@ -185,6 +185,14 @@ function createNameOk(row: ImportServiceRow): boolean {
 }
 function suggestionLabel(s: string): string {
   return s === 'reuse' ? '复用(值一致)' : s === 'map' ? '映射(本机为准)' : '新建'
+}
+// 计数按当前决策取(复盘 2026-10-15:切换决策接管面不同,确认内容必须
+// 与实际执行一致);旧负载无 countsByDecision 时回落顶层建议计数
+function toAliasCount(row: ImportServiceRow): number {
+  return row.countsByDecision?.[decision(row)]?.fieldsToAlias ?? row.fieldsToAlias
+}
+function keptLiteralCount(row: ImportServiceRow): number {
+  return row.countsByDecision?.[decision(row)]?.fieldsKeptLiteral ?? row.fieldsKeptLiteral
 }
 
 async function runPrecheck(): Promise<void> {

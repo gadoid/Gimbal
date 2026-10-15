@@ -31,7 +31,12 @@ function pre(over: Record<string, unknown> = {}) {
     suggestedId: 'sc-import-abc',
     services: [
       { serviceKey: 'fin-service', suggestion: 'map', localAlias: 'fin-service',
-        fieldsToAlias: 1, fieldsKeptLiteral: 2, createNameAvailable: false,
+        fieldsToAlias: 0, fieldsKeptLiteral: 3, createNameAvailable: false,
+        countsByDecision: {
+          map: { fieldsToAlias: 0, fieldsKeptLiteral: 3 },
+          create: { fieldsToAlias: 2, fieldsKeptLiteral: 1 },
+          reuse: { fieldsToAlias: 0, fieldsKeptLiteral: 3 },
+        },
         inconsistentPaths: [], sensitivePaths: ['$.api_token'] },
       { serviceKey: 'qa-svc', suggestion: 'create', localAlias: null,
         fieldsToAlias: 1, fieldsKeptLiteral: 0, createNameAvailable: true,
@@ -129,6 +134,22 @@ describe('ImportScenarioDialog 状态机', () => {
     expect(warn.exists()).toBe(true)
     expect(warn.text()).toContain('fin-service $.remark')
     expect(warn.text()).toContain('保留文件里的原值')
+    w.unmount()
+  })
+
+  it('计数按当前决策显示:切到新建后交别名数随之变化(复盘 2026-10-15)', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    const w = mountDialog()
+    await flushPromises()
+    const row = () => w.find('[data-testid="import-svc-fin-service"]')
+    // 默认 = 建议 map:本机无值 → 交别名 0
+    expect(row().text()).toMatch(/0/)
+    // 切到新建:create 接管非敏感一致路径 → 交别名 2(保留 1)
+    await row().find('input[value="create"]').trigger('change')
+    await flushPromises()
+    const tds = row().findAll('td')
+    expect(tds[2].text()).toBe('2')
+    expect(tds[3].text()).toContain('1')
     w.unmount()
   })
 })

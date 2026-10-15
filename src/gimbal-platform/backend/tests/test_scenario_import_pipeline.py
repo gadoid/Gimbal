@@ -466,6 +466,47 @@ async def test_precheck_inconsistent_listed_for_ui(client, plate_mock: PlateMock
     assert qa["sensitivePaths"] == []
 
 
+async def test_precheck_counts_by_decision(client, plate_mock: PlateMock):
+    """复盘 2026-10-15:切换决策后接管面不同 —— countsByDecision 给出
+    create/map/reuse 三套计数(本机无值时 map 接管 0、create 写 1),
+    确认界面按当前选择显示。"""
+    _mock_faces(plate_mock)   # fin-service 在目录但本机无任何绑定值
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": _bundle()})
+    fs = {s["serviceKey"]: s for s in r.json()["services"]}["fin-service"]
+    assert fs["suggestion"] == "map"
+    assert fs["countsByDecision"]["map"] == {
+        "fieldsToAlias": 0,        # 本机缺值:映射不接管
+        "fieldsKeptLiteral": 3}
+    assert fs["countsByDecision"]["create"] == {
+        "fieldsToAlias": 2,        # 新建接管非敏感一致路径(remark+appCode)
+        "fieldsKeptLiteral": 1}    # api_token 敏感
+    assert fs["countsByDecision"]["reuse"] == fs["countsByDecision"]["map"]
+    # 顶层计数 = 建议决策(map)的那套
+    assert fs["fieldsToAlias"] == 0 and fs["fieldsKeptLiteral"] == 3
+
+
+async def test_bodyless_step_counts_as_unfilled(client, plate_mock: PlateMock):
+    """无请求体的步骤按「未填」观测:其他步骤的同路径一致字面值不再
+    被接管(carry 可能给它注入源文件没有的字段)。"""
+    _multi_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    bundle = _multi_bundle()
+    # 第 4 步(无锚点)换成有锚点但无请求体的步骤,与步骤 0 同端点
+    bundle["steps"][3] = {
+        "kind": "step", "endpoint": "fin.ep1",
+        "call": {"service": "fin-service-qa", "headers": {}},
+    }
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": bundle})
+    qa = {s["serviceKey"]: s for s in r.json()["services"]}["fin-service-qa"]
+    # remark:步骤 0 = A(字面),步骤 1 = B(不一致),步骤 3 = 无 body
+    # (未填)—— 混用判不一致,三种决策都不接管
+    assert qa["inconsistentPaths"] == ["$.remark"]
+    assert qa["countsByDecision"]["create"]["fieldsToAlias"] == 0
+
+
 # ── 体积门(服务函数直测,N3:解析前拒绝)─────────────────────────
 
 

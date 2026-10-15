@@ -164,11 +164,12 @@ def _service_plan(ctx, raw_steps: list, svc: str, decision: str) -> dict:
     最终取值不一致就**不进 carry、不进清除集**,所有步骤保留各自的字
     面值 —— 只有各步取值一致的路径才可交给别名接管。参与观测的步骤 =
     ``call.service`` 命中且自身 carry 面(``step_fields[i]``,原始索引)
-    非空;字面值不等,或字面值与模板/未填混用 → 判不一致。纯模板/未填
-    (该路径无任何字面值观测)不参与计数 —— 文件本就没有可接管的取值,
-    模板原样保留、不清除。无锚点步骤不在 ``step_fields``(没有面,谈
-    不上接管),``ext:`` 锚点的面是 plate 404 降级的空面 —— 两者天然
-    不参与、也永不被清除。
+    非空;字面值不等,或字面值与模板/未填混用(无请求体的步骤同样按
+    「未填」观测 —— carry 可能给它注入源文件没有的字段)→ 判不一致。
+    纯模板/未填(该路径无任何字面值观测)不参与计数 —— 文件本就没有
+    可接管的取值,模板原样保留、不清除。无锚点步骤不在 ``step_fields``
+    (没有面,谈不上接管),``ext:`` 锚点的面是 plate 404 降级的空面
+    —— 两者天然不参与、也永不被清除。
 
     ``decision``:create=非敏感一致路径;reuse=本机有值且相等;map=本机
     有值(本机为准);suggest=本机有值(预检建议口径,与 reuse/map 同集)。
@@ -182,16 +183,20 @@ def _service_plan(ctx, raw_steps: list, svc: str, decision: str) -> dict:
             continue
         face = ctx.step_fields.get(i) or {}
         body = _step_body(step)
-        if body is None:
-            continue   # 无请求体:carry 注入无从作用,不构成观测
         for path in face:
-            v = _walk(body, _path_segs(path))
-            if v is _MISSING:
+            if body is None:
+                # 无请求体步骤按「未填」观测(复盘 2026-10-15):否则
+                # 其他步骤的一致字面值会被接管,carry 可能为它注入源
+                # 文件里没有的字段 —— 「最终取值不一致不接管」的口径
                 obs: Any = _Mark("<未填>")
-            elif _is_template(v):
-                obs = _Mark("<模板>")
             else:
-                obs = v
+                v = _walk(body, _path_segs(path))
+                if v is _MISSING:
+                    obs = _Mark("<未填>")
+                elif _is_template(v):
+                    obs = _Mark("<模板>")
+                else:
+                    obs = v
             seen.setdefault(path, []).append(obs)
 
     consistent: dict[str, Any] = {}
@@ -324,9 +329,13 @@ async def analyze_services(db, definition: dict) -> list[dict]:
     """按服务键析出分析(方案 §3.1 组装表;plate 依赖在事务外取完)。
 
     计数与落库共用 :func:`_service_plan`(§1 修复:预检看到的 = 落库
-    要执行的)。``fieldsKeptLiteral`` 含两类:接管判定后保留的(敏感/
-    本机缺值)+ 一致性判定不过的(各步取值不一致,``inconsistentPaths``
-    逐条列出供确认界面展示)。
+    要执行的)。顶层 ``fieldsToAlias``/``fieldsKeptLiteral`` 是**建议
+    决策**下的计数;``countsByDecision`` 给出 create/map/reuse 三套
+    (复盘 2026-10-15:用户切换决策后接管面不同 —— 本机无值时 map 接
+    管 0 条、create 却会写 N 条 —— 确认界面按当前选择显示,确认的
+    内容与实际执行保持一致)。``fieldsKeptLiteral`` 含两类:接管判定
+    后保留的(敏感/本机缺值)+ 一致性判定不过的(各步取值不一致,
+    ``inconsistentPaths`` 逐条列出供确认界面展示)。
     """
     raw_steps = list(definition.get("steps") or [])
     if not raw_steps:
@@ -336,15 +345,25 @@ async def analyze_services(db, definition: dict) -> list[dict]:
     alias_names = set((await db.execute(
         select(ServiceAlias.alias_name))).scalars().all())
 
+    def _counts(plan: dict) -> dict:
+        return {
+            "fieldsToAlias": len(plan["provider"]),
+            "fieldsKeptLiteral": (len(plan["consistent"])
+                                  - len(plan["provider"])
+                                  + len(plan["inconsistent"])),
+        }
+
     out: list[dict] = []
     for svc in referenced_services(
             [s for s in raw_steps if isinstance(s, dict)]):
         exists = svc in alias_names or svc in catalog
+        plans = {d: _service_plan(ctx, raw_steps, svc, d)
+                 for d in ("create", "map", "reuse")}
         if exists:
-            # P7-⑤ 路径级复用判定(一致集上):全部路径本机有值且相等 →
-            # 复用;否则映射(本机为准),缺值路径保留字面值
-            plan = _service_plan(ctx, raw_steps, svc, "suggest")
-            consistent = plan["consistent"]
+            # P7-⑤ 路径级复用判定(一致集上,consistent 与决策无关):
+            # 全部路径本机有值且相等 → 复用;否则映射(本机为准),
+            # 缺值路径保留字面值
+            consistent = plans["map"]["consistent"]
             matched = {
                 p for p, v in consistent.items()
                 if _local_value(ctx, svc, p) is not _MISSING
@@ -354,21 +373,20 @@ async def analyze_services(db, definition: dict) -> list[dict]:
                           else "map")
         else:
             suggestion = "create"
-            plan = _service_plan(ctx, raw_steps, svc, "create")
-        provider = plan["provider"]
-        kept = (len(plan["consistent"]) - len(provider)
-                + len(plan["inconsistent"]))
+        provider = plans[suggestion]["provider"]
         out.append({
             "serviceKey": svc,
             "suggestion": suggestion,
             "localAlias": svc if exists else None,
             "fieldsToAlias": len(provider),
-            "fieldsKeptLiteral": kept,
-            "inconsistentPaths": sorted(plan["inconsistent"]),
+            "fieldsKeptLiteral": _counts(plans[suggestion])["fieldsKeptLiteral"],
+            "countsByDecision": {d: _counts(plans[d])
+                                 for d in ("create", "map", "reuse")},
+            "inconsistentPaths": sorted(plans[suggestion]["inconsistent"]),
             "createNameAvailable": (
                 svc not in alias_names
                 and service_names.derive_base(svc, catalog) is not None),
-            "sensitivePaths": sorted(plan["sensitive"]),
+            "sensitivePaths": sorted(plans[suggestion]["sensitive"]),
         })
     return out
 
