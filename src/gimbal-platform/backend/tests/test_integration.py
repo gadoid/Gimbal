@@ -253,6 +253,9 @@ class TestIntegrationRouter:
 
     async def test_platform_credentials_admin_gate(self, client):
         await _seed_platform_user()
+        # 首个真人注册者成为 admin(系统用户不计 —— 整体评审 2026-10-15
+        # 首个 admin 引导修复);先占掉首位,ig_cred 才是普通用户
+        await register_and_login(client, "ig_first", "ig_firstpass123")
         h = await register_and_login(client, "ig_cred", "ig_credpass123")
         r = await client.get("/api/integration/platform-credentials", headers=h)
         assert r.status_code == 403
