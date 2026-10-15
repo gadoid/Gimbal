@@ -298,55 +298,87 @@ class _ChannelSlot:
     def __init__(self) -> None:
         self.session: object | None = None
         self.last_used: datetime | None = None
+        # 忙闲标记(整体评审 2026-10-15 #1):「有会话」≠「忙」—— 半常驻
+        # 通道跑完保留会话,旧实现按 session is None 选槽,两槽预热后恒
+        # 回落 slots[0],并发两次挤同一单 run server(409)并在异常分支
+        # 关掉另一次正在用的会话。busy 只在借出期间为 True。
+        self.busy: bool = False
 
 
 class IntegrationChannels:
     """N 槽半常驻 gimbal server 通道:执行时借/按需拉起,空闲超
     CHANNEL_IDLE_SECONDS 由调度循环收口(reap_idle)。单槽串行(引擎
-    /runs 单 run 设计),槽间并行。"""
+    /runs 单 run 设计),槽间并行。
+
+    借还语义:``_acquire`` 在条件变量下独占一个空闲槽(优先已有会话的
+    热槽,其次冷槽),全忙则等待归还;``_release`` 归还并唤醒等待者。
+    会话层异常只关闭**本次独占**的会话(其他槽不受影响)。
+    """
 
     def __init__(self, size: int = GLOBAL_INFLIGHT_CAP) -> None:
         self.size = max(1, size)
         self.slots = [_ChannelSlot() for _ in range(self.size)]
-        self._lock = asyncio.Lock()
+        self._cond = asyncio.Condition()
+
+    async def _acquire(self) -> _ChannelSlot:
+        async with self._cond:
+            while True:
+                free = [s for s in self.slots if not s.busy]
+                if free:
+                    # 热槽优先(省一次冷启动);同为热槽取最近使用者
+                    warm = [s for s in free if s.session is not None]
+                    slot = (max(warm, key=lambda s: s.last_used or _now())
+                            if warm else free[0])
+                    slot.busy = True
+                    return slot
+                await self._cond.wait()
+
+    async def _release(self, slot: _ChannelSlot) -> None:
+        async with self._cond:
+            slot.busy = False
+            slot.last_used = _now()
+            self._cond.notify()
 
     async def run_case(self, case_path: str | Path) -> object:
-        async with self._lock:
-            slot = next((s for s in self.slots if s.session is None), None)
-            if slot is None:            # 全忙 → 等最早空闲者(简化:等锁轮转)
-                slot = self.slots[0]
-                await asyncio.sleep(0)
-        from .gimbal_server_session import ServerSession
-        if slot.session is None:
-            sess = ServerSession()
-            await sess.start()
-            slot.session = sess
-        slot.last_used = _now()
+        slot = await self._acquire()
         try:
-            return await slot.session.run_case(case_path)
-        except Exception:
-            # 会话层故障:收口该槽(下次执行重新拉起),异常上抛
+            from .gimbal_server_session import ServerSession
+            if slot.session is None:
+                sess = ServerSession()
+                await sess.start()
+                slot.session = sess
+            slot.last_used = _now()
             try:
-                await slot.session.close()
-            except Exception:  # noqa: BLE001
-                pass
-            slot.session = None
-            raise
+                return await slot.session.run_case(case_path)
+            except Exception:
+                # 会话层故障:只收口本槽(独占中,不会误伤别的执行),
+                # 下次借到该槽时重新拉起;异常上抛
+                sess, slot.session = slot.session, None
+                try:
+                    await sess.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                raise
+        finally:
+            await self._release(slot)
 
     async def reap_idle(self) -> int:
-        async with self._lock:
-            n = 0
+        """回收空闲超时的会话 —— 借出中的槽不回收(长执行不被腰斩)。"""
+        to_close: list[object] = []
+        async with self._cond:
             for s in self.slots:
-                if (s.session is not None and s.last_used is not None
+                if (not s.busy and s.session is not None
+                        and s.last_used is not None
                         and (_now() - s.last_used).total_seconds()
                         > CHANNEL_IDLE_SECONDS):
-                    try:
-                        await s.session.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    to_close.append(s.session)
                     s.session = None
-                    n += 1
-            return n
+        for sess in to_close:
+            try:
+                await sess.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return len(to_close)
 
     async def close_all(self) -> None:
         for s in self.slots:
