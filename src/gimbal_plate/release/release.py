@@ -194,9 +194,12 @@ def latest_revision_manifest(artifacts_root: Path, system: str, line: str,
     line_dir = _lines_dir(artifacts_root, system) / line
     if not line_dir.is_dir():
         return None
+    # 只认 manifest 已落盘的修订目录(整体评审 2026-10-15 #7):编号目录
+    # 由 mkdir 抢占先于 manifest 写入 —— 发版进行中/中途崩溃留下的空目录
+    # 不是修订,不得被当作「最新」读出 FileNotFoundError。
     nums = sorted(
         int(p.name) for p in line_dir.iterdir()
-        if p.is_dir() and p.name.isdigit()
+        if p.is_dir() and p.name.isdigit() and (p / "manifest.json").is_file()
     )
     if not nums:
         return None
@@ -226,7 +229,11 @@ def _commit_artifacts(artifacts_root: Path, message: str) -> str | None:
     except OSError:
         return None
     ident = ["-c", "user.name=plate-release", "-c", "user.email=release@plate"]
-    _git(ident + ["add", "-A"], artifacts_root)
+    # 发版锁与原子写临时文件不入构件分支(整体评审 2026-10-15 #7:锁在
+    # 提交期间仍持有,add -A 会把它一并提交)
+    _git(ident + ["add", "-A", "--", ".",
+                  ":(exclude,glob)**/.release.lock",
+                  ":(exclude,glob)**/*.tmp"], artifacts_root)
     if _git(["diff", "--cached", "--quiet"], artifacts_root).returncode == 0:
         return _git(["rev-parse", "HEAD"], artifacts_root).stdout.strip()
     r = _git(ident + ["commit", "-m", message], artifacts_root)
@@ -268,7 +275,101 @@ def ensure_m2_pooled() -> dict[str, Any]:
         return {"status": "error", "message": f"{type(e).__name__}: {e}"[:200]}
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+RELEASE_LOCK_TIMEOUT_S = 120.0
+RELEASE_LOCK_STALE_S = 30 * 60.0
+
+
+class _SystemReleaseLock:
+    """按系统的发版互斥锁(整体评审 2026-10-15 #7):跨平台 O_EXCL 锁文件。
+
+    锁内完成「读上一修订 → 祖先校验 → 分配编号 → 写 manifest」,并发
+    发版不再基于同一个陈旧的上一修订计算 ``previous_revision`` /
+    corrections。持锁进程崩溃留下的锁文件超过 ``RELEASE_LOCK_STALE_S``
+    视为陈旧并清除;等待超过 ``RELEASE_LOCK_TIMEOUT_S`` 放弃。
+    """
+
+    def __init__(self, artifacts_root: Path, system: str) -> None:
+        self.path = artifacts_root / system / ".release.lock"
+        self._held = False
+
+    def acquire(self, timeout: float | None = None) -> bool:
+        import time
+        if timeout is None:
+            timeout = RELEASE_LOCK_TIMEOUT_S   # 调用期读取(可配置/可测)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                try:
+                    age = time.time() - self.path.stat().st_mtime
+                except FileNotFoundError:
+                    continue            # 持有者刚释放,立即重试
+                if age > RELEASE_LOCK_STALE_S:
+                    try:
+                        self.path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    continue
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(0.2)
+                continue
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(f"pid={os.getpid()} at={datetime.now(timezone.utc).isoformat()}\n")
+            self._held = True
+            return True
+
+    def release(self) -> None:
+        if self._held:
+            try:
+                self.path.unlink()
+            except FileNotFoundError:
+                pass
+            self._held = False
+
+
 def release_system(
+    system_root: Path,
+    *,
+    artifacts_root: Path | None = None,
+    signed_by: str = "",
+    checklist: dict[str, int] | None = None,
+) -> ReleaseResult:
+    """冻结一个系统(版本模型 v1.4 的修订签发);按系统串行(发版锁)。"""
+    resolved = resolve_artifacts_root(artifacts_root)
+    lock = _SystemReleaseLock(resolved, system_root.name)
+    if not lock.acquire():
+        return ReleaseResult(
+            success=False,
+            message=(f"{system_root.name} 另有发版进行中(锁 {lock.path} "
+                     f"超过 {int(RELEASE_LOCK_TIMEOUT_S)}s 未释放)——稍后重试"))
+    try:
+        return _release_system_locked(
+            system_root, artifacts_root=resolved, signed_by=signed_by,
+            checklist=checklist)
+    finally:
+        lock.release()
+
+
+def _release_system_locked(
     system_root: Path,
     *,
     artifacts_root: Path | None = None,
@@ -576,10 +677,11 @@ def release_system(
                                  if not review_of.get(id(m))),
         },
     }
-    (manifest_dir / "manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=1),
-        encoding="utf-8", newline="\n",
-    )
+    # 原子落盘(整体评审 2026-10-15 #7):tmp + os.replace,与对象池同口径
+    # —— 中途崩溃不会留下半截 manifest(读侧只认完整文件)。
+    _atomic_write_text(
+        manifest_dir / "manifest.json",
+        json.dumps(manifest, ensure_ascii=False, indent=1))
 
     revision = f"{fm.line}#{n}"
     commit = _commit_artifacts(
