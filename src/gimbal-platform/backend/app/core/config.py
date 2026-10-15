@@ -47,11 +47,17 @@ class Settings(BaseSettings):
     # never land as relative ``./data\...`` in logs.
     DATA_DIR: Path = _BACKEND_ROOT / "data"
     # case 案卷(result.json/case.json,含注入后明文凭证)保留天数;
-    # 启动期清扫超期目录。0 = 禁用清扫(P2:此前无限累积)。
+    # 启动期 + 后台保留期维护任务周期清扫超期目录。0 = 禁用清扫。
     CASE_RETENTION_DAYS: int = 14
     # P2-02/C2:execution_events 事件/日志保留天数(0 = 永久);
-    # dispatch 收口时顺带清扫超期执行的事件面(与 case 清扫同节奏)。
+    # 由后台保留期维护任务分批清扫(整体评审 2026-10-15 #2)。
     EXEC_EVENTS_RETENTION_DAYS: int = 14
+    # 按日 JSONL 运维索引(runs/YYYY-MM-DD.jsonl)保留天数(0 = 永久)。
+    # M6 前存量单的行级只读归档在此,故默认长于 case 案卷。
+    RUNS_JSONL_RETENTION_DAYS: int = 90
+    # 保留期维护任务周期(秒);启动后首拍在一个周期后执行(启动期的
+    # case 清扫仍由 startup_recovery 即时完成)。
+    RETENTION_MAINTENANCE_INTERVAL_S: int = 6 * 3600
 
     # ── Gimbal 执行链(V3.2 ``gimbal run launch`` 子进程) ──
     # GIMBAL_BIN: gimbal 可执行文件(如 D:\Gimbal\Scripts\gimbal.exe);

@@ -574,15 +574,22 @@ async def event_counts_by_category(
     return {c or "(none)": n for c, n in (await db.execute(stmt)).all()}
 
 
-async def purge_expired_events(db: AsyncSession) -> int:
+async def purge_expired_events(
+    db: AsyncSession, *, batch_executions: int = 200,
+) -> int:
     """超期执行的事件面清扫(保留 EXEC_EVENTS_RETENTION_DAYS 天;0=禁用)。
 
-    与 case 案卷清扫同节奏由 dispatch 收口/维护入口调用;执行主行与
-    台账单元行不受影响(它们是审计面)。
+    由后台保留期维护任务周期调用(run_dispatcher.run_retention_maintenance;
+    整体评审 2026-10-15 #2:此前全仓零调用点,结构化日志入库后表只增
+    不减)。执行主行与台账单元行不受影响(它们是审计面)。
+
+    分批:每批最多 ``batch_executions`` 个仍有事件残留的超期执行,删完
+    即提交 —— 不对大表做一次性 DELETE 长事务(锁与 WAL 突增)。返回删除
+    的事件行数(证据体行另计不返回)。
     """
     from datetime import datetime, timedelta, timezone
 
-    from sqlalchemy import delete
+    from sqlalchemy import delete, exists
 
     from ..core.config import settings
     from ..models.execution import ExecutionEvent, ExecutionEventEvidence
@@ -591,15 +598,25 @@ async def purge_expired_events(db: AsyncSession) -> int:
     if days <= 0:
         return 0
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    subq = (
-        select(Execution.id)
-        .where(Execution.finished_at.is_not(None),
-               Execution.finished_at < cutoff)
+    has_residue = or_(
+        exists().where(ExecutionEvent.execution_id == Execution.id),
+        exists().where(ExecutionEventEvidence.execution_id == Execution.id),
     )
-    ev_del = delete(ExecutionEvent).where(ExecutionEvent.execution_id.in_(subq))
-    result = await db.execute(ev_del)
-    n = result.rowcount or 0
-    await db.execute(
-        delete(ExecutionEventEvidence).where(
-            ExecutionEventEvidence.execution_id.in_(subq)))
-    return n
+    total = 0
+    while True:
+        ids = list((await db.execute(
+            select(Execution.id)
+            .where(Execution.finished_at.is_not(None),
+                   Execution.finished_at < cutoff, has_residue)
+            .order_by(Execution.id)
+            .limit(max(1, batch_executions))
+        )).scalars().all())
+        if not ids:
+            return total
+        result = await db.execute(
+            delete(ExecutionEvent).where(ExecutionEvent.execution_id.in_(ids)))
+        total += result.rowcount or 0
+        await db.execute(
+            delete(ExecutionEventEvidence).where(
+                ExecutionEventEvidence.execution_id.in_(ids)))
+        await db.commit()

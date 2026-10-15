@@ -2776,6 +2776,77 @@ def sweep_stale_case_dirs() -> int:
     return removed
 
 
+_JSONL_NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.jsonl$")
+
+
+def sweep_stale_run_journals() -> int:
+    """按日 JSONL 运维索引(``runs/YYYY-MM-DD.jsonl``)的保留期清扫。
+
+    按**文件名日期**判龄(不看 mtime:追加写会刷新 mtime)。保留期
+    ``RUNS_JSONL_RETENTION_DAYS``(0 = 禁用)。JSONL 是 M6 前存量单的
+    行级只读归档(``_replay_rows``)与运维索引,M6 起行级已入库,故默认
+    保留期长于 case 案卷。
+    """
+    days = settings.RUNS_JSONL_RETENTION_DAYS
+    if days <= 0:
+        return 0
+    root = settings.DATA_DIR / "runs"
+    if not root.exists():
+        return 0
+    from datetime import date, timedelta
+    cutoff = date.today() - timedelta(days=days)
+    removed = 0
+    for path in root.glob("*.jsonl"):
+        m = _JSONL_NAME_RE.match(path.name)
+        if not m:
+            continue
+        try:
+            day = date.fromisoformat(m.group(1))
+        except ValueError:
+            continue
+        if day < cutoff:
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                continue
+    if removed:
+        logger.info("run_dispatcher: swept {} stale run journal(s) (> {}d)",
+                    removed, days)
+    return removed
+
+
+async def run_retention_maintenance() -> dict[str, int]:
+    """保留期维护(后台周期任务;整体评审 2026-10-15 #2/#3)。
+
+    三项清扫此前要么零调用点(事件面),要么只在启动期跑一次(case
+    案卷,含明文凭证)——长期不重启的服务上保留期形同虚设。各项互相
+    隔离:一项失败不影响其余,失败计 -1 并记日志。
+    """
+    from . import execution_store
+
+    out: dict[str, int] = {"case_dirs": 0, "run_journals": 0, "events": 0}
+    try:
+        out["case_dirs"] = await asyncio.to_thread(sweep_stale_case_dirs)
+    except Exception as e:  # noqa: BLE001 — 旁路:单项失败不阻断其余
+        logger.warning("retention: case dir sweep failed: {}", e)
+        out["case_dirs"] = -1
+    try:
+        out["run_journals"] = await asyncio.to_thread(sweep_stale_run_journals)
+    except Exception as e:  # noqa: BLE001 — 旁路
+        logger.warning("retention: run journal sweep failed: {}", e)
+        out["run_journals"] = -1
+    try:
+        async with _session_factory() as session:
+            out["events"] = await execution_store.purge_expired_events(session)
+    except Exception as e:  # noqa: BLE001 — 旁路
+        logger.warning("retention: event purge failed: {}", e)
+        out["events"] = -1
+    if any(out.values()):
+        logger.info("retention maintenance: {}", out)
+    return out
+
+
 def _write_case_file(case_dir: Path, scenario_dict: dict[str, Any]) -> Path:
     """把注入完成的数据驱动用例落盘为 gimbal 可执行 case.json。
 

@@ -114,18 +114,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.error("lifespan: execution queue workers failed to start: {}", e)
     # 外部系统集成 P1:后台任务注册表(评审 E8,草稿巡检并入)+ 集成
-    # 调度循环(15s:半常驻通道收口 → 僵尸回收 → 短持锁认领到期实例)
+    # 调度循环 + 保留期维护 —— 注册集中在 register_background_tasks
     from .services import background_tasks
-    from .services.integration_runner import scheduler_tick
-
-    async def _draft_sweep_once() -> None:
-        from .services.suite_maintenance import sweep_stale_drafts
-        n = await sweep_stale_drafts()
-        if n:
-            logger.info("draft sweeper: removed {} stale draft(s)", n)
-
-    background_tasks.register("draft-sweeper", 3600, _draft_sweep_once)
-    background_tasks.register("integration-scheduler", 15, scheduler_tick)
+    register_background_tasks()
     background_tasks.start_all()
     try:
         yield
@@ -146,6 +137,29 @@ async def lifespan(app: FastAPI):
             await plate_client_module.aclose()
         except Exception as e:  # noqa: BLE001
             logger.debug("lifespan: plate_client.aclose raised {}", e)
+
+
+def register_background_tasks() -> None:
+    """lifespan 的后台周期任务注册(可单测:注册表即契约)。"""
+    from .services import background_tasks
+    from .services.integration_runner import scheduler_tick
+    from .services.run_dispatcher import run_retention_maintenance
+
+    async def _draft_sweep_once() -> None:
+        from .services.suite_maintenance import sweep_stale_drafts
+        n = await sweep_stale_drafts()
+        if n:
+            logger.info("draft sweeper: removed {} stale draft(s)", n)
+
+    background_tasks.register("draft-sweeper", 3600, _draft_sweep_once)
+    # 集成调度循环(15s:半常驻通道收口 → 僵尸回收 → 短持锁认领到期实例)
+    background_tasks.register("integration-scheduler", 15, scheduler_tick)
+    # 保留期维护(整体评审 2026-10-15 #2/#3):事件面分批清扫 + case 案卷
+    # (含明文凭证)+ 按日 JSONL —— 此前事件面零调用点、case 仅启动期一次
+    background_tasks.register(
+        "retention-maintenance",
+        max(60, settings.RETENTION_MAINTENANCE_INTERVAL_S),
+        run_retention_maintenance)
 
 
 def create_app() -> FastAPI:
