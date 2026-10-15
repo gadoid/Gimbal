@@ -46,6 +46,10 @@ if not TEST_DATABASE_URL.startswith("postgresql"):
         "compose.pg.yml 起库)。", returncode=3)
 
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+# 测试面:大量用例自助注册多个账号 → 开放注册;密钥由 settings 临时生成
+# (lifespan 不在 ASGITransport 下运行,放行仅为一致口径)。生产默认二者皆关。
+os.environ.setdefault("REGISTRATION_OPEN", "true")
+os.environ.setdefault("ALLOW_EPHEMERAL_SECRETS", "true")
 
 from app import models  # noqa: E402,F401  register all models on Base.metadata
 from app.models import AuthSession  # noqa: E402,F401  explicit re-export to register table

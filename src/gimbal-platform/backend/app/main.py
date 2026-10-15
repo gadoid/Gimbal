@@ -50,12 +50,39 @@ from .routers import (
 from .routers.report_definitions import router as report_definitions_router  # noqa: E402
 
 
+def check_crypto_secrets() -> None:
+    """持久化密钥前置校验(整体评审 2026-10-15 #4,与 DATABASE_URL 必填同级)。
+
+    JWT_SECRET / FERNET_KEY 未配置时 settings 会生成**仅本进程有效**的
+    随机密钥 —— 重启即使全部会话失效、全部 Fernet 密文(凭证池/平台凭
+    证)不可解密,且不可恢复。服务进程默认拒绝以临时密钥启动;仅当
+    ``ALLOW_EPHEMERAL_SECRETS=1``(测试/一次性本地环境)时降级为告警。
+    """
+    missing = [name for name, eph in (
+        ("JWT_SECRET", settings.JWT_SECRET_EPHEMERAL),
+        ("FERNET_KEY", settings.FERNET_KEY_EPHEMERAL)) if eph]
+    if not missing:
+        return
+    if not settings.ALLOW_EPHEMERAL_SECRETS:
+        raise RuntimeError(
+            f"secrets_missing: {', '.join(missing)} 未配置 —— 临时随机密钥会在"
+            "重启后使全部会话失效、全部已存凭证不可解密。请在 backend/.env "
+            "配置并与库备份同级保管;仅测试/一次性环境可设 "
+            "ALLOW_EPHEMERAL_SECRETS=1 放行")
+    logger.warning(
+        "{} 未配置 —— 本进程使用临时随机密钥(ALLOW_EPHEMERAL_SECRETS=1)。"
+        "重启后全部会话失效、已存 Fernet 密文不可解密", ", ".join(missing))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: run schema policy (M2: alembic 启动分叉,create_all 退役)
     and warn on ephemeral crypto secrets.
     Shutdown: drain in-flight dispatches and close the shared Plate /
     Gimbal httpx clients."""
+    # 密钥前置(整体评审 2026-10-15 #4):放在建库/迁移之前,缺密钥的
+    # 进程不触碰库。
+    check_crypto_secrets()
     from .core.migrations import ensure_schema
     from .core import db as db_module
     await ensure_schema(db_module.engine.url.render_as_string(hide_password=False))
@@ -69,22 +96,6 @@ async def lifespan(app: FastAPI):
         logger.warning("lifespan: legacy stars absorb failed: {}", e)
     # (runSchemes → composer_run_schemes 一次性迁移已随阶段④清理下线 —
     #  迁移窗口已过,方案读写唯一面是 /run-schemes CRUD。)
-    # Loud, actionable warnings when crypto secrets are ephemeral — every
-    # restart silently rotates them otherwise (all sessions dropped, all
-    # Fernet-encrypted credentials undecryptable).
-    if settings.JWT_SECRET_EPHEMERAL:
-        logger.warning(
-            "JWT_SECRET not configured — generated a random secret for THIS "
-            "process only. Every restart invalidates all issued tokens. "
-            "Set JWT_SECRET in backend/.env for persistent sessions."
-        )
-    if settings.FERNET_KEY_EPHEMERAL:
-        logger.warning(
-            "FERNET_KEY not configured — generated a random key for THIS "
-            "process only. Every restart makes previously stored auth-"
-            "session ciphertexts undecryptable. Set FERNET_KEY in "
-            "backend/.env (keep a backup)."
-        )
     from .services import plate_client as plate_client_module
     from .services.run_dispatcher import (
         drain_in_flight_dispatches,

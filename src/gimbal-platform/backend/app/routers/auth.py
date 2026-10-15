@@ -26,7 +26,11 @@ from ..schemas.auth import (
     TokenOut,
     UserPublic,
 )
-from ._codes import BAD_CREDENTIALS, ACCOUNT_DISABLED, NAME_TAKEN_ON_REGISTER, code_detail
+from ..core.config import settings
+from ._codes import (
+    ACCOUNT_DISABLED, BAD_CREDENTIALS, NAME_TAKEN_ON_REGISTER,
+    REGISTRATION_CLOSED, code_detail,
+)
 from ._name_checks import assert_name_available
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -58,6 +62,21 @@ async def register(
     payload: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenOut:
+    # 首个真人用户判定 —— 只数 is_system=False(整体评审 2026-10-15:
+    # 0015 迁移为集成平台模式种了 ``__platform__`` 系统用户,空库建库后
+    # users 表恒有 1 行,此前 count()==0 永不成立 → 上线空库首个注册者
+    # 拿不到 admin,且全站无 admin 可开号)。
+    humans = (await db.execute(
+        select(func.count()).select_from(User).where(
+            User.is_system == False)  # noqa: E712
+    )).scalar_one()
+    first = humans == 0
+    if not first and not settings.REGISTRATION_OPEN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=code_detail(
+                REGISTRATION_CLOSED, "自助注册已关闭,请联系管理员开通账号"),
+        )
     # Normalize display_name the same way patch_user does: it doubles as
     # composer-ownership identity, so " Bob " / "Bob" must not coexist.
     payload.display_name = (payload.display_name or "").strip()
@@ -68,10 +87,6 @@ async def register(
         display_name=payload.display_name or None,
         code=NAME_TAKEN_ON_REGISTER,
     )
-    # First registered user becomes admin(M2.5:写 role,is_admin 镜像)。
-    count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
-    first = count == 0
-
     user = User(
         username=payload.username,
         display_name=payload.display_name,
@@ -86,7 +101,8 @@ async def register(
         # 在场,本单降级回 user。
         earlier = (await db.execute(
             select(func.count()).select_from(User).where(
-                User.role == "admin", User.id < user.id)
+                User.role == "admin", User.id < user.id,
+                User.is_system == False)  # noqa: E712
         )).scalar_one()
         if earlier:
             user.role = "user"

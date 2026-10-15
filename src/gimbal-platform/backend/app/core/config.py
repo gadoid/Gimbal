@@ -33,6 +33,15 @@ class Settings(BaseSettings):
 
     # ── Fernet ────────────────────────────────────────────
     FERNET_KEY: str = ""
+    # 密钥缺失时是否允许以临时随机密钥启动(整体评审 2026-10-15 #4):
+    # 默认 False = 服务启动 fail-fast(重启即丢全部会话与 Fernet 密文,
+    # 与 DATABASE_URL 必填同级);仅测试/一次性本地环境显式置 1。
+    ALLOW_EPHEMERAL_SECRETS: bool = False
+
+    # ── 注册(整体评审 2026-10-15 #5)────────────────────────
+    # False(默认):仅「库内尚无真人用户」时放行注册(引导首个 admin),
+    # 其后由 admin 在用户管理开号;True:开放自助注册(新号 role=user)。
+    REGISTRATION_OPEN: bool = False
 
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
