@@ -5,25 +5,35 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
+import jwt
 from cryptography.fernet import Fernet, InvalidToken
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from .config import settings
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _fernet = Fernet(settings.FERNET_KEY.encode())
 
 
 # ─── Password ───────────────────────────────────────────────
+# 直接使用 bcrypt(整体评审 2026-10-15 #6:passlib 已停止维护,且迫使
+# bcrypt 锁在 <4.1)。存量 passlib 产出的 $2b$ 哈希与 bcrypt 原生格式
+# 相同,可直接校验。passlib 对 >72 字节口令静默截断,bcrypt>=5 改为
+# 抛错 —— 这里按 passlib 同口径截断到 72 字节,存量长口令仍可登录。
+_BCRYPT_MAX_BYTES = 72
+
+
+def _pw_bytes(plain: str) -> bytes:
+    return plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
+
 def hash_password(plain: str) -> str:
-    return _pwd_ctx.hash(plain)
+    return bcrypt.hashpw(_pw_bytes(plain), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return _pwd_ctx.verify(plain, hashed)
-    except Exception:
+        return bcrypt.checkpw(_pw_bytes(plain), hashed.encode("ascii"))
+    except (ValueError, TypeError):
         return False
 
 
@@ -63,7 +73,7 @@ def create_refresh_token(*, subject: str | int) -> str:
 def decode_token(token: str) -> dict[str, Any]:
     try:
         return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGO])
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         raise ValueError(f"invalid token: {e}") from e
 
 

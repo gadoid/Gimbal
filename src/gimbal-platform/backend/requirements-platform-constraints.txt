@@ -5,21 +5,14 @@
 # pip may otherwise resolve to an incompatible newer release.
 #
 # ── bcrypt ──────────────────────────────────────────────────────────
-# passlib 1.7.4 (released 2021) reads ``bcrypt.__about__.__version__`` on
-# init and calls ``bcrypt.hashpw`` directly.  Both interactions break
-# against bcrypt ≥ 4.1: the ``__about__`` attribute was removed, and
-# ``hashpw`` now refuses passwords > 72 bytes instead of silently
-# truncating.  Symptom on /api/auth/register:
-#     AttributeError: module 'bcrypt' has no attribute '__about__'
-#     ValueError: password cannot be longer than 72 bytes
-# Cap at <4.1 (the latest version still compatible with passlib 1.7.4).
-bcrypt>=3.1,<4.1
+# 历史:passlib 1.7.4 与 bcrypt>=4.1 不兼容,曾在此钉 <4.1。2026-10-15
+# 起口令哈希改用原生 bcrypt(passlib 下架),此钉解除;精确版本见仓库根
+# requirements.lock。
 
 # ── PG 栈（PG迁移方案 §3.1，M0 实装版本）─────────────────────────────
 # asyncpg: 运行时异步驱动（pyproject dependencies 已列，此处钉准版本）。
 # alembic: 迁移必经（空库建库/版本校验；SQLite 方言 2026-10-14 退役）。
-# psycopg: 仅 ETL/preccheck 脚本用的同步驱动，按需安装：
-#   pip install -c requirements-platform-constraints.txt "psycopg[binary]"
+# psycopg: 同步驱动(lifespan ensure_schema_sync / 空库门 / ETL 共用)。
 asyncpg==0.31.0
 alembic==1.20.0
 psycopg==3.3.6

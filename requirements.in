@@ -1,0 +1,10 @@
+# 锁定输入(整体评审 2026-10-15 #6):执行器/plate(根包 dev 组)+ 平台后端。
+# 重新生成(依赖变更后必须同提交):
+#   uv pip compile requirements.in --universal --python-version 3.12 \
+#       --no-emit-package gimbal --no-emit-package gimbal-platform-backend \
+#       -o requirements.lock
+# 安装(CI/部署):
+#   pip install -r requirements.lock
+#   pip install --no-deps -e . -e src/gimbal-platform/backend
+-e .[dev]
+-e ./src/gimbal-platform/backend

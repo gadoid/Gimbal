@@ -4,14 +4,14 @@ version = "0.1.0"
 description = "A testing framework"
 requires-python = ">=3.11"
 dependencies = [
-    "typer>=0.12.0",
-    "pydantic>=2.0",
-    "rich>=13.0",
-    "pyyaml>=6.0",
-    "httpx>=0.28",
-    "loguru>=0.7.0",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
+    "typer>=0.12.0,<1",
+    "pydantic>=2.6,<3",
+    "rich>=13.0,<16",
+    "pyyaml>=6.0,<7",
+    "httpx>=0.28,<1",
+    "loguru>=0.7.0,<1",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 [project.scripts]
 gimbal = "gimbal.cli.main:starter"
@@ -21,17 +21,21 @@ plate = "gimbal_plate.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
+    # 版本上界(整体评审 2026-10-15 #6):主版本封顶;精确版本以仓库根
+    # requirements.lock 为准(CI/部署按 lock 安装)
+    "pytest>=8.0,<10",
+    # 后端测试为 async(conftest/fixtures);此前 CI 单独补装
+    "pytest-asyncio>=0.24,<2",
     "ruff>=0.4.0",
     "mypy>=1.10",
-    "pyyaml>=6.0",
-    "httpx>=0.28",
-    "loguru>=0.7.0",
+    "pyyaml>=6.0,<7",
+    "httpx>=0.28,<1",
+    "loguru>=0.7.0,<1",
     # tests/unit/platform_compat 的执行器测试 import 平台后端
     # (app.core.config → cryptography.fernet + pydantic_settings。
     # BaseSettings);CI 只装 .[dev] 时收集阶段即报错(评审 R5/N2)。
-    "cryptography>=42.0",
-    "pydantic-settings>=2.0",
+    "cryptography>=42.0,<51",
+    "pydantic-settings>=2.0,<3",
     # M2 交换形态生成工具（gen_m2.py；Q8 版本锁定）
     "datamodel-code-generator==0.28.5",
 ]

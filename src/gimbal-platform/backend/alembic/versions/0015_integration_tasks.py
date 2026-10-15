@@ -15,14 +15,13 @@ import uuid
 
 import sqlalchemy as sa
 from alembic import op
-from passlib.context import CryptContext
+import bcrypt
 
 revision = "0015_integration_tasks"
 down_revision = "0014_suite_modes"
 branch_labels = None
 depends_on = None
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 
@@ -121,7 +120,9 @@ def upgrade() -> None:
                         ["owner_id", "removed_at"])
     # 种子:平台系统用户(不可登录 —— 随机口令哈希,且 is_system 登录闸
     # 双保险;用户列表/登录路由按 is_system 过滤)
-    _seed_pw = _pwd.hash(f"system-user-not-loginable:{uuid.uuid4().hex}")
+    _seed_pw = bcrypt.hashpw(
+        f"system-user-not-loginable:{uuid.uuid4().hex}".encode(),
+        bcrypt.gensalt()).decode("ascii")
     op.execute(
         sa.text(
             "INSERT INTO users (username, display_name, password_hash, "

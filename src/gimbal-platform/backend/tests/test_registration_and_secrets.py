@@ -73,3 +73,30 @@ def test_check_crypto_secrets(monkeypatch, jwt_eph, fernet_eph, allow, raises):
             check_crypto_secrets()
     else:
         check_crypto_secrets()
+
+
+# ── 口令哈希/JWT 换库兼容(整体评审 2026-10-15 #6:passlib→bcrypt,
+#    python-jose→PyJWT)—— 存量账号必须照常登录 ──────────────────────
+# 以下两条哈希由 passlib 1.7.4 + bcrypt 4.0.1(换库前的生产组合)生成。
+_PASSLIB_SHORT = "$2b$12$d/0ZL5fdo03axIzkXrpLIOH3163QpL8l38j48RYBN90df5MhcnpHe"
+_PASSLIB_LONG = "$2b$12$MHW5RUKFY0pt0ewOpXiJC.HDMQO1ZSbXlcTxgJHLiqtKEZWLZWpdO"
+_LONG_PW = "长口令" * 30          # 270 字节:passlib 静默截断到 72 字节
+
+
+def test_passlib_hashes_still_verify():
+    from app.core.security import hash_password, verify_password
+    assert verify_password("Passw0rd!123", _PASSLIB_SHORT)
+    assert not verify_password("wrong", _PASSLIB_SHORT)
+    assert verify_password(_LONG_PW, _PASSLIB_LONG)
+    # 新哈希同为 $2b$,>72 字节不抛错(bcrypt>=5 原生会抛 ValueError)
+    h = hash_password(_LONG_PW)
+    assert h.startswith("$2b$") and verify_password(_LONG_PW, h)
+    assert not verify_password("x", "not-a-bcrypt-hash")
+
+
+def test_jwt_roundtrip_and_tamper():
+    from app.core.security import create_access_token, decode_token
+    tok = create_access_token(subject=42)
+    assert decode_token(tok)["sub"] == "42"
+    with pytest.raises(ValueError, match="invalid token"):
+        decode_token(tok[:-2] + ("aa" if not tok.endswith("aa") else "bb"))

@@ -47,16 +47,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install (editable, plate entry included)
+      - name: Install (lock 精确版本 + editable 本仓包)
         run: |
-          pip install -e .[dev]
-          # 平台后端侧依赖(A-2,2026-10-13):后端是独立 pyproject,根
-          # [dev] 不含其运行件(sqlalchemy/alembic/passlib/python-jose/
-          # asyncpg)与 pytest-asyncio —— 只装 .[dev] 时后端测试在
-          # conftest 收集阶段即崩(No module named 'sqlalchemy')。
-          # editable 装后端包带齐运行件;constraints 钉 bcrypt/asyncpg/
-          # alembic 与后端 pyproject 同口径。
-          pip install -e src/gimbal-platform/backend "pytest-asyncio>=0.24"             -c src/gimbal-platform/backend/requirements-platform-constraints.txt
+          # 整体评审 2026-10-15 #6:按仓库根 requirements.lock 安装全部三方
+          # 依赖(执行器/plate dev 组 + 平台后端,含 pytest-asyncio),本仓
+          # 两个包 --no-deps editable 装 —— CI 与部署同一组精确版本,不再
+          # 被上游新版(sqlalchemy 2.1 greenlet、fastapi 内部路由等)突袭。
+          # 依赖变更须同提交重生 lock(命令见 requirements.in 头注)。
+          pip install -r requirements.lock
+          pip install --no-deps -e . -e src/gimbal-platform/backend
+          # lock 与 pyproject 一致性:pyproject 改了上下界却没重生 lock
+          # 时这里红(pip 按 pyproject 依赖声明复核已装版本)
+          pip check
       # 评审 G-2/7.1-7:未定义名称守卫——plate_pins_container / m2_info /
       # Session 这类一跑就崩的缺陷不再进入提交。只拦 F821(未定义名),
       # unused 类噪音不在此门。
@@ -121,7 +123,7 @@ jobs:
       - name: 非 editable 安装冒烟
         run: |
           python -m venv /tmp/wheelenv
-          /tmp/wheelenv/bin/pip install -q .
+          /tmp/wheelenv/bin/pip install -q -c requirements.lock .
           /tmp/wheelenv/bin/plate --help >/dev/null
           /tmp/wheelenv/bin/python -c "import gimbal_plate, gimbal; print('non-editable install OK')"
           PLATE_REPO_ROOT="$PWD" /tmp/wheelenv/bin/plate check fin --json >/dev/null
