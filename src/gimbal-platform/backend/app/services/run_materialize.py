@@ -13,6 +13,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from loguru import logger
+
 
 @dataclass(frozen=True)
 class CarryContext:
@@ -222,6 +224,14 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
         if candidates is None:
             # 降级门控(无锚点存量 step):候选 = 绑定键 ∪ 全局默认键
             candidates = {**bound, **ctx.global_defaults}
+            if candidates:
+                # #323(2026-10-15):导入落库的无锚点可执行场景曾在此被
+                # 灌全表绑定(orderPage ES 400)。门控语义按测试钉死不动,
+                # 此处仅留遥测 —— 无锚点 + 服务有绑定 = 高危注入面。
+                logger.warning(
+                    "carry 降级门控: step[{}] service={!r} 无锚点,候选 = "
+                    "绑定 {} 键 ∪ 全局默认共 {} 键(值原样透传不转换)",
+                    i, svc, len(bound), len(candidates))
         request = step.get("request")
         if not isinstance(request, dict):
             continue

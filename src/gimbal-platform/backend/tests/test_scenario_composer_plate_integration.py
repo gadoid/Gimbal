@@ -54,6 +54,10 @@ class PlateMock:
         # 场景导入 v2.3(W3):/lines/{line}/revisions 回放
         # ({系统: {线: [修订条目]}});缺省每线 [#1, #2]。
         self.line_revisions: dict[str, dict[str, list[dict]]] = {}
+        # 导入重锚定(2026-10-15 #323):working 端点清单回放
+        # ({系统: [条目]});未注入的系统 → 404(= PlateRejectedError →
+        # 该系统不可反查,reason=catalog_unavailable)。
+        self.system_endpoints: dict[str, list[dict]] = {}
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -190,6 +194,16 @@ class PlateMock:
                 return httpx.Response(200, json={
                     "ok": True, "dim": "system",
                     "data": {"item": {"system": sysname, "objects": objs}}})
+            # 导入重锚定(#323):系统作用域 working 端点清单(轻视图)
+            if path.startswith("/api/systems/") and path.endswith("/endpoint"):
+                system = path.split("/")[3]
+                items = self.system_endpoints.get(system)
+                if items is not None:
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "endpoint",
+                        "data": {"items": items, "total": len(items)},
+                    })
+                return httpx.Response(404, json={"ok": False})
             # carry 预解析面(T9):services 目录 + endpoint full(写法对齐
             # conftest.EndpointPlateMock;未知 /full id → 404 = face 降级)。
             if path == "/api/service":

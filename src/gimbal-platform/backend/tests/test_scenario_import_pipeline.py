@@ -609,3 +609,81 @@ async def test_land_rechecks_rewritten_definition(client, plate_mock: PlateMock,
         assert (await db.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == _SCENARIO_ID))
         ).scalar_one_or_none() is None
+
+
+# ── 重锚定(2026-10-15 #323)────────────────────────────────────────
+
+
+def _exec_bundle(sid: str = "sc-import-exec") -> dict:
+    """无锚点可执行形态(导出产物原样):call 带 binding 派生字段。"""
+    return {
+        "scenarioId": sid,
+        "meta": {"scenarioId": sid, "name": "Exec", "module": "order",
+                 "priority": 1, "system": ["fin"],
+                 "plate": {"fin": "1.0#1"}},
+        "steps": [{
+            "kind": "step",
+            "call": {"kind": "call", "protocol": "http",
+                     "service": "fin-service", "method": "POST",
+                     "path": "/api/order/orderEntrust/orderPage",
+                     "timeout": 30, "auth": "none",
+                     "headers": {"Authorization": "${auth.qa1.token}"}},
+            "request": {"kind": "request", "body": {"page_no": 1}},
+            "strategy": [],
+        }],
+        "config": {"services": {"fin-service": "https://src"}},
+    }
+
+
+def _mock_reanchor_plate(pm: PlateMock) -> None:
+    """反查桩:working 清单 + /full(钉定修订复核 + carry 面)。"""
+    pm.behaviour = "echo"
+    pm.services = [{"name": "fin-service"}]
+    pm.system_endpoints["fin"] = [{
+        "id": "fin.order_entrust.order_page", "system": "fin",
+        "service": "fin-service", "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage"}]
+    pm.fulls["fin.order_entrust.order_page"] = {
+        "binding": {"protocol": "http", "method": "POST",
+                    "path": "/api/order/orderEntrust/orderPage",
+                    "timeout": 30},
+        "request": {"declarations": [
+            {"path": "$.page_no", "state": "form", "type": "integer"},
+        ]},
+    }
+
+
+async def test_precheck_reports_reanchoring(client, plate_mock: PlateMock):
+    _mock_reanchor_plate(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": _exec_bundle()})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["blocking"] is False
+    assert body["anchoring"]["unresolved"] == []
+    assert body["anchoring"]["anchored"] == [{
+        "index": 0, "service": "fin-service", "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage",
+        "endpoint": "fin.order_entrust.order_page", "reason": None}]
+
+
+async def test_land_stores_reanchored_storage_form(client,
+                                                   plate_mock: PlateMock):
+    """#323 回归:无锚点可执行文件落库 = 锚定存储形态 —— endpoint 回填,
+    binding 派生字段(protocol/method/path/timeout)由存储闸剥离。
+    不锚则 dispatch carry 降级门控会灌服务绑定全表(orderPage ES 400)。"""
+    _mock_reanchor_plate(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": _exec_bundle(), "mappings": []})
+    assert r.status_code == 201, r.text
+    defn = await _stored_definition("sc-import-exec")
+    step = defn["steps"][0]
+    assert step["endpoint"] == "fin.order_entrust.order_page"
+    call = step["call"]
+    for k in ("protocol", "method", "path", "timeout"):
+        assert k not in call, f"binding 派生字段 {k} 应被存储闸剥离"
+    assert call["service"] == "fin-service"
+    assert call["headers"] == {"Authorization": "${auth.qa1.token}"}
+    assert step["request"]["body"] == {"page_no": 1}

@@ -620,6 +620,35 @@ async def resolve(
     return envelope.get("data", {}).get("item", {})
 
 
+async def list_system_endpoints(
+    system_id: str, *, timeout: float = 15.0,
+) -> list[dict]:
+    """GET /api/systems/{system}/endpoint → data.items(working 树轻视图)。
+
+    导入重锚定(2026-10-15 #323)的反查候选源:条目含 id/service/
+    method/path。5xx/网络错误上抛 PlateUnavailableError,4xx 上抛
+    PlateRejectedError(调用方决定降级口径)。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(f"/api/systems/{system_id}/endpoint",
+                                timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(f"plate_unavailable: {e}") from e
+    if resp.status_code >= 500:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
+    if resp.status_code >= 400:
+        _raise_rejected(resp)
+    envelope = resp.json()
+    if not envelope.get("ok"):
+        raise PlateRejectedError(
+            code="invalid_action",
+            message=envelope.get("error", {}).get("message", "not ok"))
+    items = envelope.get("data", {}).get("items", [])
+    return items if isinstance(items, list) else []
+
+
 async def get_endpoint_full_at(
     endpoint_id: str, ref: str, *, timeout: float = 15.0,
 ) -> "dict[str, Any] | None":

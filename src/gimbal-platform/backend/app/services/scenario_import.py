@@ -28,7 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from ..models.composer_scenario import ComposerScenario
 from ..models.service_alias import ServiceAlias
 from ..schemas.scenario_composer import ScenarioDraft
-from . import plate_client, scenario_store
+from . import endpoint_anchoring, plate_client, scenario_store
 from . import service_aliases as alias_svc
 from . import service_names
 from .carry_injection import build_carry_context
@@ -279,6 +279,7 @@ async def precheck(db, *, definition: dict, user) -> dict:
         "metaPlate": {}, "availableRevisions": {},
         "idConflict": False, "suggestedId": None,
         "services": [], "authRefs": [], "workingDeclarations": [],
+        "anchoring": {"anchored": [], "unresolved": []},
     }
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
     if not isinstance(meta_plate, dict) or not meta_plate:
@@ -311,6 +312,20 @@ async def precheck(db, *, definition: dict, user) -> dict:
 
     out["workingDeclarations"] = sorted(
         s for s, ref in meta_plate.items() if ref == "working")
+
+    # 重锚定(2026-10-15 #323):可执行形态的无锚点步骤回填 endpoint。
+    # 之后的析出分析(services/authRefs)与 land 落库同源 —— 都在锚定
+    # 后的形态上算;报告随信封返回,unresolved 步骤落库后执行将走
+    # carry 降级门控(该服务绑定全表注入),确认界面应予提示。
+    try:
+        definition, anchor_report = (
+            await endpoint_anchoring.reanchor_import_definition(definition))
+    except plate_client.PlateUnavailableError as e:
+        raise ImportRejected("plate_unavailable", 502, e.message) from e
+    out["anchoring"] = {
+        "anchored": [r for r in anchor_report if r["endpoint"]],
+        "unresolved": [r for r in anchor_report if not r["endpoint"]],
+    }
 
     sid = definition.get("scenarioId") or ""
     if sid and (await db.execute(
@@ -444,6 +459,19 @@ async def land(
             raise ImportRejected("meta_plate_invalid_ref", 422, str(e)) from e
     # 注:create_in_transaction 内的 enforce_meta_plate 会再验一次 refs
     # (与常规创建同路径,store 唯一写入口收口⑥ 的既有契约,幂等读)。
+
+    # 重锚定(2026-10-15 #323):无锚点可执行步骤按 (service, method,
+    # path) 反查回填 endpoint —— 不锚则 dispatch 的 carry 降级门控会把
+    # 服务绑定全表灌进每个请求体。剥离 binding 派生字段由
+    # create_in_transaction 的 strip_binding_fields 收口,此处只加锚;
+    # 下方 carry 析出/清除计划随之自然在锚定形态上工作(无锚点步骤
+    # 本就"没有面,谈不上接管",两条路径口径一致)。plate 不可达上抛
+    # 502(convert 同口径 — 静默不锚 = 落库后必踩降级门控)。
+    try:
+        definition, _anchor_report = (
+            await endpoint_anchoring.reanchor_import_definition(definition))
+    except plate_client.PlateUnavailableError as e:
+        raise ImportRejected("plate_unavailable", 502, e.message) from e
 
     steps = [s for s in (definition.get("steps") or []) if isinstance(s, dict)]
     raw_steps = list(definition.get("steps") or [])
