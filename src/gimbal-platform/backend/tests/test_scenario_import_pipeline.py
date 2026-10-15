@@ -668,6 +668,31 @@ async def test_precheck_reports_reanchoring(client, plate_mock: PlateMock):
         "endpoint": "fin.order_entrust.order_page", "reason": None}]
 
 
+async def test_precheck_revision_drift_reports_unresolved(
+        client, plate_mock: PlateMock):
+    """#323 口径缺口回归(2026-10-15 实测):钉定修订 path 漂移的步骤
+    实际未锚(落库执行仍走 carry 降级门控),预检必须把它归入
+    unresolved —— 旧实现按 endpoint 字段判定,漂移条目携带命中候选
+    被误报成 anchored、unresolved 反而为空。"""
+    _mock_reanchor_plate(plate_mock)
+    plate_mock.fulls["fin.order_entrust.order_page"] = {
+        "binding": {"protocol": "http", "method": "POST",
+                    "path": "/api/renamed",       # 修订里已漂移
+                    "timeout": 30},
+        "request": {"declarations": []},
+    }
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": _exec_bundle()})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["anchoring"]["anchored"] == []
+    assert len(body["anchoring"]["unresolved"]) == 1
+    entry = body["anchoring"]["unresolved"][0]
+    assert entry["reason"] == "not_in_revision"
+    assert entry["endpoint"] == "fin.order_entrust.order_page"  # 排查可见
+
+
 async def test_land_stores_reanchored_storage_form(client,
                                                    plate_mock: PlateMock):
     """#323 回归:无锚点可执行文件落库 = 锚定存储形态 —— endpoint 回填,

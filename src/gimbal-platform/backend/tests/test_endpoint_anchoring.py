@@ -13,7 +13,8 @@ import copy
 
 import pytest
 
-from app.services.endpoint_anchoring import reanchor_import_definition
+from app.services.endpoint_anchoring import (
+    is_anchored, reanchor_import_definition)
 
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 
@@ -68,6 +69,7 @@ async def test_matched_working_ref_anchors(pm: PlateMock):
                        "path": "/api/order/orderEntrust/orderPage",
                        "endpoint": "fin.order_entrust.order_page",
                        "reason": None}]
+    assert is_anchored(report[0]) is True
 
 
 async def test_method_match_case_insensitive(pm: PlateMock):
@@ -124,7 +126,9 @@ async def test_pinned_ref_binding_match_anchors(pm: PlateMock):
 
 async def test_pinned_ref_drift_not_anchored(pm: PlateMock):
     """working 命中但钉定修订里 path 已漂移 → 不锚(reproject 会按修订
-    投影,锚了执行形态就与文件不符)。"""
+    投影,锚了执行形态就与文件不符)。报告条目仍携带命中候选(endpoint
+    供排查),**判定只看 reason** —— 按 endpoint 判会把漂移步骤误报成
+    已锚(2026-10-15 实测发现的口径缺口)。"""
     pm.system_endpoints["fin"] = _fin_endpoints({"id": "fin.ep"})
     pm.fulls["fin.ep"] = {
         "binding": {"protocol": "http", "method": "POST",
@@ -136,6 +140,7 @@ async def test_pinned_ref_drift_not_anchored(pm: PlateMock):
     assert "endpoint" not in out["steps"][0]
     assert report[0]["endpoint"] == "fin.ep"   # 命中了谁仍可见
     assert report[0]["reason"] == "not_in_revision"
+    assert is_anchored(report[0]) is False     # 但不是已锚
 
 
 async def test_pinned_ref_missing_full_not_anchored(pm: PlateMock):

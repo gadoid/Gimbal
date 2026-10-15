@@ -43,6 +43,16 @@ def _anchor_report_entry(
             "path": path, "endpoint": endpoint, "reason": reason}
 
 
+def is_anchored(entry: dict) -> bool:
+    """报告条目是否已锚的**唯一**判定:``reason is None``。
+
+    不能按 ``endpoint`` 非空判 —— not_in_revision 条目也携带命中的候选
+    ID(供人排查"差一点锚到了谁"),消费者(precheck 分组/回填脚本)曾
+    因此把漂移步骤误报成已锚(#323 口径缺口,2026-10-15 实测发现)。
+    """
+    return entry.get("reason") is None
+
+
 async def reanchor_import_definition(
     definition: dict,
 ) -> tuple[dict, list[dict]]:
@@ -51,8 +61,10 @@ async def reanchor_import_definition(
     返回 ``(新 definition, 报告)``;无待锚步骤时原对象原样返回
     (同一引用,调用方可做身份断言)。definition 不被就地修改。
     报告条目:{index, service, method, path, endpoint, reason};
-    ``endpoint`` 非空 = 已锚,``reason`` 为 None;未锚条目给出原因
-    (not_in_catalog / ambiguous / not_in_revision / catalog_unavailable)。
+    已锚与否**只看 reason**(None = 已锚,见 :func:`is_anchored`)——
+    ``endpoint`` 在 not_in_revision 时也携带被拒的命中候选,仅供排查,
+    不代表已锚;未锚原因:not_in_catalog / ambiguous / not_in_revision /
+    catalog_unavailable。
     """
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
     steps = definition.get("steps")
@@ -127,7 +139,6 @@ async def reanchor_import_definition(
             continue
 
         system, eid = matched[0]
-        anchored = True
         ref = meta_plate.get(system)
         if ref and ref != "working":
             full: Any = await plate_client.get_endpoint_full_at(eid, ref)

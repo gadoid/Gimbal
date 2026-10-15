@@ -323,8 +323,10 @@ async def precheck(db, *, definition: dict, user) -> dict:
     except plate_client.PlateUnavailableError as e:
         raise ImportRejected("plate_unavailable", 502, e.message) from e
     out["anchoring"] = {
-        "anchored": [r for r in anchor_report if r["endpoint"]],
-        "unresolved": [r for r in anchor_report if not r["endpoint"]],
+        "anchored": [r for r in anchor_report
+                     if endpoint_anchoring.is_anchored(r)],
+        "unresolved": [r for r in anchor_report
+                       if not endpoint_anchoring.is_anchored(r)],
     }
 
     sid = definition.get("scenarioId") or ""
