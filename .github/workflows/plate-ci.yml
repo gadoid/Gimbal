@@ -106,16 +106,16 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
         run: pytest src/gimbal-platform/backend/tests/test_empty_db_bootstrap.py -q
-      # 增量升级门(合入评估 §2-2,二修):从 SNAPSHOT_REF 钉定的交付点
-      # 快照(worktree 用交付点自己的模型建库 —— 免疫「当前模型 create_all
-      # 同义反复」)upgrade 到 head,再与模型比对;窗口 = 快照后的全部
-      # 迁移及其返工,守卫不再跳过。白名单仅 trgm 索引。快照 ref 随发版
-      # 推进;长期 = 迁移链压平为冻结静态 DDL。service 容器内 gimbal 是
-      # 超级用户,脚本默认建临时库 gimbal_chain。
-      - name: 增量升级门(快照交付点 → head vs 模型)
-        run: >
-          python scripts/check_migration_drift.py
-          --url postgresql://gimbal:gimbal@localhost:5432/gimbal
+      # 增量升级门(合入评估 §2-2;整体评审 2026-10-15 三修):psql 恢复入库的
+      # 上一交付点 schema 转储(scripts/fixtures/schema-snapshot-*.sql,不执行
+      # 历史代码 —— 历史迁移依赖的 passlib/python-jose 已下架)→ 当前迁移链
+      # upgrade head → 与模型比对 + 执行面序列须为 bigint(compare_metadata
+      # 不比对序列)。白名单仅 trgm 索引。快照随发版推进;长期 = 迁移链压平。
+      - name: 增量升级门(快照转储 → head vs 模型)
+        run: |
+          command -v psql >/dev/null || (sudo apt-get update -q && sudo apt-get install -yq postgresql-client)
+          python scripts/check_migration_drift.py \
+            --url postgresql://gimbal:gimbal@localhost:5432/gimbal
       # 评审第三轮:非 editable 安装冒烟——`pip install .` 后 plate 命令
       # 必须可用(此前 wheel 丢 gimbal_plate 包,-e 安装测不出来)。
       # 第四轮 M2:冒烟升级为真实 check——PLATE_REPO_ROOT 指到 checkout

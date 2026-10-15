@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Index, Integer, String, Text
+from sqlalchemy import BigInteger, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -19,7 +19,8 @@ class AdaptationOp(Base):
     __tablename__ = "adaptation_ops"
     __table_args__ = (Index("ix_aop_batch", "batch_id"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # BIGINT(整体评审 2026-10-15 #10):事件型表与执行面同口径
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(64), nullable=False)
     # carry 值表类 op 无场景落点(spec §7/D1 红利)→ 可空
     scenario_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

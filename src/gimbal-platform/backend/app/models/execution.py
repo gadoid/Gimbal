@@ -17,7 +17,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text, false, func
+from sqlalchemy import (
+    JSON, BigInteger, Boolean, ForeignKey, Index, Integer, String, Text, false,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -55,7 +58,8 @@ class Execution(Base):
         Index("ix_executions_suite", "suite_id"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    # BIGINT(整体评审 2026-10-15 #10):执行面所有外键的根
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     # 台账快照:场景删除后仍可读(空串 = 场景已删且名字不可考)
     scenario_name: Mapped[str] = mapped_column(String(255), default="")
@@ -112,7 +116,8 @@ class ExecutionSnapshot(Base):
     __tablename__ = "execution_snapshots"
 
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE"), primary_key=True
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     snapshot: Mapped[dict] = mapped_column(JsonVar, default=dict)
 
@@ -130,9 +135,9 @@ class ExecutionRow(Base):
 
     __tablename__ = "execution_rows"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE")
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE")
     )
     seq: Mapped[int] = mapped_column(Integer)
     # P2-01:单元标识(与执行器 unit 标签一致);存量行 '' = 行级时代
@@ -176,10 +181,12 @@ class ExecutionEvent(Base):
 
     __tablename__ = "execution_events"
 
-    # Integer(非 BigInteger):SQLite 仅对 INTEGER 主键生成 rowid 自增
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # BIGINT(整体评审 2026-10-15 #10):每条事件/日志行消耗一个号,是
+    # int4(约 21 亿)上限最先用尽的列;保留期清扫只删数据不回收号
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
+                                    autoincrement=True)
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE")
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE")
     )
     # event:执行域单调语义序(SSE 续传锚);log:负数轴跨批递减,仅为
     # (execution_id, seq) 唯一性令牌 + 恢复重跑续接,**无序语义** ——
@@ -216,7 +223,8 @@ class ExecutionEventEvidence(Base):
     __tablename__ = "execution_event_evidence"
 
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE"), primary_key=True
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     seq: Mapped[int] = mapped_column(Integer, primary_key=True)
     evidence: Mapped[dict] = mapped_column(JsonVar, default=dict)
@@ -241,10 +249,11 @@ class ExecutionJob(Base):
     __tablename__ = "execution_jobs"
 
     # Integer(PK):SQLite 仅对 INTEGER 主键生成 rowid 自增（同 execution_rows）
-    id: Mapped[int] = mapped_column(Integer, primary_key=True,
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
                                     autoincrement=True)
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE"), unique=True)
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE"),
+        unique=True)
     # queued / running / done / failed / canceled
     status: Mapped[str] = mapped_column(String(16), default="queued")
     # cases / graph / debug（debug = cases + debug 段，强制 server 链）

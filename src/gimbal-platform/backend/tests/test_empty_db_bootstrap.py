@@ -17,6 +17,13 @@ from pathlib import Path
 
 _BACKEND = Path(__file__).resolve().parents[1]
 
+# 执行面序列(0028:与列一并升 bigint;增量门 check_migration_drift 同表)
+EXEC_FACE_SEQUENCES = {
+    "executions_id_seq", "execution_events_id_seq", "execution_rows_id_seq",
+    "execution_jobs_id_seq", "adaptation_ops_id_seq",
+    "adaptation_snapshots_id_seq",
+}
+
 
 def test_empty_db_pg_face():
     """⑤(2026-10-13):空库门 PG 面 —— SQLite 退役(2026-10-14)后
@@ -89,6 +96,16 @@ def test_empty_db_pg_face():
                 (schema,)).fetchall()
         rows = [r for r in rows if r != ("external_endpoints", "request_schema")]
         assert rows == [], f"仍是 json 的列: {rows[:6]}"
+        # 整体评审 2026-10-15 #10:执行面序列必须是 bigint —— compare_metadata
+        # 不比对序列类型,列改 bigint 而序列仍 int4 时号段照样在 21 亿耗尽
+        with engine.connect() as conn:
+            seqs = conn.exec_driver_sql(
+                "select sequencename, data_type from pg_sequences "
+                "where schemaname = %s", (schema,)).fetchall()
+        bad = [r for r in seqs
+               if r[0] in EXEC_FACE_SEQUENCES and r[1] != "bigint"]
+        assert not bad, f"执行面序列非 bigint: {bad}"
+        assert EXEC_FACE_SEQUENCES <= {r[0] for r in seqs}
         engine.dispose()
     finally:
         asyncio.run(_admin(

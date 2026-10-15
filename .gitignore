@@ -51,3 +51,4 @@ node_modules/
 *.sql
 *.dump
 !pg-init/*.sql
+!scripts/fixtures/*.sql
