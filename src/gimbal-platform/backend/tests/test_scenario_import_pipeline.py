@@ -280,6 +280,192 @@ async def test_import_user_role_403(client, plate_mock: PlateMock):
         assert r.status_code == 403, (path, r.status_code)
 
 
+# ── 一致性判定 + 按步骤清除(合入评估 §1 修复,Codfish 规则)──────
+#
+# 矩阵:同一服务多个步骤、各步骤取值不一致 / 模板混用 / 同名 form 字段 /
+# 无锚点步骤 —— 三种决策(create/reuse/map)下都不得改写或删除任何步
+# 骤的字面值;只有各步取值一致的路径才交给别名接管,且只从各步**自己
+# carry 面**上清除。
+
+
+def _multi_bundle(sid: str = "sc-imp-multi", svc: str = "fin-service-qa",
+                  s1_remark="B") -> dict:
+    """四步骤文件:s0/s1 同端点(ep1,remark 属 carry 面)取值不一致;
+    s2 另一端点(ep2,remark 是 **form** 字段);s3 无锚点原始调用。"""
+    return {
+        "scenarioId": sid,
+        "meta": {
+            "scenarioId": sid, "name": "Multi", "module": "order",
+            "priority": 1, "system": ["fin"], "plate": {"fin": "1.0#1"},
+        },
+        "steps": [
+            {"kind": "step", "endpoint": "fin.ep1",
+             "call": {"service": svc, "headers": {}},
+             "request": {"kind": "request", "body": {
+                 "remark": "A", "other": "keep"}}},
+            {"kind": "step", "endpoint": "fin.ep1",
+             "call": {"service": svc, "headers": {}},
+             "request": {"kind": "request", "body": {"remark": s1_remark}}},
+            {"kind": "step", "endpoint": "fin.ep2",
+             "call": {"service": svc, "headers": {}},
+             "request": {"kind": "request", "body": {
+                 "remark": "ep2-business"}}},
+            {"kind": "step",
+             "call": {"service": svc, "method": "POST", "path": "/raw"},
+             "request": {"kind": "request", "body": {
+                 "remark": "raw-step"}}},
+        ],
+        "config": {"services": {svc: "https://src"}},
+    }
+
+
+def _multi_faces(pm: PlateMock) -> None:
+    pm.behaviour = "echo"
+    pm.services = [{"name": "fin-service"}]
+    pm.fulls = {
+        "fin.ep1": {"request": {"declarations": [
+            {"path": "$.remark", "state": "carry", "type": "string"}]}},
+        "fin.ep2": {"request": {"declarations": [
+            {"path": "$.remark", "state": "form", "type": "string"}]}},
+    }
+
+
+async def _remarks(sid: str) -> list:
+    """落库后各步骤 body 的 remark 观测(None = 键不存在)。"""
+    defn = await _stored_definition(sid)
+    out = []
+    for st in defn.get("steps") or []:
+        body = (st.get("request") or {}).get("body") or {}
+        out.append(body.get("remark", "<保留:键不存在>"))
+    return out
+
+
+async def test_inconsistent_values_never_taken_over__create(
+        client, plate_mock: PlateMock):
+    """取值不一致(A/B):create 也不接管 —— 四步骤 remark 全部原样,
+    新别名零 carry 条目;预检把该路径列进 inconsistentPaths。"""
+    _multi_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": _multi_bundle()})
+    by_key = {s["serviceKey"]: s for s in r.json()["services"]}
+    qa = by_key["fin-service-qa"]
+    assert qa["suggestion"] == "create"
+    assert qa["fieldsToAlias"] == 0
+    assert qa["inconsistentPaths"] == ["$.remark"]
+
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": _multi_bundle(),
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}]})
+    assert r.status_code == 201, r.text
+    assert await _remarks("sc-imp-multi") == ["A", "B", "ep2-business",
+                                              "raw-step"]
+    async with db_module.SessionLocal() as db:
+        binds = await carry_store.get_bindings(db, "fin-service-qa")
+        assert binds == {}
+
+
+async def test_inconsistent_values_never_taken_over__map_and_reuse(
+        client, plate_mock: PlateMock):
+    """map/reuse 同守:本机有值的别名不统一覆盖取值不一致的各步骤
+    (旧缺陷:map 会把各步统一改写成 carry 值)。"""
+    _multi_faces(plate_mock)
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(
+            db, "fin-service",
+            {"$.remark": "A"},
+            updated_by_id=None, updated_by_name="seed")
+        await db.commit()
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    for decision in ("map", "reuse"):
+        sid = f"sc-imp-m-{decision}"
+        bundle = _multi_bundle(sid, svc="fin-service")
+        r = await client.post("/api/scenarios/import", headers=bob, json={
+            "bundle": bundle,
+            "mappings": [{"serviceKey": "fin-service",
+                          "decision": decision}]})
+        assert r.status_code == 201, (decision, r.text)
+        assert await _remarks(sid) == ["A", "B", "ep2-business",
+                                       "raw-step"], decision
+
+
+async def test_template_literal_mix_kept(client, plate_mock: PlateMock):
+    """模板与字面值混用:不进接管集,模板与字面值都原样保留。"""
+    _multi_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    bundle = _multi_bundle(s1_remark="${vars.t}")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": bundle})
+    qa = {s["serviceKey"]: s for s in r.json()["services"]}["fin-service-qa"]
+    assert qa["inconsistentPaths"] == ["$.remark"]
+    assert qa["fieldsToAlias"] == 0
+
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": bundle,
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}]})
+    assert r.status_code == 201, r.text
+    assert await _remarks("sc-imp-multi") == ["A", "${vars.t}",
+                                              "ep2-business", "raw-step"]
+
+
+async def test_consistent_values_cleared_only_from_own_carry_face(
+        client, plate_mock: PlateMock):
+    """正控:各步取值一致(A/A)才接管,且只清 carry 面上该清的步骤
+    —— ep2 的 form remark 与无锚点步骤的 remark 不在面内,永不清。"""
+    _multi_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    bundle = _multi_bundle(s1_remark="A")
+    r = await client.post("/api/scenarios/import", headers=bob, json={
+        "bundle": bundle,
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}]})
+    assert r.status_code == 201, r.text
+    assert await _remarks("sc-imp-multi") == [
+        "<保留:键不存在>", "<保留:键不存在>", "ep2-business", "raw-step"]
+    # 非 face 字段不受牵连;carry 写的是一致值
+    defn = await _stored_definition("sc-imp-multi")
+    assert defn["steps"][0]["request"]["body"] == {"other": "keep"}
+    async with db_module.SessionLocal() as db:
+        binds = await carry_store.get_bindings(db, "fin-service-qa")
+        assert binds == {"$.remark": "A"}
+
+
+async def test_consistent_values_reuse_and_map(client, plate_mock: PlateMock):
+    """一致值 × reuse/map:接管集按决策过滤,清除同样只落在锚点步骤。"""
+    _multi_faces(plate_mock)
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(
+            db, "fin-service", {"$.remark": "A"},
+            updated_by_id=None, updated_by_name="seed")
+        await db.commit()
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    for decision in ("map", "reuse"):
+        sid = f"sc-imp-c-{decision}"
+        r = await client.post("/api/scenarios/import", headers=bob, json={
+            "bundle": _multi_bundle(sid, svc="fin-service", s1_remark="A"),
+            "mappings": [{"serviceKey": "fin-service",
+                          "decision": decision}]})
+        assert r.status_code == 201, (decision, r.text)
+        assert await _remarks(sid) == [
+            "<保留:键不存在>", "<保留:键不存在>",
+            "ep2-business", "raw-step"], decision
+
+
+async def test_precheck_inconsistent_listed_for_ui(client, plate_mock: PlateMock):
+    """预检/落库共用同一计算:确认界面看到的 inconsistentPaths 就是
+    落库保留的(取值摘要一并给出)。"""
+    _multi_faces(plate_mock)
+    bob = await register_and_login(client, "admin0", "admin0pass123")
+    r = await client.post("/api/scenarios/import/precheck", headers=bob,
+                          json={"bundle": _multi_bundle()})
+    qa = {s["serviceKey"]: s for s in r.json()["services"]}["fin-service-qa"]
+    assert qa["inconsistentPaths"] == ["$.remark"]
+    assert qa["fieldsKeptLiteral"] == 1   # remark(不一致)
+    assert qa["sensitivePaths"] == []
+
+
 # ── 体积门(服务函数直测,N3:解析前拒绝)─────────────────────────
 
 

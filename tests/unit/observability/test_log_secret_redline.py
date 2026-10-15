@@ -50,7 +50,7 @@ def _run_redline_plan(buf: io.StringIO) -> list[dict]:
       - core:stdlib 桥接(httpx.client 经 InterceptHandler → loguru → JSON);
       - step/strategy/compiler:成功 + 失败两条单元路径的引擎日志。
     """
-    from loguru import logger as _lu
+    from loguru import logger
 
     from gimbal.auth.manager import AuthManager
     from gimbal.auth.registry import AuthRegistry
@@ -145,13 +145,13 @@ def _run_redline_plan(buf: io.StringIO) -> list[dict]:
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(logging.DEBUG)
     logging.getLogger("httpx.client").setLevel(logging.DEBUG)
-    sink_id = _lu.add(JsonSink(buf), level="DEBUG")
+    sink_id = logger.add(JsonSink(buf), level="DEBUG")
     try:
         AuthManager(reg).load_and_auth(
             "login-user", {"username": "admin", "password": SECRET_PW})
         Engine(conf).run(graph)
     finally:
-        _lu.remove(sink_id)
+        logger.remove(sink_id)
         logging.root.handlers = root_handlers
         logging.root.setLevel(root_level)
         logging.getLogger("httpx.client").setLevel(httpx_lv)

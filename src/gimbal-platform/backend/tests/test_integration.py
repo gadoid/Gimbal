@@ -406,6 +406,51 @@ class TestIntegrationRouter:
         assert out["status"] == "failed"
         assert "拒绝触发" in (out.get("error") or "")
 
+    async def test_runner_readonly_gate_plate_unreachable_closes_channel(
+            self, client, plate_mock, monkeypatch):
+        """合入评估 §2-3:钉定修订场景只读闸的 /full?ref= 取数
+        (get_endpoint_full_at 连接失败/5xx 即抛)遇 plate 不可达时收口
+        run=channel + 固定前缀 —— 裸抛会被 _spawn 吞成 warning,实例
+        卡 running 到租约回收。working 声明走 fail-soft 的
+        get_endpoint_full(item=None → 「未知方法」offender),本就收口。"""
+        await _seed_platform_user()
+        h = await register_and_login(client, "ig_pdown", "ig_pdown123")
+        anchored = [{
+            "kind": "step", "description": "查单",
+            "endpoint": "fin.orders.get",
+            "call": {"service": "fin.order", "method": "GET", "path": "/o"},
+            "request": {"kind": "request", "body": {}},
+            "strategy": [],
+        }]
+        plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
+        pinned = make_draft("sc-ig-pdown", steps=anchored,
+                            plate={"fin": "1.0#1"})
+        assert (await client.post(
+            "/api/scenarios", headers=h, json=pinned)).status_code in (200, 201)
+        await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body("sc-ig-pdown"))
+        from app.services import integration_runner as ir
+        from app.services import plate_client
+
+        async def _unreachable(endpoint_id, ref, **kw):
+            raise plate_client.PlateUnavailableError(
+                f"plate_unavailable: connection refused ({endpoint_id}@{ref})")
+
+        monkeypatch.setattr(plate_client, "get_endpoint_full_at", _unreachable)
+        async with db_module.SessionLocal() as db:
+            tpl = (await db.execute(select(IntegrationTask).where(
+                IntegrationTask.scenario_id == "sc-ig-pdown",
+                IntegrationTask.template_id.is_(None)))).scalar_one()
+            inst = await ir.ensure_instance(tpl)
+            out = await ir.run_instance(inst.id)
+        assert out["status"] == "failed"
+        assert (out.get("error") or "") == "只读检查未通过: plate 不可达"
+        async with db_module.SessionLocal() as db:
+            row = await db.get(IntegrationTask, inst.id)
+            assert row.run_status == "channel"
+            assert row.state == "idle"   # 收口,不再卡 running
+            assert row.last_error == "只读检查未通过: plate 不可达"
+
 
 # ── Y2(G7):auth 类失败暂停实例 + 凭证复活钩子 ────────────────────
 

@@ -2364,7 +2364,7 @@ async def _failure_digest(db: AsyncSession, execution_id: int) -> "str | None":
             EE.execution_id == execution_id,
             EE.kind == "event", EE.event_type == "step.failed")
         .order_by(EE.ts.desc(), EE.id.desc()).limit(50))).scalars().all()
-    anchors: dict[str, ExecutionEvent] = {}   # 倒序首见 = 该 unit 最新
+    anchors: dict[str, EE] = {}   # 倒序首见 = 该 unit 最新
     for r in failed_rows:
         anchors.setdefault(r.unit or "", r)
     groups: list[str] = []

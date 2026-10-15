@@ -64,7 +64,7 @@
                   <td class="mono">{{ row.serviceKey }}</td>
                   <td>{{ suggestionLabel(row.suggestion) }}</td>
                   <td>{{ row.fieldsToAlias }}</td>
-                  <td>{{ row.fieldsKeptLiteral }}<span v-if="row.sensitivePaths.length" class="text-caption text-slate-500">(含敏感 {{ row.sensitivePaths.length }})</span></td>
+                  <td>{{ row.fieldsKeptLiteral }}<span v-if="row.sensitivePaths.length" class="text-caption text-slate-500">(含敏感 {{ row.sensitivePaths.length }})</span><span v-if="row.inconsistentPaths.length" class="text-caption text-slate-500">(取值不一致 {{ row.inconsistentPaths.length }})</span></td>
                   <td>
                     <template v-if="exists(row)">
                       <label class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="reuse" :checked="decision(row) !== 'create'" @change="setDecision(row, 'map')" />映射到已有</label>
@@ -92,6 +92,9 @@
                 </tr>
               </tbody>
             </table>
+            <p v-if="Object.keys(inconsistentMap).length" class="imp-warn" data-testid="import-inconsistent">
+              ⚠ 以下字段在各步骤取值不一致,不交给别名接管,各步骤保留文件里的原值:<template v-for="(paths, key) in inconsistentMap" :key="key">{{ key }} {{ paths.join('、') }};</template>
+            </p>
           </div>
 
           <!-- 认证引用栏(P7-③) -->
@@ -150,6 +153,13 @@ const fatal = computed(() => !!precheck.value?.blocking)
 const rows = computed(() => precheck.value?.services || [])
 const createRows = computed(() => rows.value.filter((r) => decision(r) === 'create'))
 const workingDeclarations = computed(() => precheck.value?.workingDeclarations || [])
+const inconsistentMap = computed<Record<string, string[]>>(() => {
+  const out: Record<string, string[]> = {}
+  for (const r of rows.value) {
+    if (r.inconsistentPaths?.length) out[r.serviceKey] = r.inconsistentPaths
+  }
+  return out
+})
 const effectiveNewId = computed(() =>
   assignNewId.value ? precheck.value?.suggestedId ?? null : null)
 const revisionsHint = computed(() => {

@@ -32,10 +32,10 @@ function pre(over: Record<string, unknown> = {}) {
     services: [
       { serviceKey: 'fin-service', suggestion: 'map', localAlias: 'fin-service',
         fieldsToAlias: 1, fieldsKeptLiteral: 2, createNameAvailable: false,
-        sensitivePaths: ['$.api_token'] },
+        inconsistentPaths: [], sensitivePaths: ['$.api_token'] },
       { serviceKey: 'qa-svc', suggestion: 'create', localAlias: null,
         fieldsToAlias: 1, fieldsKeptLiteral: 0, createNameAvailable: true,
-        sensitivePaths: [] },
+        inconsistentPaths: [], sensitivePaths: [] },
     ],
     authRefs: [{ tag: 'qa1', inMyPool: false }],
     workingDeclarations: [],
@@ -110,6 +110,25 @@ describe('ImportScenarioDialog 状态机', () => {
     expect(importScenario).toHaveBeenCalledTimes(1)
     expect(importPrecheck).toHaveBeenCalledTimes(2)   // 409 后自动重预检
     expect(w.find('[data-testid="import-confirm"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('取值不一致:保留字面值列标注 + 表下列出路径(§1 修复)', async () => {
+    importPrecheck.mockResolvedValue(pre({
+      services: [
+        { serviceKey: 'fin-service', suggestion: 'map', localAlias: 'fin-service',
+          fieldsToAlias: 0, fieldsKeptLiteral: 1, createNameAvailable: false,
+          inconsistentPaths: ['$.remark'], sensitivePaths: [] },
+      ],
+    }))
+    const w = mountDialog()
+    await flushPromises()
+    const row = w.find('[data-testid="import-svc-fin-service"]')
+    expect(row.text()).toContain('取值不一致 1')
+    const warn = w.find('[data-testid="import-inconsistent"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('fin-service $.remark')
+    expect(warn.text()).toContain('保留文件里的原值')
     w.unmount()
   })
 })

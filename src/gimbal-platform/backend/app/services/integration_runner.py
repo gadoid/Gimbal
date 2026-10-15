@@ -421,9 +421,15 @@ async def run_instance(instance_id: int) -> dict:
             )).scalars().first()
 
         # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
-        # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀
+        # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。
+        # plate 不可达同样闸失败而非裸抛 —— 裸抛会被 _spawn 吞成
+        # warning,实例卡 running 到租约回收,用户看不到任何原因。
         if tpl.identity_mode == "platform":
-            ok, offenders = await is_scenario_read_only(scen.payload)
+            try:
+                ok, offenders = await is_scenario_read_only(scen.payload)
+            except plate_client.PlateUnavailableError:
+                return await _finish(
+                    db, inst, tpl, "channel", "只读检查未通过: plate 不可达")
             if not ok:
                 return await _finish(
                     db, inst, tpl, "channel",

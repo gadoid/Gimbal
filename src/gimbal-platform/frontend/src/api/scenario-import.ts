@@ -9,6 +9,8 @@ export interface ImportServiceRow {
   localAlias: string | null
   fieldsToAlias: number
   fieldsKeptLiteral: number
+  /** 各步骤取值不一致的路径(Codfish 规则):不交别名接管,保留文件原值。 */
+  inconsistentPaths: string[]
   createNameAvailable: boolean
   sensitivePaths: string[]
 }

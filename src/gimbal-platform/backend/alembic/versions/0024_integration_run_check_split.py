@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0024_integration_run_check"
 down_revision = "0023_ext_schema_json"
@@ -40,13 +41,18 @@ _COLUMNS: list[tuple[str, sa.Column]] = [
                                server_default="")),
     ("check_message", sa.Column("check_message", sa.Text(), nullable=False,
                                 server_default="")),
-    ("check_changed_at", sa.Column("check_changed_at", sa.DateTime(),
-                                   nullable=True)),
+    # 时间戳列用 timestamptz(= 模型 UtcDateTime;合入评估 §2-2:原先
+    # sa.DateTime() 在 PG 得 timestamp without time zone,与模型漂移,
+    # 由 0027 对已执行过旧版 0024 的环境补正)
+    ("check_changed_at", sa.Column(
+        "check_changed_at", postgresql.TIMESTAMP(timezone=True),
+        nullable=True)),
     ("check_notified_status",
      sa.Column("check_notified_status", sa.String(16), nullable=False,
                server_default="")),
-    ("check_notified_at", sa.Column("check_notified_at", sa.DateTime(),
-                                    nullable=True)),
+    ("check_notified_at", sa.Column(
+        "check_notified_at", postgresql.TIMESTAMP(timezone=True),
+        nullable=True)),
 ]
 
 

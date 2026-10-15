@@ -4,8 +4,11 @@ precheck = 纯读析出分析(阻塞项/映射建议/认证引用);land = 一次
 (建别名 + 写 carry + 改写 definition + 建场景,单事务)。方案拍板在此
 实现的落点:
 
-* P5「有接管者才清除」—— _clear_plan 是唯一清除判定,body 字面值与
-  config.services URL 仅在本地有实际接管者时进清除集;
+* P5「有接管者才清除」—— 一致性判定先行(Codfish 规则 2026-10-15:
+  同服务同路径各步骤取值不一致 → 不进 carry、不清除,保留各步字面
+  值),清除计划粒度 = (step_index, path),只清该步骤自己 carry 面上
+  的路径;body 字面值与 config.services URL 仅在本地有实际接管者时
+  进清除集;
 * P7-② 敏感路径(命名启发)不写 carry、不进清除集,字面值保留;
 * P7-④ plate 调用(面/目录/convert)全部在事务外完成;
 * P7-⑤ 复用判定路径级:文件面字面值路径集 vs 三层链解析值逐条比,
@@ -127,26 +130,90 @@ def _step_body(step: dict) -> Any:
     return req.get("body") if isinstance(req, dict) else None
 
 
-def _service_file_values(
-    ctx, steps: list[dict], svc: str,
-) -> dict[str, Any]:
-    """文件侧:该服务在 carry 面上的**字面值**路径集合(§2 复用判定的
-    比较范围)。只统计有锚点且面非空的步骤;无值/模板不参与。"""
-    out: dict[str, Any] = {}
-    for i, step in enumerate(steps):
+class _Mark:
+    """取值观测里的不可比标记(模板/未填),与原始 JSON 值区分类型。"""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+
+def _json_equal(a: Any, b: Any) -> bool:
+    """JSON 值相等(布尔与数字分型:JSON true ≠ 1)。"""
+    if isinstance(a, bool) != isinstance(b, bool):
+        return False
+    return a == b
+
+
+def _obs_label(o: Any) -> str:
+    if isinstance(o, _Mark):
+        return o.label
+    return json.dumps(o, ensure_ascii=False)
+
+
+def _service_plan(ctx, raw_steps: list, svc: str, decision: str) -> dict:
+    """单服务接管计划 —— 预检计数与落库清除/carry **共用的唯一计算函数**
+    (合入评估 §1 修复:确认界面看到的必须就是落库要执行的)。
+
+    一致性判定先行(Codfish 规则 2026-10-15):同服务同路径,只要各步骤
+    最终取值不一致就**不进 carry、不进清除集**,所有步骤保留各自的字
+    面值 —— 只有各步取值一致的路径才可交给别名接管。参与观测的步骤 =
+    ``call.service`` 命中且自身 carry 面(``step_fields[i]``,原始索引)
+    非空;字面值不等,或字面值与模板/未填混用 → 判不一致。纯模板/未填
+    (该路径无任何字面值观测)不参与计数 —— 文件本就没有可接管的取值,
+    模板原样保留、不清除。无锚点步骤不在 ``step_fields``(没有面,谈
+    不上接管),``ext:`` 锚点的面是 plate 404 降级的空面 —— 两者天然
+    不参与、也永不被清除。
+
+    ``decision``:create=非敏感一致路径;reuse=本机有值且相等;map=本机
+    有值(本机为准);suggest=本机有值(预检建议口径,与 reuse/map 同集)。
+    """
+    seen: dict[str, list[Any]] = {}
+    for i, step in enumerate(raw_steps):
+        if not isinstance(step, dict):
+            continue
         call = step.get("call")
         if not (isinstance(call, dict) and call.get("service") == svc):
             continue
         face = ctx.step_fields.get(i) or {}
         body = _step_body(step)
         if body is None:
-            continue
+            continue   # 无请求体:carry 注入无从作用,不构成观测
         for path in face:
             v = _walk(body, _path_segs(path))
-            if v is _MISSING or _is_template(v):
-                continue
-            out.setdefault(path, v)
-    return out
+            if v is _MISSING:
+                obs: Any = _Mark("<未填>")
+            elif _is_template(v):
+                obs = _Mark("<模板>")
+            else:
+                obs = v
+            seen.setdefault(path, []).append(obs)
+
+    consistent: dict[str, Any] = {}
+    inconsistent: dict[str, list[str]] = {}
+    for path, obs_list in seen.items():
+        lits = [o for o in obs_list if not isinstance(o, _Mark)]
+        if not lits:
+            continue   # 纯模板/未填:无可接管取值,模板原样保留
+        first = lits[0]
+        if (any(isinstance(o, _Mark) for o in obs_list)
+                or not all(_json_equal(o, first) for o in lits)):
+            inconsistent[path] = [_obs_label(o) for o in obs_list]
+        else:
+            consistent[path] = first
+
+    sensitive = {p for p in consistent if _SENSITIVE_RE.search(p)}
+    if decision == "create":
+        provider = {p for p in consistent if p not in sensitive}
+    elif decision == "reuse":
+        provider = {
+            p for p, v in consistent.items()
+            if _local_value(ctx, svc, p) is not _MISSING
+            and _local_value(ctx, svc, p) == v}
+    else:   # map / suggest:本机有值即接管(本机为准)
+        provider = {p for p in consistent
+                    if _local_value(ctx, svc, p) is not _MISSING}
+    return {"consistent": consistent, "inconsistent": inconsistent,
+            "provider": provider, "sensitive": sensitive}
 
 
 def _local_value(ctx, svc: str, path: str) -> Any:
@@ -248,9 +315,15 @@ async def precheck(db, *, definition: dict, user) -> dict:
 
 
 async def analyze_services(db, definition: dict) -> list[dict]:
-    """按服务键析出分析(方案 §3.1 组装表;plate 依赖在事务外取完)。"""
-    steps = [s for s in (definition.get("steps") or []) if isinstance(s, dict)]
-    if not steps:
+    """按服务键析出分析(方案 §3.1 组装表;plate 依赖在事务外取完)。
+
+    计数与落库共用 :func:`_service_plan`(§1 修复:预检看到的 = 落库
+    要执行的)。``fieldsKeptLiteral`` 含两类:接管判定后保留的(敏感/
+    本机缺值)+ 一致性判定不过的(各步取值不一致,``inconsistentPaths``
+    逐条列出供确认界面展示)。
+    """
+    raw_steps = list(definition.get("steps") or [])
+    if not raw_steps:
         return []
     ctx = await build_carry_context(db, definition, ui_field_states={})
     catalog = await service_names.catalog_service_names()
@@ -258,37 +331,38 @@ async def analyze_services(db, definition: dict) -> list[dict]:
         select(ServiceAlias.alias_name))).scalars().all())
 
     out: list[dict] = []
-    for svc in referenced_services(steps):
-        file_vals = _service_file_values(ctx, steps, svc)
+    for svc in referenced_services(
+            [s for s in raw_steps if isinstance(s, dict)]):
         exists = svc in alias_names or svc in catalog
-        sensitive = {p for p in file_vals if _SENSITIVE_RE.search(p)}
         if exists:
-            # P7-⑤ 路径级复用判定:全部路径本机有值且相等 → 复用;
-            # 本机缺值/不等 → 映射(本机为准),缺值路径保留字面值
+            # P7-⑤ 路径级复用判定(一致集上):全部路径本机有值且相等 →
+            # 复用;否则映射(本机为准),缺值路径保留字面值
+            plan = _service_plan(ctx, raw_steps, svc, "suggest")
+            consistent = plan["consistent"]
             matched = {
-                p for p, v in file_vals.items()
+                p for p, v in consistent.items()
                 if _local_value(ctx, svc, p) is not _MISSING
-                and _local_value(ctx, svc, p) == v
-            }
+                and _local_value(ctx, svc, p) == v}
             suggestion = ("reuse"
-                          if file_vals and matched == set(file_vals)
+                          if consistent and matched == set(consistent)
                           else "map")
-            provider = {p for p in file_vals
-                        if _local_value(ctx, svc, p) is not _MISSING}
         else:
             suggestion = "create"
-            # 新建接管集 = 非敏感字面值路径(P7-②:敏感不写 carry)
-            provider = {p for p in file_vals if p not in sensitive}
+            plan = _service_plan(ctx, raw_steps, svc, "create")
+        provider = plan["provider"]
+        kept = (len(plan["consistent"]) - len(provider)
+                + len(plan["inconsistent"]))
         out.append({
             "serviceKey": svc,
             "suggestion": suggestion,
             "localAlias": svc if exists else None,
             "fieldsToAlias": len(provider),
-            "fieldsKeptLiteral": len(file_vals) - len(provider),
+            "fieldsKeptLiteral": kept,
+            "inconsistentPaths": sorted(plan["inconsistent"]),
             "createNameAvailable": (
                 svc not in alias_names
                 and service_names.derive_base(svc, catalog) is not None),
-            "sensitivePaths": sorted(sensitive),
+            "sensitivePaths": sorted(plan["sensitive"]),
         })
     return out
 
@@ -348,6 +422,7 @@ async def land(
     # (与常规创建同路径,store 唯一写入口收口⑥ 的既有契约,幂等读)。
 
     steps = [s for s in (definition.get("steps") or []) if isinstance(s, dict)]
+    raw_steps = list(definition.get("steps") or [])
     ctx = await build_carry_context(db, definition, ui_field_states={})
     catalog = await service_names.catalog_service_names()
 
@@ -386,23 +461,29 @@ async def land(
                     "mapping_stale", 409, f"服务 {key} 本机已不存在(重预检)")
             eff_key[key] = key
 
-    # ── 清除计划(P5:有接管者才清除)──────────────────────────────
-    # per 原服务键:进接管集的字面值路径;其余一律保留(不清即不丢)
-    clear_paths: dict[str, set[str]] = {}
+    # ── 清除计划(P5:有接管者才清除;§1 修复:一致性先行 + 按步骤)──
+    # 接管集与预检计数共用 _service_plan(唯一真源)。粒度 =
+    # (step_index, path):只清该步骤**自己 carry 面**上、且在接管集内
+    # 的路径 —— 取值不一致的路径不进接管集(三种决策一致,保留字面
+    # 值),无锚点/ext: 步骤没有面,永不被清。
+    plan_by_key: dict[str, dict] = {}
+    provider_by_key: dict[str, set[str]] = {}
     for key, m in by_key.items():
-        file_vals = _service_file_values(ctx, steps, key)
-        if m["decision"] == "create":
-            sensitive = {p for p in file_vals if _SENSITIVE_RE.search(p)}
-            clear_paths[key] = {p for p in file_vals if p not in sensitive}
-        elif m["decision"] == "reuse":
-            clear_paths[key] = {
-                p for p, v in file_vals.items()
-                if _local_value(ctx, key, p) is not _MISSING
-                and _local_value(ctx, key, p) == v}
-        else:  # map:本机有值即接管(本机为准);缺值路径保留字面值
-            clear_paths[key] = {
-                p for p in file_vals
-                if _local_value(ctx, key, p) is not _MISSING}
+        plan = _service_plan(ctx, raw_steps, key, m["decision"])
+        plan_by_key[key] = plan
+        provider_by_key[key] = plan["provider"]
+    clear_by_step: dict[int, set[str]] = {}
+    for i, step in enumerate(raw_steps):
+        if not isinstance(step, dict):
+            continue
+        call = step.get("call")
+        svc = call.get("service") if isinstance(call, dict) else None
+        if svc not in provider_by_key:
+            continue
+        face = ctx.step_fields.get(i) or {}
+        hit = provider_by_key[svc] & set(face)
+        if hit:
+            clear_by_step[i] = hit
 
     # ── definition 改写(纯内存)──────────────────────────────────
     defn = json.loads(json.dumps(definition))  # 深拷贝,不碰请求原对象
@@ -414,19 +495,17 @@ async def land(
     # config.users 清空(P2:明文凭证不落库)
     config.pop("users", None)
     services_cfg = dict(config.get("services") or {})
-    # body 字面值清除(P5:仅清除集内路径)—— 先于 call.service 改写,
-    # 清除集按原服务键索引
-    for step in defn.get("steps") or []:
-        if not isinstance(step, dict):
-            continue
-        call = step.get("call")
-        svc = call.get("service") if isinstance(call, dict) else None
-        if svc not in clear_paths:
+    # body 字面值清除(P5:仅清除集内路径)—— 按 (step_index, path) 计
+    # 划执行,索引与 step_fields 同一原始列表(T8 对齐);先于
+    # call.service 改写(接管集按原服务键索引)
+    for i, step in enumerate(defn.get("steps") or []):
+        hit = clear_by_step.get(i)
+        if not hit:
             continue
         body = _step_body(step)
         if body is None:
             continue
-        for path in clear_paths[svc]:
+        for path in hit:
             _delete_path(body, _path_segs(path))
     for key, new_name in eff_key.items():
         if new_name == key:
@@ -461,9 +540,9 @@ async def land(
             catalog_names=catalog)
         alias_names.add(name)
         created_aliases.append(name)
-        file_vals = _service_file_values(ctx, steps, key)
-        entries = {p: v for p, v in file_vals.items()
-                   if p in clear_paths[key]}
+        # carry 写接管集内的一致字面值(P7-②:敏感/不一致路径不落)
+        entries = {p: v for p, v in plan_by_key[key]["consistent"].items()
+                   if p in provider_by_key[key]}
         if entries:
             await carry_store_put(db, name, entries, user)
 
@@ -484,7 +563,7 @@ async def land(
     await scheme_store.ensure_default_scheme(db, sid)
     await _write_audit(db, user=user, created_aliases=created_aliases,
                        entries_count={
-                           eff_key[k]: len(v) for k, v in clear_paths.items()
+                           eff_key[k]: len(v) for k, v in provider_by_key.items()
                            if by_key[k]["decision"] == "create" and v})
     await db.refresh(row)
     return {"scenarioId": row.scenario_id, "idMode": id_mode}
