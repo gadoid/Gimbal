@@ -37,7 +37,7 @@
 
 | 文档 | 状态判定 | 处置 |
 |---|---|---|
-| external-definition-unification-design | **v0.8 整理版,批0 可开工**(七轮 71 项全采纳;**D-F 待拍板**) | 活;批3 合入时 W3 注记其取代关系 |
+| external-definition-unification-design | **v0.8.1,全部决策项已定**(七轮 71 项 + owner 轮 D-F 定案) | 活;批3 合入时 W3 注记其取代关系 |
 | single-source-registry | **待产出**(归一方案批2 交付物) | 产出后即为活文档(台账),纳入状态行纪律 |
 | docs-cleanup-plan(本方案) | v0.7 整理版 | 活,W1 开工时定稿 |
 | integration-v2-design.md | **已交付**(I1-I4 全落,10-14) | 状态行已是「已实现」;补交付指针;平台目录段加取代注记(W3) |
