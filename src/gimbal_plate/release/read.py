@@ -40,24 +40,48 @@ _WORKING = "working"
 
 
 class ReleaseReadError(Exception):
-    """读取侧错误：code 即 HTTP 错误码（release_not_found 等）。"""
+    """读取侧错误：code 即 HTTP 错误码（release_not_found 等）。
 
-    def __init__(self, code: str, message: str) -> None:
+    ``reason``(归一方案 v1.0 D-K,可选):``invalid_ref`` 的细分原因 ——
+    ``record_value``(``integration@…`` 是执行记录值,声明只能写裸值)/
+    ``malformed``(``#`` 后非数字等形状非法)。None = 无细分(存量错误路径)。
+    """
+
+    def __init__(self, code: str, message: str, *,
+                 reason: str | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        self.reason = reason
+
+
+_INTEGRATION = "integration"
 
 
 def parse_ref(ref: str) -> tuple[str, str | None, int | None]:
-    """``working`` | ``<line>`` | ``<line>#<n>`` → (kind, line, n)。"""
+    """``working`` | ``integration`` | ``<line>`` | ``<line>#<n>`` → (kind, line, n)。
+
+    归一方案 v1.0 §1.4:``integration`` 是与 ``working`` 同列的保留字
+    (定义源声明,恒取当前定义);``integration@<任意>`` 是执行记录值,
+    全域非法(声明域伪钉定);裸 ``<line>`` 保留 line-kind(取数域合法,
+    声明域政策由声明闸另行给出)。返回值形状不变(调用方零改动)。
+    """
     ref = (ref or "").strip()
     if not ref or ref == _WORKING:
         return (_WORKING, None, None)
+    if ref == _INTEGRATION:
+        return (_INTEGRATION, None, None)
+    if ref.startswith(_INTEGRATION + "@"):
+        raise ReleaseReadError(
+            "invalid_ref",
+            f"ref {ref!r} 非法:integration@… 是执行记录值,声明只能写 integration",
+            reason="record_value")
     if "#" in ref:
         line, _, n = ref.rpartition("#")
         if not line or not n.isdigit():
             raise ReleaseReadError(
-                "invalid_ref", f"ref {ref!r} 非法(须为 <line>#<n>)")
+                "invalid_ref", f"ref {ref!r} 非法(须为 <line>#<n>)",
+                reason="malformed")
         return ("revision", line, int(n))
     return ("line", ref, None)
 
