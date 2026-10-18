@@ -41,4 +41,5 @@ metadata:
   tags:
   - integration
   owner: integration
+  query_safe: true
 ```
