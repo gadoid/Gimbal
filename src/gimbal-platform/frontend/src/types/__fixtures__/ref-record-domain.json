@@ -1,0 +1,11 @@
+{
+  "comment": "归一方案 v1.0 记录域样例(ref-record-domain):后端 run_semantics.record_category 与前端 types/plate.ts 记录域判定函数各自读同一份断言(vitest/pytest 同源,防两侧样例漂移)。plate_pins 记录值形态:integration@<标识> 归 INTEGRATION;其余按声明域分类。生产代码不读 fixture。",
+  "cases": [
+    {"value": "integration@3f2a9c", "category": "INTEGRATION"},
+    {"value": "integration@", "category": "INTEGRATION"},
+    {"value": "integration", "category": "INTEGRATION"},
+    {"value": "working", "category": "WORKING"},
+    {"value": "1.0#3", "category": "PIN"},
+    {"value": "", "category": "UNDECLARED"}
+  ]
+}

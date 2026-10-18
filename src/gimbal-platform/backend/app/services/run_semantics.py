@@ -16,6 +16,73 @@ from .scenario_store import definition_from_payload, steps_from_payload
 
 WORKING = "working"
 
+# ── ref 类别分类器(归一方案 v1.0 §1.4/D-K,平台侧唯一原语) ─────────
+# 与 plate parse_ref 对称(两侧分进程不可 import,契约测试锁定分类表:
+# tests/fixtures/ref-decl-domain.json,由测试读取、生产代码不读)。
+# 分类分两个域,不得混用:
+#   声明域(meta.plate 声明/执行副本//convert 入参):合法 {WORKING,
+#   INTEGRATION, PIN},非法 INVALID + reason(record_value=integration@…
+#   是执行记录值;missing_revision=裸线,声明必须带修订号;malformed=
+#   其余形状非法);
+#   记录域(plate_pins 及其下游):integration@<标识> 归 INTEGRATION
+#   (台账比对正是拿记录值对声明值,只认裸值则修法落不了地)。
+
+UNDECLARED = "UNDECLARED"
+INTEGRATION = "INTEGRATION"
+PIN = "PIN"
+INVALID = "INVALID"
+
+
+def ref_category(ref: str) -> str:
+    """声明域分类:``UNDECLARED | WORKING | INTEGRATION | PIN | INVALID``。
+
+    INVALID 时另行提供 ``invalid_reason()``(平台预检按 reason 映射文案,
+    不得自带前缀/形状字面判断 —— 门禁③拦)。
+    """
+    ref = str(ref or "").strip()
+    if not ref:
+        return UNDECLARED
+    if ref == WORKING:
+        return WORKING
+    if ref == "integration":
+        return INTEGRATION
+    if ref.startswith("integration@"):
+        return INVALID  # reason: record_value
+    if "#" in ref:
+        line, _, n = ref.rpartition("#")
+        if not line or not n.isdigit():
+            return INVALID  # reason: malformed
+        return PIN
+    if ref:
+        return INVALID  # reason: missing_revision(裸线:声明须带修订号)
+    return UNDECLARED  # pragma: no cover — unreachable,空串已early-return
+
+
+def invalid_reason(ref: str) -> str | None:
+    """INVALID 声明的 reason 码(与 plate 侧一致);非 INVALID 返回 None。"""
+    ref = str(ref or "").strip()
+    if ref.startswith("integration@"):
+        return "record_value"
+    if "#" in ref:
+        line, _, n = ref.rpartition("#")
+        if not line or not n.isdigit():
+            return "malformed"
+        return None  # 合法 PIN
+    return "missing_revision"
+
+
+def record_category(value: str) -> str:
+    """记录域分类(``plate_pins`` 值):integration@<标识> 归 INTEGRATION。
+
+    仅平台单侧(后端入口;前端另有 types/plate.ts 判定函数,两侧共享
+    ref-record-domain.json 样例锁定);不进 plate 契约测试 —— 否则会
+    反向要求 plate 接受追溯态声明。
+    """
+    value = str(value or "").strip()
+    if value.startswith("integration@"):
+        return INTEGRATION
+    return ref_category(value)
+
 
 def anchored_systems(payload: dict | None) -> set[str]:
     """锚点步骤引用的系统集（``endpoint`` 首段）。"""
