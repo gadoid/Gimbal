@@ -1,0 +1,13 @@
+{
+  "comment": "批0 B10:sut carry 基名解析现状样本(derive_base 单射)。b2-9(D-M 别名表优先)落地时,本表断言在同名提交中按新解析次序复核 —— sut 样本预期结果不变(别名 base_service 即创建时 derive_base 派生值),fin.order/stub 无别名仍推不出。",
+  "catalog": ["fin-service", "platform-service", "common"],
+  "cases": [
+    {"key": "fin-service", "base": "fin-service"},
+    {"key": "fin-service-prod", "base": "fin-service"},
+    {"key": "fin-service-uat", "base": "fin-service"},
+    {"key": "platform-service-eu", "base": "platform-service"},
+    {"key": "fin.order", "base": null},
+    {"key": "stub", "base": null},
+    {"key": "fin-service-x-y", "base": null}
+  ]
+}
