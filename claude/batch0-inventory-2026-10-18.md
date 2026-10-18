@@ -24,3 +24,9 @@
 
 - plate 全局端点列表不分页(`per_page` 参数无效):非问题,第三方端点接入后无截断风险。
 - 现存口径张力:`anchored_systems`(`run_semantics.py:20-27`)不过滤 `ext:` 前缀,仅锚 `ext:` 的场景按代码会被判预览,与模块注释相悖;C12 后自然消解。
+
+## 门禁记录(批0 验收,2026-10-18)
+
+- **三侧门(批0 验收口径)**:gimbal+plate pytest **1338 passed**;backend pytest(含本批 12 条基线)**1031 passed/1 failed→修复后复跑见合并说明**;frontend typecheck(vue-tsc)**绿** + vitest **全绿**(含本批 B12)。
+- **verify_all 第 4 步(bootstrap pytest)预存红,与本批无关**:`gimbal_plate.systems` 包已随 A2 统一加载器退役(仓库无 `src/gimbal_plate/systems/`),而 `gimbal-bootstrap` 的 `case_builder.py:55` / `contract_gen_py.py:64` 仍 import `gimbal_plate.systems.platform.endpoint` → 43 用例红(`test_contract_reconcile_live.py` 已自带该缺失的守卫,orchestrator 用例无守卫直接跑挂)。**另立工单处理**(bootstrap 契约生成迁移到统一加载器),不阻塞批0-批4。
+- 本机运行备注:verify_all 需 venv 前置(`PATH="/d/Gimbal/Scripts:$PATH"`)并导出 `TEST_DATABASE_URL`(容器 `gimbal-pg-15432`);系统 Python 缺后端依赖。
