@@ -185,6 +185,12 @@ def _default_plate_stub():
                 "ok": True, "dim": "service",
                 "data": {"items": [], "total": 0},
             })
+        if path == "/api/endpoint":
+            # b2-7 唯一访问件(降级面:空目录,与 /api/service 同口径)
+            return httpx.Response(200, json={
+                "ok": True, "dim": "endpoint",
+                "data": {"items": [], "total": 0},
+            })
         if path.startswith("/api/endpoint/") and path.endswith("/full"):
             return httpx.Response(404, json={"ok": False})
         return httpx.Response(503, json={"ok": False})
@@ -196,9 +202,11 @@ def _default_plate_stub():
         transport=httpx.MockTransport(handler),
         base_url="http://plate-test-default",
     ))
+    plate_client.reset_catalog_cache_for_tests()  # b2-7:目录缓存不跨测试
     try:
         yield
     finally:
+        plate_client.reset_catalog_cache_for_tests()  # b2-7:目录缓存不跨测试
         plate_client.set_client_for_tests(None)
 
 
@@ -257,6 +265,9 @@ class EndpointPlateMock:
         self.system_scoped: dict[tuple[str, str], list[dict]] = {}
 
     def install(self) -> None:
+        from app.services import plate_client as _pc
+
+        _pc.reset_catalog_cache_for_tests()  # b2-7:换桩先清目录缓存
         mock = self
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -268,6 +279,8 @@ class EndpointPlateMock:
                     "ok": True, "dim": "service",
                     "data": {"items": mock.services, "total": len(mock.services)},
                 })
+            # (b2-7:/api/endpoint 走下方 mock.items 真行分支 —— 唯一访问件
+            #  不改假件形状;kind 缺省由消费方按 sut 处理)
             # 系统作用域接口列表(带 ref → 修订快照;无匹配 → 404)
             if path.startswith("/api/systems/") and path.endswith("/endpoint"):
                 system = path.split("/")[3]
@@ -285,9 +298,17 @@ class EndpointPlateMock:
                                "message": f"revision {ref!r} not found"},
                 })
             if path == "/api/endpoint":
+                # b2-7:items 为空但 services 有值(旧式用例只设 services)
+                # → 合成扁平行,保持「目录派生」语义可达
+                items = mock.items or [
+                    {"id": f"{it.get('name')}.mock", "service": it.get("name"),
+                     "system": it.get("system", "fin"),
+                     "kind": it.get("kind", "sut")}
+                    for it in mock.services
+                ]
                 return httpx.Response(200, json={
                     "ok": True, "dim": "endpoint",
-                    "data": {"items": mock.items, "total": len(mock.items)},
+                    "data": {"items": items, "total": len(items)},
                 })
             if path.endswith("/full"):
                 eid = path.rsplit("/", 2)[-2]

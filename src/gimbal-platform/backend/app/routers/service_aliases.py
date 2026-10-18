@@ -61,9 +61,12 @@ class AliasCreate(BaseModel):
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
-    # 三态接入(P1.0):plate 走目录派生强约束;external 跳过(第三方,
-    # 别名即服务本体)。不可 patch —— 改态删重建(base 语义随之变)。
+    # 三态接入(P1.0):plate 走目录派生强约束。b2-8/b2-10d(归一 v1.0
+    # §1.6):external 不派生 —— 必填显式 base_service(指向 plate 目录
+    # kind=integration 的服务;校验在 service 层)。
     kind: Literal["plate", "external"] = "plate"
+    base_service: str | None = Field(
+        default=None, max_length=128, alias="baseService")
 
 
 class AliasPatch(BaseModel):
@@ -74,6 +77,11 @@ class AliasPatch(BaseModel):
     environment_id: int | None = Field(default=None, alias="environmentId")
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
+    # b2-8:base_service 仅 external 可改(重指向 integration 系统)
+    base_service: str | None = Field(
+        default=None, max_length=128, alias="baseService")
+    # b2-8:kind 仅支持 external→plate(升级路径,§1.8)
+    kind: Literal["plate", "external"] | None = None
 
 
 @router.get("", response_model=AliasListOut)
@@ -136,7 +144,7 @@ async def create_alias(
             credential_alias=body.credential_alias,
             owner_user_id=body.owner_user_id,
             base_url=body.base_url, kind=body.kind,
-        )
+            base_service=body.base_service)
     except UnknownBaseService as e:
         # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
         # (kind=external 不受此约束 —— 第三方无目录概念)
@@ -182,7 +190,8 @@ async def patch_alias(
             environment_id=body.environment_id if explicit_env else ...,
             credential_alias=body.credential_alias if explicit_cred else ...,
             base_url=body.base_url if explicit_url else ...,
-        )
+            base_service=(body.base_service if body.base_service is not None else ...),
+            kind=body.kind)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
     from ..services import audit as audit_svc

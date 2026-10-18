@@ -19,11 +19,15 @@ ALIAS = "gitlab-ext"
 
 
 async def _seed_external_alias(client, admin) -> None:
-    r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": ALIAS, "kind": "external",
-        "baseUrl": "https://git.example.com",
-    })
-    assert r.status_code in (200, 201), r.text
+    # b2-8 起 external 创建需显式 base_service(指向 integration 服务);
+    # 本文件随 ext 目录在批3 整体退役(C4/C10)—— 种子改直插绕过校验
+    from app.core import db as db_module
+    from app.models.service_alias import ServiceAlias
+
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name=ALIAS, base_service=ALIAS,
+                           base_url="https://git.example.com", kind="external"))
+        await s.commit()
 
 
 # ── 转换器(纯函数)──────────────────────────────────────────────

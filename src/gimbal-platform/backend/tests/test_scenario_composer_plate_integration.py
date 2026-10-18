@@ -61,9 +61,23 @@ class PlateMock:
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
+        from app.services import plate_client as _pc
+
+        _pc.reset_catalog_cache_for_tests()  # b2-7:换桩先清目录缓存
 
         async def handler(request: httpx.Request) -> httpx.Response:
             path = request.url.path
+            if path == "/api/endpoint":
+                # b2-7 唯一访问件:由 services 合成扁平行(items 用例可另注)
+                items = getattr(self, "endpoint_items", None) or [
+                    {"id": f"{it.get('name')}.mock", "service": it.get("name"),
+                     "system": it.get("system", "fin"),
+                     "kind": it.get("kind", "sut")}
+                    for it in self.services
+                ]
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "endpoint",
+                    "data": {"items": items, "total": len(items)}})
             if path.endswith("/api/scenario/action/convert"):
                 self.convert_calls.append(json.loads(request.content))
                 if self.behaviour == "ok":

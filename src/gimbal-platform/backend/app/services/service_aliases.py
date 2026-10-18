@@ -100,7 +100,7 @@ async def create_alias_in_transaction(
                 "(第三方服务在 plate 的服务名;不再派生 alias_name)")
         from . import plate_client
 
-        entries = await plate_client.catalog_service_entries()
+        entries = await plate_client.catalog_service_entries(refresh=True)
         hit = next((e for e in entries if e["name"] == base_service), None)
         if hit is None:
             raise UnknownBaseService(
@@ -120,7 +120,7 @@ async def create_alias_in_transaction(
         if catalog_names is not None:
             names = catalog_names
         else:
-            entries = await plate_client.catalog_service_entries()
+            entries = await plate_client.catalog_service_entries(refresh=True)
             names = {e["name"] for e in entries if e.get("kind") == "sut"}
         base = service_names.derive_base(alias_name, names)
         if base is None:
@@ -226,7 +226,7 @@ async def patch_alias(
                 "base_service_immutable: 仅 external 别名可设置 base_service")
         from . import plate_client
 
-        entries = await plate_client.catalog_service_entries()
+        entries = await plate_client.catalog_service_entries(refresh=True)
         hit = next((e for e in entries if e["name"] == base_service), None)
         if hit is None or hit.get("kind") != "integration":
             raise ValueError(
@@ -240,7 +240,7 @@ async def patch_alias(
                 "(仅支持 external → plate)")
         from . import plate_client
 
-        entries = await plate_client.catalog_service_entries()
+        entries = await plate_client.catalog_service_entries(refresh=True)
         hit = next((e for e in entries
                     if e["name"] == (row.base_service or "")), None)
         if hit is None or hit.get("kind") != "sut":

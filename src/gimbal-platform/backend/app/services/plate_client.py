@@ -550,13 +550,14 @@ def reset_catalog_cache_for_tests() -> None:
     _catalog_cache["endpoints"] = None
 
 
-async def _catalog_endpoints() -> list[dict]:
+async def _catalog_endpoints(*, refresh: bool = False) -> list[dict]:
     """GET /api/endpoint 全量行(带 kind);不可达/异常 → 空表(增强链路
     降级语义沿 catalog.py 先例;降级结果不进缓存)。"""
     import time
 
     now = time.monotonic()
-    if _catalog_cache["endpoints"] is not None and             now - float(_catalog_cache["at"]) < _CATALOG_TTL_SEC:
+    if (not refresh and _catalog_cache["endpoints"] is not None and
+            now - float(_catalog_cache["at"]) < _CATALOG_TTL_SEC):
         return _catalog_cache["endpoints"]  # type: ignore[return-value]
     client = get_client()
     try:
@@ -591,18 +592,36 @@ async def catalog_service_rows() -> list[dict]:
     return sorted(by.values(), key=lambda r: r["name"])
 
 
-async def catalog_service_entries() -> list[dict]:
+async def catalog_service_entries(*, refresh: bool = False) -> list[dict]:
     """扁平名视图:``[{name, kind}]``(sut 派生点在调用处取 sut 子集;
-    过滤不得下沉 —— 台账条目)。"""
+    过滤不得下沉 —— 台账条目)。校验路径(别名创建/patch)传
+    ``refresh=True`` 绕缓存 —— down/kind 新鲜度优先于取数成本。"""
     return [{"name": str(it.get("service") or ""),
              "kind": str(it.get("kind") or "sut")}
-            for it in await _catalog_endpoints()
+            for it in await _catalog_endpoints(refresh=refresh)
             if it.get("service")]
 
 
 async def plate_endpoints_light() -> list[dict]:
-    """轻端点视图:plate /api/endpoint 原始行(看板/carry 消费)。"""
-    return await _catalog_endpoints()
+    """轻端点视图:plate /api/endpoint 原始行(看板/carry 消费)。
+
+    **保留旧失败语义**(原 adaptation_service._plate_list_endpoints):
+    不可达/非 200/坏信封 → PlateUnavailableError 上抛 —— carry 的 502
+    与 drift 的 reachable 旗标依赖它;聚合/扁平视图才走降级空表。
+    """
+    client = get_client()
+    try:
+        resp = await client.get("/api/endpoint")
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(
+            f"plate_unavailable: {type(e).__name__}: {e}") from e
+    if resp.status_code != 200:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}: {resp.text[:200]}")
+    items = (resp.json().get("data") or {}).get("items")
+    if not isinstance(items, list):
+        raise PlateUnavailableError("plate_unavailable: no items in response")
+    return [it for it in items if isinstance(it, dict)]
 
 
 async def get_system_kind(system_id: str, *, timeout: float = 10.0) -> str | None:

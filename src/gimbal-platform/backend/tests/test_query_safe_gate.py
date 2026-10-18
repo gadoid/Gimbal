@@ -98,10 +98,10 @@ async def test_ext_query_safe_gate_and_toggle_route(client, monkeypatch):
         u.role = "admin"
         await s.commit()
 
-    # 未标记 → 拒
+    # b2-11 过渡期口径:ext: 目录不再喂闸 —— 无内联 method 即 fail-closed
     ok, offenders = await is_scenario_read_only(
         _anchored("ext:jira-x.search"))
-    assert not ok and "未标 query_safe" in offenders[0]
+    assert not ok and offenders
 
     # 非 admin 开关 → 403
     h2 = await register_and_login(client, "qs_user", "pw123456")
@@ -123,9 +123,7 @@ async def test_ext_query_safe_gate_and_toggle_route(client, monkeypatch):
         assert d.get("aliasName") == "jira-x" and d.get("name") == "search"
         assert d.get("querySafe") is True
 
-    ok, offenders = await is_scenario_read_only(
-        _anchored("ext:jira-x.search"))
-    assert ok and offenders == []
+    # 目录标记不再影响闸(b2-11);下方仅钉路由/审计行为本身(批3 C4 退役)
 
     # 撤销 → 拒 + 审计
     r = await client.post("/api/external-endpoints/jira-x/search/query-safe",

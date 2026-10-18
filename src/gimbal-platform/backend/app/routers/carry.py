@@ -103,7 +103,7 @@ async def drift(user: MemberUser, db=DbSession):
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
-async def service_fields(service: str, user: MemberUser):
+async def service_fields(service: str, user: MemberUser, db=DbSession):
     """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。
     任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,
     配置页整表替换保存会删不可见端点的绑定值,须据此禁存。

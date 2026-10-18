@@ -40,8 +40,8 @@ async def test_b1_ext_inline_get_passes():
 
 async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe(client):
     """反转依据①的实证钉:目录条目 query_safe=True **救不了**带内联 POST 的
-    ext: 步骤 —— 内联 method 优先,目录 query_safe 读不到(现状)。
-    预期变更点 b2-11:ext: DB 分支删除后目录更不被读。"""
+    ext: 步骤。基线翻转:b2-11 —— ext: DB 分支已删,目录彻底不被读
+    (行为等价:内联 method 优先 → POST 未标即拒)。"""
     from app.core import db as db_module
     from app.models.external_endpoint import ExternalEndpoint
     from app.models.service_alias import ServiceAlias
@@ -57,6 +57,14 @@ async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe(clien
     ok, offenders = await is_scenario_read_only(
         _gate_scenario("ext:jira-x.search", "POST"))
     assert not ok and offenders, "内联 POST 必拒,目录 query_safe 不生效"
+
+
+async def test_b1_ext_without_inline_method_fails_closed(client):
+    """基线翻转(新增,b2-11 过渡期行为 §3.5):无内联 method 的 ext: 步骤
+    落入 plate 分支取不到定义 → fail-closed(未知方法)。"""
+    ok, offenders = await is_scenario_read_only(
+        _gate_scenario("ext:jira-x.search", None))
+    assert not ok and offenders
 
 
 async def test_b1_plate_unreachable_propagates(monkeypatch):
@@ -292,7 +300,7 @@ async def test_b11_catalog_row_shape_carries_kind(monkeypatch):
          "kind": "integration"},
     ]
 
-    async def fake_rows():
+    async def fake_rows(**kw):
         return items
 
     monkeypatch.setattr(plate_client, "_catalog_endpoints", fake_rows)

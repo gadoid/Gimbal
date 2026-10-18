@@ -588,21 +588,21 @@ async def test_read_only_gate_ext_anchor(client):
             step["endpoint"] = ep
         return {"definition": {"meta": {"name": "n"}, "steps": [step]}}
 
+    # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支已删 —— 过渡期口径(§3.5):
+    # 目录不再被读;无内联 method 的 ext: 一律 fail-closed;
+    # 带内联 method 按方法判定(GET 放行/POST 拒)。
     ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list"))
-    assert ok and offenders == []
+    assert not ok and offenders, "无内联 method → fail-closed"
 
-    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-create"))
-    assert not ok and "POST" in offenders[0]
-
-    # 条目缺 → fail-closed
-    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.gone"))
-    assert not ok and "未知方法" in offenders[0]
-
-    # ext: 锚点 + 存储了 method(手写调用形态)→ 直接用存储值
-    p = _payload("ext:gitlab-g.mr-create")
+    p = _payload("ext:gitlab-g.mr-list")
     p["definition"]["steps"][0]["call"]["method"] = "GET"
     ok, _ = await is_scenario_read_only(p)
     assert ok
+
+    p = _payload("ext:gitlab-g.mr-create")
+    p["definition"]["steps"][0]["call"]["method"] = "POST"
+    ok, offenders = await is_scenario_read_only(p)
+    assert not ok and "POST" in offenders[0]
 
 
 # ── Y3:个人模式(写操作放行/订阅实例/无冷却/missing_credential)────
