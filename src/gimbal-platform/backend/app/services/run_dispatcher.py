@@ -824,7 +824,7 @@ async def _check_env_consistency(
     for env in envs:
         for system, line in (env.lines or {}).items():
             declared = meta_plate.get(system)
-            if declared and declared != "working":
+            if ref_category(declared) == PIN:  # b2-3:线一致告警仅对钉定
                 declared_line = declared.split("#")[0]
                 if declared_line != line:
                     warnings.append(
@@ -1267,7 +1267,7 @@ async def _fanout_graph(
         # 修订],baseline 判定输入同口径;m2_hash 取 /convert 附带身份,
         # 随台账一次写)。台账性质:判定/写库失败不阻断执行。
         _g_pins = {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
-                   if v and v != "working"}
+                   if v and record_category(v) in (PIN, INTEGRATION)}  # b2-3:追溯台账
         _g_baseline = None
         try:
             from . import run_semantics
@@ -1645,14 +1645,16 @@ async def _fanout(
             svc = call.get('service') if isinstance(call, dict) else None
             if isinstance(svc, str) and svc:
                 unanchored_services.append(svc)
-    if meta_plate and any(v and v != 'working' for v in meta_plate.values()):
+    if meta_plate and any(  # b2-3/b2-4:追溯类 = PIN ∪ INTEGRATION
+            record_category(v) in (PIN, INTEGRATION)
+            for v in meta_plate.values()):
         try:
             resolve_result = await plate_client.resolve(
                 meta_plate,
                 {sys_: sorted(ids) for sys_, ids in endpoints_used.items()})
             for sys_, info in resolve_result.items():
                 eff = info.get('effective', '')
-                if eff and eff != 'working':
+                if eff and record_category(eff) in (PIN, INTEGRATION):  # b2-4:记录值含 integration@
                     plate_pins[sys_] = eff
                     # 写入执行副本（/convert 按原值取修订）
                     if sys_ in meta_plate:
@@ -2966,6 +2968,7 @@ async def _create_execution(
 
 # ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
 # 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 from .scenario_store import get_row, steps_from_payload, definition_from_payload
 from .scenario_store import _meta_from_row  # noqa: PLC2701 台账快照列(M2)
 from .data_set_store import get_row as get_dataset_row

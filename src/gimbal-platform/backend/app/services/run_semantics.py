@@ -12,7 +12,6 @@
 """
 from __future__ import annotations
 
-from .scenario_store import definition_from_payload, steps_from_payload
 
 WORKING = "working"
 
@@ -86,6 +85,8 @@ def record_category(value: str) -> str:
 
 def anchored_systems(payload: dict | None) -> set[str]:
     """锚点步骤引用的系统集（``endpoint`` 首段）。"""
+    from .scenario_store import steps_from_payload  # 延迟导入防环(b2-3)
+
     out: set[str] = set()
     for step in steps_from_payload(payload):
         eid = step.get("endpoint") if isinstance(step, dict) else None
@@ -99,6 +100,8 @@ def working_preview(payload: dict | None) -> bool:
 
     无锚点步骤 / 全部受管系统都钉了精确修订 → 正式执行。
     """
+    from .scenario_store import definition_from_payload  # 延迟导入防环(b2-3)
+
     declared = (((definition_from_payload(payload) or {}).get("meta") or {})
                 .get("plate"))
     declared = declared if isinstance(declared, dict) else {}

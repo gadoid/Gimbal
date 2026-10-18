@@ -10,6 +10,7 @@
 与原始列表对齐;先过滤非 dict 再枚举会让索引漂移、注入错步。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 from typing import Any
 
@@ -44,7 +45,7 @@ async def _endpoint_declarations(
     working(未声明系统的过渡形态)。
     """
     from .endpoint_declarations import declarations_of_at
-    if ref and ref != "working":
+    if ref_category(ref) == PIN:  # b2-3:读取按类别
         return await declarations_of_at(endpoint_id, ref)
     return await declarations_of(endpoint_id)
 

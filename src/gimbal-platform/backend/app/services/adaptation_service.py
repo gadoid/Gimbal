@@ -31,6 +31,7 @@ from ..models.integration_task import IntegrationTask
 from ..models.suite import Suite
 from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
 from . import carry_store, data_set_store, endpoint_ref_index, plate_client, scenario_store
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 from .scenario_store import definition_from_payload
 from .adaptation_ops import (
     ALL_OPS,
@@ -1700,7 +1701,7 @@ async def stale_scenarios(
             except Exception:  # noqa: BLE001 — plate 不可达:提示降级
                 resolved = {}
         for sys_, ref in meta_plate.items():
-            if ref == "working" or not ref:
+            if ref_category(ref) in (UNDECLARED, WORKING):  # b2-3:stale 原因·预览(含未声明)
                 reasons.append(f"{sys_}: 仍为预览(working)")
                 continue
             line = ref.split("#")[0]

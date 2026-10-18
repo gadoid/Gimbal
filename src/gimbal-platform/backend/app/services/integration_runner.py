@@ -35,6 +35,7 @@ from ..models.integration_task import IntegrationTask
 from ..models.user import User
 from .cron_expr import next_fire
 from .run_materialize import materialize_run_copy, referenced_services
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 from .scenario_store import definition_from_payload, steps_from_payload
 
 # 与 gimbal/protocols/result.py 同口径(评审 E1:state_vars 不收敏感键)
@@ -134,7 +135,7 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
                 method = "未知方法(目录无此条目)"
         if not method and endpoint:
             ref = meta_plate.get(endpoint.split(".")[0])
-            if ref and ref != "working":
+            if ref_category(ref) == PIN:  # b2-3:读取按类别
                 item = await plate_client.get_endpoint_full_at(endpoint, ref)
             else:
                 item = (await plate_client.get_endpoint_full(endpoint)).item

@@ -12,6 +12,9 @@ P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ admin,
 """
 from __future__ import annotations
 
+from ..services.run_semantics import (INTEGRATION, INVALID, PIN,
+    UNDECLARED, WORKING, invalid_reason, record_category, ref_category)
+
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -1579,7 +1582,7 @@ async def get_version_distribution(
         defn = scenario_store.definition_from_payload(row.payload or {})
         plate = (defn.get("meta") or {}).get("plate") or {}
         lines = {sys_: ref.split("#")[0]
-                 for sys_, ref in plate.items() if ref and ref != "working"}
+                 for sys_, ref in plate.items() if ref_category(ref) == PIN}  # b2-3
         items.append({"scenarioId": scen_id,
                       "name": (defn.get("meta") or {}).get("name", ""),
                       "lines": lines})
