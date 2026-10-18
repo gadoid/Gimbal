@@ -132,11 +132,23 @@ async def assess_baseline(
     unknown 服务(未登记别名)按 external 阻塞(保守:未登记 = 未受管,
     无契约可验证),证据里单列 ``unknown_services``。
     """
+    # b2-6(归一方案 v1.0 §1.8/D-H):integration 声明在按修订查评审之前
+    # 短路 —— 现状拿 "integration" 会走到 revision_objects 抛未捕获的
+    # PlateRejectedError(invalid_ref),而非分桶结果。
+    integration = sorted(
+        s for s in endpoints_used if ref_category(meta_plate.get(s)) == INTEGRATION)
     working = sorted(
         s for s in endpoints_used
-        if not meta_plate.get(s) or meta_plate.get(s) == WORKING)
+        if (not meta_plate.get(s) or ref_category(meta_plate.get(s)) == WORKING)
+        and s not in integration)
     if working:
         return False, "working", {"working_systems": working}
+    if integration:
+        # 归 external 桶不计入(证据单列,与未登记服务同桶不同证)
+        return False, "external", {
+            "external_services": [], "unknown_services": [],
+            "integration_systems": integration,
+        }
 
     if review_lookup is None:
         from . import plate_client

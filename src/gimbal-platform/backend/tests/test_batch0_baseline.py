@@ -141,18 +141,21 @@ async def test_b4_baseline_buckets(monkeypatch):
     assert ev["external_services"] == ["jira-x"] and ev["unknown_services"] == ["stub"]
 
 
-async def test_b4_non_revision_pin_raises_in_review_lookup(monkeypatch):
-    """现状:非 ``#`` 的钉定值(未来的 ``integration``)走到 review_lookup 即
-    抛未捕获异常 —— 预期变更点 b2-6(assess_baseline 短路 external 桶)。"""
-    from app.services.plate_client import PlateRejectedError
+async def test_b4_integration_short_circuits_to_external_bucket(monkeypatch):
+    """基线翻转:b2-6 —— integration 在按修订查评审前短路归 external 桶
+    (此前是未捕获的 PlateRejectedError invalid_ref;review_lookup 不被触达)。"""
+    called = []
 
     async def rejecting(sys_, ref):
-        raise PlateRejectedError(
-            code="invalid_ref", message=f"已验证修订须为 <line>#<n>,得到 {ref!r}")
-    with pytest.raises(PlateRejectedError):
-        await run_semantics.assess_baseline(
-            db=None, meta_plate={"fin": "integration"}, endpoints_used={"fin": ["fin.a.a"]},
-            unanchored_services=[], review_lookup=rejecting)
+        called.append((sys_, ref))
+        raise AssertionError("integration 不应触达 review_lookup")
+
+    ok, block, ev = await run_semantics.assess_baseline(
+        db=None, meta_plate={"fin": "integration"}, endpoints_used={"fin": ["fin.a.a"]},
+        unanchored_services=[], review_lookup=rejecting)
+    assert (ok, block) == (False, "external")
+    assert ev.get("integration_systems") == ["fin"]
+    assert called == []
 
 
 # ── B7|适配 from=working 现状(不预期变更;integration 跳过在 b2-3) ─────
