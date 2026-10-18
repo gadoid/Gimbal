@@ -75,7 +75,7 @@ def make_draft(
             *(str(st.get("endpoint", "")).split(".")[0]
               for st in (steps or [])
               if isinstance(st, dict) and st.get("endpoint")
-              and not str(st.get("endpoint")).startswith("ext:")),
+              ),
             *(str(s) for s in meta.get("system", [])),
         }
         systems.discard("")

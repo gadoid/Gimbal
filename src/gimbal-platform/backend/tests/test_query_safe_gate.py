@@ -6,7 +6,6 @@ query_safe(兑现 P1 立下的欠条)。
 - ext: 锚点:外部目录条目 ``query_safe=true`` 同款;撤销后未标记的
   POST 拒绝并列判定依据「步骤 i(POST,未标 query_safe)」;
 - admin 开关路由:非 admin 403;标记/撤销写审计
-  (external_endpoint.query_safe,detail 带接口名与别名);
 - OpenAPI 导入不自动标记(条目 query_safe=false);
 - 手写原始调用仍只认 method(fail-closed)。
 """
