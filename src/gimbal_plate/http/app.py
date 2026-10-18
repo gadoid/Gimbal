@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
@@ -164,20 +165,27 @@ def create_app(
         return out
 
     def _load_git_head() -> str | None:
-        import subprocess
-
+        """读 .git 文件而非子进程 git(批4 活体:子进程在服务环境恒
+        null)。HEAD → ref → refs/packed-refs 兜底;无 .git → null。"""
+        root = Path(__file__).resolve().parents[3]
+        dot = root / ".git"
         try:
-            res = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=5,
-                cwd=str(Path(__file__).resolve().parents[3]),
-            )
+            if not dot.is_dir():
+                return None
+            head_txt = (dot / "HEAD").read_text(encoding="utf-8").strip()
+            if not head_txt.startswith("ref: "):
+                return head_txt or None
+            ref = head_txt[5:].strip()
+            ref_file = dot / ref
+            if ref_file.is_file():
+                return ref_file.read_text(encoding="utf-8").strip() or None
+            for line in (dot / "packed-refs").read_text(
+                    encoding="utf-8").splitlines():
+                if line.endswith(" " + ref):
+                    return line.split(" ", 1)[0] or None
+            return None
         except Exception:
             return None
-        if res.returncode != 0:
-            return None
-        head = (res.stdout or "").strip()
-        return head or None
 
     app.include_router(grammar_router)
 
