@@ -1378,8 +1378,12 @@ def action_scenario_convert(
         # —— reproject_raw 对 working 声明只用当前树。此前 meta.plate
         # 非空即 503,全 working 场景(保存闸 C-2 起缺省声明)在未配
         # 构件根的环境(进程内 plate/新检出)一律拒转。
+        # 归一方案 v1.0 §3.1:按 parse_ref 类别判断 —— integration 与
+        # working 同走当前树,不触发构件根(否则含 integration 声明的
+        # convert 在无构件根时 503)。
+        from gimbal_plate.release.read import parse_ref as _parse_ref
         _needs_root = any(
-            str(v) and str(v) != "working"
+            str(v) and _parse_ref(str(v))[0] not in ("working", "integration")
             for v in (meta_plate or {}).values())
         root = (_artifacts_root_or_503(request) if _needs_root else None)
         try:

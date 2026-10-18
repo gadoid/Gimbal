@@ -80,9 +80,12 @@ def reproject_raw(
     used: dict[str, str] = {}
     for system, ref in (meta_plate or {}).items():
         ref = str(ref)
-        if ref == "working":
+        # 归一方案 v1.0 §1.5:integration 与 working 同走当前树(分类器
+        # 类别判断,不写字面量散点;这里按 parse_ref 的类别收口)。
+        kind = release_read.parse_ref(ref)[0]
+        if kind in ("working", "integration"):
             snaps[system] = None
-            used[system] = "working"
+            used[system] = kind
             continue
         line, n, _m = release_read.resolve_revision(root, system, ref)
         snaps[system] = release_read.load_snapshot(root, system, line, n)
