@@ -698,6 +698,21 @@ describe('Executions.vue — 修订台账 (W21)', () => {
     expect(table.text()).toContain('重跑结果不可与本次对比')
   })
 
+  it('B12 基线:integration 记录值 vs 声明值字面不等 → 误标「不一致」(预期变更点 b2-10b)', async () => {
+    // 批0 特征化(实施计划 v1.1 §2 B12):现状 ledgerRows 逐字比对
+    // (thenRev !== nowRev),integration@<标识> ≠ integration → 恒「不一致」。
+    // b2-10b 落地(改调 types/plate.ts 记录域判定函数)时,本断言在同一
+    // 提交翻转为:不字面比对、展示当时标识 +「第三方实时定义」标注。
+    // 趋势签名(useScenarioRuns `${sys}#${pins[sys]}`)只拼接不分类,不受影响。
+    const w = await mountLedger({
+      plate_pins: { jira: 'integration@3f2a9c' },
+      current_plate: { jira: 'integration' },
+    })
+    const table = w.find('[data-testid="revision-ledger"]')
+    expect(table.text()).toContain('不一致')
+    expect(table.text()).toContain('重跑结果不可与本次对比')
+  })
+
   it('当时未钉(预览执行)→ 未钉徽标 + m2 未记录;重跑列显示当前声明', async () => {
     const w = await mountLedger({
       plate_pins: null,
