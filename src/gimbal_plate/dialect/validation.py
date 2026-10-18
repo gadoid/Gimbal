@@ -33,6 +33,8 @@ from typing import Any, Iterable
 
 import yaml
 
+from gimbal_plate.schema.service_definition import ServiceDefinition
+
 from .models import EndpointSpec, Statement, Term
 from .parser import Deliverable
 
@@ -746,6 +748,10 @@ class SystemTree:
     system_frontmatter: "Frontmatter | None" = None
     system_md_source: str = ""
     service_names: set[str] = field(default_factory=set)
+    # 归一方案 v1.0 §1.10:gimbal:system 块水合的服务定义(规则 1 取 kind)
+    # 与「树内是否存在 review: draft 块」(规则 3,起草常态 → warning)。
+    service_definitions: list["ServiceDefinition"] = field(default_factory=list)
+    has_draft_block: bool = False
 
 
 def collect_system_tree(
@@ -772,7 +778,14 @@ def collect_system_tree(
                          else [b.payload]):
                 if isinstance(item, dict) and item.get("name"):
                     tree.service_names.add(str(item["name"]))
+                    try:
+                        tree.service_definitions.append(
+                            ServiceDefinition.model_validate(item))
+                    except Exception:
+                        pass  # 水合错误由方言层/发版闸报,这里不重复
         for b in d.blocks():
+            if b.review == "draft":
+                tree.has_draft_block = True
             for m in b.models():
                 if isinstance(m, EndpointSpec):
                     tree.endpoints.append(m)
@@ -866,6 +879,52 @@ def _check_line_declaration(tree: SystemTree, *, report: ValidationReport) -> No
             bad(f"line={fm.line!r} 不符合 iteration（数字）")
 
 
+def _check_integration_kind(tree: SystemTree, *, report: ValidationReport) -> None:
+    """归一方案 v1.0 §1.10(plate check 规则 1-4,系统树校验区)。
+
+    1 同系统 kind 一致(error);2 integration 不声明版本线字段 +
+    线名禁用 integration(error);3 integration 不得有 draft 块
+    (warning —— 起草常态,合入闸由 tests/plate pytest 承担);
+    4 integration 端点不得声明 query_views(error)。
+    """
+    kinds = {sd.kind for sd in tree.service_definitions}
+    if not kinds or kinds == {"sut"}:
+        return  # 纯 sut(或未水合):四规则零触发
+    src = tree.system_md_source or "<system.md>"
+    if len(kinds) > 1:
+        report.add(Finding(
+            "F5", "blocking",
+            f"同一系统内服务的 kind 不一致({sorted(kinds)})"
+            "(归一 v1.0 规则 1:integration 须整系统一致)", source=src, line=1))
+        return
+    # kinds == {"integration"}
+    fm = tree.system_frontmatter
+    line_fields = any((fm.line, fm.predecessor_line, fm.line_scheme,
+                       fm.line_source, fm.line_service, fm.line_pattern))         if fm is not None else False
+    if line_fields:
+        report.add(Finding(
+            "F5", "blocking",
+            "kind=integration 系统不得声明版本线字段(归一 v1.0 规则 2:"
+            "第三方不发版,无版本线)", source=src, line=1))
+    if fm is not None and fm.line == "integration":
+        report.add(Finding(
+            "F5", "blocking",
+            "版本线不得命名为 integration(与保留字冲突,取数域不可达;"
+            "归一 v1.0 §1.4)", source=src, line=1))
+    if tree.has_draft_block:
+        report.add(Finding(
+            "F5", "warning",
+            "kind=integration 系统主分支存在 review: draft 块"
+            "(合入闸由 tests/plate 拒绝;本地起草属常态,仅提示)",
+            source=src, line=1))
+    for ep in tree.endpoints:
+        if ep.query_views:
+            report.add(Finding(
+                "F5", "blocking",
+                f"{ep.id}: integration 系统的端点不得声明 query_views"
+                "(归一 v1.0 D-D:取数视图仅 sut)", source=src, line=1))
+
+
 def validate_system_tree(
     system_root: Path,
     *,
@@ -951,6 +1010,7 @@ def validate_system_tree(
         else:
             st_seen[st.id] = src
     _check_line_declaration(tree, report=report)
+    _check_integration_kind(tree, report=report)
     validate_terms(
         tree.terms.values(), system_id=system_root.name,
         common_ids=set(common_terms), report=report,
