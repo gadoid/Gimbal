@@ -112,7 +112,13 @@ class EndpointIndex(BaseIndex):
         return self.registry.try_endpoint(item_id)
 
     def to_view(self, item: EndpointSpec) -> dict[str, Any]:
-        return EndpointView.from_spec(item).model_dump(mode="json", exclude_none=True)
+        out = EndpointView.from_spec(item).model_dump(mode="json", exclude_none=True)
+        # 归一方案 v1.0 §1.2:端点行带所属服务的 kind;无服务定义时保持
+        # 缺省 sut(fail-safe,与 SystemView.kind=None 的消费口径一致)。
+        sd = self.registry.get_service(item.service)
+        if sd is not None:
+            out["kind"] = sd.kind
+        return out
 
     def find_by_route(
         self, *, service: str, method: str, path: str
@@ -232,12 +238,18 @@ class SystemIndex(BaseIndex):
         # 8n(已定):EndpointSpec.updated_at 删除。系统时间戳改取快照提交
         # 时间(A2 影响清单);working 阶段无提交信息,registered_at 置空,
         # 批次 B 随 release/ref 落地。
+        kinds = {
+            sd.kind
+            for sd in self.registry.iter_services_for_system(system)
+        }
         return {
             "id": system,
             "name": system,
             "service_count": len(services),
             "endpoint_count": len(eps),
             "registered_at": None,
+            # 派生:系统内服务 kind 的共同值;不一致 → None(check 规则 1 拦)
+            "kind": next(iter(kinds)) if len(kinds) == 1 else None,
         }
 
 

@@ -12,7 +12,7 @@ Per-dim views are the redaction boundary. The handler never returns
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,6 +37,9 @@ class SystemView(BaseModel):
     service_count: int = Field(ge=0)
     endpoint_count: int = Field(ge=0)
     registered_at: datetime | None = None
+    # 归一方案 v1.0 §1.2:派生自系统内服务的共同 kind(不一致 → None,
+    # 由 plate check 规则 1 拦;消费方把 None 按「非 integration」处理)。
+    kind: Literal["sut", "integration"] | None = None
 
     @classmethod
     def from_summary(cls, summary: dict[str, Any]) -> "SystemView":
@@ -79,6 +82,7 @@ class ServiceView(BaseModel):
     description: str = ""
     endpoint_count: int = Field(ge=0, default=0)
     system: str | None = None  # derived from endpoint index
+    kind: Literal["sut", "integration"] = "sut"  # 归一方案 v1.0 §1.2
 
     @classmethod
     def from_definition(
@@ -92,6 +96,7 @@ class ServiceView(BaseModel):
             description=sd.description,
             endpoint_count=endpoint_count,
             system=system,
+            kind=sd.kind,
         )
 
 
@@ -162,6 +167,7 @@ class EndpointView(BaseModel):
     tags: list[str] = Field(default_factory=list)
     priority: int | None = None
     capability: str | None = None
+    kind: Literal["sut", "integration"] = "sut"  # 端点所属服务的 kind(归一 v1.0)
 
     @classmethod
     def from_spec(cls, ep: EndpointSpec) -> "EndpointView":

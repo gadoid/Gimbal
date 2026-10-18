@@ -45,6 +45,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from gimbal_plate.release.release import ensure_m2_pooled
 
         app.state.m2_pool = ensure_m2_pooled()
+        # 归一方案 v1.0 §1.5/D-L:kind=integration 系统的定义标识
+        # (各端点 shape_hash 按 id 排序聚合)—— resolve 的
+        # integration@<标识> 追溯值与 /healthz 透出共用此表。
+        from gimbal_plate.dialect.canonical import integration_system_hash
+
+        defs: dict[str, str] = {}
+        for system in default_registry.list_systems():
+            eps = list(default_registry.iter_endpoints_for_system(system))
+            kinds = {
+                sd.kind for sd in default_registry.iter_services_for_system(system)
+            }
+            if kinds == {"integration"}:
+                defs[system] = integration_system_hash(eps)
+        app.state.integration_definitions = defs
     yield
 
 
@@ -140,7 +154,30 @@ def create_app(
         pool = getattr(app.state, "m2_pool", None)
         if pool is not None:
             out["m2_pool"] = pool
+        # 归一方案 v1.0 §1.5/D-L:integration 定义标识 + 部署核对用
+        # git HEAD(读取失败返回 null,不报错不阻断 —— 源码检出部署
+        # 才有工作树,嵌入模式/无 git 环境下 null 即「未提供」)。
+        defs = getattr(app.state, "integration_definitions", None)
+        if defs is not None:
+            out["integration_definitions"] = defs
+        out["git_head"] = _load_git_head()
         return out
+
+    def _load_git_head() -> str | None:
+        import subprocess
+
+        try:
+            res = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+                cwd=str(Path(__file__).resolve().parents[3]),
+            )
+        except Exception:
+            return None
+        if res.returncode != 0:
+            return None
+        head = (res.stdout or "").strip()
+        return head or None
 
     app.include_router(grammar_router)
 

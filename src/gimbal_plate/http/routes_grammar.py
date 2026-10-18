@@ -64,8 +64,18 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
     id 前缀路由支持 ref；全局路由不带系统，ref 无从解析。
     """
     ref = (request.query_params.get("ref") or "").strip()
-    working = not ref or ref == "working"
-    if working or not system:
+    from gimbal_plate.release import read as release_read
+    from gimbal_plate.release.release import resolve_artifacts_root
+
+    # 归一方案 v1.0 §1.4:类别经 parse_ref 先行 —— integration 取数域
+    # 恒读当前树(与 working 同);全域非法值(integration@…)在需要
+    # 构件根之前即 400 + details.reason(不落 503/500)。
+    try:
+        _kind = release_read.parse_ref(ref)[0]
+    except release_read.ReleaseReadError as e:
+        raise _read_error(e)
+    working = _kind == "working"
+    if _kind == "integration" or working or not system:
         reg: PlateRegistry | None = getattr(request.app.state, "registry", None)
         if reg is None:
             raise PlateHTTPError(
@@ -74,8 +84,6 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
                 message="plate registry is not initialised",
             )
         return reg
-    from gimbal_plate.release import read as release_read
-    from gimbal_plate.release.release import resolve_artifacts_root
 
     # 修订快照缓存（容量淘汰,Release 4.1:修订不可变、按修订缓存整个
     # 快照,超容量 LRU 淘汰最旧条目;设计未定具体数字,取 64）
@@ -118,11 +126,29 @@ _READ_ERROR_HTTP = {
 }
 
 
-def _read_error(e: Any) -> PlateHTTPError:
+def _read_error(e: Any, *, decl_domain: bool = False) -> PlateHTTPError:
+    """ReleaseReadError → 结构化 HTTP 错误。
+
+    归一方案 v1.0 §1.4/D-O:``decl_domain=True`` 时 ``invalid_ref`` 用
+    422(声明域:resolve 出口);取数路由保持 ``_READ_ERROR_HTTP`` 的 400。
+    异常附带的 ``reason`` 经 ``details.reason`` 转发(一行承载,不新增
+    ErrorCode —— envelope.ErrorPayload.details 既有字段)。
+    """
     status, code = _READ_ERROR_HTTP.get(
         getattr(e, "code", ""), (400, ErrorCode.INVALID_REF))
+    if decl_domain and code == ErrorCode.INVALID_REF:
+        status = 422
+    reason = getattr(e, "reason", None)
     return PlateHTTPError(http_status=status, code=code,
-                          message=getattr(e, "message", str(e)))
+                          message=getattr(e, "message", str(e)),
+                          details={"reason": reason} if reason else None)
+
+
+def _service_of_system(reg: PlateRegistry, system: str) -> str:
+    """系统内任一服务名(声明闸取 kind 用;无服务 → 空串,按未登记处理)。"""
+    for sd in reg.iter_services_for_system(system):
+        return sd.name
+    return ""
 
 
 def _resolve_system(reg: PlateRegistry, system: str) -> None:
@@ -1228,19 +1254,36 @@ def action_system_resolve(
     body = body or {}
     meta_plate = body.get("meta_plate") or {}
     endpoints = body.get("endpoints") or {}
-    root = _artifacts_root_or_503(request)
+    root: Any = None  # 惰性:仅 revision 类别需要构件根(integration/working 不需要)
     out: dict[str, Any] = {}
     for system, declared in meta_plate.items():
-        if declared == "working":
-            out[system] = {"effective": "working",
+        # 归一方案 v1.0 §1.5/§3.1:类别经 parse_ref 裁决。integration 必须
+        # 在 resolve_effective **之前**分流(其开头即要求 revision 类别,
+        # 不前置分流 integration 会被直接 invalid_ref 拒);
+        # integration@… 声明 → record_value 422(执行记录值不得作声明)。
+        try:
+            kind = release_read.parse_ref(str(declared))[0]
+        except release_read.ReleaseReadError as e:
+            raise _read_error(e, decl_domain=True)
+        if kind in ("working", "integration"):
+            eff = "working"
+            if kind == "integration":
+                digest = getattr(
+                    request.app.state, "integration_definitions",
+                    {}).get(system, "")
+                eff = f"integration@{digest}" if digest else "integration"
+            out[system] = {"effective": eff,
                            "available": [], "changed_endpoints": []}
             continue
+        if root is None:
+            root = _artifacts_root_or_503(request)
         try:
             out[system] = release_read.resolve_effective(
                 root, system, str(declared),
                 list(endpoints.get(system) or []))
         except release_read.ReleaseReadError as e:
-            raise _read_error(e)
+            # D-O:resolve 入参是 meta.plate 声明 → 归声明域(invalid_ref 422)
+            raise _read_error(e, decl_domain=True)
     return ok_response({"item": out, "total": len(out)}, dim="system")
 
 
@@ -1367,8 +1410,51 @@ def action_scenario_convert(
                 message=(f"锚定系统 {undeclared} 未声明 meta.plate —— "
                          "平台保存闸已强制声明,不带/缺声明的载荷属旁路写入"),
             )
+        # 归一方案 v1.0 §1.4(D-K/D-O):声明域合法集 = working |
+        # <line>#<n> | integration,逐系统经 parse_ref 类别裁决 ——
+        # ①裸线(取数域合法、声明域拒,消除「平台拒、plate 收」双口径);
+        # ②integration 双向绑定:仅 kind=integration 系统可声明,反之
+        # 亦然(绑定违例不是形状问题,invalid_ref 不带 reason)。
+        # 线存在性/修订号范围由 reproject 的 resolve_revision 兜底。
+        from gimbal_plate.release.read import (
+            ReleaseReadError as _RRE,
+            parse_ref as _parse_ref,
+        )
+        for sys_name, raw_ref in declared.items():
+            ref = str(raw_ref or "")
+            try:
+                kind = _parse_ref(ref)[0]
+            except _RRE as e:
+                raise PlateHTTPError(
+                    http_status=422,
+                    code=ErrorCode("invalid_ref"),
+                    message=e.message,
+                    details={"reason": e.reason} if e.reason else None,
+                ) from e
+            if kind == "line":
+                raise PlateHTTPError(
+                    http_status=422,
+                    code=ErrorCode("invalid_ref"),
+                    message=(f"{sys_name}={ref!r} 缺修订号"
+                             "(声明须为 <line>#<n> / working / integration)"),
+                    details={"reason": "missing_revision"},
+                )
+            if kind == "integration":
+                _sd = _registry(request).get_service(
+                    _service_of_system(_registry(request), sys_name))
+                _sys_kind = _sd.kind if _sd is not None else None
+                if _sys_kind != "integration":
+                    raise PlateHTTPError(
+                        http_status=422,
+                        code=ErrorCode("invalid_ref"),
+                        message=(f"{sys_name}={ref!r} 仅可用于 "
+                                 f"kind=integration 的系统(实为 "
+                                 f"{_sys_kind or '未登记'});"
+                                 "sut 系统请声明 <line>#<n> 或 working"),
+                    )
     used_refs: dict[str, str] | None = None
     if meta_plate:
+        from gimbal_plate.release import read as release_read
         from gimbal_plate.release.reproject import (
             ReprojectError,
             reproject_raw,
@@ -1378,8 +1464,12 @@ def action_scenario_convert(
         # —— reproject_raw 对 working 声明只用当前树。此前 meta.plate
         # 非空即 503,全 working 场景(保存闸 C-2 起缺省声明)在未配
         # 构件根的环境(进程内 plate/新检出)一律拒转。
+        # 归一方案 v1.0 §3.1:按 parse_ref 类别判断 —— integration 与
+        # working 同走当前树,不触发构件根(否则含 integration 声明的
+        # convert 在无构件根时 503)。
+        from gimbal_plate.release.read import parse_ref as _parse_ref
         _needs_root = any(
-            str(v) and str(v) != "working"
+            str(v) and _parse_ref(str(v))[0] not in ("working", "integration")
             for v in (meta_plate or {}).values())
         root = (_artifacts_root_or_503(request) if _needs_root else None)
         try:
@@ -1392,6 +1482,10 @@ def action_scenario_convert(
                 code=ErrorCode(str(e.code)),
                 message=e.message,
             ) from e
+        except release_read.ReleaseReadError as e:
+            # 归一方案 v1.0 §1.4:声明域的读取错误(如钉定修订不存在)
+            # 不再落全局 handler 变 500;状态码分域 + reason 转发。
+            raise _read_error(e, decl_domain=True) from e
     try:
         scenario = Scenario.model_validate(raw_scenario)
     except ValidationError as exc:

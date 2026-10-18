@@ -109,3 +109,24 @@ def shape_hash(spec: EndpointSpec) -> str:
         ensure_ascii=False, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(data).hexdigest()
+
+def integration_system_hash(endpoints: list[EndpointSpec]) -> str:
+    """integration 系统的定义标识(归一方案 v1.0 D-L/§1.5)。
+
+    输入系统内全部端点 → ``[(ep.id, shape_hash(ep))]`` 按端点 id 排序 →
+    规范序列化(同 ``canonical_bytes`` 纪律:紧凑 JSON + 键序归一)→ sha256。
+    只随该系统「接口形状」变化(剔除 description/ui_kind 等纯展示字段,
+    见 ``_DECL_SHAPE_EXCLUDE``);增删端点(id 集合)必翻转 —— 趋势签名的
+    「定义切换」标记由此可信。用于 lifespan 计算、``/healthz`` 透出、
+    resolve 的 ``integration@<标识>`` 追溯值。
+    """
+    pairs = [
+        {"id": ep.id, "shape_hash": shape_hash(ep)}
+        for ep in sorted(endpoints, key=lambda e: e.id)
+    ]
+    data = json.dumps(
+        _sorted_dicts(pairs),
+        ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+

@@ -1,4 +1,5 @@
-"""gimbal_plate.schema.service_definition —— 被测服务定义(M2 不可变域)。
+"""gimbal_plate.schema.service_definition —— 服务定义(M1/框架,非 M2;
+与 schema/__init__.py 的归类一致 —— 归一方案 v1.0 §1.2 同批更正)。
 
 本文件原位于 ``gimbal_plate.service.service``,于 V3.1 架构重构中迁入
 ``schema/``。归位理由:
@@ -10,6 +11,8 @@
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -20,6 +23,9 @@ class ServiceDefinition(BaseModel):
     - ``title``:业务名称,用于 Web 端展示
     - ``version``:被测系统部署版本(人维护,字面与被测系统版本保持一致,无格式校验)
     - ``description``:业务描述
+    - ``kind``:系统类别,``sut``(缺省,被测)/ ``integration``(第三方,不发版;
+      归一方案 v1.0 D-A —— 系统内所有服务须一致,plate check 规则 1 强制;
+      存量构件无此键,回读走缺省 sut)。**不进执行产物**(case.json/call 投影零变化)
 
     S1-0 清理 B2(2026-10-07):``endpoints_module`` / ``models_module`` 已删除
     ——指向 Python 模块路径与「Markdown 方言为唯一真源」(P1)冲突,且全仓无消费方。
@@ -34,6 +40,10 @@ class ServiceDefinition(BaseModel):
         description="被测系统部署版本(人维护,字面与被测系统版本保持一致,无格式校验)",
     )
     description: str = Field(default="", description="服务业务描述")
+    kind: Literal["sut", "integration"] = Field(
+        default="sut",
+        description="系统类别:sut=被测(缺省)/ integration=第三方集成(不发版)",
+    )
 
     @model_validator(mode="after")
     def _validate_version_nonempty(self) -> "ServiceDefinition":
