@@ -93,5 +93,6 @@ class TestB5GenerationAndReadback:
         sd = reg.iter_services_global()[0]
         assert sd.name == "fin-service"
         assert sd.version == "1.0.0"
-        # 现状:模型尚无 kind 字段(b1-1 起存在且缺省 sut —— 届时同提交翻转)
-        assert "kind" not in ServiceDefinition.model_fields
+        # b1-1 已落地:kind 存在、缺省 sut(存量无键回读即 sut;基线翻转:b1-1)
+        assert ServiceDefinition.model_fields["kind"].default == "sut"
+        assert sd.kind == "sut"
