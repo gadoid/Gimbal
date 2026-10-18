@@ -130,7 +130,9 @@
               <span v-else class="pin-badge working" title="场景当前声明 working">working</span>
             </td>
             <td>
-              <span v-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
+              <span v-if="row.integration" class="dim"
+                    title="第三方系统恒取当前定义(定义标识见当时修订列),无版本可比">第三方 · 实时定义</span>
+              <span v-else-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
               <span v-else class="dim">一致</span>
             </td>
           </tr>
@@ -290,6 +292,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { plateRecordCategory } from '@/types/plate'
 import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import PageBack from '@/components/chrome/PageBack.vue'
@@ -376,8 +379,13 @@ const ledgerRows = computed(() => {
   return systems.map((sys) => {
     const thenRev = thenPins[sys] ?? ''
     const nowRev = nowPins ? (nowPins[sys] ?? '') : null   // null = 场景已删,无从对比
-    const diverged = nowRev !== null && thenRev !== nowRev
-    return { system: sys, then: thenRev, now: nowRev, diverged }
+    // b2-10b(归一 v1.0 §1.5):integration 不做字面比对 —— 记录值
+    // integration@<标识> 对声明值 integration 恒不等;类别判定经
+    // types/plate.ts 记录域函数(唯一实现,门禁③放行区)。
+    const integration = plateRecordCategory(thenRev) === 'INTEGRATION'
+      && plateRecordCategory(nowRev ?? '') === 'INTEGRATION'
+    const diverged = !integration && nowRev !== null && thenRev !== nowRev
+    return { system: sys, then: thenRev, now: nowRev, diverged, integration }
   })
 })
 

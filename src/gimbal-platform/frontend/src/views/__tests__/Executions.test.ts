@@ -709,8 +709,10 @@ describe('Executions.vue — 修订台账 (W21)', () => {
       current_plate: { jira: 'integration' },
     })
     const table = w.find('[data-testid="revision-ledger"]')
-    expect(table.text()).toContain('不一致')
-    expect(table.text()).toContain('重跑结果不可与本次对比')
+    // 基线翻转:b2-10b —— integration 记录值不字面比对,标「第三方 · 实时定义」
+    expect(table.text()).toContain('第三方 · 实时定义')
+    expect(table.text()).not.toContain('不一致')
+    expect(table.text()).toContain('integration@3f2a9c')  // 展示当时标识
   })
 
   it('当时未钉(预览执行)→ 未钉徽标 + m2 未记录;重跑列显示当前声明', async () => {
