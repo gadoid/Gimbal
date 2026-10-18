@@ -117,10 +117,11 @@ async def service_fields(service: str, user: MemberUser):
     from ..services import service_names
     from ..services.adaptation_service import _plate_full_endpoint
 
-    catalog = await service_names.catalog_service_names()
-    base = service_names.derive_base(service, catalog) if catalog else service
+    # b2-9(D-M):别名表优先;未登记裸键走目录 derive_base,降级语义
+    # 不变(plate 不可达 → 按原样服务名查,退化为修复前行为)。
+    base = await service_names.resolve_base_with_aliases(db, service)
     if base is None:
-        return ServiceFieldsOut(fields=[], degraded=False)
+        base = service
     try:
         client_items = await _plate_list_endpoints_filtered(base)
     except PlateUnavailableError as e:

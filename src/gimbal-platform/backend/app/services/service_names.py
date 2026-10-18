@@ -35,3 +35,25 @@ async def catalog_service_names() -> set[str]:
 
     return {e["name"] for e in await plate_client.catalog_service_entries()
             if e.get("name")}
+
+
+async def resolve_base_with_aliases(db, key: str) -> str | None:
+    """b2-9(D-M,归一 v1.0 §8.2 覆盖分支):carry 基名解析 —— **先查别名表
+    ``base_service``**(external 显式值/sut 已派生值),未登记的裸服务键
+    再走全量目录 ``derive_base``。
+
+    sut 行为不变约束(批0 基线 B10):sut 别名的 base_service 即创建时
+    derive_base 派生值,两路结果一致;外部别名不守 ``<服务名>-<后缀>``
+    规约,别名表优先是其唯一解析途径(运行时 derive_base 台账条目保留)。
+    """
+    from sqlalchemy import select as sa_select
+
+    from .service_aliases import ServiceAlias  # 延迟导入防环
+
+    hit = (await db.execute(
+        sa_select(ServiceAlias.base_service)
+        .where(ServiceAlias.alias_name == key))).scalar_one_or_none()
+    if hit:
+        return hit
+    catalog = await catalog_service_names()
+    return derive_base(key, catalog) if catalog else None

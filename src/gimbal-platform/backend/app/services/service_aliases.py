@@ -75,6 +75,7 @@ async def create_alias_in_transaction(
     db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
     base_url: str | None = None, kind: str = "plate",
+    base_service: str | None = None,
     catalog_names: "set[str] | None" = None,
 ) -> ServiceAlias:
     """Insert a new alias **without committing**(导入 W2/T2:建别名+写
@@ -90,13 +91,37 @@ async def create_alias_in_transaction(
     行为等价旧版)。
     """
     if kind == "external":
-        # 三态接入(P1.0):external = 第三方服务,不经 plate 目录派生
-        # —— 别名即服务本体(base_service = alias_name),无契约面、
-        # 无版本管理。强约束(derive_base 落回目录)只约束 plate 态。
-        base = alias_name
+        # b2-8(归一 v1.0 §1.6/D-M):external 不派生 —— 接收并校验显式
+        # base_service(①存在于 plate 目录 ②所指系统 kind=integration;
+        # 校验数据 = 唯一访问件扁平名视图,过滤只在此消费)。
+        if not base_service:
+            raise ValueError(
+                "base_service_required: kind=external 须显式选择 base_service"
+                "(第三方服务在 plate 的服务名;不再派生 alias_name)")
+        from . import plate_client
+
+        entries = await plate_client.catalog_service_entries()
+        hit = next((e for e in entries if e["name"] == base_service), None)
+        if hit is None:
+            raise UnknownBaseService(
+                f"unknown_base_service: {base_service!r} 不在 plate 目录"
+                "(external 别名须指向已入库的第三方服务)")
+        if hit.get("kind") != "integration":
+            raise ValueError(
+                f"kind_mismatch: base_service={base_service!r} 的系统是 "
+                f"{hit.get('kind')!r}(external 别名须指向 kind=integration "
+                "的系统;sut 服务请建 plate 别名)")
+        base = base_service
     elif kind == "plate":
-        names = (catalog_names if catalog_names is not None
-                 else await service_names.catalog_service_names())
+        # b2-8:sut 派生候选 = sut 子集(sut 过滤唯一出口,§1.6/§6.1;
+        # catalog_names 兼容导入事务外预取的全量集合,向后兼容)
+        from . import plate_client
+
+        if catalog_names is not None:
+            names = catalog_names
+        else:
+            entries = await plate_client.catalog_service_entries()
+            names = {e["name"] for e in entries if e.get("kind") == "sut"}
         base = service_names.derive_base(alias_name, names)
         if base is None:
             # 强约束:含 plate 不可达(空目录)场景,区分两种原因给排查线索
@@ -125,13 +150,14 @@ async def create_alias(
     db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
     base_url: str | None = None, kind: str = "plate",
+    base_service: str | None = None,
 ) -> dict:
     """提交包装器(W2/T2):既有调用方(别名路由/迁移脚本)行为零变化;
     导入流水线走 :func:`create_alias_in_transaction` 自管事务。"""
     row = await create_alias_in_transaction(
         db, alias_name=alias_name, environment_id=environment_id,
         credential_alias=credential_alias, owner_user_id=owner_user_id,
-        base_url=base_url, kind=kind)
+        base_url=base_url, kind=kind, base_service=base_service)
     await db.commit()
     await db.refresh(row)  # server_default 时间列:刷新防异步懒加载
     env_name = None
@@ -185,10 +211,43 @@ async def classify_services(
 async def patch_alias(
     db: AsyncSession, alias_name: str, *, environment_id: int | None = ...,
     credential_alias: str | None = ..., base_url: str | None = ...,
+    base_service: str | None = ..., kind: str | None = None,
 ) -> dict:
+    """b2-8(归一 v1.0 §1.6):``base_service`` 仅 external 可改(重指向
+    integration 系统);``kind`` 仅支持 external→plate(前提:base_service
+    所指系统已是 sut —— 支撑 integration 原地转 sut 的升级路径 §1.8)。
+    """
     row = await db.get(ServiceAlias, alias_name)
     if row is None:
         raise KeyError(f"alias_not_found: {alias_name}")
+    if base_service is not ...:
+        if row.kind != "external":
+            raise ValueError(
+                "base_service_immutable: 仅 external 别名可设置 base_service")
+        from . import plate_client
+
+        entries = await plate_client.catalog_service_entries()
+        hit = next((e for e in entries if e["name"] == base_service), None)
+        if hit is None or hit.get("kind") != "integration":
+            raise ValueError(
+                f"kind_mismatch: base_service={base_service!r} 须指向 "
+                "kind=integration 的系统")
+        row.base_service = base_service
+    if kind is not None:
+        if not (row.kind == "external" and kind == "plate"):
+            raise ValueError(
+                f"kind_transition_invalid: {row.kind!r} → {kind!r}"
+                "(仅支持 external → plate)")
+        from . import plate_client
+
+        entries = await plate_client.catalog_service_entries()
+        hit = next((e for e in entries
+                    if e["name"] == (row.base_service or "")), None)
+        if hit is None or hit.get("kind") != "sut":
+            raise ValueError(
+                "kind_transition_precondition: base_service 所指系统须已"
+                "转为 sut(integration 原地升级,归一 v1.0 §1.8)")
+        row.kind = "plate"
     if environment_id is not ...:
         if environment_id is not None:
             env = await db.get(Environment, environment_id)

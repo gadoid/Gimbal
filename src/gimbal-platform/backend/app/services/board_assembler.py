@@ -32,6 +32,13 @@ from ..models.composer_scenario import ComposerScenario
 from ..models.execution import Execution
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 from .adaptation_service import _plate_list_endpoints
+
+
+async def _sut_endpoints() -> list[dict]:
+    """b2-9(归一 v1.0 §3.4):看板瓦片排除 integration 端点(画像 =
+    被测覆盖);全量轻端点经唯一访问件,过滤只在此消费。"""
+    return [it for it in await _plate_list_endpoints()
+            if str(it.get("kind") or "sut") != "integration"]
 from .plate_client import PlateUnavailableError, get_endpoint_full
 
 # 槽③的终态映射:done=全过(pass)/ failed=有失败行(fail);
@@ -88,7 +95,7 @@ async def grid(db: AsyncSession, service: str) -> dict[str, Any]:
     # ── 瓦片清单:plate 轻量列表(不可达 → 降级,不抛)─────────────
     reachable = True
     try:
-        items = await _plate_list_endpoints()
+        items = await _sut_endpoints()
     except PlateUnavailableError:
         items, reachable = [], False
     svc_items = [it for it in items if it.get("service") == service and it.get("id")]
@@ -194,7 +201,7 @@ async def board(
         field_count = len(decls) if isinstance(decls, list) else 0
     else:
         try:
-            items = await _plate_list_endpoints()
+            items = await _sut_endpoints()
         except PlateUnavailableError:
             items = []
         lit = next((it for it in items if str(it.get("id", "")) == endpoint_id), None)
@@ -314,7 +321,7 @@ async def board(
         )).all() if eid != endpoint_id})[:12]  # 防巨图:先封顶 12
         if sibling_ids:
             try:
-                items = await _plate_list_endpoints()
+                items = await _sut_endpoints()
             except PlateUnavailableError:
                 items = []
             by_id = {str(it.get("id", "")): it for it in items}
