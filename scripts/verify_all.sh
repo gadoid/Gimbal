@@ -51,6 +51,7 @@ for step in "${STEPS[@]}"; do
       run_step "platform backend pytest" bash -c "cd '$ROOT/src/gimbal-platform/backend' && python -m pytest tests/ -q"
       ;;
     frontend)
+      run_step "platform frontend typecheck" bash -c "cd '$ROOT/src/gimbal-platform/frontend' && npm run typecheck"
       run_step "platform frontend vitest" bash -c "cd '$ROOT/src/gimbal-platform/frontend' && npx vitest run --silent"
       ;;
     bootstrap)
