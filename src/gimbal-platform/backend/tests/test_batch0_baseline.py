@@ -279,36 +279,29 @@ async def test_b10_plate_list_endpoints_reads_global_list(monkeypatch):
 # ── B11|/api/catalog/services 行形状(预期变更点 b1-3 + b2-7) ─────────
 
 
-async def test_b11_catalog_row_shape_no_kind(monkeypatch):
-    """现状:聚合源 = plate /api/endpoint(per_page=500 被忽略);行只有
-    name/system/endpointCount,**无 kind**(b1-3 加 kind、b2-7 收敛访问件)。"""
+async def test_b11_catalog_row_shape_carries_kind(monkeypatch):
+    """基线翻转:b1-3+b2-7 —— 聚合经 plate_client 唯一访问件(/api/endpoint
+    全量行),行带 kind(由端点行带出);三视图共享同一缓存缝隙。"""
     from app.routers import catalog
     from app.services import plate_client
 
     items = [
-        {"id": "fin.a.a", "service": "fin-service", "system": "fin"},
-        {"id": "fin.a.b", "service": "fin-service", "system": "fin"},
-        {"id": "platform.b.x", "service": "platform-service", "system": "platform"},
+        {"id": "fin.a.a", "service": "fin-service", "system": "fin", "kind": "sut"},
+        {"id": "fin.a.b", "service": "fin-service", "system": "fin", "kind": "sut"},
+        {"id": "jira.x.q", "service": "jira-service", "system": "jira",
+         "kind": "integration"},
     ]
-    captured: dict = {}
 
-    class FakeResp:
-        status_code = 200
+    async def fake_rows():
+        return items
 
-        def json(self):
-            return {"data": {"items": items}}
-
-    class FakeClient:
-        async def get(self, url, **kw):
-            captured.update(url=url, params=kw.get("params"))
-            return FakeResp()
-
-    monkeypatch.setattr(plate_client, "get_client", lambda: FakeClient())
-    catalog.reset_catalog_cache_for_tests()
+    monkeypatch.setattr(plate_client, "_catalog_endpoints", fake_rows)
     out = await catalog._fetch_and_aggregate()
-    assert captured["url"] == "/api/endpoint"
     assert [s.model_dump() for s in out.services] == [
-        {"name": "fin-service", "system": "fin", "endpointCount": 2},
-        {"name": "platform-service", "system": "platform", "endpointCount": 1},
-    ], "现行行形状无 kind —— b1-3/b2-7 落地时同提交翻转"
-    catalog.reset_catalog_cache_for_tests()
+        {"name": "fin-service", "system": "fin", "endpointCount": 2, "kind": "sut"},
+        {"name": "jira-service", "system": "jira", "endpointCount": 1,
+         "kind": "integration"},
+    ], "聚合行带 kind —— b1-3/b2-7 落地后口径"
+    # 扁平名视图:带 kind(sut 子集由派生点取)
+    entries = await plate_client.catalog_service_entries()
+    assert {"name": "jira-service", "kind": "integration"} in entries

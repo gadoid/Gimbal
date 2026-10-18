@@ -24,22 +24,14 @@ def derive_base(key: str, catalog_names: set[str]) -> str | None:
 
 
 async def catalog_service_names() -> set[str]:
-    """GET /api/service → data.items[].name;失败 → 空集(降级)。
+    """目录服务名集合(**全量**,b2-7 起经 plate_client 唯一访问件)。
 
-    降级面覆盖 json 解析/信封遍历全程:plate 回垃圾 200 体(json 抛
-    ValueError)或非 dict 信封(.get 抛 AttributeError)同样得空集,
-    不上抛 — 该目录喂 carry 预解析/服务名推导,属增强链路,绝不
-    阻塞执行。
+    六个消费方中:别名校验/导入映射/导入重锚定须全量;carry 按 D-M
+    落地。**过滤不得下沉到本函数**(sut 过滤唯一出口在别名创建派生点,
+    归一 v1.0 §1.6/§6.1)。带 kind 的扁平行视图见
+    ``plate_client.catalog_service_entries``。
     """
-    client = get_client()
-    try:
-        resp = await client.get("/api/service")
-        if resp.status_code != 200:
-            return set()
-        items = (resp.json().get("data") or {}).get("items")
-    except (httpx.HTTPError, ValueError, AttributeError):
-        return set()
-    if not isinstance(items, list):
-        return set()
-    return {str(it.get("name")) for it in items
-            if isinstance(it, dict) and it.get("name")}
+    from . import plate_client
+
+    return {e["name"] for e in await plate_client.catalog_service_entries()
+            if e.get("name")}

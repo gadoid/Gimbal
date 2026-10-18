@@ -536,6 +536,75 @@ def _reset_revision_cache_for_test() -> None:
     _revision_cache.clear()
 
 
+# ── plate 目录唯一访问件(归一方案 v1.0 §3.3/b2-7) ─────────────────
+# 三视图(聚合行 / 扁平名 / 轻端点)共享一次取数与缓存;原三处独立
+# 访问件(routers/catalog.py、service_names.py、adaptation_service.
+# _plate_list_endpoints)改为调用这里。全量返回、行带 kind —— 过滤只
+# 发生在消费方(不得过滤面,§3.4)。
+_catalog_cache: dict = {"at": 0.0, "endpoints": None}
+_CATALOG_TTL_SEC = 30.0
+
+
+def reset_catalog_cache_for_tests() -> None:
+    _catalog_cache["at"] = 0.0
+    _catalog_cache["endpoints"] = None
+
+
+async def _catalog_endpoints() -> list[dict]:
+    """GET /api/endpoint 全量行(带 kind);不可达/异常 → 空表(增强链路
+    降级语义沿 catalog.py 先例;降级结果不进缓存)。"""
+    import time
+
+    now = time.monotonic()
+    if _catalog_cache["endpoints"] is not None and             now - float(_catalog_cache["at"]) < _CATALOG_TTL_SEC:
+        return _catalog_cache["endpoints"]  # type: ignore[return-value]
+    client = get_client()
+    try:
+        resp = await client.get("/api/endpoint")
+        if resp.status_code != 200:
+            return []
+        items = (resp.json().get("data") or {}).get("items")
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return []
+    rows = [it for it in items if isinstance(it, dict)]         if isinstance(items, list) else []
+    _catalog_cache["endpoints"] = rows
+    _catalog_cache["at"] = now
+    return rows
+
+
+async def catalog_service_rows() -> list[dict]:
+    """聚合行视图:service×system 聚合 + endpointCount,**行带 kind**
+    (由端点行带出;全量不过滤)。"""
+    by: dict[tuple[str, str], dict] = {}
+    for it in await _catalog_endpoints():
+        service = str(it.get("service") or "")
+        system = str(it.get("system") or "")
+        if not service or not system:
+            continue
+        row = by.get((service, system))
+        if row is None:
+            by[(service, system)] = {
+                "name": service, "system": system, "endpointCount": 1,
+                "kind": str(it.get("kind") or "sut")}
+        else:
+            row["endpointCount"] += 1
+    return sorted(by.values(), key=lambda r: r["name"])
+
+
+async def catalog_service_entries() -> list[dict]:
+    """扁平名视图:``[{name, kind}]``(sut 派生点在调用处取 sut 子集;
+    过滤不得下沉 —— 台账条目)。"""
+    return [{"name": str(it.get("service") or ""),
+             "kind": str(it.get("kind") or "sut")}
+            for it in await _catalog_endpoints()
+            if it.get("service")]
+
+
+async def plate_endpoints_light() -> list[dict]:
+    """轻端点视图:plate /api/endpoint 原始行(看板/carry 消费)。"""
+    return await _catalog_endpoints()
+
+
 async def get_system_kind(system_id: str, *, timeout: float = 10.0) -> str | None:
     """GET /api/system/{id} → SystemView.kind(归一方案 v1.0 §1.4)。
 

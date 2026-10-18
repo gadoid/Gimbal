@@ -51,22 +51,8 @@ from .plate_client import PlateUnavailableError
 
 # ─── plate 目录拉取(M6 语法路由,信封 {ok, dim, data})──────────
 async def _plate_list_endpoints() -> list[dict]:
-    """GET /api/endpoint → data.items(轻量视图,自带 version/updated_at)。"""
-    client = plate_client.get_client()
-    try:
-        resp = await client.get("/api/endpoint")
-    except httpx.HTTPError as e:
-        raise PlateUnavailableError(
-            f"plate_unavailable: {type(e).__name__}: {e}"
-        ) from e
-    if resp.status_code != 200:
-        raise PlateUnavailableError(
-            f"plate_unavailable: status {resp.status_code}: {resp.text[:200]}"
-        )
-    items = (resp.json().get("data") or {}).get("items")
-    if not isinstance(items, list):
-        raise PlateUnavailableError("plate_unavailable: no items in response")
-    return [it for it in items if isinstance(it, dict)]
+    """b2-7(归一 v1.0 §3.3):改经 plate_client 唯一访问件(轻端点视图)。"""
+    return await plate_client.plate_endpoints_light()
 
 
 async def _plate_full_endpoint(endpoint_id: str) -> dict | None:
