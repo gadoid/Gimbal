@@ -125,6 +125,13 @@ def _read_error(e: Any) -> PlateHTTPError:
                           message=getattr(e, "message", str(e)))
 
 
+def _service_of_system(reg: PlateRegistry, system: str) -> str:
+    """系统内任一服务名(声明闸取 kind 用;无服务 → 空串,按未登记处理)。"""
+    for sd in reg.iter_services_for_system(system):
+        return sd.name
+    return ""
+
+
 def _resolve_system(reg: PlateRegistry, system: str) -> None:
     """Raise SYSTEM_NOT_FOUND if no endpoint under ``system`` exists."""
     if not reg.has_system(system):
@@ -1367,6 +1374,48 @@ def action_scenario_convert(
                 message=(f"锚定系统 {undeclared} 未声明 meta.plate —— "
                          "平台保存闸已强制声明,不带/缺声明的载荷属旁路写入"),
             )
+        # 归一方案 v1.0 §1.4(D-K/D-O):声明域合法集 = working |
+        # <line>#<n> | integration,逐系统经 parse_ref 类别裁决 ——
+        # ①裸线(取数域合法、声明域拒,消除「平台拒、plate 收」双口径);
+        # ②integration 双向绑定:仅 kind=integration 系统可声明,反之
+        # 亦然(绑定违例不是形状问题,invalid_ref 不带 reason)。
+        # 线存在性/修订号范围由 reproject 的 resolve_revision 兜底。
+        from gimbal_plate.release.read import (
+            ReleaseReadError as _RRE,
+            parse_ref as _parse_ref,
+        )
+        for sys_name, raw_ref in declared.items():
+            ref = str(raw_ref or "")
+            try:
+                kind = _parse_ref(ref)[0]
+            except _RRE as e:
+                raise PlateHTTPError(
+                    http_status=422,
+                    code=ErrorCode("invalid_ref"),
+                    message=e.message,
+                    details={"reason": e.reason} if e.reason else None,
+                ) from e
+            if kind == "line":
+                raise PlateHTTPError(
+                    http_status=422,
+                    code=ErrorCode("invalid_ref"),
+                    message=(f"{sys_name}={ref!r} 缺修订号"
+                             "(声明须为 <line>#<n> / working / integration)"),
+                    details={"reason": "missing_revision"},
+                )
+            if kind == "integration":
+                _sd = _registry(request).get_service(
+                    _service_of_system(_registry(request), sys_name))
+                _sys_kind = _sd.kind if _sd is not None else None
+                if _sys_kind != "integration":
+                    raise PlateHTTPError(
+                        http_status=422,
+                        code=ErrorCode("invalid_ref"),
+                        message=(f"{sys_name}={ref!r} 仅可用于 "
+                                 f"kind=integration 的系统(实为 "
+                                 f"{_sys_kind or '未登记'});"
+                                 "sut 系统请声明 <line>#<n> 或 working"),
+                    )
     used_refs: dict[str, str] | None = None
     if meta_plate:
         from gimbal_plate.release.reproject import (

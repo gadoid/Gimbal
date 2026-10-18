@@ -58,10 +58,11 @@ class TestB3BareLineDeclaration:
                 json={"consumer": "gimbal",
                       "scenario": _minimal_scenario("fin.a.a", {"fin": "1.0"})},
             )
-        # 现状:裸线声明被接受(批1 b1-6 起改为 422 missing_revision)
-        assert resp.status_code == 200, resp.text
-        step = resp.json()["data"]["converted"]["steps"][0]
-        assert step["call"]["path"] == "/a2", "裸线应 resolve 到线最新修订的 binding"
+        # 基线翻转:b1-6(声明域合法集)—— 裸线声明对齐拒,422+reason
+        assert resp.status_code == 422, resp.text
+        err = resp.json()["error"]
+        assert err["code"] == "invalid_ref"
+        assert err["details"]["reason"] == "missing_revision"
 
     def test_resolve_effective_rejects_bare_line(self, tmp_path):
         """`resolve_effective` 开头即要求 revision —— 裸线 invalid_ref(不预期变更)。"""
