@@ -19,7 +19,6 @@ binding:
   method: POST
   path: /rest/api/2/search
   timeout_seconds: 15.0
-  auth: none
 request:
   declarations:
   - name: jql

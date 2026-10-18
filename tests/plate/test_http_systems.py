@@ -17,7 +17,7 @@ def test_list_systems_returns_fin_and_common(http_client: TestClient) -> None:
     systems = body["data"]["items"]
     # fin:endpoint 派生;common:声明式通用层(register_common_dims)。
     ids = [s["id"] for s in systems]
-    assert ids == ["common", "fin", "platform"]
+    assert ids == ["common", "fin", "jira", "platform"]
     fin = next(s for s in systems if s["id"] == "fin")
     assert fin["service_count"] >= 1
     assert fin["endpoint_count"] >= 1

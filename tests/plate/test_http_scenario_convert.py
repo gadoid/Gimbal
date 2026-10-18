@@ -311,9 +311,10 @@ def test_convert_anchored_without_meta_plate_rejected(client: TestClient) -> Non
     r2 = client.post("/api/scenario/action/convert",
                      json={"consumer": "gimbal", "scenario": raw})
     assert "version_undeclared" not in r2.text, r2.text
-    # ext: 外部锚点豁免(无版本语义)
+    # b3-4(C12):ext: 豁免已删 —— ext: 锚点按未声明系统 422(存量已迁移)
     raw["meta"].pop("plate")
     raw["steps"][0]["endpoint"] = "ext:pay.list"
     r3 = client.post("/api/scenario/action/convert",
                      json={"consumer": "gimbal", "scenario": raw})
-    assert r3.status_code == 200, r3.text
+    assert r3.status_code == 422, r3.text
+    assert "version_undeclared" in r3.text

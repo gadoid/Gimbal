@@ -146,6 +146,20 @@ const activeTab = ref(
   : 'fields')
 
 
+onMounted(async () => {
+  try {
+    ;[aliases.value, catalogNames.value] = await Promise.all([
+      listAllAliases(),
+      loadCatalogServiceNames().catch((): string[] => []),
+    ])
+  } catch (e) {
+    showError('加载', e)
+  } finally {
+    loading.value = false
+  }
+})
+
+
 
 </script>
 
@@ -162,3 +176,4 @@ const activeTab = ref(
   line-height: 1.7;
   color: var(--sl-ink-3);
 }
+</style>

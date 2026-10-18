@@ -19,7 +19,6 @@ binding:
   method: GET
   path: /rest/api/2/issue/{key}
   timeout_seconds: 15.0
-  auth: none
 request: {}
 responses:
   "200":
