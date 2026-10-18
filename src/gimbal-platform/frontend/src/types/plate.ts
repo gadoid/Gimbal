@@ -393,3 +393,25 @@ export function stepMethod(step: StepLike): string {
 export function stepPath(step: StepView | Record<string, unknown> | undefined | null): string {
   return String(stepCall(step)?.path ?? '')
 }
+
+// ─── 归一方案 v1.0:ref 常量与记录域判定(§1.4/§3.3) ────────────────
+// 门禁③放行区:常量 + 记录域判定函数(组件内散写 `startsWith('integration@')`
+// 会被 verify_all 门禁拦下 —— 判定唯一实现在此,与后端
+// run_semantics.record_category 共享 __fixtures__/ref-record-domain.json
+// 样例锁定)。
+
+export const PLATE_REF_WORKING = 'working'
+export const PLATE_REF_INTEGRATION = 'integration'
+
+/** 记录域分类(``plate_pins`` 值;台账比对用)。与后端 record_category 对称。 */
+export type PlateRecordCategory =
+  | 'INTEGRATION' | 'WORKING' | 'PIN' | 'UNDECLARED'
+
+export function plateRecordCategory(value: string | null | undefined): PlateRecordCategory {
+  const v = (value ?? '').trim()
+  if (!v) return 'UNDECLARED'
+  if (v === PLATE_REF_WORKING) return 'WORKING'
+  if (v === PLATE_REF_INTEGRATION) return 'INTEGRATION'
+  if (v.startsWith(PLATE_REF_INTEGRATION + '@')) return 'INTEGRATION'
+  return 'PIN'
+}
