@@ -1676,7 +1676,7 @@ async def stale_scenarios(
                 eid = str(st["endpoint"])
                 endpoints_used.setdefault(eid.split(".")[0], []).append(eid)
         resolvable = {s: ref for s, ref in meta_plate.items()
-                      if ref and ref != "working"
+                      if ref_category(ref) == PIN  # b2-3 补:门禁② 抓获的漏改点
                       and endpoints_used.get(s)}
         resolved: dict = {}
         if resolvable:
