@@ -22,36 +22,46 @@
       <aside class="svc-rail">
         <div class="svc-rail-title">
           全部服务
-          <span class="svc-rail-hint">{{ treeServices.length }} 系统 · {{ serviceCount }} 服务</span>
+          <span class="svc-rail-hint">{{ totalSystems }} 系统 · {{ serviceCount }} 服务</span>
         </div>
-        <p class="svc-rail-hint">按系统分组 · 只列到服务级</p>
-        <div v-for="g in treeServices" :key="g.system">
-          <div class="svc-tree-group">
-            <SystemChip :sys="g.system" />
-            <span class="n">({{ g.services.length }})</span>
-          </div>
-          <div
-            v-for="s in g.services"
-            :key="s.name"
-            class="svc-tree-row"
-            :class="{ on: selectedService === s.name }"
-          >
-            <button
-              type="button"
-              class="svc-tree-item"
-              :data-testid="`svc-tree-${s.name}`"
-              @click="selectService(selectedService === s.name ? '' : s.name)"
+        <p class="svc-rail-hint">按系统分组 · 只列到服务级 · b2.5 按类别分区</p>
+        <!-- b2.5(归一 v1.0 §3.4):被测 / 第三方两区,全量不隐藏 -->
+        <div v-for="section in [
+            { key: 'sut', label: '被测服务', groups: treeServices.sut },
+            { key: 'integration', label: '第三方集成', groups: treeServices.integration }]"
+             :key="section.key">
+          <p v-if="section.groups.length"
+             class="svc-rail-hint svc-kind-label"
+             :data-testid="`svc-kind-${section.key}`">
+            {{ section.label }}({{ section.groups.length }})</p>
+          <div v-for="g in section.groups" :key="g.system">
+            <div class="svc-tree-group">
+              <SystemChip :sys="g.system" />
+              <span class="n">({{ g.services.length }})</span>
+            </div>
+            <div
+              v-for="s in g.services"
+              :key="s.name"
+              class="svc-tree-row"
+              :class="{ on: selectedService === s.name }"
             >
-              <span class="nm">{{ s.name }}</span>
-              <span class="n">{{ aliasCount(s.name) }}</span>
-            </button>
-            <button
-              type="button"
-              class="svc-tree-act"
-              title="配置该服务的字段默认值(服务级默认层)"
-              :data-testid="`svc-config-${s.name}`"
-              @click.stop="router.push(`/service-admin/${encodeURIComponent(s.name)}`)"
-            >字段</button>
+              <button
+                type="button"
+                class="svc-tree-item"
+                :data-testid="`svc-tree-${s.name}`"
+                @click="selectService(selectedService === s.name ? '' : s.name)"
+              >
+                <span class="nm">{{ s.name }}</span>
+                <span class="n">{{ aliasCount(s.name) }}</span>
+              </button>
+              <button
+                type="button"
+                class="svc-tree-act"
+                title="配置该服务的字段默认值(服务级默认层)"
+                :data-testid="`svc-config-${s.name}`"
+                @click.stop="router.push(`/service-admin/${encodeURIComponent(s.name)}`)"
+              >字段</button>
+            </div>
           </div>
         </div>
       </aside>
@@ -164,9 +174,10 @@
             <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <!-- 三态接入(P1.0):plate 受管(目录派生强约束)/ external
-                 第三方(跳过目录校验,别名即服务本体)。编辑态不可改
-                 (后端无 kind patch;改态删重建)。 -->
+            <!-- 三态接入(P1.0)/b2.5(归一 v1.0 §1.6):plate 受管(目录
+                 派生强约束)/ external 第三方(不派生,须显式选 base_service
+                 = plate 里 kind=integration 的服务)。编辑态 kind 不可改;
+                 external→plate 升级走后端 patch(系统转 sut 后),UI 走删重建。 -->
             <Select v-model="draft.kind" :disabled="!!editing" :key="`kind:${draft.kind}:${!!editing}`">
               <SelectTrigger class="w-[128px]" data-testid="alias-kind-trigger"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -174,14 +185,29 @@
                 <SelectItem value="external" title="第三方服务,无版本管理">第三方</SelectItem>
               </SelectContent>
             </Select>
-            <!-- external:无前缀/后缀拆分 —— 别名即服务全名。 -->
-            <Input
-              v-if="draft.kind === 'external' && !editing"
-              v-model="draft.aliasName"
-              class="w-[392px]"
-              placeholder="服务名(如 pay-service)"
-              data-testid="alias-name-full-input"
-            />
+            <!-- b2.5(§1.6):external 不派生 —— 显式选 base_service(下拉
+                 只列 plate 里 kind=integration 的服务);别名全名仍手填。 -->
+            <template v-if="draft.kind === 'external' && !editing">
+              <Select v-model="draft.baseService">
+                <SelectTrigger class="w-[220px]" data-testid="alias-baseservice-trigger">
+                  <SelectValue placeholder="选择第三方服务(base_service)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="svc in integrationServices"
+                    :key="svc"
+                    :value="svc"
+                    :title="`plate 系统的第三方服务(${svc})`"
+                  >{{ svc }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                v-model="draft.aliasName"
+                class="w-[240px]"
+                placeholder="别名全名(如 jira-x)"
+                data-testid="alias-name-full-input"
+              />
+            </template>
             <!-- 常驻只读前缀槽 + 后缀输入(2026-09-23 三次微调):槽恒在
                  (未选服务时占位「服务」),点选服务只换槽内文字,输入框
                  位置零跳动;框内永远只写后缀,完整全串 = 前缀 + 后缀
@@ -279,10 +305,11 @@ const editing = ref<ServiceAliasRow | null>(null)
 
 const draft = ref<{
   aliasName: string; baseUrl: string; environmentId: string;
-  credentialAlias: string; kind: 'plate' | 'external';
+  credentialAlias: string; kind: 'plate' | 'external'; baseService: string;
 }>({
   aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
   kind: 'plate',
+  baseService: '',
 })
 
 /** 常驻前缀槽的基服务:登记态 = 左栏点选;编辑态 = 该别名自身所属服务;
@@ -310,33 +337,49 @@ const aliasIncomplete = computed(() =>
   !editing.value && draft.value.kind === 'plate'
   && (!aliasBase.value || !aliasSuffix.value.trim()))
 
-interface ServiceRow { name: string; system: string; count: number }
-interface ServiceGroup { system: string; services: ServiceRow[] }
+interface ServiceRow { name: string; system: string; count: number; kind: string }
+interface ServiceGroup { system: string; services: ServiceRow[]; kind: string }
 
-// 左栏树:plate 目录(系统 → 服务两层,只到服务级)
-const treeServices = computed<ServiceGroup[]>(() => {
+// 左栏树:plate 目录(系统 → 服务两层,只到服务级)。b2.5(归一 v1.0
+// §3.4):按系统 kind 分「被测服务 / 第三方集成」两区 —— 第三方同样要
+// 配实例与凭证,全量不隐藏,只是分区呈现。
+const treeServices = computed<{ sut: ServiceGroup[]; integration: ServiceGroup[] }>(() => {
   const byName = new Map<string, ServiceRow>()
   for (const e of catalogEntries.value) {
+    const kind = e.kind ?? 'sut'
     const row = byName.get(e.service)
     if (row) row.count += 1
-    else byName.set(e.service, { name: e.service, system: e.system, count: 1 })
+    else byName.set(e.service, { name: e.service, system: e.system, count: 1, kind })
   }
   const groups = new Map<string, ServiceRow[]>()
   for (const row of byName.values()) {
     if (!groups.has(row.system)) groups.set(row.system, [])
     groups.get(row.system)!.push(row)
   }
-  return [...groups.entries()]
-    .map(([system, services]) => ({
-      system,
-      services: services.sort((a, b) => a.name.localeCompare(b.name)),
-    }))
-    .sort((a, b) => a.system.localeCompare(b.system))
+  const build = (kind: string): ServiceGroup[] =>
+    [...groups.entries()]
+      .filter(([, services]) => services.every((r) => r.kind === kind))
+      .map(([system, services]) => ({
+        system, kind,
+        services: services.sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.system.localeCompare(b.system))
+  return { sut: build('sut'), integration: build('integration') }
 })
 
-const catalogEntries = ref<{ service: string; system: string }[]>([])
+const catalogEntries = ref<{ service: string; system: string; kind?: string }[]>([])
 
-const serviceCount = computed(() => treeServices.value.reduce((n, g) => n + g.services.length, 0))
+// b2.5:external 别名的 base_service 下拉选项(plate kind=integration)
+const integrationServices = computed(() =>
+  [...new Set(catalogEntries.value
+    .filter((e) => (e.kind ?? 'sut') === 'integration')
+    .map((e) => e.service))].sort())
+
+const totalSystems = computed(() =>
+  treeServices.value.sut.length + treeServices.value.integration.length)
+const serviceCount = computed(() =>
+  [...treeServices.value.sut, ...treeServices.value.integration]
+    .reduce((n, g) => n + g.services.length, 0))
 
 function aliasCount(service: string): number {
   return aliases.value.filter((a) => a.baseService === service).length
@@ -386,6 +429,7 @@ function startEdit(a: ServiceAliasRow): void {
     environmentId: a.environmentId != null ? String(a.environmentId) : '0',
     credentialAlias: a.credentialAlias ?? '',
     kind: a.kind ?? 'plate',
+    baseService: a.baseService ?? '',
   }
 }
 
@@ -393,7 +437,7 @@ function cancelEdit(): void {
   editing.value = null
   draft.value = {
     aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
-    kind: 'plate',
+    kind: 'plate', baseService: '',
   }
 }
 
@@ -416,6 +460,7 @@ async function save(): Promise<void> {
         environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
         credentialAlias: d.credentialAlias.trim() || null,
         kind: d.kind,
+        baseService: d.kind === 'external' ? d.baseService : null,
       })
       toast.success('已登记')
     }

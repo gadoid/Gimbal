@@ -66,7 +66,7 @@ async function load(): Promise<void> {
   try {
     // 聚合口径在 catalog-services 里,工作台「服务画像」卡读同一份 ——
     // 两处各算一次,卡上计数就会和点进来的页面对不上。
-    services.value = await loadCatalogServiceRows()
+    services.value = await loadCatalogServiceRows({ sutOnly: true })
   } catch {
     error.value = 'Plate 目录不可达,服务清单拉取失败。'
   } finally {

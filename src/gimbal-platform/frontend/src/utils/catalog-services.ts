@@ -21,11 +21,13 @@ interface CatalogServiceEntry {
   service: string
   system: string
   id?: string
+  kind?: string  // b2.5(归一 v1.0 §3.4):Admin 分区/下拉过滤用;缺省 sut
 }
 
 /** GET /api/catalog/services 响应形状(M5 聚合端点)。 */
 interface CatalogServicesEnvelope {
-  services: { name: string; system: string; endpointCount: number }[]
+  // b2.5:kind 由平台聚合行带出(归一 v1.0 §3.4);旧 plate 无此字段按 sut
+  services: { name: string; system: string; endpointCount: number; kind?: string }[]
   endpoints: { id: string; service: string }[]
   plateReachable: boolean
 }
@@ -81,8 +83,16 @@ export interface CatalogServiceRow {
   kind?: string  // b2-10c(归一 v1.0):plate 端点行带出;缺省按 sut
 }
 
-export function loadCatalogServiceRows(): Promise<CatalogServiceRow[]> {
-  // 聚合端点已按服务聚好 —— 直接取,不再前端重算(口径唯一,债 11 消除)
+export function loadCatalogServiceRows(
+  opts?: { sutOnly?: boolean },
+): Promise<CatalogServiceRow[]> {
+  // 聚合端点已按服务聚好 —— 直接取,不再前端重算(口径唯一,债 11 消除)。
+  // b2.5(归一 v1.0 §3.4):sutOnly = 画像面的过滤出口 —— 画像 = 被测
+  // 覆盖探索,只列 sut;缺省全量(编排器 kind 识别等消费方不受影响)。
   return loadCatalogEntries().then(() => (cached ? cached : fetchCatalogServices()))
-    .then((env) => env.services.map((s) => ({ ...s })))
+    .then((env) => {
+      const rows = env.services.map((s) => ({ ...s }))
+      return opts?.sutOnly ? rows.filter((r) => (r.kind ?? 'sut') !== 'integration')
+                           : rows
+    })
 }

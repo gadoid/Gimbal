@@ -173,3 +173,46 @@ async def assess_baseline(
             "unknown_services": classified["unknown"],
         }
     return True, None, {}
+
+
+def merge_resolve_effective(
+    meta_plate: dict, plate_pins: dict, resolve_result: dict,
+) -> None:
+    """b2.5(归一 v1.0 §1.5/b2-4,抽为可测):resolve 结果回写分流。
+
+    PIN:写 ``plate_pins`` **并**写执行副本(执行按具体修订取投影);
+    INTEGRATION:**只写 ``plate_pins``**,执行副本保持声明值
+    ``integration`` —— ``integration@<标识>`` 是记录值,写副本则
+    ``/convert`` 声明域 422,整条执行失败。working/空 effective 不写。
+    """
+    for sys_, info in (resolve_result or {}).items():
+        eff = info.get('effective', '') if isinstance(info, dict) else ''
+        if not eff or record_category(eff) not in (PIN, INTEGRATION):
+            continue
+        plate_pins[sys_] = eff
+        if sys_ in meta_plate and record_category(eff) == PIN:
+            meta_plate[sys_] = eff
+
+
+async def graph_pins_with_identity(
+    g_pins: dict, resolver,
+) -> dict:
+    """b2.5(归一 v1.0 §1.5/b2-4,抽为可测):图执行台账的标识补取。
+
+    图执行链不经 resolve,INTEGRATION 会记成裸值丢标识 —— 对其补调
+    ``resolver({系统: integration})`` 取 ``integration@<标识>``,结果只进
+    台账(不动执行副本);失败不阻断(台账性质)。返回**新 dict**。
+    """
+    out = dict(g_pins or {})
+    integ = [k for k, v in out.items() if ref_category(v) == INTEGRATION]
+    if not integ:
+        return out
+    try:
+        res = await resolver({k: out[k] for k in integ})
+        for k in integ:
+            eff = (res.get(k) or {}).get('effective', '')
+            if eff:
+                out[k] = eff
+    except Exception:  # noqa: BLE001 — 台账性质,失败保留裸值
+        pass
+    return out

@@ -68,9 +68,6 @@ class PrecheckResult(BaseModel):
     dangling_entry_ids: list[str] = Field(default_factory=list, alias="danglingEntryIds")
     # steps 引用了、但声明 URL 与绑定 URL 双缺的 service(引擎会显式报错)
     unbound_services: list[str] = Field(default_factory=list, alias="unboundServices")
-    # 外部接口登记批 X2:ext: 锚点步骤 vs 目录 JSON Schema 的告警清单
-    # (D2 拍板:告警不阻塞 —— 不参与 scheme_valid,读侧展示)
-    external_warnings: list[str] = Field(default_factory=list, alias="externalWarnings")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -143,23 +140,8 @@ async def _precheck_one(
         and not (bindings.get(svc) or {}).get("url")
     ]
 
-    # ── external 锚点步骤 vs 目录 schema(X2;D2:告警不阻塞)────
-    try:
-        result.external_warnings = await _external_schema_warnings(
-            db, raw_payload)
-    except Exception:  # noqa: BLE001 — 目录读失败不阻塞预检
-        result.external_warnings = []
-
     result.scheme_valid = not (
         result.dead_dataset_ids or result.dangling_entry_ids
     )
     return result
 
-
-async def _external_schema_warnings(
-        db: AsyncSession, raw_payload: dict,
-) -> list[str]:
-    """b3-1(归一 v1.0 C6):ext: schema 告警退役 —— 恒空清单。
-    保留空壳以兼容调用点签名,随 C12 调用点清除。
-    """
-    return []

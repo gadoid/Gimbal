@@ -60,9 +60,11 @@ async def get_endpoint_projection(
     """
     from ..services import plate_client
     try:
-        # b2-3:缺省值经分类器(INVALID 落 working 兜底)
+        # b2.5:缺省=working 保持本地显式(空串不外包给 plate 兜底);
+        # INVALID 声明值落 working(浏览场景不因非法声明 500)
         item = await plate_client.get_projection(
-            endpoint_id, ref if ref_category(ref) != INVALID else "working")
+            endpoint_id,
+            ref if (ref and ref_category(ref) != INVALID) else "working")
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(status_code=502, detail={
             "code": "plate_unavailable", "message": e.message}) from e

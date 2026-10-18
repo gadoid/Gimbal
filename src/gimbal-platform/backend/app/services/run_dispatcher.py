@@ -1266,26 +1266,13 @@ async def _fanout_graph(
         # dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效
         # 修订],baseline 判定输入同口径;m2_hash 取 /convert 附带身份,
         # 随台账一次写)。台账性质:判定/写库失败不阻断执行。
-        _g_pins = {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
-                   if v and record_category(v) in (PIN, INTEGRATION)}  # b2-3:追溯台账
-        # b2-4(归一 v1.0 §1.5):图执行链不经 resolve,INTEGRATION 会记成
-        # 裸值丢标识 —— 对其补调 resolve 取 integration@<标识>,结果只进
-        # _g_pins(台账),不动执行副本 meta_plate。失败不阻断(台账性质,
-        # 与下方 baseline 同口径)。
-        try:
-            _g_integ = [k for k, v in _g_pins.items()
-                        if ref_category(v) == INTEGRATION]
-            if _g_integ:
-                _g_res = await plate_client.resolve(
-                    {k: _g_pins[k] for k in _g_integ}, {})
-                for k in _g_integ:
-                    _eff = (_g_res.get(k) or {}).get("effective", "")
-                    if _eff:
-                        _g_pins[k] = _eff
-        except Exception:  # noqa: BLE001
-            logger.opt(exception=True).warning(
-                "run_dispatcher: graph integration 标识补取失败 (execution={})",
-                execution_id)
+        # b2-3/b2-4/b2.5:追溯台账(PIN ∪ INTEGRATION)+ integration 标识
+        # 补取,均抽为 run_semantics 可测函数(补取只进台账,不动执行副本)
+        from . import run_semantics as _rs_g
+        _g_pins = await _rs_g.graph_pins_with_identity(
+            {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
+             if v and record_category(v) in (PIN, INTEGRATION)},
+            plate_client.resolve)
         _g_baseline = None
         try:
             from . import run_semantics
@@ -1670,16 +1657,11 @@ async def _fanout(
             resolve_result = await plate_client.resolve(
                 meta_plate,
                 {sys_: sorted(ids) for sys_, ids in endpoints_used.items()})
-            for sys_, info in resolve_result.items():
-                eff = info.get('effective', '')
-                if eff and record_category(eff) in (PIN, INTEGRATION):  # b2-4:记录值含 integration@
-                    plate_pins[sys_] = eff
-                    # b2-4(归一 v1.0 §1.5):回写分流 —— PIN 写执行副本
-                    # (/convert 按原值取修订);INTEGRATION 只写 pins,
-                    # 执行副本保持声明值 integration(integration@<标识>
-                    # 是记录值,写副本则 /convert 声明域 422,整条执行失败)。
-                    if sys_ in meta_plate and record_category(eff) == PIN:
-                        meta_plate[sys_] = eff
+            # b2-4/b2.5(归一 v1.0 §1.5):回写分流抽为 run_semantics
+            # .merge_resolve_effective(可测;PIN 写副本/INTEGRATION 只写 pins)
+            from . import run_semantics as _rs
+            _rs.merge_resolve_effective(
+                meta_plate, plate_pins, resolve_result)
         except plate_client.PlateRejectedError as exc:
             # ⑥(2026-10-13):plate 的 4xx 是对**声明**的裁决(修订不存在/
             # 线不存在等)—— 归 plate_rejected,不再冒充 plate_unavailable

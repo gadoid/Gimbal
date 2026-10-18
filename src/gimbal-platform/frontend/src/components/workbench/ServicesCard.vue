@@ -75,7 +75,7 @@ const wbT = (suffix: string) => `wb-card-services-${suffix}`
 // 卡同帧挂载时合流,不打第二次 plate。
 onMounted(async () => {
   try {
-    rows.value = await loadCatalogServiceRows()
+    rows.value = await loadCatalogServiceRows({ sutOnly: true })
   } catch {
     error.value = 'Plate 目录不可达'
   } finally {
