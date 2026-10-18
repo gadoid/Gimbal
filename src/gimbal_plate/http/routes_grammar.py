@@ -64,8 +64,18 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
     id 前缀路由支持 ref；全局路由不带系统，ref 无从解析。
     """
     ref = (request.query_params.get("ref") or "").strip()
-    working = not ref or ref == "working"
-    if working or not system:
+    from gimbal_plate.release import read as release_read
+    from gimbal_plate.release.release import resolve_artifacts_root
+
+    # 归一方案 v1.0 §1.4:类别经 parse_ref 先行 —— integration 取数域
+    # 恒读当前树(与 working 同);全域非法值(integration@…)在需要
+    # 构件根之前即 400 + details.reason(不落 503/500)。
+    try:
+        _kind = release_read.parse_ref(ref)[0]
+    except release_read.ReleaseReadError as e:
+        raise _read_error(e)
+    working = _kind == "working"
+    if _kind == "integration" or working or not system:
         reg: PlateRegistry | None = getattr(request.app.state, "registry", None)
         if reg is None:
             raise PlateHTTPError(
@@ -74,8 +84,6 @@ def _registry(request: Request, system: str | None = None) -> PlateRegistry:
                 message="plate registry is not initialised",
             )
         return reg
-    from gimbal_plate.release import read as release_read
-    from gimbal_plate.release.release import resolve_artifacts_root
 
     # 修订快照缓存（容量淘汰,Release 4.1:修订不可变、按修订缓存整个
     # 快照,超容量 LRU 淘汰最旧条目;设计未定具体数字,取 64）
@@ -1246,7 +1254,7 @@ def action_system_resolve(
     body = body or {}
     meta_plate = body.get("meta_plate") or {}
     endpoints = body.get("endpoints") or {}
-    root = _artifacts_root_or_503(request)
+    root: Any = None  # 惰性:仅 revision 类别需要构件根(integration/working 不需要)
     out: dict[str, Any] = {}
     for system, declared in meta_plate.items():
         # 归一方案 v1.0 §1.5/§3.1:类别经 parse_ref 裁决。integration 必须
@@ -1267,6 +1275,8 @@ def action_system_resolve(
             out[system] = {"effective": eff,
                            "available": [], "changed_endpoints": []}
             continue
+        if root is None:
+            root = _artifacts_root_or_503(request)
         try:
             out[system] = release_read.resolve_effective(
                 root, system, str(declared),

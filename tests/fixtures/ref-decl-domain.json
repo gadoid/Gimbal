@@ -1,0 +1,16 @@
+{
+  "comment": "归一方案 v1.0 D-K:ref 声明域分类契约(两侧测试各自读取,生产代码不读)。plate pytest 直读;backend pytest 回溯仓库根读同一文件。valid=两侧一致的合法类别;invalid=全域非法(parse_ref 抛 invalid_ref 附 reason);declaration_only=plate 取数域合法(line)而声明域拒(missing_revision,由声明闸/平台预检给出)。",
+  "valid": [
+    {"ref": "working", "category": "WORKING"},
+    {"ref": "integration", "category": "INTEGRATION"},
+    {"ref": "1.0#3", "category": "PIN"}
+  ],
+  "invalid": [
+    {"ref": "integration@abc123", "reason": "record_value"},
+    {"ref": "1.0#x", "reason": "malformed"},
+    {"ref": "#5", "reason": "malformed"}
+  ],
+  "declaration_only": [
+    {"ref": "1.0", "plate_parse": "line", "declaration_reason": "missing_revision"}
+  ]
+}
