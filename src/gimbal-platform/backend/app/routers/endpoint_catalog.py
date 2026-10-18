@@ -11,6 +11,9 @@ AsyncClient 单例(共享连接池,MockTransport 测试替换随之生效)。
 """
 from __future__ import annotations
 
+from ..services.run_semantics import (INTEGRATION, INVALID, PIN,
+    UNDECLARED, WORKING, invalid_reason, record_category, ref_category)
+
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +60,9 @@ async def get_endpoint_projection(
     """
     from ..services import plate_client
     try:
-        item = await plate_client.get_projection(endpoint_id, ref or "working")
+        # b2-3:缺省值经分类器(INVALID 落 working 兜底)
+        item = await plate_client.get_projection(
+            endpoint_id, ref if ref_category(ref) != INVALID else "working")
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(status_code=502, detail={
             "code": "plate_unavailable", "message": e.message}) from e
@@ -135,7 +140,7 @@ async def get_full_endpoint(
 
     # RS3（Release v4.4 §6.1）：ref = 场景生效修订（4.4）→ 修订快照
     # 定义；缺省/working → working 注册表（现状不变）。
-    if ref and ref != "working":
+    if ref_category(ref) == PIN:  # b2-3:读取按类别
         # 按修订读 plate /full（不命中平台缓存——修订内容不可变,
         # 前端可长期缓存;后续可加修订级缓存）
         client = get_client()
@@ -305,7 +310,7 @@ async def list_endpoints(
         params["service"] = service
     if q:
         params["q"] = q
-    if ref and ref != "working" and system:
+    if ref_category(ref) == PIN and system:
         # 系统作用域 + 修订 → 已有路由 /api/systems/{system}/endpoint
         # (支持 ref;全局路由不带系统,ref 无从解析)
         path = f"/api/systems/{system}/endpoint"

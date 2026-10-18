@@ -29,6 +29,7 @@ ui.fieldStates 不在导出产物里,重锚定不重建(面回落目录共识默
 carry 已物化进 body,显式值优先级最高,行为等价)。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 from typing import Any
 
@@ -140,7 +141,7 @@ async def reanchor_import_definition(
 
         system, eid = matched[0]
         ref = meta_plate.get(system)
-        if ref and ref != "working":
+        if ref_category(ref) == PIN:  # b2-3:读取按类别
             full: Any = await plate_client.get_endpoint_full_at(eid, ref)
             binding = (full or {}).get("binding") or {}
             if (full is None

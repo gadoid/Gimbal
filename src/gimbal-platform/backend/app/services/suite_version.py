@@ -9,6 +9,7 @@
 用到的接口结构与各自已验证修订完全相同的全部修订（不必连续区间）。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 from typing import Any
 
@@ -61,7 +62,7 @@ async def check_and_resolve_suite_versions(
             "index": i, "meta_plate": meta_plate, "endpoints": endpoints,
         })
         for system, ref in meta_plate.items():
-            if ref and ref != "working":
+            if ref_category(ref) == PIN:  # b2-3:钉定收集仅 PIN
                 line = ref.rsplit("#", 1)[0]
                 system_lines.setdefault(system, set()).add(line)
 
@@ -87,7 +88,7 @@ async def check_and_resolve_suite_versions(
                     endpoints_union.add(ep)
             if system in m["meta_plate"]:
                 ref = m["meta_plate"][system]
-                if ref != "working":
+                if ref_category(ref) == PIN:  # b2-3:钉定收集仅 PIN
                     meta_for_system[str(m["index"])] = ref
         if not meta_for_system or not endpoints_union:
             continue

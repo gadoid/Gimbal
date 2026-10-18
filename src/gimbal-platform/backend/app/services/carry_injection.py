@@ -10,6 +10,7 @@
 与原始列表对齐;先过滤非 dict 再枚举会让索引漂移、注入错步。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 from typing import Any
 
@@ -44,7 +45,7 @@ async def _endpoint_declarations(
     working(未声明系统的过渡形态)。
     """
     from .endpoint_declarations import declarations_of_at
-    if ref and ref != "working":
+    if ref_category(ref) == PIN:  # b2-3:读取按类别
         return await declarations_of_at(endpoint_id, ref)
     return await declarations_of(endpoint_id)
 
@@ -118,8 +119,9 @@ async def build_carry_context(
         if isinstance(svc, str) and svc:
             raw_services.setdefault(svc, None)
     service_bindings: dict[str, dict[str, str | None] | None] = {}
+    _ = catalog  # b2-9(D-M):解析改经别名表优先(目录兜底在 helper 内)
     for raw in raw_services:
-        base = service_names.derive_base(raw, catalog)
+        base = await service_names.resolve_base_with_aliases(db, raw)
         if base is None:
             logger.warning(
                 "carry_injection: service {!r} 不在目录(裸声明)— 该 step "

@@ -232,11 +232,13 @@ async def test_alias_credential_chain_end_to_end(
 
 
 # ─── 三态接入 kind(P1.0/W2-W4)──────────────────────────────────
-async def test_kind_default_plate_and_external_bypasses_catalog(
+async def test_kind_default_plate_and_external_requires_base_service(
         client, fresh_db, plate):
-    """plate 态缺省、目录强约束不变;external 态跳过目录派生(别名
-    即服务本体 base_service=alias_name);非法 kind 422(Literal)。"""
-    plate.services = [{"name": "fin-service"}]
+    """plate 态缺省、目录强约束不变;external 态(b2-8/归一 v1.0 §1.6)
+    不派生 —— 必须显式 base_service 且指向 kind=integration 的服务;
+    非法 kind 422(Literal)。"""
+    plate.services = [{"name": "fin-service"},
+                      {"name": "pay-service", "kind": "integration"}]
     admin = await _admin(client)
 
     # 缺省 kind='plate':目录内派生照旧 + 出参带 kind
@@ -246,13 +248,17 @@ async def test_kind_default_plate_and_external_bypasses_catalog(
     assert r.json()["kind"] == "plate"
     assert r.json()["baseService"] == "fin-service"
 
-    # external:目录外服务可登记(强约束只约束 plate 态)
+    # external:不派生 —— 缺 base_service 422;显式指向 integration 服务 201
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "pay-service", "baseUrl": "https://pay.third.local",
+        "aliasName": "pay-gw", "baseUrl": "https://pay.third.local",
         "kind": "external"})
+    assert r.status_code == 422, r.text
+    r = await client.post("/api/service-aliases", headers=admin, json={
+        "aliasName": "pay-gw", "baseUrl": "https://pay.third.local",
+        "kind": "external", "baseService": "pay-service"})
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "external"
-    assert r.json()["baseService"] == "pay-service"   # 别名即服务本体
+    assert r.json()["baseService"] == "pay-service"
 
     # 非法 kind → 422
     r = await client.post("/api/service-aliases", headers=admin, json={
@@ -263,7 +269,7 @@ async def test_kind_default_plate_and_external_bypasses_catalog(
     r = await client.get("/api/service-aliases", headers=admin)
     kinds = {i["aliasName"]: i["kind"] for i in r.json()["items"]}
     assert kinds["fin-service-uat"] == "plate"
-    assert kinds["pay-service"] == "external"
+    assert kinds["pay-gw"] == "external"
 
 
 async def test_classify_services_three_buckets(fresh_db, plate):

@@ -106,6 +106,20 @@ async def update_environment(
     if body.description is not None:
         env.description = body.description
     if body.lines is not None:
+        # b2-8(归一 v1.0 §3.3):integration 系统无版本,环境不得为其声明
+        # 版本线(kind 预检;plate 不可达时跳过 —— 与保存端
+        # validate_meta_plate_refs 的「不可达跳过」口径一致)。
+        from ..services import plate_client
+
+        try:
+            for sysname in (body.lines or {}):
+                if await plate_client.get_system_kind(sysname) == "integration":
+                    raise HTTPException(
+                        422, f"integration_system_no_lines: {sysname} 是 "
+                        "kind=integration 的系统(第三方不发版),环境不能"
+                        "为其声明版本线")
+        except plate_client.PlateUnavailableError:
+            pass  # 不可达跳过(环境是配置面;执行期门仍在)
         env.lines = body.lines
     await db.commit()
     await db.refresh(env)

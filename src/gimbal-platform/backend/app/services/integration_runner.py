@@ -35,6 +35,7 @@ from ..models.integration_task import IntegrationTask
 from ..models.user import User
 from .cron_expr import next_fire
 from .run_materialize import materialize_run_copy, referenced_services
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 from .scenario_store import definition_from_payload, steps_from_payload
 
 # 与 gimbal/protocols/result.py 同口径(评审 E1:state_vars 不收敏感键)
@@ -116,25 +117,12 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
         method = str((call or {}).get("method") or "").upper()
         endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
         query_safe = False
-        if not method and endpoint and endpoint.startswith("ext:"):
-            # Y5:外部目录锚点 —— method/query_safe 出平台目录
-            # (plate 零感知);条目已删/查不到按不安全处理(fail-closed)
-            alias, _, name = endpoint[4:].partition(".")
-            from sqlalchemy import select as _sel
-            from ..models.external_endpoint import ExternalEndpoint
-            async with db_module.SessionLocal() as _db:
-                row = (await _db.execute(_sel(
-                    ExternalEndpoint.method, ExternalEndpoint.query_safe).where(
-                    ExternalEndpoint.alias_name == alias,
-                    ExternalEndpoint.name == name))).one_or_none()
-            if row is not None:
-                method = str(row[0] or "").upper()
-                query_safe = bool(row[1])
-            else:
-                method = "未知方法(目录无此条目)"
+        # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支删除 —— 存量 ext: 步骤
+        # 必带内联 method,落入下方 plate 分支取不到定义即 fail-closed
+        # (过渡期行为见 §3.5;ext: 整体退役在批3/C12)。
         if not method and endpoint:
             ref = meta_plate.get(endpoint.split(".")[0])
-            if ref and ref != "working":
+            if ref_category(ref) == PIN:  # b2-3:读取按类别
                 item = await plate_client.get_endpoint_full_at(endpoint, ref)
             else:
                 item = (await plate_client.get_endpoint_full(endpoint)).item

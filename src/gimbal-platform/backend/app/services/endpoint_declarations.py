@@ -37,6 +37,7 @@
   空 frozenset。只有**拿不到**声明面才 ``None``。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 import time
 from datetime import datetime, timezone
@@ -207,7 +208,7 @@ async def declared_paths_of(
     → 既有 working 缓存路径(编排浏览/未声明系统的过渡形态)。执行路径
     一律传执行副本 ``meta.plate`` 写明的修订。
     """
-    if ref and ref != "working":
+    if ref_category(ref) == PIN:  # b2-3:读取按类别(PIN→修订快照)
         decls = await declarations_of_at(endpoint_id, ref)
         if decls is None:
             return None

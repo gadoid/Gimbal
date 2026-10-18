@@ -824,7 +824,7 @@ async def _check_env_consistency(
     for env in envs:
         for system, line in (env.lines or {}).items():
             declared = meta_plate.get(system)
-            if declared and declared != "working":
+            if ref_category(declared) == PIN:  # b2-3:线一致告警仅对钉定
                 declared_line = declared.split("#")[0]
                 if declared_line != line:
                     warnings.append(
@@ -1267,7 +1267,25 @@ async def _fanout_graph(
         # 修订],baseline 判定输入同口径;m2_hash 取 /convert 附带身份,
         # 随台账一次写)。台账性质:判定/写库失败不阻断执行。
         _g_pins = {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
-                   if v and v != "working"}
+                   if v and record_category(v) in (PIN, INTEGRATION)}  # b2-3:追溯台账
+        # b2-4(归一 v1.0 §1.5):图执行链不经 resolve,INTEGRATION 会记成
+        # 裸值丢标识 —— 对其补调 resolve 取 integration@<标识>,结果只进
+        # _g_pins(台账),不动执行副本 meta_plate。失败不阻断(台账性质,
+        # 与下方 baseline 同口径)。
+        try:
+            _g_integ = [k for k, v in _g_pins.items()
+                        if ref_category(v) == INTEGRATION]
+            if _g_integ:
+                _g_res = await plate_client.resolve(
+                    {k: _g_pins[k] for k in _g_integ}, {})
+                for k in _g_integ:
+                    _eff = (_g_res.get(k) or {}).get("effective", "")
+                    if _eff:
+                        _g_pins[k] = _eff
+        except Exception:  # noqa: BLE001
+            logger.opt(exception=True).warning(
+                "run_dispatcher: graph integration 标识补取失败 (execution={})",
+                execution_id)
         _g_baseline = None
         try:
             from . import run_semantics
@@ -1645,17 +1663,22 @@ async def _fanout(
             svc = call.get('service') if isinstance(call, dict) else None
             if isinstance(svc, str) and svc:
                 unanchored_services.append(svc)
-    if meta_plate and any(v and v != 'working' for v in meta_plate.values()):
+    if meta_plate and any(  # b2-3/b2-4:追溯类 = PIN ∪ INTEGRATION
+            record_category(v) in (PIN, INTEGRATION)
+            for v in meta_plate.values()):
         try:
             resolve_result = await plate_client.resolve(
                 meta_plate,
                 {sys_: sorted(ids) for sys_, ids in endpoints_used.items()})
             for sys_, info in resolve_result.items():
                 eff = info.get('effective', '')
-                if eff and eff != 'working':
+                if eff and record_category(eff) in (PIN, INTEGRATION):  # b2-4:记录值含 integration@
                     plate_pins[sys_] = eff
-                    # 写入执行副本（/convert 按原值取修订）
-                    if sys_ in meta_plate:
+                    # b2-4(归一 v1.0 §1.5):回写分流 —— PIN 写执行副本
+                    # (/convert 按原值取修订);INTEGRATION 只写 pins,
+                    # 执行副本保持声明值 integration(integration@<标识>
+                    # 是记录值,写副本则 /convert 声明域 422,整条执行失败)。
+                    if sys_ in meta_plate and record_category(eff) == PIN:
                         meta_plate[sys_] = eff
         except plate_client.PlateRejectedError as exc:
             # ⑥(2026-10-13):plate 的 4xx 是对**声明**的裁决(修订不存在/
@@ -2966,6 +2989,7 @@ async def _create_execution(
 
 # ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
 # 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 from .scenario_store import get_row, steps_from_payload, definition_from_payload
 from .scenario_store import _meta_from_row  # noqa: PLC2701 台账快照列(M2)
 from .data_set_store import get_row as get_dataset_row

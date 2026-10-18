@@ -71,7 +71,42 @@
       <!-- 左侧:系统树 (按过滤结果显示) -->
       <aside class="system-tree">
         <div class="tree-header">系统树 · {{ filtered.length }} 个</div>
-        <div v-for="sys in systemsInFiltered" :key="sys" class="tree-system">
+        <!-- b2-10c(归一 v1.0 §1.7/D-F):被测 / 第三方两组 -->
+        <div v-if="sutSystems.length" class="tree-group-label">被测接口</div>
+        <div v-for="sys in sutSystems" :key="sys" class="tree-system">
+          <div
+            class="tree-node tree-system-node"
+            :class="{ active: filterSystem === sys }"
+            @click="selectSystem(sys)"
+          >
+            <span :class="`sys-dot s-${sys}`">●</span>
+            <span class="sys-name">{{ systemLabel(sys) }}</span>
+            <span class="muted">[{{ endpointsForFilteredSystem(sys).length }}]</span>
+          </div>
+          <div v-if="isSystemOpen(sys) || filterSystem === sys" class="tree-services">
+            <div v-for="svc in servicesForFilteredSystem(sys)" :key="`svc-${svc}`">
+              <div class="tree-node tree-service-node"
+                   :class="{ active: filterService === svc }"
+                   @click="selectService(sys, svc)">
+                <span class="caret" :class="{ open: isServiceOpen(sys, svc) || filterService === svc }">▸</span>
+                <span>{{ svc }}</span>
+              </div>
+              <div v-if="isServiceOpen(sys, svc) || filterService === svc" class="tree-endpoints">
+                <div v-for="ep in endpointsForFilteredService(sys, svc)" :key="`ep-${ep.id}`"
+                     class="tree-node tree-endpoint-node"
+                     :class="{ active: selectedId === ep.id }"
+                     @click="selectEndpoint(ep)">
+                  <span class="ep-name">{{ ep.name }}</span>
+                </div>
+                <div v-if="!endpointsForFilteredService(sys, svc).length" class="tree-empty">
+                  （无接口）
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="integrationSystems.length" class="tree-group-label integration">第三方集成 · 实时定义</div>
+        <div v-for="sys in integrationSystems" :key="sys" class="tree-system">
           <div
             class="tree-node tree-system-node"
             :class="{ active: filterSystem === sys }"
@@ -340,6 +375,14 @@ const hasActiveFilter = computed(() =>
 )
 
 // 树使用 filtered 数据 (真正过滤!)
+// b2-10c:系统树两组(D-F)—— sut / integration(系统 kind = 其端点 kind 共同值)
+const systemKind = (sys: string): string => {
+  const eps = filtered.value.filter((e: any) => e.system === sys)
+  return eps.some((e: any) => e.kind === 'integration') ? 'integration' : 'sut'
+}
+const sutSystems = computed(() => systemsInFiltered.value.filter(s => systemKind(s) === 'sut'))
+const integrationSystems = computed(() => systemsInFiltered.value.filter(s => systemKind(s) === 'integration'))
+
 const systemsInFiltered = computed(() => {
   const present = new Set(filtered.value.map(e => e.system))
   return SYS_ORDER.filter(s => present.has(s))
@@ -509,6 +552,7 @@ async function refetch() {
       path: e.path ?? '',
       protocol: e.protocol ?? 'http',
       shape_hash: e.shape_hash ?? '',
+      kind: e.kind ?? 'sut',  // b2-10c:目录行带 kind(plate 端点行透传)
     }))
     // 默认展开第一个 system + 它所有的 services (避免用户多点 6 次)
     if (systemsInFiltered.value.length > 0 && openSystems.value.length === 0) {

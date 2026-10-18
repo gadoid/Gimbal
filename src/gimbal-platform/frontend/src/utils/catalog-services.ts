@@ -78,6 +78,7 @@ export interface CatalogServiceRow {
   name: string
   system: string
   endpointCount: number
+  kind?: string  // b2-10c(归一 v1.0):plate 端点行带出;缺省按 sut
 }
 
 export function loadCatalogServiceRows(): Promise<CatalogServiceRow[]> {

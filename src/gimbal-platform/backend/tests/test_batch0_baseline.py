@@ -40,8 +40,8 @@ async def test_b1_ext_inline_get_passes():
 
 async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe(client):
     """反转依据①的实证钉:目录条目 query_safe=True **救不了**带内联 POST 的
-    ext: 步骤 —— 内联 method 优先,目录 query_safe 读不到(现状)。
-    预期变更点 b2-11:ext: DB 分支删除后目录更不被读。"""
+    ext: 步骤。基线翻转:b2-11 —— ext: DB 分支已删,目录彻底不被读
+    (行为等价:内联 method 优先 → POST 未标即拒)。"""
     from app.core import db as db_module
     from app.models.external_endpoint import ExternalEndpoint
     from app.models.service_alias import ServiceAlias
@@ -57,6 +57,14 @@ async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe(clien
     ok, offenders = await is_scenario_read_only(
         _gate_scenario("ext:jira-x.search", "POST"))
     assert not ok and offenders, "内联 POST 必拒,目录 query_safe 不生效"
+
+
+async def test_b1_ext_without_inline_method_fails_closed(client):
+    """基线翻转(新增,b2-11 过渡期行为 §3.5):无内联 method 的 ext: 步骤
+    落入 plate 分支取不到定义 → fail-closed(未知方法)。"""
+    ok, offenders = await is_scenario_read_only(
+        _gate_scenario("ext:jira-x.search", None))
+    assert not ok and offenders
 
 
 async def test_b1_plate_unreachable_propagates(monkeypatch):
@@ -141,18 +149,21 @@ async def test_b4_baseline_buckets(monkeypatch):
     assert ev["external_services"] == ["jira-x"] and ev["unknown_services"] == ["stub"]
 
 
-async def test_b4_non_revision_pin_raises_in_review_lookup(monkeypatch):
-    """现状:非 ``#`` 的钉定值(未来的 ``integration``)走到 review_lookup 即
-    抛未捕获异常 —— 预期变更点 b2-6(assess_baseline 短路 external 桶)。"""
-    from app.services.plate_client import PlateRejectedError
+async def test_b4_integration_short_circuits_to_external_bucket(monkeypatch):
+    """基线翻转:b2-6 —— integration 在按修订查评审前短路归 external 桶
+    (此前是未捕获的 PlateRejectedError invalid_ref;review_lookup 不被触达)。"""
+    called = []
 
     async def rejecting(sys_, ref):
-        raise PlateRejectedError(
-            code="invalid_ref", message=f"已验证修订须为 <line>#<n>,得到 {ref!r}")
-    with pytest.raises(PlateRejectedError):
-        await run_semantics.assess_baseline(
-            db=None, meta_plate={"fin": "integration"}, endpoints_used={"fin": ["fin.a.a"]},
-            unanchored_services=[], review_lookup=rejecting)
+        called.append((sys_, ref))
+        raise AssertionError("integration 不应触达 review_lookup")
+
+    ok, block, ev = await run_semantics.assess_baseline(
+        db=None, meta_plate={"fin": "integration"}, endpoints_used={"fin": ["fin.a.a"]},
+        unanchored_services=[], review_lookup=rejecting)
+    assert (ok, block) == (False, "external")
+    assert ev.get("integration_systems") == ["fin"]
+    assert called == []
 
 
 # ── B7|适配 from=working 现状(不预期变更;integration 跳过在 b2-3) ─────
@@ -276,36 +287,29 @@ async def test_b10_plate_list_endpoints_reads_global_list(monkeypatch):
 # ── B11|/api/catalog/services 行形状(预期变更点 b1-3 + b2-7) ─────────
 
 
-async def test_b11_catalog_row_shape_no_kind(monkeypatch):
-    """现状:聚合源 = plate /api/endpoint(per_page=500 被忽略);行只有
-    name/system/endpointCount,**无 kind**(b1-3 加 kind、b2-7 收敛访问件)。"""
+async def test_b11_catalog_row_shape_carries_kind(monkeypatch):
+    """基线翻转:b1-3+b2-7 —— 聚合经 plate_client 唯一访问件(/api/endpoint
+    全量行),行带 kind(由端点行带出);三视图共享同一缓存缝隙。"""
     from app.routers import catalog
     from app.services import plate_client
 
     items = [
-        {"id": "fin.a.a", "service": "fin-service", "system": "fin"},
-        {"id": "fin.a.b", "service": "fin-service", "system": "fin"},
-        {"id": "platform.b.x", "service": "platform-service", "system": "platform"},
+        {"id": "fin.a.a", "service": "fin-service", "system": "fin", "kind": "sut"},
+        {"id": "fin.a.b", "service": "fin-service", "system": "fin", "kind": "sut"},
+        {"id": "jira.x.q", "service": "jira-service", "system": "jira",
+         "kind": "integration"},
     ]
-    captured: dict = {}
 
-    class FakeResp:
-        status_code = 200
+    async def fake_rows(**kw):
+        return items
 
-        def json(self):
-            return {"data": {"items": items}}
-
-    class FakeClient:
-        async def get(self, url, **kw):
-            captured.update(url=url, params=kw.get("params"))
-            return FakeResp()
-
-    monkeypatch.setattr(plate_client, "get_client", lambda: FakeClient())
-    catalog.reset_catalog_cache_for_tests()
+    monkeypatch.setattr(plate_client, "_catalog_endpoints", fake_rows)
     out = await catalog._fetch_and_aggregate()
-    assert captured["url"] == "/api/endpoint"
     assert [s.model_dump() for s in out.services] == [
-        {"name": "fin-service", "system": "fin", "endpointCount": 2},
-        {"name": "platform-service", "system": "platform", "endpointCount": 1},
-    ], "现行行形状无 kind —— b1-3/b2-7 落地时同提交翻转"
-    catalog.reset_catalog_cache_for_tests()
+        {"name": "fin-service", "system": "fin", "endpointCount": 2, "kind": "sut"},
+        {"name": "jira-service", "system": "jira", "endpointCount": 1,
+         "kind": "integration"},
+    ], "聚合行带 kind —— b1-3/b2-7 落地后口径"
+    # 扁平名视图:带 kind(sut 子集由派生点取)
+    entries = await plate_client.catalog_service_entries()
+    assert {"name": "jira-service", "kind": "integration"} in entries

@@ -7,6 +7,7 @@ All public methods take an ``AsyncSession`` (or use the default from
 concurrent requests see consistent reads/writes.
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 from datetime import datetime, timedelta
 
@@ -774,7 +775,7 @@ async def _bump_verified_to_effective(db, row: ComposerScenario) -> None:
             eid = str(st["endpoint"])
             system = eid.split(".")[0]
             ref = meta_plate.get(system)
-            if ref and ref != "working" and system not in resolvable:
+            if ref_category(ref) == PIN and system not in resolvable:  # b2-3:钉定收集仅 PIN(integration 不改写落库)
                 resolvable[system] = ref
             endpoints.setdefault(system, []).append(eid)
     resolvable = {s: r for s, r in resolvable.items() if endpoints.get(s)}

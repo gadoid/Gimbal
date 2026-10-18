@@ -25,6 +25,7 @@ class CatalogServiceRow(BaseModel):
     name: str
     system: str
     endpointCount: int
+    kind: str = "sut"  # b2-7:由端点行带出(归一 v1.0 §3.1/§3.4)
 
 
 class CatalogEndpointRef(BaseModel):
@@ -41,18 +42,18 @@ class CatalogServicesOut(BaseModel):
 
 
 async def _fetch_and_aggregate() -> CatalogServicesOut:
-    """plate /api/endpoint 全量 → service×system 聚合行 + endpoint 引用。"""
-    try:
-        resp = await plate_client.get_client().get(
-            "/api/endpoint", params={"per_page": 500})
-        if resp.status_code != 200:
-            return CatalogServicesOut(services=[], endpoints=[], plateReachable=False)
-        items = (resp.json().get("data") or {}).get("items")
-    except Exception:
-        # plate 不可达 = 确定性空集,不上抛(增强链路绝不阻塞读方)
-        return CatalogServicesOut(services=[], endpoints=[], plateReachable=False)
-    if not isinstance(items, list):
-        return CatalogServicesOut(services=[], endpoints=[], plateReachable=False)
+    """b2-7(归一 v1.0 §3.3):经 plate_client 唯一访问件取聚合行(带 kind)。"""
+    rows = await plate_client.catalog_service_rows()
+    if not rows:
+        return CatalogServicesOut(services=[], endpoints=[],
+                                  plateReachable=False)
+    services = [CatalogServiceRow(**r) for r in rows]
+    endpoint_refs = []
+    for it in await plate_client.plate_endpoints_light():
+        if it.get("id") and it.get("service"):
+            endpoint_refs.append(CatalogEndpointRef(
+                id=str(it["id"]), service=str(it["service"])))
+    return CatalogServicesOut(services=services, endpoints=endpoint_refs)
 
     by_service: dict[str, CatalogServiceRow] = {}
     endpoint_refs: list[CatalogEndpointRef] = []

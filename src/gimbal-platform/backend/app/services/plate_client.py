@@ -37,6 +37,9 @@ from typing import Any
 
 import httpx
 
+from .run_semantics import (  # b2-5:reason 映射唯一出口(分类器)
+    INTEGRATION, INVALID, PIN, WORKING, invalid_reason, ref_category,
+)
 from ..core.config import settings
 from ..core.timeutil import utcnow as _utcnow
 from .query_view_cache import TtlLruCache
@@ -533,6 +536,118 @@ def _reset_revision_cache_for_test() -> None:
     _revision_cache.clear()
 
 
+# ── plate 目录唯一访问件(归一方案 v1.0 §3.3/b2-7) ─────────────────
+# 三视图(聚合行 / 扁平名 / 轻端点)共享一次取数与缓存;原三处独立
+# 访问件(routers/catalog.py、service_names.py、adaptation_service.
+# _plate_list_endpoints)改为调用这里。全量返回、行带 kind —— 过滤只
+# 发生在消费方(不得过滤面,§3.4)。
+_catalog_cache: dict = {"at": 0.0, "endpoints": None}
+_CATALOG_TTL_SEC = 30.0
+
+
+def reset_catalog_cache_for_tests() -> None:
+    _catalog_cache["at"] = 0.0
+    _catalog_cache["endpoints"] = None
+
+
+async def _catalog_endpoints(*, refresh: bool = False) -> list[dict]:
+    """GET /api/endpoint 全量行(带 kind);不可达/异常 → 空表(增强链路
+    降级语义沿 catalog.py 先例;降级结果不进缓存)。"""
+    import time
+
+    now = time.monotonic()
+    if (not refresh and _catalog_cache["endpoints"] is not None and
+            now - float(_catalog_cache["at"]) < _CATALOG_TTL_SEC):
+        return _catalog_cache["endpoints"]  # type: ignore[return-value]
+    client = get_client()
+    try:
+        resp = await client.get("/api/endpoint")
+        if resp.status_code != 200:
+            return []
+        items = (resp.json().get("data") or {}).get("items")
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return []
+    rows = [it for it in items if isinstance(it, dict)]         if isinstance(items, list) else []
+    _catalog_cache["endpoints"] = rows
+    _catalog_cache["at"] = now
+    return rows
+
+
+async def catalog_service_rows() -> list[dict]:
+    """聚合行视图:service×system 聚合 + endpointCount,**行带 kind**
+    (由端点行带出;全量不过滤)。"""
+    by: dict[tuple[str, str], dict] = {}
+    for it in await _catalog_endpoints():
+        service = str(it.get("service") or "")
+        system = str(it.get("system") or "")
+        if not service or not system:
+            continue
+        row = by.get((service, system))
+        if row is None:
+            by[(service, system)] = {
+                "name": service, "system": system, "endpointCount": 1,
+                "kind": str(it.get("kind") or "sut")}
+        else:
+            row["endpointCount"] += 1
+    return sorted(by.values(), key=lambda r: r["name"])
+
+
+async def catalog_service_entries(*, refresh: bool = False) -> list[dict]:
+    """扁平名视图:``[{name, kind}]``(sut 派生点在调用处取 sut 子集;
+    过滤不得下沉 —— 台账条目)。校验路径(别名创建/patch)传
+    ``refresh=True`` 绕缓存 —— down/kind 新鲜度优先于取数成本。"""
+    return [{"name": str(it.get("service") or ""),
+             "kind": str(it.get("kind") or "sut")}
+            for it in await _catalog_endpoints(refresh=refresh)
+            if it.get("service")]
+
+
+async def plate_endpoints_light() -> list[dict]:
+    """轻端点视图:plate /api/endpoint 原始行(看板/carry 消费)。
+
+    **保留旧失败语义**(原 adaptation_service._plate_list_endpoints):
+    不可达/非 200/坏信封 → PlateUnavailableError 上抛 —— carry 的 502
+    与 drift 的 reachable 旗标依赖它;聚合/扁平视图才走降级空表。
+    """
+    client = get_client()
+    try:
+        resp = await client.get("/api/endpoint")
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(
+            f"plate_unavailable: {type(e).__name__}: {e}") from e
+    if resp.status_code != 200:
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}: {resp.text[:200]}")
+    items = (resp.json().get("data") or {}).get("items")
+    if not isinstance(items, list):
+        raise PlateUnavailableError("plate_unavailable: no items in response")
+    return [it for it in items if isinstance(it, dict)]
+
+
+async def get_system_kind(system_id: str, *, timeout: float = 10.0) -> str | None:
+    """GET /api/system/{id} → SystemView.kind(归一方案 v1.0 §1.4)。
+
+    保存端 ``validate_meta_plate_refs`` 对 ``integration`` 声明的 kind
+    预检数据源(规则口径以 plate 为准,平台只预检与映射)。系统不存在
+    返回 None;plate 不可达照常抛 PlateUnavailableError(调用方按保存端
+    「不可达跳过」口径处理)。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(f"/api/system/{system_id}", timeout=timeout)
+    except httpx.HTTPError as e:
+        raise PlateUnavailableError(
+            f"plate_unavailable: {type(e).__name__}: {e}") from e
+    if resp.status_code == 404:
+        return None
+    if resp.status_code != 200:
+        raise PlateRejectedError(
+            code=resp.json().get("error", {}).get("code", "plate_error"),
+            message=resp.text[:200])
+    item = (resp.json().get("data") or {}).get("item") or {}
+    return item.get("kind")
+
+
 async def list_lines(system_id: str, *, timeout: float = 15.0) -> list[dict]:
     """GET /api/system/{id}/lines（版本线列表，2.4）。
 
@@ -773,17 +888,35 @@ async def validate_meta_plate_refs(meta_plate: dict[str, str]) -> None:
     Raises:
         ValueError: ``meta_plate_invalid_ref`` 带具体系统与原因。
     """
+    # b2-5(归一方案 v1.0 §1.4/D-K):分类器先裁,reason 映射文案 ——
+    # 本体不做前缀/形状字面判断(record-value 检测唯一实现在分类器,
+    # 门禁③拦散写)。
+    _REASON_MSG = {
+        "record_value": "是执行记录值,声明只能写 integration",
+        "missing_revision": "缺修订号(须 <line>#<n> / working / integration)",
+        "malformed": "形状非法",
+    }
     for sysname, ref in (meta_plate or {}).items():
-        if not ref or ref == "working":
+        if not ref:
             continue
-        if "#" not in ref:
+        cat = ref_category(ref)
+        if cat == WORKING:
+            continue
+        if cat == INTEGRATION:
+            # kind 预检:双向绑定(与 plate 声明闸同口径,平台只预检映射)
+            kind = await get_system_kind(sysname)
+            if kind != "integration":
+                raise ValueError(
+                    f"meta_plate_invalid_ref: {sysname}={ref!r} 仅可用于 "
+                    f"kind=integration 的系统(实为 {kind or '未登记'});"
+                    "sut 系统请声明 <line>#<n> 或 working")
+            continue
+        if cat == INVALID:
             raise ValueError(
-                f"meta_plate_invalid_ref: {sysname}={ref!r} 缺修订号"
-                "(须 <line>#<n> 或 working)")
+                f"meta_plate_invalid_ref: {sysname}={ref!r} "
+                f"{_REASON_MSG[invalid_reason(ref)]}")
+        # PIN:线存在 + 修订号范围(存量口径不变)
         line, _, num = ref.rpartition("#")
-        if not line or not num.isdigit():
-            raise ValueError(
-                f"meta_plate_invalid_ref: {sysname}={ref!r} 形状非法")
         items = await list_lines(sysname)
         info = next((x for x in items if x.get("line") == line), None)
         if info is None:

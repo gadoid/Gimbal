@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 STEPS=("${@:-}")
 if [ ${#STEPS[@]} -eq 0 ] || [ -z "${STEPS[0]}" ]; then
-  STEPS=(gimbal backend frontend bootstrap)
+  STEPS=(gimbal backend frontend bootstrap extgates)
 fi
 
 declare -a LABELS=()
@@ -56,6 +56,9 @@ for step in "${STEPS[@]}"; do
       ;;
     bootstrap)
       run_step "bootstrap pytest" bash -c "cd '$ROOT/src/gimbal-bootstrap' && python -m pytest tests/ -q --ignore=tests/test_contract_reconcile_live.py"
+      ;;
+    extgates)
+      run_step "ext-unify grep gates ②③" bash "$ROOT/scripts/ext_gates.sh"
       ;;
     *)
       echo "未知步骤: $step(合法: gimbal backend frontend bootstrap)" >&2

@@ -16,6 +16,7 @@ precheck = 纯读析出分析(阻塞项/映射建议/认证引用);land = 一次
 * P2 config.users 清空(明文凭证不落库)。
 """
 from __future__ import annotations
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
 
 import json
 import re
@@ -243,7 +244,7 @@ async def _available_revisions(meta_plate: dict) -> dict:
     """声明修订缺失时的可选集(提示是增强:任何查询失败降级跳过)。"""
     out: dict[str, list[str]] = {}
     for system, ref in meta_plate.items():
-        if not isinstance(ref, str) or ref == "working":
+        if not isinstance(ref, str) or ref_category(ref) != PIN:  # b2-3:可用修订仅对钉定
             continue
         line = ref.split("#")[0]
         try:
@@ -311,7 +312,7 @@ async def precheck(db, *, definition: dict, user) -> dict:
         raise ImportRejected("plate_unavailable", 502, e.message) from e
 
     out["workingDeclarations"] = sorted(
-        s for s, ref in meta_plate.items() if ref == "working")
+        s for s, ref in meta_plate.items() if ref_category(ref) == WORKING)  # b2-3:预览声明
 
     # 重锚定(2026-10-15 #323):可执行形态的无锚点步骤回填 endpoint。
     # 之后的析出分析(services/authRefs)与 land 落库同源 —— 都在锚定

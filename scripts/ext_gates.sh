@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# ext_gates.sh — 归一方案 v1.0 §6.3 门禁 ②③(b2-13 加入 verify_all;
+# ① ext 目录残留门禁随批3 加入)。命中即非零退出。
+# ② ref 字面比较零残留(基线 19 处,批2 后应为 0;只放行 run_semantics.py)
+# ③ 新保留字零散写(等值比较 + integration@ 前缀;后端只放行分类器,
+#    前端只放行 types/plate.ts 的常量与记录域判定函数)
+set -u
+cd "$(dirname "$0")/.."
+rc=0
+
+hits=$(grep -rnE "(ref|v|eff|declared)\s*[!=]=\s*['\"]working['\"]" \
+  src/gimbal-platform/backend/app | grep -v "services/run_semantics.py" || true)
+if [ -n "$hits" ]; then
+  echo "[gate②] ref 字面比较残留:"; echo "$hits"; rc=1
+fi
+
+hits=$(grep -rnE "(ref|v|eff|declared|plateRef)\s*[!=]==?\s*['\"]integration['\"]|starts[wW]ith\(['\"]integration@" \
+  src/gimbal-platform/backend/app src/gimbal-platform/frontend/src \
+  | grep -vE "services/run_semantics.py|types/plate.ts|__tests__" || true)
+if [ -n "$hits" ]; then
+  echo "[gate③] 新保留字散写残留:"; echo "$hits"; rc=1
+fi
+
+exit $rc
