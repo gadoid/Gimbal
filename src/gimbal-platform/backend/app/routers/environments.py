@@ -118,8 +118,9 @@ async def update_environment(
                         422, f"integration_system_no_lines: {sysname} 是 "
                         "kind=integration 的系统(第三方不发版),环境不能"
                         "为其声明版本线")
-        except plate_client.PlateUnavailableError:
-            pass  # 不可达跳过(环境是配置面;执行期门仍在)
+        except (plate_client.PlateUnavailableError,
+                plate_client.PlateRejectedError):
+            pass  # plate 异常跳过(环境是配置面;执行期门仍在)
         env.lines = body.lines
     await db.commit()
     await db.refresh(env)

@@ -28,20 +28,28 @@ def test_bare_declaration_returns_null_no_guess():
 
 
 async def test_catalog_service_names_fetches_plate():
+    """b2-7(基线翻转):catalog_service_names 改经 plate_client 唯一访问件
+    (取数缝隙 /api/endpoint,行带 kind);返回集合面不变。"""
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/service"
+        assert request.url.path == "/api/endpoint"
         return httpx.Response(200, json={
-            "ok": True, "dim": "service",
-            "data": {"items": [{"name": "fin-service"},
-                               {"name": "track-trace-service"}],
-                     "total": 2},
+            "ok": True, "dim": "endpoint",
+            "data": {"items": [
+                {"id": "fin.a.a", "service": "fin-service", "system": "fin",
+                 "kind": "sut"},
+                {"id": "track.a.b", "service": "track-trace-service",
+                 "system": "track", "kind": "sut"},
+            ], "total": 2},
         })
 
     plate_client.set_client_for_tests(httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="http://plate-test"))
+    plate_client.reset_catalog_cache_for_tests()
     try:
         names = await service_names.catalog_service_names()
     finally:
+        plate_client.reset_catalog_cache_for_tests()
         plate_client.set_client_for_tests(None)
     assert names == {"fin-service", "track-trace-service"}
 

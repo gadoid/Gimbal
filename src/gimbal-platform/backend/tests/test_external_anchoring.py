@@ -26,10 +26,15 @@ SCHEMA = {"type": "object", "required": ["title"], "properties": {
 
 
 async def _seed(client, admin) -> None:
-    r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": ALIAS, "kind": "external",
-        "baseUrl": "https://git.example.com"})
-    assert r.status_code in (200, 201), r.text
+    # b2-8 起 external 创建需显式 base_service;本文件随 ext 锚点在批3
+    # 退役(C6/C10)—— 种子改直插绕过校验
+    from app.core import db as db_module
+    from app.models.service_alias import ServiceAlias
+
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name=ALIAS, base_service=ALIAS,
+                           base_url="https://git.example.com", kind="external"))
+        await s.commit()
     r = await client.post("/api/external-endpoints", headers=admin, json={
         "aliasName": ALIAS, "name": "mr-create", "title": "建 MR",
         "method": "POST", "path": "/projects/{id}/merge_requests",

@@ -22,9 +22,12 @@ async def test_catalog_services_aggregates_and_caches(client, plate):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["plateReachable"] is True
+    # b2-7(基线翻转,与 B11 同口径):聚合行带 kind(缺省 sut)
     assert body["services"] == [
-        {"name": "fin-service", "system": "fin", "endpointCount": 2},
-        {"name": "wms-service", "system": "wms", "endpointCount": 1},
+        {"name": "fin-service", "system": "fin", "endpointCount": 2,
+         "kind": "sut"},
+        {"name": "wms-service", "system": "wms", "endpointCount": 1,
+         "kind": "sut"},
     ]
     got = {e["id"]: e["service"] for e in body["endpoints"]}
     assert got["fin.order.add"] == "fin-service"
