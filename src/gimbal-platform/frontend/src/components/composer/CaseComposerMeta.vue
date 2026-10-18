@@ -112,13 +112,19 @@
             <span class="plate-sys">{{ systemLabel(sys) }}</span>
             <select
               class="meta-select plate-select"
-              :value="local.plate?.[sys] ?? 'working'"
+              :value="local.plate?.[sys] ?? (isIntegrationSystem(sys) ? 'integration' : 'working')"
               @change="setPlateRef(sys, ($event.target as HTMLSelectElement).value)"
             >
-              <option value="working">working · 预览（不计入入库标准）</option>
-              <option v-for="ln in plateLines[sys] ?? []" :key="ln.latest" :value="ln.latest">
-                {{ ln.line }} · 最新 {{ ln.latest }}（{{ ln.revisions }} 个修订）
-              </option>
+              <!-- b2-10c(归一 v1.0 §1.7):integration 系统固定单项 -->
+              <template v-if="isIntegrationSystem(sys)">
+                <option value="integration">integration · 第三方实时定义</option>
+              </template>
+              <template v-else>
+                <option value="working">working · 预览（不计入入库标准）</option>
+                <option v-for="ln in plateLines[sys] ?? []" :key="ln.latest" :value="ln.latest">
+                  {{ ln.line }} · 最新 {{ ln.latest }}（{{ ln.revisions }} 个修订）
+                </option>
+              </template>
             </select>
           </div>
           <span class="hint">精确修订执行才可入库；改版本线跳转到变更适配处理</span>
@@ -193,6 +199,13 @@ function addSystem() {
 onMounted(async () => {
   try {
     plateSystems.value = await fetchPlateSystems()
+    // b2-10c:integration 系统识别(SystemView.kind;失败降级 = 全按 sut)
+    try {
+      const rows = await (await import('@/utils/catalog-services'))
+        .loadCatalogServiceRows()
+      systemKinds.value = Object.fromEntries(
+        rows.map(r => [r.system, r.kind ?? 'sut']))
+    } catch { systemKinds.value = {} }
   } catch (e) {
     // 静默降级:选项为空,下拉 allow-create 手输不受影响
     console.warn('[CaseComposerMeta] plate 系统列表加载失败:', e)
@@ -216,11 +229,21 @@ watch(() => props.modelValue, (v) => {
 // 存出 plate:null,保存被 C1 闸 422 拒(界面显示 ≠ 存储值)。现在的
 // 不变式:显示什么存什么;用户选了修订即覆盖,移除系统不清声明
 // (后端闸按 meta.system 逐系统校验,残留键无害)。
+// b2-10c(归一 v1.0 §1.7):系统加入时默认声明按 kind —— integration
+// 系统写 'integration'(D-F:选单分组选中即正确声明),sut 维持 working。
+const systemKinds = ref<Record<string, string>>({})
+
+function isIntegrationSystem(sys: string): boolean {
+  return systemKinds.value[sys] === 'integration'
+}
+
 watch(() => local.system, (systems) => {
   if (!systems?.length) return
   if (!local.plate) local.plate = {}
   for (const sys of systems) {
-    if (local.plate[sys] === undefined) local.plate[sys] = 'working'
+    if (local.plate[sys] === undefined) {
+      local.plate[sys] = isIntegrationSystem(sys) ? 'integration' : 'working'
+    }
   }
 }, { immediate: true, deep: true })
 

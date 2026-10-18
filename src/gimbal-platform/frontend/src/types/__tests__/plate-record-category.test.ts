@@ -5,11 +5,13 @@
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { plateRecordCategory } from '@/types/plate'
 
-const fixturePath = fileURLToPath(
-  new URL('../__fixtures__/ref-record-domain.json', import.meta.url))
+// vitest(jsdom)下 import.meta.url 非 file 协议 —— 用 cwd 相对定位
+// (vitest 运行目录 = frontend/)
+const fixturePath = resolve(
+  process.cwd(), 'src/types/__fixtures__/ref-record-domain.json')
 
 interface Case { value: string; category: string }
 const cases: Case[] = JSON.parse(readFileSync(fixturePath, 'utf-8')).cases
