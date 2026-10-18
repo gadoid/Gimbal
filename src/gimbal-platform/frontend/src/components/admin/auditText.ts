@@ -18,7 +18,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'adaptation.batch.rollback': '回滚适配批次',
   'alias.write': '别名变更',
   // I4(集成线 v2 §3.2):外部目录只读标记 admin 写
-  'external_endpoint.query_safe': '只读标记变更',
+  'external_endpoint.query_safe': '只读标记变更(已退役:b3/C4 外部接口登记下线,历史审计只读)',
   'share.admin_revoke': '管理员撤销分享',
   'suite.admin_unpublish': '下架公共套件',
   // 词表外存量动作:suites fork 落审计但未登记进 AUDIT_ACTIONS
@@ -35,7 +35,7 @@ const RESOURCE_TYPE_LABELS: Record<string, string> = {
   announcement: '公告',
   carry: 'carry 配置',
   alias: '别名',
-  external_endpoint: '外部接口',
+  external_endpoint: '外部接口(已退役)',
   scenario: '场景',
   suite: '套件',
   adaptation_op: '适配单',
