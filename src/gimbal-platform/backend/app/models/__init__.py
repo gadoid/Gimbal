@@ -17,7 +17,6 @@ from .adaptation_op import AdaptationOp
 from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .board_card import BoardCard
 from .environment import Environment
-from .external_endpoint import ExternalEndpoint
 from .service_alias import ServiceAlias
 # ⑤(2026-10-13)补注册:此前未进 __init__ —— 空库 baseline 的
 # create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落下
@@ -48,7 +47,6 @@ __all__ = [
     "CarryGlobalDefault",
     "CarryServiceBinding",
     "BoardCard",
-    "Environment", "ExternalEndpoint", "ServiceAlias",
     "IntegrationTask",
     "AuditLog",
     "Notification",

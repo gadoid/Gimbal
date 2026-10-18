@@ -559,49 +559,28 @@ async def test_non_auth_failure_keeps_running(client):
 # ── Y5:只读闸 ext: 锚点分支 ──────────────────────────────────────
 
 async def test_read_only_gate_ext_anchor(client):
-    """ext: 锚点步骤 method 出外部目录:GET 放行;POST 拒;条目缺
-    fail-closed;ext 步骤带存储 method 的直接用(手写调用同款)。"""
-    from app.core import db as db_module
-    from app.models.external_endpoint import ExternalEndpoint
-    from app.models.service_alias import ServiceAlias
+    """b3-5(C10)改写:ext: 锚点已退役 —— 过渡期口径(归一 v1.0 §3.5):
+    目录不再被读;无内联 method 一律 fail-closed;带内联 method 按方法
+    判定(GET 放行/POST 拒)。与 test_batch0_baseline B1 同口径。"""
     from app.services.integration_runner import is_scenario_read_only
 
-    await register_and_login(client, "gate_admin", "pw123456")
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="gitlab-g", base_service="gitlab",
-                           base_url="https://git", kind="external"))
-        # PG 强制 external_endpoints.alias_name 外键 —— 别名先落库
-        await s.flush()
-        s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-list",
-                               title="MR", method="GET", path="/mr"))
-        s.add(ExternalEndpoint(alias_name="gitlab-g", name="mr-create",
-                               title="建MR", method="POST",
-                               path="/mr", request_schema=None))
-        await s.commit()
-
-    def _payload(ep: str | None) -> dict:
+    def _payload(ep: str | None, method: str | None = None) -> dict:
         step = {"kind": "step",
                 "call": {"protocol": "http", "service": "gitlab-g",
-                         "headers": {}},
-                "request": {"kind": "request", "body": {}}, "strategy": []}
+                         "headers": {}}}
+        if method:
+            step["call"]["method"] = method
         if ep:
             step["endpoint"] = ep
         return {"definition": {"meta": {"name": "n"}, "steps": [step]}}
 
-    # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支已删 —— 过渡期口径(§3.5):
-    # 目录不再被读;无内联 method 的 ext: 一律 fail-closed;
-    # 带内联 method 按方法判定(GET 放行/POST 拒)。
     ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list"))
     assert not ok and offenders, "无内联 method → fail-closed"
 
-    p = _payload("ext:gitlab-g.mr-list")
-    p["definition"]["steps"][0]["call"]["method"] = "GET"
-    ok, _ = await is_scenario_read_only(p)
+    ok, _ = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list", "GET"))
     assert ok
 
-    p = _payload("ext:gitlab-g.mr-create")
-    p["definition"]["steps"][0]["call"]["method"] = "POST"
-    ok, offenders = await is_scenario_read_only(p)
+    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-create", "POST"))
     assert not ok and "POST" in offenders[0]
 
 

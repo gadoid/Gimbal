@@ -112,3 +112,9 @@
 
 - 此后退场某功能时:删除代码(含注释),并在本表追加一行 + 详情小节(日期 / 原语义 / 现语义 / 存量处置 / 提交)。
 - 代码注释一律现在时描述当前行为;历史性对照(「原为 / 已移除 / 已退场」)只写在本文档。
+
+## 2026-10-19 外部接口登记目录(ext: 锚点体系)
+
+- **对象**:`external_endpoints` 表(alembic 0029 drop)、`services/external_endpoints.py`、登记路由与前端登记面、只读闸 `ext:` DB 分支、`_strip_ext_anchors` 等 `ext:` 特例(归一方案 v1.0 C1-C12)。
+- **继任**:plate `kind=integration` 系统 + plate 锚点 + `meta.plate=<系统>: integration`(执行与判定同源)。
+- **依据**:`claude/external-definition-unification-design.md` v1.0;迁移记录见 `claude/batch0-inventory-2026-10-18.md` 与批3 提交。

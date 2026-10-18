@@ -84,17 +84,15 @@ def test_empty_db_pg_face():
             assert current == head, f"{current} != {head}"
             names = set(x for x in inspect(conn).get_table_names())
         for required in ("users", "composer_scenarios", "executions",
-                         "integration_tasks", "external_endpoints"):
+                 "service_aliases"):
             assert required in names, f"缺表 {required}"
         # ⑤ 核心回归面:JSON 列必须是 jsonb(不是 json)—— 唯一例外 =
-        # external_endpoints.request_schema(2-4:顺序敏感列,JSONB 会按
         # 键长/字节序重排打乱表单字段序,x-order 盖章 + 列留 json 兜底)
         with engine.connect() as conn:
             rows = conn.exec_driver_sql(
                 "select table_name, column_name from information_schema.columns "
                 "where table_schema = %s and data_type = 'json'",
                 (schema,)).fetchall()
-        rows = [r for r in rows if r != ("external_endpoints", "request_schema")]
         assert rows == [], f"仍是 json 的列: {rows[:6]}"
         # 整体评审 2026-10-15 #10:执行面序列必须是 bigint —— compare_metadata
         # 不比对序列类型,列改 bigint 而序列仍 int4 时号段照样在 21 亿耗尽

@@ -117,6 +117,9 @@ flowchart LR
 
 ## 详细设计
 
+> **取代注记(2026-10-19,W3)**:§详细设计 1(外部系统进 plate)已由归一方案 v1.0 落地(kind=integration,不发版);G6 决策保留,目录路线段作废。
+
+
 ### 1. plate：集成系统定义（G6）
 
 - 每个被集成系统一个目录：`systems/gitlab/`、`systems/jenkins/`、`systems/jira/`、`systems/confluence/`、`systems/metersphere/`，结构与 `systems/fin/` 相同：`system.md` + `endpoints/*.md`。

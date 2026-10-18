@@ -3138,7 +3138,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
   })
 })
 
-// ─── W11 三态徽标(钉修订/当前规格/外部·无版本/未接入)─────────────
+// ─── W11 三态徽标(钉修订/当前规格/外部别名·legacy(ext: 已退役)/未接入)─────────────
 describe('CaseComposerCanvas — 步骤三态徽标', () => {
   it('锚定步骤:meta.plate 有值 → 钉修订 <ref>;无/working → 当前规格', () => {
     const { w } = mountCanvas({
@@ -3157,7 +3157,7 @@ describe('CaseComposerCanvas — 步骤三态徽标', () => {
     w.unmount()
   })
 
-  it('无锚步骤:external → 外部·无版本;unknown → 未接入;plate/无键 → 不出', () => {
+  it('无锚步骤:external → 外部别名·legacy(ext: 已退役);unknown → 未接入;plate/无键 → 不出', () => {
     const bare = (service: string) => mkStep({
       endpoint: undefined as unknown as string,
       call: { kind: 'call', protocol: 'http', service, method: 'GET',
@@ -3173,7 +3173,7 @@ describe('CaseComposerCanvas — 步骤三态徽标', () => {
     const badges = w.findAll('.ver-badge')
     expect(badges).toHaveLength(2)                    // plate 键不出徽标
     expect(badges[0]!.classes()).toContain('v-external')
-    expect(badges[0]!.text()).toBe('外部·无版本')
+    expect(badges[0]!.text()).toBe('外部别名·legacy(ext: 已退役)')
     expect(badges[1]!.classes()).toContain('v-unknown')
     expect(badges[1]!.text()).toBe('未接入')
     w.unmount()

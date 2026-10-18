@@ -13,7 +13,7 @@ _ENDPOINTS_DIRS = sorted(SYSTEMS_ROOT.glob("*/endpoints"))
 
 
 def test_endpoints_dirs_exist() -> None:
-    assert {d.parent.name for d in _ENDPOINTS_DIRS} == {"fin", "platform"}
+    assert {d.parent.name for d in _ENDPOINTS_DIRS} == {"fin", "jira", "platform"}
 
 
 def test_each_endpoint_file_exports_one_endpointspec() -> None:
@@ -28,8 +28,8 @@ def test_each_endpoint_file_exports_one_endpointspec() -> None:
             models = blocks[0].models()
             assert len(models) == 1 and isinstance(models[0], EndpointSpec)
             count += 1
-    # 149 → 198(141f2b1c 自举端点注册批 +49 platform,2026-10-12 补钉)
-    assert count == 198
+    # 149 → 198(141f2b1c 自举端点注册批 +49 platform)→ 200(b3-7:+jira 2)
+    assert count == 200
 
 
 def test_endpoint_filename_matches_id() -> None:

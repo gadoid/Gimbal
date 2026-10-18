@@ -156,9 +156,15 @@ class TestListKindRows:
         assert svcs and all(r.get("kind") == "integration" for r in svcs)
         assert sysr and sysr[0]["kind"] == "integration"
 
-    def test_real_systems_default_sut(self, http_client):
-        rows = http_client.get("/api/service").json()["data"]["items"]
-        assert rows and all(r["kind"] == "sut" for r in rows)
+    def test_real_systems_kind_by_system(self, http_client):
+        """b3-7 后真源含 jira(integration):sut 缺省仍成立,jira 例外。
+        (/api/service 行不带 system 维度 —— 用端点行分组。)"""
+        rows = http_client.get("/api/endpoint").json()["data"]["items"]
+        by_sys: dict[str, set] = {}
+        for r in rows:
+            by_sys.setdefault(r["system"], set()).add(r["kind"])
+        assert by_sys.get("jira") == {"integration"}, by_sys
+        assert all(v == {"sut"} for k, v in by_sys.items() if k != "jira"), by_sys
 
 
 # ── plate check 四规则(正反例) ───────────────────────────────────

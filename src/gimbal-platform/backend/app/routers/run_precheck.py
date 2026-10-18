@@ -157,38 +157,9 @@ async def _precheck_one(
 
 
 async def _external_schema_warnings(
-    db: AsyncSession, raw_payload: dict,
+        db: AsyncSession, raw_payload: dict,
 ) -> list[str]:
-    """ext: 锚点步骤 body vs 目录 JSON Schema → 告警清单。
-
-    未锚定的 external 步骤(无 schema 面)与目录中已删的条目不出告警
-    (登记是增强不是权威;条目被删只意味着回到自由编辑)。
+    """b3-1(归一 v1.0 C6):ext: schema 告警退役 —— 恒空清单。
+    保留空壳以兼容调用点签名,随 C12 调用点清除。
     """
-    from ..models.external_endpoint import ExternalEndpoint
-    from ..services.external_endpoints import check_body_against_schema
-
-    warns: list[str] = []
-    rows: dict[str, ExternalEndpoint] = {}
-    for i, st in enumerate(definition_from_payload(raw_payload).get("steps") or []):
-        if not isinstance(st, dict):
-            continue
-        ep = str(st.get("endpoint") or "")
-        if not ep.startswith("ext:"):
-            continue
-        rest = ep[4:]
-        alias, _, name = rest.partition(".")
-        key = f"{alias}.{name}"
-        if key not in rows:
-            rows[key] = (await db.execute(
-                select(ExternalEndpoint).where(
-                    ExternalEndpoint.alias_name == alias,
-                    ExternalEndpoint.name == name,
-                ))).scalar_one_or_none()
-        row = rows[key]
-        if row is None or not row.request_schema:
-            continue
-        body = (st.get("request") or {}).get("body") if isinstance(
-            st.get("request"), dict) else None
-        for w in check_body_against_schema(body, row.request_schema):
-            warns.append(f"步骤 {i}({ep}):{w}")
-    return warns
+    return []

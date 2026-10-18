@@ -70,7 +70,9 @@ async def test_valid_ref_and_working_pass(client, plate_mock: PlateMock):
     r = await client.post("/api/scenarios", headers=h, json=make_draft(
         "sc-c2-ext", steps=_steps("ext:pay.list"),
         plate=False))
-    assert r.status_code == 201, r.text
+    # b3-4(C12):ext: 豁免已删 —— 纯 ext: 锚点按未声明系统 422
+    assert r.status_code == 422, r.text
+    assert "ext:pay" in r.text
 
 
 async def test_put_unchanged_declaration_skips_ref_check(

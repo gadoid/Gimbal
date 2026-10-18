@@ -68,7 +68,7 @@ async def enforce_meta_plate(definition: dict,
                              prev_meta_plate: dict | None = None) -> None:
     """版本声明闸(⑥下沉,2026-10-13;create/update/导入/适配提交共用)。
 
-    * 锚定系统(endpoint 首段,``ext:`` 外部锚点豁免)必须声明 —— 未声明
+    * 锚定系统(endpoint 首段)必须声明 —— 未声明
       = 绕开 plate 按陈旧存储 binding 执行的过渡形态(C-2),唯一写入口
       收口后由本闸关闭;
     * 声明引用须有效(线/修订存在;working 豁免);
@@ -87,7 +87,7 @@ async def enforce_meta_plate(definition: dict,
     meta_plate = meta_plate if isinstance(meta_plate, dict) else {}
     anchored = {
         s for s in run_semantics.anchored_systems({"definition": definition})
-        if not s.startswith("ext:")}
+       }
     undeclared = sorted(s for s in anchored if not meta_plate.get(s))
     if undeclared:
         raise ValueError(

@@ -160,7 +160,8 @@ class TestEndpointCompositionHolds:
     """V3 核心原则:系统差异由组合表达,允许 EndpointSpec 容纳 body model。"""
 
     def test_all_fin_endpoints_carry_system_and_service(self) -> None:
-        expected = {"fin": {"fin-service"}, "platform": {"platform-service"}}
+        expected = {"fin": {"fin-service"}, "platform": {"platform-service"},
+                     "jira": {"jira"}}  # b3-7:jira(integration)入真源
         for endpoint in ALL_ENDPOINTS:
             assert endpoint.system in expected, endpoint.id
             assert endpoint.service in expected[endpoint.system]

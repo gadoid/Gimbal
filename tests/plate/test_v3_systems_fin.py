@@ -39,4 +39,4 @@ class TestQueryViews:
 
     def test_endpoint_count_total(self):
         # 149 → 198(141f2b1c 自举端点注册批 +49 platform,2026-10-12 补钉)
-        assert len(ALL_ENDPOINTS) == 198
+        assert len(ALL_ENDPOINTS) == 200  # b3-7:+jira 2 端点

@@ -38,25 +38,15 @@ async def test_b1_ext_inline_get_passes():
     assert ok and offenders == []
 
 
-async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe(client):
-    """反转依据①的实证钉:目录条目 query_safe=True **救不了**带内联 POST 的
-    ext: 步骤。基线翻转:b2-11 —— ext: DB 分支已删,目录彻底不被读
-    (行为等价:内联 method 优先 → POST 未标即拒)。"""
-    from app.core import db as db_module
-    from app.models.external_endpoint import ExternalEndpoint
-    from app.models.service_alias import ServiceAlias
-
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="jira-x", base_service="jira",
-                           base_url="https://jira", kind="external"))
-        await s.flush()
-        s.add(ExternalEndpoint(alias_name="jira-x", name="search",
-                               title="搜索", method="POST", path="/search",
-                               query_safe=True))
-        await s.commit()
+async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe():
+    """反转依据①的实证钉(b3-5 收窄:目录表已退役):带内联 POST 的
+    ext: 步骤必拒 —— 目录 query_safe 从未/不再救它;GET 放行。"""
     ok, offenders = await is_scenario_read_only(
         _gate_scenario("ext:jira-x.search", "POST"))
-    assert not ok and offenders, "内联 POST 必拒,目录 query_safe 不生效"
+    assert not ok and offenders
+    ok, _ = await is_scenario_read_only(
+        _gate_scenario("ext:jira-x.search", "GET"))
+    assert ok
 
 
 async def test_b1_ext_without_inline_method_fails_closed(client):
