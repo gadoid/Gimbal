@@ -60,7 +60,7 @@
                     <span v-if="stepMethod(s)" class="method-badge" :class="`m-${stepMethod(s).toLowerCase()}`">{{ stepMethod(s) }}</span>
                     <span v-if="stepService(s)" class="svc-tag">{{ stepService(s) }}</span>
                     <!-- W11 三态徽标:该步的版本态(锚定=钉修订/当前规格;
-                         无锚=外部·无版本/未接入;见 stepVersionBadge) -->
+                         无锚=外部别名·legacy(ext: 已退役)/未接入;见 stepVersionBadge) -->
                     <span v-if="stepVersionBadge(s)" class="ver-badge" :class="stepVersionBadge(s)!.cls">{{ stepVersionBadge(s)!.text }}</span>
                     <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
                          与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
@@ -668,7 +668,7 @@ function _syncFs(): void {
 /** W11 三态徽标(与 W5/W7 判定链同口径):
  *  锚定步骤(有 endpoint)→ 系统受管:meta.plate[sys] 有值 = 「钉修订
  *  <ref>」;无/working = 「当前规格」(预览执行,不计入库标准)。
- *  无锚步骤 → 按 call.service 三态:external = 「外部·无版本」(独立
+ *  无锚步骤 → 按 call.service 三态:external = 「外部别名·legacy(ext: 已退役)」(独立
  *  分桶,不计入库分母);unknown = 「未接入」(保存另有告警);plate
  *  (受管服务裸用)/无调用 → 不出徽标。 */
 function stepVersionBadge(step: StepView): { cls: string; text: string } | null {
@@ -685,7 +685,7 @@ function stepVersionBadge(step: StepView): { cls: string; text: string } | null 
   const svc = stepService(step)
   if (!svc) return null
   const kind = props.serviceKinds?.[svc]
-  if (kind === 'external') return { cls: 'v-external', text: '外部·无版本' }
+  if (kind === 'external') return { cls: 'v-external', text: '外部别名·legacy(ext: 已退役)' }
   if (kind === 'unknown') return { cls: 'v-unknown', text: '未接入' }
   return null
 }

@@ -1398,7 +1398,6 @@ def action_scenario_convert(
             str(st.get("endpoint")).split(".")[0]
             for st in (raw_scenario.get("steps") or [])
             if isinstance(st, dict) and st.get("endpoint")
-            and not str(st.get("endpoint")).startswith("ext:")
         }
         anchored.discard("")
         declared = meta_plate or {}
