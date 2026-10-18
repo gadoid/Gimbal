@@ -120,7 +120,9 @@ async def carry_drift(db) -> dict:
         bound = bound_by_service.get(svc, set())
         # 键归一:别名键(不在目录)→ 对 base 的面做 diff;只出 orphaned
         if reachable and svc not in face_by_service:
-            base = service_names.derive_base(svc, plate_services)
+            # b2.5(D-M 第三处):drift 孤儿 diff 也走别名表优先 —— external
+            # 别名键(不守命名规约)在此归一;目录兜底在 helper 内。
+            base = await service_names.resolve_base_with_aliases(db, svc)
             if base and base != svc:
                 face = face_by_service.get(base, set())
                 out.append({"service": svc, "baseService": base,

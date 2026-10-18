@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import ServiceAdmin from '@/views/ServiceAdmin.vue'
 import * as api from '@/api/service-aliases'
@@ -118,7 +119,7 @@ it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);�
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null, kind: 'plate',
+    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null, kind: 'plate', baseService: null,
   })
   expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
@@ -155,7 +156,7 @@ it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀�
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null, kind: 'plate',
+    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null, kind: 'plate', baseService: null,
   })
   // 编辑态:槽显该别名所属服务,输入框只读展示后缀
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
@@ -177,4 +178,60 @@ it('删除走确认对话框;取消不动', async () => {
   await w.find('[data-testid="alias-del-fin-service-uat"]').trigger('click')
   await flushPromises()
   expect(del).toHaveBeenCalledWith('fin-service-uat')
+})
+
+// ── b2.5(归一 v1.0 §3.4/§1.6):kind 分区 + external base_service 下拉 ──
+describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    vi.spyOn(api, 'listAllAliases').mockResolvedValue(aliases)
+    vi.spyOn(authApi, 'listAll').mockResolvedValue([])
+    vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([])
+    vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
+      { service: 'fin-service', system: 'fin', kind: 'sut', id: 'fin.a.a' },
+      { service: 'fin-report-service', system: 'fin', kind: 'sut', id: 'fin.a.b' },
+      { service: 'wms-service', system: 'wms', kind: 'sut', id: 'wms.a.a' },
+      { service: 'jira', system: 'jira', kind: 'integration', id: 'jira.a.list' },
+      { service: 'jira', system: 'jira', kind: 'integration', id: 'jira.a.issue_get' },
+    ])
+  })
+
+  it('左栏分「被测服务/第三方集成」两区,integration 服务在第三方区', async () => {
+    const w = await mountPage()
+    await flushPromises()
+    expect(w.find('[data-testid="svc-kind-sut"]').text()).toContain('被测服务')
+    expect(w.find('[data-testid="svc-kind-integration"]').text())
+      .toContain('第三方集成')
+    expect(w.find('[data-testid="svc-tree-jira"]').exists()).toBe(true)
+    expect(w.find('[data-testid="svc-tree-fin-service"]').exists()).toBe(true)
+  })
+
+  it('external 别名:显式 base_service 下拉(只列 integration 服务),登记透传', async () => {
+    const create = vi.spyOn(api, 'createAlias').mockResolvedValue({} as never)
+    const w = await mountPage()
+    await flushPromises()
+    expect(w.find('[data-testid="alias-baseservice-trigger"]').exists())
+      .toBe(false)  // plate 态不出现
+    const vm = w.vm as unknown as {
+      draft: { kind: string; baseService: string; aliasName: string; baseUrl: string }
+    }
+    vm.draft.kind = 'external'
+    await nextTick()
+    const trigger = w.find('[data-testid="alias-baseservice-trigger"]')
+    expect(trigger.exists()).toBe(true)
+    // 选项集:SelectContent 经 portal 渲染,jsdom 下不自 DOM ——
+    // 以组件计算属性断言(与下拉同源 integrationServices)
+    const admin = w.vm as unknown as { integrationServices: string[] }
+    expect(admin.integrationServices).toEqual(['jira'])
+    vm.draft.baseService = 'jira'
+    vm.draft.aliasName = 'jira-x'
+    vm.draft.baseUrl = 'https://jira.example'
+    await nextTick()
+    await w.find('[data-testid="alias-save"]').trigger('click')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'external', baseService: 'jira',
+    }))
+  })
 })

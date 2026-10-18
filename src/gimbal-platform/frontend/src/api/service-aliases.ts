@@ -57,6 +57,8 @@ export function createAlias(input: {
   /** 三态接入(P1.0):缺省 plate(目录派生强约束);external 跳过
    * 目录校验(第三方服务,别名即服务本体) */
   kind?: 'plate' | 'external'
+  /** b2.5:external 须显式 base_service(plate kind=integration 的服务) */
+  baseService?: string | null
 }): Promise<ServiceAliasRow> {
   return http.post<ServiceAliasRow>('/service-aliases', input)
     .then(({ data }) => data)
@@ -64,7 +66,9 @@ export function createAlias(input: {
 
 export function patchAlias(
   aliasName: string,
-  input: { baseUrl?: string | null; environmentId?: number | null; credentialAlias?: string | null },
+  input: { baseUrl?: string | null; environmentId?: number | null;
+         credentialAlias?: string | null; baseService?: string | null;
+         kind?: 'plate' | 'external' | null },
 ): Promise<ServiceAliasRow> {
   return http
     .patch<ServiceAliasRow>(`/service-aliases/${encodeURIComponent(aliasName)}`, input)
