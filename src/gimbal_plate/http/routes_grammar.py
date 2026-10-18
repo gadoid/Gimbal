@@ -118,11 +118,22 @@ _READ_ERROR_HTTP = {
 }
 
 
-def _read_error(e: Any) -> PlateHTTPError:
+def _read_error(e: Any, *, decl_domain: bool = False) -> PlateHTTPError:
+    """ReleaseReadError → 结构化 HTTP 错误。
+
+    归一方案 v1.0 §1.4/D-O:``decl_domain=True`` 时 ``invalid_ref`` 用
+    422(声明域:resolve 出口);取数路由保持 ``_READ_ERROR_HTTP`` 的 400。
+    异常附带的 ``reason`` 经 ``details.reason`` 转发(一行承载,不新增
+    ErrorCode —— envelope.ErrorPayload.details 既有字段)。
+    """
     status, code = _READ_ERROR_HTTP.get(
         getattr(e, "code", ""), (400, ErrorCode.INVALID_REF))
+    if decl_domain and code == ErrorCode.INVALID_REF:
+        status = 422
+    reason = getattr(e, "reason", None)
     return PlateHTTPError(http_status=status, code=code,
-                          message=getattr(e, "message", str(e)))
+                          message=getattr(e, "message", str(e)),
+                          details={"reason": reason} if reason else None)
 
 
 def _service_of_system(reg: PlateRegistry, system: str) -> str:
@@ -1238,8 +1249,22 @@ def action_system_resolve(
     root = _artifacts_root_or_503(request)
     out: dict[str, Any] = {}
     for system, declared in meta_plate.items():
-        if declared == "working":
-            out[system] = {"effective": "working",
+        # 归一方案 v1.0 §1.5/§3.1:类别经 parse_ref 裁决。integration 必须
+        # 在 resolve_effective **之前**分流(其开头即要求 revision 类别,
+        # 不前置分流 integration 会被直接 invalid_ref 拒);
+        # integration@… 声明 → record_value 422(执行记录值不得作声明)。
+        try:
+            kind = release_read.parse_ref(str(declared))[0]
+        except release_read.ReleaseReadError as e:
+            raise _read_error(e, decl_domain=True)
+        if kind in ("working", "integration"):
+            eff = "working"
+            if kind == "integration":
+                digest = getattr(
+                    request.app.state, "integration_definitions",
+                    {}).get(system, "")
+                eff = f"integration@{digest}" if digest else "integration"
+            out[system] = {"effective": eff,
                            "available": [], "changed_endpoints": []}
             continue
         try:
@@ -1247,7 +1272,8 @@ def action_system_resolve(
                 root, system, str(declared),
                 list(endpoints.get(system) or []))
         except release_read.ReleaseReadError as e:
-            raise _read_error(e)
+            # D-O:resolve 入参是 meta.plate 声明 → 归声明域(invalid_ref 422)
+            raise _read_error(e, decl_domain=True)
     return ok_response({"item": out, "total": len(out)}, dim="system")
 
 
@@ -1418,6 +1444,7 @@ def action_scenario_convert(
                     )
     used_refs: dict[str, str] | None = None
     if meta_plate:
+        from gimbal_plate.release import read as release_read
         from gimbal_plate.release.reproject import (
             ReprojectError,
             reproject_raw,
@@ -1445,6 +1472,10 @@ def action_scenario_convert(
                 code=ErrorCode(str(e.code)),
                 message=e.message,
             ) from e
+        except release_read.ReleaseReadError as e:
+            # 归一方案 v1.0 §1.4:声明域的读取错误(如钉定修订不存在)
+            # 不再落全局 handler 变 500;状态码分域 + reason 转发。
+            raise _read_error(e, decl_domain=True) from e
     try:
         scenario = Scenario.model_validate(raw_scenario)
     except ValidationError as exc:
