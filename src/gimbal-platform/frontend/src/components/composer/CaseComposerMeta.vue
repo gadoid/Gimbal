@@ -112,15 +112,15 @@
             <span class="plate-sys">{{ systemLabel(sys) }}</span>
             <select
               class="meta-select plate-select"
-              :value="local.plate?.[sys] ?? (isIntegrationSystem(sys) ? 'integration' : 'working')"
+              :value="local.plate?.[sys] ?? (isIntegrationSystem(sys) ? PLATE_REF_INTEGRATION : PLATE_REF_WORKING)"
               @change="setPlateRef(sys, ($event.target as HTMLSelectElement).value)"
             >
               <!-- b2-10c(归一 v1.0 §1.7):integration 系统固定单项 -->
               <template v-if="isIntegrationSystem(sys)">
-                <option value="integration">integration · 第三方实时定义</option>
+                <option :value="PLATE_REF_INTEGRATION">integration · 第三方实时定义</option>
               </template>
               <template v-else>
-                <option value="working">working · 预览（不计入入库标准）</option>
+                <option :value="PLATE_REF_WORKING">working · 预览（不计入入库标准）</option>
                 <option v-for="ln in plateLines[sys] ?? []" :key="ln.latest" :value="ln.latest">
                   {{ ln.line }} · 最新 {{ ln.latest }}（{{ ln.revisions }} 个修订）
                 </option>
@@ -141,6 +141,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { fetchPlateSystems, fetchSystemLines } from '@/api/plate'
 import type { MetaView } from '@/types/plate'
+import { PLATE_REF_INTEGRATION, PLATE_REF_WORKING } from '@/types/plate'
 
 // ── RS3：版本线数据（GET /endpoint-catalog/{system}/lines）──
 interface LineInfo {
@@ -234,7 +235,7 @@ watch(() => props.modelValue, (v) => {
 const systemKinds = ref<Record<string, string>>({})
 
 function isIntegrationSystem(sys: string): boolean {
-  return systemKinds.value[sys] === 'integration'
+  return systemKinds.value[sys] === PLATE_REF_INTEGRATION
 }
 
 watch(() => local.system, (systems) => {
@@ -242,7 +243,9 @@ watch(() => local.system, (systems) => {
   if (!local.plate) local.plate = {}
   for (const sys of systems) {
     if (local.plate[sys] === undefined) {
-      local.plate[sys] = isIntegrationSystem(sys) ? 'integration' : 'working'
+      local.plate[sys] = isIntegrationSystem(sys)
+        ? PLATE_REF_INTEGRATION
+        : PLATE_REF_WORKING
     }
   }
 }, { immediate: true, deep: true })

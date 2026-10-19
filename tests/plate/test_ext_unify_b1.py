@@ -302,6 +302,45 @@ class TestResolveAndDomains:
         assert err["code"] == "invalid_ref"
         assert "kind" in err["message"] and "integration" in err["message"]
 
+    def test_binding_violation_integration_declares_working(self, tmp_path):
+        """双向绑定另一半:integration 系统声明 working → 422(无 reason)。"""
+        root = _integration_repo(tmp_path)
+        with _app_for(root) as c:
+            r = c.post("/api/scenario/action/convert",
+                       json={"consumer": "gimbal",
+                             "scenario": _scenario(
+                                 "jira.a.list", {"jira": "working"})})
+        assert r.status_code == 422, r.text
+        err = r.json()["error"]
+        assert err["code"] == "invalid_ref"
+        assert "只能声明 integration" in err["message"]
+        assert not (err.get("details") or {}).get("reason")
+
+    def test_binding_violation_integration_declares_pin(
+            self, tmp_path, monkeypatch):
+        """integration 系统声明 <line>#<n> → 422,且在构件根之前(无根也拒)。"""
+        monkeypatch.delenv("PLATE_ARTIFACTS_PATH", raising=False)
+        root = _integration_repo(tmp_path)
+        with _app_for(root) as c:
+            r = c.post("/api/scenario/action/convert",
+                       json={"consumer": "gimbal",
+                             "scenario": _scenario(
+                                 "jira.a.list", {"jira": "rel#1"})})
+        assert r.status_code == 422, r.text
+        err = r.json()["error"]
+        assert err["code"] == "invalid_ref"
+        assert "只能声明 integration" in err["message"]
+
+    def test_resolve_bare_line_422_missing_revision(self, http_client):
+        """resolve 拒裸线带 reason:与 convert 声明闸同口径(此前无 reason)。"""
+        r = http_client.post("/api/system/action/resolve",
+                             json={"meta_plate": {"fin": "1.0"},
+                                   "endpoints": {}})
+        assert r.status_code == 422, r.text
+        err = r.json()["error"]
+        assert err["code"] == "invalid_ref"
+        assert err["details"]["reason"] == "missing_revision"
+
     def test_healthz_owned_mode_defs(self, tmp_path, monkeypatch):
         root = _integration_repo(tmp_path)
         monkeypatch.setenv("PLATE_SYSTEMS_PATH", str(root))

@@ -123,8 +123,8 @@ def _now_iso() -> str:
 
 # ─── public surface ───────────────────────────────────────────────
 
-# b3-4(C12):_strip_ext_anchors 已删 —— ext: 前缀锚点不再剥离,
-# 场景原样发 plate(存量已迁移;残留 ext: 按未声明系统 422)。
+# b3-4(C12):ext: 前缀锚点剥离器(原 _strip_* 特例)已删 —— 场景原样发
+# plate(存量已迁移;残留 ext: 按未声明系统 422)。
 
 async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     """POST /api/scenario/action/convert(consumer 固定 "gimbal")。
@@ -615,6 +615,11 @@ async def get_system_kind(system_id: str, *, timeout: float = 10.0) -> str | Non
             f"plate_unavailable: {type(e).__name__}: {e}") from e
     if resp.status_code == 404:
         return None
+    if resp.status_code >= 500:
+        # 5xx = 不可达(与 resolve/list_lines 同口径):保存端按「不可达
+        # 跳过」处理,不得当 PlateRejected 拒存。
+        raise PlateUnavailableError(
+            f"plate_unavailable: status {resp.status_code}")
     if resp.status_code != 200:
         raise PlateRejectedError(
             code=resp.json().get("error", {}).get("code", "plate_error"),
@@ -875,21 +880,26 @@ async def validate_meta_plate_refs(meta_plate: dict[str, str]) -> None:
         if not ref:
             continue
         cat = ref_category(ref)
-        if cat == WORKING:
-            continue
-        if cat == INTEGRATION:
-            # kind 预检:双向绑定(与 plate 声明闸同口径,平台只预检映射)
-            kind = await get_system_kind(sysname)
-            if kind != "integration":
-                raise ValueError(
-                    f"meta_plate_invalid_ref: {sysname}={ref!r} 仅可用于 "
-                    f"kind=integration 的系统(实为 {kind or '未登记'});"
-                    "sut 系统请声明 <line>#<n> 或 working")
-            continue
         if cat == INVALID:
             raise ValueError(
                 f"meta_plate_invalid_ref: {sysname}={ref!r} "
                 f"{_REASON_MSG[invalid_reason(ref)]}")
+        if cat in (WORKING, INTEGRATION, PIN):
+            # kind 预检:双向绑定(与 plate 声明闸同口径,平台只预检映射)——
+            # sut 声明 integration 拒;integration 系统只接受 integration,
+            # working/<line>#<n> 同拒。plate 不可达由调用方按口径跳过。
+            kind = await get_system_kind(sysname)
+            if cat == INTEGRATION and kind != "integration":
+                raise ValueError(
+                    f"meta_plate_invalid_ref: {sysname}={ref!r} 仅可用于 "
+                    f"kind=integration 的系统(实为 {kind or '未登记'});"
+                    "sut 系统请声明 <line>#<n> 或 working")
+            if cat != INTEGRATION and kind == "integration":
+                raise ValueError(
+                    f"meta_plate_invalid_ref: {sysname}={ref!r} integration "
+                    "系统只能声明 integration(不接受 working / <line>#<n>)")
+        if cat != PIN:
+            continue
         # PIN:线存在 + 修订号范围(存量口径不变)
         line, _, num = ref.rpartition("#")
         items = await list_lines(sysname)

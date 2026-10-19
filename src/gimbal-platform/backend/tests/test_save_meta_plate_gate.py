@@ -75,6 +75,32 @@ async def test_valid_ref_and_working_pass(client, plate_mock: PlateMock):
     assert "ext:pay" in r.text
 
 
+async def test_integration_declaration_passes_kind_precheck(
+        client, plate_mock: PlateMock):
+    """integration 声明 + kind=integration 系统 → 预检通过(正向路径
+    此前无覆盖:PlateMock 没有 kind 桩时恒落 PlateUnavailable 跳过)。"""
+    plate_mock.system_kinds = {"jira": "integration"}
+    h = await register_and_login(client, "c2gate6", "pw123456")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-c2-jira-ok", steps=_steps("jira.a.list"),
+        plate={"jira": "integration"}, system=["jira"]))
+    assert r.status_code == 201, r.text
+
+
+async def test_integration_system_rejects_working_and_pin(
+        client, plate_mock: PlateMock):
+    """双向绑定另一半:integration 系统声明 working / <line>#<n> 均被
+    预检拒(与 plate 声明闸同口径文案)。"""
+    plate_mock.system_kinds = {"jira": "integration"}
+    h = await register_and_login(client, "c2gate7", "pw123456")
+    for i, bad in enumerate(["working", "1.0#1"]):
+        r = await client.post("/api/scenarios", headers=h, json=make_draft(
+            f"sc-c2-jira-bad{i}", steps=_steps("jira.a.list"),
+            plate={"jira": bad}, system=["jira"]))
+        assert r.status_code == 422, (bad, r.text)
+        assert "只能声明 integration" in r.json()["detail"], bad
+
+
 async def test_put_unchanged_declaration_skips_ref_check(
         client, plate_mock: PlateMock):
     """PUT 声明未变 → 跳过引用校验(防抖自动保存不放大 plate 调用):

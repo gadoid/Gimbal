@@ -21,7 +21,10 @@ from app import models  # noqa: F401  注册全部模型
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False:fileConfig 缺省 True 会把导入期
+    # 已创建的 stdlib logger 全部禁掉(应用启动内嵌跑迁移时,服务层
+    # 告警就此静默丢失)。
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

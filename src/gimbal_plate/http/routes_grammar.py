@@ -1265,6 +1265,16 @@ def action_system_resolve(
             kind = release_read.parse_ref(str(declared))[0]
         except release_read.ReleaseReadError as e:
             raise _read_error(e, decl_domain=True)
+        if kind == "line":
+            # 裸线:与 convert 声明闸同口径(422 + missing_revision),否则
+            # 落进 resolve_effective 抛不带 reason 的 invalid_ref。
+            raise PlateHTTPError(
+                http_status=422,
+                code=ErrorCode("invalid_ref"),
+                message=(f"{system}={str(declared)!r} 缺修订号"
+                         "(声明须为 <line>#<n> / working / integration)"),
+                details={"reason": "missing_revision"},
+            )
         if kind in ("working", "integration"):
             eff = "working"
             if kind == "integration":
@@ -1419,6 +1429,7 @@ def action_scenario_convert(
             ReleaseReadError as _RRE,
             parse_ref as _parse_ref,
         )
+        reg = _registry(request)
         for sys_name, raw_ref in declared.items():
             ref = str(raw_ref or "")
             try:
@@ -1438,10 +1449,9 @@ def action_scenario_convert(
                              "(声明须为 <line>#<n> / working / integration)"),
                     details={"reason": "missing_revision"},
                 )
+            _sd = reg.get_service(_service_of_system(reg, sys_name))
+            _sys_kind = _sd.kind if _sd is not None else None
             if kind == "integration":
-                _sd = _registry(request).get_service(
-                    _service_of_system(_registry(request), sys_name))
-                _sys_kind = _sd.kind if _sd is not None else None
                 if _sys_kind != "integration":
                     raise PlateHTTPError(
                         http_status=422,
@@ -1451,6 +1461,16 @@ def action_scenario_convert(
                                  f"{_sys_kind or '未登记'});"
                                  "sut 系统请声明 <line>#<n> 或 working"),
                     )
+            elif _sys_kind == "integration":
+                # 双向绑定的另一半:integration 系统只接受 integration ——
+                # sut 改 kind 后,存量 <line>#<n> 声明不得再解析到冻结构件
+                # 按旧定义静默执行;working 同拒(预览口径不适用于第三方)。
+                raise PlateHTTPError(
+                    http_status=422,
+                    code=ErrorCode("invalid_ref"),
+                    message=(f"{sys_name}={ref!r} integration 系统只能声明 "
+                             "integration(不接受 working / <line>#<n>)"),
+                )
     used_refs: dict[str, str] | None = None
     if meta_plate:
         from gimbal_plate.release import read as release_read

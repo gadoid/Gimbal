@@ -81,10 +81,12 @@ def _load_real_scenario() -> dict:
     return raw
 
 
-def _ab_batch_scenario(eids: list[str]) -> dict:
+def _ab_batch_scenario(eids: list[str], sys_kinds: dict[str, str] | None = None) -> dict:
     """AB 批场景:每端点一个合成 step(锚点 + 空 body,注入后成物化终值)。"""
-    # 锚定系统按端点首段推导(fin+platform…),逐系统给 working 声明
-    # (⑥:锚定场景必须声明;working = 按当前树,与无声明旧行为同投影)
+    # 锚定系统按端点首段推导(fin+platform…),逐系统声明:working = 按当前
+    # 树,与无声明旧行为同投影;integration 系统声明 integration(双向
+    # 绑定:integration 系统不接受 working)。
+    sys_kinds = sys_kinds or {}
     systems = sorted({eid.split(".")[0] for eid in eids if eid})
     return {
         "kind": "scenario",
@@ -94,7 +96,9 @@ def _ab_batch_scenario(eids: list[str]) -> dict:
             "description": "", "tags": [], "version": "v0.1.0",
             "requirementRef": [], "module": "ab", "priority": 1,
             "createTime": "2026-09-05T00:00:00Z", "expire": False,
-            "plate": {s: "working" for s in systems},
+            "plate": {s: ("integration" if sys_kinds.get(s) == "integration"
+                          else "working")
+                      for s in systems},
         },
         "resource": {},
         "config": {},
@@ -128,6 +132,11 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
         items = data.get("items") if isinstance(data, dict) else data
         eids = sorted(it["id"] for it in items)
         out["endpoints"] = eids
+        # 系统类别(声明形态按 kind 取值:integration 系统不得声明 working)
+        sys_kinds = {
+            it["id"]: (it.get("kind") or "sut")
+            for it in client.get("/api/system").json()["data"]["items"]
+        }
 
         # B. carry 面(每端点;/full wire → 解析链真源投影)
         faces: dict[str, dict[str, str]] = {}
@@ -144,7 +153,7 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
             for face in faces.values():
                 for path, ftype in face.items():
                     values.setdefault(path, carry_value(path, ftype))
-        batch = _ab_batch_scenario(eids)
+        batch = _ab_batch_scenario(eids, sys_kinds)
         ctx = CarryContext(
             step_fields={i: faces[eid] for i, eid in enumerate(eids)},
             service_bindings={"fin": values},

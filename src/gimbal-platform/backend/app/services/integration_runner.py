@@ -91,21 +91,18 @@ def _scrub(value, key_hint: str = "") -> None:
 
 async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
     """平台模式只读护栏 —— I4(集成线 v2 §3.1)补全 query_safe 口径,
-    与取数视图消费**同一个真源**(plate 契约元数据 / 外部目录条目):
+    与取数视图消费**同一个真源**(plate 契约元数据):
 
     一个步骤满足任一即视为只读:
     * 方法 ∈ GET / HEAD / OPTIONS;
     * plate 锚点:端点 ``metadata.query_safe = true``(钉修订场景按
       meta.plate 修订取,与 method 同路径;R-E 已核实 /full 投影带
       metadata);
-    * ``ext:`` 锚点:外部目录条目 ``query_safe = true``(同形状的
-      第二来源);
-    * 无锚点手写原始调用:只认 method,fail-closed(存了 method 的
-      ext 锚点同此口径 —— 手写即自担)。
+    * 无锚点手写原始调用:只认 method,fail-closed(存量 ``ext:`` 步骤
+      必带内联 method,同此口径 —— 手写即自担)。
 
-    契约/条目不可得即按不安全处理(fail-closed:只读闸不得因取不到
-    契约而放行)。不满足时列出判定依据「步骤 i(POST,未标
-    query_safe)」。
+    契约不可得即按不安全处理(fail-closed:只读闸不得因取不到契约而
+    放行)。不满足时列出判定依据「步骤 i(POST,未标 query_safe)」。
     """
     from . import plate_client
 

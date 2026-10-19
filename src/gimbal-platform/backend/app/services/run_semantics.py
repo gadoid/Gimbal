@@ -12,6 +12,9 @@
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 WORKING = "working"
 
@@ -208,11 +211,14 @@ async def graph_pins_with_identity(
     if not integ:
         return out
     try:
-        res = await resolver({k: out[k] for k in integ})
+        # resolver 与 plate_client.resolve 同签名(meta_plate, endpoints_used);
+        # 补取不看端点集,endpoints_used 传空 dict。
+        res = await resolver({k: out[k] for k in integ}, {})
         for k in integ:
             eff = (res.get(k) or {}).get('effective', '')
             if eff:
                 out[k] = eff
-    except Exception:  # noqa: BLE001 — 台账性质,失败保留裸值
-        pass
+    except Exception as e:  # noqa: BLE001 — 台账性质,失败保留裸值
+        logger.warning(
+            "graph integration 标识补取失败,台账保留裸值: %s", e)
     return out

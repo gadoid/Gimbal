@@ -6,6 +6,8 @@
     {"value": "integration", "category": "INTEGRATION"},
     {"value": "working", "category": "WORKING"},
     {"value": "1.0#3", "category": "PIN"},
+    {"value": "1.0", "category": "INVALID"},
+    {"value": "1.0#x", "category": "INVALID"},
     {"value": "", "category": "UNDECLARED"}
   ]
 }

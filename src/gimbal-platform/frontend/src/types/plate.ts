@@ -405,7 +405,7 @@ export const PLATE_REF_INTEGRATION = 'integration'
 
 /** 记录域分类(``plate_pins`` 值;台账比对用)。与后端 record_category 对称。 */
 export type PlateRecordCategory =
-  | 'INTEGRATION' | 'WORKING' | 'PIN' | 'UNDECLARED'
+  | 'INTEGRATION' | 'WORKING' | 'PIN' | 'UNDECLARED' | 'INVALID'
 
 export function plateRecordCategory(value: string | null | undefined): PlateRecordCategory {
   const v = (value ?? '').trim()
@@ -413,5 +413,11 @@ export function plateRecordCategory(value: string | null | undefined): PlateReco
   if (v === PLATE_REF_WORKING) return 'WORKING'
   if (v === PLATE_REF_INTEGRATION) return 'INTEGRATION'
   if (v.startsWith(PLATE_REF_INTEGRATION + '@')) return 'INTEGRATION'
-  return 'PIN'
+  // 与后端 ref_category 对称:# 后取末段,线空或修订号非数字 → INVALID
+  // (裸线/乱写不是 PIN;合法 plate_pins 不出现 INVALID,对齐仅防两侧漂移)。
+  const idx = v.lastIndexOf('#')
+  if (idx === -1) return 'INVALID'
+  const line = v.slice(0, idx)
+  const num = v.slice(idx + 1)
+  return line !== '' && /^\d+$/.test(num) ? 'PIN' : 'INVALID'
 }

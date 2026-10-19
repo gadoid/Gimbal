@@ -30,7 +30,7 @@ RECORD_FIXTURE = (REPO / "src" / "gimbal-platform" / "frontend" / "src"
 
 
 _CANON = {"WORKING": WORKING, "INTEGRATION": INTEGRATION, "PIN": PIN,
-          "UNDECLARED": UNDECLARED}
+          "UNDECLARED": UNDECLARED, "INVALID": INVALID}
 
 
 def test_declaration_domain_matches_fixture() -> None:

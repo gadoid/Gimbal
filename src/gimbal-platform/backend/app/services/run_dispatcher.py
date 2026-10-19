@@ -1271,7 +1271,7 @@ async def _fanout_graph(
         from . import run_semantics as _rs_g
         _g_pins = await _rs_g.graph_pins_with_identity(
             {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
-             if v and record_category(v) in (PIN, INTEGRATION)},
+             if v and ref_category(v) in (PIN, INTEGRATION)},
             plate_client.resolve)
         _g_baseline = None
         try:

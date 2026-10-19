@@ -446,12 +446,12 @@ grep -rnE "(ref|v|eff|declared|plateRef)\s*[!=]==?\s*['\"]integration['\"]|start
 | D-K | **声明域合法集与非法 reason(v0.9.8;承载与分流精化 v0.9.9)** | **声明域 = `working` \| `<line>#<n>` \| `integration`;非法返回 INVALID + reason(`record_value` / `missing_revision` / `malformed`)。承载:错误码沿用现有 `invalid_ref`(`envelope.py:33`),reason 放 `ErrorPayload.details.reason`(`envelope.py:46`),不新增 ErrorCode;`parse_ref` 不改返回值形状,非法继续**抛** `ReleaseReadError(invalid_ref)` 附 reason(`read.py:58-61` 现契约,调用方零改动),INVALID 枚举只在平台 `ref_category`;HTTP 状态码分域:取数域沿 `_READ_ERROR_HTTP`(`routes_grammar.py:117`)保持 400,声明域(声明闸、`/convert`)422,两侧 reason 一致。裸 `<line>` 在取数域保留(?ref 线最新);plate 声明闸对裸线声明对齐拒。**论据(v0.9.9 补强)**:裸线声明**今天在测试执行本就跑不了** —— 派发链对非 working 声明调 `resolve`,`resolve_effective` 开头即拒非 revision(`read.py:365-368`);「plate 照收」只发生在绕过 resolve 的路径,主要是集成任务(`integration_runner.py:533` 直调 `/convert`)。故 D-K 对测试执行不是新限制,只是把集成任务对齐到同一口径;R13 影响面 = 被集成任务引用的裸线场景。plate 侧 integration 的 resolve 返回须在 `resolve_effective` **之前分流**(§3.1);resolve 动作错误域已定 D-O(422)** |
 | **D-L** | **执行追溯定义标识(owner 确认 2026-10-18,原 P-5)** | **shape_hash 聚合**:系统内各端点 `shape_hash`(`dialect/canonical.py:101`)按端点 id 排序后的聚合哈希;聚合函数放既有 `dialect/canonical.py`(沿用其序列化纪律);`/healthz` 透出(沿 `m2_pool` 先例);`plate_pins` 只记内容哈希(HEAD 可同时透出作部署核对)。论证全文见 §9 v0.9.6 行(甲/乙案否决、有意不覆盖 metadata/服务对象、增删端点必翻转)与批1 稳定性断言 |
 | **D-M** | **carry 覆盖第三方(owner 确认 2026-10-18,原 P-4)** | **覆盖,别名表优先**:carry 三处基名解析先查别名表 `base_service`(external 显式值、sut 已派生值),未登记裸服务键再走全量 `derive_base`;carry_store/carry 配置面不排除 integration 端点;sut 过滤仍只在别名创建派生点;验收含「sut 场景 carry 解析与批0 基线一致」断言(R7);运行时 `derive_base` 的台账条目保留 |
-| **D-N** | **无锚点外部裸调用(owner 确认 2026-10-18,原 P-3)** | **维持合法**;批0 盘点⑤出数复核 —— 为 0 即终态;非 0 再议收紧(届时与 §3.3 重锚定同批) |
+| **D-N** | **无锚点外部裸调用(owner 确认 2026-10-18,原 P-3)** | **维持合法**;批0 盘点⑤出数复核 —— 为 0 即终态;非 0 再议收紧(届时与 §3.3 重锚定同批)。**复核裁定(owner 2026-10-19):批0 A5=11(`fin.order` ×8、`stub` ×3)全部为种子/调试场景数据,平台未上线,无收紧收益 —— 维持合法为终态,该项关闭** |
 | **D-O** | **resolve 动作错误域(owner 确认 2026-10-18,原 P-6)** | **归声明域,422**:resolve 异常出口改用声明域映射(不走 `_READ_ERROR_HTTP` 的 invalid_ref 行),带 `details.reason`;平台侧对 4xx 统一 `PlateRejectedError`,状态码变化无行为影响;批1 落地并出正反例 |
 
 ### 8.2 待 owner 确认
 
-(无 —— owner 2026-10-18 决策轮全部拍板:P-3 → D-N、P-4 → D-M、P-5 → D-L、P-6 → D-O,均取建议值。D-N 含批0 盘点⑤复核检查点:出数非 0 时重开该项。)
+(无 —— owner 2026-10-18 决策轮全部拍板:P-3 → D-N、P-4 → D-M、P-5 → D-L、P-6 → D-O,均取建议值。D-N 含批0 盘点⑤复核检查点:出数非 0 时重开该项。2026-10-19 复核:A5=11 全为种子/调试数据,owner 裁定**维持合法为终态**,D-N 关闭,详见 §8.1 D-N 行。)
 ---
 
 ## 9. 修订记录

@@ -8,9 +8,17 @@ set -u
 cd "$(dirname "$0")/.."
 rc=0
 
-# ① 平台目录与 ext: 特例零残留(b3-9 加入;允许名单:auditText「已退役」
-#    映射、runbook-pg 历史段、alembic 历史链)
-hits=$(grep -rInE "ExternalEndpoint|external_endpoint|external-endpoints|ext_svc|_strip_ext_anchors|_external_schema_warnings|starts[wW]ith\(['\"]ext:"   src docs --exclude-dir=alembic --exclude-dir=node_modules     --exclude-dir=__pycache__ --exclude-dir=.pytest_cache   | grep -vE "auditText|runbook-pg|已退役|已删|alembic|batch0-inventory|single-source-registry|ADR|adr|services/audit\.py"   | grep -v "\.dump$" || true)
+# ① 平台目录与 ext: 特例零残留(b3-9 加入)。豁免按**文件路径**锚定
+#    (b2.6/评审 F8:原按整行内容豁免,adr 会误配 address、已删/已退役
+#    会放过任意带注释行)—— 均为记录退役面的历史文档/审计映射:
+#    auditText 审计文案、audit.py 历史动作词表、runbook-pg 迁移史、
+#    docs/adr 退役日志、概念地图已退役条目;dist 是构建产物不扫。
+hits=$(grep -rInE "ExternalEndpoint|external_endpoint|external-endpoints|ext_svc|_strip_ext_anchors|_external_schema_warnings|starts[wW]ith\(['\"]ext:" \
+  src docs --exclude-dir=alembic --exclude-dir=node_modules \
+  --exclude-dir=__pycache__ --exclude-dir=.pytest_cache --exclude-dir=dist \
+  --exclude-dir="*.egg-info" \
+  | grep -vE "^src/gimbal-platform/frontend/src/components/admin/(__tests__/)?auditText(\.test)?\.ts:|^src/gimbal-platform/backend/app/services/audit\.py:|^src/gimbal-platform/docs/runbook-pg\.md:|^docs/adr/|^docs/概念地图\.md:" \
+  | grep -v "\.dump$" || true)
 if [ -n "$hits" ]; then
   echo "[gate①] ext 目录/特例残留:"; echo "$hits"; rc=1
 fi

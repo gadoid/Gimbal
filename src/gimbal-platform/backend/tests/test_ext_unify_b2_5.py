@@ -3,10 +3,14 @@
 - merge_resolve_effective:派发链回写分流(PIN 写副本/INTEGRATION 只写
   pins/working 不写)—— v1.0 风险 R5 的防线,此前无直接测试;
 - graph_pins_with_identity:图台账 integration 标识补取(只进台账、
-  resolver 失败保留裸值);
+  resolver 失败保留裸值且落 warning;真身 plate_client.resolve 直传,
+  签名漂移即测试失败);
 - environments 拒绝 integration 系统声明版本线(plate 不可达跳过)。
 """
 from __future__ import annotations
+
+import json
+import logging
 
 import httpx
 import pytest
@@ -51,30 +55,63 @@ class TestMergeResolveEffective:
 
 class TestGraphPinsWithIdentity:
     async def test_integration_backfilled(self):
-        async def resolver(meta):
+        async def resolver(meta, endpoints):
             assert meta == {"jira": "integration"}
+            assert endpoints == {}
             return {"jira": {"effective": "integration@deadbeef"}}
 
         out = await graph_pins_with_identity(
             {"fin": "1.0#2", "jira": "integration"}, resolver)
         assert out == {"fin": "1.0#2", "jira": "integration@deadbeef"}
 
-    async def test_resolver_failure_keeps_bare(self):
-        async def boom(meta):
+    async def test_resolver_failure_keeps_bare_and_logs(self, caplog):
+        async def boom(meta, endpoints):
             raise RuntimeError("plate down")
 
-        out = await graph_pins_with_identity({"jira": "integration"}, boom)
+        with caplog.at_level(logging.WARNING,
+                             logger="app.services.run_semantics"):
+            out = await graph_pins_with_identity(
+                {"jira": "integration"}, boom)
         assert out == {"jira": "integration"}, "台账性质:失败保留裸值不阻断"
+        assert any("标识补取失败" in r.message for r in caplog.records), \
+            "台账性质失败也不得无痕"
 
     async def test_no_integration_is_passthrough(self):
         calls = []
 
-        async def resolver(meta):
+        async def resolver(meta, endpoints):
             calls.append(meta)
             return {}
 
         out = await graph_pins_with_identity({"fin": "1.0#2"}, resolver)
         assert out == {"fin": "1.0#2"} and calls == []
+
+    async def test_real_resolve_signature(self, monkeypatch):
+        """真身 plate_client.resolve 直传:resolver 签名漂移会 TypeError
+        被吞成裸值台账(b2.5 回归),此用例让漂移直接测试失败。"""
+        from app.services import plate_client
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/api/system/action/resolve"
+            body = json.loads(request.content)
+            assert body["meta_plate"] == {"jira": "integration"}
+            assert body["endpoints"] == {}
+            return httpx.Response(200, json={
+                "ok": True, "dim": "system",
+                "data": {"item": {
+                    "jira": {"effective": "integration@deadbeef",
+                             "available": True, "changed_endpoints": []}}},
+            })
+
+        monkeypatch.setattr(
+            plate_client, "get_client",
+            lambda: httpx.AsyncClient(
+                transport=httpx.MockTransport(handler),
+                base_url="http://plate-resolve-mock"))
+
+        out = await graph_pins_with_identity(
+            {"fin": "1.0#2", "jira": "integration"}, plate_client.resolve)
+        assert out == {"fin": "1.0#2", "jira": "integration@deadbeef"}
 
 
 class TestEnvironmentsRejectIntegration:

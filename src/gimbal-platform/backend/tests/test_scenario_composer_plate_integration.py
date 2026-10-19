@@ -58,6 +58,8 @@ class PlateMock:
         # ({系统: [条目]});未注入的系统 → 404(= PlateRejectedError →
         # 该系统不可反查,reason=catalog_unavailable)。
         self.system_endpoints: dict[str, list[dict]] = {}
+        # 双向绑定 kind 预检面({系统: kind});未注入 → 404 = 未登记。
+        self.system_kinds: dict[str, str] = {}
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -167,6 +169,21 @@ class PlateMock:
                 return httpx.Response(200, json={
                     "ok": True, "dim": "system",
                     "data": {"items": items, "total": len(items)}})
+            # 双向绑定 kind 预检面:GET /api/system/{id} → SystemView.kind。
+            # 未注入系统 → 404(= get_system_kind None,按未登记处理)。
+            if (path.startswith("/api/system/")
+                    and path.count("/") == 3
+                    and request.method == "GET"):
+                sid = path.rstrip("/").rsplit("/", 1)[-1]
+                kind = self.system_kinds.get(sid)
+                if kind is None:
+                    return httpx.Response(404, json={"ok": False})
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "system",
+                    "data": {"item": {"id": sid, "name": sid,
+                                      "service_count": 1,
+                                      "endpoint_count": 1,
+                                      "kind": kind}}})
             # 场景导入 v2.3(W3):线内修订列表(availableRevisions 组装面)
             if ("/api/system/" in path and "/lines/" in path
                     and path.endswith("/revisions")):
