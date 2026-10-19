@@ -209,6 +209,11 @@ async def test_carry_anchored_entry_overrides_platform_carried_value(
     # ① 服务进目录:否则 derive_base 解析失败 → carry 面 fail-closed 降级,
     #    平台带不进任何值,本条就退化成上一条的场景(覆盖无从谈起)。
     plate_mock.services = [{"name": "stubsvc"}]
+    # install 后改桩须清目录缓存(同 PlateMock.install 的「换桩先清」
+    # 约定):保存链(P3.1 kind 预检)已会填充 30s TTL 目录缓存,不清则
+    # carry 读到改桩前的空目录 → 误降级。
+    from app.services import plate_client as _pc
+    _pc.reset_catalog_cache_for_tests()
     # ② 种一个与条目 value **不同**的值(999 ≠ 261),覆盖才有观察面。
     async with _db_module.SessionLocal() as db:
         await carry_store.put_bindings(db, "stubsvc", {"$.customer_id": "999"}, updated_by_id=None, updated_by_name="bob")

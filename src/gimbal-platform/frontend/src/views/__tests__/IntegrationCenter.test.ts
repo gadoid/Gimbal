@@ -257,7 +257,40 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     expect(txt).toContain('jira.local')
     await w.find('[data-testid="sub-confirm"]').trigger('click')
     await flushPromises()
-    expect(api.subscribeIntegrationTask).toHaveBeenCalledWith(3)
+    expect(api.subscribeIntegrationTask).toHaveBeenCalledWith(3, 'fp')
+    w.unmount()
+  })
+
+  it('W2 订阅 409 consent_stale:自动重拉摘要提示重新核对,二次确认才通过', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+               visibility: 'public', subscribed: false, instance: null }),
+    ])
+    vi.mocked(api.fetchSubscriptionSummary).mockResolvedValue({
+      fingerprint: 'fp-v2',
+      steps: [
+        { service: 'jira', method: 'POST', path: '/issue', endpoint: null, readonly: false },
+      ],
+      authAliases: [], baseUrls: {}, datasetName: null, cron: '*/5 * * * *',
+    })
+    const staleErr = Object.assign(new Error('stale'), {
+      response: { data: { detail: { code: 'consent_stale', message: '模板内容已变更' } } },
+    })
+    const sub = vi.mocked(api.subscribeIntegrationTask)
+      .mockRejectedValueOnce(staleErr as never)
+      .mockResolvedValueOnce(mkTask())
+    const w = await mountPage()
+    await w.find('[data-testid="ig-sub-3"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="sub-confirm"]').trigger('click')
+    await flushPromises()
+    // 409 → 不关弹窗,自动重拉摘要并提示重新核对
+    expect(api.fetchSubscriptionSummary).toHaveBeenCalledTimes(2)
+    expect(w.find('[data-testid="sub-dialog"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sub-dialog"]').text()).toContain('已刷新摘要')
+    await w.find('[data-testid="sub-confirm"]').trigger('click')
+    await flushPromises()
+    expect(sub).toHaveBeenLastCalledWith(3, 'fp-v2')
     w.unmount()
   })
 

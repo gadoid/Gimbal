@@ -48,7 +48,9 @@
           周期:{{ summary.cron }}
         </p>
       </template>
-      <p v-else-if="errText" class="sub-err">{{ errText }}</p>
+      <!-- 独立渲染(不挂 summary 的 else-if 链):409 重拉摘要后摘要与
+           「请重新核对」提示需同时可见 -->
+      <p v-if="errText" class="sub-err" data-testid="sub-err">{{ errText }}</p>
 
       <div class="sub-acts">
         <button type="button" class="sub-ghost" @click="$emit('close')">取消</button>
@@ -66,7 +68,7 @@
 import { ref, watch } from 'vue'
 import {
   fetchSubscriptionSummary, subscribeIntegrationTask, integrationErr,
-  type SubscriptionSummary,
+  integrationErrCode, type SubscriptionSummary,
 } from '@/api/integration'
 import { toast } from '@/utils/toast'
 
@@ -78,10 +80,9 @@ const loading = ref(false)
 const confirming = ref(false)
 const errText = ref('')
 
-watch(() => props.open, async (v) => {
+async function loadSummary(): Promise<void> {
   summary.value = null
   errText.value = ''
-  if (!v || !props.taskId) return
   loading.value = true
   try {
     summary.value = await fetchSubscriptionSummary(props.taskId)
@@ -90,17 +91,28 @@ watch(() => props.open, async (v) => {
   } finally {
     loading.value = false
   }
+}
+
+watch(() => props.open, (v) => {
+  if (v && props.taskId) loadSummary()
 })
 
 async function confirm(): Promise<void> {
   confirming.value = true
   try {
-    await subscribeIntegrationTask(props.taskId)
+    // P2.2:带上摘要指纹 —— 服务端确认「确认的 = 看到的」;摘要之后
+    // 内容变了会 409 consent_stale,重拉摘要让订阅者重新核对。
+    await subscribeIntegrationTask(props.taskId, summary.value?.fingerprint)
     toast.success('已订阅 — 内容已确认,按周期执行')
     emit('done')
     emit('close')
   } catch (e) {
-    errText.value = integrationErr(e)
+    if (integrationErrCode(e) === 'consent_stale') {
+      await loadSummary()   // loadSummary 会清 errText,提示放它之后
+      errText.value = '模板内容已变更,已刷新摘要 — 请重新核对后确认'
+    } else {
+      errText.value = integrationErr(e)
+    }
   } finally {
     confirming.value = false
   }

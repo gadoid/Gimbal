@@ -217,9 +217,13 @@ export async function fetchSubscriptionSummary(
 
 export async function subscribeIntegrationTask(
   id: number,
+  /** P2.2:摘要返回的 fingerprint —— 服务端与当前内容比对,
+   * 不一致 409 consent_stale(确认的必须是看到的那份内容)。 */
+  fingerprint?: string,
 ): Promise<IntegrationTaskItem> {
   const { data } = await http.post<IntegrationTaskItem>(
-    `/integration/tasks/${id}/subscribe`)
+    `/integration/tasks/${id}/subscribe`,
+    fingerprint ? { fingerprint } : undefined)
   return data
 }
 
@@ -249,4 +253,11 @@ export function integrationErr(e: unknown): string {
   const det = resp?.data as { detail?: { message?: string } | string } | undefined
   if (typeof det?.detail === 'string') return det.detail
   return det?.detail?.message || (e as Error).message
+}
+
+/** detail.code 提取(P2.2 订阅 409 consent_stale 分支处理用)。 */
+export function integrationErrCode(e: unknown): string | undefined {
+  const resp = (e as { response?: { data?: unknown } })?.response
+  const det = resp?.data as { detail?: { code?: string } | string } | undefined
+  return typeof det?.detail === 'object' ? det.detail?.code : undefined
 }

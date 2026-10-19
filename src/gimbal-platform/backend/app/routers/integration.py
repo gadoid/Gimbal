@@ -203,7 +203,11 @@ class TaskPatch(BaseModel):
 
 @router.get("/tasks")
 async def list_tasks(user: CurrentUser, db: DbSession) -> dict:
-    """可见模板:我的 + 公共(admin 全见);软删的不出。"""
+    """可见模板:我的 + 公共(admin 全见);软删的不出。
+
+    P3.2(已知欠账,暂记不修):每行算 authAliases / missingCredentials
+    要单独装载场景 + 方案并查凭证池(N+1);当前数据量小可接受,
+    行数上去后按「场景/方案批量取 + 凭证池一次查」批量化。"""
     rows = (await db.execute(
         select(IntegrationTask).where(
             IntegrationTask.template_id.is_(None),
@@ -499,18 +503,32 @@ async def subscription_summary(
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
     _subscribable(tpl, user)
+    from ..services.plate_client import PlateUnavailableError
     try:
         return await integration_runner.subscription_view(db, tpl)
     except integration_runner.IntegrationRunError as e:
         raise _bad(e.code, e.message, 404) from None
+    except PlateUnavailableError as e:
+        # P1:摘要按修订/当前定义从 plate 取 binding —— 取不到就不给
+        # 确认(fail-closed:看不出步骤读写面的摘要不能作为知情依据)
+        raise _bad("plate_unavailable",
+                   f"接口定义暂不可得,稍后再试: {e}", 502) from None
     except Exception as e:  # noqa: BLE001 — 别名查询失败 → 503(订阅面口径)
         raise _bad("alias_unavailable",
                    f"服务地址解析失败,暂不能订阅: {e}", 503) from None
 
 
+class SubscribeIn(BaseModel):
+    """P2.2:订阅回传摘要里的 fingerprint —— 确认的必须是订阅者看到
+    的那份内容;与当前计算值不一致 409,前端重拉摘要后再确认。缺省
+    兼容旧客户端(不比对)。"""
+    fingerprint: str | None = None
+
+
 @router.post("/tasks/{task_id}/subscribe")
 async def subscribe_task(
     task_id: int, user: CurrentUser, db: DbSession,
+    body: SubscribeIn | None = None,
 ) -> dict:
     """显式订阅(W0a①/P-1=b):建立/刷新持有人实例 + 记录内容指纹与
     确认时刻;对 template_changed/made_private 暂停的实例 = 重新确认
@@ -524,6 +542,20 @@ async def subscribe_task(
         if tpl.scenario_id else None
     if scen is None:
         raise _bad("scenario_not_found", "场景不存在", 404)
+    # P2.2:先按当前内容算指纹并与回传值比对(在 ensure_instance 之前
+    # —— 比对失败不留半确认的实例行)。摘要之后内容变了 → 409,让
+    # 前端重拉摘要;订阅者确认的永远是他在摘要里看到的那份内容。
+    if body is not None and body.fingerprint:
+        try:
+            current_fp = await integration_runner.consent_fingerprint_now(
+                db, tpl, scen)
+        except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503
+            raise _bad("alias_unavailable",
+                       f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+        if body.fingerprint != current_fp:
+            raise _bad(
+                "consent_stale",
+                "模板内容已变更,请重新查看执行内容摘要后确认", 409)
     inst = await integration_runner.ensure_instance(tpl, holder_id=user.id)
     if inst is None:
         raise _bad("instance_missing", "实例创建失败", 500)

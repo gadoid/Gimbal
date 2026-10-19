@@ -628,6 +628,20 @@ async def get_system_kind(system_id: str, *, timeout: float = 10.0) -> str | Non
     return item.get("kind")
 
 
+async def system_kind_cached(system_id: str) -> str | None:
+    """kind 预检的缓存路径(P3.1):先读 30s TTL 目录缓存(b2-7 唯一
+    访问件,行带 kind —— 每次保存含自动保存都过这里,不缓存则逐系统
+    一次 HTTP);目录里没有该系统(零端点系统 / 目录降级空表)再走
+    :func:`get_system_kind` 原路。降级不可达时空表不进缓存 → 回落
+    HTTP → PlateUnavailableError 照旧上抛,调用方「不可达跳过」口径
+    不变。kind 语义与 :func:`catalog_service_rows` 同源(行由端点带出)。
+    """
+    for it in await _catalog_endpoints():
+        if str(it.get("system") or "") == system_id:
+            return str(it.get("kind") or "sut")
+    return await get_system_kind(system_id)
+
+
 async def list_lines(system_id: str, *, timeout: float = 15.0) -> list[dict]:
     """GET /api/system/{id}/lines（版本线列表，2.4）。
 
@@ -888,7 +902,8 @@ async def validate_meta_plate_refs(meta_plate: dict[str, str]) -> None:
             # kind 预检:双向绑定(与 plate 声明闸同口径,平台只预检映射)——
             # sut 声明 integration 拒;integration 系统只接受 integration,
             # working/<line>#<n> 同拒。plate 不可达由调用方按口径跳过。
-            kind = await get_system_kind(sysname)
+            # P3.1:走目录缓存(保存高频路径),未命中再 HTTP。
+            kind = await system_kind_cached(sysname)
             if cat == INTEGRATION and kind != "integration":
                 raise ValueError(
                     f"meta_plate_invalid_ref: {sysname}={ref!r} 仅可用于 "

@@ -85,7 +85,7 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     expect(w.find('[data-testid="sub-dialog"]').exists()).toBe(true)
     await w.find('[data-testid="sub-confirm"]').trigger('click')
     await flushPromises()
-    expect(api.subscribeIntegrationTask).toHaveBeenCalledWith(9)
+    expect(api.subscribeIntegrationTask).toHaveBeenCalledWith(9, 'fp')
     w.unmount()
   })
 

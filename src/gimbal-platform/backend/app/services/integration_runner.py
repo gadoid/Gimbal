@@ -90,6 +90,47 @@ def _scrub(value, key_hint: str = "") -> None:
             _scrub(value[k], lk)
 
 
+async def _anchored_call_shape(
+    step: dict, meta_plate: dict,
+) -> tuple[str, str | None, bool]:
+    """单步骤调用形态 → ``(method, path, query_safe)``。
+
+    只读闸(:func:`is_scenario_read_only`)与订阅摘要
+    (:func:`subscription_view`)的**同一取数实现**:
+    * 内联 method 优先(手写原始调用 / 未声明系统的锚点步骤,存储
+      自有字段即执行面);
+    * 锚点步骤(无内联 method)按声明类别取 plate 契约:PIN 按修订
+      (:func:`plate_client.get_endpoint_full_at`),integration /
+      working / 未声明取当前定义(:func:`plate_client.get_endpoint_full`);
+      method/path 取 binding,query_safe 取端点 metadata;
+    * 契约不可得 → method「未知方法」、query_safe=False —— fail-closed,
+      只读闸不得因取不到契约而放行(P1:钉修订场景的锚点步骤在存储里
+      无 method/path,摘要必须走这条 plate 取数,否则空方法一律标「写」)。
+    """
+    from . import plate_client
+
+    call = step.get("call") if isinstance(step, dict) else None
+    call = call if isinstance(call, dict) else {}
+    method = str(call.get("method") or "").upper()
+    endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
+    if method or not endpoint:
+        return method, call.get("path"), False
+    # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支删除 —— 存量 ext: 步骤
+    # 必带内联 method,落入 plate 分支取不到定义即 fail-closed
+    # (过渡期行为见 §3.5;ext: 整体退役在批3/C12)。
+    ref = meta_plate.get(endpoint.split(".")[0])
+    if ref_category(ref) == PIN:  # b2-3:读取按类别
+        item = await plate_client.get_endpoint_full_at(endpoint, ref)
+    else:
+        item = (await plate_client.get_endpoint_full(endpoint)).item
+    binding = ((item or {}).get("binding")
+               if isinstance(item, dict) else None) or {}
+    meta = ((item or {}).get("metadata")
+            if isinstance(item, dict) else None) or {}
+    return (str(binding.get("method") or "").upper() or "未知方法",
+            binding.get("path"), bool(meta.get("query_safe")))
+
+
 async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
     """平台模式只读护栏 —— I4(集成线 v2 §3.1)补全 query_safe 口径,
     与取数视图消费**同一个真源**(plate 契约元数据):
@@ -105,31 +146,12 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
     契约不可得即按不安全处理(fail-closed:只读闸不得因取不到契约而
     放行)。不满足时列出判定依据「步骤 i(POST,未标 query_safe)」。
     """
-    from . import plate_client
-
     meta_plate = (((definition_from_payload(payload) or {}).get("meta") or {})
                   .get("plate") or {})
     offenders: list[str] = []
     for i, step in enumerate(steps_from_payload(payload)):
-        call = step.get("call") if isinstance(step, dict) else None
-        method = str((call or {}).get("method") or "").upper()
+        method, _, query_safe = await _anchored_call_shape(step, meta_plate)
         endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
-        query_safe = False
-        # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支删除 —— 存量 ext: 步骤
-        # 必带内联 method,落入下方 plate 分支取不到定义即 fail-closed
-        # (过渡期行为见 §3.5;ext: 整体退役在批3/C12)。
-        if not method and endpoint:
-            ref = meta_plate.get(endpoint.split(".")[0])
-            if ref_category(ref) == PIN:  # b2-3:读取按类别
-                item = await plate_client.get_endpoint_full_at(endpoint, ref)
-            else:
-                item = (await plate_client.get_endpoint_full(endpoint)).item
-            binding = ((item or {}).get("binding")
-                       if isinstance(item, dict) else None) or {}
-            meta = ((item or {}).get("metadata")
-                    if isinstance(item, dict) else None) or {}
-            method = str(binding.get("method") or "").upper() or "未知方法"
-            query_safe = bool(meta.get("query_safe"))
         if method and method not in _SAFE_METHODS and not query_safe:
             # 判定依据(§3.2)只给锚点步骤(可去标 query_safe);
             # 手写原始调用无锚点可标、契约不可得同理,只报方法
@@ -413,12 +435,15 @@ def consent_fingerprint_of(
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
-    投影 = 执行形态五要素:场景步骤(逐 step 去 description 展示字段)
-    + definition.config、方案(serviceBindings/dataSetSelection/
-    dataSetIds,去方案名)、数据集首行注入值、cron、别名 base_url 集合。
-    **有意不覆盖**(R3,实现勿再纠结):plate 接口定义(git 评审、
-    全员共享同一份,纳入只会全员频繁重确认)、名称/描述等展示性字段。
-    canonical JSON(sort_keys)→ sha256 hex。
+    投影 = 执行形态六要素:场景步骤(逐 step 去 description 展示字段)
+    + definition.config、**meta.plate 声明**(P2.1:主人把钉定系统从
+    1.0#2 换到 1.0#5,实际执行的 method/path/请求体随新修订变化,
+    属主动改内容,须触发重新确认 —— 与「有意不覆盖 plate 定义」不
+    冲突:那是共享定义自己变了,这是主人改声明)、方案(serviceBindings/
+    dataSetSelection/dataSetIds,去方案名)、数据集首行注入值、cron、
+    别名 base_url 集合。**有意不覆盖**(R3,实现勿再纠结):plate 接口
+    定义(git 评审、全员共享同一份,纳入只会全员频繁重确认)、名称/
+    描述等展示性字段。canonical JSON(sort_keys)→ sha256 hex。
     """
     definition = definition_from_payload(scen_payload) or {}
     steps = []
@@ -427,7 +452,8 @@ def consent_fingerprint_of(
                      if isinstance(st, dict) else st)
     projection = {
         "scenario": {"steps": steps,
-                     "config": definition.get("config") or {}},
+                     "config": definition.get("config") or {},
+                     "plate": (definition.get("meta") or {}).get("plate") or {}},
         "scheme": {k: scheme_payload.get(k) for k in (
             "serviceBindings", "dataSetSelection", "dataSetIds")},
         "dataset_row": row_dict,
@@ -498,16 +524,24 @@ async def _alias_urls_of(db, scen_payload: dict) -> dict[str, str]:
             definition_from_payload(scen_payload).get("steps") or [])))
 
 
+async def consent_fingerprint_now(
+    db, tpl: IntegrationTask, scen: ComposerScenario,
+) -> str:
+    """当前内容指纹(**只算不写**)—— 订阅摘要与 subscribe 的「确认的
+    必须是看到的那份」比对共用(P2.2)。别名查询失败向上抛(503 口径)。"""
+    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl.scheme_id, scen)
+    alias_urls = await _alias_urls_of(db, scen.payload)
+    return consent_fingerprint_of(
+        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+
+
 async def refresh_consent(
     db, tpl: IntegrationTask, scen: ComposerScenario,
     inst: IntegrationTask,
 ) -> str:
     """写入当前内容指纹与确认时刻(创建/订阅/重新确认共用)。
     别名查询失败向上抛(订阅面 503;创建面 best-effort 跳过)。"""
-    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl.scheme_id, scen)
-    alias_urls = await _alias_urls_of(db, scen.payload)
-    fp = consent_fingerprint_of(
-        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+    fp = await consent_fingerprint_now(db, tpl, scen)
     inst.consent_fingerprint = fp
     inst.consented_at = _now()
     return fp
@@ -516,7 +550,14 @@ async def refresh_consent(
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
     """订阅确认摘要(W0a③):只暴露执行所需结构信息(步骤系统·方法·
     只读标记、凭证别名、服务地址、数据集名、cron),不含场景全文与
-    数据值(私有场景可见性边界,§2.1)。"""
+    数据值(私有场景可见性边界,§2.1)。
+
+    P1:锚点步骤的 method/path 存储里被 strip_binding_fields 剥掉,
+    摘要按 :func:`_anchored_call_shape` 从 plate 取(钉修订按修订、
+    integration 取当前定义),readonly 与只读闸同口径 —— 含
+    ``query_safe``(如 jira search 是 POST 但实际只读)。契约不可得
+    显示「未知方法」且标「写」(fail-closed:看不出写不写的按写对待)。
+    """
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
         if tpl.scenario_id else None
@@ -529,15 +570,21 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
     alias_urls = await _alias_urls_of(db, scen.payload)
     fp = consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+    meta_plate = (((definition_from_payload(scen.payload) or {}).get("meta") or {})
+                  .get("plate") or {})
     steps = []
     for st in (steps_from_payload(scen.payload) or []):
-        call = (st or {}).get("call") or {}
-        method = str(call.get("method") or "")
+        st = st if isinstance(st, dict) else {}
+        call = st.get("call") or {}
+        endpoint = str(st.get("endpoint") or "")
+        method, path, query_safe = await _anchored_call_shape(st, meta_plate)
         steps.append({
-            "service": call.get("service"), "method": method,
-            "path": call.get("path"),
-            "endpoint": (st or {}).get("endpoint"),
-            "readonly": method.upper() in ("GET", "HEAD", "OPTIONS"),
+            "service": call.get("service")
+            or (endpoint.split(".")[0] if endpoint else None),
+            "method": method,
+            "path": path,
+            "endpoint": st.get("endpoint"),
+            "readonly": method in _SAFE_METHODS or query_safe,
         })
     return {"fingerprint": fp, "steps": steps, "authAliases": aliases,
             "baseUrls": alias_urls, "datasetName": dataset_name,
@@ -708,6 +755,17 @@ async def run_instance(instance_id: int) -> dict:
         consent_gate = (tpl.identity_mode == "personal"
                         and inst.holder_id is not None
                         and inst.holder_id != tpl.owner_id)
+        # P2.3:非 owner 实例只在 public 模板上执行。W0a⑤ 的联动暂停
+        # 只覆盖转私有那一刻 idle 的行 —— 运行中实例跑完回 idle 会被
+        # _claim_due 再认领、missing_credential/auth_failed 暂停的实例
+        # 会被凭证复活钩子拉回调度;两条漏网路径都在这道闸兜死
+        # (联动暂停降级为「提前通知」)。
+        if consent_gate and tpl.visibility != "public":
+            return await _pause_consent_changed(
+                db, inst, tpl,
+                paused_reason="made_private",
+                message="模板已转为私有,执行已暂停;模板重新公开后请"
+                        "重新确认订阅")
         try:
             alias_urls = await _alias_urls_of(db, scen.payload)
         except Exception as e:  # noqa: BLE001
