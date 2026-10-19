@@ -19,6 +19,14 @@ vi.mock('@/api/integration', async (importOriginal) => {
     listPlatformCredentials: vi.fn().mockResolvedValue([]),
     createPlatformCredential: vi.fn(),
     deletePlatformCredential: vi.fn(),
+    fetchScenarioPreview: vi.fn().mockResolvedValue({
+      authAliases: [], missingCredentials: [], workingPreview: false,
+    }),
+    fetchSubscriptionSummary: vi.fn(),
+    subscribeIntegrationTask: vi.fn(),
+    unsubscribeIntegrationTask: vi.fn(),
+    pauseMySubscription: vi.fn(),
+    resumeMySubscription: vi.fn(),
     integrationErr: vi.fn((e: unknown) => {
       const det = (e as { response?: { data?: { detail?: { message?: string } } } })
       ?.response?.data?.detail
@@ -170,5 +178,125 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     const admin = await mountPage(true)
     expect(admin.find('[data-testid="ig-creds"]').exists()).toBe(true)
     admin.unmount()
+  })
+
+  it('W1 新建·个人模式:执行身份/凭证前置提示/订阅者提示;保存带 identityMode', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
+    vi.mocked(api.fetchScenarioPreview).mockResolvedValue({
+      authAliases: ['gitlab'], missingCredentials: ['gitlab'],
+      workingPreview: false,
+    })
+    vi.mocked(api.createIntegrationTask).mockResolvedValue(mkTask())
+    const w = await mountPage()
+    await w.find('[data-testid="ig-create"]').trigger('click')
+    await flushPromises()
+    // 平台模式缺省:只读提示在场、凭证提示不在
+    expect(w.find('[data-testid="ig-form-cred-hint"]').exists()).toBe(false)
+
+    // 选场景 → 前置预览被调
+    await w.find('[data-testid="ig-form-scenario"]').setValue('sc-probe')
+    await flushPromises()
+    expect(api.fetchScenarioPreview).toHaveBeenCalledWith('sc-probe', null)
+
+    // 切个人模式 + 公共:凭证缺失提示与订阅者提示在场
+    await w.find('[data-testid="ig-form-mode"]').setValue('personal')
+    await w.find('[data-testid="ig-form-visibility"]').setValue('public')
+    await flushPromises()
+    const credHint = w.find('[data-testid="ig-form-cred-hint"]')
+    expect(credHint.exists()).toBe(true)
+    expect(credHint.text()).toContain('gitlab')
+    expect(credHint.text()).toContain('未配置')
+    expect(w.find('[data-testid="ig-form-subscriber-hint"]').exists()).toBe(true)
+
+    // 保存携带执行身份
+    await w.find('[data-testid="ig-form-name"]').setValue('我的待办')
+    await w.find('[data-testid="ig-form-save"]').trigger('click')
+    await flushPromises()
+    expect(api.createIntegrationTask).toHaveBeenCalledWith(
+      expect.objectContaining({ identityMode: 'personal', scenarioId: 'sc-probe' }))
+    w.unmount()
+  })
+
+  it('W1 新建·working 预警:预览标记为预览执行时两模式均显示', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
+    vi.mocked(api.fetchScenarioPreview).mockResolvedValue({
+      authAliases: [], missingCredentials: [], workingPreview: true,
+    })
+    const w = await mountPage()
+    await w.find('[data-testid="ig-create"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="ig-form-scenario"]').setValue('sc-probe')
+    await flushPromises()
+    expect(w.find('[data-testid="ig-form-working-warn"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('W2 订阅面:未订阅出订阅入口 → 弹窗摘要(步骤/读写/别名/地址)→ 确认调 subscribe', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+               visibility: 'public', subscribed: false, instance: null }),
+    ])
+    vi.mocked(api.fetchSubscriptionSummary).mockResolvedValue({
+      fingerprint: 'fp',
+      steps: [
+        { service: 'jira', method: 'POST', path: '/issue', endpoint: null, readonly: false },
+        { service: 'jira', method: 'GET', path: '/search', endpoint: null, readonly: true },
+      ],
+      authAliases: ['jira'], baseUrls: { jira: 'http://jira.local' },
+      datasetName: '主数据', cron: '*/5 * * * *',
+    })
+    vi.mocked(api.subscribeIntegrationTask).mockResolvedValue(mkTask())
+    const w = await mountPage()
+    await w.find('[data-testid="ig-sub-3"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="sub-dialog"]').exists()).toBe(true)
+    const txt = w.find('[data-testid="sub-dialog"]').text()
+    expect(txt).toContain('jira')
+    expect(txt).toContain('/issue')
+    expect(txt).toContain('写')
+    expect(txt).toContain('jira.local')
+    await w.find('[data-testid="sub-confirm"]').trigger('click')
+    await flushPromises()
+    expect(api.subscribeIntegrationTask).toHaveBeenCalledWith(3)
+    w.unmount()
+  })
+
+  it('W2 已订阅:自暂停显示恢复;退订确认后调用;待确认显示重新确认与文案', async () => {
+    // manual 暂停 →「已暂停(本人)」+ 恢复按钮
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+               subscribed: true,
+               instance: { ...mkTask().instance!, state: 'paused',
+                           pausedReason: 'manual' } }),
+    ])
+    vi.mocked(api.resumeMySubscription).mockResolvedValue(mkTask())
+    let w = await mountPage()
+    expect(w.find('[data-testid="ig-row-3"]').text()).toContain('已暂停(本人)')
+    await w.find('[data-testid="ig-pause-3"]').trigger('click')
+    await flushPromises()
+    expect(api.resumeMySubscription).toHaveBeenCalledWith(3)
+    w.unmount()
+
+    // 退订(confirm 放行)
+    const spy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(api.unsubscribeIntegrationTask).mockResolvedValue(undefined)
+    w = await mountPage()
+    await w.find('[data-testid="ig-unsub-3"]').trigger('click')
+    await flushPromises()
+    expect(api.unsubscribeIntegrationTask).toHaveBeenCalledWith(3)
+    spy.mockRestore()
+    w.unmount()
+
+    // 待确认(template_changed)→ 状态文案 + 重新确认按钮
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+               subscribed: true,
+               instance: { ...mkTask().instance!, state: 'paused',
+                           pausedReason: 'template_changed' } }),
+    ])
+    w = await mountPage()
+    expect(w.find('[data-testid="ig-row-3"]').text()).toContain('内容已变更·待确认')
+    expect(w.find('[data-testid="ig-sub-3"]').text()).toBe('重新确认')
+    w.unmount()
   })
 })

@@ -118,7 +118,9 @@ void listIntegrationTasks().then((tasks) => {
   fnDefs.value = tasks.map((t) => ({
     id: `fn:${t.id}`,
     title: t.name,
-    description: `功能卡 · ${t.cronText}`,
+    description: t.identityMode === 'personal'
+      ? `个人功能卡 · ${t.cronText} · 订阅后按我的凭证执行`
+      : `功能卡 · ${t.cronText}`,
     accent: 'gold',
     component: () => import('@/components/workbench/FunctionCard.vue'),
     defaultSize: 'M' as const,

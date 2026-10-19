@@ -357,6 +357,14 @@ async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
         raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
+    # W2(G-E):模板删除通知持有人(卡片转「已移除」态,但按 cron 等
+    # 结果的用户只见「过期」—— 发一条人话通知)
+    if tpl.identity_mode == "personal":
+        await integration_runner.notify_subscribers(
+            tpl,
+            title=f"集成任务「{tpl.name}」已删除",
+            message="模板已被创建者删除,你的订阅随之失效;"
+                    "卡片会显示「已移除」,可自行删卡")
     return {"removed": True}
 
 
@@ -447,6 +455,37 @@ def _subscribable(tpl: IntegrationTask, user) -> None:
         raise _bad("not_found", "功能不存在", 404)
     if tpl.identity_mode != "personal":
         raise _bad("not_subscribable", "仅个人模式任务支持订阅", 422)
+
+
+@router.get("/scenario-preview")
+async def scenario_preview(
+    user: CurrentUser, db: DbSession,
+    scenarioId: str, schemeId: str | None = None,
+) -> dict:
+    """W1 创建前置提示(个人侧方案 §2 W1):场景+方案(可选)的执行
+    形态预览 —— 注入凭证别名、当前用户缺失清单、working 预览标记。
+    只允许预览自己的场景(与创建闸同口径);指定方案须属该场景。"""
+    scen = (await db.execute(select(ComposerScenario).where(
+        ComposerScenario.scenario_id == scenarioId))).scalar()
+    if scen is None:
+        raise _bad("scenario_not_found", f"场景不存在: {scenarioId}", 404)
+    if scen.owner_id != user.id:
+        raise _bad("scenario_not_owned", "只能引用自己创建的场景")
+    if schemeId:
+        from ..services import scheme_store
+        try:
+            await scheme_store.get_row(db, scenarioId, schemeId)
+        except KeyError:
+            raise _bad(
+                "scheme_not_owned",
+                f"执行方案不存在或不属于该场景: {schemeId}") from None
+    aliases = await integration_runner.scenario_aliases(db, scen, schemeId)
+    return {
+        "authAliases": aliases,
+        "missingCredentials": await _missing_credentials(
+            db, aliases, user.id),
+        "workingPreview": bool(working_preview(scen.payload)),
+    }
 
 
 @router.get("/tasks/{task_id}/subscription-summary")

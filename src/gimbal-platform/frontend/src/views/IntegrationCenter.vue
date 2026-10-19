@@ -57,11 +57,27 @@
           </td>
           <td class="ig-ops">
             <button
+              v-if="t.canManage || t.identityMode === 'platform' || t.subscribed"
               type="button" class="ig-act"
               :data-testid="`ig-run-${t.id}`"
               :disabled="runningId === t.id"
               @click="runNow(t)"
             >{{ runningId === t.id ? '执行中…' : '立即执行' }}</button>
+            <!-- W2:个人模式订阅面 —— 订阅/重新确认走知情确认弹窗 -->
+            <button
+              v-if="t.identityMode === 'personal' && !t.canManage
+                    && (!t.subscribed || needsReconfirm(t))"
+              type="button" class="ig-act" :data-testid="`ig-sub-${t.id}`"
+              @click="subTask = t"
+            >{{ needsReconfirm(t) ? '重新确认' : '订阅' }}</button>
+            <template v-if="t.identityMode === 'personal' && t.subscribed && !t.canManage">
+              <button type="button" class="ig-act" :data-testid="`ig-pause-${t.id}`"
+                      @click="togglePause(t)"
+              >{{ t.instance?.pausedReason === 'manual' ? '恢复' : '暂停' }}</button>
+              <button type="button" class="ig-act danger" :data-testid="`ig-unsub-${t.id}`"
+                      @click="doUnsubscribe(t)"
+              >退订</button>
+            </template>
             <button
               v-if="t.canManage" type="button" class="ig-act danger"
               :data-testid="`ig-del-${t.id}`"
@@ -76,12 +92,26 @@
     <Transition name="pop">
   <div v-if="createOpen" class="ig-mask" data-testid="ig-create-mask" @click.self="createOpen = false">
       <div role="dialog" aria-labelledby="ig-new-title" class="ig-dialog">
-        <h2 id="ig-new-title">新建功能(P1 · 平台模式)</h2>
+        <h2 id="ig-new-title">新建功能</h2>
         <label class="ig-field">名称
           <input v-model="form.name" data-testid="ig-form-name" placeholder="如:下单服务保活" />
         </label>
-        <label class="ig-field">场景(只读探活类;须为「我的场景」)
-          <select v-model="form.scenarioId" data-testid="ig-form-scenario" @change="loadSchemes">
+        <div class="ig-field-row">
+          <label class="ig-field">执行身份
+            <select v-model="form.identityMode" data-testid="ig-form-mode">
+              <option value="platform">平台模式(平台凭证 · 只读)</option>
+              <option value="personal">个人模式(我的凭证 · 读写)</option>
+            </select>
+          </label>
+          <label class="ig-field">可见性
+            <select v-model="form.visibility" data-testid="ig-form-visibility">
+              <option value="private">私有(只有我)</option>
+              <option value="public">公共(可被订阅)</option>
+            </select>
+          </label>
+        </div>
+        <label class="ig-field">场景(须为「我的场景」)
+          <select v-model="form.scenarioId" data-testid="ig-form-scenario" @change="onScenarioChange">
             <option value="">选择场景…</option>
             <option v-for="s in scenarios" :key="s.scenarioId" :value="s.scenarioId">
               {{ s.name || s.scenarioId }}({{ s.scenarioId }})
@@ -89,7 +119,7 @@
           </select>
         </label>
         <label class="ig-field">执行方案(缺省 = 默认方案)
-          <select v-model="form.schemeId" data-testid="ig-form-scheme">
+          <select v-model="form.schemeId" data-testid="ig-form-scheme" @change="loadPreview">
             <option value="">默认方案</option>
             <option v-for="s in schemes" :key="s.schemeId" :value="s.schemeId">
               {{ s.name }}{{ s.isDefault ? '(默认)' : '' }}
@@ -107,17 +137,33 @@
             </select>
           </label>
         </div>
-        <label class="ig-field">可见性
-          <select v-model="form.visibility" data-testid="ig-form-visibility">
-            <option value="private">私有(只有我)</option>
-            <option value="public">公共(所有人可加卡)</option>
-          </select>
-        </label>
         <p v-if="formErr" class="ig-err" data-testid="ig-form-err">{{ formErr }}</p>
-        <p class="ig-hint">
+        <!-- W1:working 声明预警(两模式通用;集成拒绝触发 A-4/W6) -->
+        <p v-if="preview?.workingPreview" class="ig-warn" data-testid="ig-form-working-warn">
+          场景声明 working(预览执行)—— 集成任务会拒绝触发,请在编排器钉定修订后再创建。
+        </p>
+        <p v-if="form.identityMode === 'platform'" class="ig-hint">
           平台模式以平台系统用户执行,只允许只读场景(全部步骤 GET/HEAD/OPTIONS);
           结果进工作台卡片(添加卡片 → 功能)。
         </p>
+        <template v-else>
+          <p class="ig-hint">
+            个人模式以<b>我的凭证</b>执行,读写皆可,边界 = 我在第三方系统的权限;
+            结果进我的工作台卡片。
+          </p>
+          <p v-if="preview && preview.authAliases.length"
+             class="ig-hint" data-testid="ig-form-cred-hint">
+            所需凭证别名:{{ preview.authAliases.join('、') }}
+            <template v-if="preview.missingCredentials.length">
+              — <b>未配置:{{ preview.missingCredentials.join('、') }}</b>(任务会暂停在「缺凭证」,到「认证管理」配置后自动恢复)
+            </template>
+            <template v-else>— 均已配置</template>
+          </p>
+          <p v-if="form.visibility === 'public'" class="ig-hint" data-testid="ig-form-subscriber-hint">
+            公共个人模板:订阅者将以其本人凭证执行;你后续对场景/方案/数据集/周期/服务地址的修改,
+            需订阅者重新确认后才继续执行。
+          </p>
+        </template>
         <div class="ig-dialog-acts">
           <button type="button" class="ig-ghost" @click="createOpen = false">取消</button>
           <button
@@ -129,6 +175,10 @@
       </div>
     </div>
     </Transition>
+
+    <!-- W2:订阅知情确认弹窗(订阅/重新确认共用) -->
+    <SubscriptionDialog :open="!!subTask" :task-id="subTask?.id || 0"
+                        @close="subTask = null" @done="load" />
 
     <!-- 平台凭证(admin) -->
     <section v-if="auth.isAdmin" class="ig-creds" data-testid="ig-creds">
@@ -165,10 +215,12 @@ import { useAuthStore } from '@/stores/auth'
 import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
   runIntegrationTask, listPlatformCredentials, createPlatformCredential,
-  deletePlatformCredential, integrationErr,
+  deletePlatformCredential, integrationErr, fetchScenarioPreview,
+  unsubscribeIntegrationTask, pauseMySubscription, resumeMySubscription,
   RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf,
-  type IntegrationTaskItem, type PlatformCredential,
+  type IntegrationTaskItem, type PlatformCredential, type ScenarioPreview,
 } from '@/api/integration'
+import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
 import { listScenarioOptions, listRunSchemes } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
@@ -226,6 +278,9 @@ function runText(t: IntegrationTaskItem): string {
   if (i.state === 'paused') {
     if (i.pausedReason === 'auth_failed') return '凭证失效'
     if (i.pausedReason === 'missing_credential') return '缺凭证'
+    if (i.pausedReason === 'template_changed') return '内容已变更·待确认'
+    if (i.pausedReason === 'made_private') return '已转私有·待确认'
+    if (i.pausedReason === 'manual') return '已暂停(本人)'
     return '已暂停'
   }
   if (i.enabled === false) return '已停用'
@@ -283,6 +338,40 @@ async function removeTask(t: IntegrationTaskItem): Promise<void> {
   }
 }
 
+// ── W2:订阅面(订阅确认弹窗 / 退订 / 订阅者自暂停恢复) ─────────
+const subTask = ref<IntegrationTaskItem | null>(null)
+
+function needsReconfirm(t: IntegrationTaskItem): boolean {
+  return t.instance?.pausedReason === 'template_changed'
+    || t.instance?.pausedReason === 'made_private'
+}
+
+async function doUnsubscribe(t: IntegrationTaskItem): Promise<void> {
+  if (!window.confirm(`退订「${t.name}」?你的实例与执行历史将删除,重新订阅需再次确认。`)) return
+  try {
+    await unsubscribeIntegrationTask(t.id)
+    toast.success('已退订')
+    await load()
+  } catch (e) {
+    toast.error(integrationErr(e))
+  }
+}
+
+async function togglePause(t: IntegrationTaskItem): Promise<void> {
+  try {
+    if (t.instance?.pausedReason === 'manual') {
+      await resumeMySubscription(t.id)
+      toast.success('已恢复执行')
+    } else {
+      await pauseMySubscription(t.id)
+      toast.success('已暂停(可随时恢复)')
+    }
+    await load()
+  } catch (e) {
+    toast.error(integrationErr(e))
+  }
+}
+
 // ── 新建 ───────────────────────────────────────────────────────
 const createOpen = ref(false)
 const creating = ref(false)
@@ -290,9 +379,31 @@ const formErr = ref('')
 const scenarios = ref<{ scenarioId: string; name: string }[]>([])
 const schemes = ref<{ schemeId: string; name: string; isDefault: boolean }[]>([])
 const form = reactive({
-  name: '', scenarioId: '', schemeId: '',
+  name: '', scenarioId: '', schemeId: '', identityMode: 'platform',
   triggerCron: '*/5 * * * *', resultPolicy: 'latest', visibility: 'private',
 })
+/** W1:创建前置预览(凭证别名/缺失/working 预警;场景或方案变化时刷新) */
+const preview = ref<ScenarioPreview | null>(null)
+const previewLoading = ref(false)
+
+async function loadPreview(): Promise<void> {
+  preview.value = null
+  if (!form.scenarioId) return
+  previewLoading.value = true
+  try {
+    preview.value = await fetchScenarioPreview(
+      form.scenarioId, form.schemeId || null)
+  } catch {
+    preview.value = null   // 预览是增强:失败不打断创建
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+async function onScenarioChange(): Promise<void> {
+  await loadSchemes()
+  await loadPreview()
+}
 
 async function openCreate(): Promise<void> {
   createOpen.value = true
@@ -330,6 +441,7 @@ async function save(): Promise<void> {
       name: form.name.trim(),
       scenarioId: form.scenarioId,
       schemeId: form.schemeId || null,
+      identityMode: form.identityMode,
       triggerCron: form.triggerCron.trim(),
       resultPolicy: form.resultPolicy,
       visibility: form.visibility,
@@ -429,6 +541,7 @@ onMounted(() => {
 }
 .ig-field-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
 .ig-err { margin: 0; font-size: 12.5px; color: #dc2626; }
+.ig-warn { margin: 0; font-size: 12.5px; color: #b45309; }
 .ig-hint { margin: 0; font-size: 11.5px; color: rgb(100 116 139); line-height: 1.6; }
 .ig-hint-inline { font-size: 11.5px; color: rgb(100 116 139); font-weight: 400; }
 .ig-dialog-acts { display: flex; justify-content: flex-end; gap: 8px; }

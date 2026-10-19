@@ -14,6 +14,8 @@ export interface IntegrationInstance {
   checkStatus: string
   checkMessage: string
   checkChangedAt: string | null
+  /** W0b④:缺失别名全集(与执行期暂停判定同口径 = 任一缺失即列) */
+  missingCredentials?: string[]
 }
 
 export interface IntegrationTaskItem {
@@ -35,6 +37,9 @@ export interface IntegrationTaskItem {
   cardTemplate: string
   removed: boolean
   instance: IntegrationInstance | null
+  /** W0b④:消费面字段(创建/列表/订阅回显) */
+  authAliases?: string[]
+  subscribed?: boolean
 }
 
 export interface FunctionCardData {
@@ -56,8 +61,11 @@ export interface FunctionCardData {
   checkStatus?: string
   checkMessage?: string
   checkChangedAt?: string | null
-  /** 暂停原因(D13 角标:auth_failed/missing_credential) */
+  /** 暂停原因(D13 角标:auth_failed/missing_credential;
+   * W2:template_changed/made_private/manual) */
   pausedReason?: string
+  /** W0b④/W3:缺失别名全集(角标跳转「我的凭证」定位用) */
+  missingCredentials?: string[]
 }
 
 /** ── 集成线 v2(I3,方案 §2.5):run/check 人话映射(卡片与集成中心共用)── */
@@ -134,6 +142,25 @@ export async function fetchFunctionCards(
   return data.items
 }
 
+// ── W1(个人侧方案 §2):创建前置预览 ────────────────────────────
+export interface ScenarioPreview {
+  /** 场景+方案所需凭证别名(方案 authAlias ∪ ${auth.*}) */
+  authAliases: string[]
+  /** 当前用户「我的凭证」中缺失的别名(任一缺失即列) */
+  missingCredentials: string[]
+  /** 场景声明 working(预览执行)—— 集成任务会拒绝触发 */
+  workingPreview: boolean
+}
+
+export async function fetchScenarioPreview(
+  scenarioId: string, schemeId?: string | null,
+): Promise<ScenarioPreview> {
+  const { data } = await http.get<ScenarioPreview>(
+    '/integration/scenario-preview',
+    { params: { scenarioId, ...(schemeId ? { schemeId } : {}) } })
+  return data
+}
+
 // ── 平台凭证(admin)────────────────────────────────────────────
 export interface PlatformCredential {
   id: number
@@ -161,6 +188,59 @@ export async function createPlatformCredential(body: {
 
 export async function deletePlatformCredential(id: number): Promise<void> {
   await http.delete(`/integration/platform-credentials/${id}`)
+}
+
+// ── W2(个人侧方案 §2):订阅 / 自管 ─────────────────────────────
+
+export interface SubscriptionSummary {
+  fingerprint: string
+  steps: {
+    service: string
+    method: string
+    path: string
+    endpoint: string | null
+    readonly: boolean
+  }[]
+  authAliases: string[]
+  baseUrls: Record<string, string>
+  datasetName: string | null
+  cron: string
+}
+
+export async function fetchSubscriptionSummary(
+  id: number,
+): Promise<SubscriptionSummary> {
+  const { data } = await http.get<SubscriptionSummary>(
+    `/integration/tasks/${id}/subscription-summary`)
+  return data
+}
+
+export async function subscribeIntegrationTask(
+  id: number,
+): Promise<IntegrationTaskItem> {
+  const { data } = await http.post<IntegrationTaskItem>(
+    `/integration/tasks/${id}/subscribe`)
+  return data
+}
+
+export async function unsubscribeIntegrationTask(id: number): Promise<void> {
+  await http.delete(`/integration/tasks/${id}/subscription`)
+}
+
+export async function pauseMySubscription(
+  id: number,
+): Promise<IntegrationTaskItem> {
+  const { data } = await http.post<IntegrationTaskItem>(
+    `/integration/tasks/${id}/subscription/pause`)
+  return data
+}
+
+export async function resumeMySubscription(
+  id: number,
+): Promise<IntegrationTaskItem> {
+  const { data } = await http.post<IntegrationTaskItem>(
+    `/integration/tasks/${id}/subscription/resume`)
+  return data
 }
 
 /** 409/422 detail 提取(集成路由统一 {code, message} 信封)。 */

@@ -439,16 +439,17 @@ def consent_fingerprint_of(
 
 
 async def _load_exec_shape(
-    db, tpl: IntegrationTask, scen: ComposerScenario,
+    db, scheme_id: str | None, scen: ComposerScenario,
 ) -> tuple[ComposerRunScheme | None, dict, dict, dict, str | None]:
     """执行形态装载(W0a 抽出,run_instance 与订阅面单一实现):
     场景限定的方案(S0①;跨场景/已删 scheme_id → 本场景默认回退)、
-    方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。"""
+    方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。
+    W1 起 scheme_id 直传(创建前置预览无模板行)。"""
     from .run_dispatcher import find_dataset_by_id
     scheme = None
-    if tpl.scheme_id:
+    if scheme_id:
         scheme = (await db.execute(select(ComposerRunScheme).where(
-            ComposerRunScheme.scheme_id == tpl.scheme_id,
+            ComposerRunScheme.scheme_id == scheme_id,
             ComposerRunScheme.scenario_id == scen.scenario_id,
         ))).scalar()
     if scheme is None:
@@ -503,7 +504,7 @@ async def refresh_consent(
 ) -> str:
     """写入当前内容指纹与确认时刻(创建/订阅/重新确认共用)。
     别名查询失败向上抛(订阅面 503;创建面 best-effort 跳过)。"""
-    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl, scen)
+    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl.scheme_id, scen)
     alias_urls = await _alias_urls_of(db, scen.payload)
     fp = consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
@@ -523,7 +524,7 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
         raise IntegrationRunError(
             "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
     _, scheme_payload, bindings, row_dict, dataset_name = \
-        await _load_exec_shape(db, tpl, scen)
+        await _load_exec_shape(db, tpl.scheme_id, scen)
     aliases = _auth_aliases_of(scen.payload, bindings)
     alias_urls = await _alias_urls_of(db, scen.payload)
     fp = consent_fingerprint_of(
@@ -543,6 +544,15 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
             "cron": tpl.trigger_cron}
 
 
+async def scenario_aliases(
+    db, scen: ComposerScenario, scheme_id: str | None,
+) -> list[str]:
+    """场景+方案(可选)的注入清单(W1 创建前置预览用;与执行期
+    `_auth_aliases_of` 同口径:方案 authAlias ∪ ${auth.*} 扫描)。"""
+    _, _, bindings, _, _ = await _load_exec_shape(db, scheme_id, scen)
+    return _auth_aliases_of(scen.payload, bindings)
+
+
 async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
     """任务当前注入清单(W0b④;与执行期 `_auth_aliases_of` 同口径:
     方案 authAlias ∪ 场景 ${auth.*} 扫描)。场景缺失返回空。"""
@@ -551,8 +561,7 @@ async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
         if tpl.scenario_id else None
     if scen is None:
         return []
-    _, _, bindings, _, _ = await _load_exec_shape(db, tpl, scen)
-    return _auth_aliases_of(scen.payload, bindings)
+    return await scenario_aliases(db, scen, tpl.scheme_id)
 
 
 async def _pause_consent_changed(
@@ -577,6 +586,28 @@ async def _pause_consent_changed(
         except Exception:  # noqa: BLE001 — 通知是增强
             logger.warning("integration: consent notify failed")
     return {"status": "paused", "durationMs": 0, "error": message}
+
+
+async def notify_subscribers(
+    tpl: IntegrationTask, *, title: str, message: str,
+) -> int:
+    """W2(G-E):向全部非 owner 持有人发通知(模板删除等管理事件)。"""
+    async with db_module.SessionLocal() as db:
+        holders = (await db.execute(select(IntegrationTask.holder_id).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id.is_not(None),
+            IntegrationTask.holder_id != tpl.owner_id,
+        ))).scalars().all()
+    for uid in holders:
+        try:
+            from .notifications import create_notification
+            async with db_module.SessionLocal() as ndb:
+                await create_notification(
+                    ndb, user_id=uid, type_="integration",
+                    title=title, body=message, link="/integrations")
+        except Exception:  # noqa: BLE001
+            logger.warning("integration: subscriber notify failed")
+    return len(holders)
 
 
 async def pause_subscriber_instances(
@@ -638,7 +669,7 @@ async def run_instance(instance_id: int) -> dict:
             raise IntegrationRunError(
                 "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
         scheme, scheme_payload, bindings, row_dict, _ds_name = \
-            await _load_exec_shape(db, tpl, scen)
+            await _load_exec_shape(db, tpl.scheme_id, scen)
 
         # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
         # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。

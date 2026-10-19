@@ -25,6 +25,28 @@
       <p>该功能已移除或不可见 — 可直接删卡</p>
     </div>
 
+    <!-- W2:未订阅的个人功能卡 —— 订阅确认入口(播种收口后卡片不再隐式订阅) -->
+    <div v-else-if="notSubscribed" class="card-empty" :data-testid="`${t}-unsub`">
+      <p>未订阅 — 该功能将以<b>你的凭证</b>执行</p>
+      <button type="button" class="fn-run" :data-testid="`${t}-subscribe`"
+              @click="subOpen = true">订阅确认</button>
+    </div>
+
+    <!-- W2:待确认(内容已变更/已转私有)与本人暂停 —— 恢复入口 -->
+    <div v-else-if="reconfirmText || data?.pausedReason === 'manual'"
+         class="card-empty" :data-testid="`${t}-gate`">
+      <p v-if="reconfirmText" class="fn-note warn">
+        {{ reconfirmText }} — 点击重新确认后恢复执行
+        <button type="button" class="fn-run" :data-testid="`${t}-reconfirm`"
+                @click="subOpen = true">重新确认</button>
+      </p>
+      <p v-else class="fn-note warn">
+        已由你暂停
+        <button type="button" class="fn-run" :data-testid="`${t}-resume`"
+                @click="doResume">恢复执行</button>
+      </p>
+    </div>
+
     <template v-else-if="data">
       <!-- S:按模板 —— status 状态灯 / counter 大数字 / kv 首键 / list 条数 -->
       <div v-if="size === 'S'" class="fn-s" :data-testid="t">
@@ -42,7 +64,7 @@
           <span v-if="data.checkStatus !== 'none'" class="fn-dot" :class="tone" />
           <span class="fn-status">{{ statusText }}</span>
         </template>
-        <span v-if="badge" class="fn-badge">{{ badge }}</span>
+        <span v-if="badge" class="fn-badge" :class="{ clickable: badgeClickable }" :data-testid="`${t}-badge`" @click="badgeGo">{{ badge }}</span>
       </div>
 
       <!-- M/L:按模板分派(Y4:status/kv/counter/list) -->
@@ -56,7 +78,7 @@
             </span>
             <span v-else class="fn-sub">等待首次执行</span>
           </div>
-          <span v-if="badge" class="fn-badge">{{ badge }}</span>
+          <span v-if="badge" class="fn-badge" :class="{ clickable: badgeClickable }" :data-testid="`${t}-badge`" @click="badgeGo">{{ badge }}</span>
         </div>
         <!-- kv:全部映射键值(S 档 = 第一个键) -->
         <div v-else-if="tplKind === 'kv'" class="fn-kv-list" :class="{ 'fn-dim': runAbnormal }" :data-testid="`${t}-kv`">
@@ -65,13 +87,13 @@
             <span class="fn-kv-val mono">{{ fmt(e[1]) }}</span>
           </div>
           <p v-if="!kvEntries.length" class="fn-sub">暂无输出</p>
-          <span v-if="badge" class="fn-badge">{{ badge }}</span>
+          <span v-if="badge" class="fn-badge" :class="{ clickable: badgeClickable }" :data-testid="`${t}-badge`" @click="badgeGo">{{ badge }}</span>
         </div>
         <!-- counter:大数字 + 最近执行 -->
         <div v-else-if="tplKind === 'counter'" class="fn-counter" :data-testid="`${t}-counter`">
           <span class="fn-counter-num mono" :class="{ 'fn-dim': runAbnormal }">{{ counterText }}</span>
           <span class="fn-sub">{{ data.lastRunAt ? `最近执行 ${relTime(data.lastRunAt)}` : '等待首次执行' }}</span>
-          <span v-if="badge" class="fn-badge">{{ badge }}</span>
+          <span v-if="badge" class="fn-badge" :class="{ clickable: badgeClickable }" :data-testid="`${t}-badge`" @click="badgeGo">{{ badge }}</span>
         </div>
         <!-- list:M 前 5 / L 前 10 -->
         <div v-else-if="tplKind === 'list'" class="fn-list" :class="{ 'fn-dim': runAbnormal }" :data-testid="`${t}-list`">
@@ -81,7 +103,7 @@
               {{ fmt(item) }}
             </li>
           </ul>
-          <span v-if="badge" class="fn-badge">{{ badge }}</span>
+          <span v-if="badge" class="fn-badge" :class="{ clickable: badgeClickable }" :data-testid="`${t}-badge`" @click="badgeGo">{{ badge }}</span>
         </div>
         <p v-if="staleNote" class="fn-note warn">{{ staleNote }}</p>
         <!-- M 档 check=fail 显示 checkMessage;运行异常显示 lastError 摘要 -->
@@ -108,17 +130,21 @@
       <p>取数失败 — 稍后自动重试</p>
     </div>
     <div v-else class="card-empty"><p>加载中…</p></div>
+      <SubscriptionDialog :open="subOpen" :task-id="tid"
+                        @close="subOpen = false" @done="load" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import {
   fetchFunctionCards, runIntegrationTask, integrationErr,
-  runAbnormalOf, RUN_BADGE_TEXT,
+  runAbnormalOf, RUN_BADGE_TEXT, resumeMySubscription,
   type FunctionCardData,
 } from '@/api/integration'
+import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
 import { useCardSize, useCardDef } from './registry'
 import { toast } from '@/utils/toast'
 
@@ -136,6 +162,21 @@ const t = computed(() => `fn-card-${cardId.value}`)
 const removed = computed(() => data.value?.state === 'removed')
 const runningState = computed(() => data.value?.state === 'running')
 
+// ── W2/W3(个人侧方案 §2):订阅与自管状态面 ─────────────────────
+const router = useRouter()
+const subOpen = ref(false)
+const tid = computed(() => Number(cardId.value.slice(3)))
+/** 未订阅的个人功能卡(播种收口后 cards 只查不建,state=none) */
+const notSubscribed = computed(() =>
+  data.value?.state === 'none' && data.value?.identityMode === 'personal')
+/** 待重新确认(模板内容已变更/已转私有) */
+const reconfirmText = computed(() => {
+  const r = data.value?.pausedReason
+  if (r === 'template_changed') return '模板内容已变更'
+  if (r === 'made_private') return '模板已转私有'
+  return ''
+})
+
 // ── 集成线 v2(§2.5):状态叠加层 ─────────────────────────────────
 
 /** run ≠ ok:主结论置灰 + 角标 + lastError 摘要 */
@@ -149,6 +190,9 @@ const badge = computed(() => {
   if (d.state === 'paused') {
     if (d.pausedReason === 'auth_failed') return '凭证失效'
     if (d.pausedReason === 'missing_credential') return '缺凭证'
+    if (d.pausedReason === 'template_changed') return '内容已变更'
+    if (d.pausedReason === 'made_private') return '已转私有'
+    if (d.pausedReason === 'manual') return '已暂停'
     return '已暂停'
   }
   if (d.enabled === false) return '已停用'
@@ -240,6 +284,27 @@ async function load(): Promise<void> {
   }
 }
 
+const badgeClickable = computed(() =>
+  data.value?.pausedReason === 'auth_failed'
+  || data.value?.pausedReason === 'missing_credential')
+
+function badgeGo(): void {
+  if (!badgeClickable.value) return
+  // W3:凭证角标 → 「我的凭证」定位缺失别名(?q 预填搜索)
+  const alias = data.value?.missingCredentials?.[0] || ''
+  void router.push({ path: '/auths', query: alias ? { q: alias } : {} })
+}
+
+async function doResume(): Promise<void> {
+  try {
+    await resumeMySubscription(tid.value)
+    toast.success('已恢复执行')
+    await load()
+  } catch (e) {
+    toast.error(integrationErr(e))
+  }
+}
+
 async function runNow(): Promise<void> {
   const tid = Number(cardId.value.slice(3))
   if (!tid || running.value) return
@@ -294,6 +359,7 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
 @keyframes fn-pulse { 50% { opacity: .35; } }
 .fn-status { font-size: 13px; font-weight: 600; }
 .fn-dim { opacity: .55; }
+.fn-badge.clickable { cursor: pointer; }
 .fn-badge {
   font-size: 10.5px; font-weight: 500; flex: none;
   padding: 1px 7px; border-radius: 999px; color: #b45309;

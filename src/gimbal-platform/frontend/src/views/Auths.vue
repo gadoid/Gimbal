@@ -331,6 +331,7 @@
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import { computed, onMounted, ref } from 'vue'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
@@ -373,7 +374,10 @@ const ttClass: Record<string, string> = {
 // ── filters(M4:检索/类型过滤下推服务端,Page 信封)───────────────
 // useServerList 观察 params 签名:q/类型任一变化 → 300ms 防抖重拉 + 回页 1。
 // username 是服务端 Fernet 密文不可检索(q 只打 alias/url,占位文案如实)。
-const searchQuery = ref('')
+const route = useRoute()
+// W3:凭证角标跳转带 ?q=别名 定位缺失项(无路由环境守卫)
+const searchQuery = ref(
+  typeof route?.query?.q === 'string' ? route.query.q : '')
 const TT_FILTERS = ['all', 'Bearer', 'Basic', 'Cookie', 'Authorization'] as const
 type TtFilter = typeof TT_FILTERS[number]
 const tokenTypeFilter = ref<TtFilter>('all')
