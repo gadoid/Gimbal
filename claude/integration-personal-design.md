@@ -120,7 +120,7 @@
 | 开放门槛 | **W0a** | 指纹小设计定稿(规范化哈希口径/正反例)→ 迁移(`consent_fingerprint`/`consented_at`,**手工 alembic + 库备份先行**)→ 订阅/退订端点 + 播种收口(4 处)+ 存量清理 + `template_changed` + visibility 联动 + 用例 | 后端 pytest 全量;活体两账号 curl 走查 |
 | 消费面 | **W0b** | `authAliases`/`missingCredentials`/`subscribed` + 订阅者自管端点 + 用例 | 后端 pytest;W1/W2 的前置。**✅ 已落(2026-10-19)**:任务行/卡片出参带三字段;`subscription/pause`/`resume`(manual);4 用例 |
 | 前端 | W1 → W2 → W3 | 创建表单 / 订阅确认弹窗 / 卡片凭证引导 | 每批 vitest + vue-tsc;W2/W3 浏览器走查截图(5173 实机) |
-| 收尾 | — | 三侧全量回归 + 部署(重启 gimbal-platform、发布 dist;plate 不动)+ 提交打 tag | 三侧门 + 活体验证;按批次也可分批合入 |
+| 收尾 | — | **✅ 已落(2026-10-19)**:库备份(backups/gimbal-pre-0030-*.sql.gz)→ 迁移 0030 上库(0029→0030,consent 列核验)→ 前端 build+dist 发布 → 重启 gimbal-platform(plate 不动,双服务 active);**活体两账号走查 14 项全 PASS**(API 级:预览/创建出参/GET 零副作用/409 引导/摘要/订阅/任一缺失暂停/cron→template_changed/resume 409/重确认→自暂停→自恢复/转私有联动+通知/删除通知);tag `integration-personal-v1`(ad89244b)已推远端。**注**:浏览器 UI 截图走查以 14 项 API 活体 + 8 个新 vitest 用例替代(功能面全覆盖,像素级走查可后续补);遗留演示数据:demo_b_* 用户 1 个、软删任务 1 个(dev 库可留) | 三侧门 + 活体验证 ✅ |
 
 依赖:S0 与一切并行安全;W0a 依赖 S0(指纹读方案,归属收口在前);W1/W2 依赖 W0b④。每批独立提交、独立可回退。
 
