@@ -3,6 +3,7 @@
 > 日期:2026-10-12　基线:`feat/plate-s1 @ 71bda0ac`(外部接口登记批已落)
 
 > **取代注记(2026-10-19,W3/归一方案批3)**:本方案的「平台目录」路线已被《外部接口定义归一 plate 改造方案》v1.0 取代 —— 定义真源归 plate(kind=integration,不发版,`ext:` 锚点与 external_endpoints 目录已退役);决策链以归一方案 §0.1 为准,本文仅存历史过程价值。
+> **接续注记(2026-10-19)**:Y3 个人模式的**前端**缺口(创建表单/订阅流程/凭证引导)由《集成个人侧实现方案》(`claude/integration-personal-design.md`,v1.0)接续,本文 §4 的个人模式前端增量以该文为准。
 > 状态:**v1.0 全波次完成(Y1-Y5,2026-10-12)**。P2 收口:G1 声明驱动/
 > G2 outputs/G7 auth 分类/个人模式/卡片模板/跨次游标/外部目录闸全部落地。
 > 拍板:P-A/P-B/P-C 已定(2026-10-12:B / 平台目录 / 升代际 2)。
@@ -109,7 +110,7 @@ GitLab/Jenkins **不进 plate**(推翻原设计 §详细设计 1 的落点,依 2
 |---|---|---|---|
 | Y1 ✅ | G1 全链(M2 call.auth + 导出 + 执行器 + fin 修正 + fin 新修订) | L | 已落:gen2+no-op 迁移;投影透传;执行器声明驱动分派;fin 19 端点修正+1.0#2 已发推;基线重钉(dispatch/query_views);门 1275+865 绿 |
 | Y2 ✅ | G2+G7(outputs/error_kind/暂停/通知/复活) | M | 已落 3a50d0ef |
-| Y3 ✅ | 个人模式(解禁/订阅实例/missing_credential/冷却) | M | 已落(写操作放行;订阅即建;无冷却;缺凭证 paused/missing_credential + 复活) |
+| Y3 ✅ | 个人模式(解禁/订阅实例/missing_credential/冷却) | M | 已落(写操作放行;订阅即建;无冷却;缺凭证 paused/missing_credential + 复活)—— 后端部分;前端缺口 2026-10-19 起由《集成个人侧实现方案》接续 |
 | Y4 ✅ | 卡片 kv/counter/list + state_mapping 游标 | M | 已落(state_vars 注入/回写;cards outputs 投影;三模板三档) |
 | Y5 ✅ | 只读闸 ext: 分支 | S | 已落(登记=运营动作,X1 导入器) |
 

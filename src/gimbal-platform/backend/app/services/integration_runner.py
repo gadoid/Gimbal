@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import tempfile
@@ -399,16 +400,226 @@ def _auth_aliases_of(payload: dict, bindings: dict) -> list[str]:
     return sorted(aliases)
 
 
+# ── W0a(个人侧方案 v1.4 §2):订阅知情同意 ──────────────────────
+
+def _canonical_json(x) -> str:
+    return json.dumps(x, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"), default=str)
+
+
+def consent_fingerprint_of(
+    scen_payload: dict, scheme_payload: dict, row_dict: dict,
+    cron: str, alias_urls: dict,
+) -> str:
+    """订阅知情同意的内容指纹(小设计 §2.2.1)。
+
+    投影 = 执行形态五要素:场景步骤(逐 step 去 description 展示字段)
+    + definition.config、方案(serviceBindings/dataSetSelection/
+    dataSetIds,去方案名)、数据集首行注入值、cron、别名 base_url 集合。
+    **有意不覆盖**(R3,实现勿再纠结):plate 接口定义(git 评审、
+    全员共享同一份,纳入只会全员频繁重确认)、名称/描述等展示性字段。
+    canonical JSON(sort_keys)→ sha256 hex。
+    """
+    definition = definition_from_payload(scen_payload) or {}
+    steps = []
+    for st in (definition.get("steps") or []):
+        steps.append({k: v for k, v in st.items() if k != "description"}
+                     if isinstance(st, dict) else st)
+    projection = {
+        "scenario": {"steps": steps,
+                     "config": definition.get("config") or {}},
+        "scheme": {k: scheme_payload.get(k) for k in (
+            "serviceBindings", "dataSetSelection", "dataSetIds")},
+        "dataset_row": row_dict,
+        "cron": cron,
+        "base_urls": dict(alias_urls or {}),
+    }
+    return hashlib.sha256(
+        _canonical_json(projection).encode("utf-8")).hexdigest()
+
+
+async def _load_exec_shape(
+    db, tpl: IntegrationTask, scen: ComposerScenario,
+) -> tuple[ComposerRunScheme | None, dict, dict, dict, str | None]:
+    """执行形态装载(W0a 抽出,run_instance 与订阅面单一实现):
+    场景限定的方案(S0①;跨场景/已删 scheme_id → 本场景默认回退)、
+    方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。"""
+    from .run_dispatcher import find_dataset_by_id
+    scheme = None
+    if tpl.scheme_id:
+        scheme = (await db.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == tpl.scheme_id,
+            ComposerRunScheme.scenario_id == scen.scenario_id,
+        ))).scalar()
+    if scheme is None:
+        row = (await db.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == scen.scenario_id,
+            ComposerRunScheme.is_default == True,  # noqa: E712
+        ))).scalar()
+        scheme = row or (await db.execute(
+            select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == scen.scenario_id)
+        )).scalars().first()
+    scheme_payload = (scheme.payload if scheme else {}) or {}
+    bindings = dict(scheme_payload.get("serviceBindings") or {})
+    # P1 取一行:首个选中数据集的首行;未选 = 裸基线
+    row_dict: dict = {}
+    dataset_name: str | None = None
+    sel = scheme_payload.get("dataSetSelection") or []
+    ds_id = None
+    if sel and isinstance(sel[0], dict) and sel[0].get("datasetId"):
+        ds_id = str(sel[0]["datasetId"])
+    if not ds_id:
+        ids = scheme_payload.get("dataSetIds") or []
+        ds_id = str(ids[0]) if ids else None
+    if ds_id:
+        ds = await find_dataset_by_id(db, ds_id)
+        # S0①(G-A):数据集必须属于本场景 —— get_row 按 dataset_id
+        # 全局查(归属检查只在 data_sets 路由层),跨场景不注入
+        if ds is not None and ds.scenario_id == scen.scenario_id:
+            dataset_name = ds.name or None
+            if ds.rows:
+                row_dict = dict(ds.rows[0] or {})
+    return scheme, scheme_payload, bindings, row_dict, dataset_name
+
+
+async def _alias_urls_of(db, scen_payload: dict) -> dict[str, str]:
+    """场景引用服务的 base_url 集合(执行期活解析;指纹与物化共用)。
+
+    查询异常**向上抛** —— consent 闸调用方按失败口径收口(本轮不执行
+    run=channel):不得以空集算指纹(误判 template_changed)、不得跳过
+    比对(绕闸)。非 consent 路径(owner/platform)沿用「增强项失败
+    跳过」旧口径,由调用方 try/except。
+    """
+    from . import service_aliases
+    return await service_aliases.base_urls_for(
+        db, sorted(referenced_services(
+            definition_from_payload(scen_payload).get("steps") or [])))
+
+
+async def refresh_consent(
+    db, tpl: IntegrationTask, scen: ComposerScenario,
+    inst: IntegrationTask,
+) -> str:
+    """写入当前内容指纹与确认时刻(创建/订阅/重新确认共用)。
+    别名查询失败向上抛(订阅面 503;创建面 best-effort 跳过)。"""
+    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl, scen)
+    alias_urls = await _alias_urls_of(db, scen.payload)
+    fp = consent_fingerprint_of(
+        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+    inst.consent_fingerprint = fp
+    inst.consented_at = _now()
+    return fp
+
+
+async def subscription_view(db, tpl: IntegrationTask) -> dict:
+    """订阅确认摘要(W0a③):只暴露执行所需结构信息(步骤系统·方法·
+    只读标记、凭证别名、服务地址、数据集名、cron),不含场景全文与
+    数据值(私有场景可见性边界,§2.1)。"""
+    scen = (await db.execute(select(ComposerScenario).where(
+        ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
+        if tpl.scenario_id else None
+    if scen is None:
+        raise IntegrationRunError(
+            "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
+    _, scheme_payload, bindings, row_dict, dataset_name = \
+        await _load_exec_shape(db, tpl, scen)
+    aliases = _auth_aliases_of(scen.payload, bindings)
+    alias_urls = await _alias_urls_of(db, scen.payload)
+    fp = consent_fingerprint_of(
+        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+    steps = []
+    for st in (steps_from_payload(scen.payload) or []):
+        call = (st or {}).get("call") or {}
+        method = str(call.get("method") or "")
+        steps.append({
+            "service": call.get("service"), "method": method,
+            "path": call.get("path"),
+            "endpoint": (st or {}).get("endpoint"),
+            "readonly": method.upper() in ("GET", "HEAD", "OPTIONS"),
+        })
+    return {"fingerprint": fp, "steps": steps, "authAliases": aliases,
+            "baseUrls": alias_urls, "datasetName": dataset_name,
+            "cron": tpl.trigger_cron}
+
+
+async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
+    """任务当前注入清单(W0b④;与执行期 `_auth_aliases_of` 同口径:
+    方案 authAlias ∪ 场景 ${auth.*} 扫描)。场景缺失返回空。"""
+    scen = (await db.execute(select(ComposerScenario).where(
+        ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
+        if tpl.scenario_id else None
+    if scen is None:
+        return []
+    _, _, bindings, _, _ = await _load_exec_shape(db, tpl, scen)
+    return _auth_aliases_of(scen.payload, bindings)
+
+
+async def _pause_consent_changed(
+    db, inst: IntegrationTask, tpl: IntegrationTask, *,
+    paused_reason: str, message: str,
+) -> dict:
+    """知情同意闸暂停(非运行失败:不动 last_run_at/fail_streak,不走
+    运维/结论通知通道;直接通知持有人)。"""
+    inst.state = "paused"
+    inst.paused_reason = paused_reason
+    inst.last_error = message[:500]
+    inst.running_since = None
+    await db.commit()
+    if inst.holder_id:
+        try:
+            from .notifications import create_notification
+            async with db_module.SessionLocal() as ndb:
+                await create_notification(
+                    ndb, user_id=inst.holder_id, type_="integration",
+                    title=f"集成任务「{tpl.name}」需要重新确认",
+                    body=message, link="/integrations")
+        except Exception:  # noqa: BLE001 — 通知是增强
+            logger.warning("integration: consent notify failed")
+    return {"status": "paused", "durationMs": 0, "error": message}
+
+
+async def pause_subscriber_instances(
+    tpl: IntegrationTask, *, paused_reason: str, message: str,
+) -> int:
+    """W0a⑤(G-C):模板转 private 等 —— 暂停全部非 owner 订阅实例并
+    逐持有人通知;已暂停/运行中的不动(运行中跑完即停)。返回暂停数。"""
+    async with db_module.SessionLocal() as db:
+        rows = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id.is_not(None),
+            IntegrationTask.holder_id != tpl.owner_id,
+            IntegrationTask.state == "idle",
+        ))).scalars().all()
+        for r in rows:
+            r.state = "paused"
+            r.paused_reason = paused_reason
+            r.last_error = message[:500]
+        await db.commit()
+        holders = [r.holder_id for r in rows]
+        name = tpl.name
+    for uid in holders:
+        try:
+            from .notifications import create_notification
+            async with db_module.SessionLocal() as ndb:
+                await create_notification(
+                    ndb, user_id=uid, type_="integration",
+                    title=f"集成任务「{name}」已暂停",
+                    body=message, link="/integrations")
+        except Exception:  # noqa: BLE001
+            logger.warning("integration: pause notify failed")
+    return len(holders)
+
+
 async def run_instance(instance_id: int) -> dict:
     """执行一个实例并回写状态。不写执行记录;明文凭证只存在于
     materialize 产物与通道请求内(case 落临时目录,执行后删除)。
 
     返回 {status, durationMs, error}(手动执行回显用)。
     """
-    from . import plate_client, service_aliases
+    from . import plate_client
     from .run_dispatcher import (
-        built_in_users, compose_scenario, find_dataset_by_id,
-        resolve_exec_auths,
+        built_in_users, compose_scenario, resolve_exec_auths,
     )
 
     started = _now()
@@ -426,19 +637,8 @@ async def run_instance(instance_id: int) -> dict:
         if scen is None:
             raise IntegrationRunError(
                 "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
-        scheme = None
-        if tpl.scheme_id:
-            scheme = (await db.execute(select(ComposerRunScheme).where(
-                ComposerRunScheme.scheme_id == tpl.scheme_id))).scalar()
-        if scheme is None:
-            row = (await db.execute(select(ComposerRunScheme).where(
-                ComposerRunScheme.scenario_id == scen.scenario_id,
-                ComposerRunScheme.is_default == True,  # noqa: E712
-            ))).scalar()
-            scheme = row or (await db.execute(
-                select(ComposerRunScheme).where(
-                    ComposerRunScheme.scenario_id == scen.scenario_id)
-            )).scalars().first()
+        scheme, scheme_payload, bindings, row_dict, _ds_name = \
+            await _load_exec_shape(db, tpl, scen)
 
         # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
         # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。
@@ -466,23 +666,36 @@ async def run_instance(instance_id: int) -> dict:
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请在编排器钉定修订后重试(外部服务不受影响)")
 
-        scheme_payload = (scheme.payload if scheme else {}) or {}
-        bindings = dict(scheme_payload.get("serviceBindings") or {})
-        # P1 取一行:首个选中数据集的首行;未选 = 裸基线
-        row_dict: dict = {}
-        sel = scheme_payload.get("dataSetSelection") or []
-        ds_id = None
-        if sel and isinstance(sel[0], dict) and sel[0].get("datasetId"):
-            ds_id = str(sel[0]["datasetId"])
-        if not ds_id:
-            ids = scheme_payload.get("dataSetIds") or []
-            ds_id = str(ids[0]) if ids else None
-        if ds_id:
-            ds = await find_dataset_by_id(db, ds_id)
-            if ds is not None and ds.rows:
-                row_dict = dict(ds.rows[0] or {})
-
         aliases = _auth_aliases_of(scen.payload, bindings)
+
+        # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
+        # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
+        # 确认;owner 自有实例不受此闸。别名地址集挪入主会话(指纹与
+        # 物化共用):consent 实例查询失败按失败口径收口(本轮不执行
+        # run=channel —— 不以空集算指纹、不跳过比对),其余实例维持
+        # 「增强项失败跳过」旧口径。
+        consent_gate = (tpl.identity_mode == "personal"
+                        and inst.holder_id is not None
+                        and inst.holder_id != tpl.owner_id)
+        try:
+            alias_urls = await _alias_urls_of(db, scen.payload)
+        except Exception as e:  # noqa: BLE001
+            if consent_gate:
+                return await _finish(
+                    db, inst, tpl, "channel",
+                    f"服务地址解析失败,本轮未执行: {e}")
+            alias_urls = {}
+        if consent_gate:
+            fp = consent_fingerprint_of(
+                scen.payload, scheme_payload, row_dict,
+                tpl.trigger_cron, alias_urls)
+            if (inst.consent_fingerprint or "") != fp:
+                return await _pause_consent_changed(
+                    db, inst, tpl,
+                    paused_reason="template_changed",
+                    message="模板内容已变更(场景/方案/数据集/周期/服务"
+                            "地址),请重新确认订阅后恢复执行")
+
         holder = (await get_platform_user_id()) \
             if tpl.identity_mode == "platform" else inst.holder_id
         # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示去
@@ -497,11 +710,19 @@ async def run_instance(instance_id: int) -> dict:
                     pause_reason="missing_credential")
             exec_auths = []
         else:
-            if aliases and not exec_auths:
-                return await _finish(
-                    db, inst, tpl, "auth",
-                    f"缺少凭证: {','.join(aliases)}",
-                    pause_reason="missing_credential")
+            # S0②(个人侧方案 G-G):任一别名未解析即暂停,一步不执行
+            # —— 个人模式允许写操作,部分缺凭证照跑会在第三方系统留
+            # 半成品。收紧只落本判定;共享 _resolve_exec_auths 维持
+            # 宽松语义(常规测试执行依赖:缺 alias 注入不到 users、
+            # 告警后继续)。
+            if aliases:
+                got = {getattr(a, "alias", "") for a in exec_auths}
+                missing = sorted(set(aliases) - got)
+                if missing:
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        f"缺少凭证: {','.join(missing)}",
+                        pause_reason="missing_credential")
 
         scen_payload = scen.payload
         builtins = built_in_users(scen_payload)
@@ -516,14 +737,6 @@ async def run_instance(instance_id: int) -> dict:
         composed = compose_scenario(
             scen_payload, {**(inst_state_vars or {}), **row_dict})
         converted = (await plate_client.convert(composed)).get("converted") or {}
-        async with db_module.SessionLocal() as db2:
-            alias_urls = {}
-            try:
-                alias_urls = await service_aliases.base_urls_for(
-                    db2, sorted(referenced_services(
-                        definition_from_payload(scen_payload).get("steps") or [])))
-            except Exception:  # noqa: BLE001 — alias 是增强,失败跳过
-                alias_urls = {}
         case = materialize_run_copy(
             converted,
             service_bindings=bindings,

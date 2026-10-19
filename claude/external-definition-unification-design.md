@@ -173,6 +173,8 @@ v0.2 起「外部照常 release」的依据是「plate 只服务冻结构件,读
 
 不按 `query_safe` 拦截;边界 = 用户本人在第三方系统的权限(手册写明)。
 
+个人模式的平台侧机制(订阅实例/缺凭证暂停/按模式通知/凭证复活/个人免只读闸)后端在位(集成线 Y3,2026-10-12);**前端消费面(创建表单/订阅流程/凭证引导)未做**,2026-10-19 起由《集成个人侧实现方案》(`claude/integration-personal-design.md`)排期,其 §0 已按本方案口径对齐。
+
 ### 2.3 可用性
 
 - plate 不可达:沿用现有 fail-closed 出口(`integration_runner.py:465-467`);
@@ -479,5 +481,6 @@ grep -rnE "(ref|v|eff|declared|plateRef)\s*[!=]==?\s*['\"]integration['\"]|start
 
 | **v0.9.10** | 第九轮评审(owner 提出 2 项)/ 均核实成立,全量并入;全量一致性检查 | ①**resolve 域归属补写**:resolve 入参是声明、语义属声明域,但错误现经 `_read_error`(`routes_grammar.py:1242`)返回 400,方案声明域只列了声明闸与 `/convert` —— 新增 **P-6** 决策项(建议归声明域 422;备选保持 400 注明例外),§1.4 域枚举/§3.1 resolve 行/D-K/批1 验收同步挂 P-6;平台侧对 4xx 统一 `PlateRejectedError`(`plate_client.py:465/489`),状态码变化无行为影响(已核实)。②**`_read_error` 转发 reason**:现只带 code+message(`:124-127`),异常附 reason 后取数路由与 resolve 的响应体里看不到 —— §3.1 新增一行改动(把 reason 带进 `ErrorPayload.details`),状态码分域不变,reason 在取数 / resolve / `/convert` 三条路径一致;§1.4/§6.1/批1 验收同步(取数路由 400 响应体含 `details.reason` 断言)。**全量检查**:版本串/域枚举/状态码措辞(「不动」→「状态码不动、补 reason 转发」)/D-K/P-6 交叉引用/R1-R13、D-A~D-K、C1-C12、批0-批4 编号与指向复核,无其他不一致 |
 | **v1.0** | owner 决策轮(2026-10-18)/ 4 项全拍板,定稿 | P-3 → **D-N**(维持合法,批0 盘点⑤复核);P-4 → **D-M**(覆盖,别名表优先;验收含 sut 行为不变断言);P-5 → **D-L**(确认 shape_hash 聚合);P-6 → **D-O**(resolve 归声明域 422,异常出口改声明域映射)。§8.2 清空;全篇 P-3/P-4/P-5/P-6 引用改指对应 D 项;状态升「定稿」;顺带修复 v0.9.10 批1 验收的一处 `****` 重复星号。**定稿后动作**:同提交入库三同步(替换仓库 v0.8.1 旧档、翻转 `docs-cleanup-plan.md` 指针、批1 小设计状态行改「待按 v1.0 重写」);批0 排期;批1 小设计按本版重写(无待拍板项) |
+| v1.0.1 | 2026-10-19 实现评审修复(b2.6)+ D-N 复核关闭 + 个人侧排期 | **b2.6(652514d5,tag `ext-unify-b2-6`)**:实现评审 8 项修复 —— F1 图执行标识补取签名/日志、F2 双向绑定补反向(integration 系统只接受 `integration`,plate+平台同文案)、F4 resolve 裸线 422+`missing_revision`、F5 前端记录域 INVALID 对齐、F6 前端字面量收口、F7 只读闸 docstring、F8 门禁①路径锚定;D-N 复核裁定(A5=11 均种子/调试数据,维持合法为终态,§8.1/§8.2 已记)。**§2.2 补个人模式消费面指针**:前端缺口与批次计划归《集成个人侧实现方案》(`claude/integration-personal-design.md`),其 §0 按本方案口径对齐;无机制变更 |
 
 **跨文档同步(§6.2 第 5 条)**:本版入库时同提交翻转 ——`docs-cleanup-plan.md` 头部联动与 §2.1 中「归一方案 v0.8/v0.8.1」指针改为 v1.0;`plate-external-batch1-design.md` 状态由「已确认」改为「待按 v1.0 重写」。

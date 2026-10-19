@@ -104,6 +104,15 @@ class IntegrationTask(Base):
     check_notified_status: Mapped[str] = mapped_column(String(16), default="")
     check_notified_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True)
+    # ── W0a(个人侧方案 §2 W0a③):订阅知情同意 ──────────────────
+    # consent_fingerprint = 订阅确认时的内容指纹(sha256 hex;投影 =
+    # 场景步骤/方案绑定/数据集首行/cron/base_url 集合,见
+    # integration_runner.consent_fingerprint_of)。执行前比对,不一致
+    # → 非 owner 实例 paused/template_changed;owner 自有实例跳闸但
+    # 同样留底。consented_at = 最近一次确认时刻。
+    consent_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    consented_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

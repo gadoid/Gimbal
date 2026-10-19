@@ -64,6 +64,16 @@ def _visible(user, tpl: IntegrationTask) -> bool:
         or user.role == "admin")
 
 
+async def _my_instance(db: AsyncSession, tpl: IntegrationTask, user):
+    """当前用户的实例(**只读**,W0a① 播种收口):personal 按 holder
+    查不建;platform 维持平台唯一实例口径(不建,创建时已有)。"""
+    if tpl.identity_mode == "personal":
+        return (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id == user.id))).scalar()
+    return await _tpl_instance(db, tpl.id)
+
+
 async def _tpl_instance(db: AsyncSession, tpl_id: int,
                        user=None, tpl=None):
     """模板实例:P1 口径 = 平台唯一实例;Y3 起个人模式按当前用户
@@ -80,8 +90,9 @@ async def _tpl_instance(db: AsyncSession, tpl_id: int,
 
 
 def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
-             current: User) -> dict:
-    return {
+             current: User, *, auth_aliases: list[str] | None = None,
+             subscribed: bool | None = None) -> dict:
+    out = {
         "id": db_tpl.id,
         "name": db_tpl.name,
         "ownerId": db_tpl.owner_id,
@@ -101,15 +112,55 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "removed": db_tpl.removed_at is not None,
         "instance": _inst_out(inst) if inst else None,
     }
+    if auth_aliases is not None:
+        # W0b④:消费面字段(创建/列表/订阅回显供 W1/W2 前端)
+        out["authAliases"] = auth_aliases
+    if subscribed is not None:
+        out["subscribed"] = subscribed
+    return out
 
 
-def _inst_out(inst: IntegrationTask | None) -> dict:
+async def _missing_credentials(
+    db: AsyncSession, aliases: list[str], holder_id: int | None,
+) -> list[str]:
+    """持有人凭证池中缺失的别名全集(W0b④;S0② 后与执行期暂停判定
+    同口径:任一缺失即列)。"""
+    if not aliases or holder_id is None:
+        return []
+    have = set((await db.execute(select(AuthSession.alias).where(
+        AuthSession.owner_id == holder_id,
+        AuthSession.alias.in_(aliases)))).scalars().all())
+    return [a for a in aliases if a not in have]
+
+
+async def _tpl_out_full(
+    db: AsyncSession, tpl: IntegrationTask,
+    inst: IntegrationTask | None, user: User,
+) -> dict:
+    """W0b④ 消费面组装:authAliases / missingCredentials / subscribed。
+    missing 的持有人:personal = 当前查看者(「我缺什么」),platform =
+    平台实例持有人。"""
+    aliases = await integration_runner.auth_aliases_view(db, tpl)
+    holder = user.id if tpl.identity_mode == "personal" else (
+        inst.holder_id if inst is not None else None)
+    missing = await _missing_credentials(db, aliases, holder)
+    subscribed = (tpl.identity_mode == "personal"
+                  and inst is not None and inst.holder_id == user.id)
+    out = _tpl_out(tpl, inst, user,
+                   auth_aliases=aliases, subscribed=subscribed)
+    if inst is not None:
+        out["instance"] = _inst_out(inst, missing=missing)
+    return out
+
+
+def _inst_out(inst: IntegrationTask | None,
+              *, missing: list[str] | None = None) -> dict:
     if inst is None:
         return {"state": "none", "enabled": False,
                 "lastRunAt": None, "lastError": "", "pausedReason": "",
                 "nextRunAt": None, "failStreak": 0,
                 "runStatus": "", "checkStatus": "", "checkMessage": "",
-                "checkChangedAt": None}
+                "checkChangedAt": None, "missingCredentials": []}
     return {
         "state": inst.state,
         "enabled": inst.enabled,
@@ -122,6 +173,8 @@ def _inst_out(inst: IntegrationTask | None) -> dict:
         "pausedReason": inst.paused_reason,
         "nextRunAt": _iso(inst.next_run_at),
         "failStreak": inst.fail_streak,
+        # W0b④:缺失别名全集(与暂停判定同口径 = 任一缺失即列)
+        "missingCredentials": missing or [],
     }
 
 
@@ -160,8 +213,8 @@ async def list_tasks(user: CurrentUser, db: DbSession) -> dict:
     for t in rows:
         if not _visible(user, t):
             continue
-        inst = await _tpl_instance(db, t.id, user=user, tpl=t)
-        out.append(_tpl_out(t, inst, user))
+        inst = await _my_instance(db, t, user)   # W0a①:列表只读不播种
+        out.append(await _tpl_out_full(db, t, inst, user))
     return {"items": out}
 
 
@@ -184,6 +237,17 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
     if scen.owner_id != user.id:
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
+    # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
+    # 场景限定)。此前 schemeId 直接入库 + runner 全局取方案,枚举
+    # rs-NNN 可跨场景引用他人方案/数据集。
+    if body.schemeId:
+        from ..services import scheme_store
+        try:
+            await scheme_store.get_row(db, scen.scenario_id, body.schemeId)
+        except KeyError:
+            raise _bad(
+                "scheme_not_owned",
+                f"执行方案不存在或不属于该场景: {body.schemeId}") from None
     # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤);
     # Y3:个人模式放行写操作(写操作必须个人身份,方案 §3)
     if body.identityMode == "platform":
@@ -205,7 +269,16 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
     await db.refresh(tpl)
     inst = await integration_runner.ensure_instance(
         tpl, holder_id=user.id if body.identityMode == "personal" else None)
-    return _tpl_out(tpl, inst, user)
+    if inst is not None:
+        # W0a③:owner 实例留底内容指纹(执行闸只对非 owner 生效);
+        # 别名查询失败不阻断创建(owner 无闸,best-effort)
+        try:
+            inst2 = await db.get(IntegrationTask, inst.id)
+            await integration_runner.refresh_consent(db, tpl, scen, inst2)
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            await db.rollback()
+    return await _tpl_out_full(db, tpl, inst, user)
 
 
 async def _read_only_with_plate(
@@ -220,8 +293,8 @@ async def get_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
-    inst = await _tpl_instance(db, tpl.id, user=user, tpl=tpl)
-    return _tpl_out(tpl, inst, user)
+    inst = await _my_instance(db, tpl, user)   # W0a①:详情只读不播种
+    return await _tpl_out_full(db, tpl, inst, user)
 
 
 @router.patch("/tasks/{task_id}")
@@ -241,8 +314,20 @@ async def patch_task(
         tpl.trigger_cron = body.triggerCron
     if body.name is not None:
         tpl.name = body.name
-    if body.schemeId is not None:
+    if body.schemeId:
+        # S0①(G-A):PATCH 同创建闸,方案必须属于模板场景
+        if not tpl.scenario_id:
+            raise _bad("scheme_not_owned", "任务未绑定场景,不能设置执行方案")
+        from ..services import scheme_store
+        try:
+            await scheme_store.get_row(db, tpl.scenario_id, body.schemeId)
+        except KeyError:
+            raise _bad(
+                "scheme_not_owned",
+                f"执行方案不存在或不属于该场景: {body.schemeId}") from None
         tpl.scheme_id = body.schemeId
+    elif body.schemeId is not None:
+        tpl.scheme_id = body.schemeId   # 显式空串 = 清除(维持原语义)
     if body.resultPolicy in ("latest", "on_change"):
         tpl.result_policy = body.resultPolicy
     if body.visibility in ("private", "public"):
@@ -251,8 +336,15 @@ async def patch_task(
         tpl.target_system = body.targetSystem
     tpl.updated_by = user.id
     await db.commit()
+    # W0a⑤(G-C):public→private 联动 —— 非 owner 订阅实例暂停+通知;
+    # 转回 public 不自动恢复,需订阅者重新确认(再订阅)
+    if body.visibility == "private" and tpl.identity_mode == "personal":
+        await integration_runner.pause_subscriber_instances(
+            tpl, paused_reason="made_private",
+            message="模板已转为私有,执行已暂停;模板重新公开后请重新"
+                    "确认订阅")
     inst = await _tpl_instance(db, tpl.id)
-    return _tpl_out(tpl, inst, user)
+    return await _tpl_out_full(db, tpl, inst, user)
 
 
 @router.delete("/tasks/{task_id}")
@@ -270,8 +362,9 @@ async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
 
 @router.post("/tasks/{task_id}/run")
 async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """立即执行:平台模式任意可见者(冷却 60s);个人模式订阅者各自的
-    实例(无冷却,方案 §3 操作表;首次触发即建 = 订阅即创建)。"""
+    """立即执行:平台模式任意可见者(冷却 60s);个人模式订阅者各自
+    的实例(无冷却,方案 §3 操作表)。W0a① 起「点执行即订阅」收口:
+    未订阅用户 409 引导走订阅确认。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
@@ -285,12 +378,22 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
                 "working_preview",
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请先在编排器钉定修订(外部服务不受影响)", 409)
-    seeded = await integration_runner.ensure_instance(
-        tpl, holder_id=user.id if tpl.identity_mode == "personal" else None)
-    if seeded is None:
-        raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)
-    # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
-    inst = await db.get(IntegrationTask, seeded.id)
+    # W0a①(P-1=b 播种收口):个人模式不再隐式建实例 —— 未订阅 409
+    # 引导订阅确认,不建不跑;平台模式维持 ensure(唯一平台实例兜底)。
+    if tpl.identity_mode == "personal":
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id == user.id))).scalar()
+        if inst is None:
+            raise _bad(
+                "subscription_required",
+                "尚未订阅该个人模式任务,请先订阅确认后再执行", 409)
+    else:
+        seeded = await integration_runner.ensure_instance(tpl)
+        if seeded is None:
+            raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)
+        # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
+        inst = await db.get(IntegrationTask, seeded.id)
     # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
     # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC(utcnow
     # 3.12 起废弃);DB 读回仍按 ensure_aware 归一(两方言形状不同)。
@@ -336,6 +439,144 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     return {"result": result, "instance": _inst_out(fresh)}
 
 
+# ── W0a(个人侧方案 §2):订阅知情同意 ────────────────────────────
+
+def _subscribable(tpl: IntegrationTask, user) -> None:
+    """订阅面前置:模板行/可见/未删 + 仅个人模式(平台模式无订阅概念)。"""
+    if tpl.template_id is not None or not _visible(user, tpl):
+        raise _bad("not_found", "功能不存在", 404)
+    if tpl.identity_mode != "personal":
+        raise _bad("not_subscribable", "仅个人模式任务支持订阅", 422)
+
+
+@router.get("/tasks/{task_id}/subscription-summary")
+async def subscription_summary(
+    task_id: int, user: CurrentUser, db: DbSession,
+) -> dict:
+    """订阅确认摘要(W0a③):步骤系统·方法·只读标记、所需凭证别名、
+    服务地址、数据集名、cron —— 结构信息 only,不含场景全文与数据值
+    (私有场景可见性边界,§2.1)。"""
+    tpl = await db.get(IntegrationTask, task_id)
+    if tpl is None:
+        raise _bad("not_found", "功能不存在", 404)
+    _subscribable(tpl, user)
+    try:
+        return await integration_runner.subscription_view(db, tpl)
+    except integration_runner.IntegrationRunError as e:
+        raise _bad(e.code, e.message, 404) from None
+    except Exception as e:  # noqa: BLE001 — 别名查询失败 → 503(订阅面口径)
+        raise _bad("alias_unavailable",
+                   f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+
+
+@router.post("/tasks/{task_id}/subscribe")
+async def subscribe_task(
+    task_id: int, user: CurrentUser, db: DbSession,
+) -> dict:
+    """显式订阅(W0a①/P-1=b):建立/刷新持有人实例 + 记录内容指纹与
+    确认时刻;对 template_changed/made_private 暂停的实例 = 重新确认
+    (刷新指纹并恢复调度)。幂等。"""
+    tpl = await db.get(IntegrationTask, task_id)
+    if tpl is None:
+        raise _bad("not_found", "功能不存在", 404)
+    _subscribable(tpl, user)
+    scen = (await db.execute(select(ComposerScenario).where(
+        ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
+        if tpl.scenario_id else None
+    if scen is None:
+        raise _bad("scenario_not_found", "场景不存在", 404)
+    inst = await integration_runner.ensure_instance(tpl, holder_id=user.id)
+    if inst is None:
+        raise _bad("instance_missing", "实例创建失败", 500)
+    inst = await db.get(IntegrationTask, inst.id)
+    try:
+        await integration_runner.refresh_consent(db, tpl, scen, inst)
+    except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503,不留半确认
+        await db.rollback()
+        raise _bad("alias_unavailable",
+                   f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+    if inst.state == "paused" and inst.paused_reason in (
+            "template_changed", "made_private"):
+        inst.state = "idle"
+        inst.paused_reason = ""
+        inst.last_error = ""
+        inst.next_run_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(inst)
+    return await _tpl_out_full(db, tpl, inst, user)
+
+
+@router.delete("/tasks/{task_id}/subscription", status_code=204)
+async def unsubscribe_task(
+    task_id: int, user: CurrentUser, db: DbSession,
+) -> None:
+    """退订(P-3):删持有人实例行(模板不动;重订 = 重新确认重建)。"""
+    tpl = await db.get(IntegrationTask, task_id)
+    if tpl is None:
+        raise _bad("not_found", "功能不存在", 404)
+    _subscribable(tpl, user)
+    row = (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id == tpl.id,
+        IntegrationTask.holder_id == user.id))).scalar()
+    if row is not None:
+        await db.delete(row)
+        await db.commit()
+
+
+async def _my_subscription(db: AsyncSession, tpl: IntegrationTask, user: User):
+    row = (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id == tpl.id,
+        IntegrationTask.holder_id == user.id))).scalar()
+    if row is None:
+        raise _bad("subscription_not_found", "尚未订阅该任务", 404)
+    return row
+
+
+@router.post("/tasks/{task_id}/subscription/pause")
+async def pause_my_subscription(
+    task_id: int, user: CurrentUser, db: DbSession,
+) -> dict:
+    """W0b⑥(G-D):订阅者自暂停 —— paused/manual(凭证复活钩子不覆盖
+    manual,只有本人 resume 可恢复)。幂等;调度面只认 idle,暂停即
+    不再被认领。"""
+    tpl = await db.get(IntegrationTask, task_id)
+    if tpl is None:
+        raise _bad("not_found", "功能不存在", 404)
+    _subscribable(tpl, user)
+    inst = await _my_subscription(db, tpl, user)
+    if inst.state != "paused" or inst.paused_reason != "manual":
+        inst.state = "paused"
+        inst.paused_reason = "manual"
+        await db.commit()
+    return await _tpl_out_full(db, tpl, inst, user)
+
+
+@router.post("/tasks/{task_id}/subscription/resume")
+async def resume_my_subscription(
+    task_id: int, user: CurrentUser, db: DbSession,
+) -> dict:
+    """W0b⑥:订阅者恢复(仅 manual 暂停可恢复)。其余暂停原因各有
+    专属路径,恢复操作不代偿:template_changed/made_private → 重新
+    订阅确认;missing_credential → 补配凭证(复活钩子自动恢复)。"""
+    tpl = await db.get(IntegrationTask, task_id)
+    if tpl is None:
+        raise _bad("not_found", "功能不存在", 404)
+    _subscribable(tpl, user)
+    inst = await _my_subscription(db, tpl, user)
+    if inst.state == "paused" and inst.paused_reason != "manual":
+        raise _bad(
+            "resume_not_allowed",
+            f"该暂停({inst.paused_reason})不能由恢复操作解除:"
+            "template_changed/made_private 请重新订阅确认,"
+            "missing_credential 请补配凭证", 409)
+    if inst.state == "paused":
+        inst.state = "idle"
+        inst.paused_reason = ""
+        inst.next_run_at = datetime.now(timezone.utc)
+        await db.commit()
+    return await _tpl_out_full(db, tpl, inst, user)
+
+
 # ── 批量卡片接口(方案 §7 取数契约)─────────────────────────────
 
 class CardsIn(BaseModel):
@@ -360,8 +601,14 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
         if not _visible(user, tpl):
             out.append({"id": raw, "state": "removed"})
             continue
-        inst = await _tpl_instance(db, tpl.id, user=user, tpl=tpl)
+        inst = await _my_instance(db, tpl, user)   # W0a①:只读不播种
         io = _inst_out(inst)
+        # W0b④:消费面字段(W3 凭证引导用:角标定位缺失别名)
+        card_aliases = await integration_runner.auth_aliases_view(db, tpl)
+        card_missing = await _missing_credentials(
+            db, card_aliases,
+            user.id if tpl.identity_mode == "personal"
+            else (inst.holder_id if inst is not None else None))
         # Y4/方案 §7:卡片输出投影 —— output_mapping {输出键 → 展示键};
         # 缺省(空 mapping)= 全量 last_outputs(已脱敏)。kv/counter/
         # list 模板据比渲染。
@@ -389,6 +636,8 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "identityMode": tpl.identity_mode, "stale": stale,
+            "authAliases": card_aliases,
+            "missingCredentials": card_missing,
             "outputs": card_outputs,
             "cardTemplate": tpl.card_template or "status",
         })

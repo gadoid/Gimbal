@@ -615,9 +615,13 @@ async def test_personal_mode_lifecycle(client):
         # 创建即订阅:owner 的实例在(个人模式不建平台实例)
         assert len(rows) == 1 and rows[0].holder_id is not None
 
-    # u2 首次立即执行 = 订阅即建(不等通道真跑,断实例已建)
+    # W0a①(P-1=b 播种收口):未订阅用户 run → 409 引导订阅,不建实例
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
-    assert r.status_code in (200, 500), r.text   # 无凭证/场景细节失败皆可
+    assert r.status_code == 409, r.text
+    assert "subscription_required" in r.text
+    # 显式订阅(知情同意入口)→ u2 实例建立
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    assert r.status_code == 200, r.text
     async with db_module.SessionLocal() as s:
         from app.models.integration_task import IntegrationTask
         rows = (await s.execute(_sel(IntegrationTask).where(
