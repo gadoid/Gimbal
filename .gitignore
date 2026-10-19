@@ -54,3 +54,7 @@ node_modules/
 *.dump
 !pg-init/*.sql
 !scripts/fixtures/*.sql
+
+# 本地运维产物(库备份/会话计划,不入库)
+backups/
+.zcode/
