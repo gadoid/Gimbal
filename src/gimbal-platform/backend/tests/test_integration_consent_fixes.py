@@ -210,6 +210,43 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
     assert r.json()["instance"] is None
 
 
+async def test_integration_passes_carry_context_to_materialize(
+        client, plate_mock, monkeypatch):
+    """carry 修复(与 run_dispatcher 同入口):集成链物化必须带上
+    build_carry_context 的产物(此前传 None 跳过整层 —— 依赖 carry
+    的场景创建单被业务层拒,误报「契约不符」);构建故障降级为 None
+    不阻塞执行。"""
+    from app.services import integration_runner as ir
+    import app.services.carry_injection as ci
+
+    u1 = await register_and_login(client, "cfx_a", "pw123456")
+    await _mk_scenario(client, u1, "sc-cfx", {"jira": "1.0#1"})
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-cfx"))).json()["id"]
+
+    captured = {}
+
+    def _fake_materialize(converted, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop-before-channel")
+
+    monkeypatch.setattr(ir, "materialize_run_copy", _fake_materialize)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    assert captured.get("carry_context") is not None
+
+    # 构建故障 → 降级为 None,链路仍走到物化(carry 是增强不是前置)
+    async def _boom(db, definition, ui_field_states=None):
+        raise RuntimeError("carry db down")
+
+    monkeypatch.setattr(ci, "build_carry_context", _boom)
+    captured.clear()
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    assert "carry_context" in captured
+    assert captured["carry_context"] is None
+
+
 async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     """P2.3:转私有后,运行中回 idle 再被调度/凭证复活拉回的两条漏网
     路径由执行闸兜住 → paused/made_private(联动暂停 = 提前通知)。"""

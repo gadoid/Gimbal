@@ -826,12 +826,28 @@ async def run_instance(instance_id: int) -> dict:
         composed = compose_scenario(
             scen_payload, {**(inst_state_vars or {}), **row_dict})
         converted = (await plate_client.convert(composed)).get("converted") or {}
+        # carry 预解析(与 run_dispatcher 同一入口、同一快照语义 ——
+        # 归一方案 D-M:carry 覆盖第三方端点,集成场景与测试执行同
+        # 口径注入。此前传 None 跳过整层,依赖 carry 的场景(如带
+        # carry 面的导入用例)业务必败、误报「契约不符」)。carry 是
+        # 增强不是前置条件:构建故障降级为无 carry,不阻塞执行。
+        from .carry_injection import build_carry_context
+        _ui_fs = ((scen_payload or {}).get("ui") or {}).get("fieldStates") or {}
+        try:
+            async with db_module.SessionLocal() as _carry_db:
+                carry_ctx = await build_carry_context(
+                    _carry_db, definition_from_payload(scen_payload),
+                    ui_field_states=_ui_fs)
+        except Exception:  # noqa: BLE001
+            logger.opt(exception=True).warning(
+                "integration: carry context build failed; skipped")
+            carry_ctx = None
         case = materialize_run_copy(
             converted,
             service_bindings=bindings,
             resolved_auths=exec_auths,
             built_in_users=builtins,
-            carry_context=None,
+            carry_context=carry_ctx,
             alias_base_urls=alias_urls,
         )
         with tempfile.TemporaryDirectory(prefix="integration-case-") as td:
