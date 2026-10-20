@@ -217,13 +217,13 @@ export async function fetchSubscriptionSummary(
 
 export async function subscribeIntegrationTask(
   id: number,
-  /** P2.2:摘要返回的 fingerprint —— 服务端与当前内容比对,
-   * 不一致 409 consent_stale(确认的必须是看到的那份内容)。 */
-  fingerprint?: string,
+  /** P2.2:摘要返回的 fingerprint(必填)—— 服务端与当前内容比对,
+   * 不一致 409 consent_stale(确认的必须是看到的那份内容);
+   * 不带指纹的订阅没有「知情」凭据,服务端 422。 */
+  fingerprint: string,
 ): Promise<IntegrationTaskItem> {
   const { data } = await http.post<IntegrationTaskItem>(
-    `/integration/tasks/${id}/subscribe`,
-    fingerprint ? { fingerprint } : undefined)
+    `/integration/tasks/${id}/subscribe`, { fingerprint })
   return data
 }
 

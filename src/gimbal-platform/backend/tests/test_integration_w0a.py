@@ -24,6 +24,17 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
 
+async def _subscribe(client, h, tid: int):
+    """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    return await client.post(
+        f"/api/integration/tasks/{tid}/subscribe",
+        headers=h, json={"fingerprint": fp})
+
+
+
 STEPS = [{
     "kind": "step", "description": "探活",
     "call": {"protocol": "http", "service": "svc",
@@ -100,7 +111,7 @@ async def test_subscribe_flow_and_gate(client):
     assert view["steps"] and view["steps"][0]["service"] == "svc"
     assert view["steps"][0]["readonly"] is True
     assert view["cron"] == "*/5 * * * *"
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     inst = await _inst(tid, uid2)
     assert inst is not None and inst.consent_fingerprint
@@ -126,7 +137,7 @@ async def test_subscribe_flow_and_gate(client):
     assert inst1.paused_reason != "template_changed"
 
     # 重新确认 = 再订阅:刷新指纹并恢复调度
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     inst = await _inst(tid, uid2)
     assert inst.state == "idle" and inst.paused_reason == ""
@@ -136,7 +147,7 @@ async def test_subscribe_flow_and_gate(client):
                             headers=u2)
     assert r.status_code == 204, r.text
     assert await _inst(tid, uid2) is None
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid2)).consent_fingerprint
 
@@ -154,7 +165,7 @@ async def test_base_url_change_triggers_template_changed(client):
                             base_url="http://host-a"))
         await db.commit()
 
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     fp0 = (await _inst(tid, uid2)).consent_fingerprint
 
@@ -181,7 +192,7 @@ async def test_alias_query_failure_is_channel_not_consent(client, monkeypatch):
     await _mk_scenario(client, u1, "sc-w0c")
     tid = await _mk_task(client, u1, "sc-w0c")
     uid2 = await _user_id("w0a_f")
-    await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    await _subscribe(client, u2, tid)
 
     async def _boom(db, payload):
         raise RuntimeError("alias db down")
@@ -205,7 +216,7 @@ async def test_visibility_private_pauses_subscribers(client):
     tid = await _mk_task(client, u1, "sc-w0d")
     uid1 = await _user_id("w0a_g")
     uid2 = await _user_id("w0a_h")
-    await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    await _subscribe(client, u2, tid)
 
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
                            json={"visibility": "private"})
@@ -222,7 +233,7 @@ async def test_visibility_private_pauses_subscribers(client):
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid2)).state == "paused"
     # 重新确认(再订阅)恢复
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid2)).state == "idle"
 
@@ -256,7 +267,9 @@ async def test_platform_task_not_subscribable(client):
         "sc-w0f", identityMode="platform", visibility="private"))
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u1)
+    # 平台任务:前置摘要即 422(助手不适用),直连断言订阅闸
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": "x"})
     assert r.status_code == 422 and "not_subscribable" in r.text, r.text
     r = await client.get(f"/api/integration/tasks/{tid}/subscription-summary",
                          headers=u1)

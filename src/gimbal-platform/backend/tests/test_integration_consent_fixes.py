@@ -29,6 +29,17 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
 
+async def _subscribe(client, h, tid: int):
+    """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    return await client.post(
+        f"/api/integration/tasks/{tid}/subscribe",
+        headers=h, json={"fingerprint": fp})
+
+
+
 # 钉定系统的锚点步骤:草稿带内联 method/path(保存时被 strip 剥掉,
 # 即 P1 的复现前提 —— 存储里只剩场景自有字段)。
 ANCHORED_STEPS = [
@@ -123,7 +134,7 @@ async def test_fingerprint_covers_meta_plate(client, plate_mock):
     tid = (await client.post("/api/integration/tasks", headers=u1,
                              json=_task_body("sc-fix2"))).json()["id"]
     uid2 = await _user_id("fix_d")
-    await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    await _subscribe(client, u2, tid)
 
     # 换修订:1.0 线第二个修订(校验面需要),步骤原样
     plate_mock.lines = {"jira": [{"line": "1.0", "revisions": 2,
@@ -175,6 +186,30 @@ async def test_subscribe_with_stale_fingerprint_409(client, plate_mock):
     assert (await _inst(tid, uid2)).consent_fingerprint == fp2
 
 
+async def test_subscribe_without_fingerprint_422(client, plate_mock):
+    """P2.2 反例:fingerprint 必填 —— 不带指纹(或空串)的订阅 422,
+    不留「不看摘要也能订阅」的口子(平台未上线,无旧客户端兼容)。"""
+    u1 = await register_and_login(client, "cfp_a", "pw123456")
+    u2 = await register_and_login(client, "cfp_b", "pw123456")
+    draft = make_draft("sc-cfp", steps=ANCHORED_STEPS,
+                       plate={"jira": "1.0#1"})
+    r = await client.post("/api/scenarios", headers=u1, json=draft)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
+        "sc-cfp", identityMode="personal", visibility="public"))
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+
+    # 不带 body / 带空指纹 → 均为 422,实例不建立
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    assert r.status_code == 422, r.text
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u2, json={"fingerprint": ""})
+    assert r.status_code == 422, r.text
+    r = await client.get(f"/api/integration/tasks/{tid}", headers=u2)
+    assert r.json()["instance"] is None
+
+
 async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     """P2.3:转私有后,运行中回 idle 再被调度/凭证复活拉回的两条漏网
     路径由执行闸兜住 → paused/made_private(联动暂停 = 提前通知)。"""
@@ -187,7 +222,7 @@ async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     tid = (await client.post("/api/integration/tasks", headers=u1,
                              json=_task_body("sc-fix4"))).json()["id"]
     uid2 = await _user_id("fix_h")
-    await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    await _subscribe(client, u2, tid)
     inst_id = (await _inst(tid, uid2)).id
 
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,

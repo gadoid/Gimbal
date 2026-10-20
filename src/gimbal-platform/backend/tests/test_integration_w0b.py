@@ -16,6 +16,17 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
 
+async def _subscribe(client, h, tid: int):
+    """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    return await client.post(
+        f"/api/integration/tasks/{tid}/subscribe",
+        headers=h, json={"fingerprint": fp})
+
+
+
 AUTH_STEPS = [{
     "kind": "step", "description": "拉取",
     "call": {"protocol": "http", "service": "svc",
@@ -70,7 +81,7 @@ async def test_consumer_fields_lifecycle(client):
     assert item["subscribed"] is False
     assert item["instance"] is None
 
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     item = await _item(client, u2, tid)
     assert item["subscribed"] is True
@@ -102,7 +113,7 @@ async def test_cards_carry_consumer_fields(client):
     u1 = await register_and_login(client, "w0b_d", "pw123456")
     u2 = await register_and_login(client, "w0b_e", "pw123456")
     tid = await _mk_task(client, u1, "sc-w0b3")
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     r = await client.post("/api/integration/cards", headers=u2,
                           json={"ids": [f"fn:{tid}"]})
@@ -122,7 +133,7 @@ async def test_pause_resume_and_revive_scope(client):
     u3 = await register_and_login(client, "w0b_h", "pw123456")
     tid = await _mk_task(client, u1, "sc-w0b4")
     uid2 = await _user_id("w0b_g")
-    await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    await _subscribe(client, u2, tid)
 
     # 未订阅者自管 → 404
     r = await client.post(
@@ -159,6 +170,6 @@ async def test_pause_resume_and_revive_scope(client):
         f"/api/integration/tasks/{tid}/subscription/resume", headers=u2)
     assert r.status_code == 409 and "resume_not_allowed" in r.text, r.text
     # 重新订阅确认后再自管一轮
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid2)).state == "idle"

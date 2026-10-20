@@ -98,11 +98,12 @@ watch(() => props.open, (v) => {
 })
 
 async function confirm(): Promise<void> {
+  if (!summary.value) return   // 确认按钮本就禁用,守卫兜底
   confirming.value = true
   try {
-    // P2.2:带上摘要指纹 —— 服务端确认「确认的 = 看到的」;摘要之后
-    // 内容变了会 409 consent_stale,重拉摘要让订阅者重新核对。
-    await subscribeIntegrationTask(props.taskId, summary.value?.fingerprint)
+    // P2.2:带上摘要指纹(必填)—— 服务端确认「确认的 = 看到的」;
+    // 摘要之后内容变了会 409 consent_stale,重拉摘要重新核对。
+    await subscribeIntegrationTask(props.taskId, summary.value.fingerprint)
     toast.success('已订阅 — 内容已确认,按周期执行')
     emit('done')
     emit('close')

@@ -520,19 +520,21 @@ async def subscription_summary(
 
 class SubscribeIn(BaseModel):
     """P2.2:订阅回传摘要里的 fingerprint —— 确认的必须是订阅者看到
-    的那份内容;与当前计算值不一致 409,前端重拉摘要后再确认。缺省
-    兼容旧客户端(不比对)。"""
-    fingerprint: str | None = None
+    的那份内容;与当前计算值不一致 409,前端重拉摘要后再确认。
+    **必填**(平台未上线、无旧客户端;不留「不看摘要也能订阅」的
+    口子 —— 知情同意初衷)。"""
+    fingerprint: str = Field(min_length=1)
 
 
 @router.post("/tasks/{task_id}/subscribe")
 async def subscribe_task(
     task_id: int, user: CurrentUser, db: DbSession,
-    body: SubscribeIn | None = None,
+    body: SubscribeIn,
 ) -> dict:
     """显式订阅(W0a①/P-1=b):建立/刷新持有人实例 + 记录内容指纹与
     确认时刻;对 template_changed/made_private 暂停的实例 = 重新确认
-    (刷新指纹并恢复调度)。幂等。"""
+    (刷新指纹并恢复调度)。幂等。**必须回传摘要 fingerprint**,
+    缺失/为空 422。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
@@ -545,17 +547,16 @@ async def subscribe_task(
     # P2.2:先按当前内容算指纹并与回传值比对(在 ensure_instance 之前
     # —— 比对失败不留半确认的实例行)。摘要之后内容变了 → 409,让
     # 前端重拉摘要;订阅者确认的永远是他在摘要里看到的那份内容。
-    if body is not None and body.fingerprint:
-        try:
-            current_fp = await integration_runner.consent_fingerprint_now(
-                db, tpl, scen)
-        except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503
-            raise _bad("alias_unavailable",
-                       f"服务地址解析失败,暂不能订阅: {e}", 503) from None
-        if body.fingerprint != current_fp:
-            raise _bad(
-                "consent_stale",
-                "模板内容已变更,请重新查看执行内容摘要后确认", 409)
+    try:
+        current_fp = await integration_runner.consent_fingerprint_now(
+            db, tpl, scen)
+    except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503
+        raise _bad("alias_unavailable",
+                   f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+    if body.fingerprint != current_fp:
+        raise _bad(
+            "consent_stale",
+            "模板内容已变更,请重新查看执行内容摘要后确认", 409)
     inst = await integration_runner.ensure_instance(tpl, holder_id=user.id)
     if inst is None:
         raise _bad("instance_missing", "实例创建失败", 500)

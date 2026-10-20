@@ -11,6 +11,17 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
 
+async def _subscribe(client, h, tid: int):
+    """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    return await client.post(
+        f"/api/integration/tasks/{tid}/subscribe",
+        headers=h, json={"fingerprint": fp})
+
+
+
 STEPS = [{
     "kind": "step", "description": "探活",
     "call": {"protocol": "http", "service": "svc",
@@ -32,7 +43,7 @@ async def test_delete_notifies_subscribers(client):
         "visibility": "public"})
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
 
     async with db_module.SessionLocal() as db:

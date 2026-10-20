@@ -142,7 +142,7 @@
 
 **行为清单(实现落点)**:
 - 播种点 4 处收口:列表/详情/卡片 GET 只查不建(`_my_instance`);run 面未订阅 → **409 `subscription_required`**(不建不跑);创建保留 owner 播种并**留底指纹**(best-effort);
-- 端点:`GET /tasks/{id}/subscription-summary`(结构摘要:步骤系统·方法·只读标记/凭证别名/服务地址/数据集名/cron;不含场景全文与数据值)、`POST /tasks/{id}/subscribe`(幂等;建实例 + 刷指纹 + `consented_at`;对 `template_changed`/`made_private` 暂停实例 = 重新确认恢复调度;别名查询失败 503 `alias_unavailable` 不留半确认)、`DELETE /tasks/{id}/subscription`(P-3 删行);
+- 端点:`GET /tasks/{id}/subscription-summary`(结构摘要:步骤系统·方法·只读标记/凭证别名/服务地址/数据集名/cron;不含场景全文与数据值)、`POST /tasks/{id}/subscribe`(**必须回传摘要 `fingerprint`**(P2.2 定稿:必填,缺失/为空 422 —— 平台未上线无旧客户端,不留「不看摘要也能订阅」的口子);幂等;建实例 + 刷指纹 + `consented_at`;回传指纹与当前内容不一致 409 `consent_stale`(比对先于建实例,不留半确认);对 `template_changed`/`made_private` 暂停实例 = 重新确认恢复调度,同一接口同一必填口径;别名查询失败 503 `alias_unavailable` 不留半确认)、`DELETE /tasks/{id}/subscription`(P-3 删行);
 - 暂停原因:`template_changed`(指纹不一致,**含未留指纹的存量行** —— 按未确认处理;非运行失败:不动 `last_run_at`/`fail_streak`,直接通知持有人)、`made_private`(W0a⑤);
 - 执行闸位置:`run_instance` 内、凭证解析**之前**(同意不成立不碰凭证);
 - 迁移 `0030_integration_consent`:加列 `consent_fingerprint`/`consented_at` + 存量清理(非 owner personal 实例行删除;活库 0 条)。

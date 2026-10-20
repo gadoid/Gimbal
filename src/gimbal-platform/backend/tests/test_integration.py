@@ -26,6 +26,17 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
 
+async def _subscribe(client, h, tid: int):
+    """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    return await client.post(
+        f"/api/integration/tasks/{tid}/subscribe",
+        headers=h, json={"fingerprint": fp})
+
+
+
 STEPS_GET = [{
     "kind": "step", "description": "探活",
     "call": {"service": "platform.health", "method": "GET", "path": "/api/health"},
@@ -620,7 +631,7 @@ async def test_personal_mode_lifecycle(client):
     assert r.status_code == 409, r.text
     assert "subscription_required" in r.text
     # 显式订阅(知情同意入口)→ u2 实例建立
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe", headers=u2)
+    r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     async with db_module.SessionLocal() as s:
         from app.models.integration_task import IntegrationTask
