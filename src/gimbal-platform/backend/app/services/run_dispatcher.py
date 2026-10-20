@@ -935,29 +935,16 @@ async def dispatch_run(
     # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
     # steps(authored 模板所在处,${auth.*} 引用一网打尽);绑定的
     # authAlias 并入(即使 steps 未引用该 alias)。去重保序。
-    scanned = scan_auth_aliases(definition_from_payload(scen.payload).get("steps") or [])
-    bound = [b.auth_alias for b in req.service_bindings.values() if b.auth_alias]
-    auth_aliases: list[str] = [*scanned, *bound]
-    # 别名表凭证默认(服务画像方案 §4.1):raw 服务键精确命中
-    # service_aliases.credential_alias → 并入注入清单,按执行者本人
-    # 凭证池解析(_resolve_exec_auths 的 owner 过滤)。优先级:场景
-    # 显式绑定 > 别名表命中 —— 同键已绑 authAlias 的不吃默认。
+    # 注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
+    # 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认,显式绑定优先)。
     # 存档口径(§4.1 拍板):config_json.serviceBindings 只记场景原始
     # 绑定,别名默认只体现于 injectedAuths 清单与实际注入的 users。
-    # 查表失败降级跳过(别名默认是增强,不是前置条件)。
-    try:
-        alias_creds = await service_aliases.credential_aliases_for(
-            db, referenced_services(
-                definition_from_payload(scen.payload).get("steps") or []))
-    except Exception:  # noqa: BLE001
-        logger.opt(exception=True).warning(
-            "run_dispatcher: service alias lookup failed; skipped")
-        alias_creds = {}
-    bound_keys = {k for k, b in req.service_bindings.items() if b.auth_alias}
-    auth_aliases = list(dict.fromkeys([
-        *auth_aliases,
-        *(cred for raw, cred in alias_creds.items() if raw not in bound_keys),
-    ]))
+    auth_aliases = await service_aliases.exec_auth_aliases(
+        db,
+        definition_from_payload(scen.payload).get("steps") or [],
+        {k: {"authAlias": b.auth_alias}
+         for k, b in (req.service_bindings or {}).items()},
+    )
 
     from . import execution_queue as _eq
     chain = chain_override or str(

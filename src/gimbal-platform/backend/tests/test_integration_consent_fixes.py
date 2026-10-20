@@ -210,6 +210,89 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
     assert r.json()["instance"] is None
 
 
+async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch):
+    """两链统一:别名表 credential_alias 默认并入集成注入清单
+    (exec_auth_aliases 唯一实现);显式绑定优先;缺默认凭证按 S0②
+    暂停并列出;有凭证则注入物化(resolved_auths 非空)。"""
+    from sqlalchemy import select as _sel
+    from app.core import db as dbm
+    from app.core.security import fernet_encrypt
+    from app.models.auth_session import AuthSession
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.models.integration_task import IntegrationTask
+    from app.models.service_alias import ServiceAlias
+    from app.models.user import User
+    from app.services import integration_runner as ir
+
+    u1 = await register_and_login(client, "cfa_a", "pw123456")
+    r = await client.post("/api/scenarios", headers=u1, json=make_draft(
+        "sc-cfa", steps=[{
+            "kind": "step",
+            "call": {"protocol": "http", "service": "svc2",
+                     "method": "GET", "path": "/x", "headers": {}},
+            "request": {"kind": "request", "body": {}}, "strategy": []}]))
+    assert r.status_code in (200, 201), r.text
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-cfa"))).json()["id"]
+
+    async with dbm.SessionLocal() as db:
+        db.add(ServiceAlias(alias_name="svc2", base_service="svc2",
+                            credential_alias="codfish"))
+        await db.commit()
+
+    # 摘要面:别名默认并入注入清单
+    sm = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()
+    assert "codfish" in sm["authAliases"]
+
+    # 显式绑定优先:绑定 authAlias=other 的服务键不吃默认
+    async with dbm.SessionLocal() as db:
+        db.add(ComposerRunScheme(
+            scheme_id="rs-cfa", scenario_id="sc-cfa", name="s",
+            payload={"serviceBindings": {"svc2": {"authAlias": "other"}}}))
+        await db.commit()
+    r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
+                           json={"schemeId": "rs-cfa"})
+    assert r.status_code == 200, r.text
+    sm = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()
+    assert sm["authAliases"] == ["other"]
+
+    # 回默认方案;无 codfish 凭证 → run 暂停 missing_credential
+    await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
+                       json={"schemeId": ""})
+    await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    async with dbm.SessionLocal() as db:
+        inst = (await db.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id.is_not(None)))).scalar()
+        uid = (await db.execute(_sel(User).where(
+            User.username == "cfa_a"))).scalars().one().id
+    assert inst.paused_reason == "missing_credential"
+    assert "codfish" in (inst.last_error or "")
+
+    # 补凭证 + 复活 → 物化收到注入(默认凭证进 resolved_auths)
+    async with dbm.SessionLocal() as db:
+        db.add(AuthSession(
+            owner_id=uid, alias="codfish", url="http://127.0.0.1:1",
+            username_enc=fernet_encrypt("u"),
+            password_enc=fernet_encrypt("p")))
+        await db.commit()
+    await ir.revive_paused_instances(user_id=uid)
+    captured = {}
+
+    def _fake(converted, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop-before-channel")
+
+    monkeypatch.setattr(ir, "materialize_run_copy", _fake)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    assert captured.get("resolved_auths"), captured.get("carry_context")
+
+
 async def test_integration_passes_carry_context_to_materialize(
         client, plate_mock, monkeypatch):
     """carry 修复(与 run_dispatcher 同入口):集成链物化必须带上

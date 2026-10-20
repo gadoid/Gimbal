@@ -56,9 +56,6 @@ CHANNEL_IDLE_SECONDS = 5 * 60
 MANUAL_COOLDOWN_SECONDS = 60
 FAIL_STREAK_NOTIFY = 3
 
-_AUTH_TEMPLATE = re.compile(r"\$\{auth\.([A-Za-z0-9_.\-]+)\.")
-
-
 def _now() -> datetime:
     # aware UTC(utcnow 3.12 起废弃;与 UtcDateTime/ensure_aware 口径同向)
     return datetime.now(timezone.utc)
@@ -410,16 +407,17 @@ class IntegrationRunError(RuntimeError):
         self.message = message
 
 
-def _auth_aliases_of(payload: dict, bindings: dict) -> list[str]:
-    """注入清单 = serviceBindings 的 authAlias ∪ ${auth.<name>.} 模板
-    扫描(与 runs.py「模板扫描 ∪ 绑定」同口径)。"""
-    aliases: set[str] = set()
-    for b in (bindings or {}).values():
-        if isinstance(b, dict) and b.get("authAlias"):
-            aliases.add(str(b["authAlias"]))
-    aliases.update(_AUTH_TEMPLATE.findall(json.dumps(
-        definition_from_payload(payload), ensure_ascii=False, default=str)))
-    return sorted(aliases)
+async def _auth_aliases_of(
+    db, scen_payload: dict, bindings: dict,
+) -> list[str]:
+    """注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
+    ${auth.*} 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认,显式绑定
+    优先;查表失败降级跳过)。此前集成为「绑定 ∪ 全 definition 正则
+    扫描」且不含别名默认 —— 与 dispatch 漂移,已收敛。"""
+    from .service_aliases import exec_auth_aliases
+    return await exec_auth_aliases(
+        db, definition_from_payload(scen_payload).get("steps") or [],
+        bindings)
 
 
 # ── W0a(个人侧方案 v1.4 §2):订阅知情同意 ──────────────────────
@@ -431,7 +429,7 @@ def _canonical_json(x) -> str:
 
 def consent_fingerprint_of(
     scen_payload: dict, scheme_payload: dict, row_dict: dict,
-    cron: str, alias_urls: dict,
+    cron: str, alias_urls: dict, *, alias_creds: dict | None = None,
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
@@ -459,6 +457,8 @@ def consent_fingerprint_of(
         "dataset_row": row_dict,
         "cron": cron,
         "base_urls": dict(alias_urls or {}),
+        # 别名表凭证默认命中(member+ 可改全局层,与 base_url 同入指纹)
+        "alias_creds": dict(alias_creds or {}),
     }
     return hashlib.sha256(
         _canonical_json(projection).encode("utf-8")).hexdigest()
@@ -529,10 +529,16 @@ async def consent_fingerprint_now(
 ) -> str:
     """当前内容指纹(**只算不写**)—— 订阅摘要与 subscribe 的「确认的
     必须是看到的那份」比对共用(P2.2)。别名查询失败向上抛(503 口径)。"""
-    _, scheme_payload, _, row_dict, _ = await _load_exec_shape(db, tpl.scheme_id, scen)
+    _, scheme_payload, bindings, row_dict, _ = await _load_exec_shape(
+        db, tpl.scheme_id, scen)
     alias_urls = await _alias_urls_of(db, scen.payload)
+    from .service_aliases import credential_alias_hits
+    hits = await credential_alias_hits(
+        db, definition_from_payload(scen.payload).get("steps") or [],
+        bindings)
     return consent_fingerprint_of(
-        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+        scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
+        alias_urls, alias_creds=hits)
 
 
 async def refresh_consent(
@@ -545,6 +551,22 @@ async def refresh_consent(
     inst.consent_fingerprint = fp
     inst.consented_at = _now()
     return fp
+
+
+async def consent_fingerprint_now_shape(
+    db, tpl: IntegrationTask, scen: ComposerScenario,
+    scheme_payload: dict, row_dict: dict, bindings: dict,
+) -> str:
+    """consent_fingerprint_now 的 shape 直传变体(subscription_view
+    已装载过执行形态,不重复查;口径与 now 完全一致)。"""
+    alias_urls = await _alias_urls_of(db, scen.payload)
+    from .service_aliases import credential_alias_hits
+    hits = await credential_alias_hits(
+        db, definition_from_payload(scen.payload).get("steps") or [],
+        bindings)
+    return consent_fingerprint_of(
+        scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
+        alias_urls, alias_creds=hits)
 
 
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
@@ -566,10 +588,10 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
             "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
     _, scheme_payload, bindings, row_dict, dataset_name = \
         await _load_exec_shape(db, tpl.scheme_id, scen)
-    aliases = _auth_aliases_of(scen.payload, bindings)
+    aliases = await _auth_aliases_of(db, scen.payload, bindings)
     alias_urls = await _alias_urls_of(db, scen.payload)
-    fp = consent_fingerprint_of(
-        scen.payload, scheme_payload, row_dict, tpl.trigger_cron, alias_urls)
+    fp = await consent_fingerprint_now_shape(
+        db, tpl, scen, scheme_payload, row_dict, bindings)
     meta_plate = (((definition_from_payload(scen.payload) or {}).get("meta") or {})
                   .get("plate") or {})
     steps = []
@@ -597,7 +619,7 @@ async def scenario_aliases(
     """场景+方案(可选)的注入清单(W1 创建前置预览用;与执行期
     `_auth_aliases_of` 同口径:方案 authAlias ∪ ${auth.*} 扫描)。"""
     _, _, bindings, _, _ = await _load_exec_shape(db, scheme_id, scen)
-    return _auth_aliases_of(scen.payload, bindings)
+    return await _auth_aliases_of(db, scen.payload, bindings)
 
 
 async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
@@ -744,7 +766,7 @@ async def run_instance(instance_id: int) -> dict:
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请在编排器钉定修订后重试(外部服务不受影响)")
 
-        aliases = _auth_aliases_of(scen.payload, bindings)
+        aliases = await _auth_aliases_of(db, scen.payload, bindings)
 
         # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
         # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
@@ -775,9 +797,13 @@ async def run_instance(instance_id: int) -> dict:
                     f"服务地址解析失败,本轮未执行: {e}")
             alias_urls = {}
         if consent_gate:
+            from .service_aliases import credential_alias_hits
+            hits = await credential_alias_hits(
+                db, definition_from_payload(scen.payload).get("steps") or [],
+                bindings)
             fp = consent_fingerprint_of(
                 scen.payload, scheme_payload, row_dict,
-                tpl.trigger_cron, alias_urls)
+                tpl.trigger_cron, alias_urls, alias_creds=hits)
             if (inst.consent_fingerprint or "") != fp:
                 return await _pause_consent_changed(
                     db, inst, tpl,

@@ -16,6 +16,8 @@ from sqlalchemy import delete as sa_delete, func, or_
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loguru import logger
+
 from ..models.environment import Environment
 from ..models.service_alias import ServiceAlias
 from . import service_names
@@ -272,6 +274,50 @@ async def delete_alias(db: AsyncSession, alias_name: str) -> None:
     await db.execute(sa_delete(ServiceAlias).where(
         ServiceAlias.alias_name == alias_name))
     await db.commit()
+
+
+async def credential_alias_hits(
+    db: AsyncSession, steps: list,
+    bindings: dict[str, dict] | None = None,
+) -> dict[str, str]:
+    """别名表凭证默认命中(raw 服务键 → credential_alias;已显式绑
+    authAlias 的服务键**排除**,显式绑定优先)。查表失败降级 {}(别名
+    默认是增强,不是前置条件)。订阅内容指纹同消费本函数 —— 别名
+    默认属 member+ 可改的全局层,与 base_url 同纳入指纹感知。"""
+    from .run_materialize import referenced_services
+    b = bindings or {}
+    bound_keys = {k for k, v in b.items()
+                  if isinstance(v, dict) and v.get("authAlias")}
+    try:
+        hits = await credential_aliases_for(
+            db, referenced_services(steps or []))
+    except Exception:  # noqa: BLE001
+        logger.warning("service_aliases: credential default lookup failed; skipped")
+        return {}
+    return {raw: cred for raw, cred in (hits or {}).items()
+            if raw not in bound_keys}
+
+
+async def exec_auth_aliases(
+    db: AsyncSession, steps: list,
+    bindings: dict[str, dict] | None = None,
+) -> list[str]:
+    """执行凭证注入清单 —— **两条执行链(测试执行 run_dispatcher /
+    集成 integration_runner)的唯一实现,算法不得漂移**:
+
+    ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps)
+    ∪ 方案绑定 authAlias ∪ 别名表凭证默认(``credential_alias_hits``,
+    显式绑定优先)。去重保序。
+    """
+    from .auth_ref_scan import scan_auth_aliases
+    b = bindings or {}
+    aliases: list[str] = [
+        *scan_auth_aliases(steps or []),
+        *(str(v.get("authAlias")) for v in b.values()
+          if isinstance(v, dict) and v.get("authAlias")),
+    ]
+    hits = await credential_alias_hits(db, steps, b)
+    return list(dict.fromkeys([*aliases, *hits.values()]))
 
 
 async def credential_aliases_for(
