@@ -18,6 +18,7 @@ vi.mock('@/api/integration', async (importOriginal) => {
     fetchFunctionCards: vi.fn(),
     runIntegrationTask: vi.fn(),
     resumeMySubscription: vi.fn(),
+    pauseMySubscription: vi.fn(),
     subscribeIntegrationTask: vi.fn(),
     fetchSubscriptionSummary: vi.fn(),
     integrationErr: vi.fn((e: unknown) => String(e)),
@@ -48,7 +49,11 @@ async function mkRouter(): Promise<Router> {
   return router
 }
 
-function mountCard(data: Partial<api.FunctionCardData> = {}, router: Router) {
+function mountCard(
+  data: Partial<api.FunctionCardData> = {},
+  router: Router,
+  size: 'S' | 'M' | 'L' = 'M',
+) {
   vi.mocked(api.fetchFunctionCards).mockResolvedValue([
     { id: 'fn:9', name: '我的待办', cronText: '每 5 分钟',
       identityMode: 'personal', ...data },
@@ -58,7 +63,7 @@ function mountCard(data: Partial<api.FunctionCardData> = {}, router: Router) {
       plugins: [router],
       provide: {
         [workbenchCardDefKey]: ref(DEF),
-        [cardSizeKey]: ref<'M'>('M'),
+        [cardSizeKey]: ref<'S' | 'M' | 'L'>(size),
       },
       stubs: { RouterLink: true },
     },
@@ -126,5 +131,61 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
       path: '/auths', query: { q: 'gitlab' },
     })
     w.unmount()
+  })
+
+  it('W4 连续失败自动暂停:启动门面(次数)+ 启动即恢复', async () => {
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    const w = mountCard({
+      state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
+    }, await mkRouter())
+    await flushPromises()
+    expect(w.find('[data-testid="fn-card-fn:9-gate"]').text())
+      .toContain('连续失败 5 次')
+    await w.find('[data-testid="fn-card-fn:9-restart"]').trigger('click')
+    await flushPromises()
+    expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
+    w.unmount()
+  })
+
+  it('W4 平台卡 fail_streak 门面:管理者出「启动」,普通用户只读', async () => {
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    const a = mountCard({
+      state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
+      identityMode: 'platform', canManage: true,
+    }, await mkRouter())
+    await flushPromises()
+    expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
+      .toContain('自动暂停')
+    await a.find('[data-testid="fn-card-fn:9-restart"]').trigger('click')
+    await flushPromises()
+    expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
+    a.unmount()
+
+    const u = mountCard({
+      state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
+      identityMode: 'platform',
+    }, await mkRouter())
+    await flushPromises()
+    expect(u.find('[data-testid="fn-card-fn:9-restart"]').exists())
+      .toBe(false)
+    u.unmount()
+  })
+
+  it('W4 L 档在跑的个人卡:「暂停」入口(平台模式不出)', async () => {
+    vi.mocked(api.pauseMySubscription).mockResolvedValue({} as never)
+    const w = mountCard({ state: 'idle' }, await mkRouter(), 'L')
+    await flushPromises()
+    const btn = w.find('[data-testid="fn-card-fn:9-pause"]')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await flushPromises()
+    expect(api.pauseMySubscription).toHaveBeenCalledWith(9)
+    w.unmount()
+
+    const p = mountCard(
+      { state: 'idle', identityMode: 'platform' }, await mkRouter(), 'L')
+    await flushPromises()
+    expect(p.find('[data-testid="fn-card-fn:9-pause"]').exists()).toBe(false)
+    p.unmount()
   })
 })

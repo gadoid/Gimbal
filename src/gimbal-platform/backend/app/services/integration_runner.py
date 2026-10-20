@@ -55,6 +55,11 @@ RUN_LEASE_SECONDS = 15 * 60
 CHANNEL_IDLE_SECONDS = 5 * 60
 MANUAL_COOLDOWN_SECONDS = 60
 FAIL_STREAK_NOTIFY = 3
+# W4(2026-10-20):连续失败自动暂停阈值 —— run≠ok 累计到该值即退回
+# paused/fail_streak,不再按周期无限重试(auth/缺凭证已各自即停,
+# 不占此路径)。3 次先告警、5 次暂停 = 告警在前;持有人「启动」
+# 恢复并清零计数。
+FAIL_STREAK_AUTO_PAUSE = 5
 
 def _now() -> datetime:
     # aware UTC(utcnow 3.12 起废弃;与 UtcDateTime/ensure_aware 口径同向)
@@ -939,7 +944,8 @@ async def _finish(
     - **暂停只看 run**:`run=auth` 立即暂停(auth_failed,不按周期重试,
       防错凭证反复登录锁号,方案 §8);missing_credential 原样;
     - **fail_streak / 运维通知**只在 `run ≠ ok` 时累加(D2:check=fail
-      不累加、不通知、不暂停);
+      不累加、不通知、不暂停);W4:累计达 ``FAIL_STREAK_AUTO_PAUSE``
+      次自动退回 ``paused/fail_streak``,「启动」恢复并清零;
     - **check**:run ≠ ok(unknown)保留上次结论与文案(卡片标「结论
       可能过期」);run = ok 写新结论,`check_changed_at` 记翻转时刻;
     - **结论变化通知 = 边沿合并**(D9):仅 pass↔fail 翻转发送,
@@ -990,6 +996,14 @@ async def _finish(
 
     # fail_streak 只看 run(check=fail 不累加,§2.3)
     inst.fail_streak = 0 if run_status == "ok" else (inst.fail_streak or 0) + 1
+    # W4:连续失败自动暂停 —— 无专属暂停原因(auth/缺凭证)的运行失败
+    # 累计到阈值即退回 paused/fail_streak,覆盖上面默认的回 idle。
+    auto_paused = False
+    if (run_status != "ok" and pause_reason is None
+            and inst.fail_streak >= FAIL_STREAK_AUTO_PAUSE):
+        inst.state = "paused"
+        inst.paused_reason = "fail_streak"
+        auto_paused = True
 
     # Y4/方案 §5:跨次状态回写 —— state_mapping {输出键 → 状态键},
     # 命中的输出复制进 state_vars(下次执行注入为变量,增量游标)。
@@ -1031,16 +1045,28 @@ async def _finish(
     # 连续 FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator);
     # 结论翻转通知(D9/D3)。
     auth_notify = (run_status == "auth")
-    streak_notify = (run_status not in ("ok", "auth")
+    streak_notify = (run_status not in ("ok", "auth") and not auto_paused
                      and inst.fail_streak >= FAIL_STREAK_NOTIFY
                      and inst.fail_streak % FAIL_STREAK_NOTIFY == 0)
-    if auth_notify or streak_notify or notify_check is not None:
+    if auth_notify or streak_notify or auto_paused \
+            or notify_check is not None:
         try:
             from .notifications import create_notification
             async with db_module.SessionLocal() as ndb:
                 if auth_notify and tpl.identity_mode == "personal" \
                         and inst.holder_id:
                     uids = [inst.holder_id]   # 凭证是持有人自己的
+                elif auto_paused:
+                    # W4:自动暂停 —— 个人=持有人(启动入口在订阅面/
+                    # 功能卡);平台=全体 admin/operator
+                    if tpl.identity_mode == "personal" and inst.holder_id:
+                        uids = [inst.holder_id]
+                    else:
+                        uids = (await ndb.execute(
+                            select(User.id).where(
+                                User.role.in_(("admin", "operator")),
+                                User.is_system == False)  # noqa: E712
+                        )).scalars().all()
                 elif notify_check is not None:
                     # D3:结论通知 —— 个人=持有人;平台=模板 owner
                     # (平台实例的 holder 是系统用户,不是收件人)
@@ -1057,6 +1083,12 @@ async def _finish(
                             + ("我的凭证" if tpl.identity_mode == "personal"
                                else "平台凭证")
                             + "中更新凭证后自动恢复")
+                elif auto_paused:
+                    title = (f"集成任务「{tpl.name}」连续失败 "
+                             f"{inst.fail_streak} 次,已自动暂停")
+                    body = ((inst.last_error or "")[:160]
+                            + ";可在集成详情或功能卡「启动」恢复,"
+                              "恢复后失败计数重新累计")
                 elif notify_check is not None:
                     if notify_check == "fail":
                         title = f"集成任务「{tpl.name}」检查不通过"

@@ -610,12 +610,21 @@ async def pause_my_subscription(
 ) -> dict:
     """W0b⑥(G-D):订阅者自暂停 —— paused/manual(凭证复活钩子不覆盖
     manual,只有本人 resume 可恢复)。幂等;调度面只认 idle,暂停即
-    不再被认领。"""
+    不再被认领。W4:个人模式 owner 自有实例同走此口(订阅面按钮对
+    owner 同样渲染);平台模式对 owner/admin 开放 —— 操作平台唯一
+    实例,其他用户 403。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
-    inst = await _my_subscription(db, tpl, user)
+    if tpl.identity_mode == "platform":
+        if not _can_manage(user, tpl):
+            raise _bad("forbidden", "平台模式暂停/恢复仅 owner/admin 可操作", 403)
+        inst = await _tpl_instance(db, tpl.id)
+        if inst is None:
+            raise _bad("instance_missing", "平台实例缺失", 404)
+    else:
+        _subscribable(tpl, user)
+        inst = await _my_subscription(db, tpl, user)
     if inst.state != "paused" or inst.paused_reason != "manual":
         inst.state = "paused"
         inst.paused_reason = "manual"
@@ -627,21 +636,33 @@ async def pause_my_subscription(
 async def resume_my_subscription(
     task_id: int, user: CurrentUser, db: DbSession,
 ) -> dict:
-    """W0b⑥:订阅者恢复(仅 manual 暂停可恢复)。其余暂停原因各有
-    专属路径,恢复操作不代偿:template_changed/made_private → 重新
-    订阅确认;missing_credential → 补配凭证(复活钩子自动恢复)。"""
+    """W0b⑥:订阅者恢复。manual 与 W4 连续失败自动暂停(fail_streak)
+    可直接恢复 —— fail_streak 恢复即清零计数(重启失败阶梯);其余
+    暂停原因各有专属路径,恢复操作不代偿:template_changed/made_private
+    → 重新订阅确认;missing_credential → 补配凭证(复活钩子自动恢复)。
+    W4:平台模式对 owner/admin 开放(恢复平台唯一实例)。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
-    inst = await _my_subscription(db, tpl, user)
-    if inst.state == "paused" and inst.paused_reason != "manual":
+    if tpl.identity_mode == "platform":
+        if not _can_manage(user, tpl):
+            raise _bad("forbidden", "平台模式暂停/恢复仅 owner/admin 可操作", 403)
+        inst = await _tpl_instance(db, tpl.id)
+        if inst is None:
+            raise _bad("instance_missing", "平台实例缺失", 404)
+    else:
+        _subscribable(tpl, user)
+        inst = await _my_subscription(db, tpl, user)
+    if inst.state == "paused" and inst.paused_reason not in ("manual",
+                                                             "fail_streak"):
         raise _bad(
             "resume_not_allowed",
             f"该暂停({inst.paused_reason})不能由恢复操作解除:"
             "template_changed/made_private 请重新订阅确认,"
             "missing_credential 请补配凭证", 409)
     if inst.state == "paused":
+        if inst.paused_reason == "fail_streak":
+            inst.fail_streak = 0   # W4:启动即重置连续失败计数
         inst.state = "idle"
         inst.paused_reason = ""
         inst.next_run_at = datetime.now(timezone.utc)
@@ -705,9 +726,11 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "checkMessage": io["checkMessage"],
             "checkChangedAt": io["checkChangedAt"],
             "pausedReason": io["pausedReason"],
+            "failStreak": io["failStreak"],
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "identityMode": tpl.identity_mode, "stale": stale,
+            "canManage": _can_manage(user, tpl),
             "authAliases": card_aliases,
             "missingCredentials": card_missing,
             "outputs": card_outputs,

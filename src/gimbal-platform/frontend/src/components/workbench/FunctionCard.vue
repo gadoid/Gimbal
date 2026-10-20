@@ -32,17 +32,25 @@
               @click="subOpen = true">订阅确认</button>
     </div>
 
-    <!-- W2:待确认(内容已变更/已转私有)与本人暂停 —— 恢复入口 -->
-    <div v-else-if="reconfirmText || data?.pausedReason === 'manual'"
+    <!-- W2:待确认(内容已变更/已转私有)与本人暂停 —— 恢复入口;
+         W4:连续失败自动暂停 —— 启动入口(恢复即清零计数) -->
+    <div v-else-if="reconfirmText || pausedGate"
          class="card-empty" :data-testid="`${t}-gate`">
       <p v-if="reconfirmText" class="fn-note warn">
         {{ reconfirmText }} — 点击重新确认后恢复执行
         <button type="button" class="fn-run" :data-testid="`${t}-reconfirm`"
                 @click="subOpen = true">重新确认</button>
       </p>
+      <p v-else-if="data?.pausedReason === 'fail_streak'" class="fn-note warn">
+        已连续失败 {{ data?.failStreak || FAIL_STREAK_AUTO_PAUSE }} 次,自动暂停
+        <button v-if="canRestart" type="button" class="fn-run"
+                :data-testid="`${t}-restart`"
+                @click="doResume">启动</button>
+      </p>
       <p v-else class="fn-note warn">
-        已由你暂停
-        <button type="button" class="fn-run" :data-testid="`${t}-resume`"
+        {{ data?.identityMode === 'platform' ? '已暂停(管理员)' : '已由你暂停' }}
+        <button v-if="canRestart" type="button" class="fn-run"
+                :data-testid="`${t}-resume`"
                 @click="doResume">恢复执行</button>
       </p>
     </div>
@@ -122,6 +130,10 @@
             :disabled="running || removed"
             @click="runNow"
           >{{ running ? '执行中…' : '立即执行' }}</button>
+          <button
+            v-if="canPause" type="button" class="fn-run fn-run-ghost"
+            :data-testid="`${t}-pause`" @click="doPause"
+          >暂停</button>
         </div>
       </template>
     </template>
@@ -142,6 +154,7 @@ import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import {
   fetchFunctionCards, runIntegrationTask, integrationErr,
   runAbnormalOf, RUN_BADGE_TEXT, resumeMySubscription,
+  pauseMySubscription,
   type FunctionCardData,
 } from '@/api/integration'
 import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
@@ -176,6 +189,23 @@ const reconfirmText = computed(() => {
   if (r === 'made_private') return '模板已转私有'
   return ''
 })
+/** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复) */
+const pausedGate = computed(() => {
+  const r = data.value?.pausedReason
+  return r === 'manual' || r === 'fail_streak'
+})
+/** 与后端 FAIL_STREAK_AUTO_PAUSE 同值(failStreak 缺失时的显示兜底) */
+const FAIL_STREAK_AUTO_PAUSE = 5
+/** W4:L 档「暂停」入口 —— 个人模式已订阅且在跑(非暂停/移除)才有 */
+const canPause = computed(() => {
+  const d = data.value
+  return !!d && d.identityMode === 'personal'
+    && (d.state === 'idle' || d.state === 'running')
+})
+/** W4:暂停门面的「启动/恢复」按钮可见性 —— 个人模式(自己的实例)
+ * 或模板管理者(owner;平台模式含 admin) */
+const canRestart = computed(() =>
+  data.value?.identityMode === 'personal' || !!data.value?.canManage)
 
 // ── 集成线 v2(§2.5):状态叠加层 ─────────────────────────────────
 
@@ -193,6 +223,7 @@ const badge = computed(() => {
     if (d.pausedReason === 'template_changed') return '内容已变更'
     if (d.pausedReason === 'made_private') return '已转私有'
     if (d.pausedReason === 'manual') return '已暂停'
+    if (d.pausedReason === 'fail_streak') return '连续失败暂停'
     return '已暂停'
   }
   if (d.enabled === false) return '已停用'
@@ -305,6 +336,16 @@ async function doResume(): Promise<void> {
   }
 }
 
+async function doPause(): Promise<void> {
+  try {
+    await pauseMySubscription(tid.value)
+    toast.success('已暂停(可随时恢复)')
+    await load()
+  } catch (e) {
+    toast.error(integrationErr(e))
+  }
+}
+
 async function runNow(): Promise<void> {
   const tid = Number(cardId.value.slice(3))
   if (!tid || running.value) return
@@ -383,6 +424,11 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
   border: 1px solid var(--accent-soft-border, #c7d2fe);
 }
 .fn-run:disabled { opacity: .5; cursor: not-allowed; }
+/* W4 暂停按钮:与主操作同款但降一档存在感 */
+.fn-run-ghost {
+  color: rgb(100 116 139); background: transparent;
+  border-color: rgb(148 163 184 / 45%);
+}
 /* Y4 模板 */
 .fn-kv-list { display: flex; flex-direction: column; gap: 4px; }
 .fn-kv-row { display: flex; justify-content: space-between; gap: 8px;

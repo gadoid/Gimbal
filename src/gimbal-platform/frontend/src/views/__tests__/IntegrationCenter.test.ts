@@ -294,6 +294,28 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
+  it('W4 owner 行与平台模式同样出暂停/恢复(owner 不出退订)', async () => {
+    // 平台模式 owner/admin 行 → 暂停按钮 + 调用
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([mkTask()])
+    vi.mocked(api.pauseMySubscription).mockResolvedValue(mkTask())
+    let w = await mountPage()
+    expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
+    await w.find('[data-testid="ig-pause-3"]').trigger('click')
+    await flushPromises()
+    expect(api.pauseMySubscription).toHaveBeenCalledWith(3)
+    w.unmount()
+
+    // 个人模式 owner 行(canManage + 自有实例)→ 暂停出、退订不出
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ identityMode: 'personal', mine: true, canManage: true,
+               subscribed: true }),
+    ])
+    w = await mountPage()
+    expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
+    expect(w.find('[data-testid="ig-unsub-3"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('W2 已订阅:自暂停显示恢复;退订确认后调用;待确认显示重新确认与文案', async () => {
     // manual 暂停 →「已暂停(本人)」+ 恢复按钮
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
@@ -305,6 +327,22 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     vi.mocked(api.resumeMySubscription).mockResolvedValue(mkTask())
     let w = await mountPage()
     expect(w.find('[data-testid="ig-row-3"]').text()).toContain('已暂停(本人)')
+    await w.find('[data-testid="ig-pause-3"]').trigger('click')
+    await flushPromises()
+    expect(api.resumeMySubscription).toHaveBeenCalledWith(3)
+    w.unmount()
+
+    // W4 连续失败自动暂停 →「连续失败暂停(N 次)」+ 恢复按钮同样可解
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+               subscribed: true,
+               instance: { ...mkTask().instance!, state: 'paused',
+                           pausedReason: 'fail_streak', failStreak: 5 } }),
+    ])
+    w = await mountPage()
+    expect(w.find('[data-testid="ig-row-3"]').text())
+      .toContain('连续失败暂停(5 次)')
+    expect(w.find('[data-testid="ig-pause-3"]').text()).toContain('恢复')
     await w.find('[data-testid="ig-pause-3"]').trigger('click')
     await flushPromises()
     expect(api.resumeMySubscription).toHaveBeenCalledWith(3)

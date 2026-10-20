@@ -62,8 +62,13 @@ export interface FunctionCardData {
   checkMessage?: string
   checkChangedAt?: string | null
   /** 暂停原因(D13 角标:auth_failed/missing_credential;
-   * W2:template_changed/made_private/manual) */
+   * W2:template_changed/made_private/manual;W4:fail_streak) */
   pausedReason?: string
+  /** W4:连续失败计数(fail_streak 暂停门面显示「N 次」) */
+  failStreak?: number
+  /** W4:当前用户可管理该模板(owner;平台模式含 admin)—— 平台卡
+   * fail_streak/manual 门面的「启动」仅对管理者渲染 */
+  canManage?: boolean
   /** W0b④/W3:缺失别名全集(角标跳转「我的凭证」定位用) */
   missingCredentials?: string[]
 }

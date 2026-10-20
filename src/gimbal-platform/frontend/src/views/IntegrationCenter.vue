@@ -70,14 +70,16 @@
               type="button" class="ig-act" :data-testid="`ig-sub-${t.id}`"
               @click="subTask = t"
             >{{ needsReconfirm(t) ? '重新确认' : '订阅' }}</button>
-            <template v-if="t.identityMode === 'personal' && t.subscribed && !t.canManage">
-              <button type="button" class="ig-act" :data-testid="`ig-pause-${t.id}`"
-                      @click="togglePause(t)"
-              >{{ t.instance?.pausedReason === 'manual' ? '恢复' : '暂停' }}</button>
-              <button type="button" class="ig-act danger" :data-testid="`ig-unsub-${t.id}`"
-                      @click="doUnsubscribe(t)"
-              >退订</button>
-            </template>
+            <!-- W2:个人模式订阅面;W4:owner 自己的行与平台模式
+                 (owner/admin)同样渲染暂停/恢复 —— 暂停入口不再只属于订阅者 -->
+            <button v-if="canPauseRow(t)" type="button" class="ig-act"
+                    :data-testid="`ig-pause-${t.id}`"
+                    @click="togglePause(t)"
+            >{{ resumablePause(t) ? '恢复' : '暂停' }}</button>
+            <button v-if="t.identityMode === 'personal' && t.subscribed && !t.canManage"
+                    type="button" class="ig-act danger" :data-testid="`ig-unsub-${t.id}`"
+                    @click="doUnsubscribe(t)"
+            >退订</button>
             <button
               v-if="t.canManage" type="button" class="ig-act danger"
               :data-testid="`ig-del-${t.id}`"
@@ -281,6 +283,8 @@ function runText(t: IntegrationTaskItem): string {
     if (i.pausedReason === 'template_changed') return '内容已变更·待确认'
     if (i.pausedReason === 'made_private') return '已转私有·待确认'
     if (i.pausedReason === 'manual') return '已暂停(本人)'
+    if (i.pausedReason === 'fail_streak')
+      return `连续失败暂停(${i.failStreak ?? '多'} 次)`
     return '已暂停'
   }
   if (i.enabled === false) return '已停用'
@@ -359,7 +363,7 @@ async function doUnsubscribe(t: IntegrationTaskItem): Promise<void> {
 
 async function togglePause(t: IntegrationTaskItem): Promise<void> {
   try {
-    if (t.instance?.pausedReason === 'manual') {
+    if (resumablePause(t)) {
       await resumeMySubscription(t.id)
       toast.success('已恢复执行')
     } else {
@@ -370,6 +374,19 @@ async function togglePause(t: IntegrationTaskItem): Promise<void> {
   } catch (e) {
     toast.error(integrationErr(e))
   }
+}
+
+/** W4:manual 与连续失败自动暂停(fail_streak)可由「恢复」直接解除 */
+function resumablePause(t: IntegrationTaskItem): boolean {
+  const r = t.instance?.pausedReason
+  return r === 'manual' || r === 'fail_streak'
+}
+
+/** W4:暂停/恢复按钮的行可见性 —— 个人模式自己有实例(owner 播种或
+ * 订阅,subscribed 均为 true),或平台模式 owner/admin 管平台实例 */
+function canPauseRow(t: IntegrationTaskItem): boolean {
+  return (t.identityMode === 'personal' && t.subscribed)
+    || (t.identityMode === 'platform' && t.canManage)
 }
 
 // ── 新建 ───────────────────────────────────────────────────────
