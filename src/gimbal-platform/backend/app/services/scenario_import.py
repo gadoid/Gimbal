@@ -649,6 +649,13 @@ async def land(
                        entries_count={
                            eff_key[k]: len(v) for k, v in provider_by_key.items()
                            if by_key[k]["decision"] == "create" and v})
+    # 时间线:导入也是「场景哪来的」一条来源(与手工新建的
+    # scenario.created 同 kind,detail.source 区分)
+    from . import activity as activity_svc
+    await activity_svc.record(
+        db, actor_id=user.id, kind="scenario.created",
+        resource_type="scenario", resource_id=sid,
+        detail={"name": row.name, "source": "import"})
     await db.refresh(row)
     return {"scenarioId": row.scenario_id, "idMode": id_mode}
 

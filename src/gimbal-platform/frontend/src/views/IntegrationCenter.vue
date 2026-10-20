@@ -532,7 +532,7 @@ onMounted(() => {
 .ig-status.bad { color: #dc2626; }
 .ig-status.run { color: #2f6fed; }
 .ig-status.muted { color: rgb(100 116 139); font-weight: 400; }
-.ig-ops { text-align: right; white-space: nowrap; }
+.ig-ops { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 .ig-act {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
   color: #4338ca; background: var(--accent-soft, #eef2ff);

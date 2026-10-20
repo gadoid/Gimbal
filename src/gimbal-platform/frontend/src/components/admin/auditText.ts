@@ -1,5 +1,5 @@
 // auditText.ts — 审计面板可读文本(2026-10-14 可读性收口):
-// * 动作:AUDIT_ACTIONS 12 键的中文标签表(unknown 回落原键);
+// * 动作:后端 AUDIT_ACTIONS 全键的中文标签表(unknown 回落原键);
 // * 对象:resource_name 快照优先(后端写审计时随 detail 落库,资源删了
 //   仍可读),老记录按类型回落 detail 里的名称字段,再回落 type:id;
 // * 详情:按动作渲染中文模板,原始 JSON 由组件收进展开区。
@@ -14,13 +14,20 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'announcement.publish': '发布公告',
   'carry.write': 'carry 写入',
   'adaptation.op.apply': '应用适配单',
-  'adaptation.batch.apply': '应用适配批次',
   'adaptation.batch.rollback': '回滚适配批次',
   'alias.write': '别名变更',
   // I4(集成线 v2 §3.2):外部目录只读标记 admin 写
   'external_endpoint.query_safe': '只读标记变更(已退役:b3/C4 外部接口登记下线,历史审计只读)',
   'share.admin_revoke': '管理员撤销分享',
   'suite.admin_unpublish': '下架公共套件',
+  // 2026-10-20 横向件补全:admin-only 平台凭证写 + admin 越属主的
+  // 删除/可见性变更(属主自操作不记,与 admin_unpublish 同口径)
+  'integration.credential.write': '平台凭证变更',
+  'scenario.admin_delete': '管理员删除场景',
+  'scenario.admin_publish': '管理员发布场景',
+  'scenario.admin_unpublish': '管理员下架场景',
+  'suite.admin_delete': '管理员删除套件',
+  'suite.admin_publish': '管理员发布套件',
   // 词表外存量动作:suites fork 落审计但未登记进 AUDIT_ACTIONS
   'suite.owner_fork': '复制私有套件',
   'suite.public_fork': '复制公共套件',
@@ -28,6 +35,43 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
 
 export function auditActionLabel(action: string): string {
   return AUDIT_ACTION_LABELS[action] ?? action
+}
+
+/** 动作词表的域(键第一段)→ 中文组名;未知域回落原段名。 */
+const ACTION_DOMAIN_LABELS: Record<string, string> = {
+  user: '用户',
+  announcement: '公告',
+  carry: 'carry',
+  adaptation: '适配',
+  alias: '别名',
+  external_endpoint: '外部接口',
+  share: '分享引用',
+  suite: '套件',
+  scenario: '场景',
+  integration: '集成',
+}
+
+export interface AuditActionGroup {
+  domain: string
+  label: string
+  items: string[]
+}
+
+/** 动作词表按域分组(筛选下拉的 optgroup 用):词表多少条都只占一行的
+ * 关键 —— 域内顺序跟词表,域顺序跟首现顺序,不做字母序魔法。 */
+export function auditActionGroups(actions: string[]): AuditActionGroup[] {
+  const groups = new Map<string, string[]>()
+  for (const a of actions) {
+    const domain = a.split('.')[0] || a
+    const bucket = groups.get(domain)
+    if (bucket) bucket.push(a)
+    else groups.set(domain, [a])
+  }
+  return [...groups.entries()].map(([domain, items]) => ({
+    domain,
+    label: ACTION_DOMAIN_LABELS[domain] ?? domain,
+    items,
+  }))
 }
 
 const RESOURCE_TYPE_LABELS: Record<string, string> = {
@@ -40,6 +84,7 @@ const RESOURCE_TYPE_LABELS: Record<string, string> = {
   suite: '套件',
   adaptation_op: '适配单',
   adaptation_batch: '适配批次',
+  integration_credential: '平台凭证',
 }
 
 // resource_name 快照上线前的老记录:各类型 detail 里可当名称用的字段
@@ -164,8 +209,6 @@ export function describeAuditDetail(row: AuditLogRow): string {
       const t = s(d.op_type)
       return `应用适配单 #${rid}${t ? `（${t}）` : ''}，状态 ${s(d.status) || '未知'}`
     }
-    case 'adaptation.batch.apply':
-      return `应用适配批次 ${rid}`
     case 'adaptation.batch.rollback':
       return `回滚适配批次 ${rid}，跳过 ${num(d.skipped)} 条`
     case 'alias.write':
@@ -180,6 +223,24 @@ export function describeAuditDetail(row: AuditLogRow): string {
         : '管理员撤销分享引用'
     case 'suite.admin_unpublish':
       return `下架公共套件「${s(d.name) || s(d.resource_name) || rid}」`
+    case 'integration.credential.write': {
+      const who = s(d.alias) || rid
+      return s(d.fn) === 'delete'
+        ? `删除平台凭证「${who}」`
+        : `登记平台凭证「${who}」`
+    }
+    case 'scenario.admin_delete':
+      return `管理员删除场景「${s(d.name) || s(d.resource_name) || rid}」`
+    case 'scenario.admin_publish':
+      return `管理员发布场景「${s(d.name) || s(d.resource_name) || rid}」`
+    case 'scenario.admin_unpublish':
+      return `管理员下架场景「${s(d.name) || s(d.resource_name) || rid}」`
+    case 'suite.admin_delete':
+      return `管理员删除套件「${s(d.name) || s(d.resource_name) || rid}」`
+    case 'suite.admin_publish': {
+      const cascaded = num(d.cascaded)
+      return `管理员发布套件「${s(d.name) || s(d.resource_name) || rid}」${Number(cascaded) > 0 ? `（连带公开 ${cascaded} 个成员场景）` : ''}`
+    }
     case 'suite.owner_fork':
     case 'suite.public_fork': {
       const from = s(d.resource_name) || `#${rid}`

@@ -503,6 +503,15 @@ watch(() => route.query, () => {
     void reload()
   }
 })
+
+// 执行号变化但路由记录复用(/executions/12/events → /executions/13/events,
+// 连点通知/深链直达)时组件不重挂载 —— 与详情页同款:盯参数重新取数。
+watch(executionId, (next, prev) => {
+  if (!next || next === prev) return
+  readFiltersFromUrl()
+  void reload()
+  void reloadCounts()
+})
 </script>
 
 <style scoped>

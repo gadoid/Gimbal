@@ -68,7 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   useAuthStore().currentUser = { id: 1, username: 'alice', is_admin: false } as never
   vi.mocked(constantsApi.list).mockResolvedValue([] as never)
-  vi.mocked(executionsApi.listExecutions).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 })
+  vi.mocked(executionsApi.listExecutions).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200, failedTotal: 0 })
   vi.mocked(scenarioApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
 })
 
@@ -250,6 +250,7 @@ describe('工作台新卡 — 最近执行', () => {
       total: 1,
       page: 1,
       pageSize: 5,
+      failedTotal: 1,
     })
     const w = mountPage()
     await vi.waitFor(() => {

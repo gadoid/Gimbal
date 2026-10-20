@@ -20,7 +20,6 @@ AUDIT_ACTIONS = (
     "announcement.publish",
     "carry.write",        # carry bindings/defaults 写
     "adaptation.op.apply",
-    "adaptation.batch.apply",
     "adaptation.batch.rollback",
     "alias.write",        # 别名登记/改/删
     # I4(集成线 v2 §3.2):外部目录只读标记 admin 写(误标 = 平台账号
@@ -28,6 +27,16 @@ AUDIT_ACTIONS = (
     "external_endpoint.query_safe",
     "share.admin_revoke",  # admin 撤销引用(特权收缩,权限域二期 P2)
     "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10)
+    # ── 横向件补全轮(2026-10-20)──────────────────────────────
+    # admin-only 特权写:平台凭证直接决定全体平台模式集成任务的认证面
+    "integration.credential.write",  # 平台凭证登记/删除(admin)
+    # admin 越属主(ensure_owner 语义)的删除/可见性变更 —— 属主自操作
+    # 不记(与 suite.admin_unpublish 同口径:只记越属主那一半)
+    "scenario.admin_delete",
+    "scenario.admin_publish",
+    "scenario.admin_unpublish",
+    "suite.admin_delete",
+    "suite.admin_publish",
 )
 
 

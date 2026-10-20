@@ -214,6 +214,13 @@ async def list_executions(
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
+    # 失败单数(与 total 同筛选口径):筛选行「共 N · 失败 M」要全口径,
+    # 客户端只数得出当前页(2026-10-21 修复)。status 已筛时按筛后集合计。
+    failed_total = (
+        await session.execute(
+            select(func.count()).select_from(
+                base.where(Execution.status == STATUS_FAILED).subquery()))
+    ).scalar_one()
     rows = (
         (
             await session.execute(
@@ -246,6 +253,7 @@ async def list_executions(
         total=total,
         page=effective_page,
         pageSize=limit,
+        failedTotal=failed_total,
     )
 
 

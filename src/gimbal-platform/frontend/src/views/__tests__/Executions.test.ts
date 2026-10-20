@@ -613,7 +613,7 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
         started_at: '2026-09-17T10:00:00Z', finished_at: '2026-09-17T10:01:00Z' },
       { id: 2, scenario_id: 'sc_b', status: 'done', passed: 3, failed: 0, total_runs: 3,
         started_at: '2026-09-17T11:00:00Z', finished_at: '2026-09-17T11:01:00Z' },
-    ] as never, total: 2, page: 1, pageSize: 200 })
+    ] as never, total: 2, page: 1, pageSize: 200, failedTotal: 1 })
     const router = makeRouter()
     router.push('/executions')
     await router.isReady()
@@ -623,12 +623,41 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
     // 时间列带日期(修订项另一条:实测已含)
     expect(w.text()).toContain('2026-09-17')
 
+    // 失败计数取信封全口径:当前页两条都是 done(页内数=0),信封
+    // failedTotal=1 —— 2026-10-21 修复前这里会显示「失败 0 条」
+    expect(w.find('.filter-count').text()).toContain('共 2 条')
+    expect(w.find('.filter-count').text()).toContain('失败 1 条')
+
     const failLink = w.find('[data-testid="exec-failed-1"]')
     expect(failLink.exists()).toBe(true)
     expect(w.find('[data-testid="exec-failed-2"]').exists()).toBe(false)  // 0 失败纯文本
     await failLink.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.fullPath).toBe('/executions/1?rows=failed')
+    w.unmount()
+  })
+
+  it('详情:同路由换执行号(通知连点)→ 停旧轮询重新拉详情', async () => {
+    // 2026-10-21 修复:/executions/12 → /executions/13 复用同一路由记录
+    // 不重挂载 —— 此前只有 markRead 在发请求,页面纹丝不动。
+    const execStore = useExecutionsStore()
+    execStore.fetchDetail = vi.fn(async (id: number) => {
+      const d = { ...fakeDetail, id } satisfies Execution
+      execStore.detail = d
+      return d
+    })
+    const router = makeRouter()
+    router.push('/executions/12')
+    await router.isReady()
+    const w = mount(Executions, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(execStore.fetchDetail).toHaveBeenCalledWith(12)
+    expect(w.find('h1').text()).toContain('#12')
+
+    await router.push('/executions/13')
+    await flushPromises()
+    expect(execStore.fetchDetail).toHaveBeenCalledWith(13)
+    expect(w.find('h1').text()).toContain('#13')
     w.unmount()
   })
 

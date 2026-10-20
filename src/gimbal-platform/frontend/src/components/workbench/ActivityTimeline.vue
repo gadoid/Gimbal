@@ -147,6 +147,7 @@ const configOpen = ref(false)
 
 const KIND_LABEL: Record<TimelineKind, string> = {
   execution: '执行', scenario: '场景', adaptation: '适配',
+  suite: '套件', integration: '集成',
 }
 
 /** 分类徽标跟着圆点取色,只是淡一档 —— 图例、圆点、徽标三处同一语义色。 */
@@ -333,8 +334,10 @@ onBeforeUnmount(() => { resize?.disconnect() })
   @apply flex items-center justify-between gap-2 border-t border-signal-line;
   padding-top: 12px;   /* 间距由 .tl-main 的 gap 给,这里只留分隔线下的呼吸 */
 }
-.lg-items { @apply flex items-center gap-2.5 flex-wrap; }
-.lg-item { @apply inline-flex items-center gap-1 text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }
+/* 2026-10-21:五类事件后横向排不下 —— 改竖排:圆点在上、类型名在下,
+   每类一列、列间自然铺开(justify-between),类型再增多也仍是这一行。 */
+.lg-items { @apply flex items-start justify-between flex-1; }
+.lg-item { @apply flex flex-col items-center gap-[3px] text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }
 .lg-item.dim { @apply opacity-40; }
 .lg-item i { @apply w-[9px] h-[9px] rounded-full; box-shadow: 0 0 0 2px white, 0 0 0 3px rgba(16, 21, 28, 0.08); }
 .lg-edit {

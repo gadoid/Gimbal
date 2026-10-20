@@ -567,6 +567,8 @@ async def subscribe_task(
         await db.rollback()
         raise _bad("alias_unavailable",
                    f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+    was_reconfirm = (inst.state == "paused" and inst.paused_reason in
+                     ("template_changed", "made_private"))
     if inst.state == "paused" and inst.paused_reason in (
             "template_changed", "made_private"):
         inst.state = "idle"
@@ -575,6 +577,19 @@ async def subscribe_task(
         inst.next_run_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(inst)
+    # 时间线:订阅(重新确认解除待确认暂停时,补记一条 resumed 配对)
+    from ..services import activity as activity_svc
+    if tpl.identity_mode == "personal":
+        await activity_svc.record(
+            db, actor_id=user.id, kind="integration.subscribed",
+            resource_type="integration", resource_id=str(tpl.id),
+            detail={"name": tpl.name}, coalesce=False)
+        if was_reconfirm:
+            await activity_svc.record(
+                db, actor_id=user.id, kind="integration.resumed",
+                resource_type="integration", resource_id=str(tpl.id),
+                detail={"name": tpl.name, "via": "reconfirm"},
+                coalesce=False)
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -593,6 +608,13 @@ async def unsubscribe_task(
     if row is not None:
         await db.delete(row)
         await db.commit()
+        # 时间线:退订(与 subscribed 成对)
+        from ..services import activity as activity_svc
+        if tpl.identity_mode == "personal":
+            await activity_svc.record(
+                db, actor_id=user.id, kind="integration.unsubscribed",
+                resource_type="integration", resource_id=str(tpl.id),
+                detail={"name": tpl.name}, coalesce=False)
 
 
 async def _my_subscription(db: AsyncSession, tpl: IntegrationTask, user: User):
@@ -629,6 +651,14 @@ async def pause_my_subscription(
         inst.state = "paused"
         inst.paused_reason = "manual"
         await db.commit()
+        # 时间线:自暂停(状态确变才记,幂等重按不刷屏)
+        from ..services import activity as activity_svc
+        if tpl.identity_mode == "personal":
+            await activity_svc.record(
+                db, actor_id=user.id, kind="integration.paused",
+                resource_type="integration", resource_id=str(tpl.id),
+                detail={"name": tpl.name, "reason": "manual"},
+                coalesce=False)
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -661,12 +691,22 @@ async def resume_my_subscription(
             "template_changed/made_private 请重新订阅确认,"
             "missing_credential 请补配凭证", 409)
     if inst.state == "paused":
+        via = ("fail_streak" if inst.paused_reason == "fail_streak"
+               else "manual")
         if inst.paused_reason == "fail_streak":
             inst.fail_streak = 0   # W4:启动即重置连续失败计数
         inst.state = "idle"
         inst.paused_reason = ""
         inst.next_run_at = datetime.now(timezone.utc)
         await db.commit()
+        # 时间线:恢复(启动清零/手动恢复,与 paused 配对;自服务动作
+        # 不给自己发通知 —— 通知面只留给异步/他人触发的恢复,如复活钩子)
+        from ..services import activity as activity_svc
+        if tpl.identity_mode == "personal":
+            await activity_svc.record(
+                db, actor_id=user.id, kind="integration.resumed",
+                resource_type="integration", resource_id=str(tpl.id),
+                detail={"name": tpl.name, "via": via}, coalesce=False)
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -793,6 +833,15 @@ async def create_platform_credential(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    # 特权写必审:平台凭证直接决定全体平台模式任务的认证面(admin-only)
+    from ..services import audit as audit_svc
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="integration.credential.write",
+        resource_type="integration_credential", resource_id=str(row.id),
+        resource_name=row.alias,
+        detail={"fn": "create", "alias": row.alias})
     # G7/Y2:平台凭证新建 = 恢复信号 → auth_failed 暂停的平台模式实例
     # 恢复调度(revive 内部平台模式不受 user_id 过滤)。
     try:
@@ -812,6 +861,15 @@ async def delete_platform_credential(
     row = await db.get(AuthSession, cred_id)
     if row is None or row.owner_id != holder:
         raise _bad("not_found", "凭证不存在", 404)
+    alias_snap = row.alias
     await db.delete(row)
     await db.commit()
+    from ..services import audit as audit_svc
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="integration.credential.write",
+        resource_type="integration_credential", resource_id=str(cred_id),
+        resource_name=alias_snap,
+        detail={"fn": "delete", "alias": alias_snap})
     return {"removed": True}

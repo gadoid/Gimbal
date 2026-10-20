@@ -14,7 +14,9 @@
   直调 run_instance,同 test_runner_internal_gate_fails_working_scenario);
 - P3.1:保存端 kind 预检走 30s TTL 目录缓存(catalog 行带 kind),
   不再每次保存逐系统 HTTP(以「目录 kind 与 /api/system kind 冲突时
-  以目录为准」证缓存路径)。
+  以目录为准」证缓存路径);
+- v1.12:指纹投影纳入 ui.fieldStates carry 面(P2.1 同款第四层)——
+  主人改字段态(步骤/修订/方案不动)即触发订阅者 template_changed。
 """
 from __future__ import annotations
 
@@ -143,6 +145,41 @@ async def test_fingerprint_covers_meta_plate(client, plate_mock):
         "sc-fix2", steps=ANCHORED_STEPS, plate={"jira": "1.0#2"},
         system=["jira"]))
     assert r.status_code == 200, r.text
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid2)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed"
+
+
+async def test_fingerprint_covers_carry_field_states(client, plate_mock):
+    """v1.12:主人改 ui.fieldStates(步骤/修订/方案全不动)→ 指纹翻转 →
+    订阅者待重新确认。carry 面是执行内容(build_carry_context 的增量
+    输入),v1.9 登记的已知后续项就此关闭。"""
+    plate_mock.fulls.update(FULLS)
+    u1 = await register_and_login(client, "fs_a", "pw123456")
+    u2 = await register_and_login(client, "fs_b", "pw123456")
+    await _mk_scenario(client, u1, "sc-fs", {"jira": "1.0#1"})
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-fs"))).json()["id"]
+    uid2 = await _user_id("fs_b")
+    await _subscribe(client, u2, tid)
+    fp1 = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u2)).json()["fingerprint"]
+
+    # 主人把 step0 的查询字段划成 carry(只有 fieldStates 变)
+    draft = make_draft("sc-fs", steps=ANCHORED_STEPS,
+                       plate={"jira": "1.0#1"}, system=["jira"])
+    draft["ui"] = {"fieldStates": {"0": {"$.body.query": "carry"}}}
+    r = await client.put("/api/scenarios/sc-fs", headers=u1, json=draft)
+    assert r.status_code == 200, r.text
+
+    fp2 = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u2)).json()["fingerprint"]
+    assert fp2 != fp1
 
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
     assert r.status_code == 200, r.text

@@ -42,6 +42,14 @@ export type SwitchableType =
   // F1(2026-09-23):分发接收提醒(悬浮标签同一数据源;关 = 标签同步消失)。
   // resource_transferred(资源转让)= 所有权转移,留给离职处置线,语义不同。
   | 'resource_handoff'
+  // 2026-10-20 横向件补全:以下类型此前已在发射但没进开关清单 ——
+  // 集成任务的高频告警(连续失败/自动暂停)此前用户无法关闭。
+  | 'scenario.version_change'
+  | 'integration'
+  | 'share_ref_received'
+  | 'share_ref_revoked'
+  | 'share_ref_resource_deleted'
+  | 'share_ref_owner_changed'
 
 export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   execution_finished: '执行完成',
@@ -51,6 +59,12 @@ export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   role_changed: '角色变更',
   resource_transferred: '资源转让',
   resource_handoff: '收到分享',
+  'scenario.version_change': '场景版本变更',
+  integration: '集成任务',
+  share_ref_received: '收到引用分享',
+  share_ref_revoked: '引用分享撤销',
+  share_ref_resource_deleted: '引用资源删除',
+  share_ref_owner_changed: '引用属主变更',
 }
 
 export function list(params?: {

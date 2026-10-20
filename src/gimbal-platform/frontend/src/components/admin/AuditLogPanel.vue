@@ -10,23 +10,40 @@
   2026-10-14 可读性收口:动作/对象/详情三列人话化 —— 动作走
   auditText 中文标签表;对象优先 resource_name 快照(无名称老记录回落
   type:id);详情按动作渲染中文模板,原始 JSON 收进 <details> 展开区。
+  2026-10-20 分页修复批次:
+  * 分页失灵根因:page 只是 Pagination 的 v-model,没有任何 watcher →
+    点页码只改本地状态不重拉。补 watch(page) → load,并加越界页回退
+    (行数变更/记录被清后停在空页 → 回末页重取,与 NotificationsCenter
+    同口径)。
+  * 动作筛选从逐动作 chip 行(20+ 个动作后已横向挤爆)改为单个下拉,
+    按域 optgroup 分组(auditActionGroups),词表再长也只占一行。
+  * 每页行数接入 usePagerSize('audit-logs') → 服务端偏好键 pager.sizes
+    (与其他列表页同一套:镜像管首帧、PUT 防抖落库)。
 -->
 <template>
   <div class="lib-card p-4">
     <div class="mb-3 flex flex-wrap items-center gap-2">
       <span class="text-body font-semibold">特权写审计</span>
-      <span class="text-caption text-slate-500">角色变更 / 删号 / 重置密码 / 公告 / carry / 适配 / 别名</span>
+      <span class="text-caption text-slate-500">特权写操作全量流水(用户 / 公告 / carry / 适配 / 场景 / 套件 / 分享 / 集成凭证…)</span>
       <span class="flex-1"></span>
-      <button
-        v-for="a in actions"
-        :key="a"
-        type="button"
-        class="audit-chip"
-        :class="{ active: action === a }"
-        :data-testid="`audit-chip-${a}`"
-        :title="a"
-        @click="setAction(action === a ? '' : a)"
-      >{{ auditActionLabel(a) }}</button>
+      <select
+        class="audit-filter"
+        data-testid="audit-action-filter"
+        :disabled="loading"
+        title="按动作筛选审计记录"
+        :value="action"
+        @change="setAction(($event.target as HTMLSelectElement).value)"
+      >
+        <option value="">全部动作</option>
+        <optgroup
+          v-for="g in actionGroups"
+          :key="g.domain"
+          :label="g.label"
+          :data-testid="`audit-group-${g.domain}`"
+        >
+          <option v-for="a in g.items" :key="a" :value="a">{{ auditActionLabel(a) }}</option>
+        </optgroup>
+      </select>
       <button
         type="button"
         class="audit-refresh"
@@ -51,7 +68,7 @@
         <TableRow v-for="row in rows" :key="row.id" :data-testid="`audit-row-${row.id}`">
           <TableCell class="muted">{{ mediumDateTime(row.createdAt) }}</TableCell>
           <TableCell>{{ row.actorName || (row.actorId ? `#${row.actorId}` : '系统') }}</TableCell>
-          <TableCell><span class="audit-chip static" :title="row.action">{{ auditActionLabel(row.action) }}</span></TableCell>
+          <TableCell><span class="audit-chip" :title="row.action">{{ auditActionLabel(row.action) }}</span></TableCell>
           <TableCell>
             <template v-if="row.resourceType || row.resourceId">
               <span :class="{ mono: !auditResourceName(row) }">{{ auditResourceText(row) }}</span>
@@ -70,25 +87,29 @@
     </Table>
     <p v-else-if="!loading" class="py-6 text-center text-body text-slate-500">暂无审计记录</p>
     <Pagination
-      v-if="pageCount > 1"
+      v-if="pageCount > 1 || total > 0"
       v-model:page="page"
+      v-model:page-size="pageSize"
       :total="total"
-      :page-size="PAGE_SIZE"
+      :disabled="loading"
+      show-page-size
+      show-jump
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { listAuditLogs, type AuditLogRow } from '@/api/admin'
+import { usePagerSize } from '@/composables/usePagerSize'
 import { mediumDateTime } from '@/utils/datetime'
 import {
-  auditActionLabel, auditResourceName, auditResourceText, describeAuditDetail,
+  auditActionGroups, auditActionLabel, auditResourceName, auditResourceText, describeAuditDetail,
 } from './auditText'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-const PAGE_SIZE = 20
+const { pageSize } = usePagerSize('audit-logs', 20)
 
 const rows = ref<AuditLogRow[]>([])
 const total = ref(0)
@@ -97,7 +118,8 @@ const action = ref('')
 const loading = ref(false)
 const actions = ref<string[]>([])
 
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const actionGroups = computed(() => auditActionGroups(actions.value))
 
 async function load(): Promise<void> {
   loading.value = true
@@ -105,11 +127,14 @@ async function load(): Promise<void> {
     const env = await listAuditLogs({
       action: action.value || undefined,
       page: page.value,
-      page_size: PAGE_SIZE,
+      page_size: pageSize.value,
     })
     rows.value = env.items
     total.value = env.total
     actions.value = env.actions
+    // 越界页回退:记录被清/行数变大后停在空页 → 回末页(page watcher 重拉)
+    const back = Math.max(1, Math.ceil(env.total / pageSize.value))
+    if (env.items.length === 0 && page.value > back) page.value = back
   } catch {
     rows.value = []
     total.value = 0
@@ -120,9 +145,16 @@ async function load(): Promise<void> {
 
 function setAction(a: string): void {
   action.value = a
-  page.value = 1
-  void load()
+  // page 已是 1 → 显式拉;否则先归 1,交给 page watcher 拉(避免双拉)
+  if (page.value === 1) void load()
+  else page.value = 1
 }
+
+watch(page, () => { void load() })
+watch(pageSize, () => {
+  if (page.value !== 1) page.value = 1
+  else void load()
+})
 
 defineExpose({ load })
 
@@ -134,16 +166,22 @@ onMounted(() => { void load() })
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
-  cursor: pointer;
   border: 1px solid var(--color-border-tertiary, #e1e5eb);
-  background: transparent;
+  background: #f1f5f9;
 }
-.audit-chip.active {
-  color: #2f6fed;
-  border-color: #2f6fed;
-  background: #e7efff;
+.audit-filter {
+  height: 26px;
+  max-width: 220px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-tertiary, #e1e5eb);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11.5px;
+  color: #5a6273;
+  cursor: pointer;
 }
-.audit-chip.static { cursor: default; background: #f1f5f9; }
+.audit-filter:hover:not(:disabled) { color: #2f6fed; border-color: #2f6fed; }
+.audit-filter:disabled { color: #c4c9d2; cursor: default; }
 .audit-refresh {
   padding: 2px 10px;
   border: 1px solid var(--color-border-tertiary, #e1e5eb);

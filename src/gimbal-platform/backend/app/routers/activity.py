@@ -31,7 +31,8 @@ BATCH_LIMIT = 10
 
 
 class ActivityEvent(BaseModel):
-    kind: Literal["execution", "scenario", "adaptation"]
+    kind: Literal["execution", "scenario", "adaptation", "suite",
+                  "integration"]
     at: str
     # execution 面
     executionId: int | None = None
@@ -52,6 +53,10 @@ class ActivityEvent(BaseModel):
     toVersion: str | None = None
     endpointId: str | None = None
     opCount: int | None = None
+    # suite 面(suites 事件此前只写不读 —— 2026-10-20 起并入时间线)
+    suiteId: int | None = None
+    # integration 面(边沿事件:订阅/暂停/恢复/结论翻转)
+    taskId: int | None = None
 
 
 class ActivityOut(BaseModel):
@@ -66,8 +71,9 @@ async def get_activity(
     db: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 40,
 ) -> ActivityOut:
-    """本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次,
-    按 at 倒序合并,截 ``limit``。"""
+    """本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次
+    + 我的 suite/集成事件(2026-10-20 起),按 at 倒序合并,截 ``limit``。
+    """
     events: list[ActivityEvent] = []
     sources: dict[str, bool] = {}
 
@@ -136,6 +142,57 @@ async def get_activity(
         sources["adaptations"] = True
     except Exception:
         sources["adaptations"] = False
+
+    # ── suite 事件(2026-10-20:suite.share_* 此前只写不读,同表同源
+    #    查询补上;kind 区分路由渲染)────────────────────────────────
+    try:
+        rows = (await db.execute(
+            select(ActivityEventRow)
+            .where(ActivityEventRow.actor_id == user.id,
+                   ActivityEventRow.resource_type == "suite")
+            .order_by(ActivityEventRow.created_at.desc())
+            .limit(SCEN_LIMIT)
+        )).scalars().all()
+        for r in rows:
+            d = r.detail or {}
+            suite_id: int | None = None
+            try:
+                suite_id = int(r.resource_id)
+            except (TypeError, ValueError):
+                suite_id = None
+            events.append(ActivityEvent(
+                kind="suite", at=iso_naive_utc(r.created_at) or "",
+                suiteId=suite_id,
+                name=d.get("name") or r.resource_id,
+                action=r.kind, detail=d or None))
+        sources["suites"] = True
+    except Exception:
+        sources["suites"] = False
+
+    # ── 集成事件(边沿:订阅/退订/暂停/恢复/翻转;个人实例归持有人轴)──
+    try:
+        rows = (await db.execute(
+            select(ActivityEventRow)
+            .where(ActivityEventRow.actor_id == user.id,
+                   ActivityEventRow.resource_type == "integration")
+            .order_by(ActivityEventRow.created_at.desc())
+            .limit(SCEN_LIMIT)
+        )).scalars().all()
+        for r in rows:
+            d = r.detail or {}
+            task_id: int | None = None
+            try:
+                task_id = int(r.resource_id)
+            except (TypeError, ValueError):
+                task_id = None
+            events.append(ActivityEvent(
+                kind="integration", at=iso_naive_utc(r.created_at) or "",
+                taskId=task_id,
+                name=d.get("name") or r.resource_id,
+                action=r.kind, detail=d or None))
+        sources["integrations"] = True
+    except Exception:
+        sources["integrations"] = False
 
     events.sort(key=lambda e: e.at, reverse=True)
     return ActivityOut(events=events[:limit], sources=sources)

@@ -98,6 +98,8 @@ export interface ExecutionListEnvelope {
   total: number
   page: number
   pageSize: number
+  /** 与 total 同筛选口径的失败单数(服务端全口径;客户端只数得出当前页) */
+  failedTotal: number
 }
 
 /** 行级状态(spec §9.1)— rows 端点返回的 camelCase 行结构 */

@@ -39,6 +39,15 @@ NOTIFICATION_TYPES = (
     "resource_handoff",
     # RS4a（Release v4.4 §5.9）：直接保存影响他人引用时的版本变更通知。
     "scenario.version_change",
+    # ── 横向件补全轮(2026-10-20):以下类型此前已在发射但未登记词表,
+    #    导致既进不了偏好开关、前端也没有可读标签 —— 三处清单失同步。
+    # 集成任务全套(凭证失效/连续失败告警/自动暂停/待确认/恢复)。
+    "integration",
+    # 引用分享生命周期(被分享人视角;P2 上线时随端点一起引入)。
+    "share_ref_received",
+    "share_ref_revoked",
+    "share_ref_resource_deleted",
+    "share_ref_owner_changed",
 )
 
 

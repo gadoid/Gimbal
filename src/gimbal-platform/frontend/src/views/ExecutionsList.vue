@@ -78,7 +78,7 @@
       <Button size="sm" class="h-7" data-testid="exec-apply" @click="applyFilters">查询</Button>
       <span class="filter-spacer"></span>
       <span class="filter-count">
-        共 {{ store.total }} 条 · <template v-if="failedCount">失败 <strong>{{ failedCount }}</strong> 条</template><template v-else>失败 0 条</template>
+        共 {{ store.total }} 条 · <template v-if="failedTotal">失败 <strong>{{ failedTotal }}</strong> 条</template><template v-else>失败 0 条</template>
       </span>
     </div>
 
@@ -369,7 +369,9 @@ watch(pageSize, () => {
 /** 搜索词/状态/时间窗下推服务端(M4):q = scenario_name/scenario_id
  * 子串 + 执行号前缀;列表取回后通过率等 KPI 随之重算。 */
 const filtered = computed(() => store.list)
-const failedCount = computed(() => filtered.value.filter((r) => r.status === 'failed').length)
+/** 失败单数 = 服务端全口径(与「共 N 条」同一筛选集合;客户端数当前页
+ * 会在分页后与总数打架 —— 2026-10-21 修复)。 */
+const failedTotal = ref(0)
 
 function applyFilters(): void {
   appliedQ.value = query.value
@@ -400,6 +402,7 @@ async function fetchFiltered(): Promise<void> {
     if (seq === listSeq) {
       store.list = r.items
       store.total = r.total
+      failedTotal.value = r.failedTotal
       store.lastError = ''
       // 结果集变小后停在越界页 → 回末页重取一次。
       if (r.items.length === 0 && page.value > 1) {

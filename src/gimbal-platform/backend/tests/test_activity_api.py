@@ -47,7 +47,8 @@ async def test_activity_merges_three_sources_desc(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["sources"] == {"executions": True, "scenarios": True,
-                               "adaptations": True}
+                               "adaptations": True,
+                               "suites": True, "integrations": True}
     kinds = [(e["kind"], e.get("scenarioId") or e.get("name")) for e in body["events"]]
     assert ("scenario", "sc-act-a") in kinds
     assert ("execution", "sc-act-a") in kinds
@@ -119,8 +120,12 @@ async def test_activity_write_points_and_coalesce(client):
     for r in rows:
         by_kind.setdefault(r.kind, []).append(r.detail or {})
 
-    assert list(by_kind) == ["scenario.edit", "scenario.rename",
+    # 2026-10-20 起 POST /scenarios 落 scenario.created(挂路由层,
+    # copy 内部的 create 不双记 —— 本用例的 save_as 仍只一条)
+    assert list(by_kind) == ["scenario.created", "scenario.edit",
+                             "scenario.rename",
                              "scenario.save_as"], list(by_kind)
+    assert by_kind["scenario.created"][0]["source"] == "manual"
     assert len(by_kind["scenario.edit"]) == 1, "同窗两次保存必须合并"
     assert by_kind["scenario.edit"][0]["name"] == "Test"
     rn = by_kind["scenario.rename"][0]
@@ -133,7 +138,8 @@ async def test_activity_write_points_and_coalesce(client):
     # 倒序在同秒内不稳定 —— 断言集合不断言顺序)
     body = (await client.get("/api/activity", headers=h)).json()
     actions = sorted(e["action"] for e in body["events"] if e["kind"] == "scenario")
-    assert actions == ["scenario.edit", "scenario.rename", "scenario.save_as"]
+    assert actions == ["scenario.created", "scenario.edit",
+                       "scenario.rename", "scenario.save_as"]
 
 
 async def test_activity_record_best_effort(monkeypatch):

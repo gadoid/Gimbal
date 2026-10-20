@@ -91,10 +91,15 @@ class PrefsOut(BaseModel):
 
 
 class PrefsIn(BaseModel):
+    """off 可选值 = NOTIFICATION_TYPES 全集(词表/开关/前端标签三处
+    同一清单;此前 integration/share_ref_* 在发射却进不了开关)。"""
+
     off: list[Literal[
         "execution_finished", "adaptation_applied", "announcement",
         "scenario_unpublished", "role_changed", "resource_transferred",
-        "resource_handoff",
+        "resource_handoff", "scenario.version_change", "integration",
+        "share_ref_received", "share_ref_revoked",
+        "share_ref_resource_deleted", "share_ref_owner_changed",
     ]] = Field(default_factory=list)
 
 

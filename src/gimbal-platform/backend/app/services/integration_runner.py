@@ -438,15 +438,18 @@ def consent_fingerprint_of(
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
-    投影 = 执行形态六要素:场景步骤(逐 step 去 description 展示字段)
+    投影 = 执行形态七要素:场景步骤(逐 step 去 description 展示字段)
     + definition.config、**meta.plate 声明**(P2.1:主人把钉定系统从
     1.0#2 换到 1.0#5,实际执行的 method/path/请求体随新修订变化,
     属主动改内容,须触发重新确认 —— 与「有意不覆盖 plate 定义」不
-    冲突:那是共享定义自己变了,这是主人改声明)、方案(serviceBindings/
-    dataSetSelection/dataSetIds,去方案名)、数据集首行注入值、cron、
-    别名 base_url 集合。**有意不覆盖**(R3,实现勿再纠结):plate 接口
-    定义(git 评审、全员共享同一份,纳入只会全员频繁重确认)、名称/
-    描述等展示性字段。canonical JSON(sort_keys)→ sha256 hex。
+    冲突:那是共享定义自己变了,这是主人改声明)、**ui.fieldStates
+    carry 面**(v1.12:build_carry_context 的增量输入,主人改字段
+    态 = 主动改注入内容,须触发重新确认;值是纯状态词表,无值噪音)、
+    方案(serviceBindings/dataSetSelection/dataSetIds,去方案名)、
+    数据集首行注入值、cron、别名 base_url 集合。**有意不覆盖**
+    (R3,实现勿再纠结):plate 接口定义(git 评审、全员共享同一份,
+    纳入只会全员频繁重确认)、名称/描述等展示性字段。canonical
+    JSON(sort_keys)→ sha256 hex。
     """
     definition = definition_from_payload(scen_payload) or {}
     steps = []
@@ -456,7 +459,14 @@ def consent_fingerprint_of(
     projection = {
         "scenario": {"steps": steps,
                      "config": definition.get("config") or {},
-                     "plate": (definition.get("meta") or {}).get("plate") or {}},
+                     "plate": (definition.get("meta") or {}).get("plate") or {},
+                     # carry 面:resolve_state 的增量输入(M4 起 payload
+                     # .ui.fieldStates,按步骤位置索引)。原样投影 —— 含
+                     # 无效词表条目也入指纹(resolve_state 读穿、执行等价
+                     # 但指纹不同:往「多确认一次」方向错,不来「漏确认」)。
+                     "ui_field_states": (
+                         (scen_payload.get("ui") or {}).get("fieldStates")
+                         or {})},
         "scheme": {k: scheme_payload.get(k) for k in (
             "serviceBindings", "dataSetSelection", "dataSetIds")},
         "dataset_row": row_dict,
@@ -638,6 +648,23 @@ async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
     return await scenario_aliases(db, scen, tpl.scheme_id)
 
 
+async def _record_activity(db, inst: IntegrationTask, tpl: IntegrationTask,
+                           kind: str, detail: dict) -> None:
+    """时间线:集成边沿事件(subscribed/unsubscribed/paused/resumed/
+    check_flipped/run_flipped)。
+
+    只落**个人实例** —— 平台实例的 holder 是系统用户,没有可归属的
+    时间线;平台面的感知由通知(admin/operator)与审计覆盖。调用点
+    全部在业务 commit 之后;best-effort(activity.record 自兜底)。"""
+    from . import activity
+    if tpl.identity_mode != "personal" or not inst.holder_id:
+        return
+    await activity.record(
+        db, actor_id=inst.holder_id, kind=kind,
+        resource_type="integration", resource_id=str(tpl.id),
+        detail={"name": tpl.name, **detail}, coalesce=False)
+
+
 async def _pause_consent_changed(
     db, inst: IntegrationTask, tpl: IntegrationTask, *,
     paused_reason: str, message: str,
@@ -649,6 +676,8 @@ async def _pause_consent_changed(
     inst.last_error = message[:500]
     inst.running_since = None
     await db.commit()
+    await _record_activity(db, inst, tpl, "integration.paused",
+                           {"reason": paused_reason})
     if inst.holder_id:
         try:
             from .notifications import create_notification
@@ -703,6 +732,9 @@ async def pause_subscriber_instances(
         await db.commit()
         holders = [r.holder_id for r in rows]
         name = tpl.name
+        for r in rows:
+            await _record_activity(db, r, tpl, "integration.paused",
+                                   {"reason": paused_reason})
     for uid in holders:
         try:
             from .notifications import create_notification
@@ -962,6 +994,7 @@ async def _finish(
 
     now = _now()
     prev_check = inst.check_status or ""
+    prev_run = inst.run_status or ""
     prev_outputs_json = _json_of(inst.last_outputs)
     prev_last_run = inst.last_run_at
 
@@ -1040,6 +1073,25 @@ async def _finish(
             # 改造前一直在走 fail_streak 运维通知,不存在「没人知道」。
             inst.check_notified_status = inst.check_status
     await db.commit()
+
+    # 时间线(边沿事件,与通知同一状态机):暂停事件优先(它已含
+    # run 翻转的语义,ok→auth 双记是噪音);run 翻转只在未暂停时记;
+    # check 翻转取真边沿(不套 D9 节流 —— 时间线是历史面,节流属于
+    # 通知面的事)。
+    if pause_reason or auto_paused:
+        _paused_detail = {"reason": pause_reason or "fail_streak"}
+        if auto_paused:
+            _paused_detail["streak"] = inst.fail_streak
+        await _record_activity(db, inst, tpl, "integration.paused",
+                               _paused_detail)
+    elif prev_run and (prev_run == "ok") != (run_status == "ok"):
+        await _record_activity(db, inst, tpl, "integration.run_flipped",
+                               {"from": prev_run, "to": run_status})
+    if (run_status == "ok" and prev_check in ("pass", "fail")
+            and inst.check_status in ("pass", "fail")
+            and inst.check_status != prev_check):
+        await _record_activity(db, inst, tpl, "integration.check_flipped",
+                               {"from": prev_check, "to": inst.check_status})
 
     # 通知(方案 §8):auth 面立即且按身份模式定向;普通运行失败 →
     # 连续 FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator);
@@ -1307,6 +1359,7 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
         )
         rows = (await db.execute(stmt)).scalars().all()
         revived = 0
+        revived_pairs: list[tuple[IntegrationTask, IntegrationTask]] = []
         for inst in rows:
             tpl = await db.get(IntegrationTask, inst.template_id)
             if tpl is None:
@@ -1318,6 +1371,43 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
             inst.paused_reason = ""   # 列 NOT NULL:空串 = 无暂停原因
             inst.next_run_at = now
             revived += 1
+            revived_pairs.append((inst, tpl))
         if revived:
             await db.commit()
+            # 时间线 + 通知:自动恢复此前完全静默(暂停侧发通知,恢复侧
+            # 没有 —— 持有人不知道任务已经自己跑起来了)
+            for inst, tpl in revived_pairs:
+                await _record_activity(db, inst, tpl, "integration.resumed",
+                                       {"via": "credential_revive"})
+            try:
+                from .notifications import create_notification
+                personal = [(i, t) for i, t in revived_pairs
+                            if t.identity_mode == "personal" and i.holder_id]
+                platform_names = [t.name for _, t in revived_pairs
+                                  if t.identity_mode != "personal"]
+                async with db_module.SessionLocal() as ndb:
+                    for inst, tpl in personal:
+                        await create_notification(
+                            ndb, user_id=inst.holder_id, type_="integration",
+                            title=f"集成任务「{tpl.name}」已自动恢复",
+                            body="凭证已更新,此前因凭证问题暂停的任务"
+                                 "已恢复调度",
+                            link="/integrations")
+                    if platform_names:
+                        # 平台模式:与暂停通知同受众(admin/operator),
+                        # 多实例聚合一条,防凭证池批量复活刷屏
+                        uids = (await ndb.execute(select(User.id).where(
+                            User.role.in_(("admin", "operator")),
+                            User.is_system == False  # noqa: E712
+                        ))).scalars().all()
+                        names = "、".join(f"「{n}」" for n in platform_names)
+                        for uid in uids:
+                            await create_notification(
+                                ndb, user_id=uid, type_="integration",
+                                title=(f"平台集成任务已自动恢复"
+                                       f"({len(platform_names)} 个)"),
+                                body=f"凭证更新后,以下任务已恢复调度:{names}",
+                                link="/integrations")
+            except Exception:  # noqa: BLE001 — 通知是增强
+                logger.warning("integration: revive notify failed")
     return revived

@@ -96,7 +96,11 @@ class ExecutionListItemOut(BaseModel):
 
 
 class ExecutionListOut(BaseModel):
-    """Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。"""
+    """Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。
+
+    ``failedTotal``(2026-10-21):与 ``total`` 同筛选口径的失败单数 —— 前端
+    筛选行的「共 N 条 · 失败 M 条」原先 N 是全量、M 却只数当前页,分页后
+    口径打架;由服务端一次 count 给全口径值。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -104,6 +108,7 @@ class ExecutionListOut(BaseModel):
     total: int
     page: int = 1
     page_size: int = Field(default=200, alias="pageSize")
+    failed_total: int = Field(default=0, alias="failedTotal")
 
 
 class ExecutionSummaryOut(BaseModel):

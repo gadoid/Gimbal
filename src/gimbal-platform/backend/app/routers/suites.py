@@ -343,6 +343,13 @@ async def create_suite(
     db.add(suite)
     await db.commit()
     await db.refresh(suite)
+    # 时间线:suite 域三事件之一(草稿 = 画布拖入的瞬态占位,不记)
+    if not is_draft:
+        from ..services import activity as activity_svc
+        await activity_svc.record(
+            db, actor_id=user.id, kind="suite.created",
+            resource_type="suite", resource_id=str(suite.id),
+            detail={"name": suite.name})
     return _summary(suite, 0)
 
 
@@ -389,6 +396,7 @@ async def delete_suite(
 ) -> Response:
     suite = await _load_suite(db, suite_id)
     _require_write(user, suite)
+    suite_name, suite_owner = suite.name, suite.owner_id
     # 重构方案:有引用者时,删除后通知引用者(与处置路径
     # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
     from ..models.share_ref import ShareRef
@@ -403,12 +411,30 @@ async def delete_suite(
             await notify_svc.create_notification(
                 db, user_id=uid,
                 type_="share_ref_resource_deleted",
-                title=f"引用失效:suite#{suite.id}",
+                title=f"引用失效:suite#{suite_id}",
                 body="该 Suite 已被删除,引用分享随之结束",
                 link=None, resource_type="suite",
-                resource_id=str(suite.id))
+                resource_id=str(suite_id))
         except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断删除
             await db.rollback()
+    # 时间线 + 审计:admin 越属主删除(属主自删只落时间线不入审计)
+    from ..services import activity as activity_svc
+    actor_id = user.id if user.id == suite_owner else suite_owner
+    extra = {} if user.id == suite_owner else {
+        "by": user.display_name or user.username}
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="suite.deleted",
+        resource_type="suite", resource_id=str(suite_id),
+        detail={"name": suite_name, **extra})
+    if user.role == "admin" and user.id != suite_owner:
+        from ..services import audit as audit_svc
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="suite.admin_delete",
+            resource_type="suite", resource_id=str(suite_id),
+            resource_name=suite_name,
+            detail={"ownerId": suite_owner, "name": suite_name})
     return Response(status_code=204)
 
 
@@ -700,6 +726,17 @@ async def put_composition(
     suite.rev += 1
     await db.commit()
     await db.refresh(suite)
+    # 时间线:整体保存确认发布的成员场景(级联路径之二,与 publish
+    # 端点同款 scenario.published/via 标注)
+    if pending_publish:
+        from ..services import activity as activity_svc
+        for sid in pending_publish:
+            await activity_svc.record(
+                db, actor_id=suite.owner_id, kind="scenario.published",
+                resource_type="scenario", resource_id=sid,
+                detail={"name": getattr(scen_rows[sid], "name", sid),
+                        "via": "suite_composition",
+                        "suiteId": suite.id, "suiteName": suite.name})
     return await _detail_out(db, user, suite)
 
 
@@ -1491,6 +1528,33 @@ async def publish_suite(
     await db.refresh(suite)
     out = _summary(suite, len(members))
     out.publishedMembers = unpublished  # 级联清单:确认框的事实面回执
+    # 时间线:suite 发布 + 被级联公开的成员场景(级联绕过
+    # set_visibility,须在此单独落 —— 此前成员被连带公开完全无痕)
+    from ..services import activity as activity_svc
+    actor_id = user.id if user.id == suite.owner_id else suite.owner_id
+    extra = {} if user.id == suite.owner_id else {
+        "by": user.display_name or user.username}
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="suite.published",
+        resource_type="suite", resource_id=str(suite.id),
+        detail={"name": suite.name, "cascaded": len(unpublished), **extra})
+    for sid in unpublished:
+        await activity_svc.record(
+            db, actor_id=suite.owner_id, kind="scenario.published",
+            resource_type="scenario", resource_id=sid,
+            detail={"name": sid, "via": "suite_publish",
+                    "suiteId": suite.id, "suiteName": suite.name})
+    # 审计:admin 越属主发布(可见性扩张;属主自发布不记)
+    if user.role == "admin" and user.id != suite.owner_id:
+        from ..services import audit as audit_svc
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="suite.admin_publish",
+            resource_type="suite", resource_id=str(suite.id),
+            resource_name=suite.name,
+            detail={"ownerId": suite.owner_id, "name": suite.name,
+                    "cascaded": len(unpublished)})
     return out
 
 

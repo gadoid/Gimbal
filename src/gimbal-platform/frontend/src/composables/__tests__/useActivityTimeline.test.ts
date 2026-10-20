@@ -28,7 +28,10 @@ async function loadWith(data: {
 }) {
   vi.mocked(activityApi.getActivity).mockResolvedValue({
     events: data.events ?? [],
-    sources: data.sources ?? { executions: true, scenarios: true, adaptations: true },
+    sources: data.sources ?? {
+      executions: true, scenarios: true, adaptations: true,
+      suites: true, integrations: true,
+    },
   } as never)
   const t = useActivityTimeline()
   await t.load()
@@ -125,7 +128,9 @@ describe('useActivityTimeline', () => {
       ],
     })
     expect(t.only.value).toBeNull()
-    expect(t.counts.value).toEqual({ execution: 2, scenario: 1, adaptation: 1 })
+    expect(t.counts.value).toEqual({
+      execution: 2, scenario: 1, adaptation: 1, suite: 0, integration: 0,
+    })
 
     t.setOnly('execution')
     expect(t.visible.value.map((e) => e.kind)).toEqual(['execution', 'execution'])
@@ -156,7 +161,7 @@ describe('useActivityTimeline', () => {
   it('重新取数后筛中的那一类一条不剩 → 自动撤筛', async () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [execEvent(1, 'done', ago(1))],
-      sources: { executions: true, scenarios: true, adaptations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
     } as never)
     const t = useActivityTimeline()
     await t.load()

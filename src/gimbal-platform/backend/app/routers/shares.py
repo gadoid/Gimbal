@@ -100,7 +100,8 @@ async def create_share(
                          f"收到副本:{out.meta.name}",
                          f"{sharer_disp} 拷贝分享了场景「{row.name or row.scenario_id}」给你",
                          link=f"/scenarios/{out.meta.scenario_id}/detail",
-                         resource_id=out.meta.scenario_id)
+                         resource_id=out.meta.scenario_id,
+                         payload={"sender_name": sharer_disp})
             await _record_share_event(
                 db, actor_id=user.id, kind="scenario.share_copy",
                 resource_type="scenario", resource_id=row.scenario_id,
@@ -149,7 +150,8 @@ async def create_share(
                      f"收到副本:{out['name']}",
                      f"{sharer_disp} 拷贝分享了 Suite「{suite.name}」给你({out['count']} 个成员)",
                      link=f"/suites/{out['suiteId']}",
-                     resource_id=str(out["suiteId"]))
+                     resource_id=str(out["suiteId"]),
+                     payload={"sender_name": sharer_disp})
         await _record_share_event(
             db, actor_id=user.id, kind="suite.share_copy",
             resource_type="suite", resource_id=str(suite.id),
@@ -317,6 +319,17 @@ async def delete_share(
     if is_grantee and user.role != "admin":
         await db.delete(ref)          # 退订(§7.7):删行,不通知
         await db.commit()
+        # 时间线:退订(与 share_ref/share_copy 的「建立」面成对;
+        # 不通知属主是既有口径,时间线只记本人轴)
+        kind = ("scenario.share_ref_unsubscribed"
+                if ref.scenario_id is not None
+                else "suite.share_ref_unsubscribed")
+        await _record_share_event(
+            db, actor_id=user.id, kind=kind,
+            resource_type=("scenario" if ref.scenario_id is not None
+                           else "suite"),
+            resource_id=ref.scenario_id or str(ref.suite_id),
+            detail={})
         return
     # 撤销:资源属主 ∨ admin
     owned = False
@@ -351,6 +364,22 @@ async def delete_share(
             resource_id=ref.scenario_id or str(ref.suite_id),
             resource_name=res_name,
             detail={"granteeUserId": ref.grantee_user_id})
+    # 时间线:撤销双事件(撤销者轴 + 被分享人轴 —— 「共享给我的」
+    # 列表变化对双方都是可见状态变更;与建立面 share_ref 成对)
+    rev_kind = ("scenario.share_ref_revoked" if ref.scenario_id is not None
+                else "suite.share_ref_revoked")
+    res_type = "scenario" if ref.scenario_id is not None else "suite"
+    res_id = ref.scenario_id or str(ref.suite_id)
+    disp = user.display_name or user.username
+    await _record_share_event(
+        db, actor_id=user.id, kind=rev_kind,
+        resource_type=res_type, resource_id=res_id,
+        detail={"granteeId": ref.grantee_user_id,
+                "name": res_name or name})
+    await _record_share_event(
+        db, actor_id=ref.grantee_user_id, kind=rev_kind,
+        resource_type=res_type, resource_id=res_id,
+        detail={"by": disp, "name": res_name or name})
 
 
 @router.post("/{share_id}/fork", response_model=ShareCopyOut, status_code=201)
@@ -423,14 +452,18 @@ async def _ensure_ref_cap(db, sharer_id: int) -> None:
 
 async def _notify(db, user_id: int, type_: str, title: str, body: str,
                   link: str | None = None, resource_id: str | None = None,
-                  resource_type: str = "scenario") -> None:
-    """通知 best-effort(§10;失败 rollback+记日志,不阻断业务)。"""
+                  resource_type: str = "scenario",
+                  payload: dict | None = None) -> None:
+    """通知 best-effort(§10;失败 rollback+记日志,不阻断业务)。
+
+    ``payload``:resource_handoff 必带 ``sender_name`` —— handoff-unread
+    端点(悬浮标签数据源)读的就是这个键,缺失 = 标签永不显示。"""
     from loguru import logger
     try:
         await notify_svc.create_notification(
             db, user_id=user_id, type_=type_, title=title, body=body,
             link=link, resource_type=resource_type, resource_id=resource_id,
-            commit=True)
+            payload=payload, commit=True)
     except Exception as e:  # noqa: BLE001
         await db.rollback()
         logger.warning("shares: notify {} failed: {}", type_, e)

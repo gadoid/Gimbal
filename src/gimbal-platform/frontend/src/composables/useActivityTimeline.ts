@@ -14,7 +14,7 @@ import { getActivity, type ActivityEventIn } from '@/api/activity'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl, scenarioDetailUrl } from '@/utils/links'
 
-export type TimelineKind = 'execution' | 'scenario' | 'adaptation'
+export type TimelineKind = 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration'
 
 export interface TimelineEvent {
   key: string
@@ -41,6 +41,16 @@ export const BATCH_LABEL: Record<string, string> = {
   open: '待处理', applying: '处理中', completed: '已完成', rolled_back: '已回滚',
 }
 
+/** 集成暂停原因 → 时间线文案(与功能卡角标同词表)。 */
+export const INTEGRATION_PAUSE_LABELS: Record<string, string> = {
+  manual: '本人暂停',
+  fail_streak: '连续失败自动暂停',
+  auth_failed: '凭证失效',
+  missing_credential: '缺少凭证',
+  template_changed: '内容已变更待确认',
+  made_private: '已转私有待确认',
+}
+
 /** 服务端事件 → 展示行(文案与深链是前端职责,数据面不再拼装)。 */
 function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
   if (e.kind === 'execution') {
@@ -50,12 +60,58 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
       detail: e.scenarioName || e.scenarioId || undefined, to: executionUrl(e.executionId!),
     }
   }
+  if (e.kind === 'integration') {
+    const d = (e.detail ?? {}) as Record<string, unknown>
+    const name = e.name || (e.taskId != null ? `#${e.taskId}` : '')
+    const reason = typeof d.reason === 'string' ? d.reason : ''
+    let title = `功能动态 ${name}`
+    if (e.action === 'integration.subscribed') title = `订阅功能 ${name}`
+    else if (e.action === 'integration.unsubscribed') title = `退订功能 ${name}`
+    else if (e.action === 'integration.paused') {
+      title = `功能暂停 ${name}(${INTEGRATION_PAUSE_LABELS[reason] ?? reason})`
+    } else if (e.action === 'integration.resumed') title = `功能恢复 ${name}`
+    else if (e.action === 'integration.check_flipped') {
+      title = `功能检查${d.to === 'pass' ? '恢复通过' : '不通过'} ${name}`
+    } else if (e.action === 'integration.run_flipped') {
+      title = `功能运行${d.to === 'ok' ? '恢复' : '异常'} ${name}`
+    }
+    return {
+      key: `int-${e.taskId}-${e.at}`, kind: 'integration', at: e.at,
+      title, to: '/integrations',
+    }
+  }
+  if (e.kind === 'suite') {
+    const d = (e.detail ?? {}) as Record<string, unknown>
+    const name = e.name || (e.suiteId != null ? `#${e.suiteId}` : '')
+    let title = `更新套件 ${name}`
+    if (e.action === 'suite.created') title = `创建套件 ${name}`
+    else if (e.action === 'suite.deleted') title = `删除套件 ${name}`
+    else if (e.action === 'suite.published') {
+      const n = typeof d.cascaded === 'number' && d.cascaded > 0
+        ? `(连带公开 ${d.cascaded} 个场景)` : ''
+      title = `发布套件 ${name}${n}`
+    } else if (e.action === 'suite.share_copy') title = `分享套件副本 ${name}`
+    else if (e.action === 'suite.share_ref') title = `分享套件引用 ${name}`
+    else if (e.action === 'suite.share_fork') title = `套件引用转副本 ${name}`
+    else if (e.action === 'suite.share_ref_revoked') {
+      title = d.by ? `套件引用分享被撤销 ${name}` : `撤销套件引用分享 ${name}`
+    } else if (e.action === 'suite.share_ref_unsubscribed') {
+      title = `退订套件引用 ${name}`
+    }
+    return {
+      key: `suite-${e.suiteId}-${e.at}`, kind: 'suite', at: e.at,
+      title,
+      to: e.suiteId != null && e.action !== 'suite.deleted'
+        ? `/suites/${e.suiteId}` : '/suites',
+    }
+  }
   if (e.kind === 'scenario') {
     // F3(2026-09-23):按 action 细分文案 —— 事件表取代 updated_at
     // 反推后,时间线第一次能区分「改了什么」。旧事件无 action = edit。
     const d = (e.detail ?? {}) as Record<string, unknown>
     const name = e.name || e.scenarioId || ''
     let title = `更新场景 ${name}`
+    let to = scenarioDetailUrl(e.scenarioId!)
     if (e.action === 'scenario.rename') {
       title = `重命名场景 ${d.oldName ?? ''} → ${d.newName ?? name}`
     } else if (e.action === 'scenario.save_as') {
@@ -63,13 +119,37 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
     } else if (e.action === 'scenario.handoff_received') {
       const sender = typeof d.senderName === 'string' ? d.senderName : ''
       title = `收到分享 ${name}${sender ? `(来自 ${sender})` : ''}`
+    } else if (e.action === 'scenario.created') {
+      title = d.source === 'import' ? `导入场景 ${name}` : `创建场景 ${name}`
+    } else if (e.action === 'scenario.deleted') {
+      title = `删除场景 ${name}${d.by ? `(由 ${d.by})` : ''}`
+      to = '/scenarios/mine'   // 详情页已 404,深链回列表
+    } else if (e.action === 'scenario.published') {
+      title = `发布场景 ${name}${d.via ? '(随套件连带公开)' : ''}${d.by ? `(由 ${d.by})` : ''}`
+    } else if (e.action === 'scenario.unpublished') {
+      title = `下架场景 ${name}${d.by ? `(由 ${d.by})` : ''}`
+    } else if (e.action === 'scenario.share_copy') {
+      const sender = typeof d.senderName === 'string' ? d.senderName : ''
+      title = sender ? `收到场景副本 ${name}(来自 ${sender})` : `分享场景副本 ${name}`
+    } else if (e.action === 'scenario.share_ref') {
+      title = `分享场景引用 ${name}`
+    } else if (e.action === 'scenario.share_fork') {
+      title = `场景引用转副本 ${name}`
+    } else if (e.action === 'scenario.share_ref_revoked') {
+      title = d.by ? `场景引用分享被撤销 ${name}` : `撤销场景引用分享 ${name}`
+    } else if (e.action === 'scenario.share_ref_unsubscribed') {
+      title = `退订场景引用 ${name}`
+    } else if (e.action === 'scenario.version_change') {
+      title = `场景版本切换 ${d.from ?? ''}→${d.to ?? ''} · ${name}`
+    } else if (e.action === 'scenario.forked_for_adaptation') {
+      title = `为适配另存副本 ${name}`
     }
     // key 带时间戳:同一场景在一个轴上可有多条事件,只带 id 会撞 key。
     return {
       key: `scen-${e.scenarioId}-${e.at}`, kind: 'scenario', at: e.at,
       title,
       detail: e.module ?? undefined,
-      to: scenarioDetailUrl(e.scenarioId!),
+      to,
     }
   }
   return {
@@ -100,8 +180,11 @@ export function useActivityTimeline() {
   const expanded = ref(false)
   const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   /** 各源是否取到过(全空 = 真没活动;某源失败 ≠ 真没活动)。 */
-  const sources = reactive<{ exec: boolean; scen: boolean; adapt: boolean }>({
-    exec: false, scen: false, adapt: false,
+  const sources = reactive<{
+    exec: boolean; scen: boolean; adapt: boolean
+    suite: boolean; integ: boolean
+  }>({
+    exec: false, scen: false, adapt: false, suite: false, integ: false,
   })
 
   /** 颜色筛选:卡头圆点即「只看这一类」。null = 不筛,全给。 */
@@ -111,7 +194,9 @@ export function useActivityTimeline() {
   )
   /** 池子里各类各有多少 —— 决定卡头哪几颗点可点、tooltip 报几个数。 */
   const counts = computed<Record<TimelineKind, number>>(() => {
-    const m: Record<TimelineKind, number> = { execution: 0, scenario: 0, adaptation: 0 }
+    const m: Record<TimelineKind, number> = {
+      execution: 0, scenario: 0, adaptation: 0, suite: 0, integration: 0,
+    }
     for (const e of pooled.value) m[e.kind] += 1
     return m
   })
@@ -133,7 +218,9 @@ export function useActivityTimeline() {
     return out
   })
 
-  const degraded = computed(() => !sources.exec || !sources.scen || !sources.adapt)
+  const degraded = computed(() =>
+    !sources.exec || !sources.scen || !sources.adapt
+    || !sources.suite || !sources.integ)
 
   async function load() {
     status.value = 'loading'
@@ -151,6 +238,8 @@ export function useActivityTimeline() {
     sources.exec = (report?.sources.executions ?? false) !== false
     sources.adapt = (report?.sources.adaptations ?? false) !== false
     sources.scen = (report?.sources.scenarios ?? false) !== false
+    sources.suite = (report?.sources.suites ?? false) !== false
+    sources.integ = (report?.sources.integrations ?? false) !== false
 
     pooled.value = (report?.events ?? []).map(toTimelineEvent)
 

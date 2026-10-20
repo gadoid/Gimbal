@@ -291,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { plateRecordCategory } from '@/types/plate'
 import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
@@ -672,7 +672,11 @@ async function cancelExec() {
   await refreshNow()
 }
 
-onMounted(async () => {
+/** 挂载与「同路由换执行号」共用:拉详情 → 起轮询 → 补行级表。
+ *  onMounted 之外还有 watch(executionId) 一条路 —— 通知铃铛里连点两条
+ *  执行通知时,/executions/12 → /executions/13 复用同一路由记录不重挂载,
+ *  不盯参数就只有 markRead 在发请求、页面纹丝不动。 */
+async function loadExecution(): Promise<void> {
   if (!executionId.value) return
   // 原型修订(v2.2):列表页失败数字入口带 ?rows=failed →
   // 自动展开行级表格(失败用例清单即行级表),省一次手动点击
@@ -693,6 +697,16 @@ onMounted(async () => {
   stop = execStore.startPolling(executionId.value)
   // 行级表格的展开态跨导航保留(store 持有):回到本页立即补一次 rows。
   refreshRowsIfExpanded()
+}
+
+onMounted(loadExecution)
+
+watch(executionId, async (next, prev) => {
+  if (!next || next === prev) return
+  // 换了执行号:先停旧轮询再走完整加载链(失败时轮询也不恢复 ——
+  // 与挂载路径同口径,错误文案由 pollError 面板承接)。
+  if (stop) { stop(); stop = null }
+  await loadExecution()
 })
 
 onUnmounted(() => {

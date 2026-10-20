@@ -7,7 +7,7 @@
 import http from '@/api/http'
 
 export interface ActivityEventIn {
-  kind: 'execution' | 'scenario' | 'adaptation'
+  kind: 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration'
   at: string
   executionId?: number | null
   status?: string | null
@@ -26,6 +26,10 @@ export interface ActivityEventIn {
   action?: string | null
   /** F3:子动作的结构化数据(oldName/newName/sourceScenarioId/senderName)。 */
   detail?: Record<string, unknown> | null
+  /** suite 面(2026-10-20:suite 事件此前只写不读,现并入时间线)。 */
+  suiteId?: number | null
+  /** integration 面(边沿事件:订阅/暂停/恢复/结论翻转)。 */
+  taskId?: number | null
 }
 
 export interface ActivityReport {

@@ -1,8 +1,8 @@
 // auditText.test.ts — 审计可读性三件套:动作标签 / 对象名称回落 / 详情模板。
 import { describe, expect, it } from 'vitest'
 import {
-  AUDIT_ACTION_LABELS, auditActionLabel, auditResourceName, auditResourceText,
-  describeAuditDetail,
+  AUDIT_ACTION_LABELS, auditActionGroups, auditActionLabel, auditResourceName,
+  auditResourceText, describeAuditDetail,
 } from '../auditText'
 import type { AuditLogRow } from '@/api/admin'
 
@@ -15,18 +15,42 @@ function row(partial: Partial<AuditLogRow>): AuditLogRow {
 }
 
 describe('auditActionLabel', () => {
-  it('后端 AUDIT_ACTIONS 13 键全部有中文标签', () => {
+  it('后端 AUDIT_ACTIONS 18 键全部有中文标签', () => {
     const all = [
       'user.create', 'user.role_change', 'user.delete', 'user.reset_password',
       'announcement.publish', 'carry.write', 'adaptation.op.apply',
-      'adaptation.batch.apply', 'adaptation.batch.rollback', 'alias.write',
+      'adaptation.batch.rollback', 'alias.write',
       'external_endpoint.query_safe',
       'share.admin_revoke', 'suite.admin_unpublish',
+      // 2026-10-20 横向件补全:平台凭证 + admin 越属主删除/可见性
+      'integration.credential.write', 'scenario.admin_delete',
+      'scenario.admin_publish', 'scenario.admin_unpublish',
+      'suite.admin_delete', 'suite.admin_publish',
     ]
     for (const k of all) {
       expect(AUDIT_ACTION_LABELS[k], k).toBeTruthy()
       expect(auditActionLabel(k)).not.toBe(k)
     }
+  })
+
+  it('adaptation.batch.apply 死键已退役(从未发射,标签一并清理)', () => {
+    expect(AUDIT_ACTION_LABELS['adaptation.batch.apply']).toBeUndefined()
+  })
+
+  it('平台凭证/admin 越属主动作详情人话', () => {
+    expect(describeAuditDetail(row({
+      action: 'integration.credential.write',
+      resourceType: 'integration_credential', resourceId: '7',
+      detail: { fn: 'create', alias: 'jira-bot' },
+    }))).toContain('登记平台凭证「jira-bot」')
+    expect(describeAuditDetail(row({
+      action: 'scenario.admin_delete', resourceType: 'scenario',
+      resourceId: 'sc-x', detail: { name: '下单链路' },
+    }))).toContain('管理员删除场景「下单链路」')
+    expect(describeAuditDetail(row({
+      action: 'suite.admin_publish', resourceType: 'suite', resourceId: '3',
+      detail: { name: '回归集', cascaded: 2 },
+    }))).toContain('连带公开 2 个成员场景')
   })
 
   it('I4 只读标记:标记/撤销外部接口人话(名称快照优先)', () => {
@@ -155,5 +179,32 @@ describe('auditResourceName', () => {
     expect(auditResourceName(row({
       resourceType: 'user', resourceId: '1', detail: { resource_name: '  ' },
     }))).toBeNull()
+  })
+})
+
+describe('auditActionGroups — 筛选下拉的域分组(2026-10-20)', () => {
+  it('按键第一段分组,域内顺序跟词表;已知域给中文组名', () => {
+    const groups = auditActionGroups([
+      'user.create', 'user.delete', 'suite.admin_publish', 'user.reset_password',
+      'scenario.admin_delete',
+    ])
+    expect(groups.map((g) => [g.domain, g.label])).toEqual([
+      ['user', '用户'], ['suite', '套件'], ['scenario', '场景'],
+    ])
+    expect(groups[0]!.items).toEqual(['user.create', 'user.delete', 'user.reset_password'])
+  })
+
+  it('未知域回落原段名;无点的键整个当域名', () => {
+    const groups = auditActionGroups(['future.thing', 'legacy'])
+    expect(groups.map((g) => g.label)).toEqual(['future', 'legacy'])
+  })
+
+  it('后端 18 键词表全部落进某个组(不丢键)', () => {
+    const vocab = Object.keys(AUDIT_ACTION_LABELS).filter(
+      (k) => !k.startsWith('suite.'),   // 词表外的存量 fork 键单独验
+    )
+    const grouped = auditActionGroups([...vocab, 'suite.owner_fork', 'suite.public_fork'])
+    expect(grouped.flatMap((g) => g.items).sort()).toEqual(
+      [...vocab, 'suite.owner_fork', 'suite.public_fork'].sort())
   })
 })

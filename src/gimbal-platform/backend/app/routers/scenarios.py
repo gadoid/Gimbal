@@ -263,7 +263,7 @@ async def create_scenario(
 ) -> Scenario:
     owner = user.display_name or user.username
     try:
-        return await scenario_store.create(
+        out = await scenario_store.create(
             db, body, owner=owner, owner_id=user.id
         )
     except ValueError as e:
@@ -274,6 +274,15 @@ async def create_scenario(
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
         })
+    # 时间线:新建此前无痕(另存为/分享各有事件,唯手工新建缺失)。
+    # 挂路由层而非 store.create —— copy_scenario 内部也调 create,
+    # 挂 store 会与 save_as/share_copy 双记。
+    from ..services import activity as activity_svc
+    await activity_svc.record(
+        db, actor_id=user.id, kind="scenario.created",
+        resource_type="scenario", resource_id=out.meta.scenario_id,
+        detail={"name": out.meta.name, "source": "manual"})
+    return out
 
 
 # ── 3a0) GET /signals(M5,债 12:关注页 N+1 消除)─────────────────────
@@ -637,6 +646,30 @@ async def star_scenario(
 
 
 # ── 4.1) POST /{id}/publish | /unpublish — 发布 / 下架 ─────────────
+def _axis_actor(user, row) -> tuple[int | None, dict]:
+    """时间线归属人:admin 代操作落在**受影响人**(资源属主)轴上,
+    detail.by 记操作者;本人操作 = 本人轴。activity.actor_id 语义本是
+    「时间线归属人」(handoff 的 actor 即接收方),不是动作发起者。"""
+    if user.id == row.owner_id:
+        return user.id, {}
+    return row.owner_id, {"by": user.display_name or user.username}
+
+
+async def _record_admin_visibility_audit(
+    db, user, row, scenario_id: str, action: str,
+) -> None:
+    """admin 越属主的可见性变更入审计(属主自发布/自下架不记 —— 与
+    suite.admin_unpublish 同口径,只记越属主那一半)。"""
+    if user.role != "admin" or user.id == row.owner_id:
+        return
+    from ..services import audit as audit_svc
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action=action,
+        resource_type="scenario", resource_id=scenario_id,
+        resource_name=row.name,
+        detail={"ownerId": row.owner_id, "name": row.name})
 @router.post("/{scenario_id}/publish", response_model=Scenario)
 async def publish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
@@ -644,10 +677,22 @@ async def publish_scenario(
     """发布:visibility → public,所有登录用户可读(取代 V1 公共库)。"""
     row = await _load_row(db, scenario_id)
     _require_owner(user, row)
+    was_public = (row.visibility or "private") == "public"
     try:
-        return await scenario_store.set_visibility(db, scenario_id, "public")
+        out = await scenario_store.set_visibility(db, scenario_id, "public")
     except KeyError as e:
         raise key_error_404(e)
+    if not was_public:   # 状态确变才记:重复发布不刷事件/审计
+        # 时间线:可见性跃迁(直接路径;suite 级联路径在 suites.py 落)
+        from ..services import activity as activity_svc
+        actor_id, extra = _axis_actor(user, row)
+        await activity_svc.record(
+            db, actor_id=actor_id, kind="scenario.published",
+            resource_type="scenario", resource_id=scenario_id,
+            detail={"name": row.name, **extra})
+        await _record_admin_visibility_audit(
+            db, user, row, scenario_id, "scenario.admin_publish")
+    return out
 
 
 @router.post("/{scenario_id}/unpublish", response_model=Scenario)
@@ -657,10 +702,21 @@ async def unpublish_scenario(
     """下架:visibility → private,仅 owner/admin 可读。"""
     row = await _load_row(db, scenario_id)
     _require_owner(user, row)
+    was_public = (row.visibility or "private") == "public"
     try:
         result = await scenario_store.set_visibility(db, scenario_id, "private")
     except KeyError as e:
         raise key_error_404(e)
+    if was_public:   # 状态确变才记:重复下架不刷事件/审计
+        # 时间线:可见性跃迁 + admin 越属主审计
+        from ..services import activity as activity_svc
+        actor_id, extra = _axis_actor(user, row)
+        await activity_svc.record(
+            db, actor_id=actor_id, kind="scenario.unpublished",
+            resource_type="scenario", resource_id=scenario_id,
+            detail={"name": row.name, **extra})
+        await _record_admin_visibility_audit(
+            db, user, row, scenario_id, "scenario.admin_unpublish")
     # P2 §7.9 连带下架:公共 suite ⇒ 成员全 public。场景下架时,其所
     # 属的公共 suite 一并下架(属主即 suite 属主——组合外键保证;自
     # 下架不通知,admin 下架通知 suite 属主,与既有 admin 下架通知口径
@@ -832,10 +888,48 @@ async def delete_scenario(
 ) -> None:
     row = await _load_row(db, scenario_id)
     _require_owner(user, row)
+    owner_id, name = row.owner_id, row.name
+    # 引用者名单必须在删除**之前**取 —— share_refs 行随 FK CASCADE 消失
+    from sqlalchemy import select as _sel
+
+    from ..models.share_ref import ShareRef
+    referrers = (await db.execute(_sel(ShareRef.grantee_user_id).where(
+        ShareRef.scenario_id == scenario_id))).scalars().all()
     try:
         await scenario_store.delete(db, scenario_id)
     except KeyError as e:
         raise key_error_404(e)
+    # 引用失效通知(与 suite 删除/用户处置同口径 —— 此前场景删除是三处
+    # 里唯一静默的,被分享人「共享给我的」列表无痕缩水)
+    from ..services import notifications as notify_svc
+
+    for uid in referrers:
+        try:
+            await notify_svc.create_notification(
+                db, user_id=uid, type_="share_ref_resource_deleted",
+                title=f"引用失效:{name or scenario_id}",
+                body=f"场景「{name or scenario_id}」已被删除,引用分享随之结束",
+                resource_type="scenario", resource_id=scenario_id)
+        except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断删除
+            await db.rollback()
+    # 时间线:删除事件(既有条目从此变孤儿深链,补事件让消失可解释)
+    from ..services import activity as activity_svc
+
+    actor_id, extra = _axis_actor(user, row)
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="scenario.deleted",
+        resource_type="scenario", resource_id=scenario_id,
+        detail={"name": name, **extra})
+    # 审计:admin 越属主删除(属主自删不记)
+    if user.role == "admin" and user.id != owner_id:
+        from ..services import audit as audit_svc
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="scenario.admin_delete",
+            resource_type="scenario", resource_id=scenario_id,
+            resource_name=name,
+            detail={"ownerId": owner_id, "name": name})
 
 
 # ── R19（Release v4.4 §6.5）:导入导出以 meta.plate 为契约 ──────────
