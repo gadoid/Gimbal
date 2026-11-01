@@ -31,7 +31,7 @@ from ..core.deps import CurrentUser, get_owned_execution
 from ..core.timeutil import utcnow
 from ..models import Execution
 from ..models.execution import (
-    is_orchestration_kind,
+    is_scenario_backed,
     STATUS_CANCELED,
     STATUS_DONE,
     STATUS_FAILED,
@@ -190,12 +190,12 @@ async def list_executions(
             Execution.scenario_id.in_(live_names.scalar_subquery()),
         ))
     if scenario_id:
-        # 重构方案:编排类执行的 scenario_id 是占位 <前缀>-<id>,
+        # 重构方案:非场景形态的 scenario_id 是占位 <前缀>-<id>,
         # 理论上永不命中真实场景;显式排除兜底任何前缀/模糊查询遗漏
-        # (N3:形态集合单源 ORCHESTRATION_KINDS,新增编排形态只改一处)
-        from ..models.execution import ORCHESTRATION_KINDS
+        # (N3:形态集合单源 NON_SCENARIO_KINDS,新增形态只改一处)
+        from ..models.execution import NON_SCENARIO_KINDS
         base = base.where(Execution.scenario_id == scenario_id,
-                          Execution.kind.notin_(ORCHESTRATION_KINDS))
+                          Execution.kind.notin_(NON_SCENARIO_KINDS))
     if status_filter:
         if status_filter not in _KNOWN_STATUSES:
             raise HTTPException(
@@ -731,16 +731,26 @@ async def rerun_execution(
     混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,
     不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜
     底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。"""
-    # 重构方案:编排类执行不按 config 重放(现在会只重跑第一个
-    # 场景)→ 409 附 Suite 链接,前端转去重新运行该 Suite(经预检)
-    if is_orchestration_kind(getattr(ex, "kind", None)):
+    # 重构方案:不挂真实场景的执行不按 config 重放(现在会只重跑第一个
+    # 场景)。N3 拆判定(评审 §3.2):守卫问「是否挂在真实场景上」
+    # (is_scenario_backed);409 的错误码与 Suite 链接是 suite_graph
+    # 专属 —— 后续新形态(如 adhoc 临时调用)入 NON_SCENARIO_KINDS
+    # 后走通用错误码,不吃 Suite 链接(带 suiteId: null 的链接是错页)。
+    _kind = getattr(ex, "kind", None)
+    if not is_scenario_backed(_kind):
+        if _kind == "suite_graph":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "suite_graph_rerun_unsupported",
+                    "message": "Suite 编排执行不能按配方重放,请重新运行该 Suite",
+                    "suiteId": ex.suite_id,
+                    "link": f"/suites/{ex.suite_id}"})
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "code": "suite_graph_rerun_unsupported",
-                "message": "Suite 编排执行不能按配方重放,请重新运行该 Suite",
-                "suiteId": ex.suite_id,
-                "link": f"/suites/{ex.suite_id}"})
+                "code": "rerun_unsupported",
+                "message": "该执行形态不支持按配方重放"})
     cfg = ex.config_json or {}
     # runOptions(W19):新行存 RunOptions dump;旧行平铺 stepTo/nRuns/
     # parallel 回退映射(重跑语义不断链 — 历史执行照常按配方重放)。

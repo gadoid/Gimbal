@@ -280,7 +280,6 @@ import {
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
-import { isOrchestrationKind } from '@/utils/executionKind'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
@@ -452,10 +451,12 @@ const expanded = ref<Set<number>>(new Set())
 const rerunningId = ref<number | null>(null)
 
 /** Suite 层重构:编排执行(成员场景历史不含它,重跑转去运行 Suite)。
- * N3:判定委托共享 isOrchestrationKind(新增编排形态只改 utils/executionKind)。 */
+ * N3 拆判定(评审 §3.2):Suite 链接/标签是 Suite 专属展示语义,直接
+ * 比较 kind === 'suite_graph'(与 SuiteRunsTab 同理由);「是否挂真实
+ * 场景」的形态集合判定见 utils/executionKind(临时调用落地时另立分支)。 */
 
 function isSuiteGraph(row: ExecutionListItem): boolean {
-  return isOrchestrationKind(row.kind)
+  return row.kind === 'suite_graph'
 }
 
 async function rerun(row: ExecutionListItem) {

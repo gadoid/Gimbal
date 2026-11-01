@@ -67,9 +67,10 @@ class Execution(Base):
     # suite_graph = 编排执行(scenario_id 写占位 suite-<id>,不计入
     # 任何成员场景的历史)。与队列层 execution_jobs.kind(cases/graph/
     # debug)同名不同层、值域互斥。存量行 scenario = 既有全部。
-    # 占位 id 约定(N3):编排类形态的 scenario_id 一律 <形态前缀>-<id>
-    # (现为 suite-<id>);后续新增形态按同一规则,判定一律走
-    # is_orchestration_kind,不散写 kind 比较。
+    # 占位 id 约定(N3):非场景形态的 scenario_id 一律 <形态前缀>-<id>
+    # (现为 suite-<id>);后续新增形态按同一规则在 NON_SCENARIO_KINDS
+    # 登记,「是否挂真实场景」判定一律走 is_scenario_backed,Suite 专属
+    # 视图只认 kind == "suite_graph" 直接比较(见集合注释的语义边界)。
     kind: Mapped[str] = mapped_column(String(32), default="scenario")
     # 编排执行的归属 Suite(聚合成员执行同样落 suite_id 供 21 页归并)。
     # 有意不加 FK:执行台账归执行人,历史不随 Suite 删除消失(21 页
@@ -279,20 +280,27 @@ class ExecutionJob(Base):
     )
 
 
-# 编排类形态集合(N3):不挂在真实场景上的执行形态。scenario_id 写
-# 占位 <前缀>-<id>(见 Execution.kind 列注释);新增形态在此登记。
-ORCHESTRATION_KINDS = frozenset({"suite_graph"})
+# 不挂在真实场景上的执行形态集合(N3):scenario_id 写占位
+# <前缀>-<id>(见 Execution.kind 列注释);后续形态(如 adhoc 临时
+# 调用)在此登记。
+#
+# 语义边界(评审 2026-11-01 §3.2 拆判定):本集合只回答「执行是否
+# 挂在真实场景上」(可否按场景筛选/按配方重跑),**不回答**「是不是
+# Suite 编排」—— Suite 专属视图(routers/suites 的最近运行/混排/
+# rerun-failed、前端 SuiteRunsTab)只认 kind == "suite_graph" 直接
+# 比较:那是 Suite 自身的展示语义,把新形态(如 adhoc)并入会让
+# Suite 页把临时调用当 Suite 运行展示、执行列表重跳 Suite 链接。
+NON_SCENARIO_KINDS = frozenset({"suite_graph"})
 
 
-def is_orchestration_kind(kind: str | None) -> bool:
-    """执行是否为**编排类**形态(不挂在真实场景上)。
+def is_scenario_backed(kind: str | None) -> bool:
+    """执行是否挂在**真实场景**上(缺省 kind 视为 "scenario",存量行
+    口径)—— 决定按场景筛选是否包含、能否按配方重跑、详情页是否链
+    到场景。执行列表(routers/executions.py)的筛选与重跑守卫消费本
+    判定;临时调用等新形态加入 :data:`NON_SCENARIO_KINDS` 后自动获得
+    「不可按配方重跑」语义。
 
-    N3 归一:后端全部 kind 分支(列表筛选排除 / 重跑 409 / Suite
-    最近运行与混排归并 / rerun-failed 守卫)统一走本判定 —— 新增
-    编排类形态(如 adhoc)只改这一处与 ORCHESTRATION_KINDS。
-
-    语义边界:决定「按场景筛选是否包含、能否按配方重跑、详情页是否
-    链到场景」;与 execution_jobs.kind(cases/graph,队列分派轴)是
-    同名不同层的两条轴,勿混用。
+    与 execution_jobs.kind(cases/graph,队列分派轴)同名不同层的
+    两条轴,勿混用。
     """
-    return (kind or "scenario") in ORCHESTRATION_KINDS
+    return (kind or "scenario") not in NON_SCENARIO_KINDS
