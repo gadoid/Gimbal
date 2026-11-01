@@ -41,6 +41,7 @@ AUDIT_ACTIONS = (
     "inbound.credential.write",   # gic_ 生成/吊销(别名属主或 admin)
     "inbound.settings.write",     # 入站/回调设置与密钥轮换
     "inbound.grant.write",        # ggt_ 签发/撤销(签发人或 admin)
+    "inbound.grant_revoked_by_deactivation",  # 停用用户连带撤销其 grant(S1)
     "inbound.auth_failed",        # 入站认证失败(401/403;凭证面取证)
 )
 

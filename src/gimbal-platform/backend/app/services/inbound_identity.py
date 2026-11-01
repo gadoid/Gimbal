@@ -173,9 +173,9 @@ async def grant_still_valid(
 
     返回 (是否有效, 失效原因 code)。失效即以 ``run_status=auth`` /
     ``paused_reason=grant_revoked`` 暂停并发 ``integration.paused``
-    回调(D9)。只看 grant 自身状态(命中/未撤销/未过期/别名匹配),
-    不再看签发人活跃度 —— 用户停用时其名下 grant 已被撤销(管理面
-    职责),这里的重校验是运行期兜底。
+    回调(D9)。校验:命中/未撤销/未过期/别名匹配,外加**签发人活跃度**
+    (纵深防御 —— 停用时由用户管理撤销其 grant(S1);此处再查一次用户
+    状态,防绕过管理面直接改库或漏撤)。
     """
     g = await db.get(InboundGrant, grant_id)
     if g is None:
@@ -186,4 +186,7 @@ async def grant_still_valid(
         return False, "grant_revoked"
     if ensure_aware(g.expires_at) < _now():
         return False, "grant_expired"
+    user = await db.get(User, g.user_id)
+    if user is None or not user.is_active:
+        return False, "grant_user_inactive"
     return True, ""

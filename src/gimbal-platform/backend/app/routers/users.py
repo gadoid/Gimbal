@@ -269,8 +269,23 @@ async def patch_user(
             )
         except Exception:  # noqa: BLE001
             pass
+    revoked_grants = 0
     if "is_active" in data:
         target.is_active = data["is_active"]
+        # S1(修复方案 §3):停用即撤销其名下全部 grant —— 否则入站调用
+        # 仍以他的身份执行(认证分流只查 grant 状态,不查用户状态)。
+        # 同一事务内改;重新启用**不**恢复 grant(要求重新签发)。
+        if prev_active and not data["is_active"]:
+            from sqlalchemy import update as _sa_update
+
+            from ..models.inbound_identity import InboundGrant
+            from ..core.timeutil import utcnow
+
+            res = await db.execute(_sa_update(InboundGrant).where(
+                InboundGrant.user_id == target.id,
+                InboundGrant.revoked_at.is_(None),
+            ).values(revoked_at=utcnow()))
+            revoked_grants = int(res.rowcount or 0)
     if "new_password" in data:
         target.password_hash = hash_password(data["new_password"])
 
@@ -287,6 +302,16 @@ async def patch_user(
                 "role": target.role, "is_active": target.is_active,
                 "role_from": prev_role, "is_active_from": prev_active},
     )
+    if revoked_grants:
+        # 停用连带撤销 grant 单独留痕(入站身份的权限收缩,取证面)
+        await audit_svc.record(
+            db, actor_id=caller.id,
+            actor_name=caller.display_name or caller.username,
+            action="inbound.grant_revoked_by_deactivation",
+            resource_type="user", resource_id=str(target.id),
+            resource_name=target.display_name or target.username,
+            detail={"revoked": revoked_grants},
+        )
     return _user_out(target)
 
 
