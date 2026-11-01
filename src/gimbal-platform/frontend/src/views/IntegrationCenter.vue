@@ -378,10 +378,12 @@ async function togglePause(t: IntegrationTaskItem): Promise<void> {
   }
 }
 
-/** W4:manual 与连续失败自动暂停(fail_streak)可由「恢复」直接解除 */
+/** W4:manual 与连续失败自动暂停(fail_streak)可由「恢复」直接解除;
+ * 修复复核 §3.1:scope_denied 场景修复后同样由「恢复」解除(grant_revoked
+ * 不在此列 —— 由调用方带新 grant PATCH 重绑) */
 function resumablePause(t: IntegrationTaskItem): boolean {
   const r = t.instance?.pausedReason
-  return r === 'manual' || r === 'fail_streak'
+  return r === 'manual' || r === 'fail_streak' || r === 'scope_denied'
 }
 
 /** W4:暂停/恢复按钮的行可见性 —— 个人模式自己有实例(owner 播种或

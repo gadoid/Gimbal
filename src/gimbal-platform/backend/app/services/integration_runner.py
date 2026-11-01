@@ -878,7 +878,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # 前重校验 —— 失效(撤销/过期)以 run=auth 暂停(grant_
             # revoked,不按周期重试)并发 integration.paused 回调(D9)。
             # 只对注册方自己的实例(个人模式 holder=grant 用户=模板
-            # owner);订阅者实例按自身身份运行,不依赖该 grant。
+            # owner);订阅者实例按自身身份运行,不依赖该 grant。恢复
+            # 路径(修复复核 §2):签发人重新签发 grant,调用方带新 grant
+            # 对任务 PATCH 重新绑定(同时解暂停)—— 「启动」不解此暂停。
             if (tpl.grant_id is not None
                     and tpl.identity_mode == "personal"
                     and inst.holder_id == tpl.owner_id):
@@ -888,13 +890,14 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 if not grant_ok:
                     return await _finish(
                         db, inst, tpl, "auth",
-                        f"grant 已失效({grant_why}),执行已暂停;"
-                        "请让签发人重新签发后重启任务",
+                        f"grant 已失效({grant_why}),执行已暂停;请签发人重新"
+                        "签发 grant,并由调用方带新 grant 对任务 PATCH 重新绑定",
                         pause_reason="grant_revoked", lease=lease)
 
             # M2(修复方案 §2.1):入站注册的平台模式任务每次运行前重查
             # 场景范围 —— 场景可能被转为私有、别名属主可能变更。JWT
-            # 建的平台任务(caller 为空)不受影响。
+            # 建的平台任务(caller 为空)不受影响。场景公开/换属主后由
+            # owner/admin 在集成详情「启动」恢复(修复复核 §3.1)。
             if (tpl.identity_mode == "platform"
                     and tpl.caller_alias_name):
                 from ..models.service_alias import ServiceAlias as _SA
@@ -905,7 +908,8 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     return await _finish(
                         db, inst, tpl, "auth",
                         "平台模式无权使用该场景(仅公共场景或别名属主"
-                        "自己的场景);请将场景公开或改用别名属主的场景",
+                        "自己的场景);请将场景公开或改用别名属主的场景,"
+                        "再在集成详情「启动」恢复",
                         pause_reason="scope_denied", lease=lease)
 
             # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
@@ -1277,7 +1281,22 @@ async def _finish(
                         select(User.id).where(User.role.in_(("admin", "operator")),
                                               User.is_system == False)  # noqa: E712
                     )).scalars().all()
-                if auth_notify:
+                if auth_notify and pause_reason == "grant_revoked":
+                    # 修复复核 §3.1:grant_revoked / scope_denied 与凭证无关,
+                    # 更新凭证也不会复活它们(revive_paused_instances 只认
+                    # auth_failed / missing_credential)—— 文案按 pause_reason
+                    # 分立,各指向自己的恢复路径。
+                    title = f"集成任务「{tpl.name}」授权已失效,已暂停"
+                    body = ("入站 grant 已撤销或到期 —— 请重新签发 grant,"
+                            "并由调用方带新 grant 对该任务发一次 PATCH "
+                            "完成重新绑定(重绑即恢复执行)")
+                elif auth_notify and pause_reason == "scope_denied":
+                    title = (f"集成任务「{tpl.name}」场景已不在平台模式"
+                             "允许范围,已暂停")
+                    body = ("平台模式只能使用公共场景或别名属主自己的场景"
+                            " —— 请将场景公开(或改用别名属主的场景)后,"
+                            "在集成详情「启动」恢复")
+                elif auth_notify:
                     title = f"集成任务「{tpl.name}」凭证失效,已暂停"
                     body = ("认证失败(auth)——请在"
                             + ("我的凭证" if tpl.identity_mode == "personal"

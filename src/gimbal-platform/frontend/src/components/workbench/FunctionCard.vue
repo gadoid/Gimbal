@@ -47,6 +47,12 @@
                 :data-testid="`${t}-restart`"
                 @click="doResume">启动</button>
       </p>
+      <p v-else-if="data?.pausedReason === 'scope_denied'" class="fn-note warn">
+        场景已不在平台模式允许范围,已暂停 — 场景公开后可启动
+        <button v-if="canRestart" type="button" class="fn-run"
+                :data-testid="`${t}-restart`"
+                @click="doResume">启动</button>
+      </p>
       <p v-else class="fn-note warn">
         {{ data?.identityMode === 'platform' ? '已暂停(管理员)' : '已由你暂停' }}
         <button v-if="canRestart" type="button" class="fn-run"
@@ -189,10 +195,12 @@ const reconfirmText = computed(() => {
   if (r === 'made_private') return '模板已转私有'
   return ''
 })
-/** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复) */
+/** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复);
+ * 修复复核 §3.1:scope_denied(平台模式场景出范围)场景修复后也由
+ * 「启动」恢复。grant_revoked 不在此列 —— 由调用方带新 grant PATCH 重绑 */
 const pausedGate = computed(() => {
   const r = data.value?.pausedReason
-  return r === 'manual' || r === 'fail_streak'
+  return r === 'manual' || r === 'fail_streak' || r === 'scope_denied'
 })
 /** 与后端 FAIL_STREAK_AUTO_PAUSE 同值(failStreak 缺失时的显示兜底) */
 const FAIL_STREAK_AUTO_PAUSE = 5

@@ -62,7 +62,8 @@ export interface FunctionCardData {
   checkMessage?: string
   checkChangedAt?: string | null
   /** 暂停原因(D13 角标:auth_failed/missing_credential;
-   * W2:template_changed/made_private/manual;W4:fail_streak) */
+   * W2:template_changed/made_private/manual;W4:fail_streak;
+   * 入站:grant_revoked(调用方 PATCH 重绑恢复)/scope_denied(启动恢复)) */
   pausedReason?: string
   /** W4:连续失败计数(fail_streak 暂停门面显示「N 次」) */
   failStreak?: number

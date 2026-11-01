@@ -363,12 +363,34 @@ async def patch_task(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or tpl.removed_at is not None:
         raise _bad("not_found", "功能不存在", 404)
+    rebind_inst: IntegrationTask | None = None
     if principal.inbound:
         # M2(修复方案 §2.2):入站调用的管理权按**调用方别名**判定 ——
         # 只能改自己别名注册的任务;不满足 → 404(不泄露存在性)。
         # _can_manage 对系统用户恒为真,不能用于入站面。
         if tpl.caller_alias_name != principal.caller_alias:
             raise _bad("not_found", "功能不存在", 404)
+        if principal.grant_id is not None:
+            # 修复复核 §2(2026-11-01):带 grant 的入站 PATCH = 用**新 grant**
+            # 重新绑定任务。grant_id 注册时写死,撤销/到期(默认 90 天)后
+            # 实例暂停 grant_revoked,「启动」不解此暂停、下次运行也只会再
+            # 校验旧 grant —— 任务此前无路可救,只能删掉重建。只认同一
+            # 签发人:他人的 grant 不能接管任务(403);平台模式任务不绑定
+            # grant,带 grant 调用即身份不符(422,与创建闸同码)。
+            if tpl.identity_mode != "personal":
+                raise _bad(
+                    "identity_mode_mismatch",
+                    "该任务为平台模式,不绑定 grant;请不带 X-Gimbal-Grant 调用")
+            if tpl.owner_id != user.id:
+                raise _bad(
+                    "grant_issuer_mismatch",
+                    "grant 签发人与任务属主不一致,不能用他人的 grant 重新绑定",
+                    403)
+            tpl.grant_id = principal.grant_id
+            inst0 = await _my_instance(db, tpl, user)
+            if (inst0 is not None and inst0.state == "paused"
+                    and inst0.paused_reason == "grant_revoked"):
+                rebind_inst = inst0
     elif not _can_manage(user, tpl):
         raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能修改", 403)
     if body.triggerCron is not None:
@@ -405,6 +427,11 @@ async def patch_task(
         tpl.target_system = body.targetSystem
     tpl.updated_by = user.id
     await db.commit()
+    if rebind_inst is not None:
+        # 修复复核 §2:重绑即恢复 —— 复用「启动」的恢复逻辑(回 idle、立即
+        # 排期、时间线 integration.resumed);下次运行按新 grant 重校验。
+        await _resume_instance(db, tpl, rebind_inst, actor_id=user.id,
+                               via="grant_rebind")
     # W0a⑤(G-C):public→private 联动 —— 非 owner 订阅实例暂停+通知;
     # 转回 public 不自动恢复,需订阅者重新确认(再订阅)
     if body.visibility == "private" and tpl.identity_mode == "personal":
@@ -693,6 +720,29 @@ async def _my_subscription(db: AsyncSession, tpl: IntegrationTask, user: User):
     return row
 
 
+async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
+                           inst: IntegrationTask, *, actor_id: int,
+                           via: str) -> None:
+    """「启动」的恢复逻辑(唯一实现):暂停实例回 idle、立即排期;
+    fail_streak 恢复即清零(重启失败阶梯);个人模式写时间线
+    ``integration.resumed``(``via`` 记恢复路径)。前置闸由调用方负责:
+    订阅面「启动」只解 manual / fail_streak / scope_denied,带新 grant
+    的入站 PATCH 解 grant_revoked(修复复核 §2)。自服务动作不给自己
+    发通知 —— 通知面只留给异步/他人触发的恢复,如复活钩子。"""
+    if inst.paused_reason == "fail_streak":
+        inst.fail_streak = 0   # W4:启动即重置连续失败计数
+    inst.state = "idle"
+    inst.paused_reason = ""
+    inst.next_run_at = datetime.now(timezone.utc)
+    await db.commit()
+    from ..services import activity as activity_svc
+    if tpl.identity_mode == "personal":
+        await activity_svc.record(
+            db, actor_id=actor_id, kind="integration.resumed",
+            resource_type="integration", resource_id=str(tpl.id),
+            detail={"name": tpl.name, "via": via}, coalesce=False)
+
+
 @router.post("/tasks/{task_id}/subscription/pause")
 async def pause_my_subscription(
     task_id: int, user: CurrentUser, db: DbSession,
@@ -734,9 +784,12 @@ async def resume_my_subscription(
     task_id: int, user: CurrentUser, db: DbSession,
 ) -> dict:
     """W0b⑥:订阅者恢复。manual 与 W4 连续失败自动暂停(fail_streak)
-    可直接恢复 —— fail_streak 恢复即清零计数(重启失败阶梯);其余
-    暂停原因各有专属路径,恢复操作不代偿:template_changed/made_private
-    → 重新订阅确认;missing_credential → 补配凭证(复活钩子自动恢复)。
+    可直接恢复 —— fail_streak 恢复即清零计数(重启失败阶梯);M2 的
+    scope_denied 同样可直接恢复(场景公开/换属主后由 owner/admin 启动,
+    下次运行再过范围闸,仍不满足只是再次暂停);其余暂停原因各有专属
+    路径,恢复操作不代偿:template_changed/made_private → 重新订阅确认;
+    missing_credential → 补配凭证(复活钩子自动恢复);grant_revoked →
+    调用方带新 grant PATCH 重新绑定(修复复核 §2)。
     W4:平台模式对 owner/admin 开放(恢复平台唯一实例)。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
@@ -750,30 +803,19 @@ async def resume_my_subscription(
     else:
         _subscribable(tpl, user)
         inst = await _my_subscription(db, tpl, user)
-    if inst.state == "paused" and inst.paused_reason not in ("manual",
-                                                             "fail_streak"):
+    if inst.state == "paused" and inst.paused_reason not in (
+            "manual", "fail_streak", "scope_denied"):
         raise _bad(
             "resume_not_allowed",
             f"该暂停({inst.paused_reason})不能由恢复操作解除:"
             "template_changed/made_private 请重新订阅确认,"
-            "missing_credential 请补配凭证", 409)
+            "missing_credential 请补配凭证,grant_revoked 请签发人重新签发"
+            " grant 并由调用方带新 grant 对任务 PATCH 重新绑定", 409)
     if inst.state == "paused":
-        via = ("fail_streak" if inst.paused_reason == "fail_streak"
+        via = (inst.paused_reason
+               if inst.paused_reason in ("fail_streak", "scope_denied")
                else "manual")
-        if inst.paused_reason == "fail_streak":
-            inst.fail_streak = 0   # W4:启动即重置连续失败计数
-        inst.state = "idle"
-        inst.paused_reason = ""
-        inst.next_run_at = datetime.now(timezone.utc)
-        await db.commit()
-        # 时间线:恢复(启动清零/手动恢复,与 paused 配对;自服务动作
-        # 不给自己发通知 —— 通知面只留给异步/他人触发的恢复,如复活钩子)
-        from ..services import activity as activity_svc
-        if tpl.identity_mode == "personal":
-            await activity_svc.record(
-                db, actor_id=user.id, kind="integration.resumed",
-                resource_type="integration", resource_id=str(tpl.id),
-                detail={"name": tpl.name, "via": via}, coalesce=False)
+        await _resume_instance(db, tpl, inst, actor_id=user.id, via=via)
     return await _tpl_out_full(db, tpl, inst, user)
 
 

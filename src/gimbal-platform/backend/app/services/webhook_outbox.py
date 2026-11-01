@@ -86,6 +86,9 @@ async def _add_delivery(
 
     插入**前**先试序列化 payload(S4):构造/序列化失败时不留下
     ``body=''`` 的半成品行(调用方随后 commit 会把空体投递出去)。
+    flush **后**的最终序列化再失败(修复复核 §3.2:理论窗口,
+    ``default=str`` 下几乎不可触发)则把行撤出会话再向上抛 ——
+    否则 ``_guarded`` 吞掉异常后,这一行会随终态一起提交成空体。
     """
     json.dumps(payload, ensure_ascii=False, default=str)
     row = WebhookDelivery(
@@ -94,8 +97,13 @@ async def _add_delivery(
         body="", status="pending", attempts=0)
     db.add(row)
     await db.flush()
-    body = {"event": event_type, "deliveryId": row.id, **payload}
-    row.body = json.dumps(body, ensure_ascii=False, default=str)
+    try:
+        body = {"event": event_type, "deliveryId": row.id, **payload}
+        row.body = json.dumps(body, ensure_ascii=False, default=str)
+    except Exception:
+        await db.delete(row)
+        await db.flush()
+        raise
     return row.id
 
 
@@ -284,10 +292,14 @@ class _Job:
 
 
 def _delivery_lease_seconds() -> int:
-    """投递租约:领取时把 next_retry_at 后推这么久(S2)。
+    """投递租约基数:领取时把 next_retry_at 后推这么久(S2)。
 
     进程在发送中退出 → 行仍 pending,租约到期后被重新领取
-    (at-least-once;接收方以 X-Gimbal-Delivery 去重)。
+    (at-least-once;接收方以 X-Gimbal-Delivery 去重)。同一别名的行
+    **组内串行**发送,排在第 k 位的行要等前 k-1 行发完(每行最长一个
+    超时),所以 :func:`_claim` 按组内位置给第 k 位 k 倍基数的租约
+    (修复复核 §3.2)—— 否则多实例部署下排后的行会在仍被本进程持有时
+    被另一实例重复领取。单进程部署本来就不会重复领取,只是租约更保守。
     """
     return int(settings.WEBHOOK_TIMEOUT_SECONDS) + 30
 
@@ -307,14 +319,17 @@ async def _claim(factory) -> "list[_Job]":
             .with_for_update(skip_locked=True))).scalars().all()
         if not rows:
             return []
-        lease_until = now + timedelta(seconds=_delivery_lease_seconds())
+        lease_base = _delivery_lease_seconds()
         jobs = [
             _Job(id=r.id, alias_name=r.alias_name,
                  event_type=r.event_type, url=r.url, body=r.body)
             for r in rows
         ]
-        for r in rows:
-            r.next_retry_at = lease_until
+        position: dict[str, int] = {}
+        for r in rows:          # 已按 id 升序 = 组内发送序
+            k = position.get(r.alias_name, 0) + 1
+            position[r.alias_name] = k
+            r.next_retry_at = now + timedelta(seconds=lease_base * k)
         await session.commit()
         return jobs
 
@@ -346,6 +361,11 @@ async def _writeback(factory, job: _Job, ok: bool,
     async with factory() as session:
         row = await session.get(WebhookDelivery, job.id)
         if row is None:            # 保留期/人工删除了行
+            return
+        if row.status != "pending":
+            # 修复复核 §3.2(多实例预留):本进程租约内行已被另一实例
+            # 回写(delivered/failed)—— 不覆盖、不再计次,避免把已投递
+            # 的行改成 failed。单进程下不会命中。
             return
         row.attempts += 1
         if ok:

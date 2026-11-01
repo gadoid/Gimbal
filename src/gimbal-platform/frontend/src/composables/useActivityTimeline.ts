@@ -49,7 +49,7 @@ export const INTEGRATION_PAUSE_LABELS: Record<string, string> = {
   missing_credential: '缺少凭证',
   template_changed: '内容已变更待确认',
   made_private: '已转私有待确认',
-  grant_revoked: '授权已失效(需重新签发)',
+  grant_revoked: '授权已失效(重新签发后由调用方重绑)',
   scope_denied: '无权使用该场景',
 }
 

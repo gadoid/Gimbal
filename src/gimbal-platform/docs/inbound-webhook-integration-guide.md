@@ -106,7 +106,11 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
   §2 的场景范围 + 只读闸约束(保存与每次实例运行前各查一次);
 - 模板行记录调用方台账(`caller_alias_name` / `grant_id` /
   `clientRef` / `callback_path_override`);PATCH 可改 clientRef /
-  callbackPath,caller 身份注册时定死。
+  callbackPath,caller **别名**注册时定死(只能改自己别名注册的任务,
+  否则 404)。个人模式任务的 `grant_id` 可由调用方**带新 grant** 对任务
+  发 PATCH 重新绑定(见第 6 节):grant 签发人必须与任务属主一致,
+  他人 grant → 403 `grant_issuer_mismatch`;平台模式任务不绑定 grant,
+  带 grant 的 PATCH → 422 `identity_mode_mismatch`。
 
 ### 3.3 查询:`GET /api/executions/{id}` / `/rows` / `/events`
 
@@ -202,10 +206,32 @@ P3 之前不提供事件流/步骤明细回调,明细走轮询。
 
 集成任务每次实例运行前重校验 grant:失效(撤销/过期)→ 实例以
 `run_status=auth` 暂停(`paused_reason=grant_revoked`)并发
-`integration.paused` 回调;重新签发后在集成详情「启动」恢复。
+`integration.paused` 回调(reason=grant_revoked),签发人收到站内通知
+「授权已失效,已暂停」。**恢复路径**(修复复核 2026-11-01 §2):签发人
+重新签发 grant 后,由调用方**带新 grant** 对任务发一次
+`PATCH /api/integration/tasks/{id}`(请求体可为 `{}`)—— 服务端把
+`grant_id` 换成新 grant,并在同一请求内把因 grant_revoked 暂停的实例
+恢复为 idle 立即排期(时间线记 `integration.resumed`)。集成详情的
+「启动」**不**解此暂停(409 `resume_not_allowed`,文案指向 PATCH);
+grant 默认 90 天有效,每个入站注册的个人模式任务到期前都要走一次重绑。
 个人模式缺凭证:即时执行在步骤级报错,集成任务暂停并回调
-`integration.paused`(reason=missing_credential)。
+`integration.paused`(reason=missing_credential),凭证补齐后复活钩子
+自动恢复。
+
+平台模式任务的场景出范围(场景转私有、别名换属主)→ 暂停
+`scope_denied`(通知全体 admin/operator):把场景公开或改用别名属主
+自己的场景后,由 owner/admin 在集成详情「启动」恢复;下次运行再过
+范围闸,仍不满足只是再次暂停。
 
 用户被**停用**时其名下 grant 全部撤销(并写审计);重新启用**不**恢复
-grant,需要本人重新签发。认证时另查签发人活跃度作为兜底 —— 未撤销但
-签发人已停用的 grant 同样拒绝(`grant_user_inactive`)。
+grant,需要本人重新签发(然后同样走上面的 PATCH 重绑)。认证时另查
+签发人活跃度作为兜底 —— 未撤销但签发人已停用的 grant 同样拒绝
+(`grant_user_inactive`)。
+
+## 7. 投递循环的已知边界(多实例部署前)
+
+当前为单进程投递循环;以下两点已在代码里预留,多实例部署时无需改
+协议:投递租约按同别名组内位置递增(第 k 行 = k × (超时 + 30s),
+排后的行不会在仍被本进程持有时被另一实例重复领取);回写前校验行仍
+`pending`,已被别的实例投递的行不会被改成 failed 或重复计次。接收方
+仍应以 `X-Gimbal-Delivery` 去重(at-least-once 语义不变)。

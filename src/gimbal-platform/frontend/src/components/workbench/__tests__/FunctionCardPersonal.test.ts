@@ -171,6 +171,32 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     u.unmount()
   })
 
+  it('复核 §3.1 平台卡 scope_denied 门面:管理者出「启动」;grant_revoked 无门面', async () => {
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    const a = mountCard({
+      state: 'paused', pausedReason: 'scope_denied',
+      identityMode: 'platform', canManage: true,
+    }, await mkRouter())
+    await flushPromises()
+    expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
+      .toContain('场景已不在平台模式允许范围')
+    await a.find('[data-testid="fn-card-fn:9-restart"]').trigger('click')
+    await flushPromises()
+    expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
+    a.unmount()
+
+    // grant_revoked 的恢复路径是调用方带新 grant PATCH,卡上不出启动门面
+    const g = mountCard({
+      state: 'paused', pausedReason: 'grant_revoked',
+    }, await mkRouter())
+    await flushPromises()
+    expect(g.find('[data-testid="fn-card-fn:9-gate"]').exists()).toBe(false)
+    expect(g.find('[data-testid="fn-card-fn:9-restart"]').exists()).toBe(false)
+    expect(g.find('[data-testid="fn-card-fn:9-badge"]').text())
+      .toContain('授权已失效')
+    g.unmount()
+  })
+
   it('W4 L 档在跑的个人卡:「暂停」入口(平台模式不出)', async () => {
     vi.mocked(api.pauseMySubscription).mockResolvedValue({} as never)
     const w = mountCard({ state: 'idle' }, await mkRouter(), 'L')
