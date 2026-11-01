@@ -659,3 +659,9 @@ P3 与其前置待决已整体移交 `docs/superpowers/plans/suite-refactor-desi
 | 2026-10-09 | 实施进度 | **P0/P1 落地**：P0 全项 + P1 除「场景库批量加入」「场景详情反查展示」两项 UX 尾巴外全部实现（§12 各期实施记录）；0012_suites 迁移已上开发 PG（含迁移顺序修正：组合唯一索引先于 FK 建表）；fanout 计算抽出为 dispatch 与预检共用；SuiteComposer 迁至 /suites/composer、/suites 让位用例组管理页；§13.4 关闭两条。回归：后端 802/802、前端 1141/1141、typecheck 干净。P2/P3 未开工 |
 | 2026-10-09 | P3 移交 | **P3 与 §13.2 待决 1/2/3 整体移交《Suite 层重构设计方案》**（`docs/superpowers/plans/suite-refactor-design/`）：1 = 不加父子记录（`executions.kind` + `suite_id`）；2 = graph 被 Suite 四模式吸收；3 = 前置/后置即成员（`suite_members.role`，**正式推翻 §6.1 模式角色存储原则**，§6.1 已加行内注记）；4 维持延后。§12 P3 小节与 §13.2 表改为指向该方案，P3 的实施与验收不再由本文维护；进度行同步（P2 ✅ 后端+前端+plate 全部落地，实施记录见 §12 P2 节） |
 | 2026-10-09 | 评审补记 | 修复轮评审核出两处后端缺口与一处小缺陷，移交重构方案第 1 步：`ShareRefOut` 缺 `scenarioName` / `memberCount`（Suite「共享给我的」行「N 个场景」显示空白）；`fork_share` suite 分支把转副本人写进 `forked_from_owner_name`（场景分支正确）；场景库「共享给我的」分区未做而清单误勾，已改回并移交其第 2 步。另两处已拍板（2026-10-09）：**场景编辑器**对被引用场景的自动保存同样绕过「保存提示」——拍板（D-1）套用「首改提示 + 常驻横幅」，推翻本清单「自动/静默保存不打断」口径，随重构方案第 2 步交付；**P2 漏交付确认**：§7.9「公共场景页按所属 suite 归组/筛选」未实施——拍板（D-3）随重构方案第 2 步补做。属主对他人运行零感知维持不变量 2 严格口径（D-2，上线检查项）；保存提示/「已引用分享」徽标此前**只查直接引用**（§7.11 与本方案验收均要求含经 suite 间接引用）——重构方案第 1 步补 `GET /shares/referrers`，第 2 步两处消费方切换 |
+
+---
+
+## 勘误(2026-11-01 · 执行链归一化 N1)
+
+- 文中「`run_dispatcher._resolve_exec_auths` 已按执行者过滤」:符号已迁 `run_prepare.resolve_exec_auths`(公开);`serviceBindings.authAlias` 与别名表 `credential_alias` 默认同样只取执行者本人池的语义不变。

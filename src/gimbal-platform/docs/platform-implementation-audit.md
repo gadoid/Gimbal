@@ -296,3 +296,10 @@ dispatch 链与 preview-plate 共享 `filter_injection_entries` 的底层扫描,
 原子计数器、诚实的数据纪律(counterDrift 只标记不修正)都有注释成文的理由。
 PG 迁移的真实工作量集中在 **P1/P2 两个语义一致化 + P3 迁移工程**,不在建模本身——
 16 张表没有任何一张需要为 PG 重塑形状。
+
+---
+
+## 勘误(2026-11-01 · 执行链归一化 N1)
+
+- **§7.7**「执行时 `run_dispatcher._resolve_exec_auths` 按执行者本人解析注入」:符号已迁 `services/run_prepare.py`(`resolve_exec_auths`,公开);注入清单为三源并集(`${auth.*}` 模板扫描 ∪ 绑定 authAlias ∪ 别名表 `credential_alias` 默认,唯一实现 `service_aliases.exec_auth_aliases`),五个装载入口(单场景执行/Suite 编排/集成/导出/预检)同源。
+- **§7.9**「`build_carry_context` 供 preview/dispatch 共用」:消费方现为一一 preview/导出(`routers/scenarios`)、单场景执行(经 `run_prepare.prepare_exec`)、集成链(`integration_runner`,v1.9 接通)、**Suite 编排(`graph_dispatch` 按单元构建,N1-2 补齐 —— 此前显式 None,是「graph 链已建 carry」误读的反面:导入存在但从未调用)**。

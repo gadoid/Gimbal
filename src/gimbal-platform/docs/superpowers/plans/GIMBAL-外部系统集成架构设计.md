@@ -364,3 +364,12 @@ P1 与 roadmap 中 task 3（执行器与执行链）的输出、错误分类有�
 - **集成中心侧栏入口迁出「执行」组**:独立为「集成」组(侧栏组序:场景 → 用例集 → 服务 → 执行 → 集成 → 平台)。此前集成中心挂在「执行」组下,与"执行"域语义不符 —— 集成是独立的运维/外部系统域。
 - 同轮 Suite 侧变更(与本方案相关的联动面):侧栏新增「用例集」组(我的用例集 `/suites`、公共用例集 `/suites/public` 新页);`isActive` 补前缀让位规则(存在更长前缀入口时父路径不激活,通用规则,集成入口不受影响);`Sidebar.test` 六处计数/顺序/组标签断言同步(可点条目 16→17、四组→六组)。
 - 本轮为纯前端 IA 调整,不改任何集成接口与数据模型;前端 vitest 140 文件 1197 绿、vue-tsc 干净。
+
+---
+
+## 勘误(2026-11-01 · 执行链归一化 N1)
+
+- **§现状盘点「物化」行(原 L53)「集成用例原样复用」**:现为「经统一准备函数 `run_prepare.prepare_exec`,缺凭证策略为严格(MissingAuthAliases → 暂停实例),修订不解析(声明域恒为完整钉修订,working 被 working_preview 闸拒绝,/convert 按钉修订取不可变快照,集成不写执行台账)」。
+- **§5 执行路径(原 L207-216)**:第 4/5 步之间补「carry 上下文构建(`build_carry_context`,与 dispatch 同入口同快照,v1.9 接通)」;凭证清单经 `exec_auth_aliases` 三源并集(v1.10 起,模板扫描 ∪ 绑定 ∪ 别名表凭证默认)。
+- **「`_resolve_exec_auths`、`_compose_scenario`、`_built_in_users` 需从私有提升为公共」**:已兑现并更进一步——随 N1 迁至 `services/run_prepare.py` 公开(`resolve_exec_auths`/`compose_scenario`/`built_in_users`),`run_dispatcher` 不再承担装载职责。
+- **§5「超时回收」**:N2 起租约超时经 `_finish(run_status="timeout")` 收口(计 fail_streak、达阈值自动暂停、发通知),不再直接写行绕过结果回写。

@@ -84,6 +84,7 @@
 | W3 | **集成线取代注记**(与归一方案批3 同批合入):三份集成线文档 + 架构设计 §详细设计 1;platform plans 批量注记(白名单脚本) | 取代注记与归一方案 §0.1 决策链一致;批量注记一个提交 |
 | W4 | ADR 0003 增补 + feature-gaps/DEFERRED 标注 + remaining-backlog 余量迁移 | ADR 条目含退役对象与继任指向 |
 | W5 | 防再欠纪律入库(§4) | 评审 checklist 更新合入 |
+| **W6** | **执行链归一化文档同步**(✅ 已完成 2026-11-01,随归一化 N0-N3 交付):execution-design / 外部系统集成架构设计 / 路线图 2026-09-28 各追加勘误段;suite-refactor-design(L393 认证别名符号与语义 + graph carry);injection-provenance spec 三源清单 + auth via 字段 + run_prepare 对齐;根 docs 的 COMPOSER-API(注入清单公式 + carry 调用点);platform-implementation-audit 勘误;概念地图/INTEGRATION-RUNBOOK/structured-execution-logs-design/Suite成员层方案 补记 | 活文档与代码一致;历史方案只追加带日期勘误段(W3 先例) |
 
 ---
 

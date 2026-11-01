@@ -452,3 +452,12 @@ E1 能独立成立是关键：**执行记录这条链跑通，不依赖任何未
 | 8 | §2.6 ②③ | 两个前置待做 | 均已由 `0aa695f` 交付。前置只剩 ①，且 ① 要说成"落在读不到的地方"而非"算完即弃"（`case.json` 在盘上，只是白名单不暴露 + 受保留期清扫） |
 
 分期改动两条主张：**批次键提到 E1**（`/run` 成页的前提，否则页面相对对话框没有净增益）；**字段来源分析拆成 E2a 预测（无前置）/ E2b 事实（前置①）**，E2a 建议早于 `/run`。另补 §3.5 的路由顺序与"无迁移脚本"两条落地坑、§5.3 执行维度硬隔离的口径不对称、附录的 token 归属缺口。
+
+---
+
+## 勘误(2026-11-01 · 执行链归一化 N1/N2/N3)
+
+- **§复核补一条(原 L130)与 §6 表(原 L376)的 `/run/precheck` 复用主张:已实现**——预检的 `unboundServices` 判定补齐服务地址优先级链第③层(与 `run_materialize._apply_services` 的 ①绑定>②声明>③`service_aliases.base_url` 同口径),消除「预检误报 unbound、执行期③层能补上」的漂移(N1-7)。
+- **注入清单口径**:文中若提「扫描 ∪ 绑定」,现一律为三源并集 `${auth.*}` 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认(`service_aliases.exec_auth_aliases` 唯一实现),由 `services/run_prepare.py`(N1 新建)统一供给五个装载入口(单场景执行/Suite 编排/集成/导出/预检)。
+- **终态写入(N2)**:执行域终态迁移收敛为 `run_dispatcher.transition_execution` 唯一函数(原子守卫 `WHERE status IN (queued,running)`);文中所引 `_finalize_execution` 行为语义不变,但已为薄壳。
+- 本文档所引 `run_dispatcher` 行号为当时快照,现已漂移;符号级以 `run_prepare.py` 为装载准备权威。

@@ -635,3 +635,9 @@ WARNING 行（#304 型场景回归样例）。**前端**：共享解析器真换
 | D8 | 跨执行对比一期形态 | 深链并排，不做内建 diff |
 | D9 | 导出格式与边界 | 前端双格式；**冻结快照上界**写入文件头；行数上限 50k 超限提示 |
 | D10 | S12 精简堆栈 | 引擎侧可选项：`GIMBAL_LOG_STACK_FRAMES=N`（或 DEBUG 自动开），默认关；独立小项不占批次 |
+
+---
+
+## 勘误(2026-11-01 · 执行链归一化)
+
+- 本设计所引 `run_dispatcher.py` 行号(如 :369/:1260)为当时快照,现已漂移;装载准备段已抽至 `services/run_prepare.py`(N1),终态迁移收敛为 `run_dispatcher.transition_execution`(N2)。日志/事件面语义未变;集成链日志入库若立项,collector 挂点按 run_prepare/transition_execution 现址。

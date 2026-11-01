@@ -63,3 +63,5 @@
   配置/凭证错误走 `lastError`/`pausedReason`。
 - 下线第三方系统:先用影响查询(`endpoint_ref_index`)列出引用场景与
   集成任务,处置后再删定义;直接删除时引用在预检/`/convert` 响亮失败。
+
+<!-- 2026-11-01 补记:执行注入清单为三源并集(${auth.*} 模板扫描 ∪ 方案绑定 authAlias ∪ 别名表 credential_alias 默认,显式绑定优先;唯一实现 service_aliases.exec_auth_aliases,经 run_prepare 供给)。 -->

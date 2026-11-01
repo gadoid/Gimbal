@@ -251,8 +251,10 @@ Authorization: Bearer <access_token>
 非空 `dataSetIds` 仍按旧键执行。
 
 > 执行认证：`serviceBindings[*].authAlias` ∪ 场景模板扫到的 `${auth.*}`
-> 引用构成注入清单，dispatcher 按 alias 解密（fernet）后注入**仅 run 副本**
-> 的 `Config.users` —— convert 那份不带明文（防凭据流进 plate 校验/日志）。
+> 引用 ∪ **别名表 `credential_alias` 凭证默认**（显式绑定优先，2026-11-01
+> N1 起三源并集，唯一实现 `service_aliases.exec_auth_aliases`，五入口经
+> `run_prepare` 同源）构成注入清单，按 alias 解密（fernet）后注入**仅 run
+> 副本**的 `Config.users` —— convert 那份不带明文（防凭据流进 plate 校验/日志）。
 > headers 里的 `${auth.<alias>.<field>}` 在 Gimbal 运行期解析。执行记录写
 > `Execution.config_json.injectedAuths`（数组 = 扫描 ∪ 绑定，
 > `run_dispatcher.py:553-558`、`:581`）。
@@ -658,8 +660,10 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
   该上限落在**共享的**声明面取数（`plate_client.get_endpoint_full`；`endpoint_declarations`
   只是它上面的派生层）上，
   **carry 面同样受它约束**（`declarations_of` 还服务
-  `carry_injection.build_carry_context`：后台 fan-out `run_dispatcher.py:748`、
-  预览/导出 `routers/scenarios.py:188`）—— 故 carry 面**不只在取数失败时降级，
+  `carry_injection.build_carry_context`：后台 fan-out（经 `run_prepare.prepare_exec`）、
+  集成链（`integration_runner.run_instance`，v1.9 接通）、Suite 编排
+  （`graph_dispatch` 按单元，N1-2 补齐）、预览/导出
+  `routers/scenarios.py`）（行号为历史锚点，以 `run_prepare` 为装载准备权威）—— 故 carry 面**不只在取数失败时降级，
   plate 慢过 3 s 时也降级**（共享一个有界面的代价，`app/core/config.py:100-118`
   已把这条代价写明）。
 - 为什么取数要短：它跑在 `/runs` 的**同步**段里。软取的上限是 3 s，而客户端

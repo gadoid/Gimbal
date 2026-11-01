@@ -24,12 +24,16 @@
 | 2 | 注册条目偏离 | `compose_injection_scenario`:Assign 直补 + asserts patch | 与 1 正交,偏离最后生效 |
 | 3 | plate convert | 校验 + 剥平台视图字段(**剥除**也是观测对象) | 剥除 |
 | 4 | 服务 URL 绑定 | `materialize_run_copy._apply_services` | 绑定 > 场景 authored |
-| 5 | auth users 合并 | `materialize_run_copy._apply_users`:`{**内置, **authored}` 后 resolved 覆盖 | resolved 最优先 |
+| 5 | auth users 合并 | `materialize_run_copy._apply_users`:`{**内置, **authored}` 后 resolved 覆盖;**resolved 的注入清单为三源并集**(模板扫描 ∪ 绑定 authAlias ∪ 别名表 `credential_alias` 默认,显式绑定优先 —— 2026-11-01 N1 起唯一实现 `service_aliases.exec_auth_aliases`,经 `run_prepare` 供给) | resolved 最优先 |
 | 6 | carry 填充 | `materialize_run_copy._apply_carry`:绑定 > 默认,`setdefault` | body 显式值永不覆盖 |
 | 7 | 引擎预处理 | `${var}/${auth}` 模板展开、`$.` JSONPath 解析(缺变量 ValueError) | 展开覆写 |
 | 8 | 运行时策略 | extract/assign 改写上下文 | 动态,静态不可知 |
 
 其中 #0–#6 全部发生在 `_fanout` 的局部变量里——**落账信息零额外 IO**;
+(2026-11-01 N1 对齐:装载准备段已抽至 `services/run_prepare.py`
+(`prepare_exec`/`compose_scenario`),本表行级语义不变,collector
+挂点随之落在 run_prepare 与 materialize_run_copy 两侧;auth 阶段
+须为 alias_default 来源单列 via,与订阅指纹的 alias_creds 层对齐。)
 #7 的引用面可以静态扫描,#8 只能标记。
 
 ## 2. 目标 / 非目标
@@ -66,7 +70,8 @@
   "value": <写入的最终值>,
   "source": {"kind": "dataset_column", "dataset_id": "ds-…", "column": "amount"}
           | {"kind": "carry", "path": "$.amount", "layer": "binding | default"}
-          | {"kind": "auth", "alias": "…", "auth_id": 3}
+          | {"kind": "auth", "alias": "…", "auth_id": 3,
+             "via": "binding | template | alias_default"}
           | {"kind": "registry_entry", "entry_id": "…"}
           | {"kind": "body_literal"}
           | {"kind": "engine_template", "ref": "${var.amount}"},
