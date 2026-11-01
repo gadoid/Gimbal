@@ -5,9 +5,10 @@
   状态只回写 integration_tasks 实例行(评审 E3:P1 无 outputs 消费,
   G2 随 P2/task 3c);
 - **复用执行链既有零件**:compose → plate convert → materialize →
-  gimbal server 通道,装载准备经 run_prepare(N1 归一:凭证清单
-  exec_auth_aliases/凭证解析/compose/内置 users 同源;修订不解析,
-  见 run_prepare 模块 docstring 的定案理由),不另开漂移面;
+  gimbal server 通道,装载准备统一经 run_prepare.prepare_exec
+  (strict/none;N1 归一 + 评审 §3.1A:凭证清单/严格解析/别名地址/
+  carry/内置 users 与单场景链同一实现;修订不解析的定案理由见
+  run_prepare 模块 docstring),不另开漂移面;
 - **半常驻通道**(评审 E4-A):执行后保留 N 分钟,空闲即收口 ——
   不引入常驻池的看护逻辑;
 - **E1**:state_vars/last_outputs 不接收敏感键(脱敏键表口径),
@@ -761,7 +762,7 @@ async def run_instance(instance_id: int) -> dict:
     """
     from . import plate_client
     from .run_prepare import (
-        built_in_users, compose_scenario, resolve_exec_auths,
+        AuthResolveError, MissingAuthAliases, compose_scenario, prepare_exec,
     )
 
     started = _now()
@@ -808,14 +809,14 @@ async def run_instance(instance_id: int) -> dict:
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请在编排器钉定修订后重试(外部服务不受影响)")
 
-        aliases = await _auth_aliases_of(db, scen.payload, bindings)
-
         # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
         # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
-        # 确认;owner 自有实例不受此闸。别名地址集挪入主会话(指纹与
-        # 物化共用):consent 实例查询失败按失败口径收口(本轮不执行
-        # run=channel —— 不以空集算指纹、不跳过比对),其余实例维持
-        # 「增强项失败跳过」旧口径。
+        # 确认;owner 自有实例不受此闸。指纹的别名地址/凭证默认命中走
+        # 主会话(指纹投影自取):查询失败按失败口径收口(本轮不执行
+        # run=channel —— 不以空集算指纹、不跳过比对)。执行注入面
+        # (地址③层/carry)由下方 prepare_exec 独立构建(失败降级语义)
+        # —— 指纹与执行是两个关注点,失败策略不同(评审 §3.1A 定案;
+        # 此前地址集与物化共用一份,归一后物化改吃 prep.alias_base_urls)。
         consent_gate = (tpl.identity_mode == "personal"
                         and inst.holder_id is not None
                         and inst.holder_id != tpl.owner_id)
@@ -830,15 +831,13 @@ async def run_instance(instance_id: int) -> dict:
                 paused_reason="made_private",
                 message="模板已转为私有,执行已暂停;模板重新公开后请"
                         "重新确认订阅")
-        try:
-            alias_urls = await _alias_urls_of(db, scen.payload)
-        except Exception as e:  # noqa: BLE001
-            if consent_gate:
+        if consent_gate:
+            try:
+                alias_urls = await _alias_urls_of(db, scen.payload)
+            except Exception as e:  # noqa: BLE001
                 return await _finish(
                     db, inst, tpl, "channel",
                     f"服务地址解析失败,本轮未执行: {e}")
-            alias_urls = {}
-        if consent_gate:
             from .service_aliases import credential_alias_hits
             hits = await credential_alias_hits(
                 db, definition_from_payload(scen.payload).get("steps") or [],
@@ -855,34 +854,35 @@ async def run_instance(instance_id: int) -> dict:
 
         holder = (await get_platform_user_id()) \
             if tpl.identity_mode == "platform" else inst.holder_id
-        # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示去
-        # 配置;凭证补齐后复活钩子恢复),不是普通失败
+        # N1 归一(评审 §3.1A):装载准备统一走 run_prepare.prepare_exec
+        # —— 凭证清单(exec_auth_aliases:模板扫描 ∪ 绑定 ∪ 别名默认,
+        # 此前 _auth_aliases_of 仅导清单,解析/严格检查是手写的同逻辑
+        # 拷贝)/strict 解析(清单别名在 holder 名下解不到 → 暂停实例,
+        # 一步不执行)/别名地址(查表失败降级空表)/carry(与 dispatch
+        # 同入口同快照语义,故障降级 None)/内置 users 基座,与单场景
+        # 链同一实现;resolve_mode="none" 的定案理由见 run_prepare 模块
+        # docstring(集成声明域恒为完整钉修订,无 resolve+merge 必要)。
+        _ui_fs = ((scen.payload or {}).get("ui") or {}).get("fieldStates") or {}
         try:
-            exec_auths = await resolve_exec_auths(
-                db_module.SessionLocal, holder or -1, aliases)
-        except Exception as e:  # noqa: BLE001
-            if aliases:
-                return await _finish(
-                    db, inst, tpl, "auth", f"凭证解析失败: {e}",
-                    pause_reason="missing_credential")
-            exec_auths = []
-        else:
-            # S0②(个人侧方案 G-G):任一别名未解析即暂停,一步不执行
-            # —— 个人模式允许写操作,部分缺凭证照跑会在第三方系统留
-            # 半成品。收紧只落本判定;共享 _resolve_exec_auths 维持
-            # 宽松语义(常规测试执行依赖:缺 alias 注入不到 users、
-            # 告警后继续)。
-            if aliases:
-                got = {getattr(a, "alias", "") for a in exec_auths}
-                missing = sorted(set(aliases) - got)
-                if missing:
-                    return await _finish(
-                        db, inst, tpl, "auth",
-                        f"缺少凭证: {','.join(missing)}",
-                        pause_reason="missing_credential")
+            prep = await prepare_exec(
+                db_module.SessionLocal, scen.payload,
+                owner_id=holder or -1, bindings=bindings,
+                ui_field_states=_ui_fs,
+                auth_policy="strict", resolve_mode="none")
+        except MissingAuthAliases as e:
+            # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
+            # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error
+            # 只列缺失别名
+            return await _finish(
+                db, inst, tpl, "auth",
+                f"缺少凭证: {','.join(e.missing)}",
+                pause_reason="missing_credential")
+        except AuthResolveError as e:
+            return await _finish(
+                db, inst, tpl, "auth", f"凭证解析失败: {e}",
+                pause_reason="missing_credential")
 
         scen_payload = scen.payload
-        builtins = built_in_users(scen_payload)
         inst_state_vars = dict(inst.state_vars or {})
 
     # 转换 + 物化 + 执行(DB 会话外跑,避免长事务)
@@ -894,29 +894,19 @@ async def run_instance(instance_id: int) -> dict:
         composed = compose_scenario(
             scen_payload, {**(inst_state_vars or {}), **row_dict})
         converted = (await plate_client.convert(composed)).get("converted") or {}
-        # carry 预解析(与 run_dispatcher 同一入口、同一快照语义 ——
-        # 归一方案 D-M:carry 覆盖第三方端点,集成场景与测试执行同
-        # 口径注入。此前传 None 跳过整层,依赖 carry 的场景(如带
-        # carry 面的导入用例)业务必败、误报「契约不符」)。carry 是
-        # 增强不是前置条件:构建故障降级为无 carry,不阻塞执行。
-        from .carry_injection import build_carry_context
-        _ui_fs = ((scen_payload or {}).get("ui") or {}).get("fieldStates") or {}
-        try:
-            async with db_module.SessionLocal() as _carry_db:
-                carry_ctx = await build_carry_context(
-                    _carry_db, definition_from_payload(scen_payload),
-                    ui_field_states=_ui_fs)
-        except Exception:  # noqa: BLE001
-            logger.opt(exception=True).warning(
-                "integration: carry context build failed; skipped")
-            carry_ctx = None
+        # carry 在 prepare_exec 内构建(与 run_dispatcher 同一入口、同一
+        # 快照语义 —— 归一方案 D-M:carry 覆盖第三方端点,集成场景与
+        # 测试执行同口径注入。此前传 None 跳过整层,依赖 carry 的场景
+        # (如带 carry 面的导入用例)业务必败、误报「契约不符」)。carry
+        # 是增强不是前置条件:构建故障在 prepare_exec 内降级为 None,
+        # 不阻塞执行。
         case = materialize_run_copy(
             converted,
             service_bindings=bindings,
-            resolved_auths=exec_auths,
-            built_in_users=builtins,
-            carry_context=carry_ctx,
-            alias_base_urls=alias_urls,
+            resolved_auths=prep.resolved_auths,
+            built_in_users=prep.built_in_users,
+            carry_context=prep.carry_ctx,
+            alias_base_urls=prep.alias_base_urls,
         )
         with tempfile.TemporaryDirectory(prefix="integration-case-") as td:
             case_path = Path(td) / "case.json"

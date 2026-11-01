@@ -44,9 +44,8 @@ from ..schemas.scenario_composer import (
     StarIn,
 )
 from ..services import plate_client, run_dispatcher, scheme_store, scenario_store
-from ..services import run_prepare, service_aliases
-from ..services.carry_injection import build_carry_context
-from ..services.run_materialize import referenced_services, materialize_run_copy
+from ..services import run_prepare
+from ..services.run_materialize import materialize_run_copy
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -132,6 +131,12 @@ async def _materialized_executable(
     gimbal 可执行形态:overlay=None(默认导出)时凭证/服务绑定零注入,
     carry 无条件物化(spec §4.3);overlay 携带 serviceBindings 时按 spec
     §8 注入凭证。plate 拒收/不可达原样上抛,由调用方映射 422/502。
+
+    装载准备统一走 run_prepare.prepare_exec(N1 归一 + 评审 §3.1A):
+    凭证清单/解析(仅 overlay;AuthResolveError → 422)、别名地址、
+    carry、内置 users 基座与执行链同一实现;resolve_mode="none" ——
+    导出按定义原样 convert(不做修订解析),payload 以容器形状包裹
+    definition(definition_from_payload 解包)。
     """
     from ..services.scenario_store import _strip_platform_meta as _spm
 
@@ -147,65 +152,38 @@ async def _materialized_executable(
     # overlay 下产物 ≡ 基线单行 case.json,逐字段相等。
     if overlay is not None:
         # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
-        # N1-4 起走 exec_auth_aliases 唯一实现(模板扫描 ∪ 绑定 authAlias
-        # ∪ **别名表凭证默认**)—— 此前手拼 scan ∪ 绑定,缺别名默认层,
-        # 与执行侧注入面漂移(别名表配了默认凭证的导出会漏注入)。
+        # exec_auth_aliases 唯一实现(模板扫描 ∪ 绑定 authAlias ∪
+        # **别名表凭证默认**)在 prepare_exec 内消费完整绑定(dict 值
+        # 读 authAlias,与 url 物化互不干扰)。
         service_bindings = {k: b.model_dump(by_alias=True)
                             for k, b in overlay.service_bindings.items()}
-        async with run_dispatcher.session_factory() as _s:
-            aliases = await service_aliases.exec_auth_aliases(
-                _s, clean.get("steps") or [],
-                {k: {"authAlias": b.auth_alias}
-                 for k, b in overlay.service_bindings.items()})
-        try:
-            exec_auths = await run_prepare.resolve_exec_auths(
-                run_dispatcher.session_factory, owner_id=owner_id,
-                aliases=aliases)
-        except run_prepare.AuthResolveError as e:
-            # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
-            # 副作用,直接拒答 422 而非 500)。
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "auth_resolve_failed", "message": str(e)},
-            )
-        # built_in 基座与 dispatch 同源:场景 definition.config.users
-        # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
-        def_cfg = (clean.get("config") or {})
-        built_in = (def_cfg.get("users")
-                    if isinstance(def_cfg.get("users"), dict) else {})
     else:
         # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
-        # 的唯一开关;carry 见下方无条件物化。
-        exec_auths = []
-        built_in = {}
+        # 的唯一开关(with_auth=False 跳过清单+解析);carry 见下方
+        # (prepare_exec 内无条件构建)。
         service_bindings = {}
-    # carry 同源注入(spec §4.3 勘误):与 dispatch 共用 build_carry_context
-    # → 导出产物 = 绑定状态的当时快照。无条件执行 — 默认导出与按方案
-    # 导出走同一套 carry 物化。plate 故障在 build 内部降级(不注入,
-    # 不 5xx);此处再兜一层 — carry 是增强不是前置条件。
     try:
-        carry_ctx = await build_carry_context(
-            db, clean, ui_field_states=(ui or {}).get("fieldStates") or {})
-    except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
-        logger.opt(exception=True).warning(
-            "materialized_executable: carry context build failed; skipped")
-        carry_ctx = None
-    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— 与 dispatch 同一
-    # helper、同一物化组装点(执行/导出同源);查表失败降级空表。
-    try:
-        alias_urls = await service_aliases.base_urls_for(
-            db, referenced_services(clean.get("steps") or []))
-    except Exception:  # noqa: BLE001 — 别名默认绝不阻塞导出
-        logger.opt(exception=True).warning(
-            "materialized_executable: alias base_url lookup failed; skipped")
-        alias_urls = {}
+        prep = await run_prepare.prepare_exec(
+            run_dispatcher.session_factory, {"definition": clean},
+            owner_id=owner_id, bindings=service_bindings,
+            ui_field_states=(ui or {}).get("fieldStates") or {},
+            resolve_mode="none", with_auth=overlay is not None)
+    except run_prepare.AuthResolveError as e:
+        # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
+        # 副作用,直接拒答 422 而非 500)。
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "auth_resolve_failed", "message": str(e)},
+        )
     return materialize_run_copy(
         converted,
         service_bindings=service_bindings,
-        resolved_auths=exec_auths,
-        built_in_users=dict(built_in or {}),
-        carry_context=carry_ctx,
-        alias_base_urls=alias_urls,
+        resolved_auths=prep.resolved_auths,
+        # 默认导出零注入:内置 users 基座也归零(_apply_users 对空
+        # resolved_auths 原样返回,此处显式归零与旧行为逐字段等价)
+        built_in_users=prep.built_in_users if overlay is not None else {},
+        carry_context=prep.carry_ctx,
+        alias_base_urls=prep.alias_base_urls,
     )
 
 

@@ -303,8 +303,9 @@ async def exec_auth_aliases(
     bindings: dict[str, dict] | None = None,
 ) -> list[str]:
     """执行凭证注入清单 —— **五个装载入口的唯一实现,算法不得漂移**
-    (N1 归一:单场景执行/Suite 编排/集成都经 run_prepare,导出与
-    Suite 预检直接调用):
+    (N1 归一 + 评审 §3.1A:单场景执行/集成/导出经 ``run_prepare.prepare_
+    exec``,Suite 编排与 Suite 预检经 ``run_prepare.graph_auth_aliases``
+    直接调用):
 
     ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps)
     ∪ 方案绑定 authAlias ∪ 别名表凭证默认(``credential_alias_hits``,

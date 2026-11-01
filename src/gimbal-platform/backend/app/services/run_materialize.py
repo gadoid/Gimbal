@@ -76,8 +76,7 @@ def materialize_run_copy(
 
 def _step_service(step: dict) -> str | None:
     """step 的 service 键：call 形态优先(plate convert v2.1 批次 F 产出),
-    (api 形态已退役;无 call 声明 → None)。N4:下方重复的二次求值
-    是死代码(77-80 命中即返回,81-83 原样重算),已删。"""
+    (api 形态已退役;无 call 声明 → None)。"""
     call = step.get("call")
     svc = call.get("service") if isinstance(call, dict) else None
     return svc if isinstance(svc, str) and svc else None
@@ -98,6 +97,26 @@ def referenced_services(steps: list) -> list[str]:
     return list(seen)
 
 
+def service_url_resolved(
+    svc: str, *, declared: dict | None, bindings: dict | None,
+    alias_base_urls: dict[str, str] | None = None,
+) -> bool:
+    """服务地址三层链判定(① 显式绑定 url > ② 场景 authored 声明
+    (键存在即算,值原样)> ③ 别名 base_url)—— 物化(:func:`_apply_
+    services`)与预检(run_precheck.unbound_services)共用同一优先级
+    链,规则不得第二份重写(N1-7 评审附注)。
+
+    ``declared`` 即物化侧的 ``config.services``(authored 层)。返回
+    False = 三层皆缺,留缺口给引擎显式报错(RunDialog 并集行提前发现)。
+    """
+    bound = (bindings or {}).get(svc)
+    if isinstance(bound, dict) and bound.get("url"):
+        return True
+    if svc in (declared or {}):
+        return True
+    return bool((alias_base_urls or {}).get(svc))
+
+
 def _apply_services(cfg: dict, *, steps: list,
                     bindings: dict[str, dict],
                     alias_base_urls: dict[str, str] | None = None) -> None:
@@ -107,15 +126,20 @@ def _apply_services(cfg: dict, *, steps: list,
     ③ service_aliases.base_url > ④ 缺口留给引擎显式报错
     (RunDialog 并集行提前发现)。③ 层只填「未声明且未绑定」的引用键,
     与凭证默认「场景显式 > 注册表默认」同款裁决,不发明新语义。
+    三层落点判定共用 :func:`service_url_resolved`(与预检同源)。
     """
     services: dict[str, Any] = cfg["services"]
     for svc in referenced_services(steps):
-        bound_url = (bindings.get(svc) or {}).get("url")
+        if not service_url_resolved(
+                svc, declared=services, bindings=bindings,
+                alias_base_urls=alias_base_urls):
+            continue                                  # ④ 缺口,引擎报错
+        bound = bindings.get(svc)
+        bound_url = bound.get("url") if isinstance(bound, dict) else None
         if bound_url:
             services[svc] = bound_url                    # ① 显式绑定最优先
-        elif svc not in services and (alias_base_urls or {}).get(svc):
+        elif svc not in services:
             services[svc] = alias_base_urls[svc]         # ③ 别名默认(仅补缺)
-        # 未绑定且未命中 authored/别名 → 缺口,引擎显式报错(D2 语义不变)
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:
