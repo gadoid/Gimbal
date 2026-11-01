@@ -20,6 +20,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1311,8 +1312,12 @@ async def validate_suite(
                               [b.get("authAlias")] if isinstance(b, dict) else [])
                 if alias})
             if aliases:
-                from .run_dispatcher import _resolve_exec_auths as _ra
-                got = await _ra(db, user.id, aliases)
+                # N0:导入路径修正(此前 from .run_dispatcher 在 routers/ 下
+                # 解析不到 → ModuleNotFoundError);凭证解析同 graph 链走
+                # 会话工厂(此前传活会话 → TypeError,且被下方兜底吞成降级)
+                from ..core import db as db_module
+                from ..services.run_dispatcher import _resolve_exec_auths as _ra
+                got = await _ra(db_module.SessionLocal, user.id, aliases)
                 missing = set(aliases) - {a.alias for a in got}
                 if missing:
                     items.append(_vitem(
@@ -1339,6 +1344,12 @@ async def validate_suite(
             elif isinstance(e, gd.GraphDispatchError):
                 items.append(_vitem("error", "materialize_failed", str(e)))
             else:
+                # N0-3:编程错误(导入路径/类型错,如 ModuleNotFoundError/
+                # TypeError)不该无声混入降级 —— 先落 error 级日志再降级,
+                # 保留「预检不因链路故障 500」的行为不变
+                logger.exception(
+                    "suite validate: 编译链路异常(非 CompileError/"
+                    "GraphDispatchError,疑编程错误)")
                 # plate convert / gimbal import 等基础设施不可用 → 降级:
                 # 只做本地结构检查(needs ⊆ 成员 + 无环),标「未校验变量」
                 degraded = True

@@ -242,3 +242,55 @@ async def test_validate_in_flight(client, monkeypatch):
     assert out["ok"] is False
     assert out["inFlight"] == {"batchId": batch}
     assert any(i["code"] == "suite_run_in_progress" for i in out["items"])
+
+
+async def test_validate_orchestration_auth_alias_not_degraded(client,
+                                                              monkeypatch):
+    """N0 回归:编排成员方案绑 authAlias → 预检不降级、别名解析可达。
+
+    修复前:预检的凭证解析导入路径错误(from .run_dispatcher 在 routers/
+    下解析不到 → ModuleNotFoundError)且传活会话(TypeError),两者都被
+    兜底分支吞成 degraded=true「执行器编译链路不可用」;修复后别名按发起人
+    正常解析(种子凭证 qa8 → 无 unresolved 警告、degraded=false)。
+    """
+    from app.core.security import fernet_encrypt
+    from app.models.auth_session import AuthSession
+    from app.models.user import User
+
+    await register_and_login(client, "vg_boot", "vg_bootpass123")
+    h = await register_and_login(client, "vg_o8", "vg_o8pass123")
+    _patch_convert(monkeypatch)
+    # 种子凭证:vg_o8 名下 qa8(修复后可解析,无 auth_alias_unresolved)
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa.select(User.id).where(
+            User.username == "vg_o8"))).scalar_one()
+        s.add(AuthSession(owner_id=uid, alias="qa8", url="http://auth:8",
+                          username_enc=fernet_encrypt("u8"),
+                          password_enc=fernet_encrypt("p8")))
+        await s.commit()
+    # 成员方案绑定 authAlias(场景已由 _mk_suite 创建)
+    sid = await _mk_suite(client, h, "凭证集")
+    r = await client.post("/api/scenarios/sc-va/run-schemes", headers=h, json={
+        "name": "带凭证", "dataSetSelection": [], "injectionEntryIds": [],
+        "serviceBindings": {"fin.order": {"authAlias": "qa8",
+                                          "url": "http://fin:8"}}})
+    assert r.status_code == 201, r.text
+    scheme_id = r.json()["schemeId"]
+    # 组合更新:单元 a 引用该方案
+    r = await client.get(f"/api/suites/{sid}", headers=h)
+    rev = r.json()["rev"]
+    r = await client.put(f"/api/suites/{sid}/composition", headers=h, json={
+        "rev": rev, "mode": "compose",
+        "members": [{"scenarioId": "sc-va"}, {"scenarioId": "sc-vb"}],
+        "modeConfig": {"units": {
+            "sc-va": {"ref": "a", "schemeId": scheme_id},
+            "sc-vb": {"ref": "b", "needs": ["sc-va"]}}}})
+    assert r.status_code == 200, r.text
+
+    r = await client.post(f"/api/suites/{sid}/validate", headers=h)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["degraded"] is False, out["items"]
+    assert not any(i["code"] == "degraded" for i in out["items"]), out["items"]
+    assert not any(i["code"] == "auth_alias_unresolved"
+                   for i in out["items"]), out["items"]

@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..core import db as db_module
 from ..models.composer_scenario import ComposerScenario
 from . import plate_client, scenario_store
 from .carry_injection import build_carry_context
@@ -189,7 +190,10 @@ async def materialize_graph(
             [b.get("authAlias")] if isinstance(b, dict) else [])
         if alias
     })
-    exec_auths = (await _resolve_exec_auths(db, owner_id, auth_aliases)
+    # 认证解析走会话工厂(_resolve_exec_auths 契约:独立短会话快照语义;
+    # N0:此前传活会话 db → AsyncSession 不可调用,authAlias 非空即 TypeError)
+    exec_auths = (await _resolve_exec_auths(db_module.SessionLocal,
+                                            owner_id, auth_aliases)
                   if auth_aliases else [])
     alias_urls: dict = {}
     try:

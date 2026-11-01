@@ -333,6 +333,46 @@ class TestGraphCompositionInline:
         assert str(graph0["units"][0]["scenario"]["config"]
                    ["vars"]["customer_id"]) == "261"
 
+    async def test_scheme_auth_alias_binding_materializes(self, client,
+                                                          monkeypatch):
+        """N0 回归:单元绑定 authAlias → materialize_graph 正常执行。
+
+        修复前:_resolve_exec_auths 收到活会话(db)→ ``AsyncSession``
+        不可调用,authAliases 非空即 TypeError;修复后走会话工厂,
+        种子凭证 qa9 注入单元 case 的 users。
+        (注意:别名收集只看 graph_req 单元级 serviceBindings ——
+        方案级 authAlias 不进清单是 N1-2 的收口范围,见清单 N1-2。)
+        """
+        await register_and_login(client, "gi_b9", "gi_b9pass123")
+        h = await register_and_login(client, "gi_o9", "gi_o9pass123")
+        await self._mk_svc_scenario(client, h, "sc-gi-9")
+        await self._fake_convert_patch(monkeypatch)
+
+        from app.core.security import fernet_encrypt
+        from app.models.auth_session import AuthSession
+        from app.models.user import User
+        from app.services import graph_dispatch, scheme_store
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gi_o9"))).scalar_one()
+            s.add(AuthSession(owner_id=uid, alias="qa9", url="http://auth:9",
+                              username_enc=fernet_encrypt("u9"),
+                              password_enc=fernet_encrypt("p9")))
+            await scheme_store.ensure_default_scheme(s, "sc-gi-9")
+            await s.commit()
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-gi-9",
+                           "serviceBindings": {
+                               "fin.order": {"authAlias": "qa9",
+                                             "url": "http://fin:9"}}}],
+            })
+        unit = graph["units"][0]
+        assert unit["scenario"]["config"]["services"]["fin.order"] == "http://fin:9"
+        users = unit["scenario"]["config"].get("users") or {}
+        assert "qa9" in users        # 修复前到不了这行(先 TypeError)
+
     async def test_map_and_control_passthrough(self, client, monkeypatch):
         import pytest
 
