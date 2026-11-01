@@ -440,7 +440,9 @@ async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
     await db.commit()
     integration_runner._inflight_add(tpl, inst.holder_id, 1)
     try:
-        result = await integration_runner.run_instance(inst.id)
+        # P0-3.1:占用 CAS 写入的 now 即租约令牌 —— 迟到结果(极端
+        # 慢的一轮撞上租约回收后再次手动触发)不覆写新一轮运行
+        result = await integration_runner.run_instance(inst.id, lease=now)
     except Exception as e:  # noqa: BLE001 — run_instance 内部已收口;兜一层
         raise _bad("run_failed", str(e)[:300], 500) from None
     finally:

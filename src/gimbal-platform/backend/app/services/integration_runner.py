@@ -667,16 +667,56 @@ async def _record_activity(db, inst: IntegrationTask, tpl: IntegrationTask,
         detail={"name": tpl.name, **detail}, coalesce=False)
 
 
+async def _lease_alive(db, inst: IntegrationTask, lease) -> bool:
+    """本轮运行的租约判定(P0-3.1,webhook 设计 v3:行锁单事务版)。
+
+    ``running_since`` 是本次运行的令牌(认领时写入)。FOR UPDATE 锁行
+    取最新值,``state='running'`` 且 ``running_since == lease`` 才是本轮
+    运行;不满足即迟到 —— 本轮已被租约回收(timeout 收口)或被新一轮
+    认领,迟到的结果/暂停都不得改写行。持锁直至调用方 commit/rollback,
+    判定与写入同一事务:进程在两者之间崩溃只会回滚,实例仍是 running,
+    由现有租约回收接管(**不引入 finishing 中间态** —— 那会把崩溃窗口
+    留在一个新状态里,回收与前端都要跟着扩,v3 讨论定案弃用)。
+
+    ``lease=None``(测试直调等无认领上下文的旧路径)跳过判定、维持
+    旧行为;生产两条入口(调度 ``_spawn``、手动端点)恒传。"""
+    if lease is None:
+        return True
+    from ..core.timeutil import ensure_aware
+    await db.refresh(inst, with_for_update=True)
+    return (inst.state == "running"
+            and inst.running_since is not None
+            and ensure_aware(inst.running_since) == ensure_aware(lease))
+
+
+def _late_result(inst_id: int, lease) -> dict:
+    """迟到结果的统一返回(不记为失败 —— 本轮已被回收/新一轮接手)。
+
+    只收标量参数:调用点 rollback 后 ORM 属性已过期,异步会话上再读
+    会触发隐式懒加载(MissingGreenlet)。"""
+    logger.info(
+        "integration: instance {} 迟到结果丢弃(租约不匹配,lease={})",
+        inst_id, lease)
+    return {"status": "discarded", "durationMs": 0,
+            "error": "租约不匹配,迟到结果已丢弃"}
+
+
 async def _pause_consent_changed(
     db, inst: IntegrationTask, tpl: IntegrationTask, *,
-    paused_reason: str, message: str,
+    paused_reason: str, message: str, lease=None,
 ) -> dict:
     """知情同意闸暂停(非运行失败:不动 last_run_at/fail_streak,不走
     运维/结论通知通道;直接通知持有人)。
 
     N2 分类:这是「运维态」写入而非运行结果 —— 不经 _finish 是设计
     决策(暂停发生在执行之前,没有 run 可回写),见模型 docstring 的
-    state 写入点分类表。"""
+    state 写入点分类表。P0-3.1:同走租约判定 —— 迟到的暂停(made_
+    private/template_changed)不得把已被回收、重新调度的新一轮运行
+    按停;判定失败 = rollback 释放锁,零字段改动。"""
+    _inst_id = inst.id          # 回滚后属性过期,先取标量
+    if not await _lease_alive(db, inst, lease):
+        await db.rollback()
+        return _late_result(_inst_id, lease)
     inst.state = "paused"
     inst.paused_reason = paused_reason
     inst.last_error = message[:500]
@@ -754,9 +794,14 @@ async def pause_subscriber_instances(
     return len(holders)
 
 
-async def run_instance(instance_id: int) -> dict:
+async def run_instance(instance_id: int, *, lease=None) -> dict:
     """执行一个实例并回写状态。不写执行记录;明文凭证只存在于
     materialize 产物与通道请求内(case 落临时目录,执行后删除)。
+
+    ``lease`` = 认领时写入的 ``running_since``(P0-3.1):经 :func:`_finish`
+    / :func:`_pause_consent_changed` 的租约判定丢弃迟到结果;``None``
+    (测试直调)跳过判定。生产两条入口恒传:调度 ``_spawn``(认领返回)、
+    手动端点(占用 CAS 的 now)。
 
     返回 {status, durationMs, error}(手动执行回显用)。
     """
@@ -798,11 +843,12 @@ async def run_instance(instance_id: int) -> dict:
                     ok, offenders = await is_scenario_read_only(scen.payload)
                 except plate_client.PlateUnavailableError:
                     return await _finish(
-                        db, inst, tpl, "channel", "只读检查未通过: plate 不可达")
+                        db, inst, tpl, "channel",
+                        "只读检查未通过: plate 不可达", lease=lease)
                 if not ok:
                     return await _finish(
                         db, inst, tpl, "channel",
-                        f"只读检查未通过: {'、'.join(offenders)}")
+                        f"只读检查未通过: {'、'.join(offenders)}", lease=lease)
 
             # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
             # 不计入入库标准的预览执行不进集成链。external 不受影响
@@ -813,7 +859,8 @@ async def run_instance(instance_id: int) -> dict:
                 return await _finish(
                     db, inst, tpl, "channel",
                     "场景声明 working(预览执行),集成任务拒绝触发:"
-                    "请在编排器钉定修订后重试(外部服务不受影响)")
+                    "请在编排器钉定修订后重试(外部服务不受影响)",
+                    lease=lease)
 
             # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
             # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
@@ -836,14 +883,14 @@ async def run_instance(instance_id: int) -> dict:
                     db, inst, tpl,
                     paused_reason="made_private",
                     message="模板已转为私有,执行已暂停;模板重新公开后请"
-                            "重新确认订阅")
+                            "重新确认订阅", lease=lease)
             if consent_gate:
                 try:
                     alias_urls = await _alias_urls_of(db, scen.payload)
                 except Exception as e:  # noqa: BLE001
                     return await _finish(
                         db, inst, tpl, "channel",
-                        f"服务地址解析失败,本轮未执行: {e}")
+                        f"服务地址解析失败,本轮未执行: {e}", lease=lease)
                 from .service_aliases import credential_alias_hits
                 hits = await credential_alias_hits(
                     db, definition_from_payload(scen.payload).get("steps") or [],
@@ -856,7 +903,8 @@ async def run_instance(instance_id: int) -> dict:
                         db, inst, tpl,
                         paused_reason="template_changed",
                         message="模板内容已变更(场景/方案/数据集/周期/服务"
-                                "地址),请重新确认订阅后恢复执行")
+                                "地址),请重新确认订阅后恢复执行",
+                        lease=lease)
 
             holder = (await get_platform_user_id()) \
                 if tpl.identity_mode == "platform" else inst.holder_id
@@ -882,11 +930,11 @@ async def run_instance(instance_id: int) -> dict:
                 return await _finish(
                     db, inst, tpl, "auth",
                     f"缺少凭证: {','.join(e.missing)}",
-                    pause_reason="missing_credential")
+                    pause_reason="missing_credential", lease=lease)
             except AuthResolveError as e:
                 return await _finish(
                     db, inst, tpl, "auth", f"凭证解析失败: {e}",
-                    pause_reason="missing_credential")
+                    pause_reason="missing_credential", lease=lease)
         except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)
             # 异常可能来自主会话上的 SQL —— PG 已把该事务标记中止,
             # 同一会话再写必然二次失败(实测:手动触发 500、实例照旧
@@ -903,7 +951,7 @@ async def run_instance(instance_id: int) -> dict:
                     raise IntegrationRunError("template_gone", "模板已删除")
                 return await _finish(
                     db2, inst2, tpl2, "channel",
-                    f"执行准备失败,本轮未执行: {e}")
+                    f"执行准备失败,本轮未执行: {e}", lease=lease)
 
         scen_payload = scen.payload
         inst_state_vars = dict(inst.state_vars or {})
@@ -980,14 +1028,15 @@ async def run_instance(instance_id: int) -> dict:
             db, inst, tpl, run_status, error,
             check_status=check_status, check_message=check_message,
             outputs=outputs,
-            duration_ms=int((_now() - started).total_seconds() * 1000))
+            duration_ms=int((_now() - started).total_seconds() * 1000),
+            lease=lease)
 
 
 async def _finish(
     db, inst: IntegrationTask, tpl: IntegrationTask, run_status: str,
     error: str, *, check_status: str = "unknown", check_message: str = "",
     outputs: dict | None = None, duration_ms: int = 0,
-    pause_reason: str | None = None,
+    pause_reason: str | None = None, lease=None,
 ) -> dict:
     """结果回写(集成线 v2 §2.3 重写):run/check 分立落库。
 
@@ -1007,7 +1056,16 @@ async def _finish(
       基准 = 结论翻转**或** outputs 序列化变化(D8);
     - 通知对象:auth 面按身份模式定向(个人=持有人,平台=全体
       admin/operator);结论通知按 D3(个人=持有人,平台=模板 owner)。
+
+    P0-3.1(webhook 设计 v3):入口先做租约判定(:func:`_lease_alive`,
+    行锁单事务)—— 迟到的结果(本轮已被租约回收/新一轮认领)丢弃:
+    零字段改动、不通知、不回调(上线后即无重复 integration.run_
+    finished);``lease=None`` 旧路径跳过判定。
     """
+    _inst_id = inst.id          # 回滚后属性过期,先取标量
+    if not await _lease_alive(db, inst, lease):
+        await db.rollback()
+        return _late_result(_inst_id, lease)
     from ..core.timeutil import ensure_aware
 
     now = _now()
@@ -1231,14 +1289,22 @@ async def _recover_stuck(db) -> int:
             r.run_status = "timeout"   # 租约超时是真实的「超时」面
             r.last_error = "运行租约超时,调度器回收(模板已删)"
             continue
-        await _finish(db, r, tpl, "timeout", "运行租约超时,调度器回收")
-        n += 1
+        # P0-3.1:以读到的 running_since 为令牌 —— 回收与迟到结果经
+        # _finish 的行锁判定互斥;读取与收口之间若真跑完(state≠
+        # running),本次回收被丢弃,不覆写真实结果
+        res = await _finish(db, r, tpl, "timeout", "运行租约超时,调度器回收",
+                            lease=r.running_since)
+        if res.get("status") != "discarded":
+            n += 1
     if rows:
         await db.commit()
     return n
 
 
-async def _claim_due(db, limit: int = 10) -> list[int]:
+async def _claim_due(db, limit: int = 10) -> "list[tuple[int, datetime]]":
+    """认领到期实例,返回 (实例 id, 租约令牌) —— 令牌即本次写入的
+    ``running_since``,随 ``_spawn`` 传入 ``run_instance`` 做 P0-3.1
+    的迟到结果判定。"""
     now = _now()
     rows = (await db.execute(
         select(IntegrationTask).where(
@@ -1265,12 +1331,12 @@ async def _claim_due(db, limit: int = 10) -> list[int]:
             .returning(IntegrationTask.id))).scalar()
         if res is not None:
             _inflight_add(tpl, r.holder_id, 1)
-            claimed.append(r.id)
+            claimed.append((r.id, now))
     await db.commit()
     return claimed
 
 
-async def _spawn(instance_id: int) -> None:
+async def _spawn(instance_id: int, lease=None) -> None:
     tpl_id = None
     holder = None
     try:
@@ -1279,7 +1345,7 @@ async def _spawn(instance_id: int) -> None:
             if inst is not None:
                 holder = inst.holder_id
                 tpl_id = inst.template_id
-        await run_instance(instance_id)
+        await run_instance(instance_id, lease=lease)
     except Exception as e:  # noqa: BLE001 — 单实例失败不炸调度循环
         logger.warning("integration: run instance {} failed: {}", instance_id, e)
     finally:
@@ -1314,8 +1380,8 @@ async def scheduler_tick() -> dict:
     else:
         async with db_module.SessionLocal() as db:
             claimed = await _claim_due(db)
-    for iid in claimed:
-        asyncio.create_task(_spawn(iid))
+    for iid, lease in claimed:
+        asyncio.create_task(_spawn(iid, lease))
     return {"claimed": claimed, "reaped": reaped, "stuck": stuck}
 
 

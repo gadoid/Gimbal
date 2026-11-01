@@ -657,7 +657,7 @@ async def test_personal_manual_run_no_cooldown(client, monkeypatch):
 
     calls = {"n": 0}
 
-    async def _fake_run(inst_id):
+    async def _fake_run(inst_id, *, lease=None):   # P0-3.1:端点恒传令牌
         calls["n"] += 1
         # 模拟 _finish 收口:state 回 idle(真链路在独立会话回写)
         from app.core import db as _dbm

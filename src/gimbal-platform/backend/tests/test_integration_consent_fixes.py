@@ -433,6 +433,36 @@ async def test_main_session_sql_error_finishes_channel(
     assert "no_such_table_xyz" in (inst.last_error or "")
 
 
+async def test_manual_run_passes_lease(client, plate_mock, monkeypatch):
+    """手动端点恒传租约令牌(P0-3.1,webhook 设计 v3):占用 CAS 写入的
+    now 即令牌,run_instance(lease=…) —— 与调度认领同口径,迟到的
+    手动结果不覆写后续运行。"""
+    from app.core.timeutil import ensure_aware
+    from app.services import integration_runner as ir
+
+    captured = {}
+
+    async def _fake_run(iid, *, lease=None):
+        captured["lease"] = lease
+        return {"status": "ok", "durationMs": 0, "error": ""}
+
+    monkeypatch.setattr(ir, "run_instance", _fake_run)
+    plate_mock.fulls.update(FULLS)
+    u1 = await register_and_login(client, "cfx_d", "pw123456")
+    await _mk_scenario(client, u1, "sc-cfw", {"jira": "1.0#1"})
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-cfw"))).json()["id"]
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    assert captured.get("lease") is not None
+    async with db_module.SessionLocal() as db:
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id.is_not(None)))).scalar()
+    assert ensure_aware(captured["lease"]) == ensure_aware(inst.running_since)
+
+
 async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     """P2.3:转私有后,运行中回 idle 再被调度/凭证复活拉回的两条漏网
     路径由执行闸兜住 → paused/made_private(联动暂停 = 提前通知)。"""

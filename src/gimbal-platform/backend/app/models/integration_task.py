@@ -28,6 +28,10 @@
   resume_my_subscription/手动执行 CAS(running)。这些路径不动
   run_status/fail_streak/last_run_at。
 - **调度 CAS**:_claim_due 与手动执行触发点的 idle→running 条件更新。
+  (写入的 ``running_since`` 即本次运行的**租约令牌**,P0-3.1/webhook
+  设计 v3:``_finish`` / ``_pause_consent_changed`` 入口行锁比对
+  ``state='running' AND running_since=lease`` —— 迟到的结果/暂停丢弃,
+  回收与迟到写入互斥,不覆写新一轮运行。)
 """
 from __future__ import annotations
 
