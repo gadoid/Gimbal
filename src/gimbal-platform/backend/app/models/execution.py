@@ -67,6 +67,9 @@ class Execution(Base):
     # suite_graph = 编排执行(scenario_id 写占位 suite-<id>,不计入
     # 任何成员场景的历史)。与队列层 execution_jobs.kind(cases/graph/
     # debug)同名不同层、值域互斥。存量行 scenario = 既有全部。
+    # 占位 id 约定(N3):编排类形态的 scenario_id 一律 <形态前缀>-<id>
+    # (现为 suite-<id>);后续新增形态按同一规则,判定一律走
+    # is_orchestration_kind,不散写 kind 比较。
     kind: Mapped[str] = mapped_column(String(32), default="scenario")
     # 编排执行的归属 Suite(聚合成员执行同样落 suite_id 供 21 页归并)。
     # 有意不加 FK:执行台账归执行人,历史不随 Suite 删除消失(21 页
@@ -274,3 +277,22 @@ class ExecutionJob(Base):
     __table_args__ = (
         Index("ix_execution_jobs_status_id", "status", "id"),
     )
+
+
+# 编排类形态集合(N3):不挂在真实场景上的执行形态。scenario_id 写
+# 占位 <前缀>-<id>(见 Execution.kind 列注释);新增形态在此登记。
+ORCHESTRATION_KINDS = frozenset({"suite_graph"})
+
+
+def is_orchestration_kind(kind: str | None) -> bool:
+    """执行是否为**编排类**形态(不挂在真实场景上)。
+
+    N3 归一:后端全部 kind 分支(列表筛选排除 / 重跑 409 / Suite
+    最近运行与混排归并 / rerun-failed 守卫)统一走本判定 —— 新增
+    编排类形态(如 adhoc)只改这一处与 ORCHESTRATION_KINDS。
+
+    语义边界:决定「按场景筛选是否包含、能否按配方重跑、详情页是否
+    链到场景」;与 execution_jobs.kind(cases/graph,队列分派轴)是
+    同名不同层的两条轴,勿混用。
+    """
+    return (kind or "scenario") in ORCHESTRATION_KINDS

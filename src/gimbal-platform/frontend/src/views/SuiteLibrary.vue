@@ -226,6 +226,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePagerSize } from '@/composables/usePagerSize'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
+import { isOrchestrationKind } from '@/utils/executionKind'
 import { promptAction, confirmAction } from '@/utils/confirmAction'
 import { executionsBatchUrl } from '@/utils/links'
 import { MODE_LABEL, runStatusTone } from '@/utils/suiteStructure'
@@ -316,7 +317,7 @@ function openSuite(s: SuiteSummary): void {
 function latestRunText(r: SuiteLatestRun): string {
   const t = r.finishedAt || r.createdAt
   const when = t ? shortDateTime(t) : ''
-  const kind = r.kind === 'suite_graph' ? '编排' : '批次'
+  const kind = isOrchestrationKind(r.kind) ? '编排' : '批次'
   return `${kind} · ${when}`
 }
 

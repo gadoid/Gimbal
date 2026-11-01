@@ -31,6 +31,7 @@ from ..core.deps import CurrentUser, get_owned_execution
 from ..core.timeutil import utcnow
 from ..models import Execution
 from ..models.execution import (
+    is_orchestration_kind,
     STATUS_CANCELED,
     STATUS_DONE,
     STATUS_FAILED,
@@ -189,10 +190,12 @@ async def list_executions(
             Execution.scenario_id.in_(live_names.scalar_subquery()),
         ))
     if scenario_id:
-        # 重构方案:suite_graph 执行的 scenario_id 是占位 suite-<id>,
+        # 重构方案:编排类执行的 scenario_id 是占位 <前缀>-<id>,
         # 理论上永不命中真实场景;显式排除兜底任何前缀/模糊查询遗漏
+        # (N3:形态集合单源 ORCHESTRATION_KINDS,新增编排形态只改一处)
+        from ..models.execution import ORCHESTRATION_KINDS
         base = base.where(Execution.scenario_id == scenario_id,
-                          Execution.kind != "suite_graph")
+                          Execution.kind.notin_(ORCHESTRATION_KINDS))
     if status_filter:
         if status_filter not in _KNOWN_STATUSES:
             raise HTTPException(
@@ -728,9 +731,9 @@ async def rerun_execution(
     混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,
     不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜
     底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。"""
-    # 重构方案:suite_graph 执行不按 config 重放(现在会只重跑第一个
+    # 重构方案:编排类执行不按 config 重放(现在会只重跑第一个
     # 场景)→ 409 附 Suite 链接,前端转去重新运行该 Suite(经预检)
-    if (getattr(ex, "kind", None) or "scenario") == "suite_graph":
+    if is_orchestration_kind(getattr(ex, "kind", None)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

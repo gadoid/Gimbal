@@ -280,6 +280,7 @@ import {
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
+import { isOrchestrationKind } from '@/utils/executionKind'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
@@ -450,9 +451,11 @@ const expanded = ref<Set<number>>(new Set())
 
 const rerunningId = ref<number | null>(null)
 
-/** Suite 层重构:suite_graph = 编排执行(成员场景历史不含它,重跑转去运行 Suite)。 */
+/** Suite 层重构:编排执行(成员场景历史不含它,重跑转去运行 Suite)。
+ * N3:判定委托共享 isOrchestrationKind(新增编排形态只改 utils/executionKind)。 */
+
 function isSuiteGraph(row: ExecutionListItem): boolean {
-  return row.kind === 'suite_graph'
+  return isOrchestrationKind(row.kind)
 }
 
 async function rerun(row: ExecutionListItem) {

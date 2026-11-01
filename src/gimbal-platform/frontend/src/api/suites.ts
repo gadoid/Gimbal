@@ -3,6 +3,7 @@
  * 第 2 步:composition 整体保存 / 模式分流运行 / 运行记录 / 重跑失败
  * 单元 / 公共复制 / 最近运行摘要)。
  */
+import type { OrchestrationKind } from '@/utils/executionKind'
 import http from '@/api/http'
 
 export type SuiteMode = 'aggregate' | 'chain' | 'fanout' | 'compose'
@@ -32,7 +33,7 @@ export interface SuiteModeConfig {
 }
 
 export interface SuiteLatestRun {
-  kind: 'suite_graph' | 'batch'
+  kind: OrchestrationKind | 'batch'
   status?: string
   executionId?: number
   batchId?: string | null
@@ -125,7 +126,7 @@ export interface RevConflict {
 
 export interface SuiteRunItem {
   executionId?: number
-  kind: 'suite_graph' | 'batch' | 'single'
+  kind: OrchestrationKind | 'batch' | 'single'
   batchId?: string | null
   mode?: string | null
   status: string

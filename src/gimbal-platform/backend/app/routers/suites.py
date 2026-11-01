@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..models.execution import Execution
+from ..models.execution import Execution, is_orchestration_kind
 from ..models.suite import Suite, SuiteMember
 from ._error_mapping import not_found_404
 from ._ownership import ensure_owner
@@ -132,7 +132,7 @@ async def _latest_runs_by_suite(
     for ex in rows:  # 新→旧:首见即该 Suite 最近一次
         if ex.suite_id in latest:
             continue
-        if (ex.kind or "scenario") == "suite_graph":
+        if is_orchestration_kind(ex.kind):
             latest[ex.suite_id] = {
                 "kind": "suite_graph", "status": ex.status,
                 "executionId": ex.id, "batchId": ex.batch_id,
@@ -848,11 +848,11 @@ async def _run_orchestration(
                         f"x nRuns)")})
 
     from ..services import execution_queue as _eq
-    from ..services.run_dispatcher import _create_execution, _new_run_id
+    from ..services.run_dispatcher import create_execution, new_run_id
     chain = str(getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
-    run_id = _new_run_id()
+    run_id = new_run_id()
     batch_id = f"suite-{suite.id}-{user.id}-{uuid4().hex[:12]}"
-    execution = await _create_execution(
+    execution = await create_execution(
         db,
         # 占位(非 sc- 前缀,绝不命中真实场景的场景维度查询)
         scenario_id=f"suite-{suite.id}",
@@ -1303,21 +1303,18 @@ async def validate_suite(
                          *graph_spec["units"],
                          *graph_spec.get("after", [])]
             resolved = await gd.resolve_graph_units(db, all_units, user.id)
-            # 认证别名按发起人解析(不借用属主凭证,P2 §13.3-5)
-            aliases = sorted({
-                alias
-                for r in resolved
-                for b in (r["unit"].get("serviceBindings") or {}).values()
-                for alias in ([b] if isinstance(b, str) and b else
-                              [b.get("authAlias")] if isinstance(b, dict) else [])
-                if alias})
+            # N1-3:认证别名清单与执行链同源(run_prepare.graph_auth_aliases:
+            # 全单元步骤并集的模板扫描 ∪ 绑定 ∪ 别名表凭证默认),不再手写
+            # 一份收集(此前只看单元绑定,与 materialize_graph 的注入面漂移);
+            # 解析按发起人(不借用属主凭证,P2 §13.3-5),走会话工厂。
+            from ..core import db as db_module
+            from ..services import run_prepare
+            from ..services.run_dispatcher import session_factory as _sf
+            aliases = await run_prepare.graph_auth_aliases(
+                _sf, [r["composed"] for r in resolved], {})
             if aliases:
-                # N0:导入路径修正(此前 from .run_dispatcher 在 routers/ 下
-                # 解析不到 → ModuleNotFoundError);凭证解析同 graph 链走
-                # 会话工厂(此前传活会话 → TypeError,且被下方兜底吞成降级)
-                from ..core import db as db_module
-                from ..services.run_dispatcher import _resolve_exec_auths as _ra
-                got = await _ra(db_module.SessionLocal, user.id, aliases)
+                got = await run_prepare.resolve_exec_auths(
+                    _sf, user.id, aliases)
                 missing = set(aliases) - {a.alias for a in got}
                 if missing:
                     items.append(_vitem(
@@ -1425,7 +1422,7 @@ async def suite_runs(
     items: list[dict] = []
     batches: dict[str, dict] = {}
     for ex in rows:
-        if (ex.kind or "scenario") == "suite_graph":
+        if is_orchestration_kind(ex.kind):
             items.append({
                 "executionId": ex.id, "kind": "suite_graph",
                 "batchId": ex.batch_id,
@@ -1483,7 +1480,7 @@ async def rerun_failed_units(
     await _require_run_async(db, user, suite)
     ex = await db.get(Execution, execution_id)
     if (ex is None or ex.suite_id != suite.id
-            or (ex.kind or "scenario") != "suite_graph"):
+            or not is_orchestration_kind(ex.kind)):
         raise not_found_404("execution", str(execution_id))
     if ex.owner_id != user.id:
         raise HTTPException(status_code=403, detail={
