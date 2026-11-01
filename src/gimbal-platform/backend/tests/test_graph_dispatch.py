@@ -609,3 +609,51 @@ class TestGraphN1Unification:
             })
         body = graph["units"][0]["scenario"]["steps"][0]["request"]["body"]
         assert body.get("remark") == "编排-李四"   # carry 注入(此前恒缺)
+
+    async def test_same_service_different_aliases_per_unit(self, client,
+                                                           monkeypatch):
+        """评审 2026-11-01 §2 回归:N1 曾把逐单元绑定按服务压平成
+        {服务: 别名} 再算清单 —— 两个单元给同一服务绑 qa1/qa2 时后写
+        覆盖先写,qa1 丢凭证(58baa92 过、336e53c 败)。逐单元算清单
+        后两别名都进清单、都解析,全单元共享的 users 两别名齐备。"""
+        await register_and_login(client, "gn_b9", "gn_b9pass123")
+        h = await register_and_login(client, "gn_o9", "gn_o9pass123")
+        plain = [{"kind": "step",
+                  "call": {"service": "fin.order", "method": "POST",
+                           "path": "/x"},
+                  "request": {"kind": "request", "body": {"amount": 1}},
+                  "strategy": []}]
+        draft = make_draft("sc-gn-9", steps=plain)
+        r = await client.post("/api/scenarios", headers=h, json=draft)
+        assert r.status_code in (200, 201), r.text
+        await self._fake_convert(monkeypatch)
+
+        from app.core.security import fernet_encrypt
+        from app.models.auth_session import AuthSession
+        from app.models.user import User
+        from app.services import graph_dispatch, scheme_store
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gn_o9"))).scalar_one()
+            for alias in ("qa1", "qa2"):
+                s.add(AuthSession(
+                    owner_id=uid, alias=alias, url=f"http://auth:{alias}",
+                    username_enc=fernet_encrypt("u"),
+                    password_enc=fernet_encrypt("p")))
+            await scheme_store.ensure_default_scheme(s, "sc-gn-9")
+            await s.commit()
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [
+                    {"ref": "a", "scenarioId": "sc-gn-9",
+                     "serviceBindings": {"fin.order": {"authAlias": "qa1"}}},
+                    {"ref": "b", "scenarioId": "sc-gn-9",
+                     "serviceBindings": {"fin.order": {"authAlias": "qa2"}}},
+                ],
+            })
+        # graph 级解析一次、resolved_auths 全单元共享:两单元 users 都含
+        # qa1 与 qa2(压平实现下单元 a 只剩 qa2)
+        for u in graph["units"]:
+            users = u["scenario"]["config"].get("users") or {}
+            assert {"qa1", "qa2"} <= set(users), (u["ref"], users)

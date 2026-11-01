@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..models.execution import Execution, is_orchestration_kind
+from ..models.execution import Execution
 from ..models.suite import Suite, SuiteMember
 from ._error_mapping import not_found_404
 from ._ownership import ensure_owner
@@ -132,7 +132,10 @@ async def _latest_runs_by_suite(
     for ex in rows:  # 新→旧:首见即该 Suite 最近一次
         if ex.suite_id in latest:
             continue
-        if is_orchestration_kind(ex.kind):
+        # kind 直接比较(N3 拆判定,评审 §3.2):本视图问的是「是不是
+        # Suite 编排」—— Suite 专属展示语义,只认 suite_graph,勿走
+        # is_scenario_backed(临时调用等新形态不是 Suite 运行)。
+        if ex.kind == "suite_graph":
             latest[ex.suite_id] = {
                 "kind": "suite_graph", "status": ex.status,
                 "executionId": ex.id, "batchId": ex.batch_id,
@@ -1303,15 +1306,19 @@ async def validate_suite(
                          *graph_spec["units"],
                          *graph_spec.get("after", [])]
             resolved = await gd.resolve_graph_units(db, all_units, user.id)
-            # N1-3:认证别名清单与执行链同源(run_prepare.graph_auth_aliases:
-            # 全单元步骤并集的模板扫描 ∪ 绑定 ∪ 别名表凭证默认),不再手写
-            # 一份收集(此前只看单元绑定,与 materialize_graph 的注入面漂移);
-            # 解析按发起人(不借用属主凭证,P2 §13.3-5),走会话工厂。
+            # N1-3:认证别名清单与执行链同源(run_prepare.graph_auth_
+            # aliases:逐单元模板扫描 ∪ 绑定 ∪ 别名表凭证默认,再并集;
+            # 单元绑定合并与 materialize 同一份 gd.unit_merged_bindings),
+            # 不再手写一份收集(此前只看单元绑定,与 materialize_graph
+            # 的注入面漂移);解析按发起人(不借用属主凭证,P2 §13.3-5),
+            # 走会话工厂。
             from ..core import db as db_module
             from ..services import run_prepare
             from ..services.run_dispatcher import session_factory as _sf
             aliases = await run_prepare.graph_auth_aliases(
-                _sf, [r["composed"] for r in resolved], {})
+                _sf, [(r["composed"],
+                       gd.unit_merged_bindings(graph_spec, r["unit"]))
+                      for r in resolved])
             if aliases:
                 got = await run_prepare.resolve_exec_auths(
                     _sf, user.id, aliases)
@@ -1422,7 +1429,9 @@ async def suite_runs(
     items: list[dict] = []
     batches: dict[str, dict] = {}
     for ex in rows:
-        if is_orchestration_kind(ex.kind):
+        # kind 直接比较(同 _latest_runs_by_suite:Suite 专属混排视图,
+        # 只认 suite_graph,与前端 SuiteRunsTab 同理由)
+        if ex.kind == "suite_graph":
             items.append({
                 "executionId": ex.id, "kind": "suite_graph",
                 "batchId": ex.batch_id,
@@ -1479,8 +1488,10 @@ async def rerun_failed_units(
     suite = await _load_suite(db, suite_id)
     await _require_run_async(db, user, suite)
     ex = await db.get(Execution, execution_id)
+    # kind 直接比较:rerun-failed 是 Suite 编排专属操作(按单元重跑),
+    # 只认 suite_graph(评审 §3.2 拆判定)。
     if (ex is None or ex.suite_id != suite.id
-            or not is_orchestration_kind(ex.kind)):
+            or ex.kind != "suite_graph"):
         raise not_found_404("execution", str(execution_id))
     if ex.owner_id != user.id:
         raise HTTPException(status_code=403, detail={

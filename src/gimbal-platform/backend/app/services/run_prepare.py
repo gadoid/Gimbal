@@ -5,18 +5,24 @@
 compose(数据行合入)。五个入口全部消费本模块:
 
   单场景执行 run_dispatcher._fanout          prepare_exec(single)
-  Suite 编排   graph_dispatch.materialize_graph  graph_auth_aliases +
-                                             unit_carry_contexts(套件交集
-                                             仍走 suite_version,本模块不重复)
+  Suite 编排   graph_dispatch.materialize_graph  graph_auth_aliases(逐单元
+                                             并集)+ unit_carry_contexts
+                                             (套件交集仍走 suite_version,
+                                             本模块不重复)
   集成        integration_runner.run_instance  prepare_exec(strict/none)
-  导出/预览   routers/scenarios._materialized_executable
-  预检        run_precheck + suites validate(清单/地址同源)
+  导出/预览   routers/scenarios._materialized_executable  prepare_exec
+                                             (none,with_auth=仅 overlay)
+  预检        run_precheck(地址链 run_materialize.service_url_resolved
+                                             同源)+ suites validate
+                                             (graph_auth_aliases 清单同源)
 
 整改背景:此前五份平行实现 —— graph 链凭证清单缺模板扫描与别名默认
 两层(方案级 authAlias 甚至不进清单)、Suite 无 carry(显式 None 是
 防崩权宜)、导出缺别名默认层、预检地址链漏第③层。归一后差异只允许
 以参数表达(auth_policy / resolve_mode),凭证清单算法、地址链、
-carry 不允许任何调用方自选。
+carry 不允许任何调用方自选。评审(2026-11-01 §3.1A)收口:集成与
+导出亦改调 prepare_exec,不再各自手写编排(只调子函数的「半归一」
+留有编排顺序/降级口径各自漂移的口子)。
 
 迁入符号自 run_dispatcher(原 _compose_scenario/_resolve_exec_auths/
 _built_in_users/_find_dataset_by_id/_AuthResolveError):已有四个跨模块
@@ -26,9 +32,10 @@ run_dispatcher → ModuleNotFoundError)—— 分层错位已造成真实 bug,
 
 签名约定:凭证解析只收**会话工厂**(独立短会话快照语义,与执行期
 隔离);纯读助手(find_dataset_by_id)收活会话。resolve_mode="none"
-仅集成链使用:其 meta.plate 声明域恒为完整钉修订(裸线在声明域即
-INVALID,working 被 working_preview 闸拒绝),/convert 按钉修订取
-不可变快照,且集成不写执行台账(决策 3)—— 无 resolve+merge 必要。
+供集成链与导出链使用:集成链的 meta.plate 声明域恒为完整钉修订(裸线
+在声明域即 INVALID,working 被 working_preview 闸拒绝),/convert 按
+钉修订取不可变快照,且集成不写执行台账(决策 3)—— 无 resolve+merge
+必要;导出链按定义原样 convert(修订解析属执行链语义)。
 """
 from __future__ import annotations
 
@@ -254,7 +261,12 @@ def compose_scenario(
 
 @dataclass
 class ExecPrep:
-    """一次执行(或一次导出)的准备产物(纯值对象)。
+    """一次执行(或一次导出)的准备产物。
+
+    除 meta_plate 外为纯值;meta_plate **引用**调用方 payload 的
+    ``definition.meta.plate`` 且在 resolve_mode="single" 时被原地修订
+    (生效修订回写,compose/convert 输入依赖该回写 —— 见 prepare_exec
+    签名说明的副作用;不落库)。
 
     单场景/集成/导出链经 :func:`prepare_exec` 产出;Suite 编排按单元
     组合(graph_auth_aliases + unit_carry_contexts + 套件交集)。
@@ -298,7 +310,13 @@ async def prepare_exec(
       ``single`` = plate resolve + merge_resolve_effective(PIN 写执行
       副本 / INTEGRATION 只写 pins;plate 拒绝/不可用原样上抛
       plate_rejected/plate_unavailable);
-      ``none`` = 原样透传(集成链,见模块 docstring 的定案理由)。
+      ``none`` = 原样透传(集成/导出链,见模块 docstring 的定案理由)。
+
+    **副作用**(评审 §3.1 附注):``resolve_mode="single"`` 时**原地
+    修订**入参 payload 的 ``definition.meta.plate``(merge_resolve_
+    effective 的生效修订回写 —— compose/convert 的输入依赖该回写才能
+    拿到生效修订;`_fanout` 在调用前 deepcopy 正是为了承接它)。调用
+    方若不希望写穿存储/草稿对象,须自备副本;其余模式不改入参。
     """
     from .carry_injection import build_carry_context
     from .run_materialize import referenced_services
@@ -380,24 +398,32 @@ async def prepare_exec(
 
 
 async def graph_auth_aliases(
-    db_factory: Any, definitions: list[dict],
-    bindings_authalias: dict[str, str] | None = None,
+    db_factory: Any, units: list[tuple[dict, dict]],
 ) -> list[str]:
-    """Suite 编排的凭证清单:全部单元 steps 的并集走
-    ``exec_auth_aliases``(模板扫描 ∪ 绑定 authAlias(单元+方案+图级
-    合并后)∪ 别名表凭证默认)。
+    """Suite 编排的凭证清单:**逐单元**走 ``exec_auth_aliases``(模板
+    扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认 —— 每单元用它自己合并后的
+    绑定),再对结果取并集(去重保序)。
 
     N1-2 整改:此前 materialize_graph 只收 graph_req 单元级显式
     ``serviceBindings.authAlias``(方案级绑定不进清单、无模板扫描、
     无别名默认)—— 与单场景链/预检(预检看得到方案级)口径漂移。
+
+    逐单元而非按服务压平(评审 2026-11-01 §2 回归):两个单元给同一
+    服务绑不同别名(qa1/qa2)时,``{服务: 别名}`` 压平会后写覆盖先写
+    丢凭证;``credential_alias_hits`` 的「显式绑定排除默认」也会因压平
+    键全局生效 —— 单元 A 显式绑定的服务,单元 B 的别名默认被误排除。
+
+    ``units``:每单元 ``(definition, merged_bindings)``;绑定合并与
+    materialize_run_copy 同一份(见 graph_dispatch.unit_merged_bindings)。
     """
-    steps: list = []
-    for d in definitions:
-        steps.extend((d or {}).get("steps") or [])
-    bindings = {k: {"authAlias": v}
-                for k, v in (bindings_authalias or {}).items() if v}
+    aliases: dict[str, None] = {}
     async with db_factory() as s:
-        return await service_aliases.exec_auth_aliases(s, steps, bindings)
+        for definition, bindings in units:
+            steps = (definition or {}).get("steps") or []
+            for a in await service_aliases.exec_auth_aliases(
+                    s, steps, bindings or {}):
+                aliases.setdefault(a, None)
+    return list(aliases)
 
 
 async def unit_carry_contexts(

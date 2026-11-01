@@ -115,6 +115,15 @@ async def resolve_graph_units(
     return resolved
 
 
+def unit_merged_bindings(graph_req: dict, unit: dict) -> dict[str, dict]:
+    """单元生效服务绑定 = 图级 ∪ 方案级(resolve_graph_units 已随行合入
+    unit)∪ 单元级(后者覆盖同名)—— 凭证清单(run_prepare.graph_auth_
+    aliases)与物化(materialize_run_copy)共用同一份,清单/注入面不漂移。
+    """
+    return {**(graph_req.get("serviceBindings") or {}),
+            **(unit.get("serviceBindings") or {})}
+
+
 class GraphDispatchError(Exception):
     """编排物化失败(场景缺失/convert 拒绝);路由层 → 4xx。"""
 
@@ -177,22 +186,18 @@ async def materialize_graph(
                     meta_plate[sys_] = eff
 
     # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。N1-2:凭证
-    # 清单与单场景链/预检同源 —— run_prepare.graph_auth_aliases(全单元
-    # steps 并集:模板扫描 ${auth.*} ∪ 绑定 authAlias(图级+单元+方案
-    # 合并后)∪ 别名表凭证默认)。此前只收 graph_req 单元级显式
-    # authAlias:方案级绑定不进清单、无模板扫描、无别名默认 —— 与
-    # 执行期真实注入面漂移(预检看得到方案级而执行收不到)。
-    bindings_authalias: dict[str, str] = {}
-    for _src in [graph_req.get("serviceBindings") or {},
-                 *((r["unit"].get("serviceBindings") or {}) for r in resolved)]:
-        for _svc, _b in _src.items():
-            _alias = (_b if isinstance(_b, str) and _b else
-                      _b.get("authAlias") if isinstance(_b, dict) else None)
-            if _alias:
-                bindings_authalias[_svc] = _alias
+    # 清单与单场景链/预检同源 —— run_prepare.graph_auth_aliases **逐
+    # 单元**走 exec_auth_aliases(模板扫描 ${auth.*} ∪ 绑定 authAlias
+    # (图级+单元+方案合并后)∪ 别名表凭证默认)再并集。此前只收
+    # graph_req 单元级显式 authAlias:方案级绑定不进清单、无模板扫描、
+    # 无别名默认 —— 与执行期真实注入面漂移(预检看得到方案级而执行
+    # 收不到)。逐单元而非按服务压平 {服务: 别名}:同服务多别名
+    # (qa1/qa2)会被后写覆盖先写丢凭证,别名默认的显式绑定排除也被
+    # 压平键全局放大(评审 2026-11-01 §2 回归)。
     auth_aliases = await run_prepare.graph_auth_aliases(
-        db_module.SessionLocal, [r["composed"] for r in resolved],
-        bindings_authalias)
+        db_module.SessionLocal,
+        [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
+         for r in resolved])
     exec_auths = (await run_prepare.resolve_exec_auths(
         db_module.SessionLocal, owner_id, auth_aliases)
         if auth_aliases else [])
@@ -219,9 +224,8 @@ async def materialize_graph(
         if m2_info is None and convert.get("m2"):
             m2_info = convert["m2"]
         converted = (convert.get("converted") or {})
-        bindings = r["unit"].get("serviceBindings") or {}
-        merged_bindings = {**(graph_req.get("serviceBindings") or {}),
-                           **bindings}
+        # 单元生效绑定(与凭证清单同一份,见 unit_merged_bindings)
+        merged_bindings = unit_merged_bindings(graph_req, r["unit"])
         materialized = materialize_run_copy(
             converted,
             service_bindings=merged_bindings,
