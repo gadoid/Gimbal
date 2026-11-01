@@ -122,7 +122,10 @@
                     row.scenario_display_name || row.scenario_id
                   }}<template v-if="row.scenario_deleted">(已删)</template></template>
                 </span>
-                <span v-if="!isSuiteGraph(row)" class="mono scenario-sid">{{ row.scenario_id }}</span>
+                <!-- 场景 id 只在挂真实场景的形态显示:非场景形态的
+                     scenario_id 是占位 id(评审 §3.2 前端收口,与后端
+                     is_scenario_backed 同口径)。 -->
+                <span v-if="isScenarioBacked(row.kind)" class="mono scenario-sid">{{ row.scenario_id }}</span>
               </div>
             </TableCell>
             <TableCell>
@@ -211,7 +214,7 @@
                       @click="router.push(`/suites/${row.suite_id}`)"
                     >重新运行 Suite</Button>
                     <Button
-                      v-else-if="row.status !== 'queued' && row.status !== 'running'"
+                      v-else-if="isScenarioBacked(row.kind) && row.status !== 'queued' && row.status !== 'running'"
                       variant="outline" size="sm" class="h-7" :data-testid="`exec-rerun-${row.id}`"
                       :disabled="rerunningId === row.id"
                       @click="rerun(row)"
@@ -280,6 +283,7 @@ import {
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
+import { isScenarioBacked } from '@/utils/executionKind'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
@@ -453,7 +457,9 @@ const rerunningId = ref<number | null>(null)
 /** Suite 层重构:编排执行(成员场景历史不含它,重跑转去运行 Suite)。
  * N3 拆判定(评审 §3.2):Suite 链接/标签是 Suite 专属展示语义,直接
  * 比较 kind === 'suite_graph'(与 SuiteRunsTab 同理由);「是否挂真实
- * 场景」的形态集合判定见 utils/executionKind(临时调用落地时另立分支)。 */
+ * 场景」(场景 id 显示 / 同配置重跑)走 utils/executionKind 的
+ * isScenarioBacked 形态集合判定 —— 临时调用(adhoc)等非场景形态
+ * 落地时不给占位 id 展示、不给必 409 的重跑按钮。 */
 
 function isSuiteGraph(row: ExecutionListItem): boolean {
   return row.kind === 'suite_graph'
