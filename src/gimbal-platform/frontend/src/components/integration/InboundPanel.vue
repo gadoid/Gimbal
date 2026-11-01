@@ -220,9 +220,15 @@ async function saveSettings(patch: {
       callbackSecretSet: out.callbackSecretSet,
     }
     pathDraft.value = out.callbackPath ?? ''
-    toast.success('已保存')
+    if (out.callbackSecret) {
+      // 首次开启回调时密钥自动生成 → 明文随本响应返回一次(否则接收方
+      // 永远拿不到密钥、无法验签);轮换走同一提示。
+      onceSecret.value = { title: '回调签名密钥', value: out.callbackSecret }
+    } else {
+      toast.success('已保存')
+    }
   } catch (e) {
-    showError('保存设置', e)
+    showError('设置回调', e)
   }
 }
 

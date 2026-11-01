@@ -256,22 +256,40 @@ class TestAliasManagementApi:
             headers=h, json={"callbackPath": "https://evil/x"})
         assert r.status_code == 422
         assert "callback_path_invalid" in r.text
-        # 齐备 + 轮换 → 密钥明文只此一次
+        # 齐备 + 首次开启:密钥自动生成,**明文随本响应返回一次**
+        # (否则接收方永远拿不到密钥、无法验签)
         r = await client.put(
             "/api/service-aliases/agent-cfg/inbound", headers=h,
-            json={"callbackEnabled": True, "callbackPath": "/cb",
-                  "rotateSecret": True})
+            json={"callbackEnabled": True, "callbackPath": "/cb"})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["callbackEnabled"] is True
-        assert body["callbackSecret"]
-        # 再查设置(不带 rotate)不回明文
+        first_secret = body["callbackSecret"]
+        assert first_secret and not first_secret.startswith(("gic_", "ggt_"))
+        # 再查设置(密钥已存在、不轮换)不回明文
         r = await client.put(
             "/api/service-aliases/agent-cfg/inbound", headers=h,
             json={"callbackEnabled": True})
         assert r.status_code == 200
         assert r.json()["callbackSecret"] is None
         assert r.json()["callbackSecretSet"] is True
+        # 显式轮换 → 新明文且与首次不同(旧密钥即时失效)
+        r = await client.put(
+            "/api/service-aliases/agent-cfg/inbound", headers=h,
+            json={"rotateSecret": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["callbackSecret"]
+        assert r.json()["callbackSecret"] != first_secret
+        # 回调关闭时 rotateSecret 无意义 → 422
+        r = await client.put(
+            "/api/service-aliases/agent-cfg/inbound", headers=h,
+            json={"callbackEnabled": False})
+        assert r.status_code == 200
+        r = await client.put(
+            "/api/service-aliases/agent-cfg/inbound", headers=h,
+            json={"rotateSecret": True})
+        assert r.status_code == 422
+        assert "rotate_requires_callback" in r.text
 
     async def test_grant_api_lifecycle(self, client):
         await _seed_alias()

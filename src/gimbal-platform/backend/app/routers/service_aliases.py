@@ -12,6 +12,7 @@ admin**(团队共享别名 owner_user_id 为空 → 只有 admin);grant 的
 """
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
@@ -440,10 +441,10 @@ async def put_inbound_settings(
     """开关入站/回调、设置回调路径、可选轮换签名密钥(§4.5)。
 
     回调开启的前提:``base_url`` 与 ``callback_path`` 齐备(否则 422
-    —— 开了也没有可投递的地址);签名密钥首次开启时自动生成(密文
-    落库,明文不返回),显式 ``rotateSecret`` 可换新 —— 新密钥明文只
-    在本响应出现一次。轮换后已在途的投递行用行内存量 body + 新密钥
-    签名(密钥投递时从别名现取,设计 §5.2)。"""
+    —— 开了也没有可投递的地址)。密钥在**首次开启时自动生成**,明文
+    随本次响应返回一次(否则接收方无从验签);显式 ``rotateSecret``
+    换新,旧密钥即时失效 —— 新明文同样只在本次响应出现。轮换后已在途
+    的投递行按新密钥签发(密钥投递时从别名现取,设计 §5.2)。"""
     alias = await _get_alias(db, alias_name)
     _require_external(alias)
     _require_inbound_manager(user, alias)
@@ -468,7 +469,12 @@ async def put_inbound_settings(
                 "callback_target_missing",
                 "开启回调需要 base_url 与 callback_path(可拼出回调 URL)")
         if not alias.callback_secret or body.rotate_secret:
-            new_secret = generate_grant_token()  # 仅取其随机性(ggt_ 前缀仅惯例)
+            # 首次开启(auto)与显式轮换同一路径:生成新密钥,**明文随
+            # 本响应返回一次**(否则首次开启的接收方永远拿不到密钥、
+            # 无法验签);轮换后旧密钥立即失效,已在途投递行按新密钥
+            # 签发(密钥投递时从别名现取)。不使用 gic_/ggt_ 前缀 ——
+            # 它是签名密钥而非令牌,前缀会与身份令牌混淆。
+            new_secret = secrets.token_urlsafe(32)
             alias.callback_secret = fernet_encrypt(new_secret)
     elif body.rotate_secret:
         await db.rollback()
