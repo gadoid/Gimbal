@@ -5,10 +5,24 @@
 写行时把 payload 序列化一次存进 ``body``、URL 冻结为「别名 base_url +
 路径」;签名密钥不落行,投递时从别名现取(Fernet 解密,§5.2)。
 
-投递循环:独立 asyncio 任务(10s 周期 + 写行提交后的事件立即唤醒,
-单进程部署唤醒有效);领取 ``FOR UPDATE SKIP LOCKED`` 为多实例留余地。
-投递结果不影响执行判定;失败按退避序列重试,上限置 ``failed`` 等
-保留期清扫。
+S4(修复方案 2026-11-01 §5):**只有数据库错误**允许把构造失败传导给
+终态写入(SQLAlchemyError 透传,原子性保留);payload 组装/序列化等
+确定性错误只记 error、本条不投递 —— 回调面的缺陷不得让执行卡在
+非终态。见 :func:`_guarded`。
+
+投递循环(S2,修复方案 §7)三段式:
+
+1. **领取**(短事务):``FOR UPDATE SKIP LOCKED LIMIT 20``,把领到行的
+   ``next_retry_at`` 后推一个**投递租约**(``WEBHOOK_TIMEOUT_SECONDS +
+   30`` 秒)后提交 —— 不长事务持锁;进程崩溃时租约到期重新领取
+   (at-least-once,``X-Gimbal-Delivery`` 去重)。
+2. **发送**(无事务):按别名分组,组内按 id 串行、组间并发
+   (``WEBHOOK_CONCURRENCY``)—— 一个慢接收端只拖住自己的序列。
+3. **回写**(每行独立短事务):status / attempts / next_retry_at /
+   last_error / delivered_at。
+
+写行提交后 ``wake()`` 立即唤醒循环(单进程部署有效;多实例退化为
+10 秒周期,SKIP LOCKED 保证正确性)。投递结果不影响执行判定。
 """
 from __future__ import annotations
 
@@ -17,6 +31,7 @@ import hashlib
 import hmac
 import json
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -231,46 +246,25 @@ def backoff_seconds(attempts: int) -> int:
     return seq[min(max(attempts - 1, 0), len(seq) - 1)]
 
 
-async def _alias_secret(
-    db: AsyncSession, alias_name: str, cache: dict,
-) -> "str | None":
-    """签名密钥投递时现取:Fernet 解密;不可解/未设 → 不带签名头
-    (接收方按无签名处理,集成指南写明密钥必设)。"""
-    if alias_name in cache:
-        return cache[alias_name]
-    alias = await db.get(ServiceAlias, alias_name)
-    secret = None
-    if alias is not None and alias.callback_secret:
-        try:
-            secret = fernet_decrypt(alias.callback_secret)
-        except ValueError:
-            logger.warning(
-                "webhook_outbox: alias {} 回调密钥不可解密"
-                "(FERNET_KEY 轮换?),本批投递不带签名", alias_name)
-    cache[alias_name] = secret
-    return secret
-
-
 async def _send_one(
-    client: httpx.AsyncClient, db: AsyncSession,
-    row: WebhookDelivery, secrets: dict,
+    client: httpx.AsyncClient, job: "_Job", secrets: dict,
 ) -> "tuple[bool, str | None]":
-    if not (row.url.startswith("http://")
-            or row.url.startswith("https://")):
+    if not (job.url.startswith("http://")
+            or job.url.startswith("https://")):
         return False, "bad url(回调仅允许 http/https)"
     headers = {
         "Content-Type": "application/json",
-        "X-Gimbal-Event": row.event_type,
-        "X-Gimbal-Delivery": str(row.id),
+        "X-Gimbal-Event": job.event_type,
+        "X-Gimbal-Delivery": str(job.id),
     }
-    secret = await _alias_secret(db, row.alias_name, secrets)
+    secret = secrets.get(job.alias_name)
     if secret:
         ts = int(time.time())
         headers["X-Gimbal-Timestamp"] = str(ts)
-        headers["X-Gimbal-Signature"] = sign_payload(secret, ts, row.body)
+        headers["X-Gimbal-Signature"] = sign_payload(secret, ts, job.body)
     try:
         resp = await client.post(
-            row.url, content=row.body.encode("utf-8"), headers=headers)
+            job.url, content=job.body.encode("utf-8"), headers=headers)
     except Exception as e:  # noqa: BLE001 — 网络/超时一律走退避
         return False, repr(e)[:500]
     if 200 <= resp.status_code < 300:
@@ -278,14 +272,29 @@ async def _send_one(
     return False, f"HTTP {resp.status_code}"
 
 
-async def delivery_once(db_factory: Any = None) -> int:
-    """领一批到期的 pending 行发送(FOR UPDATE SKIP LOCKED)。
+@dataclass(frozen=True)
+class _Job:
+    """领取后脱离会话的投递快照(发送阶段不持有 ORM 对象/事务)。"""
 
-    返回本拍处理的行数(0 = 无到期行)。崩溃窗口:发送中进程退出 →
-    事务回滚 → 行仍 pending,下拍重发(at-least-once,接收方以
-    ``X-Gimbal-Delivery`` 去重)。投递结果不影响执行判定。"""
-    from ..core import db as db_module
-    factory = db_factory or db_module.SessionLocal
+    id: int
+    alias_name: str
+    event_type: str
+    url: str
+    body: str
+
+
+def _delivery_lease_seconds() -> int:
+    """投递租约:领取时把 next_retry_at 后推这么久(S2)。
+
+    进程在发送中退出 → 行仍 pending,租约到期后被重新领取
+    (at-least-once;接收方以 X-Gimbal-Delivery 去重)。
+    """
+    return int(settings.WEBHOOK_TIMEOUT_SECONDS) + 30
+
+
+async def _claim(factory) -> "list[_Job]":
+    """第一段:短事务领取(S2)。只锁行、推进投递租约、提交 —— 不发送,
+    不长事务(此前整个发送过程持行锁,一个慢接收端拖住整批)。"""
     now = _now()
     async with factory() as session:
         rows = (await session.execute(
@@ -297,27 +306,93 @@ async def delivery_once(db_factory: Any = None) -> int:
             .order_by(WebhookDelivery.id).limit(_BATCH)
             .with_for_update(skip_locked=True))).scalars().all()
         if not rows:
-            return 0
-        secrets: dict = {}
-        async with httpx.AsyncClient(
-                timeout=settings.WEBHOOK_TIMEOUT_SECONDS,
-                follow_redirects=False) as client:
-            for row in rows:
-                ok, err = await _send_one(client, session, row, secrets)
-                row.attempts += 1
-                if ok:
-                    row.status = "delivered"
-                    row.delivered_at = _now()
-                    row.last_error = None
-                elif row.attempts >= settings.WEBHOOK_MAX_ATTEMPTS:
-                    row.status = "failed"
-                    row.last_error = err
-                else:
-                    row.next_retry_at = _now() + timedelta(
-                        seconds=backoff_seconds(row.attempts))
-                    row.last_error = err
+            return []
+        lease_until = now + timedelta(seconds=_delivery_lease_seconds())
+        jobs = [
+            _Job(id=r.id, alias_name=r.alias_name,
+                 event_type=r.event_type, url=r.url, body=r.body)
+            for r in rows
+        ]
+        for r in rows:
+            r.next_retry_at = lease_until
         await session.commit()
-        return len(rows)
+        return jobs
+
+
+async def _load_secrets(factory, aliases: "set[str]") -> dict:
+    """签名密钥按别名现取(Fernet 解密),发送阶段不再开查询事务。"""
+    if not aliases:
+        return {}
+    async with factory() as session:
+        rows = (await session.execute(
+            select(ServiceAlias).where(
+                ServiceAlias.alias_name.in_(aliases)))).scalars().all()
+        out: dict = {}
+        for a in rows:
+            if not a.callback_secret:
+                continue
+            try:
+                out[a.alias_name] = fernet_decrypt(a.callback_secret)
+            except ValueError:
+                logger.warning(
+                    "webhook_outbox: alias {} 回调密钥不可解密"
+                    "(FERNET_KEY 轮换?),本批投递不带签名", a.alias_name)
+        return out
+
+
+async def _writeback(factory, job: _Job, ok: bool,
+                     err: "str | None") -> None:
+    """第三段:每行独立短事务回写结果(S2)。"""
+    async with factory() as session:
+        row = await session.get(WebhookDelivery, job.id)
+        if row is None:            # 保留期/人工删除了行
+            return
+        row.attempts += 1
+        if ok:
+            row.status = "delivered"
+            row.delivered_at = _now()
+            row.next_retry_at = None
+            row.last_error = None
+        elif row.attempts >= settings.WEBHOOK_MAX_ATTEMPTS:
+            row.status = "failed"
+            row.next_retry_at = None
+            row.last_error = err
+        else:
+            row.next_retry_at = _now() + timedelta(
+                seconds=backoff_seconds(row.attempts))
+            row.last_error = err
+        await session.commit()
+
+
+async def delivery_once(db_factory: Any = None) -> int:
+    """投递一拍:领取(短事务)→ 并发发送(无事务)→ 逐行回写(S2)。
+
+    返回本拍处理的行数(0 = 无到期行)。并发:全局上限
+    ``WEBHOOK_CONCURRENCY``,同一别名**组内串行**(按 id 序)—— 一个
+    慢接收端只拖住自己的序列,不占用其他别名的并发位。
+    """
+    from ..core import db as db_module
+    factory = db_factory or db_module.SessionLocal
+    jobs = await _claim(factory)
+    if not jobs:
+        return 0
+    secrets = await _load_secrets(factory, {j.alias_name for j in jobs})
+    groups: dict[str, "list[_Job]"] = {}
+    for j in jobs:          # 领取已按 id 升序;分组保持组内序
+        groups.setdefault(j.alias_name, []).append(j)
+    sem = asyncio.Semaphore(max(1, int(settings.WEBHOOK_CONCURRENCY)))
+
+    async with httpx.AsyncClient(
+            timeout=settings.WEBHOOK_TIMEOUT_SECONDS,
+            follow_redirects=False) as client:
+        async def _run_group(group: "list[_Job]") -> None:
+            async with sem:
+                for job in group:
+                    ok, err = await _send_one(client, job, secrets)
+                    await _writeback(factory, job, ok, err)
+
+        await asyncio.gather(*(_run_group(g) for g in groups.values()))
+    return len(jobs)
 
 
 async def cleanup_retention(db_factory: Any = None) -> "tuple[int, int]":

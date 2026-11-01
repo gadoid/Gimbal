@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     # 失败退避序列(秒,逗号分隔;尝试 n 失败后退 backoff[min(n-1, len-1)])
     WEBHOOK_BACKOFF_SECONDS: str = "30,120,480,1800"
     WEBHOOK_TIMEOUT_SECONDS: float = 10.0
+    # 并发投递上限(S2):同时发送的别名组数;同一别名组内仍串行(按 id),
+    # 一个慢接收端只拖住自己的序列。领取时把 next_retry_at 后推
+    # WEBHOOK_TIMEOUT_SECONDS+30 = 投递租约(进程退出后到期重领)。
+    WEBHOOK_CONCURRENCY: int = 5
     # 投递行保留期(天):delivered 30 / failed 180;挂到 retention-maintenance
     WEBHOOK_RETENTION_DELIVERED_DAYS: int = 30
     WEBHOOK_RETENTION_FAILED_DAYS: int = 180

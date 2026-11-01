@@ -1343,33 +1343,49 @@ async def _recover_stuck(db) -> int:
     归一后租约超时与普通超时同口径:fail_streak 累计、达阈值自动
     暂停、streak 通知照发。模板已删的实例维持直接回 idle(模板不在
     即无运行结果语义,_finish 也无处落)。
+
+    S3(修复方案 §6):两段式 —— 传入会话只查到期行的 ``(id,
+    running_since)`` 标量(不持 ORM 对象),逐行开**独立会话**收口。
+    同行内 ``_lease_alive`` 的行锁已在单个事务内;此前一批共用会话时,
+    某行收口中途 rollback(``_lease_alive`` 不命中 / 写库异常)会把
+    同批其他行的改动一起回滚。单行异常只记 warning,不影响其余行。
     """
     cutoff = _now() - timedelta(seconds=RUN_LEASE_SECONDS)
     rows = (await db.execute(
-        select(IntegrationTask).where(
+        select(IntegrationTask.id, IntegrationTask.running_since).where(
             IntegrationTask.template_id.is_not(None),
             IntegrationTask.state == "running",
             IntegrationTask.running_since.is_not(None),
             IntegrationTask.running_since < cutoff,
-        ).limit(20))).scalars().all()
+        ).limit(20))).all()
     n = 0
-    for r in rows:
-        tpl = await db.get(IntegrationTask, r.template_id)
-        if tpl is None or tpl.removed_at is not None:
-            r.state = "idle"
-            r.running_since = None
-            r.run_status = "timeout"   # 租约超时是真实的「超时」面
-            r.last_error = "运行租约超时,调度器回收(模板已删)"
-            continue
-        # P0-3.1:以读到的 running_since 为令牌 —— 回收与迟到结果经
-        # _finish 的行锁判定互斥;读取与收口之间若真跑完(state≠
-        # running),本次回收被丢弃,不覆写真实结果
-        res = await _finish(db, r, tpl, "timeout", "运行租约超时,调度器回收",
-                            lease=r.running_since)
-        if res.get("status") != "discarded":
-            n += 1
-    if rows:
-        await db.commit()
+    for inst_id, running_since in rows:
+        try:
+            async with db_module.SessionLocal() as row_db:
+                r = await row_db.get(IntegrationTask, inst_id)
+                if r is None:
+                    continue
+                tpl = await row_db.get(IntegrationTask, r.template_id)
+                if tpl is None or tpl.removed_at is not None:
+                    r.state = "idle"
+                    r.running_since = None
+                    r.run_status = "timeout"   # 租约超时是真实的「超时」面
+                    r.last_error = "运行租约超时,调度器回收(模板已删)"
+                    await row_db.commit()
+                    n += 1
+                    continue
+                # P0-3.1:以读到的 running_since 为令牌 —— 回收与迟到
+                # 结果经 _finish 的行锁判定互斥;读取与收口之间若真跑完
+                # (state≠running),本次回收被丢弃,不覆写真实结果
+                res = await _finish(
+                    row_db, r, tpl, "timeout", "运行租约超时,调度器回收",
+                    lease=running_since)
+                if res.get("status") != "discarded":
+                    n += 1
+        except Exception as e:  # noqa: BLE001 — 单行失败不波及同批
+            logger.warning(
+                "integration: stuck recovery for instance {} failed: {}",
+                inst_id, e)
     return n
 
 

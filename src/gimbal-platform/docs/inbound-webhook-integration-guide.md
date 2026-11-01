@@ -35,12 +35,52 @@
 | 请求 | 执行身份(identityMode) | 凭证池 | 权限 |
 | --- | --- | --- | --- |
 | 入站凭证 + grant | personal(grant 签发人) | 签发人的认证管理池 | 以签发人身份走既有属主闸 |
-| 入站凭证,无 grant | platform(`__platform__` 系统用户) | 平台凭证池 | **只读闸**:执行区间每一步必须是 GET/HEAD/OPTIONS 或 plate 标记 `query_safe`;否则 403 |
+| 入站凭证,无 grant | platform(`__platform__` 系统用户) | 平台凭证池 | **只读闸** + **场景范围**:见下 |
+
+平台模式的**场景范围**(修复方案 M2):只能执行
+
+- **公共场景**(任何属主);或
+- **调用方别名属主自己的场景**。
+
+他人私有场景 403 `platform_scope_denied`;团队共享别名(无属主)只能用
+公共场景。分享引用**不**延伸到平台身份。范围在每次执行前与每个集成
+实例运行前重新检查 —— 场景转为私有后,已注册的平台任务在下一次运行
+时以 `paused_reason=scope_denied` 暂停并发 `integration.paused` 回调;
+场景重新公开或改由别名属主持有后,在卡片上「启动」恢复。
 
 平台模式不做场景属主闸(只读查询视为安全);但**编排执行(graph)
-本期限定个人模式**,平台模式 403。
+本期限定个人模式**,平台模式整体拒绝。平台模式执行区间每一步必须是
+GET/HEAD/OPTIONS 或 plate 标记 `query_safe`,否则 403 `not_read_only`。
+
+管理权:入站调用只能修改**由自己别名注册**的集成任务(否则 404,不
+泄露存在性);JWT 用户维持既有的属主/admin 管理权。
 
 ## 3. 调用入口
+
+### 3.0 入站调用不携带配方(修复方案 M1)
+
+入站调用方只能**选择**平台上已有的配方,**不能携带**配方 —— 服务
+地址、凭证别名、数据集、注入条目一律由服务端按运行方案读取(方案由
+场景属主在平台维护,是可信来源)。
+
+`POST /api/runs` 的可传字段白名单:
+
+| 字段 | 说明 |
+| --- | --- |
+| `scenarioId` | 必填,目标场景 |
+| `schemeId` | 可选;指定方案,必须属于该场景(否则 422 `scheme_not_owned`);缺省用默认方案 |
+| `runOptions.step_to` | 可选;只执行到第 N 步(截断,无地址/凭证语义) |
+| `clientRef` | 可选,回调原样带回 |
+| `callbackPath` | 可选,回调路径覆盖 |
+
+出现以下任一非空字段 → 422 `inbound_field_not_allowed`(列出字段名):
+`serviceBindings`、`dataSetIds`、`dataSetSelection`、`injectionEntryIds`、
+`graph`,以及 `runOptions` 内除 `step_to` 外的任何键(`n_runs`、
+`parallel`、`debug`、`step_from`、`subscribe`)。
+
+**原因**:地址链第①层「显式绑定 url 优先」,调用方带 `serviceBindings.
+url` 即可把被测请求连同注入的凭证改发到任意主机。JWT 前端调用不受
+此限(配方由平台 UI 构造)。
 
 ### 3.1 即时执行:`POST /api/runs`
 
@@ -54,18 +94,16 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
  "callbackPath": "/jobs/done"}        (可选;只允许路径段,含协议/主机即 422)
 ```
 
-响应 `201 {runId, executionId, identityMode}`。`dataSetIds` /
-`serviceBindings` / `runOptions` 等字段与前端同构(见
-`PLATFORM-SCENARIO-COMPOSER-API.md`);临时调用(`steps` 直传)随
-P3 开放。
+响应 `201 {runId, executionId, identityMode}`。配方字段(数据集/绑定/
+执行参数)不接受 —— 见 §3.0;临时调用(`steps` 直传)随 P3 开放。
 
 ### 3.2 定时任务:`POST /api/integration/tasks`
 
 - 入站调用的 `identityMode` **由认证结果锁定**:gic_+ggt_ = personal,
   gic_ 无 grant = platform;请求体传入不同值 → 422(不静默改写身份
   预期)。JWT(前端)用户维持既有自由选择(platform | personal);
-- 个人模式要求场景属主 = grant 签发人;平台模式不做属主闸,但保存
-  与每次实例运行前都会过只读闸;
+- 个人模式要求场景属主 = grant 签发人;平台模式不做属主闸,但受
+  §2 的场景范围 + 只读闸约束(保存与每次实例运行前各查一次);
 - 模板行记录调用方台账(`caller_alias_name` / `grant_id` /
   `clientRef` / `callback_path_override`);PATCH 可改 clientRef /
   callbackPath,caller 身份注册时定死。
@@ -91,7 +129,7 @@ P3 开放。
 | --- | --- |
 | `execution.finished` | 执行终态(含 canceled —— 用户取消/启动前取消/对账遇取消 job 三条路径都发) |
 | `integration.run_finished` | 集成实例一次运行收口 |
-| `integration.paused` | 集成实例暂停(reason ∈ missing_credential / auth_failed / fail_streak / template_changed / made_private / grant_revoked) |
+| `integration.paused` | 集成实例暂停(reason ∈ missing_credential / auth_failed / fail_streak / template_changed / made_private / grant_revoked / scope_denied) |
 
 JWT(前端)发起的执行没有 caller,不回调。**公共模板只有注册方自己
 的实例回调**;订阅者实例按自身身份运行,不向原注册方回调(D12)。
@@ -138,7 +176,8 @@ def verify(secret: str, ts: str, sig_v1: str, body: bytes) -> bool:
  "kind": "scenario", "scenarioId": "sc-settle-query", "release": "settle@2026.10#3",
  "identityMode": "personal", "status": "done",
  "total": 1, "passed": 1, "failed": 0, "skipped": 0,
- "startedAt": "…", "finishedAt": "…",
+ "startedAt": "2026-11-01T14:06:27.735108Z",
+ "finishedAt": "2026-11-01T14:06:29.402115Z",
  "failureDigest": null,
  "outputs": {"status": "SETTLED", "amount": "1200.00"}}
 ```
@@ -146,6 +185,8 @@ def verify(secret: str, ts: str, sig_v1: str, body: bytes) -> bool:
 - `outputs` 只对**单 case 执行**(总行数 1)携带,经脱敏(敏感键
   表打码,游标键 nextToken/pageToken 豁免);多行执行为 `null`,
   明细走轮询;
+- **时间字段一律 UTC、`Z` 结尾**(如 `2026-11-01T14:06:27.735108Z`),
+  可直接 `datetime.fromisoformat` 解析;不带 `+00:00` 偏移;
 - `failureDigest` 为失败执行的两行式根因摘要(已脱敏);
 - `integration.run_finished` / `integration.paused` 形状见设计文档
   §5.4。
@@ -164,3 +205,7 @@ P3 之前不提供事件流/步骤明细回调,明细走轮询。
 `integration.paused` 回调;重新签发后在集成详情「启动」恢复。
 个人模式缺凭证:即时执行在步骤级报错,集成任务暂停并回调
 `integration.paused`(reason=missing_credential)。
+
+用户被**停用**时其名下 grant 全部撤销(并写审计);重新启用**不**恢复
+grant,需要本人重新签发。认证时另查签发人活跃度作为兜底 —— 未撤销但
+签发人已停用的 grant 同样拒绝(`grant_user_inactive`)。
