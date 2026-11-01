@@ -85,6 +85,15 @@ async def _mk_grant(alias: str, user_id: int, *,
     return token
 
 
+async def _own_alias(alias: str, username: str) -> None:
+    """把别名属主设为该用户(M2:平台模式允许别名属主自己的私有场景)。"""
+    uid = await _user_id(username)
+    async with db_module.SessionLocal() as s:
+        row = await s.get(ServiceAlias, alias)
+        row.owner_user_id = uid
+        await s.commit()
+
+
 async def _user_id(username: str) -> int:
     async with db_module.SessionLocal() as s:
         return (await s.execute(
@@ -351,6 +360,7 @@ class TestRunEntry:
         await _seed_alias()
         token = await _mk_credential()
         h = await _register(client, "p1_owner")
+        await _own_alias("agent-sys", "p1_owner")   # 过 M2 范围闸
         await client.post("/api/scenarios", headers=h, json=_draft(
             "sc-p1-ro", steps=[POST_STEP]))
         # 写步骤 → 403(只读闸,D6)
@@ -389,7 +399,9 @@ class TestRunEntry:
             owner = await s.get(User, ex.owner_id)
             assert owner.is_system
 
-    async def test_platform_mode_graph_rejected(self, client):
+    async def test_inbound_graph_rejected_before_platform_gate(self, client):
+        """入站 graph 由 M1 先拒(422 配方白名单);平台模式的 403
+        graph_not_supported_for_platform 退为纵深防御(不可达)。"""
         await _seed_platform_user()
         await _seed_alias()
         token = await _mk_credential()
@@ -400,8 +412,9 @@ class TestRunEntry:
             "scenarioId": "sc-p1-g",
             "graph": {"units": [
                 {"ref": "u1", "scenarioId": "sc-p1-g"}]}})
-        assert r.status_code == 403
-        assert "graph_not_supported_for_platform" in r.text
+        assert r.status_code == 422
+        assert "inbound_field_not_allowed" in r.text
+        assert "graph" in r.json()["detail"]["fields"]
 
     async def test_callback_path_with_scheme_422(self, client):
         await _seed_platform_user()
@@ -422,6 +435,7 @@ class TestIntegrationEntry:
         await _seed_platform_user()
         await _seed_alias()
         h = await _register(client, "p1_reg")
+        await _own_alias("agent-sys", "p1_reg")     # 过 M2 范围闸
         await client.post("/api/scenarios", headers=h, json=_draft(
             "sc-p1-int", steps=[GET_STEP]))
         # JWT 注册:维持既有自由选择(platform 缺省可建)—— Principal
@@ -478,6 +492,7 @@ class TestIntegrationEntry:
         await _seed_platform_user()
         await _seed_alias()
         h = await _register(client, "p1_reg3")
+        await _own_alias("agent-sys", "p1_reg3")    # 过 M2 范围闸
         await client.post("/api/scenarios", headers=h, json=_draft(
             "sc-p1-int3", steps=[GET_STEP]))
         token = await _mk_credential()

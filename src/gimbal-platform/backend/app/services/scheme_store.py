@@ -137,6 +137,37 @@ async def get_row(
     return row
 
 
+async def resolve_for_run(
+    db: AsyncSession, scenario_id: str, scheme_id: str | None,
+) -> ComposerRunScheme | None:
+    """执行时的方案选择(唯一实现,集成链与入站调用共用)。
+
+    指定 → **必须属于本场景**(跨场景/不存在视为未指定,回落默认 ——
+    与集成链既有口径一致);未指定 → 默认方案;无默认 → 首个;场景
+    无方案 → None(空配方执行)。
+
+    入站调用的「指定方案跨场景」在路由层先拦成 422(`scheme_not_owned`
+    —— 调用方显式给了错的 id,静默回退默认会让它跑错配方);本函数
+    的回落语义服务于「模板上存了一个已删除的方案 id」这类存量场景。
+    """
+    scheme = None
+    if scheme_id:
+        scheme = (await db.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == scheme_id,
+            ComposerRunScheme.scenario_id == scenario_id,
+        ))).scalar()
+    if scheme is None:
+        row = (await db.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == scenario_id,
+            ComposerRunScheme.is_default == True,  # noqa: E712
+        ))).scalar()
+        scheme = row or (await db.execute(
+            select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == scenario_id)
+        )).scalars().first()
+    return scheme
+
+
 async def update_scheme(
     db: AsyncSession, scenario_id: str, scheme_id: str, *,
     name: str | None, payload: dict | None,

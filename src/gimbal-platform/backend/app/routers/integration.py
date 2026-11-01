@@ -272,10 +272,18 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
     if principal.identity_mode != "platform" \
             and scen.owner_id != user.id:
-        # §4.3:个人模式(含 JWT/grant 用户)要求场景属主;平台模式不做
-        # 属主闸(执行 owner 是系统用户,场景属主对它无意义)—— 安全
-        # 边界由只读闸承担(下方 + 每次实例运行前再查)。
+        # §4.3:个人模式(含 JWT/grant 用户)要求场景属主。
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
+    if principal.inbound and principal.identity_mode == "platform":
+        # M2(修复方案 §2.1):平台模式场景范围 —— 公共场景,或别名
+        # 属主自己的场景;团队共享别名只能用公共场景。JWT 建的平台
+        # 任务不走本闸(它们仍受只读闸约束,且由真人属主管理)。
+        from ..services.inbound_identity import platform_scope_ok
+        if not platform_scope_ok(scen, principal.caller_alias_owner_id):
+            raise _bad(
+                "platform_scope_denied",
+                "平台模式只能使用公共场景,或经由别名属主自己的场景",
+                403)
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
     # 场景限定)。此前 schemeId 直接入库 + runner 全局取方案,枚举
     # rs-NNN 可跨场景引用他人方案/数据集。
@@ -355,7 +363,13 @@ async def patch_task(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or tpl.removed_at is not None:
         raise _bad("not_found", "功能不存在", 404)
-    if not _can_manage(user, tpl):
+    if principal.inbound:
+        # M2(修复方案 §2.2):入站调用的管理权按**调用方别名**判定 ——
+        # 只能改自己别名注册的任务;不满足 → 404(不泄露存在性)。
+        # _can_manage 对系统用户恒为真,不能用于入站面。
+        if tpl.caller_alias_name != principal.caller_alias:
+            raise _bad("not_found", "功能不存在", 404)
+    elif not _can_manage(user, tpl):
         raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能修改", 403)
     if body.triggerCron is not None:
         try:

@@ -49,6 +49,8 @@ export const INTEGRATION_PAUSE_LABELS: Record<string, string> = {
   missing_credential: '缺少凭证',
   template_changed: '内容已变更待确认',
   made_private: '已转私有待确认',
+  grant_revoked: '授权已失效(需重新签发)',
+  scope_denied: '无权使用该场景',
 }
 
 /** 服务端事件 → 展示行(文案与深链是前端职责,数据面不再拼装)。 */

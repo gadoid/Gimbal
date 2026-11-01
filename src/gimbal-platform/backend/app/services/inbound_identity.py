@@ -53,6 +53,8 @@ class Principal:
     JWT:identity_mode=personal、caller_alias=None(前端发起,不回调);
     入站 + grant:personal(grant 签发人 = 执行 owner);
     入站无 grant:platform(``__platform__`` 系统用户 = 执行 owner)。
+    ``caller_alias_owner_id`` = 调用方别名属主(团队共享别名恒 None),
+    平台模式场景范围判定用(M2)。
     """
 
     user: User
@@ -61,6 +63,20 @@ class Principal:
     inbound: bool = False
     credential_id: int | None = None
     grant_id: int | None = None
+    caller_alias_owner_id: int | None = None
+
+
+def platform_scope_ok(scen, alias_owner_user_id: int | None) -> bool:
+    """平台模式的场景范围(M2 修复方案 §2.1,拍板 A)。
+
+    允许:公共场景;或场景属主 = 调用方别名属主(owner_user_id 非空
+    且匹配)。**不看分享引用** —— 引用授权给人,不延伸到平台身份;
+    团队共享别名(owner 为空)只能用公共场景。
+    """
+    if (getattr(scen, "visibility", None) or "private") == "public":
+        return True
+    return (alias_owner_user_id is not None
+            and getattr(scen, "owner_id", None) == alias_owner_user_id)
 
 
 def generate_credential_token() -> str:
@@ -146,7 +162,8 @@ async def resolve_inbound_principal(
     return Principal(
         user=user, identity_mode=identity_mode,
         caller_alias=cred.alias_name, inbound=True,
-        credential_id=cred.id, grant_id=grant.id if grant else None)
+        credential_id=cred.id, grant_id=grant.id if grant else None,
+        caller_alias_owner_id=alias.owner_user_id)
 
 
 async def grant_still_valid(

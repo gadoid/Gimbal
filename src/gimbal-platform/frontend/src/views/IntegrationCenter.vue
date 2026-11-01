@@ -282,6 +282,8 @@ function runText(t: IntegrationTaskItem): string {
     if (i.pausedReason === 'missing_credential') return '缺凭证'
     if (i.pausedReason === 'template_changed') return '内容已变更·待确认'
     if (i.pausedReason === 'made_private') return '已转私有·待确认'
+    if (i.pausedReason === 'grant_revoked') return '授权已失效'
+    if (i.pausedReason === 'scope_denied') return '无权使用该场景'
     if (i.pausedReason === 'manual') return '已暂停(本人)'
     if (i.pausedReason === 'fail_streak')
       return `连续失败暂停(${i.failStreak ?? '多'} 次)`

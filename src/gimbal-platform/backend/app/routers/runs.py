@@ -36,7 +36,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import principal_or_user
-from ..schemas.scenario_composer import RunRequest, RunResponse
+from ..schemas.scenario_composer import (
+    DataSetSelection, RunOptions, RunRequest, RunResponse, ServiceBinding,
+)
 from ..services import run_dispatcher, scenario_store
 from ..services.inbound_identity import Principal, valid_callback_path
 
@@ -46,6 +48,110 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
+
+
+# M1(修复方案 2026-11-01 §1):入站调用**只能选择平台上已有的配方,
+# 不能携带配方** —— 服务地址/凭证别名/数据集/注入条目一律由服务端按
+# 运行方案读取(方案由场景属主在平台维护,是可信来源)。否则
+# serviceBindings.url 可以改写被测地址、把注入的凭证发到任意主机
+# (实测 201 且绑定原样到达 fanout)。
+_INBOUND_FORBIDDEN_FIELDS = (
+    ("service_bindings", "serviceBindings"),
+    ("data_set_ids", "dataSetIds"),
+    ("data_set_selection", "dataSetSelection"),
+    ("injection_entry_ids", "injectionEntryIds"),
+)
+# runOptions 只开放 stepTo(截断执行,无地址/凭证语义);其余键任何
+# 非缺省值都拒 —— 尤其 nRuns/parallel(资源面)与 debug(强制 server 链)。
+_INBOUND_OPTIONS_DENIED = (
+    ("debug", "runOptions.debug"),
+    ("step_from", "runOptions.stepFrom"),
+    ("subscribe", "runOptions.subscribe"),
+)
+
+
+def _reject_inbound_recipe(body: RunRequest) -> None:
+    offenders: list[str] = [
+        label for attr, label in _INBOUND_FORBIDDEN_FIELDS
+        if getattr(body, attr)
+    ]
+    if body.graph is not None:
+        offenders.append("graph")
+    opts = body.run_options
+    if opts is not None:
+        offenders.extend(
+            label for attr, label in _INBOUND_OPTIONS_DENIED
+            if getattr(opts, attr) is not None)
+        if int(opts.n_runs or 1) != 1:
+            offenders.append("runOptions.nRuns")
+        if int(opts.parallel or 1) != 1:
+            offenders.append("runOptions.parallel")
+    if offenders:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "inbound_field_not_allowed",
+                "message": ("入站调用不能携带执行配方,以下字段由服务端按"
+                            "运行方案读取: " + "、".join(offenders)),
+                "fields": offenders,
+            })
+
+
+async def _apply_scheme_recipe(
+    db: AsyncSession, scen, body: RunRequest,
+) -> None:
+    """M1:按方案覆盖请求配方(入站分支专用,见模块注释)。
+
+    - ``schemeId`` 显式给出:必须属于本场景,否则 422 ``scheme_not_owned``
+      (调用方给了错的 id 就明确拒绝 —— 静默回落默认方案会跑错配方);
+    - 未给:默认方案(``scheme_store.resolve_for_run`` 同一实现,与集成
+      链的选择段不漂移),无方案 = 空配方(基线执行口径);
+    - 覆盖 serviceBindings / dataSetIds / dataSetSelection /
+      injectionEntryIds,runOptions 以方案 options 为底、仅用请求的
+      ``stepTo`` 覆盖;``schemeId`` / ``schemeName`` 写方案真值(溯源)。
+    """
+    from ..services import scheme_store
+
+    scheme = None
+    if body.scheme_id:
+        try:
+            scheme = await scheme_store.get_row(
+                db, scen.scenario_id, body.scheme_id)
+        except KeyError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "scheme_not_owned",
+                    "message": f"执行方案不存在或不属于该场景: {body.scheme_id}",
+                }) from None
+    else:
+        scheme = await scheme_store.resolve_for_run(
+            db, scen.scenario_id, None)
+    payload = (scheme.payload if scheme is not None else {}) or {}
+    body.service_bindings = {
+        k: ServiceBinding(**v)
+        for k, v in (payload.get("serviceBindings") or {}).items()
+        if isinstance(v, dict)
+    }
+    body.data_set_ids = [str(x) for x in (payload.get("dataSetIds") or [])]
+    body.data_set_selection = [
+        DataSetSelection(**s)
+        for s in (payload.get("dataSetSelection") or [])
+        if isinstance(s, dict)
+    ]
+    body.injection_entry_ids = [
+        str(x) for x in (payload.get("injectionEntryIds") or [])]
+    opts = {
+        k: v for k, v in (payload.get("options") or {}).items()
+        if k in RunOptions.model_fields
+    }
+    requested_step_to = (body.run_options.step_to
+                         if body.run_options is not None else None)
+    if requested_step_to is not None:
+        opts["step_to"] = requested_step_to
+    body.run_options = RunOptions(**opts) if opts else None
+    body.scheme_id = scheme.scheme_id if scheme is not None else None
+    body.scheme_name = scheme.name if scheme is not None else None
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -63,6 +169,9 @@ async def post_run(
                 "code": "callback_path_invalid",
                 "message": "callbackPath 必须是以 / 开头的路径段(不含协议与主机)",
             })
+    if principal.inbound:
+        # M1:先拒「携带配方」(不依赖场景/方案,尽早失败)
+        _reject_inbound_recipe(body)
     # Access check (mirrors V1 executions create / composer ownership):
     # dispatching a run has real side effects (subprocesses hitting the
     # bound services), so it must not be open to every member —
@@ -75,11 +184,32 @@ async def post_run(
             raise run_dispatcher.NotFound(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
+        if principal.inbound:
+            # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
+            await _apply_scheme_recipe(db, scen, body)
         if principal.identity_mode == "platform":
+            # M2(修复方案 §2.1,拍板 A):平台模式的场景范围 —— 公共
+            # 场景,或别名属主自己的场景;他人私有场景 403(此前平台
+            # 模式可跑任何人的私有场景)。团队共享别名(owner 为空)只
+            # 能用公共场景。只看属主与可见性,不看分享引用(引用授权
+            # 给人,不延伸到平台身份)。
+            from ..models.service_alias import ServiceAlias
+            from ..services.inbound_identity import platform_scope_ok
+            alias = await db.get(ServiceAlias, principal.caller_alias)
+            if not platform_scope_ok(
+                    scen, alias.owner_user_id if alias is not None else None):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "platform_scope_denied",
+                        "message": ("平台模式只能执行公共场景,或经由别名"
+                                    "属主自己的场景;该场景不在允许范围"),
+                    })
             # 平台模式(D6):无属主闸,凭证取 __platform__ 池 —— 前提是
             # 执行区间只读(is_scenario_read_only,与集成链同一实现)。
             # graph 编排本期限定 JWT/个人模式:多单元逐个过只读闸的
-            # 覆盖面本链未接,先整体拒绝(fail-closed,§4.3)。
+            # 覆盖面本链未接,先整体拒绝(fail-closed,§4.3;入站 graph
+            # 通常已被 M1 的 422 先拒,此处是纵深防御)。
             if body.graph is not None:
                 raise HTTPException(
                     status_code=403,

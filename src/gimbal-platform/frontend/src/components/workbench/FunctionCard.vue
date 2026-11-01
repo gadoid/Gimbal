@@ -222,6 +222,8 @@ const badge = computed(() => {
     if (d.pausedReason === 'missing_credential') return '缺凭证'
     if (d.pausedReason === 'template_changed') return '内容已变更'
     if (d.pausedReason === 'made_private') return '已转私有'
+    if (d.pausedReason === 'grant_revoked') return '授权已失效'
+    if (d.pausedReason === 'scope_denied') return '无权用该场景'
     if (d.pausedReason === 'manual') return '已暂停'
     if (d.pausedReason === 'fail_streak') return '连续失败暂停'
     return '已暂停'

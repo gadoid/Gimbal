@@ -497,23 +497,15 @@ async def _load_exec_shape(
     """执行形态装载(W0a 抽出,run_instance 与订阅面单一实现):
     场景限定的方案(S0①;跨场景/已删 scheme_id → 本场景默认回退)、
     方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。
-    W1 起 scheme_id 直传(创建前置预览无模板行)。"""
+    W1 起 scheme_id 直传(创建前置预览无模板行)。
+
+    方案选择段改调 :func:`scheme_store.resolve_for_run`(M1 归一:入站
+    调用取方案走同一实现,不再留两份) —— 回落语义(跨场景/已删 →
+    默认 → 首个 → None)由它承载。"""
     from .run_prepare import find_dataset_by_id
-    scheme = None
-    if scheme_id:
-        scheme = (await db.execute(select(ComposerRunScheme).where(
-            ComposerRunScheme.scheme_id == scheme_id,
-            ComposerRunScheme.scenario_id == scen.scenario_id,
-        ))).scalar()
-    if scheme is None:
-        row = (await db.execute(select(ComposerRunScheme).where(
-            ComposerRunScheme.scenario_id == scen.scenario_id,
-            ComposerRunScheme.is_default == True,  # noqa: E712
-        ))).scalar()
-        scheme = row or (await db.execute(
-            select(ComposerRunScheme).where(
-                ComposerRunScheme.scenario_id == scen.scenario_id)
-        )).scalars().first()
+    from .scheme_store import resolve_for_run
+
+    scheme = await resolve_for_run(db, scen.scenario_id, scheme_id)
     scheme_payload = (scheme.payload if scheme else {}) or {}
     bindings = dict(scheme_payload.get("serviceBindings") or {})
     # P1 取一行:首个选中数据集的首行;未选 = 裸基线
@@ -898,6 +890,22 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         f"grant 已失效({grant_why}),执行已暂停;"
                         "请让签发人重新签发后重启任务",
                         pause_reason="grant_revoked", lease=lease)
+
+            # M2(修复方案 §2.1):入站注册的平台模式任务每次运行前重查
+            # 场景范围 —— 场景可能被转为私有、别名属主可能变更。JWT
+            # 建的平台任务(caller 为空)不受影响。
+            if (tpl.identity_mode == "platform"
+                    and tpl.caller_alias_name):
+                from ..models.service_alias import ServiceAlias as _SA
+                from .inbound_identity import platform_scope_ok
+                _alias = await db.get(_SA, tpl.caller_alias_name)
+                if not platform_scope_ok(
+                        scen, _alias.owner_user_id if _alias else None):
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        "平台模式无权使用该场景(仅公共场景或别名属主"
+                        "自己的场景);请将场景公开或改用别名属主的场景",
+                        pause_reason="scope_denied", lease=lease)
 
             # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
             # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
