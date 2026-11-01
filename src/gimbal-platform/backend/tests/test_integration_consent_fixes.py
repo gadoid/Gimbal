@@ -367,6 +367,36 @@ async def test_integration_passes_carry_context_to_materialize(
     assert captured["carry_context"] is None
 
 
+async def test_prepare_infra_failure_finishes_channel(
+        client, plate_mock, monkeypatch):
+    """执行前段基础设施兜底(评审 2026-11-01):prepare_exec 的非凭证
+    异常(数据库抖动等)此前只两种凭证异常被捕获,其余被 _spawn 吞成
+    warning,实例卡 running 到租约回收(≈15 分钟黑盒)—— 现统一
+    channel 收口,当轮 idle、last_error 带原因。"""
+    from app.services import run_prepare as rp
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(rp, "prepare_exec", _boom)
+    plate_mock.fulls.update(FULLS)
+    u1 = await register_and_login(client, "cfx_b", "pw123456")
+    await _mk_scenario(client, u1, "sc-cfy", {"jira": "1.0#1"})
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-cfy"))).json()["id"]
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    async with db_module.SessionLocal() as db:
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id.is_not(None)))).scalar()
+    assert inst.state == "idle"            # 不再卡 running 等租约回收
+    assert inst.run_status == "channel"
+    assert "执行准备失败" in (inst.last_error or "")
+    assert "db down" in (inst.last_error or "")
+
+
 async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     """P2.3:转私有后,运行中回 idle 再被调度/凭证复活拉回的两条漏网
     路径由执行闸兜住 → paused/made_private(联动暂停 = 提前通知)。"""

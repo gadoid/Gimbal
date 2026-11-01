@@ -780,107 +780,116 @@ async def run_instance(instance_id: int) -> dict:
         if scen is None:
             raise IntegrationRunError(
                 "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
-        scheme, scheme_payload, bindings, row_dict, _ds_name = \
-            await _load_exec_shape(db, tpl.scheme_id, scen)
+        # 执行前段(形态装载/只读闸/同意闸/prepare_exec)整段兜底:
+        # 非凭证类异常(数据库抖动、装载查询失败、plate 其它故障)裸抛
+        # 会被 _spawn 吞成 warning,实例卡 running 到租约回收(≈15
+        # 分钟),期间用户看不到任何原因 —— 统一 channel 收口,当轮
+        # 可见(评审 2026-11-01;与下方 convert/物化段兜底同一哲学)。
+        try:
+            scheme, scheme_payload, bindings, row_dict, _ds_name = \
+                await _load_exec_shape(db, tpl.scheme_id, scen)
 
-        # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
-        # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。
-        # plate 不可达同样闸失败而非裸抛 —— 裸抛会被 _spawn 吞成
-        # warning,实例卡 running 到租约回收,用户看不到任何原因。
-        if tpl.identity_mode == "platform":
-            try:
-                ok, offenders = await is_scenario_read_only(scen.payload)
-            except plate_client.PlateUnavailableError:
-                return await _finish(
-                    db, inst, tpl, "channel", "只读检查未通过: plate 不可达")
-            if not ok:
-                return await _finish(
-                    db, inst, tpl, "channel",
-                    f"只读检查未通过: {'、'.join(offenders)}")
+            # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
+            # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。
+            # plate 不可达同样闸失败而非裸抛 —— 裸抛会被 _spawn 吞成
+            # warning,实例卡 running 到租约回收,用户看不到任何原因。
+            if tpl.identity_mode == "platform":
+                try:
+                    ok, offenders = await is_scenario_read_only(scen.payload)
+                except plate_client.PlateUnavailableError:
+                    return await _finish(
+                        db, inst, tpl, "channel", "只读检查未通过: plate 不可达")
+                if not ok:
+                    return await _finish(
+                        db, inst, tpl, "channel",
+                        f"只读检查未通过: {'、'.join(offenders)}")
 
-        # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
-        # 不计入入库标准的预览执行不进集成链。external 不受影响
-        # (working_preview 只看锚点系统的钉定状态)。调度路径与手动
-        # 触发路由的双闸之一;手动面在 routers/integration.py 先行 409。
-        from .run_semantics import working_preview
-        if working_preview(scen.payload):
-            return await _finish(
-                db, inst, tpl, "channel",
-                "场景声明 working(预览执行),集成任务拒绝触发:"
-                "请在编排器钉定修订后重试(外部服务不受影响)")
-
-        # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
-        # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
-        # 确认;owner 自有实例不受此闸。指纹的别名地址/凭证默认命中走
-        # 主会话(指纹投影自取):查询失败按失败口径收口(本轮不执行
-        # run=channel —— 不以空集算指纹、不跳过比对)。执行注入面
-        # (地址③层/carry)由下方 prepare_exec 独立构建(失败降级语义)
-        # —— 指纹与执行是两个关注点,失败策略不同(评审 §3.1A 定案;
-        # 此前地址集与物化共用一份,归一后物化改吃 prep.alias_base_urls)。
-        consent_gate = (tpl.identity_mode == "personal"
-                        and inst.holder_id is not None
-                        and inst.holder_id != tpl.owner_id)
-        # P2.3:非 owner 实例只在 public 模板上执行。W0a⑤ 的联动暂停
-        # 只覆盖转私有那一刻 idle 的行 —— 运行中实例跑完回 idle 会被
-        # _claim_due 再认领、missing_credential/auth_failed 暂停的实例
-        # 会被凭证复活钩子拉回调度;两条漏网路径都在这道闸兜死
-        # (联动暂停降级为「提前通知」)。
-        if consent_gate and tpl.visibility != "public":
-            return await _pause_consent_changed(
-                db, inst, tpl,
-                paused_reason="made_private",
-                message="模板已转为私有,执行已暂停;模板重新公开后请"
-                        "重新确认订阅")
-        if consent_gate:
-            try:
-                alias_urls = await _alias_urls_of(db, scen.payload)
-            except Exception as e:  # noqa: BLE001
+            # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
+            # 不计入入库标准的预览执行不进集成链。external 不受影响
+            # (working_preview 只看锚点系统的钉定状态)。调度路径与手动
+            # 触发路由的双闸之一;手动面在 routers/integration.py 先行 409。
+            from .run_semantics import working_preview
+            if working_preview(scen.payload):
                 return await _finish(
                     db, inst, tpl, "channel",
-                    f"服务地址解析失败,本轮未执行: {e}")
-            from .service_aliases import credential_alias_hits
-            hits = await credential_alias_hits(
-                db, definition_from_payload(scen.payload).get("steps") or [],
-                bindings)
-            fp = consent_fingerprint_of(
-                scen.payload, scheme_payload, row_dict,
-                tpl.trigger_cron, alias_urls, alias_creds=hits)
-            if (inst.consent_fingerprint or "") != fp:
+                    "场景声明 working(预览执行),集成任务拒绝触发:"
+                    "请在编排器钉定修订后重试(外部服务不受影响)")
+
+            # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
+            # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
+            # 确认;owner 自有实例不受此闸。指纹的别名地址/凭证默认命中走
+            # 主会话(指纹投影自取):查询失败按失败口径收口(本轮不执行
+            # run=channel —— 不以空集算指纹、不跳过比对)。执行注入面
+            # (地址③层/carry)由下方 prepare_exec 独立构建(失败降级语义)
+            # —— 指纹与执行是两个关注点,失败策略不同(评审 §3.1A 定案;
+            # 此前地址集与物化共用一份,归一后物化改吃 prep.alias_base_urls)。
+            consent_gate = (tpl.identity_mode == "personal"
+                            and inst.holder_id is not None
+                            and inst.holder_id != tpl.owner_id)
+            # P2.3:非 owner 实例只在 public 模板上执行。W0a⑤ 的联动暂停
+            # 只覆盖转私有那一刻 idle 的行 —— 运行中实例跑完回 idle 会被
+            # _claim_due 再认领、missing_credential/auth_failed 暂停的实例
+            # 会被凭证复活钩子拉回调度;两条漏网路径都在这道闸兜死
+            # (联动暂停降级为「提前通知」)。
+            if consent_gate and tpl.visibility != "public":
                 return await _pause_consent_changed(
                     db, inst, tpl,
-                    paused_reason="template_changed",
-                    message="模板内容已变更(场景/方案/数据集/周期/服务"
-                            "地址),请重新确认订阅后恢复执行")
+                    paused_reason="made_private",
+                    message="模板已转为私有,执行已暂停;模板重新公开后请"
+                            "重新确认订阅")
+            if consent_gate:
+                try:
+                    alias_urls = await _alias_urls_of(db, scen.payload)
+                except Exception as e:  # noqa: BLE001
+                    return await _finish(
+                        db, inst, tpl, "channel",
+                        f"服务地址解析失败,本轮未执行: {e}")
+                from .service_aliases import credential_alias_hits
+                hits = await credential_alias_hits(
+                    db, definition_from_payload(scen.payload).get("steps") or [],
+                    bindings)
+                fp = consent_fingerprint_of(
+                    scen.payload, scheme_payload, row_dict,
+                    tpl.trigger_cron, alias_urls, alias_creds=hits)
+                if (inst.consent_fingerprint or "") != fp:
+                    return await _pause_consent_changed(
+                        db, inst, tpl,
+                        paused_reason="template_changed",
+                        message="模板内容已变更(场景/方案/数据集/周期/服务"
+                                "地址),请重新确认订阅后恢复执行")
 
-        holder = (await get_platform_user_id()) \
-            if tpl.identity_mode == "platform" else inst.holder_id
-        # N1 归一(评审 §3.1A):装载准备统一走 run_prepare.prepare_exec
-        # —— 凭证清单(exec_auth_aliases:模板扫描 ∪ 绑定 ∪ 别名默认,
-        # 此前 _auth_aliases_of 仅导清单,解析/严格检查是手写的同逻辑
-        # 拷贝)/strict 解析(清单别名在 holder 名下解不到 → 暂停实例,
-        # 一步不执行)/别名地址(查表失败降级空表)/carry(与 dispatch
-        # 同入口同快照语义,故障降级 None)/内置 users 基座,与单场景
-        # 链同一实现;resolve_mode="none" 的定案理由见 run_prepare 模块
-        # docstring(集成声明域恒为完整钉修订,无 resolve+merge 必要)。
-        _ui_fs = ((scen.payload or {}).get("ui") or {}).get("fieldStates") or {}
-        try:
-            prep = await prepare_exec(
-                db_module.SessionLocal, scen.payload,
-                owner_id=holder or -1, bindings=bindings,
-                ui_field_states=_ui_fs,
-                auth_policy="strict", resolve_mode="none")
-        except MissingAuthAliases as e:
-            # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
-            # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error
-            # 只列缺失别名
+            holder = (await get_platform_user_id()) \
+                if tpl.identity_mode == "platform" else inst.holder_id
+            # N1 归一(评审 §3.1A):装载准备统一走 run_prepare.prepare_exec
+            # —— 凭证清单(exec_auth_aliases:模板扫描 ∪ 绑定 ∪ 别名默认,
+            # 此前 _auth_aliases_of 仅导清单,解析/严格检查是手写的同逻辑
+            # 拷贝)/strict 解析(清单别名在 holder 名下解不到 → 暂停实例,
+            # 一步不执行)/别名地址(查表失败降级空表)/carry(与 dispatch
+            # 同入口同快照语义,故障降级 None)/内置 users 基座,与单场景
+            # 链同一实现;resolve_mode="none" 的定案理由见 run_prepare 模块
+            # docstring(集成声明域恒为完整钉修订,无 resolve+merge 必要)。
+            _ui_fs = ((scen.payload or {}).get("ui") or {}).get("fieldStates") or {}
+            try:
+                prep = await prepare_exec(
+                    db_module.SessionLocal, scen.payload,
+                    owner_id=holder or -1, bindings=bindings,
+                    ui_field_states=_ui_fs,
+                    auth_policy="strict", resolve_mode="none")
+            except MissingAuthAliases as e:
+                # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
+                # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error
+                # 只列缺失别名
+                return await _finish(
+                    db, inst, tpl, "auth",
+                    f"缺少凭证: {','.join(e.missing)}",
+                    pause_reason="missing_credential")
+            except AuthResolveError as e:
+                return await _finish(
+                    db, inst, tpl, "auth", f"凭证解析失败: {e}",
+                    pause_reason="missing_credential")
+        except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)
             return await _finish(
-                db, inst, tpl, "auth",
-                f"缺少凭证: {','.join(e.missing)}",
-                pause_reason="missing_credential")
-        except AuthResolveError as e:
-            return await _finish(
-                db, inst, tpl, "auth", f"凭证解析失败: {e}",
-                pause_reason="missing_credential")
+                db, inst, tpl, "channel", f"执行准备失败,本轮未执行: {e}")
 
         scen_payload = scen.payload
         inst_state_vars = dict(inst.state_vars or {})
