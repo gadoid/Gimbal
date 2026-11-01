@@ -450,3 +450,79 @@ async def unit_carry_contexts(
 
     import asyncio as _aio
     return list(await _aio.gather(*[_one(d) for d in composed_units]))
+
+
+# ─── P3 临时调用:请求 steps → 标准场景 payload(纯函数)───────────
+
+ADHOC_SCENARIO_PREFIX = "adhoc"
+
+
+def adhoc_placeholder_id(run_id: str) -> str:
+    """临时调用执行行的占位 scenario_id(models.execution 非场景形态
+    ``<形态前缀>-<id>`` 约定,与 ``suite-<id>`` 同款)。"""
+    return f"{ADHOC_SCENARIO_PREFIX}-{run_id}"
+
+
+def build_adhoc_payload(
+    steps: list[dict], *, run_id: str, meta_plate: dict[str, str],
+    credential_by_service: dict[str, str], name: str,
+) -> dict:
+    """临时调用请求 → 与库中场景同形的容器 payload(设计 2026-11-02 §五)。
+
+    纯函数:输入已过 :mod:`adhoc_run` 的结构/别名/版本校验。产物进
+    :func:`prepare_exec`(resolve_mode="single")→ convert → 物化,与单场景
+    执行同一条装载链;快照即本产物。
+
+    * ``method / path`` **不写入**:锚点步骤由 plate convert 按定义补全
+      (Release 6.2 存储形态:call 只存 service / user / path_params);
+    * ``config`` 留空:服务地址由装载链第③层别名 base_url 补、凭证由
+      注入清单(别名默认层)落 ``config.users`` —— 请求体钉不了任何 URL;
+    * ``call.user`` = 别名表 ``credential_alias``(执行器编译期:
+      ``call.auth≠none`` 的步骤必须带 call.user,且标签须在 config.users
+      —— 别名默认层正好注入该标签);别名未配凭证则省略,接口若需认证由
+      执行器步骤级报错(方案 §五);
+    * definition 级 ``scenarioId`` 只为满足 plate/执行器形状(前缀 sc),
+      执行行挂载的是 :func:`adhoc_placeholder_id`。
+    """
+    systems = sorted({str(st["endpoint"]).split(".")[0] for st in steps})
+    out_steps: list[dict] = []
+    for i, st in enumerate(steps):
+        svc = str(st["service"])
+        call: dict[str, Any] = {"service": svc}
+        cred = credential_by_service.get(svc)
+        if cred:
+            call["user"] = cred
+        if st.get("pathParams"):
+            # plate 路径模板 {key} 占位的值(存储形态字段 call.path_params;
+            # 执行器 call.py 缺键报 PATH_PARAM_MISSING)
+            call["path_params"] = {str(k): v for k, v in st["pathParams"].items()}
+        step: dict[str, Any] = {
+            "kind": "step", "id": f"s{i + 1}",
+            "endpoint": str(st["endpoint"]),
+            "call": call,
+            "request": {"kind": "request", "body": st.get("body", {})},
+            "strategy": [dict(s) for s in (st.get("strategy") or [])],
+        }
+        out_steps.append(step)
+    return {
+        "definition": {
+            "kind": "scenario",
+            "scenarioId": f"sc-{adhoc_placeholder_id(run_id)}",
+            "meta": {
+                "name": name[:64],
+                "module": "",
+                "priority": 0,
+                "system": systems,
+                "plate": dict(meta_plate),
+                "tags": ["adhoc"],
+            },
+            "config": {},
+            "resource": {},
+            "steps": out_steps,
+        },
+        "orchestration": {
+            "steps": [{"enabled": True, "name": ""} for _ in out_steps],
+            "resourceMeta": {},
+        },
+        "ui": {},
+    }

@@ -46,6 +46,9 @@ _REDACT_KEYS = ("authorization", "cookie", "x-auth-token", "token",
                 "secret", "password")
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# 平台模式只读闸认可的策略类型(P3 设计 §九):执行器当前注册的
+# extract / assign / assertion / sleep 都无对外副作用;未知类型 fail-closed。
+_SAFE_STRATEGY_KINDS = frozenset({"extract", "assign", "assertion", "sleep"})
 
 # 准入上限(P1 定值;上线检查项随真实数据复核)
 GLOBAL_INFLIGHT_CAP = 2        # = 通道数
@@ -159,6 +162,12 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
 
     契约不可得即按不安全处理(fail-closed:只读闸不得因取不到契约而
     放行)。不满足时列出判定依据「步骤 i(POST,未标 query_safe)」。
+
+    纵深防御(P3 设计 2026-11-02 §九):步骤上出现 **不在**
+    :data:`_SAFE_STRATEGY_KINDS` 之内的策略类型 → 判为不只读(策略可由
+    插件注册,将来的新策略可能有对外副作用;现有 extract / assign /
+    assertion / sleep 都没有),``offenders`` 写「步骤 i(策略 X 未知)」。
+    新增策略若确无副作用,显式加入该集合。
     """
     meta_plate = (((definition_from_payload(payload) or {}).get("meta") or {})
                   .get("plate") or {})
@@ -173,6 +182,11 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
                 f"步骤 {i}({method},未标 query_safe)"
                 if endpoint and "未知" not in method
                 else f"步骤 {i}({method})")
+        strategies = step.get("strategy") if isinstance(step, dict) else None
+        for entry in (strategies if isinstance(strategies, list) else []):
+            kind = str(entry.get("kind") or "") if isinstance(entry, dict) else ""
+            if kind not in _SAFE_STRATEGY_KINDS:
+                offenders.append(f"步骤 {i}(策略 {kind or '?'} 未知)")
     return (not offenders, offenders)
 
 

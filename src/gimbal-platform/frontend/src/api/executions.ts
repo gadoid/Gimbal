@@ -26,7 +26,9 @@ export interface Execution {
   scenario_deleted?: boolean
   /** Suite 层重构:kind=suite_graph = 编排执行(scenario_id 是占位
    *  suite-<id>,scenario_display_name 是 Suite 名);聚合成员执行仍是
-   *  scenario、只多记 suite_id。 */
+   *  scenario、只多记 suite_id。P3:kind=adhoc = 入站临时调用(scenario_id
+   *  占位 adhoc-<runId>,scenario_name 为「临时调用 · 别名 · 锚点」;
+   *  非场景形态由 utils/executionKind 统一判定,列表不给占位 id 与重跑)。 */
   kind?: string
   suite_id?: number | null
   config: {

@@ -154,6 +154,66 @@ async def _apply_scheme_recipe(
     body.scheme_name = scheme.name if scheme is not None else None
 
 
+async def _post_adhoc_run(
+    principal: Principal, db: AsyncSession, body: RunRequest,
+) -> RunResponse:
+    """P3 临时调用分支(设计 2026-11-02 §四):身份闸 → 配方字段禁令 →
+    :func:`adhoc_run.prepare_adhoc`(结构 / 别名 / 地址 / 版本 / 组装 /
+    干跑 convert)→ :func:`run_dispatcher.dispatch_target`(kind='adhoc',
+    占位 id)。全部校验在建执行行之前,不通过即 4xx。
+    """
+    from ..services import adhoc_run, plate_client, run_prepare
+
+    # §四.1 身份:只对入站个人模式(带 grant)开放 —— 平台模式(P3-D1)
+    # 与 JWT(P3-D7,前端无入口,不开未设计的调用面)都 403。
+    if not principal.inbound:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "adhoc_inbound_only",
+                    "message": "临时调用只对入站调用方(gic_ + grant)开放"})
+    if principal.grant_id is None or principal.identity_mode != "personal":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "adhoc_requires_grant",
+                    "message": "临时调用要求个人模式:请携带用户签发给该"
+                               "别名的 grant(X-Gimbal-Grant)"})
+    # §三:除 steps / release / clientRef / callbackPath 外的配方字段一律拒
+    offenders = adhoc_run.recipe_fields_present(body)
+    if offenders:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "adhoc_field_not_allowed",
+                "message": "临时调用不接受以下字段(没有数据集/注入/编排/"
+                           "方案/runOptions 语义): " + "、".join(offenders),
+                "fields": offenders,
+            })
+    run_id = run_dispatcher.new_run_id()   # 占位 id 先于派发用到
+    try:
+        payload = await adhoc_run.prepare_adhoc(db, body, run_id=run_id)
+    except adhoc_run.AdhocRejected as e:
+        raise HTTPException(
+            status_code=e.status,
+            detail={"code": e.code, "message": e.message, **e.extra}) from None
+    except plate_client.PlateUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "plate_unavailable",
+                    "message": f"临时调用派发前校验需要 plate: {e}"}) from None
+    target = run_dispatcher.RunTarget(
+        scenario_id=run_prepare.adhoc_placeholder_id(run_id),
+        payload=payload, kind="adhoc")
+    try:
+        return await run_dispatcher.dispatch_target(
+            db, principal.user.id, body, target, run_id=run_id,
+            caller_alias=principal.caller_alias, grant_id=principal.grant_id,
+            identity_mode=principal.identity_mode)
+    except run_dispatcher.NotFound as e:
+        raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
+    except run_dispatcher.Conflict as e:
+        raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, **e.extra})
+
+
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def post_run(
     principal: PrincipalIn,
@@ -172,6 +232,16 @@ async def post_run(
     if principal.inbound:
         # M1:先拒「携带配方」(不依赖场景/方案,尽早失败)
         _reject_inbound_recipe(body)
+    # P3 临时调用(设计 2026-11-02 §三):scenarioId 与 steps 二选一
+    if (body.scenario_id is None) == (body.steps is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "run_target_ambiguous",
+                "message": "scenarioId 与 steps 必须且只能提供一个",
+            })
+    if body.steps is not None:
+        return await _post_adhoc_run(principal, db, body)
     # Access check (mirrors V1 executions create / composer ownership):
     # dispatching a run has real side effects (subprocesses hitting the
     # bound services), so it must not be open to every member —

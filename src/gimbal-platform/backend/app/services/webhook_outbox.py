@@ -168,11 +168,14 @@ async def _enqueue_execution_finished(
     pins = ex.plate_pins or {}
     release = ",".join(
         f"{k}@{v}" for k, v in sorted(pins.items())) or None
+    from ..models.execution import is_scenario_backed
     payload = {
         "executionId": ex.id,
         "clientRef": ex.client_ref,
         "kind": ex.kind,
-        "scenarioId": ex.scenario_id,
+        # P3(设计 2026-11-02 §八):非场景形态(adhoc)的 scenario_id 是
+        # 占位 id,不对外暴露 → null;kind 字段足以区分形态。
+        "scenarioId": ex.scenario_id if is_scenario_backed(ex.kind) else None,
         "release": release,
         # 身份推导(§7.4):caller+grant=personal;caller 无 grant=platform
         "identityMode": "platform" if ex.grant_id is None else "personal",

@@ -361,12 +361,24 @@ class RunRequest(BaseModel):
 
     model_config = _CAMEL
 
-    scenario_id: str = Field(
+    # P3 临时调用(设计 2026-11-02 §三):``scenarioId`` 与 ``steps`` 二选一
+    # —— 同时出现或都缺失由路由判 422 ``run_target_ambiguous``(pydantic
+    # 层只放宽为可选,互斥与错误码在入口统一给)。
+    scenario_id: str | None = Field(
+        default=None,
         alias="scenarioId",
         pattern=r"^sc-[a-z0-9-]+$",
         min_length=3,
         max_length=128,
     )
+    # 临时调用的步骤(只对入站个人模式开放):平铺形状 {endpoint, service,
+    # body?, strategy?},字段白名单/步数(1..10)/策略白名单在
+    # services.adhoc_run 校验(错误码 adhoc_*),这里不建模 —— 与
+    # ScenarioDraft.definition 同口径:plate /convert 是结构的最终权威。
+    steps: list[dict[str, Any]] | None = Field(default=None)
+    # 临时调用的版本覆盖 {系统: "<线>#<修订>"};缺省按别名所属环境版本线
+    # 取线内最新修订(P3-D6)。
+    release: dict[str, str] | None = Field(default=None)
     # D12:空列表 = 基线执行(一个隐式空覆盖行),不再强制 min_length=1
     data_set_ids: list[str] = Field(alias="dataSetIds", default_factory=list)
     # 行级数据集选择(spec v3 §4)— 权威键;两键同发时本键优先,dataSetIds 忽略

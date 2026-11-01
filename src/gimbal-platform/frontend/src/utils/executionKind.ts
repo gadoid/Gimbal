@@ -11,8 +11,9 @@
  * 那是 Suite 自身的展示语义,新形态不该被当成 Suite 运行)。
  */
 
-/** 不挂在真实场景上的形态:scenario_id 是占位 `<前缀>-<id>`。 */
-export const NON_SCENARIO_KINDS = ['suite_graph'] as const
+/** 不挂在真实场景上的形态:scenario_id 是占位 `<前缀>-<id>`
+ *  (suite_graph → `suite-<id>`;adhoc 临时调用 → `adhoc-<runId>`,P3 2026-11-02)。 */
+export const NON_SCENARIO_KINDS = ['suite_graph', 'adhoc'] as const
 
 export type NonScenarioKind = (typeof NON_SCENARIO_KINDS)[number]
 

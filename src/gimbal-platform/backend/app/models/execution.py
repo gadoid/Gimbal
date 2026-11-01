@@ -68,12 +68,16 @@ class Execution(Base):
     scenario_name: Mapped[str] = mapped_column(String(255), default="")
     # 执行形态(重构方案迁移 0014):scenario = 单场景/聚合批次成员;
     # suite_graph = 编排执行(scenario_id 写占位 suite-<id>,不计入
-    # 任何成员场景的历史)。与队列层 execution_jobs.kind(cases/graph/
-    # debug)同名不同层、值域互斥。存量行 scenario = 既有全部。
+    # 任何成员场景的历史);adhoc = 临时调用(P3,设计 2026-11-02:入站
+    # 个人模式按 plate 锚点直接调一次接口,不先建场景;scenario_id 写
+    # 占位 adhoc-<runId>,快照存组装后的 payload)。与队列层
+    # execution_jobs.kind(cases/graph/debug)同名不同层、值域互斥。
+    # 存量行 scenario = 既有全部。
     # 占位 id 约定(N3):非场景形态的 scenario_id 一律 <形态前缀>-<id>
-    # (现为 suite-<id>);后续新增形态按同一规则在 NON_SCENARIO_KINDS
-    # 登记,「是否挂真实场景」判定一律走 is_scenario_backed,Suite 专属
-    # 视图只认 kind == "suite_graph" 直接比较(见集合注释的语义边界)。
+    # (suite-<id> / adhoc-<runId>);后续新增形态按同一规则在
+    # NON_SCENARIO_KINDS 登记,「是否挂真实场景」判定一律走
+    # is_scenario_backed,Suite 专属视图只认 kind == "suite_graph" 直接
+    # 比较(见集合注释的语义边界)。
     kind: Mapped[str] = mapped_column(String(32), default="scenario")
     # 编排执行的归属 Suite(聚合成员执行同样落 suite_id 供 21 页归并)。
     # 有意不加 FK:执行台账归执行人,历史不随 Suite 删除消失(21 页
@@ -302,8 +306,8 @@ class ExecutionJob(Base):
 
 
 # 不挂在真实场景上的执行形态集合(N3):scenario_id 写占位
-# <前缀>-<id>(见 Execution.kind 列注释);后续形态(如 adhoc 临时
-# 调用)在此登记。
+# <前缀>-<id>(见 Execution.kind 列注释)。suite_graph = Suite 编排;
+# adhoc = 临时调用(P3,2026-11-02 登记)。
 #
 # 语义边界(评审 2026-11-01 §3.2 拆判定):本集合只回答「执行是否
 # 挂在真实场景上」(可否按场景筛选/按配方重跑),**不回答**「是不是
@@ -311,7 +315,7 @@ class ExecutionJob(Base):
 # rerun-failed、前端 SuiteRunsTab)只认 kind == "suite_graph" 直接
 # 比较:那是 Suite 自身的展示语义,把新形态(如 adhoc)并入会让
 # Suite 页把临时调用当 Suite 运行展示、执行列表重跳 Suite 链接。
-NON_SCENARIO_KINDS = frozenset({"suite_graph"})
+NON_SCENARIO_KINDS = frozenset({"suite_graph", "adhoc"})
 
 
 def is_scenario_backed(kind: str | None) -> bool:
