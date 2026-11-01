@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import enum
 import hashlib
 import json
 import logging
@@ -38,7 +39,7 @@ import shutil
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -571,55 +572,80 @@ def _replay_rows(execution_id: int) -> list[dict]:
 
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
-async def reconcile_stale_executions(db_factory: Any) -> int:
-    """启动期 reconcile（C11 起 jobs 感知;N2 起走唯一终态迁移）。
+async def reconcile_stale_executions(
+    db_factory: Any, *, periodic: bool = False,
+) -> int:
+    """reconcile 僵尸执行(C11 起 jobs 感知;N2 起走唯一终态迁移;
+    P0-3.2/3.3 起支持周期模式与 canceled 口径,webhook 设计 v3)。
 
     * executions stuck queued/running **且无 job 行**（0009 前遗留/
       建行后入队前崩溃）→ failed + ``config_json.reconciled``（原口径）;
     * job ``failed``/``canceled`` 终态而 execution 仍 queued/running
-      （worker 收口前崩溃）→ failed 收口;
+      （worker 收口前崩溃）→ job failed → failed 收口;job canceled →
+      **canceled 收口**(D7:不做零计数兜底、不通知 —— 取消不是失败,
+      回调上线后 status=canceled);
     * job ``queued``/``running``：留给 worker（queued 待认领;running
       由 sweep_stale 按租约回收——回队重跑或 attempts 耗尽失败）。
 
+    两种模式:启动期(``periodic=False``,全量扫描,理由文案保持原文)
+    与周期(``periodic=True``,经 :func:`periodic_reconcile_once` 注册
+    background_tasks,每 ``EXEC_RECONCILE_INTERVAL_S`` 秒一拍;只收
+    ``created_at`` 早于 ``EXEC_RECONCILE_GRACE_S`` 宽限期的单 —— 避免与
+    正在收尾的执行抢终态)。周期理由文案带 ``periodic reconcile:`` 前缀,
+    ``config_json.reconciled.reason`` 可区分两期。
+
     N2 变化:①收口改经 :func:`transition_execution`(原子守卫,重启
-    竞态下已终态的不覆写);②整单未分发(passed=failed=0)按
-    failed=total 计(与 if_stuck 同款 2-3 口径,消除"状态 failed 而
-    计数 0"的矛盾);③started_at 从 created_at 回填;④failed 终态发
-    完成通知(N2-2:启动对账不再静默)。返回**实际发生迁移**的行数。
+    竞态下已终态的不覆写);②整单未分发(passed=failed=0)按 failed=total
+    计(与 if_stuck 同款 2-3 口径,消除"状态 failed 而计数 0"的矛盾);
+    ③started_at 从 created_at 回填;④failed 终态发完成通知(N2-2:启动
+    对账不再静默)。返回**实际发生迁移**的行数。
     """
     from sqlalchemy import select as _select
     async with db_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    _select(Execution.id, Execution.created_at,
-                            ExecutionJob.status).outerjoin(
-                        ExecutionJob,
-                        ExecutionJob.execution_id == Execution.id).where(
-                        Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)))
-                )
-            )
-            .all()
-        )
+        q = _select(Execution.id, Execution.created_at,
+                    ExecutionJob.status).outerjoin(
+            ExecutionJob, ExecutionJob.execution_id == Execution.id).where(
+                Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)))
+        if periodic:
+            grace = timedelta(seconds=settings.EXEC_RECONCILE_GRACE_S)
+            q = q.where(Execution.created_at < _utcnow() - grace)
+        rows = (await session.execute(q)).all()
+    prefix = "periodic reconcile: " if periodic else ""
     count = 0
     for ex_id, created_at, job_status in rows:
         if job_status in ("queued", "running"):
             continue   # worker 域:待认领或由租约回收
-        moved = await transition_execution(
-            db_factory, ex_id, STATUS_FAILED,
-            count_fallback=True,
-            reconciled_reason=(
-                "backend restarted mid-dispatch"
-                if job_status is None
-                else f"job {job_status} without execution finalize"),
-            backfill_started_at=created_at)
-        count += 1 if moved else 0
+        if job_status == "canceled":
+            # D7(P0-3.3):job 已取消 → 执行记 canceled;取消不是失败,
+            # 不做零计数兜底、不发通知(canceled 站内通知本就不发),
+            # 回调面(P2)按 MOVED 正常发 status=canceled。
+            moved = await transition_with_retry(
+                db_factory, ex_id, STATUS_CANCELED, notify=False,
+                reconciled_reason=(
+                    f"{prefix}job canceled without execution finalize"))
+        else:
+            moved = await transition_with_retry(
+                db_factory, ex_id, STATUS_FAILED, count_fallback=True,
+                reconciled_reason=(
+                    f"{prefix}backend restarted mid-dispatch"
+                    if job_status is None
+                    else f"{prefix}job {job_status} without execution finalize"),
+                backfill_started_at=created_at)
+        count += 1 if moved is TransitionResult.MOVED else 0
     if count:
         logger.warning(
-            "run_dispatcher: reconciled {} stale execution(s) after restart",
-            count,
+            "run_dispatcher: reconciled {} stale execution(s) ({})",
+            count, "periodic" if periodic else "after restart",
         )
     return count
+
+
+async def periodic_reconcile_once() -> int:
+    """周期对账入口(background_tasks 注册,P0-3.2/设计 v3 P0-5)。
+
+    卡住的执行最迟「宽限 10 分钟 + 周期 5 分钟」内被收口 —— 回调上线
+    后这是「收不到回调」兜底的书面承诺(集成指南按 executionId 轮询)。"""
+    return await reconcile_stale_executions(_session_factory, periodic=True)
 
 
 async def startup_recovery() -> tuple[int, int]:
@@ -1086,8 +1112,8 @@ async def finalize_canceled_before_start(job: dict) -> None:
     (从未启动),不发通知(用户自发的取消)。
     """
     execution_id = job["payload"]["args"]["execution_id"]
-    await transition_execution(_session_factory, execution_id,
-                               STATUS_CANCELED)
+    await transition_with_retry(_session_factory, execution_id,
+                                STATUS_CANCELED)
     _row_states.pop(execution_id, None)
     logger.info("run_dispatcher: execution {} canceled before start", execution_id)
 
@@ -1098,7 +1124,7 @@ async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
     N2-2 拍板:failed 兜底也发完成通知 —— 任务体崩溃是调用方无从得知
     的静默失败,此前零通知。
     """
-    await transition_execution(
+    await transition_with_retry(
         _session_factory, execution_id, STATUS_FAILED,
         dispatcher_error=error, count_fallback=True)
 
@@ -1177,8 +1203,8 @@ async def _fanout_graph(
         except Exception:  # noqa: BLE001
             pass
         # N2:恢复收口改经唯一终态迁移(原子守卫 + failed 通知 ——
-        # 此前静默,N2-2 拍板补发)
-        await transition_execution(
+        # 此前静默,N2-2 拍板补发);P0-3.2:改带重试版
+        await transition_with_retry(
             db_factory, execution_id, STATUS_FAILED,
             dispatcher_error=(
                 f"graph recovery: at-most-once 收口"
@@ -2156,6 +2182,20 @@ async def _bump_counters(
                 })
 
 
+class TransitionResult(enum.Enum):
+    """终态迁移三态返回(P0-3.2,webhook 设计 v3)。
+
+    此前 bool 把「已终态」(幂等跳过,正常)与「写库失败」(异常,静默
+    等下次启动对账)混为同一个 False —— 回调上线后写失败的执行既无
+    终态也无回调,调用方无从分辨。三态拆开:只有 ``FAILED`` 需要调用方
+    重试(:func:`transition_with_retry`),``MOVED`` 是回调/计数的唯一
+    依据,``ALREADY_TERMINAL`` 幂等跳过。"""
+
+    MOVED = "moved"
+    ALREADY_TERMINAL = "already_terminal"
+    FAILED = "failed"
+
+
 async def transition_execution(
     db_factory: Any, execution_id: int, final_status: "str | None" = None, *,
     dispatcher_error: "str | None" = None,
@@ -2163,11 +2203,13 @@ async def transition_execution(
     reconciled_reason: "str | None" = None,
     backfill_started_at: Any = None,
     notify: bool = True,
-) -> bool:
-    """执行域**唯一**终态迁移(N2 归一)。
+) -> "TransitionResult":
+    """执行域**唯一**终态迁移(N2 归一;P0-3.2 起三态返回)。
 
     原子条件更新 ``WHERE status IN (queued, running)`` —— 已终态的执行
-    不覆写、不重复通知;返回是否真的发生了迁移(供调用方计数/记日志)。
+    不覆写、不重复通知;返回 :class:`TransitionResult`(MOVED=真实迁移,
+    供调用方计数/记日志/写回调;ALREADY_TERMINAL=已终态或行不存在;
+    FAILED=写库失败,见 :func:`transition_with_retry`)。
     六个历史写入点(正常收口/取消先于启动/任务体异常兜底/启动对账/
     graph 恢复收口/cancel 端点无活任务)全部改经本函数。
 
@@ -2196,10 +2238,10 @@ async def transition_execution(
                         else_=STATUS_DONE)),
                     finished_at=_utcnow()))
             if result.rowcount != 1:
-                return False        # 已终态(或行不存在):本次迁移无效
+                return TransitionResult.ALREADY_TERMINAL   # 已终态/行不存在
             ex = await session.get(Execution, execution_id)
             if ex is None:
-                return False
+                return TransitionResult.ALREADY_TERMINAL
             if ex.started_at is None and backfill_started_at is not None:
                 ex.started_at = backfill_started_at
             if count_fallback and not ex.failed and not ex.passed:
@@ -2226,12 +2268,32 @@ async def transition_execution(
             # 也发;canceled 不发)。ex.status 为迁移后真值(含派生)。
             if notify and ex.status != STATUS_CANCELED and ex.owner_id:
                 await _notify_finished(ex, ex.status)
-            return True
-    except Exception as e:  # noqa: BLE001 — 迁移失败不炸调用方(与旧路径同款自吞)
+            return TransitionResult.MOVED
+    except Exception as e:  # noqa: BLE001 — 迁移失败不炸调用方(重试见 transition_with_retry)
         logger.warning(
             "run_dispatcher: transition_execution {} -> {} failed: {}",
             execution_id, final_status, e)
-        return False
+        return TransitionResult.FAILED
+
+
+async def transition_with_retry(
+    db_factory: Any, execution_id: int, final_status: "str | None" = None,
+    *, retry_delay: float = 1.0, **kw: Any,
+) -> "TransitionResult":
+    """带一次重试的终态迁移(P0-3.2/设计 v3 P0-4)。
+
+    只有 ``FAILED`` 重试(1 秒后一次),仍失败记 error 日志后返回;
+    ``ALREADY_TERMINAL`` 幂等跳过、``MOVED`` 直接返回。供六个调用点
+    共用,不各自散写重试。"""
+    res = await transition_execution(db_factory, execution_id, final_status, **kw)
+    if res is TransitionResult.FAILED:
+        await asyncio.sleep(retry_delay)
+        res = await transition_execution(db_factory, execution_id, final_status, **kw)
+        if res is TransitionResult.FAILED:
+            logger.error(
+                "run_dispatcher: transition {} -> {} 写库失败(重试后仍失败,"
+                "等待周期对账兜底)", execution_id, final_status)
+    return res
 
 
 async def _finalize_execution(
@@ -2246,7 +2308,7 @@ async def _finalize_execution(
     不再覆写、不重复通知 —— 修复此前无守卫直接覆写的漂移面)。
     """
     try:
-        await transition_execution(
+        await transition_with_retry(
             db_factory, execution_id, status,
             backfill_started_at=_utcnow())
     except Exception as e:  # noqa: BLE001

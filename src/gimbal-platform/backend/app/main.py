@@ -153,7 +153,9 @@ def register_background_tasks() -> None:
     """lifespan 的后台周期任务注册(可单测:注册表即契约)。"""
     from .services import background_tasks
     from .services.integration_runner import scheduler_tick
-    from .services.run_dispatcher import run_retention_maintenance
+    from .services.run_dispatcher import (
+        periodic_reconcile_once, run_retention_maintenance,
+    )
 
     async def _draft_sweep_once() -> None:
         from .services.suite_maintenance import sweep_stale_drafts
@@ -170,6 +172,13 @@ def register_background_tasks() -> None:
         "retention-maintenance",
         max(60, settings.RETENTION_MAINTENANCE_INTERVAL_S),
         run_retention_maintenance)
+    # 周期对账(P0-3.2,webhook 设计 v3):僵尸执行(job 已终态/不存在
+    # 而执行仍 queued/running)每 5 分钟收口一次,宽限 10 分钟内的单
+    # 不动 —— 启动期对账不再是唯一兜底,卡住的执行最迟 ≈15 分钟有终态
+    background_tasks.register(
+        "execution-reconcile",
+        max(30, settings.EXEC_RECONCILE_INTERVAL_S),
+        periodic_reconcile_once)
 
 
 def create_app() -> FastAPI:

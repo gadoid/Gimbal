@@ -115,6 +115,13 @@ class Settings(BaseSettings):
     # legacy = run launch 子进程(stdout jsonl)——回滚路径,稳定一段
     #   时间后删除(不留兼容层)。
     EXEC_CHAIN: str = "server"
+    # ── 周期对账(P0-3.2,webhook 设计 v3)───────────────────────
+    # 僵尸执行(job 已终态/不存在而执行仍 queued/running)的周期收口:
+    # 间隔 5 分钟一拍;宽限 10 分钟内的单不动(可能与正在收尾的执行抢
+    # 终态)。卡住的执行最迟「宽限+间隔」≈15 分钟被收口 —— 回调上线后
+    # 这是「收不到回调」的兜底承诺(调用方超时后按 executionId 轮询)。
+    EXEC_RECONCILE_INTERVAL_S: int = 300
+    EXEC_RECONCILE_GRACE_S: int = 600
     # ── 执行结构化日志(设计 AD3:入库级别门槛)────────────────
     # server 链 stderr 泵的入库级别:低于此级别的日志行不入库不缓冲
     # (server-engine.log 文件不受影响,全量保留);DEBUG 排障走文件。
