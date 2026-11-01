@@ -12,6 +12,12 @@ serviceBindings / runOptions) lives entirely in
 field was retired (D2) — stale env keys from old clients are silently
 ignored (pydantic extra=ignore).
 
+认证(webhook 设计 v3 P1 §4.4):``principal_or_user`` 分流 —— JWT
+行为不变;``Bearer gic_…`` 入站凭证进个人(grant)/平台(无 grant)
+模式。平台模式不做属主闸,改为执行区间只读闸(``is_scenario_read_
+only``,D6:只放行 GET/HEAD/OPTIONS 或 query_safe);个人模式以 grant
+用户过原有属主闸(§4.3)。
+
 Error mapping (per the agreed run-failure semantics):
 * scenario / data_set missing → 404
 * empty dataSetIds is legal (D12 baseline run: one implicit empty
@@ -29,24 +35,34 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser
-from ._ownership import ensure_owner
+from ..core.deps import principal_or_user
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from ..services import run_dispatcher, scenario_store
+from ..services.inbound_identity import Principal, valid_callback_path
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def post_run(
-    user: CurrentUser,
+    principal: PrincipalIn,
     db: DbSession,
     body: RunRequest,
 ) -> RunResponse:
+    user = principal.user
+    if body.callback_path is not None \
+            and not valid_callback_path(body.callback_path):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "callback_path_invalid",
+                "message": "callbackPath 必须是以 / 开头的路径段(不含协议与主机)",
+            })
     # Access check (mirrors V1 executions create / composer ownership):
     # dispatching a run has real side effects (subprocesses hitting the
     # bound services), so it must not be open to every member —
@@ -59,59 +75,97 @@ async def post_run(
             raise run_dispatcher.NotFound(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
-        # §8.2:ensure_owner → can_run_scenario(属主 ∨ admin ∨ 引用,
-        # §7.6;public 不开执行 —— 公共资源跑需先 fork,不变量 7)。
-        from ._ownership import can_run_scenario
-        if not await can_run_scenario(
-                db, user, scenario_id=scen.scenario_id,
-                owner_id=scen.owner_id):
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "not_owner",
-                    "message": ("only the scenario's owner (or admin, or a "
-                                "share reference) can run this scenario"),
-                })
-        # graph 链 unit 授权(必修缺口,《Suite成员层、引用分享与浏览镜头-
-        # 设计方案》§8.2):unit 与 before/after 括号场景此前只在 worker 侧
-        # 物化时查存在性、无归属检查——任何登录用户都能经编排跑他人
-        # 私有场景。请求侧逐个过属主闸(与顶层同款 = 属主 ∨ admin,403
-        # not_owner;不存在 → 404 不泄露)。rerun 不重放 graph(config 重放
-        # 构造无 graph 字段),此处即唯一入口。
-        if body.graph is not None:
-            seen_unit_ids: set[str] = set()
-            for unit in [
-                *body.graph.units,
-                *body.graph.before,
-                *body.graph.after,
-            ]:
-                if unit.scenario_id in seen_unit_ids:
-                    continue
-                seen_unit_ids.add(unit.scenario_id)
-                unit_scen = await scenario_store.get_row(db, unit.scenario_id)
-                if unit_scen is None:
-                    raise run_dispatcher.NotFound(
-                        "scenario_not_found",
-                        f"scenario not found: {unit.scenario_id}",
-                    )
-                if not await can_run_scenario(
+        if principal.identity_mode == "platform":
+            # 平台模式(D6):无属主闸,凭证取 __platform__ 池 —— 前提是
+            # 执行区间只读(is_scenario_read_only,与集成链同一实现)。
+            # graph 编排本期限定 JWT/个人模式:多单元逐个过只读闸的
+            # 覆盖面本链未接,先整体拒绝(fail-closed,§4.3)。
+            if body.graph is not None:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "graph_not_supported_for_platform",
+                        "message": "平台模式(入站无 grant)暂不支持编排执行,"
+                                   "请使用持久化场景或携带 grant",
+                    })
+            from ..services import plate_client
+            from ..services.integration_runner import is_scenario_read_only
+            try:
+                ok, offenders = await is_scenario_read_only(scen.payload)
+            except plate_client.PlateUnavailableError:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": "plate_unavailable",
+                        "message": "只读检查未通过: plate 不可达(平台模式"
+                                   "执行需要 plate 契约元数据)",
+                    }) from None
+            if not ok:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "not_read_only",
+                        "message": ("平台模式要求全部步骤为只读"
+                                    f"(GET/HEAD/OPTIONS 或已标 query_safe): "
+                                    f"{'、'.join(offenders)}"),
+                    })
+        else:
+            # §8.2:ensure_owner → can_run_scenario(属主 ∨ admin ∨ 引用,
+            # §7.6;public 不开执行 —— 公共资源跑需先 fork,不变量 7)。
+            from ._ownership import can_run_scenario
+            if not await can_run_scenario(
+                    db, user, scenario_id=scen.scenario_id,
+                    owner_id=scen.owner_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "not_owner",
+                        "message": ("only the scenario's owner (or admin, or a "
+                                    "share reference) can run this scenario"),
+                    })
+            # graph 链 unit 授权(必修缺口,《Suite成员层、引用分享与浏览镜头-
+            # 设计方案》§8.2):unit 与 before/after 括号场景此前只在 worker 侧
+            # 物化时查存在性、无归属检查——任何登录用户都能经编排跑他人
+            # 私有场景。请求侧逐个过属主闸(与顶层同款 = 属主 ∨ admin,403
+            # not_owner;不存在 → 404 不泄露)。rerun 不重放 graph(config 重放
+            # 构造无 graph 字段),此处即唯一入口。
+            if body.graph is not None:
+                seen_unit_ids: set[str] = set()
+                for unit in [
+                    *body.graph.units,
+                    *body.graph.before,
+                    *body.graph.after,
+                ]:
+                    if unit.scenario_id in seen_unit_ids:
+                        continue
+                    seen_unit_ids.add(unit.scenario_id)
+                    unit_scen = await scenario_store.get_row(db, unit.scenario_id)
+                    if unit_scen is None:
+                        raise run_dispatcher.NotFound(
+                            "scenario_not_found",
+                            f"scenario not found: {unit.scenario_id}",
+                        )
+                    if not await can_run_scenario(
                         db, user, scenario_id=unit_scen.scenario_id,
                         owner_id=unit_scen.owner_id):
-                    raise HTTPException(
-                        status_code=403,
-                        detail={
-                            "code": "not_owner",
-                            "message": (
-                                "only the scenario's owner (or admin, or a "
-                                "share reference) can run graph unit: "
-                                f"{unit.scenario_id}"
-                            ),
-                        })
+                        raise HTTPException(
+                            status_code=403,
+                            detail={
+                                "code": "not_owner",
+                                "message": (
+                                    "only the scenario's owner (or admin, or a "
+                                    "share reference) can run graph unit: "
+                                    f"{unit.scenario_id}"
+                                ),
+                            })
         return await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,
             req=body,
             preloaded_scenario=scen,  # 已为归属检查加载,不再二次查询
+            caller_alias=principal.caller_alias,
+            grant_id=principal.grant_id,
+            identity_mode=principal.identity_mode,
         )
     except run_dispatcher.NotFound as e:
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})

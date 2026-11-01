@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser
+from ..core.deps import CurrentUser, principal_or_user
 from ..core.security import fernet_decrypt, fernet_encrypt
 from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
@@ -24,9 +24,11 @@ from ..models.integration_task import IntegrationTask
 from ..models.user import User
 from ..services import integration_runner
 from ..services.cron_expr import CronError, describe_cron, parse_cron
+from ..services.inbound_identity import Principal, valid_callback_path
 from ..services.run_semantics import working_preview
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 router = APIRouter(prefix="/integration", tags=["integration"])
 
 
@@ -117,6 +119,11 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         out["authAliases"] = auth_aliases
     if subscribed is not None:
         out["subscribed"] = subscribed
+    # D12(webhook 设计 v3):公共模板对非属主隐藏 caller/client_ref —
+    # 注册方的集成关系不外泄;属主/admin(即 canManage 面)可见。
+    if current.role == "admin" or db_tpl.owner_id == current.id:
+        out["callerAliasName"] = db_tpl.caller_alias_name
+        out["clientRef"] = db_tpl.client_ref
     return out
 
 
@@ -190,6 +197,9 @@ class TaskIn(BaseModel):
     cardTemplate: str = "status"
     visibility: str = "private"
     targetSystem: str = ""
+    # 入站注册面(webhook 设计 v3 §4.4;JWT 调用可带但无回调语义)
+    clientRef: str | None = Field(default=None, max_length=128)
+    callbackPath: str | None = Field(default=None, max_length=256)
 
 
 class TaskPatch(BaseModel):
@@ -199,6 +209,10 @@ class TaskPatch(BaseModel):
     resultPolicy: str | None = None
     visibility: str | None = None
     targetSystem: str | None = None
+    # 入站注册面(§4.4):属主可改引用键/回调路径覆盖;caller 身份
+    # (caller_alias_name/grant_id)注册时定死,PATCH 不可改
+    clientRef: str | None = Field(default=None, max_length=128)
+    callbackPath: str | None = Field(default=None, max_length=256)
 
 
 @router.get("/tasks")
@@ -223,7 +237,24 @@ async def list_tasks(user: CurrentUser, db: DbSession) -> dict:
 
 
 @router.post("/tasks", status_code=201)
-async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
+async def create_task(body: TaskIn, principal: PrincipalIn,
+                      db: DbSession) -> dict:
+    user = principal.user
+    # §4.4(webhook 设计 v3):入站调用的 identityMode 由认证结果决定
+    # —— gic_+ggt_ = personal(grant 签发人),gic_ 无 grant = platform;
+    # 请求体传入不同值 → 422(不静默改写调用方的身份预期)。JWT 用户
+    # 维持既有自由选择(platform|personal 均可)—— 平台模式任务本就
+    # 由 UI 侧用户创建,Principal.identity_mode 只约束入站执行面。
+    if principal.inbound and body.identityMode != principal.identity_mode:
+        raise _bad(
+            "identity_mode_mismatch",
+            f"identityMode 由认证结果决定为 {principal.identity_mode}"
+            f"(请求体传了 {body.identityMode})")
+    if body.callbackPath is not None \
+            and not valid_callback_path(body.callbackPath):
+        raise _bad(
+            "callback_path_invalid",
+            "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
     if body.identityMode not in ("platform", "personal"):
         raise _bad("identity_mode_invalid",
                    "identityMode ∈ platform | personal")
@@ -239,7 +270,11 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
-    if scen.owner_id != user.id:
+    if principal.identity_mode != "platform" \
+            and scen.owner_id != user.id:
+        # §4.3:个人模式(含 JWT/grant 用户)要求场景属主;平台模式不做
+        # 属主闸(执行 owner 是系统用户,场景属主对它无意义)—— 安全
+        # 边界由只读闸承担(下方 + 每次实例运行前再查)。
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
     # 场景限定)。此前 schemeId 直接入库 + runner 全局取方案,枚举
@@ -267,7 +302,13 @@ async def create_task(body: TaskIn, user: CurrentUser, db: DbSession) -> dict:
         scenario_id=body.scenarioId, scheme_id=body.schemeId,
         target_system=body.targetSystem or "", trigger_cron=body.triggerCron,
         result_policy=body.resultPolicy, card_template=body.cardTemplate,
-        updated_by=user.id)
+        updated_by=user.id,
+        # 入站注册台账(§7.4/D12):JWT 注册恒 None → 不回调;
+        # 公共化不剥离 —— 仅注册方自己的实例写回调投递行
+        caller_alias_name=principal.caller_alias,
+        grant_id=principal.grant_id,
+        client_ref=body.clientRef,
+        callback_path_override=body.callbackPath)
     db.add(tpl)
     await db.commit()
     await db.refresh(tpl)
@@ -303,8 +344,14 @@ async def get_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
 
 @router.patch("/tasks/{task_id}")
 async def patch_task(
-    task_id: int, body: TaskPatch, user: CurrentUser, db: DbSession,
+    task_id: int, body: TaskPatch, principal: PrincipalIn, db: DbSession,
 ) -> dict:
+    user = principal.user
+    if body.callbackPath is not None \
+            and not valid_callback_path(body.callbackPath):
+        raise _bad(
+            "callback_path_invalid",
+            "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or tpl.removed_at is not None:
         raise _bad("not_found", "功能不存在", 404)
@@ -318,6 +365,10 @@ async def patch_task(
         tpl.trigger_cron = body.triggerCron
     if body.name is not None:
         tpl.name = body.name
+    if "clientRef" in body.model_fields_set:
+        tpl.client_ref = body.clientRef
+    if "callbackPath" in body.model_fields_set:
+        tpl.callback_path_override = body.callbackPath
     if body.schemeId:
         # S0①(G-A):PATCH 同创建闸,方案必须属于模板场景
         if not tpl.scenario_id:

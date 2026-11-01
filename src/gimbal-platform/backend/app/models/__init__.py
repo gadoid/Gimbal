@@ -26,6 +26,9 @@ from .integration_task import IntegrationTask
 from .permission import AuditLog, Notification, UserPref, UserStar
 # 场景域事件日志(2026-09-23 批次 F3:时间线唯一数据源)
 from .activity_event import ActivityEvent
+# 入站身份两类令牌 + 回调投递行(webhook 设计 v3 P1/P2)
+from .inbound_identity import InboundCredential, InboundGrant
+from .webhook_delivery import WebhookDelivery
 
 __all__ = [
     "User",
@@ -54,6 +57,9 @@ __all__ = [
     "UserPref",
     "UserStar",
     "ShareRef",
+    "InboundCredential",
+    "InboundGrant",
+    "WebhookDelivery",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

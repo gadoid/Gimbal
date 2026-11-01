@@ -57,6 +57,10 @@
         <TabsList>
           <TabsTrigger value="fields">字段默认值</TabsTrigger>
           <TabsTrigger v-if="isAliasMode" value="credential">凭证</TabsTrigger>
+          <!-- 入站与回调(webhook 设计 v3 P1):external 别名专属 -->
+          <TabsTrigger v-if="isExternalAlias" value="inbound" data-testid="tab-inbound">
+            入站与回调
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="fields">
@@ -93,6 +97,16 @@
           </div>
         </TabsContent>
 
+        <TabsContent v-if="isExternalAlias" value="inbound">
+          <InboundPanel
+            :alias-name="key"
+            :inbound-enabled="row!.inboundEnabled"
+            :callback-enabled="row!.callbackEnabled"
+            :callback-path="row!.callbackPath"
+            :can-manage="canManageInbound"
+          />
+        </TabsContent>
+
       </Tabs>
     </template>
   </section>
@@ -109,6 +123,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
+import InboundPanel from '@/components/integration/InboundPanel.vue'
 import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
@@ -143,7 +158,12 @@ const pageSubtitle = computed(() =>
 
 const activeTab = ref(
   route.query.tab === 'credential' ? 'credential'
+  : route.query.tab === 'inbound' ? 'inbound'
   : 'fields')
+
+/** 入站/回调设置与凭证管理:别名属主或 admin(团队共享别名只归 admin) */
+const canManageInbound = computed(() =>
+  auth.role === 'admin' || row.value?.ownerUserId === auth.currentUser?.id)
 
 
 onMounted(async () => {

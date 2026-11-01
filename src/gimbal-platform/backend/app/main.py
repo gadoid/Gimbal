@@ -45,6 +45,7 @@ from .routers import (
     suites,
     user_preferences,
     users,
+    webhook_deliveries,
 )
 from .routers.report_definitions import router as report_definitions_router  # noqa: E402
 
@@ -128,9 +129,14 @@ async def lifespan(app: FastAPI):
     from .services import background_tasks
     register_background_tasks()
     background_tasks.start_all()
+    # P2-3(webhook 设计 v3 §5.2):回调投递循环 —— 独立任务而非注册表
+    # (10s 周期 + 写行提交后的事件立即唤醒;注册表的 sleep 间隔切不开)。
+    from .services import webhook_outbox
+    webhook_outbox.start_worker()
     try:
         yield
     finally:
+        webhook_outbox.stop_worker()
         background_tasks.stop_all()
         # C11:优雅停止 worker(当前任务回队;等收口后清 plate 客户端)。
         n_dispatched = await drain_in_flight_dispatches()
@@ -242,6 +248,8 @@ def create_app() -> FastAPI:
     app.include_router(service_profile.cards_router, prefix="/api")
     # 服务别名基础层(§4.1):读全员 / 写 admin;读侧挂 carry/凭证两条解析链
     app.include_router(service_aliases.router, prefix="/api")
+    # P2-6(webhook 设计 v3):回调投递排查面
+    app.include_router(webhook_deliveries.router, prefix="/api")
     app.include_router(environments.router, prefix="/api")
     # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
     app.include_router(catalog.router, prefix="/api")

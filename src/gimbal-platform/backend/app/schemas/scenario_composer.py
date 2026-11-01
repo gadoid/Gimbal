@@ -415,6 +415,14 @@ class RunRequest(BaseModel):
     # 单条发起(运行对话框/重跑)不传;纯归并键,不参与任何分发语义(每条
     # 仍是独立 Execution,批级执行策略本期不存在)。
     batch_id: str | None = Field(default=None, alias="batchId", max_length=64)
+    # ── 入站调用面(webhook 设计 v3 P1 §4.4;JWT 调用可带但无回调语义)──
+    # 调用方自定义引用键(回调原样带回,调用方对账用)
+    client_ref: str | None = Field(
+        default=None, alias="clientRef", max_length=128)
+    # 回调路径覆盖(只允许路径段;空 = 用别名 callback_path)。路径段
+    # 判定在入口路由(valid_callback_path,含协议/主机即 422)。
+    callback_path: str | None = Field(
+        default=None, alias="callbackPath", max_length=256)
 
     # ── 派生读取面(W19):调用方按习惯属性读执行参数 ─────────────
     # 值的唯一权威 = run_options(缺省 = RunOptions() 全默认);
@@ -447,6 +455,10 @@ class RunResponse(BaseModel):
     # Numeric Execution row backing this dispatch — lets the frontend jump
     # straight to /executions/{id} (the string runId alone has no route).
     execution_id: int = Field(alias="executionId")
+    # 执行身份模式(webhook 设计 v3 §4.4):personal = JWT/grant 用户,
+    # platform = 入站无 grant(__platform__ 系统用户)。JWT 前端恒
+    # personal —— 字段为入站调用方而设,前端可忽略。
+    identity_mode: str = Field(default="personal", alias="identityMode")
 
 
 # ─── preview-plate ─────────────────────────────────────────────────

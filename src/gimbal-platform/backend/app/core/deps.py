@@ -1,9 +1,9 @@
-"""FastAPI Depends (current user, admin gate, db)."""
+"""FastAPI Depends (current user, admin gate, db, 入站分流)."""
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Path, status
+from fastapi import Depends, HTTPException, Path, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,10 +15,7 @@ from ..models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> User:
+async def _load_jwt_user(db: AsyncSession, token: str) -> User:
     try:
         payload = decode_token(token)
     except ValueError as e:
@@ -32,7 +29,73 @@ async def get_current_user(
     return user
 
 
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User:
+    return await _load_jwt_user(db, token)
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def principal_or_user(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """入站分流依赖(webhook 设计 v3 P1 §4.2):按 Authorization 前缀
+    分流 ``Bearer gic_…``(入站凭证)/ 其余(JWT,行为与
+    :func:`get_current_user` 完全一致)。
+
+    * 入站:凭证命中、未吊销、别名 ``inbound_enabled`` → 得到调用方
+      别名;带 ``X-Gimbal-Grant`` 则校验命中/未过期/未撤销/属同一别名,
+      失败 403;无 grant → 平台模式(owner=``__platform__`` 系统用户)。
+      认证失败(401/403)写审计(v3 定案)。
+    * JWT:JWT 请求带 ``X-Gimbal-Grant`` 直接 400 —— grant 只对入站
+      凭证有意义,混用是客户端错误,不静默忽略。
+
+    返回 :class:`~app.services.inbound_identity.Principal`(JWT 情况下
+    caller_alias=None → 该执行不回调)。
+    """
+    from ..services import audit as audit_svc
+    from ..services.inbound_identity import (
+        CREDENTIAL_PREFIX, GRANT_HEADER, InboundAuthError, Principal,
+        resolve_inbound_principal,
+    )
+
+    auth = request.headers.get("authorization") or ""
+    grant_header = (request.headers.get(GRANT_HEADER) or "").strip() or None
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="missing bearer credential")
+    token = auth[7:].strip()
+    if token.startswith(CREDENTIAL_PREFIX):
+        try:
+            return await resolve_inbound_principal(db, token, grant_header)
+        except InboundAuthError as e:
+            # 认证失败入审计(v3 定案):不记完整令牌,只记哈希前 8 位
+            # 定位用。best-effort(audit.record 自吞失败)。
+            await audit_svc.record(
+                db, actor_id=None, actor_name="inbound",
+                action="inbound.auth_failed",
+                resource_type="alias",
+                detail={"reason": e.code, "message": e.message},
+            )
+            raise HTTPException(
+                status_code=e.status_code,
+                detail={"code": e.code, "message": e.message},
+            ) from e
+    if grant_header:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "grant_header_on_jwt",
+                "message": "X-Gimbal-Grant 只能与入站凭证(gic_)同用",
+            })
+    user = await _load_jwt_user(db, token)
+    return Principal(
+        user=user, identity_mode="personal", caller_alias=None)
 
 
 # ── 三级单角色(M2.5,权限方案 §1)─────────────────────────────────
@@ -95,3 +158,51 @@ async def get_owned_execution(
             detail=f"execution not found: {execution_id}",
         )
     return ex
+
+
+async def get_visible_execution(
+    principal: Annotated["object", Depends(principal_or_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+    execution_id: Annotated[int, Path(ge=1)],
+):
+    """入站分流版执行可见性(webhook 设计 v3 §4.4/§5.6,D8)。
+
+    比 :func:`get_owned_execution` 宽两档(只用于三个只读查询端点
+    detail/rows/events;写面端点仍走 owner 闸):
+
+    * 入站凭证:只看 ``caller_alias_name`` 等于自己别名的执行
+      (平台模式 + 经该别名注册的个人模式);
+    * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
+      当前用户是该执行 caller 别名的属主 —— 别名属主在执行列表页
+      看不到平台模式执行(「我的执行」按 owner 过滤),详情/排查走
+      本判定 + 别名页的投递查询。
+    """
+    from ..models.execution import Execution
+    from ..models.service_alias import ServiceAlias
+
+    ex = await session.get(Execution, execution_id)
+    if ex is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"execution not found: {execution_id}",
+        )
+    if getattr(principal, "inbound", False):
+        if ex.caller_alias_name == principal.caller_alias:
+            return ex
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"execution not found: {execution_id}",
+        )
+    user = principal.user
+    if ex.owner_id == user.id or user.role == "admin":
+        return ex
+    if ex.owner_id is not None and ex.caller_alias_name:
+        owner = await session.get(User, ex.owner_id)
+        if owner is not None and owner.is_system:
+            alias = await session.get(ServiceAlias, ex.caller_alias_name)
+            if alias is not None and alias.owner_user_id == user.id:
+                return ex
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"execution not found: {execution_id}",
+    )

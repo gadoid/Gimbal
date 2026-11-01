@@ -27,7 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.timeutil import ensure_aware
-from ..core.deps import CurrentUser, get_owned_execution
+from ..core.deps import (
+    CurrentUser, get_owned_execution, get_visible_execution, principal_or_user,
+)
 from ..core.timeutil import utcnow
 from ..models import Execution
 from ..models.execution import (
@@ -47,6 +49,7 @@ from ..schemas.execution import (
 )
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from ..services import execution_store, run_dispatcher, scenario_store
+from ..services.inbound_identity import Principal
 from ..services.run_dispatcher import Conflict, NotFound
 from ._ownership import ensure_owner
 
@@ -55,6 +58,10 @@ router = APIRouter(prefix="/executions", tags=["executions"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
+# 入站分流版可见性(D8,webhook 设计 v3 §5.6):detail/rows/events 三个
+# 只读查询端点用;写面(删除/重跑/取消/调试)仍走 owner 闸。
+VisibleExecution = Annotated[Execution, Depends(get_visible_execution)]
+PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 _KNOWN_STATUSES = frozenset({
     STATUS_QUEUED, STATUS_RUNNING, STATUS_DONE, STATUS_FAILED, STATUS_CANCELED,
@@ -141,7 +148,7 @@ async def executions_summary(
 # ── list ────────────────────────────────────────────────────────
 @router.get("", response_model=ExecutionListOut)
 async def list_executions(
-    user: CurrentUser,
+    principal: PrincipalIn,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -166,12 +173,21 @@ async def list_executions(
     queued 单 started_at 可空不作锚)/ ``batch_id``(队列归并视图)筛选。
     M4(§6.3):``q`` 下推(scenario_name ILIKE / id 前缀)——列表页
     检索框不再拉全量在客户端过滤。
+
+    入站凭证(webhook 设计 v3 §5.6):过滤面从「owner 本人」换成
+    「caller_alias_name 等于本别名」—— 只看经由自己别名的执行
+    (平台模式 + 经该别名注册的个人模式);JWT 调用行为不变。
     """
+    user = principal.user
     if page is not None:
         page_size = page_size or 200
         limit = page_size
         offset = (page - 1) * page_size
-    base = select(Execution).where(Execution.owner_id == user.id)
+    if getattr(principal, "inbound", False):
+        base = select(Execution).where(
+            Execution.caller_alias_name == principal.caller_alias)
+    else:
+        base = select(Execution).where(Execution.owner_id == user.id)
     if q:
         # G1 扩口径:快照名/活名都可命中(改名后旧名仍可搜到历史执行);
         # 活名子查询套可见性谓词(吃 trgm),与展示投影同口径。
@@ -263,8 +279,9 @@ async def list_executions(
 # ── detail ─────────────────────────────────────────────────────
 @router.get("/{execution_id}", response_model=ExecutionOut)
 async def get_execution(
-    ex: OwnedExecution, session: DbSession, user: CurrentUser
+    ex: VisibleExecution, session: DbSession, principal: PrincipalIn
 ) -> ExecutionOut:
+    user = principal.user
     disp = await execution_store.scenario_display_map(
         session, user, [ex.scenario_id])
     out = execution_store.execution_out(
@@ -289,13 +306,14 @@ async def get_execution(
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────
 @router.get("/{execution_id}/rows", response_model=ExecutionRowsOut)
 async def get_execution_rows(
-    ex: OwnedExecution, session: DbSession, user: CurrentUser,
+    ex: VisibleExecution, session: DbSession, principal: PrincipalIn,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> ExecutionRowsOut:
     """行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存
     registry;历史执行读 execution_rows DB 分页;M6 前的存量单回放
     JSONL(只读归档)兜底。信封 {items,total,page,pageSize}。"""
+    user = principal.user
     items, total = await run_dispatcher.execution_rows_page(
         session, ex.id, page=page, page_size=page_size)
     # G1:datasetName 批量投影(随场景可见性;已删/不可读 = None,
@@ -543,7 +561,7 @@ async def stream_execution_logs(
 
 @router.get("/{execution_id}/events")
 async def get_execution_events(
-    ex: OwnedExecution,
+    ex: VisibleExecution,
     session: DbSession,
     kind: Annotated[str | None, Query(description="event | log")] = None,
     level: str | None = None,

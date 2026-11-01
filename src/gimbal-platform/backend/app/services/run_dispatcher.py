@@ -840,6 +840,9 @@ async def dispatch_run(
     *,
     preloaded_scenario: ComposerScenario | None = None,
     chain_override: str | None = None,
+    caller_alias: str | None = None,
+    grant_id: int | None = None,
+    identity_mode: str = "personal",
 ) -> RunResponse:
     """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
     worker 认领驱动；本函数不再 spawn 进程内 fanout）。
@@ -857,6 +860,11 @@ async def dispatch_run(
     row for the ownership check — pass it here to avoid querying the
     same row twice (and keep a single source for the
     scenario_not_found 404).
+
+    入站调用面(webhook 设计 v3 §4.4):``caller_alias``/``grant_id`` 来自
+    ``principal_or_user`` 分流(JWT 调用恒 None → 不写投递行、不回调);
+    ``client_ref``/``callback_path`` 在 ``req`` 上;``identity_mode``
+    只回显进响应。
     """
     # P3:优雅关闭窗口内不再"建行但不 spawn"(那会制造一条 201 返回、
     # 永远停在 queued 的僵尸单)。直接拒单,客户端重启后重试。
@@ -971,6 +979,11 @@ async def dispatch_run(
         # 单条发起为 None。列 + config_json 双落:列驱动筛选,config 驱动
         # 重跑配方的原样保真。
         batch_id=req.batch_id,
+        # 入站调用台账(webhook 设计 v3 §7.4):JWT 调用恒 None。
+        caller_alias_name=caller_alias,
+        grant_id=grant_id,
+        client_ref=req.client_ref,
+        callback_path_override=req.callback_path,
         # 台账快照列(M2):通知/列表展示用 name,场景删了执行仍可读。
         # 直读唯一权威 payload.definition.meta.name,不走 _meta_from_row
         # 的整 meta 严格校验 —— 畸形行不拦发起,空值由通知侧兜底链接住。
@@ -1073,7 +1086,8 @@ async def dispatch_run(
     # RS3 plate_pins 不在此回填：job 经 DB 队列异步驱动，dispatch 返回时
     # fanout 尚未解析生效修订 —— 由 _fanout 解析出后自行落库。
 
-    return RunResponse(runId=run_id, executionId=execution.id)
+    return RunResponse(runId=run_id, executionId=execution.id,
+                       identityMode=identity_mode)
 
 
 # ─── C11：worker 任务体入口（payload → fanout）──────────────────
@@ -1926,6 +1940,22 @@ async def _fanout(
                 skipped=row_skipped,
             )
 
+            # P2-4(webhook 设计 v3 §5.5/D10):单 case 执行(行数为 1)
+            # 在行完成处把提取产物脱敏后写进 ``config_json.outputs``
+            # (唯一例外键,见 models.execution 注释)—— 终态迁移组装
+            # 回调 payload 时读取;发生在 finalize/终态之前,顺序保证
+            # 回调拿得到。多行执行不写、回调 outputs=null。best-effort:
+            # 写失败只丢回调里的 outputs,不影响行/终态。
+            if len(entries) == 1 and "runResult" in log_line:
+                _outputs: dict = {}
+                for _d in (getattr(result, "details", None) or []):
+                    if (isinstance(_d, dict)
+                            and isinstance(_d.get("outputs"), dict)):
+                        _outputs.update(_d["outputs"])
+                if _outputs:
+                    await _store_single_case_outputs(
+                        db_factory, execution_id, _outputs)
+
     # (dataset row × injection entry × repeat) 交叉笛卡尔积(spec v3 §4):
     # injections 已含 None 占位(未选条目时 = [None],恰一次无注入组合)。
     # rows 携带 (原始行号, 行字典) 对 — row_idx 即编辑器行号,稀疏选择
@@ -2143,6 +2173,33 @@ def _write_result_evidence(
         )
 
 
+async def _store_single_case_outputs(
+    db_factory: Any, execution_id: int, outputs: dict,
+) -> None:
+    """单 case 执行的 outputs 落 ``config_json.outputs``(P2-4/D10)。
+
+    落库前过 :func:`integration_runner.scrub_outputs`(E1 同键表 ——
+    收在存储点保证所有调用方统一脱敏)。独立会话写(行计数/终态是
+    另一批会话);best-effort —— 失败只记 warning(回调 outputs 缺席,
+    行/终态不受影响)。终态迁移在 finalize 之后,顺序上本写恒先于
+    回调组装。"""
+    from .integration_runner import scrub_outputs
+    outputs = scrub_outputs(outputs)
+    try:
+        async with db_factory() as session:
+            ex = await session.get(Execution, execution_id)
+            if ex is None:
+                return
+            cfg = dict(ex.config_json or {})
+            cfg["outputs"] = outputs
+            ex.config_json = cfg
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: single-case outputs for {} failed: {}",
+            execution_id, e)
+
+
 async def _bump_counters(
     db_factory: Any, execution_id: int, *, passed: int, failed: int,
     skipped: int = 0,
@@ -2263,7 +2320,18 @@ async def transition_execution(
                 )
                 cfg["counterDrift"] = True
             ex.config_json = cfg
+            # P2-2(webhook 设计 v3 §5.1):outbox 同事务写行 —— 入站
+            # 发起(有 caller_alias_name)且别名回调开启时写
+            # execution.finished 投递行;三条 canceled 路径也经本函数
+            # 真实迁移,满足条件即发 status=canceled(D11)。写行异常
+            # 自然传播 → 终态与投递行都不落库(「有终态无回调」不出现)。
+            if ex.caller_alias_name:
+                from .webhook_outbox import enqueue_execution_finished
+                await enqueue_execution_finished(session, ex)
             await session.commit()
+            if ex.caller_alias_name:
+                from .webhook_outbox import wake
+                wake()
             # 通知口径:done/failed 且有 owner(N2-2:三个异常收口路径
             # 也发;canceled 不发)。ex.status 为迁移后真值(含派生)。
             if notify and ex.status != STATUS_CANCELED and ex.owner_id:
@@ -2425,6 +2493,13 @@ async def _notify_finished(ex: Execution, final_status: str) -> None:
     from ..core import db as db_module
     try:
         async with db_module.SessionLocal() as s2:
+            # P2-5(webhook 设计 v3 §5.6/D8):平台模式执行的 owner 是
+            # ``__platform__`` 系统用户 —— 站内通知无人消费,跳过
+            # (回调才是它的完成通知面)。
+            if ex.owner_id:
+                owner = await s2.get(User, ex.owner_id)
+                if owner is not None and owner.is_system:
+                    return
             name = ex.scenario_name
             if not name:
                 row = await get_row(s2, ex.scenario_id)
@@ -2743,7 +2818,8 @@ async def run_retention_maintenance() -> dict[str, int]:
     """
     from . import execution_store
 
-    out: dict[str, int] = {"case_dirs": 0, "run_journals": 0, "events": 0}
+    out: dict[str, int] = {"case_dirs": 0, "run_journals": 0, "events": 0,
+                           "webhook_delivered": 0, "webhook_failed": 0}
     try:
         out["case_dirs"] = await asyncio.to_thread(sweep_stale_case_dirs)
     except Exception as e:  # noqa: BLE001 — 旁路:单项失败不阻断其余
@@ -2760,6 +2836,15 @@ async def run_retention_maintenance() -> dict[str, int]:
     except Exception as e:  # noqa: BLE001 — 旁路
         logger.warning("retention: event purge failed: {}", e)
         out["events"] = -1
+    # P2-3(webhook 设计 v3 §5.2):投递行保留期 —— delivered 30 天 /
+    # failed 180 天,与其余保留期同一维护任务、同一隔离口径。
+    try:
+        from .webhook_outbox import cleanup_retention
+        (out["webhook_delivered"],
+         out["webhook_failed"]) = await cleanup_retention(_session_factory)
+    except Exception as e:  # noqa: BLE001 — 旁路
+        logger.warning("retention: webhook delivery sweep failed: {}", e)
+        out["webhook_delivered"] = out["webhook_failed"] = -1
     if any(out.values()):
         logger.info("retention maintenance: {}", out)
     return out
@@ -2794,6 +2879,10 @@ async def _create_execution(
     kind: str = "scenario",
     suite_id: int | None = None,
     plate_pins: dict | None = None,
+    caller_alias_name: str | None = None,
+    grant_id: int | None = None,
+    client_ref: str | None = None,
+    callback_path_override: str | None = None,
 ) -> Execution:
     """Insert an Execution row(+ 拆表后的快照行)。
 
@@ -2802,6 +2891,7 @@ async def _create_execution(
     重构方案 0014:kind = scenario(默认)/ suite_graph(编排执行,
     scenario_id 写占位 suite-<id>);suite_id 供 21 页归并,无 FK
     (执行台账归执行人,历史不随 Suite 删除消失)。
+    caller_*(webhook 设计 v3 §7.4):入站调用台账;JWT 调用恒 None。
     """
     owner_name = (await db.execute(
         select(User.display_name, User.username).where(User.id == owner_id)
@@ -2820,6 +2910,10 @@ async def _create_execution(
         config_json=config_json,
         batch_id=batch_id,
         plate_pins=plate_pins,
+        caller_alias_name=caller_alias_name,
+        grant_id=grant_id,
+        client_ref=client_ref,
+        callback_path_override=callback_path_override,
     )
     db.add(ex)
     await db.flush()  # 拿 execution.id,快照行同事务写入

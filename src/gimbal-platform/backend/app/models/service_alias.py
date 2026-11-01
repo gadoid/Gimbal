@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ._types import UtcDateTime
-from sqlalchemy import ( ForeignKey, Integer, Index, String, func,
+from sqlalchemy import ( Boolean, ForeignKey, Integer, Index, String, false, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,9 +61,29 @@ class ServiceAlias(Base):
     owner_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), nullable=True, index=True
     )
+    # ── 入站与回调(webhook 设计 v3 P1/D2):同一别名承载出站与入站 ──
+    # 只允许 kind=external 启用入站(管理 API 强约束,见 routers/
+    # service_aliases);库列不设 CHECK,约束在写面 —— 与 kind 升级
+    # (external→plate)路径兼容,降级时入站面由管理 API 一并关掉。
+    inbound_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false())
+    # 回调开关:别名属主自选;关闭时终态照常落库、不写投递行。
+    callback_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false())
+    # 拼在 base_url 之后的路径段(以 / 开头);回调 URL = base_url +
+    # (执行的 callback_path_override 或本列),写投递行时解析冻结。
+    callback_path: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Fernet 密文(v3 定案 D4:与 auth_sessions 同级处理),投递时解密
+    # 签发 HMAC;明文只在轮换时返回一次,库中不可检索。
+    callback_secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now(), onupdate=func.now()
     )
+
+    @property
+    def callback_secret_set(self) -> bool:
+        """回调签名密钥是否已设(读面投影;密文本体不外露)。"""
+        return bool(self.callback_secret)

@@ -94,6 +94,16 @@ def _scrub(value, key_hint: str = "") -> None:
             _scrub(value[k], lk)
 
 
+def scrub_outputs(value: dict | None) -> dict:
+    """公开脱敏入口(N1「唯一实现」纪律,不跨模块触私有名):单 case
+    outputs 写入 ``config_json.outputs``(webhook 设计 v3 §5.5/D10)前
+    过同一张键表 —— 复制后就地改,不动调用方原 dict(引擎 details 里的
+    outputs 可能还被 registry/证据面引用)。"""
+    out = dict(value or {})
+    _scrub(out)
+    return out
+
+
 async def _anchored_call_shape(
     step: dict, meta_plate: dict,
 ) -> tuple[str, str | None, bool]:
@@ -721,7 +731,16 @@ async def _pause_consent_changed(
     inst.paused_reason = paused_reason
     inst.last_error = message[:500]
     inst.running_since = None
+    # P2-2(webhook 设计 v3 §5.1/D9):同意闸暂停也回调 integration.paused
+    # (注册方自己的实例才回,D12 判定在 enqueue 内)—— 同事务写行。
+    from .webhook_outbox import enqueue_integration_event
+    await enqueue_integration_event(
+        db, tpl, inst, event_type="integration.paused",
+        fields={"reason": paused_reason, "message": message[:500],
+                "at": _now().isoformat() + "Z"})
     await db.commit()
+    from .webhook_outbox import wake
+    wake()
     await _record_activity(db, inst, tpl, "integration.paused",
                            {"reason": paused_reason})
     if inst.holder_id:
@@ -861,6 +880,24 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     "场景声明 working(预览执行),集成任务拒绝触发:"
                     "请在编排器钉定修订后重试(外部服务不受影响)",
                     lease=lease)
+
+            # P1-5(webhook 设计 v3 §4.4):入站注册的 grant 每次实例运行
+            # 前重校验 —— 失效(撤销/过期)以 run=auth 暂停(grant_
+            # revoked,不按周期重试)并发 integration.paused 回调(D9)。
+            # 只对注册方自己的实例(个人模式 holder=grant 用户=模板
+            # owner);订阅者实例按自身身份运行,不依赖该 grant。
+            if (tpl.grant_id is not None
+                    and tpl.identity_mode == "personal"
+                    and inst.holder_id == tpl.owner_id):
+                from .inbound_identity import grant_still_valid
+                grant_ok, grant_why = await grant_still_valid(
+                    db, tpl.caller_alias_name or "", tpl.grant_id)
+                if not grant_ok:
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        f"grant 已失效({grant_why}),执行已暂停;"
+                        "请让签发人重新签发后重启任务",
+                        pause_reason="grant_revoked", lease=lease)
 
             # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
             # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
@@ -1148,7 +1185,32 @@ async def _finish(
             # 已知取舍:存量迁移后首跑直接 fail 这次不发 —— 此类实例
             # 改造前一直在走 fail_streak 运维通知,不存在「没人知道」。
             inst.check_notified_status = inst.check_status
+
+    # P2-2(webhook 设计 v3 §5.1):outbox 同事务写行 —— 注册方自己的
+    # 实例才回调(D12 判定在 enqueue_integration_event 内);暂停分支
+    # (含 fail_streak 自动暂停)发 integration.paused(D9),否则
+    # integration.run_finished。写行异常自然传播 → 两者都不落库。
+    from .webhook_outbox import enqueue_integration_event
+    if pause_reason or auto_paused:
+        await enqueue_integration_event(
+            db, tpl, inst, event_type="integration.paused",
+            fields={"reason": pause_reason or "fail_streak",
+                    "message": (inst.last_error or "")[:500],
+                    "at": now.isoformat() + "Z"})
+    else:
+        await enqueue_integration_event(
+            db, tpl, inst, event_type="integration.run_finished",
+            fields={"runStatus": inst.run_status or "",
+                    "checkStatus": inst.check_status or "",
+                    "checkMessage": (inst.check_message or "") or None,
+                    "error": (inst.last_error or "") or None,
+                    "outputs": dict(inst.last_outputs or {})
+                    if run_status == "ok" else {},
+                    "durationMs": duration_ms,
+                    "finishedAt": now.isoformat() + "Z"})
     await db.commit()
+    from .webhook_outbox import wake
+    wake()
 
     # 时间线(边沿事件,与通知同一状态机):暂停事件优先(它已含
     # run 翻转的语义,ok→auth 双记是噪音);run 翻转只在未暂停时记;

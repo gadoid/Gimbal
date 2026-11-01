@@ -16,6 +16,7 @@ import * as catalog from '@/utils/catalog-services'
 vi.mock('@/api/service-aliases', () => ({
   listAliases: vi.fn(),
   listAllAliases: vi.fn(),
+  listGrants: vi.fn(),
 }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceNames: vi.fn(),
@@ -28,12 +29,21 @@ vi.mock('@/components/carry/ServiceBindingEditor.vue', () => ({
     template: '<div data-testid="binding-editor-stub">{{ serviceKey }}|{{ baseService ?? "-" }}</div>',
   },
 }))
+vi.mock('@/components/integration/InboundPanel.vue', () => ({
+  default: {
+    name: 'InboundPanel',
+    props: ['aliasName', 'inboundEnabled', 'callbackEnabled', 'callbackPath', 'canManage'],
+    template: '<div data-testid="inbound-panel-stub">{{ aliasName }}|{{ inboundEnabled }}|{{ canManage }}</div>',
+  },
+}))
 
 const aliases: aliasApi.ServiceAliasRow[] = [
   { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
-    credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
+    credentialAlias: 'uat-cred', ownerUserId: null, inboundEnabled: false, callbackEnabled: false, callbackPath: null, callbackSecretSet: false, createdAt: '', updatedAt: '' },
   { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate', baseUrl: null, environmentId: null, environmentName: null,
-    credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
+    credentialAlias: null, ownerUserId: null, inboundEnabled: false, callbackEnabled: false, callbackPath: null, callbackSecretSet: false, createdAt: '', updatedAt: '' },
+  { aliasName: 'agent-sys', baseService: 'pay-service', kind: 'external', baseUrl: 'https://cb.example.local', environmentId: null, environmentName: null,
+    credentialAlias: null, ownerUserId: null, inboundEnabled: true, callbackEnabled: true, callbackPath: '/gimbal/callback', callbackSecretSet: true, createdAt: '', updatedAt: '' },
 ]
 
 async function makeRouter(path: string): Promise<Router> {
@@ -114,6 +124,24 @@ describe('ServiceAliasDetail — 凭证 tab', () => {
     const { w } = await mountDetail('/service-admin/fin-service-uat')
     expect(w.find('[data-testid="binding-editor-stub"]').exists()).toBe(true)
     expect(w.text()).not.toContain('凭证绑定')
+    w.unmount()
+  })
+})
+
+describe('ServiceAliasDetail — 入站与回调 tab(webhook 设计 v3 P1)', () => {
+  it('external 别名:tab 存在,?tab=inbound 深链渲染三区块面板', async () => {
+    const { w } = await mountDetail('/service-admin/agent-sys?tab=inbound')
+    expect(w.find('[data-testid="tab-inbound"]').exists()).toBe(true)
+    const panel = w.find('[data-testid="inbound-panel-stub"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('agent-sys')
+    w.unmount()
+  })
+
+  it('plate 别名:无入站 tab(webhook 设计 v3:入站身份只挂 external)', async () => {
+    const { w } = await mountDetail('/service-admin/fin-service-uat')
+    expect(w.find('[data-testid="tab-inbound"]').exists()).toBe(false)
+    expect(w.find('[data-testid="inbound-panel-stub"]').exists()).toBe(false)
     w.unmount()
   })
 })

@@ -22,11 +22,11 @@ vi.mock('@/utils/toast', () => ({
 
 const aliases: api.ServiceAliasRow[] = [
   { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate', baseUrl: null, environmentId: null, environmentName: null,
-    credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
+    credentialAlias: null, ownerUserId: null, inboundEnabled: false, callbackEnabled: false, callbackPath: null, callbackSecretSet: false, createdAt: '', updatedAt: '' },
   { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
-    credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
+    credentialAlias: 'uat-cred', ownerUserId: null, inboundEnabled: false, callbackEnabled: false, callbackPath: null, callbackSecretSet: false, createdAt: '', updatedAt: '' },
   { aliasName: 'wms-service-pre', baseService: 'wms-service', kind: 'plate', baseUrl: null, environmentId: 1, environmentName: '预发',
-    credentialAlias: null, ownerUserId: 7, createdAt: '', updatedAt: '' },
+    credentialAlias: null, ownerUserId: 7, inboundEnabled: false, callbackEnabled: false, callbackPath: null, callbackSecretSet: false, createdAt: '', updatedAt: '' },
 ]
 
 beforeEach(() => {

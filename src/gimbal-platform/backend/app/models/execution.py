@@ -56,6 +56,9 @@ class Execution(Base):
         Index("ix_executions_owner_id", "owner_id", "id"),
         # suite 归属查询索引:0014 迁移建,模型侧补声明(2026-10-13 A-1)
         Index("ix_executions_suite", "suite_id"),
+        # 入站调用排查面(webhook 设计 v3 §7.4,v3 定案加索引):入站凭证
+        # 按本列查「经由我这别名的执行」;JWT 发起的执行恒 NULL
+        Index("ix_executions_caller", "caller_alias_name"),
     )
 
     # BIGINT(整体评审 2026-10-15 #10):执行面所有外键的根
@@ -98,6 +101,12 @@ class Execution(Base):
     # V3 dispatcher recipe: {runId, scenarioId, dataSetIds,
     # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
     # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
+    #
+    # **outputs 是唯一例外键**(webhook 设计 v3 §5.5/D10):单 case 执行
+    # (total_runs==1)在行完成处把脱敏后的提取产物写进
+    # ``config_json.outputs``,供终态回调组装;多行执行不写。config_json
+    # 本是纯值配方(凭证引用面)—— 除 outputs 外**禁止**再把运行产物
+    # 塞进配方(新产物面找自己的列/表)。
     config_json: Mapped[dict] = mapped_column(JsonVar, default=dict)
     started_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
@@ -105,6 +114,18 @@ class Execution(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
     )
+    # ── 入站调用台账(webhook 设计 v3 §7.4)──────────────────────
+    # caller_alias_name = 经由的外部系统别名;JWT(前端)发起的执行为
+    # NULL → 不写投递行、不回调。不建外键:执行台账不随别名删除消失。
+    caller_alias_name: Mapped[str | None] = mapped_column(
+        String(128), nullable=True)
+    # 当时生效的 grant id(个人模式;平台模式 NULL)—— 不建外键,同上
+    grant_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # 调用方自定义引用键(≤128,回调原样带回,调用方对账用)
+    client_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 本执行的回调路径覆盖(只允许路径段);空 = 用别名 callback_path
+    callback_path_override: Mapped[str | None] = mapped_column(
+        String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )

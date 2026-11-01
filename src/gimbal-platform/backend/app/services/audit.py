@@ -37,6 +37,11 @@ AUDIT_ACTIONS = (
     "scenario.admin_unpublish",
     "suite.admin_delete",
     "suite.admin_publish",
+    # ── 入站身份(webhook 设计 v3 P1;v3 定案:认证失败也入审计)──
+    "inbound.credential.write",   # gic_ 生成/吊销(别名属主或 admin)
+    "inbound.settings.write",     # 入站/回调设置与密钥轮换
+    "inbound.grant.write",        # ggt_ 签发/撤销(签发人或 admin)
+    "inbound.auth_failed",        # 入站认证失败(401/403;凭证面取证)
 )
 
 

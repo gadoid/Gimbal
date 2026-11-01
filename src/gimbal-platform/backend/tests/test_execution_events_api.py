@@ -86,12 +86,15 @@ class TestQueryApi:
         assert r.status_code == 200 and "byCategory" in r.json()
 
     async def test_other_users_execution_404(self, client):
-        headers = await register_and_login(client)
+        # 首个注册用户会被提为 admin,而 D8(webhook 设计 v3)扩展了
+        # 查询可见性:admin 全可见 —— 404 断言改用第二个非 admin 用户。
+        await register_and_login(client)
+        member = await register_and_login(client, "bob_event404", "pw123456")
         eid = await _seed_execution()   # owner_id=None → 不属于任何人
-        r = await client.get(f"/api/executions/{eid}/events", headers=headers)
+        r = await client.get(f"/api/executions/{eid}/events", headers=member)
         assert r.status_code == 404
         r = await client.get(f"/api/executions/{eid}/events/stream",
-                             headers=headers)
+                             headers=member)
         assert r.status_code == 404
 
 

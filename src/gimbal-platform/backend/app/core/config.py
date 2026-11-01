@@ -122,6 +122,19 @@ class Settings(BaseSettings):
     # 这是「收不到回调」的兜底承诺(调用方超时后按 executionId 轮询)。
     EXEC_RECONCILE_INTERVAL_S: int = 300
     EXEC_RECONCILE_GRACE_S: int = 600
+    # ── 入站身份(webhook 设计 v3 P1 §4.1)───────────────────────
+    # grant(ggt_)默认有效期与上限(天);签发时 ttlDays 可选,超过上限 422
+    GRANT_DEFAULT_TTL_DAYS: int = 90
+    GRANT_MAX_TTL_DAYS: int = 365
+    # ── 回调投递(webhook 设计 v3 P2 §5.2)──────────────────────
+    # 单行投递总尝试上限(含首次),用尽置 failed 等保留期清扫
+    WEBHOOK_MAX_ATTEMPTS: int = 5
+    # 失败退避序列(秒,逗号分隔;尝试 n 失败后退 backoff[min(n-1, len-1)])
+    WEBHOOK_BACKOFF_SECONDS: str = "30,120,480,1800"
+    WEBHOOK_TIMEOUT_SECONDS: float = 10.0
+    # 投递行保留期(天):delivered 30 / failed 180;挂到 retention-maintenance
+    WEBHOOK_RETENTION_DELIVERED_DAYS: int = 30
+    WEBHOOK_RETENTION_FAILED_DAYS: int = 180
     # ── 执行结构化日志(设计 AD3:入库级别门槛)────────────────
     # server 链 stderr 泵的入库级别:低于此级别的日志行不入库不缓冲
     # (server-engine.log 文件不受影响,全量保留);DEBUG 排障走文件。

@@ -38,7 +38,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, ForeignKey, Index, Integer, String, Text,
+    BigInteger, Boolean, ForeignKey, Index, Integer, String, Text,
 )
 from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -84,6 +84,18 @@ class IntegrationTask(Base):
     state_mapping: Mapped[dict] = mapped_column(JsonVar, default=dict)
     updated_by: Mapped[int] = mapped_column(Integer, nullable=True)
     removed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # ── 入站注册台账(webhook 设计 v3 §7.4/D12;只落模板行)────────
+    # 模板公共化**不剥离** caller 信息:模板保留调用方集成关系,只有
+    # 注册方自己的实例(个人模式 holder=grant 用户、平台模式唯一实例)
+    # 执行时写回调投递行;订阅者实例按自身身份运行,永不向原注册方
+    # 回调。读面:非属主视角(公共模板列表/详情)隐藏 caller/client_ref。
+    # 不建外键:模板台账不随别名删除消失。
+    caller_alias_name: Mapped[str | None] = mapped_column(
+        String(128), nullable=True)
+    grant_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    client_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    callback_path_override: Mapped[str | None] = mapped_column(
+        String(256), nullable=True)
 
     # ── 实例层(template_id NOT NULL)───────────────────────────
     template_id: Mapped[int | None] = mapped_column(
