@@ -453,6 +453,42 @@ class TestExecution:
         assert body["outputs"] == {"status": "SETTLED", "auth_token": "***"}
         assert rows[0].url.endswith("/agent/cb")
 
+    async def test_multi_step_outputs_merge_later_wins(self, ready, client,
+                                                       monkeypatch):
+        """§八:多步 outputs 合并、同名后者覆盖(与集成链口径一致);
+        scenario_name 带「等 N 步」,快照按序含全部步骤。"""
+        cases: list[dict] = []
+
+        async def _capture(case_path, *, step_to=None, report_dir=None,
+                           cwd=None, timeout=None, engine_log_path=None,
+                           on_event=None, on_log=None, log_counters=None,
+                           n_runs=1, retry=0):
+            cases.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
+            return LaunchResult(
+                launch_status="ok", exit_code=0, total=1, passed=1,
+                details=[{"outputs": {"status": "INIT", "amount": 1}},
+                         {"outputs": {"status": "SETTLED"}}])
+
+        from app.services import gimbal_launcher as gl
+        monkeypatch.setattr(gl, "launch", _capture)
+        second = _step(body={"orderNo": "${status}"}, strategy=[
+            {"kind": "extract", "expression": "$.data.status",
+             "target": "status", "scope": "scenario"}])
+        r = await _post(client, ready, _body([_step(), second]))
+        assert r.status_code == 201, r.text
+        ex_id = r.json()["executionId"]
+        ex = await _execution(ex_id)
+        assert ex.scenario_name == f"临时调用 · {SVC} · {EP} 等 2 步"
+        snap = await _snapshot(ex_id)
+        assert [s["id"] for s in snap["definition"]["steps"]] == ["s1", "s2"]
+        assert snap["definition"]["steps"][1]["strategy"][0]["scope"] == "scenario"
+        ex = await _wait_terminal(ex_id)
+        assert ex.status == "done", ex.config_json
+        assert len(cases[0]["steps"]) == 2
+        assert ex.config_json["outputs"] == {"status": "SETTLED", "amount": 1}
+        body = body_of((await deliveries())[0])
+        assert body["outputs"] == {"status": "SETTLED", "amount": 1}
+
     async def test_rerun_409_and_scenario_filter_excludes(self, client):
         h = await _register(client, "ad_owner")
         uid = await _user_id("ad_owner")
