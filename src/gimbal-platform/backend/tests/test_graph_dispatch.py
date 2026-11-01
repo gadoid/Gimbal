@@ -44,6 +44,23 @@ class TestGraphSpecValidation:
         })
         assert r.status_code == 422
 
+    async def test_rejects_string_service_bindings(self, client):
+        """serviceBindings 值收紧为 ServiceBinding(评审 2026-11-01):
+        此前 Any —— 字符串别名会被 exec_auth_aliases 的 isinstance(dict)
+        分支静默跳过(凭证清单/注入双漏),入站 API 上线前在 wire 面
+        422 拒掉,不留给运行时静默丢弃。graph 级与单元级同口径。"""
+        headers = await register_and_login(client)
+        for where in ("graph", "unit"):
+            graph = {"mode": "aggregate",
+                     "units": [{"ref": "a", "scenarioId": "sc-x"}]}
+            if where == "graph":
+                graph["serviceBindings"] = {"fin.order": "qa1"}
+            else:
+                graph["units"][0]["serviceBindings"] = {"fin.order": "qa1"}
+            r = await client.post("/api/runs", headers=headers, json={
+                "scenarioId": "sc-x", "graph": graph})
+            assert r.status_code == 422, (where, r.text)
+
 
 class TestGraphRunEndToEnd:
 

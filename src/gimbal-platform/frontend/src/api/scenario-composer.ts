@@ -261,7 +261,9 @@ export interface GraphUnitSpec {
   repeat?: number
   nRuns?: number
   injectionEntryIds?: string[]
-  serviceBindings?: Record<string, { authAlias?: string; url?: string }>
+  /** 与后端 GraphUnitSpec.serviceBindings 同形(dict[str, ServiceBinding],
+   *  字符串别名后端 422 —— 与 RunRequest 顶层同一契约) */
+  serviceBindings?: Record<string, ServiceBinding>
 }
 
 export interface GateSpec {
@@ -285,7 +287,8 @@ export interface GraphSpec {
   nRuns?: number
   gates?: GateSpec[]
   checks?: CheckSpec[]
-  serviceBindings?: Record<string, { authAlias?: string; url?: string }>
+  /** graph 级服务绑定(单元可覆盖);与后端 GraphSpec.serviceBindings 同形 */
+  serviceBindings?: Record<string, ServiceBinding>
 }
 
 export interface RunScenarioResult {

@@ -312,9 +312,12 @@ class GraphUnitSpec(BaseModel):
     # 单元粒度注入(条目 id 取自该场景的 assertion_registry)
     injection_entry_ids: list[str] = Field(default_factory=list,
                                            alias="injectionEntryIds")
-    # 单元粒度服务绑定(与 graph 级合并,单元覆盖同名)
-    service_bindings: dict[str, Any] = Field(default_factory=dict,
-                                              alias="serviceBindings")
+    # 单元粒度服务绑定(与 graph 级合并,单元覆盖同名)。值收紧为
+    # ServiceBinding(评审 2026-11-01:此前 Any —— 字符串别名会被
+    # exec_auth_aliases 的 isinstance(dict) 分支静默跳过,清单/注入
+    # 双漏;入站 API 上线前在 wire 面拒掉,不留给运行时静默丢弃)
+    service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
+                                                        alias="serviceBindings")
     # ── 重构方案约束 5/第 6 处(单行内联 + 连线改名)──
     # 运行方案:空 = 该场景的默认方案
     scheme_id: str | None = Field(default=None, alias="schemeId")
@@ -340,9 +343,10 @@ class GraphSpec(BaseModel):
     # 单词无驼峰差,CheckDecl extra=forbid 即保存时校验)
     gates: list[GateDecl] = Field(default_factory=list)
     checks: list[CheckDecl] = Field(default_factory=list)
-    # graph 级服务绑定(单元可覆盖)
-    service_bindings: dict[str, Any] = Field(default_factory=dict,
-                                              alias="serviceBindings")
+    # graph 级服务绑定(单元可覆盖);值收紧为 ServiceBinding(理由同
+    # GraphUnitSpec.service_bindings:字符串别名在 wire 面 422,不静默跳过)
+    service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
+                                                        alias="serviceBindings")
     # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
     control: GraphControlSpec | None = None
 
