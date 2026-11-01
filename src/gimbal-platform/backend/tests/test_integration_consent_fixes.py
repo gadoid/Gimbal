@@ -397,6 +397,42 @@ async def test_prepare_infra_failure_finishes_channel(
     assert "db down" in (inst.last_error or "")
 
 
+async def test_main_session_sql_error_finishes_channel(
+        client, plate_mock, monkeypatch):
+    """主会话 SQL 故障下的兜底(评审三轮必修):异常来自主会话时,PG
+    已把事务标记中止 —— 兜底在同一会话上 _finish 必二次失败(实测:
+    手动触发 500、实例照旧卡 running 等租约回收,兜底形同虚设)。
+    兜底须先 rollback、再开新会话重载 inst/tpl 收口。替身在传入的
+    主会话上执行坏 SQL,真正覆盖「事务中止」这一层。"""
+    from sqlalchemy import text as _sa_text
+    from app.services import integration_runner as ir
+
+    async def _bad_sql_shape(db, scheme_id, scen):
+        await db.execute(_sa_text("SELECT * FROM no_such_table_xyz"))
+
+    plate_mock.fulls.update(FULLS)
+    u1 = await register_and_login(client, "cfx_c", "pw123456")
+    await _mk_scenario(client, u1, "sc-cfz", {"jira": "1.0#1"})
+    tid = (await client.post("/api/integration/tasks", headers=u1,
+                             json=_task_body("sc-cfz"))).json()["id"]
+
+    # 补丁在创建后打:_load_exec_shape 也被创建面摘要(_tpl_out_full →
+    # auth_aliases_view)复用,打早了连任务都建不出来;此处只覆盖
+    # run_instance 的主会话路径
+    monkeypatch.setattr(ir, "_load_exec_shape", _bad_sql_shape)
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text      # 修复前:500(兜底二次失败)
+    async with db_module.SessionLocal() as db:
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id.is_not(None)))).scalar()
+    assert inst.state == "idle"            # 不再卡 running 等租约回收
+    assert inst.run_status == "channel"
+    assert "执行准备失败" in (inst.last_error or "")
+    assert "no_such_table_xyz" in (inst.last_error or "")
+
+
 async def test_made_private_gate_covers_leak_paths(client, plate_mock):
     """P2.3:转私有后,运行中回 idle 再被调度/凭证复活拉回的两条漏网
     路径由执行闸兜住 → paused/made_private(联动暂停 = 提前通知)。"""

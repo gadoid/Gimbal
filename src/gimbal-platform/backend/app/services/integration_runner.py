@@ -888,8 +888,22 @@ async def run_instance(instance_id: int) -> dict:
                     db, inst, tpl, "auth", f"凭证解析失败: {e}",
                     pause_reason="missing_credential")
         except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)
-            return await _finish(
-                db, inst, tpl, "channel", f"执行准备失败,本轮未执行: {e}")
+            # 异常可能来自主会话上的 SQL —— PG 已把该事务标记中止,
+            # 同一会话再写必然二次失败(实测:手动触发 500、实例照旧
+            # 卡 running 等租约回收,兜底形同虚设)。先 rollback 再开
+            # 新会话重载 inst/tpl 收口 —— 回滚后原对象属性过期,异步
+            # 会话上再读会炸,不能沿用(与下方收口段同款两段式)。
+            await db.rollback()
+            async with db_module.SessionLocal() as db2:
+                inst2 = await db2.get(IntegrationTask, instance_id)
+                if inst2 is None or inst2.template_id is None:
+                    raise IntegrationRunError("instance_gone", "实例已删除")
+                tpl2 = await db2.get(IntegrationTask, inst2.template_id)
+                if tpl2 is None:
+                    raise IntegrationRunError("template_gone", "模板已删除")
+                return await _finish(
+                    db2, inst2, tpl2, "channel",
+                    f"执行准备失败,本轮未执行: {e}")
 
         scen_payload = scen.payload
         inst_state_vars = dict(inst.state_vars or {})
