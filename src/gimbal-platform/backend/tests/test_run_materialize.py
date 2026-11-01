@@ -154,6 +154,31 @@ def test_alias_entry_without_url_stays_gap() -> None:
     assert "svc-orphan" not in out["config"]["services"]
 
 
+def test_empty_declaration_falls_through_to_alias() -> None:
+    """②层按「非空字符串值」算(评审 2026-11-01):空声明(键在值空)
+    不算 authored 落点 —— ③层别名地址可补上(空值挡③只会把缺口推迟
+    到引擎报错,且预检按同源判定不再漏报)。"""
+    from app.services.run_materialize import service_url_resolved
+
+    # 判定面:空/空白/None 声明 = 未落点;有③层命中即算可解析
+    assert not service_url_resolved(
+        "s", declared={"s": ""}, bindings={})
+    assert not service_url_resolved(
+        "s", declared={"s": "  "}, bindings={})
+    assert not service_url_resolved(
+        "s", declared={"s": None}, bindings={})
+    assert service_url_resolved(
+        "s", declared={"s": ""}, bindings={}, alias_base_urls={"s": "https://a"})
+
+    # 物化面:空声明被③层盖掉;无③层保持空值留缺口(引擎显式报错)
+    src = _converted()
+    src["config"]["services"]["fin-service"] = ""
+    out = materialize_run_copy(src, alias_base_urls={"fin-service": "https://alias"})
+    assert out["config"]["services"]["fin-service"] == "https://alias"
+    out = materialize_run_copy(src, alias_base_urls={})
+    assert not out["config"]["services"].get("fin-service")
+
+
 # ─── carry 填充(spec §4)────────────────────────────────────────
 from app.services.run_materialize import CarryContext
 

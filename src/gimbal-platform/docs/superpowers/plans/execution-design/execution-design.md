@@ -460,4 +460,5 @@ E1 能独立成立是关键：**执行记录这条链跑通，不依赖任何未
 - **§复核补一条(原 L130)与 §6 表(原 L376)的 `/run/precheck` 复用主张:已实现**——预检的 `unboundServices` 判定补齐服务地址优先级链第③层(与 `run_materialize._apply_services` 的 ①绑定>②声明>③`service_aliases.base_url` 同口径),消除「预检误报 unbound、执行期③层能补上」的漂移(N1-7)。
 - **注入清单口径**:文中若提「扫描 ∪ 绑定」,现一律为三源并集 `${auth.*}` 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认(`service_aliases.exec_auth_aliases` 唯一实现),由 `services/run_prepare.py`(N1 新建)统一供给五个装载入口(单场景执行/Suite 编排/集成/导出/预检)。
 - **终态写入(N2)**:执行域终态迁移收敛为 `run_dispatcher.transition_execution` 唯一函数(原子守卫 `WHERE status IN (queued,running)`);文中所引 `_finalize_execution` 行为语义不变,但已为薄壳。
+- **地址链②层语义收紧(同日评审第二轮)**:②「authored 声明」现要求**非空字符串值** —— 空声明(键在值空)不算落点,继续走③别名补齐;判定在 `service_url_resolved`(物化/预检同源)。此前「键存在即算」会让空声明既挡住③补齐、又让预检沉默,空值被带进 case 到引擎才报错。
 - 本文档所引 `run_dispatcher` 行号为当时快照,现已漂移;符号级以 `run_prepare.py` 为装载准备权威。

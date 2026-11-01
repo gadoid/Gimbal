@@ -459,3 +459,37 @@ async def test_precheck_alias_base_url_not_unbound(
     assert r.status_code == 200, r.text
     res = {x["schemeId"]: x for x in r.json()}[scheme]
     assert res["unboundServices"] == []      # ③层补上,不再误报
+
+
+async def test_precheck_empty_declaration_not_resolved(
+    client: AsyncClient, plate_mock: PlateMock
+) -> None:
+    """空声明(键在值空)不算 ② 层落点(评审 2026-11-01):与执行期
+    _apply_services 同源判定 —— 无③层别名时预检提示未落点(此前键
+    存在即算,预检与执行一起漏报,空值被带进 case 到引擎才炸);
+    有③层时算可解析(执行期用别名地址盖掉空值)。"""
+    from app.core import db as db_module
+    from app.models.service_alias import ServiceAlias
+
+    auth = await _member(client, "alice")
+    await _setup_scenario(client, auth, services={"fin.order": ""})
+    scheme = await _make_scheme(client, auth, "空声明方案")
+
+    r = await client.post("/api/run/precheck", headers=auth, json=[
+        {"scenarioId": "sc-test", "schemeId": scheme},
+    ])
+    assert r.status_code == 200, r.text
+    res = {x["schemeId"]: x for x in r.json()}[scheme]
+    assert res["unboundServices"] == ["fin.order"]     # 空声明 ≠ 落点
+
+    async with db_module.SessionLocal() as db:
+        db.add(ServiceAlias(alias_name="fin.order", base_service="fin.order",
+                            base_url="http://fin-alias"))
+        await db.commit()
+
+    r = await client.post("/api/run/precheck", headers=auth, json=[
+        {"scenarioId": "sc-test", "schemeId": scheme},
+    ])
+    assert r.status_code == 200, r.text
+    res = {x["schemeId"]: x for x in r.json()}[scheme]
+    assert res["unboundServices"] == []               # ③层可补 → 不提示
