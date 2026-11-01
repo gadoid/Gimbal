@@ -95,7 +95,8 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
 ```
 
 响应 `201 {runId, executionId, identityMode}`。配方字段(数据集/绑定/
-执行参数)不接受 —— 见 §3.0;临时调用(`steps` 直传)随 P3 开放。
+执行参数)不接受 —— 见 §3.0;**临时调用**(不先建场景,请求体直接带
+`steps`)见第 8 节,与 `scenarioId` 二选一。
 
 ### 3.2 定时任务:`POST /api/integration/tasks`
 
@@ -189,6 +190,9 @@ def verify(secret: str, ts: str, sig_v1: str, body: bytes) -> bool:
 - `outputs` 只对**单 case 执行**(总行数 1)携带,经脱敏(敏感键
   表打码,游标键 nextToken/pageToken 豁免);多行执行为 `null`,
   明细走轮询;
+- `kind` 区分执行形态:`scenario` = 场景执行;`adhoc` = 临时调用(第 8
+  节),此时 `scenarioId` 为 `null`(占位 id 不对外暴露),`outputs` 即
+  各步 `extract` 结果(多步合并,同名后者覆盖);
 - **时间字段一律 UTC、`Z` 结尾**(如 `2026-11-01T14:06:27.735108Z`),
   可直接 `datetime.fromisoformat` 解析;不带 `+00:00` 偏移;
 - `failureDigest` 为失败执行的两行式根因摘要(已脱敏);
@@ -235,3 +239,115 @@ grant,需要本人重新签发(然后同样走上面的 PATCH 重绑)。认证�
 排后的行不会在仍被本进程持有时被另一实例重复领取);回写前校验行仍
 `pending`,已被别的实例投递的行不会被改成 failed 或重复计次。接收方
 仍应以 `X-Gimbal-Delivery` 去重(at-least-once 语义不变)。
+
+## 8. 临时调用(P3,设计 2026-11-02)
+
+**不先在平台上建场景,直接按 plate 定义调一次接口**。产物与普通场景
+执行完全相同:一条执行记录(`kind=adhoc`)+ 一次 `execution.finished`
+回调。平台把请求组装成一份标准场景,走与普通执行同一条装载链
+(`prepare_exec` → convert → 物化)交给执行器;平台本身不发 HTTP。
+
+### 8.1 谁能调
+
+只对**入站个人模式**(`gic_` + `X-Gimbal-Grant`)开放:临时调用的灵活性
+绑定到具体用户的授权,凭证取 grant 用户的凭证池。平台模式(无 grant)
+→ 403 `adhoc_requires_grant`;JWT 前端用户 → 403 `adhoc_inbound_only`
+(前端无入口,本期不开未设计的调用面)。
+
+### 8.2 请求契约
+
+```http
+POST /api/runs
+Authorization: Bearer gic_…
+X-Gimbal-Grant: ggt_…
+
+{"steps": [{"endpoint": "settle.order.query",
+            "service": "settle-sit",
+            "body": {"orderNo": "PO20261030001"},
+            "strategy": [{"kind": "extract", "expression": "$.data.status",
+                          "target": "status"}]}],
+ "release": {"settle": "2026.10#3"},          (可选;缺省按环境版本线)
+ "clientRef": "agent-task-8812",
+ "callbackPath": "/agent/callback"}
+```
+
+`steps` 与 `scenarioId` **二选一**(同时出现或都缺失 → 422
+`run_target_ambiguous`)。`steps[*]` 允许的字段(其余一律 422
+`adhoc_field_not_allowed`,`fields` 列出违规路径):
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `endpoint` | 是 | plate 接口锚点 `<系统>.<接口>`;系统取首段 |
+| `service` | 是 | 服务别名名(与场景 `call.service` 同义);须为 `kind=plate` 且 `base_service` = 锚点系统的已登记别名 |
+| `body` | 否 | 业务参数(对象/数组/字符串);GET 类接口由执行器转 query |
+| `pathParams` | 否 | plate 路径模板 `{key}` 占位的值 `{key: 标量}`;模板本身仍来自 plate 定义 |
+| `strategy` | 否 | 只允许 `kind ∈ extract / assertion / assign`,条目结构同场景步骤(执行器 M2 schema,`extra=forbid`) |
+
+顶层只认 `steps` / `release` / `clientRef` / `callbackPath`:`schemeId`、
+`dataSetIds`、`dataSetSelection`、`serviceBindings`、`injectionEntryIds`、
+`graph`、`reportDefinitionId`、`batchId`、`runOptions`(整键,临时调用无
+截断/重复语义)任一非空 → 422 `adhoc_field_not_allowed`。步数 1..10。
+`release` 只能钉步骤锚到的系统,值形如 `<线>#<修订>`。
+
+**平台补什么**:method / path(plate 定义)、服务地址(别名 `base_url`,
+地址链第③层)、凭证(别名 `credential_alias` → 写入 `call.user`,按
+grant 用户凭证池解析落 `config.users`;别名未配凭证则省略,接口若需认证
+由执行器步骤级报错)、carry、版本(下节)。请求体钉不了任何 URL、
+method、path、header —— 与 M1 同一原则。
+
+### 8.3 版本
+
+每个锚点系统的 `meta.plate` 声明:`release` 指定了用它;否则取 `service`
+别名所属环境的 `lines[系统]` 版本线,再经 plate 取**线内最新修订**钉成
+`<线>#<n>`。取不到 → 422 `adhoc_version_unresolved`(`systems[].reason`:
+`no_line` 别名无环境或环境未声明该系统 / `conflicting_lines` 同系统的多个
+别名分属不同线 / `line_not_in_plate` plate 无此线)。不兜底 working:临时
+调用永远执行一个可追溯的钉定修订(`plate_pins` 照常写入)。
+
+### 8.4 派发前校验(不通过即 4xx,不建执行行)
+
+按顺序:身份(8.1)→ 结构(8.2)→ 服务别名(存在 / plate / 系统对应,
+422 `adhoc_service_mismatch`,`services[].reason` = `unknown` /
+`not_plate` / `system_mismatch`)→ 地址落点(别名无 `base_url` → 422
+`adhoc_service_unresolved`)→ 版本(8.3)→ 组装 → **干跑一次 plate
+convert**(与 preview-plate 同口径:锚点不存在、未知字段、必填缺失、类型
+不符 → 422 `adhoc_invalid`,`errors` 原样带回 plate 的逐字段错误)。
+干跑结果不缓存进执行,执行期按正常链路再 convert 一次,派发前校验与
+执行走同一代码路径。plate 不可达 → 503 `plate_unavailable`。
+
+### 8.5 记录与回调
+
+- 执行记录 `kind=adhoc`,`scenario_id` 为占位 `adhoc-<runId>`(列表隐藏
+  场景 id 列与「同配置重跑」,重跑接口 409 `rerun_unsupported`);
+  `scenario_name` = 「临时调用 · 别名 · 锚点」(多步加「等 N 步」);
+  `execution_snapshots` 存组装后的 payload(当时调了什么可追溯)。
+- 回调沿用 `execution.finished`:`kind: "adhoc"`、`scenarioId: null`、
+  `outputs` = 各步 `extract` 结果(已脱敏;多步合并,同名后者覆盖),其余
+  字段同场景执行(§4.4)。
+- 可见性沿用现有规则:owner(grant 用户)本人、admin、经由该别名的入站
+  凭证。
+
+### 8.6 错误码
+
+| HTTP | code | 场景 |
+| --- | --- | --- |
+| 403 | `adhoc_requires_grant` | 平台模式(无 grant)发起 |
+| 403 | `adhoc_inbound_only` | JWT 发起 |
+| 422 | `run_target_ambiguous` | `steps` 与 `scenarioId` 同时出现或都缺失 |
+| 422 | `adhoc_field_not_allowed` | 白名单外字段 / 不允许的策略 / 步数越界 / 带 runOptions 等配方字段 / release 形状或系统不对 |
+| 422 | `adhoc_step_invalid` | 步骤缺 endpoint/service 或 body/pathParams/strategy 形状不对 |
+| 422 | `adhoc_service_mismatch` | 别名不存在、非 plate 别名、或与锚点系统不对应 |
+| 422 | `adhoc_service_unresolved` | 别名无 base_url |
+| 422 | `adhoc_version_unresolved` | 取不到环境版本线或修订 |
+| 422 | `adhoc_invalid` | plate convert 拒绝(附逐字段 `errors`) |
+| 503 | `plate_unavailable` | 派发前校验期间 plate 不可达 |
+
+入站 M1 闸先于临时调用分支:`serviceBindings` 等仍是 422
+`inbound_field_not_allowed`。
+
+### 8.7 已知边界
+
+- `extract` 默认 `scope=step`;跨步用 `${var}` 穿值时请在条目上显式写
+  `"scope": "scenario"`(与场景步骤同语义,平台不替改)。
+- 不支持数据集、断言注入、编排、定时(定时任务必须引用持久化场景)。
+- 「临时调用另存为场景」本期不做;有需要可把快照里的 payload 落成场景。
