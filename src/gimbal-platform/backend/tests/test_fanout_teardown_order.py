@@ -180,7 +180,7 @@ async def test_gather_exception_still_closes_pump_and_finalizes(
     monkeypatch.setattr(pc, "convert", _fake_convert)
     monkeypatch.setattr(gimbal_server_session, "ServerSessionPool",
                         _TrailingLogPool)
-    monkeypatch.setattr(rd, "_compose_scenario", _boom)
+    monkeypatch.setattr(rd, "compose_scenario", _boom)
 
     h = await register_and_login(client, "trail2", "pw123456")
     async with db_module.SessionLocal() as s:
