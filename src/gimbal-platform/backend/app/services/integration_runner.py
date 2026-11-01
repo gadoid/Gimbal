@@ -5,8 +5,9 @@
   状态只回写 integration_tasks 实例行(评审 E3:P1 无 outputs 消费,
   G2 随 P2/task 3c);
 - **复用执行链既有零件**:compose → plate convert → materialize →
-  gimbal server 通道,与 run_dispatcher 同一份实现(经公共别名),
-  不另开漂移面;
+  gimbal server 通道,装载准备经 run_prepare(N1 归一:凭证清单
+  exec_auth_aliases/凭证解析/compose/内置 users 同源;修订不解析,
+  见 run_prepare 模块 docstring 的定案理由),不另开漂移面;
 - **半常驻通道**(评审 E4-A):执行后保留 N 分钟,空闲即收口 ——
   不引入常驻池的看护逻辑;
 - **E1**:state_vars/last_outputs 不接收敏感键(脱敏键表口径),
@@ -486,7 +487,7 @@ async def _load_exec_shape(
     场景限定的方案(S0①;跨场景/已删 scheme_id → 本场景默认回退)、
     方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。
     W1 起 scheme_id 直传(创建前置预览无模板行)。"""
-    from .run_dispatcher import find_dataset_by_id
+    from .run_prepare import find_dataset_by_id
     scheme = None
     if scheme_id:
         scheme = (await db.execute(select(ComposerRunScheme).where(
@@ -759,7 +760,7 @@ async def run_instance(instance_id: int) -> dict:
     返回 {status, durationMs, error}(手动执行回显用)。
     """
     from . import plate_client
-    from .run_dispatcher import (
+    from .run_prepare import (
         built_in_users, compose_scenario, resolve_exec_auths,
     )
 

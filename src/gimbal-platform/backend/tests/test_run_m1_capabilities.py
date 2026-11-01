@@ -220,7 +220,7 @@ async def test_service_binding_auth_merge_keeps_built_in(
     async def _fake_resolve(db_factory, owner_id, aliases):
         return [_FakeAuth(a) for a in aliases]
 
-    monkeypatch.setattr(rd, "_resolve_exec_auths", _fake_resolve)
+    monkeypatch.setattr(rd, "resolve_exec_auths", _fake_resolve)
 
     r = await _post_run(
         client, bob, serviceBindings={"svc": {"authAlias": "qa9"}}

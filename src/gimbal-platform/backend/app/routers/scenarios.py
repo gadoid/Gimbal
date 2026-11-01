@@ -44,8 +44,7 @@ from ..schemas.scenario_composer import (
     StarIn,
 )
 from ..services import plate_client, run_dispatcher, scheme_store, scenario_store
-from ..services import service_aliases
-from ..services.auth_ref_scan import scan_auth_aliases
+from ..services import run_prepare, service_aliases
 from ..services.carry_injection import build_carry_context
 from ..services.run_materialize import referenced_services, materialize_run_copy
 
@@ -148,16 +147,21 @@ async def _materialized_executable(
     # overlay 下产物 ≡ 基线单行 case.json,逐字段相等。
     if overlay is not None:
         # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
-        # scan_auth_aliases(definition steps)∪ 绑定 authAlias(去重即可)。
-        scanned = scan_auth_aliases(clean.get("steps") or [])
-        bound = [b.auth_alias for b in overlay.service_bindings.values()
-                 if b.auth_alias]
-        aliases = sorted(set([*scanned, *bound]))
+        # N1-4 起走 exec_auth_aliases 唯一实现(模板扫描 ∪ 绑定 authAlias
+        # ∪ **别名表凭证默认**)—— 此前手拼 scan ∪ 绑定,缺别名默认层,
+        # 与执行侧注入面漂移(别名表配了默认凭证的导出会漏注入)。
+        service_bindings = {k: b.model_dump(by_alias=True)
+                            for k, b in overlay.service_bindings.items()}
+        async with run_dispatcher.session_factory() as _s:
+            aliases = await service_aliases.exec_auth_aliases(
+                _s, clean.get("steps") or [],
+                {k: {"authAlias": b.auth_alias}
+                 for k, b in overlay.service_bindings.items()})
         try:
-            exec_auths = await run_dispatcher._resolve_exec_auths(
+            exec_auths = await run_prepare.resolve_exec_auths(
                 run_dispatcher.session_factory, owner_id=owner_id,
                 aliases=aliases)
-        except run_dispatcher._AuthResolveError as e:
+        except run_prepare.AuthResolveError as e:
             # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
             # 副作用,直接拒答 422 而非 500)。
             raise HTTPException(
@@ -169,8 +173,6 @@ async def _materialized_executable(
         def_cfg = (clean.get("config") or {})
         built_in = (def_cfg.get("users")
                     if isinstance(def_cfg.get("users"), dict) else {})
-        service_bindings = {k: b.model_dump(by_alias=True)
-                            for k, b in overlay.service_bindings.items()}
     else:
         # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
         # 的唯一开关;carry 见下方无条件物化。

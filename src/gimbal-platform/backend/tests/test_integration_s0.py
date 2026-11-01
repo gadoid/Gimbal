@@ -133,7 +133,7 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
 
-    from app.services import run_dispatcher as rd
+    from app.services import run_prepare
 
     captured: list[dict] = []
 
@@ -141,9 +141,9 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
         captured.append(dict(vars_))
         raise RuntimeError("stop-before-convert")
 
-    # compose_scenario 是 run_instance 内的函数级导入,
-    # 打桩须落在源模块 run_dispatcher 上
-    monkeypatch.setattr(rd, "compose_scenario", _fake_compose)
+    # compose_scenario 是 run_instance 内的函数级导入(N1 起源自
+    # run_prepare),打桩须落在源模块 run_prepare 上
+    monkeypatch.setattr(run_prepare, "compose_scenario", _fake_compose)
 
     async def _point_scheme(scheme_id: str) -> None:
         # 直改模板行(id == tid 且 template_id IS NULL;此前误选实例行)
@@ -200,7 +200,7 @@ async def test_partial_missing_credential_pauses(client):
 async def test_resolve_exec_auths_stays_lenient_on_partial(client):
     """S0② 验收:共享解析函数行为不变 —— 部分缺失不抛不少给,返回
     已解析子集(常规测试执行链依赖的宽松语义)。"""
-    from app.services.run_dispatcher import _resolve_exec_auths
+    from app.services.run_prepare import resolve_exec_auths
 
     h = await register_and_login(client, "s0_shared", "pw123456")
     uid = await _user_id("s0_shared")
@@ -211,6 +211,6 @@ async def test_resolve_exec_auths_stays_lenient_on_partial(client):
             password_enc=fernet_encrypt("p")))
         await db.commit()
 
-    resolved = await _resolve_exec_auths(
+    resolved = await resolve_exec_auths(
         db_module.SessionLocal, uid, ["only-one", "not-there"])
     assert [a.alias for a in resolved] == ["only-one"]

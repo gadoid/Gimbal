@@ -430,3 +430,32 @@ async def test_execution_detail_current_plate(client: AsyncClient) -> None:
     d = await client.get(f"/api/executions/{eid}", headers=auth)
     assert d.status_code == 200, d.text
     assert d.json()["current_plate"] is None
+
+
+async def test_precheck_alias_base_url_not_unbound(
+    client: AsyncClient, plate_mock: PlateMock
+) -> None:
+    """N1-7:别名表 base_url(③层)不算未落点 —— 与执行期三层链同口径。
+
+    执行物化 _apply_services 是 ①绑定>②声明>③别名 base_url;预检此前
+    只判 ①②,fin.order 无声明无绑定时被误报 unbound —— 但执行期③层
+    能补上(预检拦了、执行能跑)。
+    """
+    from app.core import db as db_module
+    from app.models.service_alias import ServiceAlias
+
+    auth = await _member(client, "alice")
+    await _setup_scenario(client, auth)      # steps 引用 fin.order,声明 services 缺
+    scheme = await _make_scheme(client, auth, "无绑定方案")
+
+    async with db_module.SessionLocal() as db:
+        db.add(ServiceAlias(alias_name="fin.order", base_service="fin.order",
+                            base_url="http://fin-alias"))
+        await db.commit()
+
+    r = await client.post("/api/run/precheck", headers=auth, json=[
+        {"scenarioId": "sc-test", "schemeId": scheme},
+    ])
+    assert r.status_code == 200, r.text
+    res = {x["schemeId"]: x for x in r.json()}[scheme]
+    assert res["unboundServices"] == []      # ③层补上,不再误报

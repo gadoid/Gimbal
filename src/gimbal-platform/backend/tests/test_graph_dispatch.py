@@ -14,6 +14,8 @@ from httpx import AsyncClient
 from app.core import db as db_module
 from app.models.execution import Execution, ExecutionRow
 from tests.helpers import make_draft, register_and_login
+from .test_scenario_composer_plate_integration import (  # noqa: F401
+    PlateMock, plate_mock)
 
 STEPS = [{
     "call": {"view_hints": {"endpoint_id": "fin.order.add"}},
@@ -516,3 +518,94 @@ async def test_graph_checks_generated_shape_validated(client):
     }
     r = await client.post("/api/runs", headers=h, json=bad_missing)
     assert r.status_code == 422, r.text
+
+
+class TestGraphN1Unification:
+    """N1-2:编排链凭证清单/补 carry 与单场景链同源。"""
+
+    AUTH_STEPS = [{
+        "kind": "step", "description": "带认证头的调用",
+        "call": {"service": "fin.order", "method": "POST", "path": "/x",
+                 "headers": {"Authorization": "${auth.qa7.token}"}},
+        "request": {"kind": "request", "body": {"amount": 1}},
+        "strategy": [],
+    }]
+
+    async def test_auth_template_scan_without_binding(self, client,
+                                                      monkeypatch):
+        """单元 steps 模板引用 ${auth.qa7.token}(无任何绑定)→ 凭证清单
+        收扫到并注入 users —— 此前编排只收显式绑定,模板扫描层整缺。"""
+        await register_and_login(client, "gn_b7", "gn_b7pass123")
+        h = await register_and_login(client, "gn_o7", "gn_o7pass123")
+        draft = make_draft("sc-gn-7", steps=self.AUTH_STEPS)
+        draft["definition"]["config"] = {"timePolicy": {"kind": "record"}}
+        r = await client.post("/api/scenarios", headers=h, json=draft)
+        assert r.status_code in (200, 201), r.text
+        await self._fake_convert(monkeypatch)
+
+        from app.core.security import fernet_encrypt
+        from app.models.auth_session import AuthSession
+        from app.models.user import User
+        from app.services import graph_dispatch, scheme_store
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gn_o7"))).scalar_one()
+            s.add(AuthSession(owner_id=uid, alias="qa7", url="http://auth:7",
+                              username_enc=fernet_encrypt("u7"),
+                              password_enc=fernet_encrypt("p7")))
+            await scheme_store.ensure_default_scheme(s, "sc-gn-7")
+            await s.commit()
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-gn-7"}],
+            })
+        users = graph["units"][0]["scenario"]["config"].get("users") or {}
+        assert "qa7" in users        # 模板扫描层(此前整缺)
+
+    async def _fake_convert(self, monkeypatch):
+        from app.services import plate_client as pc
+
+        async def _fake_convert(scenario):
+            return {"consumer": "platform", "converted": dict(scenario)}
+        monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    async def test_unit_carry_injected(self, client, plate_mock):
+        """N1-2:Suite 编排 carry 按单元注入 —— 修复「显式 None」权宜
+        留下的功能缺口(单场景链有 carry、编排链没有)。"""
+        from app.services import carry_store
+        from app.services import graph_dispatch
+
+        plate_mock.behaviour = "echo"
+        plate_mock.services = [{"name": "fin-service"}]
+        plate_mock.fulls = {"fin.ep1": {"request": {"declarations": [
+            {"path": "$.remark", "state": "carry", "type": "string"}]}}}
+        async with db_module.SessionLocal() as db:
+            await carry_store.put_bindings(
+                db, "fin-service", {"$.remark": "编排-李四"},
+                updated_by_id=None, updated_by_name="alice")
+            await db.commit()
+
+        await register_and_login(client, "gn_b8", "gn_b8pass123")
+        h = await register_and_login(client, "gn_o8", "gn_o8pass123")
+        draft = make_draft("sc-gn-8", steps=[{
+            "kind": "step",
+            "call": {"service": "fin-service", "path": "/x",
+                     "view_hints": {"endpoint_id": "fin.ep1"}},
+            "request": {"kind": "request", "body": {"order_id": "o-1"}}}])
+        r = await client.post("/api/scenarios", headers=h, json=draft)
+        assert r.status_code in (200, 201), r.text
+
+        from app.models.user import User
+        async with db_module.SessionLocal() as s:
+            uid = (await s.execute(sa.select(User.id).where(
+                User.username == "gn_o8"))).scalar_one()
+        async with db_module.SessionLocal() as s:
+            graph = await graph_dispatch.materialize_graph(s, uid, {
+                "mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-gn-8",
+                           "serviceBindings": {
+                               "fin-service": {"url": "http://fin:1"}}}],
+            })
+        body = graph["units"][0]["scenario"]["steps"][0]["request"]["body"]
+        assert body.get("remark") == "编排-李四"   # carry 注入(此前恒缺)

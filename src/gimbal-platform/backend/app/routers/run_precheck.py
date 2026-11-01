@@ -134,11 +134,22 @@ async def _precheck_one(
     steps = definition_from_payload(raw_payload).get("steps") or []
     declared = (definition_from_payload(raw_payload).get("config") or {}).get("services")
     declared = declared if isinstance(declared, dict) else {}
-    result.unbound_services = [
+    # N1-7:与执行期地址三层链同口径 —— ①绑定 url > ②authored 声明 >
+    # ③ service_aliases.base_url > ④缺口引擎报错。预检此前只判 ①②,
+    # 会被③层补上的服务误报 unbound(预检拦了、执行能跑 —— 口径漂移)。
+    candidates = [
         svc for svc in referenced_services(steps)
         if not isinstance(declared.get(svc), str)
         and not (bindings.get(svc) or {}).get("url")
     ]
+    if candidates:
+        try:
+            from ..services import service_aliases
+            alias_urls = await service_aliases.base_urls_for(db, candidates)
+        except Exception:  # noqa: BLE001 — 查表失败退回①②口径(不误放行)
+            alias_urls = {}
+        candidates = [s for s in candidates if s not in alias_urls]
+    result.unbound_services = candidates
 
     result.scheme_valid = not (
         result.dead_dataset_ids or result.dangling_entry_ids

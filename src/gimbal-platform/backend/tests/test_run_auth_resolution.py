@@ -1,4 +1,4 @@
-"""Real-path tests for run_dispatcher._resolve_exec_auths.
+"""Real-path tests for run_prepare.resolve_exec_auths.
 
 Every run test previously monkeypatched this function away, so the
 actual Fernet round-trip — including the "plaintext never lands on the
@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
 from app.models import AuthSession, User
-from app.services import run_dispatcher
+from app.services import run_prepare
 
 
 async def _seed_owner(factory, alias: str, username: str, password: str) -> int:
@@ -48,12 +48,12 @@ async def test_resolve_exec_auths_happy_path_and_orm_purity(fresh_db) -> None:
     factory = db_module.SessionLocal
     owner_id = await _seed_owner(factory, "svc", "alice", "s3cret")
 
-    resolved = await run_dispatcher._resolve_exec_auths(
+    resolved = await run_prepare.resolve_exec_auths(
         factory, owner_id=owner_id, aliases=["svc"]
     )
     assert len(resolved) == 1
     r = resolved[0]
-    assert isinstance(r, run_dispatcher.ResolvedAuth)
+    assert isinstance(r, run_prepare.ResolvedAuth)
     assert (r.alias, r.username, r.password) == ("svc", "alice", "s3cret")
     assert r.url == "https://svc.internal"
 
@@ -82,8 +82,8 @@ async def test_resolve_exec_auths_decrypt_failure_fails_fast(fresh_db) -> None:
         ))
         await db.commit()
 
-    with pytest.raises(run_dispatcher._AuthResolveError, match="rotten"):
-        await run_dispatcher._resolve_exec_auths(
+    with pytest.raises(run_prepare.AuthResolveError, match="rotten"):
+        await run_prepare.resolve_exec_auths(
             factory, owner_id=owner_id, aliases=["good", "rotten"]
         )
 
@@ -95,7 +95,7 @@ async def test_resolve_exec_auths_missing_alias_warns_and_continues(fresh_db) ->
     factory = db_module.SessionLocal
     owner_id = await _seed_owner(factory, "svc", "alice", "s3cret")
 
-    resolved = await run_dispatcher._resolve_exec_auths(
+    resolved = await run_prepare.resolve_exec_auths(
         factory, owner_id=owner_id, aliases=["svc", "ghost"]
     )
     assert [r.alias for r in resolved] == ["svc"]

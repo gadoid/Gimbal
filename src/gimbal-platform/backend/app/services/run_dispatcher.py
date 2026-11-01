@@ -2,7 +2,7 @@
 
 Per-row fan-out of a Scenario's selected DataSets:
 
-1. :func:`_compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
+1. :func:`run_prepare.compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
    gimbal scenario dict(行键注入 ``config.vars``,按基线类型还原)。
 2. Plate ``/convert`` — 校验 + 剥平台视图字段(orchestration 绝不外发)。
 3. 执行凭证注入 convert 产物(明文不流经 plate)— Task 3 起由
@@ -18,7 +18,7 @@ helper) so the app lifespan can shut down cleanly.
 
 The former Case layer was dissolved — ``RunRequest`` IS the recipe
 (dataSetIds / serviceBindings / …, pure values) applied directly
-to the scenario by :func:`_compose_scenario` (the 配置器/transformer).
+to the scenario by :func:`run_prepare.compose_scenario` (the 配置器/transformer).
 
 Returns ``RunResponse(runId)`` to the caller immediately, and the
 ``Execution`` row (re-used from Spec-2) holds the aggregate counters
@@ -60,7 +60,6 @@ from ..models.execution import (
     ExecutionJob,
     STATUS_RUNNING,
 )
-from ..models.auth_session import AuthSession as DBAuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
@@ -73,44 +72,18 @@ from .run_injection import (
     entry_issues,
     injectable_universe,
 )
-from .run_materialize import referenced_services, materialize_run_copy
+from .run_materialize import materialize_run_copy
 from . import service_aliases
-
-# 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
-# 下游 materialize_run_copy(_apply_users)仍消费 username/password/url/token_type/
-# expires_in 这几个字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入
-# 逻辑)。保留 ResolvedAuth 作为兼容 shim,免改下游的字段引用。
-from app.auth.schema import AuthSession as RuntimeAuthSession  # noqa: E402
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedAuth:
-    """解密后的执行认证(轻量值对象,保留兼容 shim)。
-
-    明文凭证只存在于该对象的生命周期内,不落在 AuthSession ORM 行
-    上 — 避免任何意外 commit 把明文写回数据库。
-
-    内部委托给标准 RuntimeAuthSession(物理迁移自 gimbal),字段对齐下游消费者。
-    """
-
-    alias: str
-    url: str
-    username: str
-    password: str
-    token_type: str
-    expires_in: int
-
-    @classmethod
-    def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str) -> "ResolvedAuth":
-        """从标准 RuntimeAuthSession 构造,供 _resolve_exec_auths 内部使用。"""
-        return cls(
-            alias=alias,
-            url=runtime.url,
-            username=runtime.username,
-            password=runtime.password,
-            token_type=runtime.token_type,
-            expires_in=runtime.expires_in or 0,
-        )
+# N1(2026-11-01):装载准备(凭证清单/解析、compose、内置 users、数据集
+# 查找、prepare_exec 统一入口)迁往 run_prepare —— 本模块只做派发与
+# 执行编排;ResolvedAuth/AuthResolveError 亦由 run_prepare 定义。
+from .run_prepare import (
+    AuthResolveError,
+    compose_scenario,
+    find_dataset_by_id,
+    prepare_exec,
+    resolve_exec_auths,
+)
 
 
 # ─── shutdown 状态 + 队列 worker 桥（C11）───────────────────────
@@ -701,7 +674,7 @@ async def compute_run_fanout(
 
     selected_datasets: list[ComposerDataSet] = []
     for ds_id in sel_by_ds:
-        ds = await _find_dataset_by_id(db, ds_id)
+        ds = await find_dataset_by_id(db, ds_id)
         if ds is None or ds.scenario_id != scen.scenario_id:
             raise NotFound(
                 "data_set_not_found", f"data set not found: {ds_id}"
@@ -1543,11 +1516,11 @@ async def _fanout(
         # 注入清单为空(无 ${auth.*} 扫描引用、无绑定 authAlias)时
         # 直接跳过解析。
         exec_auths = (
-            await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
+            await resolve_exec_auths(db_factory, owner_id, auth_aliases)
             if auth_aliases
             else []
         )
-    except _AuthResolveError as e:
+    except AuthResolveError as e:
         logger.error(
             "run_dispatcher: auth resolve failed for execution {}: {}",
             execution_id, e,
@@ -1572,72 +1545,24 @@ async def _fanout(
     # 认证解析通过、即将分发行 → queued 置 running(UI 可见"在跑")。
     await _mark_running(db_factory, execution_id)
 
-    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— dispatch 阶段查
-    # 一次,纯函数物化时消费(与 resolved_auths/CarryContext 同款传参
-    # 模式)。增强链路:查表失败降级空表,绝不阻塞执行。
-    try:
-        async with db_factory() as _alias_s:
-            alias_urls = await service_aliases.base_urls_for(
-                _alias_s,
-                referenced_services(
-                    (definition_from_payload(scenario_payload)
-                     .get("steps") or [])),
-            )
-    except Exception:  # noqa: BLE001
-        logger.opt(exception=True).warning(
-            "run_dispatcher: alias base_url lookup failed; skipped")
-        alias_urls = {}
-
     sem = asyncio.Semaphore(max(1, parallel))
 
     # P6:整单固定一次 compose 时间戳 — deepcopy 隔离存储 payload(防写穿
     # ORM 行),同一行 n_runs 次重复的 convert 输入完全一致, memo 键才能命中。
     scenario_payload = copy.deepcopy(scenario_payload)
-    definition = definition_from_payload(scenario_payload)
 
-    # RS3（Release v4.4 §4.4/§6.3）：生效修订解析 + plate_pins 记录
-    # meta.plate = {系统: '<line>#<n>' | 'working'}；入队时调 resolve
-    # 得到各系统生效修订，写入执行副本后 /convert 按原值取修订重投影。
-    meta_plate = (definition.get('meta') or {}).get('plate') or {}
-    plate_pins: dict[str, str] = {}
-    # A-3/W7(版本模型 4.3)入库判定的输入:受管系统的在用接口集
-    # (锚点收,system = endpoint 首段)+ 无锚点步骤的服务键(external
-    # 判定;收集外提 —— working 场景(不进 resolve 分支)也要判)。
-    endpoints_used: dict[str, set[str]] = {}
-    unanchored_services: list[str] = []
-    for step in (definition.get('steps') or []):
-        if not isinstance(step, dict):
-            continue
-        ep_id = step.get('endpoint')
-        if ep_id:
-            system = str(ep_id).split('.')[0]
-            endpoints_used.setdefault(system, set()).add(str(ep_id))
-        else:
-            call = step.get('call')
-            svc = call.get('service') if isinstance(call, dict) else None
-            if isinstance(svc, str) and svc:
-                unanchored_services.append(svc)
-    if meta_plate and any(  # b2-3/b2-4:追溯类 = PIN ∪ INTEGRATION
-            record_category(v) in (PIN, INTEGRATION)
-            for v in meta_plate.values()):
-        try:
-            resolve_result = await plate_client.resolve(
-                meta_plate,
-                {sys_: sorted(ids) for sys_, ids in endpoints_used.items()})
-            # b2-4/b2.5(归一 v1.0 §1.5):回写分流抽为 run_semantics
-            # .merge_resolve_effective(可测;PIN 写副本/INTEGRATION 只写 pins)
-            from . import run_semantics as _rs
-            _rs.merge_resolve_effective(
-                meta_plate, plate_pins, resolve_result)
-        except plate_client.PlateRejectedError as exc:
-            # ⑥(2026-10-13):plate 的 4xx 是对**声明**的裁决(修订不存在/
-            # 线不存在等)—— 归 plate_rejected,不再冒充 plate_unavailable
-            # 把运维引去查一个并不存在的目录故障。
-            raise RuntimeError(
-                f'plate_rejected: 生效修订解析被拒: {exc}') from exc
-        except Exception as exc:  # noqa: BLE001 — plate 不可用时执行失败
-            raise RuntimeError(
-                f'plate_unavailable: 生效修订解析失败: {exc}') from exc
+    # N1(2026-11-01):装载准备归一 —— 别名 base_url 预解析(F4 方案 B,
+    # 查表失败降级空表)、RS3 生效修订解析(plate_client.resolve +
+    # merge_resolve_effective;plate_rejected/plate_unavailable 异常
+    # 拓扑不变)、内置 users 基座、carry 预解析(M4:field_states 增量在
+    # payload.ui.fieldStates)统一走 run_prepare.prepare_exec。认证已在
+    # 上方先行 fail-fast 解析(with_auth=False 跳过重复解密);deepcopy
+    # 先行 —— 修订回写落在副本上,不写穿存储 payload。
+    _ui_fs = ((scenario_payload or {}).get("ui") or {}).get("fieldStates") or {}
+    prep = await prepare_exec(
+        db_factory, scenario_payload, owner_id=owner_id,
+        ui_field_states=_ui_fs, resolve_mode="single", with_auth=False)
+
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。
     baseline: tuple[bool, str | None, dict] | None = None
@@ -1645,22 +1570,22 @@ async def _fanout(
         from . import run_semantics
         async with db_factory() as _sem_s:
             baseline = await run_semantics.assess_baseline(
-                _sem_s, meta_plate=meta_plate,
-                endpoints_used=endpoints_used,
-                unanchored_services=unanchored_services)
+                _sem_s, meta_plate=prep.meta_plate,
+                endpoints_used=prep.endpoints_used,
+                unanchored_services=prep.unanchored_services)
     except Exception:  # noqa: BLE001
         logger.opt(exception=True).warning(
             'run_dispatcher: 入库标准判定失败 (execution={})', execution_id)
         baseline = None
     # RS3：生效修订表落库（dispatch 侧无引用可回填 —— job 经 DB
     # 队列异步驱动，在解析处就地写入；台账性质，失败不阻断执行）。
-    if plate_pins or baseline is not None:
+    if prep.plate_pins or baseline is not None:
         try:
             from sqlalchemy import update as sa_update
             async with db_factory() as _pin_sess:
                 _values: dict = {}
-                if plate_pins:
-                    _values['plate_pins'] = plate_pins
+                if prep.plate_pins:
+                    _values['plate_pins'] = prep.plate_pins
                 if baseline is not None:
                     _values['baseline_eligible'] = baseline[0]
                     _values['baseline_block'] = baseline[1]
@@ -1687,26 +1612,17 @@ async def _fanout(
     # 内置认证(definition.config.users)是 users 合并的保留基座 —— plate
     # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
-    built_in_users = _built_in_users(scenario_payload)
+    # (N1:基座取值移入 run_prepare,此处消费 prep 产物)
+    built_in_users = prep.built_in_users
     # serviceBindings 原样传给 materialize_run_copy(url 物化只对 steps
     # 实际引用的 service 键生效,见 run_materialize._apply_services)。
     service_bindings = service_bindings or {}
 
     # carry 预解析(spec §4.1):dispatch 阶段一次,run 内快照一致 —
-    # 绑定/契约编辑的生效边界是下次执行。plate 故障在 build 内部降级
-    # (空面/空目录);此处再兜一层 — carry 是增强不是前置条件,任何
-    # 故障(含 DB)都降级为无 carry,绝不阻塞执行。
-    from .carry_injection import build_carry_context
-    # M4:field_states 增量在 payload.ui.fieldStates(按步骤位置索引)
-    _ui_fs = ((scenario_payload or {}).get("ui") or {}).get("fieldStates") or {}
-    try:
-        async with db_factory() as _carry_db:
-            carry_ctx = await build_carry_context(
-                _carry_db, definition, ui_field_states=_ui_fs)
-    except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
-        logger.opt(exception=True).warning(
-            "run_dispatcher: carry context build failed; skipped")
-        carry_ctx = None
+    # 绑定/契约编辑的生效边界是下次执行。构建在 run_prepare 内完成
+    # (plate 故障在 build 内部降级空面;DB 故障降级为无 carry)——
+    # carry 是增强不是前置条件,任何故障都不阻塞执行。
+    carry_ctx = prep.carry_ctx
 
     async def _row(ds: dict | None, row_idx: int, row: dict | None, rep: int,
                    seq: int, injection: dict | None = None) -> None:
@@ -1744,7 +1660,7 @@ async def _fanout(
             # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
             # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
             row_dict = dict(row or {})
-            composed = _compose_scenario(scenario_payload, row_dict)
+            composed = compose_scenario(scenario_payload, row_dict)
             if injection is not None:
                 composed = compose_injection_scenario(composed, injection)
             # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
@@ -1834,7 +1750,7 @@ async def _fanout(
                         resolved_auths=exec_auths,
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
-                        alias_base_urls=alias_urls,
+                        alias_base_urls=prep.alias_base_urls,
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
@@ -2629,49 +2545,6 @@ async def filter_injection_entries(
     return selected_entries, dangling_ids, skipped_while_degraded
 
 
-def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
-    """场景 definition.config.users(merge 策略保留基座)。"""
-    def_cfg = definition_from_payload(scenario_payload).get("config") or {}
-    users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
-    return dict(users or {})
-
-
-def _compose_scenario(
-    scenario_payload: dict, row_dict: dict
-) -> dict[str, Any]:
-    """配置器:把存储的 Scenario + 一行数据 变换成 Plate 输入。
-
-    源存果算 — 这里是唯一的变换点:存储里只有场景定义(源)与
-    数据行(纯值),每个 run 的形态由本函数即时计算:
-
-    * deep-copy 场景定义,行键值合入 ``config.vars``(行值覆盖同名
-      场景级 var)。行值按基线类型还原(新数据集编辑器全字符串落库,
-      ``_coerce_row_value`` 恢复"int 还是 int"的旧语义,断言
-      ``expected: 0`` 不会被字符串化破坏)。
-    * 数据集行是稀疏覆盖(缺键 = 继承基线,即场景级 vars 原值;
-      ``""`` = 显式空覆盖),与行 0 基线虚行/三态单元格的编辑器
-      契约一致 —— 基线行本身不落库,由场景 vars 承担。
-    * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
-      容器化重构后为 ``{definition, orchestration}``;plate 只吃
-      ``definition``(orchestration 是平台侧投影,绝不外发)。
-    * M2 步骤 4(Q18):定义即纯 M2,Meta 只 name 必填(M6),不再补
-      plate 默认值 —— fill_plate_defaults 已删除。
-    """
-    raw = scenario_payload or {}
-    # Unwrap the container: plate must never see orchestration.
-    out = copy.deepcopy(definition_from_payload(raw))
-    cfg = out.setdefault("config", {})
-    if not isinstance(cfg, dict):
-        cfg = {}
-        out["config"] = cfg
-    vars_map = dict(cfg.get("vars") or {})
-    # Row wins: a row's `qty` overrides a scenario-level `vars.qty`.
-    for k, v in (row_dict or {}).items():
-        vars_map[k] = _coerce_row_value(vars_map.get(k), v)
-    cfg["vars"] = vars_map
-    return out
-
-
 def _new_run_id() -> str:
     return f"run-{_utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
 
@@ -2687,71 +2560,29 @@ def _convert_cache_key(payload: dict) -> str:
     ).hexdigest()
 
 
-class _AuthResolveError(RuntimeError):
-    """执行认证解密失败 — fail-fast,同 V1 executor 的 ``_decrypt_auths``
-    语义(解密失败上抛使整个 run 失败,而不是带着空/坏凭证静默打环境)。"""
+# (N1 迁移勘误:_jsonl_lock 随 _append_jsonl 原本同居一块,块搬移时
+# 失联 —— 与函数一并回插。)
+_jsonl_lock = threading.Lock()
 
 
-async def _resolve_exec_auths(
-    db_factory: Any, owner_id: int, aliases: list[str]
-) -> list["ResolvedAuth"]:
-    """Owner 级 alias → ResolvedAuth(解密后的轻量值对象)。owner 过滤
-    防跨 owner 同名 alias 解错凭证。
-
-    * 解密失败 → 抛 :class:`_AuthResolveError`(V1 严格语义:
-      凭证路径 fail-fast,不静默降级)。
-    * alias 不属于该 owner 时解不到 → 告警后继续(与 V1 一致:
-      缺 alias 只是注入不到 users,该行 run 在 Gimbal 解析
-      ``${auth.*}`` 时步骤级报错)。
-    * 明文只存在于返回的值对象上 — 绝不写回 ORM 行(此前
-      ``a.username = ...`` 会把明文挂到 session 里的 AuthSession
-      实例上,任何一次意外 commit 都会把明文持久化进库)。
-
-    Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
-    接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
-    这样下游 materialize_run_copy(_apply_users)不动,未来可直接消费
-    ``RuntimeAuthSession``。
-    """
-    if not aliases:
-        return []
-    from ..core.security import fernet_decrypt
-
-    resolved: list[ResolvedAuth] = []
-    async with db_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(DBAuthSession).where(
-                        DBAuthSession.owner_id == owner_id,
-                        DBAuthSession.alias.in_(aliases),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-    for a in rows:
+def _append_jsonl(path: Path, payload: dict) -> None:
+    data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+    with _jsonl_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY
+                     | getattr(os, "O_BINARY", 0))
         try:
-            # 先构造标准 RuntimeAuthSession(字段对齐 gimbal 侧 AuthSession)
-            runtime = RuntimeAuthSession(
-                url=a.url,
-                username=fernet_decrypt(a.username_enc),
-                password=fernet_decrypt(a.password_enc),
-                token_type=a.token_type,
-                expires_in=a.expires_in,
-            )
-            # 转兼容 shim(下游消费的字段不变)
-            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.alias))
-        except ValueError as e:
-            raise _AuthResolveError(
-                f"auth alias '{a.alias}' decrypt failed: {e}"
-            ) from e
-    missing = set(aliases) - {a.alias for a in resolved}
-    if missing:
-        logger.warning(
-            "run_dispatcher: exec auth aliases not found: {}", sorted(missing)
-        )
-    return resolved
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+
+
+# 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
+# (N1 迁移勘误:这组底部导入曾位于已迁走的 _coerce_row_value 与
+# _find_dataset_by_id 之间,随块搬移而失联 —— 回插于此。)
+from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, ref_category
+from .scenario_store import get_row, steps_from_payload, definition_from_payload
+from .scenario_store import _meta_from_row  # noqa: PLC2701 台账快照列(M2)
 
 
 def _jsonl_path() -> Path:
@@ -2888,57 +2719,6 @@ def _write_case_file(case_dir: Path, scenario_dict: dict[str, Any]) -> Path:
     return case_path
 
 
-def _coerce_row_value(base_val: Any, row_val: Any) -> Any:
-    """行值按基线类型还原(新数据集编辑器把所有值存成字符串)。
-
-    转置表格/CSV 导入统一 ``String(v)`` 落库,直接合入会把整型基线
-    覆盖成字符串,破坏 ``Assertion{expected: 0}`` 这类强类型断言
-    (旧链路"int 还是 int"的语义)。规则:
-
-    * 基线是 bool  → ``"true"/"false"``(大小写不敏感)还原,其余原样;
-    * 基线是 int   → ``int(row_val)`` 可解析则还原(int("2.0") 会抛
-      ValueError,正好保留原串);
-    * 基线是 float → ``float(row_val)`` 可解析则还原;
-    * 其余(str/生成式 dict/基线不存在)→ 原样合入 —— 空串仍是显式
-      空覆盖,生成式 spec 不受行值影响。
-    """
-    if not isinstance(row_val, str) or not isinstance(base_val, (bool, int, float)):
-        return row_val
-    if isinstance(base_val, bool):
-        lowered = row_val.strip().lower()
-        if lowered == "true":
-            return True
-        if lowered == "false":
-            return False
-        return row_val
-    try:
-        if isinstance(base_val, int):
-            return int(row_val)
-        return float(row_val)
-    except ValueError:
-        return row_val
-
-
-# P1 收口(known-issues/run-journal/jsonl-append-race):fan-out 行协程经
-# to_thread 并发 append 同一 JSONL,文本模式「定位到末尾再写」在 Windows
-# 上非原子,实测出撕裂行 —— 进程内串行化(锁)+ 单次 os.write 二进制追加。
-# 跨进程双写者(live server + 测试同日文件)仍非内核级原子,与修复前同
-# 面,不承诺;唯一证据源是 per-case result.json,JSONL 是运维索引。
-_jsonl_lock = threading.Lock()
-
-
-def _append_jsonl(path: Path, payload: dict) -> None:
-    data = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
-    with _jsonl_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY
-                     | getattr(os, "O_BINARY", 0))
-        try:
-            os.write(fd, data)
-        finally:
-            os.close(fd)
-
-
 async def _create_execution(
     db: AsyncSession,
     *,
@@ -2989,20 +2769,6 @@ async def _create_execution(
     return ex
 
 
-# ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
-# 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
-from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
-from .scenario_store import get_row, steps_from_payload, definition_from_payload
-from .scenario_store import _meta_from_row  # noqa: PLC2701 台账快照列(M2)
-from .data_set_store import get_row as get_dataset_row
-
-
-async def _find_dataset_by_id(
-    db: AsyncSession, dataset_id: str
-) -> ComposerDataSet | None:
-    return await get_dataset_row(db, dataset_id)
-
-
 # ─── session factory (for the background task) ───────────────────
 def _session_factory() -> AsyncSession:
     """Open a fresh AsyncSession — the background task outlives the
@@ -3013,7 +2779,6 @@ def _session_factory() -> AsyncSession:
 
 # 公开别名:启动恢复等模块外调用方不必触私有名。
 session_factory = _session_factory
-
 
 # ─── error sentinels (router translates to HTTPException) ─────────
 class NotFound(Exception):
@@ -3032,10 +2797,12 @@ class Conflict(Exception):
         self.extra = extra or {}
 
 
-# ── 外部系统集成 P1:私有件提升为公共(方案 §5,与此前 ─────────────
-# referenced_services 的处理一致 —— integration_runner 复用同一份
-# 组装/解析实现,不在集成路径另开第二份漂移面)。
-compose_scenario = _compose_scenario
-built_in_users = _built_in_users
-resolve_exec_auths = _resolve_exec_auths
-find_dataset_by_id = _find_dataset_by_id
+# 外部系统集成 P1 的私有件公共别名(compose_scenario/built_in_users/
+# resolve_exec_auths/find_dataset_by_id)已随 N1 迁至 run_prepare 并
+# 公开 —— 外部消费方一律 from .run_prepare import,本模块不再转发。
+
+
+# 编排执行入口(suites 路由)消费 —— 执行行创建/runId 生成是执行域职责,
+# 与装载准备(run_prepare)分属两层。
+create_execution = _create_execution
+new_run_id = _new_run_id

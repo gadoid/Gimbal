@@ -265,3 +265,32 @@ async def test_golden_equivalence_with_carry(
     await _wait(lambda: len(cases) >= 1)
 
     assert cases[0] == exported
+
+
+async def test_overlay_alias_default_credential_injected(
+        client, plate_mock: PlateMock):
+    """N1-4:别名表 credential_alias 默认凭证并入导出注入清单。
+
+    steps 模板未引用、overlay 未绑定,仅别名表给 fin-service 配了
+    默认凭证 qa9 → overlay 导出 users 含 qa9(与 dispatch 注入面
+    同源;此前导出手拼「扫描 ∪ 绑定」缺别名默认层 —— 执行能注而
+    导出漏注,黄金等价对这对输入不成立)。
+    """
+    from app.models.service_alias import ServiceAlias
+
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob")
+    await _seed(client, bob)
+    await _seed_owner_auth("qa9")
+    async with db_module.SessionLocal() as db:
+        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
+                            credential_alias="qa9"))
+        await db.commit()
+
+    exported = (await client.post(
+        "/api/scenarios/preview-plate", headers=bob,
+        json={**_eq_draft(), "overlay": {"serviceBindings": {}}})
+    ).json()["converted"]
+    users = exported["config"].get("users") or {}
+    assert "qa9" in users, users          # 别名默认层并入清单
+    assert users["qa9"]["username"] == "qa9-user"

@@ -25,8 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core import db as db_module
 from ..models.composer_scenario import ComposerScenario
-from . import plate_client, scenario_store
-from .carry_injection import build_carry_context
+from . import plate_client, run_prepare, scenario_store
 from .run_injection import compose_injection_scenario
 from . import service_aliases
 from . import carry_store
@@ -47,9 +46,9 @@ async def resolve_graph_units(
     重构方案约束 5(单行内联):``schemeId``(空 = 默认方案)+ ``row``
     {datasetId, rowIndex}(空 = 裸基线)选定该单元唯一运行的一行;
     方案的服务绑定随行合入(单元级覆盖同名)。此前固定
-    ``_compose_scenario(payload, {})`` 只跑裸基线。
+    ``compose_scenario(payload, {})`` 只跑裸基线(run_prepare)。
     """
-    from .run_dispatcher import _compose_scenario, _find_dataset_by_id
+    from .run_prepare import compose_scenario, find_dataset_by_id
     from . import scheme_store
 
     resolved: list[dict] = []
@@ -80,7 +79,7 @@ async def resolve_graph_units(
         if row_spec:
             ds_id = row_spec.get("datasetId")
             ri = int(row_spec.get("rowIndex", 0))
-            ds = await _find_dataset_by_id(db, ds_id)
+            ds = await find_dataset_by_id(db, ds_id)
             if ds is None or ds.scenario_id != u["scenarioId"]:
                 raise GraphDispatchError(
                     f"unit {u['ref']!r}: dataset not found: {ds_id}")
@@ -90,7 +89,7 @@ async def resolve_graph_units(
                     f"unit {u['ref']!r}: rowIndex {ri} out of range for "
                     f"{ds_id} (0..{len(rows) - 1})")
             row_dict = rows[ri] or {}
-        composed = _compose_scenario(payload, row_dict)
+        composed = compose_scenario(payload, row_dict)
 
         entries = u.get("injectionEntryIds") or []
         if entries:
@@ -137,7 +136,6 @@ async def materialize_graph(
     —— 版本模型三件套(plate_pins/baseline_*/m2_hash)对 suite 执行
     与单场景同口径;此前 graph 分支完全不记台账、不传 m2 代际门。
     """
-    from .run_dispatcher import _resolve_exec_auths, _built_in_users
 
     mode = graph_req.get("mode") or "aggregate"
     if mode not in ("aggregate", "compose", "fanout", "chain"):
@@ -154,7 +152,7 @@ async def materialize_graph(
     # 可用集合交集的最新修订;不一致/无交集 → 拒绝(错误码随
     # GraphDispatchError 面 4xx)。plate 不可用时跳过检查(resolve 内
     # 部已按成员降级,与单场景执行同口径)。
-    # B-1(2026-10-13 勘误):r["composed"] 是 _compose_scenario 的产物
+    # B-1(2026-10-13 勘误):r["composed"] 是 compose_scenario 的产物
     # —— 已解包的 definition 本体,不再是容器;此前此处按容器调
     # definition_from_payload 恒得 {},R25 版本统一(含 check_and_
     # resolve_suite_versions 调用)在真实 graph 路径从未生效(死代码)。
@@ -178,23 +176,26 @@ async def materialize_graph(
                 if sys_ in meta_plate:
                     meta_plate[sys_] = eff
 
-    # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。绑定值两种
-    # 形态都收:别名串(旧)与 ServiceBinding dict 的 authAlias 键
-    #(方案绑定的形态,约束 5 随行合入后在此解析)
-    auth_aliases: list[str] = sorted({
-        alias
-        for u in all_units
-        for b in (u.get("serviceBindings") or {}).values()
-        for alias in (
-            [b] if isinstance(b, str) and b else
-            [b.get("authAlias")] if isinstance(b, dict) else [])
-        if alias
-    })
-    # 认证解析走会话工厂(_resolve_exec_auths 契约:独立短会话快照语义;
-    # N0:此前传活会话 db → AsyncSession 不可调用,authAlias 非空即 TypeError)
-    exec_auths = (await _resolve_exec_auths(db_module.SessionLocal,
-                                            owner_id, auth_aliases)
-                  if auth_aliases else [])
+    # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。N1-2:凭证
+    # 清单与单场景链/预检同源 —— run_prepare.graph_auth_aliases(全单元
+    # steps 并集:模板扫描 ${auth.*} ∪ 绑定 authAlias(图级+单元+方案
+    # 合并后)∪ 别名表凭证默认)。此前只收 graph_req 单元级显式
+    # authAlias:方案级绑定不进清单、无模板扫描、无别名默认 —— 与
+    # 执行期真实注入面漂移(预检看得到方案级而执行收不到)。
+    bindings_authalias: dict[str, str] = {}
+    for _src in [graph_req.get("serviceBindings") or {},
+                 *((r["unit"].get("serviceBindings") or {}) for r in resolved)]:
+        for _svc, _b in _src.items():
+            _alias = (_b if isinstance(_b, str) and _b else
+                      _b.get("authAlias") if isinstance(_b, dict) else None)
+            if _alias:
+                bindings_authalias[_svc] = _alias
+    auth_aliases = await run_prepare.graph_auth_aliases(
+        db_module.SessionLocal, [r["composed"] for r in resolved],
+        bindings_authalias)
+    exec_auths = (await run_prepare.resolve_exec_auths(
+        db_module.SessionLocal, owner_id, auth_aliases)
+        if auth_aliases else [])
     alias_urls: dict = {}
     try:
         alias_urls = await service_aliases.base_urls_for(
@@ -202,9 +203,15 @@ async def materialize_graph(
     except Exception:  # noqa: BLE001
         alias_urls = {}
 
+    # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
+    # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
+    # 炸 _apply_carry 的权宜 —— Suite 无 carry 的功能缺口由归一补齐。
+    carry_ctxs = await run_prepare.unit_carry_contexts(
+        db_module.SessionLocal, [r["composed"] for r in resolved])
+
     unit_payloads: dict[str, dict] = {}
     m2_info: dict | None = None
-    for r in resolved:
+    for i, r in enumerate(resolved):
         composed = r["composed"]
         # plate convert(gimbal 形态)
         convert = await plate_client.convert(composed)
@@ -219,12 +226,8 @@ async def materialize_graph(
             converted,
             service_bindings=merged_bindings,
             resolved_auths=exec_auths,
-            built_in_users=_built_in_users(composed),
-            # graph 不做 carry 注入;须显式 None —— 空 dict 会经
-            # materialize 的 ``is not None`` 判定进 _apply_carry,在
-            # step 引用了 service 时炸 AttributeError(dict 无
-            # service_bindings 属性;对账基准扩充实测抓到)
-            carry_context=None,
+            built_in_users=run_prepare.built_in_users(composed),
+            carry_context=carry_ctxs[i],
             alias_base_urls=alias_urls,
         )
         unit_payloads[r["unit"]["ref"]] = materialized

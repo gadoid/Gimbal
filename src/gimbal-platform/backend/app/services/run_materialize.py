@@ -1,9 +1,12 @@
-"""run 副本物化(POST-convert 注入,执行与导出同源)。
+"""run 副本物化(POST-convert 注入,五入口同源)。
 
-materialize_run_copy 是执行链(run_dispatcher._fanout)与导出链
-(preview-plate overlay)共用的唯一物化点 — 相同输入逐字段相同输出,
-黄金等价测试锁死不漂移(spec §7)。PRE/POST convert 是刻意安全缝:
-明文凭证不过 plate。
+materialize_run_copy 是唯一物化点 — 相同输入逐字段相同输出,黄金
+等价测试锁死不漂移(spec §7)。调用方(N1 起四链,准备段同源
+run_prepare):单场景执行(run_dispatcher._fanout)、Suite 编排
+(graph_dispatch.materialize_graph,逐单元)、集成
+(integration_runner.run_instance)、导出/预览
+(routers/scenarios._materialized_executable)。PRE/POST convert 是
+刻意安全缝:明文凭证不过 plate。
 """
 from __future__ import annotations
 
@@ -73,11 +76,8 @@ def materialize_run_copy(
 
 def _step_service(step: dict) -> str | None:
     """step 的 service 键：call 形态优先(plate convert v2.1 批次 F 产出),
-    (api 形态已退役;无 call 声明 → None)。"""
-    call = step.get("call")
-    svc = call.get("service") if isinstance(call, dict) else None
-    if isinstance(svc, str) and svc:
-        return svc
+    (api 形态已退役;无 call 声明 → None)。N4:下方重复的二次求值
+    是死代码(77-80 命中即返回,81-83 原样重算),已删。"""
     call = step.get("call")
     svc = call.get("service") if isinstance(call, dict) else None
     return svc if isinstance(svc, str) and svc else None
