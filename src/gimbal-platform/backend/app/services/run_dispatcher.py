@@ -665,7 +665,8 @@ async def startup_recovery() -> tuple[int, int]:
 
 # ─── fanout 计算(dispatch 与 suite 预检共用)────────────────────
 async def compute_run_fanout(
-    db: AsyncSession, scen: ComposerScenario, req: RunRequest,
+    db: AsyncSession, scenario_id: str, payload: dict | None,
+    req: RunRequest,
 ) -> tuple[list[dict], list, list, list]:
     """数据集选择合并 + 注入条目过滤 + 交叉矩阵 → (fanout_datasets,
     injections, selected_entries, skipped_while_degraded)。
@@ -677,6 +678,10 @@ async def compute_run_fanout(
     skipped_while_degraded = 降级期跳过的条目 id(判定降级留档);
     预检只消费 fanout/injections 计数,后两者忽略。不建行、不改库;
     校验失败照常抛 NotFound/Conflict。
+
+    P3(临时调用 §六):入参由 ORM 行改为 ``(scenario_id, payload)`` ——
+    本函数只用这两个值(数据集归属校验 + 注入条目过滤),临时构造的
+    payload 与库行同形即可共用;调用方传 ``scen.scenario_id, scen.payload``。
     """
     # 行级选择合并(spec v3 §4):dataSetSelection 权威键 — 仅当其缺省
     # (空)时旧 dataSetIds 才生效(兼容读,映射整库);两键同发则旧键
@@ -701,7 +706,7 @@ async def compute_run_fanout(
     selected_datasets: list[ComposerDataSet] = []
     for ds_id in sel_by_ds:
         ds = await find_dataset_by_id(db, ds_id)
-        if ds is None or ds.scenario_id != scen.scenario_id:
+        if ds is None or ds.scenario_id != scenario_id:
             raise NotFound(
                 "data_set_not_found", f"data set not found: {ds_id}"
             )
@@ -711,7 +716,7 @@ async def compute_run_fanout(
     # (与数据集行交叉派生 case,spec v3 §4);死/旧条目 skip + 告警,
     # 绝不炸。判定本体 = filter_injection_entries(执行设计 §1.6:
     # /run/precheck 与 dispatch 共用这**一份**实现,失效口径不开第二份)。
-    raw_payload = scen.payload or {}
+    raw_payload = payload or {}
     selected_entries, dangling_ids, skipped_while_degraded = (
         await filter_injection_entries(raw_payload, req.injection_entry_ids or [])
     )
@@ -833,6 +838,25 @@ async def _check_env_consistency(
     return warnings
 
 
+@dataclass(frozen=True)
+class RunTarget:
+    """派发目标(P3 临时调用 §六:``dispatch_run`` 拆两段的第一段产物)。
+
+    * ``scenario_id``:执行行的挂载 id —— 库场景即其 ``scenario_id``;
+      临时调用为占位 ``adhoc-<run_id>``(models.execution 非场景形态的
+      ``<形态前缀>-<id>`` 约定,与 ``suite-<id>`` 同款);
+    * ``payload``:与库行 payload 同形的容器(``{definition, ...}``,
+      ``definition_from_payload`` 解包);快照、扇出、注入清单都读它;
+    * ``kind``:进 ``Execution.kind``(scenario | adhoc)。
+
+    不带 owner_id:执行者(凭证池归属)始终是调用者 ``user_id``,派发链
+    从不读场景属主 —— 加了反而会悄悄改掉 admin 代跑的语义。
+    """
+    scenario_id: str
+    payload: dict
+    kind: str = "scenario"
+
+
 async def dispatch_run(
     db: AsyncSession,
     user_id: int,
@@ -844,27 +868,15 @@ async def dispatch_run(
     grant_id: int | None = None,
     identity_mode: str = "personal",
 ) -> RunResponse:
-    """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
-    worker 认领驱动；本函数不再 spawn 进程内 fanout）。
+    """库中场景的派发入口 = 取场景 → :func:`dispatch_target`(P3 §六)。
 
-    Caller (the runs router) wraps any exception in HTTPException.  This
-    function NEVER raises for "Plate is down" — it records the failure
-    and returns the runId so the user can still see the run in
-    ``/executions`` (per the agreed run-failure semantics).
-
-    ``chain_override``（C13 对账用，非公开 API 面）：强制本次执行的链
-    （legacy|server），覆盖 settings.EXEC_CHAIN；随配方与 config_json
-    落档，回滚 = 开关关闭即回旧链。
+    对外签名不变(runs 路由 / 重跑 / Suite 成员三处调用零改动);
+    临时调用由路由层自行构造 :class:`RunTarget` 直接走第二段。
 
     ``preloaded_scenario``: the runs router already loads the scenario
     row for the ownership check — pass it here to avoid querying the
     same row twice (and keep a single source for the
     scenario_not_found 404).
-
-    入站调用面(webhook 设计 v3 §4.4):``caller_alias``/``grant_id`` 来自
-    ``principal_or_user`` 分流(JWT 调用恒 None → 不写投递行、不回调);
-    ``client_ref``/``callback_path`` 在 ``req`` 上;``identity_mode``
-    只回显进响应。
     """
     # P3:优雅关闭窗口内不再"建行但不 spawn"(那会制造一条 201 返回、
     # 永远停在 queued 的僵尸单)。直接拒单,客户端重启后重试。
@@ -878,10 +890,59 @@ async def dispatch_run(
     scen = (
         preloaded_scenario
         if preloaded_scenario is not None
-        else await get_row(db, req.scenario_id)
+        else (await get_row(db, req.scenario_id)
+              if req.scenario_id else None)
     )
     if scen is None:
         raise NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
+    return await dispatch_target(
+        db, user_id, req,
+        RunTarget(scenario_id=scen.scenario_id,
+                  payload=scen.payload or {}, kind="scenario"),
+        chain_override=chain_override, caller_alias=caller_alias,
+        grant_id=grant_id, identity_mode=identity_mode)
+
+
+async def dispatch_target(
+    db: AsyncSession,
+    user_id: int,
+    req: RunRequest,
+    target: RunTarget,
+    *,
+    run_id: str | None = None,
+    chain_override: str | None = None,
+    caller_alias: str | None = None,
+    grant_id: int | None = None,
+    identity_mode: str = "personal",
+) -> RunResponse:
+    """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
+    worker 认领驱动；本函数不再 spawn 进程内 fanout）。
+
+    第二段(P3 §六):只认 ``target``(scenario_id / payload / kind),库场景
+    与临时调用共用 —— 校验、扇出、建执行行、快照、入队全在这里,逐字段
+    与拆分前一致(tests/test_adhoc_run 对拍钉住)。``run_id`` 可由调用方
+    预生成(临时调用的占位 id 要先用到它),缺省在此分配。
+
+    Caller (the runs router) wraps any exception in HTTPException.  This
+    function NEVER raises for "Plate is down" — it records the failure
+    and returns the runId so the user can still see the run in
+    ``/executions`` (per the agreed run-failure semantics).
+
+    ``chain_override``（C13 对账用，非公开 API 面）：强制本次执行的链
+    （legacy|server），覆盖 settings.EXEC_CHAIN；随配方与 config_json
+    落档，回滚 = 开关关闭即回旧链。
+
+    入站调用面(webhook 设计 v3 §4.4):``caller_alias``/``grant_id`` 来自
+    ``principal_or_user`` 分流(JWT 调用恒 None → 不写投递行、不回调);
+    ``client_ref``/``callback_path`` 在 ``req`` 上;``identity_mode``
+    只回显进响应。
+    """
+    if is_shutting_down():
+        raise Conflict(
+            "shutting_down",
+            "platform is shutting down; retry after the backend restarts",
+        )
+    scenario_payload = target.payload or {}
 
     # 2. Validate datasets.
     # (旧 env 校验块已随 D2 执行环境退役 — 旧客户端多发的 env 键由
@@ -905,7 +966,7 @@ async def dispatch_run(
             )
 
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
-    steps = steps_from_payload(scen.payload)
+    steps = steps_from_payload(scenario_payload)
     if req.step_to is not None:
         if not steps:
             raise NotFound("no_steps", "scenario has no steps; step_to cannot be set")
@@ -918,20 +979,21 @@ async def dispatch_run(
     # V5-B 环境告警（§6.3）:混合环境 + 版本线不一致 → 写 config_json
     try:
         env_warnings = await _check_env_consistency(
-            db, scen.payload or {}, req.service_bindings or {})
+            db, scenario_payload, req.service_bindings or {})
     except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
         env_warnings = []
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
     (fanout_datasets, injections, selected_entries,
-     skipped_while_degraded) = await compute_run_fanout(db, scen, req)
+     skipped_while_degraded) = await compute_run_fanout(
+        db, target.scenario_id, scenario_payload, req)
 
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
     # 超过 total_runs 出现 failed > total 的怪状态。
-    run_id = _new_run_id()
+    run_id = run_id or _new_run_id()
     total_runs = fanout_total(fanout_datasets, injections)
     if total_runs > settings.MAX_RUNS_PER_EXECUTION:
         raise Conflict(
@@ -948,7 +1010,7 @@ async def dispatch_run(
     # 绑定,别名默认只体现于 injectedAuths 清单与实际注入的 users。
     auth_aliases = await service_aliases.exec_auth_aliases(
         db,
-        definition_from_payload(scen.payload).get("steps") or [],
+        definition_from_payload(scenario_payload).get("steps") or [],
         {k: {"authAlias": b.auth_alias}
          for k, b in (req.service_bindings or {}).items()},
     )
@@ -971,10 +1033,13 @@ async def dispatch_run(
 
     execution = await _create_execution(
         db,
-        # (Case 层解散后执行的挂载点就是场景)。
-        scenario_id=scen.scenario_id,
+        # (Case 层解散后执行的挂载点就是场景;临时调用为占位 id)。
+        scenario_id=target.scenario_id,
         owner_id=user_id,
         total_runs=total_runs,
+        # P3:执行形态(scenario | adhoc)—— 非场景形态登记在
+        # models.execution.NON_SCENARIO_KINDS,列表/重跑按它判定。
+        kind=target.kind,
         # 批次键(执行设计 §1.2):前端队列逐条发起时共用,执行记录归并用;
         # 单条发起为 None。列 + config_json 双落:列驱动筛选,config 驱动
         # 重跑配方的原样保真。
@@ -988,18 +1053,18 @@ async def dispatch_run(
         # 直读唯一权威 payload.definition.meta.name,不走 _meta_from_row
         # 的整 meta 严格校验 —— 畸形行不拦发起,空值由通知侧兜底链接住。
         scenario_name=str(
-            (definition_from_payload(scen.payload).get("meta") or {}
+            (definition_from_payload(scenario_payload).get("meta") or {}
             ).get("name") or ""
         ).strip(),
         # 执行时场景快照:与传给 _fanout 的 scenario_payload 同拍同源
         # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
         # setdefault 写穿,不污染快照。
-        scenario_snapshot=copy.deepcopy(scen.payload or {}),
+        scenario_snapshot=copy.deepcopy(scenario_payload),
         # RS3：plate_pins 随 fanout 后回填（生效修订在 fanout 内解析）
         plate_pins=None,
         config_json={
             "runId": run_id,
-            "scenarioId": scen.scenario_id,
+            "scenarioId": target.scenario_id,
             "dataSetIds": req.data_set_ids,
             "dataSetSelection": [
                 s.model_dump(by_alias=True) for s in req.data_set_selection
@@ -1055,7 +1120,7 @@ async def dispatch_run(
                 "owner_id": user_id,
                 "graph_spec": req.graph.model_dump(by_alias=True),
                 "n_runs": req.n_runs, "halt_at": req.step_to,
-                "scenario_payload": dict(scen.payload or {}),
+                "scenario_payload": dict(scenario_payload),
             },
         }
     else:
@@ -1066,7 +1131,7 @@ async def dispatch_run(
                       if debug_spec is not None else None),
             "args": {
                 "execution_id": execution.id, "run_id": run_id,
-                "scenario_payload": dict(scen.payload or {}),
+                "scenario_payload": dict(scenario_payload),
                 "datasets": fanout_datasets,
                 "injections": selected_entries,
                 "owner_id": user_id,

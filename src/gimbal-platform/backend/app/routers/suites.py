@@ -1013,8 +1013,9 @@ async def run_suite(
         if entry["req"] is None:
             continue
         try:
+            _scen = scen_rows[entry["scenarioId"]]
             fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(
-                db, scen_rows[entry["scenarioId"]], entry["req"])
+                db, _scen.scenario_id, _scen.payload, entry["req"])
             total_runs += run_dispatcher.fanout_total(fd, inj)
         except (run_dispatcher.NotFound, run_dispatcher.Conflict) as e:
             entry["req"] = None
@@ -1231,7 +1232,8 @@ async def validate_suite(
                     units=[m.scenario_id]))
             try:
                 fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(
-                    db, scen, _req_from_scheme(m.scenario_id, scheme, "precheck"))
+                    db, scen.scenario_id, scen.payload,
+                    _req_from_scheme(m.scenario_id, scheme, "precheck"))
                 est += run_dispatcher.fanout_total(fd, inj)
             except Exception:  # noqa: BLE001 — 总量估算失败不拦预检
                 est += 1
