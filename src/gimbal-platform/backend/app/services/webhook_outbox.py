@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..core.security import fernet_decrypt
+from ..core.timeutil import iso_utc_z
 from ..models.service_alias import ServiceAlias
 from ..models.webhook_delivery import WebhookDelivery
 
@@ -36,10 +37,6 @@ _BATCH = 20
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() + "Z" if dt is not None else None
 
 
 # ─── 写行(outbox;调用方 commit 前调用)───────────────────────────
@@ -70,7 +67,12 @@ async def _add_delivery(
     instance_id: int | None = None,
 ) -> int:
     """插一行并 flush 拿 id —— payload 的 ``deliveryId`` 即行 id
-    (``X-Gimbal-Delivery`` 去重键,重试不变)。"""
+    (``X-Gimbal-Delivery`` 去重键,重试不变)。
+
+    插入**前**先试序列化 payload(S4):构造/序列化失败时不留下
+    ``body=''`` 的半成品行(调用方随后 commit 会把空体投递出去)。
+    """
+    json.dumps(payload, ensure_ascii=False, default=str)
     row = WebhookDelivery(
         alias_name=alias_name, event_type=event_type, url=url,
         execution_id=execution_id, instance_id=instance_id,
@@ -82,6 +84,26 @@ async def _add_delivery(
     return row.id
 
 
+async def _guarded(label: str, fn, /, *args, **kwargs) -> "int | None":
+    """S4(修复方案 §5):投递行构造错误不得阻止执行进入终态。
+
+    数据库错误(SQLAlchemyError)**继续向上传播** —— 投递行与终态同生
+    共死,原子性保留(由 transition_with_retry / 周期对账兜底);其余
+    异常(payload 组装、序列化、取别名配置失败)只记 error,本条不投递,
+    终态照常写入。``label`` / ``fn`` 为位置专用 —— 被调函数的实参里
+    可能有同名关键字(``event_type``)。
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        return await fn(*args, **kwargs)
+    except SQLAlchemyError:
+        raise
+    except Exception:
+        logger.opt(exception=True).error(
+            "webhook_outbox: 构造 {} 投递行失败,本条不投递", label)
+        return None
+
+
 async def enqueue_execution_finished(
     db: AsyncSession, ex: Any,
 ) -> "int | None":
@@ -91,7 +113,15 @@ async def enqueue_execution_finished(
     只再判别名回调开关与 URL 齐备。JWT 发起的执行不会进这里。
     ``outputs`` 只对单 case 执行(total_runs==1)携带(§5.5/D10),
     读 ``config_json.outputs``(唯一例外键,见 models.execution 注释)。
+    构造异常策略见 :func:`_guarded`(S4)。
     """
+    return await _guarded(
+        "execution.finished", _enqueue_execution_finished, db, ex)
+
+
+async def _enqueue_execution_finished(
+    db: AsyncSession, ex: Any,
+) -> "int | None":
     if not ex.caller_alias_name:
         return None
     target = await _callback_target(
@@ -128,8 +158,8 @@ async def enqueue_execution_finished(
         "passed": int(ex.passed or 0),
         "failed": int(ex.failed or 0),
         "skipped": int(ex.skipped or 0),
-        "startedAt": _iso(ex.started_at),
-        "finishedAt": _iso(ex.finished_at),
+        "startedAt": iso_utc_z(ex.started_at),
+        "finishedAt": iso_utc_z(ex.finished_at),
         "failureDigest": digest,
         "outputs": outputs,
     }
@@ -147,7 +177,17 @@ async def enqueue_integration_event(
     D12:模板公共化不剥离 caller —— 只有**注册方自己的实例**回调:
     个人模式 holder = grant 用户(= 模板 owner),平台模式唯一实例本就
     是注册方的;订阅者实例按自身身份运行,永不向原注册方回调。
+    构造异常策略见 :func:`_guarded`(S4)。
     """
+    return await _guarded(
+        event_type, _enqueue_integration_event,
+        db, tpl, inst, event_type=event_type, fields=fields)
+
+
+async def _enqueue_integration_event(
+    db: AsyncSession, tpl: Any, inst: Any, *,
+    event_type: str, fields: dict,
+) -> "int | None":
     if not tpl.caller_alias_name:
         return None
     if tpl.identity_mode == "personal" \

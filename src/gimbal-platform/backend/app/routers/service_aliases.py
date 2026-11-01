@@ -27,6 +27,7 @@ from ..core.config import settings
 from ..core.db import get_db
 from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import fernet_encrypt
+from ..core.timeutil import iso_utc_z
 from ..models.inbound_identity import InboundCredential, InboundGrant
 from ..models.service_alias import ServiceAlias
 from ..models.user import User
@@ -359,10 +360,6 @@ class GrantCreated(GrantOut):
     token: str
 
 
-def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() + "Z" if dt is not None else None
-
-
 @router.post(
     "/{alias_name}/inbound-credentials",
     response_model=InboundCredentialCreated, status_code=201)
@@ -391,7 +388,7 @@ async def create_inbound_credential(
     )
     return InboundCredentialCreated(
         id=cred.id, name=cred.name, token=token,
-        createdAt=_iso(cred.created_at))
+        createdAt=iso_utc_z(cred.created_at))
 
 
 @router.get("/{alias_name}/inbound-credentials",
@@ -406,8 +403,8 @@ async def list_inbound_credentials(
             InboundCredential.alias_name == alias_name)
         .order_by(InboundCredential.id.desc()))).scalars().all()
     return [InboundCredentialOut(
-        id=r.id, name=r.name, createdAt=_iso(r.created_at),
-        lastUsedAt=_iso(r.last_used_at), revokedAt=_iso(r.revoked_at))
+        id=r.id, name=r.name, createdAt=iso_utc_z(r.created_at),
+        lastUsedAt=iso_utc_z(r.last_used_at), revokedAt=iso_utc_z(r.revoked_at))
         for r in rows]
 
 
@@ -539,7 +536,7 @@ async def create_grant(
     return GrantCreated(
         id=g.id, aliasName=alias_name, userId=user.id,
         username=user.username, token=token,
-        expiresAt=_iso(g.expires_at), createdAt=_iso(g.created_at))
+        expiresAt=iso_utc_z(g.expires_at), createdAt=iso_utc_z(g.created_at))
 
 
 @router.get("/{alias_name}/grants", response_model=list[GrantOut])
@@ -562,8 +559,8 @@ async def list_grants(
     return [GrantOut(
         id=r.id, aliasName=r.alias_name, userId=r.user_id,
         username=usernames.get(r.user_id, "(已删除)"),
-        expiresAt=_iso(r.expires_at), createdAt=_iso(r.created_at),
-        lastUsedAt=_iso(r.last_used_at), revokedAt=_iso(r.revoked_at))
+        expiresAt=iso_utc_z(r.expires_at), createdAt=iso_utc_z(r.created_at),
+        lastUsedAt=iso_utc_z(r.last_used_at), revokedAt=iso_utc_z(r.revoked_at))
         for r in rows]
 
 

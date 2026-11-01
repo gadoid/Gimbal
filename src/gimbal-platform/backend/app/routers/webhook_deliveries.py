@@ -11,7 +11,6 @@ body 含脱敏后的 outputs,可见面已按属主收窄,可随行返回。
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import principal_or_user
+from ..core.timeutil import iso_utc_z
 from ..models.execution import Execution
 from ..models.integration_task import IntegrationTask
 from ..models.service_alias import ServiceAlias
@@ -32,17 +32,13 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 
-def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() + "Z" if dt is not None else None
-
-
 def _row_out(r: WebhookDelivery) -> dict:
     return {
         "id": r.id, "aliasName": r.alias_name, "eventType": r.event_type,
         "executionId": r.execution_id, "instanceId": r.instance_id,
         "url": r.url, "status": r.status, "attempts": r.attempts,
-        "lastError": r.last_error, "nextRetryAt": _iso(r.next_retry_at),
-        "deliveredAt": _iso(r.delivered_at), "createdAt": _iso(r.created_at),
+        "lastError": r.last_error, "nextRetryAt": iso_utc_z(r.next_retry_at),
+        "deliveredAt": iso_utc_z(r.delivered_at), "createdAt": iso_utc_z(r.created_at),
         "body": r.body,
     }
 

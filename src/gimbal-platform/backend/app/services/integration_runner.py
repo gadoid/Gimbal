@@ -725,11 +725,12 @@ async def _pause_consent_changed(
     inst.running_since = None
     # P2-2(webhook 设计 v3 §5.1/D9):同意闸暂停也回调 integration.paused
     # (注册方自己的实例才回,D12 判定在 enqueue 内)—— 同事务写行。
+    from ..core.timeutil import iso_utc_z
     from .webhook_outbox import enqueue_integration_event
     await enqueue_integration_event(
         db, tpl, inst, event_type="integration.paused",
         fields={"reason": paused_reason, "message": message[:500],
-                "at": _now().isoformat() + "Z"})
+                "at": iso_utc_z(_now())})
     await db.commit()
     from .webhook_outbox import wake
     wake()
@@ -1198,13 +1199,14 @@ async def _finish(
     # 实例才回调(D12 判定在 enqueue_integration_event 内);暂停分支
     # (含 fail_streak 自动暂停)发 integration.paused(D9),否则
     # integration.run_finished。写行异常自然传播 → 两者都不落库。
+    from ..core.timeutil import iso_utc_z
     from .webhook_outbox import enqueue_integration_event
     if pause_reason or auto_paused:
         await enqueue_integration_event(
             db, tpl, inst, event_type="integration.paused",
             fields={"reason": pause_reason or "fail_streak",
                     "message": (inst.last_error or "")[:500],
-                    "at": now.isoformat() + "Z"})
+                    "at": iso_utc_z(now)})
     else:
         await enqueue_integration_event(
             db, tpl, inst, event_type="integration.run_finished",
@@ -1215,7 +1217,7 @@ async def _finish(
                     "outputs": dict(inst.last_outputs or {})
                     if run_status == "ok" else {},
                     "durationMs": duration_ms,
-                    "finishedAt": now.isoformat() + "Z"})
+                    "finishedAt": iso_utc_z(now)})
     await db.commit()
     from .webhook_outbox import wake
     wake()

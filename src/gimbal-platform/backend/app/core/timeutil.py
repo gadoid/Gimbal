@@ -35,3 +35,15 @@ def iso_naive_utc(dt: datetime | None) -> str | None:
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt.isoformat()
+
+
+def iso_utc_z(dt: datetime | None) -> str | None:
+    """回调契约的时间格式:UTC、带 Z 后缀(``...T14:06:27.735108Z``)。
+
+    M3(修复方案 2026-11-01 §4):此前用 ``dt.isoformat() + "Z"``,而
+    PG 读回的是 aware(``+00:00``),拼出 ``...216788+00:00Z`` —— 双
+    后缀,按 ISO 8601 解析失败。先经 :func:`iso_naive_utc` 归一去
+    offset 再补 Z(复用同一归一口径,不另立格式规则)。
+    """
+    s = iso_naive_utc(dt)
+    return None if s is None else s + "Z"
