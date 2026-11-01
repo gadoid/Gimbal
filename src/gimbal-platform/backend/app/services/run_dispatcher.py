@@ -44,7 +44,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy import text as sa_text
 from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -599,7 +599,7 @@ def _replay_rows(execution_id: int) -> list[dict]:
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
 async def reconcile_stale_executions(db_factory: Any) -> int:
-    """启动期 reconcile（C11 起 jobs 感知）。
+    """启动期 reconcile（C11 起 jobs 感知;N2 起走唯一终态迁移）。
 
     * executions stuck queued/running **且无 job 行**（0009 前遗留/
       建行后入队前崩溃）→ failed + ``config_json.reconciled``（原口径）;
@@ -608,15 +608,19 @@ async def reconcile_stale_executions(db_factory: Any) -> int:
     * job ``queued``/``running``：留给 worker（queued 待认领;running
       由 sweep_stale 按租约回收——回队重跑或 attempts 耗尽失败）。
 
-    返回处理行数。
+    N2 变化:①收口改经 :func:`transition_execution`(原子守卫,重启
+    竞态下已终态的不覆写);②整单未分发(passed=failed=0)按
+    failed=total 计(与 if_stuck 同款 2-3 口径,消除"状态 failed 而
+    计数 0"的矛盾);③started_at 从 created_at 回填;④failed 终态发
+    完成通知(N2-2:启动对账不再静默)。返回**实际发生迁移**的行数。
     """
     from sqlalchemy import select as _select
-    count = 0
     async with db_factory() as session:
         rows = (
             (
                 await session.execute(
-                    _select(Execution, ExecutionJob.status).outerjoin(
+                    _select(Execution.id, Execution.created_at,
+                            ExecutionJob.status).outerjoin(
                         ExecutionJob,
                         ExecutionJob.execution_id == Execution.id).where(
                         Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)))
@@ -624,23 +628,19 @@ async def reconcile_stale_executions(db_factory: Any) -> int:
             )
             .all()
         )
-        for ex, job_status in rows:
-            if job_status in ("queued", "running"):
-                continue   # worker 域:待认领或由租约回收
-            ex.status = STATUS_FAILED
-            if ex.started_at is None:
-                ex.started_at = ex.created_at or _utcnow()
-            ex.finished_at = _utcnow()
-            cfg = dict(ex.config_json or {})
-            cfg["reconciled"] = {
-                "at": _utcnow().isoformat() + "Z",
-                "reason": ("backend restarted mid-dispatch"
-                           if job_status is None
-                           else f"job {job_status} without execution finalize"),
-            }
-            ex.config_json = cfg
-            count += 1
-        await session.commit()
+    count = 0
+    for ex_id, created_at, job_status in rows:
+        if job_status in ("queued", "running"):
+            continue   # worker 域:待认领或由租约回收
+        moved = await transition_execution(
+            db_factory, ex_id, STATUS_FAILED,
+            count_fallback=True,
+            reconciled_reason=(
+                "backend restarted mid-dispatch"
+                if job_status is None
+                else f"job {job_status} without execution finalize"),
+            backfill_started_at=created_at)
+        count += 1 if moved else 0
     if count:
         logger.warning(
             "run_dispatcher: reconciled {} stale execution(s) after restart",
@@ -1107,39 +1107,27 @@ async def run_job_from_payload(job: dict) -> None:
 
 
 async def finalize_canceled_before_start(job: dict) -> None:
-    """取消先于启动：执行直接 canceled 收口（无行、零计数）。"""
+    """取消先于启动：执行直接 canceled 收口（无行、零计数）。
+
+    N2:改经唯一终态迁移(原子守卫);取消类不回填 started_at
+    (从未启动),不发通知(用户自发的取消)。
+    """
     execution_id = job["payload"]["args"]["execution_id"]
-    async with _session_factory() as session:
-        ex = await session.get(Execution, execution_id)
-        if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
-            ex.status = STATUS_CANCELED
-            ex.finished_at = _utcnow()
-            await session.commit()
+    await transition_execution(_session_factory, execution_id,
+                               STATUS_CANCELED)
     _row_states.pop(execution_id, None)
     logger.info("run_dispatcher: execution {} canceled before start", execution_id)
 
 
 async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
-    """任务体异常的兜底终态化（幂等：终态不再改）。"""
-    try:
-        async with _session_factory() as session:
-            ex = await session.get(Execution, execution_id)
-            if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
-                ex.status = STATUS_FAILED
-                ex.finished_at = _utcnow()
-                # 2-3(2026-10-13):派发期被拒/崩溃的执行此前 failed=0 而
-                # 状态 failed —— 计数与状态矛盾(上一轮 C-1 后半)。整单
-                # 未分发行按 failed=total 计(auth fail-fast 同款口径)。
-                if not ex.failed and not ex.passed:
-                    ex.failed = max(int(ex.total_runs or 0), 1)
-                cfg = dict(ex.config_json or {})
-                cfg["dispatcherError"] = str(error)[:512]
-                ex.config_json = cfg
-                await session.commit()
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "run_dispatcher: finalize_execution_if_stuck failed for {}",
-            execution_id)
+    """任务体异常的兜底终态化(N2:走唯一迁移;幂等 = 终态不再改)。
+
+    N2-2 拍板:failed 兜底也发完成通知 —— 任务体崩溃是调用方无从得知
+    的静默失败,此前零通知。
+    """
+    await transition_execution(
+        _session_factory, execution_id, STATUS_FAILED,
+        dispatcher_error=error, count_fallback=True)
 
 
 # ─── background fan-out ──────────────────────────────────────────
@@ -1215,21 +1203,13 @@ async def _fanout_graph(
                     await session.commit()
         except Exception:  # noqa: BLE001
             pass
-        try:
-            async with db_factory() as session:
-                ex = await session.get(Execution, execution_id)
-                if ex is not None and ex.status in (STATUS_QUEUED, STATUS_RUNNING):
-                    ex.status = STATUS_FAILED
-                    ex.finished_at = _utcnow()
-                    cfg = dict(ex.config_json or {})
-                    cfg["dispatcherError"] = (
-                        f"graph recovery: at-most-once 收口"
-                        f"({_prior} prior events, 不整图重放)")
-                    ex.config_json = cfg
-                    await session.commit()
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "run_dispatcher: graph recovery finalize failed {}", execution_id)
+        # N2:恢复收口改经唯一终态迁移(原子守卫 + failed 通知 ——
+        # 此前静默,N2-2 拍板补发)
+        await transition_execution(
+            db_factory, execution_id, STATUS_FAILED,
+            dispatcher_error=(
+                f"graph recovery: at-most-once 收口"
+                f"({_prior} prior events, 不整图重放)"))
         await ingester.finalize()
         return
 
@@ -2260,46 +2240,99 @@ async def _bump_counters(
                 })
 
 
-async def _finalize_execution(
-    db_factory: Any, execution_id: int, *, status: str | None = None
-) -> None:
-    """终态收尾:只写 status + 时间戳(计数器由上方增量维护)。
+async def transition_execution(
+    db_factory: Any, execution_id: int, final_status: "str | None" = None, *,
+    dispatcher_error: "str | None" = None,
+    count_fallback: bool = False,
+    reconciled_reason: "str | None" = None,
+    backfill_started_at: Any = None,
+    notify: bool = True,
+) -> bool:
+    """执行域**唯一**终态迁移(N2 归一)。
 
-    ``status`` 显式覆盖用于取消终态(canceled);缺省沿用严格规则
-    ``failed > 0 → failed``。P8:非 canceled 终态校账
-    ``passed + failed == total_runs``,漂移只标记不修正(counterDrift
-    供读侧发现"数字对不上",真值以 JSONL 为准)。
+    原子条件更新 ``WHERE status IN (queued, running)`` —— 已终态的执行
+    不覆写、不重复通知;返回是否真的发生了迁移(供调用方计数/记日志)。
+    六个历史写入点(正常收口/取消先于启动/任务体异常兜底/启动对账/
+    graph 恢复收口/cancel 端点无活任务)全部改经本函数。
+
+    收尾动作全部收敛在此,且只在真实迁移时发生:
+      * ``final_status=None`` → 严格规则 ``failed > 0 → failed``(SQL 内
+        原子推导,与收口前计数一致);
+      * ``count_fallback``:整单未分分发(passed=failed=0)按 failed=total
+        计(2-3 口径修正,取消先于启动不适用);
+      * ``backfill_started_at``:started_at 为空时回填(正常收口=now;
+        启动对账=created_at;取消类不回填 —— 从未启动);
+      * ``dispatcher_error`` / ``reconciled_reason``:config_json 标记;
+      * counterDrift 校账(仅非 canceled);
+      * 完成通知(独立会话 + 自吞异常):done/failed 且有 owner 才发 ——
+        N2-2 拍板:stuck 兜底/启动对账/graph 恢复收口三个异常路径也发
+        (此前静默),canceled 不发(用户自发的取消)。
     """
     try:
         async with db_factory() as session:
+            result = await session.execute(
+                sqlalchemy_update(Execution)
+                .where(Execution.id == execution_id,
+                       Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)))
+                .values(
+                    status=(final_status if final_status is not None else case(
+                        (Execution.failed > 0, STATUS_FAILED),
+                        else_=STATUS_DONE)),
+                    finished_at=_utcnow()))
+            if result.rowcount != 1:
+                return False        # 已终态(或行不存在):本次迁移无效
             ex = await session.get(Execution, execution_id)
-            if ex is not None:
-                final_status = status or (
-                    STATUS_FAILED if ex.failed else STATUS_DONE
+            if ex is None:
+                return False
+            if ex.started_at is None and backfill_started_at is not None:
+                ex.started_at = backfill_started_at
+            if count_fallback and not ex.failed and not ex.passed:
+                ex.failed = max(int(ex.total_runs or 0), 1)
+            cfg = dict(ex.config_json or {})
+            if dispatcher_error is not None:
+                cfg["dispatcherError"] = str(dispatcher_error)[:512]
+            if reconciled_reason is not None:
+                cfg["reconciled"] = {
+                    "at": _utcnow().isoformat() + "Z",
+                    "reason": reconciled_reason,
+                }
+            if (ex.status != STATUS_CANCELED
+                    and ex.passed + ex.failed != ex.total_runs):
+                logger.error(
+                    "run_dispatcher: counter drift execution {}: "
+                    "total={} passed+failed={}",
+                    execution_id, ex.total_runs, ex.passed + ex.failed,
                 )
-                ex.status = final_status
-                if ex.started_at is None:
-                    ex.started_at = _utcnow()
-                ex.finished_at = _utcnow()
-                if (
-                    final_status != STATUS_CANCELED
-                    and ex.passed + ex.failed != ex.total_runs
-                ):
-                    logger.error(
-                        "run_dispatcher: counter drift execution {}: "
-                        "total={} passed+failed={}",
-                        execution_id, ex.total_runs, ex.passed + ex.failed,
-                    )
-                    cfg = dict(ex.config_json or {})
-                    cfg["counterDrift"] = True
-                    ex.config_json = cfg
-                await session.commit()
-                # 通知接线(P1b/M2.5,权限方案 §3.2):发起人收一条
-                # 「执行完成」;带 batch_id 的按批 upsert 单条聚合通知
-                # (50 条批次不刷屏),单发执行逐条。通知失败不影响终态
-                # 收口(独立会话 + 自吞异常)。
-                if final_status in (STATUS_DONE, STATUS_FAILED) and ex.owner_id:
-                    await _notify_finished(ex, final_status)
+                cfg["counterDrift"] = True
+            ex.config_json = cfg
+            await session.commit()
+            # 通知口径:done/failed 且有 owner(N2-2:三个异常收口路径
+            # 也发;canceled 不发)。ex.status 为迁移后真值(含派生)。
+            if notify and ex.status != STATUS_CANCELED and ex.owner_id:
+                await _notify_finished(ex, ex.status)
+            return True
+    except Exception as e:  # noqa: BLE001 — 迁移失败不炸调用方(与旧路径同款自吞)
+        logger.warning(
+            "run_dispatcher: transition_execution {} -> {} failed: {}",
+            execution_id, final_status, e)
+        return False
+
+
+async def _finalize_execution(
+    db_factory: Any, execution_id: int, *, status: str | None = None
+) -> None:
+    """终态收尾(N2 后为薄壳):状态推导 + 唯一迁移函数。
+
+    ``status`` 显式覆盖用于取消终态(canceled);缺省由
+    :func:`transition_execution` 按 ``failed > 0 → failed`` 原子推导。
+    计数器由上方增量维护;校账(counterDrift)、started_at 回填、通知
+    全部在迁移函数内,只在真实迁移时发生(重复收口 = 无效迁移,
+    不再覆写、不重复通知 —— 修复此前无守卫直接覆写的漂移面)。
+    """
+    try:
+        await transition_execution(
+            db_factory, execution_id, status,
+            backfill_started_at=_utcnow())
     except Exception as e:  # noqa: BLE001
         logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)
     # spec §9.1:执行终态化 → 活跃行状态出清(读侧此后走 JSONL 回放)。

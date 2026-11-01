@@ -14,6 +14,12 @@ sweep_stale 回收（attempts 未超上限 → 回队重跑；超上限 → 失�
 
 取消：``cancel_requested`` DB 位（进程内 _cancel_requested 集合退役）；
 worker 在行边界/任务起点查询并收敛为 canceled 终态。
+
+ExecutionJob.status 写入点全量(本模块内,别处零写入;新增写入点须回此
+登记):enqueue(建行 queued) / claim_next(running) / finish(done|failed|
+canceled) / release(worker 优雅关闭回队 queued) / sweep_stale(回队或
+attempts 耗尽 failed)。执行行的终态写入一律经 run_dispatcher.
+transition_execution(N2 归一后的唯一迁移点),不经本模块。
 """
 from __future__ import annotations
 
@@ -211,7 +217,8 @@ async def _execute_job(job: dict) -> None:
             await finish(session, job["id"], "failed", last_error=str(exc)[:2000])
             await session.commit()
         # 任务体异常时执行行由任务体自身收口；此处兜底标 failed
-        # （幂等：_finalize_execution 已终态的不会再改）
+        # （幂等守卫在 transition_execution 内：已终态的不再改、
+        #   不重复通知 —— N2 归一）
         from . import run_dispatcher as rd
         await rd.finalize_execution_if_stuck(job["execution_id"], str(exc))
     finally:

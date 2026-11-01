@@ -15,6 +15,19 @@
   会让所有人卡片同时失效;卡片据 removed_at/可见性走「已移除」态。
 - 平台模式的实例 ``holder_id`` = 平台系统用户(users.is_system,
   迁移 0015 种子);个人模式(P2)= 每个订阅者一个实例。
+
+实例 ``state`` / ``run_status`` 写入点分类(N2 归一登记;新增写入点
+须回此登记):
+- **运行结果**(唯一入口 = integration_runner._finish;租约超时回收
+  _recover_stuck 也经它落 timeout):state 回 idle/paused、run_status、
+  last_run_at、fail_streak、通知面 —— 全部在 _finish 内,旁路即缺陷。
+- **运维态**(与运行结果无关,允许直接写 state):
+  _pause_consent_changed(同意闸暂停)、pause_subscriber_instances
+  (转私联动)、revive_paused_instances(凭证复活恢复)、
+  routers/integration 的 subscribe 重确认/pause_my_subscription/
+  resume_my_subscription/手动执行 CAS(running)。这些路径不动
+  run_status/fail_streak/last_run_at。
+- **调度 CAS**:_claim_due 与手动执行触发点的 idle→running 条件更新。
 """
 from __future__ import annotations
 

@@ -820,9 +820,10 @@ async def cancel_execution(
         )
     live = await run_dispatcher.request_cancel(session, ex.id)
     if not live:
-        ex.status = STATUS_CANCELED
-        ex.finished_at = utcnow()
-        await session.commit()
+        # N2:无活任务(job 终态或无 job 行)的僵尸单也走唯一终态迁移
+        # (原子守卫;取消不发通知,与另两处 canceled 收口同口径)
+        await run_dispatcher.transition_execution(
+            run_dispatcher.session_factory, ex.id, STATUS_CANCELED)
         await session.refresh(ex)
     disp = await execution_store.scenario_display_map(
         session, user, [ex.scenario_id])

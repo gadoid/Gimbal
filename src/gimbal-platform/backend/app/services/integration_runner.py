@@ -670,7 +670,11 @@ async def _pause_consent_changed(
     paused_reason: str, message: str,
 ) -> dict:
     """知情同意闸暂停(非运行失败:不动 last_run_at/fail_streak,不走
-    运维/结论通知通道;直接通知持有人)。"""
+    运维/结论通知通道;直接通知持有人)。
+
+    N2 分类:这是「运维态」写入而非运行结果 —— 不经 _finish 是设计
+    决策(暂停发生在执行之前,没有 run 可回写),见模型 docstring 的
+    state 写入点分类表。"""
     inst.state = "paused"
     inst.paused_reason = paused_reason
     inst.last_error = message[:500]
@@ -1188,7 +1192,14 @@ def _inflight_add(tpl: IntegrationTask, holder_id: int | None, delta: int) -> No
 
 
 async def _recover_stuck(db) -> int:
-    """running_since 超租约 → 回 idle + timeout(方案 §5 超时回收)。"""
+    """running_since 超租约 → 经 ``_finish`` 以 timeout 收口(N2 归一)。
+
+    此前直接写行绕过 ``_finish``:不计 fail_streak(连续超时永不触发
+    自动暂停)、不发任何通知、不动 last_run_at —— 是结果回写的旁路。
+    归一后租约超时与普通超时同口径:fail_streak 累计、达阈值自动
+    暂停、streak 通知照发。模板已删的实例维持直接回 idle(模板不在
+    即无运行结果语义,_finish 也无处落)。
+    """
     cutoff = _now() - timedelta(seconds=RUN_LEASE_SECONDS)
     rows = (await db.execute(
         select(IntegrationTask).where(
@@ -1197,20 +1208,20 @@ async def _recover_stuck(db) -> int:
             IntegrationTask.running_since.is_not(None),
             IntegrationTask.running_since < cutoff,
         ).limit(20))).scalars().all()
+    n = 0
     for r in rows:
-        r.state = "idle"
-        r.running_since = None
-        r.run_status = "timeout"     # 租约超时是真实的「超时」面
-        r.last_error = "运行租约超时,调度器回收"
-        try:
-            r.next_run_at = next_fire(
-                (await db.get(IntegrationTask, r.template_id)).trigger_cron,
-                _now())
-        except Exception:  # noqa: BLE001
-            r.next_run_at = _now() + timedelta(hours=1)
+        tpl = await db.get(IntegrationTask, r.template_id)
+        if tpl is None or tpl.removed_at is not None:
+            r.state = "idle"
+            r.running_since = None
+            r.run_status = "timeout"   # 租约超时是真实的「超时」面
+            r.last_error = "运行租约超时,调度器回收(模板已删)"
+            continue
+        await _finish(db, r, tpl, "timeout", "运行租约超时,调度器回收")
+        n += 1
     if rows:
         await db.commit()
-    return len(rows)
+    return n
 
 
 async def _claim_due(db, limit: int = 10) -> list[int]:
