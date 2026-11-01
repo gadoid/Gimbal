@@ -155,9 +155,11 @@ def test_alias_entry_without_url_stays_gap() -> None:
 
 
 def test_empty_declaration_falls_through_to_alias() -> None:
-    """②层按「非空字符串值」算(评审 2026-11-01):空声明(键在值空)
-    不算 authored 落点 —— ③层别名地址可补上(空值挡③只会把缺口推迟
-    到引擎报错,且预检按同源判定不再漏报)。"""
+    """②层按「非空字符串值」算(评审 2026-11-01):空/全空白声明(键在
+    值空)不算 authored 落点 —— ③层别名地址可补上(空值挡③只会把缺口
+    推迟到引擎报错,且预检按同源判定不再漏报)。判定与物化共用
+    _usable_declared_url 同一判断(评审三轮小修:全空白值此前判定面
+    按 strip 不算、物化面按真值算 —— 预检放行、执行引擎报错)。"""
     from app.services.run_materialize import service_url_resolved
 
     # 判定面:空/空白/None 声明 = 未落点;有③层命中即算可解析
@@ -170,13 +172,16 @@ def test_empty_declaration_falls_through_to_alias() -> None:
     assert service_url_resolved(
         "s", declared={"s": ""}, bindings={}, alias_base_urls={"s": "https://a"})
 
-    # 物化面:空声明被③层盖掉;无③层保持空值留缺口(引擎显式报错)
-    src = _converted()
-    src["config"]["services"]["fin-service"] = ""
-    out = materialize_run_copy(src, alias_base_urls={"fin-service": "https://alias"})
-    assert out["config"]["services"]["fin-service"] == "https://alias"
-    out = materialize_run_copy(src, alias_base_urls={})
-    assert not out["config"]["services"].get("fin-service")
+    # 物化面:空与全空白声明都被③层盖掉(与预检 strip 口径一致);
+    # 无③层保持原值留缺口(引擎显式报错)
+    for bad in ("", "   "):
+        src = _converted()
+        src["config"]["services"]["fin-service"] = bad
+        out = materialize_run_copy(
+            src, alias_base_urls={"fin-service": "https://alias"})
+        assert out["config"]["services"]["fin-service"] == "https://alias", bad
+        out = materialize_run_copy(src, alias_base_urls={})
+        assert out["config"]["services"]["fin-service"] == bad
 
 
 # ─── carry 填充(spec §4)────────────────────────────────────────

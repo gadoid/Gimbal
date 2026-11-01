@@ -97,25 +97,33 @@ def referenced_services(steps: list) -> list[str]:
     return list(seen)
 
 
+def _usable_declared_url(value) -> bool:
+    """②层 authored 声明值的可用性(评审二轮④/三轮小修):非空(去
+    空白)字符串才算钉了地址。判定(:func:`service_url_resolved`,预检
+    同源)与物化补缺(:func:`_apply_services`)**共用本判断** —— 否则
+    全空白值会「预检放行(按 strip 不算落点、③层可补)、物化不补
+    (按真值算、`"  "` 为真)」,预检放行、执行期引擎报错。"""
+    return isinstance(value, str) and bool(value.strip())
+
+
 def service_url_resolved(
     svc: str, *, declared: dict | None, bindings: dict | None,
     alias_base_urls: dict[str, str] | None = None,
 ) -> bool:
     """服务地址三层链判定(① 显式绑定 url > ② 场景 authored 声明
-    (值须为非空字符串)> ③ 别名 base_url)—— 物化(:func:`_apply_
-    services`)与预检(run_precheck.unbound_services)共用同一优先级
-    链,规则不得第二份重写(N1-7 评审附注)。
+    (值须为非空字符串,去空白)> ③ 别名 base_url)—— 物化(:func:
+    `_apply_services`)与预检(run_precheck.unbound_services)共用
+    同一优先级链,规则不得第二份重写(N1-7 评审附注)。
 
-    ``declared`` 即物化侧的 ``config.services``(authored 层)。空声明
-    (键在值空)不算落点 —— 继续走 ③ 别名补齐(空值不是 authored
-    钉的地址,挡住 ③ 只会把缺口推迟到引擎报错);三层皆缺返回
-    False,留缺口给引擎显式报错(RunDialog 并集行提前发现)。
+    ``declared`` 即物化侧的 ``config.services``(authored 层)。空/全
+    空白声明(键在值空)不算落点 —— 继续走 ③ 别名补齐(空值不是
+    authored 钉的地址,挡住 ③ 只会把缺口推迟到引擎报错);三层皆缺
+    返回 False,留缺口给引擎显式报错(RunDialog 并集行提前发现)。
     """
     bound = (bindings or {}).get(svc)
     if isinstance(bound, dict) and bound.get("url"):
         return True
-    declared_url = (declared or {}).get(svc)
-    if isinstance(declared_url, str) and declared_url.strip():
+    if _usable_declared_url((declared or {}).get(svc)):
         return True
     return bool((alias_base_urls or {}).get(svc))
 
@@ -126,10 +134,11 @@ def _apply_services(cfg: dict, *, steps: list,
     """services 物化优先级链的唯一组装点(F4 方案 B 定稿):
 
     ① 显式绑定 url(RunDialog 现场填)> ② 场景 authored 声明(非空
-    字符串值)> ③ service_aliases.base_url > ④ 缺口留给引擎显式报错
-    (RunDialog 并集行提前发现)。③ 层只填「无可用声明值且未绑定
-    url」的引用键(空声明视同缺 —— 空值可被 ③ 补上,非空 authored
-    不被覆盖),与凭证默认「场景显式 > 注册表默认」同款裁决,不发明
+    字符串值,:func:`_usable_declared_url`)> ③ service_aliases.base_url
+    > ④ 缺口留给引擎显式报错(RunDialog 并集行提前发现)。③ 层只填
+    「无可用声明值且未绑定 url」的引用键(空/全空白声明视同缺 ——
+    可被 ③ 补上,非空 authored 不被覆盖;与预检 strip 口径同一判断,
+    不漂移),与凭证默认「场景显式 > 注册表默认」同款裁决,不发明
     新语义。三层落点判定共用 :func:`service_url_resolved`(与预检
     同源)。
     """
@@ -143,8 +152,8 @@ def _apply_services(cfg: dict, *, steps: list,
         bound_url = bound.get("url") if isinstance(bound, dict) else None
         if bound_url:
             services[svc] = bound_url                    # ① 显式绑定最优先
-        elif not services.get(svc):
-            services[svc] = alias_base_urls[svc]         # ③ 别名默认(仅补缺,空声明视同缺)
+        elif not _usable_declared_url(services.get(svc)):
+            services[svc] = alias_base_urls[svc]         # ③ 别名默认(仅补缺,空/全空白声明视同缺)
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:
