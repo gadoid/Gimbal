@@ -59,12 +59,16 @@ class RuntimeControl:
         cancel_event:  协作取消事件（threading.Event）。调度器 attempt 超时
                        弃跑时置位——step 循环与 STEP_FAILED 重试点检测到
                        即停,防止被弃线程与重试并发重复发请求。
+        drain_event:   单元级取消（graph 单元级取消方案 2026-11-02 E2）。
+                       只被 PlanScheduler 读取:置位后不再提交新主体单元,
+                       在飞单元跑完,after 括号照常。场景/步骤层不消费。
     """
     halt_at: Optional[int] = None
     halt_reason: str = "user-requested"
     step_from: Optional[int] = None
     debug_mode: bool = False
     cancel_event: Any = None
+    drain_event: Any = None
 
 
 # ── ScenarioRunResult ─────────────────────────────────────────────────────────

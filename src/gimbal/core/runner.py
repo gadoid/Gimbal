@@ -470,13 +470,28 @@ class Engine:
             with exec_context(run=framework_ctx.run_id):
                 return self._run_unit_inner(unit, inputs, cancel, runtime_control, runner, suite_ctx)
 
+        def _run_after_unit(unit, inputs, cancel=None):
+            # A0（graph 单元级取消方案 2026-11-02）：after 括号必达 —— 不受外层
+            # 取消短路,场景层也看不到外层取消事件（只保留 attempt 超时事件）
+            with exec_context(run=framework_ctx.run_id):
+                return self._run_unit_inner(unit, inputs, cancel, runtime_control, runner, suite_ctx,
+                                            bracket_after=True)
+
         fail_fast = framework_ctx.config.fail_fast
         if plan.policy.fail_fast is not None:
             fail_fast = plan.policy.fail_fast
 
+        # E3：单元级取消信号（server POST /runs/{id}/cancel scope=unit 置位
+        # RuntimeControl.drain_event）→ 调度器停止提交新主体单元
+        drain = (getattr(runtime_control, "drain_event", None)
+                 if runtime_control is not None else None)
+        stop_requested = (lambda: drain.is_set()) if drain is not None else None
+
         # P0-5：总线透传调度器——after 缺失输入注入 None 时发 debug.* 事件留痕
         sched = PlanScheduler(event_bus=self._ictx.event_bus)
-        outcome = sched.run(plan, _run_unit, fail_fast=fail_fast)
+        outcome = sched.run(plan, _run_unit, fail_fast=fail_fast,
+                            stop_requested=stop_requested,
+                            run_after_unit=_run_after_unit)
 
         # ── 判定：按计划清单对账（blocked / cancelled 由 outcome 呈现）──
         # 残留 #6：单场景/编排统一走 aggregate 口径（halted/error/failed/blocked
@@ -498,8 +513,13 @@ class Engine:
         self._emit_suite_end(plan, suite_ctx, result)
         return result
 
-    def _run_unit_inner(self, unit, inputs, cancel, runtime_control, runner, suite_ctx) -> Any:
-        """单元执行体（P1-01：exec_context 由 _run_unit 包装设置）。"""
+    def _run_unit_inner(self, unit, inputs, cancel, runtime_control, runner, suite_ctx,
+                        *, bracket_after: bool = False) -> Any:
+        """单元执行体（P1-01：exec_context 由 _run_unit 包装设置）。
+
+        ``bracket_after``（A0）：after 括号单元 —— 跳过外层取消短路,且不把
+        外层取消事件合成进场景的 RuntimeControl（清理必达,不在步骤边界被截断）。
+        """
         scenario = unit.scenario
         if inputs:
             # 统一输入注入原语：inputs 注入为 scenario vars（生效副本，不改源）；
@@ -513,7 +533,7 @@ class Engine:
         # 单元调度边界短路 —— 未启动的单元不再进场景（在飞步骤由
         # scenario_runner 的步骤边界检查收口）
         outer = (getattr(runtime_control, "cancel_event", None)
-                 if runtime_control is not None else None)
+                 if runtime_control is not None and not bracket_after else None)
         if outer is not None and outer.is_set():
             from datetime import datetime, timezone
             from gimbal.core.scenario_runner import ScenarioRunResult
@@ -526,6 +546,12 @@ class Engine:
                 halted=True, halt_reason="cancelled",
             )
         rc = runtime_control
+        if (bracket_after and runtime_control is not None
+                and getattr(runtime_control, "cancel_event", None) is not None):
+            # A0：after 单元的场景不接外层取消事件（attempt 超时事件在下方照挂）
+            import dataclasses as _dc
+            rc = _dc.replace(runtime_control, cancel_event=None)
+            runtime_control = rc
         if cancel is not None:
             # 调度器超时弃跑的协作取消——**复制后挂事件,不改共享对象**：
             # runtime_control 由本次 run 的所有单元/所有 attempt 共用,

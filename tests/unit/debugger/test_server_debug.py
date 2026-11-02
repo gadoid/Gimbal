@@ -333,6 +333,93 @@ class TestCancelAndMultiplication:
         rc2 = client.post(f"/runs/{rid}/cancel", headers=h)
         assert rc2.status_code == 200 and rc2.json()["accepted"] is False
 
+    def _gated_registry(self, monkeypatch, gate, release):
+        """首次发送在 gate 处放行信号、等待 release 的 echo 注册表。"""
+        from debugger.test_batch_e import ProgEcho
+
+        class _Gated(ProgEcho):
+            protocol = "echo"
+
+            def send(self, spec, view):
+                gate.set()
+                release.wait(timeout=10.0)
+                return super().send(spec, view)
+
+        import gimbal.protocols.registry as preg
+
+        def _registry_with_gated(**kw):
+            reg = _ORIG_BUILD(**kw)
+            reg.register(_Gated())
+            return reg
+        monkeypatch.setattr(preg, "build_default_protocol_registry",
+                            _registry_with_gated)
+
+    @staticmethod
+    def _graph_dict(*sids: str) -> dict:
+        return {"kind": "graph", "mode": "aggregate",
+                "units": [{"ref": sid, "scenario": _scenario_dict(sid)}
+                          for sid in sids]}
+
+    def test_cancel_without_body_is_step_scope(self, client, monkeypatch):
+        """E1 兼容:不带 body = scope=step(C12 既有行为),响应回显 scope。"""
+        import threading
+        gate, release = threading.Event(), threading.Event()
+        self._gated_registry(monkeypatch, gate, release)
+        two_step = _scenario_dict("srv-scope-default")
+        two_step["steps"].append({"kind": "step",
+                                  "call": {"protocol": "echo", "message": "s2"},
+                                  "strategy": []})
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t5")
+        h = {"X-Gimbal-Token": "t5"}
+        rid = client.post("/runs", json={"target": two_step}, headers=h).json()["runId"]
+        assert gate.wait(timeout=10.0)
+        rc = client.post(f"/runs/{rid}/cancel", headers=h)
+        assert rc.json() == {"accepted": True, "runId": rid, "scope": "step"}
+        release.set()
+        st = _wait_finished(client, rid)
+        assert st["summary"]["exitCode"] != 0      # 步骤边界截断 → halted
+
+    def test_cancel_scope_unit_finishes_inflight_cancels_rest(
+            self, client, monkeypatch):
+        """E1/E3:scope=unit —— 在飞单元 a 跑完(passed),未启动的 b 记 cancelled。"""
+        import threading
+        gate, release = threading.Event(), threading.Event()
+        self._gated_registry(monkeypatch, gate, release)
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t6")
+        h = {"X-Gimbal-Token": "t6"}
+        rid = client.post("/runs", json={"target": self._graph_dict("ga", "gb")},
+                          headers=h).json()["runId"]
+        assert gate.wait(timeout=10.0)
+        rc = client.post(f"/runs/{rid}/cancel", json={"scope": "unit"}, headers=h)
+        assert rc.json() == {"accepted": True, "runId": rid, "scope": "unit"}
+        release.set()
+        st = _wait_finished(client, rid)
+        by_id = {d["scenario_id"]: d["status"] for d in st["details"]}
+        assert by_id == {"ga": "passed", "gb": "cancelled"}
+
+    def test_cancel_unit_then_step_upgrades(self, client, monkeypatch):
+        """先 unit 后 step → 升级为 step(在飞场景在步骤边界停);反向忽略。"""
+        import threading
+        gate, release = threading.Event(), threading.Event()
+        self._gated_registry(monkeypatch, gate, release)
+        two_step = _scenario_dict("srv-upgrade")
+        two_step["steps"].append({"kind": "step",
+                                  "call": {"protocol": "echo", "message": "s2"},
+                                  "strategy": []})
+        monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t7")
+        h = {"X-Gimbal-Token": "t7"}
+        rid = client.post("/runs", json={"target": two_step}, headers=h).json()["runId"]
+        assert gate.wait(timeout=10.0)
+        r1 = client.post(f"/runs/{rid}/cancel", json={"scope": "unit"}, headers=h)
+        assert r1.json()["scope"] == "unit"
+        r2 = client.post(f"/runs/{rid}/cancel", json={"scope": "step"}, headers=h)
+        assert r2.json()["scope"] == "step"
+        r3 = client.post(f"/runs/{rid}/cancel", json={"scope": "unit"}, headers=h)
+        assert r3.json()["scope"] == "step"          # 不降级
+        release.set()
+        st = _wait_finished(client, rid)
+        assert st["summary"]["exitCode"] != 0
+
     def test_n_runs_multiplication_via_server(self, client, monkeypatch):
         """n_runs=3 → attempts=3、total 按单元计数（=1）。"""
         monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "t3")

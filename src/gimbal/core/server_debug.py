@@ -39,7 +39,7 @@ from gimbal.events.types import M2HashMismatchEvent  # noqa: E402
 # server.py 在 create_app() 内延迟导入本模块，此时 server 模块已初始化完毕）
 from gimbal.core.server import (  # noqa: E402
     RunsRequest, RunsCreated, DebugCommandRequest, DebugCommandResponse,
-    CancelResponse,
+    CancelResponse, CancelRequest,
 )
 
 NL = chr(10)
@@ -220,9 +220,12 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             # C12：外层取消事件 —— POST /runs/{id}/cancel 置位，
             # 经 RuntimeControl.cancel_event 在步骤边界/未启动单元生效
             cancel_event = threading.Event()
+            # 单元级取消(E2):只停调度、不打断在飞单元 —— 与 cancel_event
+            # 分开,后者的消费点在步骤边界/单元短路,一置位就会截断在飞单元
+            drain_event = threading.Event()
             registry[run_id] = {"status": "running", "result": None, "error": None,
                                 "debugger": None, "session": session, "events": [],
-                                "cancel": cancel_event}
+                                "cancel": cancel_event, "drain": drain_event}
 
         from gimbal.core.scenario_runner import RuntimeControl
         # C12 起恒建 RC（cancel 通道恒在）；其余字段按请求
@@ -232,6 +235,7 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
             step_from=step_from,
             debug_mode=debug is not None,   # 调试挂起不计 scenario 超时
             cancel_event=cancel_event,
+            drain_event=drain_event,
         )
 
         entry = registry[run_id]
@@ -380,24 +384,35 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
     @app.post("/runs/{run_id}/cancel", response_model=CancelResponse)
     async def cancel_run(
         run_id: str,
+        body: CancelRequest | None = None,
         authorization: str | None = Header(default=None),
         x_gimbal_token: str | None = Header(default=None, alias="X-Gimbal-Token"),
     ) -> Any:
-        """C12（P3-02）：协作取消 —— 置位外层取消事件。
+        """C12（P3-02）：协作取消。
 
-        生效点：在飞步骤完成后的步骤边界、未启动单元的调度边界；
-        在飞的单笔请求不中断（至多跑满协议超时）。
+        scope=step（缺省）置位外层取消事件 —— 在飞步骤完成后的步骤边界、未
+        启动单元的调度边界生效；在飞的单笔请求不中断（至多跑满协议超时）。
+        scope=unit（E1,2026-11-02）只置位 drain：调度器不再提交新主体单元，
+        在飞单元跑完（含 n_runs × retry），after 括号照常。step 同时置位
+        drain（调度也停）；先 unit 后 step 升级，反向忽略。响应回显生效的
+        scope（cancel 已置位 → step）。
         """
         _require_token(authorization, x_gimbal_token)
         entry = registry.get(run_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="unknown run")
         cancel = entry.get("cancel")
+        drain = entry.get("drain")
+        scope = body.scope if body is not None else "step"
         if entry["status"] != "running" or cancel is None:
-            return CancelResponse(accepted=False, runId=run_id)
-        cancel.set()
-        logger.info("[Server] 协作取消已请求: {}", run_id)
-        return CancelResponse(accepted=True, runId=run_id)
+            return CancelResponse(accepted=False, runId=run_id, scope=scope)
+        if drain is not None:
+            drain.set()
+        if scope == "step":
+            cancel.set()
+        effective = "step" if cancel.is_set() else "unit"
+        logger.info("[Server] 协作取消已请求: {} scope={}", run_id, effective)
+        return CancelResponse(accepted=True, runId=run_id, scope=effective)
 
     @app.get("/runs/{run_id}/events")
     async def run_events(

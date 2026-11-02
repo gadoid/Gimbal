@@ -103,22 +103,35 @@ def _define_models() -> tuple[type, ...]:
         accepted: bool
         output: list[str] = Field(default_factory=list)
 
+    class CancelRequest(BaseModel):
+        """POST /runs/{id}/cancel 可选请求体（graph 单元级取消方案 2026-11-02 E1）。
+
+        scope=step（缺省,C12 既有行为）:在飞场景在步骤边界停、未启动主体单元
+        短路;scope=unit:只停调度 —— 在飞单元跑完(含其 n_runs × retry),未
+        启动的主体单元记 cancelled,after 括号照常。同一 run 先 unit 后 step
+        按更强的 step 生效,反向忽略。
+        """
+        scope: str = Field("step", pattern="^(step|unit)$")
+
     class CancelResponse(BaseModel):
         """POST /runs/{id}/cancel：协作取消已请求（步骤边界/未启动单元生效）。"""
         accepted: bool
         runId: str
+        scope: str = "step"
 
     class DebugCommandResponse(BaseModel):
         accepted: bool
         output: list[str] = Field(default_factory=list)
 
     return (RunsRequest, RunsCreated,
-            DebugCommandRequest, DebugCommandResponse, CancelResponse)
+            DebugCommandRequest, DebugCommandResponse, CancelResponse,
+            CancelRequest)
 
 
 _MODELS = _define_models()
 (RunsRequest, RunsCreated,
- DebugCommandRequest, DebugCommandResponse, CancelResponse) = _MODELS
+ DebugCommandRequest, DebugCommandResponse, CancelResponse,
+ CancelRequest) = _MODELS
 
 
 # ─── app 工厂 ─────────────────────────────────────────────────────

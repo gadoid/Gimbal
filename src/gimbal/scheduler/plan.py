@@ -123,8 +123,20 @@ class PlanScheduler:
         run_unit: Callable[[Unit, dict], Any],
         *,
         fail_fast: bool = False,
+        stop_requested: Callable[[], bool] | None = None,
+        run_after_unit: Callable[[Unit, dict], Any] | None = None,
     ) -> PlanOutcome:
+        """``stop_requested``（graph 单元级取消 E3,2026-11-02）：外部「停止
+        调度」信号,读取点与 plan deadline 同位 —— 进入主体前 / 并行首批
+        提交前 / 每次有单元完成后 / 串行每个单元提交前;置位后未启动的
+        主体单元记 cancelled,在飞单元跑完照常计数,after 括号不读此信号。
+
+        ``run_after_unit``（A0 修复）：after 括号专用的执行函数,缺省同
+        ``run_unit``。Engine 传入不受外层取消短路/截断的版本,兑现
+        「after 必达」。
+        """
         outcome = PlanOutcome()
+        after_runner = run_after_unit or run_unit
 
         # P1-12：Plan 全局 deadline（PlanPolicy.timeout，单调钟）；
         # 只作用于主体单元——括号必达语义（before 先行 / after 清理）不受影响
@@ -142,16 +154,22 @@ class PlanScheduler:
         if self._before_failed(plan, outcome):
             for unit in plan.units:
                 outcome.blocked.add(unit.id)
+        elif self._stop(None, stop_requested):
+            # 读取点 1：before 期间已请求停止 → 主体全部 cancelled、不提交
+            for unit in plan.units:
+                outcome.cancelled.add(unit.id)
         else:
             # 2. units 主体（拓扑）
             if plan.policy.parallel > 1:
-                self._schedule_parallel(plan, run_unit, outcome, fail_fast, deadline)
+                self._schedule_parallel(plan, run_unit, outcome, fail_fast, deadline,
+                                        stop_requested)
             else:
-                self._schedule_serial(plan, run_unit, outcome, fail_fast, deadline)
+                self._schedule_serial(plan, run_unit, outcome, fail_fast, deadline,
+                                      stop_requested)
 
-        # 3. after 括号（串行，必达——units 失败/取消不影响其执行）
+        # 3. after 括号（串行，必达——units 失败/取消/外部停止都不影响其执行）
         for unit in plan.after:
-            outcome.results[unit.id] = self._run_one(run_unit, unit, self._resolve_inputs(plan, outcome, unit))
+            outcome.results[unit.id] = self._run_one(after_runner, unit, self._resolve_inputs(plan, outcome, unit))
 
         return outcome
 
@@ -203,7 +221,8 @@ class PlanScheduler:
     # ── 串行拓扑 ─────────────────────────────────────────────
 
     def _schedule_serial(self, plan: Plan, run_unit, outcome: PlanOutcome,
-                         fail_fast: bool, deadline: float | None = None) -> None:
+                         fail_fast: bool, deadline: float | None = None,
+                         stop_requested: Callable[[], bool] | None = None) -> None:
         units = {u.id: u for u in plan.units}
         needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
         stop_scheduling = False
@@ -221,8 +240,8 @@ class PlanScheduler:
                 # 声明序遍历中上游尚未完成：正常情况不会发生（串行按序），
                 # 出现即前向依赖（needs 指向后面的单元）→ 下一轮补跑
                 continue
-            if stop_scheduling or self._expired(deadline):
-                # P1-12：plan deadline 到点，未启动的单元置 cancelled
+            if stop_scheduling or self._stop(deadline, stop_requested):
+                # P1-12：plan deadline 到点 / E3 外部停止，未启动的单元置 cancelled
                 outcome.cancelled.add(unit.id)
                 continue
             outcome.results[unit.id] = self._run_one(
@@ -243,7 +262,7 @@ class PlanScheduler:
                     progress = True
                     continue
                 if all(outcome.status_of(n) == "done" for n in needs_map[unit.id]):
-                    if stop_scheduling or self._expired(deadline):
+                    if stop_scheduling or self._stop(deadline, stop_requested):
                         outcome.cancelled.add(unit.id)
                     else:
                         outcome.results[unit.id] = self._run_one(
@@ -261,7 +280,8 @@ class PlanScheduler:
     # ── 并行拓扑（ready-set 线程池）──────────────────────────
 
     def _schedule_parallel(self, plan: Plan, run_unit, outcome: PlanOutcome,
-                           fail_fast: bool, deadline: float | None = None) -> None:
+                           fail_fast: bool, deadline: float | None = None,
+                           stop_requested: Callable[[], bool] | None = None) -> None:
         units = {u.id: u for u in plan.units}
         needs_map = {u.id: [n for n in u.needs if n in units] for u in plan.units}
         lock = threading.Lock()
@@ -281,8 +301,12 @@ class PlanScheduler:
             return ready
 
         def cancel_pending() -> None:
+            # 只取消**未提交**的：在飞单元（仍在 futures 里）要跑完照常计数，
+            # 不能同时出现在 cancelled 集合（此前 fail-fast/deadline 路径会把
+            # 在飞单元也记进 cancelled，靠 status_of 先查 results 掩盖）
+            inflight = {fu.id for fu in futures.values()}
             for u in plan.units:
-                if outcome.status_of(u.id) == "pending":
+                if outcome.status_of(u.id) == "pending" and u.id not in inflight:
                     outcome.cancelled.add(u.id)
 
         def cascade_blocked() -> None:
@@ -303,8 +327,8 @@ class PlanScheduler:
             with lock:
                 initial = ready_units()
                 for u in initial:
-                    if self._expired(deadline):
-                        # P1-12：deadline 已到，首批也不提交
+                    if self._stop(deadline, stop_requested):
+                        # P1-12：deadline 已到 / E3 外部停止，首批也不提交
                         outcome.cancelled.add(u.id)
                         continue
                     futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
@@ -322,14 +346,15 @@ class PlanScheduler:
                             cascade_blocked()
                             if fail_fast:
                                 stop_scheduling = True
-                    if stop_scheduling or self._expired(deadline):
-                        # P1-12：fail-fast / plan deadline → 未启动的置 cancelled；
-                        # 在飞的跑完照常计数（不抢占线程）
+                    if stop_scheduling or self._stop(deadline, stop_requested):
+                        # P1-12 / E3：fail-fast / plan deadline / 外部停止 → 未启动的
+                        # 置 cancelled；在飞的跑完照常计数（不抢占线程）—— 单元完成
+                        # 时检查即是精确的「跑完当前单元再停」
                         cancel_pending()
                         continue
                     for u in ready_units():
                         if u.id not in {fu.id for fu in futures.values()}:
-                            if self._expired(deadline):
+                            if self._stop(deadline, stop_requested):
                                 outcome.cancelled.add(u.id)
                                 continue
                             futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
@@ -340,8 +365,8 @@ class PlanScheduler:
                         cancel_pending()
                     break
 
-        # P1-12 兜底：deadline 到点仍未提交的 pending（如首批即被拦）置 cancelled
-        if self._expired(deadline):
+        # P1-12 兜底：deadline 到点 / 外部停止仍未提交的 pending（如首批即被拦）置 cancelled
+        if self._stop(deadline, stop_requested):
             cancel_pending()
 
     # ── 判定辅助 ─────────────────────────────────────────────
@@ -565,6 +590,20 @@ class PlanScheduler:
     def _expired(deadline: float | None) -> bool:
         """P1-12：plan deadline 是否已到（None = 无 deadline）。"""
         return deadline is not None and time.monotonic() >= deadline
+
+    @classmethod
+    def _stop(cls, deadline: float | None,
+              stop_requested: Callable[[], bool] | None) -> bool:
+        """停止调度条件 = plan deadline 到点 ∨ 外部停止信号（E3）。
+        信号读取失败按未置位处理（不让调度因信号源异常中断）。"""
+        if cls._expired(deadline):
+            return True
+        if stop_requested is None:
+            return False
+        try:
+            return bool(stop_requested())
+        except Exception:  # noqa: BLE001
+            return False
 
     @staticmethod
     def _safe_run(run_unit, unit: Unit, inputs: dict,
