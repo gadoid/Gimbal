@@ -75,6 +75,17 @@ export interface Execution {
   current_plate?: Record<string, string> | null
   /** B-3:失败原因(终态失败单 = dispatcherError;成功/运行中 null) */
   error?: string | null
+  /** 可取消标志(服务端给,前端不按 status 自推 —— 全量评估 2026-11-02 #1):
+   *  queued 恒 true;running 仅 cases 链 true,graph 链(Suite 编排 /
+   *  POST /api/runs 带 graph)不消费取消位 → false,cancel 端点同口径 409。 */
+  cancelable?: boolean
+  /** 入站身份只读投影(全量评估 2026-11-02 #9):经由的别名 / 身份模式
+   *  (personal=grant 用户,platform=系统用户)/ grant id / 调用方对账键。
+   *  JWT 发起的执行四者皆 null。 */
+  caller_alias?: string | null
+  identity_mode?: 'personal' | 'platform' | null
+  grant_id?: number | null
+  client_ref?: string | null
 
 }
 

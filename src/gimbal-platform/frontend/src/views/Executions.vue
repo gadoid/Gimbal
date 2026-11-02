@@ -104,6 +104,11 @@
 
     <h3 class="recipe-title">执行信息</h3>
     <dl class="recipe">
+      <!-- 入站来源(全量评估 #9):经由谁、以谁的身份;JWT 发起的执行不显示 -->
+      <template v-if="execStore.detail?.caller_alias">
+        <dt>入站来源</dt>
+        <dd class="mono" data-testid="inbound-origin">{{ inboundOriginText }}</dd>
+      </template>
       <template v-for="([k, label, v]) in recipeEntries" :key="k">
         <dt>{{ label }}</dt>
         <dd class="mono">{{ formatRecipeValue(v) }}</dd>
@@ -338,12 +343,10 @@ const failureReason = computed(() => {
   return '未记录顶层原因 — 展开行级明细查看各行失败原因(引擎日志/步骤明细)'
 })
 
-// P4 协作式取消:queued/running 可取消(running 由在飞 fanout 行边界
-// 收敛);终态按钮消失。
-const canCancel = computed(() => {
-  const s = execStore.detail?.status
-  return !!s && !isTerminalExecutionStatus(s)
-})
+// P4 协作式取消:按服务端 cancelable 标志(全量评估 2026-11-02 #1):queued
+// 恒可取消;running 仅 cases 链可取消(行边界收敛),graph 链不消费取消位
+// → 按钮不显示;终态为 false。
+const canCancel = computed(() => !!execStore.detail?.cancelable)
 
 /** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM:SS'(与列表页同款字符串切片)。 */
 function fmtTime(iso: string | null): string {
@@ -434,6 +437,16 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
   return entries
     .filter(([k, v]) => v !== undefined && !RECIPE_HIDDEN_KEYS.has(k))
     .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
+})
+
+/** 入站来源一行:别名 · 身份模式(个人模式带 grant id)· clientRef。 */
+const inboundOriginText = computed(() => {
+  const d = execStore.detail
+  if (!d?.caller_alias) return ''
+  const mode = d.identity_mode === 'personal'
+    ? `个人模式(grant #${d.grant_id ?? '?'})`
+    : '平台模式'
+  return `别名 ${d.caller_alias} · ${mode}${d.client_ref ? ` · clientRef ${d.client_ref}` : ''}`
 })
 
 /** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效。 */
@@ -661,9 +674,12 @@ async function cancelExec() {
     await cancelExecution(execStore.detail.id)
     toast.success('已请求取消 — 在飞行收敛后生效')
   } catch (e) {
-    if ((e as { status?: number }).status === 409) {
-      // 终态竞态:刷新让按钮消失即可,不算失败。
-      toast.info('该执行已结束,无法取消')
+    const err = e as { status?: number; detail?: { message?: unknown } }
+    if (err.status === 409) {
+      // 终态竞态:刷新让按钮消失即可,不算失败;running 的 graph 链 409
+      // 时服务端 message 说明不支持中途取消,原样透出。
+      const msg = err.detail?.message
+      toast.info(typeof msg === 'string' && msg ? msg : '该执行已结束,无法取消')
     } else {
       showError('取消', e)
       return

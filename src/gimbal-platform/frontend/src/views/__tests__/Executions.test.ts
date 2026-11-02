@@ -177,6 +177,7 @@ describe('Executions.vue — P1 detail upgrades', () => {
     status: 'running' as const,
     started_at: '2026-08-26T01:02:03',
     finished_at: null,
+    cancelable: true,
   } satisfies Execution
 
   it('running 单显示取消按钮;点击 → cancelExecution + 重新拉详情', async () => {
@@ -193,6 +194,29 @@ describe('Executions.vue — P1 detail upgrades', () => {
 
     expect(cancelExecution).toHaveBeenCalledWith(1)
     expect(execStore.fetchDetail).toHaveBeenCalledWith(1)
+    wrapper.unmount()
+  })
+
+  it('入站发起的执行显示「入站来源」(别名 · 身份模式 · grant);JWT 执行不显示(全量评估 #9)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail, caller_alias: 'agent-sys', identity_mode: 'personal',
+                         grant_id: 12, client_ref: 'job-7' }
+    const w1 = await mountPage()
+    const origin = w1.find('[data-testid="inbound-origin"]')
+    expect(origin.exists()).toBe(true)
+    expect(origin.text()).toBe('别名 agent-sys · 个人模式(grant #12) · clientRef job-7')
+    w1.unmount()
+    execStore.detail = { ...fakeDetail }
+    const w2 = await mountPage()
+    expect(w2.find('[data-testid="inbound-origin"]').exists()).toBe(false)
+    w2.unmount()
+  })
+
+  it('running 但服务端 cancelable=false(graph 链)→ 不显示取消按钮(全量评估 #1)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...runningDetail, cancelable: false }
+    const wrapper = await mountPage()
+    expect(wrapper.findAll('button').find((b) => b.text() === '取消')).toBeUndefined()
     wrapper.unmount()
   })
 

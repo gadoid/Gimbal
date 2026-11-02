@@ -544,6 +544,11 @@ class TestVisibility:
         h = await _register(client, "p1_owner4")
         r = await client.get(f"/api/executions/{ex_id}", headers=h)
         assert r.status_code == 200, r.text
+        # 全量评估 2026-11-02 #9:详情投影入站身份(平台模式:无 grant)
+        body = r.json()
+        assert body["caller_alias"] == "agent-sys"
+        assert body["identity_mode"] == "platform"
+        assert body["grant_id"] is None
         # 其他 member → 404(不泄露)
         h2 = await _register(client, "p1_stranger")
         r = await client.get(f"/api/executions/{ex_id}", headers=h2)

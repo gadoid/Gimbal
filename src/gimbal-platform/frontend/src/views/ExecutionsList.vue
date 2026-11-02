@@ -177,7 +177,7 @@
               <div class="flex items-center justify-center gap-0.5">
                 <Button variant="link" size="sm" class="h-7 px-2" @click.stop="open(row.id)">详情</Button>
                 <Button
-                  v-if="row.status === 'queued' || row.status === 'running'"
+                  v-if="row.cancelable"
                   variant="link" size="sm" class="h-7 px-2 text-amber-700"
                   @click.stop="cancel(row.id)"
                 >取消</Button>
@@ -487,14 +487,18 @@ async function remove(id: number) {
   await fetchFiltered().catch(() => undefined)
 }
 
-/** P4 协作式取消:queued/running 行可见。409 = 点击时单子已终态(竞态)。 */
+/** P4 协作式取消:按服务端 cancelable 标志显示。409 = 点击时单子已终态
+ *  (竞态),或 running 的 graph 链不支持中途取消 —— 后者服务端 message
+ *  有说明,原样透出。 */
 async function cancel(id: number) {
   try {
     await cancelExecution(id)
     toast.success('已请求取消')
   } catch (e) {
-    if ((e as { status?: number }).status === 409) {
-      toast.info('该执行已结束,无法取消')
+    const err = e as { status?: number; detail?: { message?: unknown } }
+    if (err.status === 409) {
+      const msg = err.detail?.message
+      toast.info(typeof msg === 'string' && msg ? msg : '该执行已结束,无法取消')
     } else {
       showError('取消', e)
       return

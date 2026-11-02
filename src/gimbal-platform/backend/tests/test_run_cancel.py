@@ -171,6 +171,58 @@ async def test_cancel_running_zombie_finalizes_immediately(client):
     assert cr.json()["status"] == "canceled"
 
 
+async def _seed_job(execution_id: int, *, kind: str, status: str) -> None:
+    """挂一行 execution_jobs(不经 dispatch,无 worker 认领)。"""
+    from app.core import db as db_module
+    from app.models.execution import ExecutionJob
+
+    async with db_module.SessionLocal() as session:
+        session.add(ExecutionJob(
+            execution_id=execution_id, kind=kind, status=status,
+            payload={"kind": kind, "args": {"execution_id": execution_id}}))
+        await session.commit()
+
+
+async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
+    """全量评估 2026-11-02 #1:running 的 graph 任务体不消费取消位 →
+    409 not_cancelable、状态不动,列表/详情 cancelable=false;queued 的
+    graph 照常可取消(启动前检查有效);running 的 cases 链仍可取消。"""
+    from app.services import run_dispatcher
+
+    run_dispatcher.reset_cancel_state()
+    headers = await register_and_login(client)
+    me = (await client.get("/api/auth/me", headers=headers)).json()
+    uid = me["user"]["id"]
+
+    running_graph = await _seed_execution(uid, status="running")
+    await _seed_job(running_graph, kind="graph", status="running")
+    queued_graph = await _seed_execution(uid, status="queued")
+    await _seed_job(queued_graph, kind="graph", status="queued")
+    running_cases = await _seed_execution(uid, status="running")
+    await _seed_job(running_cases, kind="cases", status="running")
+
+    async def flag(eid: int) -> bool:
+        r = await client.get(f"/api/executions/{eid}", headers=headers)
+        assert r.status_code == 200, r.text
+        return r.json()["cancelable"]
+
+    assert await flag(running_graph) is False
+    assert await flag(queued_graph) is True
+    assert await flag(running_cases) is True
+    lst = (await client.get("/api/executions", headers=headers)).json()["items"]
+    flags = {i["id"]: i["cancelable"] for i in lst}
+    assert flags[running_graph] is False
+    assert flags[queued_graph] is True and flags[running_cases] is True
+
+    cr = await client.post(f"/api/executions/{running_graph}/cancel", headers=headers)
+    assert cr.status_code == 409, cr.text
+    assert cr.json()["detail"]["code"] == "not_cancelable"
+    assert (await _get_execution(running_graph)).status == "running"
+
+    cr = await client.post(f"/api/executions/{queued_graph}/cancel", headers=headers)
+    assert cr.status_code == 200, cr.text   # 位已写,worker 启动前消费
+
+
 async def test_fanout_marks_running(client, monkeypatch):
     """认证解析通过、行分发开始前 → status=running + started_at 落定;
     终态(done)覆盖 running。"""

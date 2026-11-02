@@ -277,11 +277,15 @@ async def list_executions(
     # G1:展示名一次批量查(可读活名;否则回落行上快照)
     disp = await execution_store.scenario_display_map(
         session, user, [e.scenario_id for e in rows])
+    # 可取消标志(#1):只对活跃行查任务体形态(graph 链不可中途取消)
+    graph_ids = await execution_store.graph_job_ids(
+        session, [e.id for e in rows if e.status in (STATUS_QUEUED, STATUS_RUNNING)])
     items = [
         execution_store.execution_list_item(
             e,
             consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
             has_scenario_snapshot=e.id in with_snap,
+            graph_job=e.id in graph_ids,
             **execution_store.display_kwargs(e, disp),
         )
         for e in rows
@@ -304,9 +308,12 @@ async def get_execution(
     user = principal.user
     disp = await execution_store.scenario_display_map(
         session, user, [ex.scenario_id])
+    graph_ids = (await execution_store.graph_job_ids(session, [ex.id])
+                 if ex.status in (STATUS_QUEUED, STATUS_RUNNING) else set())
     out = execution_store.execution_out(
         ex,
         has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id),
+        graph_job=ex.id in graph_ids,
         **execution_store.display_kwargs(ex, disp),
     )
     # W21 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
@@ -863,6 +870,12 @@ async def cancel_execution(
     收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的
     queued/running 立即终态化。终态单 409。server 链的在飞 run 由
     worker 侧 cancel 端点协作收口（步骤边界生效）。
+
+    running 的 graph 链(Suite 编排 / ``POST /api/runs`` 带 graph)409
+    ``not_cancelable``:``_fanout_graph`` 全程不读取消位,写了位只会
+    静默跑完按 passed/failed 收口(全量评估 2026-11-02 #1 短期修法);
+    queued 的 graph 照常取消(worker 启动前检查有效)。中途取消语义
+    (跑完当前单元收口 vs 终止引擎 run)待拍板。
     """
     if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
         raise HTTPException(
@@ -870,6 +883,16 @@ async def cancel_execution(
             detail={
                 "code": "not_cancelable",
                 "message": f"execution already {ex.status}",
+            },
+        )
+    if ex.status == STATUS_RUNNING and ex.id in (
+            await execution_store.graph_job_ids(session, [ex.id])):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "not_cancelable",
+                "message": "编排执行(graph)暂不支持中途取消:取消位不会被"
+                           "消费,执行会跑完并按结果收口;排队中的可取消",
             },
         )
     live = await run_dispatcher.request_cancel(session, ex.id)

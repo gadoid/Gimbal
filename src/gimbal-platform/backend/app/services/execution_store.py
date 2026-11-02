@@ -11,9 +11,9 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Execution, ExecutionSnapshot
-from ..models.execution import ExecutionEvent
+from ..models.execution import ExecutionEvent, ExecutionJob
 from ..models.composer_scenario import ComposerScenario
-from ..models.execution import STATUS_FAILED
+from ..models.execution import STATUS_FAILED, STATUS_QUEUED, STATUS_RUNNING
 from ..schemas.execution import ExecutionListItemOut, ExecutionOut
 
 async def scenario_display_map(
@@ -84,6 +84,40 @@ async def snapshot_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
     return set(rows)
 
 
+# ── 可取消判定(全量评估 2026-11-02 #1)────────────────────────────
+
+async def graph_job_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
+    """任务体为 graph 链且仍在活(queued/running)的执行 id(一次 in 查询;
+    列表/详情/cancel 共用)。
+
+    graph 不能看 ``Execution.kind``:Suite 编排是 suite_graph,但
+    ``POST /api/runs`` 带 graph 的执行 kind 仍是 scenario,只有
+    ``execution_jobs.kind`` 如实记了任务体形态(run_job_from_payload 的
+    分流键)。只取活任务:job 已终态而执行仍 running 是重启僵尸,照常
+    可取消(cancel 端点 inline 终态化)。
+    """
+    if not execution_ids:
+        return set()
+    rows = (await db.execute(
+        select(ExecutionJob.execution_id).where(
+            ExecutionJob.execution_id.in_(execution_ids),
+            ExecutionJob.kind == "graph",
+            ExecutionJob.status.in_(("queued", "running")))
+    )).scalars().all()
+    return set(rows)
+
+
+def is_cancelable(e: Execution, *, graph_job: bool) -> bool:
+    """queued 恒可取消(启动前消费取消位);running 仅 cases 链可取消
+    (行边界轮询取消位)—— graph 链全程不读取消位,写了位也只是静默
+    跑完按 passed/failed 收口,按「明确不支持」处理而不是假成功。"""
+    if e.status == STATUS_QUEUED:
+        return True
+    if e.status == STATUS_RUNNING:
+        return not graph_job
+    return False
+
+
 # 连续失败计数回看的最大行数(执行设计 §3.2「连续第 N 次失败」信号)。
 # 内部平台量级下,owner 全量 (id, scenario_id, status) 轻行扫描足够;
 # 超出视为断层(信号照报,只是 N 以窗内为准)。
@@ -97,6 +131,7 @@ def execution_out(
     has_scenario_snapshot: bool = False,
     scenario_display_name: str = "",
     scenario_deleted: bool = False,
+    graph_job: bool = False,
 ) -> ExecutionOut:
     return ExecutionOut(
         id=e.id,
@@ -123,6 +158,13 @@ def execution_out(
         # B-3:失败原因顶层化(config.dispatcherError 是唯一写点)
         error=(e.config_json or {}).get("dispatcherError")
         if e.status == "failed" else None,
+        cancelable=is_cancelable(e, graph_job=graph_job),
+        caller_alias=e.caller_alias_name or None,
+        identity_mode=(None if not e.caller_alias_name
+                       else "personal" if e.grant_id is not None
+                       else "platform"),
+        grant_id=e.grant_id if e.caller_alias_name else None,
+        client_ref=e.client_ref or None,
     )
 
 
@@ -160,6 +202,7 @@ def execution_list_item(
     has_scenario_snapshot: bool = False,
     scenario_display_name: str = "",
     scenario_deleted: bool = False,
+    graph_job: bool = False,
 ) -> ExecutionListItemOut:
     """列表行形态(M1):响应去 config,只带窄投影 config_summary。
 
@@ -193,6 +236,7 @@ def execution_list_item(
         m2_hash=e.m2_hash,
         baseline_eligible=bool(e.baseline_eligible),
         baseline_block=e.baseline_block,
+        cancelable=is_cancelable(e, graph_job=graph_job),
     )
 
 

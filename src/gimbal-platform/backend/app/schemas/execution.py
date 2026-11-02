@@ -54,6 +54,19 @@ class ExecutionOut(BaseModel):
     # 详情页首屏看不到。终态失败单 = dispatcherError;reconcile 收敛单
     # 由 config.reconciled 表达(前端已有专项提示);成功/运行中为 None。
     error: str | None = None
+    # 全量评估 2026-11-02 #1:可取消标志由服务端给(前端不再按 status 自推)。
+    # queued 恒可取消(worker 启动前消费取消位);running 的 cases 链行边界
+    # 消费;running 的 graph 链(Suite 编排 / POST /api/runs 带 graph —— 后者
+    # 执行 kind 仍是 scenario,只能看任务体 kind)不消费取消位 → False,
+    # cancel 端点同口径 409 not_cancelable。
+    cancelable: bool = False
+    # 全量评估 2026-11-02 #9:入站身份只读投影 —— 经由谁(别名)、以谁的
+    # 身份(personal=grant 用户 / platform=系统用户)、对账键。JWT 发起的
+    # 执行四者皆 None;别名面板按别名过滤,详情页从这里看来源。
+    caller_alias: str | None = None
+    identity_mode: str | None = None
+    grant_id: int | None = None
+    client_ref: str | None = None
 
 
 class ExecutionListItemOut(BaseModel):
@@ -93,6 +106,8 @@ class ExecutionListItemOut(BaseModel):
     # 入库标准台账(同 ExecutionOut;evidence 不随列表行下发,详情取)。
     baseline_eligible: bool = False
     baseline_block: str | None = None
+    # 可取消标志(同 ExecutionOut 注释)
+    cancelable: bool = False
 
 
 class ExecutionListOut(BaseModel):
