@@ -871,11 +871,13 @@ async def cancel_execution(
     queued/running 立即终态化。终态单 409。server 链的在飞 run 由
     worker 侧 cancel 端点协作收口（步骤边界生效）。
 
-    running 的 graph 链(Suite 编排 / ``POST /api/runs`` 带 graph)409
-    ``not_cancelable``:``_fanout_graph`` 全程不读取消位,写了位只会
-    静默跑完按 passed/failed 收口(全量评估 2026-11-02 #1 短期修法);
-    queued 的 graph 照常取消(worker 启动前检查有效)。中途取消语义
-    (跑完当前单元收口 vs 终止引擎 run)待拍板。
+    已认领(job running)的 graph 链(Suite 编排 / ``POST /api/runs`` 带
+    graph)409 ``not_cancelable``:``_fanout_graph`` 全程不读取消位,写了
+    位只会静默跑完按 passed/failed 收口(全量评估 2026-11-02 #1 短期修法)。
+    按 job 状态而非执行状态判断 —— graph 执行要等物化完成才置 running,
+    期间执行仍 queued 但取消位已无人消费(核验补充)。job 仍 queued 的
+    graph 照常取消(worker 启动前检查有效)。中途取消语义(跑完当前单元
+    收口 vs 终止引擎 run)待拍板。
     """
     if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
         raise HTTPException(
@@ -885,8 +887,7 @@ async def cancel_execution(
                 "message": f"execution already {ex.status}",
             },
         )
-    if ex.status == STATUS_RUNNING and ex.id in (
-            await execution_store.graph_job_ids(session, [ex.id])):
+    if ex.id in await execution_store.graph_job_ids(session, [ex.id]):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

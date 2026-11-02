@@ -333,6 +333,10 @@ class TestAliasManagementApi:
                                headers=h, json={})
         gid2 = r2.json()["id"]
         h2 = await _register(client, "p1_carol")
+        # user 角色不能签发(member+,与别名详情页路由对齐;核验补充 2026-11-02)
+        r = await client.post("/api/service-aliases/agent-sys/grants",
+                              headers=h2, json={})
+        assert r.status_code == 403, r.text
         r = await client.delete(
             f"/api/service-aliases/agent-sys/grants/{gid2}", headers=h2)
         assert r.status_code == 403

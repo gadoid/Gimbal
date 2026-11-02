@@ -16,7 +16,8 @@ from .inbound_fixtures import (
     seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
 )
 from .test_inbound_identity import (
-    _gic, _mk_credential, _mk_grant, _promote, _register, _user_id,
+    _gic, _mk_credential, _mk_grant, _promote, _register, _set_role,
+    _user_id,
 )
 
 
@@ -27,6 +28,7 @@ class TestS1Deactivation:
         h_admin = await _register(client, "s1_admin")
         await _promote("s1_admin")
         h_user = await _register(client, "s1_user")
+        await _set_role("s1_user", "member")     # 签发 grant 须 member+
         uid = await _user_id("s1_user")
         r = await client.post("/api/service-aliases/agent-sys/grants",
                               headers=h_user, json={})

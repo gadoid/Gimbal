@@ -87,14 +87,18 @@ async def snapshot_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
 # ── 可取消判定(全量评估 2026-11-02 #1)────────────────────────────
 
 async def graph_job_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
-    """任务体为 graph 链且仍在活(queued/running)的执行 id(一次 in 查询;
-    列表/详情/cancel 共用)。
+    """任务体为 graph 链且**已被 worker 认领**(job.status=running)的执行 id
+    (一次 in 查询;列表/详情/cancel 共用)。
 
     graph 不能看 ``Execution.kind``:Suite 编排是 suite_graph,但
     ``POST /api/runs`` 带 graph 的执行 kind 仍是 scenario,只有
     ``execution_jobs.kind`` 如实记了任务体形态(run_job_from_payload 的
-    分流键)。只取活任务:job 已终态而执行仍 running 是重启僵尸,照常
-    可取消(cancel 端点 inline 终态化)。
+    分流键)。按 **job** 状态而不是执行状态判断:graph 任务体认领后要等
+    物化(可能访问 plate)完成才把执行置 running,这段窗口里执行仍是
+    queued、取消位却已无人消费 —— 一旦 job running 就不可取消(核验补充
+    2026-11-02)。认领与「启动前检查」之间的微小窗口按不可取消处理(拒掉
+    一次本可生效的取消,优于假成功)。job 已终态而执行仍活是重启僵尸,
+    照常可取消(cancel 端点 inline 终态化)。
     """
     if not execution_ids:
         return set()
@@ -102,20 +106,19 @@ async def graph_job_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
         select(ExecutionJob.execution_id).where(
             ExecutionJob.execution_id.in_(execution_ids),
             ExecutionJob.kind == "graph",
-            ExecutionJob.status.in_(("queued", "running")))
+            ExecutionJob.status == "running")
     )).scalars().all()
     return set(rows)
 
 
 def is_cancelable(e: Execution, *, graph_job: bool) -> bool:
-    """queued 恒可取消(启动前消费取消位);running 仅 cases 链可取消
-    (行边界轮询取消位)—— graph 链全程不读取消位,写了位也只是静默
-    跑完按 passed/failed 收口,按「明确不支持」处理而不是假成功。"""
-    if e.status == STATUS_QUEUED:
-        return True
-    if e.status == STATUS_RUNNING:
-        return not graph_job
-    return False
+    """graph 任务体已认领 → 不可取消(不看执行状态,见 graph_job_ids);
+    否则 queued 恒可取消(启动前消费取消位),running 的 cases 链行边界
+    轮询取消位 —— graph 链全程不读取消位,写了位也只是静默跑完按
+    passed/failed 收口,按「明确不支持」处理而不是假成功。"""
+    if graph_job:
+        return False
+    return e.status in (STATUS_QUEUED, STATUS_RUNNING)
 
 
 # 连续失败计数回看的最大行数(执行设计 §3.2「连续第 N 次失败」信号)。

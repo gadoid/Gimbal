@@ -502,9 +502,13 @@ async def put_inbound_settings(
 @router.post("/{alias_name}/grants",
              response_model=GrantCreated, status_code=201)
 async def create_grant(
-    alias_name: str, body: GrantIn, user: CurrentUser, db: DbSession,
+    alias_name: str, body: GrantIn, user: MemberUser, db: DbSession,
 ) -> GrantCreated:
     """当前用户为该别名签发 grant(自授权:授权该别名代我执行)。
+
+    member+(2026-11-02 核验补充):与「服务信息管理归 member+」及别名详情
+    页路由对齐 —— user 角色进不了签发入口所在页面,API 单独放开只会留下
+    界面不可达的后门。列表/撤销仍是登录即可(历史 grant 的自我管理)。
 
     明文 ggt_… 只返回一次;有效期缺省 GRANT_DEFAULT_TTL_DAYS,
     上限 GRANT_MAX_TTL_DAYS(§4.1)。"""

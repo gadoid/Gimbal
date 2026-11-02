@@ -184,8 +184,9 @@ async def _seed_job(execution_id: int, *, kind: str, status: str) -> None:
 
 
 async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
-    """全量评估 2026-11-02 #1:running 的 graph 任务体不消费取消位 →
-    409 not_cancelable、状态不动,列表/详情 cancelable=false;queued 的
+    """全量评估 2026-11-02 #1:已认领(job running)的 graph 任务体不消费取消位
+    → 409 not_cancelable、状态不动,列表/详情 cancelable=false —— 不看执行
+    状态(执行仍 queued 的物化窗口同样 409,核验补充);job 仍 queued 的
     graph 照常可取消(启动前检查有效);running 的 cases 链仍可取消。"""
     from app.services import run_dispatcher
 
@@ -200,6 +201,9 @@ async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
     await _seed_job(queued_graph, kind="graph", status="queued")
     running_cases = await _seed_execution(uid, status="running")
     await _seed_job(running_cases, kind="cases", status="running")
+    # 核验补充:graph job 已认领、执行仍 queued(物化窗口)→ 同样不可取消
+    claimed_graph = await _seed_execution(uid, status="queued")
+    await _seed_job(claimed_graph, kind="graph", status="running")
 
     async def flag(eid: int) -> bool:
         r = await client.get(f"/api/executions/{eid}", headers=headers)
@@ -209,10 +213,16 @@ async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
     assert await flag(running_graph) is False
     assert await flag(queued_graph) is True
     assert await flag(running_cases) is True
+    assert await flag(claimed_graph) is False
     lst = (await client.get("/api/executions", headers=headers)).json()["items"]
     flags = {i["id"]: i["cancelable"] for i in lst}
-    assert flags[running_graph] is False
+    assert flags[running_graph] is False and flags[claimed_graph] is False
     assert flags[queued_graph] is True and flags[running_cases] is True
+
+    cr = await client.post(f"/api/executions/{claimed_graph}/cancel", headers=headers)
+    assert cr.status_code == 409, cr.text
+    assert cr.json()["detail"]["code"] == "not_cancelable"
+    assert (await _get_execution(claimed_graph)).status == "queued"
 
     cr = await client.post(f"/api/executions/{running_graph}/cancel", headers=headers)
     assert cr.status_code == 409, cr.text

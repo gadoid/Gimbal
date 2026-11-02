@@ -158,10 +158,11 @@ class StrategyDispatcher:
         result.duration_ms = (time.monotonic() - t0) * 1000
         result.strategy_id = result.strategy_id or strategy_id
         # 软失败标记：spec.onFailure != ABORT 时，FAILED 仅记录不中止。
-        # ERROR（系统异常 / 执行器未注册 / 执行器抛异常）永远不是 soft
+        # ERROR（执行器内部抛异常 / 执行器自报的系统异常）永远不是 soft
         # （executor_base.StrategyResult 契约 + docs/modules/strategy.md）：
-        # 此前对 failed 一律置 soft，onFailure=CONTINUE/WARN 的断言执行器
-        # 抛异常、策略 kind 拼错时步骤会被判 PASSED（全量评估 2026-11-02 #5）。
+        # 此前对 failed 一律置 soft，onFailure=CONTINUE/WARN 的执行器抛异常
+        # 会 hard_failed=False → 步骤被判 PASSED（全量评估 2026-11-02 #5）。
+        # 注：kind 未注册在上方第 2 步已提前返回，不经过这里，修复前就是硬失败。
         from gimbal.schema import FailurePolicy
         on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
         if (result.status == StrategyStatus.FAILED

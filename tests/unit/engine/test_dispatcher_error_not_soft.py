@@ -1,10 +1,12 @@
 """ERROR 永远不是 soft(executor_base.StrategyResult 契约;全量评估 2026-11-02 #5)。
 
 dispatcher 此前对 ``failed``(FAILED ∪ ERROR)一律按 onFailure 置 soft,
-onFailure=CONTINUE/WARN 时执行器抛异常、策略 kind 未注册都会 hard_failed=False
-→ 状态机各阶段只看 hard_failed,步骤被判 PASSED。本文件钉住三条对拍:
-FAILED+CONTINUE 仍是 soft;ERROR(执行器抛异常)+CONTINUE 不 soft;
-未注册 kind(ERROR)+CONTINUE 不 soft。
+onFailure=CONTINUE/WARN 时**执行器抛异常**会 hard_failed=False → 状态机各
+阶段只看 hard_failed,步骤被判 PASSED。这是本次修掉的路径(回归用例)。
+
+更正(核验补充 2026-11-02):「策略 kind 未注册也会被判通过」是误判 ——
+未注册 kind 在 dispatch 第 2 步就提前返回 ERROR,不经过 soft 标记,修复前
+就是硬失败;对应用例保留为**特征化**(钉住现状),不是回归用例。
 """
 from __future__ import annotations
 
@@ -63,7 +65,8 @@ def test_executor_exception_is_never_soft() -> None:
         assert r.hard_failed is True, policy
 
 
-def test_unregistered_kind_is_never_soft() -> None:
+def test_unregistered_kind_is_never_soft_characterization() -> None:
+    """特征化:未注册 kind 提前返回 ERROR,与 soft 标记无关(修复前后一致)。"""
     r = _dispatcher().dispatch(_spec("t.typo", FailurePolicy.CONTINUE), view=None)
     assert r.status is StrategyStatus.ERROR
     assert "No executor registered" in r.message

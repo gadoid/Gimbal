@@ -55,10 +55,11 @@ class ExecutionOut(BaseModel):
     # 由 config.reconciled 表达(前端已有专项提示);成功/运行中为 None。
     error: str | None = None
     # 全量评估 2026-11-02 #1:可取消标志由服务端给(前端不再按 status 自推)。
-    # queued 恒可取消(worker 启动前消费取消位);running 的 cases 链行边界
-    # 消费;running 的 graph 链(Suite 编排 / POST /api/runs 带 graph —— 后者
-    # 执行 kind 仍是 scenario,只能看任务体 kind)不消费取消位 → False,
-    # cancel 端点同口径 409 not_cancelable。
+    # graph 任务体一经 worker 认领(job running;执行可能仍 queued —— 物化
+    # 窗口)即 False:graph 链不消费取消位,cancel 端点同口径 409。Suite 编排
+    # 与 POST /api/runs 带 graph 都算(后者执行 kind 仍是 scenario,只能看
+    # 任务体 kind)。其余 queued 恒可取消(启动前消费取消位),running 的
+    # cases 链行边界消费。
     cancelable: bool = False
     # 全量评估 2026-11-02 #9:入站身份只读投影 —— 经由谁(别名)、以谁的
     # 身份(personal=grant 用户 / platform=系统用户)、对账键。JWT 发起的
