@@ -386,3 +386,54 @@ class TestFieldLevelDiff:
         fd = parts["responses"]["field_diff"]["200"]
         assert fd["removed"] == ["$.code"]
         assert fd["added"] == []
+
+
+class TestWorkingDiff:
+    """全量评估 2026-11-02 #2/#7:working 伪快照须从注册表公开面取端点
+    (旧实现读不存在的 ``reg.endpoints`` → 恒 0 端点、对面全报 added);
+    任一侧为 working 时比较域收窄为端点(scope=endpoints),工作树零改动时
+    两个方向的差异都为空、不凭空冒出 ``service.*``。"""
+
+    @staticmethod
+    def _working(repo: Path) -> rr.RevisionSnapshot:
+        from gimbal_plate.loader import load_registry
+        return rr.snapshot_from_registry(
+            load_registry([repo / "systems"]), "fin")
+
+    def test_registry_snapshot_hydrates_endpoints(self, tmp_path: Path) -> None:
+        repo, fin, art = make_repo(tmp_path)
+        write_endpoint(fin, "b", reviewed=True, path="/b")
+        snap = self._working(repo)
+        assert snap.line == "working"
+        assert set(snap.endpoints) == {"fin.a.a", "fin.a.b"}
+
+    def test_unchanged_tree_diff_is_empty_both_directions(
+            self, tmp_path: Path) -> None:
+        repo, fin, art = make_repo(tmp_path)
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        rev = rr.load_snapshot(art, "fin", "1.0", 1)
+        # 修订 manifest 含 service 对象;收窄前这里会报 service.fin-service 被删/新增
+        assert any(o["type"] == "service" for o in rev.manifest["objects"])
+        for a, b in ((rev, self._working(repo)), (self._working(repo), rev)):
+            d = rr.diff_snapshots(a, b)
+            assert d["scope"] == "endpoints"
+            assert (d["added"], d["removed"], d["changed"]) == ([], [], {})
+        assert rr.diff_snapshots(rev, rev)["scope"] == "all"
+
+    def test_changed_removed_added_against_working(
+            self, tmp_path: Path) -> None:
+        repo, fin, art = make_repo(tmp_path)
+        write_endpoint(fin, "b", reviewed=True, path="/b")
+        commit(repo, "b")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        # 工作树(未提交):改 a 的 path、删 b、加 c
+        write_endpoint(fin, "a", reviewed=True, path="/a2")
+        (fin / "endpoints" / "fin.a.b.md").unlink()
+        write_endpoint(fin, "c", reviewed=True, path="/c")
+        d = rr.diff_snapshots(
+            rr.load_snapshot(art, "fin", "1.0", 1), self._working(repo))
+        assert (d["from"], d["to"], d["scope"]) == ("1.0#1", "working", "endpoints")
+        assert d["added"] == ["endpoint.fin.a.c"]
+        assert d["removed"] == ["endpoint.fin.a.b"]
+        assert list(d["changed"]) == ["endpoint.fin.a.a"]
+        assert "binding" in d["changed"]["endpoint.fin.a.a"]["parts"]

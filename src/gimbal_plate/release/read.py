@@ -261,12 +261,24 @@ def load_snapshot(root: Path, system: str, line: str, n: int,
 
 
 def snapshot_from_registry(reg: Any, system: str) -> RevisionSnapshot:
-    """working 侧的伪快照（diff 的 working 端点；只含注册表有的对象）。"""
+    """working 侧的伪快照（diff 的 working 端点；只含注册表有的对象）。
+
+    端点经注册表公开查询面 ``iter_endpoints_for_system`` 取（旧实现读
+    不存在的 ``reg.endpoints`` 属性,working 侧恒为 0 端点,差异把对面修订
+    的全部对象报成 added —— 全量评估 2026-11-02 #2）。只水合端点:服务/
+    词条/投影在注册表没有与 manifest 同口径的对照物,由 ``diff_snapshots``
+    收窄比较域处理。
+    """
     snap = RevisionSnapshot(system=system, line=_WORKING, n=0,
                             manifest={"system": system})
-    for ep in getattr(reg, "endpoints", []) or []:
-        if getattr(ep, "system", system) == system:
-            snap.endpoints[ep.id] = ep
+    iter_fn = getattr(reg, "iter_endpoints_for_system", None)
+    if iter_fn is not None:
+        eps = list(iter_fn(system))
+    else:  # 鸭子类型替身:退回按属性过滤
+        eps = [ep for ep in getattr(reg, "endpoints", []) or []
+               if getattr(ep, "system", system) == system]
+    for ep in eps:
+        snap.endpoints[ep.id] = ep
     return snap
 
 
@@ -349,7 +361,15 @@ def _endpoint_changed_parts(a: EndpointSpec, b: EndpointSpec) -> dict[str, Any]:
 
 def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
                    ) -> dict[str, Any]:
-    """对象级差异 + 变化接口的部位（a → b）。"""
+    """对象级差异 + 变化接口的部位（a → b）。
+
+    ``scope``:两侧都是修订 → ``all``(manifest 全对象域);任一侧是
+    working 伪快照 → ``endpoints``,比较域收窄为端点 —— working 侧只从
+    注册表水合端点,服务/词条/投影没有同口径对照物,放进来会在工作树零
+    改动时也凭空报 ``service.*`` 被删/新增(全量评估 2026-11-02 #7,
+    方案 B;服务/词条/投影级 working 差异留 S1.5)。
+    """
+    working = sa.line == _WORKING or sb.line == _WORKING
     ea = {(e["type"], e["id"]): e for e in sa.manifest.get("objects", [])}
     if not ea and sa.endpoints:
         # working 伪快照没有 manifest objects——按水合对象即时取 hash
@@ -359,6 +379,9 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
     if not eb and sb.endpoints:
         eb = {("endpoint", eid): {"hash": object_hash(ep)}
               for eid, ep in sb.endpoints.items()}
+    if working:
+        ea = {k: v for k, v in ea.items() if k[0] == "endpoint"}
+        eb = {k: v for k, v in eb.items() if k[0] == "endpoint"}
 
     added = sorted(f"{t}.{i}" for k in eb.keys() - ea.keys() for t, i in [k])
     removed = sorted(f"{t}.{i}" for k in ea.keys() - eb.keys() for t, i in [k])
@@ -373,6 +396,7 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
             changed[f"{t}.{i}"] = entry
     return {"from": sa.ref if sa.line != _WORKING else _WORKING,
             "to": sb.ref if sb.line != _WORKING else _WORKING,
+            "scope": "endpoints" if working else "all",
             "added": added, "removed": removed, "changed": changed}
 
 
