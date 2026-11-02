@@ -160,7 +160,7 @@
               </span>
               <span v-if="row.cancel_requested && !isTerminalExecutionStatus(row.status)"
                     class="status-tag text-micro font-semibold status-canceled ml-1"
-                    title="已请求取消:当前单元跑完后停止,后续单元记为已取消"
+                    :title="row.cancel_note ?? '已请求取消'"
                     data-testid="cancel-pending">取消中</span>
             </TableCell>
             <!-- 信号列(§3.2):"这单值不值得点开"提到列表层 -->
@@ -491,15 +491,14 @@ async function remove(id: number) {
   await fetchFiltered().catch(() => undefined)
 }
 
-/** P4 协作式取消:按服务端 cancelable 标志显示。409 = 点击时单子已终态
- *  (竞态),或 running 的 graph 链不支持中途取消 —— 后者服务端 message
- *  有说明,原样透出。 */
+/** P4 协作式取消:按服务端 cancelable 标志显示;说明文案(等在飞单元还是
+ *  当前行)由服务端按任务体形态给,toast 原样显示、不按 kind 自推。409 =
+ *  点击时单子已终态(竞态),或 running 的 graph 链不支持中途取消 —— 后者
+ *  服务端 message 有说明,原样透出。 */
 async function cancel(row: ExecutionListItem) {
   try {
-    await cancelExecution(row.id)
-    toast.success(row.kind === 'suite_graph'
-      ? '已请求取消:当前单元跑完后停止,后续单元记为已取消'
-      : '已请求取消')
+    const res = await cancelExecution(row.id)
+    toast.success(res.cancel_note ?? '已请求取消')
   } catch (e) {
     const err = e as { status?: number; detail?: { message?: unknown } }
     if (err.status === 409) {

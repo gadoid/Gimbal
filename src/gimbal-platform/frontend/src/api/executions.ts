@@ -83,6 +83,11 @@ export interface Execution {
   /** 取消中(单元级取消方案 P4):取消位已写、任务仍活 —— graph 要等在飞
    *  单元跑完才收口,期间 running && cancel_requested 显示「取消中」、按钮隐藏。 */
   cancel_requested?: boolean
+  /** 取消说明文案(服务端给,前端原样显示,不按 kind 自推):取消中 → 等的是
+   *  在飞单元(graph)还是当前行(cases)按任务体 kind 区分,POST /api/runs
+   *  带 graph 的执行 kind 仍是 scenario;终态 → 点了取消却按真实结果收口
+   *  (config.cancelIgnored)的原因。 */
+  cancel_note?: string | null
   /** 入站身份只读投影(全量评估 2026-11-02 #9):经由的别名 / 身份模式
    *  (personal=grant 用户,platform=系统用户)/ grant id / 调用方对账键。
    *  JWT 发起的执行四者皆 null。 */

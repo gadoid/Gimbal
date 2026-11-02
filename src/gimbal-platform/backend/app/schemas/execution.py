@@ -62,6 +62,10 @@ class ExecutionOut(BaseModel):
     # kind/链判断(后者执行 kind 仍是 scenario)。
     cancelable: bool = False
     cancel_requested: bool = False
+    # 取消说明文案(服务端给,前端原样显示):取消中 → 等待的是在飞单元(graph)
+    # 还是当前行(cases);终态且 config.cancelIgnored → 解释为何点了取消仍按
+    # 真实结果收口。按任务体形态而非 Execution.kind 区分(同 cancelable 注释)。
+    cancel_note: str | None = None
     # 全量评估 2026-11-02 #9:入站身份只读投影 —— 经由谁(别名)、以谁的
     # 身份(personal=grant 用户 / platform=系统用户)、对账键。JWT 发起的
     # 执行四者皆 None;别名面板按别名过滤,详情页从这里看来源。
@@ -108,9 +112,10 @@ class ExecutionListItemOut(BaseModel):
     # 入库标准台账(同 ExecutionOut;evidence 不随列表行下发,详情取)。
     baseline_eligible: bool = False
     baseline_block: str | None = None
-    # 可取消标志 / 取消中(同 ExecutionOut 注释)
+    # 可取消标志 / 取消中 / 取消说明(同 ExecutionOut 注释)
     cancelable: bool = False
     cancel_requested: bool = False
+    cancel_note: str | None = None
 
 
 class ExecutionListOut(BaseModel):

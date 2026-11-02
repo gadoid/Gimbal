@@ -19,7 +19,7 @@
 
     <template #actions>
       <PageBack to="/executions" label="执行记录" />
-      <span :class="['status-tag', `status-${execStore.detail.status}`]">
+      <span :class="['status-tag', `status-${execStore.detail.status}`]" :title="execStore.detail.cancel_note ?? undefined">
         {{ statusText }}
       </span>
       <TooltipProvider>
@@ -94,9 +94,14 @@
       <AlertTitle>执行失败 — {{ failureReason }}</AlertTitle>
     </Alert>
 
-    <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
+    <!-- 系统标记:reconcile 收敛 / 取消留痕 / 计数器漂移(不进配方 dl)-->
     <Alert v-if="execStore.detail.config?.reconciled" class="sys-alert">
       <AlertTitle>后端重启：本单由启动期 reconcile 收敛为 failed（详见执行信息外的 reconciled 记录）</AlertTitle>
+    </Alert>
+    <!-- 取消留痕(单元级取消方案 §2):点了取消、但请求时所有单元均已启动,
+         按真实结果收口 —— 不解释的话用户只看到「我取消了它却显示通过」 -->
+    <Alert v-if="execStore.detail.cancel_note && isTerminalDetail" class="sys-alert" data-testid="exec-cancel-note">
+      <AlertTitle>{{ execStore.detail.cancel_note }}</AlertTitle>
     </Alert>
     <Alert v-if="execStore.detail.config?.counterDrift" variant="destructive" class="sys-alert">
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
@@ -329,9 +334,10 @@ const executionId = computed(() => Number(route.params.id))
 const statusText = computed(() => {
   const s = execStore.detail?.status
   if (!s) return ''
-  // 单元级取消方案 P4:取消位已写、尚未收口 → 「取消中」(graph 等在飞单元跑完)
+  // 单元级取消方案 P4:取消位已写、尚未收口 → 「取消中」;等待面(在飞单元
+  // 还是当前行)由服务端 cancel_note 给,徽标 title 原样显示
   if (execStore.detail?.cancel_requested && !isTerminalExecutionStatus(s)) {
-    return '取消中(等待当前单元完成)'
+    return '取消中'
   }
   return executionStatusText(s)
 })
@@ -672,14 +678,14 @@ async function exportScenario(): Promise<void> {
   }
 }
 
-/** P4:请求协作式取消;在飞 fanout 在行边界收敛,刷新看最新状态。 */
+/** P4:请求协作式取消;说明文案由服务端按任务体形态给(等在飞单元还是
+ *  当前行),toast 原样显示 —— 不按 kind 自推,POST /api/runs 带 graph 的
+ *  执行 kind 仍是 scenario。 */
 async function cancelExec() {
   if (!execStore.detail) return
   try {
-    await cancelExecution(execStore.detail.id)
-    toast.success(execStore.detail.kind === 'suite_graph'
-      ? '已请求取消:当前单元跑完后停止,后续单元记为已取消'
-      : '已请求取消 — 在飞行收敛后生效')
+    const res = await cancelExecution(execStore.detail.id)
+    toast.success(res.cancel_note ?? '已请求取消 — 在飞行收敛后生效')
   } catch (e) {
     const err = e as { status?: number; detail?: { message?: unknown } }
     if (err.status === 409) {

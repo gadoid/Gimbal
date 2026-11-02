@@ -14,7 +14,7 @@ from tests.helpers import (
 # ─── 测试基座(同 test_run_log_integrity / test_run_case_retention)──
 async def _seed_execution(
     owner_id: int, *, status: str, total_runs: int = 1,
-    passed: int = 0, failed: int = 0,
+    passed: int = 0, failed: int = 0, config: dict | None = None,
 ) -> int:
     """Insert one Execution row; return its id."""
     from app.core import db as db_module
@@ -28,7 +28,7 @@ async def _seed_execution(
             total_runs=total_runs,
             passed=passed,
             failed=failed,
-            config_json={},
+            config_json=config or {},
         )
         session.add(ex)
         await session.commit()
@@ -246,6 +246,61 @@ async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
     d = (await client.get(f"/api/executions/{server_graph}", headers=headers)).json()
     assert d["status"] == "running"          # 等在飞单元跑完才收口
     assert d["cancel_requested"] is True and d["cancelable"] is False
+
+
+async def test_cancel_note_follows_job_form_and_ignored(client):
+    """取消说明文案(前端 toast/徽标 title/告警条原样显示)由服务端给:
+    取消中按**任务体** kind 区分等待面(graph 等在飞单元 / cases 等当前行)——
+    POST /api/runs 带 graph 的执行 kind 仍是 scenario,按 Execution.kind 自推
+    必错;终态 config.cancelIgnored 单在详情/列表解释为何按真实结果收口。"""
+    from app.services import run_dispatcher
+    from app.services.execution_store import (
+        CANCEL_NOTE_CASES,
+        CANCEL_NOTE_GRAPH,
+        CANCEL_NOTE_IGNORED,
+    )
+
+    run_dispatcher.reset_cancel_state()
+    headers = await register_and_login(client)
+    me = (await client.get("/api/auth/me", headers=headers)).json()
+    uid = me["user"]["id"]
+
+    plain = await _seed_execution(uid, status="running")     # 未请求取消:无说明
+    await _seed_job(plain, kind="cases", status="running")
+    ignored = await _seed_execution(
+        uid, status="done", passed=1,
+        config={"cancelIgnored": "all units already started"})
+    done_plain = await _seed_execution(uid, status="done", passed=1)
+
+    async def detail_note(eid: int):
+        return (await client.get(f"/api/executions/{eid}", headers=headers)
+                ).json()["cancel_note"]
+
+    async def list_note(eid: int):
+        lst = (await client.get("/api/executions", headers=headers)).json()["items"]
+        return next(i["cancel_note"] for i in lst if i["id"] == eid)
+
+    assert await detail_note(plain) is None
+    assert await detail_note(done_plain) is None
+    assert await detail_note(ignored) == CANCEL_NOTE_IGNORED
+    assert await list_note(ignored) == CANCEL_NOTE_IGNORED
+
+    # cases 链在飞:取消 → 当前行口径(取消响应与详情/列表投影一致)
+    cr = await client.post(f"/api/executions/{plain}/cancel", headers=headers)
+    assert cr.status_code == 200, cr.text
+    assert cr.json()["cancel_note"] == CANCEL_NOTE_CASES
+    assert await detail_note(plain) == CANCEL_NOTE_CASES
+    assert await list_note(plain) == CANCEL_NOTE_CASES
+
+    # graph(server 链)在飞:执行 kind 仍是 scenario —— 文案必须按任务体给
+    graph = await _seed_execution(uid, status="running")
+    await _seed_job(graph, kind="graph", status="running", chain="server")
+    cr = await client.post(f"/api/executions/{graph}/cancel", headers=headers)
+    assert cr.status_code == 200, cr.text
+    assert cr.json()["kind"] == "scenario"
+    assert cr.json()["cancel_note"] == CANCEL_NOTE_GRAPH
+    assert await detail_note(graph) == CANCEL_NOTE_GRAPH
+    assert await list_note(graph) == CANCEL_NOTE_GRAPH
 
 
 async def test_fanout_marks_running(client, monkeypatch):

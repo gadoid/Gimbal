@@ -281,6 +281,7 @@ async def list_executions(
     active_ids = [e.id for e in rows if e.status in (STATUS_QUEUED, STATUS_RUNNING)]
     uncancelable = await execution_store.uncancelable_graph_ids(session, active_ids)
     cancel_req = await execution_store.cancel_requested_ids(session, active_ids)
+    forms = await execution_store.active_job_forms(session, list(cancel_req))
     items = [
         execution_store.execution_list_item(
             e,
@@ -288,6 +289,7 @@ async def list_executions(
             has_scenario_snapshot=e.id in with_snap,
             uncancelable_graph=e.id in uncancelable,
             cancel_requested=e.id in cancel_req,
+            job_form=forms.get(e.id, "cases"),
             **execution_store.display_kwargs(e, disp),
         )
         for e in rows
@@ -315,11 +317,14 @@ async def get_execution(
                     if active else set())
     cancel_req = (await execution_store.cancel_requested_ids(session, [ex.id])
                   if active else set())
+    forms = (await execution_store.active_job_forms(session, [ex.id])
+             if cancel_req else {})
     out = execution_store.execution_out(
         ex,
         has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id),
         uncancelable_graph=ex.id in uncancelable,
         cancel_requested=ex.id in cancel_req,
+        job_form=forms.get(ex.id, "cases"),
         **execution_store.display_kwargs(ex, disp),
     )
     # W21 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
@@ -919,9 +924,13 @@ async def cancel_execution(
         "fn": "cancel", "execution": ex.id})
     disp = await execution_store.scenario_display_map(
         session, principal.user, [ex.scenario_id])
-    # 取消位已写(live)→ 响应即呈「取消中」;僵尸单已终态化,无取消中态
+    # 取消位已写(live)→ 响应即呈「取消中」+ 说明文案(等在飞单元还是当前行,
+    # 前端 toast 原样显示);僵尸单已终态化,无取消中态
+    forms = (await execution_store.active_job_forms(session, [ex.id])
+             if live else {})
     return execution_store.execution_out(
         ex, cancel_requested=bool(live),
+        job_form=forms.get(ex.id, "cases"),
         **execution_store.display_kwargs(ex, disp))
 
 

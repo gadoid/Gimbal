@@ -33,7 +33,7 @@ vi.mock('@/api/executions', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@/api/executions')>()
   return {
     ...orig,
-    cancelExecution: vi.fn().mockResolvedValue(undefined),
+    cancelExecution: vi.fn().mockResolvedValue({}),
     listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
     getExecutionRows: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 }),
@@ -212,12 +212,27 @@ describe('Executions.vue — P1 detail upgrades', () => {
     w2.unmount()
   })
 
-  it('取消中:running + cancel_requested → 状态显示「取消中」、无取消按钮(单元级取消 P4)', async () => {
+  it('取消中:running + cancel_requested → 状态显示「取消中」、说明由 cancel_note 给、无取消按钮(单元级取消 P4)', async () => {
     const execStore = useExecutionsStore()
-    execStore.detail = { ...runningDetail, cancelable: false, cancel_requested: true }
+    execStore.detail = { ...runningDetail, cancelable: false, cancel_requested: true,
+                         cancel_note: '已请求取消:当前单元跑完后停止,后续单元记为已取消' }
     const wrapper = await mountPage()
-    expect(wrapper.text()).toContain('取消中(等待当前单元完成)')
+    expect(wrapper.text()).toContain('取消中')
+    expect(wrapper.find('[data-testid="exec-cancel-note"]').exists()).toBe(false)
+    const badge = wrapper.find('.status-tag.status-running')
+    expect(badge.attributes('title')).toBe('已请求取消:当前单元跑完后停止,后续单元记为已取消')
     expect(wrapper.findAll('button').find((b) => b.text() === '取消')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('终态 cancelIgnored → 系统告警条解释「点了取消却按真实结果收口」', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail,
+                         cancel_note: '已请求取消,但当时所有单元均已启动、没有可停的单元,已按真实结果收口' }
+    const wrapper = await mountPage()
+    const alert = wrapper.find('[data-testid="exec-cancel-note"]')
+    expect(alert.exists()).toBe(true)
+    expect(alert.text()).toContain('没有可停的单元')
     wrapper.unmount()
   })
 

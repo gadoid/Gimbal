@@ -143,6 +143,9 @@ class TestServerGraphUnitCancel:
         assert r.status_code == 200, r.text
         assert r.json()["cancel_requested"] is True
         assert r.json()["cancelable"] is False
+        # 执行 kind 仍是 scenario(POST /api/runs 带 graph)—— 说明文案按任务体给
+        assert r.json()["cancel_note"] == (
+            "已请求取消:当前单元跑完后停止,后续单元记为已取消")
 
         ex = await _wait_terminal(exec_id)
         assert ex.status == "canceled"
@@ -183,6 +186,13 @@ class TestServerGraphUnitCancel:
         assert ex.status == "done"
         assert (ex.passed, ex.failed, ex.skipped) == (2, 0, 0)
         assert ex.config_json.get("cancelIgnored") == "all units already started"
+        # 终态留痕有解释:详情/列表的 cancel_note 说明为何按真实结果收口
+        d = (await client.get(f"/api/executions/{exec_id}", headers=headers)).json()
+        assert d["cancel_note"] == (
+            "已请求取消,但当时所有单元均已启动、没有可停的单元,已按真实结果收口")
+        lst = (await client.get("/api/executions", headers=headers)).json()["items"]
+        row = next(i for i in lst if i["id"] == exec_id)
+        assert row["cancel_note"] == d["cancel_note"]
 
     async def test_cancel_in_materialize_window_skips_dispatch(
             self, client, monkeypatch):

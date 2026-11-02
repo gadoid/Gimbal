@@ -133,6 +133,45 @@ def is_cancelable(e: Execution, *, uncancelable_graph: bool,
     return e.status in (STATUS_QUEUED, STATUS_RUNNING)
 
 
+async def active_job_forms(db: AsyncSession, execution_ids: list[int]) -> dict[int, str]:
+    """execution id → 活任务体形态 ``graph`` | ``cases``(无活任务的不在表)。
+
+    取消说明按它区分等待面:graph 等在飞单元跑完,cases 等当前行跑完。
+    与 :func:`uncancelable_graph_ids` 同坑:``POST /api/runs`` 带 graph 的
+    执行 kind 仍是 scenario,只有 ``execution_jobs.kind`` 如实。
+    """
+    if not execution_ids:
+        return {}
+    rows = (await db.execute(
+        select(ExecutionJob.execution_id, ExecutionJob.kind).where(
+            ExecutionJob.execution_id.in_(execution_ids),
+            ExecutionJob.status.in_(("queued", "running")))
+    )).all()
+    return {eid: ("graph" if kind == "graph" else "cases") for eid, kind in rows}
+
+
+CANCEL_NOTE_GRAPH = "已请求取消:当前单元跑完后停止,后续单元记为已取消"
+CANCEL_NOTE_CASES = "已请求取消:当前行跑完后停止,后续行记为已取消"
+CANCEL_NOTE_IGNORED = ("已请求取消,但当时所有单元均已启动、没有可停的单元,"
+                       "已按真实结果收口")
+
+
+def cancel_note(e: Execution, *, form: str = "cases",
+                cancel_requested: bool = False) -> str | None:
+    """取消说明文案(服务端给、前端原样显示):
+
+    * 活跃且取消位已写 → 取消中,等的是在飞单元(graph)还是当前行(cases);
+    * 终态且 ``config.cancelIgnored`` → 点了取消却按真实结果收口的原因;
+    * 其余 None。
+    """
+    if e.status in (STATUS_QUEUED, STATUS_RUNNING):
+        if not cancel_requested:
+            return None
+        return CANCEL_NOTE_GRAPH if form == "graph" else CANCEL_NOTE_CASES
+    cfg = e.config_json if isinstance(e.config_json, dict) else {}
+    return CANCEL_NOTE_IGNORED if cfg.get("cancelIgnored") else None
+
+
 # 连续失败计数回看的最大行数(执行设计 §3.2「连续第 N 次失败」信号)。
 # 内部平台量级下,owner 全量 (id, scenario_id, status) 轻行扫描足够;
 # 超出视为断层(信号照报,只是 N 以窗内为准)。
@@ -148,6 +187,7 @@ def execution_out(
     scenario_deleted: bool = False,
     uncancelable_graph: bool = False,
     cancel_requested: bool = False,
+    job_form: str = "cases",
 ) -> ExecutionOut:
     return ExecutionOut(
         id=e.id,
@@ -177,6 +217,7 @@ def execution_out(
         cancelable=is_cancelable(e, uncancelable_graph=uncancelable_graph,
                                  cancel_requested=cancel_requested),
         cancel_requested=cancel_requested,
+        cancel_note=cancel_note(e, form=job_form, cancel_requested=cancel_requested),
         caller_alias=e.caller_alias_name or None,
         identity_mode=(None if not e.caller_alias_name
                        else "personal" if e.grant_id is not None
@@ -222,6 +263,7 @@ def execution_list_item(
     scenario_deleted: bool = False,
     uncancelable_graph: bool = False,
     cancel_requested: bool = False,
+    job_form: str = "cases",
 ) -> ExecutionListItemOut:
     """列表行形态(M1):响应去 config,只带窄投影 config_summary。
 
@@ -258,6 +300,7 @@ def execution_list_item(
         cancelable=is_cancelable(e, uncancelable_graph=uncancelable_graph,
                                  cancel_requested=cancel_requested),
         cancel_requested=cancel_requested,
+        cancel_note=cancel_note(e, form=job_form, cancel_requested=cancel_requested),
     )
 
 
