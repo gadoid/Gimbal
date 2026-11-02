@@ -389,21 +389,23 @@ class TestFieldLevelDiff:
 
 
 class TestWorkingDiff:
-    """全量评估 2026-11-02 #2/#7:working 伪快照须从注册表公开面取端点
-    (旧实现读不存在的 ``reg.endpoints`` → 恒 0 端点、对面全报 added);
-    任一侧为 working 时比较域收窄为端点(scope=endpoints),工作树零改动时
-    两个方向的差异都为空、不凭空冒出 ``service.*``。"""
+    """working 全域快照(S1.5,2026-11-03):与发布链同一遍收集(collect_
+    freeze_objects/freeze_common_terms/manifest_entry)—— 服务/词条/片段
+    有同口径对照物,diff 域回 ``all``(全量评估 2026-11-02 #7 方案 B 的
+    收窄解除);工作树零改动时两个方向差异为空(含 service/term 域)。"""
 
     @staticmethod
-    def _working(repo: Path) -> rr.RevisionSnapshot:
-        from gimbal_plate.loader import load_registry
-        return rr.snapshot_from_registry(
-            load_registry([repo / "systems"]), "fin")
+    def _working(fin: Path) -> rr.RevisionSnapshot:
+        return rr.working_snapshot(fin)
 
     def test_registry_snapshot_hydrates_endpoints(self, tmp_path: Path) -> None:
+        """轻量端点-only 伪快照保留(兼容旧调用方):仍从注册表公开面取
+        端点(旧实现读不存在的 ``reg.endpoints`` → 恒 0 端点,#2)。"""
+        from gimbal_plate.loader import load_registry
         repo, fin, art = make_repo(tmp_path)
         write_endpoint(fin, "b", reviewed=True, path="/b")
-        snap = self._working(repo)
+        snap = rr.snapshot_from_registry(
+            load_registry([repo / "systems"]), "fin")
         assert snap.line == "working"
         assert set(snap.endpoints) == {"fin.a.a", "fin.a.b"}
 
@@ -414,9 +416,9 @@ class TestWorkingDiff:
         rev = rr.load_snapshot(art, "fin", "1.0", 1)
         # 修订 manifest 含 service 对象;收窄前这里会报 service.fin-service 被删/新增
         assert any(o["type"] == "service" for o in rev.manifest["objects"])
-        for a, b in ((rev, self._working(repo)), (self._working(repo), rev)):
+        for a, b in ((rev, self._working(fin)), (self._working(fin), rev)):
             d = rr.diff_snapshots(a, b)
-            assert d["scope"] == "endpoints"
+            assert d["scope"] == "all"      # S1.5:全域,不再收窄为 endpoints
             assert (d["added"], d["removed"], d["changed"]) == ([], [], {})
         assert rr.diff_snapshots(rev, rev)["scope"] == "all"
 
@@ -431,9 +433,66 @@ class TestWorkingDiff:
         (fin / "endpoints" / "fin.a.b.md").unlink()
         write_endpoint(fin, "c", reviewed=True, path="/c")
         d = rr.diff_snapshots(
-            rr.load_snapshot(art, "fin", "1.0", 1), self._working(repo))
-        assert (d["from"], d["to"], d["scope"]) == ("1.0#1", "working", "endpoints")
+            rr.load_snapshot(art, "fin", "1.0", 1), self._working(fin))
+        assert (d["from"], d["to"], d["scope"]) == ("1.0#1", "working", "all")
         assert d["added"] == ["endpoint.fin.a.c"]
         assert d["removed"] == ["endpoint.fin.a.b"]
         assert list(d["changed"]) == ["endpoint.fin.a.a"]
         assert "binding" in d["changed"]["endpoint.fin.a.a"]["parts"]
+
+    def test_term_and_service_changes_visible(self, tmp_path: Path) -> None:
+        """S1.5 主断言:词条/服务级 working 差异可见(收窄前被
+        scope=endpoints 吞掉,只有端点域可比)。"""
+        repo, fin, art = make_repo(tmp_path)
+        terms_md = fin / "terms.md"
+        terms_md.write_text(
+            "---\ntype: dictionary\nsystem: fin\n---\n"
+            "```gimbal:term\nid: entity:order\nlabel: 订单\n```\n",
+            encoding="utf-8", newline="\n")
+        commit(repo, "term")
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        rev = rr.load_snapshot(art, "fin", "1.0", 1)
+        assert any(o["type"] == "term" for o in rev.manifest["objects"])
+
+        # 零改动(含词条/服务域):全域差异为空
+        d = rr.diff_snapshots(rev, self._working(fin))
+        assert (d["added"], d["removed"], d["changed"]) == ([], [], {})
+
+        # 改词条 label(未提交)→ term.* changed
+        terms_md.write_text(
+            "---\ntype: dictionary\nsystem: fin\n---\n"
+            "```gimbal:term\nid: entity:order\nlabel: 订单(改)\n```\n",
+            encoding="utf-8", newline="\n")
+        d = rr.diff_snapshots(rev, self._working(fin))
+        assert list(d["changed"]) == ["term.entity:order"]
+
+        # 再改服务声明 version(未提交)→ service.* changed 一并可见
+        system_md = fin / "system.md"
+        system_md.write_text(
+            system_md.read_text(encoding="utf-8").replace(
+                "version: 1.0.0", "version: 1.1.0"),
+            encoding="utf-8", newline="\n")
+        d = rr.diff_snapshots(rev, self._working(fin))
+        assert set(d["changed"]) == {"term.entity:order", "service.fin-service"}
+
+    def test_broken_dialect_tree_maps_to_read_error(self, tmp_path: Path) -> None:
+        """方言树坏 → ReleaseReadError(working_dialect_invalid),HTTP 层
+        映射 4xx 而非 500(脏树是请求侧可修的树状态)。"""
+        repo, fin, art = make_repo(tmp_path)
+        (fin / "endpoints" / "broken.md").write_text(
+            "---\ntype: endpoints\nsystem: fin\n---\n"
+            "```gimbal:endpoint\nid: [unclosed\n```\n",
+            encoding="utf-8", newline="\n")
+        with pytest.raises(rr.ReleaseReadError) as ei:
+            self._working(fin)
+        assert ei.value.code == "working_dialect_invalid"
+
+    def test_snapshot_for_locates_system_roots(self, tmp_path: Path) -> None:
+        """working_snapshot_for:按 roots 定位系统目录;找不到 →
+        release_not_found(与修订读不到同码)。"""
+        repo, fin, art = make_repo(tmp_path)
+        snap = rr.working_snapshot_for("fin", [repo / "systems"])
+        assert set(snap.endpoints) == {"fin.a.a"}
+        with pytest.raises(rr.ReleaseReadError) as ei:
+            rr.working_snapshot_for("nope", [repo / "systems"])
+        assert ei.value.code == "release_not_found"

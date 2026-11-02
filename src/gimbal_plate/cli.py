@@ -252,15 +252,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
     def _snap(ref: str):
         if ref == "working":
-            from gimbal_plate.dialect.validation import collect_system_tree
-
-            fin = _repo_system(args.system)
-            tree = collect_system_tree(fin)
-            snap = release_read.RevisionSnapshot(
-                system=args.system, line="working", n=0, manifest={})
-            for ep in tree.endpoints:
-                snap.endpoints[ep.id] = ep
-            return snap
+            # S1.5:与发布链同一遍收集(服务/词条/片段同口径)—— 此前这里
+            # 自拼端点-only 伪快照,与 HTTP 面 /diff 的 working 比较域不一致
+            return release_read.working_snapshot(_repo_system(args.system))
         line, n, _m = release_read.resolve_revision(root, args.system, ref)
         return release_read.load_snapshot(root, args.system, line, n)
 

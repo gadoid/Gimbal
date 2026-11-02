@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -261,13 +262,13 @@ def load_snapshot(root: Path, system: str, line: str, n: int,
 
 
 def snapshot_from_registry(reg: Any, system: str) -> RevisionSnapshot:
-    """working 侧的伪快照（diff 的 working 端点；只含注册表有的对象）。
+    """working 侧的伪快照(端点-only 形态,兼容保留)。
 
-    端点经注册表公开查询面 ``iter_endpoints_for_system`` 取（旧实现读
-    不存在的 ``reg.endpoints`` 属性,working 侧恒为 0 端点,差异把对面修订
-    的全部对象报成 added —— 全量评估 2026-11-02 #2）。只水合端点:服务/
-    词条/投影在注册表没有与 manifest 同口径的对照物,由 ``diff_snapshots``
-    收窄比较域处理。
+    .. deprecated:: S1.5(2026-11-03)
+        diff 的 working 端改用 :func:`working_snapshot_for` —— 与发布链
+        同一遍收集(collect_freeze_objects/freeze_common_terms),服务/
+        词条/片段有同口径对照物;本函数只含注册表端点,作为 diff 输入会
+        丢失非端点域。保留给只关心端点的轻量调用方与既有测试。
     """
     snap = RevisionSnapshot(system=system, line=_WORKING, n=0,
                             manifest={"system": system})
@@ -280,6 +281,105 @@ def snapshot_from_registry(reg: Any, system: str) -> RevisionSnapshot:
     for ep in eps:
         snap.endpoints[ep.id] = ep
     return snap
+
+
+# working 全域快照缓存:key = (system_root, 树 mtime 指纹)—— 方言树是
+# 纯文件源,md 未改动时不重解析(collect_system_tree 全树 rglob+parse)。
+# 上限按系统数留量,LRU 淘汰。
+_WORKING_SNAPSHOT_CACHE: "OrderedDict[tuple[str, tuple], RevisionSnapshot]" = (
+    OrderedDict())
+_WORKING_CACHE_LIMIT = 16
+
+
+def _tree_fingerprint(system_root: Path) -> tuple:
+    """方言树 mtime 指纹:系统目录 + common 参照(collect_system_tree 的
+    with_common 取 system_root.parent/common)的全部 md。"""
+    files = sorted(system_root.rglob("*.md"))
+    common_root = system_root.parent / "common"
+    if common_root.is_dir() and system_root.name != "common":
+        files += sorted(common_root.rglob("*.md"))
+    return tuple((str(p), p.stat().st_mtime_ns) for p in files)
+
+
+def working_snapshot(system_root: Path) -> RevisionSnapshot:
+    """working 全域伪快照(S1.5):方言树 → 与发布链同一遍冻结对象收集
+    (collect_freeze_objects / freeze_common_terms / manifest_entry)→
+    manifest 形状 ``objects`` + 端点/词条水合(diff 的 parts 用)。
+
+    hash 口径按构造一致 —— 「工作树零改动 → 对修订 diff 零差异」的不变式
+    由此保证(全量评估 2026-11-02 #7 的收窄由此解除;服务/词条/片段级
+    working 差异自 S1.5 起可见)。投影不入 objects:修订对修订的 diff 也
+    只比 objects 域,投影是 binding 的派生物(其变化必体现为 parts.binding)。
+
+    语义差异(相对发布链):服务声明校验错误/引用闭包未闭合只跳过对应
+    对象,不上抛 —— 脏树也要能 diff(发布链会 fail-fast,那是发版闸门)。
+    方言解析错误(DialectError)转 ``ReleaseReadError("working_dialect_invalid")``。
+    """
+    from gimbal_plate.dialect.parser import DialectError
+    from gimbal_plate.dialect.validation import collect_system_tree
+    from gimbal_plate.release.release import (
+        collect_freeze_objects,
+        freeze_common_terms,
+        manifest_entry,
+    )
+
+    fp = _tree_fingerprint(system_root)
+    key = (str(system_root), fp)
+    hit = _WORKING_SNAPSHOT_CACHE.get(key)
+    if hit is not None:
+        _WORKING_SNAPSHOT_CACHE.move_to_end(key)
+        return hit
+
+    try:
+        tree = collect_system_tree(system_root)
+    except DialectError as e:
+        raise ReleaseReadError(
+            "working_dialect_invalid",
+            f"working 方言树解析失败({system_root.name}): {e}") from e
+
+    objs, _svc_errors = collect_freeze_objects(tree)
+    common_frozen, _closure = freeze_common_terms(tree, objs)
+
+    objects: list[dict[str, Any]] = []
+    snap = RevisionSnapshot(system=system_root.name, line=_WORKING, n=0,
+                            manifest={"system": system_root.name})
+    for kind, m, reviewed in objs:
+        objects.append(manifest_entry(kind, m, reviewed))
+        if kind == "endpoint":
+            snap.endpoints[m.id] = m
+        elif kind == "statement":
+            snap.statements[m.id] = m
+        elif kind == "term":
+            snap.terms[m.id] = m
+        elif kind == "service":
+            snap.services.append(m)
+    for mid in sorted(common_frozen):
+        tm = tree.common_terms[mid]
+        # common 词条按发布口径恒 draft(manifest_entry 注释)
+        objects.append(manifest_entry("term", tm, False))
+        snap.terms[mid] = tm
+    snap.manifest["objects"] = objects
+
+    _WORKING_SNAPSHOT_CACHE[key] = snap
+    while len(_WORKING_SNAPSHOT_CACHE) > _WORKING_CACHE_LIMIT:
+        _WORKING_SNAPSHOT_CACHE.popitem(last=False)
+    return snap
+
+
+def working_snapshot_for(system: str, roots: "list[Path] | None" = None) -> RevisionSnapshot:
+    """按系统名定位目录树并构建 working 全域快照(diff HTTP 端点入口)。
+
+    目录定位与 loader.load_registry 同源(systems_roots 的缺省/环境覆盖
+    规则);找不到系统 → ``release_not_found``(与修订读不到同码)。
+    """
+    from gimbal_plate.loader import systems_roots
+
+    for root in (roots if roots is not None else systems_roots()):
+        system_root = root / system
+        if system_root.is_dir():
+            return working_snapshot(system_root)
+    raise ReleaseReadError(
+        "release_not_found", f"系统 {system} 的 working 目录不存在")
 
 
 def _path_placeholders(path: str) -> set[str]:
@@ -363,25 +463,22 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
                    ) -> dict[str, Any]:
     """对象级差异 + 变化接口的部位（a → b）。
 
-    ``scope``:两侧都是修订 → ``all``(manifest 全对象域);任一侧是
-    working 伪快照 → ``endpoints``,比较域收窄为端点 —— working 侧只从
-    注册表水合端点,服务/词条/投影没有同口径对照物,放进来会在工作树零
-    改动时也凭空报 ``service.*`` 被删/新增(全量评估 2026-11-02 #7,
-    方案 B;服务/词条/投影级 working 差异留 S1.5)。
+    ``scope`` 恒 ``all``(manifest 全对象域:endpoint/statement/term/service)。
+    S1.5(2026-11-03)起 working 侧经 :func:`working_snapshot` 与发布链同一遍
+    收集,服务/词条/片段有同口径对照物 —— 此前(全量评估 2026-11-02 #7
+    方案 B)任一侧为 working 时收窄为只比端点;只有端点的旧伪快照
+    (snapshot_from_registry)作输入时仍按端点域回退。投影不入 objects
+    (binding 的派生物,其变化必体现为 parts.binding)。
     """
-    working = sa.line == _WORKING or sb.line == _WORKING
     ea = {(e["type"], e["id"]): e for e in sa.manifest.get("objects", [])}
     if not ea and sa.endpoints:
-        # working 伪快照没有 manifest objects——按水合对象即时取 hash
+        # 端点-only 伪快照(注册表面)没有 manifest objects——按水合对象即时取 hash
         ea = {("endpoint", eid): {"hash": object_hash(ep)}
               for eid, ep in sa.endpoints.items()}
     eb = {(e["type"], e["id"]): e for e in sb.manifest.get("objects", [])}
     if not eb and sb.endpoints:
         eb = {("endpoint", eid): {"hash": object_hash(ep)}
               for eid, ep in sb.endpoints.items()}
-    if working:
-        ea = {k: v for k, v in ea.items() if k[0] == "endpoint"}
-        eb = {k: v for k, v in eb.items() if k[0] == "endpoint"}
 
     added = sorted(f"{t}.{i}" for k in eb.keys() - ea.keys() for t, i in [k])
     removed = sorted(f"{t}.{i}" for k in ea.keys() - eb.keys() for t, i in [k])
@@ -396,7 +493,7 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
             changed[f"{t}.{i}"] = entry
     return {"from": sa.ref if sa.line != _WORKING else _WORKING,
             "to": sb.ref if sb.line != _WORKING else _WORKING,
-            "scope": "endpoints" if working else "all",
+            "scope": "all",
             "added": added, "removed": removed, "changed": changed}
 
 
@@ -446,4 +543,5 @@ __all__ = [
     "diff_snapshots", "list_lines", "list_revisions", "load_manifest",
     "load_snapshot", "parse_ref", "resolve_artifacts_root",
     "resolve_effective", "resolve_revision", "snapshot_from_registry",
+    "working_snapshot", "working_snapshot_for",
 ]

@@ -184,8 +184,138 @@ def _grade(report: ValidationReport, tree: Any,
     return blocking, warns
 
 
-def _lines_dir(artifacts_root: Path, system: str) -> Path:
-    return artifacts_root / system / "lines"
+def collect_freeze_objects(
+    tree: Any,
+) -> tuple[list[tuple[str, Any, bool]], list[str]]:
+    """从系统树收集全部冻结对象(3.1 全部块,逐对象记录评审状态)。
+
+    发布链(release)与 working 全域快照(read.working_snapshot)共用同一遍
+    收集 —— hash 口径按构造一致,working diff 的「零改动树 → 零差异」
+    不变式依赖这一点(S1.5,全量评估 2026-11-02 #7 方案 B 的收窄解除)。
+
+    返回 ``(对象列表, 服务声明校验错误)``:对象为 ``(kind, model|dict,
+    reviewed)`` —— service 存 gimbal:system 块的**原始 dict**(manifest 冻
+    ``_dict_hash``,水合模型补默认值后 hash 必不相等,#7 式假差异的根源);
+    错误列表发布链 fail-fast,working 快照跳过对应对象(不可发布的脏树
+    也要能 diff)。gimbal:defaults 不冻结(偏环境属性,平台读 working)。
+    """
+    objs: list[tuple[str, Any, bool]] = []
+    errors: list[str] = []
+    from gimbal_plate.schema.service_definition import ServiceDefinition
+    for d in tree.deliverables:
+        for b in d.blocks():
+            if b.type == "system":
+                items = (b.payload if isinstance(b.payload, list)
+                         else [b.payload])
+                for item in items:
+                    if not isinstance(item, dict) or not item.get("name"):
+                        continue
+                    try:
+                        ServiceDefinition.model_validate(item)
+                    except Exception as e:  # noqa: BLE001
+                        errors.append(str(e))
+                        continue
+                    objs.append(("service", item, b.review == "reviewed"))
+                continue
+            for m in b.models():
+                if isinstance(m, EndpointSpec):
+                    objs.append(("endpoint", m, b.review == "reviewed"))
+                elif isinstance(m, Statement):
+                    objs.append(("statement", m, b.review == "reviewed"))
+                elif isinstance(m, Term):
+                    objs.append(("term", m, b.review == "reviewed"))
+    return objs, errors
+
+
+def freeze_common_terms(
+    tree: Any, all_objects: list[tuple[str, Any, bool]],
+) -> tuple[set[str], list[tuple[str, str]]]:
+    """引用闭包(3.2):已评审只引用已评审;草稿引用只决定 common 冻结面。
+
+    返回 ``(随冻结的 common 词条 id 集, 未闭合引用列表)``:发布链对未
+    闭合 fail-fast;working 快照只取 common_frozen(脏树的未闭合不阻断
+    diff)。与 release 内联实现逐字同源 —— 闭包语义分叉会造成 working
+    快照多冻/少冻 common 词条,重演 #7 式假差异。
+    """
+    from gimbal_plate.dialect.validation import _parent_of
+
+    def _term_edges(tid: str) -> list[str]:
+        t_ = tree.terms.get(tid) or tree.common_terms.get(tid)
+        if t_ is None:
+            return []
+        out: list[str] = []
+        if t_.refers:
+            out.append(t_.refers)
+        if t_.replaced_by:
+            out.append(t_.replaced_by)
+        parent = _parent_of(tid)
+        if parent:
+            out.append(parent)
+        return out
+
+    def _refs_of(kind: str, m: Any) -> list[str]:
+        if kind == "endpoint":
+            return [r for r in (m.capability, *m.consumes, *m.produces) if r]
+        if kind == "statement":
+            out: list[str] = []
+            for v in m.slots.values():
+                if isinstance(v, str):
+                    out.append(v)
+                elif isinstance(v, list):
+                    out.extend(x for x in v if isinstance(x, str))
+            return out
+        if kind == "term":
+            return _term_edges(m.id)
+        return []
+
+    common_frozen: set[str] = set()
+    closure: list[tuple[str, str]] = []
+    visited: set[str] = set()
+    queue: list[tuple[str, str]] = []
+    for kind, m, reviewed in all_objects:
+        for r in _refs_of(kind, m):
+            if reviewed:
+                queue.append((getattr(m, "id", "?"), r))
+            elif r in tree.common_terms:
+                # 草稿对象的引用不作闸门,但其指向的 common 词条随冻结
+                common_frozen.add(r)
+    while queue:
+        owner, tid = queue.pop()
+        if tid in visited:
+            continue
+        visited.add(tid)   # 边始终展开:种子(reviewed)也不例外——传递引用仍要查
+        if tid not in tree.terms and tid not in tree.common_terms:
+            closure.append((owner, tid))   # 不存在(S2 已报,双保险)
+            continue
+        if not tree.term_block_review.get(tid, False):
+            closure.append((owner, tid))   # 草稿词条被已评审内容引用
+            continue
+        if tid in tree.common_terms:
+            common_frozen.add(tid)
+        queue.extend((owner, e) for e in _term_edges(tid))
+    return common_frozen, closure
+
+
+def manifest_entry(kind: str, m: Any, reviewed: bool) -> dict[str, Any]:
+    """manifest ``objects`` 条目(只算 hash,不写对象池)。
+
+    发布链 ``_entry``(写池后返回)与 working 全域快照共用 —— 同一函数
+    保证条目形状与 hash 口径逐字节一致。common 词条按发布口径恒 draft
+    (``review_of`` 只覆盖本系统对象;调用方勿自行传 True)。
+    """
+    if kind == "service":
+        return {"id": m.get("name", ""), "type": "service",
+                "hash": _dict_hash(m),
+                "review": "reviewed" if reviewed else "draft"}
+    e: dict[str, Any] = {"id": getattr(m, "id", ""), "type": kind,
+                         "hash": object_hash(m),
+                         "review": "reviewed" if reviewed else "draft"}
+    if kind == "endpoint":
+        e["shape_hash"] = shape_hash(m)
+    return e
+
+
+def _lines_dir(artifacts_root: Path, system: str) -> Path:    return artifacts_root / system / "lines"
 
 
 def latest_revision_manifest(artifacts_root: Path, system: str, line: str,
@@ -473,37 +603,15 @@ def _release_system_locked(
 
     # ── 收集冻结对象(3.1:全部块,逐对象记录评审状态)──
     # D-3:gimbal:system(服务声明)随修订冻结——服务是接口坐标的一部分;
-    # gimbal:defaults 不冻结(偏环境属性,平台读 working)。
-    all_objects: list[tuple[str, Any, bool]] = []   # (kind, model, reviewed)
-    from gimbal_plate.schema.service_definition import ServiceDefinition
-    for d in tree.deliverables:
-        for b in d.blocks():
-            if b.type == "system":
-                items = (b.payload if isinstance(b.payload, list)
-                         else [b.payload])
-                for item in items:
-                    if not isinstance(item, dict) or not item.get("name"):
-                        continue
-                    try:
-                        ServiceDefinition.model_validate(item)
-                    except Exception as e:  # noqa: BLE001
-                        return ReleaseResult(
-                            success=False,
-                            message=f"服务声明非法(3.1/D-3): {e}",
-                            report=report)
-                    all_objects.append(("service", item,
-                                        b.review == "reviewed"))
-                continue
-            for m in b.models():
-                if isinstance(m, EndpointSpec):
-                    all_objects.append(("endpoint", m,
-                                        b.review == "reviewed"))
-                elif isinstance(m, Statement):
-                    all_objects.append(("statement", m,
-                                        b.review == "reviewed"))
-                elif isinstance(m, Term):
-                    all_objects.append(("term", m,
-                                        b.review == "reviewed"))
+    # gimbal:defaults 不冻结(偏环境属性,平台读 working)。收集器与
+    # working 全域快照(read.working_snapshot)共用同一遍 —— hash 口径
+    # 按构造一致(S1.5)。
+    all_objects, service_errors = collect_freeze_objects(tree)
+    if service_errors:
+        return ReleaseResult(
+            success=False,
+            message=f"服务声明非法(3.1/D-3): {service_errors[0]}",
+            report=report)
     if not all_objects:
         return ReleaseResult(
             success=False,
@@ -511,62 +619,7 @@ def _release_system_locked(
             report=report)
 
     # ── 引用闭包(3.2):已评审只引用已评审;草稿引用只决定 common 冻结面 ──
-    from gimbal_plate.dialect.validation import _parent_of
-
-    def _term_edges(tid: str) -> list[str]:
-        t_ = tree.terms.get(tid) or tree.common_terms.get(tid)
-        if t_ is None:
-            return []
-        out: list[str] = []
-        if t_.refers:
-            out.append(t_.refers)
-        if t_.replaced_by:
-            out.append(t_.replaced_by)
-        parent = _parent_of(tid)
-        if parent:
-            out.append(parent)
-        return out
-
-    def _refs_of(kind: str, m: Any) -> list[str]:
-        if kind == "endpoint":
-            return [r for r in (m.capability, *m.consumes, *m.produces) if r]
-        if kind == "statement":
-            out: list[str] = []
-            for v in m.slots.values():
-                if isinstance(v, str):
-                    out.append(v)
-                elif isinstance(v, list):
-                    out.extend(x for x in v if isinstance(x, str))
-            return out
-        if kind == "term":
-            return _term_edges(m.id)
-        return []
-
-    closure: list[tuple[str, str]] = []
-    common_frozen: set[str] = set()
-    visited: set[str] = set()
-    queue: list[tuple[str, str]] = []
-    for kind, m, reviewed in all_objects:
-        for r in _refs_of(kind, m):
-            if reviewed:
-                queue.append((getattr(m, "id", "?"), r))
-            elif r in tree.common_terms:
-                # 草稿对象的引用不作闸门,但其指向的 common 词条随冻结
-                common_frozen.add(r)
-    while queue:
-        owner, tid = queue.pop()
-        if tid in visited:
-            continue
-        visited.add(tid)   # 边始终展开:种子(reviewed)也不例外——传递引用仍要查
-        if tid not in tree.terms and tid not in tree.common_terms:
-            closure.append((owner, tid))   # 不存在(S2 已报,双保险)
-            continue
-        if not tree.term_block_review.get(tid, False):
-            closure.append((owner, tid))   # 草稿词条被已评审内容引用
-            continue
-        if tid in tree.common_terms:
-            common_frozen.add(tid)
-        queue.extend((owner, e) for e in _term_edges(tid))
+    common_frozen, closure = freeze_common_terms(tree, all_objects)
     if closure:
         return ReleaseResult(
             success=False,
@@ -590,22 +643,12 @@ def _release_system_locked(
                     for mid in sorted(common_frozen)]
 
     def _entry(kind: str, m: Any) -> dict[str, Any]:
+        e = manifest_entry(kind, m, bool(review_of.get(id(m))))
         if kind == "service":
-            h = _dict_hash(m)
-            _pool_write(artifacts_root, h, "service", m)
-            return {"id": m.get("name", ""), "type": "service",
-                    "hash": h,
-                    "review": "reviewed" if review_of.get(id(m)) else "draft"}
-        h = object_hash(m)
-        _pool_write(artifacts_root, h, kind, m.model_dump(mode="json"))
-        e: dict[str, Any] = {
-            "id": getattr(m, "id", ""),
-            "type": kind,
-            "hash": h,
-            "review": "reviewed" if review_of.get(id(m)) else "draft",
-        }
-        if kind == "endpoint":
-            e["shape_hash"] = shape_hash(m)
+            _pool_write(artifacts_root, e["hash"], "service", m)
+        else:
+            _pool_write(artifacts_root, e["hash"], kind,
+                        m.model_dump(mode="json"))
         return e
 
     object_entries = [_entry(kind, m) for kind, m in freeze_list]

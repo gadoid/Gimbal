@@ -123,6 +123,8 @@ _READ_ERROR_HTTP = {
     "release_corrupt": (409, ErrorCode.RELEASE_CORRUPT),
     "release_m2_incompatible": (409, ErrorCode.RELEASE_M2_INCOMPATIBLE),
     "invalid_ref": (400, ErrorCode.INVALID_REF),
+    # S1.5 working 全域快照:方言树坏是请求侧可修的树状态,422 而非 500
+    "working_dialect_invalid": (422, ErrorCode.INVALID_REF),
 }
 
 
@@ -246,8 +248,12 @@ def system_revision_diff(system_id: str, a: str, b: str,
 
     def _snap(ref: str) -> Any:
         if ref == "working":
-            return release_read.snapshot_from_registry(
-                _registry(request), system_id)
+            # S1.5:working 端与发布链同一遍收集(服务/词条/片段同口径);
+            # 方言树坏 → working_dialect_invalid(422),不再 500
+            try:
+                return release_read.working_snapshot_for(system_id)
+            except release_read.ReleaseReadError as e:
+                raise _read_error(e)
         try:
             ln, nn, _m = release_read.resolve_revision(root, system_id, ref)
             return release_read.load_snapshot(root, system_id, ln, nn)
