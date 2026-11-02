@@ -206,3 +206,33 @@ async def get_visible_execution(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"execution not found: {execution_id}",
     )
+
+
+async def get_controllable_execution(
+    principal: Annotated["object", Depends(principal_or_user)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+    execution_id: Annotated[int, Path(ge=1)],
+):
+    """写面(取消)的入站分流版(收尾评审 2026-11-02 G2)。
+
+    * 入站凭证:``caller_alias_name`` 等于自己别名 —— 与只读查询同一
+      规则,调用方能取消自己经由该别名发起的执行(平台模式 owner 是系统
+      用户、个人模式 owner 是 grant 用户,按 owner 判它们都取消不了);
+    * JWT:维持 owner 本人 —— **不**随 :func:`get_visible_execution` 放宽
+      到 admin / 别名属主,写面不扩。
+
+    不满足一律 404(不泄露存在性)。
+    """
+    from ..models.execution import Execution
+
+    ex = await session.get(Execution, execution_id)
+    if ex is not None:
+        if getattr(principal, "inbound", False):
+            if ex.caller_alias_name == principal.caller_alias:
+                return ex
+        elif ex.owner_id == principal.user.id:
+            return ex
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"execution not found: {execution_id}",
+    )

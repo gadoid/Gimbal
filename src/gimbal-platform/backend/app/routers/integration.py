@@ -66,6 +66,15 @@ def _visible(user, tpl: IntegrationTask) -> bool:
         or user.role == "admin")
 
 
+def _inbound_owns(principal: Principal, tpl: IntegrationTask) -> bool:
+    """入站面的可见/管理判定(M2 规则,收尾评审 G1 推广到查/删/触发):
+    只认**调用方别名**注册的模板,已软删的不出;不满足一律 404(不泄露
+    存在性)。``_visible`` / ``_can_manage`` 对系统用户恒为真,不能用于
+    入站面。"""
+    return (tpl.removed_at is None
+            and tpl.caller_alias_name == principal.caller_alias)
+
+
 async def _my_instance(db: AsyncSession, tpl: IntegrationTask, user):
     """当前用户的实例(**只读**,W0a① 播种收口):personal 按 holder
     查不建;platform 维持平台唯一实例口径(不建,创建时已有)。"""
@@ -216,20 +225,24 @@ class TaskPatch(BaseModel):
 
 
 @router.get("/tasks")
-async def list_tasks(user: CurrentUser, db: DbSession) -> dict:
-    """可见模板:我的 + 公共(admin 全见);软删的不出。
+async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
+    """可见模板:我的 + 公共(admin 全见);软删的不出。入站凭证
+    (收尾评审 G1):只回本别名注册的模板。
 
     P3.2(已知欠账,暂记不修):每行算 authAliases / missingCredentials
     要单独装载场景 + 方案并查凭证池(N+1);当前数据量小可接受,
     行数上去后按「场景/方案批量取 + 凭证池一次查」批量化。"""
-    rows = (await db.execute(
-        select(IntegrationTask).where(
-            IntegrationTask.template_id.is_(None),
-            IntegrationTask.removed_at.is_(None),
-        ).order_by(IntegrationTask.id.desc()))).scalars().all()
+    user = principal.user
+    q = select(IntegrationTask).where(
+        IntegrationTask.template_id.is_(None),
+        IntegrationTask.removed_at.is_(None),
+    )
+    if principal.inbound:
+        q = q.where(IntegrationTask.caller_alias_name == principal.caller_alias)
+    rows = (await db.execute(q.order_by(IntegrationTask.id.desc()))).scalars().all()
     out = []
     for t in rows:
-        if not _visible(user, t):
+        if not principal.inbound and not _visible(user, t):
             continue
         inst = await _my_instance(db, t, user)   # W0a①:列表只读不播种
         out.append(await _tpl_out_full(db, t, inst, user))
@@ -342,9 +355,12 @@ async def _read_only_with_plate(
 
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
+async def get_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
+    user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
-    if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
+    if tpl is None or tpl.template_id is not None or not (
+            _inbound_owns(principal, tpl) if principal.inbound
+            else _visible(user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
     inst = await _my_instance(db, tpl, user)   # W0a①:详情只读不播种
     return await _tpl_out_full(db, tpl, inst, user)
@@ -444,12 +460,17 @@ async def patch_task(
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """软删(评审 E7):卡片走「已移除」态,订阅者可见可自行删卡。"""
+async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
+    """软删(评审 E7):卡片走「已移除」态,订阅者可见可自行删卡。
+    入站凭证(G1):只能删自己别名注册的,否则 404。"""
+    user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None:
         raise _bad("not_found", "功能不存在", 404)
-    if not _can_manage(user, tpl):
+    if principal.inbound:
+        if not _inbound_owns(principal, tpl):
+            raise _bad("not_found", "功能不存在", 404)
+    elif not _can_manage(user, tpl):
         raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
@@ -465,13 +486,32 @@ async def delete_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
 
 
 @router.post("/tasks/{task_id}/run")
-async def run_task(task_id: int, user: CurrentUser, db: DbSession) -> dict:
+async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     """立即执行:平台模式任意可见者(冷却 60s);个人模式订阅者各自
     的实例(无冷却,方案 §3 操作表)。W0a① 起「点执行即订阅」收口:
-    未订阅用户 409 引导走订阅确认。"""
+    未订阅用户 409 引导走订阅确认。
+
+    入站凭证(收尾评审 G1):只能触发自己别名注册的任务(否则 404),
+    且身份须与注册时一致 —— 个人模式任务要带**同一签发人**的 grant
+    (grant 用户 = 任务属主 = 实例持有人),平台模式任务不带 grant;
+    错配 422 / 403 与 PATCH 重绑同码。"""
+    user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
-    if tpl is None or tpl.template_id is not None or not _visible(user, tpl):
+    if tpl is None or tpl.template_id is not None or not (
+            _inbound_owns(principal, tpl) if principal.inbound
+            else _visible(user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
+    if principal.inbound:
+        if tpl.identity_mode != principal.identity_mode:
+            raise _bad(
+                "identity_mode_mismatch",
+                f"该任务为{'个人' if tpl.identity_mode == 'personal' else '平台'}"
+                f"模式,触发时{'须携带' if tpl.identity_mode == 'personal' else '不能携带'}"
+                " X-Gimbal-Grant")
+        if tpl.identity_mode == "personal" and tpl.owner_id != user.id:
+            raise _bad(
+                "grant_issuer_mismatch",
+                "grant 签发人与任务属主不一致,不能用他人的 grant 触发", 403)
     # A-4/W6 手动面前置闸(版本模型 §6):working 预览场景 409 拒触发,
     # 在建实例/占冷却之前;调度路径由 integration_runner 内部同款闸兜底。
     if tpl.scenario_id:

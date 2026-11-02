@@ -28,7 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.timeutil import ensure_aware
 from ..core.deps import (
-    CurrentUser, get_owned_execution, get_visible_execution, principal_or_user,
+    CurrentUser, get_controllable_execution, get_owned_execution,
+    get_visible_execution, principal_or_user,
 )
 from ..core.timeutil import utcnow
 from ..models import Execution
@@ -59,8 +60,10 @@ router = APIRouter(prefix="/executions", tags=["executions"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
 # 入站分流版可见性(D8,webhook 设计 v3 §5.6):detail/rows/events 三个
-# 只读查询端点用;写面(删除/重跑/取消/调试)仍走 owner 闸。
+# 只读查询端点用;写面(删除/重跑/调试)仍走 owner 闸。取消(收尾评审
+# G2)单列:入站按 caller 别名、JWT 仍 owner 本人。
 VisibleExecution = Annotated[Execution, Depends(get_visible_execution)]
+ControllableExecution = Annotated[Execution, Depends(get_controllable_execution)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 _KNOWN_STATUSES = frozenset({
@@ -830,11 +833,14 @@ async def rerun_execution(
 # ── cancel ──────────────────────────────────────────────────────
 @router.post("/{execution_id}/cancel", response_model=ExecutionOut)
 async def cancel_execution(
-    ex: OwnedExecution,
+    ex: ControllableExecution,
     session: DbSession,
-    user: CurrentUser,
+    principal: PrincipalIn,
 ) -> ExecutionOut:
     """C11 协作式取消：写 execution_jobs.cancel_requested 位。
+
+    入站凭证可取消自己经由该别名发起的执行(G2);取消后照常回调
+    ``execution.finished(status=canceled)``。
 
     可取消态 = queued | running（worker 在任务起点/行边界消费 DB 位，
     收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的
@@ -858,7 +864,7 @@ async def cancel_execution(
             run_dispatcher.session_factory, ex.id, STATUS_CANCELED)
         await session.refresh(ex)
     disp = await execution_store.scenario_display_map(
-        session, user, [ex.scenario_id])
+        session, principal.user, [ex.scenario_id])
     return execution_store.execution_out(
         ex, **execution_store.display_kwargs(ex, disp))
 

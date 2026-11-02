@@ -112,12 +112,26 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
   发 PATCH 重新绑定(见第 6 节):grant 签发人必须与任务属主一致,
   他人 grant → 403 `grant_issuer_mismatch`;平台模式任务不绑定 grant,
   带 grant 的 PATCH → 422 `identity_mode_mismatch`。
+- **任务生命周期**(收尾评审 G1,2026-11-02):`GET /api/integration/tasks`
+  (列表,只回本别名注册的)/ `GET …/tasks/{id}` / `DELETE …/tasks/{id}`
+  (软删)/ `POST …/tasks/{id}/run`(立即执行)都接受入站凭证,判定与
+  PATCH 同一规则 —— 只认自己别名注册的任务,否则 404。`run` 时身份须与
+  注册一致:平台模式任务不带 grant、个人模式任务带**同一签发人**的
+  grant(错配 422 `identity_mode_mismatch` / 403 `grant_issuer_mismatch`);
+  平台模式手动触发有 60s 冷却(409 `cooldown`),个人模式无。
 
 ### 3.3 查询:`GET /api/executions/{id}` / `/rows` / `/events`
 
 接受入站凭证。可见性:入站凭证只能看**经由本别名**的执行;JWT 用户
 = 执行 owner、admin、或 caller 别名的属主(平台模式执行对别名属主
 可见)。执行列表 `GET /api/executions` 入站侧同样按本别名过滤。
+
+### 3.4 取消:`POST /api/executions/{id}/cancel`
+
+接受入站凭证(收尾评审 G2):可取消 `caller_alias_name` 等于本别名的
+执行(与 3.3 同一判定;他人别名 404)。可取消态 = queued | running,
+终态 409 `not_cancelable`。取消后照常回调 `execution.finished`
+(`status: "canceled"`)。JWT 面仍只限执行 owner 本人。
 
 ## 4. 回调(webhook)
 
