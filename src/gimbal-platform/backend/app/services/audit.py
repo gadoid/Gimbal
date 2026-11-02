@@ -43,6 +43,11 @@ AUDIT_ACTIONS = (
     "inbound.grant.write",        # ggt_ 签发/撤销(签发人或 admin)
     "inbound.grant_revoked_by_deactivation",  # 停用用户连带撤销其 grant(S1)
     "inbound.auth_failed",        # 入站认证失败(401/403;凭证面取证)
+    # ── 入站发起的操作(收尾评审 2026-11-02 G4):actor = grant 用户或
+    # 平台系统用户,resource = 调用方别名 —— 审计面板按别名统一查看
+    "inbound.run",                # 经别名发起/取消执行(场景 / 临时调用 / 取消)
+    "inbound.task.write",         # 经别名注册/修改/删除/触发集成任务
+    "inbound.grant_rebind",       # 带新 grant PATCH 任务 → grant_id 换绑
 )
 
 
@@ -77,6 +82,21 @@ async def record(
     except Exception as e:  # noqa: BLE001
         await db.rollback()
         logger.warning("audit: record {} failed: {}", action, e)
+
+
+async def record_inbound(db: AsyncSession, principal, action: str, *,
+                         detail: dict | None = None) -> None:
+    """入站发起的操作统一落审计(G4):JWT 调用方 no-op;actor 取
+    Principal.user(grant 签发人或 ``__platform__``),资源列为调用方别名,
+    detail 恒带 ``identity_mode`` / ``grant_id``(经由谁、以谁身份)。"""
+    if not getattr(principal, "inbound", False):
+        return
+    u = principal.user
+    await record(
+        db, actor_id=u.id, actor_name=u.display_name or u.username,
+        action=action, resource_type="alias", resource_id=principal.caller_alias,
+        detail={"identity_mode": principal.identity_mode,
+                "grant_id": principal.grant_id, **(detail or {})})
 
 
 async def list_page(

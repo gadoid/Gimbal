@@ -31,6 +31,15 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   // 词表外存量动作:suites fork 落审计但未登记进 AUDIT_ACTIONS
   'suite.owner_fork': '复制私有套件',
   'suite.public_fork': '复制公共套件',
+  // 入站身份(webhook 设计 v3 P1)+ 入站发起的操作(收尾评审 2026-11-02 G4)
+  'inbound.credential.write': '入站凭证变更',
+  'inbound.settings.write': '入站/回调设置变更',
+  'inbound.grant.write': '授权(grant)变更',
+  'inbound.grant_revoked_by_deactivation': '停用用户连带撤销授权',
+  'inbound.auth_failed': '入站认证失败',
+  'inbound.run': '经别名发起执行',
+  'inbound.task.write': '经别名变更集成任务',
+  'inbound.grant_rebind': '集成任务换绑授权',
 }
 
 export function auditActionLabel(action: string): string {
@@ -49,6 +58,7 @@ const ACTION_DOMAIN_LABELS: Record<string, string> = {
   suite: '套件',
   scenario: '场景',
   integration: '集成',
+  inbound: '入站调用',
 }
 
 export interface AuditActionGroup {
@@ -146,6 +156,19 @@ const ALIAS_FN_LABELS: Record<string, string> = {
   delete: '删除',
 }
 
+const INBOUND_TASK_FN_LABELS: Record<string, string> = {
+  create: '注册',
+  patch: '修改',
+  delete: '删除',
+  run: '触发',
+}
+
+/** 入站操作的身份后缀:平台模式 / 个人模式(grant #n)。 */
+function inboundIdentity(d: Record<string, unknown>): string {
+  if (s(d.identity_mode) === 'platform') return '平台模式'
+  return d.grant_id != null ? `个人模式，grant #${String(d.grant_id)}` : '个人模式'
+}
+
 function s(v: unknown): string {
   return typeof v === 'string' && v ? v : ''
 }
@@ -241,6 +264,27 @@ export function describeAuditDetail(row: AuditLogRow): string {
       const cascaded = num(d.cascaded)
       return `管理员发布套件「${s(d.name) || s(d.resource_name) || rid}」${Number(cascaded) > 0 ? `（连带公开 ${cascaded} 个成员场景）` : ''}`
     }
+    case 'inbound.run': {
+      const via = `经别名「${rid}」`
+      const fn = s(d.fn)
+      if (fn === 'cancel') return `${via}取消执行 #${String(d.execution ?? '')}（${inboundIdentity(d)}）`
+      const target = fn === 'adhoc'
+        ? `临时调用 ${(Array.isArray(d.endpoints) ? d.endpoints : []).join('、') || '—'}`
+        : `场景「${s(d.scenario_id)}」`
+      return `${via}发起${target} → 执行 #${String(d.execution ?? '')}（${inboundIdentity(d)}）`
+    }
+    case 'inbound.task.write': {
+      const fn = INBOUND_TASK_FN_LABELS[s(d.fn)] ?? '变更'
+      const name = s(d.name) ? `「${s(d.name)}」` : `#${String(d.task ?? '')}`
+      return `经别名「${rid}」${fn}集成任务${name}（${inboundIdentity(d)}）`
+    }
+    case 'inbound.grant_rebind': {
+      const name = s(d.name) ? `「${s(d.name)}」` : `#${String(d.task ?? '')}`
+      const from = d.grant_from != null ? `grant #${String(d.grant_from)}` : '无'
+      return `集成任务${name}换绑授权：${from} → grant #${String(d.grant_id ?? '')}${d.resumed ? '，实例已恢复' : ''}`
+    }
+    case 'inbound.auth_failed':
+      return `入站认证失败：${s(d.reason) || '未知原因'}${s(d.message) ? `（${s(d.message)}）` : ''}`
     case 'suite.owner_fork':
     case 'suite.public_fork': {
       const from = s(d.resource_name) || `#${rid}`

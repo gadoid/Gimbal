@@ -204,7 +204,7 @@ async def _post_adhoc_run(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
     try:
-        return await run_dispatcher.dispatch_target(
+        resp = await run_dispatcher.dispatch_target(
             db, principal.user.id, body, target, run_id=run_id,
             caller_alias=principal.caller_alias, grant_id=principal.grant_id,
             identity_mode=principal.identity_mode)
@@ -212,6 +212,13 @@ async def _post_adhoc_run(
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
     except run_dispatcher.Conflict as e:
         raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, **e.extra})
+    from ..services import audit as audit_svc
+    await audit_svc.record_inbound(db, principal, "inbound.run", detail={
+        "fn": "adhoc",
+        "endpoints": [str(dict(st).get("endpoint")) for st in body.steps],
+        "execution": resp.execution_id, "run_id": resp.run_id,
+        "client_ref": body.client_ref})
+    return resp
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -358,7 +365,7 @@ async def post_run(
                                     f"{unit.scenario_id}"
                                 ),
                             })
-        return await run_dispatcher.dispatch_run(
+        resp = await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,
             req=body,
@@ -371,3 +378,9 @@ async def post_run(
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
     except run_dispatcher.Conflict as e:
         raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, **e.extra})
+    from ..services import audit as audit_svc
+    await audit_svc.record_inbound(db, principal, "inbound.run", detail={
+        "fn": "scenario", "scenario_id": scen.scenario_id,
+        "execution": resp.execution_id, "run_id": resp.run_id,
+        "client_ref": body.client_ref})
+    return resp

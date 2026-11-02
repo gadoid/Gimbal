@@ -22,6 +22,7 @@ from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.integration_task import IntegrationTask
 from ..models.user import User
+from ..services import audit as audit_svc
 from ..services import integration_runner
 from ..services.cron_expr import CronError, describe_cron, parse_cron
 from ..services.inbound_identity import Principal, valid_callback_path
@@ -344,6 +345,9 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             await db.commit()
         except Exception:  # noqa: BLE001
             await db.rollback()
+    await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
+        "fn": "create", "task": tpl.id, "name": tpl.name,
+        "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref})
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -380,6 +384,7 @@ async def patch_task(
     if tpl is None or tpl.template_id is not None or tpl.removed_at is not None:
         raise _bad("not_found", "功能不存在", 404)
     rebind_inst: IntegrationTask | None = None
+    grant_from = tpl.grant_id          # G4:换绑审计记前值
     if principal.inbound:
         # M2(修复方案 §2.2):入站调用的管理权按**调用方别名**判定 ——
         # 只能改自己别名注册的任务;不满足 → 404(不泄露存在性)。
@@ -455,6 +460,15 @@ async def patch_task(
             tpl, paused_reason="made_private",
             message="模板已转为私有,执行已暂停;模板重新公开后请重新"
                     "确认订阅")
+    await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
+        "fn": "patch", "task": tpl.id, "name": tpl.name,
+        "changed": sorted(body.model_fields_set)})
+    if (principal.inbound and principal.grant_id is not None
+            and grant_from != principal.grant_id):
+        # G4:换绑单独一条 —— 它改变的是「以谁身份跑」,比普通修改重
+        await audit_svc.record_inbound(db, principal, "inbound.grant_rebind", detail={
+            "task": tpl.id, "name": tpl.name, "grant_from": grant_from,
+            "resumed": rebind_inst is not None})
     inst = await _tpl_instance(db, tpl.id)
     return await _tpl_out_full(db, tpl, inst, user)
 
@@ -482,6 +496,8 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
             title=f"集成任务「{tpl.name}」已删除",
             message="模板已被创建者删除,你的订阅随之失效;"
                     "卡片会显示「已移除」,可自行删卡")
+    await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
+        "fn": "delete", "task": tpl.id, "name": tpl.name})
     return {"removed": True}
 
 
@@ -582,6 +598,9 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     fresh = await db.get(IntegrationTask, inst.id)
     if fresh is not None:
         await db.refresh(fresh)   # run_instance 在独立会话回写,穿透本会话缓存
+    await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
+        "fn": "run", "task": tpl.id, "name": tpl.name, "instance": inst.id,
+        "run_status": (fresh.run_status or "") if fresh is not None else ""})
     return {"result": result, "instance": _inst_out(fresh)}
 
 

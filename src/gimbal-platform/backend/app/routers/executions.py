@@ -863,6 +863,9 @@ async def cancel_execution(
         await run_dispatcher.transition_with_retry(
             run_dispatcher.session_factory, ex.id, STATUS_CANCELED)
         await session.refresh(ex)
+    from ..services import audit as audit_svc
+    await audit_svc.record_inbound(session, principal, "inbound.run", detail={
+        "fn": "cancel", "execution": ex.id})
     disp = await execution_store.scenario_display_map(
         session, principal.user, [ex.scenario_id])
     return execution_store.execution_out(

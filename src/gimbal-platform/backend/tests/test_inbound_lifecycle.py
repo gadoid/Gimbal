@@ -7,6 +7,10 @@
   重绑同码);JWT 面语义不变。
 * G2 执行取消:入站凭证可取消 caller_alias_name 等于自己别名的执行
   (与只读查询同规则);他人别名 404;终态 409;JWT 仍只限 owner 本人。
+* G4 入站审计:经别名发起的执行 / 取消(inbound.run)、任务注册 / 修改 /
+  删除 / 触发(inbound.task.write)、换绑(inbound.grant_rebind)各落一条,
+  actor = grant 用户或平台系统用户,resource = 调用方别名,detail 带
+  identity_mode / grant_id;JWT 面不记。
 """
 from __future__ import annotations
 
@@ -15,9 +19,10 @@ import sqlalchemy as sa
 from app.core import db as db_module
 from app.models import Execution
 from app.models.integration_task import IntegrationTask
+from app.models.permission import AuditLog
 from app.services import integration_runner as ir
 
-from .helpers import make_draft as _draft
+from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
     mk_execution,
     publish_scenario as _publish,
@@ -26,6 +31,7 @@ from .inbound_fixtures import (
 from .test_inbound_identity import (
     GET_STEP, _gic, _mk_credential, _mk_grant, _register, _user_id,
 )
+from .test_inbound_recipe_scope import _capture_fanout
 
 ALIAS_A, ALIAS_B = "agent-sys", "agent-b"
 
@@ -212,3 +218,86 @@ class TestInboundCancel:
         h = await _register(client, "lc_u6")
         r = await client.post(f"/api/executions/{ex_a}/cancel", headers=h)
         assert r.status_code == 404
+
+
+# ── G4 ────────────────────────────────────────────────────────────
+
+
+async def _audit(action: str) -> list[AuditLog]:
+    async with db_module.SessionLocal() as s:
+        return list((await s.execute(sa.select(AuditLog).where(
+            AuditLog.action == action).order_by(AuditLog.id))).scalars().all())
+
+
+class TestInboundAudit:
+    async def test_task_lifecycle_and_rebind_audited(self, client, monkeypatch):
+        tok_a, _ = await _two_aliases()
+        h = await _register(client, "au_u1")
+        uid = await _user_id("au_u1")
+        await client.post("/api/scenarios", headers=h, json=_draft(
+            "sc-au1", steps=[GET_STEP]))
+        grant = await _mk_grant(ALIAS_A, uid)
+        r = await client.post("/api/integration/tasks", headers=_gic(tok_a, grant),
+                              json={"name": "task-au", "scenarioId": "sc-au1",
+                                    "identityMode": "personal"})
+        assert r.status_code == 201, r.text
+        tid = r.json()["id"]
+        _stub_run(monkeypatch, [])
+        assert (await client.post(f"/api/integration/tasks/{tid}/run",
+                                  headers=_gic(tok_a, grant))).status_code == 200
+        grant2 = await _mk_grant(ALIAS_A, uid)
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=_gic(tok_a, grant2), json={"name": "task-au2"})
+        assert r.status_code == 200, r.text
+        assert (await client.delete(f"/api/integration/tasks/{tid}",
+                                    headers=_gic(tok_a))).status_code == 200
+        rows = await _audit("inbound.task.write")
+        assert [r.detail["fn"] for r in rows] == ["create", "run", "patch", "delete"]
+        assert {r.resource_type for r in rows} == {"alias"}
+        assert {r.resource_id for r in rows} == {ALIAS_A}
+        assert rows[0].actor_id == uid                      # 个人模式 actor = grant 用户
+        assert rows[0].detail["identity_mode"] == "personal"
+        assert rows[0].detail["grant_id"] is not None
+        assert rows[0].detail["task"] == tid
+        assert rows[2].detail["changed"] == ["name"]
+        assert rows[3].detail["identity_mode"] == "platform"  # 删除时未带 grant
+        rebind = await _audit("inbound.grant_rebind")
+        assert len(rebind) == 1
+        assert rebind[0].detail["task"] == tid
+        assert rebind[0].detail["grant_from"] == rows[0].detail["grant_id"]
+        assert rebind[0].detail["grant_id"] != rebind[0].detail["grant_from"]
+        assert rebind[0].detail["resumed"] is False
+        # 同 grant 再 PATCH:只记 task.write,不再记换绑
+        async with db_module.SessionLocal() as s:
+            (await s.get(IntegrationTask, tid)).removed_at = None
+            await s.commit()
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=_gic(tok_a, grant2), json={})
+        assert r.status_code == 200, r.text
+        assert len(await _audit("inbound.grant_rebind")) == 1
+        assert len(await _audit("inbound.task.write")) == 5
+
+    async def test_run_and_cancel_audited_jwt_not(self, client, monkeypatch):
+        tok_a, _ = await _two_aliases()
+        h = await _register(client, "au_u2")
+        await _public_scenario(client, h, "sc-au2")
+        cap = await _capture_fanout(monkeypatch)
+        r = await client.post("/api/runs", headers=_gic(tok_a),
+                              json={"scenarioId": "sc-au2", "clientRef": "cr-1"})
+        assert r.status_code == 201, r.text
+        ex_id = r.json()["executionId"]
+        # JWT 发起不记
+        r = await client.post("/api/runs", headers=h, json={"scenarioId": "sc-au2"})
+        assert r.status_code == 201, r.text
+        await _wait(lambda: len(cap) == 2)
+        ex_c = await mk_execution(caller=ALIAS_A, status="running")
+        assert (await client.post(f"/api/executions/{ex_c}/cancel",
+                                  headers=_gic(tok_a))).status_code == 200
+        rows = await _audit("inbound.run")
+        assert [(r.detail["fn"], r.detail["execution"]) for r in rows] == [
+            ("scenario", ex_id), ("cancel", ex_c)]
+        assert rows[0].detail["scenario_id"] == "sc-au2"
+        assert rows[0].detail["client_ref"] == "cr-1"
+        assert rows[0].detail["identity_mode"] == "platform"
+        assert rows[0].actor_name == "平台系统"
+        assert rows[0].resource_id == ALIAS_A
