@@ -328,7 +328,12 @@ const executionId = computed(() => Number(route.params.id))
 
 const statusText = computed(() => {
   const s = execStore.detail?.status
-  return s ? executionStatusText(s) : ''
+  if (!s) return ''
+  // 单元级取消方案 P4:取消位已写、尚未收口 → 「取消中」(graph 等在飞单元跑完)
+  if (execStore.detail?.cancel_requested && !isTerminalExecutionStatus(s)) {
+    return '取消中(等待当前单元完成)'
+  }
+  return executionStatusText(s)
 })
 
 /** B-3:失败单首屏原因 —— 顶层 error(dispatcherError)缺省时按已知
@@ -672,7 +677,9 @@ async function cancelExec() {
   if (!execStore.detail) return
   try {
     await cancelExecution(execStore.detail.id)
-    toast.success('已请求取消 — 在飞行收敛后生效')
+    toast.success(execStore.detail.kind === 'suite_graph'
+      ? '已请求取消:当前单元跑完后停止,后续单元记为已取消'
+      : '已请求取消 — 在飞行收敛后生效')
   } catch (e) {
     const err = e as { status?: number; detail?: { message?: unknown } }
     if (err.status === 409) {

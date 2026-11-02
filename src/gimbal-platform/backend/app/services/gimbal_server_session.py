@@ -312,14 +312,21 @@ class ServerSession:
     def _headers(self) -> dict[str, str]:
         return {"X-Gimbal-Token": self.token}
 
-    async def cancel(self) -> bool:
-        """协作取消当前 run（步骤边界/未启动单元生效）。"""
+    async def cancel(self, *, scope: str = "step") -> bool:
+        """协作取消当前 run。
+
+        ``scope="step"``（缺省,超时路径/cases 链）:步骤边界/未启动单元生效;
+        ``scope="unit"``（graph 单元级取消方案 2026-11-02 P1）:执行器只停
+        调度,在飞单元跑完,未启动主体记 cancelled,after 照常。POST /runs
+        尚未返回 runId 时返回 False,调用方按节拍重试。
+        """
         if self._run_id is None or self._proc is None:
             return False
         try:
             async with httpx.AsyncClient(base_url=self._base, timeout=5.0,
                                          headers=self._headers()) as c:
-                r = await c.post(f"/runs/{self._run_id}/cancel")
+                r = await c.post(f"/runs/{self._run_id}/cancel",
+                                 json={"scope": scope})
                 return r.status_code == 200 and bool(r.json().get("accepted"))
         except Exception:  # noqa: BLE001
             return False

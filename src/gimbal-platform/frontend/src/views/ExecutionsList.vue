@@ -158,6 +158,10 @@
               <span :class="['status-tag', 'text-micro', 'font-semibold', `status-${row.status}`]">
                 {{ executionStatusText(row.status) }}
               </span>
+              <span v-if="row.cancel_requested && !isTerminalExecutionStatus(row.status)"
+                    class="status-tag text-micro font-semibold status-canceled ml-1"
+                    title="已请求取消:当前单元跑完后停止,后续单元记为已取消"
+                    data-testid="cancel-pending">取消中</span>
             </TableCell>
             <!-- 信号列(§3.2):"这单值不值得点开"提到列表层 -->
             <TableCell class="signals-cell">
@@ -179,7 +183,7 @@
                 <Button
                   v-if="row.cancelable"
                   variant="link" size="sm" class="h-7 px-2 text-amber-700"
-                  @click.stop="cancel(row.id)"
+                  @click.stop="cancel(row)"
                 >取消</Button>
               </div>
             </TableCell>
@@ -282,7 +286,7 @@ import {
   cancelExecution, getExecutionsSummary, listExecutions, rerunExecution,
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
-import { executionStatusText } from '@/utils/executionStatus'
+import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { isScenarioBacked } from '@/utils/executionKind'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
@@ -490,10 +494,12 @@ async function remove(id: number) {
 /** P4 协作式取消:按服务端 cancelable 标志显示。409 = 点击时单子已终态
  *  (竞态),或 running 的 graph 链不支持中途取消 —— 后者服务端 message
  *  有说明,原样透出。 */
-async function cancel(id: number) {
+async function cancel(row: ExecutionListItem) {
   try {
-    await cancelExecution(id)
-    toast.success('已请求取消')
+    await cancelExecution(row.id)
+    toast.success(row.kind === 'suite_graph'
+      ? '已请求取消:当前单元跑完后停止,后续单元记为已取消'
+      : '已请求取消')
   } catch (e) {
     const err = e as { status?: number; detail?: { message?: unknown } }
     if (err.status === 409) {

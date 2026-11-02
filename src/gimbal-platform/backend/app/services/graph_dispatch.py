@@ -347,12 +347,15 @@ async def execute_graph(
     *, on_event=None, on_log=None, log_counters: dict | None = None,
     chain: str = "legacy",
     m2_info: dict | None = None,
+    on_session=None,
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
     LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
 
     C12/C13：``chain="server"`` 走执行器 server 实例（POST /runs +
     SSE 消费）；legacy 走 run launch 子进程（stdout jsonl）。
+    ``on_session``（graph 单元级取消 P2）：server 链启动后把 ServerSession
+    交给调用方,供其在取消位置位时下发 ``cancel(scope="unit")``。
     """
     case_dir = run_dir / "case-graph"
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -368,6 +371,11 @@ async def execute_graph(
         # (泵排空后才返回),调用方 _fanout_graph 随后 finalize。
         await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir,
                        on_log=on_log, log_counters=log_counters)
+        if on_session is not None:
+            try:
+                on_session(ss)
+            except Exception:  # noqa: BLE001
+                pass
         try:
             return await ss.run_case(
                 case_path, n_runs=n_runs, on_event=on_event,

@@ -1209,6 +1209,39 @@ async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
 
 
 # ─── background fan-out ──────────────────────────────────────────
+def _start_cancel_poller(db_factory: Any, execution_id: int, *,
+                         on_set: Any = None) -> tuple[dict, "asyncio.Task"]:
+    """C11 取消轮询器(cases / graph 两链共用):DB 位 → 局部标志(0.5s 节拍)。
+
+    返回 ``(cancel_local, task)``;``cancel_local["set"]`` 由消费点同步读,
+    ``cancel_local["done"]`` 由调用方收尾置位。``on_set`` 在首次置位时
+    调一次(graph 链据此向执行器下发 scope=unit 取消)。
+    """
+    from . import execution_queue as _eq
+
+    cancel_local = {"set": False, "done": False}
+
+    async def _poll_cancel() -> None:
+        while not cancel_local["done"]:
+            try:
+                async with db_factory() as s:
+                    if await _eq.is_cancel_requested(s, execution_id):
+                        cancel_local["set"] = True
+                        if on_set is not None:
+                            try:
+                                on_set()
+                            except Exception:  # noqa: BLE001
+                                logger.exception(
+                                    "run_dispatcher: cancel on_set 回调异常 {}",
+                                    execution_id)
+                        return
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(0.5)
+
+    return cancel_local, asyncio.create_task(_poll_cancel())
+
+
 async def _fanout_graph(
     *,
     db_factory: Any,
@@ -1223,13 +1256,60 @@ async def _fanout_graph(
 ) -> None:
     """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
     事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
-    C12/C13：chain=server 时 spawn 走执行器 server 实例。"""
+    C12/C13：chain=server 时 spawn 走执行器 server 实例。
+
+    取消(graph 单元级取消方案 2026-11-02 P2):取消轮询器置位后 ——
+    ① 物化完成、下发执行器之前命中 → 不下发,canceled 零计数收口;
+    ② server 链在飞 → 向执行器下发 ``cancel(scope="unit")``(runId 返回
+    前每 0.5s 重试),执行器跑完在飞单元、未启动主体记 cancelled、after
+    照常;收口时至少一个主体单元 cancelled → 执行记 canceled,否则按
+    真实结果收口并在 config 写 ``cancelIgnored`` 留痕。legacy 链无单元级
+    信号(cancel 端点对其 409),这里只处理 ①。
+    """
+    from . import execution_queue as _eq
     from . import graph_dispatch
     from .graph_dispatch import GraphDispatchError
 
     ingester = _EventIngester(db_factory, execution_id)
     await ingester.seed_from_db()   # P3.5-2：恢复重跑事件 seq 续接
     ingester.start()
+
+    session_holder: dict = {}
+    deliver: dict = {"task": None, "accepted": False}
+
+    async def _deliver_unit_cancel() -> None:
+        # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
+        # 返回 False);执行已结束(done)则停
+        while not cancel_local["done"]:
+            ss = session_holder.get("ss")
+            if ss is not None:
+                try:
+                    if await ss.cancel(scope="unit"):
+                        deliver["accepted"] = True
+                        logger.info(
+                            "run_dispatcher: graph execution {} unit-level cancel "
+                            "accepted by executor", execution_id)
+                        return
+                except Exception:  # noqa: BLE001
+                    pass
+            await asyncio.sleep(0.5)
+
+    def _on_cancel_set() -> None:
+        if chain == "server" and deliver["task"] is None:
+            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
+
+    cancel_local, cancel_poller = _start_cancel_poller(
+        db_factory, execution_id, on_set=_on_cancel_set)
+
+    def _teardown() -> None:
+        # 进程内快速通道也算命中(写位与轮询之间的窗口),再出清
+        if execution_id in _eq._cancel_hint:
+            cancel_local["set"] = True
+        cancel_local["done"] = True
+        cancel_poller.cancel()
+        if deliver["task"] is not None:
+            deliver["task"].cancel()
+        _eq._cancel_hint.discard(execution_id)
     run_dir = _run_dir(run_id)
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1306,6 +1386,16 @@ async def _fanout_graph(
                 session, owner_id, graph_spec, full=True)
         graph = graph_bundle["graph"]
         graph_sem = graph_bundle
+        if cancel_local["set"] or execution_id in _eq._cancel_hint:
+            # ① 物化窗口取消:执行仍 queued、取消位已写 —— 不下发执行器,
+            # 走「启动前取消」口径(canceled、零计数;finally 收尾 ingester/轮询)
+            logger.info("run_dispatcher: graph execution {} canceled after "
+                        "materialize, before dispatch", execution_id)
+            # 与 finalize_canceled_before_start 同形:不回填 started_at(从未
+            # 启动),不发通知;_finalize_execution 会无条件回填 now,不用它
+            await transition_with_retry(db_factory, execution_id, STATUS_CANCELED)
+            _row_states.pop(execution_id, None)
+            return
         await _mark_running(db_factory, execution_id)
         # B-1(2026-10-13):suite 执行接入版本模型 —— 台账三件套与单场景
         # dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效
@@ -1391,7 +1481,8 @@ async def _fanout_graph(
             db_factory, execution_id, run_dir, graph,
             on_event=_on_event, on_log=ingester.on_log,
             log_counters=ingester.pump_counters, chain=chain,
-            m2_info=graph_sem.get("m2_info"))
+            m2_info=graph_sem.get("m2_info"),
+            on_session=lambda ss: session_holder.__setitem__("ss", ss))
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
             # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉
@@ -1409,6 +1500,27 @@ async def _fanout_graph(
         status = "dispatcher_error"
     finally:
         await ingester.finalize()
+        _teardown()
+
+    # ② 取消收口判定(方案 §2):取消位命中且至少一个**主体**单元被执行器记
+    # cancelled → 执行 canceled;命中但主体已全部启动/结束(没有单元可停)
+    # → 按真实结果收口,config.cancelIgnored 留痕供详情页解释。
+    main_refs = [u.get("ref") for u in graph_spec.get("units", []) if u.get("ref")]
+
+    def _is_main(uid: str) -> bool:
+        return any(uid == r or uid.startswith(r + "#") for r in main_refs)
+
+    main_cancelled = any(
+        ev.get("status") in ("cancelled", "canceled") and _is_main(uid)
+        for uid, ev in unit_events.items())
+    final_status: str | None = None
+    cancel_ignored: str | None = None
+    if cancel_local["set"] and result is not None:
+        if main_cancelled:
+            status = "canceled"
+            final_status = STATUS_CANCELED
+        else:
+            cancel_ignored = "all units already started"
 
     # 台账(重构方案第 3 处):seq=0 图行(与 at-most-once 恢复路径同形)
     # + seq=1..n 逐单元行(按物化单元清单顺序;×重复变体按 unit 标签
@@ -1487,19 +1599,24 @@ async def _fanout_graph(
                          passed=n_pass,
                          failed=n_fail,
                          skipped=max(len(ordered_units) - n_pass - n_fail, 0))
+    cfg_patch: dict = {}
     if proj.get("gates"):
         # 判定门结论(第 4 处):经事件通道落 config_json,21 页实测值来源
+        cfg_patch["gatesEvaluated"] = proj["gates"]
+    if cancel_ignored:
+        cfg_patch["cancelIgnored"] = cancel_ignored
+    if cfg_patch:
         try:
             async with db_factory() as session:
                 ex = await session.get(Execution, execution_id)
                 if ex is not None:
                     cfgj = dict(ex.config_json or {})
-                    cfgj["gatesEvaluated"] = proj["gates"]
+                    cfgj.update(cfg_patch)
                     ex.config_json = cfgj
                     await session.commit()
         except Exception:  # noqa: BLE001 — 结论留档 best-effort
             pass
-    await _finalize_execution(db_factory, execution_id)
+    await _finalize_execution(db_factory, execution_id, status=final_status)
 
 
 async def _fanout(
@@ -1543,20 +1660,7 @@ async def _fanout(
     from . import execution_queue as _eq
 
     # C11 取消轮询器:DB 位 → 局部标志(0.5s 节拍;行边界同步读)
-    cancel_local = {"set": False, "done": False}
-
-    async def _poll_cancel() -> None:
-        while not cancel_local["done"]:
-            try:
-                async with db_factory() as s:
-                    if await _eq.is_cancel_requested(s, execution_id):
-                        cancel_local["set"] = True
-                        return
-            except Exception:  # noqa: BLE001
-                pass
-            await asyncio.sleep(0.5)
-
-    cancel_poller = asyncio.create_task(_poll_cancel())
+    cancel_local, cancel_poller = _start_cancel_poller(db_factory, execution_id)
 
     async def _teardown() -> None:
         """fanout 收尾：停取消轮询、回收 server 实例、注销调试会话。"""

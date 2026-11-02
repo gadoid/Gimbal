@@ -80,6 +80,9 @@ export interface Execution {
    *  (不看执行状态,不消费取消位,cancel 端点同口径 409);其余 queued/
    *  running 为 true。 */
   cancelable?: boolean
+  /** 取消中(单元级取消方案 P4):取消位已写、任务仍活 —— graph 要等在飞
+   *  单元跑完才收口,期间 running && cancel_requested 显示「取消中」、按钮隐藏。 */
+  cancel_requested?: boolean
   /** 入站身份只读投影(全量评估 2026-11-02 #9):经由的别名 / 身份模式
    *  (personal=grant 用户,platform=系统用户)/ grant id / 调用方对账键。
    *  JWT 发起的执行四者皆 null。 */

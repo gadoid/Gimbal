@@ -212,6 +212,15 @@ describe('Executions.vue — P1 detail upgrades', () => {
     w2.unmount()
   })
 
+  it('取消中:running + cancel_requested → 状态显示「取消中」、无取消按钮(单元级取消 P4)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...runningDetail, cancelable: false, cancel_requested: true }
+    const wrapper = await mountPage()
+    expect(wrapper.text()).toContain('取消中(等待当前单元完成)')
+    expect(wrapper.findAll('button').find((b) => b.text() === '取消')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('running 但服务端 cancelable=false(graph 链)→ 不显示取消按钮(全量评估 #1)', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...runningDetail, cancelable: false }

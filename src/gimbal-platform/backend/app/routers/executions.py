@@ -277,15 +277,17 @@ async def list_executions(
     # G1:展示名一次批量查(可读活名;否则回落行上快照)
     disp = await execution_store.scenario_display_map(
         session, user, [e.scenario_id for e in rows])
-    # 可取消标志(#1):只对活跃行查任务体形态(graph 链不可中途取消)
-    graph_ids = await execution_store.graph_job_ids(
-        session, [e.id for e in rows if e.status in (STATUS_QUEUED, STATUS_RUNNING)])
+    # 可取消标志 / 取消中(#1 + 单元级取消方案 P3/P4):只对活跃行查任务体
+    active_ids = [e.id for e in rows if e.status in (STATUS_QUEUED, STATUS_RUNNING)]
+    uncancelable = await execution_store.uncancelable_graph_ids(session, active_ids)
+    cancel_req = await execution_store.cancel_requested_ids(session, active_ids)
     items = [
         execution_store.execution_list_item(
             e,
             consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
             has_scenario_snapshot=e.id in with_snap,
-            graph_job=e.id in graph_ids,
+            uncancelable_graph=e.id in uncancelable,
+            cancel_requested=e.id in cancel_req,
             **execution_store.display_kwargs(e, disp),
         )
         for e in rows
@@ -308,12 +310,16 @@ async def get_execution(
     user = principal.user
     disp = await execution_store.scenario_display_map(
         session, user, [ex.scenario_id])
-    graph_ids = (await execution_store.graph_job_ids(session, [ex.id])
-                 if ex.status in (STATUS_QUEUED, STATUS_RUNNING) else set())
+    active = ex.status in (STATUS_QUEUED, STATUS_RUNNING)
+    uncancelable = (await execution_store.uncancelable_graph_ids(session, [ex.id])
+                    if active else set())
+    cancel_req = (await execution_store.cancel_requested_ids(session, [ex.id])
+                  if active else set())
     out = execution_store.execution_out(
         ex,
         has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id),
-        graph_job=ex.id in graph_ids,
+        uncancelable_graph=ex.id in uncancelable,
+        cancel_requested=ex.id in cancel_req,
         **execution_store.display_kwargs(ex, disp),
     )
     # W21 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
@@ -871,13 +877,13 @@ async def cancel_execution(
     queued/running 立即终态化。终态单 409。server 链的在飞 run 由
     worker 侧 cancel 端点协作收口（步骤边界生效）。
 
-    已认领(job running)的 graph 链(Suite 编排 / ``POST /api/runs`` 带
-    graph)409 ``not_cancelable``:``_fanout_graph`` 全程不读取消位,写了
-    位只会静默跑完按 passed/failed 收口(全量评估 2026-11-02 #1 短期修法)。
-    按 job 状态而非执行状态判断 —— graph 执行要等物化完成才置 running,
-    期间执行仍 queued 但取消位已无人消费(核验补充)。job 仍 queued 的
-    graph 照常取消(worker 启动前检查有效)。中途取消语义(跑完当前单元
-    收口 vs 终止引擎 run)待拍板。
+    graph(Suite 编排 / ``POST /api/runs`` 带 graph;单元级取消方案 2026-11-02）:
+    server 链写取消位后由 ``_fanout_graph`` 下发执行器 ``cancel(scope=unit)``
+    —— 在飞单元跑完、未启动主体记 cancelled、after 照常,最终 canceled;
+    主体已全部启动则按真实结果收口并留 ``config.cancelIgnored``。**legacy 链**
+    graph 已认领(job running)仍 409 ``not_cancelable``(单子进程无单元级
+    信号);按 job 状态而非执行状态判断(物化窗口执行仍 queued)。job 仍
+    queued 的 graph 两条链都照常取消。
     """
     if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
         raise HTTPException(
@@ -887,16 +893,20 @@ async def cancel_execution(
                 "message": f"execution already {ex.status}",
             },
         )
-    if ex.id in await execution_store.graph_job_ids(session, [ex.id]):
+    if ex.id in await execution_store.uncancelable_graph_ids(session, [ex.id]):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "not_cancelable",
-                "message": "编排执行(graph)暂不支持中途取消:取消位不会被"
-                           "消费,执行会跑完并按结果收口;排队中的可取消",
+                "message": "legacy 链的编排执行(graph)不支持中途取消:取消位"
+                           "不会被消费,执行会跑完并按结果收口;排队中的可取消",
             },
         )
     live = await run_dispatcher.request_cancel(session, ex.id)
+    # 单元级取消方案 P4 顺带修:此前取消位只 execute 不 commit,DB 位从未
+    # 落库,全靠进程内 _cancel_hint 快速通道兜着(单进程下无感;重启/多实例
+    # 即丢,cancel_requested 投影也读不到)。
+    await session.commit()
     if not live:
         # N2:无活任务(job 终态或无 job 行)的僵尸单也走唯一终态迁移
         # (原子守卫;取消不发通知,与另两处 canceled 收口同口径);
@@ -909,8 +919,10 @@ async def cancel_execution(
         "fn": "cancel", "execution": ex.id})
     disp = await execution_store.scenario_display_map(
         session, principal.user, [ex.scenario_id])
+    # 取消位已写(live)→ 响应即呈「取消中」;僵尸单已终态化,无取消中态
     return execution_store.execution_out(
-        ex, **execution_store.display_kwargs(ex, disp))
+        ex, cancel_requested=bool(live),
+        **execution_store.display_kwargs(ex, disp))
 
 
 # ── C6(P3-04):调试台代理(执行器 token 不出后端)────────────────
