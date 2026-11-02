@@ -157,10 +157,15 @@ class StrategyDispatcher:
             )
         result.duration_ms = (time.monotonic() - t0) * 1000
         result.strategy_id = result.strategy_id or strategy_id
-        # 软失败标记：spec.onFailure != ABORT 时，即使失败也仅记录不中止
+        # 软失败标记：spec.onFailure != ABORT 时，FAILED 仅记录不中止。
+        # ERROR（系统异常 / 执行器未注册 / 执行器抛异常）永远不是 soft
+        # （executor_base.StrategyResult 契约 + docs/modules/strategy.md）：
+        # 此前对 failed 一律置 soft，onFailure=CONTINUE/WARN 的断言执行器
+        # 抛异常、策略 kind 拼错时步骤会被判 PASSED（全量评估 2026-11-02 #5）。
         from gimbal.schema import FailurePolicy
         on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
-        if result.failed and on_failure != FailurePolicy.ABORT:
+        if (result.status == StrategyStatus.FAILED
+                and on_failure != FailurePolicy.ABORT):
             result.soft = True
             logger.debug(
                 "[StrategyDispatcher] Strategy marked soft-fail: strategy_id={} onFailure={}",
@@ -182,8 +187,8 @@ class StrategyDispatcher:
     ) -> list[StrategyResult]:
         """执行属于指定 phase 的所有策略，按 order 排序后顺序执行。
 
-        遇到 hard-fail（onFailure=ABORT 且结果为 FAILED/ERROR）时提前终止。
-        软失败（onFailure=CONTINUE/WARN）则记录并继续。
+        遇到 hard-fail（结果为 ERROR，或 onFailure=ABORT 且结果为 FAILED）时
+        提前终止。软失败（onFailure=CONTINUE/WARN 的 FAILED）则记录并继续。
 
         Returns:
             已执行策略的结果列表（包括提前终止前已完成的部分）。
