@@ -157,6 +157,18 @@ async def redeliver(
         payload["deliveryId"] = fresh.id
         payload["redeliveredFrom"] = row.id
         fresh.body = json.dumps(payload, ensure_ascii=False, default=str)
+    # 全量评估 2026-11-02 #8:手工干预入审计(同事务;入站动作已在 G4 入审计,
+    # admin/属主的补发此前反而是盲区)。resource = 别名,与入站域同面查看。
+    from ..services import audit as audit_svc
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="webhook.redeliver", resource_type="alias",
+        resource_id=row.alias_name,
+        detail={"delivery": row.id, "new_delivery": fresh.id,
+                "event_type": row.event_type,
+                "execution": row.execution_id, "instance": row.instance_id,
+                "url": row.url})
     await db.commit()
     await db.refresh(fresh)
     webhook_outbox.wake()

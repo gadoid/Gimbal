@@ -48,6 +48,9 @@ AUDIT_ACTIONS = (
     "inbound.run",                # 经别名发起/取消执行(场景 / 临时调用 / 取消)
     "inbound.task.write",         # 经别名注册/修改/删除/触发集成任务
     "inbound.grant_rebind",       # 带新 grant PATCH 任务 → grant_id 换绑
+    # ── 回调投递的人工干预(全量评估 2026-11-02 #8):admin / 别名属主
+    # 点补发,resource = 别名(与入站域同面查看)
+    "webhook.redeliver",          # 人工补发回调(新建一行 pending)
 )
 
 

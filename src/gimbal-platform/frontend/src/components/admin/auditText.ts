@@ -40,6 +40,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'inbound.run': '经别名发起执行',
   'inbound.task.write': '经别名变更集成任务',
   'inbound.grant_rebind': '集成任务换绑授权',
+  // 回调投递人工干预(全量评估 2026-11-02 #8)
+  'webhook.redeliver': '人工补发回调',
 }
 
 export function auditActionLabel(action: string): string {
@@ -59,6 +61,7 @@ const ACTION_DOMAIN_LABELS: Record<string, string> = {
   scenario: '场景',
   integration: '集成',
   inbound: '入站调用',
+  webhook: '回调投递',
 }
 
 export interface AuditActionGroup {
@@ -282,6 +285,11 @@ export function describeAuditDetail(row: AuditLogRow): string {
       const name = s(d.name) ? `「${s(d.name)}」` : `#${String(d.task ?? '')}`
       const from = d.grant_from != null ? `grant #${String(d.grant_from)}` : '无'
       return `集成任务${name}换绑授权：${from} → grant #${String(d.grant_id ?? '')}${d.resumed ? '，实例已恢复' : ''}`
+    }
+    case 'webhook.redeliver': {
+      const target = d.execution != null ? `执行 #${String(d.execution)}`
+        : d.instance != null ? `集成实例 #${String(d.instance)}` : ''
+      return `补发别名「${rid}」的回调 ${s(d.event_type)}${target ? `（${target}）` : ''}：投递 #${String(d.delivery ?? '')} → 新投递 #${String(d.new_delivery ?? '')}`
     }
     case 'inbound.auth_failed':
       return `入站认证失败：${s(d.reason) || '未知原因'}${s(d.message) ? `（${s(d.message)}）` : ''}`

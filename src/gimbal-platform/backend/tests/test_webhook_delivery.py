@@ -652,6 +652,14 @@ class TestRedeliver:
                     if k not in ("deliveryId", "redeliveredFrom")} == {
                 "event": "execution.finished", "executionId": 7}
             assert old_body["deliveryId"] == 0
+            # 全量评估 2026-11-02 #8:人工补发入审计(resource = 别名)
+            from app.models.permission import AuditLog
+            logs = (await s.execute(sa.select(AuditLog).where(
+                AuditLog.action == "webhook.redeliver"))).scalars().all()
+            assert len(logs) == 1
+            assert logs[0].resource_id == "agent-sys"
+            assert logs[0].detail["delivery"] == old_id
+            assert logs[0].detail["new_delivery"] == out["id"]
         # 新行可被投递循环领取(领取后推进租约、仍 pending)
         jobs = await wo._claim(db_module.SessionLocal)
         assert [j.id for j in jobs] == [out["id"]]
