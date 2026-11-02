@@ -1274,42 +1274,6 @@ async def _fanout_graph(
     await ingester.seed_from_db()   # P3.5-2：恢复重跑事件 seq 续接
     ingester.start()
 
-    session_holder: dict = {}
-    deliver: dict = {"task": None, "accepted": False}
-
-    async def _deliver_unit_cancel() -> None:
-        # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
-        # 返回 False);执行已结束(done)则停
-        while not cancel_local["done"]:
-            ss = session_holder.get("ss")
-            if ss is not None:
-                try:
-                    if await ss.cancel(scope="unit"):
-                        deliver["accepted"] = True
-                        logger.info(
-                            "run_dispatcher: graph execution {} unit-level cancel "
-                            "accepted by executor", execution_id)
-                        return
-                except Exception:  # noqa: BLE001
-                    pass
-            await asyncio.sleep(0.5)
-
-    def _on_cancel_set() -> None:
-        if chain == "server" and deliver["task"] is None:
-            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
-
-    cancel_local, cancel_poller = _start_cancel_poller(
-        db_factory, execution_id, on_set=_on_cancel_set)
-
-    def _teardown() -> None:
-        # 进程内快速通道也算命中(写位与轮询之间的窗口),再出清
-        if execution_id in _eq._cancel_hint:
-            cancel_local["set"] = True
-        cancel_local["done"] = True
-        cancel_poller.cancel()
-        if deliver["task"] is not None:
-            deliver["task"].cancel()
-        _eq._cancel_hint.discard(execution_id)
     run_dir = _run_dir(run_id)
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1370,6 +1334,46 @@ async def _fanout_graph(
                 f"({_prior} prior events, 不整图重放)"))
         await ingester.finalize()
         return
+
+    # 取消轮询器只在真正要下发的路径上启动:上面的恢复分支在 try/finally
+    # 之前返回,_teardown 不会执行 —— 若在此之前启动,轮询任务会一直查库到
+    # 进程退出(恢复后执行已 failed,取消位永远不会置上)。
+    session_holder: dict = {}
+    deliver: dict = {"task": None, "accepted": False}
+
+    async def _deliver_unit_cancel() -> None:
+        # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
+        # 返回 False);执行已结束(done)则停
+        while not cancel_local["done"]:
+            ss = session_holder.get("ss")
+            if ss is not None:
+                try:
+                    if await ss.cancel(scope="unit"):
+                        deliver["accepted"] = True
+                        logger.info(
+                            "run_dispatcher: graph execution {} unit-level cancel "
+                            "accepted by executor", execution_id)
+                        return
+                except Exception:  # noqa: BLE001
+                    pass
+            await asyncio.sleep(0.5)
+
+    def _on_cancel_set() -> None:
+        if chain == "server" and deliver["task"] is None:
+            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
+
+    cancel_local, cancel_poller = _start_cancel_poller(
+        db_factory, execution_id, on_set=_on_cancel_set)
+
+    def _teardown() -> None:
+        # 进程内快速通道也算命中(写位与轮询之间的窗口),再出清
+        if execution_id in _eq._cancel_hint:
+            cancel_local["set"] = True
+        cancel_local["done"] = True
+        cancel_poller.cancel()
+        if deliver["task"] is not None:
+            deliver["task"].cancel()
+        _eq._cancel_hint.discard(execution_id)
 
     # 逐单元事件投影(重构方案第 3 处):unit → {started_at, finished_at,
     # status};blocked/cancelled 单元不发事件,从 run.finished.details 按

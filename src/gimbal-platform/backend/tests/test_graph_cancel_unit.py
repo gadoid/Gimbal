@@ -211,3 +211,47 @@ class TestServerGraphUnitCancel:
         assert (ex.passed, ex.failed, ex.skipped) == (0, 0, 0)
         assert ex.started_at is None                 # 从未启动,不回填
         assert FakeServerSession.instances == []     # 未下发
+
+
+def _live_cancel_pollers() -> set:
+    return {t for t in asyncio.all_tasks()
+            if not t.done()
+            and "_poll_cancel" in getattr(t.get_coro(), "__qualname__", "")}
+
+
+class TestGraphRecoveryNoPollerLeak:
+    async def test_at_most_once_recovery_does_not_leak_cancel_poller(
+            self, client, monkeypatch):
+        """恢复分支(已有事件 → failed 收口、不重放)在 try/finally 之前返回,
+        _teardown 不执行;取消轮询器若在此之前启动,会每 0.5s 查库直到进程
+        退出(恢复后执行已 failed,取消位永远不会置上)。"""
+        from app.models.execution import ExecutionJob
+        from app.services import run_dispatcher as rd
+
+        headers = await _setup(client, monkeypatch)
+        exec_id = await _post_graph(client, headers)
+        sess = await _wait_session()
+        sess.release.set()                           # 正常跑完,留下事件
+        ex = await _wait_terminal(exec_id)
+        assert ex.status == "done"
+
+        # 崩溃残留:事件已落库、执行回到未终态,job 重放同一配方
+        async with db_module.SessionLocal() as s:
+            payload = (await s.execute(
+                sa.select(ExecutionJob.payload)
+                .where(ExecutionJob.execution_id == exec_id))).scalar_one()
+            ex = await s.get(Execution, exec_id)
+            ex.status = "queued"
+            ex.finished_at = None
+            await s.commit()
+
+        before = _live_cancel_pollers()
+        await rd.run_job_from_payload({"payload": payload})
+        await asyncio.sleep(0)
+
+        async with db_module.SessionLocal() as s:
+            ex = await s.get(Execution, exec_id)
+        assert ex.status == "failed"
+        assert "at-most-once" in (ex.config_json or {}).get("dispatcherError", "")
+        assert len(FakeServerSession.instances) == 1     # 恢复未再下发
+        assert _live_cancel_pollers() - before == set()
