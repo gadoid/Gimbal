@@ -468,3 +468,22 @@ class TestCancelAndMultiplication:
                          json={"command": {"kind": "continue"}}, headers=h)
         assert rd.status_code == 200
         _wait_finished(client, rid)
+
+
+class TestHealthzCapability:
+    def test_healthz_reports_version_and_cancel_scopes(self):
+        """能力上报(单元级取消方案 §6「可」项):平台 ServerSession.start 建连
+        轮询 healthz 并读 body,据 cancel_scopes 判定能否下发 scope=unit ——
+        旧执行器 body 无这些键 = 空能力,平台按不可单元级取消处理。"""
+        from gimbal.core.server import SERVER_CANCEL_SCOPES
+        from gimbal.version import __version__
+        app = create_app(CLIContext())
+        c = fastapi_testclient.TestClient(app, client=("127.0.0.1", 50000))
+        r = c.get("/healthz")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["version"] == __version__
+        assert body["cancel_scopes"] == list(SERVER_CANCEL_SCOPES) == ["step", "unit"]
+        # openapi 版本面同源(不再硬编码)
+        assert c.get("/openapi.json").json()["info"]["version"] == __version__

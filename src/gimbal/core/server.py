@@ -25,8 +25,15 @@ import typer
 from gimbal.cli.context import CLIContext
 from gimbal.schema import RunOptions  # noqa: F401（RunsRequest 类型引用）
 from gimbal.log import get_logger
+from gimbal.version import __version__
 
 logger = get_logger(__name__)
+
+# server cancel 端点接受的 scope 集合(graph 单元级取消方案 §6「可」项):
+# healthz 据此上报能力位 —— 旧执行器 body 无 cancel_scopes 键 = 空能力,
+# 平台按「不可单元级取消」处理(409)而非把 scope=unit 当 step 执行
+# (旧实现带 A0 缺陷:取消会跳过 after 括号)。
+SERVER_CANCEL_SCOPES = ("step", "unit")
 
 
 @dataclass
@@ -141,7 +148,7 @@ def create_app(cli_ctx: CLIContext) -> "FastAPI":
     未来其它托管方式(uvicorn worker / 容器)复用。"""
     from fastapi import FastAPI, HTTPException
 
-    app = FastAPI(title="Gimbal runner", version="0.1.0")
+    app = FastAPI(title="Gimbal runner", version=__version__)
     # 引擎设施(EventBus/插件/Reporter)按单 run 设计 → 串行执行
     run_lock = asyncio.Lock()
 
@@ -156,7 +163,10 @@ def create_app(cli_ctx: CLIContext) -> "FastAPI":
 
     @app.get("/healthz")
     async def healthz() -> dict:
-        return {"ok": True}
+        # 能力上报:平台 ServerSession.start 建连时轮询本端点(只看 200 →
+        # 现在也读 body),据此记录执行器版本与 cancel 能力位。
+        return {"ok": True, "version": __version__,
+                "cancel_scopes": list(SERVER_CANCEL_SCOPES)}
 
     return app  # type: ignore[return-value]
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from typing import Annotated
 from pathlib import Path
 from pprint import pprint
@@ -22,6 +23,34 @@ from gimbal.log import get_logger
 from gimbal.schema import Scenario
 
 logger = get_logger(__name__)
+
+
+def _watch_cancel_file(path: str) -> tuple["threading.Event", "threading.Event"]:
+    """--cancel-file 轮询器:文件出现 → 置 drain(单元级取消,E2 语义)。
+
+    返回 ``(drain, stop)``;调用方在引擎收尾时置 ``stop`` 停线程。守护线程
+    + 0.5s 节拍(与平台取消轮询器同节拍);文件语义 = 存在即取消 —— 不依赖
+    unlink(Windows 删除有延迟),信号文件由编排方(平台 legacy 链)在
+    run_dir 下创建、teardown 清理。drain 只停调度:在飞单元跑完、未启动
+    主体记 cancelled、after 括号必达,与 server cancel scope=unit 同语义。
+    """
+    drain = threading.Event()
+    stop = threading.Event()
+    target = Path(path)
+
+    def _loop() -> None:
+        while not stop.is_set():
+            try:
+                if target.exists():
+                    drain.set()
+                    return
+            except OSError:  # noqa: BLE001 — 路径暂不可达按未取消处理
+                pass
+            stop.wait(0.5)
+
+    threading.Thread(target=_loop, name="cancel-file-watch",
+                     daemon=True).start()
+    return drain, stop
 
 
 class InputError(typer.BadParameter):
@@ -186,6 +215,13 @@ def launch(
         typer.Option("--parallel", min=1, max=64, help="graph 单元级并发上限"
                      "（N4；单 scenario 忽略）", rich_help_panel="执行控制"),
     ] = 1,
+    cancel_file: Annotated[
+        str | None,
+        typer.Option("--cancel-file", help="单元级取消信号文件:文件出现即触发 ——"
+                     " 跑完在飞单元、未启动主体记 cancelled、after 照常(与 server"
+                     " cancel scope=unit 同语义;供编排方跨进程下发,如平台 legacy 链)",
+                     rich_help_panel="执行控制"),
+    ] = None,
     # ========== 步骤级控制（阶段 1 最小子集）==========
     step_from: Annotated[
         int | None,
@@ -355,6 +391,15 @@ def launch(
         )
     # v2.1 批次 E：step_from 生效（区间外 step 跳过，所需输入由 vars/inputs 提供）
 
+    # --cancel-file:跨进程单元级取消(平台 legacy 链)。drain 只停调度,
+    # 与 halt/cancel(step 级截断)语义不同 —— 不置 cancel_event。
+    cancel_watcher_stop: threading.Event | None = None
+    if cancel_file is not None:
+        drain, cancel_watcher_stop = _watch_cancel_file(cancel_file)
+        if runtime_control is None:
+            runtime_control = RuntimeControl()
+        runtime_control.drain_event = drain
+
     # 7.6 debugger 装载（v2.1 批次 E）：仅单单元且 n_runs=1；调试挂起不计超时
     debugger = None
     if debug:
@@ -400,6 +445,8 @@ def launch(
     try:
         result = engine.run(scenario, runtime_control=runtime_control)
     finally:
+        if cancel_watcher_stop is not None:
+            cancel_watcher_stop.set()
         if debugger is not None:
             debugger.deactivate(configuration.hook_registry)
         if jsonl_sub is not None:

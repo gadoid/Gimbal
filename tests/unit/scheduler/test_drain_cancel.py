@@ -216,3 +216,57 @@ class TestAfterBracketSurvivesOuterCancel:
         by_id = {d["scenario_id"]: d for d in result.details}
         assert by_id["a"]["status"] == "cancelled"
         assert echo.sent == []
+
+
+class TestCancelFileWatcher:
+    """--cancel-file 轮询器(legacy 链跨进程单元级取消通道):文件出现 → 置
+    drain;stop 停线程;drain → PlanScheduler 全链路与 server scope=unit 同义。"""
+
+    def test_file_appears_sets_drain(self, tmp_path) -> None:
+        from gimbal.cli.commands.run_launch import _watch_cancel_file
+        drain, stop = _watch_cancel_file(str(tmp_path / "cancel-unit"))
+        assert not drain.is_set()
+        (tmp_path / "cancel-unit").write_text("", encoding="utf-8")
+        deadline = time.time() + 2.0          # 0.5s 节拍,2s 足够
+        while not drain.is_set() and time.time() < deadline:
+            time.sleep(0.05)
+        assert drain.is_set()
+        stop.set()
+
+    def test_stop_before_file_keeps_drain_unset(self, tmp_path) -> None:
+        from gimbal.cli.commands.run_launch import _watch_cancel_file
+        signal_file = tmp_path / "cancel-unit"
+        drain, stop = _watch_cancel_file(str(signal_file))
+        stop.set()
+        time.sleep(0.7)                       # 跨过一个轮询节拍
+        signal_file.write_text("", encoding="utf-8")
+        time.sleep(0.7)
+        assert not drain.is_set()             # 已停的轮询器不再消费信号
+
+    def test_full_channel_cancels_rest_after_inflight(self, tmp_path) -> None:
+        """u0 启动时编排方写 cancel 文件 → 轮询器置 drain → u0 跑完、u1/u2
+        cancelled、after 照常(与 test_serial_first_finishes_rest_cancelled 同
+        期望,信号源换成文件)。"""
+        from gimbal.cli.commands.run_launch import _watch_cancel_file
+        signal_file = tmp_path / "cancel-unit"
+        drain, stop = _watch_cancel_file(str(signal_file))
+
+        class _FileRecorder(_Recorder):
+            def __call__(self, unit, inputs, cancel=None):
+                if unit.id == "u0":
+                    signal_file.write_text("", encoding="utf-8")
+                    deadline = time.time() + 2.0
+                    while not drain.is_set() and time.time() < deadline:
+                        time.sleep(0.05)      # 等轮询器消费,确保在 u0 在飞时置位
+                return super().__call__(unit, inputs, cancel=cancel)
+
+        try:
+            rec = _FileRecorder(drain, sleep=0.05)
+            outcome = PlanScheduler().run(
+                _plan(3, parallel=1), rec, stop_requested=drain.is_set)
+        finally:
+            stop.set()
+        assert outcome.results["u0"].status == "passed"
+        assert outcome.cancelled == {"u1", "u2"}
+        assert outcome.results["z0"].status == "passed"
+        assert rec.started == ["u0", "z0"]
