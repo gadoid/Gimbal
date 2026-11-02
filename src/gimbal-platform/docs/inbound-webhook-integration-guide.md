@@ -19,7 +19,7 @@
 
 | 令牌 | 携带 | 证明什么 | 获取 | 生命周期 |
 | --- | --- | --- | --- | --- |
-| 入站凭证 `gic_…` | `Authorization: Bearer gic_…` | 调用方是某个已启用入站的别名 | 别名详情页生成(明文只显示一次) | 长期;可吊销,轮换 = 吊销旧 + 生成新 |
+| 入站凭证 `gic_…` | `Authorization: Bearer gic_…` | 调用方是某个已启用入站的别名 | 别名详情页生成(明文只显示一次) | 长期;可吊销,轮换 = 吊销旧 + 生成新;吊销不影响已注册任务(见 §6) |
 | grant `ggt_…` | `X-Gimbal-Grant: ggt_…` | 某用户授权该别名代其执行 | 用户在别名详情页签发(明文只显示一次) | 默认 90 天,上限 365 天;可随时撤销 |
 
 规则:
@@ -155,7 +155,7 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
 | --- | --- |
 | `execution.finished` | 执行终态(含 canceled —— 用户取消/启动前取消/对账遇取消 job 三条路径都发) |
 | `integration.run_finished` | 集成实例一次运行收口 |
-| `integration.paused` | 集成实例暂停(reason ∈ missing_credential / auth_failed / fail_streak / template_changed / made_private / grant_revoked / scope_denied) |
+| `integration.paused` | 集成实例暂停(reason ∈ missing_credential / auth_failed / fail_streak / template_changed / made_private / grant_revoked / scope_denied / inbound_disabled) |
 
 JWT(前端)发起的执行没有 caller,不回调。**公共模板只有注册方自己
 的实例回调**;订阅者实例按自身身份运行,不向原注册方回调(D12)。
@@ -261,6 +261,17 @@ grant 默认 90 天有效,每个入站注册的个人模式任务到期前都要
 `scope_denied`(通知全体 admin/operator):把场景公开或改用别名属主
 自己的场景后,由 owner/admin 在集成详情「启动」恢复;下次运行再过
 范围闸,仍不满足只是再次暂停。
+
+**别名开关与凭证吊销是两回事**(全量评估 2026-11-02 #6):
+
+- 别名属主关闭「允许入站调用」= kill switch:新调用立即 401
+  `inbound_disabled`;经该别名注册的定时任务(两种身份模式、含订阅者
+  实例)在**下次运行前**暂停(`paused_reason=inbound_disabled`,发
+  `integration.paused` 回调)。重新开启**不**自动解暂停,由任务 owner/
+  admin 在集成详情「启动」恢复;仍关闭则下次运行再次暂停。
+- 吊销单个 `gic_` **不**影响已注册任务 —— 任务的信任单元是别名而不是
+  某个凭证,否则凭证轮换(先生成新、再吊销旧)会把调用方的全部任务停掉。
+  要停任务请关开关。
 
 用户被**停用**时其名下 grant 全部撤销(并写审计);重新启用**不**恢复
 grant,需要本人重新签发(然后同样走上面的 PATCH 重绑)。认证时另查

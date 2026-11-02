@@ -427,3 +427,63 @@ class TestOutboxEdges:
         assert row.status == "delivered"
         assert row.attempts == 1
         assert row.last_error is None
+
+
+# ── 全量评估 2026-11-02 #6:别名开关 vs 凭证吊销 ───────────────────────
+
+
+async def _set_inbound(alias: str, enabled: bool) -> None:
+    async with db_module.SessionLocal() as s:
+        row = await s.get(ServiceAlias, alias)
+        row.inbound_enabled = enabled
+        await s.commit()
+
+
+class TestInboundSwitchVsCredentialRevoke:
+    async def test_disable_inbound_pauses_task_and_restart_after_reenable(
+            self, client, monkeypatch):
+        """关「允许入站调用」→ 下次运行前暂停 inbound_disabled(回调 +
+        时间线);重新开启后「启动」恢复 → 下次运行通过。"""
+        await _seed_platform_user()
+        await _seed_alias()
+        h = await _register(client, "hb_sw")
+        tid, iid, _token, _gid = await _register_personal_task(
+            client, h, "hb_sw", "sc-hb-sw", "hbsw")
+        await _set_inbound("agent-sys", False)
+        await ir.run_instance(iid)
+        inst = await _row(iid)
+        assert inst.state == "paused"
+        assert inst.paused_reason == "inbound_disabled"
+        assert "允许入站调用" in inst.last_error
+        paused = [d for d in await deliveries()
+                  if d.event_type == "integration.paused"]
+        assert paused and '"inbound_disabled"' in paused[-1].body
+        # 重新开启 + 「启动」(白名单内,200)→ idle → 真正跑完
+        await _set_inbound("agent-sys", True)
+        r = await client.post(
+            f"/api/integration/tasks/{tid}/subscription/resume", headers=h)
+        assert r.status_code == 200, r.text
+        assert (await _row(iid)).state == "idle"
+        _stub_run_ok(monkeypatch, "sc-hb-sw")
+        await ir.run_instance(iid)
+        inst = await _row(iid)
+        assert inst.state == "idle" and inst.run_status == "ok"
+
+    async def test_revoking_credential_does_not_touch_tasks(
+            self, client, monkeypatch):
+        """吊销别名下全部 gic_:已注册任务照常运行(信任单元是别名)。"""
+        from app.models.inbound_identity import InboundCredential
+
+        await _seed_platform_user()
+        await _seed_alias()
+        h = await _register(client, "hb_rv")
+        _tid, iid, _token, _gid = await _register_personal_task(
+            client, h, "hb_rv", "sc-hb-rv", "hbrv")
+        async with db_module.SessionLocal() as s:
+            await s.execute(sa.update(InboundCredential).values(
+                revoked_at=datetime.now(timezone.utc)))
+            await s.commit()
+        _stub_run_ok(monkeypatch, "sc-hb-rv")
+        await ir.run_instance(iid)
+        inst = await _row(iid)
+        assert inst.state == "idle" and inst.run_status == "ok"

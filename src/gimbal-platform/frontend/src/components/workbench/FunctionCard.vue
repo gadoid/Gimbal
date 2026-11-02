@@ -53,6 +53,12 @@
                 :data-testid="`${t}-restart`"
                 @click="doResume">启动</button>
       </p>
+      <p v-else-if="data?.pausedReason === 'inbound_disabled'" class="fn-note warn">
+        调用方别名已关闭「允许入站调用」,已暂停 — 别名重新开启后可启动
+        <button v-if="canRestart" type="button" class="fn-run"
+                :data-testid="`${t}-restart`"
+                @click="doResume">启动</button>
+      </p>
       <p v-else class="fn-note warn">
         {{ data?.identityMode === 'platform' ? '已暂停(管理员)' : '已由你暂停' }}
         <button v-if="canRestart" type="button" class="fn-run"
@@ -197,10 +203,12 @@ const reconfirmText = computed(() => {
 })
 /** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复);
  * 修复复核 §3.1:scope_denied(平台模式场景出范围)场景修复后也由
- * 「启动」恢复。grant_revoked 不在此列 —— 由调用方带新 grant PATCH 重绑 */
+ * 「启动」恢复;inbound_disabled(调用方别名关闭入站,全量评估 #6)
+ * 同口径。grant_revoked 不在此列 —— 由调用方带新 grant PATCH 重绑 */
 const pausedGate = computed(() => {
   const r = data.value?.pausedReason
   return r === 'manual' || r === 'fail_streak' || r === 'scope_denied'
+    || r === 'inbound_disabled'
 })
 /** 与后端 FAIL_STREAK_AUTO_PAUSE 同值(failStreak 缺失时的显示兜底) */
 const FAIL_STREAK_AUTO_PAUSE = 5
@@ -232,6 +240,7 @@ const badge = computed(() => {
     if (d.pausedReason === 'made_private') return '已转私有'
     if (d.pausedReason === 'grant_revoked') return '授权已失效'
     if (d.pausedReason === 'scope_denied') return '无权用该场景'
+    if (d.pausedReason === 'inbound_disabled') return '入站已关闭'
     if (d.pausedReason === 'manual') return '已暂停'
     if (d.pausedReason === 'fail_streak') return '连续失败暂停'
     return '已暂停'

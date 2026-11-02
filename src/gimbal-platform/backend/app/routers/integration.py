@@ -848,7 +848,9 @@ async def resume_my_subscription(
     下次运行再过范围闸,仍不满足只是再次暂停);其余暂停原因各有专属
     路径,恢复操作不代偿:template_changed/made_private → 重新订阅确认;
     missing_credential → 补配凭证(复活钩子自动恢复);grant_revoked →
-    调用方带新 grant PATCH 重新绑定(修复复核 §2)。
+    调用方带新 grant PATCH 重新绑定(修复复核 §2)。inbound_disabled
+    (别名关闭「允许入站调用」,全量评估 2026-11-02 #6)同 scope_denied:
+    重新开启后由 owner/admin 启动,仍关闭则下次运行再次暂停。
     W4:平台模式对 owner/admin 开放(恢复平台唯一实例)。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
@@ -863,7 +865,7 @@ async def resume_my_subscription(
         _subscribable(tpl, user)
         inst = await _my_subscription(db, tpl, user)
     if inst.state == "paused" and inst.paused_reason not in (
-            "manual", "fail_streak", "scope_denied"):
+            "manual", "fail_streak", "scope_denied", "inbound_disabled"):
         raise _bad(
             "resume_not_allowed",
             f"该暂停({inst.paused_reason})不能由恢复操作解除:"
@@ -872,7 +874,8 @@ async def resume_my_subscription(
             " grant 并由调用方带新 grant 对任务 PATCH 重新绑定", 409)
     if inst.state == "paused":
         via = (inst.paused_reason
-               if inst.paused_reason in ("fail_streak", "scope_denied")
+               if inst.paused_reason in ("fail_streak", "scope_denied",
+                                         "inbound_disabled")
                else "manual")
         await _resume_instance(db, tpl, inst, actor_id=user.id, via=via)
     return await _tpl_out_full(db, tpl, inst, user)

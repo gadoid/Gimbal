@@ -888,6 +888,25 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     "请在编排器钉定修订后重试(外部服务不受影响)",
                     lease=lease)
 
+            # 全量评估 2026-11-02 #6:别名的「允许入站调用」开关是运营者心中
+            # 的 kill switch —— 关闭后经该别名注册的任务(两种身份模式、含
+            # 订阅者实例)运行前一律以 run=auth 暂停(inbound_disabled)并发
+            # integration.paused 回调;重新开启后由 owner/admin 在集成详情
+            # 「启动」恢复(不自动解暂停)。吊销单个 gic_ **不**影响已注册
+            # 任务:任务的信任单元是别名而非某个凭证,否则凭证轮换(先发新
+            # 再吊旧)会把调用方的全部任务停掉。JWT 建的任务(caller 为空)
+            # 不受影响。
+            if tpl.caller_alias_name:
+                from ..models.service_alias import ServiceAlias as _SA
+                _alias_row = await db.get(_SA, tpl.caller_alias_name)
+                if _alias_row is None or not _alias_row.inbound_enabled:
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        f"别名 {tpl.caller_alias_name} 已关闭「允许入站调用」"
+                        "(或已删除),经该别名注册的任务已暂停;重新开启后"
+                        "在集成详情「启动」恢复",
+                        pause_reason="inbound_disabled", lease=lease)
+
             # P1-5(webhook 设计 v3 §4.4):入站注册的 grant 每次实例运行
             # 前重校验 —— 失效(撤销/过期)以 run=auth 暂停(grant_
             # revoked,不按周期重试)并发 integration.paused 回调(D9)。

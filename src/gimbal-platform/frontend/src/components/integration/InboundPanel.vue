@@ -22,6 +22,10 @@
                   :disabled="!canManage" @update:model-value="v => saveSettings({ inboundEnabled: v })" />
           允许入站调用(Kind=external 专属)
         </label>
+        <p class="muted text-caption pl-11" data-testid="inbound-toggle-hint">
+          关闭后新调用立即 401;经本别名注册的定时任务在下次运行前暂停
+          (原因「入站已关闭」),重新开启后由任务 owner/admin 在集成详情「启动」恢复
+        </p>
         <label class="flex items-center gap-2 text-body" data-testid="callback-toggle">
           <Switch :model-value="settings.callbackEnabled"
                   :disabled="!canManage" @update:model-value="v => saveSettings({ callbackEnabled: v })" />
@@ -64,7 +68,8 @@
       <div class="svc-panel-head">
         <span class="svc-panel-title">入站凭证(gic_)</span>
         <span class="svc-panel-desc">
-          Authorization: Bearer gic_…;吊销立即失效,轮换 = 吊销旧 + 生成新
+          Authorization: Bearer gic_…;吊销立即失效,轮换 = 吊销旧 + 生成新;
+          吊销不影响已注册的定时任务(任务以别名为信任单元,要停任务请关闭上方「允许入站调用」)
         </span>
         <span class="flex-1" />
         <Button variant="outline" size="sm" :disabled="!canManage" data-testid="create-credential"
