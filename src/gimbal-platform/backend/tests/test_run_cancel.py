@@ -172,16 +172,22 @@ async def test_cancel_running_zombie_finalizes_immediately(client):
 
 
 async def _seed_job(execution_id: int, *, kind: str, status: str,
-                    chain: str = "legacy") -> None:
-    """挂一行 execution_jobs(不经 dispatch,无 worker 认领)。"""
+                    chain: str = "legacy", unit_cancel: bool | None = None) -> None:
+    """挂一行 execution_jobs(不经 dispatch,无 worker 认领)。
+
+    ``unit_cancel``:spawn 期探测落库的单元级取消能力位(None = 未探测,
+    即物化窗口形态)。"""
     from app.core import db as db_module
     from app.models.execution import ExecutionJob
 
+    payload = {"kind": kind, "chain": chain,
+               "args": {"execution_id": execution_id}}
+    if unit_cancel is not None:
+        payload["unit_cancel"] = unit_cancel
     async with db_module.SessionLocal() as session:
         session.add(ExecutionJob(
             execution_id=execution_id, kind=kind, status=status,
-            payload={"kind": kind, "chain": chain,
-                     "args": {"execution_id": execution_id}}))
+            payload=payload))
         await session.commit()
 
 
@@ -246,6 +252,56 @@ async def test_cancel_running_graph_conflicts_and_cancelable_flag(client):
     d = (await client.get(f"/api/executions/{server_graph}", headers=headers)).json()
     assert d["status"] == "running"          # 等在飞单元跑完才收口
     assert d["cancel_requested"] is True and d["cancelable"] is False
+
+
+async def test_cancel_capability_gate_unit_cancel_flag(client):
+    """能力位判定(§6「可」项 + legacy 通道):server 链 unit_cancel=False
+    (healthz 空能力的旧执行器)→ 409 + 文案点明执行器版本、cancelable 投影
+    False;legacy 链 unit_cancel=True(--cancel-file 通道)→ 200 可取消。"""
+    from app.services import run_dispatcher
+
+    run_dispatcher.reset_cancel_state()
+    headers = await register_and_login(client)
+    me = (await client.get("/api/auth/me", headers=headers)).json()
+    uid = me["user"]["id"]
+
+    server_old = await _seed_execution(uid, status="running")
+    await _seed_job(server_old, kind="graph", status="running",
+                    chain="server", unit_cancel=False)
+    legacy_new = await _seed_execution(uid, status="running")
+    await _seed_job(legacy_new, kind="graph", status="running",
+                    chain="legacy", unit_cancel=True)
+
+    async def flag(eid: int) -> bool:
+        return (await client.get(f"/api/executions/{eid}", headers=headers)
+                ).json()["cancelable"]
+
+    assert await flag(server_old) is False
+    assert await flag(legacy_new) is True
+    lst = (await client.get("/api/executions", headers=headers)).json()["items"]
+    flags = {i["id"]: i["cancelable"] for i in lst}
+    assert flags[server_old] is False and flags[legacy_new] is True
+
+    cr = await client.post(f"/api/executions/{server_old}/cancel", headers=headers)
+    assert cr.status_code == 409, cr.text
+    assert cr.json()["detail"]["code"] == "not_cancelable"
+    assert "执行器版本过低" in cr.json()["detail"]["message"]
+
+    cr = await client.post(f"/api/executions/{legacy_new}/cancel", headers=headers)
+    assert cr.status_code == 200, cr.text
+    assert cr.json()["cancel_requested"] is True
+
+
+def test_graph_unit_cancelable_defaults():
+    """能力位缺失(未探测)的缺省口径:server 链 = 物化窗口(取消走启动前
+    检查、不下发执行器)→ 可取消;legacy 链 = 旧引擎/未探测 → 不可取消。"""
+    from app.services.execution_store import _graph_unit_cancelable
+
+    assert _graph_unit_cancelable({"chain": "server"}) is True
+    assert _graph_unit_cancelable({}) is False                 # legacy 缺省
+    assert _graph_unit_cancelable({"chain": "legacy"}) is False
+    assert _graph_unit_cancelable({"chain": "server", "unit_cancel": False}) is False
+    assert _graph_unit_cancelable({"chain": "legacy", "unit_cancel": True}) is True
 
 
 async def test_cancel_note_follows_job_form_and_ignored(client):

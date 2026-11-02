@@ -95,6 +95,7 @@ def build_argv(
     report_dir: Path | str | None = None,
     n_runs: int = 1,
     retry: int = 0,
+    cancel_file: Path | str | None = None,
 ) -> list[str]:
     """组装 ``gimbal run launch`` 命令行。
 
@@ -105,6 +106,10 @@ def build_argv(
     * ``--report-dir`` — 引擎原生报告目录(逐 case 隔离,防并发互踩)。
     * ``--n-runs/--retry`` — P2-05 乘法下沉:平台不再循环 nRuns,
       乘法由执行器单元策略执行(N4 CLI 入口)。
+    * ``--cancel-file`` — 跨进程单元级取消信号(legacy 链 graph):文件
+      出现 = 执行器 drain(在飞单元跑完、未启动主体记 cancelled、after
+      必达);要求执行器声明 cancel-file 能力(gimbal.version.FEATURES),
+      旧引擎不认该参数会启动失败 —— 调用方须先探测能力再传。
     """
     argv = [*_base_argv(), "run", "launch", str(case_path), "-o", "jsonl"]
     if step_to is not None:
@@ -115,6 +120,8 @@ def build_argv(
         argv += ["--n-runs", str(n_runs)]
     if retry and retry > 0:
         argv += ["--retry", str(retry)]
+    if cancel_file is not None:
+        argv += ["--cancel-file", str(cancel_file)]
     return argv
 
 
@@ -191,7 +198,7 @@ async def launch(
     *,
     step_to: int | None = None,
     report_dir: Path | str | None = None,
-    cwd: Path | str | None = None,
+    cwd: Path | None = None,
     timeout: float | None = None,
     engine_log_path: Path | None = None,
     on_event: "Callable[[dict], None] | None" = None,
@@ -199,6 +206,7 @@ async def launch(
     log_counters: "dict | None" = None,
     n_runs: int = 1,
     retry: int = 0,
+    cancel_file: Path | str | None = None,
 ) -> LaunchResult:
     """执行 ``gimbal run launch <case_path>``,同步返回 LaunchResult。
 
@@ -217,7 +225,7 @@ async def launch(
     """
     from collections.abc import Callable  # noqa: F401  # 注解运行时求值用
     argv = build_argv(case_path, step_to=step_to, report_dir=report_dir,
-                      n_runs=n_runs, retry=retry)
+                      n_runs=n_runs, retry=retry, cancel_file=cancel_file)
     timeout = settings.GIMBAL_TIMEOUT_SEC if timeout is None else timeout
 
     # Windows: 不弹控制台窗;其他平台无该 flag。
@@ -326,30 +334,49 @@ async def launch(
 
     stdout_task = asyncio.create_task(_drain_stdout())
     stderr_task = asyncio.create_task(_drain_stderr())
+    # shield:超时不取消泵/等待 —— 取消宽限分支要二次等待;kill 分支收尸
+    # 后管道 EOF,泵自然收尾(此前 wait_for 直接取消 gather 的行为只被
+    # finally 的兜底取消依赖,语义不变)。
+    work = asyncio.shield(asyncio.gather(stdout_task, stderr_task, proc.wait()))
+    timed_out = False
     try:
-        await asyncio.wait_for(
-            asyncio.gather(stdout_task, stderr_task, proc.wait()),
-            timeout=timeout,
-        )
-    except asyncio.TimeoutError:
-        # kill 后 wait() 收尸,避免进程残留;管道随进程关闭,
-        # 在飞读取任务已被 wait_for 取消,finally 落盘已读部分。
         try:
-            proc.kill()
-        except ProcessLookupError:  # pragma: no cover - race with exit
-            pass
-        try:
-            await proc.wait()
-        except Exception:  # noqa: BLE001 - best-effort reaping
-            pass
-        logger.warning(
-            "gimbal_launcher: launch timed out after {}s: {}", timeout, case_path
-        )
-        return LaunchResult(
-            launch_status="timeout",
-            error=f"launch timeout after {timeout}s",
-            argv=argv,
-        )
+            await asyncio.wait_for(work, timeout=timeout)
+        except asyncio.TimeoutError:
+            # 单元级取消宽限:--cancel-file 已出现说明执行器正在取消收尾
+            # (在飞单元跑完 + after 括号必达),一次性加时,避免正常收口被
+            # 误判 launch_timeout —— kill 会把「跑完当前单元」变成硬中断。
+            grace = (settings.GIMBAL_CANCEL_GRACE_SEC
+                     if cancel_file is not None else 0.0)
+            if grace > 0 and Path(cancel_file).exists():   # type: ignore[arg-type]
+                logger.info(
+                    "gimbal_launcher: unit cancel in flight, granting {}s grace "
+                    "over {}s timeout: {}", grace, timeout, case_path)
+                try:
+                    await asyncio.wait_for(work, timeout=grace)
+                except asyncio.TimeoutError:
+                    timed_out = True
+            else:
+                timed_out = True
+        if timed_out:
+            # kill 后 wait() 收尸,避免进程残留;管道随进程关闭,泵读 EOF
+            # 自然收尾,finally 落盘已读部分。
+            try:
+                proc.kill()
+            except ProcessLookupError:  # pragma: no cover - race with exit
+                pass
+            try:
+                await proc.wait()
+            except Exception:  # noqa: BLE001 - best-effort reaping
+                pass
+            logger.warning(
+                "gimbal_launcher: launch timed out after {}s: {}", timeout, case_path
+            )
+            return LaunchResult(
+                launch_status="timeout",
+                error=f"launch timeout after {timeout}s",
+                argv=argv,
+            )
     finally:
         if log_fh:
             log_fh.flush()

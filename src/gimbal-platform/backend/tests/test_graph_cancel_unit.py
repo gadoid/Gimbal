@@ -21,6 +21,9 @@ from .test_graph_dispatch import _mk_scenario
 class _Knobs:
     run_id_ready = True      # False → cancel() 先返回 False(POST /runs 未返回 runId)
     honor_cancel = True      # False → 执行器忽略取消,两单元都 passed
+    # healthz 能力位(§6「可」项):() = 旧执行器(空能力,会把 scope=unit
+    # 当 step 处理且带 A0 缺陷)
+    server_scopes: tuple = ("step", "unit")
 
 
 class FakeServerSession:
@@ -31,6 +34,14 @@ class FakeServerSession:
         self.gate = asyncio.Event()       # 已进入 a 的执行
         self.release = asyncio.Event()    # 放行(由 cancel 或测试触发)
         FakeServerSession.instances.append(self)
+
+    @property
+    def server_version(self) -> str:
+        return "fake"
+
+    @property
+    def cancel_scopes(self) -> tuple:
+        return _Knobs.server_scopes
 
     async def start(self, **kw) -> None:
         return None
@@ -80,6 +91,7 @@ async def _setup(client, monkeypatch, *, run_id_ready=True, honor_cancel=True):
     FakeServerSession.instances.clear()
     _Knobs.run_id_ready = run_id_ready
     _Knobs.honor_cancel = honor_cancel
+    _Knobs.server_scopes = ("step", "unit")
     monkeypatch.setattr(settings, "EXEC_CHAIN", "server", raising=True)
     monkeypatch.setattr(gss, "ServerSession", FakeServerSession)
     monkeypatch.setattr(pc, "convert", _fake_convert)
@@ -265,3 +277,103 @@ class TestGraphRecoveryNoPollerLeak:
         assert "at-most-once" in (ex.config_json or {}).get("dispatcherError", "")
         assert len(FakeServerSession.instances) == 1     # 恢复未再下发
         assert _live_cancel_pollers() - before == set()
+
+
+class TestCapabilityGate:
+    """§6「可」项 + legacy 通道:单元级取消按能力位放行/拦截。"""
+
+    async def test_old_executor_server_graph_cancel_409(self, client, monkeypatch):
+        """旧执行器(healthz 空能力)→ on_session 落 unit_cancel=False;
+        已认领 graph 的取消 409(文案点明执行器版本)、cancelable 投影 False、
+        取消不下发 → 按真实结果跑完。"""
+        from app.models.execution import ExecutionJob
+
+        headers = await _setup(client, monkeypatch)
+        _Knobs.server_scopes = ()            # 旧执行器
+        exec_id = await _post_graph(client, headers)
+        sess = await _wait_session()
+
+        for _ in range(100):                 # 等 session 就绪 + 能力位落库
+            d = (await client.get(f"/api/executions/{exec_id}",
+                                  headers=headers)).json()
+            if d["cancelable"] is False:
+                break
+            await asyncio.sleep(0.05)
+        assert d["cancelable"] is False
+        r = await client.post(f"/api/executions/{exec_id}/cancel", headers=headers)
+        assert r.status_code == 409
+        assert "执行器版本过低" in r.json()["detail"]["message"]
+
+        async with db_module.SessionLocal() as s:
+            payload = (await s.execute(sa.select(ExecutionJob.payload).where(
+                ExecutionJob.execution_id == exec_id))).scalar_one()
+        assert payload["unit_cancel"] is False
+
+        sess.release.set()                   # 未收到取消 → 正常跑完
+        ex = await _wait_terminal(exec_id)
+        assert ex.status == "done"
+        assert sess.cancel_calls == []
+
+    async def test_legacy_graph_cancel_via_signal_file(self, client, monkeypatch):
+        """legacy 链 + 本地引擎带 cancel-file 能力:取消 → 平台写信号文件 →
+        执行器(假 launch)读到后跑完在飞单元、其余 cancelled → 执行 canceled。"""
+        from pathlib import Path
+
+        from app.core.config import settings
+        from app.models.execution import ExecutionJob
+        from app.services import graph_dispatch as gd
+
+        headers = await _setup(client, monkeypatch)
+        monkeypatch.setattr(settings, "EXEC_CHAIN", "legacy", raising=True)
+        # 同环境部署(GIMBAL_BIN 空)→ 能力读本地 gimbal FEATURES;外部
+        # GIMBAL_BIN 无法探测、保守 False 的路径由 test_run_cancel 的
+        # _graph_unit_cancelable 单测面覆盖
+        monkeypatch.setattr(settings, "GIMBAL_BIN", "", raising=True)
+        seen: dict = {}
+
+        async def _fake_launch(case_path, *, step_to=None, report_dir=None,
+                               cwd=None, timeout=None, engine_log_path=None,
+                               on_event=None, on_log=None, log_counters=None,
+                               n_runs=1, retry=0, cancel_file=None):
+            seen["cancel_file"] = cancel_file
+            assert cancel_file is not None and Path(cancel_file).name == "cancel-unit"
+
+            def ev(d):
+                if on_event is not None:
+                    on_event(dict(d))
+            ev({"event_type": "scenario.start", "seq": 2, "scenario_id": "sc-a",
+                "scenario_name": "a", "step_count": 1, "unit": "a", "attempt": "1.1"})
+            for _ in range(200):             # 等平台写信号文件(单元级取消)
+                if Path(cancel_file).exists():
+                    break
+                await asyncio.sleep(0.05)
+            else:
+                raise AssertionError("cancel signal file never appeared")
+            ev({"event_type": "scenario.end", "seq": 3, "scenario_id": "sc-a",
+                "status": "passed", "step_count": 1, "unit": "a", "attempt": "1.1"})
+            ev({"event_type": "run.finished", "seq": 6, "exit_code": 0,
+                "total": 2, "passed": 1, "failed": 0, "skipped": 1, "attempts": 2,
+                "details": [{"unit": "a", "status": "passed"},
+                            {"unit": "b", "status": "cancelled"}]})
+            return launch_ok()
+
+        monkeypatch.setattr(gd, "launch", _fake_launch)
+        exec_id = await _post_graph(client, headers)
+
+        for _ in range(100):                 # 等 spawn 前能力位落库(legacy 可取消)
+            d = (await client.get(f"/api/executions/{exec_id}",
+                                  headers=headers)).json()
+            if d["cancelable"] is True:
+                break
+            await asyncio.sleep(0.05)
+        assert d["cancelable"] is True
+        r = await client.post(f"/api/executions/{exec_id}/cancel", headers=headers)
+        assert r.status_code == 200, r.text
+
+        ex = await _wait_terminal(exec_id)
+        assert ex.status == "canceled"
+        assert (ex.passed, ex.failed, ex.skipped) == (1, 0, 1)
+        async with db_module.SessionLocal() as s:
+            payload = (await s.execute(sa.select(ExecutionJob.payload).where(
+                ExecutionJob.execution_id == exec_id))).scalar_one()
+        assert payload["chain"] == "legacy" and payload["unit_cancel"] is True

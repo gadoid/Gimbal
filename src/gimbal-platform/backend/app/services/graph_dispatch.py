@@ -348,6 +348,7 @@ async def execute_graph(
     chain: str = "legacy",
     m2_info: dict | None = None,
     on_session=None,
+    cancel_file: Path | None = None,
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
     LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
@@ -356,6 +357,9 @@ async def execute_graph(
     SSE 消费）；legacy 走 run launch 子进程（stdout jsonl）。
     ``on_session``（graph 单元级取消 P2）：server 链启动后把 ServerSession
     交给调用方,供其在取消位置位时下发 ``cancel(scope="unit")``。
+    ``cancel_file``（legacy 链单元级取消）：信号文件路径,透传
+    ``gimbal run launch --cancel-file`` —— 调用方在取消位置位时创建该
+    文件,执行器 drain(在飞单元跑完、未启动主体记 cancelled、after 必达)。
     """
     case_dir = run_dir / "case-graph"
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -391,6 +395,7 @@ async def execute_graph(
         on_log=on_log,
         log_counters=log_counters,
         n_runs=n_runs,
+        cancel_file=cancel_file,
     )
 
 

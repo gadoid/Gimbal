@@ -1242,6 +1242,48 @@ def _start_cancel_poller(db_factory: Any, execution_id: int, *,
     return cancel_local, asyncio.create_task(_poll_cancel())
 
 
+def _legacy_unit_cancel_capable() -> bool:
+    """legacy 链(单子进程)是否具备单元级取消(--cancel-file 通道)。
+
+    legacy 链没有 HTTP 面,无法运行期探测:GIMBAL_BIN 未设置(默认同解释器
+    ``-m gimbal``,引擎与本进程同安装)时读本地 gimbal 包的 FEATURES 声明;
+    GIMBAL_BIN 指向外部安装 → 无法探测,保守 False(旧引擎不认 --cancel-file
+    参数会启动失败,宁可 409 也不下发)。
+    """
+    if settings.GIMBAL_BIN:
+        return False
+    try:
+        from gimbal.version import FEATURES
+    except Exception:  # noqa: BLE001 — 本地无 gimbal 包(异常部署)按无能力
+        return False
+    return "cancel-file" in FEATURES
+
+
+async def _record_unit_cancel(db_factory: Any, execution_id: int,
+                              capable: bool) -> None:
+    """把「本执行是否具备单元级取消」写进 job payload(台账性质,写失败
+    只告警不阻断 —— 失败时能力位缺失,读侧按各自缺省口径处理)。"""
+    from sqlalchemy import select as _sel
+
+    from ..models.execution import ExecutionJob
+    try:
+        async with db_factory() as session:
+            job = (await session.execute(
+                _sel(ExecutionJob).where(
+                    ExecutionJob.execution_id == execution_id))
+            ).scalar_one_or_none()
+            if job is None:
+                return
+            payload = dict(job.payload or {})
+            payload["unit_cancel"] = bool(capable)
+            job.payload = payload
+            await session.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: record unit_cancel flag failed for {}",
+            execution_id)
+
+
 async def _fanout_graph(
     *,
     db_factory: Any,
@@ -1258,13 +1300,17 @@ async def _fanout_graph(
     事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
     C12/C13：chain=server 时 spawn 走执行器 server 实例。
 
-    取消(graph 单元级取消方案 2026-11-02 P2):取消轮询器置位后 ——
+    取消(graph 单元级取消方案 2026-11-02 P2 + §6「可」项/legacy 通道
+    2026-11-03):取消轮询器置位后 ——
     ① 物化完成、下发执行器之前命中 → 不下发,canceled 零计数收口;
-    ② server 链在飞 → 向执行器下发 ``cancel(scope="unit")``(runId 返回
-    前每 0.5s 重试),执行器跑完在飞单元、未启动主体记 cancelled、after
-    照常;收口时至少一个主体单元 cancelled → 执行记 canceled,否则按
-    真实结果收口并在 config 写 ``cancelIgnored`` 留痕。legacy 链无单元级
-    信号(cancel 端点对其 409),这里只处理 ①。
+    ② 在飞 → 按链下发单元级取消:server 链向执行器 ``cancel(scope="unit")``
+    (runId 返回前每 0.5s 重试);legacy 链写 ``--cancel-file`` 信号文件
+    (执行器 drain)。两链同语义:在飞单元跑完、未启动主体记 cancelled、
+    after 照常;收口时至少一个主体单元 cancelled → 执行记 canceled,否则
+    按真实结果收口并在 config 写 ``cancelIgnored`` 留痕。
+    能力门禁:spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链
+    读 healthz cancel_scopes(旧执行器空能力,不下发,读侧 409);legacy 链
+    读本地 gimbal FEATURES(GIMBAL_BIN 外部安装保守 False)。
     """
     from . import execution_queue as _eq
     from . import graph_dispatch
@@ -1340,6 +1386,14 @@ async def _fanout_graph(
     # 进程退出(恢复后执行已 failed,取消位永远不会置上)。
     session_holder: dict = {}
     deliver: dict = {"task": None, "accepted": False}
+    # 单元级取消能力:server 链 session 就绪时按 healthz 能力位填 ok 并落
+    # job payload(旧执行器 False → 不下发,读侧按能力位 409);legacy 链
+    # spawn 前按本地 FEATURES 判定,ok 时才有信号文件可写。
+    unit_cancel: dict = {"ok": chain != "server" and _legacy_unit_cancel_capable(),
+                         "recorded": chain != "server"}
+    cancel_file: "Path | None" = (
+        run_dir / "case-graph" / "cancel-unit"
+        if chain != "server" and unit_cancel["ok"] else None)
 
     async def _deliver_unit_cancel() -> None:
         # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
@@ -1359,8 +1413,32 @@ async def _fanout_graph(
             await asyncio.sleep(0.5)
 
     def _on_cancel_set() -> None:
-        if chain == "server" and deliver["task"] is None:
-            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
+        if chain == "server":
+            # 能力位在 on_session 落定;旧执行器(False)不下发 —— 读了也
+            # 会被当 step 处理(带 A0 缺陷),宁可不发(读侧 409 已拦,此处
+            # 只兜取消位写入与能力落库之间的竞态)。
+            if deliver["task"] is None and unit_cancel["ok"]:
+                deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
+        elif cancel_file is not None:
+            try:
+                cancel_file.parent.mkdir(parents=True, exist_ok=True)
+                cancel_file.write_text("", encoding="utf-8")
+                logger.info(
+                    "run_dispatcher: graph execution {} unit-level cancel "
+                    "signal file written ({})", execution_id, cancel_file)
+            except OSError:
+                logger.warning(
+                    "run_dispatcher: write cancel file failed for {} ({})",
+                    execution_id, cancel_file)
+
+    def _on_session(ss: Any) -> None:
+        session_holder["ss"] = ss
+        capable = "unit" in (getattr(ss, "cancel_scopes", ()) or ())
+        unit_cancel["ok"] = capable
+        if not unit_cancel["recorded"]:
+            unit_cancel["recorded"] = True
+            asyncio.create_task(
+                _record_unit_cancel(db_factory, execution_id, capable))
 
     cancel_local, cancel_poller = _start_cancel_poller(
         db_factory, execution_id, on_set=_on_cancel_set)
@@ -1481,12 +1559,16 @@ async def _fanout_graph(
                             unit_events[uid] = {"status": st}
             ingester.on_event(d)
 
+        if chain != "server":
+            # legacy 链能力位在 spawn 前落库(server 链在 on_session):
+            # cancel 端点读 job payload 判定,晚于首次取消会白拒一次。
+            await _record_unit_cancel(db_factory, execution_id, unit_cancel["ok"])
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
             on_event=_on_event, on_log=ingester.on_log,
             log_counters=ingester.pump_counters, chain=chain,
             m2_info=graph_sem.get("m2_info"),
-            on_session=lambda ss: session_holder.__setitem__("ss", ss))
+            on_session=_on_session, cancel_file=cancel_file)
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
             # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉

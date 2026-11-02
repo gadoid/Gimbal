@@ -90,11 +90,15 @@ async def uncancelable_graph_ids(db: AsyncSession, execution_ids: list[int]) -> 
     """已被 worker 认领(job running)且**不支持中途取消**的 graph 执行 id
     (一次 in 查询;列表/详情/cancel 共用)。
 
-    口径按执行链:server 链 graph 可取消(执行器 cancel scope=unit,在飞
-    单元跑完、其余 cancelled);**legacy 链** graph 是单子进程跑整图、无
-    进程间信号,认领后不可取消(409)。graph 不能看 ``Execution.kind``:
+    口径按单元级取消能力(方案 §6「可」项 + legacy 通道,2026-11-03 起):
+    spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链读 healthz
+    的 cancel_scopes(旧执行器空能力 → False,旧执行器会把 scope=unit 当
+    step 处理且带 A0 缺陷);legacy 链读本地 gimbal 包 FEATURES(GIMBAL_BIN
+    指向外部安装无法探测 → 保守 False)。能力位缺失 = 尚未探测:server 链
+    是物化窗口(session 未起,取消由 _fanout_graph 启动前检查消费、不会下
+    发执行器)→ 可取消;legacy 链按不可取消。graph 不能看 ``Execution.kind``:
     ``POST /api/runs`` 带 graph 的执行 kind 仍是 scenario,只有
-    ``execution_jobs.kind`` / payload.chain 如实记了任务体形态与链。按 job
+    ``execution_jobs.kind`` / payload 如实记了任务体形态与链。按 job
     状态而非执行状态判断 —— 物化窗口里执行仍 queued。queued 的 graph
     两条链都可取消(启动前检查 / 物化窗口检查)。
     """
@@ -104,10 +108,28 @@ async def uncancelable_graph_ids(db: AsyncSession, execution_ids: list[int]) -> 
         select(ExecutionJob.execution_id, ExecutionJob.payload).where(
             ExecutionJob.execution_id.in_(execution_ids),
             ExecutionJob.kind == "graph",
-            ExecutionJob.status == "running")
-    )).all()
+            ExecutionJob.status == "running"))
+    ).all()
     return {eid for eid, payload in rows
-            if ((payload or {}).get("chain") or "legacy") != "server"}
+            if not _graph_unit_cancelable(payload or {})}
+
+
+def _graph_unit_cancelable(payload: dict) -> bool:
+    """graph 任务体 payload → 是否具备单元级取消(uncancelable 的取反)。"""
+    flag = payload.get("unit_cancel")
+    if flag is not None:
+        return bool(flag)
+    # 能力位未探测:server 链 = 物化窗口(取消走启动前检查,安全);
+    # legacy 链 = 旧引擎/未探测,保守不可取消。
+    return (payload.get("chain") or "legacy") == "server"
+
+
+async def graph_job_payload(db: AsyncSession, execution_id: int) -> dict | None:
+    """执行的任务体 payload(cancel 端点 409 文案按链/能力位区分用)。"""
+    return (await db.execute(
+        select(ExecutionJob.payload).where(
+            ExecutionJob.execution_id == execution_id)
+    )).scalar_one_or_none()
 
 
 async def cancel_requested_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:

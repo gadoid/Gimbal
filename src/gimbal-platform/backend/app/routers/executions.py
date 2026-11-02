@@ -882,12 +882,17 @@ async def cancel_execution(
     queued/running 立即终态化。终态单 409。server 链的在飞 run 由
     worker 侧 cancel 端点协作收口（步骤边界生效）。
 
-    graph(Suite 编排 / ``POST /api/runs`` 带 graph;单元级取消方案 2026-11-02）:
-    server 链写取消位后由 ``_fanout_graph`` 下发执行器 ``cancel(scope=unit)``
-    —— 在飞单元跑完、未启动主体记 cancelled、after 照常,最终 canceled;
-    主体已全部启动则按真实结果收口并留 ``config.cancelIgnored``。**legacy 链**
-    graph 已认领(job running)仍 409 ``not_cancelable``(单子进程无单元级
-    信号);按 job 状态而非执行状态判断(物化窗口执行仍 queued)。job 仍
+    graph(Suite 编排 / ``POST /api/runs`` 带 graph;单元级取消方案 2026-11-02
+    + §6「可」项能力门禁 2026-11-03):
+    写取消位后由 ``_fanout_graph`` 下发单元级取消 —— server 链向执行器发
+    ``cancel(scope=unit)``、legacy 链写 ``--cancel-file`` 信号文件 —— 在飞
+    单元跑完、未启动主体记 cancelled、after 照常,最终 canceled;
+    主体已全部启动则按真实结果收口并留 ``config.cancelIgnored``。
+    **无单元级取消能力**的 graph 已认领(job running)仍 409
+    ``not_cancelable`` —— 能力位 ``job payload["unit_cancel"]`` 由 spawn 期
+    探测(server 链读 healthz cancel_scopes,旧执行器空能力;legacy 链读
+    本地 gimbal FEATURES,GIMBAL_BIN 外部安装保守 False);按 job 状态而非
+    执行状态判断(物化窗口执行仍 queued)。job 仍
     queued 的 graph 两条链都照常取消。
     """
     if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
@@ -899,13 +904,18 @@ async def cancel_execution(
             },
         )
     if ex.id in await execution_store.uncancelable_graph_ids(session, [ex.id]):
+        # 文案按链/能力位区分(§6「可」项):legacy 无通道 vs server 旧执行器
+        payload = (await execution_store.graph_job_payload(session, ex.id)) or {}
+        if (payload.get("chain") or "legacy") == "server":
+            message = ("执行器版本过低(不支持单元级取消 cancel scope=unit),"
+                       "已认领的编排执行不可中途取消;请先升级执行器,"
+                       "排队中的可取消")
+        else:
+            message = ("legacy 链的编排执行(graph)不支持中途取消:取消位"
+                       "不会被消费,执行会跑完并按结果收口;排队中的可取消")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "not_cancelable",
-                "message": "legacy 链的编排执行(graph)不支持中途取消:取消位"
-                           "不会被消费,执行会跑完并按结果收口;排队中的可取消",
-            },
+            detail={"code": "not_cancelable", "message": message},
         )
     live = await run_dispatcher.request_cancel(session, ex.id)
     # 单元级取消方案 P4 顺带修:此前取消位只 execute 不 commit,DB 位从未

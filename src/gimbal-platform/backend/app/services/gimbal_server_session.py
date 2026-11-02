@@ -101,6 +101,11 @@ class ServerSession:
         self._base: str | None = None
         self._run_id: str | None = None      # 当前(最近)run
         self._stderr_task: "asyncio.Task | None" = None
+        # 执行器能力(healthz 上报;单元级取消方案 §6「可」项):旧执行器
+        # body 无这些键 = 空版本/空能力,调用方按「不可单元级取消」处理 ——
+        # 旧执行器会把 cancel scope=unit 当 step 执行且带 A0 缺陷。
+        self.server_version: str | None = None
+        self.cancel_scopes: tuple[str, ...] = ()
 
     # ── 进程生命周期 ────────────────────────────────────────
 
@@ -154,6 +159,20 @@ class ServerSession:
                 try:
                     r = await c.get(f"{self._base}/healthz")
                     if r.status_code == 200:
+                        # 能力探测:此前只看状态码丢弃 body。读版本与 cancel
+                        # 能力位;畸形 body 按空能力(保守)。
+                        try:
+                            info = r.json()
+                        except Exception:  # noqa: BLE001
+                            info = {}
+                        if isinstance(info, dict):
+                            v = info.get("version")
+                            if isinstance(v, str):
+                                self.server_version = v
+                            scopes = info.get("cancel_scopes")
+                            if isinstance(scopes, list):
+                                self.cancel_scopes = tuple(
+                                    s for s in scopes if isinstance(s, str))
                         return
                 except Exception:  # noqa: BLE001
                     await asyncio.sleep(0.15)

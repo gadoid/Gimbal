@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     GIMBAL_BIN: str = ""
     # 单次 launch 子进程超时(秒)。
     GIMBAL_TIMEOUT_SEC: float = 300.0
+    # 单元级取消(--cancel-file)下发后的一次性超时宽限(秒):取消在收尾时
+    # 在飞单元要跑完、after 括号必达,墙钟可能顶到 GIMBAL_TIMEOUT_SEC ——
+    # 文件已出现即视为「正在取消收尾」,加时一段避免被误判 launch_timeout
+    # (kill 会把「跑完当前单元」变成硬中断,丢 after 语义)。0 = 不宽限。
+    GIMBAL_CANCEL_GRACE_SEC: float = 120.0
     # P7 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)与
     # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
     MAX_RUNS_PER_EXECUTION: int = 200
