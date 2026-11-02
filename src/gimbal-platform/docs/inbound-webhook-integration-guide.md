@@ -50,7 +50,9 @@
 
 平台模式不做场景属主闸(只读查询视为安全);但**编排执行(graph)
 本期限定个人模式**,平台模式整体拒绝。平台模式执行区间每一步必须是
-GET/HEAD/OPTIONS 或 plate 标记 `query_safe`,否则 403 `not_read_only`。
+GET/HEAD/OPTIONS 或 plate 标记 `query_safe`,否则拒绝 `not_read_only`
+(`POST /api/runs` 为 403,注册定时任务为 422;plate 不可用时同样拒绝,
+见 §9.3 的注)。
 
 管理权:入站调用只能修改**由自己别名注册**的集成任务(否则 404,不
 泄露存在性);JWT 用户维持既有的属主/admin 管理权。
@@ -419,8 +421,15 @@ message}`)→ 服务别名(存在 / plate / `base_service` 与锚点声明的服
 | 404 | `scenario_not_found` | 场景不存在或已删 → 核对 `scenarioId` |
 | 403 | `not_owner` | 个人模式:场景属主 ≠ grant 签发人 → 换属主签发的 grant |
 | 403 | `platform_scope_denied` | 平台模式:场景非公共且非别名属主的 → 用公共场景或个人模式 |
-| 403 | `not_read_only` | 平台模式:场景含写操作 → 携带 grant 走个人模式 |
-| 503 | `plate_unavailable` | 校验需要 plate(只读判定 / 临时调用)→ 稍后重试 |
+| 403 | `not_read_only` | 平台模式:场景含写操作 → 携带 grant 走个人模式。取不到接口定义时也返回本码,见 9.3 的注 |
+| 503 | `plate_unavailable` | 校验需要 plate(钉修订场景的只读判定 / 临时调用)→ 稍后重试 |
+| 422 | `scheme_not_owned` | `schemeId` 不属于该场景 → 核对方案 id(同 9.3) |
+| 404 | `data_set_not_found` | 方案引用的数据集不存在、已删或不属该场景 → 联系场景属主 |
+| 409 | `dangling_injection_entries` | 方案选中的断言注入条目已悬空(`detail.entries` 列出)→ 联系场景属主 |
+| 409 | `row_index_out_of_range` | 方案的数据集行选择越界(数据集行数已变)→ 联系场景属主 |
+| 409 | `too_many_runs` | 方案展开的行 × 注入条目数超过单次执行上限 → 联系场景属主 |
+| 404 | `no_steps` | 场景无步骤却带了 `stepTo` → 去掉 `stepTo` |
+| 409 | `step_to_out_of_range` | `stepTo` 越界(0 起,须小于步骤数)→ 改小或去掉 |
 | 409 | `shutting_down` | 平台正在停机 → 稍后重试 |
 | 404 | (无 code) | 查询/取消:执行不存在或不可见(含按别名过滤不命中)→ 核对 executionId 与所用别名 |
 | 409 | `not_cancelable` | 取消:已是终态 → 无需处理,等回调即可 |
@@ -437,7 +446,8 @@ message}`)→ 服务别名(存在 / plate / `base_service` 与锚点声明的服
 | 404 | `scenario_not_found` | 注册引用的场景不存在 → 核对 `scenarioId` |
 | 422 | `scenario_not_owned` | 个人模式:场景属主 ≠ grant 签发人 → 只能引用签发人自己的场景 |
 | 422 | `scheme_not_owned` | `schemeId` 不属于该场景 → 核对方案 id |
-| 403 | `platform_scope_denied` / `not_read_only` | 平台模式场景范围 / 只读闸,同 9.2 |
+| 403 | `platform_scope_denied` | 平台模式场景范围,同 9.2 |
+| 422 | `not_read_only` | 平台模式只读闸,含义同 9.2(注意注册时是 422,`POST /api/runs` 时是 403)。注:plate 不可用、取不到接口定义时,只读检查按「不安全」处理,返回的仍是本码而不是 503,此时 `message` 里的步骤显示为「未知方法」—— 这不表示场景含写操作,稍后重试即可 |
 | 404 | `not_found` | 查/删/触发:任务不存在、已软删,或不是本别名注册的 → 核对任务 id 与所用别名 |
 | 403 | `grant_issuer_mismatch` | 带 grant 改/触发个人模式任务,但签发人 ≠ 任务属主 → 用属主签发的 grant |
 | 403 | `forbidden` | JWT 用户改动他人任务(owner/admin 之外)→ 走属主账号 |
