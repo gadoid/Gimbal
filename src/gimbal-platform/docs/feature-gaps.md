@@ -5,6 +5,16 @@
 > 已覆盖的核心链路:搜索/筛选/三 tab(我的·公共·收藏)/收藏/查看详情/执行(RunDialog,
 > 含次数·并发·前缀·凭证合并策略,为 V1 超集)/发布/下架/复制/删除/导出。
 
+> **状态(2026-11-03 复核)**:本清单大半已收口 —— **#1 场景导入已做**
+> (`services/scenario_import.py`,设计见 `claude/scenario-import-design.md`);
+> **#3 admin 删除他人公共场景已做**(`routers/scenarios.py` `scenario.admin_delete`
+> 越属主审计分支);**#5 重跑已决策不做**;**#6 僵尸派发对账已做**(启动恢复
+> `startup_recovery` + 唯一终态迁移,后续多轮持续加固)。**仍开放:#4 审核标记**
+> (决策点至今未拍:做或作废需定)、**#7 RunDialog `?dataSetId=` 预选**(前端无此
+> 逻辑)、**#2 重命名/另存为尾巴**(改名经 PUT 改 meta.name 已可生效,独立
+> rename/save-as 端点与 RenameInputDialog 未建)。本文件保留作 V1 对照存档,
+> 开放项已并入路线图(`GIMBAL-待实现功能与路线图-2026-09-28.md` §PD 与小尾巴清单)。
+
 ## 一、待实现(建议排期)
 
 ### 1. 场景导入(影响最大)

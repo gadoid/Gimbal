@@ -5,6 +5,19 @@
 > 其余服务定向核查(删除级联/状态转移/锁/缓存)、开发库实测孤儿行扫描、
 > 执行域功能与《执行 — 设计与改造方案》§6/§7 逐条比对。
 
+> **状态复核(2026-11-03,HEAD `5be4cfb5`)**:PG 已是生产库(alembic 至 0032、
+> asyncpg),§3 问题登记表逐项复核结论 —— **已解决:P2**(UtcDateTime(timezone=True)
+> + 0027 迁移)、**P3**(alembic 0007–0032 + asyncpg)、**P4**(单进程/禁多 worker
+> 已成文:`docs/runbook-pg.md` 「禁多 worker」段 + 起服清单)、**P5**(UserStar 入库,
+> stars.json 数据岛已吞)、**P7**(状态转移改原子条件 UPDATE,`transition_execution`
+> WHERE status IN …;集成域调度 CAS)、**P10**(0010 迁移 payload→JSONB)。
+> **过时(问题已不存在):P1**(SQLite 已于 2026-10-14 全线退役,`core/db.py`
+> 对非 postgresql URL fail-fast,PRAGMA 一致性问题无从谈起)。**疑已失效(未逐项
+> 验证):P9**(角色体系重构后 is_admin 列已删)。**仍开放:P6**(composer/adaptation
+> 软引用 FK 收敛或注释豁免)、**P8**(list_users 挂 MemberUser,任意 member+ 可枚举
+> —— 按平台定位拍板收紧或保留)、**P12**(可选 PG 测试 profile 未建)。§5 比对遗留
+> E2a 字段来源分析·预测 仍置灰、数据分析页仍 AnalyticsDeferred 延后。
+
 ---
 
 ## 1. 总体结论

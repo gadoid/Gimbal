@@ -140,6 +140,19 @@ X-Gimbal-Grant: ggt_…            (可选;缺省 = 平台模式)
 终态 409 `not_cancelable`。取消后照常回调 `execution.finished`
 (`status: "canceled"`)。JWT 面仍只限执行 owner 本人。
 
+编排执行(graph)为**单元级取消**(2026-11-02 落地、2026-11-03 加能力
+门禁):200 后进入「取消中」—— 在飞单元跑完、未启动的主体单元记
+cancelled、清理括号照常执行,随后按口径收口:至少一个主体单元被记
+cancelled → `canceled`(未跑单元入 skipped);主体已全部启动、无可停
+单元 → 按真实结果收口并在 `config.cancelIgnored` 留痕(详情页有解释
+条)。响应与详情/列表均带 `cancel_note` 说明文案,原样展示即可。
+**能力门禁**:平台在 spawn 期探测执行器能力(server 链读 healthz
+`cancel_scopes`;legacy 链读引擎 `FEATURES` 声明)—— 旧执行器会把
+`scope=unit` 当作步骤级处理且取消会跳过清理括号,故**无能力的执行器**
+已认领的编排执行取消仍 409 `not_cancelable`,message 区分「执行器
+版本过低,请先升级执行器」与「legacy 链不支持」;排队中(job 仍
+queued)的编排执行不受门禁影响,照常可取消。
+
 ## 4. 回调(webhook)
 
 ### 4.1 开通
@@ -443,7 +456,7 @@ message}`)→ 服务别名(存在 / plate / `base_service` 与锚点声明的服
 | 409 | `step_to_out_of_range` | `stepTo` 越界(0 起,须小于步骤数)→ 改小或去掉 |
 | 409 | `shutting_down` | 平台正在停机 → 稍后重试 |
 | 404 | (无 code) | 查询/取消:执行不存在或不可见(含按别名过滤不命中)→ 核对 executionId 与所用别名 |
-| 409 | `not_cancelable` | 取消:已是终态 → 无需处理,等回调即可 |
+| 409 | `not_cancelable` | 取消:已是终态 → 无需处理,等回调即可;或已认领的编排执行遇无能力执行器(message 区分「执行器版本过低,请先升级执行器」与「legacy 链不支持」;排队中的编排执行可取消) |
 | 422 | `bad_status_filter` | 执行列表 `status` 值非法 → 用 queued/running/done/failed/canceled |
 
 ### 9.3 定时任务(`POST/PATCH/GET/DELETE /api/integration/tasks*`)
