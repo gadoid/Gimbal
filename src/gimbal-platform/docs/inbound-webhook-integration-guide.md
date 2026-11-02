@@ -220,6 +220,14 @@ def verify(secret: str, ts: str, sig_v1: str, body: bytes) -> bool:
 **15 分钟**(宽限 10 分钟 + 周期 5 分钟)内有终态并补发回调。
 P3 之前不提供事件流/步骤明细回调,明细走轮询。
 
+**人工补发**(收尾评审 G5,2026-11-02):投递达到最大次数置 `failed`
+后,别名属主或 admin 可对该行 `POST /api/webhook-deliveries/{id}/redeliver`
+—— 服务端**新建一行** pending(同 url / body / 事件,新 id)交回投递循环,
+原行保留为历史;响应带 `redeliveredFrom`。换新 id 是因为接收端按
+`X-Gimbal-Delivery` 去重,同 id 重发会被当重复丢弃。`delivered` 行也可
+补发(接收端丢了 2xx 之后的处理时用);`pending` 行 409 `already_pending`。
+该接口不对入站凭证开放;调用方自己的兜底仍是按 `executionId` 轮询。
+
 ## 6. grant 失效行为
 
 集成任务每次实例运行前重校验 grant:失效(撤销/过期)→ 实例以

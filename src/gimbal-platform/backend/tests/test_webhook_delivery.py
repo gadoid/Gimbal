@@ -595,3 +595,88 @@ class TestRetentionAndEndpoint:
         # 无过滤参数 → 422
         r = await client.get("/api/webhook-deliveries", headers=h)
         assert r.status_code == 422
+
+
+class TestRedeliver:
+    """人工补发(收尾评审 2026-11-02 G5):新建一行 pending、原行留历史;
+    别名属主 / admin 可点,入站凭证与陌生人 404;pending 行 409。"""
+
+    @staticmethod
+    async def _failed_row(**over) -> int:
+        async with db_module.SessionLocal() as s:
+            row = WebhookDelivery(
+                alias_name="agent-sys", event_type="execution.finished",
+                execution_id=over.get("execution_id"),
+                url="https://cb.example.local/gimbal/callback",
+                body='{"event":"execution.finished","executionId":7}',
+                status=over.get("status", "failed"), attempts=5,
+                last_error="HTTP 503")
+            s.add(row)
+            await s.commit()
+            return row.id
+
+    async def test_alias_owner_redelivers_as_new_row(self, client):
+        await _seed_platform_user()          # 先于注册:避免首个注册者成 admin
+        await _seed_alias()
+        h = await _client_login(client, "rd_owner")
+        async with db_module.SessionLocal() as s:
+            alias = await s.get(ServiceAlias, "agent-sys")
+            alias.owner_user_id = (await s.execute(
+                sa.select(User.id).where(
+                    User.username == "rd_owner"))).scalar_one()
+            await s.commit()
+        old_id = await self._failed_row()
+        r = await client.post(f"/api/webhook-deliveries/{old_id}/redeliver",
+                              headers=h)
+        assert r.status_code == 201, r.text
+        out = r.json()
+        assert out["redeliveredFrom"] == old_id
+        assert out["id"] != old_id
+        assert out["status"] == "pending" and out["attempts"] == 0
+        assert out["url"].endswith("/gimbal/callback")
+        async with db_module.SessionLocal() as s:
+            old = await s.get(WebhookDelivery, old_id)
+            new = await s.get(WebhookDelivery, out["id"])
+            assert (old.status, old.attempts, old.last_error) == ("failed", 5, "HTTP 503")
+            assert new.body == old.body and new.alias_name == old.alias_name
+            assert new.next_retry_at is None and new.last_error is None
+        # 新行可被投递循环领取(领取后推进租约、仍 pending)
+        jobs = await wo._claim(db_module.SessionLocal)
+        assert [j.id for j in jobs] == [out["id"]]
+        # pending 行再补发 → 409
+        r = await client.post(f"/api/webhook-deliveries/{out['id']}/redeliver",
+                              headers=h)
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "already_pending"
+
+    async def test_visibility_and_admin(self, client):
+        from app.models.inbound_identity import InboundCredential
+        from app.services.inbound_identity import (
+            generate_credential_token, sha256_hex)
+
+        await _seed_platform_user()
+        await _seed_alias()
+        admin = await _client_login(client, "rd_admin")
+        async with db_module.SessionLocal() as s:
+            u = (await s.execute(sa.select(User).where(
+                User.username == "rd_admin"))).scalar_one()
+            u.role = "admin"
+            tok = generate_credential_token()
+            s.add(InboundCredential(alias_name="agent-sys", name="t",
+                                    token_hash=sha256_hex(tok)))
+            await s.commit()
+        stranger = await _client_login(client, "rd_stranger")
+        row_id = await self._failed_row(status="delivered")
+        r = await client.post(f"/api/webhook-deliveries/{row_id}/redeliver",
+                              headers=stranger)
+        assert r.status_code == 404
+        r = await client.post(f"/api/webhook-deliveries/{row_id}/redeliver",
+                              headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 404           # 入站凭证不开放补发
+        r = await client.post("/api/webhook-deliveries/999999/redeliver",
+                              headers=admin)
+        assert r.status_code == 404
+        r = await client.post(f"/api/webhook-deliveries/{row_id}/redeliver",
+                              headers=admin)
+        assert r.status_code == 201, r.text    # admin 可补发已投递行
+

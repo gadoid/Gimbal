@@ -106,3 +106,45 @@ async def list_deliveries(
     rows = (await db.execute(
         q.order_by(WebhookDelivery.id.desc()).limit(limit))).scalars().all()
     return {"items": [_row_out(r) for r in rows]}
+
+
+@router.post("/{delivery_id}/redeliver", status_code=status.HTTP_201_CREATED)
+async def redeliver(
+    delivery_id: int, principal: PrincipalIn, db: DbSession,
+) -> dict:
+    """人工补发(收尾评审 2026-11-02 G5):按 ``failed`` / ``delivered``
+    的投递行**新建一行** pending(同 alias / event / execution / instance /
+    url / body),交回投递循环重发;原行原样保留为历史。
+
+    为什么不是原地重置:接收端以 ``X-Gimbal-Delivery``(= 行 id)去重
+    (§4.3),同 id 重发会被正确实现的接收端当重复丢弃 —— 补发必须换
+    新 id。签名按当前别名密钥现取。
+
+    谁能点:admin,或该行 caller 别名的**属主**(JWT);入站凭证与其他
+    用户一律 404(不泄露)。``pending`` 行(在飞 / 等待退避)409
+    ``already_pending`` —— 它本来就会发。
+    """
+    from ..services import webhook_outbox
+
+    user = principal.user
+    row = await db.get(WebhookDelivery, delivery_id)
+    if row is None or getattr(principal, "inbound", False):
+        raise _not_found()
+    if user.role != "admin":
+        alias = await db.get(ServiceAlias, row.alias_name)
+        if alias is None or alias.owner_user_id != user.id:
+            raise _not_found()
+    if row.status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "already_pending",
+                    "message": "该投递仍在队列中,无需补发"})
+    fresh = WebhookDelivery(
+        alias_name=row.alias_name, event_type=row.event_type,
+        execution_id=row.execution_id, instance_id=row.instance_id,
+        url=row.url, body=row.body, status="pending", attempts=0)
+    db.add(fresh)
+    await db.commit()
+    await db.refresh(fresh)
+    webhook_outbox.wake()
+    return {**_row_out(fresh), "redeliveredFrom": row.id}
