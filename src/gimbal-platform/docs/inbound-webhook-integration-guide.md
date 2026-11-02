@@ -228,6 +228,11 @@ P3 之前不提供事件流/步骤明细回调,明细走轮询。
 补发(接收端丢了 2xx 之后的处理时用);`pending` 行 409 `already_pending`。
 该接口不对入站凭证开放;调用方自己的兜底仍是按 `executionId` 轮询。
 
+**界面排查入口**(收尾评审 G3):别名详情页「入站与回调」tab 底部对
+别名属主 / admin 显示「经由本别名的执行」与「回调投递记录」两张表
+(后端 `GET /api/executions?caller_alias=<别名>` + `GET /api/webhook-
+deliveries?aliasName=<别名>`),投递行上可直接补发。
+
 ## 6. grant 失效行为
 
 集成任务每次实例运行前重校验 grant:失效(撤销/过期)→ 实例以

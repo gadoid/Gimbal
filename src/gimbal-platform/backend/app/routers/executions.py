@@ -163,6 +163,7 @@ async def list_executions(
     batch_id: Annotated[str | None, Query(max_length=64)] = None,
     created_from: Annotated[datetime | None, Query()] = None,
     created_to: Annotated[datetime | None, Query()] = None,
+    caller_alias: Annotated[str | None, Query(max_length=128)] = None,
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
@@ -180,6 +181,11 @@ async def list_executions(
     入站凭证(webhook 设计 v3 §5.6):过滤面从「owner 本人」换成
     「caller_alias_name 等于本别名」—— 只看经由自己别名的执行
     (平台模式 + 经该别名注册的个人模式);JWT 调用行为不变。
+
+    ``caller_alias``(收尾评审 2026-11-02 G3,JWT 面):别名属主或 admin
+    按别名列出**经由该别名**的执行 —— 平台模式执行 owner 是系统用户,
+    不进任何人的「我的执行」,别名详情页据此排查;非属主/不存在 404。
+    入站凭证忽略该参数(恒按本别名)。
     """
     user = principal.user
     if page is not None:
@@ -189,6 +195,17 @@ async def list_executions(
     if getattr(principal, "inbound", False):
         base = select(Execution).where(
             Execution.caller_alias_name == principal.caller_alias)
+    elif caller_alias:
+        from ..models.service_alias import ServiceAlias
+        alias = await session.get(ServiceAlias, caller_alias)
+        if alias is None or not (
+                user.role == "admin" or alias.owner_user_id == user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"alias not found: {caller_alias}"})
+        base = select(Execution).where(
+            Execution.caller_alias_name == caller_alias)
     else:
         base = select(Execution).where(Execution.owner_id == user.id)
     if q:

@@ -11,6 +11,9 @@
   删除 / 触发(inbound.task.write)、换绑(inbound.grant_rebind)各落一条,
   actor = grant 用户或平台系统用户,resource = 调用方别名,detail 带
   identity_mode / grant_id;JWT 面不记。
+* G3 别名页排查面:GET /api/executions?caller_alias= 由别名属主 / admin 列出
+  经由该别名的执行(平台模式执行不进「我的执行」);陌生人 / 不存在 404;
+  入站凭证忽略该参数。
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from app.core import db as db_module
 from app.models import Execution
 from app.models.integration_task import IntegrationTask
 from app.models.permission import AuditLog
+from app.models.service_alias import ServiceAlias
 from app.services import integration_runner as ir
 
 from .helpers import make_draft as _draft, wait_until as _wait
@@ -301,3 +305,41 @@ class TestInboundAudit:
         assert rows[0].detail["identity_mode"] == "platform"
         assert rows[0].actor_name == "平台系统"
         assert rows[0].resource_id == ALIAS_A
+
+
+# ── G3 ────────────────────────────────────────────────────────────
+
+
+class TestAliasExecutionsList:
+    async def test_alias_owner_and_admin_list_by_caller_alias(self, client):
+        tok_a, _ = await _two_aliases()
+        ex_a = await mk_execution(caller=ALIAS_A, status="done")
+        await mk_execution(caller=ALIAS_B, status="done")
+        h_admin = await _register(client, "al_admin")        # 首个真人 = admin
+        h_owner = await _register(client, "al_owner")        # 之后注册 = 普通用户
+        async with db_module.SessionLocal() as s:
+            (await s.get(ServiceAlias, ALIAS_A)).owner_user_id = await _user_id("al_owner")
+            await s.commit()
+        r = await client.get("/api/executions", headers=h_owner,
+                             params={"caller_alias": ALIAS_A})
+        assert r.status_code == 200, r.text
+        assert [it["id"] for it in r.json()["items"]] == [ex_a]
+        # 不是属主的别名 / 不存在的别名 → 404
+        r = await client.get("/api/executions", headers=h_owner,
+                             params={"caller_alias": ALIAS_B})
+        assert r.status_code == 404
+        r = await client.get("/api/executions", headers=h_owner,
+                             params={"caller_alias": "nope"})
+        assert r.status_code == 404
+        # 不带参数仍是「我的执行」(平台模式执行不进来)
+        r = await client.get("/api/executions", headers=h_owner)
+        assert r.json()["total"] == 0
+        # 入站凭证忽略 caller_alias(恒按本别名)
+        r = await client.get("/api/executions", headers=_gic(tok_a),
+                             params={"caller_alias": ALIAS_B})
+        assert r.status_code == 200
+        assert [it["id"] for it in r.json()["items"]] == [ex_a]
+        # admin 任意别名
+        r = await client.get("/api/executions", headers=h_admin,
+                             params={"caller_alias": ALIAS_B})
+        assert r.status_code == 200 and r.json()["total"] == 1

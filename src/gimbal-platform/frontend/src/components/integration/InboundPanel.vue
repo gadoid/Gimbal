@@ -141,6 +141,9 @@
       </table>
       <p v-else class="muted text-caption">我在本别名下尚无 grant</p>
     </div>
+
+    <!-- ── 排查面(G3):经由本别名的执行 + 回调投递 ──────────── -->
+    <InboundActivityPanel v-if="canManage" :alias-name="aliasName" />
   </div>
 </template>
 
@@ -162,6 +165,7 @@ import { toast } from '@/utils/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import InboundActivityPanel from '@/components/integration/InboundActivityPanel.vue'
 
 const props = defineProps<{
   aliasName: string

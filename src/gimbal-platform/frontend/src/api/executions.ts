@@ -135,6 +135,9 @@ export function listExecutions(params?: {
   /** 发起时间范围 ISO(锚 created_at;queued 单 started_at 可空不作锚) */
   createdFrom?: string
   createdTo?: string
+  /** 按调用方别名列经由该别名的执行(收尾评审 G3):别名属主或 admin;
+   *  平台模式执行 owner 是系统用户,不进「我的执行」,别名详情页排查用。 */
+  callerAlias?: string
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。
   return http
@@ -150,6 +153,7 @@ export function listExecutions(params?: {
         batch_id: params?.batchId,
         created_from: params?.createdFrom,
         created_to: params?.createdTo,
+        caller_alias: params?.callerAlias,
       },
     })
     .then((r) => r.data)
