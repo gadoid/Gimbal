@@ -11,6 +11,7 @@ body 含脱敏后的 outputs,可见面已按属主收窄,可随行返回。
 """
 from __future__ import annotations
 
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -114,11 +115,14 @@ async def redeliver(
 ) -> dict:
     """人工补发(收尾评审 2026-11-02 G5):按 ``failed`` / ``delivered``
     的投递行**新建一行** pending(同 alias / event / execution / instance /
-    url / body),交回投递循环重发;原行原样保留为历史。
+    url;body 同内容但 ``deliveryId`` 改为新行 id、附 ``redeliveredFrom``),
+    交回投递循环重发;原行原样保留为历史。
 
     为什么不是原地重置:接收端以 ``X-Gimbal-Delivery``(= 行 id)去重
     (§4.3),同 id 重发会被正确实现的接收端当重复丢弃 —— 补发必须换
-    新 id。签名按当前别名密钥现取。
+    新 id。body 里的 ``deliveryId`` 必须跟着换:按 body 去重的接收端
+    否则同样把补发当重复丢掉,而补发恰是接收端故障恢复后才用的。
+    签名按当前别名密钥现取。
 
     谁能点:admin,或该行 caller 别名的**属主**(JWT);入站凭证与其他
     用户一律 404(不泄露)。``pending`` 行(在飞 / 等待退避)409
@@ -144,6 +148,15 @@ async def redeliver(
         execution_id=row.execution_id, instance_id=row.instance_id,
         url=row.url, body=row.body, status="pending", attempts=0)
     db.add(fresh)
+    await db.flush()                      # 先拿新 id,再改写 body
+    try:
+        payload = json.loads(row.body)
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        payload["deliveryId"] = fresh.id
+        payload["redeliveredFrom"] = row.id
+        fresh.body = json.dumps(payload, ensure_ascii=False, default=str)
     await db.commit()
     await db.refresh(fresh)
     webhook_outbox.wake()

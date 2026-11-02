@@ -599,7 +599,9 @@ class TestRetentionAndEndpoint:
 
 class TestRedeliver:
     """人工补发(收尾评审 2026-11-02 G5):新建一行 pending、原行留历史;
-    别名属主 / admin 可点,入站凭证与陌生人 404;pending 行 409。"""
+    body 的 deliveryId 跟着换成新 id(按 body 去重的接收端也能收到)并附
+    redeliveredFrom;别名属主 / admin 可点,入站凭证与陌生人 404;pending
+    行 409。"""
 
     @staticmethod
     async def _failed_row(**over) -> int:
@@ -608,7 +610,8 @@ class TestRedeliver:
                 alias_name="agent-sys", event_type="execution.finished",
                 execution_id=over.get("execution_id"),
                 url="https://cb.example.local/gimbal/callback",
-                body='{"event":"execution.finished","executionId":7}',
+                body=json.dumps({"event": "execution.finished",
+                                 "deliveryId": 0, "executionId": 7}),
                 status=over.get("status", "failed"), attempts=5,
                 last_error="HTTP 503")
             s.add(row)
@@ -638,8 +641,17 @@ class TestRedeliver:
             old = await s.get(WebhookDelivery, old_id)
             new = await s.get(WebhookDelivery, out["id"])
             assert (old.status, old.attempts, old.last_error) == ("failed", 5, "HTTP 503")
-            assert new.body == old.body and new.alias_name == old.alias_name
+            assert new.alias_name == old.alias_name
             assert new.next_retry_at is None and new.last_error is None
+            # body 跟着换 id:deliveryId = 新行 id、附 redeliveredFrom,其余字段不变;
+            # 原行 body 不动
+            new_body, old_body = json.loads(new.body), json.loads(old.body)
+            assert new_body["deliveryId"] == out["id"]
+            assert new_body["redeliveredFrom"] == old_id
+            assert {k: v for k, v in new_body.items()
+                    if k not in ("deliveryId", "redeliveredFrom")} == {
+                "event": "execution.finished", "executionId": 7}
+            assert old_body["deliveryId"] == 0
         # 新行可被投递循环领取(领取后推进租约、仍 pending)
         jobs = await wo._claim(db_module.SessionLocal)
         assert [j.id for j in jobs] == [out["id"]]
