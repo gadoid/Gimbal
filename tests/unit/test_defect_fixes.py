@@ -2,7 +2,7 @@
 
 Covers the following fix points (numbers match the report):
   #11  EventFilter: re.match -> re.fullmatch
-  #14  _publish_run_meta silent except -> logger.warning
+  #14  (退役) _publish_run_meta -> Engine._emit_run_meta,见 reporter/test_run_meta_timing
   #23  RunEndEvent add skipped field
   #34/#79  HttpResponseEvent status_code conversion crash
   #45  Suite details add step_results
@@ -133,31 +133,10 @@ def _():
 
 
 # ════════════════════════════════════════════════════════════════════
-# #14  _publish_run_meta silent except -> logger.warning
+# #14  _publish_run_meta 已退役（2026-11-02 全量评估 #4）：RunMetaEvent 改由
+#      Engine.run 在 reporter 订阅后发布（core.run_meta + Engine._emit_run_meta），
+#      时序用例见 tests/unit/reporter/test_run_meta_timing.py
 # ════════════════════════════════════════════════════════════════════
-print("\n[3] _publish_run_meta exception handling (#14)")
-
-import inspect
-from gimbal.cli import common as cli_common
-
-
-@test("#14.1 _publish_run_meta uses logger.warning instead of pass")
-def _():
-    src = inspect.getsource(cli_common._publish_run_meta)
-    assert "logger.warning" in src, "should use logger.warning instead of pass"
-    # extract except block
-    after_except = src.split("except Exception")[1] if "except Exception" in src else ""
-    assert "pass" not in after_except, "should not silently pass in except block"
-
-
-@test("#14.2 _publish_run_meta returns early when bus is None")
-def _():
-    class _FakeCfg:
-        event_bus = None
-
-    # Should not raise
-    cli_common._publish_run_meta(_FakeCfg())
-
 
 # ════════════════════════════════════════════════════════════════════
 # #34/#79  HttpResponseEvent status_code conversion crash

@@ -15,7 +15,7 @@ from pydantic import TypeAdapter
 from gimbal.cli.common import (
     EnvOpt, InputFormat, FormatOpt, LogLevel, LogLevelOpt, ModeOpt,
     OutputFormat, OutputOpt, ReportDirOpt, ReporterOpt,
-    _print_run_report, _publish_run_meta,
+    _print_run_report,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.cli.commands.run_launch import InputError, normalize_input
@@ -110,7 +110,6 @@ def execute_run_file(
         for sc in scenarios:
             # 每个场景独立 run（bootstrap 新 Configuration；_run_loaded 内负责 shutdown）
             configuration = bootstrap(cli_ctx)
-            _publish_run_meta(configuration)
             worst = max(worst, _run_loaded(
                 cli_ctx, configuration, sc, expect_kind="scenario",
                 output=output, step_from=step_from, step_to=step_to,
@@ -118,7 +117,6 @@ def execute_run_file(
         raise typer.Exit(code=worst)
 
     configuration = bootstrap(cli_ctx)
-    _publish_run_meta(configuration)
 
     payload = normalize_input(source, None, fmt)
     try:

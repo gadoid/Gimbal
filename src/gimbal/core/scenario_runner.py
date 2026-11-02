@@ -345,7 +345,25 @@ class ScenarioRunner:
             bootstrap_config=scenario_ctx.config,
             auth_registry=self._auth_registry,
         )
-        resolved_steps, base_url, services = preprocessor.run()
+        try:
+            resolved_steps, base_url, services = preprocessor.run()
+        except Exception:
+            # 全量评估 2026-11-02 #11:预处理异常(模板变量缺失 / 认证失败等)
+            # 此前直接冒泡,finalize_scenario 与 scenario.start/end 都不执行
+            # —— 场景无归档、生命周期事件残缺。这里补齐生命周期后**原样上抛**:
+            # 聚合判定(runner 记 error 行)与 CLI 退出码口径不变。
+            logger.exception("[ScenarioRunner] 预处理失败: scenario_id={}", sid)
+            self._emit_scenario_start(scenario_schema, sid, 0,
+                                      suite_id=suite_ctx.suite_id,
+                                      run_id=suite_ctx.run_id)
+            try:
+                self._ctx_manager.finalize_scenario(scenario_ctx, "error")
+            except Exception:  # noqa: BLE001
+                logger.exception("[ScenarioRunner] 预处理失败后 finalize 亦失败（已隔离）")
+            self._emit_scenario_end(scenario_schema, sid, "error", 0,
+                                    suite_id=suite_ctx.suite_id,
+                                    run_id=suite_ctx.run_id)
+            raise
         logger.debug(
             "[ScenarioRunner] 预处理完成: resolved_steps={} base_url={}",
             len(resolved_steps), base_url,

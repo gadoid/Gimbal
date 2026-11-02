@@ -11,7 +11,7 @@ Gimbal 把"场景编排 / 策略执行 / 状态机驱动 / 插件扩展"装进�
 - **层级执行上下文**：`Framework → Suite → Scenario → Step`，每次 `Engine.run()` 独立创建、互不污染。
 - **完整的扩展点**：自定义 `StrategyExecutor` / `Reporter` / `Authenticator`；通过 `PluginLoader` 流水线以插件形式接入。
 - **Event + Hook 双总线**：Event 通知型，Hook 介入型可中断 / 改写 payload；均支持 `plugin_name` 精确热卸载。
-- **CI / Git 上下文透传**：run 前自动发布 `RunMetaEvent`（CI provider / build URL / commit / 触发人等）。
+- **CI / Git 上下文透传**：`bootstrap` 收集 CI provider / build URL / commit / 触发人等进 `Configuration.run_meta`，`Engine.run` 在 reporter 订阅完成后发布 `RunMetaEvent`，HTML / JSON 报告头部与事件流都能拿到。
 
 ## 安装
 
@@ -84,23 +84,26 @@ CLI (Typer)
         │     └── ReporterRuntime.setup
         │     → Configuration (frozen)
         │
-        ├── _publish_run_meta(configuration)        # 发布 RunMetaEvent
-        │
         ├── engine = Engine(configuration)
         ├── result = engine.run(scenario | suite)
         │     ├── 创建 FrameworkContext (run_id 唯一)
-        │     ├── reporter_runtime.begin_all(...)
         │     ├── RunStartEvent
-        │     ├── ScenarioRunner.run() / 多个
-        │     │     ├── ScenarioPreprocessor.run()
-        │     │     │     ├── Phase 1 认证
-        │     │     │     ├── Phase 2 构建查询根
-        │     │     │     ├── Phase 3 模板展开
-        │     │     │     └── Phase 4 提取 base_url
-        │     │     └── StepRunner.run() × n
-        │     │           └── StepStateMachine.run()
-        │     │                 PENDING → BEFORE_REQUEST → CALLING
-        │     │                 → AFTER_REQUEST → VERIFYING → TEARDOWN
+        │     ├── reporter_runtime.begin_all(...)        # reporter 实例化 + 订阅
+        │     ├── RunMetaEvent                           # 订阅之后才发,reporter 收得到
+        │     ├── compile_plan(target)                   # 七阶段编译:单场景 = 隐式 aggregate Plan
+        │     ├── SuiteContext 派生 + suite.start
+        │     ├── PlanScheduler.run(plan)                # 单元乘法(n_runs/数据行)、并行、fail-fast、before/after 连线
+        │     │     └── ScenarioRunner.run() × 单元
+        │     │           ├── ScenarioPreprocessor.run()  # 认证 → 查询根 → 模板展开 → base_url
+        │     │           │   （异常也补齐 scenario.start/end + 归档后再上抛）
+        │     │           ├── setup 括号(LifecycleEntry)
+        │     │           ├── StepRunner.run() × n
+        │     │           │     └── StepStateMachine.run()
+        │     │           │           PENDING → PREPARE → INVOKING → EXTRACTING
+        │     │           │           → VERIFYING → TEARDOWN → PASSED | FAILED | ERROR
+        │     │           └── teardown 括号 → finalize_scenario → scenario.end
+        │     ├── 聚合对账(total/passed/failed/error/halted/blocked)→ 判定门(gates)
+        │     ├── finalize_suite(归档)→ suite.end
         │     ├── RunEndEvent
         │     └── reporter_runtime.finalize_all()  →  ReportArtifact[]
         │

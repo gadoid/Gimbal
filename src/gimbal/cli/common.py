@@ -229,60 +229,11 @@ def parse_parallel(value: str) -> int:
 
 
 def _collect_run_meta() -> dict[str, Any]:
-    """从环境变量和 ~/.gimbal/env / gimbal.toml[run_meta] 汇总本次运行的 CI/Git/触发人上下文，字段缺失时使用空字符串。"""
-    """收集本次运行的元数据（CI/CD 上下文 / git 信息 / 触发人 / 业务扩展）。
-
-    数据来源：
-      - 环境变量：CI 平台约定的标准变量（GitHub Actions / GitLab CI / Jenkins / 通用）
-      - 用户可在 ~/.gimbal/env 或 gimbal.toml 的 [run_meta] 段补充自定义键值
-
-    兼容设计：
-      - 所有字段都有 default；任何环境变量缺失都不会抛错
-      - 字段名为人类可读，与 HTML 报告头部 pill 一一对应
-    """
-    import os
-
-    return {
-        # CI/CD 上下文
-        "ci":              bool(os.environ.get("CI")),
-        "ci_provider":     os.environ.get("CI_PROVIDER", ""),     # 手动指定
-        "build_url":       os.environ.get("BUILD_URL", "") or os.environ.get("CI_BUILD_URL", "") or os.environ.get("GITHUB_SERVER_URL", ""),
-        "build_number":    os.environ.get("BUILD_NUMBER", "") or os.environ.get("GITHUB_RUN_NUMBER", "") or os.environ.get("CI_PIPELINE_ID", ""),
-        "build_id":        os.environ.get("BUILD_ID", "") or os.environ.get("GITHUB_RUN_ID", ""),
-        # Git 上下文（短名：与 HTML 报告头部 pill / JsonReporter dump 对齐）
-        "branch":          os.environ.get("GIT_BRANCH", "") or os.environ.get("GITHUB_REF_NAME", "") or os.environ.get("CI_COMMIT_REF_NAME", ""),
-        "commit":          (os.environ.get("GIT_COMMIT", "") or os.environ.get("GITHUB_SHA", "") or os.environ.get("CI_COMMIT_SHA", ""))[:12],
-        "commit_msg":      (os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("CI_COMMIT_MESSAGE", ""))[:120],
-        # 触发人
-        "triggered_by":    os.environ.get("GIT_AUTHOR", "") or os.environ.get("GITHUB_ACTOR", "") or os.environ.get("CI_COMMIT_AUTHOR", "") or os.environ.get("USER", "") or os.environ.get("USERNAME", ""),
-    }
-
-
-def _publish_run_meta(configuration: Any) -> None:
-    """bootstrap 后、Engine.run 前调用：把 _collect_run_meta() 的结果包装为 RunMetaEvent 发到 bus；bus 缺失或失败时静默降级。"""
-    """收集并发布 RunMetaEvent 到 EventBus。
-
-    时机：bootstrap() 之后、Engine.run() 之前。
-    此时 bus 已经初始化，reporter 也已订阅过 interested_events。
-
-    容错：bus 不存在或 publish 失败时静默跳过（reporter 拿不到 meta 时
-    应能优雅地降级到空 meta，而不是让 CLI 崩溃）。
-    """
-    import os  # 显式 import，便于工具识别
-
-    bus = getattr(configuration, "event_bus", None)
-    if bus is None:
-        return
-    try:
-        from gimbal.events.types import RunMetaEvent
-        meta = _collect_run_meta()
-        bus.publish(RunMetaEvent(meta=meta))
-    except Exception as exc:  # noqa: BLE001
-        # 元数据发布失败不影响主流程，但要留 trace 供调试
-        logger.warning(
-            "[CLI] RunMetaEvent 发布失败（已隔离）: {}: {}",
-            type(exc).__name__, exc,
-        )
+    """CI/Git/触发人上下文(兼容别名)——实现已挪到 core.run_meta.collect_run_meta:
+    发布点在 Engine.run 内 reporter 订阅之后(全量评估 2026-11-02 #4),CLI
+    不再自己 publish RunMetaEvent。"""
+    from gimbal.core.run_meta import collect_run_meta
+    return collect_run_meta()
 
 
 def attach_jsonl_sink(event_bus) -> str:

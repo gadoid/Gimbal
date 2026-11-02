@@ -139,7 +139,9 @@ class RunEndEvent(FrameworkEvent):
 class RunMetaEvent(FrameworkEvent):
     """Run 级元数据（CI/CD 上下文 / git 信息 / 触发人 / 业务自定义键值）。
 
-    由 CLI 在 bootstrap() 之后、Engine.run() 之前 publish 一次。
+    由 Engine.run 在 reporter 订阅完成（reporter_runtime.begin_all）之后
+    publish 一次，meta 取自 bootstrap 收集的 Configuration.run_meta
+    （总线无回放，更早发布 reporter 收不到 —— 全量评估 2026-11-02 #4）。
     所有 reporter 可通过订阅此事件获得本次运行的元信息，而无需直接
     读取 BootstrapConfig 或 FrameworkContext（保持 reporter 层的
     "一切皆事件" 架构一致性，且支持事件流重放）。
@@ -147,9 +149,8 @@ class RunMetaEvent(FrameworkEvent):
     设计要点：
       - meta 字段为开放 dict，允许扩展任意 KV。
       - 不订阅此事件的 reporter 完全无感。
-      - run_id 可为 None（CLI 此时通常还没拿到真正的 run_id，
-        Engine 后续会发出带 run_id 的 RUN_START 事件，reporter
-        可在 on_event 中按需关联）。
+      - run_id 可为 None（元数据是 run 无关的环境信息，reporter 按
+        随后到达的 RUN_START 关联）。
     """
     event_type: Literal["run.meta"] = "run.meta"
     meta: dict[str, Any] = Field(default_factory=dict)

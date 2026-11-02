@@ -15,7 +15,7 @@ from gimbal.core.bootstrap import bootstrap, shutdown
 from gimbal.cli.common import (
     DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
     OutputFormat, OutputOpt, PluginsOpt, ReportDirOpt, ReporterOpt,
-    _print_run_report, _publish_run_meta,
+    _print_run_report,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
@@ -297,8 +297,8 @@ def launch(
             typer.secho(f"--subscribe 读取失败: {exc}", fg=typer.colors.RED, err=True)
             shutdown(configuration)
             raise typer.Exit(code=2)
-    # 2.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文）
-    _publish_run_meta(configuration)
+    # 2.5 RunMetaEvent（CI/CD / git / 触发人）由 Engine.run 在 reporter 订阅后
+    #     发布（bootstrap 已收集进 configuration.run_meta;全量评估 #4）
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
 
     # 4. 归一化输入 → dict

@@ -176,6 +176,11 @@ class Engine:
             except Exception:  # noqa: BLE001
                 logger.exception("[Engine] reporter_runtime.begin_all 失败（已隔离）")
 
+        # 2.6 RunMetaEvent 必须在 reporter 订阅（begin_all）之后发布：总线无回放，
+        #     此前 CLI 在 Engine.run 之前发布,HTML/JSON reporter 永远收不到
+        #     （全量评估 2026-11-02 #4）。JSONL sink 在 Engine.run 之前订阅,照常收到。
+        self._emit_run_meta()
+
         # 3. 执行：编译为 Plan → 单路径执行（v2.1 批次 B；scenario=隐式 aggregate）
         attached_subscribe = None
         try:
@@ -349,6 +354,23 @@ class Engine:
         except Exception:  # noqa: BLE001
             logger.exception("[Engine] run.finished 发布失败（不影响结果返回）")
 
+    def _emit_run_meta(self) -> None:
+        """向 event_bus 发布 RunMetaEvent（Configuration.run_meta;None 不发布）。
+
+        时机：reporter_runtime.begin_all 之后 —— reporter 已订阅。失败只记
+        warning，不影响主流程（报告缺元数据可降级为空）。
+        """
+        bus = self._ictx.event_bus
+        meta = getattr(self._ictx, "run_meta", None)
+        if bus is None or meta is None:
+            return
+        try:
+            from gimbal.events.types import RunMetaEvent
+            bus.publish(RunMetaEvent(meta=dict(meta)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[Engine] RunMetaEvent 发布失败（已隔离）: {}: {}",
+                           type(exc).__name__, exc)
+
     def _emit_run_start(self, framework_ctx: FrameworkContext) -> None:
         """向 event_bus 发布 RunStartEvent 事件。
 
@@ -463,6 +485,15 @@ class Engine:
         # N1（D-6 保留）：suite 判定门 —— 聚合度量上按 gates 求与,
         # 失败改写 exit_code 并在 details 追加 gate 行(不重算单元状态)
         self._apply_gates(plan, result, suite_ctx)
+        # 全量评估 2026-11-02 #10:SuiteContext 收口(ended_at/status + seal +
+        # Archive.save_suite)—— 此前 finalize_suite 全仓零调用,Suite 层无归档。
+        # 放在 gates 之后、suite.end 之前:状态与对外事件一致;隔离失败不改判定。
+        try:
+            framework_ctx.ctx_manager.finalize_suite(
+                suite_ctx, status="passed" if result.exit_code == 0 else "failed")
+        except Exception:  # noqa: BLE001
+            logger.exception("[Engine] finalize_suite 失败（已隔离）: suite_id={}",
+                             suite_ctx.suite_id)
         # N2/S4：suite 边界事件(终态对账 + gates 之后;reporter 感知 suite 边界)
         self._emit_suite_end(plan, suite_ctx, result)
         return result

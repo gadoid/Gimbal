@@ -47,6 +47,9 @@ class Configuration:
     reporter_runtime: Any = None
     # 协议执行器注册表（dispatcher.protocols 的显式引用；Engine 透传给状态机）
     protocols: Any = None
+    # Run 级元数据（CI/Git/触发人,core.run_meta.collect_run_meta 产物）：
+    # Engine.run 在 reporter 订阅后包成 RunMetaEvent 发布；None = 不发布。
+    run_meta: Any = None
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -148,6 +151,9 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     cfg = cfg.model_copy(update={"generator": generator})
     logger.info("[bootstrap] 变量生成器已就绪: kinds={}", generator._registry.kinds())
 
+    # 9. Run 级元数据（纯环境变量读取;Engine.run 内 reporter 订阅后发布）
+    from gimbal.core.run_meta import collect_run_meta
+
     return Configuration(
         cfg=cfg,
         auth_registry=auth_registry,
@@ -160,6 +166,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         plugin_registry=plugin_registry,
         plugins=tuple(plugins),
         reporter_runtime=reporter_runtime,
+        run_meta=collect_run_meta(),
     )
 
 
