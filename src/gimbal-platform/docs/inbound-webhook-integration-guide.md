@@ -82,6 +82,11 @@ GET/HEAD/OPTIONS 或 plate 标记 `query_safe`,否则 403 `not_read_only`。
 url` 即可把被测请求连同注入的凭证改发到任意主机。JWT 前端调用不受
 此限(配方由平台 UI 构造)。
 
+注:编排(`graph`)对入站调用**只有**上面这一个 422 出口;服务端另有
+403 `graph_not_supported_for_platform` 分支,但那是 M1 之后的纵深防御,
+入站请求实际**走不到**(带 `graph` 已在更早一步被 422 拒掉),不是调用
+方需要处理的错误码。
+
 ### 3.1 即时执行:`POST /api/runs`
 
 ```http
@@ -382,3 +387,71 @@ message}`)→ 服务别名(存在 / plate / `base_service` 与锚点声明的服
   `"scope": "scenario"`(与场景步骤同语义,平台不替改)。
 - 不支持数据集、断言注入、编排、定时(定时任务必须引用持久化场景)。
 - 「临时调用另存为场景」本期不做;有需要可把快照里的 payload 落成场景。
+
+## 9. 错误码总表(全接口)
+
+按调用方会碰到的顺序分组;`detail.code` 即下表第二列。临时调用
+(P3)专属错误码见 §8.6,不在此重复。除注明外均为 4xx/5xx + JSON
+`{"detail": {"code", "message", …}}`;认证失败的 401/403 同时写审计
+(§0,G4)。
+
+### 9.1 认证(所有接口,最先碰到)
+
+| HTTP | code | 场景与处理建议 |
+| --- | --- | --- |
+| 401 | `credential_invalid` | gic_ 无效或已吊销 → 换有效凭证;吊销的找别名属主重新生成 |
+| 401 | `inbound_disabled` | 别名不存在或未启用入站 → 找别名属主在别名页开启「允许入站调用」 |
+| 401 | (无 code) | 未带 `Authorization: Bearer …` → 补齐认证头 |
+| 400 | `grant_header_on_jwt` | `X-Gimbal-Grant` 配了 JWT → grant 只与 gic_ 凭证同用,去掉该头 |
+| 403 | `grant_invalid` | ggt_ 无效或已撤销 → 让签发人重新签发(撤销立即生效) |
+| 403 | `grant_alias_mismatch` | grant 不属于当前凭证的别名 → 用该别名下签发的 grant |
+| 403 | `grant_expired` | grant 过期(默认 90 天)→ 签发人重签;已注册的任务走 PATCH 重绑(§6) |
+| 403 | `grant_user_inactive` | 签发人账号被停用/删除 → 找管理员恢复账号或换签发人 |
+| 503 | `platform_user_missing` | 平台系统用户缺失(部署/迁移问题)→ 联系平台管理员 |
+
+### 9.2 执行(`POST /api/runs` 场景 / 取消 / 查询)
+
+| HTTP | code | 场景与处理建议 |
+| --- | --- | --- |
+| 422 | `run_target_ambiguous` | `steps` 与 `scenarioId` 同时出现或都缺 → 二选一 |
+| 422 | `inbound_field_not_allowed` | 携带了配方字段(含 `graph`、`runOptions` 越界键,§3.0)→ 去掉,配方走 `schemeId` |
+| 422 | `callback_path_invalid` | `callbackPath` 带协议/主机 → 只传路径段(`/x/y`) |
+| 404 | `scenario_not_found` | 场景不存在或已删 → 核对 `scenarioId` |
+| 403 | `not_owner` | 个人模式:场景属主 ≠ grant 签发人 → 换属主签发的 grant |
+| 403 | `platform_scope_denied` | 平台模式:场景非公共且非别名属主的 → 用公共场景或个人模式 |
+| 403 | `not_read_only` | 平台模式:场景含写操作 → 携带 grant 走个人模式 |
+| 503 | `plate_unavailable` | 校验需要 plate(只读判定 / 临时调用)→ 稍后重试 |
+| 409 | `shutting_down` | 平台正在停机 → 稍后重试 |
+| 404 | (无 code) | 查询/取消:执行不存在或不可见(含按别名过滤不命中)→ 核对 executionId 与所用别名 |
+| 409 | `not_cancelable` | 取消:已是终态 → 无需处理,等回调即可 |
+| 422 | `bad_status_filter` | 执行列表 `status` 值非法 → 用 queued/running/done/failed/canceled |
+
+### 9.3 定时任务(`POST/PATCH/GET/DELETE /api/integration/tasks*`)
+
+| HTTP | code | 场景与处理建议 |
+| --- | --- | --- |
+| 422 | `identity_mode_mismatch` | 请求体 `identityMode` 与认证结果不一致;或平台模式任务带 grant(PATCH/run);或个人模式任务不带 grant(run)→ 按认证身份调用 |
+| 422 | `identity_mode_invalid` / `visibility_invalid` / `result_policy_invalid` | 枚举值非法 → platform\|personal / private\|public / latest\|on_change |
+| 422 | `cron_invalid` | cron 表达式解析失败 → 改表达式(5 段式) |
+| 422 | `callback_path_invalid` | 同 9.2 → 只传路径段 |
+| 404 | `scenario_not_found` | 注册引用的场景不存在 → 核对 `scenarioId` |
+| 422 | `scenario_not_owned` | 个人模式:场景属主 ≠ grant 签发人 → 只能引用签发人自己的场景 |
+| 422 | `scheme_not_owned` | `schemeId` 不属于该场景 → 核对方案 id |
+| 403 | `platform_scope_denied` / `not_read_only` | 平台模式场景范围 / 只读闸,同 9.2 |
+| 404 | `not_found` | 查/删/触发:任务不存在、已软删,或不是本别名注册的 → 核对任务 id 与所用别名 |
+| 403 | `grant_issuer_mismatch` | 带 grant 改/触发个人模式任务,但签发人 ≠ 任务属主 → 用属主签发的 grant |
+| 403 | `forbidden` | JWT 用户改动他人任务(owner/admin 之外)→ 走属主账号 |
+| 409 | `subscription_required` | 个人模式任务触发但未订阅 → 先订阅确认 |
+| 409 | `cooldown` | 平台模式手动触发 60s 冷却 → 等 `message` 提示的秒数 |
+| 409 | `running` | 实例正在执行 → 等终态后再触发 |
+| 409 | `working_preview` | 场景声明 working(预览)→ 场景钉定修订后再注册/触发 |
+| 429 | `inflight_limit` | 该功能在飞实例已达上限 → 稍后再试 |
+| 500 | `run_failed` / `instance_missing` | 执行内部错误 / 平台系统用户缺失 → 看 `message`,必要时联系管理员 |
+
+### 9.4 投递(`GET /api/webhook-deliveries*`)
+
+| HTTP | code | 场景与处理建议 |
+| --- | --- | --- |
+| 422 | `filter_required` | 列表未带 `executionId` / `instanceId` / `aliasName` → 至少一个 |
+| 404 | `not_found` | 行不存在或无权查看(不泄露)→ 核对 id 与身份 |
+| 409 | `already_pending` | 补发的行仍在队列 → 无需处理,等投递即可 |
