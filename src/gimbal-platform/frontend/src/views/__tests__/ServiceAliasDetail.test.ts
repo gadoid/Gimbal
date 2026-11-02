@@ -10,6 +10,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import ServiceAliasDetail from '@/views/ServiceAliasDetail.vue'
+import { useAuthStore } from '@/stores/auth'
 import * as aliasApi from '@/api/service-aliases'
 import * as catalog from '@/utils/catalog-services'
 
@@ -61,10 +62,20 @@ async function makeRouter(path: string): Promise<Router> {
   return router
 }
 
-async function mountDetail(path: string) {
+async function mountDetail(
+  path: string,
+  user?: { id: number; role: 'user' | 'member' | 'admin' },
+) {
   const router = await makeRouter(path)
   const pinia = createPinia()
   setActivePinia(pinia)
+  if (user) {
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+    auth.currentUser = {
+      id: user.id, username: 'u', display_name: 'u', role: user.role, is_active: true,
+    } as never
+  }
   const w = mount(ServiceAliasDetail, { global: { plugins: [router, pinia] } })
   await flushPromises()
   return { w, router }
@@ -143,5 +154,17 @@ describe('ServiceAliasDetail — 入站与回调 tab(webhook 设计 v3 P1)', () 
     expect(w.find('[data-testid="tab-inbound"]').exists()).toBe(false)
     expect(w.find('[data-testid="inbound-panel-stub"]').exists()).toBe(false)
     w.unmount()
+  })
+
+  it('member 属主:面板 canManage=true;member 非属主:面板仍渲染(grant 自助)但 canManage=false' +
+     '(路由已放开 member+,写面权限按 admin ∨ 属主 —— 全量评估 2026-11-02 #3)', async () => {
+    vi.mocked(aliasApi.listAllAliases).mockResolvedValue(
+      aliases.map(a => a.aliasName === 'agent-sys' ? { ...a, ownerUserId: 7 } : a))
+    const owner = await mountDetail('/service-admin/agent-sys?tab=inbound', { id: 7, role: 'member' })
+    expect(owner.w.find('[data-testid="inbound-panel-stub"]').text()).toBe('agent-sys|true|true')
+    owner.w.unmount()
+    const other = await mountDetail('/service-admin/agent-sys?tab=inbound', { id: 8, role: 'member' })
+    expect(other.w.find('[data-testid="inbound-panel-stub"]').text()).toBe('agent-sys|true|false')
+    other.w.unmount()
   })
 })

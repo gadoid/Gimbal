@@ -47,6 +47,15 @@ describe('router — 角色矩阵守卫', () => {
     expect(to).toBe('/service-admin')
   })
 
+  it('member 可达别名详情页(后端按 admin ∨ 属主放行入站管理、grant 人人可签;' +
+     '路由守卫与后端权限对拍 —— 全量评估 2026-11-02 #3)', async () => {
+    loginAs('member')
+    expect(await nav('/service-admin/agent-sys')).toBe('/service-admin/agent-sys')
+    loginAs('user')
+    // 换一个路由参数,避免同路径重复导航被 vue-router 短路、守卫不再执行
+    expect(await nav('/service-admin/other-sys')).toBe('/home')
+  })
+
   it('admin 全通 + /profile 全员可达', async () => {
     loginAs('admin')
     expect(await nav('/admin/users')).toBe('/admin/users')

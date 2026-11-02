@@ -236,7 +236,11 @@ const routes = [
     // 字段默认值 tab 在此编辑;?tab=credential 供认证管理反查深链
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    // member+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
+    // 且「我的 grant」区块人人可自助签发 —— 旧 requiresAdmin 把属主与
+    // 个人模式调用方一并挡在门外(全量评估 2026-11-02 #3)。写面权限仍由
+    // 后端与子面板的 canManage 把关,放开路由不扩大写权限。
+    meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
   },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
 ]
