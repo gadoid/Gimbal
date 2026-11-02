@@ -3,8 +3,8 @@
 请求 ``steps`` 是配方,按 M1 同一原则收紧(§三):只能带锚点、服务别名、
 值与取回声明;method / path / headers / 地址 / 凭证 / 版本全部由平台按
 plate 定义、别名表、环境版本线补。校验全部在派发前完成(§四 2–6),
-不通过即 4xx、不建执行行;顺序:结构 → 服务别名 → 地址落点 → 版本 →
-组装 → 干跑 convert。身份闸(§四.1,403)在路由层。
+不通过即 4xx、不建执行行;顺序:结构 → 锚点存在 → 服务别名 → 地址落点
+→ 版本 → 组装 → 干跑 convert。身份闸(§四.1,403)在路由层。
 
 干跑 convert 的结果不缓存进执行:执行期按正常链路再 convert 一次,
 「派发前校验」与「执行」走同一代码路径,不分叉。
@@ -162,31 +162,76 @@ async def load_alias_rows(
     return {r.alias_name: r for r in rows}
 
 
-def check_services(steps: list[dict], rows: dict[str, ServiceAlias]) -> None:
-    """§四.3:别名存在、``kind=plate``、``base_service`` = 锚点系统
-    (别名不能拿来调别的系统的接口)→ 否则 422 ``adhoc_service_mismatch``。"""
+def check_services(
+    steps: list[dict], rows: dict[str, ServiceAlias],
+    endpoint_services: dict[str, str],
+) -> None:
+    """§四.3:别名存在、``kind=plate``、``base_service`` = 锚点在 plate 中
+    **声明的服务**(别名不能拿来调别的服务的接口)→ 否则 422
+    ``adhoc_service_mismatch``。
+
+    比较对象是端点的 ``service`` 字段,不是锚点首段的系统名 —— 两者是
+    不同命名空间(``fin.account.query_balance`` 属系统 ``fin``,其端点
+    声明的 service 是 ``fin-service``;别名 ``base_service`` 取自 plate
+    服务目录,即后者)。``endpoint_services`` 由
+    :func:`lookup_endpoint_services` 预取。
+    """
     offenders: list[dict] = []
+    bad_alias: set[str] = set()            # unknown / not_plate 每个别名只报一次
     seen: set[tuple[str, str]] = set()
     for st in steps:
-        svc, system = str(st["service"]).strip(), _system_of(str(st["endpoint"]).strip())
-        if (svc, system) in seen:
+        svc, ep = str(st["service"]).strip(), str(st["endpoint"]).strip()
+        if (svc, ep) in seen or svc in bad_alias:
             continue
-        seen.add((svc, system))
+        seen.add((svc, ep))
         row = rows.get(svc)
         if row is None:
+            bad_alias.add(svc)
             offenders.append({"service": svc, "reason": "unknown"})
         elif row.kind != "plate":
+            bad_alias.add(svc)
             offenders.append({"service": svc, "reason": "not_plate"})
-        elif row.base_service != system:
-            offenders.append({"service": svc, "reason": "system_mismatch",
-                              "system": system, "baseService": row.base_service})
+        elif row.base_service != endpoint_services.get(ep):
+            offenders.append({"service": svc, "reason": "service_mismatch",
+                              "endpoint": ep,
+                              "endpointService": endpoint_services.get(ep),
+                              "baseService": row.base_service})
     if offenders:
         raise AdhocRejected(
             "adhoc_service_mismatch",
-            "service 必须是已登记的 plate 别名,且其 base_service 与锚点"
-            "系统一致: " + "、".join(
+            "service 必须是已登记的 plate 别名,且其 base_service 与锚点在"
+            "plate 中声明的服务一致: " + "、".join(
                 f"{o['service']}({o['reason']})" for o in offenders),
             extra={"services": offenders})
+
+
+async def lookup_endpoint_services(steps: list[dict]) -> dict[str, str]:
+    """按锚点取 plate 当前定义的 ``service``(``/api/endpoint/{id}/full``,
+    共用进程级 TTL 缓存)。锚点在 plate 中不存在(404)→ 422
+    ``adhoc_invalid``(``errors`` 形状同干跑 convert 的逐字段错误,比等到
+    干跑更早、更明确);其余取不到(连不上 / 非 404 / 信封坏)→
+    ``PlateUnavailableError``(路由 503)。
+    """
+    out: dict[str, str] = {}
+    errors: list[dict] = []
+    for ep in dict.fromkeys(str(st["endpoint"]).strip() for st in steps):
+        res = await plate_client.get_endpoint_full(ep)
+        if res.item is None:
+            if res.status == 404:
+                errors.extend(
+                    {"path": f"steps[{i}].endpoint",
+                     "message": f"plate 中不存在锚点 {ep}"}
+                    for i, st in enumerate(steps)
+                    if str(st["endpoint"]).strip() == ep)
+                continue
+            raise plate_client.PlateUnavailableError(
+                f"plate_unavailable: 取端点 {ep} 定义失败"
+                f"(status {res.status}): {res.reason}")
+        out[ep] = str(res.item.get("service") or "")
+    if errors:
+        raise AdhocRejected(
+            "adhoc_invalid", "锚点在 plate 中不存在", extra={"errors": errors})
+    return out
 
 
 def check_addresses(services: list[str], rows: dict[str, ServiceAlias]) -> None:
@@ -323,8 +368,9 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str) -> dict:
         st["endpoint"] = str(st["endpoint"]).strip()
         st["service"] = str(st["service"]).strip()
     services = list(dict.fromkeys(st["service"] for st in steps))
+    endpoint_services = await lookup_endpoint_services(steps)
     rows = await load_alias_rows(db, services)
-    check_services(steps, rows)
+    check_services(steps, rows, endpoint_services)
     check_addresses(services, rows)
     meta_plate = await resolve_versions(db, steps, rows, req.release)
     payload = build_adhoc_payload(

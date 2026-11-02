@@ -278,7 +278,7 @@ X-Gimbal-Grant: ggt_…
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | `endpoint` | 是 | plate 接口锚点 `<系统>.<接口>`;系统取首段 |
-| `service` | 是 | 服务别名名(与场景 `call.service` 同义);须为 `kind=plate` 且 `base_service` = 锚点系统的已登记别名 |
+| `service` | 是 | 服务别名名(与场景 `call.service` 同义);须为 `kind=plate` 且 `base_service` = 锚点在 plate 中**声明的服务**(端点的 `service` 字段,如 `fin.account.query_balance` → `fin-service`,不是系统名 `fin`)的已登记别名 |
 | `body` | 否 | 业务参数(对象/数组/字符串);GET 类接口由执行器转 query |
 | `pathParams` | 否 | plate 路径模板 `{key}` 占位的值 `{key: 标量}`;模板本身仍来自 plate 定义 |
 | `strategy` | 否 | 只允许 `kind ∈ extract / assertion / assign`,条目结构同场景步骤(执行器 M2 schema,`extra=forbid`) |
@@ -306,14 +306,17 @@ method、path、header —— 与 M1 同一原则。
 
 ### 8.4 派发前校验(不通过即 4xx,不建执行行)
 
-按顺序:身份(8.1)→ 结构(8.2)→ 服务别名(存在 / plate / 系统对应,
+按顺序:身份(8.1)→ 结构(8.2)→ 锚点存在(按锚点取 plate 端点定义;
+不存在 → 422 `adhoc_invalid`,`errors[]` 为 `{path: "steps[i].endpoint",
+message}`)→ 服务别名(存在 / plate / `base_service` 与锚点声明的服务一致,
 422 `adhoc_service_mismatch`,`services[].reason` = `unknown` /
-`not_plate` / `system_mismatch`)→ 地址落点(别名无 `base_url` → 422
-`adhoc_service_unresolved`)→ 版本(8.3)→ 组装 → **干跑一次 plate
-convert**(与 preview-plate 同口径:锚点不存在、未知字段、必填缺失、类型
-不符 → 422 `adhoc_invalid`,`errors` 原样带回 plate 的逐字段错误)。
-干跑结果不缓存进执行,执行期按正常链路再 convert 一次,派发前校验与
-执行走同一代码路径。plate 不可达 → 503 `plate_unavailable`。
+`not_plate` / `service_mismatch`,后者附 `endpointService` 与 `baseService`)
+→ 地址落点(别名无 `base_url` → 422 `adhoc_service_unresolved`)→ 版本
+(8.3)→ 组装 → **干跑一次 plate convert**(与 preview-plate 同口径:未知
+字段、必填缺失、类型不符 → 422 `adhoc_invalid`,`errors` 原样带回 plate
+的逐字段错误)。干跑结果不缓存进执行,执行期按正常链路再 convert 一次,
+派发前校验与执行走同一代码路径。plate 不可达(取端点定义或干跑时)→
+503 `plate_unavailable`。
 
 ### 8.5 记录与回调
 
@@ -336,11 +339,11 @@ convert**(与 preview-plate 同口径:锚点不存在、未知字段、必填缺
 | 422 | `run_target_ambiguous` | `steps` 与 `scenarioId` 同时出现或都缺失 |
 | 422 | `adhoc_field_not_allowed` | 白名单外字段 / 不允许的策略 / 步数越界 / 带 runOptions 等配方字段 / release 形状或系统不对 |
 | 422 | `adhoc_step_invalid` | 步骤缺 endpoint/service 或 body/pathParams/strategy 形状不对 |
-| 422 | `adhoc_service_mismatch` | 别名不存在、非 plate 别名、或与锚点系统不对应 |
+| 422 | `adhoc_service_mismatch` | 别名不存在、非 plate 别名、或 `base_service` 与锚点在 plate 中声明的服务不一致 |
 | 422 | `adhoc_service_unresolved` | 别名无 base_url |
 | 422 | `adhoc_version_unresolved` | 取不到环境版本线或修订 |
-| 422 | `adhoc_invalid` | plate convert 拒绝(附逐字段 `errors`) |
-| 503 | `plate_unavailable` | 派发前校验期间 plate 不可达 |
+| 422 | `adhoc_invalid` | 锚点在 plate 中不存在,或 plate convert 拒绝(均附逐字段 `errors`) |
+| 503 | `plate_unavailable` | 派发前校验期间 plate 不可达(取端点定义或干跑 convert) |
 
 入站 M1 闸先于临时调用分支:`serviceBindings` 等仍是 422
 `inbound_field_not_allowed`。

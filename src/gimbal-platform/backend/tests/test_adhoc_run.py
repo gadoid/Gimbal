@@ -5,8 +5,10 @@
 * 结构:call.method/path、headers、config、schemeId、runOptions、未知策略、
   步数越界、release 形状 → 422 adhoc_field_not_allowed(fields 列全);
   缺 endpoint → 422 adhoc_step_invalid;入站 M1 先拒 serviceBindings;
-* 别名:不存在 / external / base_service 与锚点系统不符 → adhoc_service_
-  mismatch;无 base_url → adhoc_service_unresolved;
+* 别名:不存在 / external / base_service 与锚点在 plate 中声明的服务不符
+  (含「= 系统名但 ≠ 端点 service」)→ adhoc_service_mismatch;无 base_url
+  → adhoc_service_unresolved;锚点在 plate 中不存在 → 422 adhoc_invalid
+  (先于别名校验);取端点定义时 plate 不可达 → 503;
 * 版本:显式 release 生效;环境版本线 → 线内最新修订;无环境 / plate 无此线
   → adhoc_version_unresolved;
 * 校验:plate convert 拒绝 → 422 adhoc_invalid 带逐字段 errors;plate 不可达
@@ -60,10 +62,16 @@ plate_mock = _plate_it.plate_mock
 
 EP = "settle.order.query"
 SYSTEM = "settle"
-SVC = "settle-sit"
+# 真实形态:锚点首段是系统名,端点声明的 service 与系统名**不同**
+# (仓库里 fin → fin-service、platform → platform-service),别名的
+# base_service 取后者。夹具若把 base_service 直接写成系统名,会掩盖
+# 「拿系统名比服务名」这类错误(实现评审 2026-11-02 §2)。
+SERVICE = "settle-service"
+SVC = "settle-service-sit"
 CRED = "qa-cred"
 BASE_URL = "https://settle.sit.local"
 PLATE_FULL = {
+    "id": EP, "system": SYSTEM, "service": SERVICE,
     "binding": {"protocol": "http", "method": "GET",
                 "path": "/orders/query", "timeout": 30},
     "metadata": {"query_safe": True},
@@ -98,9 +106,10 @@ async def _personal(client, username: str) -> dict:
 
 
 async def _seed_target(*, base_url: str | None = BASE_URL, kind: str = "plate",
-                       base_service: str = SYSTEM, credential: str | None = CRED,
+                       base_service: str = SERVICE, credential: str | None = CRED,
                        env_lines: dict | None = None) -> None:
-    """被调服务别名(默认挂一个声明 settle@2.1 的环境)。"""
+    """被调服务别名(默认 base_service = 端点声明的服务,挂一个声明
+    settle@2.1 的环境)。"""
     lines = {SYSTEM: "2.1"} if env_lines is None else env_lines
     async with db_module.SessionLocal() as s:
         env_id = None
@@ -289,10 +298,17 @@ class TestStructure:
 
 
 class TestAliasAndVersion:
-    async def test_unknown_alias_mismatch(self, client, plate_mock):
+    @staticmethod
+    async def _personal_ready(client, plate_mock: PlateMock, username: str) -> dict:
+        """入站个人模式 + plate 桩(锚点 /full 可取),**不**种被调别名
+        —— 别名由各用例按需种。"""
         await _seed_platform_user()
         await _seed_alias()
-        h = await _personal(client, "ad_a1")
+        _plate_ready(plate_mock)
+        return await _personal(client, username)
+
+    async def test_unknown_alias_mismatch(self, client, plate_mock):
+        h = await self._personal_ready(client, plate_mock, "ad_a1")
         r = await _post(client, h, _body())
         assert r.status_code == 422, r.text
         d = r.json()["detail"]
@@ -300,29 +316,63 @@ class TestAliasAndVersion:
         assert d["services"] == [{"service": SVC, "reason": "unknown"}]
 
     async def test_external_alias_mismatch(self, client, plate_mock):
-        await _seed_platform_user()
-        await _seed_alias()
-        h = await _personal(client, "ad_a2")
+        h = await self._personal_ready(client, plate_mock, "ad_a2")
         await _seed_target(kind="external")
         r = await _post(client, h, _body())
         assert r.status_code == 422, r.text
         assert r.json()["detail"]["services"][0]["reason"] == "not_plate"
 
-    async def test_system_mismatch(self, client, plate_mock):
-        await _seed_platform_user()
-        await _seed_alias()
-        h = await _personal(client, "ad_a3")
-        await _seed_target(base_service="pay")
+    @pytest.mark.parametrize("base_service", ["pay-service", SYSTEM])
+    async def test_service_mismatch(self, client, plate_mock, base_service):
+        """base_service 与锚点在 plate 中声明的服务不符 → service_mismatch。
+        第二组是实现评审 §2 的复现:base_service 写成**系统名**(settle)而
+        端点声明的 service 是 settle-service —— 两个命名空间不能混。"""
+        h = await self._personal_ready(client, plate_mock, "ad_a3")
+        await _seed_target(base_service=base_service)
         r = await _post(client, h, _body())
         assert r.status_code == 422, r.text
-        o = r.json()["detail"]["services"][0]
-        assert o["reason"] == "system_mismatch"
-        assert o["system"] == SYSTEM and o["baseService"] == "pay"
+        d = r.json()["detail"]
+        assert d["code"] == "adhoc_service_mismatch"
+        assert d["services"] == [{
+            "service": SVC, "reason": "service_mismatch", "endpoint": EP,
+            "endpointService": SERVICE, "baseService": base_service}]
+        assert await _executions() == []
+
+    async def test_unknown_endpoint_422_invalid_before_alias(
+            self, client, plate_mock):
+        """锚点在 plate 中不存在 → 422 adhoc_invalid(errors 形状同干跑
+        convert),先于别名校验、不建执行行。"""
+        h = await self._personal_ready(client, plate_mock, "ad_a5")
+        await _seed_target()
+        r = await _post(client, h, _body(
+            [_step(endpoint="settle.order.nope"), _step()]))
+        assert r.status_code == 422, r.text
+        d = r.json()["detail"]
+        assert d["code"] == "adhoc_invalid"
+        assert d["errors"] == [{"path": "steps[0].endpoint",
+                                "message": "plate 中不存在锚点 settle.order.nope"}]
+        assert await _executions() == []
+
+    async def test_endpoint_lookup_unavailable_503(self, client, plate_mock,
+                                                   monkeypatch):
+        """取端点定义时 plate 连不上(非 404)→ 503 plate_unavailable。"""
+        from app.services import adhoc_run, plate_client
+
+        h = await self._personal_ready(client, plate_mock, "ad_a6")
+        await _seed_target()
+
+        async def _down(endpoint_id, *, timeout=None):
+            return plate_client.EndpointFull(
+                item=None, stale=False, status=None, reason="connection refused")
+
+        monkeypatch.setattr(adhoc_run.plate_client, "get_endpoint_full", _down)
+        r = await _post(client, h, _body())
+        assert r.status_code == 503, r.text
+        assert r.json()["detail"]["code"] == "plate_unavailable"
+        assert await _executions() == []
 
     async def test_no_base_url_unresolved(self, client, plate_mock):
-        await _seed_platform_user()
-        await _seed_alias()
-        h = await _personal(client, "ad_a4")
+        h = await self._personal_ready(client, plate_mock, "ad_a4")
         await _seed_target(base_url=None)
         r = await _post(client, h, _body())
         assert r.status_code == 422, r.text
@@ -332,9 +382,7 @@ class TestAliasAndVersion:
         assert await _executions() == []
 
     async def test_no_environment_version_unresolved(self, client, plate_mock):
-        await _seed_platform_user()
-        await _seed_alias()
-        h = await _personal(client, "ad_v1")
+        h = await self._personal_ready(client, plate_mock, "ad_v1")
         await _seed_target(env_lines={})
         r = await _post(client, h, _body())
         assert r.status_code == 422, r.text
@@ -343,9 +391,7 @@ class TestAliasAndVersion:
         assert d["systems"] == [{"system": SYSTEM, "reason": "no_line"}]
 
     async def test_line_not_in_plate_unresolved(self, client, plate_mock):
-        await _seed_platform_user()
-        await _seed_alias()
-        h = await _personal(client, "ad_v2")
+        h = await self._personal_ready(client, plate_mock, "ad_v2")
         await _seed_target(env_lines={SYSTEM: "7.7"})
         plate_mock.lines[SYSTEM] = [{"line": "1.0", "revisions": 1,
                                      "latest": "1.0#1"}]
