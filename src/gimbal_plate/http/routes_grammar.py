@@ -239,7 +239,8 @@ def system_revision_diff(system_id: str, a: str, b: str,
                          request: Request) -> dict[str, Any]:
     """对象级差异 + 变化接口的变化部位（Release 4.3 / R7）。
 
-    ``a``/``b`` 可跨版本线，也可为 ``working``（与进程当前树比）；
+    ``a``/``b`` 可跨版本线，也可为 ``working``（与磁盘当前方言树比 ——
+    S1.5 起直接读文件源,非进程启动时加载的注册表缓存）；
     ``#`` 需编码为 ``%23``，或用 ``<line>``（最新修订）写法。
     """
     from gimbal_plate.release import read as release_read

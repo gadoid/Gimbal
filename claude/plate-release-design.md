@@ -139,7 +139,7 @@
 | `GET /api/system/{id}/lines` | 版本线列表（按 `predecessor_line` 排序）：各线的修订数、最新修订 |
 | `GET /api/system/{id}/lines/{line}/revisions` | 修订列表：编号、时间、签发人、摘要、`corrections` 摘要 |
 | `GET /api/system/{id}/revisions/{rev}` | manifest |
-| `GET /api/system/{id}/revisions/{a}/diff/{b}` | 对象级差异；每个变更接口的**变化部位**（`service` / `binding` / `request` / `responses`，以及 path 占位符差异）；请求与响应的字段级差异。`a`、`b` 可以跨版本线，也可以是 `working` |
+| `GET /api/system/{id}/revisions/{a}/diff/{b}` | 对象级差异；每个变更接口的**变化部位**（`service` / `binding` / `request` / `responses`，以及 path 占位符差异）；请求与响应的字段级差异。`a`、`b` 可以跨版本线，也可以是 `working`（S1.5 起 `working` 端直接读磁盘当前方言树、与发布链同一遍收集全域对象，非进程启动时加载的注册表） |
 
 字段级差异收归 plate（R7），覆盖请求与响应；平台删除 `diff_field_specs`。
 
