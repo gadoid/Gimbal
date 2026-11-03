@@ -32,9 +32,6 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 import asyncio
-import os
-import stat
-import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -43,6 +40,7 @@ from typing import Any, Callable
 import typer
 
 from gimbal.cli.context import CLIContext
+from gimbal.core.proc_guard import start_stdin_guard
 from gimbal.schema import RunOptions  # noqa: F401（RunsRequest 类型引用）
 from gimbal.log import get_logger
 from gimbal.version import __version__
@@ -79,41 +77,8 @@ _IDLE_CHECK_INTERVAL_SEC = 15.0
 
 
 # ─── 进程自守卫(父进程生死解耦的退出路径) ─────────────────────────
-
-def _stdin_is_pipe(fd: int = 0) -> bool:
-    """stdin 是否为管道(FIFO)。只有管道才布防 EOF 守卫:tty 的 EOF 是
-    用户 Ctrl-D、devnull 立即 EOF、文件读完即 EOF —— 都不是「父进程死亡」。"""
-    try:
-        return stat.S_ISFIFO(os.fstat(fd).st_mode)
-    except (OSError, ValueError):
-        return False
-
-
-def _start_stdin_guard(on_parent_gone: Callable[[], None]) -> "threading.Thread | None":
-    """stdin 为管道时起守卫线程:阻塞读到 EOF → ``on_parent_gone()``。
-
-    父进程无论怎么死(SIGKILL 也一样)内核都会关闭它持有的管道写端,
-    本端 ``read`` 随即返回空 —— 不依赖父进程配合,是最可靠的跨平台
-    「父死子亡」通道。父进程从不往 stdin 写(写了也只是被丢弃)。
-    非管道不布防,返回 None。
-    """
-    if not _stdin_is_pipe():
-        return None
-
-    def _watch() -> None:
-        try:
-            buf = sys.stdin.buffer
-            while buf.read(1):
-                pass
-        except Exception:  # noqa: BLE001 — stdin 已关/不可读,同样视为父进程不在
-            pass
-        logger.info("[Server] stdin EOF(父进程已退出/关闭管道),执行器自退")
-        on_parent_gone()
-
-    t = threading.Thread(target=_watch, name="gimbal-stdin-guard", daemon=True)
-    t.start()
-    return t
-
+# stdin 守卫实现在 gimbal.core.proc_guard(launch 链同款共用);本模块
+# 只保留 server 特有的空闲 TTL 判定与看门狗。
 
 def _idle_should_exit(app: Any, timeout_s: float, now: "float | None" = None) -> bool:
     """真闲判定:无在飞 run 且距最近活动(run 启动/收口)≥ timeout。
@@ -313,7 +278,7 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
     )
     server = uvicorn.Server(uconfig)
     # 进程自守卫(模块 docstring):任一触发 → should_exit 优雅自退。
-    _start_stdin_guard(lambda: setattr(server, "should_exit", True))
+    start_stdin_guard(lambda: setattr(server, "should_exit", True))
     _start_idle_watchdog(app, config.idle_timeout,
                          lambda: setattr(server, "should_exit", True))
     server.run()

@@ -308,6 +308,8 @@ gimbal run server --register-to=https://scheduler --auth=token --token-file=/etc
 
 直接接收文件/stdin/inline 内容加载执行，走完整 bootstrap + Engine 路径。
 
+> **进程自守卫（2026-11-03）**：stdin 为管道（平台 launcher spawn 时 `stdin=PIPE`）时布防 EOF 守卫——父进程硬死后引擎读到 EOF 即置协作取消（在飞请求跑完、步骤边界停、报告照写）后退出，杜绝「盲跑僵尸」；tty/devnull/文件不布防，手动运行不受影响（见 `core/proc_guard.py`）。
+
 ```bash
 gimbal run launch [SOURCE] [选项]
 ```

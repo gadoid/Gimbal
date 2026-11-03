@@ -1,13 +1,13 @@
 """server 进程自守卫的判定面(2026-11-03 执行器泄漏复盘)。
 
 真子进程 e2e(stdin EOF 自退/空闲 TTL 自退)在 tests/integration/
-test_server_selfexit.py;本文件只钉两个纯判定,毫秒级:
+test_server_selfexit.py;本文件只钉纯判定,毫秒级:
 
-- ``_stdin_is_pipe``:只有管道才布防 EOF 守卫 —— devnull(立即 EOF)
-  /普通文件(读完 EOF)/非 fd 都不得布防,否则手动运行与 pytest 捕获
-  stdin 的场景一启动就自退;
-- ``_idle_should_exit``:在飞 run 挡住 TTL;最近活动未到 TTL 挡住;
-  timeout≤0 恒不退(开关关闭)。状态面来自 server_debug 挂的
+- ``proc_guard.stdin_is_pipe``(server/launch 两链共用):只有管道才
+  布防 EOF 守卫 —— devnull(立即 EOF)/普通文件(读完 EOF)/非 fd 都
+  不得布防,否则手动运行与 pytest 捕获 stdin 的场景一启动就自退;
+- ``server._idle_should_exit``:在飞 run 挡住 TTL;最近活动未到 TTL
+  挡住;timeout≤0 恒不退(开关关闭)。状态面来自 server_debug 挂的
   app.state(runs_registry/runs_lock/runs_last_activity)。
 """
 from __future__ import annotations
@@ -18,14 +18,15 @@ import threading
 import time
 from types import SimpleNamespace
 
-from gimbal.core.server import _idle_should_exit, _stdin_is_pipe
+from gimbal.core.proc_guard import stdin_is_pipe
+from gimbal.core.server import _idle_should_exit
 
 
 def test_stdin_is_pipe_true_for_fifo() -> None:
     r, w = os.pipe()
     try:
-        assert _stdin_is_pipe(r) is True
-        assert _stdin_is_pipe(w) is True
+        assert stdin_is_pipe(r) is True
+        assert stdin_is_pipe(w) is True
     finally:
         os.close(r)
         os.close(w)
@@ -34,17 +35,17 @@ def test_stdin_is_pipe_true_for_fifo() -> None:
 def test_stdin_is_pipe_false_for_file_and_devnull() -> None:
     # 普通文件:读完即 EOF,不是「父进程死亡」信号
     with tempfile.NamedTemporaryFile() as f:
-        assert _stdin_is_pipe(f.fileno()) is False
+        assert stdin_is_pipe(f.fileno()) is False
     # /dev/null:字符设备,打开即 EOF;手动后台运行常见形态
     fd = os.open(os.devnull, os.O_RDONLY)
     try:
-        assert _stdin_is_pipe(fd) is False
+        assert stdin_is_pipe(fd) is False
     finally:
         os.close(fd)
 
 
 def test_stdin_is_pipe_false_for_bad_fd() -> None:
-    assert _stdin_is_pipe(9999) is False
+    assert stdin_is_pipe(9999) is False
 
 
 def _state_app(*, running: bool, idle_for: float) -> SimpleNamespace:

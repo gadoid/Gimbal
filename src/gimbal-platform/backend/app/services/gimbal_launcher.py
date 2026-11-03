@@ -22,8 +22,10 @@ dispatcher 级测试替换(继承原 ``gimbal_client.run`` 的 mock 模式)。
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import json
 import os
+import signal
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +34,42 @@ from typing import Callable, Any
 from loguru import logger
 
 from ..core.config import settings
+
+
+# ─── 子进程泄漏防线(2026-11-03 复盘,launch 链) ────────────────────
+# 事故形态(实证):平台父进程被硬杀(SIGKILL/Bash 超时/带会话退出)后,
+# launch 子进程不会死 —— stdout 写断管道的 BrokenPipeError 被引擎事件
+# 总线 _safe_call 吞掉(只往同样已断的 stderr 记日志,loguru 再吞一层),
+# Python 默认 SIGPIPE=SIG_IGN 也不杀进程 —— 它把用例剩余工作量全部跑完
+# 才退(继续对被测系统发真实请求、写报告),且 GIMBAL_TIMEOUT_SEC 超时
+# 上限随父进程失效。本链与 server 链(见 gimbal_server_session)同款双守卫:
+#   - stdin=PIPE:父死→内核关写端→引擎 stdin EOF 守卫置协作取消,
+#     步骤边界收口后正常退出(引擎侧 core/proc_guard,Windows 唯一守卫);
+#   - PR_SET_PDEATHSIG=SIGTERM:内核级即时兜底,不依赖引擎版本。
+
+_PR_SET_PDEATHSIG = 1
+
+try:
+    # 模块装载期解析 libc(preexec_fn 里只做一次 prctl 函数指针调用,
+    # 不做 dlopen/分配 —— fork 后子进程上下文里这些不保证安全)
+    _LIBC = (ctypes.CDLL("libc.so.6", use_errno=True)
+             if sys.platform != "win32" else None)
+except OSError:  # pragma: no cover — 非常规 libc 缺失环境
+    _LIBC = None
+
+
+def _arm_pdeathsig() -> None:
+    """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGTERM``。
+
+    内核保证「父进程死亡 → 向本进程递送 SIGTERM」，父进程怎么死都成立
+    （含 SIGKILL）。注意其触发条件是**发起 fork 的线程**退出：本服务
+    的 spawn 恒经事件循环(asyncio transport 同步创建)且 uvicorn 事件
+    循环在主线程 —— 主线程退出=进程退出，语义恰为「父进程死亡」。
+    若未来把执行挪到工作线程的事件循环，此守卫会在线程退出时误触发，
+    届时依赖 stdin EOF 守卫兜底即可。
+    """
+    if _LIBC is not None:
+        _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
 
 
 # ─── result value object ──────────────────────────────────────────
@@ -253,11 +291,16 @@ async def launch(
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
+            # 泄漏防线(模块头 docstring):stdin 管道=父死子亡的跨平台通道,
+            # 引擎 stdin EOF 守卫据此置协作取消;PDEATHSIG 为内核级即时
+            # 兜底(非 Windows)。
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(cwd) if cwd else None,
             env=env,
             creationflags=creationflags,
+            preexec_fn=_arm_pdeathsig if sys.platform != "win32" else None,
         )
     except OSError as e:
         logger.error(

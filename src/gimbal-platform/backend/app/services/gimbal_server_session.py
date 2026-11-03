@@ -13,7 +13,8 @@ docstring），本模块不再单靠协作式回收：
     （跨平台；也是 close() 的首选优雅通道）；
   - ``PR_SET_PDEATHSIG=SIGTERM``（preexec_fn，非 Windows）：父进程死亡
     → 内核直接递送 SIGTERM，不依赖执行器版本（旧执行器 uvicorn 收
-    SIGTERM 同样优雅退出）。
+    SIGTERM 同样优雅退出）。助手实现在 ``gimbal_launcher._arm_pdeathsig``
+    （launch 链共用）。
 
 与 ``gimbal_launcher.launch()``（run launch 子进程 stdout jsonl）双链并存
 （C13 灰度：``settings.EXEC_CHAIN`` / 执行配方 ``chain`` 键切换）。
@@ -21,11 +22,9 @@ docstring），本模块不再单靠协作式回收：
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import json
 import os
 import secrets
-import signal
 import sys
 import time
 from pathlib import Path
@@ -35,33 +34,9 @@ import httpx
 from loguru import logger
 
 from ..core.config import settings
-from .gimbal_launcher import LaunchResult, _base_argv
-
-# ─── 子进程泄漏防线(模块 docstring) ─────────────────────────────
-
-_PR_SET_PDEATHSIG = 1
-
-try:
-    # 模块装载期解析 libc(preexec_fn 里只做一次 prctl 函数指针调用,
-    # 不做 dlopen/分配 —— fork 后子进程上下文里这些不保证安全)
-    _LIBC = (ctypes.CDLL("libc.so.6", use_errno=True)
-             if sys.platform != "win32" else None)
-except OSError:  # pragma: no cover — 非常规 libc 缺失环境
-    _LIBC = None
-
-
-def _arm_pdeathsig() -> None:
-    """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGTERM``。
-
-    内核保证「父进程死亡 → 向本进程递送 SIGTERM」，父进程怎么死都成立
-    （含 SIGKILL）。注意其触发条件是**发起 fork 的线程**退出：本服务
-    的 spawn 恒经事件循环(asyncio transport 同步创建)且 uvicorn 事件
-    循环在主线程 —— 主线程退出=进程退出，语义恰为「父进程死亡」。
-    若未来把执行挪到工作线程的事件循环，此守卫会在线程退出时误触发，
-    届时依赖 stdin EOF 守卫兜底即可。
-    """
-    if _LIBC is not None:
-        _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+# PDEATHSIG 助手实现在 gimbal_launcher(launch 链同款共用,方向:本模块
+# 已依赖 launcher,反向放这里会循环导入)
+from .gimbal_launcher import LaunchResult, _arm_pdeathsig, _base_argv
 
 # 入库级别序(与 execution_store.query_events 的 level_min 同一序;泵处
 # 只做门槛比较,读侧序表独立维护)

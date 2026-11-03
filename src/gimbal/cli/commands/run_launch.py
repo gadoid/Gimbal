@@ -13,6 +13,7 @@ import json
 
 from gimbal.core.runner import Engine
 from gimbal.core.bootstrap import bootstrap, shutdown
+from gimbal.core.proc_guard import start_stdin_guard
 from gimbal.cli.common import (
     DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
     OutputFormat, OutputOpt, PluginsOpt, ReportDirOpt, ReporterOpt,
@@ -286,6 +287,17 @@ def launch(
             step_to, breakpoint_at,
         )
 
+    # 0.5 进程自守卫(2026-11-03 泄漏复盘,与 run server 同款):平台
+    #     launcher spawn 时 stdin=PIPE 并持有写端,父进程硬死(SIGKILL/
+    #     超时/带会话退出)→ 内核关写端 → EOF。触发即置协作取消事件,
+    #     跑到步骤边界停、报告照写、正常退出码收口。否则旧形态是
+    #     「盲跑僵尸」:断管道的 BrokenPipeError 被事件总线 _safe_call
+    #     与 loguru 层层吞掉,用例继续打满剩余请求才退,且平台的
+    #     GIMBAL_TIMEOUT_SEC 上限随父进程失效。tty/devnull/文件不布防,
+    #     手动运行与 pytest 捕获 stdin 不受影响(见 core/proc_guard)。
+    orphan_cancel = threading.Event()
+    start_stdin_guard(orphan_cancel.set)
+
     # 1. 将传入参数 注入到 ctx上下文中
     cli_ctx : CLIContext = ctx.obj
     cli_ctx.extras["fail_fast"] = fail_fast   # v2.1 批次 F：接线（loader bool_fields 已支持）
@@ -437,7 +449,20 @@ def launch(
         else:
             runtime_control.debug_mode = True
 
-    # 7.7 jsonl 事件流：sink 已在 2.1（bootstrap 后）提前挂载；
+    # 7.7 孤儿取消并入 cancel 通道(0.5 的守卫事件 → RuntimeControl.
+    #     cancel_event,引擎原生协作取消:在飞请求跑完、步骤边界停)。
+    #     守卫早于本行触发时事件已置位,首个步骤边界即生效;此前 RC 为
+    #     None 的路径(无 step 控制/无 cancel-file/无 debug)也恒建 ——
+    #     cancel_event 不置位即无行为差异,与上方 cancel-file 分支的
+    #     None 补建同一模式。
+    if runtime_control is None:
+        runtime_control = RuntimeControl()
+    if runtime_control.cancel_event is None:
+        runtime_control.cancel_event = orphan_cancel
+    elif orphan_cancel.is_set():
+        runtime_control.cancel_event.set()
+
+    # 7.8 jsonl 事件流：sink 已在 2.1（bootstrap 后）提前挂载；
     #     终线 run.finished 由 runner 发布（RunFinishedEvent）、sink 打印
 
     #8. 数据类有效，执行器启动
