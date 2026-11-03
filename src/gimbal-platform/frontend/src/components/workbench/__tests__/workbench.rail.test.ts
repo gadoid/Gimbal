@@ -129,7 +129,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
     vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)
     // M5-3:时间线一次合流;默认空报告(各用例按需覆写)
     vi.mocked(activityApi.getActivity).mockResolvedValue({
-      events: [], sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      events: [], sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
   })
   afterEach(() => {
@@ -145,7 +145,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
            status: 'completed', endpointId: 'fin.pay.create', opCount: 2 },
         { kind: 'execution', at: ago(30), executionId: 11, status: 'done', scenarioId: 'sc-a' },
       ],
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
 
     const w = mountWithRouter(ActivityTimeline)
@@ -165,10 +165,11 @@ describe('ActivityTimeline — 右栏时间线', () => {
     expect(rows[1].find('.tl-dot').attributes('style')).toContain('var(--avatar-3)')
     expect(rows[2].find('.tl-body').attributes('href')).toBe('/adaptations/batches/b1')
     expect(w.text()).toContain('接口适配 v1 → v2(已完成) · 2 处改写')
-    expect(w.find('.tl-note').exists()).toBe(false)     // 五源都成功 → 不该有警示
-    // 图例 = 颜色↔类型的说明,五类各一条(2026-10-20 起 suite/集成入轴)
+    expect(w.find('.tl-note').exists()).toBe(false)     // 六源都成功 → 不该有警示
+    // 图例 = 颜色↔类型的说明,六类各一条(2026-10-20 suite/集成入轴;
+    // 2026-11-03 外部调用入轴)
     expect(w.findAll('.lg-item').map((i) => i.text())).toEqual(
-      ['执行', '场景', '适配', '套件', '集成'])
+      ['执行', '场景', '适配', '套件', '集成', '外部调用'])
     expect(w.find('[data-testid="wb-rail-config"]').exists()).toBe(false)
     w.unmount()
   })
@@ -178,7 +179,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
       events: [
         { kind: 'execution', at: ago(1), executionId: 5, status: 'done', scenarioId: 'sc-a' },
       ],
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -186,8 +187,8 @@ describe('ActivityTimeline — 右栏时间线', () => {
     await w.find('.lg-edit').trigger('click')
     const panel = w.find('[data-testid="wb-rail-config"]')
     expect(panel.exists()).toBe(true)
-    expect(panel.findAll('.cfg-row')).toHaveLength(5)     // 五类各一行
-    expect(panel.findAll('.cfg-sw')).toHaveLength(40)     // 8 色 × 5 类
+    expect(panel.findAll('.cfg-row')).toHaveLength(6)     // 六类各一行
+    expect(panel.findAll('.cfg-sw')).toHaveLength(48)     // 8 色 × 6 类
 
     // 第一行(执行)选第 5 色 → 圆点与图例同步
     await panel.findAll('.cfg-row')[0]!.findAll('.cfg-sw')[4].trigger('click')
@@ -206,7 +207,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
       events: Array.from({ length: 14 }, (_, i) => ({
         kind: 'execution', at: ago(i + 1), executionId: i + 1, status: 'done', scenarioId: 'sc-a',
       })),
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -234,7 +235,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
       events: Array.from({ length: 14 }, (_, i) => ({
         kind: 'execution', at: ago(i + 1), executionId: i + 1, status: 'done', scenarioId: 'sc-a',
       })),
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -274,13 +275,13 @@ describe('ActivityTimeline — 右栏时间线', () => {
         { kind: 'scenario', at: ago(5), scenarioId: 'p1', name: '场景 p1', module: 'm' },
         { kind: 'execution', at: ago(3), executionId: 11, status: 'done', scenarioId: 'sc-a' },
       ],
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)   // 适配一类为空
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
 
     const chips = w.findAll('[data-testid="wb-rail-filter"]')
-    expect(chips).toHaveLength(5)
+    expect(chips).toHaveLength(6)          // 2026-11-03 增外部调用
     // 点色跟着「配色」映射走,不是写死的
     expect(chips[0]!.attributes('style')).toContain('var(--avatar-2)')
     expect(chips[2]!.attributes('disabled')).toBeDefined()   // 适配为空不给点
@@ -307,7 +308,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
       events: [
         { kind: 'execution', at: ago(1), executionId: 5, status: 'done', scenarioId: 'sc-a' },
       ],
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -322,11 +323,11 @@ describe('ActivityTimeline — 右栏时间线', () => {
     expect(empty.find('.tl-state p').text()).toContain('还没有动态')
     empty.unmount()
 
-    // 五源全挂(sources 全 false 且无事件)→ 错误态
+    // 六源全挂(sources 全 false 且无事件)→ 错误态
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [],
       sources: { executions: false, scenarios: false, adaptations: false,
-                 suites: false, integrations: false },
+                 suites: false, integrations: false, inbound: false },
     } as never)
     const broken = mountWithRouter(ActivityTimeline)
     await flushPromises()

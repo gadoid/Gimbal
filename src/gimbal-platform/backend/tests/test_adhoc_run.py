@@ -34,10 +34,11 @@ import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models import Execution
+from app.models import ActivityEvent, Execution
 from app.models.auth_session import AuthSession
 from app.models.environment import Environment
 from app.models.execution import ExecutionSnapshot
+from app.models.permission import AuditLog
 from app.models.service_alias import ServiceAlias
 from app.services import run_dispatcher as rd
 from app.services.gimbal_launcher import LaunchResult
@@ -413,6 +414,25 @@ class TestAliasAndVersion:
         assert r.status_code == 201, r.text
         snap = await _snapshot(r.json()["executionId"])
         assert snap["definition"]["meta"]["plate"] == {SYSTEM: "1.0#1"}
+        # G4 增强(2026-11-03):临时调用审计记**全量请求信息**(steps
+        # 原样 + release),时间线 inbound.run 同源;个人模式时间线
+        # actor = grant 签发人(「使用了谁的凭证」)
+        uid = await _user_id("ad_user")
+        async with db_module.SessionLocal() as s:
+            audits = (await s.execute(sa.select(AuditLog).where(
+                AuditLog.action == "inbound.run"))).scalars().all()
+            acts = (await s.execute(sa.select(ActivityEvent).where(
+                ActivityEvent.resource_type == "inbound"))).scalars().all()
+        assert len(audits) == 2 and len(acts) == 2
+        for row in (*audits, *acts):
+            d = row.detail
+            assert d["fn"] == "adhoc"
+            assert d["steps"] == [_step()]
+            assert d["caller_alias"] == "agent-sys"
+            assert d["credential_owner"]
+        assert {a.actor_id for a in acts} == {uid}   # 个人模式 → 签发人轴
+        assert audits[0].detail["release"] is None
+        assert audits[1].detail["release"] == {SYSTEM: "1.0#1"}
 
 
 # ── 派发前 convert 校验 ──────────────────────────────────────────

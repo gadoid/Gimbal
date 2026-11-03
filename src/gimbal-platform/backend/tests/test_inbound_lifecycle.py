@@ -305,6 +305,25 @@ class TestInboundAudit:
         assert rows[0].detail["identity_mode"] == "platform"
         assert rows[0].actor_name == "平台系统"
         assert rows[0].resource_id == ALIAS_A
+        # G4 增强(2026-11-03):detail 自含凭证归属/别名/场景名快照 ——
+        # 单行审计即可回答「谁的身份、经哪个别名、跑了哪个场景」
+        assert rows[0].detail["caller_alias"] == ALIAS_A
+        assert rows[0].detail["credential_owner"] == "平台系统"
+        assert rows[0].detail["scenario_name"] == "Test"
+        # 时间线(2026-11-03):入站触发落 inbound.run 事件;JWT 发起不落。
+        # 团队共享别名 + 平台模式 → actor 空(不上个人轴,审计面板可查)
+        from app.models import ActivityEvent as _AE
+        async with db_module.SessionLocal() as s:
+            acts = (await s.execute(sa.select(_AE).where(
+                _AE.resource_type == "inbound"))).scalars().all()
+        assert len(acts) == 1
+        a0 = acts[0]
+        assert (a0.kind, a0.resource_id) == ("inbound.run", ALIAS_A)
+        assert a0.actor_id is None
+        assert a0.detail["execution_id"] == ex_id
+        assert a0.detail["identity_mode"] == "platform"
+        assert a0.detail["fn"] == "scenario"
+        assert "steps" not in a0.detail   # steps 是临时调用专属
 
 
 # ── G3 ────────────────────────────────────────────────────────────

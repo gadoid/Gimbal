@@ -7,7 +7,7 @@
 import http from '@/api/http'
 
 export interface ActivityEventIn {
-  kind: 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration'
+  kind: 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration' | 'inbound'
   at: string
   executionId?: number | null
   status?: string | null
@@ -30,6 +30,10 @@ export interface ActivityEventIn {
   suiteId?: number | null
   /** integration 面(边沿事件:订阅/暂停/恢复/结论翻转)。 */
   taskId?: number | null
+  /** inbound 面(2026-11-03:经别名触发的执行/临时调用)。 */
+  callerAlias?: string | null
+  clientRef?: string | null
+  credentialOwner?: string | null
 }
 
 export interface ActivityReport {

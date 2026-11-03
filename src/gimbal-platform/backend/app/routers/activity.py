@@ -1,9 +1,17 @@
 """工作台活动时间线服务端合流(M5,PG迁移方案 §7 M5-3)。
 
 前端 useActivityTimeline 原来三条请求自己拼(执行 + 场景窗 + 适配批次)
-—— 收编为一次 GET /api/activity:服务端合流三类事件,前端只做日历分组
-与文案。三源独立降级语义保留:sources 报告各源是否取到,任一源失败
-不拖垮整条轴。
+—— 收编为一次 GET /api/activity:服务端合流事件,前端只做日历分组与
+文案。各源独立降级语义保留:sources 报告各源是否取到,任一源失败不
+拖垮整条轴。
+
+容量语义(2026-11-03 改造):``limit`` 是**每类上限**(缺省 30),不再
+全局截断 —— 此前合流后统一截 ``limit``,单一类型刷屏会把其余类型挤出
+轴、且按类型筛选时远不足额。现在每类各留 30 条返回(≤ 6×limit 行),
+「全部」视图取混排最近 30 由前端负责(useActivityTimeline 的
+TIMELINE_POOL)。入站调用(inbound.run,经别名触发的执行/临时调用)
+自本改造起入轴 —— 此前第三方调用只有执行行(owner 隔离)看不出调用
+来源维度。
 """
 from __future__ import annotations
 
@@ -25,14 +33,13 @@ router = APIRouter(prefix="/activity", tags=["activity"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-EXEC_LIMIT = 20
-SCEN_LIMIT = 10
-BATCH_LIMIT = 10
+# 2026-11-03 起:每类一份等额窗口(此前 20/10/10 + 全局截断)
+PER_KIND_LIMIT = 30
 
 
 class ActivityEvent(BaseModel):
     kind: Literal["execution", "scenario", "adaptation", "suite",
-                  "integration"]
+                  "integration", "inbound"]
     at: str
     # execution 面
     executionId: int | None = None
@@ -57,6 +64,11 @@ class ActivityEvent(BaseModel):
     suiteId: int | None = None
     # integration 面(边沿事件:订阅/暂停/恢复/结论翻转)
     taskId: int | None = None
+    # inbound 面(2026-11-03:经别名触发的执行/临时调用;detail 另带
+    # identity_mode/steps(临时调用全量请求)/release/run_id)
+    callerAlias: str | None = None
+    clientRef: str | None = None
+    credentialOwner: str | None = None
 
 
 class ActivityOut(BaseModel):
@@ -69,22 +81,27 @@ class ActivityOut(BaseModel):
 async def get_activity(
     user: CurrentUser,
     db: DbSession,
-    limit: Annotated[int, Query(ge=1, le=100)] = 40,
+    limit: Annotated[int, Query(ge=1, le=100)] = PER_KIND_LIMIT,
 ) -> ActivityOut:
     """本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次
-    + 我的 suite/集成事件(2026-10-20 起),按 at 倒序合并,截 ``limit``。
+    + 我的 suite/集成事件(2026-10-20 起)+ 入站调用(2026-11-03 起),
+    按 at 倒序合并。``limit`` = **每类上限**(不做全局截断,「全部」视图
+    取混排最近 30 由前端负责 —— 见模块注释的容量语义改造说明)。
     """
     events: list[ActivityEvent] = []
     sources: dict[str, bool] = {}
 
     # ── 执行(owner 隔离;排队且无时间戳的行无处安放,跳过)─────────
+    # 取 2×limit 再过滤无时间戳行,装满 limit 即停 —— 每类上限对执行源
+    # 同样成立(2026-11-03 容量语义),不随 2× 预取超发。
     try:
         rows = (await db.execute(
             select(Execution)
             .where(Execution.owner_id == user.id)
             .order_by(Execution.id.desc())
-            .limit(EXEC_LIMIT * 2)
+            .limit(limit * 2)
         )).scalars().all()
+        taken = 0
         for e in rows:
             at = e.finished_at or e.started_at
             if at is None:
@@ -93,6 +110,9 @@ async def get_activity(
                 kind="execution", at=iso_naive_utc(at) or "",
                 executionId=e.id, status=e.status, scenarioId=e.scenario_id,
                 scenarioName=(e.scenario_name or None)))
+            taken += 1
+            if taken >= limit:
+                break
         sources["executions"] = True
     except Exception:
         sources["executions"] = False
@@ -106,7 +126,7 @@ async def get_activity(
             .where(ActivityEventRow.actor_id == user.id,
                    ActivityEventRow.resource_type == "scenario")
             .order_by(ActivityEventRow.created_at.desc())
-            .limit(SCEN_LIMIT)
+            .limit(limit)
         )).scalars().all()
         for r in rows:
             d = r.detail or {}
@@ -122,10 +142,10 @@ async def get_activity(
     # ── 适配批次(触碰我场景的批次;member 无全量权,owner 视图人人可读)──
     try:
         batches, _total = await adaptation_service.list_batches_for_owner(
-            db, user.id, page=1, page_size=BATCH_LIMIT)
+            db, user.id, page=1, page_size=limit)
         from datetime import datetime as _dt
 
-        for b in batches[:BATCH_LIMIT]:
+        for b in batches[:limit]:
             ops = sum((b.get("opCounts") or {}).values())
             raw_at = b.get("closedAt") or b.get("createdAt")
             at_str = iso_naive_utc(raw_at) if isinstance(raw_at, _dt) else str(raw_at or "")
@@ -151,7 +171,7 @@ async def get_activity(
             .where(ActivityEventRow.actor_id == user.id,
                    ActivityEventRow.resource_type == "suite")
             .order_by(ActivityEventRow.created_at.desc())
-            .limit(SCEN_LIMIT)
+            .limit(limit)
         )).scalars().all()
         for r in rows:
             d = r.detail or {}
@@ -176,7 +196,7 @@ async def get_activity(
             .where(ActivityEventRow.actor_id == user.id,
                    ActivityEventRow.resource_type == "integration")
             .order_by(ActivityEventRow.created_at.desc())
-            .limit(SCEN_LIMIT)
+            .limit(limit)
         )).scalars().all()
         for r in rows:
             d = r.detail or {}
@@ -194,5 +214,32 @@ async def get_activity(
     except Exception:
         sources["integrations"] = False
 
+    # ── 入站调用(2026-11-03:经别名触发的执行/临时调用;actor = 凭证
+    #    归属人(个人模式)或别名属主(平台模式),写入点 runs.py)──────
+    try:
+        rows = (await db.execute(
+            select(ActivityEventRow)
+            .where(ActivityEventRow.actor_id == user.id,
+                   ActivityEventRow.resource_type == "inbound")
+            .order_by(ActivityEventRow.created_at.desc())
+            .limit(limit)
+        )).scalars().all()
+        for r in rows:
+            d = r.detail or {}
+            exec_id = d.get("execution_id")
+            events.append(ActivityEvent(
+                kind="inbound", at=iso_naive_utc(r.created_at) or "",
+                executionId=int(exec_id) if exec_id is not None else None,
+                scenarioId=d.get("scenario_id"),
+                scenarioName=d.get("scenario_name"),
+                callerAlias=d.get("caller_alias") or r.resource_id,
+                clientRef=d.get("client_ref"),
+                credentialOwner=d.get("credential_owner"),
+                action=r.kind, detail=d or None))
+        sources["inbound"] = True
+    except Exception:
+        sources["inbound"] = False
+
     events.sort(key=lambda e: e.at, reverse=True)
-    return ActivityOut(events=events[:limit], sources=sources)
+    # 每类上限已各自生效;此处不再全局截断(容量语义见模块注释)
+    return ActivityOut(events=events, sources=sources)

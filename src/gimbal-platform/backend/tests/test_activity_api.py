@@ -48,7 +48,8 @@ async def test_activity_merges_three_sources_desc(client):
     body = r.json()
     assert body["sources"] == {"executions": True, "scenarios": True,
                                "adaptations": True,
-                               "suites": True, "integrations": True}
+                               "suites": True, "integrations": True,
+                               "inbound": True}
     kinds = [(e["kind"], e.get("scenarioId") or e.get("name")) for e in body["events"]]
     assert ("scenario", "sc-act-a") in kinds
     assert ("execution", "sc-act-a") in kinds
@@ -82,6 +83,95 @@ async def test_activity_owner_isolation(client):
 async def test_activity_requires_auth(client):
     r = await client.get("/api/activity")
     assert r.status_code == 401
+
+
+# ── 2026-11-03 容量语义:每类 30,不做全局截断 ──────────────────────
+async def test_activity_per_kind_cap_without_global_truncation(client):
+    """每类各留 limit 条(场景 35 → 30;执行 35 → 30),两类共存时
+    总量 60 —— 不再有「合流后全局截 30」把单一类型外的世界挤掉。"""
+    h = await register_and_login(client, "m5cap", "pw123456")
+    from app.core import db as db_module
+
+    t0 = datetime(2026, 11, 3, 8, 0, tzinfo=UTC)
+    async with db_module.SessionLocal() as s:
+        from app.models import ActivityEvent
+
+        for i in range(35):
+            s.add(ActivityEvent(
+                actor_id=1, kind="scenario.edit", resource_type="scenario",
+                resource_id=f"sc-cap-{i}", detail={"name": f"S{i}"},
+                created_at=t0 + timedelta(seconds=i)))
+        for i in range(35):
+            await _mk_exec(s, sid=f"sc-cap-{i}", owner_id=1, status_="done",
+                           finished=t0 + timedelta(seconds=i))
+        await s.commit()
+
+    body = (await client.get("/api/activity", headers=h,
+                             params={"limit": 30})).json()
+    kinds = [e["kind"] for e in body["events"]]
+    assert kinds.count("scenario") == 30, "场景类必须恰为每类上限 30"
+    assert kinds.count("execution") == 30, "执行类必须恰为每类上限 30"
+    assert len(kinds) == 60, "全局不再截断 —— 两类各 30 共 60"
+    # 每类留下的都是最近的:id 编号最大(时间最晚)的那批
+    scen_ids = {e["scenarioId"] for e in body["events"]
+                if e["kind"] == "scenario"}
+    assert "sc-cap-34" in scen_ids and "sc-cap-0" not in scen_ids
+
+
+# ── 2026-11-03:入站调用(inbound.run)入轴 ─────────────────────────
+async def test_activity_inbound_source(client):
+    """经别名触发的执行/临时调用上轴:callerAlias/clientRef/
+    credentialOwner 顶层透出,临时调用 detail 带全量 steps;owner 隔离。"""
+    h1 = await register_and_login(client, "m5inb", "pw123456")   # id=1
+    h2 = await register_and_login(client, "m5inb2", "pw123456")  # id=2(他人)
+    from app.core import db as db_module
+
+    t0 = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
+    async with db_module.SessionLocal() as s:
+        from app.models import ActivityEvent
+
+        s.add(ActivityEvent(
+            actor_id=1, kind="inbound.run", resource_type="inbound",
+            resource_id="agent-sys",
+            detail={"fn": "scenario", "execution_id": 351,
+                    "run_id": "run-x", "scenario_id": "sc-import-1d9df0",
+                    "scenario_name": "订单创建_1", "client_ref": "cr-9",
+                    "identity_mode": "personal",
+                    "credential_owner": "Administrator",
+                    "caller_alias": "agent-sys"},
+            created_at=t0))
+        s.add(ActivityEvent(
+            actor_id=1, kind="inbound.run", resource_type="inbound",
+            resource_id="agent-sys",
+            detail={"fn": "adhoc", "execution_id": 352, "run_id": "run-y",
+                    "scenario_id": None, "scenario_name": None,
+                    "client_ref": None, "identity_mode": "personal",
+                    "credential_owner": "Administrator",
+                    "caller_alias": "agent-sys",
+                    "steps": [{"endpoint": "fin.ping", "service": "fin"}],
+                    "release": {"fin": "prod#42"}},
+            created_at=t0 + timedelta(seconds=5)))
+        await s.commit()
+
+    body = (await client.get("/api/activity", headers=h1,
+                             params={"limit": 30})).json()
+    inb = [e for e in body["events"] if e["kind"] == "inbound"]
+    assert len(inb) == 2
+    assert body["sources"]["inbound"] is True
+    scen = next(e for e in inb if e["detail"]["fn"] == "scenario")
+    assert scen["callerAlias"] == "agent-sys"
+    assert scen["clientRef"] == "cr-9"
+    assert scen["credentialOwner"] == "Administrator"
+    assert scen["scenarioName"] == "订单创建_1"
+    assert scen["executionId"] == 351
+    adhoc = next(e for e in inb if e["detail"]["fn"] == "adhoc")
+    assert adhoc["detail"]["steps"] == [
+        {"endpoint": "fin.ping", "service": "fin"}]
+    assert adhoc["detail"]["release"] == {"fin": "prod#42"}
+    # 他人轴不可见
+    body2 = (await client.get("/api/activity", headers=h2,
+                              params={"limit": 30})).json()
+    assert not [e for e in body2["events"] if e["kind"] == "inbound"]
 
 
 # ── F3(2026-09-23):写入点 + autosave 短窗合并 + best-effort ───────

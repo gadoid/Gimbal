@@ -14,7 +14,7 @@ import { getActivity, type ActivityEventIn } from '@/api/activity'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl, scenarioDetailUrl } from '@/utils/links'
 
-export type TimelineKind = 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration'
+export type TimelineKind = 'execution' | 'scenario' | 'adaptation' | 'suite' | 'integration' | 'inbound'
 
 export interface TimelineEvent {
   key: string
@@ -34,6 +34,11 @@ export interface TimelineDay {
 
 /** 右栏常态只看最近 10 条;「查看更多」展开到合流后的池子上限。 */
 export const TIMELINE_PREVIEW = 10
+/**
+ * 2026-11-03 容量语义改造:服务端每类各留 30 条(不再全局截断),
+ * 「全部」视图 = 混排取最近 TIMELINE_POOL(30)条;筛某一类时给该类
+ * 全量(≤30)—— 单一类型刷屏不再把其余类型挤出轴。
+ */
 export const TIMELINE_POOL = 30
 
 /** 批次状态文案 —— 时间线与工作台适配卡共用一份(两处各写一套必漂)。 */
@@ -60,6 +65,29 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
       key: `exec-${e.executionId}`, kind: 'execution', at: e.at,
       title: `执行 #${e.executionId} ${executionStatusText(e.status ?? '')}`,
       detail: e.scenarioName || e.scenarioId || undefined, to: executionUrl(e.executionId!),
+    }
+  }
+  if (e.kind === 'inbound') {
+    // 2026-11-03:经别名触发的执行/临时调用上轴 —— 此前第三方调用只有
+    // 执行行,看不出「谁经哪个别名调进来的」。凭证归属人与 clientRef
+    // 是这条事件的核心信息(对账:谁的身份、哪次调用)。
+    const d = (e.detail ?? {}) as Record<string, unknown>
+    const via = e.callerAlias ?? ''
+    const who = e.credentialOwner ?? ''
+    if (e.action === 'inbound.run' && d.fn === 'adhoc') {
+      const steps = Array.isArray(d.steps) ? (d.steps as unknown[]).length : 0
+      return {
+        key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
+        title: `外部调用 ${via} · 临时调用 ${steps} 步`,
+        detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
+        to: executionUrl(e.executionId!),
+      }
+    }
+    return {
+      key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
+      title: `外部调用 ${via} → ${e.scenarioName || e.scenarioId || `执行 #${e.executionId}`}`,
+      detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
+      to: executionUrl(e.executionId!),
     }
   }
   if (e.kind === 'integration') {
@@ -177,27 +205,33 @@ function dayLabel(iso: string, now = new Date()): string {
 }
 
 export function useActivityTimeline() {
-  /** 合流后的事件池(已按时间倒序,上限 TIMELINE_POOL)。 */
+  /** 合流后的事件池(已按时间倒序;服务端每类各留 30,池子上限
+   * 6×TIMELINE_POOL —— 展示截断在 visible 里做,池子保全量供筛流)。 */
   const pooled = ref<TimelineEvent[]>([])
   const expanded = ref(false)
   const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   /** 各源是否取到过(全空 = 真没活动;某源失败 ≠ 真没活动)。 */
   const sources = reactive<{
     exec: boolean; scen: boolean; adapt: boolean
-    suite: boolean; integ: boolean
+    suite: boolean; integ: boolean; inb: boolean
   }>({
-    exec: false, scen: false, adapt: false, suite: false, integ: false,
+    exec: false, scen: false, adapt: false, suite: false, integ: false, inb: false,
   })
 
-  /** 颜色筛选:卡头圆点即「只看这一类」。null = 不筛,全给。 */
+  /** 颜色筛选:卡头圆点即「只看这一类」。null = 不筛,全给。
+   * 「全部」= 混排取最近 TIMELINE_POOL(30)条;筛中某一类时给该类
+   * 全量(服务端每类各留 30,2026-11-03 容量语义)。 */
   const only = ref<TimelineKind | null>(null)
   const visible = computed<TimelineEvent[]>(() =>
-    only.value ? pooled.value.filter((e) => e.kind === only.value) : pooled.value,
+    only.value
+      ? pooled.value.filter((e) => e.kind === only.value)
+      : pooled.value.slice(0, TIMELINE_POOL),
   )
   /** 池子里各类各有多少 —— 决定卡头哪几颗点可点、tooltip 报几个数。 */
   const counts = computed<Record<TimelineKind, number>>(() => {
     const m: Record<TimelineKind, number> = {
       execution: 0, scenario: 0, adaptation: 0, suite: 0, integration: 0,
+      inbound: 0,
     }
     for (const e of pooled.value) m[e.kind] += 1
     return m
@@ -222,7 +256,7 @@ export function useActivityTimeline() {
 
   const degraded = computed(() =>
     !sources.exec || !sources.scen || !sources.adapt
-    || !sources.suite || !sources.integ)
+    || !sources.suite || !sources.integ || !sources.inb)
 
   async function load() {
     status.value = 'loading'
@@ -242,6 +276,7 @@ export function useActivityTimeline() {
     sources.scen = (report?.sources.scenarios ?? false) !== false
     sources.suite = (report?.sources.suites ?? false) !== false
     sources.integ = (report?.sources.integrations ?? false) !== false
+    sources.inb = (report?.sources.inbound ?? false) !== false
 
     pooled.value = (report?.events ?? []).map(toTimelineEvent)
 

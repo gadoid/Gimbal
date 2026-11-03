@@ -19,7 +19,7 @@ export const DOT_PALETTE = [
   'var(--avatar-5)', 'var(--avatar-6)', 'var(--avatar-7)', 'var(--avatar-8)',
 ] as const
 
-export const TIMELINE_KINDS = ['execution', 'scenario', 'adaptation', 'suite', 'integration'] as const
+export const TIMELINE_KINDS = ['execution', 'scenario', 'adaptation', 'suite', 'integration', 'inbound'] as const
 
 export const DEFAULT_TIMELINE_COLORS: Record<TimelineKind, string> = {
   execution: 'var(--avatar-2)',
@@ -27,6 +27,8 @@ export const DEFAULT_TIMELINE_COLORS: Record<TimelineKind, string> = {
   adaptation: 'var(--avatar-4)',
   suite: 'var(--avatar-5)',
   integration: 'var(--avatar-6)',
+  // 入站调用(2026-11-03):外部触发单独一档色
+  inbound: 'var(--avatar-7)',
 }
 
 const MIRROR_PREFIX = 'gimbal.workbench.timeline-colors'

@@ -30,7 +30,7 @@ async function loadWith(data: {
     events: data.events ?? [],
     sources: data.sources ?? {
       executions: true, scenarios: true, adaptations: true,
-      suites: true, integrations: true,
+      suites: true, integrations: true, inbound: true,
     },
   } as never)
   const t = useActivityTimeline()
@@ -91,6 +91,50 @@ describe('useActivityTimeline', () => {
     expect(t.days.value[1]!.events[0]!.title).toContain('执行 #2')
   })
 
+  it('入站调用:场景/临时调用文案、凭证归属与 clientRef、深链执行页', async () => {
+    const inbEvent = (over: Record<string, unknown>) =>
+      ({ kind: 'inbound', at: ago(1), action: 'inbound.run',
+         executionId: 351, callerAlias: 'agent-sys', clientRef: 'cr-9',
+         credentialOwner: 'Administrator', ...over }) as never
+    const t = await loadWith({
+      events: [
+        inbEvent({ fn: undefined, scenarioName: '订单创建_1',
+                   scenarioId: 'sc-import-1d9df0',
+                   detail: { fn: 'scenario', identity_mode: 'personal' } }),
+        inbEvent({ executionId: 352, scenarioName: null, scenarioId: null,
+                   clientRef: null,
+                   detail: { fn: 'adhoc', identity_mode: 'personal',
+                             steps: [{ endpoint: 'fin.ping' }, { endpoint: 'fin.order' }] } }),
+      ],
+    })
+    expect(t.events.value[0]!.title)
+      .toContain('外部调用 agent-sys → 订单创建_1')
+    expect(t.events.value[0]!.detail).toContain('Administrator')
+    expect(t.events.value[0]!.detail).toContain('cr-9')
+    expect(t.events.value[0]!.to).toContain('/executions/351')
+    expect(t.events.value[1]!.title).toContain('外部调用 agent-sys · 临时调用 2 步')
+    expect(t.events.value[1]!.detail).toBe('Administrator')  // 无 clientRef 只剩归属人
+    expect(t.events.value[1]!.to).toContain('/executions/352')
+    expect(t.counts.value.inbound).toBe(2)
+  })
+
+  it('混排语义:「全部」取最近 30,筛某一类给该类全量(2026-11-03)', async () => {
+    // 25 条执行 + 20 条场景 = 45 条池(服务端每类各留 30,不再全局截断)
+    const events = [
+      ...Array.from({ length: 25 }, (_, i) => execEvent(i + 1, 'done', ago(i + 1))),
+      ...Array.from({ length: 20 }, (_, i) => scenEvent(`s${i}`, ago(i + 100))),
+    ] as never[]
+    const t = await loadWith({ events })
+    expect(t.pooled.value).toHaveLength(45)         // 池子保全量供筛流
+    expect(t.visible.value).toHaveLength(30)        // 「全部」= 混排最近 30
+    // 单一类型刷屏不再把其余类型挤出轴:筛场景 → 20 条全在
+    t.setOnly('scenario')
+    expect(t.visible.value).toHaveLength(20)
+    expect(t.visible.value.every((e) => e.kind === 'scenario')).toBe(true)
+    t.setOnly('scenario')                          // 再点取消 → 回混排 30
+    expect(t.visible.value).toHaveLength(30)
+  })
+
   it('执行源挂掉 → 只丢执行类事件,其余照常上轴并标降级', async () => {
     const t = await loadWith({
       events: [scenEvent('s1', ago(2))],
@@ -130,6 +174,7 @@ describe('useActivityTimeline', () => {
     expect(t.only.value).toBeNull()
     expect(t.counts.value).toEqual({
       execution: 2, scenario: 1, adaptation: 1, suite: 0, integration: 0,
+      inbound: 0,
     })
 
     t.setOnly('execution')
@@ -161,7 +206,7 @@ describe('useActivityTimeline', () => {
   it('重新取数后筛中的那一类一条不剩 → 自动撤筛', async () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [execEvent(1, 'done', ago(1))],
-      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true },
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
     } as never)
     const t = useActivityTimeline()
     await t.load()

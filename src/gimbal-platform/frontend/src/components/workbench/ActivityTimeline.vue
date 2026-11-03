@@ -147,7 +147,7 @@ const configOpen = ref(false)
 
 const KIND_LABEL: Record<TimelineKind, string> = {
   execution: '执行', scenario: '场景', adaptation: '适配',
-  suite: '套件', integration: '集成',
+  suite: '套件', integration: '集成', inbound: '外部调用',
 }
 
 /** 分类徽标跟着圆点取色,只是淡一档 —— 图例、圆点、徽标三处同一语义色。 */

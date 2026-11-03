@@ -154,6 +154,48 @@ async def _apply_scheme_recipe(
     body.scheme_name = scheme.name if scheme is not None else None
 
 
+async def _record_inbound_activity(
+    db: AsyncSession, principal: Principal, resp: RunResponse,
+    *, body: RunRequest, scen=None,
+) -> None:
+    """入站触发写一条时间线事件(2026-11-03):此前第三方调用只有执行行
+    入轴(owner 隔离),看不出「谁经哪个别名调进来的」。actor = 时间线
+    归属人:个人模式 = grant 用户(**使用了谁的凭证**);平台模式 = 别名
+    属主(平台系统用户无人登录,挂它等于轴不可见;团队共享别名 owner 为
+    空 → 不上任何人的轴,取证走审计面板)。JWT 调用 no-op(与
+    audit.record_inbound 同口径)。best-effort,失败不阻断业务。
+    """
+    if not principal.inbound:
+        return
+    from ..models.service_alias import ServiceAlias
+    from ..services import activity as activity_svc
+
+    if principal.identity_mode == "platform":
+        alias = await db.get(ServiceAlias, principal.caller_alias)
+        actor_id = alias.owner_user_id if alias is not None else None
+    else:
+        actor_id = principal.user.id
+    detail: dict = {
+        "fn": "adhoc" if body.steps is not None else "scenario",
+        "execution_id": resp.execution_id, "run_id": resp.run_id,
+        "scenario_id": scen.scenario_id if scen is not None else None,
+        "scenario_name": scen.name if scen is not None else None,
+        "client_ref": body.client_ref,
+        "identity_mode": principal.identity_mode,
+        "credential_owner": (principal.user.display_name
+                             or principal.user.username),
+        "caller_alias": principal.caller_alias,
+    }
+    if body.steps is not None:
+        # 临时调用:全量请求信息(与审计同源)
+        detail["steps"] = body.steps
+        detail["release"] = body.release
+    await activity_svc.record(
+        db, actor_id=actor_id, kind=activity_svc.KIND_INBOUND_RUN,
+        resource_type="inbound", resource_id=principal.caller_alias,
+        detail=detail)
+
+
 async def _post_adhoc_run(
     principal: Principal, db: AsyncSession, body: RunRequest,
 ) -> RunResponse:
@@ -215,9 +257,17 @@ async def _post_adhoc_run(
     from ..services import audit as audit_svc
     await audit_svc.record_inbound(db, principal, "inbound.run", detail={
         "fn": "adhoc",
+        # G4 增强(2026-11-03):临时调用记**全量请求信息**(steps 原样
+        # + 版本覆盖)——端点串只是索引,取证需要调用方到底发了什么。
+        "steps": body.steps,
+        "release": body.release,
         "endpoints": [str(dict(st).get("endpoint")) for st in body.steps],
         "execution": resp.execution_id, "run_id": resp.run_id,
-        "client_ref": body.client_ref})
+        "client_ref": body.client_ref,
+        "credential_owner": (principal.user.display_name
+                             or principal.user.username),
+        "caller_alias": principal.caller_alias})
+    await _record_inbound_activity(db, principal, resp, body=body)
     return resp
 
 
@@ -381,6 +431,14 @@ async def post_run(
     from ..services import audit as audit_svc
     await audit_svc.record_inbound(db, principal, "inbound.run", detail={
         "fn": "scenario", "scenario_id": scen.scenario_id,
+        # G4 增强(2026-11-03):场景名快照 + 凭证归属人显式化
+        # (actor_name 列已有,但 detail 自含便于按行取证)。
+        "scenario_name": scen.name,
         "execution": resp.execution_id, "run_id": resp.run_id,
-        "client_ref": body.client_ref})
+        "client_ref": body.client_ref,
+        "credential_owner": (principal.user.display_name
+                             or principal.user.username),
+        "caller_alias": principal.caller_alias})
+    await _record_inbound_activity(db, principal, resp, body=body,
+                                   scen=scen)
     return resp

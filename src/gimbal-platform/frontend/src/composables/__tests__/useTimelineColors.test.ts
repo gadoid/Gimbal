@@ -30,11 +30,11 @@ describe('useTimelineColors', () => {
     as('alice')
   })
 
-  it('默认五类各一色,互不重复', async () => {
+  it('默认六类各一色,互不重复(2026-11-03 增 inbound)', async () => {
     const { DEFAULT_TIMELINE_COLORS, DOT_PALETTE, useTimelineColors } = await fresh()
     const c = useTimelineColors()
-    expect(new Set(Object.values(DEFAULT_TIMELINE_COLORS)).size).toBe(5)
-    for (const kind of ['execution', 'scenario', 'adaptation', 'suite', 'integration'] as const) {
+    expect(new Set(Object.values(DEFAULT_TIMELINE_COLORS)).size).toBe(6)
+    for (const kind of ['execution', 'scenario', 'adaptation', 'suite', 'integration', 'inbound'] as const) {
       expect(DOT_PALETTE).toContain(c.colorOf(kind) as never)
     }
   })
