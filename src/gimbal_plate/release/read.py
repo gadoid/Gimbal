@@ -466,19 +466,32 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
     ``scope`` 恒 ``all``(manifest 全对象域:endpoint/statement/term/service)。
     S1.5(2026-11-03)起 working 侧经 :func:`working_snapshot` 与发布链同一遍
     收集,服务/词条/片段有同口径对照物 —— 此前(全量评估 2026-11-02 #7
-    方案 B)任一侧为 working 时收窄为只比端点;只有端点的旧伪快照
-    (snapshot_from_registry)作输入时仍按端点域回退。投影不入 objects
+    方案 B)任一侧为 working 时收窄为只比端点。**例外**:任一侧是只有端点
+    的旧伪快照(:func:`snapshot_from_registry`,无 manifest objects)时,
+    另一侧的服务/词条/片段没有对照物、照全量比会报假删除 —— 回退为只比
+    ``endpoint`` 域,``scope`` 如实回 ``endpoints``。投影不入 objects
     (binding 的派生物,其变化必体现为 parts.binding)。
     """
     ea = {(e["type"], e["id"]): e for e in sa.manifest.get("objects", [])}
+    # objects 键在场 = 全域快照(修订/working_snapshot,空树也写空列表);
+    # 键缺席 = 端点-only 伪快照(snapshot_from_registry)
+    sa_full = "objects" in sa.manifest
     if not ea and sa.endpoints:
         # 端点-only 伪快照(注册表面)没有 manifest objects——按水合对象即时取 hash
         ea = {("endpoint", eid): {"hash": object_hash(ep)}
               for eid, ep in sa.endpoints.items()}
     eb = {(e["type"], e["id"]): e for e in sb.manifest.get("objects", [])}
+    sb_full = "objects" in sb.manifest
     if not eb and sb.endpoints:
         eb = {("endpoint", eid): {"hash": object_hash(ep)}
               for eid, ep in sb.endpoints.items()}
+
+    scope = "all"
+    if not (sa_full and sb_full):
+        # 端点域回退(评审 2026-11-03 §3.2):任一侧端点-only 时只比端点
+        ea = {k: v for k, v in ea.items() if k[0] == "endpoint"}
+        eb = {k: v for k, v in eb.items() if k[0] == "endpoint"}
+        scope = "endpoints"
 
     added = sorted(f"{t}.{i}" for k in eb.keys() - ea.keys() for t, i in [k])
     removed = sorted(f"{t}.{i}" for k in ea.keys() - eb.keys() for t, i in [k])
@@ -493,7 +506,7 @@ def diff_snapshots(sa: RevisionSnapshot, sb: RevisionSnapshot,
             changed[f"{t}.{i}"] = entry
     return {"from": sa.ref if sa.line != _WORKING else _WORKING,
             "to": sb.ref if sb.line != _WORKING else _WORKING,
-            "scope": "all",
+            "scope": scope,
             "added": added, "removed": removed, "changed": changed}
 
 

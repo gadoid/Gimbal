@@ -409,6 +409,23 @@ class TestWorkingDiff:
         assert snap.line == "working"
         assert set(snap.endpoints) == {"fin.a.a", "fin.a.b"}
 
+    def test_registry_pseudo_snapshot_falls_back_to_endpoint_domain(
+            self, tmp_path: Path) -> None:
+        """端点-only 伪快照(snapshot_from_registry)作 diff 输入:另一侧的
+        服务/词条没有对照物 → 回退只比端点域,scope=endpoints,不报
+        service.* 假删除(评审 2026-11-03 §3.2 —— docstring 声称的回退
+        在 S1.5 提交中被误删,此用例钉住)。"""
+        from gimbal_plate.loader import load_registry
+        repo, fin, art = make_repo(tmp_path)
+        assert release_system(fin, artifacts_root=art, signed_by="t").success
+        rev = rr.load_snapshot(art, "fin", "1.0", 1)
+        assert any(o["type"] == "service" for o in rev.manifest["objects"])
+        reg = rr.snapshot_from_registry(load_registry([repo / "systems"]), "fin")
+        for a, b in ((rev, reg), (reg, rev)):
+            d = rr.diff_snapshots(a, b)
+            assert d["scope"] == "endpoints"
+            assert (d["added"], d["removed"], d["changed"]) == ([], [], {})
+
     def test_unchanged_tree_diff_is_empty_both_directions(
             self, tmp_path: Path) -> None:
         repo, fin, art = make_repo(tmp_path)
