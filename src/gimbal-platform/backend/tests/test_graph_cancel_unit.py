@@ -24,6 +24,9 @@ class _Knobs:
     # healthz 能力位(§6「可」项):() = 旧执行器(空能力,会把 scope=unit
     # 当 step 处理且带 A0 缺陷)
     server_scopes: tuple = ("step", "unit")
+    # 设了 → start() 挂起等放行:模拟「执行器启动窗口」(ss.start 轮询
+    # healthz 期间 on_session 尚未回调,评审 2026-11-03 §3.1)
+    start_gate: asyncio.Event | None = None
 
 
 class FakeServerSession:
@@ -44,7 +47,8 @@ class FakeServerSession:
         return _Knobs.server_scopes
 
     async def start(self, **kw) -> None:
-        return None
+        if _Knobs.start_gate is not None:
+            await asyncio.wait_for(_Knobs.start_gate.wait(), timeout=10.0)
 
     async def close(self) -> None:
         return None
@@ -92,6 +96,7 @@ async def _setup(client, monkeypatch, *, run_id_ready=True, honor_cancel=True):
     _Knobs.run_id_ready = run_id_ready
     _Knobs.honor_cancel = honor_cancel
     _Knobs.server_scopes = ("step", "unit")
+    _Knobs.start_gate = None
     monkeypatch.setattr(settings, "EXEC_CHAIN", "server", raising=True)
     monkeypatch.setattr(gss, "ServerSession", FakeServerSession)
     monkeypatch.setattr(pc, "convert", _fake_convert)
@@ -118,6 +123,15 @@ async def _wait_session() -> FakeServerSession:
             return FakeServerSession.instances[0]
         await asyncio.sleep(0.05)
     raise AssertionError("假执行器未进入运行")
+
+
+async def _wait_instance() -> FakeServerSession:
+    """等假会话实例出现(不等进入运行 —— start() 可能仍在启动窗口挂起)。"""
+    for _ in range(200):
+        if FakeServerSession.instances:
+            return FakeServerSession.instances[0]
+        await asyncio.sleep(0.05)
+    raise AssertionError("假执行器会话未创建")
 
 
 async def _wait_terminal(exec_id: int) -> Execution:
@@ -233,6 +247,61 @@ class TestServerGraphUnitCancel:
         assert (ex.passed, ex.failed, ex.skipped) == (0, 0, 0)
         assert ex.started_at is None                 # 从未启动,不回填
         assert FakeServerSession.instances == []     # 未下发
+
+    async def test_cancel_during_executor_start_is_delivered(
+            self, client, monkeypatch):
+        """3.1(评审 2026-11-03):执行器启动窗口(ss.start 轮询 healthz、
+        on_session 未回调)取消被接受 → 下发任务先建;session 就绪后能力位
+        通过 → 下发 scope=unit → a passed、b cancelled → 执行 canceled。"""
+        headers = await _setup(client, monkeypatch)
+        _Knobs.start_gate = asyncio.Event()
+        exec_id = await _post_graph(client, headers)
+        await _wait_instance()
+
+        d = (await client.get(f"/api/executions/{exec_id}", headers=headers)).json()
+        assert d["status"] == "running"          # 已过 _mark_running
+        assert d["cancelable"] is True           # 能力位未落,server 缺省可取消
+
+        r = await client.post(f"/api/executions/{exec_id}/cancel", headers=headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["cancel_requested"] is True
+
+        _Knobs.start_gate.set()                  # 放行 start → on_session → 下发
+        sess = await _wait_session()
+        ex = await _wait_terminal(exec_id)
+        assert ex.status == "canceled"
+        assert sess.cancel_calls == ["unit"]
+        assert (ex.passed, ex.failed, ex.skipped) == (1, 0, 1)
+
+    async def test_old_executor_cancel_during_start_marks_no_unit_cancel(
+            self, client, monkeypatch):
+        """3.1 附带:旧执行器(cancel_scopes 空)启动窗口取消被读侧接受、
+        session 就绪后能力位 False → 停止下发;按真实结果收口并留痕
+        cancelIgnored=executor_no_unit_cancel,detail/list cancel_note 给
+        对应解释(与「所有单元已启动」区分)。"""
+        headers = await _setup(client, monkeypatch)
+        _Knobs.server_scopes = ()
+        _Knobs.start_gate = asyncio.Event()
+        exec_id = await _post_graph(client, headers)
+        sess = await _wait_instance()
+
+        r = await client.post(f"/api/executions/{exec_id}/cancel", headers=headers)
+        assert r.status_code == 200, r.text      # 能力位未落,读侧接受
+
+        _Knobs.start_gate.set()
+        await _wait_session()                    # 进入运行(未收到取消)
+        sess.release.set()                       # 旧执行器正常跑完
+        ex = await _wait_terminal(exec_id)
+        assert ex.status == "done"
+        assert sess.cancel_calls == []           # 未下发
+        assert (ex.config_json or {}).get("cancelIgnored") == "executor_no_unit_cancel"
+        d = (await client.get(f"/api/executions/{exec_id}", headers=headers)).json()
+        assert d["cancel_note"] == (
+            "已请求取消,但执行器版本不支持单元级中途取消,取消未下发,"
+            "已按真实结果收口")
+        lst = (await client.get("/api/executions", headers=headers)).json()["items"]
+        row = next(i for i in lst if i["id"] == exec_id)
+        assert row["cancel_note"] == d["cancel_note"]
 
 
 def _live_cancel_pollers() -> set:

@@ -94,9 +94,10 @@ async def uncancelable_graph_ids(db: AsyncSession, execution_ids: list[int]) -> 
     spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链读 healthz
     的 cancel_scopes(旧执行器空能力 → False,旧执行器会把 scope=unit 当
     step 处理且带 A0 缺陷);legacy 链读本地 gimbal 包 FEATURES(GIMBAL_BIN
-    指向外部安装无法探测 → 保守 False)。能力位缺失 = 尚未探测:server 链
-    是物化窗口(session 未起,取消由 _fanout_graph 启动前检查消费、不会下
-    发执行器)→ 可取消;legacy 链按不可取消。graph 不能看 ``Execution.kind``:
+    指向外部安装无法探测 → 保守 False)。能力位缺失 = 尚未探测(物化/执行
+    器启动窗口):server 链取消可被接受 —— 启动前命中走「取消先于启动」收
+    口、启动期命中由下发任务等 session 就绪后按能力位决定(评审
+    2026-11-03 §3.1)→ 可取消;legacy 链按不可取消。graph 不能看 ``Execution.kind``:
     ``POST /api/runs`` 带 graph 的执行 kind 仍是 scenario,只有
     ``execution_jobs.kind`` / payload 如实记了任务体形态与链。按 job
     状态而非执行状态判断 —— 物化窗口里执行仍 queued。queued 的 graph
@@ -119,8 +120,9 @@ def _graph_unit_cancelable(payload: dict) -> bool:
     flag = payload.get("unit_cancel")
     if flag is not None:
         return bool(flag)
-    # 能力位未探测:server 链 = 物化窗口(取消走启动前检查,安全);
-    # legacy 链 = 旧引擎/未探测,保守不可取消。
+    # 能力位未探测 = 物化/执行器启动窗口:server 链取消可被接受,下发任务
+    # 总是先建、session 就绪后按能力位决定发或停(评审 2026-11-03 §3.1)
+    # → 可取消;legacy 链 = 旧引擎/未探测,保守不可取消。
     return (payload.get("chain") or "legacy") == "server"
 
 
@@ -176,6 +178,9 @@ CANCEL_NOTE_GRAPH = "已请求取消:当前单元跑完后停止,后续单元记
 CANCEL_NOTE_CASES = "已请求取消:当前行跑完后停止,后续行记为已取消"
 CANCEL_NOTE_IGNORED = ("已请求取消,但当时所有单元均已启动、没有可停的单元,"
                        "已按真实结果收口")
+# cancelIgnored=executor_no_unit_cancel(旧执行器启动窗口取消被接受但未下发)
+CANCEL_NOTE_NO_UNIT_CANCEL = ("已请求取消,但执行器版本不支持单元级中途取消,"
+                              "取消未下发,已按真实结果收口")
 
 
 def cancel_note(e: Execution, *, form: str = "cases",
@@ -183,7 +188,8 @@ def cancel_note(e: Execution, *, form: str = "cases",
     """取消说明文案(服务端给、前端原样显示):
 
     * 活跃且取消位已写 → 取消中,等的是在飞单元(graph)还是当前行(cases);
-    * 终态且 ``config.cancelIgnored`` → 点了取消却按真实结果收口的原因;
+    * 终态且 ``config.cancelIgnored`` → 点了取消却按真实结果收口的原因
+      (所有单元已启动 vs 执行器不支持单元级取消,按值区分);
     * 其余 None。
     """
     if e.status in (STATUS_QUEUED, STATUS_RUNNING):
@@ -191,6 +197,8 @@ def cancel_note(e: Execution, *, form: str = "cases",
             return None
         return CANCEL_NOTE_GRAPH if form == "graph" else CANCEL_NOTE_CASES
     cfg = e.config_json if isinstance(e.config_json, dict) else {}
+    if cfg.get("cancelIgnored") == "executor_no_unit_cancel":
+        return CANCEL_NOTE_NO_UNIT_CANCEL
     return CANCEL_NOTE_IGNORED if cfg.get("cancelIgnored") else None
 
 

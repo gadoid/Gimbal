@@ -1310,7 +1310,9 @@ async def _fanout_graph(
     按真实结果收口并在 config 写 ``cancelIgnored`` 留痕。
     能力门禁:spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链
     读 healthz cancel_scopes(旧执行器空能力,不下发,读侧 409);legacy 链
-    读本地 gimbal FEATURES(GIMBAL_BIN 外部安装保守 False)。
+    读本地 gimbal FEATURES(GIMBAL_BIN 外部安装保守 False)。取消落在执行器
+    启动窗口时总是先创建下发任务,session 就绪后按能力位决定发或停(评审
+    2026-11-03 §3.1)—— 旧执行器停发并留痕 cancelIgnored=executor_no_unit_cancel。
     """
     from . import execution_queue as _eq
     from . import graph_dispatch
@@ -1397,10 +1399,18 @@ async def _fanout_graph(
 
     async def _deliver_unit_cancel() -> None:
         # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
-        # 返回 False);执行已结束(done)则停
+        # 返回 False);执行已结束(done)则停。能力检查在 session 就绪后做
+        # (取消可能先于 session 到达):旧执行器(cancel_scopes 无 unit)
+        # 停止下发 —— 读了也会被当 step 处理(带 A0 缺陷),按真实结果
+        # 收口并留痕 cancelIgnored=executor_no_unit_cancel。
         while not cancel_local["done"]:
             ss = session_holder.get("ss")
             if ss is not None:
+                if not unit_cancel["ok"]:
+                    logger.info(
+                        "run_dispatcher: graph execution {} executor lacks "
+                        "unit cancel scope; cancel not delivered", execution_id)
+                    return
                 try:
                     if await ss.cancel(scope="unit"):
                         deliver["accepted"] = True
@@ -1414,10 +1424,12 @@ async def _fanout_graph(
 
     def _on_cancel_set() -> None:
         if chain == "server":
-            # 能力位在 on_session 落定;旧执行器(False)不下发 —— 读了也
-            # 会被当 step 处理(带 A0 缺陷),宁可不发(读侧 409 已拦,此处
-            # 只兜取消位写入与能力落库之间的竞态)。
-            if deliver["task"] is None and unit_cancel["ok"]:
+            # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
+            # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
+            # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
+            # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
+            # 旧执行器的拦截挪进 _deliver_unit_cancel(session 就绪后判)。
+            if deliver["task"] is None:
                 deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
         elif cancel_file is not None:
             try:
@@ -1605,6 +1617,11 @@ async def _fanout_graph(
         if main_cancelled:
             status = "canceled"
             final_status = STATUS_CANCELED
+        elif chain == "server" and not unit_cancel["ok"]:
+            # 旧执行器(cancel_scopes 无 unit):取消被读侧接受(启动窗口
+            # 能力位未落定)但未下发 —— 与「所有单元已启动」区分留痕,
+            # 读侧 cancel_note 给对应解释。
+            cancel_ignored = "executor_no_unit_cancel"
         else:
             cancel_ignored = "all units already started"
 
