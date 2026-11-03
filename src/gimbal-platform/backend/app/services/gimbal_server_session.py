@@ -5,15 +5,27 @@ spawn 到随机空闲端口，逐 case ``POST /runs`` + SSE 消费事件（→ �
 _EventIngester 同一入库面），取消走执行器 cancel 端点（协作取消），
 结束 terminate 进程树（Windows/Linux 无残留）。
 
+子进程泄漏防线（2026-11-03 复盘）：本进程被硬杀（SIGKILL/超时/带会话
+退出）时 close() 永不执行，旧执行器以 PPID=1 空转数日。spawn 现带双守卫，
+执行器侧另有 stdin EOF/空闲 TTL 自退（见 gimbal core/server.py 模块
+docstring），本模块不再单靠协作式回收：
+  - ``stdin=PIPE``：父进程死亡 → 内核关写端 → 执行器读到 EOF 自退
+    （跨平台；也是 close() 的首选优雅通道）；
+  - ``PR_SET_PDEATHSIG=SIGTERM``（preexec_fn，非 Windows）：父进程死亡
+    → 内核直接递送 SIGTERM，不依赖执行器版本（旧执行器 uvicorn 收
+    SIGTERM 同样优雅退出）。
+
 与 ``gimbal_launcher.launch()``（run launch 子进程 stdout jsonl）双链并存
 （C13 灰度：``settings.EXEC_CHAIN`` / 执行配方 ``chain`` 键切换）。
 """
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import json
 import os
 import secrets
+import signal
 import sys
 import time
 from pathlib import Path
@@ -25,10 +37,40 @@ from loguru import logger
 from ..core.config import settings
 from .gimbal_launcher import LaunchResult, _base_argv
 
+# ─── 子进程泄漏防线(模块 docstring) ─────────────────────────────
+
+_PR_SET_PDEATHSIG = 1
+
+try:
+    # 模块装载期解析 libc(preexec_fn 里只做一次 prctl 函数指针调用,
+    # 不做 dlopen/分配 —— fork 后子进程上下文里这些不保证安全)
+    _LIBC = (ctypes.CDLL("libc.so.6", use_errno=True)
+             if sys.platform != "win32" else None)
+except OSError:  # pragma: no cover — 非常规 libc 缺失环境
+    _LIBC = None
+
+
+def _arm_pdeathsig() -> None:
+    """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGTERM``。
+
+    内核保证「父进程死亡 → 向本进程递送 SIGTERM」，父进程怎么死都成立
+    （含 SIGKILL）。注意其触发条件是**发起 fork 的线程**退出：本服务
+    的 spawn 恒经事件循环(asyncio transport 同步创建)且 uvicorn 事件
+    循环在主线程 —— 主线程退出=进程退出，语义恰为「父进程死亡」。
+    若未来把执行挪到工作线程的事件循环，此守卫会在线程退出时误触发，
+    届时依赖 stdin EOF 守卫兜底即可。
+    """
+    if _LIBC is not None:
+        _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+
 # 入库级别序(与 execution_store.query_events 的 level_min 同一序;泵处
 # 只做门槛比较,读侧序表独立维护)
 _LOG_LEVEL_ORDER = ("TRACE", "DEBUG", "INFO", "SUCCESS",
                     "WARNING", "ERROR", "CRITICAL")
+
+# close() 先关 stdin 后等执行器优雅退出的宽限(秒):空闲执行器 uvicorn
+# should_exit 收口 < 1s;在飞 run 的收尾由随后的 terminate 兜底,不在这里等。
+_STDIN_GRACE_SEC = 2.0
 
 
 async def _pump_stderr(stderr, log, on_log: "Callable[[dict], None] | None",
@@ -130,10 +172,16 @@ class ServerSession:
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
+                # 泄漏防线(模块 docstring):stdin 管道 = 父死子亡的跨平台
+                # 通道;执行器读到 EOF 自退,close() 也先关它做优雅收口。
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cwd) if cwd else None,
                 env=env, creationflags=creationflags,
+                # PDEATHSIG:Linux 内核级父死子亡,旧执行器(无 stdin 守卫)
+                # 也被覆盖;Windows 无此机制,preexec_fn 留 None。
+                preexec_fn=_arm_pdeathsig if sys.platform != "win32" else None,
             )
         except OSError as e:
             if log_fh:
@@ -180,12 +228,18 @@ class ServerSession:
         raise RuntimeError("server not ready within timeout")
 
     async def close(self) -> None:
-        """终止进程树（terminate → wait → kill；无残留）。
+        """终止进程树（stdin EOF 优雅 → terminate → kill；无残留）。
 
         D1(2026-10-13):先收 stderr 泵任务再置空 _proc —— 此前先
         ``self._proc = None``,泵的 ``assert self._proc`` 随即 AttributeError,
         每次关会话记一条 "Task exception was never retrieved",engine.log
         尾部(进程终止前的 stderr 突发)可能丢、log 句柄不关。
+
+        泄漏防线随行(2026-11-03):先关 stdin 给执行器一个 EOF 优雅出口
+        (uvicorn should_exit:在飞 run/SSE 收尾后再退)。Windows 的
+        terminate() 是硬杀(TerminateProcess),这个优雅窗口在 Windows
+        上是唯一体面路径;超时或旧执行器无守卫 → 下方 terminate 兜底,
+        行为与此前一致。
         """
         proc = self._proc
         task, self._stderr_task = self._stderr_task, None
@@ -194,15 +248,25 @@ class ServerSession:
             if task is not None:
                 await _quiet(task)
             return
-        try:
-            proc.terminate()
-            await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except Exception:  # noqa: BLE001
+        if proc.stdin is not None:
             try:
-                proc.kill()
-                await proc.wait()
+                proc.stdin.close()
             except Exception:  # noqa: BLE001
                 pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=_STDIN_GRACE_SEC)
+            except asyncio.TimeoutError:
+                pass
+        if proc.returncode is None:
+            try:
+                proc.terminate()
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except Exception:  # noqa: BLE001
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:  # noqa: BLE001
+                    pass
         if task is not None:
             await _quiet(task)
 

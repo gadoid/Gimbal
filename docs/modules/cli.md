@@ -293,6 +293,7 @@ gimbal run server [--host ADDR] [--port N] [选项]
 
 生命周期（panel `生命周期`）：
 - `--graceful-timeout N`：优雅关闭等待时间（秒，默认 30，0-3600）
+- `--idle-timeout N`：空闲自退（秒）——无在飞 run 持续该时长后服务自行优雅退出（默认 1800，0 关闭；平台 spawn 的执行器靠它与 stdin EOF 守卫防泄漏，见 core/server.py 模块 docstring）
 - `--pidfile PATH`：PID 文件路径，systemd 友好
 
 **示例**：

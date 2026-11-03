@@ -101,6 +101,17 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
     registry: dict[str, dict[str, Any]] = {}
     reg_lock = threading.Lock()
 
+    # 空闲 TTL 自退(server.py 模块 docstring「进程自守卫」)的状态面:
+    # 注册表 + 锁 + 最近活动时刻(run 启动/收口各刷新一次)挂 app.state,
+    # _idle_should_exit 只读不写。起始值 = app 创建时刻 —— 从未被调用的
+    # 执行器到点也退(spawn 而不用的泄漏同样有界)。
+    app.state.runs_registry = registry
+    app.state.runs_lock = reg_lock
+    app.state.runs_last_activity = time.monotonic()
+
+    def _touch_activity() -> None:
+        app.state.runs_last_activity = time.monotonic()
+
     def _require_token(authorization: str | None, x_token: str | None) -> None:
         token = os.environ.get("GIMBAL_SERVER_TOKEN") or None
         if token is None:
@@ -212,6 +223,8 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                     status_code=409, detail="one run at a time (single-run server)"
                 )
             run_id = str(uuid.uuid4())
+            # 空闲 TTL:run 启动即活动(注册成功才会走到这,409 路径不刷)
+            _touch_activity()
             # 调试会话在启动时就创建（不等 run 线程装载 debugger）：
             # 调用方可立即 POST debug 命令，命令入队等暂停点消费
             from gimbal.core.debugger import QueueSession
@@ -304,6 +317,11 @@ def register_debug_endpoints(app, cli_ctx, models=None) -> dict:
                 logger.exception("[Server] run 执行异常")
                 entry["error"] = str(exc)
             finally:
+                # 空闲 TTL:run 收口也计活动。先刷时刻再置终态 —— 顺序反了
+                # 会开出「看门狗见 finished 但读到旧时刻」的窗口,长 run
+                # (时长 ≥ TTL)收口瞬间即被误判闲置;这样排则最坏读到
+                # busy=True,下轮再看,无害。
+                _touch_activity()
                 entry["status"] = "finished"
                 timer = threading.Timer(_REAP_TTL_SEC, _reap, args=(run_id,))
                 timer.daemon = True

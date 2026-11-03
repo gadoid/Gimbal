@@ -9,6 +9,20 @@ run 相互独立)。执行经 ``asyncio.to_thread`` 下放线程,事件循环
 设计,并发 run 的安全性未验证前先不放开。
 
 默认端口 8766:8765 已被 gimbal-plate 实占(run_plate.py)。
+
+进程自守卫(2026-11-03 执行器泄漏复盘):平台每次执行 spawn 一个本服务,
+回收只有协作式 ``close()`` 一条路 —— 父进程被硬杀(SIGKILL/Bash 超时/
+pytest 带会话退出)就没人 terminate,21 个旧执行器以 PPID=1 空转两周。
+本模块自带两道与父进程生死解耦的退出路径,任一触发即 ``Server.should_exit``
+优雅收口(在飞 run 跑完、SSE 发完 done 再退):
+  - **stdin 守卫**:stdin 是管道(平台 spawn 时 ``stdin=PIPE``)才布防,
+    读到 EOF = 父进程死亡/显式关管道 → 退出。tty/devnull/文件不布防,
+    手动运行与 pytest 捕获 stdin 的场景不受影响;跨平台(Windows 无
+    PDEATHSIG,这是唯一守卫);
+  - **空闲 TTL**:无在飞 run 且距最近一次 run 启动/收口 ≥ ``idle_timeout``
+    即退出(默认 1800s,``--idle-timeout 0`` 关闭)。调试会话挂起时 run
+    仍是 running,不会被判闲置;收口也计活动 —— 长 run 结束瞬间不会被
+    「启动时刻 + TTL」误判。
 """
 from __future__ import annotations
 
@@ -18,7 +32,13 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 import asyncio
+import os
+import stat
+import sys
+import threading
+import time
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 import typer
 
@@ -50,6 +70,91 @@ class ServerConfig:
     allow_origins: list[str] = field(default_factory=list)
     health_port: int | None = None
     graceful_timeout: int = 30
+    # 空闲自退(秒;≤0 关闭)。见模块 docstring「进程自守卫」。
+    idle_timeout: float = 1800.0
+
+
+# 空闲 TTL 检查周期(秒;测试可 patch 缩短)
+_IDLE_CHECK_INTERVAL_SEC = 15.0
+
+
+# ─── 进程自守卫(父进程生死解耦的退出路径) ─────────────────────────
+
+def _stdin_is_pipe(fd: int = 0) -> bool:
+    """stdin 是否为管道(FIFO)。只有管道才布防 EOF 守卫:tty 的 EOF 是
+    用户 Ctrl-D、devnull 立即 EOF、文件读完即 EOF —— 都不是「父进程死亡」。"""
+    try:
+        return stat.S_ISFIFO(os.fstat(fd).st_mode)
+    except (OSError, ValueError):
+        return False
+
+
+def _start_stdin_guard(on_parent_gone: Callable[[], None]) -> "threading.Thread | None":
+    """stdin 为管道时起守卫线程:阻塞读到 EOF → ``on_parent_gone()``。
+
+    父进程无论怎么死(SIGKILL 也一样)内核都会关闭它持有的管道写端,
+    本端 ``read`` 随即返回空 —— 不依赖父进程配合,是最可靠的跨平台
+    「父死子亡」通道。父进程从不往 stdin 写(写了也只是被丢弃)。
+    非管道不布防,返回 None。
+    """
+    if not _stdin_is_pipe():
+        return None
+
+    def _watch() -> None:
+        try:
+            buf = sys.stdin.buffer
+            while buf.read(1):
+                pass
+        except Exception:  # noqa: BLE001 — stdin 已关/不可读,同样视为父进程不在
+            pass
+        logger.info("[Server] stdin EOF(父进程已退出/关闭管道),执行器自退")
+        on_parent_gone()
+
+    t = threading.Thread(target=_watch, name="gimbal-stdin-guard", daemon=True)
+    t.start()
+    return t
+
+
+def _idle_should_exit(app: Any, timeout_s: float, now: "float | None" = None) -> bool:
+    """真闲判定:无在飞 run 且距最近活动(run 启动/收口)≥ timeout。
+
+    注册表与活动时刻由 server_debug.register_debug_endpoints 挂在
+    ``app.state``(runs_registry / runs_lock / runs_last_activity)。
+    """
+    if timeout_s <= 0:
+        return False
+    st = app.state
+    with st.runs_lock:
+        busy = any(e.get("status") == "running" for e in st.runs_registry.values())
+        last = st.runs_last_activity
+    if busy:
+        return False
+    return (time.monotonic() if now is None else now) - last >= timeout_s
+
+
+def _start_idle_watchdog(app: Any, timeout_s: float,
+                         on_idle: Callable[[], None]) -> "threading.Thread | None":
+    """空闲 TTL 看门狗线程:周期判定 ``_idle_should_exit`` → ``on_idle()``。"""
+    if timeout_s <= 0:
+        return None
+    # 检查周期:TTL 很小时相应缩短(短 TTL 多为测试/精确收口场景,等满
+    # 15s 粒度没意义);默认 TTL 下就是 _IDLE_CHECK_INTERVAL_SEC。
+    interval = min(_IDLE_CHECK_INTERVAL_SEC, max(timeout_s / 4.0, 1.0))
+
+    def _watch() -> None:
+        while True:
+            time.sleep(interval)
+            try:
+                if _idle_should_exit(app, timeout_s):
+                    break
+            except Exception:  # noqa: BLE001 — 看门狗自身异常不伤服务,下轮再看
+                logger.warning("[Server] 空闲看门狗判定异常(已忽略)")
+        logger.info("[Server] 空闲 {}s 无 run,执行器自退", int(timeout_s))
+        on_idle()
+
+    t = threading.Thread(target=_watch, name="gimbal-idle-watchdog", daemon=True)
+    t.start()
+    return t
 
 
 # ─── 请求/响应模型(模块级:FastAPI 签名解析不支持函数内局部类) ──
@@ -191,12 +296,14 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
     elif config.host not in ("127.0.0.1", "localhost", "::1"):
         typer.echo("[Server] warning: 无 token 且监听非回环地址,POST /runs 将拒绝非回环来源(403)")
 
-    uvicorn.run(
+    # uvicorn.Server 直控(不用 uvicorn.run 便捷封装):守卫线程需要
+    # ``server.should_exit`` 句柄 —— 置位即 uvicorn 官方优雅收口(拒绝
+    # 新连接,在飞请求/SSE 跑完再退),与 Ctrl-C/SIGTERM 同一条路径。
+    # Server 本就单进程,uvicorn.run(workers=1) 语义等价。
+    uconfig = uvicorn.Config(
         app,  # type: ignore[arg-type]
         host=config.host,
         port=config.port,
-        # 引擎单请求串行,多 worker 只会复制进程不带来吞吐,默认 1。
-        workers=1,
         log_level="info",
         # AD8:不装 uvicorn 自带彩色 logging 配置 —— 其日志改经 root →
         # InterceptHandler 桥进 loguru,输出 JSON 行(顺带可入库)。桥接行
@@ -204,4 +311,10 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
         # access log 由 _silence_noisy_loggers 压到 WARNING。
         log_config=None,
     )
+    server = uvicorn.Server(uconfig)
+    # 进程自守卫(模块 docstring):任一触发 → should_exit 优雅自退。
+    _start_stdin_guard(lambda: setattr(server, "should_exit", True))
+    _start_idle_watchdog(app, config.idle_timeout,
+                         lambda: setattr(server, "should_exit", True))
+    server.run()
     return 0

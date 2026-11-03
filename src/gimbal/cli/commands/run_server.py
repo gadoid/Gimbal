@@ -62,6 +62,16 @@ def server(
         int,
         typer.Option("--graceful-timeout", min=0, max=3600, help="优雅关闭等待时间（秒）。", rich_help_panel="生命周期"),
     ] = 30,
+    idle_timeout: Annotated[
+        int,
+        typer.Option(
+            "--idle-timeout",
+            min=0,
+            max=86400,
+            help="空闲自退（秒）：无在飞 run 持续该时长后服务自行优雅退出，0 关闭。默认 1800。",
+            rich_help_panel="生命周期",
+        ),
+    ] = 1800,
 ) -> None:
     """Typer 命令：构造 ServerConfig 后阻塞调用 start_server 启动常驻服务，Ctrl-C 触发优雅关闭。"""
     """作为服务监听端口，接收任务并执行。
@@ -88,6 +98,7 @@ def server(
         allow_origins=allow_origin or [],
         health_port=health_port,
         graceful_timeout=graceful_timeout,
+        idle_timeout=float(idle_timeout),
     )
 
     try:
