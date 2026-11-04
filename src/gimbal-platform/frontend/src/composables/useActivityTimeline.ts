@@ -78,14 +78,14 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
       const steps = Array.isArray(d.steps) ? (d.steps as unknown[]).length : 0
       return {
         key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
-        title: `外部调用 ${via} · 临时调用 ${steps} 步`,
+        title: `调用 ${via} · 临时调用 ${steps} 步`,
         detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
         to: executionUrl(e.executionId!),
       }
     }
     return {
       key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
-      title: `外部调用 ${via} → ${e.scenarioName || e.scenarioId || `执行 #${e.executionId}`}`,
+      title: `调用 ${via} → ${e.scenarioName || e.scenarioId || `执行 #${e.executionId}`}`,
       detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
       to: executionUrl(e.executionId!),
     }

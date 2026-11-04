@@ -167,9 +167,9 @@ describe('ActivityTimeline — 右栏时间线', () => {
     expect(w.text()).toContain('接口适配 v1 → v2(已完成) · 2 处改写')
     expect(w.find('.tl-note').exists()).toBe(false)     // 六源都成功 → 不该有警示
     // 图例 = 颜色↔类型的说明,六类各一条(2026-10-20 suite/集成入轴;
-    // 2026-11-03 外部调用入轴)
+    // 2026-11-03 外部调用入轴;2026-11-04 更名「调用」)
     expect(w.findAll('.lg-item').map((i) => i.text())).toEqual(
-      ['执行', '场景', '适配', '套件', '集成', '外部调用'])
+      ['执行', '场景', '适配', '套件', '集成', '调用'])
     expect(w.find('[data-testid="wb-rail-config"]').exists()).toBe(false)
     w.unmount()
   })
@@ -281,7 +281,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
     await flushPromises()
 
     const chips = w.findAll('[data-testid="wb-rail-filter"]')
-    expect(chips).toHaveLength(6)          // 2026-11-03 增外部调用
+    expect(chips).toHaveLength(6)          // 2026-11-03 增外部调用(现名「调用」)
     // 点色跟着「配色」映射走,不是写死的
     expect(chips[0]!.attributes('style')).toContain('var(--avatar-2)')
     expect(chips[2]!.attributes('disabled')).toBeDefined()   // 适配为空不给点
