@@ -174,7 +174,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
     w.unmount()
   })
 
-  it('调用类单行:对账明细并入标题行,不出第二行徽标(2026-11-04)', async () => {
+  it('调用类单行:徽标、标题、对账明细、时间同一条线(2026-11-04)', async () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [
         { kind: 'inbound', at: ago(1), action: 'inbound.run', executionId: 351,
@@ -187,10 +187,12 @@ describe('ActivityTimeline — 右栏时间线', () => {
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
     const row = w.find('[data-testid="wb-tl-inbound"]')
+    expect(row.find('.tl-kind').text()).toBe('调用')   // 徽标保留,配色同其余类(kindTint)
+    expect(row.find('.tl-kind').attributes('style')).toContain('color-mix')
+    expect(row.find('.tl-kind').element.parentElement!.className).toContain('tl-line')  // 与标题同一条线
     expect(row.find('.tl-title').text()).toContain('调用 agent-sys → 订单创建_1')
-    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')  // 明细随标题同一条线
+    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')  // 明细随标题同线
     expect(row.find('.tl-sub').exists()).toBe(false)   // 单行:没有第二行
-    expect(row.find('.tl-kind').exists()).toBe(false)  // 徽标被标题前缀「调用」顶掉
     expect(row.find('.tl-body').attributes('href')).toBe('/executions/351')
     w.unmount()
   })
