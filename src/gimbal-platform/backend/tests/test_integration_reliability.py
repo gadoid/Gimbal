@@ -1,8 +1,8 @@
 """S3 + S2 修复(修复方案 2026-11-01 §6/§7):执行与投递可靠性。
 
 S3:租约回收逐行独立会话 —— 单行异常/回滚不波及同批;
-S2:投递三段式 —— 短事务领取(投递租约)+ 别名分组并发发送 + 逐行
-回写;慢接收端不队头阻塞,别名组内按 id 串行。
+S2:投递三段式 —— 短事务领取(投递租约)+ 令牌分组并发发送 + 逐行
+回写;慢接收端不队头阻塞,同令牌组内按 id 串行(v4 领取键 token_id)。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from app.services import integration_runner as ir
 from app.services import webhook_outbox as wo
 
 from .inbound_fixtures import (
-    mk_pending, mk_task_pair as _mk_pair,
+    mk_pending, mk_task_pair as _mk_pair, mk_token,
     seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
 )
 
@@ -32,7 +32,7 @@ class TestS3RecoverStuck:
             seconds=ir.RUN_LEASE_SECONDS + 60)
         ids = []
         for name in ("s3-a", "s3-b"):
-            tpl_id, inst_id = await _mk_pair(name=name)
+            tpl_id, inst_id, _owner = await _mk_pair(name=name)
             async with db_module.SessionLocal() as s:
                 inst = await s.get(IntegrationTask, inst_id)
                 inst.running_since = old
@@ -62,7 +62,7 @@ class TestS3RecoverStuck:
         await _seed_platform_user()
         old = datetime.now(timezone.utc) - timedelta(
             seconds=ir.RUN_LEASE_SECONDS + 60)
-        tpl_id, inst_id = await _mk_pair(name="s3-c")
+        tpl_id, inst_id, _owner = await _mk_pair(name="s3-c")
         async with db_module.SessionLocal() as s:
             tpl = await s.get(IntegrationTask, tpl_id)
             tpl.removed_at = datetime.now(timezone.utc)
@@ -111,12 +111,18 @@ class _SlowClient:
 class TestS2DeliveryLoop:
     async def test_slow_alias_does_not_block_others(
             self, client, monkeypatch):
-        """别名 A 的接收端挂起 2s,别名 B 的投递不受阻(并发)。"""
-        await _seed_alias("agent-fast")
-        await _seed_alias("agent-slow")
-        await mk_pending(alias_name="agent-slow",
+        """令牌 A 的接收端挂起 2s,令牌 B 的投递不受阻(并发)。"""
+        from app.services import access_token as at_mod
+        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        slow_tid, _ = await mk_token(kind="platform", name="slow",
+                                      callback_url="https://slow.example/cb",
+                                      callback_secret="s")
+        fast_tid, _ = await mk_token(kind="platform", name="fast",
+                                      callback_url="https://fast.example/cb",
+                                      callback_secret="s")
+        await mk_pending(token_id=slow_tid,
                           url="https://slow.example/cb")
-        await mk_pending(alias_name="agent-fast",
+        await mk_pending(token_id=fast_tid,
                           url="https://fast.example/cb")
         _SlowClient.events.clear()
         monkeypatch.setattr(wo.httpx, "AsyncClient", _SlowClient)
@@ -127,11 +133,15 @@ class TestS2DeliveryLoop:
         assert fast_done - t0 < 1.5       # 未被慢组拖住
 
     async def test_same_alias_serial_by_id(self, client, monkeypatch):
-        """同一别名的两行按 id 顺序发送。"""
-        await _seed_alias()
-        first = await mk_pending(alias_name="agent-sys",
+        """同一令牌的两行按 id 顺序发送。"""
+        from app.services import access_token as at_mod
+        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        tid, _ = await mk_token(kind="platform", name="serial",
+                                callback_url="https://cb.example.local/1",
+                                callback_secret="s")
+        first = await mk_pending(token_id=tid,
                                   url="https://cb.example.local/1")
-        second = await mk_pending(alias_name="agent-sys",
+        second = await mk_pending(token_id=tid,
                                    url="https://cb.example.local/2")
         _SlowClient.events.clear()
         monkeypatch.setattr(wo.httpx, "AsyncClient", _SlowClient)
@@ -144,8 +154,8 @@ class TestS2DeliveryLoop:
     async def test_delivery_lease_reclaim_after_crash(
             self, client, monkeypatch):
         """发送中进程退出(不回写)→ 投递租约到期后被重新领取。"""
-        await _seed_alias()
-        row_id = await mk_pending()
+        tok_tid, _ = await mk_token(kind="platform", name="lease")
+        row_id = await mk_pending(token_id=tok_tid)
         # 只领取、发送阶段整体失败(模拟崩溃:进程在 writeback 前退出)
         jobs = await wo._claim(db_module.SessionLocal)
         assert len(jobs) == 1
@@ -166,8 +176,11 @@ class TestS2DeliveryLoop:
         assert len(await wo._claim(db_module.SessionLocal)) == 1
 
     async def test_concurrent_claim_sends_once(self, client, monkeypatch):
-        await _seed_alias()
-        await mk_pending()
+        from app.services import access_token as at_mod
+        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        once_tid, _ = await mk_token(kind="platform", name="once",
+                                      callback_secret="s")
+        await mk_pending(token_id=once_tid)
         calls = {"n": 0}
 
         class _Count:

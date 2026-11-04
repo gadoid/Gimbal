@@ -120,8 +120,9 @@ async def test_activity_per_kind_cap_without_global_truncation(client):
 
 # ── 2026-11-03:入站调用(inbound.run)入轴 ─────────────────────────
 async def test_activity_inbound_source(client):
-    """经别名触发的执行/临时调用上轴:callerAlias/clientRef/
-    credentialOwner 顶层透出,临时调用 detail 带全量 steps;owner 隔离。"""
+    """经个人令牌触发的执行/临时调用上轴(webhook v4 §7.3):
+    tokenId/tokenName/clientRef 顶层透出,临时调用 detail 带全量 steps;
+    owner 隔离;平台令牌不在此面(写入点就不写个人轴)。"""
     h1 = await register_and_login(client, "m5inb", "pw123456")   # id=1
     h2 = await register_and_login(client, "m5inb2", "pw123456")  # id=2(他人)
     from app.core import db as db_module
@@ -132,22 +133,20 @@ async def test_activity_inbound_source(client):
 
         s.add(ActivityEvent(
             actor_id=1, kind="inbound.run", resource_type="inbound",
-            resource_id="agent-sys",
+            resource_id="7",
             detail={"fn": "scenario", "execution_id": 351,
                     "run_id": "run-x", "scenario_id": "sc-import-1d9df0",
                     "scenario_name": "订单创建_1", "client_ref": "cr-9",
                     "identity_mode": "personal",
-                    "credential_owner": "Administrator",
-                    "caller_alias": "agent-sys"},
+                    "token_id": 7, "token_name": "nightly"},
             created_at=t0))
         s.add(ActivityEvent(
             actor_id=1, kind="inbound.run", resource_type="inbound",
-            resource_id="agent-sys",
+            resource_id="7",
             detail={"fn": "adhoc", "execution_id": 352, "run_id": "run-y",
                     "scenario_id": None, "scenario_name": None,
                     "client_ref": None, "identity_mode": "personal",
-                    "credential_owner": "Administrator",
-                    "caller_alias": "agent-sys",
+                    "token_id": 7, "token_name": "nightly",
                     "steps": [{"endpoint": "fin.ping", "service": "fin"}],
                     "release": {"fin": "prod#42"}},
             created_at=t0 + timedelta(seconds=5)))
@@ -159,9 +158,9 @@ async def test_activity_inbound_source(client):
     assert len(inb) == 2
     assert body["sources"]["inbound"] is True
     scen = next(e for e in inb if e["detail"]["fn"] == "scenario")
-    assert scen["callerAlias"] == "agent-sys"
+    assert scen["tokenId"] == 7
+    assert scen["tokenName"] == "nightly"
     assert scen["clientRef"] == "cr-9"
-    assert scen["credentialOwner"] == "Administrator"
     assert scen["scenarioName"] == "订单创建_1"
     assert scen["executionId"] == 351
     adhoc = next(e for e in inb if e["detail"]["fn"] == "adhoc")

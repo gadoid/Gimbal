@@ -1,6 +1,6 @@
 """P3 临时调用(设计 2026-11-02)—— §十三 测试矩阵 + 拆段对拍 + §九 只读加固。
 
-* 身份:JWT 403 adhoc_inbound_only;平台模式 403 adhoc_requires_grant;
+* 身份:JWT/平台令牌 403 adhoc_personal_token_only(仅个人令牌);
   个人模式通过;steps 与 scenarioId 互斥 422 run_target_ambiguous;
 * 结构:call.method/path、headers、config、schemeId、runOptions、未知策略、
   步数越界、release 形状 → 422 adhoc_field_not_allowed(fields 列全);
@@ -47,13 +47,13 @@ from app.services.run_dispatcher import STATUS_DONE, RunTarget
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
-    body_of, deliveries,
+    body_of, deliveries, mk_token,
     seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
 )
-from .test_inbound_identity import (
-    GET_STEP, _gic, _mk_credential, _mk_grant, _register, _user_id,
+from .test_access_tokens import (
+    GET_STEP, _gtk, _register, _user_id,
 )
-from .test_inbound_recipe_scope import _capture_fanout
+from ._fanout_stub import _capture_fanout
 from . import test_scenario_composer_plate_integration as _plate_it
 
 PlateMock = _plate_it.PlateMock
@@ -97,13 +97,27 @@ def _body(steps: list | None = None, **extra) -> dict:
     return {"steps": steps if steps is not None else [_step()], **extra}
 
 
-async def _personal(client, username: str) -> dict:
-    """注册 username → gic 凭证 + 该用户签发的 grant → 入站个人模式头。"""
-    await _register(client, username)
+async def _personal(client, username: str, *,
+                    scope_aliases: tuple[str, ...] = (),
+                    cred_aliases: tuple[str, ...] = ()) -> dict:
+    """直插 member + 个人令牌(范围 = 被调别名 ∪ 属主凭证)→ 请求头。
+    范围对象须先种好(FK);别名/凭证按各用例的种子取。"""
+    from .inbound_fixtures import mk_user
+    await mk_user(username, role="member")
     uid = await _user_id(username)
-    token = await _mk_credential()
-    grant = await _mk_grant("agent-sys", uid)
-    return _gic(token, grant)
+    auth_ids: list[int] = []
+    if cred_aliases:
+        async with db_module.SessionLocal() as s:
+            rows = (await s.execute(sa.select(AuthSession.id).where(
+                AuthSession.owner_id == uid,
+                AuthSession.alias.in_(cred_aliases)))).scalars().all()
+            auth_ids = list(rows)
+    _, plain = await mk_token(user_id=uid,
+                              scope_aliases=scope_aliases,
+                              scope_auths=auth_ids,
+                              callback_url="https://cb.example.com/agent/cb",
+                              callback_secret="cb-sec")
+    return _gtk(plain)
 
 
 async def _seed_target(*, base_url: str | None = BASE_URL, kind: str = "plate",
@@ -195,12 +209,15 @@ async def _post(client, headers: dict, body: dict):
 
 @pytest.fixture
 async def ready(client, plate_mock: PlateMock) -> dict:
-    """入站个人模式 + 被调别名(含环境/凭证)+ plate 桩,返回请求头。"""
+    """个人令牌 + 被调别名(含环境/凭证)+ plate 桩,返回请求头。
+    令牌范围覆盖 SVC 别名与属主凭证 qa-cred(§3.2 临时调用集合)。"""
     await _seed_platform_user()
-    await _seed_alias()
-    h = await _personal(client, "ad_user")
     await _seed_target()
+    from .inbound_fixtures import mk_user
+    await mk_user("ad_user")          # 属主先建,凭证随后入池
     await _seed_user_auth("ad_user")
+    h = await _personal(client, "ad_user", scope_aliases=(SVC,),
+                        cred_aliases=(CRED,))
     _plate_ready(plate_mock)
     return h
 
@@ -209,20 +226,19 @@ async def ready(client, plate_mock: PlateMock) -> dict:
 
 
 class TestIdentityAndTarget:
-    async def test_jwt_403_inbound_only(self, client, plate_mock):
+    async def test_jwt_403_personal_token_only(self, client, plate_mock):
         h = await _register(client, "ad_jwt")
         r = await _post(client, h, _body())
         assert r.status_code == 403, r.text
-        assert r.json()["detail"]["code"] == "adhoc_inbound_only"
+        assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
         assert await _executions() == []
 
-    async def test_platform_mode_403_requires_grant(self, client, plate_mock):
+    async def test_platform_token_403_personal_only(self, client, plate_mock):
         await _seed_platform_user()
-        await _seed_alias()
-        token = await _mk_credential()
-        r = await _post(client, _gic(token), _body())
+        _, plain = await mk_token(kind="platform", name="pt")
+        r = await _post(client, _gtk(plain), _body())
         assert r.status_code == 403, r.text
-        assert r.json()["detail"]["code"] == "adhoc_requires_grant"
+        assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
         assert await _executions() == []
 
     async def test_target_ambiguous_422(self, ready, client):
@@ -300,11 +316,17 @@ class TestStructure:
 
 class TestAliasAndVersion:
     @staticmethod
-    async def _personal_ready(client, plate_mock: PlateMock, username: str) -> dict:
-        """入站个人模式 + plate 桩(锚点 /full 可取),**不**种被调别名
-        —— 别名由各用例按需种。"""
+    async def _personal_ready(client, plate_mock: PlateMock, username: str,
+                               *, with_target: bool = False) -> dict:
+        """个人令牌 + plate 桩(锚点 /full 可取)。``with_target`` 时先种
+        被调别名与凭证并把它们纳入令牌范围;否则空范围 —— 别名/凭证由
+        各用例按需种(v4:范围校验在 adhoc 结构校验之后,未种别名的
+        用例仍先吃到 adhoc_* 的 422)。"""
         await _seed_platform_user()
-        await _seed_alias()
+        if with_target:
+            await _seed_target()
+            return await _personal(client, username,
+                                   scope_aliases=(SVC,), cred_aliases=())
         _plate_ready(plate_mock)
         return await _personal(client, username)
 
@@ -428,8 +450,8 @@ class TestAliasAndVersion:
             d = row.detail
             assert d["fn"] == "adhoc"
             assert d["steps"] == [_step()]
-            assert d["caller_alias"] == "agent-sys"
-            assert d["credential_owner"]
+            assert d["token_name"] == "t"
+            assert d["token_id"]
         assert {a.actor_id for a in acts} == {uid}   # 个人模式 → 签发人轴
         assert audits[0].detail["release"] is None
         assert audits[1].detail["release"] == {SYSTEM: "1.0#1"}
@@ -475,8 +497,8 @@ class TestExecution:
         assert ex.kind == "adhoc"
         assert ex.scenario_id == f"adhoc-{run_id}"
         assert ex.scenario_name == f"临时调用 · {SVC} · {EP}"
-        assert ex.caller_alias_name == "agent-sys"
-        assert ex.grant_id is not None
+        assert ex.token_id is not None
+        assert (ex.config_json or {}).get("token", {}).get("kind") == "personal" 
         assert ex.client_ref == "agent-1"
         assert ex.owner_id == await _user_id("ad_user")
         assert ex.config_json["scenarioId"] == f"adhoc-{run_id}"
@@ -608,8 +630,11 @@ class TestDispatchSplitEquivalence:
         b = {k: v for k, v in cap[1].items() if k not in volatile}
         assert a == b
         e1, e2 = await _execution(ex1), await _execution(ex2)
-        c1 = {k: v for k, v in e1.config_json.items() if k != "runId"}
-        c2 = {k: v for k, v in e2.config_json.items() if k != "runId"}
+        # resolvedServices/builtinAuths 是路由层算出的 §7.1 追溯块,
+        # 直调 dispatch_target 不带 —— 对拍只比派发层自身的配方面
+        volatile_cfg = {"runId", "resolvedServices", "builtinAuths"}
+        c1 = {k: v for k, v in e1.config_json.items() if k not in volatile_cfg}
+        c2 = {k: v for k, v in e2.config_json.items() if k not in volatile_cfg}
         assert c1 == c2
         assert (e1.kind, e1.scenario_id) == (e2.kind, e2.scenario_id) == (
             "scenario", "sc-eq")

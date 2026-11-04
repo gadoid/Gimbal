@@ -261,8 +261,11 @@ async def test_unstamped_instance_treated_as_unconfirmed(client):
 
 async def test_platform_task_not_subscribable(client):
     """平台模式任务无订阅概念:subscribe/摘要 → 422 not_subscribable。"""
+    from .inbound_fixtures import publish_scenario
+
     u1 = await register_and_login(client, "w0a_k", "pw123456")
     await _mk_scenario(client, u1, "sc-w0f")
+    await publish_scenario("sc-w0f")  # v4:平台模式只认公共场景
     r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
         "sc-w0f", identityMode="platform", visibility="private"))
     assert r.status_code == 201, r.text

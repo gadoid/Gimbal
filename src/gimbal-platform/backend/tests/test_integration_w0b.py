@@ -50,9 +50,13 @@ async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
 
 
 async def _mk_task(client, h, sid: str, **over) -> int:
+    from .inbound_fixtures import publish_scenario
+
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=AUTH_STEPS))
     assert r.status_code in (200, 201), r.text
+    if over.get("identityMode") == "platform":
+        await publish_scenario(sid)  # v4:平台模式只认公共场景
     body = {"name": "W0b", "scenarioId": sid, "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}

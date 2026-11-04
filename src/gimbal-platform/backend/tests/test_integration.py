@@ -62,10 +62,15 @@ def _task_body(sid: str, **over) -> dict:
 
 
 async def _mk_scenario(client: AsyncClient, h: dict, sid: str,
-                       steps: list) -> None:
+                       steps: list, *, publish: bool = False) -> None:
+    """建草稿场景;publish=True 时直改可见性为公共(v4 §5.2:平台模式
+    只认公共场景,平台任务种子须先发布)。"""
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=steps))
     assert r.status_code in (200, 201), r.text
+    if publish:
+        from .inbound_fixtures import publish_scenario
+        await publish_scenario(sid)
 
 
 async def _seed_platform_user() -> None:
@@ -186,14 +191,14 @@ class TestIntegrationRouter:
 
     async def test_create_rejects_write_scenario_and_bad_cron(self, client):
         h = await register_and_login(client, "ig_mk", "ig_mkpass123")
-        await _mk_scenario(client, h, "sc-ig-post", STEPS_POST)
+        await _mk_scenario(client, h, "sc-ig-post", STEPS_POST, publish=True)
         # 写场景 → 只读闸拒
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-post"))
         assert r.status_code == 422
         assert r.json()["detail"]["code"] == "not_read_only"
         # cron 坏 → 拒
-        await _mk_scenario(client, h, "sc-ig-get", STEPS_GET)
+        await _mk_scenario(client, h, "sc-ig-get", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-get", triggerCron="bad"))
         assert r.status_code == 422
@@ -205,17 +210,19 @@ class TestIntegrationRouter:
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-get", identityMode="bogus"))
         assert r.status_code == 422
-        # 他人场景 → 拒
+        # 他人场景 → 拒(v4:个人模式要求场景属主;平台模式用他人公共
+        # 场景合法,故此处走个人模式保住属主闸)
         h2 = await register_and_login(client, "ig_mk2", "ig_mk2pass123")
         r = await client.post("/api/integration/tasks", headers=h2,
-                              json=_task_body("sc-ig-get"))
+                              json=_task_body("sc-ig-get",
+                                               identityMode="personal"))
         assert r.status_code == 422
         assert r.json()["detail"]["code"] == "scenario_not_owned"
 
     async def test_create_ok_and_instance_seeded(self, client):
         await _seed_platform_user()
         h = await register_and_login(client, "ig_ok", "ig_okpass123")
-        await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET)
+        await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-ok", visibility="public"))
         assert r.status_code == 201, r.text
@@ -227,7 +234,7 @@ class TestIntegrationRouter:
     async def test_soft_delete_and_visibility(self, client):
         await _seed_platform_user()
         h = await register_and_login(client, "ig_del", "ig_delpass123")
-        await _mk_scenario(client, h, "sc-ig-del", STEPS_GET)
+        await _mk_scenario(client, h, "sc-ig-del", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-del", visibility="public"))
         tid = r.json()["id"]
@@ -248,7 +255,7 @@ class TestIntegrationRouter:
     async def test_cards_batch_removed_for_strangers(self, client):
         await _seed_platform_user()
         h = await register_and_login(client, "ig_card", "ig_cardpass123")
-        await _mk_scenario(client, h, "sc-ig-card", STEPS_GET)
+        await _mk_scenario(client, h, "sc-ig-card", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-card"))
         tid = r.json()["id"]
@@ -298,7 +305,7 @@ class TestIntegrationRouter:
         convert 透传由 conftest 决定;这里直接双桩走通接线)。"""
         await _seed_platform_user()
         h = await register_and_login(client, "ig_run", "ig_runpass123")
-        await _mk_scenario(client, h, "sc-ig-run", STEPS_GET)
+        await _mk_scenario(client, h, "sc-ig-run", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-run"))
         tid = r.json()["id"]
@@ -369,7 +376,7 @@ class TestIntegrationRouter:
         # C-1/C-2 后 make_draft 缺省声明 working → 保存剥离 call.method →
         # Y5 只读闸的 method 权威 = plate 工作面(/full);注入条目供判定。
         plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
-        await _mk_scenario(client, h, "sc-ig-wp", anchored)
+        await _mk_scenario(client, h, "sc-ig-wp", anchored, publish=True)
         tid = (await client.post("/api/integration/tasks", headers=h,
                                  json=_task_body("sc-ig-wp"))).json()["id"]
 
@@ -407,7 +414,7 @@ class TestIntegrationRouter:
             "strategy": [],
         }]
         plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
-        await _mk_scenario(client, h, "sc-ig-wp2", anchored)
+        await _mk_scenario(client, h, "sc-ig-wp2", anchored, publish=True)
         await client.post("/api/integration/tasks", headers=h,
                           json=_task_body("sc-ig-wp2"))
         from app.services import integration_runner as ir
@@ -441,6 +448,8 @@ class TestIntegrationRouter:
                             plate={"fin": "1.0#1"})
         assert (await client.post(
             "/api/scenarios", headers=h, json=pinned)).status_code in (200, 201)
+        from .inbound_fixtures import publish_scenario
+        await publish_scenario("sc-ig-pdown")  # v4:平台模式只认公共场景
         await client.post("/api/integration/tasks", headers=h,
                           json=_task_body("sc-ig-pdown"))
         from app.services import integration_runner as ir
@@ -800,6 +809,8 @@ async def test_cards_output_projection(client):
                  "method": "GET", "path": "/x", "headers": {}},
         "request": {"kind": "request", "body": {}}, "strategy": []}])
     await client.post("/api/scenarios", headers=u, json=draft)
+    from .inbound_fixtures import publish_scenario
+    await publish_scenario("sc-p5")  # v4:平台模式只认公共场景
     r = await client.post("/api/integration/tasks", headers=u,
                           json=_task_body("sc-p5"))
     tid = r.json()["id"]
