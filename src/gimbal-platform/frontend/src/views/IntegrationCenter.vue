@@ -92,6 +92,12 @@
                     type="button" class="ig-act danger" :data-testid="`ig-unsub-${t.id}`"
                     @click="doUnsubscribe(t)"
             >退订</button>
+            <!-- D26:JWT 管理者解绑令牌(转为我管理);令牌路径不能解绑 -->
+            <button
+              v-if="t.tokenId && t.canManage" type="button" class="ig-act"
+              :data-testid="`ig-unbind-${t.id}`"
+              @click="unbindTask = t"
+            >解绑</button>
             <button
               v-if="t.canManage" type="button" class="ig-act danger"
               :data-testid="`ig-del-${t.id}`"
@@ -101,6 +107,28 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- 解绑令牌确认(D26:4 条说明,原型 IntegrationDetail)。
+         注:reka Dialog teleport 容器不落 attr fallthrough,检索以
+         内层 ig-unbind-confirm 为准(测试同 Suites 惯例)。 -->
+    <Dialog :open="!!unbindTask" @update:open="(v) => !v && (unbindTask = null)">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>把「{{ unbindTask?.name }}」转为我管理？</DialogTitle>
+          <DialogDescription>解绑任务所属的访问令牌，转由你的账号管理</DialogDescription>
+        </DialogHeader>
+        <ul class="m-0 flex flex-col gap-1.5 pl-5 text-caption text-signal-ink/70">
+          <li>任务与令牌 {{ unbindTask?.tokenName ?? `#${unbindTask?.tokenId}` }} 解除绑定，此后不再受这张令牌的状态与范围约束。</li>
+          <li>不再向令牌的回调地址推送事件；需要结果请在 Gimbal 内查看或订阅通知。</li>
+          <li>个人任务解绑后以你的身份、你的凭证池运行。</li>
+          <li>解绑后任务处于暂停，确认无误后点「启动」。</li>
+        </ul>
+        <DialogFooter>
+          <Button variant="outline" @click="unbindTask = null">取消</Button>
+          <Button data-testid="ig-unbind-confirm" @click="doUnbind">解绑</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- 新建功能 -->
     <Transition name="pop">
@@ -449,14 +477,15 @@ function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   return { label: '启动' }
 }
 
-async function unbindToken(t: IntegrationTaskItem): Promise<void> {
-  const tokenLabel = t.tokenName ?? ('#' + String(t.tokenId))
-  if (!window.confirm(
-    `解绑「${t.name}」的令牌(${tokenLabel})?\n`
-    + '任务转由你的账号管理:停用回调并暂停,启动后恢复调度。')) return
+async function doUnbind(): Promise<void> {
+  // D26 解绑:确认框带 4 条说明(原型 IntegrationDetail「解绑令牌 ·
+  // 确认」),不再用 window.confirm 一句话带过
+  const t = unbindTask.value
+  if (!t) return
   try {
     await patchIntegrationTask(t.id, { tokenId: null })
     toast.success('已解绑;任务暂停待你启动')
+    unbindTask.value = null
     await load()
   } catch (e) {
     toast.error(integrationErr(e))
@@ -627,6 +656,7 @@ async function addCred(): Promise<void> {
 
 // ── 平台凭证编辑(D34:id 不变)与删除影响面(§11-14)──────────
 const editingCred = ref<PlatformCredential | null>(null)
+const unbindTask = ref<IntegrationTaskItem | null>(null)
 const credEdit = reactive({ url: '', username: '', password: '' })
 const credEditBusy = ref(false)
 const deletingCred = ref<PlatformCredential | null>(null)

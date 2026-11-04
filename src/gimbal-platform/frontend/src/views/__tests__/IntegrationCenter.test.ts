@@ -15,6 +15,7 @@ vi.mock('@/api/integration', async (importOriginal) => {
     listIntegrationTasks: vi.fn(),
     createIntegrationTask: vi.fn(),
     deleteIntegrationTask: vi.fn(),
+    patchIntegrationTask: vi.fn(),
     runIntegrationTask: vi.fn(),
     listPlatformCredentials: vi.fn().mockResolvedValue([]),
     createPlatformCredential: vi.fn(),
@@ -78,6 +79,9 @@ async function mountPage(isAdmin = false) {
     is_active: true, created_at: '', updated_at: '',
   } as never
   const w = mount(IntegrationCenter, {
+    // attachTo body:reka Dialog teleport 目标(document.querySelector 检索,
+    // Suites.test 同款惯例)—— 解绑确认框断言需要
+    attachTo: document.body,
     global: { plugins: [router, pinia], stubs: { RouterLink: true } },
   })
   await flushPromises()
@@ -368,6 +372,35 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w = await mountPage()
     expect(w.find('[data-testid="ig-row-3"]').text()).toContain('内容已变更·待确认')
     expect(w.find('[data-testid="ig-sub-3"]').text()).toBe('重新确认')
+    w.unmount()
+  })
+
+  it('D26 解绑:管理者行出「解绑」→ 4 条说明确认框 → 确认 PATCH tokenId:null(评审 2026-11-05 P2)', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ tokenId: 9, tokenName: 'agent-nightly',
+               identityMode: 'personal' }),
+      mkTask({ id: 4 }),   // 未绑令牌 → 不出解绑钮
+    ])
+    vi.mocked(api.patchIntegrationTask).mockResolvedValue(mkTask())
+    const w = await mountPage(true)
+    expect(w.find('[data-testid="ig-unbind-3"]').exists()).toBe(true)
+    expect(w.find('[data-testid="ig-unbind-4"]').exists()).toBe(false)
+    await w.find('[data-testid="ig-unbind-3"]').trigger('click')
+    await flushPromises()
+    // reka Dialog teleport 到 body;attr fallthrough 不落容器 testid
+    // —— 以确认钮为在场判据,文案检索 body(Suites.test 同款惯例)
+    const confirmBtn = document.querySelector(
+      '[data-testid="ig-unbind-confirm"]') as HTMLElement | null
+    expect(confirmBtn).toBeTruthy()
+    const txt = document.body.textContent || ''
+    expect(txt).toContain('把「下单服务保活」转为我管理')
+    expect(txt).toContain('agent-nightly 解除绑定')
+    expect(txt).toContain('不再向令牌的回调地址推送事件')
+    expect(txt).toContain('以你的身份、你的凭证池运行')
+    expect(txt).toContain('解绑后任务处于暂停')
+    confirmBtn!.click()
+    await flushPromises()
+    expect(api.patchIntegrationTask).toHaveBeenCalledWith(3, { tokenId: null })
     w.unmount()
   })
 })

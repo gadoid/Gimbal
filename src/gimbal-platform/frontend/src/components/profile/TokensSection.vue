@@ -140,6 +140,7 @@
         <thead>
           <tr class="bg-signal-soft text-left text-caption text-signal-ink/60">
             <th class="px-4 py-2.5 font-medium">名称</th>
+            <th v-if="kind === 'platform'" class="px-3 py-2.5 font-medium">签发人</th>
             <th v-if="mode === 'admin'" class="px-3 py-2.5 font-medium">属主</th>
             <th class="px-3 py-2.5 font-medium">状态</th>
             <th class="px-3 py-2.5 font-medium">授权范围</th>
@@ -163,6 +164,7 @@
                   <span v-if="hintOf(t)" class="text-caption" :class="hintClass(t)">{{ hintOf(t) }}</span>
                 </div>
               </td>
+              <td v-if="kind === 'platform'" class="whitespace-nowrap px-3 py-3 text-signal-ink/60">{{ t.issuerName ?? '—' }}</td>
               <td v-if="mode === 'admin'" class="px-3 py-3 text-signal-ink/60">{{ t.ownerName ?? t.ownerId }}</td>
               <td class="px-3 py-3">
                 <span class="status-pill" :class="`st-${statusLabel(t).key}`">
@@ -183,7 +185,7 @@
                   <Button
                     variant="outline" size="sm" :class="t.status === 'invalidated' ? 'btn-emphasis' : ''"
                     :disabled="busy" data-testid="token-regenerate" @click="regenerate(t)"
-                  >{{ t.status === 'invalidated' ? '重新生成' : '重新生成' }}</Button>
+                  >重新生成</Button>
                   <Button
                     variant="outline" size="sm" class="text-red-600"
                     :disabled="busy" data-testid="token-revoke" @click="askRevoke(t)"
@@ -776,8 +778,7 @@ function taskClass(t: AccessTokenListItem) {
 function missingSummary(missing: { kind: string; name: string; deleted: boolean }[]) {
   const first = missing[0]
   if (!first) return '不满足'
-  const label = first.kind === 'alias' ? '未授权' : '未授权'
-  return `${first.deleted ? '对象已不存在' : label} · ${first.name}`
+  return `${first.deleted ? '对象已不存在' : '未授权'} · ${first.name}`
 }
 
 function callClass(c: { denied: boolean; status?: string }) {

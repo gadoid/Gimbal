@@ -32,6 +32,8 @@ export interface AccessTokenListItem {
   /** admin `all=1` 视图附带 */
   ownerId?: number
   ownerName?: string
+  /** 平台令牌列表附带:签发人(created_by;签发人已删/属主个人令牌不带) */
+  issuerName?: string
 }
 
 export interface TokenListEnvelope {

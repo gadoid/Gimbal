@@ -146,6 +146,7 @@ async def _task_bindings(db: AsyncSession, tpl, scen) -> dict:
 def _token_out(
     tok: AccessToken, *, scope: dict, tasks: dict,
     owner_label: "str | None" = None, include_owner: bool = False,
+    issuer_label: "str | None" = None,
 ) -> dict:
     out: dict[str, Any] = {
         "id": tok.id,
@@ -172,6 +173,10 @@ def _token_out(
     if include_owner:
         out["ownerId"] = tok.user_id
         out["ownerName"] = owner_label
+    if issuer_label is not None:
+        # 平台令牌的「签发人」列(原型 Tokens--platform;属主恒
+        # __platform__ 无信息量,签发人 = created_by,方案 §11.3)
+        out["issuerName"] = issuer_label
     return out
 
 
@@ -230,12 +235,19 @@ async def list_tokens(
     labels: dict[int, str] = {}
     if include_owner:
         labels = await _owner_labels(db, {r.user_id for r in rows})
+    # 平台令牌补「签发人」(created_by;个人令牌签发人 = 属主,不重复给)
+    issuer_ids = {r.created_by for r in rows
+                  if r.created_by is not None and r.kind == at.PLATFORM_KIND}
+    issuer_labels = await _owner_labels(db, issuer_ids)
     items = [
         _token_out(r,
                    scope=scopes.get(r.id, {"aliases": 0, "auths": 0}),
                    tasks=tasks.get(r.id, {"total": 0, "unsatisfied": 0}),
                    owner_label=labels.get(r.user_id),
-                   include_owner=include_owner)
+                   include_owner=include_owner,
+                   issuer_label=(
+                       issuer_labels.get(r.created_by or -1)
+                       if r.kind == at.PLATFORM_KIND else None))
         for r in rows
     ]
     # 额度提示(不含已吊销,D3)
