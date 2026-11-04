@@ -290,23 +290,23 @@ async def patch_user(
             from ..models.access_token import AccessToken
             from ..services import access_token as at_svc
 
+            # RETURNING 只取本次 UPDATE 命中的行(评审 2026-11-05 P2:
+            # 按 invalidated_reason==deactivated 重取会把上一轮停用
+            # 失效、尚未重新生成的历史令牌再通知一遍)
             res = await db.execute(_sa_update(AccessToken).where(
                 AccessToken.user_id == target.id,
                 AccessToken.kind == at_svc.PERSONAL_KIND,
                 AccessToken.revoked_at.is_(None),
                 AccessToken.invalidated_at.is_(None),
             ).values(invalidated_at=at_svc.now_utc(),
-                     invalidated_reason=at_svc.REASON_DEACTIVATED))
-            revoked_tokens = int(res.rowcount or 0)
-            if revoked_tokens:
-                # 逐令牌暂停注册方实例 + 通知(§3.4);先 flush 让上面的
-                # UPDATE 生效再逐行取
+                     invalidated_reason=at_svc.REASON_DEACTIVATED)
+                .returning(AccessToken.id))
+            hit_ids = list(res.scalars().all())
+            revoked_tokens = len(hit_ids)
+            if hit_ids:
+                # 逐令牌暂停注册方实例 + 通知(§3.4)
                 toks = (await db.execute(select(AccessToken).where(
-                    AccessToken.user_id == target.id,
-                    AccessToken.kind == at_svc.PERSONAL_KIND,
-                    AccessToken.invalidated_reason ==
-                    at_svc.REASON_DEACTIVATED,
-                ))).scalars().all()
+                    AccessToken.id.in_(hit_ids)))).scalars().all()
                 for tok in toks:
                     await at_svc.pause_token_instances(
                         db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
@@ -702,13 +702,14 @@ async def delete_user(
     # 剩余行(保留的模板及其实例)的 owner_id 跟随新属主(transfer →
     # 受让人;publicize 平台模板 → __platform__),否则删除用户行违反
     # integration_tasks.owner_id 外键(实例行同样带 owner_id 列)。
-    if disposed_tasks:
-        new_owner_id = (transferee.id if disposal == "transfer"
-                        else platform_user_id)
-        if new_owner_id is not None:
-            await db.execute(sa_update(IntegrationTask).where(
-                IntegrationTask.owner_id == user_id,
-            ).values(owner_id=new_owner_id))
+    # 无条件执行:被删用户可能只剩已软删(removed_at 非空)的模板,
+    # disposed_tasks 为空但这些行仍在,外键照样违反(评审 P2)。
+    new_owner_id = (transferee.id if disposal == "transfer"
+                    else platform_user_id)
+    if new_owner_id is not None:
+        await db.execute(sa_update(IntegrationTask).where(
+            IntegrationTask.owner_id == user_id,
+        ).values(owner_id=new_owner_id))
 
     # 该用户持有的订阅者实例:三种处置一律删除
     await db.execute(sa_delete(IntegrationTask).where(
