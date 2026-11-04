@@ -39,6 +39,12 @@
               <span v-if="t.mine" class="ig-chip mine">我的</span>
               <span v-else class="ig-chip">公共</span>
             </div>
+            <!-- §8:任务常驻显示所属令牌(解绑入口在操作列的管理菜单里) -->
+            <div
+              v-if="t.tokenId" class="ig-token mono"
+              :data-testid="`ig-token-${t.id}`"
+              :title="`经访问令牌 ${t.tokenName ?? '#' + t.tokenId} 注册;解绑后转账号管理`"
+            >令牌 {{ t.tokenName ?? `#${t.tokenId}` }}</div>
           </td>
           <td><span class="mono ig-sid">{{ t.scenarioId }}</span></td>
           <td>{{ t.cronText }}</td>
@@ -53,7 +59,12 @@
             <span class="ig-status" :class="checkTone(t)" :title="t.instance?.checkMessage || ''">{{ checkText(t) }}</span>
           </td>
           <td>
-            <span class="ig-status" :class="runTone(t)">{{ runText(t) }}</span>
+            <!-- §3.3:暂停原因短标签;title 挂 lastError 完整明细
+                 (resource_not_allowed 含缺项两类清单) -->
+            <span
+              class="ig-status" :class="runTone(t)"
+              :title="t.instance?.lastError || ''"
+            >{{ runText(t) }}</span>
           </td>
           <td class="ig-ops">
             <button
@@ -103,7 +114,7 @@
           <label class="ig-field">执行身份
             <select v-model="form.identityMode" data-testid="ig-form-mode">
               <!-- §2.3:平台模式要求 member+;user 角色不显示该选项 -->
-              <option v-if="auth.hasRole('member')" value="platform">平台模式(平台凭证 · 只读)</option>
+              <option v-if="auth.hasRole('member')" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
               <option value="personal">个人模式(我的凭证 · 读写)</option>
             </select>
           </label>
@@ -717,6 +728,7 @@ onMounted(() => {
   border: 1px dashed rgb(100 116 139 / 30%); border-radius: 10px;
 }
 .ig-name { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.ig-token { font-size: 11.5px; color: rgb(100 116 139); margin-top: 2px; }
 .ig-chip {
   font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 400;
   color: rgb(100 116 139); border: 1px solid rgb(100 116 139 / 30%);

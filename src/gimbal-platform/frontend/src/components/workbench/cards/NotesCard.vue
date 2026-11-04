@@ -3,9 +3,12 @@
      筛选与整理。数据存 ``notes`` 偏好(整值覆盖,后写为准);每条
      ≤ 200 字、共 ≤ 20 条,已完成 7 天后自动清理。 -->
 <template>
-  <div class="flex h-full flex-col gap-2">
-    <div class="flex items-baseline justify-between">
-      <h3 class="m-0 text-body font-semibold">便签</h3>
+  <div class="flex h-full flex-col gap-2" data-testid="wb-card-notes">
+    <header class="chead">
+      <span class="chead-icon ci-gold">
+        <SlibIcon name="pencil" :size="14" />
+      </span>
+      <span class="chead-title">便签</span>
       <span class="text-caption text-signal-ink/60">
         <template v-if="size === 'L'">
           {{ items.length }} / 20 · 每条 200 字 · 已完成 7 天后自动清理
@@ -13,7 +16,7 @@
         <template v-else-if="size === 'M'">{{ items.length }} / 20</template>
         <template v-else>{{ openCount }} 条未完成</template>
       </span>
-    </div>
+    </header>
 
     <!-- S:只看结论 -->
     <template v-if="size === 'S'">
@@ -97,6 +100,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Cross2Icon } from '@radix-icons/vue'
 import { Input } from '@/components/ui/input'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import http from '@/api/http'
 import { toast } from '@/utils/toast'
 import { useCardSize } from '../registry'

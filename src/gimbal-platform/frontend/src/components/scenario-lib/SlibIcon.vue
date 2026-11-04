@@ -80,8 +80,8 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import {
-  BellIcon, CounterClockwiseClockIcon, GearIcon, HomeIcon, PieChartIcon,
-  PlayIcon, Share2Icon, StackIcon,
+  BellIcon, CounterClockwiseClockIcon, GearIcon, HomeIcon, Pencil2Icon,
+  PieChartIcon, PlayIcon, Share2Icon, StackIcon,
 } from '@radix-icons/vue'
 
 /** 页头图标名(PageHead 的取值域)+ 卡头/页头补充的几种。 */
@@ -89,7 +89,7 @@ export type SlibIconName =
   | 'folder' | 'globe' | 'star' | 'grid' | 'layers' | 'lock' | 'sliders'
   | 'activity' | 'key' | 'network' | 'database' | 'clock'
   | 'history' | 'gear' | 'play'
-  | 'stack' | 'share' | 'pie' | 'home' | 'bell'
+  | 'stack' | 'share' | 'pie' | 'home' | 'bell' | 'pencil'
 
 const RADIX: Partial<Record<SlibIconName, Component>> = {
   // 执行记录 / 执行器 / 用户管理三页页面上没有图标,全站唯一的一颗就是侧
@@ -98,6 +98,8 @@ const RADIX: Partial<Record<SlibIconName, Component>> = {
   history: CounterClockwiseClockIcon,
   play: PlayIcon,
   gear: GearIcon,
+  // 便签卡(webhook v4 D18):随手记,铅笔头
+  pencil: Pencil2Icon,
   // 风格整理轮(2026-10-10):侧栏/页头图标唯一化 —— Suite=堆叠、集成
   // 中心=互连、数据分析=饼图、工作台=家、通知=铃铛,页头与侧栏渲染
   // 同一颗组件。

@@ -208,7 +208,12 @@
                         <dt class="text-signal-ink/60">回调</dt>
                         <dd class="m-0 flex flex-wrap items-center gap-2">
                           <span class="mono">{{ detailOf(t)!.callbackUrl || '未设置（令牌可轮询使用）' }}</span>
-                          <Button variant="outline" size="sm" class="h-6" :disabled="busy" @click="rotateSecret(t)">轮换签名密钥</Button>
+                          <template v-if="t.status !== 'revoked'">
+                            <Button variant="outline" size="sm" class="h-6" :disabled="busy" @click="rotateSecret(t)">轮换签名密钥</Button>
+                            <Button variant="outline" size="sm" class="h-6" :disabled="busy" data-testid="token-callback-edit" @click="askCallback(t)">
+                              {{ detailOf(t)!.callbackUrl ? '修改回调' : '设置回调' }}
+                            </Button>
+                          </template>
                         </dd>
                         <dt class="text-signal-ink/60">服务别名</dt>
                         <dd class="m-0 flex flex-wrap items-center gap-1.5">
@@ -335,7 +340,37 @@
       </DialogContent>
     </Dialog>
 
-    <!-- 明文一次性展示(创建/重新生成/轮换共用) -->
+    <!-- 后配/修改回调(§8:后配回调自动发密钥,明文一次性) -->
+    <Dialog :open="!!callbackEditing" @update:open="(v) => !v && (callbackEditing = null)">
+      <DialogContent class="max-w-md" data-testid="callback-dialog">
+        <DialogHeader>
+          <DialogTitle>回调地址 · {{ callbackEditing?.name }}</DialogTitle>
+          <DialogDescription>
+            事件推送到该地址（POST + HMAC 签名）；主机须在部署白名单内。首次设置会自动生成签名密钥，随保存结果一次性展示
+          </DialogDescription>
+        </DialogHeader>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-caption font-medium text-signal-ink/60">回调地址</span>
+          <Input v-model="callbackUrl" placeholder="https://agent.internal/gimbal/callback" data-testid="token-callback-url" />
+        </label>
+        <div
+          v-if="callbackEditing && detailOf(callbackEditing)?.callbackUrl"
+          class="flex flex-wrap items-center gap-2 text-caption text-signal-ink/60"
+        >
+          <span class="mono">当前：{{ detailOf(callbackEditing)!.callbackUrl }}</span>
+          <button
+            class="text-red-600 hover:underline" :disabled="busy"
+            data-testid="token-callback-clear" @click="doClearCallback"
+          >清除回调（保留密钥）</button>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="callbackEditing = null">取消</Button>
+          <Button :disabled="busy || !callbackUrl.trim()" data-testid="token-callback-save" @click="doSaveCallback">保存</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 明文一次性展示(创建/重新生成/轮换/后配回调共用) -->
     <TokenSecretDialog
       :open="secretOut !== null"
       :title="secretOut?.title ?? ''"
@@ -370,8 +405,9 @@ import {
 } from '@/components/ui/dialog'
 import {
   createAccessToken, getAccessToken, getScopeCandidates,
-  invalidateAccessToken, listAccessTokens, regenerateAccessToken,
-  renewAccessToken, revokeAccessToken, rotateCallbackSecret,
+  invalidateAccessToken, listAccessTokens, putTokenCallback,
+  regenerateAccessToken, renewAccessToken, revokeAccessToken,
+  rotateCallbackSecret,
   type AccessTokenDetail, type AccessTokenListItem,
   type ScopeCandidates, type TokenCreatedOut, type TokenKind,
   type TokenStatus,
@@ -572,6 +608,56 @@ async function rotateSecret(t: AccessTokenListItem) {
     }
   } catch (e) {
     toast.error((e as Error).message || '轮换失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+// ── 后配/修改回调(§8 第四场景:后配回调自动发密钥,一次性展示) ──
+const callbackEditing = ref<AccessTokenListItem | null>(null)
+const callbackUrl = ref('')
+
+function askCallback(t: AccessTokenListItem) {
+  callbackEditing.value = t
+  callbackUrl.value = detailOf(t)?.callbackUrl ?? ''
+}
+
+async function doSaveCallback() {
+  const t = callbackEditing.value
+  if (!t || !callbackUrl.value.trim()) return
+  busy.value = true
+  try {
+    const out = await putTokenCallback(t.id, callbackUrl.value.trim())
+    if (out.callbackSecret) {
+      secretOut.value = {
+        title: `回调已设置 · ${t.name}`,
+        subtitle: '签名密钥只展示这一次，请立即交给接收方；丢失可「轮换签名密钥」重新生成',
+        token: '',
+        callbackSecret: out.callbackSecret,
+      }
+    } else {
+      toast.success('回调地址已更新')
+    }
+    callbackEditing.value = null
+    await reloadDetails()
+  } catch (e) {
+    toast.error((e as Error).message || '回调保存失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function doClearCallback() {
+  const t = callbackEditing.value
+  if (!t) return
+  busy.value = true
+  try {
+    await putTokenCallback(t.id, null)
+    toast.success('回调已清除（签名密钥保留，再次设置地址可直接复用）')
+    callbackEditing.value = null
+    await reloadDetails()
+  } catch (e) {
+    toast.error((e as Error).message || '回调清除失败')
   } finally {
     busy.value = false
   }
