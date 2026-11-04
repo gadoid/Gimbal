@@ -235,20 +235,6 @@ export async function addSuiteMembers(
   return data
 }
 
-export async function reorderSuiteMembers(
-  suiteId: number, scenarioIds: string[],
-): Promise<SuiteDetail> {
-  const { data } = await http.patch<SuiteDetail>(
-    `/suites/${suiteId}/members/order`, { scenarioIds })
-  return data
-}
-
-export async function removeSuiteMember(
-  suiteId: number, scenarioId: string,
-): Promise<void> {
-  await http.delete(`/suites/${suiteId}/members/${encodeURIComponent(scenarioId)}`)
-}
-
 /** 运行(模式分流):聚合 → SuiteRunResult(批次);编排 → SuiteOrchRunResult。
  *  control:only = 试跑选中段(单元 ref);toNode = 串联只跑到某一步。 */
 export async function runSuite(

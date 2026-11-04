@@ -12,7 +12,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import { FOLLOW_CAP, FollowCapError } from '@/composables/useFollowLayout'
 import type {
-  Scenario, ScenarioListItem, ScenarioOptionsItem, ScenarioPage,
+  Scenario, ScenarioListItem, ScenarioPage,
   ScenarioDraft, DataSetSummary,
 } from '@/types/scenario-composer'
 
@@ -20,7 +20,6 @@ type FetchStatus = 'idle' | 'loading' | 'error'
 
 /** 首窗/单飞的 module 作用域 promise:Pinia state 不该持 Promise。 */
 let inflightWindow: Promise<void> | null = null
-let inflightOptions: Promise<void> | null = null
 
 export const useScenarioComposerStore = defineStore('scenario-composer', {
   state: () => ({
@@ -33,10 +32,6 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
     window: [] as ScenarioListItem[],
     windowLoaded: false,
     windowStatus: 'idle' as FetchStatus,
-
-    // ── options 轻量缓存(名称映射类消费方,单飞)─────────────────
-    options: [] as ScenarioOptionsItem[],
-    optionsLoaded: false,
 
     dataSets: [] as DataSetSummary[],
     dataSetsStatus: 'idle' as FetchStatus,
@@ -91,33 +86,14 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       return this.window
     },
 
-    // ── options:选择器/名称映射(Runner picker、OpConstructDialog、
-    //    台账场景名)——「为拿名字拉全量场景表」就此退役。
-    async fetchOptions(q?: string): Promise<void> {
-      try {
-        const env = await api.listScenarioOptions({
-          page_size: 100, q: q || undefined,
-        })
-        this.options = env.items
-        this.optionsLoaded = true
-      } catch (e) {
-        this.lastError = (e as Error).message
-      }
-    },
+    // ── options 缓存已随消费方全部直连 api.listScenarioOptions 退役
+    //    (Runner picker / OpConstructDialog / 台账场景名;「为拿名字拉
+    //    全量场景表」就此退役),store 不再持有该面。
 
-    async ensureOptions(): Promise<ScenarioOptionsItem[]> {
-      if (this.optionsLoaded) return this.options
-      const p = (inflightOptions
-        ??= this.fetchOptions().finally(() => { inflightOptions = null }))
-      await p
-      return this.options
-    },
-
-    /** mutation 后作废缓存:当前页按需重拉(列表页在),首窗/options
-     *  置脏下次挂载再拉。不维护全量乐观 upsert —— 那是退位前的形态。 */
+    /** mutation 后作废缓存:当前页按需重拉(列表页在),首窗置脏
+     *  下次挂载再拉。不维护全量乐观 upsert —— 那是退位前的形态。 */
     invalidate() {
       this.windowLoaded = false
-      this.optionsLoaded = false
     },
 
     async saveScenario(scenarioId: string | null, draft: ScenarioDraft) {

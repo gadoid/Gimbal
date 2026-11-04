@@ -15,12 +15,10 @@
  */
 import http from '@/api/http'
 
-/** 目录 endpoint 条目中派生所需的字段(id 供 endpoint→service 映射,
- *  如变更适配待适配卡跳接口线索板;个别脏行可缺)。 */
+/** 目录 endpoint 条目中派生所需的字段(个别脏行可缺)。 */
 interface CatalogServiceEntry {
   service: string
   system: string
-  id?: string
   kind?: string  // b2.5(归一 v1.0 §3.4):Admin 分区/下拉过滤用;缺省 sut
 }
 
@@ -54,15 +52,7 @@ export function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
     env.endpoints.map((ep) => ({
       service: ep.service,
       system: env.services.find((s) => s.name === ep.service)?.system ?? '',
-      id: ep.id,
     })).filter((e) => e.service && e.system))
-}
-
-/** endpoint_id → service 映射(变更适配「看影响面」跳线索板要用;
- *  与其他 loader 共享同一次缓存拉取)。 */
-export function loadCatalogEndpointServiceMap(): Promise<Map<string, string>> {
-  return loadCatalogEntries().then(
-    (es) => new Map(es.filter((e) => e.id).map((e) => [e.id!, e.service])))
 }
 
 export function loadCatalogServiceNames(): Promise<string[]> {

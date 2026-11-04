@@ -20,8 +20,6 @@ vi.mock('@/api/suites', () => ({
   patchSuite: vi.fn(),
   deleteSuite: vi.fn(),
   addSuiteMembers: vi.fn(),
-  reorderSuiteMembers: vi.fn(),
-  removeSuiteMember: vi.fn(),
   putSuiteComposition: vi.fn(),
   runSuite: vi.fn(),
   listSuiteRuns: vi.fn(),

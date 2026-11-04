@@ -31,13 +31,6 @@ export function parseSseFrame(block: string): SseFrame | null {
     : null
 }
 
-/** 整段文本 → 帧列表(测试/一次性解析用)。 */
-export function parseSseText(text: string): SseFrame[] {
-  return text.split('\n\n')
-    .map(parseSseFrame)
-    .filter((f): f is SseFrame => f !== null)
-}
-
 /**
  * 逐帧消费 fetch 响应体。chunk 边界任意(网络分片不保证行对齐),内部
  * 缓冲按 `\n\n` 切帧;流结束收尾。

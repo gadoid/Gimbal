@@ -6,7 +6,7 @@
  * 发帧 → 前端永远切不出帧)由后端帧结构测试把守,本面把守前端解析。
  */
 import { describe, it, expect } from 'vitest'
-import { parseSseFrame, parseSseText, readSseStream } from '@/utils/sse'
+import { parseSseFrame, readSseStream } from '@/utils/sse'
 
 function respOf(chunks: string[]): Response {
   const enc = new TextEncoder()
@@ -19,7 +19,7 @@ function respOf(chunks: string[]): Response {
   return { ok: true, status: 200, body: stream } as unknown as Response
 }
 
-describe('parseSseFrame / parseSseText', () => {
+describe('parseSseFrame', () => {
   it('解析 id/event/data 三字段(真换行)', () => {
     const f = parseSseFrame('id: 42\nevent: log\ndata: {"a":1}')
     expect(f).toEqual({ id: '42', event: 'log', data: '{"a":1}' })
@@ -33,14 +33,6 @@ describe('parseSseFrame / parseSseText', () => {
   it('CRLF 行尾兼容', () => {
     const f = parseSseFrame('id: 7\r\nevent: ev\r\n')
     expect(f).toEqual({ id: '7', event: 'ev' })
-  })
-
-  it('parseSseText 按 \\n\\n 分帧且丢弃注释帧', () => {
-    const frames = parseSseText(
-      'id: 1\nevent: ev\ndata: {}\n\n: ping\n\nid: 2\nevent: done\ndata: {"status":"done"}\n\n',
-    )
-    expect(frames.map((f) => f.id)).toEqual(['1', '2'])
-    expect(frames[1]!.event).toBe('done')
   })
 })
 

@@ -1,7 +1,7 @@
 /** suiteStructure.ts 纯函数测试(重构方案「前端模块」:单独单测)。 */
 import { describe, it, expect } from 'vitest'
 import {
-  MODES, modeMeta, estimateOrchRuns, layeredUnits, needsHasCycle,
+  MODES, modeMeta, estimateOrchRuns, layeredUnits,
   runStatusTone, MODE_LABEL, inferStructure, orderByStructure,
   canvasEdgesFromSuite, edgeMakesCycle,
 } from '@/utils/suiteStructure'
@@ -49,9 +49,9 @@ describe('suiteStructure — 依赖编排分层与环检测', () => {
     expect(layeredUnits(members, {
       units: { a: { needs: ['ghost'] } },
     }).layers).toEqual([['a', 'b', 'c']])
-    expect(needsHasCycle(members, {
+    expect(layeredUnits(members, {
       units: { a: { needs: ['c'] }, c: { needs: ['b'] }, b: { needs: ['a'] } },
-    })).toBe(true)
+    }).hasCycle).toBe(true)
   })
 })
 

@@ -61,12 +61,6 @@ export interface RollbackReport {
   conflicts: RollbackConflictItem[]
 }
 
-export interface UnindexedStep {
-  scenarioId: string
-  stepIndex: number
-  reason: string
-}
-
 export interface OpCreateIn {
   opType: string
   /** 场景 op 必填;CARRY_OPS 免(后端 OpCreateIn 已可空)—— carry 请求体不带该键。 */
@@ -87,11 +81,6 @@ export function errMsg(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message || fallback
   const msg = (e as { msg?: string } | null)?.msg
   return msg || fallback
-}
-
-export async function unindexedSteps(): Promise<UnindexedStep[]> {
-  const { data } = await http.get<UnindexedStep[]>('/adaptations/unindexed-steps')
-  return data
 }
 
 /** M4 Page 信封(§6.3):status 精确 + 分页。 */

@@ -110,14 +110,6 @@ export function layeredUnits(
   return { layers: layers.filter(Boolean), hasCycle: hasCycle.v }
 }
 
-/** needs 图环检测(保存前本地提示用;服务端校验为唯一闸)。 */
-export function needsHasCycle(
-  members: { scenarioId: string }[],
-  config: SuiteModeConfig | null | undefined,
-): boolean {
-  return layeredUnits(members, config).hasCycle
-}
-
 // ── 画布结构推断(第 4 步;原型 11/12,交互规则「模式由结构推断」)──
 // 自上而下五条规则,命中第一条即止;「开始」节点的连线不参与。
 

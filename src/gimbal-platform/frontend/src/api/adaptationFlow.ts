@@ -9,14 +9,6 @@ import http from '@/api/http'
 
 // ── 类型 ──────────────────────────────────────────────────────────
 
-/** 版本线信息（GET /endpoint-catalog/{system}/lines → plate lines） */
-export interface SystemLine {
-  line: string
-  revisions: number
-  latest: string
-  line_scheme: string | null
-}
-
 /** 声明字段级差异（R7，plate diff 的 field_diff） */
 export interface FieldDiff {
   added: string[]
@@ -90,13 +82,6 @@ export interface SubmitResult {
 }
 
 // ── API 调用 ──────────────────────────────────────────────────────
-
-/** 获取系统版本线列表 */
-export async function fetchLines(systemId: string): Promise<SystemLine[]> {
-  const { data } = await http.get<{ items: SystemLine[] }>(
-    `/endpoint-catalog/${encodeURIComponent(systemId)}/lines`)
-  return data.items
-}
 
 /** 修订目录里的轻量接口条目（结构级改造的接口选择面） */
 export interface RevisionEndpoint {

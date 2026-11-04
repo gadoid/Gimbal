@@ -189,11 +189,11 @@ describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
     vi.spyOn(authApi, 'listAll').mockResolvedValue([])
     vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([])
     vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
-      { service: 'fin-service', system: 'fin', kind: 'sut', id: 'fin.a.a' },
-      { service: 'fin-report-service', system: 'fin', kind: 'sut', id: 'fin.a.b' },
-      { service: 'wms-service', system: 'wms', kind: 'sut', id: 'wms.a.a' },
-      { service: 'jira', system: 'jira', kind: 'integration', id: 'jira.a.list' },
-      { service: 'jira', system: 'jira', kind: 'integration', id: 'jira.a.issue_get' },
+      { service: 'fin-service', system: 'fin', kind: 'sut' },
+      { service: 'fin-report-service', system: 'fin', kind: 'sut' },
+      { service: 'wms-service', system: 'wms', kind: 'sut' },
+      { service: 'jira', system: 'jira', kind: 'integration' },
+      { service: 'jira', system: 'jira', kind: 'integration' },
     ])
   })
 
