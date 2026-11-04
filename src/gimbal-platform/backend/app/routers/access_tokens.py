@@ -118,7 +118,9 @@ async def _task_missing(
     db: AsyncSession, tpl: IntegrationTask, tok: AccessToken,
     scope_aliases: set, scope_auths: set,
 ) -> "list[at.ScopeMissing] | None":
-    """单个注册任务的缺项(§3.3 #6 分类;与运行前复核同一口径)。"""
+    """单个注册任务的缺项(§3.3 #6 分类;与运行前复核同一口径 ——
+    子集判定走 ``services.check_scope`` 单一实现(§3.2),范围集由
+    调用方预载传入,免逐任务重查)。"""
     from ..models.composer_scenario import ComposerScenario
     from ..services.scenario_store import definition_from_payload
 
@@ -130,24 +132,8 @@ async def _task_missing(
     bindings = await _task_bindings(db, tpl, scen)
     used = await at.used_sets_for_definition(
         db, definition_from_payload(scen.payload), bindings)
-    owner_id = tok.user_id
-    missing: list[at.ScopeMissing] = []
-    for alias in sorted(set(used.aliases)):
-        if alias in scope_aliases:
-            continue
-        missing.append(at.ScopeMissing(
-            "alias", alias, await db.get(ServiceAlias, alias) is None))
-    if used.auths:
-        used_rows = (await db.execute(
-            select(AuthSession.id, AuthSession.alias).where(
-                AuthSession.owner_id == owner_id,
-                AuthSession.alias.in_(set(used.auths))))).all()
-        by_name = {alias: rid for rid, alias in used_rows}
-        for alias in sorted(set(used.auths)):
-            rid = by_name.get(alias)
-            if rid is None or rid not in scope_auths:
-                missing.append(at.ScopeMissing("auth", alias, rid is None))
-    return missing or None
+    return await at.check_scope(db, tok, tok.user_id, used,
+                                scope=(scope_aliases, scope_auths))
 
 
 async def _task_bindings(db: AsyncSession, tpl, scen) -> dict:
@@ -333,6 +319,9 @@ async def create_token(
                 at.ERR_CALLBACK_HOST_NOT_ALLOWED,
                 "回调主机不在白名单内(联系管理员配置 CALLBACK_HOST_"
                 "ALLOWLIST;空白名单 = 不允许任何回调地址)")
+    # 与 PUT /scope 同款范围对象校验(评审 2026-11-05 P2:此前直写
+    # _write_scope,别名不存在触发外键 500、他人凭证 id 落脏数据)
+    await _validate_scope_candidates(db, owner_id, body.scope)
 
     # 额度:同 kind 未吊销计数(平台令牌全平台共享 5 张,D3)。
     # §5.1「事务内锁行计数」:锁属主 users 行(个人 = 本人,平台 =

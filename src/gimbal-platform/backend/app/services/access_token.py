@@ -288,14 +288,21 @@ async def load_scope(db: AsyncSession, token_id: int) -> tuple[set, set]:
 async def check_scope(
     db: AsyncSession, token: AccessToken, owner_id: int,
     used: ScopeSets,
+    scope: "tuple[set, set] | None" = None,
 ) -> "list[ScopeMissing] | None":
     """子集判定:全在范围内返回 None;否则返回缺项(按 §3.3 分类)。
 
     ``owner_id`` = 执行属主(平台令牌 = ``__platform__`` id),凭证存在性
     按其凭证池判。范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个
     查对象表分类。
+
+    ``scope`` 可传入预载的 (别名集, 凭证 id 集) 免重查(§3.2 单一实现:
+    详情页/PUT 试算的逐任务预检与运行前复核同走本函数,不另起一份)。
     """
-    scope_aliases, scope_auths = await load_scope(db, token.id)
+    if scope is not None:
+        scope_aliases, scope_auths = scope
+    else:
+        scope_aliases, scope_auths = await load_scope(db, token.id)
     missing: list[ScopeMissing] = []
 
     for alias in sorted(set(used.aliases)):
