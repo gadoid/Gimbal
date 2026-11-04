@@ -34,7 +34,8 @@ class WebhookDelivery(Base):
     # 令牌删除后投递台账保留(token_id SET NULL),签名密钥不快照、投递
     # 时按令牌现取 —— 令牌行没了即该行失败(token_deleted)。
     token_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL"),
+        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL",
+                               name="fk_webhook_deliveries_token_id"),
         nullable=True)
     token_name: Mapped[str] = mapped_column(String(64), default="")
     # execution.finished | integration.run_finished | integration.paused

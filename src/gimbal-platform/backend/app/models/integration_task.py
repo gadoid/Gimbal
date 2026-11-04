@@ -91,7 +91,8 @@ class IntegrationTask(Base):
     # 属主视角(公共模板列表/详情)隐藏 token/client_ref。
     # JWT 管理者可解绑(D26):token_id 置空 + manual 暂停。
     token_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL"),
+        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL",
+                               name="fk_integration_tasks_token_id"),
         nullable=True)
     client_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     callback_path_override: Mapped[str | None] = mapped_column(

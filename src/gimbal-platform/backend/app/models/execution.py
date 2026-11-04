@@ -123,11 +123,12 @@ class Execution(Base):
     # NULL → 不写投递行、不回调。FK SET NULL:令牌随用户删除后执行
     # 台账保留,追溯靠 config_json.token 快照。
     token_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL"),
+        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL",
+                               name="fk_executions_token_id"),
         nullable=True)
     # 调用方自定义引用键(≤128,回调原样带回,调用方对账用)
     client_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    # 本执行的回调路径覆盖(只允许路径段);空 = 用别名 callback_path
+    # 本执行的回调路径覆盖(只允许路径段);空 = 令牌 callback_url 根路径
     callback_path_override: Mapped[str | None] = mapped_column(
         String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
