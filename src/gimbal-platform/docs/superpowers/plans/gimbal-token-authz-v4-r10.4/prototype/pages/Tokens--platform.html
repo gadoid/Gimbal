@@ -1,0 +1,350 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>访问令牌 · 个人 / 平台 / 管理员视角</title><style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style></head><body>
+
+<div style="width: 100%; min-height: 1320px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <!-- 侧栏 chrome -->
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">通知</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #F8FAFC; background: rgba(255,255,255,0.08); text-decoration: none;">集成</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">管理</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; background: transparent; text-decoration: none;">用户管理</a>
+    <div style="flex-grow: 1;"></div>
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-decoration: none;">
+        <span style="color: #F8FAFC; font-weight: 500;">鳕鱼</span>
+        <span style="font-size: 10px; padding: 0 6px; border-radius: 9999px; background: rgba(255,255,255,0.12); color: #CBD5E1;">管理员</span>
+      </a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <header style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">集成 · 平台令牌</h1>
+      <span style="font-size: 12px; color: #5B6472;">成员及以上可签发与管理 · 平台凭证由管理员维护</span>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      
+
+      <div id="tokens" style="flex: 999 1 560px; min-width: 0; max-width: 1120px; display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- 分区头 -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">平台令牌</h2>
+          <button type="button" aria-label="说明：平台令牌以平台身份调用 Gimbal，只能运行公共只读场景" style="width: 18px; height: 18px; border: 1px solid #C9CFD8; border-radius: 9999px; background: #FFFFFF; color: #5B6472; font-size: 11px; line-height: 16px; padding: 0;">?</button>
+          <span style="font-size: 12px; color: #5B6472;">全平台共享 · 已用 2 / 5（不含已吊销）</span>
+          <div style="flex-grow: 1;"></div>
+          
+            <button type="button" style="height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 13px; font-weight: 500;">创建平台令牌</button>
+          
+        </div>
+
+        <!-- 平台令牌：身份说明 -->
+        
+          <div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 8px; background: #EEF4FF; border: 1px solid #C7D7FB; font-size: 12px; color: #1F3B73;">
+            <span style="font-weight: 600; white-space: nowrap;">平台身份</span>
+            <span>平台令牌以平台系统身份执行：只能运行公共且全部步骤只读的场景，不能临时调用；凭证取自平台凭证池（由管理员维护，这里只列别名）。额度全平台共享，占满时请联系管理员清理闲置令牌。</span>
+          </div>
+        
+
+        <!-- 管理员：筛选 -->
+        
+
+        <!-- user 角色：不可用态 -->
+        
+
+        
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+
+            <!-- 创建表单（展开态） -->
+            
+              <form style="background: #FFFFFF; border: 1px solid #2F6FED; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 0 0 3px #E7EFFF;">
+                <h3 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">新建平台令牌</h3>
+                <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tname" style="font-size: 12px; font-weight: 500; color: #5B6472;">名称</label>
+                    <input id="tname" placeholder="例如：nightly-recon" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tttl" style="font-size: 12px; font-weight: 500; color: #5B6472;">有效期</label>
+                    <select id="tttl" style="height: 32px; padding: 0 8px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px; background: #FFFFFF;">
+                      <option>30 天</option>
+                      <option selected="selected">90 天</option>
+                      <option>180 天</option>
+                      <option>365 天（上限）</option>
+                    </select>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tcb" style="font-size: 12px; font-weight: 500; color: #5B6472;">回调地址（可选）</label>
+                    <input id="tcb" value="https://recon.internal/hooks/gimbal" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+                    <span style="font-size: 11px; color: #15803D;">主机已在回调主机白名单内</span>
+                  </div>
+                </div>
+
+                <fieldset style="margin: 0; border: 1px solid #E1E5EB; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px;">
+                  <legend style="padding: 0 6px; font-size: 12px; font-weight: 600; color: #10151C;">授权范围 · 未勾选的一律不可用</legend>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="width: 64px; font-size: 12px; color: #5B6472;">服务别名</span>
+                    
+                      <button type="button" aria-pressed="true" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #2F6FED; background: #E7EFFF; color: #1F55C4; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">fin-test</button>
+                    
+                      <button type="button" aria-pressed="true" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #2F6FED; background: #E7EFFF; color: #1F55C4; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">logi-test</button>
+                    
+                      <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">wms-test</button>
+                    
+                      <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">mall-uat</button>
+                    
+                      <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">fin-uat</button>
+                    
+                    <button type="button" style="height: 26px; padding: 0 8px; border: 0; background: transparent; color: #2F6FED; font-size: 12px;">全选</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="width: 64px; font-size: 12px; color: #5B6472;">平台凭证</span>
+                    
+                      <button type="button" aria-pressed="true" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #2F6FED; background: #E7EFFF; color: #1F55C4; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">plat-fin-ro</button>
+                    
+                      <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">plat-logi-ro</button>
+                    
+                    <button type="button" style="height: 26px; padding: 0 8px; border: 0; background: transparent; color: #2F6FED; font-size: 12px;">全选</button>
+                  </div>
+                  
+                  <span style="font-size: 11px; color: #5B6472;">候选 = 全部服务别名、平台凭证池（只列别名，凭证内容由管理员维护）。某一维度可以不选：不选即不允许使用该类资源。</span>
+                </fieldset>
+
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span style="font-size: 12px; color: #B45309;">令牌等同账号密码：明文只展示一次</span>
+                  <div style="flex-grow: 1;"></div>
+                  <button type="button" style="height: 32px; padding: 0 14px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 13px;">取消</button>
+                  <a href="TokenCreated.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 13px; font-weight: 500; text-decoration: none;">创建</a>
+                </div>
+              </form>
+            
+
+            <!-- 令牌列表 -->
+            <div style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; overflow-x: auto;">
+              <table style="width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #F6F8FC; color: #4A5A72; font-size: 12px; text-align: left;">
+                    <th scope="col" style="padding: 10px 16px; font-weight: 500;">名称</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500; display: table-cell;">签发人</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">状态</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">授权范围</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">到期</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">最近使用</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">任务</th>
+                    <th scope="col" style="padding: 10px 16px; font-weight: 500; text-align: right;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  
+                    <tr style="border-top: 1px solid #EEF0F3; color: #10151C; background: #FFFFFF;">
+                      <td style="padding: 12px 16px;">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                          <span style="font-weight: 600;">nightly-recon</span>
+                          <span style="font-size: 11px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">gtk_2f7a…d301</span>
+                          <span style="display: none; font-size: 11px; color: #5B6472;"></span>
+                        </div>
+                      </td>
+                      <td style="padding: 12px; color: #5B6472; display: table-cell;">签发 李四</td>
+                      <td style="padding: 12px;"><span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D; white-space: nowrap;">有效</span></td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">3 别名 · 1 凭证</td>
+                      <td style="padding: 12px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">2027-03-01</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">20 分钟前</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #10151C;">4</td>
+                      <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                        
+                          <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">续期</button>
+                        
+                        
+                          <a href="TokenCreated.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px; text-decoration: none; box-sizing: border-box;">重新生成</a>
+                        
+                        
+                          <a href="RevokeConfirm.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px; text-decoration: none; box-sizing: border-box;">吊销</a>
+                        
+                        
+                        
+                      </td>
+                    </tr>
+                  
+                    <tr style="border-top: 1px solid #EEF0F3; color: #10151C; background: #FFFFFF;">
+                      <td style="padding: 12px 16px;">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                          <span style="font-weight: 600;">bi-export</span>
+                          <span style="font-size: 11px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">gtk_8c1d…a9e2</span>
+                          <span style="display: none; font-size: 11px; color: #5B6472;"></span>
+                        </div>
+                      </td>
+                      <td style="padding: 12px; color: #5B6472; display: table-cell;">签发 王五</td>
+                      <td style="padding: 12px;"><span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #FEF3C7; color: #B45309; white-space: nowrap;">5 天后到期</span></td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">1 别名 · 0 凭证</td>
+                      <td style="padding: 12px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">2026-11-09</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">昨天</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #10151C;">1</td>
+                      <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                        
+                          <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #2F6FED; border-radius: 4px; background: #2F6FED; color: #FFFFFF; font-size: 12px;">续期</button>
+                        
+                        
+                          <a href="TokenCreated.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px; text-decoration: none; box-sizing: border-box;">重新生成</a>
+                        
+                        
+                          <a href="RevokeConfirm.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px; text-decoration: none; box-sizing: border-box;">吊销</a>
+                        
+                        
+                        
+                      </td>
+                    </tr>
+                  
+                    <tr style="border-top: 1px solid #EEF0F3; color: #5B6472; background: #FAFBFC;">
+                      <td style="padding: 12px 16px;">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                          <span style="font-weight: 600;">legacy-sync</span>
+                          <span style="font-size: 11px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">gtk_44b0…01fe</span>
+                          <span style="display: none; font-size: 11px; color: #5B6472;"></span>
+                        </div>
+                      </td>
+                      <td style="padding: 12px; color: #5B6472; display: table-cell;">签发 鳕鱼</td>
+                      <td style="padding: 12px;"><span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #EEF0F3; color: #5B6472; white-space: nowrap;">已吊销</span></td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">—</td>
+                      <td style="padding: 12px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">—</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">10-12</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #10151C;">—</td>
+                      <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                        
+                        
+                        
+                        
+                        
+                          <span style="font-size: 12px; color: #8B93A1;">仅查看</span>
+                        
+                      </td>
+                    </tr>
+                  
+                </tbody>
+              </table>
+
+              <!-- 管理员：强制失效确认（行内展开） -->
+              
+
+              <!-- 展开详情 -->
+              
+                <div style="border-top: 1px solid #E1E5EB; background: #F6F8FC; padding: 16px 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <dl style="margin: 0; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px 12px; font-size: 12px;">
+                      <dt style="color: #5B6472;">令牌</dt>
+                      <dd style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">nightly-recon · gtk_2f7a…d301</dd>
+                      <dt style="color: #5B6472;">回调</dt>
+                      <dd style="margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">https://recon.internal/hooks/gimbal</span>
+                        <button type="button" style="height: 24px; padding: 0 8px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">轮换签名密钥</button>
+                      </dd>
+                      <dt style="color: #5B6472;">服务别名</dt>
+                      <dd style="margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                        
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">fin-test</span>
+                        
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">logi-test</span>
+                        
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">mall-uat</span>
+                        
+                      </dd>
+                      <dt style="color: #5B6472;">平台凭证</dt>
+                      <dd style="margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                        
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">plat-fin-ro</span>
+                        
+                        <a href="ScopeEdit.html" style="font-size: 12px;">编辑范围</a>
+                      </dd>
+                    </dl>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <span style="font-size: 12px; font-weight: 600;">经此令牌注册的任务</span>
+                      
+                        <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <a href="IntegrationDetail.html" style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #10151C; text-decoration: none;">月结对账巡检</a>
+                            <span style="color: #5B6472;">每天 03:00</span>
+                            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D; white-space: nowrap;">范围满足</span>
+                          </div>
+                          <span style="display: none; font-size: 11px; color: #5B6472;"></span>
+                        </div>
+                      
+                        <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <a href="IntegrationDetail.html" style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #10151C; text-decoration: none;">公共报表导出</a>
+                            <span style="color: #5B6472;">每周一</span>
+                            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #FEF3C7; color: #B45309; white-space: nowrap;">场景已转私有</span>
+                          </div>
+                          <span style="display: block; font-size: 11px; color: #5B6472;">平台模式只能运行公共场景：场景公开后在集成详情启动</span>
+                        </div>
+                      
+                    </div>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                      <span style="font-size: 12px; font-weight: 600;">最近调用（含被拒）</span>
+                      <a href="#" style="font-size: 12px;">全部调用与回调记录</a>
+                    </div>
+                    
+                      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4821</span>
+                        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">月结对账巡检</span>
+                        <span style="display: none; font-size: 11px; padding: 1px 8px; border-radius: 9999px; border: 1px dashed #B45309; color: #B45309; white-space: nowrap;">含范围外目标</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D; white-space: nowrap;">通过</span>
+                        <span style="color: #5B6472; white-space: nowrap;">2 小时前</span>
+                      </div>
+                    
+                      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">—</span>
+                        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">公共报表导出</span>
+                        <span style="display: none; font-size: 11px; padding: 1px 8px; border-radius: 9999px; border: 1px dashed #B45309; color: #B45309; white-space: nowrap;">含范围外目标</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #FEF3C7; color: #B45309; white-space: nowrap;">拒绝 · 场景非公共</span>
+                        <span style="color: #5B6472; white-space: nowrap;">3 小时前</span>
+                      </div>
+                    
+                      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4790</span>
+                        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">月结对账巡检</span>
+                        <span style="display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 9999px; border: 1px dashed #B45309; color: #B45309; white-space: nowrap;">含范围外目标</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #FEE2E2; color: #B91C1C; white-space: nowrap;">失败</span>
+                        <span style="color: #5B6472; white-space: nowrap;">昨天 02:10</span>
+                      </div>
+                    
+                      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4733</span>
+                        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">月结对账巡检</span>
+                        <span style="display: none; font-size: 11px; padding: 1px 8px; border-radius: 9999px; border: 1px dashed #B45309; color: #B45309; white-space: nowrap;">含范围外目标</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D; white-space: nowrap;">通过</span>
+                        <span style="color: #5B6472; white-space: nowrap;">11-02</span>
+                      </div>
+                    
+                  </div>
+                </div>
+              
+            </div>
+
+          </div>
+        
+
+      </div>
+    </div>
+  </main>
+</div>
+</body></html>

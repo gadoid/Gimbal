@@ -1,0 +1,60 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>吊销访问令牌</title><style>
+body{margin:0}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style></head><body>
+
+<div style="width: 880px; height: 680px; box-sizing: border-box; background: rgba(16, 21, 28, 0.45); display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px; color: #10151C;">
+  <div role="dialog" aria-labelledby="rv-title" style="width: 640px; background: #FFFFFF; border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12); display: flex; flex-direction: column; overflow: hidden;">
+    <div style="padding: 18px 22px 14px; border-bottom: 1px solid #EEF0F3; display: flex; flex-direction: column; gap: 4px;">
+      <h2 id="rv-title" style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">吊销 agent-nightly？</h2>
+      <span style="font-size: 12px; color: #5B6472;">吊销是终态：令牌永久不可用，不能续期或重新生成，只保留查看</span>
+    </div>
+
+    <div style="padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; background: #EEF4FF; border: 1px solid #C7D7FB; font-size: 12px; color: #1F3B73;">
+        <span style="font-weight: 600; white-space: nowrap;">只是轮换？</span>
+        <span>用「重新生成」：令牌 id 不变，旧明文立即作废，经它注册的定时任务不受影响。</span>
+        <div style="flex-grow: 1;"></div>
+        <a href="TokenCreated.html" style="white-space: nowrap; font-weight: 500;">改为重新生成</a>
+      </div>
+
+      
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 8px; background: #FEF2F2; border: 1px solid #FECACA;">
+          <span style="font-size: 12px; font-weight: 600; color: #991B1B;">经此令牌注册的 3 个任务将暂停，需要在集成详情「解绑令牌」后由你接管</span>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+              <span style="flex-grow: 1;">每日应收对账</span>
+              <span style="color: #5B6472;">每天 02:00</span>
+              <a href="IntegrationDetail.html" style="font-size: 12px;">打开</a>
+            </div>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+              <span style="flex-grow: 1;">物流轨迹同步</span>
+              <span style="color: #5B6472;">每小时</span>
+              <a href="IntegrationDetail.html" style="font-size: 12px;">打开</a>
+            </div>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+              <span style="flex-grow: 1;">库存快照比对</span>
+              <span style="color: #5B6472;">每天 06:00</span>
+              <a href="IntegrationDetail.html" style="font-size: 12px;">打开</a>
+            </div>
+          
+          <span style="font-size: 11px; color: #5B6472;">解绑后任务改由你的账号管理，不再向这张令牌的回调地址推送事件。</span>
+        </div>
+      
+
+      <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #5B6472; display: flex; flex-direction: column; gap: 4px;">
+        <li>调用方的请求立即返回 401。</li>
+        <li>已在途的回调事件仍会带签名投递，回调地址此后不可修改。</li>
+        <li>吊销的令牌不占额度。</li>
+      </ul>
+    </div>
+
+    <div style="padding: 14px 22px; border-top: 1px solid #EEF0F3; display: flex; align-items: center; gap: 10px; justify-content: flex-end;">
+      <a href="Tokens.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 13px; text-decoration: none; box-sizing: border-box;">取消</a>
+      <a href="Tokens.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 6px; background: #DC2626; color: #FFFFFF; font-size: 13px; font-weight: 500; text-decoration: none;">吊销</a>
+    </div>
+  </div>
+</div>
+</body></html>

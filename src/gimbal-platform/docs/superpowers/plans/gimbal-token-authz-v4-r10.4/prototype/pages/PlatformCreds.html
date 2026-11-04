@@ -1,0 +1,123 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>集成 · 平台凭证编辑与删除</title><style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style></head><body>
+
+<div style="width: 1440px; min-height: 860px; box-sizing: border-box; padding: 28px 32px; background: #F3F5F8; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <!-- 列表 -->
+  <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">平台凭证</h2>
+      <span style="font-size: 12px; color: #5B6472;">仅管理员可管理 · 平台模式任务与平台令牌使用</span>
+      <div style="flex-grow: 1;"></div>
+      <button type="button" style="height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 13px; font-weight: 500;">新建平台凭证</button>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; overflow-x: auto;">
+      <table style="width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background: #F6F8FC; color: #4A5A72; font-size: 12px; text-align: left;">
+            <th scope="col" style="padding: 10px 16px; font-weight: 500;">别名</th>
+            <th scope="col" style="padding: 10px 12px; font-weight: 500;">认证地址</th>
+            <th scope="col" style="padding: 10px 12px; font-weight: 500;">用户名</th>
+            <th scope="col" style="padding: 10px 12px; font-weight: 500;">被引用</th>
+            <th scope="col" style="padding: 10px 16px; font-weight: 500; text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr style="border-top: 1px solid #EEF0F3; background: #F6F8FC;">
+              <td style="padding: 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600;">plat-fin-ro</td>
+              <td style="padding: 12px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">https://fin-test.internal/oauth/token</td>
+              <td style="padding: 12px; color: #5B6472;">svc-gimbal-ro</td>
+              <td style="padding: 12px; color: #5B6472;">1 张平台令牌 · 3 个任务</td>
+              <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">编辑</button>
+                <button type="button" style="height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px;">删除</button>
+              </td>
+            </tr>
+          
+            <tr style="border-top: 1px solid #EEF0F3; background: #FFFFFF;">
+              <td style="padding: 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600;">plat-logi-ro</td>
+              <td style="padding: 12px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">https://logi-test.internal/auth</td>
+              <td style="padding: 12px; color: #5B6472;">svc-logi-ro</td>
+              <td style="padding: 12px; color: #5B6472;">1 个任务</td>
+              <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">编辑</button>
+                <button type="button" style="height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px;">删除</button>
+              </td>
+            </tr>
+          
+            <tr style="border-top: 1px solid #EEF0F3; background: #FFFFFF;">
+              <td style="padding: 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600;">plat-bi</td>
+              <td style="padding: 12px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">https://bi.internal/api/login</td>
+              <td style="padding: 12px; color: #5B6472;">gimbal-bi</td>
+              <td style="padding: 12px; color: #5B6472;">未被引用</td>
+              <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">编辑</button>
+                <button type="button" style="height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px;">删除</button>
+              </td>
+            </tr>
+          
+        </tbody>
+      </table>
+    </div>
+    <span style="font-size: 11px; color: #5B6472;">轮换密码请用「编辑」：凭证 id 不变，平台令牌的授权范围与任务都不受影响。删除即收回授权。</span>
+  </div>
+
+  <!-- 右侧：编辑 / 删除 -->
+  <div style="flex: 1 1 420px; max-width: 460px; display: flex; flex-direction: column; gap: 20px;">
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <span style="font-size: 12px; font-weight: 600; color: #5B6472;">编辑 · plat-fin-ro</span>
+      <form style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.08); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;">
+        <label for="pc-url" style="font-size: 12px; font-weight: 500; color: #5B6472;">认证地址</label>
+        <input id="pc-url" value="https://fin-test.internal/oauth/token" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+        <label for="pc-user" style="font-size: 12px; font-weight: 500; color: #5B6472;">用户名</label>
+        <input id="pc-user" value="svc-gimbal-ro" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+        <label for="pc-pw" style="font-size: 12px; font-weight: 500; color: #5B6472;">新密码（留空不改）</label>
+        <input id="pc-pw" type="password" value="••••••••••" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+        <div style="display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 6px; background: #E4F5EA; font-size: 12px; color: #14532D;">
+          <span>保存后凭证 id 不变：引用它的平台令牌范围保持不变；因认证失败暂停的平台任务会自动恢复。</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">取消</button>
+          <button type="button" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 12px; font-weight: 500;">保存</button>
+        </div>
+      </form>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <span style="font-size: 12px; font-weight: 600; color: #5B6472;">删除确认 · plat-fin-ro</span>
+      <div role="dialog" aria-labelledby="pc-del" style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.08); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 14px 18px 10px; border-bottom: 1px solid #EEF0F3;">
+          <h3 id="pc-del" style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600;">删除平台凭证 plat-fin-ro？</h3>
+          <span style="font-size: 12px; color: #5B6472;">只是换密码请用「编辑」</span>
+        </div>
+        <div style="padding: 12px 18px; display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 12px; font-weight: 600; color: #991B1B;">将从 1 张平台令牌的范围中移除，3 个任务会在下次运行前暂停</span>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #FAFBFC; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+              <span style="font-size: 11px; color: #5B6472; width: 36px;">令牌</span>
+              <span style="flex-grow: 1;">nightly-recon</span>
+              <span style="color: #5B6472;">范围移除该凭证</span>
+            </div>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #FAFBFC; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+              <span style="font-size: 11px; color: #5B6472; width: 36px;">任务</span>
+              <span style="flex-grow: 1;">月结对账巡检 等 3 个</span>
+              <span style="color: #5B6472;">下次运行前暂停</span>
+            </div>
+          
+          <span style="font-size: 11px; color: #5B6472;">同名重建不会自动回到令牌范围，需要重新加入。</span>
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid #EEF0F3; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">取消</button>
+          <button type="button" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #DC2626; color: #FFFFFF; font-size: 12px; font-weight: 500;">删除</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body></html>

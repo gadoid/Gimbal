@@ -1,0 +1,94 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>访问令牌 · 个人 / 平台 / 管理员视角</title><style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style></head><body>
+
+<div style="width: 100%; min-height: 1320px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <!-- 侧栏 chrome -->
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">通知</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; background: transparent; text-decoration: none;">集成</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">管理</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; background: transparent; text-decoration: none;">用户管理</a>
+    <div style="flex-grow: 1;"></div>
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-decoration: none;">
+        <span style="color: #F8FAFC; font-weight: 500;">鳕鱼</span>
+        <span style="font-size: 10px; padding: 0 6px; border-radius: 9999px; background: rgba(255,255,255,0.12); color: #CBD5E1;">用户</span>
+      </a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <header style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">个人设置</h1>
+      <span style="font-size: 12px; color: #5B6472;">codfish · 用户</span>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      
+        <nav aria-label="个人设置分区" style="flex: 1 1 168px; max-width: 168px; display: flex; flex-direction: column; gap: 2px;">
+          <a href="Main.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">账号</a>
+          <a href="#tokens" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px; background: #E7EFFF; color: #1F55C4; font-weight: 600; text-decoration: none;">
+            访问令牌
+            
+          </a>
+          <a href="CardSettings.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">工作台身份卡</a>
+          <a href="Main.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">通知</a>
+        </nav>
+      
+
+      <div id="tokens" style="flex: 999 1 560px; min-width: 0; max-width: 1120px; display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- 分区头 -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">访问令牌</h2>
+          <button type="button" aria-label="说明：令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码" style="width: 18px; height: 18px; border: 1px solid #C9CFD8; border-radius: 9999px; background: #FFFFFF; color: #5B6472; font-size: 11px; line-height: 16px; padding: 0;">?</button>
+          <span style="font-size: 12px; color: #5B6472;"></span>
+          <div style="flex-grow: 1;"></div>
+          
+        </div>
+
+        <!-- 平台令牌：身份说明 -->
+        
+
+        <!-- 管理员：筛选 -->
+        
+
+        <!-- user 角色：不可用态 -->
+        
+          <div style="background: #FFFFFF; border: 1px dashed #C9CFD8; border-radius: 10px; padding: 28px 24px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+            <span style="font-size: 14px; font-weight: 600;">访问令牌需要成员及以上角色</span>
+            <span style="font-size: 12px; color: #5B6472;">如需让外部系统以你的身份调用 Gimbal，请联系管理员调整角色。</span>
+            <span style="font-size: 12px; color: #5B6472;">你之前创建的令牌在恢复成员角色前不可用，仍可在下方查看与吊销；经它注册的任务已暂停，恢复角色后在集成详情启动。</span>
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FAFBFC; font-size: 12px; align-self: stretch;">
+              <span style="font-weight: 600;">agent-nightly</span>
+              <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">gtk_ab12…9f3c</span>
+              <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #EEF0F3; color: #5B6472;">角色不足 · 不可用</span>
+              <div style="flex-grow: 1;"></div>
+              <a href="RevokeConfirm.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px; text-decoration: none; box-sizing: border-box;">吊销</a>
+            </div>
+          </div>
+        
+
+        
+
+      </div>
+    </div>
+  </main>
+</div>
+</body></html>

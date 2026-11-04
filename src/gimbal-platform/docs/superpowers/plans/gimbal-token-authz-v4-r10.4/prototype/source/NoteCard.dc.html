@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>便签卡 · S / M / L</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style>
+</helmet>
+<div style="width: 1400px; height: 600px; box-sizing: border-box; padding: 32px 40px; background: #F3F5F8; display: flex; gap: 32px; align-items: flex-start; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px; color: #10151C;">
+
+  <!-- S -->
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <span style="font-size: 12px; font-weight: 600; color: #5B6472;">S · 只看结论</span>
+    <section style="width: 260px; background: #FFFFFF; border: 1px solid #E1E5EB; border-top: 3px solid #B45309; border-radius: 12px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">便签</h3>
+        <span style="font-size: 11px; color: #5B6472;">2 条未完成</span>
+      </div>
+      <sc-for list="{{open}}" as="n" hint-placeholder-count="2">
+        <span style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">· {{n.text}}</span>
+      </sc-for>
+      <a href="#" style="font-size: 12px; text-decoration: none;">+ 记一笔</a>
+    </section>
+  </div>
+
+  <!-- M -->
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <span style="font-size: 12px; font-weight: 600; color: #5B6472;">M · 明细 + 快速记录</span>
+    <section style="width: 400px; background: #FFFFFF; border: 1px solid #E1E5EB; border-top: 3px solid #B45309; border-radius: 12px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">便签</h3>
+        <span style="font-size: 11px; color: #5B6472;">3 / 20</span>
+      </div>
+      <label for="note-m" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">新便签</label>
+      <input id="note-m" placeholder="记一笔，回车保存" style="height: 30px; padding: 0 10px; border: 1px dashed #C9CFD8; border-radius: 6px; font-size: 12px; background: #FFFFFF; color: #10151C;">
+      <sc-for list="{{all}}" as="n" hint-placeholder-count="3">
+        <label style="display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px; color: {{n.fg}};">
+          <input type="checkbox" checked="{{n.done}}" style="width: 14px; height: 14px; margin: 2px 0 0; flex: none;">
+          <span style="flex-grow: 1; text-decoration: {{n.deco}};">{{n.text}}</span>
+        </label>
+      </sc-for>
+    </section>
+  </div>
+
+  <!-- L -->
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <span style="font-size: 12px; font-weight: 600; color: #5B6472;">L · 全部 + 筛选与整理</span>
+    <section style="width: 560px; background: #FFFFFF; border: 1px solid #E1E5EB; border-top: 3px solid #B45309; border-radius: 12px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <h3 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">便签</h3>
+        <span style="font-size: 11px; color: #5B6472;">3 / 20 · 每条 200 字 · 已完成 7 天后自动清理</span>
+        <div style="flex-grow: 1;"></div>
+        <div role="group" aria-label="筛选" style="display: flex; border: 1px solid #E1E5EB; border-radius: 6px; overflow: hidden;">
+          <button type="button" aria-pressed="true" style="height: 26px; padding: 0 10px; border: 0; background: #E7EFFF; color: #1F55C4; font-size: 12px;">全部</button>
+          <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border: 0; border-left: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px;">未完成</button>
+          <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border: 0; border-left: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px;">已完成</button>
+        </div>
+      </div>
+      <label for="note-l" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">新便签</label>
+      <input id="note-l" placeholder="记一笔，回车保存" style="height: 30px; padding: 0 10px; border: 1px dashed #C9CFD8; border-radius: 6px; font-size: 12px; background: #FFFFFF; color: #10151C;">
+      <sc-for list="{{all}}" as="n" hint-placeholder-count="3">
+        <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px; color: {{n.fg}};">
+          <input type="checkbox" checked="{{n.done}}" aria-label="完成" style="width: 14px; height: 14px; margin: 2px 0 0; flex: none;">
+          <span style="flex-grow: 1; text-decoration: {{n.deco}};">{{n.text}}</span>
+          <span style="color: #5B6472; white-space: nowrap;">{{n.when}}</span>
+          <button type="button" aria-label="删除" style="width: 22px; height: 22px; border: 0; background: transparent; color: #5B6472; padding: 0;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+          </button>
+        </div>
+      </sc-for>
+      <div style="display: flex; justify-content: flex-end;">
+        <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">清空已完成（1）</button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const all = [
+      { text: '周五前给物流轨迹同步补 wms-test 授权', done: false, fg: '#10151C', deco: 'none', when: '今天 14:20' },
+      { text: '#4790 退款失败，找开发确认', done: false, fg: '#10151C', deco: 'none', when: '昨天' },
+      { text: '更新 ci-jenkins 令牌', done: true, fg: '#8B93A1', deco: 'line-through', when: '11-02' }
+    ];
+    return { all: all, open: all.filter(function (n) { return !n.done; }) };
+  }
+}
+</script>
+</body>
+</html>

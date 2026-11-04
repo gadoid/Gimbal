@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>集成详情 · 令牌与暂停恢复</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 980px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #F8FAFC; background: rgba(255,255,255,0.08); text-decoration: none;">集成</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <div style="flex-grow: 1;"></div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+    <!-- 详情列 -->
+    <div style="flex: 999 1 560px; min-width: 0; max-width: 820px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 12px; color: #5B6472;"><a href="#">集成</a> / {{taskName}}</span>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">{{taskName}}</h1>
+          <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: {{modeBg}}; color: {{modeFg}};">{{modeLabel}}</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: {{stateBg}}; color: {{stateFg}};">{{stateLabel}}</span>
+        </div>
+      </div>
+
+      <!-- 暂停横幅 -->
+      <sc-if value="{{paused}}" hint-placeholder-val="{{ true }}">
+        <section style="background: {{bnBg}}; border: 1px solid {{bnBorder}}; border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 14px; font-weight: 600; color: {{bnFg}};">{{bnTitle}}</span>
+            <span style="font-size: 12px; color: #4A5A72;">{{bnDesc}}</span>
+          </div>
+          <sc-if value="{{hasMissing}}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <sc-for list="{{missing}}" as="m" hint-placeholder-count="2">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                  <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600;">{{m.name}}</span>
+                  <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: {{m.bg}}; color: {{m.fg}};">{{m.kind}}</span>
+                  <span style="flex-grow: 1; color: #5B6472;">{{m.hint}}</span>
+                  <a href="{{m.href}}" style="font-size: 12px; white-space: nowrap;">{{m.action}}</a>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <sc-for list="{{actions}}" as="a" hint-placeholder-count="2">
+              <a href="{{a.href}}" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid {{a.border}}; background: {{a.bg}}; color: {{a.fg}}; font-size: 12px; font-weight: 500; text-decoration: none; box-sizing: border-box; opacity: {{a.opacity}};">{{a.label}}</a>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- 身份与令牌 -->
+      <section style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">身份与令牌</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px 12px; font-size: 12px;">
+          <dt style="color: #5B6472;">执行身份</dt>
+          <dd style="margin: 0;">{{identity}}</dd>
+          <dt style="color: #5B6472;">所属令牌</dt>
+          <dd style="margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{tokenText}}</span>
+            <span style="display: {{tokStDisp}}; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: {{tokStBg}}; color: {{tokStFg}};">{{tokSt}}</span>
+            <a href="{{tokenHref}}" style="display: {{tokStDisp}}; font-size: 12px;">查看令牌</a>
+          </dd>
+          <dt style="color: #5B6472;">回调</dt>
+          <dd style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{callback}}</dd>
+          <dt style="color: #5B6472;">场景</dt>
+          <dd style="margin: 0;"><a href="#">{{scenario}}</a></dd>
+        </dl>
+        <sc-if value="{{canUnbind}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid #EEF0F3;">
+            <span style="flex-grow: 1; font-size: 12px; color: #5B6472;">令牌退役或吊销后，可以把任务转为由你的账号管理</span>
+            <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">解绑令牌（转为我管理）</button>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- 运行 -->
+      <section style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px;">
+        <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">最近运行</h2>
+        <sc-for list="{{runs}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">{{r.id}}</span>
+            <span style="flex-grow: 1;">{{r.when}}</span>
+            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: {{r.bg}}; color: {{r.fg}};">{{r.status}}</span>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+
+    <!-- 解绑确认 -->
+    <div style="flex: 1 1 360px; max-width: 400px; display: flex; flex-direction: column; gap: 8px;">
+      <span style="font-size: 12px; font-weight: 600; color: #5B6472;">解绑令牌 · 确认</span>
+      <div role="dialog" aria-labelledby="ub-title" style="background: #FFFFFF; border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12); border: 1px solid #E1E5EB; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 16px 18px 12px; border-bottom: 1px solid #EEF0F3;">
+          <h3 id="ub-title" style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600;">把「{{taskName}}」转为我管理？</h3>
+        </div>
+        <ul style="margin: 0; padding: 14px 18px 14px 34px; font-size: 12px; color: #4A5A72; display: flex; flex-direction: column; gap: 6px;">
+          <li>任务与令牌 {{tokenShort}} 解除绑定，此后不再受这张令牌的状态与范围约束。</li>
+          <li>不再向令牌的回调地址推送事件；需要结果请在 Gimbal 内查看或订阅通知。</li>
+          <li>{{unbindIdentity}}</li>
+          <li>解绑后任务处于暂停，确认无误后点「启动」。</li>
+        </ul>
+        <div style="padding: 12px 18px; border-top: 1px solid #EEF0F3; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">取消</button>
+          <button type="button" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 12px; font-weight: 500;">解绑</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"pause":{"editor":"enum","options":["token_revoked","token_invalidated","token_expired","token_owner_ineligible","resource_not_allowed","scope_denied","manual","running"],"default":"token_revoked","section":"暂停原因"},"mode":{"editor":"enum","options":["personal","platform"],"default":"personal","section":"模式"},"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pause = this.props.pause ?? 'token_revoked';
+    // 不成立的组合自动校正：场景非公共只出现在平台模式；角色不足只出现在个人令牌
+    let platform = (this.props.mode ?? 'personal') === 'platform';
+    if (pause === 'scope_denied') platform = true;
+    if (pause === 'token_owner_ineligible') platform = false;
+    const unbound = pause === 'manual';
+    const prim = { bg: '#2F6FED', fg: '#FFFFFF', border: '#2F6FED', opacity: '1' };
+    const sec = { bg: '#FFFFFF', fg: '#10151C', border: '#E1E5EB', opacity: '1' };
+    const dis = { bg: '#FFFFFF', fg: '#8B93A1', border: '#E1E5EB', opacity: '0.7' };
+    const act = (label, style, href) => Object.assign({ label: label, href: href || '#' }, style);
+    const red = { bnBg: '#FEF2F2', bnBorder: '#FECACA', bnFg: '#991B1B' };
+    const amber = { bnBg: '#FFFBEB', bnBorder: '#FDE68A', bnFg: '#92400E' };
+    const grey = { bnBg: '#F6F8FC', bnBorder: '#E1E5EB', bnFg: '#10151C' };
+    const tokName = platform ? 'nightly-recon' : 'agent-nightly';
+
+    const B = {
+      token_revoked: Object.assign({ bnTitle: '已暂停 · 所属令牌已吊销', bnDesc: '吊销是终态，这个任务不能直接启动。解绑令牌后由你接管，再启动。', actions: [act('解绑令牌（转为我管理）', prim), act('启动', dis)], tokSt: '已吊销', tokStBg: '#EEF0F3', tokStFg: '#5B6472' }, red),
+      token_invalidated: Object.assign({ bnTitle: '已暂停 · 所属令牌已失效', bnDesc: '令牌因改密、停用或管理员强制失效而不可用。令牌属主「重新生成」后，任务自动恢复。', actions: [act('去重新生成', prim, 'Tokens.dc.html')], tokSt: '改密失效', tokStBg: '#FEE2E2', tokStFg: '#B91C1C' }, red),
+      token_expired: Object.assign({ bnTitle: '已暂停 · 所属令牌已到期', bnDesc: '续期或重新生成令牌后，任务自动恢复。', actions: [act('去续期', prim, 'Tokens.dc.html')], tokSt: '已到期', tokStBg: '#EEF0F3', tokStFg: '#5B6472' }, amber),
+      token_owner_ineligible: Object.assign({ bnTitle: '已暂停 · 令牌属主角色不足', bnDesc: '个人令牌需要属主为成员及以上。管理员恢复角色后在这里启动。', actions: [act('启动', sec)], tokSt: '角色不足 · 不可用', tokStBg: '#EEF0F3', tokStFg: '#5B6472' }, amber),
+      resource_not_allowed: Object.assign({ bnTitle: '已暂停 · 超出令牌范围', bnDesc: '场景用到的以下资源不在令牌范围内。处理后在这里启动。', actions: [act('启动', sec)], tokSt: '有效', tokStBg: '#E4F5EA', tokStFg: '#15803D' }, red),
+      scope_denied: Object.assign({ bnTitle: '已暂停 · 场景不是公共场景', bnDesc: '平台模式只能运行公共且只读的场景。场景公开后在这里启动；未公开就启动，下次运行会再次暂停。', actions: [act('去公开场景', prim), act('启动', sec)], tokSt: '有效', tokStBg: '#E4F5EA', tokStFg: '#15803D' }, amber),
+      manual: Object.assign({ bnTitle: '已暂停 · 待启动', bnDesc: '已解绑令牌，任务改由你的账号管理。确认无误后启动。', actions: [act('启动', prim)], tokSt: '', tokStBg: '#FFFFFF', tokStFg: '#10151C' }, grey),
+      running: Object.assign({ bnTitle: '', bnDesc: '', actions: [], tokSt: '有效', tokStBg: '#E4F5EA', tokStFg: '#15803D' }, grey)
+    };
+    const b = B[pause] || B.running;
+    const paused = pause !== 'running';
+    const missing = [
+      { name: 'wms-test', kind: '未授权', bg: '#FEE2E2', fg: '#B91C1C', hint: '服务别名存在，但不在令牌范围内', action: '编辑令牌范围', href: 'ScopeEdit.dc.html' },
+      { name: 'codfish-old', kind: '对象已不存在', bg: '#FEF3C7', fg: '#B45309', hint: '凭证已被删除；重建后还需加入令牌范围，或修改场景不再引用，或解绑任务', action: '去认证管理', href: '#' }
+    ];
+
+    return {
+      taskName: platform ? '公共报表导出' : '物流轨迹同步',
+      modeLabel: platform ? '平台模式' : '个人模式',
+      modeBg: platform ? '#EEF4FF' : '#F6F8FC', modeFg: platform ? '#1F3B73' : '#4A5A72',
+      stateLabel: paused ? '已暂停' : '运行中',
+      stateBg: paused ? '#FEF3C7' : '#E4F5EA', stateFg: paused ? '#B45309' : '#15803D',
+      paused: paused,
+      bnTitle: b.bnTitle, bnDesc: b.bnDesc, bnBg: b.bnBg, bnBorder: b.bnBorder, bnFg: b.bnFg,
+      actions: b.actions,
+      hasMissing: pause === 'resource_not_allowed',
+      missing: missing,
+      identity: platform ? '平台身份（只读 · 仅公共场景）' : '鳕鱼（令牌属主）',
+      tokenText: unbound ? '未绑定（由你的账号管理）' : tokName + (platform ? ' · gtk_2f7a…d301' : ' · gtk_ab12…9f3c'),
+      tokenShort: tokName,
+      tokSt: b.tokSt, tokStBg: b.tokStBg, tokStFg: b.tokStFg,
+      tokStDisp: unbound ? 'none' : 'inline-block',
+      tokenHref: 'Tokens.dc.html',
+      callback: unbound ? '—（解绑后不推送）' : (platform ? 'https://recon.internal/hooks/gimbal' : 'https://agent.internal/gimbal/callback'),
+      scenario: platform ? '公共报表 · 周汇总' : '物流轨迹查询',
+      canUnbind: !unbound,
+      unbindIdentity: platform ? '平台任务解绑后仍以平台身份运行：仍只能运行公共只读场景。' : '个人任务解绑后以你的身份、你的凭证池运行。',
+      runs: [
+        { id: '#4830', when: '今天 09:00', status: paused ? '未运行 · 已暂停' : '通过', bg: paused ? '#EEF0F3' : '#E4F5EA', fg: paused ? '#5B6472' : '#15803D' },
+        { id: '#4812', when: '今天 08:00', status: '通过', bg: '#E4F5EA', fg: '#15803D' },
+        { id: '#4799', when: '今天 07:00', status: '通过', bg: '#E4F5EA', fg: '#15803D' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

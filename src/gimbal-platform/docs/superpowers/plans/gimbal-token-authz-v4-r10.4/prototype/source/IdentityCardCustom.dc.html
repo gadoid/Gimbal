@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>身份卡 · 自定义后</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style>
+</helmet>
+<section style="width: 288px; box-sizing: border-box; background: #FFFFFF; border: 1px solid #E1E5EB; border-top: 3px solid #2F6FED; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(16, 21, 28, 0.07); font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px; color: #10151C;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; background: #E7EFFF; border-bottom: 1px solid #E1E5EB;">
+    <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+      <h3 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: -0.4px;">鳕鱼</h3>
+      <p style="margin: 0; color: #3D4654;">下午好，欢迎回来</p>
+      <div style="display: flex; gap: 6px; margin-top: 4px; align-items: center;">
+        <span style="font-size: 11px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">@codfish</span>
+        <span style="font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 9999px; background: #FFFFFF; color: #2F6FED;">管理员</span>
+      </div>
+    </div>
+    <span aria-hidden="true" style="flex: none; width: 56px; height: 56px; border-radius: 9999px; background: #3B82F6; color: #FFFFFF; font-size: 22px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 0 0 4px #FFFFFF, 0 4px 14px rgba(16, 21, 28, 0.16);">鳕</span>
+  </div>
+
+  <!-- 常驻统计（用户选 4 项） -->
+  <div style="padding: 12px 16px 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+    <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+      <a href="#" style="display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; background: #F6F8FC; border: 1px solid #E1E5EB; border-radius: 8px; color: #10151C; text-decoration: none;">
+        <span style="font-size: 10px; color: #5B6472;">{{s.label}}</span>
+        <span style="font-size: 18px; line-height: 22px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: {{s.fg}};">{{s.value}}</span>
+      </a>
+    </sc-for>
+  </div>
+
+  <!-- 告警（最多 3 条） -->
+  <div style="padding: 0 16px 10px; display: flex; flex-direction: column; gap: 6px;">
+    <sc-for list="{{alerts}}" as="a" hint-placeholder-count="3">
+      <a href="{{a.href}}" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: {{a.bg}}; color: {{a.fg}}; font-size: 12px; text-decoration: none;">
+        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{a.text}}</span>
+        <span style="font-weight: 600; white-space: nowrap;">{{a.action}}</span>
+      </a>
+    </sc-for>
+    <a href="#" style="font-size: 11px; color: #5B6472; text-decoration: none; align-self: flex-end;">另有 1 条 · 查看全部</a>
+  </div>
+
+  <!-- 快捷入口 -->
+  <div style="padding: 0 16px 12px; display: flex; gap: 6px; flex-wrap: wrap;">
+    <a href="Tokens.dc.html" style="height: 24px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid #E1E5EB; border-radius: 9999px; color: #10151C; font-size: 12px; text-decoration: none;">访问令牌</a>
+    <a href="#" style="height: 24px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid #E1E5EB; border-radius: 9999px; color: #10151C; font-size: 12px; text-decoration: none;">我的凭证</a>
+    <a href="Main.dc.html" style="height: 24px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid #E1E5EB; border-radius: 9999px; color: #10151C; font-size: 12px; text-decoration: none;">修改密码</a>
+  </div>
+
+  <div style="border-top: 1px solid #EEF0F3; padding: 9px 16px; display: flex; justify-content: space-between;">
+    <a href="CardSettings.dc.html" style="font-size: 12px; text-decoration: none;">自定义身份卡</a>
+    <a href="Main.dc.html" style="font-size: 12px; text-decoration: none;">个人设置</a>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":288,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      stats: [
+        { label: '私有场景', value: '12', fg: '#10151C' },
+        { label: '访问令牌', value: '2', fg: '#10151C' },
+        { label: '今日执行失败', value: '3', fg: '#B91C1C' },
+        { label: '订阅的集成任务', value: '5', fg: '#10151C' }
+      ],
+      alerts: [
+        { text: 'regress-bot 改密失效 · 1 个任务已暂停', action: '重新生成', bg: '#FEE2E2', fg: '#991B1B', href: 'Tokens.dc.html' },
+        { text: '物流轨迹同步 未授权 wms-test，下次运行前暂停', action: '查看', bg: '#FEE2E2', fg: '#991B1B', href: 'IntegrationDetail.dc.html' },
+        { text: 'ci-jenkins 3 天后到期', action: '续期', bg: '#FEF3C7', fg: '#92400E', href: 'Tokens.dc.html' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

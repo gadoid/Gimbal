@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>访问令牌 · 个人 / 平台 / 管理员视角</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1320px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <!-- 侧栏 chrome -->
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">通知</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: {{navIntegFg}}; background: {{navIntegBg}}; text-decoration: none;">集成</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">管理</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: {{navUsersFg}}; background: {{navUsersBg}}; text-decoration: none;">用户管理</a>
+    <div style="flex-grow: 1;"></div>
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-decoration: none;">
+        <span style="color: #F8FAFC; font-weight: 500;">鳕鱼</span>
+        <span style="font-size: 10px; padding: 0 6px; border-radius: 9999px; background: rgba(255,255,255,0.12); color: #CBD5E1;">{{roleLabel}}</span>
+      </a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <header style="display: flex; flex-direction: column; gap: 2px;">
+      <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">{{pageTitle}}</h1>
+      <span style="font-size: 12px; color: #5B6472;">{{pageSub}}</span>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      <sc-if value="{{isPersonal}}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="个人设置分区" style="flex: 1 1 168px; max-width: 168px; display: flex; flex-direction: column; gap: 2px;">
+          <a href="Main.dc.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">账号</a>
+          <a href="#tokens" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px; background: #E7EFFF; color: #1F55C4; font-weight: 600; text-decoration: none;">
+            访问令牌
+            <sc-if value="{{canCreate}}" hint-placeholder-val="{{ true }}">
+              <span style="font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 9999px; background: #FEF3C7; color: #B45309;">3 待处理</span>
+            </sc-if>
+          </a>
+          <a href="CardSettings.dc.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">工作台身份卡</a>
+          <a href="Main.dc.html" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">通知</a>
+        </nav>
+      </sc-if>
+
+      <div id="tokens" style="flex: 999 1 560px; min-width: 0; max-width: 1120px; display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- 分区头 -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">{{sectionTitle}}</h2>
+          <button type="button" aria-label="{{helpText}}" style="width: 18px; height: 18px; border: 1px solid #C9CFD8; border-radius: 9999px; background: #FFFFFF; color: #5B6472; font-size: 11px; line-height: 16px; padding: 0;">?</button>
+          <span style="font-size: 12px; color: #5B6472;">{{quota}}</span>
+          <div style="flex-grow: 1;"></div>
+          <sc-if value="{{canCreate}}" hint-placeholder-val="{{ true }}">
+            <button type="button" style="height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 13px; font-weight: 500;">{{createLabel}}</button>
+          </sc-if>
+        </div>
+
+        <!-- 平台令牌：身份说明 -->
+        <sc-if value="{{isPlatform}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 8px; background: #EEF4FF; border: 1px solid #C7D7FB; font-size: 12px; color: #1F3B73;">
+            <span style="font-weight: 600; white-space: nowrap;">平台身份</span>
+            <span>平台令牌以平台系统身份执行：只能运行公共且全部步骤只读的场景，不能临时调用；凭证取自平台凭证池（由管理员维护，这里只列别名）。额度全平台共享，占满时请联系管理员清理闲置令牌。</span>
+          </div>
+        </sc-if>
+
+        <!-- 管理员：筛选 -->
+        <sc-if value="{{isAdmin}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px;">
+            <span style="font-size: 12px; color: #5B6472;">类型</span>
+            <div role="group" aria-label="类型" style="display: flex; border: 1px solid #E1E5EB; border-radius: 6px; overflow: hidden;">
+              <button type="button" aria-pressed="true" style="height: 26px; padding: 0 10px; border: 0; background: #E7EFFF; color: #1F55C4; font-size: 12px;">全部</button>
+              <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border: 0; border-left: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px;">个人</button>
+              <button type="button" aria-pressed="false" style="height: 26px; padding: 0 10px; border: 0; border-left: 1px solid #E1E5EB; background: #FFFFFF; color: #10151C; font-size: 12px;">平台</button>
+            </div>
+            <span style="font-size: 12px; color: #5B6472;">状态</span>
+            <select aria-label="状态" style="height: 28px; padding: 0 8px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px; background: #FFFFFF;">
+              <option selected="selected">全部状态</option>
+              <option>有效</option>
+              <option>即将到期 / 已到期</option>
+              <option>已失效</option>
+              <option>已吊销</option>
+            </select>
+            <label for="owner-q" style="font-size: 12px; color: #5B6472;">属主</label>
+            <input id="owner-q" placeholder="用户名或昵称" style="height: 28px; width: 160px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+            <div style="flex-grow: 1;"></div>
+            <span style="font-size: 11px; color: #5B6472;">不显示明文与签名密钥</span>
+          </div>
+        </sc-if>
+
+        <!-- user 角色：不可用态 -->
+        <sc-if value="{{isUserRole}}" hint-placeholder-val="{{ false }}">
+          <div style="background: #FFFFFF; border: 1px dashed #C9CFD8; border-radius: 10px; padding: 28px 24px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+            <span style="font-size: 14px; font-weight: 600;">访问令牌需要成员及以上角色</span>
+            <span style="font-size: 12px; color: #5B6472;">如需让外部系统以你的身份调用 Gimbal，请联系管理员调整角色。</span>
+            <span style="font-size: 12px; color: #5B6472;">你之前创建的令牌在恢复成员角色前不可用，仍可在下方查看与吊销；经它注册的任务已暂停，恢复角色后在集成详情启动。</span>
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FAFBFC; font-size: 12px; align-self: stretch;">
+              <span style="font-weight: 600;">agent-nightly</span>
+              <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">gtk_ab12…9f3c</span>
+              <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #EEF0F3; color: #5B6472;">角色不足 · 不可用</span>
+              <div style="flex-grow: 1;"></div>
+              <a href="RevokeConfirm.dc.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px; text-decoration: none; box-sizing: border-box;">吊销</a>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{showMain}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+
+            <!-- 创建表单（展开态） -->
+            <sc-if value="{{canCreate}}" hint-placeholder-val="{{ true }}">
+              <form style="background: #FFFFFF; border: 1px solid #2F6FED; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 0 0 3px #E7EFFF;">
+                <h3 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">{{formTitle}}</h3>
+                <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tname" style="font-size: 12px; font-weight: 500; color: #5B6472;">名称</label>
+                    <input id="tname" placeholder="{{namePh}}" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tttl" style="font-size: 12px; font-weight: 500; color: #5B6472;">有效期</label>
+                    <select id="tttl" style="height: 32px; padding: 0 8px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px; background: #FFFFFF;">
+                      <option>30 天</option>
+                      <option selected="selected">90 天</option>
+                      <option>180 天</option>
+                      <option>365 天（上限）</option>
+                    </select>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="tcb" style="font-size: 12px; font-weight: 500; color: #5B6472;">回调地址（可选）</label>
+                    <input id="tcb" value="{{cbValue}}" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+                    <span style="font-size: 11px; color: #15803D;">主机已在回调主机白名单内</span>
+                  </div>
+                </div>
+
+                <fieldset style="margin: 0; border: 1px solid #E1E5EB; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px;">
+                  <legend style="padding: 0 6px; font-size: 12px; font-weight: 600; color: #10151C;">授权范围 · 未勾选的一律不可用</legend>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="width: 64px; font-size: 12px; color: #5B6472;">服务别名</span>
+                    <sc-for list="{{scopeAliases}}" as="s" hint-placeholder-count="5">
+                      <button type="button" aria-pressed="{{s.pressed}}" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid {{s.border}}; background: {{s.bg}}; color: {{s.fg}}; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{s.name}}</button>
+                    </sc-for>
+                    <button type="button" style="height: 26px; padding: 0 8px; border: 0; background: transparent; color: #2F6FED; font-size: 12px;">全选</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="width: 64px; font-size: 12px; color: #5B6472;">{{authsLabel}}</span>
+                    <sc-for list="{{scopeAuths}}" as="s" hint-placeholder-count="3">
+                      <button type="button" aria-pressed="{{s.pressed}}" style="height: 26px; padding: 0 10px; border-radius: 9999px; border: 1px solid {{s.border}}; background: {{s.bg}}; color: {{s.fg}}; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{s.name}}</button>
+                    </sc-for>
+                    <button type="button" style="height: 26px; padding: 0 8px; border: 0; background: transparent; color: #2F6FED; font-size: 12px;">全选</button>
+                  </div>
+                  <sc-if value="{{authsEmpty}}" hint-placeholder-val="{{ false }}">
+                    <div style="display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 6px; background: #FFFBEB; border: 1px solid #FDE68A; font-size: 12px; color: #92400E;">
+                      <span style="font-weight: 600;">未选凭证</span>
+                      <span>这张令牌只能调用无需认证的场景；可以保存，之后随时编辑范围。</span>
+                    </div>
+                  </sc-if>
+                  <span style="font-size: 11px; color: #5B6472;">{{candHint}}</span>
+                </fieldset>
+
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span style="font-size: 12px; color: #B45309;">令牌等同账号密码：明文只展示一次</span>
+                  <div style="flex-grow: 1;"></div>
+                  <button type="button" style="height: 32px; padding: 0 14px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 13px;">取消</button>
+                  <a href="TokenCreated.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 13px; font-weight: 500; text-decoration: none;">创建</a>
+                </div>
+              </form>
+            </sc-if>
+
+            <!-- 令牌列表 -->
+            <div style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; overflow-x: auto;">
+              <table style="width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #F6F8FC; color: #4A5A72; font-size: 12px; text-align: left;">
+                    <th scope="col" style="padding: 10px 16px; font-weight: 500;">名称</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500; display: {{ownerDisp}};">{{ownerHead}}</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">状态</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">授权范围</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">到期</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">最近使用</th>
+                    <th scope="col" style="padding: 10px 12px; font-weight: 500;">任务</th>
+                    <th scope="col" style="padding: 10px 16px; font-weight: 500; text-align: right;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+                    <tr style="border-top: 1px solid #EEF0F3; color: {{r.ink}}; background: {{r.rowBg}};">
+                      <td style="padding: 12px 16px;">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                          <span style="font-weight: 600;">{{r.name}}</span>
+                          <span style="font-size: 11px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{r.frag}}</span>
+                          <span style="display: {{r.noteDisp}}; font-size: 11px; color: {{r.noteFg}};">{{r.note}}</span>
+                        </div>
+                      </td>
+                      <td style="padding: 12px; color: #5B6472; display: {{ownerDisp}};">{{r.owner}}</td>
+                      <td style="padding: 12px;"><span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: {{r.stBg}}; color: {{r.stFg}}; white-space: nowrap;">{{r.status}}</span></td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">{{r.scope}}</td>
+                      <td style="padding: 12px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">{{r.expires}}</td>
+                      <td style="padding: 12px; white-space: nowrap; color: #5B6472;">{{r.lastUsed}}</td>
+                      <td style="padding: 12px; white-space: nowrap; color: {{r.taskFg}};">{{r.tasks}}</td>
+                      <td style="padding: 12px 16px; text-align: right; white-space: nowrap;">
+                        <sc-if value="{{r.canRenew}}" hint-placeholder-val="{{ true }}">
+                          <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid {{r.renewBorder}}; border-radius: 4px; background: {{r.renewBg}}; color: {{r.renewFg}}; font-size: 12px;">续期</button>
+                        </sc-if>
+                        <sc-if value="{{r.canRegen}}" hint-placeholder-val="{{ true }}">
+                          <a href="TokenCreated.dc.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid {{r.regenBorder}}; border-radius: 4px; background: {{r.regenBg}}; color: {{r.regenFg}}; font-size: 12px; text-decoration: none; box-sizing: border-box;">重新生成</a>
+                        </sc-if>
+                        <sc-if value="{{r.canRevoke}}" hint-placeholder-val="{{ true }}">
+                          <a href="RevokeConfirm.dc.html" style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #DC2626; font-size: 12px; text-decoration: none; box-sizing: border-box;">吊销</a>
+                        </sc-if>
+                        <sc-if value="{{r.canInvalidate}}" hint-placeholder-val="{{ false }}">
+                          <button type="button" style="height: 26px; padding: 0 10px; margin-left: 6px; border: 1px solid #FCA5A5; border-radius: 4px; background: #FFFFFF; color: #B91C1C; font-size: 12px;">强制失效</button>
+                        </sc-if>
+                        <sc-if value="{{r.viewOnly}}" hint-placeholder-val="{{ false }}">
+                          <span style="font-size: 12px; color: #8B93A1;">仅查看</span>
+                        </sc-if>
+                      </td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+
+              <!-- 管理员：强制失效确认（行内展开） -->
+              <sc-if value="{{isAdmin}}" hint-placeholder-val="{{ false }}">
+                <div style="border-top: 1px solid #E1E5EB; background: #FEF2F2; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;">
+                  <span style="font-size: 13px; font-weight: 600; color: #991B1B;">强制失效 · ci-jenkins（属主 李四）</span>
+                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #7F1D1D; display: flex; flex-direction: column; gap: 4px;">
+                    <li>旧明文立即作废，调用方的即时请求返回 401。</li>
+                    <li>经此令牌注册的 1 个任务下次运行前暂停；属主「重新生成」后自动恢复。</li>
+                    <li>会通知属主，并写入审计（原因：管理员强制失效）。如需永久退役请让属主吊销，或停用账号。</li>
+                  </ul>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <label for="inv-note" style="font-size: 12px; color: #7F1D1D;">处置说明（随通知发给属主）</label>
+                    <input id="inv-note" value="疑似在 CI 日志中泄露" style="flex-grow: 1; height: 30px; padding: 0 10px; border: 1px solid #FECACA; border-radius: 6px; font-size: 12px; background: #FFFFFF;">
+                    <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">取消</button>
+                    <button type="button" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #DC2626; color: #FFFFFF; font-size: 12px; font-weight: 500;">确认强制失效</button>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- 展开详情 -->
+              <sc-if value="{{showDetail}}" hint-placeholder-val="{{ true }}">
+                <div style="border-top: 1px solid #E1E5EB; background: #F6F8FC; padding: 16px 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <dl style="margin: 0; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px 12px; font-size: 12px;">
+                      <dt style="color: #5B6472;">令牌</dt>
+                      <dd style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{detailName}}</dd>
+                      <dt style="color: #5B6472;">回调</dt>
+                      <dd style="margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{cbValue}}</span>
+                        <button type="button" style="height: 24px; padding: 0 8px; border: 1px solid #E1E5EB; border-radius: 4px; background: #FFFFFF; color: #10151C; font-size: 12px;">轮换签名密钥</button>
+                      </dd>
+                      <dt style="color: #5B6472;">服务别名</dt>
+                      <dd style="margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                        <sc-for list="{{detailAliases}}" as="d" hint-placeholder-count="2">
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{d}}</span>
+                        </sc-for>
+                      </dd>
+                      <dt style="color: #5B6472;">{{authsLabel}}</dt>
+                      <dd style="margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                        <sc-for list="{{detailAuths}}" as="d" hint-placeholder-count="2">
+                          <span style="font-size: 11px; padding: 1px 8px; border-radius: 9999px; background: #E7EFFF; color: #1F55C4; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">{{d}}</span>
+                        </sc-for>
+                        <a href="ScopeEdit.dc.html" style="font-size: 12px;">编辑范围</a>
+                      </dd>
+                    </dl>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <span style="font-size: 12px; font-weight: 600;">经此令牌注册的任务</span>
+                      <sc-for list="{{tasks}}" as="t" hint-placeholder-count="3">
+                        <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <a href="IntegrationDetail.dc.html" style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #10151C; text-decoration: none;">{{t.name}}</a>
+                            <span style="color: #5B6472;">{{t.cron}}</span>
+                            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: {{t.bg}}; color: {{t.fg}}; white-space: nowrap;">{{t.check}}</span>
+                          </div>
+                          <span style="display: {{t.hintDisp}}; font-size: 11px; color: #5B6472;">{{t.hint}}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                      <span style="font-size: 12px; font-weight: 600;">最近调用（含被拒）</span>
+                      <a href="#" style="font-size: 12px;">全部调用与回调记录</a>
+                    </div>
+                    <sc-for list="{{calls}}" as="c" hint-placeholder-count="4">
+                      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 12px;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">{{c.id}}</span>
+                        <span style="flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{c.scenario}}</span>
+                        <span style="display: {{c.oosDisp}}; font-size: 11px; padding: 1px 8px; border-radius: 9999px; border: 1px dashed #B45309; color: #B45309; white-space: nowrap;">含范围外目标</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: {{c.bg}}; color: {{c.fg}}; white-space: nowrap;">{{c.status}}</span>
+                        <span style="color: #5B6472; white-space: nowrap;">{{c.when}}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"context":{"editor":"enum","options":["personal","platform","admin"],"default":"personal","section":"视角"},"viewerRole":{"editor":"enum","options":["member","user"],"default":"member","section":"视角"},"emptyAuths":{"editor":"boolean","default":false,"section":"创建表单"},"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ctx = this.props.context ?? 'personal';
+    const role = this.props.viewerRole ?? 'member';
+    const emptyAuths = this.props.emptyAuths ?? false;
+    const personal = ctx === 'personal', platform = ctx === 'platform', admin = ctx === 'admin';
+    const userRole = personal && role === 'user';
+
+    const on = { bg: '#E7EFFF', fg: '#1F55C4', border: '#2F6FED', pressed: 'true' };
+    const off = { bg: '#FFFFFF', fg: '#10151C', border: '#E1E5EB', pressed: 'false' };
+    const btn = { renewBg: '#FFFFFF', renewFg: '#10151C', renewBorder: '#E1E5EB', regenBg: '#FFFFFF', regenFg: '#10151C', regenBorder: '#E1E5EB' };
+    const primRenew = { renewBg: '#2F6FED', renewFg: '#FFFFFF', renewBorder: '#2F6FED' };
+    const primRegen = { regenBg: '#2F6FED', regenFg: '#FFFFFF', regenBorder: '#2F6FED' };
+    const base = Object.assign({ ink: '#10151C', rowBg: '#FFFFFF', taskFg: '#10151C', owner: '', note: '', noteDisp: 'none', noteFg: '#5B6472', canRenew: false, canRegen: false, canRevoke: false, canInvalidate: false, viewOnly: false }, btn);
+    const row = (o) => Object.assign({}, base, o, { noteDisp: o.note ? 'block' : 'none' });
+
+    const ST = {
+      ok: { stBg: '#E4F5EA', stFg: '#15803D' },
+      warn: { stBg: '#FEF3C7', stFg: '#B45309' },
+      bad: { stBg: '#FEE2E2', stFg: '#B91C1C' },
+      grey: { stBg: '#EEF0F3', stFg: '#5B6472' }
+    };
+    const revoked = { ink: '#5B6472', rowBg: '#FAFBFC' };
+
+    const personalRows = [
+      row(Object.assign({ name: 'agent-nightly', frag: 'gtk_ab12…9f3c', status: '有效', scope: '2 别名 · 2 凭证', expires: '2027-01-28', lastUsed: '2 小时前', tasks: '3（2 不满足）', taskFg: '#B91C1C', canRenew: true, canRegen: true, canRevoke: true }, ST.ok)),
+      row(Object.assign({}, primRenew, { name: 'ci-jenkins', frag: 'gtk_7d0e…11a4', status: '3 天后到期', scope: '1 别名 · 1 凭证', expires: '2026-11-07', lastUsed: '昨天', tasks: '—', canRenew: true, canRegen: true, canRevoke: true, note: '签名密钥不可用 · 请轮换', noteFg: '#B91C1C' }, ST.warn)),
+      row(Object.assign({}, primRegen, { name: 'regress-bot', frag: 'gtk_c3f9…0b72', status: '改密失效', scope: '3 别名 · 2 凭证', expires: '—', lastUsed: '11-01', tasks: '1（已暂停）', taskFg: '#B45309', canRegen: true, canRevoke: true, note: '重新生成后任务自动恢复' }, ST.bad)),
+      row(Object.assign({}, primRegen, { name: 'sec-probe', frag: 'gtk_e04a…7c19', status: '管理员强制失效', scope: '1 别名 · 0 凭证', expires: '—', lastUsed: '11-03', tasks: '1（已暂停）', taskFg: '#B45309', canRegen: true, canRevoke: true, note: '管理员：疑似在 CI 日志中泄露 · 重新生成后任务自动恢复' }, ST.bad)),
+      row(Object.assign({}, revoked, { name: 'old-bot', frag: 'gtk_91be…4c55', status: '已吊销', scope: '—', expires: '—', lastUsed: '10-21', tasks: '—', viewOnly: true }, ST.grey))
+    ];
+    const platformRows = [
+      row(Object.assign({ name: 'nightly-recon', frag: 'gtk_2f7a…d301', owner: '签发 李四', status: '有效', scope: '3 别名 · 1 凭证', expires: '2027-03-01', lastUsed: '20 分钟前', tasks: '4', canRenew: true, canRegen: true, canRevoke: true }, ST.ok)),
+      row(Object.assign({}, primRenew, { name: 'bi-export', frag: 'gtk_8c1d…a9e2', owner: '签发 王五', status: '5 天后到期', scope: '1 别名 · 0 凭证', expires: '2026-11-09', lastUsed: '昨天', tasks: '1', canRenew: true, canRegen: true, canRevoke: true }, ST.warn)),
+      row(Object.assign({}, revoked, { name: 'legacy-sync', frag: 'gtk_44b0…01fe', owner: '签发 鳕鱼', status: '已吊销', scope: '—', expires: '—', lastUsed: '10-12', tasks: '—', viewOnly: true }, ST.grey))
+    ];
+    const adminRows = [
+      row(Object.assign({ name: 'agent-nightly', frag: '个人 · gtk_ab12…9f3c', owner: '鳕鱼', status: '有效', scope: '2 别名 · 2 凭证', expires: '2027-01-28', lastUsed: '2 小时前', tasks: '3', canInvalidate: true }, ST.ok)),
+      row(Object.assign({ name: 'ci-jenkins', frag: '个人 · gtk_7d0e…11a4', owner: '李四', status: '有效', scope: '1 别名 · 1 凭证', expires: '2027-02-11', lastUsed: '5 分钟前', tasks: '1', canInvalidate: true, rowBg: '#FFF7F7' }, ST.ok)),
+      row(Object.assign({ name: 'nightly-recon', frag: '平台 · gtk_2f7a…d301', owner: '平台（签发 李四）', status: '有效', scope: '3 别名 · 1 凭证', expires: '2027-03-01', lastUsed: '20 分钟前', tasks: '4', canInvalidate: true }, ST.ok)),
+      row(Object.assign({ name: 'sec-probe', frag: '个人 · gtk_e04a…7c19', owner: '鳕鱼', status: '管理员强制失效', scope: '1 别名 · 0 凭证', expires: '—', lastUsed: '11-03', tasks: '1', viewOnly: true, note: '11-03 由 王五 强制失效' }, ST.bad)),
+      row(Object.assign({ name: 'old-script', frag: '个人 · gtk_5a1c…e8d0', owner: '鳕鱼', status: '已到期', scope: '1 别名 · 0 凭证', expires: '2026-10-30', lastUsed: '10-29', tasks: '—', canInvalidate: true }, ST.grey)),
+      row(Object.assign({}, revoked, { name: 'legacy-sync', frag: '平台 · gtk_44b0…01fe', owner: '平台（签发 鳕鱼）', status: '已吊销', scope: '—', expires: '—', lastUsed: '10-12', tasks: '—', viewOnly: true }, ST.grey))
+    ];
+
+    const personalAuths = [Object.assign({ name: 'codfish-fin' }, emptyAuths ? off : on), Object.assign({ name: 'codfish-logi' }, emptyAuths ? off : on), Object.assign({ name: 'codfish2' }, off)];
+    const platformAuths = [Object.assign({ name: 'plat-fin-ro' }, emptyAuths ? off : on), Object.assign({ name: 'plat-logi-ro' }, off)];
+
+    const okT = { bg: '#E4F5EA', fg: '#15803D' }, badT = { bg: '#FEE2E2', fg: '#B91C1C' }, warnT = { bg: '#FEF3C7', fg: '#B45309' };
+    const task = (o) => Object.assign({ hint: '', hintDisp: 'none' }, o, { hintDisp: o.hint ? 'block' : 'none' });
+
+    return {
+      isPersonal: personal, isPlatform: platform, isAdmin: admin,
+      isUserRole: userRole,
+      showMain: !userRole,
+      canCreate: (personal && !userRole) || platform,
+      showDetail: !admin,
+      roleLabel: userRole ? '用户' : '管理员',
+      navIntegBg: platform ? 'rgba(255,255,255,0.08)' : 'transparent', navIntegFg: platform ? '#F8FAFC' : '#CBD5E1',
+      navUsersBg: admin ? 'rgba(255,255,255,0.08)' : 'transparent', navUsersFg: admin ? '#F8FAFC' : '#CBD5E1',
+      pageTitle: personal ? '个人设置' : platform ? '集成 · 平台令牌' : '用户管理 · 访问令牌',
+      pageSub: personal ? (userRole ? 'codfish · 用户' : 'codfish · 管理员') : platform ? '成员及以上可签发与管理 · 平台凭证由管理员维护' : '全部个人与平台令牌 · 泄露处置用「强制失效」，属主重新生成后恢复',
+      sectionTitle: personal ? '访问令牌' : platform ? '平台令牌' : '全部访问令牌',
+      helpText: personal ? '说明：令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码' : platform ? '说明：平台令牌以平台身份调用 Gimbal，只能运行公共只读场景' : '说明：管理员可查看全部令牌并强制失效，不能查看明文',
+      quota: personal ? (userRole ? '' : '已用 4 · 上限 5（不含已吊销）') : platform ? '全平台共享 · 已用 2 / 5（不含已吊销）' : '共 6 张 · 个人 4 · 平台 2',
+      createLabel: personal ? '创建访问令牌' : '创建平台令牌',
+      formTitle: personal ? '新建访问令牌' : '新建平台令牌',
+      namePh: personal ? '例如：agent-nightly' : '例如：nightly-recon',
+      cbValue: personal ? 'https://agent.internal/gimbal/callback' : 'https://recon.internal/hooks/gimbal',
+      authsLabel: personal ? '凭证' : '平台凭证',
+      authsEmpty: emptyAuths,
+      candHint: personal ? '候选 = 全部服务别名、你的凭证池。某一维度可以不选：不选即不允许使用该类资源。别名或凭证被删除后，授权随之移除。' : '候选 = 全部服务别名、平台凭证池（只列别名，凭证内容由管理员维护）。某一维度可以不选：不选即不允许使用该类资源。',
+      ownerDisp: personal ? 'none' : 'table-cell',
+      ownerHead: platform ? '签发人' : '属主',
+      scopeAliases: [
+        Object.assign({ name: 'fin-test' }, on),
+        Object.assign({ name: 'logi-test' }, on),
+        Object.assign({ name: 'wms-test' }, off),
+        Object.assign({ name: 'mall-uat' }, off),
+        Object.assign({ name: 'fin-uat' }, off)
+      ],
+      scopeAuths: personal ? personalAuths : platformAuths,
+      rows: personal ? personalRows : platform ? platformRows : adminRows,
+      detailName: personal ? 'agent-nightly · gtk_ab12…9f3c' : 'nightly-recon · gtk_2f7a…d301',
+      detailAliases: personal ? ['fin-test', 'logi-test'] : ['fin-test', 'logi-test', 'mall-uat'],
+      detailAuths: personal ? ['codfish-fin', 'codfish-logi'] : ['plat-fin-ro'],
+      tasks: personal ? [
+        task(Object.assign({ name: '每日应收对账', cron: '每天 02:00', check: '范围满足' }, okT)),
+        task(Object.assign({ name: '物流轨迹同步', cron: '每小时', check: '未授权 · wms-test', hint: '令牌范围未包含 wms-test：编辑范围加入后在集成详情启动' }, badT)),
+        task(Object.assign({ name: '库存快照比对', cron: '每天 06:00', check: '对象已不存在 · codfish-old', hint: '凭证 codfish-old 已被删除：重建后加入令牌范围，或修改场景不再引用，或解绑任务' }, warnT))
+      ] : [
+        task(Object.assign({ name: '月结对账巡检', cron: '每天 03:00', check: '范围满足' }, okT)),
+        task(Object.assign({ name: '公共报表导出', cron: '每周一', check: '场景已转私有', hint: '平台模式只能运行公共场景：场景公开后在集成详情启动' }, warnT))
+      ],
+      calls: [
+        { id: '#4821', scenario: personal ? '应收对账查询 · 基线' : '月结对账巡检', status: '通过', bg: '#E4F5EA', fg: '#15803D', when: '2 小时前', oosDisp: 'none' },
+        { id: '—', scenario: personal ? '物流轨迹同步' : '公共报表导出', status: personal ? '拒绝 · 未授权 wms-test' : '拒绝 · 场景非公共', bg: '#FEF3C7', fg: '#B45309', when: '3 小时前', oosDisp: 'none' },
+        { id: '#4790', scenario: personal ? '订单退款异常复现' : '月结对账巡检', status: '失败', bg: '#FEE2E2', fg: '#B91C1C', when: '昨天 02:10', oosDisp: 'inline-block' },
+        { id: '#4733', scenario: personal ? '应收对账查询 · 基线' : '月结对账巡检', status: '通过', bg: '#E4F5EA', fg: '#15803D', when: '11-02', oosDisp: 'none' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

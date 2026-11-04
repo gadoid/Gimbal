@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>个人设置 · 账号与通知</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1020px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <!-- 侧栏 chrome -->
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <a href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">通知</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">关注</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务画像</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <sc-if value="{{showAuthsInSidebar}}" hint-placeholder-val="{{ true }}">
+      <a href="#" style="display: block; padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    </sc-if>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">变更适配</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行器</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <div style="flex-grow: 1;"></div>
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-decoration: none;">
+        <span style="color: #F8FAFC; font-weight: 500;">鳕鱼</span>
+        <span style="font-size: 10px; padding: 0 6px; border-radius: 9999px; background: rgba(255,255,255,0.12); color: #CBD5E1;">管理员</span>
+      </a>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 2px;">
+        <button type="button" aria-label="通知" style="width: 28px; height: 28px; border: 0; background: transparent; color: #CBD5E1; cursor: pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+        </button>
+        <button type="button" style="height: 26px; padding: 0 8px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; background: transparent; color: #CBD5E1; font-size: 11px;">退出</button>
+      </div>
+    </div>
+  </nav><main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">个人设置</h1>
+        <span style="font-size: 12px; color: #5B6472;">codfish · 管理员</span>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      <!-- 锚点导航 -->
+      <nav aria-label="个人设置分区" style="flex: 1 1 168px; max-width: 168px; display: flex; flex-direction: column; gap: 2px;">
+        <a href="#account" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px; background: #E7EFFF; color: #1F55C4; font-weight: 600; text-decoration: none;">账号</a>
+        <a href="Tokens.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">
+          访问令牌
+          <span style="font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 9999px; background: #FEF3C7; color: #B45309;">3 待处理</span>
+        </a>
+        <sc-if value="{{mergeAuths}}" hint-placeholder-val="{{ false }}">
+          <a href="#" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">我的凭证</a>
+        </sc-if>
+        <a href="#notify" style="display: flex; padding: 8px 12px; border-radius: 6px; color: #10151C; text-decoration: none;">通知</a>
+      </nav>
+
+      <!-- 分区内容 -->
+      <div style="flex: 999 1 520px; min-width: 0; max-width: 880px; display: flex; flex-direction: column; gap: 16px;">
+
+        <section id="account" style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; overflow: hidden;">
+          <div style="padding: 16px 20px; border-bottom: 1px solid #EEF0F3; display: flex; align-items: center; gap: 14px;">
+            <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 9999px; background: #3B82F6; color: #FFFFFF; font-size: 18px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">鳕</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 600;">鳕鱼</span>
+              <span style="font-size: 12px; color: #5B6472; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">@codfish</span>
+            </div>
+            <div style="flex-grow: 1;"></div>
+            <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #FEE2E2; color: #B91C1C;">管理员</span>
+            <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D;">启用中</span>
+          </div>
+
+          <div style="padding: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+            <form style="display: flex; flex-direction: column; gap: 10px;">
+              <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">昵称</h2>
+              <label for="nick" style="font-size: 12px; font-weight: 500; color: #5B6472;">展示在场景归属、审计记录里的名字</label>
+              <div style="display: flex; gap: 8px;">
+                <input id="nick" value="鳕鱼" style="flex-grow: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px; color: #10151C; background: #FFFFFF;">
+                <button type="button" disabled="disabled" style="height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; opacity: 0.5; font-size: 13px;">保存</button>
+              </div>
+              <span style="font-size: 11px; color: #5B6472;">与用户名双向查重</span>
+            </form>
+
+            <form style="display: flex; flex-direction: column; gap: 10px;">
+              <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">修改密码</h2>
+              <label for="oldpw" style="font-size: 12px; font-weight: 500; color: #5B6472;">旧密码</label>
+              <input id="oldpw" type="password" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+              <label for="newpw" style="font-size: 12px; font-weight: 500; color: #5B6472;">新密码（至少 8 位）</label>
+              <input id="newpw" type="password" style="height: 32px; padding: 0 10px; border: 1px solid #E1E5EB; border-radius: 6px; font-size: 13px;">
+              <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #10151C;">
+                <input type="checkbox" checked="checked" style="width: 14px; height: 14px; margin: 2px 0 0;">
+                <span>访问令牌同时失效，需重新生成（2 张有效令牌）</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #10151C;">
+                <input type="checkbox" checked="checked" style="width: 14px; height: 14px; margin: 2px 0 0;">
+                <span>退出其他已登录的会话</span>
+              </label>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="button" style="height: 32px; padding: 0 14px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 13px;">修改密码</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section id="notify" style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">通知</h2>
+            <button type="button" aria-label="说明：关闭的类型不再入库，与铃铛面板同一份开关" style="width: 18px; height: 18px; border: 1px solid #C9CFD8; border-radius: 9999px; background: #FFFFFF; color: #5B6472; font-size: 11px; line-height: 16px; padding: 0;">?</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px;">
+            <sc-for list="{{notifyTypes}}" as="t" hint-placeholder-count="6">
+              <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EEF0F3;">
+                <span>{{t.label}}</span>
+                <span style="width: 32px; height: 18px; border-radius: 9999px; background: {{t.track}}; display: inline-flex; align-items: center; padding: 2px; box-sizing: border-box; justify-content: {{t.align}};">
+                  <span style="width: 14px; height: 14px; border-radius: 9999px; background: #FFFFFF;"></span>
+                </span>
+              </label>
+            </sc-for>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- 内容区 -->
+  
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mergeAuths":{"editor":"boolean","default":false,"section":"拍板项"},"$preview":{"width":1440,"height":1020}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const merge = this.props.mergeAuths ?? false;
+    const on = { track: '#2F6FED', align: 'flex-end' };
+    const off = { track: '#C9CFD8', align: 'flex-start' };
+    return {
+      mergeAuths: merge,
+      showAuthsInSidebar: !merge,
+      notifyTypes: [
+        Object.assign({ label: '执行完成' }, on),
+        Object.assign({ label: '执行失败' }, on),
+        Object.assign({ label: '场景被分享 / 引用撤销' }, on),
+        Object.assign({ label: '资源转让' }, on),
+        Object.assign({ label: '集成任务暂停' }, on),
+        Object.assign({ label: '访问令牌到期与失效' }, on),
+        Object.assign({ label: '变更适配批次' }, off),
+        Object.assign({ label: '系统公告' }, on)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

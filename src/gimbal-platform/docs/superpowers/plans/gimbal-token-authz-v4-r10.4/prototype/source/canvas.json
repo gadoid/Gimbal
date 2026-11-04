@@ -1,0 +1,152 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "IdentityCard.dc.html": {
+      "h": 600,
+      "title": "工作台身份卡 · 现状 / 默认 / 自定义后",
+      "w": 1120,
+      "x": 1920,
+      "y": 1640
+    },
+    "ScopeEdit.dc.html": {
+      "h": 680,
+      "title": "编辑授权范围 · 收紧确认",
+      "w": 880,
+      "x": 960,
+      "y": 1640
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1020,
+      "title": "个人设置 · 账号与通知",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "TokenCreated.dc.html": {
+      "h": 680,
+      "title": "创建成功 · 明文一次性展示",
+      "w": 880,
+      "x": 0,
+      "y": 1640
+    },
+    "Tokens.dc.html": {
+      "expand": "fill",
+      "h": 1320,
+      "title": "访问令牌 · 个人 / 平台 / 管理员视角（视角切换）",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "UserBadge.dc.html": {
+      "h": 520,
+      "title": "chrome 用户区 · 顶条下拉 / 侧栏底部",
+      "w": 840,
+      "x": 3120,
+      "y": 1640
+    },
+    "CardSettings.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1100,
+      "title": "个人设置 · 工作台身份卡",
+      "expand": "fill"
+    },
+    "IdentityCardCustom.dc.html": {
+      "x": 4040,
+      "y": 1640,
+      "w": 288,
+      "h": 480,
+      "title": "身份卡组件 · 自定义后"
+    },
+    "NoteCard.dc.html": {
+      "x": 0,
+      "y": 2740,
+      "w": 1400,
+      "h": 600,
+      "title": "便签卡（工作台注册卡）· S / M / L"
+    },
+    "RevokeConfirm.dc.html": {
+      "x": 4440,
+      "y": 1640,
+      "w": 880,
+      "h": 680,
+      "title": "吊销确认 · 有注册任务时"
+    },
+    "IntegrationDetail.dc.html": {
+      "x": 0,
+      "y": 3740,
+      "w": 1440,
+      "h": 980,
+      "title": "集成详情 · 所属令牌、暂停恢复与解绑（暂停原因切换）",
+      "expand": "fill"
+    },
+    "PlatformCreds.dc.html": {
+      "x": 1520,
+      "y": 3740,
+      "w": 1440,
+      "h": 860,
+      "title": "集成 · 平台凭证编辑与删除影响"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-04T08:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "row1": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "个人设置 /profile — 锚点分区",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 5320,
+      "text": "令牌明文 · 收紧确认 · 身份卡 · 用户区",
+      "w": 240,
+      "x": 0,
+      "y": 1340
+    },
+    "row3": {
+      "kind": "title1",
+      "maxW": 1400,
+      "text": "工作台卡片 · 便签",
+      "w": 240,
+      "x": 0,
+      "y": 2440
+    },
+    "row4": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "集成页 · 令牌与平台凭证",
+      "w": 240,
+      "x": 0,
+      "y": 3440
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Tokens.dc.html",
+    "CardSettings.dc.html",
+    "TokenCreated.dc.html",
+    "ScopeEdit.dc.html",
+    "IdentityCard.dc.html",
+    "IdentityCardCustom.dc.html",
+    "UserBadge.dc.html",
+    "RevokeConfirm.dc.html",
+    "NoteCard.dc.html",
+    "IntegrationDetail.dc.html",
+    "PlatformCreds.dc.html"
+  ],
+  "pages": [],
+  "title": "个人设置与用户入口重构"
+}

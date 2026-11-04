@@ -1,0 +1,129 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>集成详情 · 令牌与暂停恢复</title><style>
+body{margin:0;background:#F3F5F8}
+a{color:#2F6FED}a:hover{color:#1F55C4}
+</style></head><body>
+
+<div style="width: 100%; min-height: 980px; display: flex; flex-wrap: wrap; align-items: stretch; background: #F3F5F8; color: #10151C; font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, &quot;PingFang SC&quot;, sans-serif; font-size: 13px; line-height: 18px;">
+
+  <nav aria-label="主导航" style="flex: 1 1 208px; max-width: 208px; min-width: 208px; background: #0B0E14; color: #CBD5E1; display: flex; flex-direction: column; padding: 16px 12px; box-sizing: border-box; gap: 4px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px;">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #22D3EE;"></span>
+      <span style="color: #F8FAFC; font-weight: 700; font-size: 15px;">platform</span>
+    </div>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">工作台</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">场景</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">我的场景</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">公共场景</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">服务</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">服务信息管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">认证管理</a>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #F8FAFC; background: rgba(255,255,255,0.08); text-decoration: none;">集成</a>
+    <span style="padding: 12px 10px 4px; font-size: 11px; color: #8B93A1;">执行</span>
+    <a href="#" style="padding: 7px 10px; border-radius: 6px; color: #CBD5E1; text-decoration: none;">执行记录</a>
+    <div style="flex-grow: 1;"></div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+    <!-- 详情列 -->
+    <div style="flex: 999 1 560px; min-width: 0; max-width: 820px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 12px; color: #5B6472;"><a href="#">集成</a> / 物流轨迹同步</span>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h1 style="margin: 0; font-size: 22px; line-height: 30px; font-weight: 600;">物流轨迹同步</h1>
+          <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #F6F8FC; color: #4A5A72;">个人模式</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9999px; background: #FEF3C7; color: #B45309;">已暂停</span>
+        </div>
+      </div>
+
+      <!-- 暂停横幅 -->
+      
+        <section style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 14px; font-weight: 600; color: #991B1B;">已暂停 · 所属令牌已吊销</span>
+            <span style="font-size: 12px; color: #4A5A72;">吊销是终态，这个任务不能直接启动。解绑令牌后由你接管，再启动。</span>
+          </div>
+          
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            
+              <a href="#" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid #2F6FED; background: #2F6FED; color: #FFFFFF; font-size: 12px; font-weight: 500; text-decoration: none; box-sizing: border-box; opacity: 1;">解绑令牌（转为我管理）</a>
+            
+              <a href="#" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid #E1E5EB; background: #FFFFFF; color: #8B93A1; font-size: 12px; font-weight: 500; text-decoration: none; box-sizing: border-box; opacity: 0.7;">启动</a>
+            
+          </div>
+        </section>
+      
+
+      <!-- 身份与令牌 -->
+      <section style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">身份与令牌</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px 12px; font-size: 12px;">
+          <dt style="color: #5B6472;">执行身份</dt>
+          <dd style="margin: 0;">鳕鱼（令牌属主）</dd>
+          <dt style="color: #5B6472;">所属令牌</dt>
+          <dd style="margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">agent-nightly · gtk_ab12…9f3c</span>
+            <span style="display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #EEF0F3; color: #5B6472;">已吊销</span>
+            <a href="Tokens.html" style="display: inline-block; font-size: 12px;">查看令牌</a>
+          </dd>
+          <dt style="color: #5B6472;">回调</dt>
+          <dd style="margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">https://agent.internal/gimbal/callback</dd>
+          <dt style="color: #5B6472;">场景</dt>
+          <dd style="margin: 0;"><a href="#">物流轨迹查询</a></dd>
+        </dl>
+        
+          <div style="display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid #EEF0F3;">
+            <span style="flex-grow: 1; font-size: 12px; color: #5B6472;">令牌退役或吊销后，可以把任务转为由你的账号管理</span>
+            <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">解绑令牌（转为我管理）</button>
+          </div>
+        
+      </section>
+
+      <!-- 运行 -->
+      <section style="background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px;">
+        <h2 style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600;">最近运行</h2>
+        
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4830</span>
+            <span style="flex-grow: 1;">今天 09:00</span>
+            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #EEF0F3; color: #5B6472;">未运行 · 已暂停</span>
+          </div>
+        
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4812</span>
+            <span style="flex-grow: 1;">今天 08:00</span>
+            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D;">通过</span>
+          </div>
+        
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EEF0F3; font-size: 12px;">
+            <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #5B6472;">#4799</span>
+            <span style="flex-grow: 1;">今天 07:00</span>
+            <span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 9999px; background: #E4F5EA; color: #15803D;">通过</span>
+          </div>
+        
+      </section>
+    </div>
+
+    <!-- 解绑确认 -->
+    <div style="flex: 1 1 360px; max-width: 400px; display: flex; flex-direction: column; gap: 8px;">
+      <span style="font-size: 12px; font-weight: 600; color: #5B6472;">解绑令牌 · 确认</span>
+      <div role="dialog" aria-labelledby="ub-title" style="background: #FFFFFF; border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12); border: 1px solid #E1E5EB; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 16px 18px 12px; border-bottom: 1px solid #EEF0F3;">
+          <h3 id="ub-title" style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600;">把「物流轨迹同步」转为我管理？</h3>
+        </div>
+        <ul style="margin: 0; padding: 14px 18px 14px 34px; font-size: 12px; color: #4A5A72; display: flex; flex-direction: column; gap: 6px;">
+          <li>任务与令牌 agent-nightly 解除绑定，此后不再受这张令牌的状态与范围约束。</li>
+          <li>不再向令牌的回调地址推送事件；需要结果请在 Gimbal 内查看或订阅通知。</li>
+          <li>个人任务解绑后以你的身份、你的凭证池运行。</li>
+          <li>解绑后任务处于暂停，确认无误后点「启动」。</li>
+        </ul>
+        <div style="padding: 12px 18px; border-top: 1px solid #EEF0F3; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #E1E5EB; border-radius: 6px; background: #FFFFFF; color: #10151C; font-size: 12px;">取消</button>
+          <button type="button" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #2F6FED; color: #FFFFFF; font-size: 12px; font-weight: 500;">解绑</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body></html>
