@@ -174,6 +174,27 @@ describe('ActivityTimeline — 右栏时间线', () => {
     w.unmount()
   })
 
+  it('调用类单行:对账明细并入标题行,不出第二行徽标(2026-11-04)', async () => {
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [
+        { kind: 'inbound', at: ago(1), action: 'inbound.run', executionId: 351,
+          callerAlias: 'agent-sys', scenarioName: '订单创建_1', clientRef: 'cr-9',
+          credentialOwner: 'Administrator',
+          detail: { fn: 'scenario', identity_mode: 'personal' } },
+      ],
+      sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
+    } as never)
+    const w = mountWithRouter(ActivityTimeline)
+    await flushPromises()
+    const row = w.find('[data-testid="wb-tl-inbound"]')
+    expect(row.find('.tl-title').text()).toContain('调用 agent-sys → 订单创建_1')
+    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')  // 明细随标题同一条线
+    expect(row.find('.tl-sub').exists()).toBe(false)   // 单行:没有第二行
+    expect(row.find('.tl-kind').exists()).toBe(false)  // 徽标被标题前缀「调用」顶掉
+    expect(row.find('.tl-body').attributes('href')).toBe('/executions/351')
+    w.unmount()
+  })
+
   it('「配色」打开映射面板:改色即时上图例、上圆点,并按用户名存档', async () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [

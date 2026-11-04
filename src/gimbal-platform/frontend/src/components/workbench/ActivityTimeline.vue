@@ -65,10 +65,14 @@
               <span class="tl-dot" :style="{ background: colorOf(e.kind) }" aria-hidden="true" />
               <router-link :to="e.to" class="tl-body">
                 <span class="tl-line">
-                  <span class="tl-title">{{ e.title }}</span>
+                  <span class="tl-title">
+                    {{ e.title }}<span v-if="e.kind === 'inbound' && e.detail" class="tl-inline mono"> · {{ e.detail }}</span>
+                  </span>
                   <span class="tl-time">{{ relTime(e.at) || shortDateTime(e.at) }}</span>
                 </span>
-                <span class="tl-sub">
+                <!-- 调用类单行(2026-11-04):标题前缀已带「调用」,徽标冗余;
+                     对账明细(归属人 · clientRef)并入标题行,整行一条省略号截断 -->
+                <span v-if="e.kind !== 'inbound'" class="tl-sub">
                   <span class="tl-kind" :style="kindTint(e.kind)">{{ KIND_LABEL[e.kind] }}</span>
                   <span v-if="e.detail" class="mono">{{ e.detail }}</span>
                 </span>
@@ -314,6 +318,8 @@ onBeforeUnmount(() => { resize?.disconnect() })
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tl-body:hover .tl-title { @apply text-signal; }
+/* 调用类的对账明细随标题行内联:小一号、淡一档,与标题同一条截断线 */
+.tl-inline { @apply text-caption font-normal text-signal-ink/45; }
 .tl-time { @apply text-caption text-signal-ink/45 flex-none; }
 .tl-sub { @apply flex items-center gap-1.5 text-caption text-signal-ink/45; }
 .tl-kind { @apply text-micro font-bold; padding: 0 5px; border-radius: 4px; }
