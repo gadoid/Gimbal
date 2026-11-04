@@ -230,6 +230,37 @@ class TestDeleteUserDisposal:
             assert inst.state == "paused"
             assert inst.paused_reason == "manual"
 
+    async def test_publicize_personal_task_template_deleted(self, client):
+        """publicize 个人模式模板:模板连同全部实例删除(方案 §3.6;
+        评审 2026-11-05 P1:此前漏删模板行,统一 owner_id 更新把它挂到
+        __platform__ 名下,留下个人模式僵尸模板)。"""
+        await seed_platform_user()
+        await _register(client, "df_a4")
+        h_admin = await self._admin(client)
+        uid, tid, tpl_id, inst_id = await self._seed_owner_with_task(
+            "df_owner5")
+        from app.models.composer_scenario import ComposerScenario
+        async with db_module.SessionLocal() as s:
+            s.add(ComposerScenario(
+                scenario_id=f"sc5-{uid}", owner_id=uid, visibility="private",
+                payload={"definition": {"steps": [], "config": {},
+                                        "meta": {"name": "x"}}}))
+            await s.commit()
+        async with db_module.SessionLocal() as s:
+            tpl = await s.get(IntegrationTask, tpl_id)
+            tpl.scenario_id = f"sc5-{uid}"
+            await s.commit()
+        r = await client.request(
+            "DELETE", f"/api/users/{uid}", headers=h_admin,
+            json={"disposal": "publicize"})
+        assert r.status_code == 204, r.text
+        async with db_module.SessionLocal() as s:
+            assert await s.get(IntegrationTask, tpl_id) is None
+            n = (await s.execute(sa.select(sa.func.count()).select_from(
+                IntegrationTask).where(
+                    IntegrationTask.template_id == tpl_id))).scalar_one()
+            assert n == 0
+
     async def test_purge_deletes_tasks(self, client):
         await seed_platform_user()
         await _register(client, "df_a2")

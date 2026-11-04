@@ -675,6 +675,10 @@ async def delete_user(
                         await db.rollback()
                 await db.execute(sa_delete(IntegrationTask).where(
                     IntegrationTask.template_id == tpl.id))
+                # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
+                # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
+                # 属主为系统用户的个人模式僵尸模板)
+                await db.delete(tpl)
             else:
                 # owner → __platform__、token 置空;平台实例暂停待 member+
                 # 确认后启动(publicize 会把该用户的私有场景转公共,
