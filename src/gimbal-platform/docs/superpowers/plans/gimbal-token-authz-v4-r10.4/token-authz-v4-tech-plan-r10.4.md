@@ -16,6 +16,7 @@
 | r10.2 | 实例暂停规则：`resource_not_allowed` 归入成因依赖令牌的一类，随 `token_id` 置空转为 `manual` |
 | r10.3 | 基线更新到 `3973f5a`，锚点全量复核无漂移；开工前置已满足 |
 | **r10.4** | 与原型逐项对齐：admin 强制失效带处置说明；用户区与个人设置的待处理数口径（到期 + 失效） |
+| **r10.5** | 实现收口（2026-11-04 评审修复轮）：0034 补建三表 `token_id` FK SET NULL（0033 只加列未建约束）；注册/保存面范围闸落地（§5.4 状态码约定：任务创建与 PATCH 换方案 422，按将生效配方核对）；额度改事务内锁属主行计数（§5.1 兑现）；范围拒绝补写 `inbound.denied` 审计（§7.2 兑现，runs 两处调用点）；`inbound.run` detail 补 `resolvedServices` 摘要；runs 链注入清单并入 setup/teardown 扫描（`exec_auth_aliases_of_definition`，与集成链同口径）；`invalidate` 对已吊销 409（已失效保持幂等）；precheck JWT `tokenId` 权限 `can_view`→`can_manage`；`identity_mode_mismatch` 按 §5.4 删除清单退役，防呆校验改名 `identity_mode_conflict`；publicize 删 suite 补删引用模板（§3.6 通用约束，含 suite id 删前物化修复）；命名补录：`invalidation_note` 列（§4.1）、`platform_user_missing`（§5.4）、`inbound.run(fn=cancel)`（§7.2） |
 
 **r10 简化**（每项都核对过代码与上下游，没有能力损失）：
 
@@ -302,6 +303,7 @@ access_tokens
   expires_at          timestamptz
   invalidated_at      timestamptz NULL
   invalidated_reason  varchar(16) NULL                          -- password | deactivated | admin
+  invalidation_note   text NULL                                 -- r10.5:admin 处置说明,随通知下发
   revoked_at          timestamptz NULL
   last_used_at        timestamptz NULL                          -- 1 分钟节流写
   callback_url        varchar(512) NULL
@@ -409,6 +411,8 @@ access_token_scopes
 | `token_limit_reached` | 409 | 超出额度 | 新增 |
 | `token_revoked` | 409 | 对已吊销令牌的写操作；对 `token_revoked` 暂停直接启动 | 新增 |
 | `system_user_protected` | 409 | 停用或删除系统用户 | 新增 |
+| `platform_user_missing` | 503 | 平台系统用户缺失（迁移 0015 种子未执行） | r10.5 补录 |
+| `identity_mode_conflict` | 422 | 请求体 `identityMode` 与令牌身份不一致（原 v3 `identity_mode_mismatch` 防呆校验的 v4 改名） | r10.5 补录 |
 | `callback_host_not_allowed` | 422 | 回调主机不在白名单（白名单为空时任何地址都拒） | 新增 |
 | `not_read_only` | 403 / 422 | 平台模式含写步骤或白名单外策略 | 沿用 |
 | `platform_scope_denied` | 403 / 422 | 平台模式场景非公共；message 去掉「别名属主的场景」 | 沿用，语义收窄 |
@@ -468,7 +472,7 @@ JWT 执行同样写 `resolvedServices` 与 `builtinAuths`。
 | `token.callback.write` / `token.callback_secret.rotate` | 新旧地址（不记密钥） |
 | `token.task.unbind` | 任务、原令牌、操作人 |
 | `integration.task.dispose` | 模板 id、处置方式、新属主 |
-| `inbound.run`（改写 `audit.record_inbound`，`audit.py:90`） | 资源列 `access_token` / 令牌 id；令牌、属主、场景、方案、`execution_id`、`clientRef`、`resolvedServices` 摘要、凭证清单、`outOfScope`；临时调用另含全量 steps 与 release |
+| `inbound.run`（改写 `audit.record_inbound`，`audit.py:90`） | 资源列 `access_token` / 令牌 id；令牌、属主、场景、方案、`execution_id`、`clientRef`、`resolvedServices` 摘要、凭证清单、`outOfScope`；临时调用另含全量 steps 与 release；令牌取消执行同动作记 `fn=cancel`（r10.5 补录） |
 | `inbound.denied` | 拒绝原因与缺项（令牌只记 hint）。hash 命中某张令牌时（含已吊销、失效、到期）资源列记该令牌 id；未命中则为空，只进审计面板 |
 
 **令牌「最近调用」** = 审计中 `resource_type="access_token" ∧ resource_id=令牌 id` 的 `inbound.run` 与 `inbound.denied`，按时间倒序取 50 条；`inbound.run` 行按 `execution_id` 批量补执行状态与「含范围外目标」标记。个人令牌在个人设置展示，平台令牌在集成页展示（member+）。
