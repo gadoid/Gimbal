@@ -18,6 +18,7 @@ import * as composerApi from '@/api/scenario-composer'
 import * as executionsApi from '@/api/executions'
 import * as adaptationsApi from '@/api/adaptations'
 import * as activityApi from '@/api/activity'
+import http from '@/api/http'
 
 vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
@@ -88,23 +89,23 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     expect(admin.find('.id-role').classes()).toContain('admin')
   })
 
-  it('计数走 store 同一份取数;store 未加载时显示占位而不是假 0', async () => {
-    vi.mocked(composerApi.listScenarios).mockResolvedValue({
-      items: [scen('p1', 'private', ago(1)), scen('p2', 'private', ago(2)), scen('pub', 'public', ago(3))] as never[],
-      total: 3, page: 1, pageSize: 100,
-    } as never)
+  it('统计来自 /me/summary;摘要未到达时占位 — 而不是假 0(P3 §3)', async () => {
     useAuthStore().currentUser = as() as never
+    const getSpy = vi.spyOn(http, 'get').mockImplementation(async (url) => ({
+      data: url === '/me/summary'
+        ? { stats: { private_scenarios: 2, follows: 0, tokens: 1 }, alerts: [] }
+        : { items: {} },
+    }) as never)
     const w = mountWithRouter(UserIdentityCard)
-    expect(w.findAll('.id-stat dd').map((d) => d.text())).toEqual(['—', '—'])
+    // 摘要未到达 → 占位 —(loaded 只认 summary,不拿 0 冒充)
+    expect(w.findAll('.id-stat .value').map((d) => d.text()))
+      .toEqual(['—', '—', '—'])
     await flushPromises()
-    const stats = w.findAll('.id-stat dd').map((d) => d.text())
-    expect(stats).toEqual(['2', '0'])              // 私有 2 个(公共不计),关注 0
-    expect(composerApi.listScenarios).toHaveBeenCalledTimes(1)
-    // 再挂一张卡也不该重复取数(store.ensureScenarios 单飞 + 复用)
-    const second = mountWithRouter(UserIdentityCard)
-    await flushPromises()
-    expect(composerApi.listScenarios).toHaveBeenCalledTimes(1)
-    second.unmount()
+    // 默认三项:私有场景 / 关注 / 访问令牌(DEFAULT_STATS)
+    expect(w.findAll('.id-stat .value').map((d) => d.text()))
+      .toEqual(['2', '0', '1'])
+    expect(getSpy).toHaveBeenCalledWith('/me/summary')
+    getSpy.mockRestore()
     w.unmount()
   })
 
@@ -178,8 +179,8 @@ describe('ActivityTimeline — 右栏时间线', () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [
         { kind: 'inbound', at: ago(1), action: 'inbound.run', executionId: 351,
-          callerAlias: 'agent-sys', scenarioName: '订单创建_1', clientRef: 'cr-9',
-          credentialOwner: 'Administrator',
+          tokenId: 12, tokenName: 'agent-sys', scenarioName: '订单创建_1',
+          clientRef: 'cr-9',
           detail: { fn: 'scenario', identity_mode: 'personal' } },
       ],
       sources: { executions: true, scenarios: true, adaptations: true, suites: true, integrations: true, inbound: true },
@@ -188,8 +189,8 @@ describe('ActivityTimeline — 右栏时间线', () => {
     await flushPromises()
     const row = w.find('[data-testid="wb-tl-inbound"]')
     // 信息行:标题与对账明细同一条线(明细并入,不再另起一行)
-    expect(row.find('.tl-title').text()).toContain('调用 agent-sys → 订单创建_1')
-    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')
+    expect(row.find('.tl-title').text()).toContain('调用 令牌 agent-sys → 订单创建_1')
+    expect(row.find('.tl-title').text()).toContain('cr-9')
     expect([...row.find('.tl-line').element.children].map((el) => el.className))
       .toEqual(['tl-title', 'tl-time'])
     // 徽章在信息行的下一行,独占该行(明细已上移),配色同其余类
@@ -197,7 +198,8 @@ describe('ActivityTimeline — 右栏时间线', () => {
     expect(sub.exists()).toBe(true)
     expect(sub.text()).toBe('调用')
     expect(sub.find('.tl-kind').attributes('style')).toContain('color-mix')
-    expect(row.find('.tl-body').attributes('href')).toBe('/executions/351')
+    // §7.3:调用行深链令牌管理(对账明细在标题行内)
+    expect(row.find('.tl-body').attributes('href')).toBe('/profile#tokens')
     w.unmount()
   })
 

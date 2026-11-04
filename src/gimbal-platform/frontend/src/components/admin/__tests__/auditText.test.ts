@@ -15,7 +15,7 @@ function row(partial: Partial<AuditLogRow>): AuditLogRow {
 }
 
 describe('auditActionLabel', () => {
-  it('后端 AUDIT_ACTIONS 全键(含入站 8 键)都有中文标签', () => {
+  it('后端 AUDIT_ACTIONS 全键(含访问令牌 12 键)都有中文标签', () => {
     const all = [
       'user.create', 'user.role_change', 'user.delete', 'user.reset_password',
       'announcement.publish', 'carry.write', 'adaptation.op.apply',
@@ -26,10 +26,14 @@ describe('auditActionLabel', () => {
       'integration.credential.write', 'scenario.admin_delete',
       'scenario.admin_publish', 'scenario.admin_unpublish',
       'suite.admin_delete', 'suite.admin_publish',
-      // 入站身份 + 入站发起的操作(G4)
-      'inbound.credential.write', 'inbound.settings.write', 'inbound.grant.write',
-      'inbound.grant_revoked_by_deactivation', 'inbound.auth_failed',
-      'inbound.run', 'inbound.task.write', 'inbound.grant_rebind',
+      // 访问令牌(webhook v4 §7.2;资源列 = access_token)
+      'token.create', 'token.renew', 'token.regenerate', 'token.revoke',
+      'token.invalidate', 'token.scope.write', 'token.callback.write',
+      'token.callback_secret.rotate', 'token.task.unbind',
+      'integration.task.dispose',
+      // 入站发起的操作(v4;grant/换绑已随 v3 退役)
+      'inbound.run', 'inbound.denied', 'inbound.task.write',
+      'webhook.redeliver',
     ]
     for (const k of all) {
       expect(AUDIT_ACTION_LABELS[k], k).toBeTruthy()
@@ -41,30 +45,36 @@ describe('auditActionLabel', () => {
     expect(AUDIT_ACTION_LABELS['adaptation.batch.apply']).toBeUndefined()
   })
 
-  it('入站发起的操作详情人话(G4)', () => {
+  it('v3 入站死键已退役(随 v3 存储移除,不再有标签)', () => {
+    for (const k of ['inbound.grant_rebind', 'inbound.grant.write',
+                     'inbound.credential.write', 'inbound.settings.write',
+                     'inbound.grant_revoked_by_deactivation']) {
+      expect(AUDIT_ACTION_LABELS[k], k).toBeUndefined()
+    }
+  })
+
+  it('经令牌发起的操作详情人话(webhook v4 §7.2)', () => {
     expect(describeAuditDetail(row({
-      action: 'inbound.run', resourceType: 'alias', resourceId: 'agent-sys',
-      detail: { fn: 'scenario', scenario_id: 'sc-1', execution: 42,
-        identity_mode: 'platform', grant_id: null },
-    }))).toBe('经别名「agent-sys」发起场景「sc-1」 → 执行 #42（平台模式）')
+      action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
+      detail: { fn: 'scenario', token_name: 'agent-sys',
+        scenario_id: 'sc-1', execution: 42, identity_mode: 'platform' },
+    }))).toBe('经令牌「agent-sys」发起场景「sc-1」 → 执行 #42（平台模式）')
     expect(describeAuditDetail(row({
-      action: 'inbound.run', resourceType: 'alias', resourceId: 'agent-sys',
-      detail: { fn: 'adhoc', endpoints: ['fin.a.b'], execution: 43,
-        identity_mode: 'personal', grant_id: 9 },
-    }))).toBe('经别名「agent-sys」发起临时调用 fin.a.b → 执行 #43（个人模式，grant #9）')
+      action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
+      detail: { fn: 'adhoc', token_name: 'agent-sys',
+        endpoints: ['fin.a.b'], execution: 43, identity_mode: 'personal' },
+    }))).toBe('经令牌「agent-sys」发起临时调用 fin.a.b → 执行 #43（个人模式）')
     expect(describeAuditDetail(row({
-      action: 'inbound.run', resourceType: 'alias', resourceId: 'agent-sys',
-      detail: { fn: 'cancel', execution: 44, identity_mode: 'platform' },
-    }))).toBe('经别名「agent-sys」取消执行 #44（平台模式）')
+      action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
+      detail: { fn: 'cancel', token_name: 'agent-sys',
+        execution: 44, identity_mode: 'platform' },
+    }))).toBe('经令牌「agent-sys」取消执行 #44（平台模式）')
     expect(describeAuditDetail(row({
-      action: 'inbound.task.write', resourceType: 'alias', resourceId: 'agent-sys',
-      detail: { fn: 'run', task: 5, name: '日结', identity_mode: 'personal', grant_id: 9 },
-    }))).toBe('经别名「agent-sys」触发集成任务「日结」（个人模式，grant #9）')
-    expect(describeAuditDetail(row({
-      action: 'inbound.grant_rebind', resourceType: 'alias', resourceId: 'agent-sys',
-      detail: { task: 5, name: '日结', grant_from: 9, grant_id: 12, resumed: true,
+      action: 'inbound.task.write', resourceType: 'access_token',
+      resourceId: '7',
+      detail: { fn: 'run', token_name: 'agent-sys', task: 5, name: '日结',
         identity_mode: 'personal' },
-    }))).toBe('集成任务「日结」换绑授权：grant #9 → grant #12，实例已恢复')
+    }))).toBe('经令牌「agent-sys」触发集成任务「日结」（个人模式）')
   })
 
   it('平台凭证/admin 越属主动作详情人话', () => {

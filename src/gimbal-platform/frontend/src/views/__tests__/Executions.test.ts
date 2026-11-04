@@ -204,7 +204,7 @@ describe('Executions.vue — P1 detail upgrades', () => {
     const w1 = await mountPage()
     const origin = w1.find('[data-testid="inbound-origin"]')
     expect(origin.exists()).toBe(true)
-    expect(origin.text()).toBe('别名 agent-sys · 个人模式(grant #12) · clientRef job-7')
+    expect(origin.text()).toBe('令牌 nightly · 个人模式 · clientRef job-7')
     w1.unmount()
     execStore.detail = { ...fakeDetail }
     const w2 = await mountPage()

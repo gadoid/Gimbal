@@ -70,6 +70,8 @@ const CARD_ICON: Record<string, SlibIconName> = {
   'service-aliases': 'layers',
   carry: 'sliders',
   users: 'gear',
+  // 便签卡(webhook v4 D18):铅笔头,radix 组件
+  notes: 'pencil',
 }
 
 afterEach(() => { document.body.innerHTML = '' })
@@ -85,7 +87,9 @@ describe('工作台卡头图标 = 功能页那颗', () => {
     expect(workbenchRegistry.map((d) => d.id).sort()).toEqual(Object.keys(CARD_ICON).sort())
   })
 
-  it('16 张卡的卡头图标全部由 SlibIcon 渲染,名字逐张钉死', async () => {
+  // 整棵 WorkbenchView + 17 张动态 import 卡在 Windows/jsdom 下 collect
+  // 久(默认 5s 存量超时),放宽到 30s
+  it('17 张卡的卡头图标全部由 SlibIcon 渲染,名字逐张钉死', async () => {
     const w = mount(WorkbenchView, {
       global: {
         plugins: [getActivePinia()!],
@@ -97,7 +101,7 @@ describe('工作台卡头图标 = 功能页那颗', () => {
       await expectCardIcon(w, def, CARD_ICON[def.id])
     }
     w.unmount()
-  })
+  }, 30_000)
 })
 
 describe('PageHead 与卡头同源', () => {

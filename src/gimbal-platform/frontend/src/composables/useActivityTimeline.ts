@@ -46,7 +46,7 @@ export const BATCH_LABEL: Record<string, string> = {
   open: '待处理', applying: '处理中', completed: '已完成', rolled_back: '已回滚',
 }
 
-/** 集成暂停原因 → 时间线文案(与功能卡角标同词表)。 */
+/** 集成暂停原因 → 时间线文案(与功能卡角标同词表;webhook v4 §3.3)。 */
 export const INTEGRATION_PAUSE_LABELS: Record<string, string> = {
   manual: '本人暂停',
   fail_streak: '连续失败自动暂停',
@@ -54,8 +54,12 @@ export const INTEGRATION_PAUSE_LABELS: Record<string, string> = {
   missing_credential: '缺少凭证',
   template_changed: '内容已变更待确认',
   made_private: '已转私有待确认',
-  grant_revoked: '授权已失效(重新签发后由调用方重绑)',
   scope_denied: '无权使用该场景',
+  token_revoked: '令牌已吊销待解绑',
+  token_invalidated: '令牌已失效待重新生成',
+  token_expired: '令牌已到期待续期',
+  token_owner_ineligible: '令牌属主角色不足',
+  resource_not_allowed: '超出令牌范围',
 }
 
 /** 服务端事件 → 展示行(文案与深链是前端职责,数据面不再拼装)。 */

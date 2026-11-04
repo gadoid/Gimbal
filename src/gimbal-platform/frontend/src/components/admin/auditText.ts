@@ -45,7 +45,6 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'inbound.run': '经令牌发起执行',
   'inbound.denied': '令牌请求被拒',
   'inbound.task.write': '经令牌变更集成任务',
-  'inbound.grant_rebind': '集成任务换绑授权',
   // 回调投递人工干预(全量评估 2026-11-02 #8)
   'webhook.redeliver': '人工补发回调',
 }
@@ -276,6 +275,8 @@ export function describeAuditDetail(row: AuditLogRow): string {
     case 'inbound.run': {
       const via = `经令牌「${s(d.token_name) || rid}」`
       const fn = s(d.fn)
+      if (fn === 'cancel')
+        return `${via}取消执行 #${String(d.execution ?? '')}（${inboundIdentity(d)}）`
       const target = fn === 'adhoc'
         ? `临时调用 ${(Array.isArray(d.endpoints) ? d.endpoints : []).join('、') || '—'}`
         : `场景「${s(d.scenario_name) || s(d.scenario_id)}」`

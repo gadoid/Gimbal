@@ -91,11 +91,11 @@ describe('useActivityTimeline', () => {
     expect(t.days.value[1]!.events[0]!.title).toContain('执行 #2')
   })
 
-  it('入站调用:场景/临时调用文案、凭证归属与 clientRef、深链执行页(2026-11-04 更名「调用」)', async () => {
+  it('调用(令牌):场景/临时调用文案、clientRef 对账、深链令牌管理(webhook v4 §7.3)', async () => {
     const inbEvent = (over: Record<string, unknown>) =>
       ({ kind: 'inbound', at: ago(1), action: 'inbound.run',
-         executionId: 351, callerAlias: 'agent-sys', clientRef: 'cr-9',
-         credentialOwner: 'Administrator', ...over }) as never
+         executionId: 351, tokenId: 12, tokenName: 'agent-sys',
+         clientRef: 'cr-9', ...over }) as never
     const t = await loadWith({
       events: [
         inbEvent({ fn: undefined, scenarioName: '订单创建_1',
@@ -108,13 +108,12 @@ describe('useActivityTimeline', () => {
       ],
     })
     expect(t.events.value[0]!.title)
-      .toContain('调用 agent-sys → 订单创建_1')
-    expect(t.events.value[0]!.detail).toContain('Administrator')
-    expect(t.events.value[0]!.detail).toContain('cr-9')
-    expect(t.events.value[0]!.to).toContain('/executions/351')
-    expect(t.events.value[1]!.title).toContain('调用 agent-sys · 临时调用 2 步')
-    expect(t.events.value[1]!.detail).toBe('Administrator')  // 无 clientRef 只剩归属人
-    expect(t.events.value[1]!.to).toContain('/executions/352')
+      .toContain('调用 令牌 agent-sys → 订单创建_1')
+    expect(t.events.value[0]!.detail).toBe('cr-9')       // 对账明细 = clientRef
+    expect(t.events.value[0]!.to).toBe('/profile#tokens')
+    expect(t.events.value[1]!.title).toContain('调用 令牌 agent-sys · 临时调用 2 步')
+    expect(t.events.value[1]!.detail).toBeUndefined()     // 无 clientRef 即无明细
+    expect(t.events.value[1]!.to).toBe('/profile#tokens')
     expect(t.counts.value.inbound).toBe(2)
   })
 
