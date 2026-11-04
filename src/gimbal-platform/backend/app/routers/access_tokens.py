@@ -335,9 +335,11 @@ async def create_token(
                 "ALLOWLIST;空白名单 = 不允许任何回调地址)")
 
     # 额度:同 kind 未吊销计数(平台令牌全平台共享 5 张,D3)。
-    # 行级锁不可移植地表达「计数 + 插入」原子性;先提交计数读后插,
-    # 撞唯一约束/超频由这里计数兜住,极端并发下多出的一张在下次创建
-    # 时被拒(风险接受:额度是防 sprawl 不是安全边界)。
+    # §5.1「事务内锁行计数」:锁属主 users 行(个人 = 本人,平台 =
+    # __platform__)串行化同一属主的并发创建 —— 计数与插入都在持锁
+    # 事务内完成(:366 commit 才放锁),不会超发;不同属主互不阻塞。
+    await db.execute(
+        select(User.id).where(User.id == owner_id).with_for_update())
     used = (await db.execute(select(func.count()).select_from(AccessToken)
         .where(AccessToken.kind == body.kind,
                AccessToken.user_id == owner_id,
@@ -674,7 +676,12 @@ async def invalidate_token(
     tok = await _get_token(db, token_id)
     if user.role != "admin":
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
-    if tok.revoked_at is not None or tok.invalidated_at is not None:
+    if tok.revoked_at is not None:
+        # 已吊销 = 终态只读,写操作 409(§3.4);改密/停用链的已失效
+        # 再失效保持幂等(§3.4 invalidate 前置「有效/已到期」)
+        raise _bad(at.ERR_TOKEN_REVOKED,
+                   "令牌已吊销(终态,只读;吊销后强制失效无意义)", 409)
+    if tok.invalidated_at is not None:
         return {"id": tok.id, "status": tok.status}   # 幂等
     now = at.now_utc()
     tok.invalidated_at = now
