@@ -15,7 +15,7 @@
   503;均不建执行行;
 * 执行:单步端到端 —— kind='adhoc'、占位 id、快照为组装 payload(无
   method/path、call.user = 别名 credential_alias、无 config.services)、
-  地址来自别名 base_url、凭证来自 grant 用户池、plate_pins 写入、outputs
+  地址来自别名 base_url、凭证来自令牌属主凭证池、plate_pins 写入、outputs
   为 extract 结果、回调 kind=adhoc / scenarioId=null;
 * 展示:重跑 409 rerun_unsupported;按场景筛选不含占位 id;
 * 对拍:dispatch_run 与 dispatch_target 同请求下 fanout 实参 / config_json /
@@ -438,7 +438,7 @@ class TestAliasAndVersion:
         assert snap["definition"]["meta"]["plate"] == {SYSTEM: "1.0#1"}
         # G4 增强(2026-11-03):临时调用审计记**全量请求信息**(steps
         # 原样 + release),时间线 inbound.run 同源;个人模式时间线
-        # actor = grant 签发人(「使用了谁的凭证」)
+        # actor = 个人令牌属主(「使用了谁的凭证」)
         uid = await _user_id("ad_user")
         async with db_module.SessionLocal() as s:
             audits = (await s.execute(sa.select(AuditLog).where(
@@ -452,7 +452,7 @@ class TestAliasAndVersion:
             assert d["steps"] == [_step()]
             assert d["token_name"] == "t"
             assert d["token_id"]
-        assert {a.actor_id for a in acts} == {uid}   # 个人模式 → 签发人轴
+        assert {a.actor_id for a in acts} == {uid}   # 个人模式 → 令牌属主轴
         assert audits[0].detail["release"] is None
         assert audits[1].detail["release"] == {SYSTEM: "1.0#1"}
 
@@ -518,7 +518,7 @@ class TestExecution:
 
         ex = await _wait_terminal(ex_id)
         assert ex.status == "done", ex.config_json
-        # 执行器拿到的 case.json:method 由 plate 投影、地址来自别名、凭证来自 grant 用户池
+        # 执行器拿到的 case.json:method 由 plate 投影、地址来自别名、凭证来自令牌属主凭证池
         assert len(cases) == 1
         case = cases[0]
         assert case["steps"][0]["call"]["method"] == "GET"

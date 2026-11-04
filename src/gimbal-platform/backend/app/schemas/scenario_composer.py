@@ -467,8 +467,8 @@ class RunResponse(BaseModel):
     # Numeric Execution row backing this dispatch — lets the frontend jump
     # straight to /executions/{id} (the string runId alone has no route).
     execution_id: int = Field(alias="executionId")
-    # 执行身份模式(webhook 设计 v3 §4.4):personal = JWT/grant 用户,
-    # platform = 入站无 grant(__platform__ 系统用户)。JWT 前端恒
+    # 执行身份模式(webhook v4 §4.4):personal = 个人 gtk_ 令牌属主,
+    # platform = 平台令牌(__platform__ 系统用户)。JWT 前端恒
     # personal —— 字段为入站调用方而设,前端可忽略。
     identity_mode: str = Field(default="personal", alias="identityMode")
 
