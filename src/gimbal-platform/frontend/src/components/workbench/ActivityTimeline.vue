@@ -64,13 +64,14 @@
             <li v-for="e in g.events" :key="e.key" class="tl-item" :data-testid="`wb-tl-${e.kind}`">
               <span class="tl-dot" :style="{ background: colorOf(e.kind) }" aria-hidden="true" />
               <router-link :to="e.to" class="tl-body">
-                <!-- 调用类单行(2026-11-04):徽标+标题+对账明细+时间同一条线;
-                     徽标仍是同一套 kindTint 配色,只是不再单独占第二行 -->
+                <!-- 调用类单行(2026-11-04):标题+对账明细在前、徽标随后、时间收尾 ——
+                     顺序与其余类「信息在上、徽章在下」一致,只是压成一条线;
+                     徽标仍是同一套 kindTint 配色 -->
                 <span class="tl-line">
-                  <span v-if="e.kind === 'inbound'" class="tl-kind" :style="kindTint(e.kind)">{{ KIND_LABEL[e.kind] }}</span>
                   <span class="tl-title">
                     {{ e.title }}<span v-if="e.kind === 'inbound' && e.detail" class="tl-inline mono"> · {{ e.detail }}</span>
                   </span>
+                  <span v-if="e.kind === 'inbound'" class="tl-kind" :style="kindTint(e.kind)">{{ KIND_LABEL[e.kind] }}</span>
                   <span class="tl-time">{{ relTime(e.at) || shortDateTime(e.at) }}</span>
                 </span>
                 <span v-if="e.kind !== 'inbound'" class="tl-sub">
@@ -319,8 +320,8 @@ onBeforeUnmount(() => { resize?.disconnect() })
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tl-body:hover .tl-title { @apply text-signal; }
-/* 调用类单行形态:徽标钉在行首不被压缩;对账明细随标题行内联,
-   小一号、淡一档,与标题同一条截断线 */
+/* 调用类单行形态:徽标随信息之后、时间之前,不被压缩;对账明细随标题
+   行内联,小一号、淡一档,与标题同一条截断线 */
 .tl-line .tl-kind { @apply flex-none; }
 .tl-inline { @apply text-caption font-normal text-signal-ink/45; }
 .tl-time { @apply text-caption text-signal-ink/45 flex-none; }
