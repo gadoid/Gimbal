@@ -641,23 +641,6 @@ async def delete_user(
     )).scalar()
     disposed_tasks: list[tuple[IntegrationTask, str]] = []
 
-    async def _pause_kept_platform_instance(
-            tpl: IntegrationTask, inst: IntegrationTask) -> None:
-        """保留的平台实例按「实例暂停规则」(§3.6):未暂停的置 manual;
-        成因依赖令牌的暂停(token_* 与 resource_not_allowed —— 后者的
-        作用条件就是 tpl.token_id 非空)改为 manual(token_id 已置空,
-        成因不再成立);其余已暂停原因(scope_denied 等)原样保留,
-        不用 manual 覆盖掉真实成因。"""
-        if inst.state != "paused":
-            inst.state = "paused"
-            inst.paused_reason = "manual"
-            inst.last_error = "任务属主账号已删除,处置后待启动"
-            inst.running_since = None
-        elif inst.paused_reason.startswith("token_") \
-                or inst.paused_reason == at_svc.PAUSE_RESOURCE_NOT_ALLOWED:
-            inst.paused_reason = "manual"
-            inst.last_error = ("任务原绑定令牌随属主删除,处置后待启动")
-
     for tpl in own_tpls:
         if disposal == "transfer":
             tpl.owner_id = transferee.id
@@ -671,7 +654,8 @@ async def delete_user(
                 inst = (await db.execute(select(IntegrationTask).where(
                     IntegrationTask.template_id == tpl.id))).scalars().first()
                 if inst is not None:
-                    await _pause_kept_platform_instance(tpl, inst)
+                    at_svc.remap_detach_pause(
+                        inst, "任务属主账号已删除,处置后待启动")
             disposed_tasks.append((tpl, "transfer"))
         elif disposal == "publicize":
             if tpl.identity_mode == "personal":
@@ -700,7 +684,8 @@ async def delete_user(
                 inst = (await db.execute(select(IntegrationTask).where(
                     IntegrationTask.template_id == tpl.id))).scalars().first()
                 if inst is not None:
-                    await _pause_kept_platform_instance(tpl, inst)
+                    at_svc.remap_detach_pause(
+                        inst, "任务属主账号已删除,处置后待启动")
             disposed_tasks.append((tpl, "publicize"))
         else:  # purge
             # 模板连同实例删除(purge 删除场景;scenario_id 无外键,

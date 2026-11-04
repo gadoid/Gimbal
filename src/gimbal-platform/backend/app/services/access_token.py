@@ -501,6 +501,25 @@ def host_is_private(host: str) -> bool:
 # ── 令牌 → 任务的暂停 / 恢复联动(§3.3/§3.4)────────────────────
 
 
+def remap_detach_pause(inst, message: str) -> None:
+    """§3.6 实例暂停规则(单一实现;解绑 D26 与删除用户处置共用):
+
+    未暂停的置 manual;成因依赖令牌的暂停(``token_*`` 与
+    ``resource_not_allowed`` —— 后者的作用条件就是 ``tpl.token_id``
+    非空)改为 manual(token_id 已置空,成因不再成立);其余已暂停
+    原因(scope_denied 等)原样保留,不用 manual 覆盖掉真实成因。
+    """
+    if inst.state != "paused":
+        inst.state = "paused"
+        inst.paused_reason = "manual"
+        inst.last_error = message
+        inst.running_since = None
+    elif inst.paused_reason.startswith("token_") \
+            or inst.paused_reason == PAUSE_RESOURCE_NOT_ALLOWED:
+        inst.paused_reason = "manual"
+        inst.last_error = message
+
+
 async def token_task_instances(
     db: AsyncSession, tok: AccessToken,
 ) -> "list[tuple[object, object]]":

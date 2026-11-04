@@ -476,8 +476,11 @@ async def patch_task(
             raise _bad("forbidden", "只有模板管理者(平台模式 member+,"
                          "个人模式属主或 admin)能修改", 403)
         if "tokenId" in body.model_fields_set:
-            # D26 解绑:token_id 置空、停回调、manual 暂停(钩子不再
-            # 拉起,之后手动启动;平台任务仍受 #5 与只读闸)。
+            # D26 解绑:token_id 置空、停回调、按 §3.6 实例暂停规则处置
+            # (钩子不再拉起,之后手动启动;平台任务仍受 #5 与只读闸)。
+            # token_*/resource_not_allowed 暂停同样改 manual —— 否则
+            # 恢复接口 409 提示「先解绑」,解绑后仍 409,死循环
+            # (评审 2026-11-05 P0)。
             if body.tokenId is not None:
                 raise _bad(
                     "token_rebind_not_allowed",
@@ -488,10 +491,9 @@ async def patch_task(
             tpl.token_id = None
             tpl.callback_path_override = None
             inst = await _tpl_instance(db, tpl.id)
-            if inst is not None and inst.state != "paused":
-                inst.state = "paused"
-                inst.paused_reason = "manual"
-                inst.last_error = "令牌已解绑,任务转由账号管理;启动后恢复调度"
+            if inst is not None:
+                at_svc.remap_detach_pause(
+                    inst, "令牌已解绑,任务转由账号管理;启动后恢复调度")
             await db.commit()
             from ..models.access_token import AccessToken
             old_tok = await db.get(AccessToken, unbind_token_id)

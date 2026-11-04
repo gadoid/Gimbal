@@ -266,6 +266,72 @@ class TestResumeAndRevive:
 
 
 class TestUnbind:
+    async def _paused_then_unbind_then_resume(self, client, *, reason: str):
+        """P0 回归主链(评审 2026-11-05):吊销/到期暂停 → 解绑 → 手动
+        启动。解绑须按 §3.6 实例暂停规则把 token_* 改 manual —— 此前
+        解绑只处理未暂停实例,token_* 原样保留,恢复接口 409 提示
+        「先解绑」,解绑后仍 409,死循环。"""
+        from .test_access_tokens import _register_role
+        await seed_platform_user()
+        await _register_role(client, "ub2_m", "member")
+        uid = await _uid("ub2_owner")
+        tid, _ = await mk_token(user_id=uid)
+        tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
+        async with db_module.SessionLocal() as s:
+            inst = await s.get(IntegrationTask, inst_id)
+            inst.state = "paused"
+            inst.paused_reason = reason
+            await s.commit()
+        login = await client.post("/api/auth/login", json={
+            "username": "ub2_owner", "password": "x"})
+        h_owner = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r = await client.patch(f"/api/integration/tasks/{tpl_id}",
+                               headers=h_owner, json={"tokenId": None})
+        assert r.status_code == 200, r.text
+        async with db_module.SessionLocal() as s:
+            tpl = await s.get(IntegrationTask, tpl_id)
+            assert tpl.token_id is None
+            inst = await s.get(IntegrationTask, inst_id)
+            assert inst.paused_reason == "manual"
+        # 解绑后可手动启动(死循环修复的判据)
+        r2 = await client.post(
+            f"/api/integration/tasks/{tpl_id}/subscription/resume",
+            headers=h_owner)
+        assert r2.status_code == 200, r2.text
+        assert await _state_of(inst_id) == "idle"
+
+    async def test_revoked_then_unbind_then_resume(self, client):
+        """吊销 → 解绑 → 启动。"""
+        await self._paused_then_unbind_then_resume(
+            client, reason="token_revoked")
+
+    async def test_expired_then_unbind_then_resume(self, client):
+        """到期 → 解绑 → 启动(token_id 已空无法重生,同 P0)。"""
+        await self._paused_then_unbind_then_resume(
+            client, reason="token_expired")
+
+    async def test_scope_denied_pause_survives_unbind(self, client):
+        """§3.6:其余暂停原因(scope_denied)解绑后原样保留,不被
+        manual 覆盖掉真实成因。"""
+        await seed_platform_user()
+        uid = await _uid("ub3_owner")
+        tid, _ = await mk_token(user_id=uid)
+        tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
+        async with db_module.SessionLocal() as s:
+            inst = await s.get(IntegrationTask, inst_id)
+            inst.state = "paused"
+            inst.paused_reason = "scope_denied"
+            await s.commit()
+        login = await client.post("/api/auth/login", json={
+            "username": "ub3_owner", "password": "x"})
+        h_owner = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r = await client.patch(f"/api/integration/tasks/{tpl_id}",
+                               headers=h_owner, json={"tokenId": None})
+        assert r.status_code == 200, r.text
+        async with db_module.SessionLocal() as s:
+            inst = await s.get(IntegrationTask, inst_id)
+            assert inst.paused_reason == "scope_denied"
+
     async def test_jwt_unbind_d26(self, client):
         """JWT 管理者 PATCH {tokenId: null}:token_id 置空、manual 暂停、
         停回调;令牌路径不能解绑。"""
