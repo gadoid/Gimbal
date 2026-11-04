@@ -33,11 +33,14 @@ vi.mock('@/api/access-tokens', () => ({
   getScopeCandidates: vi.fn().mockResolvedValue({ aliases: [], auths: [] }),
 }))
 
-// P2 锚点分区的滚动高亮用 IntersectionObserver(jsdom 不提供,给空实现)
+// P2 锚点分区的滚动高亮用 IntersectionObserver(jsdom 不提供,给记录式
+// 空实现 —— observe 只吃 Element;曾把组件实例(cardEl)喂进去炸掉
+// mounted 钩子,这里把参数记下来钉死只允许 Element,2026-11-05)
+const ioObserved: unknown[] = []
 beforeAll(() => {
   if (!('IntersectionObserver' in globalThis)) {
     class IO {
-      observe(): void { /* noop */ }
+      observe(target: unknown): void { ioObserved.push(target) }
       unobserve(): void { /* noop */ }
       disconnect(): void { /* noop */ }
       takeRecords(): IntersectionObserverEntry[] { return [] }
@@ -82,6 +85,10 @@ describe('Profile — 个人设置(P2-1)', () => {
     } as never)
     const w = mountPage()
     await flushPromises()
+    // 锚点分区滚动高亮:observe 的每个目标都必须是 Element(组件 ref
+    // 须取 $el,直接喂组件实例会 TypeError 炸 mounted)
+    expect(ioObserved.length).toBeGreaterThan(0)
+    expect(ioObserved.every((t) => t instanceof Element)).toBe(true)
     await w.find('[data-testid="profile-display-name"]').setValue('Alice2')
     await w.find('[data-testid="profile-save-name"]').trigger('submit')
     await flushPromises()

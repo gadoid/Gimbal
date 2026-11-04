@@ -171,8 +171,14 @@ onMounted(() => {
       if (e.isIntersecting) active.value = e.target.id
     }
   }, { rootMargin: '-40% 0px -55% 0px' })
-  for (const el of [accountEl.value, cardEl.value, notifyEl.value]) {
-    if (el) observer.observe(el)
+  // cardEl 绑在 <IdentityCardSection>(组件)上,ref 是组件实例而非元素
+  // —— observe 只吃 Element,组件取 $el;直接 observe 组件实例会抛
+  // TypeError 并把 mounted 钩子炸成 unhandled error(2026-11-05 修复)
+  const raws: unknown[] = [accountEl.value, cardEl.value, notifyEl.value]
+  for (const raw of raws) {
+    const el = raw && typeof raw === 'object' && '$el' in raw
+      ? (raw as { $el?: unknown }).$el : raw
+    if (el instanceof Element) observer.observe(el)
   }
   const tokensEl = document.getElementById('tokens')
   if (tokensEl) observer.observe(tokensEl)
