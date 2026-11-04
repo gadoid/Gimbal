@@ -546,6 +546,18 @@ class Engine:
                 halted=True, halt_reason="cancelled",
             )
         rc = runtime_control
+        if bracket_after:
+            # A0 补全(评审 3.1,2026-11-04):SIGINT 取消旗标(cli.main._
+            # cancelled,手动 Ctrl-C 与 PDEATHSIG=SIGINT 的父死信号置位)
+            # 与 cancel_event 同为取消面,不得进 after 括号 —— scenario_
+            # runner 在每个步骤边界(含第 0 步)查它,不清旗标则 after 单元
+            # 进场即被截断,「清理必达」破功。进 after 括号前复位;清理期间
+            # 再收 SIGINT 会重新置位(二次强退语义保留)。
+            try:
+                from gimbal.cli.main import reset_cancelled
+                reset_cancelled()
+            except ImportError:  # 引擎作库使用,CLI 面不可用(无旗标可清)
+                pass
         if (bracket_after and runtime_control is not None
                 and getattr(runtime_control, "cancel_event", None) is not None):
             # A0：after 单元的场景不接外层取消事件（attempt 超时事件在下方照挂）

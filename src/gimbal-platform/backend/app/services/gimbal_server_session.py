@@ -11,10 +11,11 @@ _EventIngester 同一入库面），取消走执行器 cancel 端点（协作取
 docstring），本模块不再单靠协作式回收：
   - ``stdin=PIPE``：父进程死亡 → 内核关写端 → 执行器读到 EOF 自退
     （跨平台；也是 close() 的首选优雅通道）；
-  - ``PR_SET_PDEATHSIG=SIGTERM``（preexec_fn，非 Windows）：父进程死亡
-    → 内核直接递送 SIGTERM，不依赖执行器版本（旧执行器 uvicorn 收
-    SIGTERM 同样优雅退出）。助手实现在 ``gimbal_launcher._arm_pdeathsig``
-    （launch 链共用）。
+  - ``PR_SET_PDEATHSIG=SIGINT``（preexec_fn，非 Windows）：父进程死亡
+    → 内核递 SIGINT，uvicorn 对 SIGINT/SIGTERM 同一条优雅收口路（不
+    依赖执行器版本；信号名随 launch 链评审 3.1 改 SIGINT——那边要求
+    协作取消，本链两信号等价）。助手实现在 ``gimbal_launcher.
+    _arm_pdeathsig``（launch 链共用）。
 
 与 ``gimbal_launcher.launch()``（run launch 子进程 stdout jsonl）双链并存
 （C13 灰度：``settings.EXEC_CHAIN`` / 执行配方 ``chain`` 键切换）。

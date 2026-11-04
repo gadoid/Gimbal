@@ -23,6 +23,13 @@ pytest 带会话退出)就没人 terminate,21 个旧执行器以 PPID=1 空转�
     即退出(默认 1800s,``--idle-timeout 0`` 关闭)。调试会话挂起时 run
     仍是 running,不会被判闲置;收口也计活动 —— 长 run 结束瞬间不会被
     「启动时刻 + TTL」误判。
+
+退出收口(评审 3.2,2026-11-04):``should_exit`` 优雅停机只等在飞
+HTTP 连接,**不等在飞 run** —— ``server.run()`` 一返回进程即退,daemon
+执行线程被连根杀掉,teardown/after 清理全丢(被测系统留脏数据)。
+``start_server`` 现在在 ``server.run()`` 返回后先对在飞 run 走与
+``POST /runs/{id}/cancel scope=step`` 同款的协作取消,并等收口
+(≤ ``graceful_timeout``)再放行退出。
 """
 from __future__ import annotations
 
@@ -120,6 +127,44 @@ def _start_idle_watchdog(app: Any, timeout_s: float,
     t = threading.Thread(target=_watch, name="gimbal-idle-watchdog", daemon=True)
     t.start()
     return t
+
+
+def _cancel_inflight_runs(app: Any, *, grace_sec: float) -> None:
+    """退出前对在飞 run 走协作取消(scope=step 同款)并等收口。
+
+    uvicorn 优雅停机只等 HTTP 连接,不等 run 线程 —— 不收口的话
+    ``server.run()`` 一返回进程即退,daemon 执行线程被硬杀,
+    teardown/after 清理括号全丢(评审 3.2)。置位与 POST
+    /runs/{id}/cancel scope=step 完全同款(drain+cancel 都置:停调度
+    + 步骤边界截断,after 括号经 A0 遮蔽照常必达);等待有界,超宽限
+    即放行退出(极端卡死不陪葬)。状态面同空闲 TTL:server_debug 挂在
+    ``app.state`` 的 runs_registry / runs_lock。
+    """
+    st = app.state
+    with st.runs_lock:
+        running = [e for e in st.runs_registry.values()
+                   if e.get("status") == "running"]
+        for e in running:
+            drain = e.get("drain")
+            cancel = e.get("cancel")
+            if drain is not None:
+                drain.set()
+            if cancel is not None:
+                cancel.set()
+    if not running:
+        return
+    logger.info("[Server] 停机收口: {} 个在飞 run 已请求协作取消(≤{}s 等收口)",
+                len(running), int(grace_sec))
+    deadline = time.monotonic() + max(grace_sec, 0.0)
+    while time.monotonic() < deadline:
+        with st.runs_lock:
+            if not any(e.get("status") == "running"
+                       for e in st.runs_registry.values()):
+                logger.info("[Server] 在飞 run 已全部收口,放行退出")
+                return
+        time.sleep(0.1)
+    logger.warning("[Server] 在飞 run 未在 {}s 宽限内收口,放弃等待(进程退出)",
+                   int(grace_sec))
 
 
 # ─── 请求/响应模型(模块级:FastAPI 签名解析不支持函数内局部类) ──
@@ -242,7 +287,10 @@ def create_app(cli_ctx: CLIContext) -> "FastAPI":
 
 
 def start_server(ctx: CLIContext, config: ServerConfig) -> int:
-    """启动 uvicorn 阻塞服务。Ctrl-C / SIGTERM 由 uvicorn 处理退出。"""
+    """启动 uvicorn 阻塞服务。Ctrl-C / SIGTERM 由 uvicorn 处理退出。
+
+    返回前先收口在飞 run(见模块 docstring「退出收口」):uvicorn 只等
+    HTTP 连接,run 线程由本函数等。"""
     import uvicorn
 
     app = create_app(ctx)
@@ -282,4 +330,7 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
     _start_idle_watchdog(app, config.idle_timeout,
                          lambda: setattr(server, "should_exit", True))
     server.run()
+    # 评审 3.2:uvicorn 收口后、进程退出前,在飞 run 先协作取消并等收口
+    # —— 直接返回的话 daemon 执行线程被硬杀,teardown/after 清理丢失。
+    _cancel_inflight_runs(app, grace_sec=config.graceful_timeout)
     return 0

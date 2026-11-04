@@ -45,7 +45,12 @@ from ..core.config import settings
 # 上限随父进程失效。本链与 server 链(见 gimbal_server_session)同款双守卫:
 #   - stdin=PIPE:父死→内核关写端→引擎 stdin EOF 守卫置协作取消,
 #     步骤边界收口后正常退出(引擎侧 core/proc_guard,Windows 唯一守卫);
-#   - PR_SET_PDEATHSIG=SIGTERM:内核级即时兜底,不依赖引擎版本。
+#   - PR_SET_PDEATHSIG=SIGINT(评审 3.1,2026-11-04):父死→内核递 SIGINT→
+#     引擎 CLI 的 SIGINT handler 置协作取消旗标(与手动 Ctrl-C 同一条路)
+#     ——在飞请求跑完、步骤边界停、teardown/after 括号必达、报告照写。
+#     不能用 SIGTERM:Python 默认处置=立即终止,等于内核级硬杀,清理括号
+#     全丢(被测系统留脏数据);SIGINT 对不装 handler 的旧引擎同样致死
+#     (KeyboardInterrupt),泄漏防线语义不变。
 
 _PR_SET_PDEATHSIG = 1
 
@@ -59,17 +64,20 @@ except OSError:  # pragma: no cover — 非常规 libc 缺失环境
 
 
 def _arm_pdeathsig() -> None:
-    """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGTERM``。
+    """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGINT``。
 
-    内核保证「父进程死亡 → 向本进程递送 SIGTERM」，父进程怎么死都成立
-    （含 SIGKILL）。注意其触发条件是**发起 fork 的线程**退出：本服务
+    内核保证「父进程死亡 → 向本进程递送 SIGINT」，父进程怎么死都成立
+    （含 SIGKILL）。递 SIGINT 而非 SIGTERM（评审 3.1）：引擎 CLI 装有
+    SIGINT handler —— 置协作取消旗标，在飞请求跑完、步骤边界停、
+    teardown/after 括号必达；SIGTERM 的默认处置是立即终止，父死=硬杀，
+    清理括号全丢。注意其触发条件是**发起 fork 的线程**退出：本服务
     的 spawn 恒经事件循环(asyncio transport 同步创建)且 uvicorn 事件
     循环在主线程 —— 主线程退出=进程退出，语义恰为「父进程死亡」。
     若未来把执行挪到工作线程的事件循环，此守卫会在线程退出时误触发，
     届时依赖 stdin EOF 守卫兜底即可。
     """
     if _LIBC is not None:
-        _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+        _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGINT, 0, 0, 0)
 
 
 # ─── result value object ──────────────────────────────────────────
@@ -292,8 +300,8 @@ async def launch(
         proc = await asyncio.create_subprocess_exec(
             *argv,
             # 泄漏防线(模块头 docstring):stdin 管道=父死子亡的跨平台通道,
-            # 引擎 stdin EOF 守卫据此置协作取消;PDEATHSIG 为内核级即时
-            # 兜底(非 Windows)。
+            # 引擎 stdin EOF 守卫据此置协作取消;PDEATHSIG=SIGINT 为内核
+            # 级兜底(非 Windows,父死即递协作取消信号)。
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

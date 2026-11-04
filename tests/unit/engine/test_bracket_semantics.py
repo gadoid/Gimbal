@@ -278,3 +278,33 @@ class TestSchedulerBeforeGate:
         )
         assert ran == ["pre", "main-1", "main-2", "post"]
         assert not outcome.blocked and not outcome.cancelled
+
+
+# ─── A0 补全(评审 3.1,2026-11-04):SIGINT 旗标不进 after 括号 ──────
+
+class TestSigintFlagNotEnteringAfterBracket:
+    """SIGINT 取消旗标(cli.main._cancelled)不得截断 after 括号。
+
+    平台 launch 链 PDEATHSIG=SIGINT(评审 3.1)后,父进程死亡=子进程收到
+    一次 SIGINT → CLI handler 置全局旗标(与手动 Ctrl-C 同路)。A0 原遮蔽
+    只挡 cancel_event,旗标不清的话 after 单元场景在**第 0 步边界**就被
+    截断 —— 与 A0 修掉的缺陷同型,「清理必达」破功。修复:Engine 进
+    after 括号前复位旗标(runner._run_unit_inner)。
+    """
+
+    def test_sigint_flag_cancels_mains_but_runs_after(self):
+        import gimbal.cli.main as cli_main
+        plan = Plan(
+            units=[Unit(id="main-1", scenario=_scenario("main-1")),
+                   Unit(id="main-2", scenario=_scenario("main-2"))],
+            after=[Unit(id="post", scenario=_scenario("post"))],
+        )
+        cli_main._cancelled = True       # SIGINT 已收到(旗标面,非 cancel_event)
+        try:
+            _result, sent = run_plan(plan)
+        finally:
+            cli_main.reset_cancelled()
+        # 主体被取消:第 0 步边界即停,echo 未发出
+        assert "main-1" not in sent and "main-2" not in sent
+        # after 清理必达:旗标已复位,照常执行
+        assert "post" in sent
