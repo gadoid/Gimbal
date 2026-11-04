@@ -77,6 +77,11 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
         steps = defn.get("steps")
         if isinstance(steps, list):
             template_aliases = scan_auth_aliases(steps)
+        # webhook v4 §3.2:setup/teardown 条目的 ${auth.*} 同为模板引用
+        # (与 exec_auth_aliases_of_definition 同一扫描源,不漂移)
+        from .service_aliases import setup_teardown_nodes
+        template_aliases.extend(
+            scan_auth_aliases(setup_teardown_nodes(defn)))
 
         scheme_aliases: list[str] = []
         for sr in schemes_by_sid.get(row.scenario_id, []):

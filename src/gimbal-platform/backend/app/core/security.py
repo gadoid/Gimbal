@@ -58,7 +58,7 @@ def create_access_token(*, subject: str | int, **claims: Any) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGO)
 
 
-def create_refresh_token(*, subject: str | int) -> str:
+def create_refresh_token(*, subject: str | int, **claims: Any) -> str:
     expire = _now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": str(subject),
@@ -66,6 +66,7 @@ def create_refresh_token(*, subject: str | int) -> str:
         "iat": _now(),
         "type": "refresh",
         "jti": uuid.uuid4().hex,
+        **claims,
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGO)
 

@@ -56,9 +56,9 @@ class Execution(Base):
         Index("ix_executions_owner_id", "owner_id", "id"),
         # suite 归属查询索引:0014 迁移建,模型侧补声明(2026-10-13 A-1)
         Index("ix_executions_suite", "suite_id"),
-        # 入站调用排查面(webhook 设计 v3 §7.4,v3 定案加索引):入站凭证
-        # 按本列查「经由我这别名的执行」;JWT 发起的执行恒 NULL
-        Index("ix_executions_caller", "caller_alias_name"),
+        # 入站调用排查面(webhook v4 §7.1):令牌按本列查「经由我令牌的
+        # 执行」;JWT 发起的执行恒 NULL
+        Index("ix_executions_caller", "token_id"),
     )
 
     # BIGINT(整体评审 2026-10-15 #10):执行面所有外键的根
@@ -118,13 +118,13 @@ class Execution(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
     )
-    # ── 入站调用台账(webhook 设计 v3 §7.4)──────────────────────
-    # caller_alias_name = 经由的外部系统别名;JWT(前端)发起的执行为
-    # NULL → 不写投递行、不回调。不建外键:执行台账不随别名删除消失。
-    caller_alias_name: Mapped[str | None] = mapped_column(
-        String(128), nullable=True)
-    # 当时生效的 grant id(个人模式;平台模式 NULL)—— 不建外键,同上
-    grant_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # ── 入站调用台账(webhook v4 §7.1)──────────────────────────
+    # token_id = 发起本次执行的访问令牌;JWT(前端)发起的执行为
+    # NULL → 不写投递行、不回调。FK SET NULL:令牌随用户删除后执行
+    # 台账保留,追溯靠 config_json.token 快照。
+    token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL"),
+        nullable=True)
     # 调用方自定义引用键(≤128,回调原样带回,调用方对账用)
     client_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # 本执行的回调路径覆盖(只允许路径段);空 = 用别名 callback_path

@@ -9,7 +9,7 @@
 全局截断 —— 此前合流后统一截 ``limit``,单一类型刷屏会把其余类型挤出
 轴、且按类型筛选时远不足额。现在每类各留 30 条返回(≤ 6×limit 行),
 「全部」视图取混排最近 30 由前端负责(useActivityTimeline 的
-TIMELINE_POOL)。入站调用(inbound.run,经别名触发的执行/临时调用)
+TIMELINE_POOL)。入站调用(inbound.run,经个人令牌触发的执行/临时调用)
 自本改造起入轴 —— 此前第三方调用只有执行行(owner 隔离)看不出调用
 来源维度。
 """
@@ -35,6 +35,13 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 # 2026-11-03 起:每类一份等额窗口(此前 20/10/10 + 全局截断)
 PER_KIND_LIMIT = 30
+
+
+def _int_or_none(v) -> "int | None":
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
 
 
 class ActivityEvent(BaseModel):
@@ -64,11 +71,11 @@ class ActivityEvent(BaseModel):
     suiteId: int | None = None
     # integration 面(边沿事件:订阅/暂停/恢复/结论翻转)
     taskId: int | None = None
-    # inbound 面(2026-11-03:经别名触发的执行/临时调用;detail 另带
+    # inbound 面(webhook v4 §7.3:经令牌触发的执行/临时调用;detail 另带
     # identity_mode/steps(临时调用全量请求)/release/run_id)
-    callerAlias: str | None = None
+    tokenId: int | None = None
+    tokenName: str | None = None
     clientRef: str | None = None
-    credentialOwner: str | None = None
 
 
 class ActivityOut(BaseModel):
@@ -214,8 +221,8 @@ async def get_activity(
     except Exception:
         sources["integrations"] = False
 
-    # ── 入站调用(2026-11-03:经别名触发的执行/临时调用;actor = 凭证
-    #    归属人(个人模式)或别名属主(平台模式),写入点 runs.py)──────
+    # ── 入站调用(webhook v4 §7.3:经**个人令牌**触发的执行/临时调用;
+    #    actor = 令牌属主,写入点 runs.py;平台令牌不上个人轴(D23))──
     try:
         rows = (await db.execute(
             select(ActivityEventRow)
@@ -232,9 +239,10 @@ async def get_activity(
                 executionId=int(exec_id) if exec_id is not None else None,
                 scenarioId=d.get("scenario_id"),
                 scenarioName=d.get("scenario_name"),
-                callerAlias=d.get("caller_alias") or r.resource_id,
+                tokenId=d.get("token_id")
+                if d.get("token_id") is not None else _int_or_none(r.resource_id),
+                tokenName=d.get("token_name"),
                 clientRef=d.get("client_ref"),
-                credentialOwner=d.get("credential_owner"),
                 action=r.kind, detail=d or None))
         sources["inbound"] = True
     except Exception:

@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ._types import UtcDateTime
-from sqlalchemy import Boolean, Index, String, Text, func, text
+from sqlalchemy import Boolean, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -52,6 +52,12 @@ class User(Base):
     # 外部系统集成 0015:平台系统用户标记 —— 登录拒绝、用户列表过滤;
     # 它持有平台凭证池(auth_sessions.owner_id),不登录平台本身。
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 访问令牌 v4 §3.6:改密「退出其他会话」的版本号 —— access 与
+    # refresh token 都带 tv,refresh 比对不等即 401;+1 即全体旧 JWT 失效。
+    # server_default 必须有:fresh 链 baseline 按当前模型建表,0015 的
+    # 裸 SQL 种子(__platform__)插入靠它兜 0(与 0033 迁移同口径)。
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )

@@ -128,6 +128,41 @@ def service_url_resolved(
     return bool((alias_base_urls or {}).get(svc))
 
 
+def resolve_service_sources(
+    steps: list, *, declared: dict | None = None,
+    bindings: dict[str, dict] | None = None,
+    alias_base_urls: dict[str, str] | None = None,
+) -> dict[str, dict]:
+    """每个被引用服务的解析结果(webhook v4 §3.2/§7.1,**只读**):
+
+    ``{svc: {url, source: binding_url | authored | alias, alias?}}`` ——
+    优先级链与 :func:`_apply_services` / :func:`service_url_resolved`
+    同一实现,不另写裁决。层数含义:
+
+    * ``binding_url`` — 方案/请求显式绑定 url(①层,直连,范围外标记);
+    * ``authored`` — 场景声明 url(②层,直连,范围外标记);
+    * ``alias`` — 别名表 base_url(③层,服务键即别名,进令牌范围判定)。
+
+    三层皆缺的键不返回(留缺口给引擎显式报错 —— 与物化同口径)。
+    ``resolvedServices`` 追溯(§7.1)与令牌范围的别名集计算共用本函数。
+    """
+    declared = declared or {}
+    bindings = bindings or {}
+    alias_base_urls = alias_base_urls or {}
+    out: dict[str, dict] = {}
+    for svc in referenced_services(steps):
+        bound = bindings.get(svc)
+        bound_url = bound.get("url") if isinstance(bound, dict) else None
+        alias_url = alias_base_urls.get(svc)
+        if bound_url:
+            out[svc] = {"url": bound_url, "source": "binding_url"}
+        elif _usable_declared_url(declared.get(svc)):
+            out[svc] = {"url": declared[svc], "source": "authored"}
+        elif alias_url:
+            out[svc] = {"url": alias_url, "source": "alias", "alias": svc}
+    return out
+
+
 def _apply_services(cfg: dict, *, steps: list,
                     bindings: dict[str, dict],
                     alias_base_urls: dict[str, str] | None = None) -> None:

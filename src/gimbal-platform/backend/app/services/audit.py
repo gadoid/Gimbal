@@ -37,19 +37,22 @@ AUDIT_ACTIONS = (
     "scenario.admin_unpublish",
     "suite.admin_delete",
     "suite.admin_publish",
-    # ── 入站身份(webhook 设计 v3 P1;v3 定案:认证失败也入审计)──
-    "inbound.credential.write",   # gic_ 生成/吊销(别名属主或 admin)
-    "inbound.settings.write",     # 入站/回调设置与密钥轮换
-    "inbound.grant.write",        # ggt_ 签发/撤销(签发人或 admin)
-    "inbound.grant_revoked_by_deactivation",  # 停用用户连带撤销其 grant(S1)
-    "inbound.auth_failed",        # 入站认证失败(401/403;凭证面取证)
-    # ── 入站发起的操作(收尾评审 2026-11-02 G4):actor = grant 用户或
-    # 平台系统用户,resource = 调用方别名 —— 审计面板按别名统一查看
-    "inbound.run",                # 经别名发起/取消执行(场景 / 临时调用 / 取消)
-    "inbound.task.write",         # 经别名注册/修改/删除/触发集成任务
-    "inbound.grant_rebind",       # 带新 grant PATCH 任务 → grant_id 换绑
-    # ── 回调投递的人工干预(全量评估 2026-11-02 #8):admin / 别名属主
-    # 点补发,resource = 别名(与入站域同面查看)
+    # ── 访问令牌(webhook v4 §7.2)──────────────────────────────
+    "token.create",               # 签发(令牌 id、名称、kind、操作人)
+    "token.renew",                # 续期
+    "token.regenerate",           # 重新生成(新明文,不记明文)
+    "token.revoke",               # 吊销
+    "token.invalidate",           # 强制失效(原因 password/deactivated/admin)
+    "token.scope.write",          # 范围整体替换(新旧)
+    "token.callback.write",       # 回调地址改写(不记密钥)
+    "token.callback_secret.rotate",  # 回调签名密钥轮换
+    "token.task.unbind",          # 任务解绑令牌(D26)
+    "integration.task.dispose",   # 删除用户时的集成任务处置(§3.6)
+    # ── 入站发起的操作(webhook v4:资源列 = access_token / 令牌 id)──
+    "inbound.run",                # 经令牌发起执行(场景 / 临时调用)
+    "inbound.denied",             # 令牌请求被拒(拒绝原因与缺项;只记 hint)
+    "inbound.task.write",         # 经令牌注册/修改/删除/触发集成任务
+    # ── 回调投递的人工干预:admin / 令牌属主点补发
     "webhook.redeliver",          # 人工补发回调(新建一行 pending)
 )
 
@@ -89,17 +92,21 @@ async def record(
 
 async def record_inbound(db: AsyncSession, principal, action: str, *,
                          detail: dict | None = None) -> None:
-    """入站发起的操作统一落审计(G4):JWT 调用方 no-op;actor 取
-    Principal.user(grant 签发人或 ``__platform__``),资源列为调用方别名,
-    detail 恒带 ``identity_mode`` / ``grant_id``(经由谁、以谁身份)。"""
-    if not getattr(principal, "inbound", False):
+    """令牌发起的操作统一落审计(webhook v4 §7.2):JWT 调用方 no-op;
+    actor 取 Principal.user(令牌属主或 ``__platform__``),资源列 =
+    ``access_token`` / 令牌 id —— 令牌「最近调用」即按资源列取
+    ``inbound.run`` ∪ ``inbound.denied``。detail 恒带令牌快照。"""
+    if not getattr(principal, "is_token", False):
         return
     u = principal.user
+    tok = principal.token
     await record(
         db, actor_id=u.id, actor_name=u.display_name or u.username,
-        action=action, resource_type="alias", resource_id=principal.caller_alias,
-        detail={"identity_mode": principal.identity_mode,
-                "grant_id": principal.grant_id, **(detail or {})})
+        action=action, resource_type="access_token",
+        resource_id=str(tok.id),
+        detail={"token_id": tok.id, "token_name": tok.name,
+                "token_kind": tok.kind, "identity_mode": principal.identity_mode,
+                **(detail or {})})
 
 
 async def list_page(

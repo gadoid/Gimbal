@@ -248,11 +248,11 @@ def execution_out(
                                  cancel_requested=cancel_requested),
         cancel_requested=cancel_requested,
         cancel_note=cancel_note(e, form=job_form, cancel_requested=cancel_requested),
-        caller_alias=e.caller_alias_name or None,
-        identity_mode=(None if not e.caller_alias_name
-                       else "personal" if e.grant_id is not None
-                       else "platform"),
-        grant_id=e.grant_id if e.caller_alias_name else None,
+        token_id=e.token_id or None,
+        identity_mode=((e.config_json or {}).get("token") or {}).get("kind")
+        if e.token_id else None,
+        token_name=((e.config_json or {}).get("token") or {}).get("name")
+        if e.token_id else None,
         client_ref=e.client_ref or None,
     )
 

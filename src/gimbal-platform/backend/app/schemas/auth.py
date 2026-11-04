@@ -45,13 +45,23 @@ class LoginIn(BaseModel):
 
 
 class ChangePasswordIn(BaseModel):
-    """Payload for POST /auth/change-password(P2-1 个人设置)。
+    model_config = ConfigDict(populate_by_name=True)
 
-    旧密码必须核验;新密码复用注册强度(PasswordField 同源)。
+    """Payload for POST /auth/change-password(webhook v4 §3.6)。
+
+    旧密码必须核验;新密码复用注册强度(PasswordField 同源)。两个
+    可选动作均默认勾选:
+
+    * ``invalidateTokens`` — 本人全部个人令牌落库失效(原因 password),
+      平台令牌不受影响;
+    * ``logoutOthers`` — ``users.token_version`` + 1 并返回新 JWT(access
+      与 refresh 都带 tv,refresh 比对不等即 401)。
     """
 
     old_password: str = Field(min_length=1, max_length=128)
     new_password: str = PasswordField
+    invalidate_tokens: bool = Field(default=True, alias="invalidateTokens")
+    logout_others: bool = Field(default=True, alias="logoutOthers")
 
 
 class RefreshIn(BaseModel):
@@ -74,6 +84,8 @@ class UserPublic(BaseModel):
     # 2026-09-29 更名:user | member | admin,原 member→user、operator→member)
     role: Literal["user", "member", "admin"] = "user"
     is_active: bool
+    # D32:系统用户标记(用户管理行防御:停用/删除入口对其隐藏)
+    is_system: bool = False
     created_at: datetime
     # 通知 unread-count 的 roleVersion 比对源(§1.3 第六轮)
     updated_at: datetime | None = None

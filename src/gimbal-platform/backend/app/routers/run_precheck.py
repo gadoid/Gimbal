@@ -19,23 +19,25 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser
+from ..core.deps import principal_or_user
 from ._ownership import can_read_scenario
 from ..models import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..services import run_dispatcher, scenario_store, scheme_store
+from ..services.access_token import Principal
 from ..services.run_dispatcher import definition_from_payload
 from ..services.run_materialize import referenced_services
 
 router = APIRouter(prefix="/run", tags=["runs"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 _MAX_BATCH = 20
 
@@ -68,15 +70,36 @@ class PrecheckResult(BaseModel):
     dangling_entry_ids: list[str] = Field(default_factory=list, alias="danglingEntryIds")
     # steps 引用了、但声明 URL 与绑定 URL 双缺的 service(引擎会显式报错)
     unbound_services: list[str] = Field(default_factory=list, alias="unboundServices")
+    # webhook v4 §5.3:令牌范围缺项(按 §3.3 分类:未授权 / 已删除);
+    # 令牌路径自动以当前令牌预检,JWT 可传 tokenId 预检自己可管理的令牌
+    scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
+    # §7.1 范围外目标(直连地址/内置认证/白名单外策略,只记录不拦截)
+    out_of_scope_targets: list[dict] = Field(
+        default_factory=list, alias="outOfScopeTargets")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
 async def precheck_run(
-    user: CurrentUser,
+    principal: PrincipalIn,
     db: DbSession,
     items: Annotated[list[PrecheckItem], Field(max_length=_MAX_BATCH)],
+    token_id: Annotated[int | None, Query(alias="tokenId", ge=1)] = None,
 ) -> list[PrecheckResult]:
-    """批量预检:队列 N 条一次发回判定面,逐条独立结论(一条 404 不连坐)。"""
+    """批量预检:队列 N 条一次发回判定面,逐条独立结论(一条 404 不连坐)。
+
+    webhook v4 §5.3:``tokenId`` 查询参数把每条方案按**该令牌的范围**做
+    预检(缺项 + 范围外目标);令牌路径(``Authorization: Bearer gtk_``)
+    不传即自动以当前令牌预检。JWT 只能预检自己可管理的令牌
+    (``can_manage``;user 角色仅限自己的个人令牌)。"""
+    from ..services import access_token as at_svc
+
+    user = principal.user
+    token = principal.token if principal.is_token else None
+    if token is None and token_id is not None:
+        from ..models.access_token import AccessToken
+        token = await db.get(AccessToken, token_id)
+        if token is None or not at_svc.can_view(user, token):
+            token = None      # 不可见 = 当作没传(不带范围预检,不 404 连坐)
     out: list[PrecheckResult] = []
     for item in items:
         scen_row = await scenario_store.get_row(db, item.scenario_id)
@@ -90,12 +113,13 @@ async def precheck_run(
                 scheme_found=False, scheme_valid=False,
             ))
             continue
-        out.append(await _precheck_one(db, scen_row, item))
+        out.append(await _precheck_one(db, scen_row, item, token=token))
     return out
 
 
 async def _precheck_one(
-    db: AsyncSession, scen: ComposerScenario, item: PrecheckItem
+    db: AsyncSession, scen: ComposerScenario, item: PrecheckItem,
+    *, token: "Any | None" = None,
 ) -> PrecheckResult:
     result = PrecheckResult(scenario_id=item.scenario_id, scheme_id=item.scheme_id)
     raw_payload = scen.payload or {}
@@ -156,8 +180,20 @@ async def _precheck_one(
             s, declared=declared, bindings=bindings, alias_base_urls=alias_urls)]
     result.unbound_services = candidates
 
-    result.scheme_valid = not (
-        result.dead_dataset_ids or result.dangling_entry_ids
-    )
+    # ── webhook v4 §5.3:令牌范围预检(缺项分类 + 范围外目标)─────
+    if token is not None:
+        from ..services import access_token as at_svc
+        used = await at_svc.used_sets_for_definition(
+            db, definition_from_payload(raw_payload), bindings)
+        missing = await at_svc.check_scope(db, token, token.user_id, used)
+        if missing:
+            result.scope_missing = [
+                {"kind": m.kind, "name": m.name, "deleted": m.deleted}
+                for m in missing]
+            result.scheme_valid = False
+        result.out_of_scope_targets = used.out_of_scope["targets"]
+
+    result.scheme_valid = result.scheme_valid and not (
+        result.dead_dataset_ids or result.dangling_entry_ids)
     return result
 

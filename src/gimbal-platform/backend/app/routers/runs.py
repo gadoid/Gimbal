@@ -5,18 +5,12 @@ Thin wrapper around :func:`app.services.run_dispatcher.dispatch_run`
 fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
 子进程执行).
 
-The former Case layer was dissolved — the run recipe (dataSetIds /
-serviceBindings / runOptions) lives entirely in
-``RunRequest``; the dispatcher materializes it into ``config_json``
-(injectedAuths = 模板扫描 ∪ serviceBindings 绑定).  The former ``env``
-field was retired (D2) — stale env keys from old clients are silently
-ignored (pydantic extra=ignore).
-
-认证(webhook 设计 v3 P1 §4.4):``principal_or_user`` 分流 —— JWT
-行为不变;``Bearer gic_…`` 入站凭证进个人(grant)/平台(无 grant)
-模式。平台模式不做属主闸,改为执行区间只读闸(``is_scenario_read_
-only``,D6:只放行 GET/HEAD/OPTIONS 或 query_safe);个人模式以 grant
-用户过原有属主闸(§4.3)。
+认证(webhook v4 §3.1):``principal_or_user`` 分流 —— JWT 行为不变;
+``Bearer gtk_…`` 访问令牌进个人(personal)/平台(platform)模式。
+判定链:① 认证(deps)→ ② M1 不带配方 → ③ 方案物化 → ④ 场景前提
+(个人 = can_run_scenario;平台 = 公共 + 只读闸 + 非临时调用)→
+⑤ 令牌范围(别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证,缺项分类)→
+⑥ 追溯计算(resolvedServices / builtinAuths / outOfScope)→ 派发。
 
 Error mapping (per the agreed run-failure semantics):
 * scenario / data_set missing → 404
@@ -39,8 +33,9 @@ from ..core.deps import principal_or_user
 from ..schemas.scenario_composer import (
     DataSetSelection, RunOptions, RunRequest, RunResponse, ServiceBinding,
 )
+from ..services import access_token as at
 from ..services import run_dispatcher, scenario_store
-from ..services.inbound_identity import Principal, valid_callback_path
+from ..services.access_token import Principal
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -53,13 +48,15 @@ PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 # M1(修复方案 2026-11-01 §1):入站调用**只能选择平台上已有的配方,
 # 不能携带配方** —— 服务地址/凭证别名/数据集/注入条目一律由服务端按
 # 运行方案读取(方案由场景属主在平台维护,是可信来源)。否则
-# serviceBindings.url 可以改写被测地址、把注入的凭证发到任意主机
-# (实测 201 且绑定原样到达 fanout)。
+# serviceBindings.url 可以改写被测地址、把注入的凭证发到任意主机。
+# v4 口径不变(§3.1 ②);graph 为 JWT 专属(D20)—— 令牌带 graph 由
+# 本清单一并拒(422)。
 _INBOUND_FORBIDDEN_FIELDS = (
     ("service_bindings", "serviceBindings"),
     ("data_set_ids", "dataSetIds"),
     ("data_set_selection", "dataSetSelection"),
     ("injection_entry_ids", "injectionEntryIds"),
+    ("graph", "graph"),
 )
 # runOptions 只开放 stepTo(截断执行,无地址/凭证语义);其余键任何
 # 非缺省值都拒 —— 尤其 nRuns/parallel(资源面)与 debug(强制 server 链)。
@@ -75,8 +72,6 @@ def _reject_inbound_recipe(body: RunRequest) -> None:
         label for attr, label in _INBOUND_FORBIDDEN_FIELDS
         if getattr(body, attr)
     ]
-    if body.graph is not None:
-        offenders.append("graph")
     opts = body.run_options
     if opts is not None:
         offenders.extend(
@@ -91,8 +86,9 @@ def _reject_inbound_recipe(body: RunRequest) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "code": "inbound_field_not_allowed",
-                "message": ("入站调用不能携带执行配方,以下字段由服务端按"
-                            "运行方案读取: " + "、".join(offenders)),
+                "message": ("令牌调用不能携带执行配方,以下字段由服务端按"
+                            "运行方案读取(graph 为 JWT 专属): "
+                            + "、".join(offenders)),
                 "fields": offenders,
             })
 
@@ -100,7 +96,7 @@ def _reject_inbound_recipe(body: RunRequest) -> None:
 async def _apply_scheme_recipe(
     db: AsyncSession, scen, body: RunRequest,
 ) -> None:
-    """M1:按方案覆盖请求配方(入站分支专用,见模块注释)。
+    """M1:按方案覆盖请求配方(令牌分支专用,见模块注释)。
 
     - ``schemeId`` 显式给出:必须属于本场景,否则 422 ``scheme_not_owned``
       (调用方给了错的 id 就明确拒绝 —— 静默回落默认方案会跑错配方);
@@ -158,23 +154,13 @@ async def _record_inbound_activity(
     db: AsyncSession, principal: Principal, resp: RunResponse,
     *, body: RunRequest, scen=None,
 ) -> None:
-    """入站触发写一条时间线事件(2026-11-03):此前第三方调用只有执行行
-    入轴(owner 隔离),看不出「谁经哪个别名调进来的」。actor = 时间线
-    归属人:个人模式 = grant 用户(**使用了谁的凭证**);平台模式 = 别名
-    属主(平台系统用户无人登录,挂它等于轴不可见;团队共享别名 owner 为
-    空 → 不上任何人的轴,取证走审计面板)。JWT 调用 no-op(与
-    audit.record_inbound 同口径)。best-effort,失败不阻断业务。
-    """
-    if not principal.inbound:
+    """令牌触发写一条时间线事件(§7.3):actor = 令牌属主(个人令牌);
+    平台令牌**不上个人轴**(D23 —— 平台身份的感知走审计面板与平台
+    令牌详情「最近调用」)。JWT 调用 no-op(与 audit.record_inbound
+    同口径)。best-effort,失败不阻断业务。"""
+    if not principal.is_token or principal.token.kind == at.PLATFORM_KIND:
         return
-    from ..models.service_alias import ServiceAlias
     from ..services import activity as activity_svc
-
-    if principal.identity_mode == "platform":
-        alias = await db.get(ServiceAlias, principal.caller_alias)
-        actor_id = alias.owner_user_id if alias is not None else None
-    else:
-        actor_id = principal.user.id
     detail: dict = {
         "fn": "adhoc" if body.steps is not None else "scenario",
         "execution_id": resp.execution_id, "run_id": resp.run_id,
@@ -182,43 +168,53 @@ async def _record_inbound_activity(
         "scenario_name": scen.name if scen is not None else None,
         "client_ref": body.client_ref,
         "identity_mode": principal.identity_mode,
-        "credential_owner": (principal.user.display_name
-                             or principal.user.username),
-        "caller_alias": principal.caller_alias,
+        "token_id": principal.token_id,
+        "token_name": principal.token.name,
     }
     if body.steps is not None:
         # 临时调用:全量请求信息(与审计同源)
         detail["steps"] = body.steps
         detail["release"] = body.release
     await activity_svc.record(
-        db, actor_id=actor_id, kind=activity_svc.KIND_INBOUND_RUN,
-        resource_type="inbound", resource_id=principal.caller_alias,
+        db, actor_id=principal.user.id, kind=activity_svc.KIND_INBOUND_RUN,
+        resource_type="inbound", resource_id=str(principal.token_id),
         detail=detail)
+
+
+def _deny_token_scope(missing: "list[at.ScopeMissing]") -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={
+            "code": at.ERR_RESOURCE_NOT_ALLOWED,
+            "message": ("超出令牌授权范围:" + at._missing_summary(missing)
+                        + ";" + at.missing_hint(missing)),
+            "missing": [{"kind": m.kind, "name": m.name, "deleted": m.deleted}
+                        for m in missing],
+        })
+
+
+def _builtin_auths(scen) -> list[str]:
+    """场景内置认证的用户名列表(§7.1:不含密码)。"""
+    from ..services.run_prepare import built_in_users
+    return sorted(str(k) for k in built_in_users(scen.payload))
 
 
 async def _post_adhoc_run(
     principal: Principal, db: AsyncSession, body: RunRequest,
 ) -> RunResponse:
-    """P3 临时调用分支(设计 2026-11-02 §四):身份闸 → 配方字段禁令 →
-    :func:`adhoc_run.prepare_adhoc`(结构 / 别名 / 地址 / 版本 / 组装 /
-    干跑 convert)→ :func:`run_dispatcher.dispatch_target`(kind='adhoc',
+    """P3 临时调用分支:身份闸 → 配方字段禁令 → :func:`adhoc_run.
+    prepare_adhoc` → :func:`run_dispatcher.dispatch_target`(kind='adhoc',
     占位 id)。全部校验在建执行行之前,不通过即 4xx。
-    """
+
+    v4:临时调用仅**个人令牌**(§3.1 ④ / D20);平台令牌与 JWT 均 403
+    ``adhoc_personal_token_only``。"""
     from ..services import adhoc_run, plate_client, run_prepare
 
-    # §四.1 身份:只对入站个人模式(带 grant)开放 —— 平台模式(P3-D1)
-    # 与 JWT(P3-D7,前端无入口,不开未设计的调用面)都 403。
-    if not principal.inbound:
+    if not principal.is_token or principal.token.kind != at.PERSONAL_KIND:
         raise HTTPException(
             status_code=403,
-            detail={"code": "adhoc_inbound_only",
-                    "message": "临时调用只对入站调用方(gic_ + grant)开放"})
-    if principal.grant_id is None or principal.identity_mode != "personal":
-        raise HTTPException(
-            status_code=403,
-            detail={"code": "adhoc_requires_grant",
-                    "message": "临时调用要求个人模式:请携带用户签发给该"
-                               "别名的 grant(X-Gimbal-Grant)"})
+            detail={"code": at.ERR_ADHOC_PERSONAL_ONLY,
+                    "message": "临时调用只对个人访问令牌开放"})
     # §三:除 steps / release / clientRef / callbackPath 外的配方字段一律拒
     offenders = adhoc_run.recipe_fields_present(body)
     if offenders:
@@ -242,14 +238,32 @@ async def _post_adhoc_run(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "plate_unavailable",
                     "message": f"临时调用派发前校验需要 plate: {e}"}) from None
+    # ⑤ 令牌范围:别名集 = steps[].service;凭证集 = 别名表凭证默认
+    used = await at.used_sets_for_adhoc(db, body.steps)
+    missing = await at.check_scope(db, principal.token,
+                                   principal.user.id, used)
+    if missing:
+        raise _deny_token_scope(missing)
     target = run_dispatcher.RunTarget(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
+    # §7.1 追溯:临时调用地址全部经别名(③层);无内置认证、无范围外目标
+    from ..services import service_aliases as sa_svc
+    alias_urls = await sa_svc.base_urls_for(db, used.aliases)
+    trace = {
+        "resolvedServices": {
+            svc: {"url": alias_urls.get(svc), "source": "alias", "alias": svc}
+            for svc in used.aliases},
+        "builtinAuths": [],
+        "token": {"id": principal.token.id, "name": principal.token.name,
+                  "kind": principal.token.kind},
+        "outOfScope": {"targets": [], "builtinAuths": [],
+                       "strategyEntries": []},
+    }
     try:
         resp = await run_dispatcher.dispatch_target(
             db, principal.user.id, body, target, run_id=run_id,
-            caller_alias=principal.caller_alias, grant_id=principal.grant_id,
-            identity_mode=principal.identity_mode)
+            token=principal.token, trace=trace)
     except run_dispatcher.NotFound as e:
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
     except run_dispatcher.Conflict as e:
@@ -257,16 +271,15 @@ async def _post_adhoc_run(
     from ..services import audit as audit_svc
     await audit_svc.record_inbound(db, principal, "inbound.run", detail={
         "fn": "adhoc",
-        # G4 增强(2026-11-03):临时调用记**全量请求信息**(steps 原样
-        # + 版本覆盖)——端点串只是索引,取证需要调用方到底发了什么。
+        # G4 增强:临时调用记**全量请求信息**(steps 原样 + 版本覆盖)
+        # ——端点串只是索引,取证需要调用方到底发了什么。
         "steps": body.steps,
         "release": body.release,
         "endpoints": [str(dict(st).get("endpoint")) for st in body.steps],
         "execution": resp.execution_id, "run_id": resp.run_id,
         "client_ref": body.client_ref,
-        "credential_owner": (principal.user.display_name
-                             or principal.user.username),
-        "caller_alias": principal.caller_alias})
+        "scope_aliases": used.aliases,
+        "scope_auths": used.auths})
     await _record_inbound_activity(db, principal, resp, body=body)
     return resp
 
@@ -279,17 +292,18 @@ async def post_run(
 ) -> RunResponse:
     user = principal.user
     if body.callback_path is not None \
-            and not valid_callback_path(body.callback_path):
+            and not at.valid_callback_path(body.callback_path):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "code": "callback_path_invalid",
                 "message": "callbackPath 必须是以 / 开头的路径段(不含协议与主机)",
             })
-    if principal.inbound:
-        # M1:先拒「携带配方」(不依赖场景/方案,尽早失败)
+    if principal.is_token:
+        # M1:先拒「携带配方」(不依赖场景/方案,尽早失败;graph 一并拒,
+        # D20:令牌请求带 graph 一律 422)
         _reject_inbound_recipe(body)
-    # P3 临时调用(设计 2026-11-02 §三):scenarioId 与 steps 二选一
+    # P3 临时调用:scenarioId 与 steps 二选一
     if (body.scenario_id is None) == (body.steps is None):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -306,44 +320,24 @@ async def post_run(
     try:
         scen = await scenario_store.get_row(db, body.scenario_id)
         if scen is None:
-            # Same dict-detail (code/message) contract as every other
-            # run-path 404 — via the shared NotFound translation below.
             raise run_dispatcher.NotFound(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
-        if principal.inbound:
+        used: "at.ScopeSets | None" = None
+        if principal.is_token:
             # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
             await _apply_scheme_recipe(db, scen, body)
-        if principal.identity_mode == "platform":
-            # M2(修复方案 §2.1,拍板 A):平台模式的场景范围 —— 公共
-            # 场景,或别名属主自己的场景;他人私有场景 403(此前平台
-            # 模式可跑任何人的私有场景)。团队共享别名(owner 为空)只
-            # 能用公共场景。只看属主与可见性,不看分享引用(引用授权
-            # 给人,不延伸到平台身份)。
-            from ..models.service_alias import ServiceAlias
-            from ..services.inbound_identity import platform_scope_ok
-            alias = await db.get(ServiceAlias, principal.caller_alias)
-            if not platform_scope_ok(
-                    scen, alias.owner_user_id if alias is not None else None):
+        if principal.is_token and principal.token.kind == at.PLATFORM_KIND:
+            # ④ 平台模式场景前提(D9):只认公共场景(令牌与 JWT 同一
+            # 判定,v3 的「别名属主自己的场景」豁免随承载别名一起退役);
+            # 执行区间只读(is_scenario_read_only);临时调用非个人令牌
+            # 已在上方 403。graph 已被 M1 的 422 先拒。
+            if (getattr(scen, "visibility", None) or "private") != "public":
                 raise HTTPException(
                     status_code=403,
                     detail={
                         "code": "platform_scope_denied",
-                        "message": ("平台模式只能执行公共场景,或经由别名"
-                                    "属主自己的场景;该场景不在允许范围"),
-                    })
-            # 平台模式(D6):无属主闸,凭证取 __platform__ 池 —— 前提是
-            # 执行区间只读(is_scenario_read_only,与集成链同一实现)。
-            # graph 编排本期限定 JWT/个人模式:多单元逐个过只读闸的
-            # 覆盖面本链未接,先整体拒绝(fail-closed,§4.3;入站 graph
-            # 通常已被 M1 的 422 先拒,此处是纵深防御)。
-            if body.graph is not None:
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "graph_not_supported_for_platform",
-                        "message": "平台模式(入站无 grant)暂不支持编排执行,"
-                                   "请使用持久化场景或携带 grant",
+                        "message": "平台模式只能执行公共场景;该场景不在允许范围",
                     })
             from ..services import plate_client
             from ..services.integration_runner import is_scenario_read_only
@@ -367,8 +361,9 @@ async def post_run(
                                     f"{'、'.join(offenders)}"),
                     })
         else:
-            # §8.2:ensure_owner → can_run_scenario(属主 ∨ admin ∨ 引用,
-            # §7.6;public 不开执行 —— 公共资源跑需先 fork,不变量 7)。
+            # ④ 个人模式(JWT 或个人令牌):ensure_owner → can_run_scenario
+            # (属主 ∨ admin ∨ 引用,§7.6;public 不开执行 —— 公共资源跑需
+            # 先 fork,不变量 7)。
             from ._ownership import can_run_scenario
             if not await can_run_scenario(
                     db, user, scenario_id=scen.scenario_id,
@@ -380,13 +375,9 @@ async def post_run(
                         "message": ("only the scenario's owner (or admin, or a "
                                     "share reference) can run this scenario"),
                     })
-            # graph 链 unit 授权(必修缺口,《Suite成员层、引用分享与浏览镜头-
-            # 设计方案》§8.2):unit 与 before/after 括号场景此前只在 worker 侧
-            # 物化时查存在性、无归属检查——任何登录用户都能经编排跑他人
-            # 私有场景。请求侧逐个过属主闸(与顶层同款 = 属主 ∨ admin,403
-            # not_owner;不存在 → 404 不泄露)。rerun 不重放 graph(config 重放
-            # 构造无 graph 字段),此处即唯一入口。
             if body.graph is not None:
+                # graph 链 unit 授权(§8.2):请求侧逐个过属主闸。rerun
+                # 不重放 graph,此处即唯一入口(令牌路径已被 M1 拒)。
                 seen_unit_ids: set[str] = set()
                 for unit in [
                     *body.graph.units,
@@ -396,15 +387,16 @@ async def post_run(
                     if unit.scenario_id in seen_unit_ids:
                         continue
                     seen_unit_ids.add(unit.scenario_id)
-                    unit_scen = await scenario_store.get_row(db, unit.scenario_id)
+                    unit_scen = await scenario_store.get_row(
+                        db, unit.scenario_id)
                     if unit_scen is None:
                         raise run_dispatcher.NotFound(
                             "scenario_not_found",
                             f"scenario not found: {unit.scenario_id}",
                         )
                     if not await can_run_scenario(
-                        db, user, scenario_id=unit_scen.scenario_id,
-                        owner_id=unit_scen.owner_id):
+                            db, user, scenario_id=unit_scen.scenario_id,
+                            owner_id=unit_scen.owner_id):
                         raise HTTPException(
                             status_code=403,
                             detail={
@@ -415,30 +407,100 @@ async def post_run(
                                     f"{unit.scenario_id}"
                                 ),
                             })
+        if principal.is_token:
+            # ⑤ 令牌范围:别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证
+            # (场景执行面:方案绑定 + 场景定义;§3.2)
+            from ..services.scenario_store import definition_from_payload
+            extra_nodes = _injection_nodes(scen, body)
+            definition = definition_from_payload(scen.payload)
+            used = await at.used_sets_for_definition(
+                db, definition,
+                {k: {"authAlias": b.auth_alias, "url": b.url}
+                 for k, b in (body.service_bindings or {}).items()},
+                extra_scan_nodes=extra_nodes)
+            missing = await at.check_scope(
+                db, principal.token, user.id, used)
+            if missing:
+                raise _deny_token_scope(missing)
+        # ⑥ 追溯计算(§7.1):resolvedServices / builtinAuths / outOfScope
+        # —— JWT 执行同样写前两者;令牌另带 token 快照
+        trace = await _build_trace(db, scen, body, principal, used)
         resp = await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,
             req=body,
             preloaded_scenario=scen,  # 已为归属检查加载,不再二次查询
-            caller_alias=principal.caller_alias,
-            grant_id=principal.grant_id,
-            identity_mode=principal.identity_mode,
+            token=principal.token if principal.is_token else None,
+            trace=trace,
         )
     except run_dispatcher.NotFound as e:
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})
     except run_dispatcher.Conflict as e:
         raise HTTPException(status_code=409, detail={"code": e.code, "message": e.message, **e.extra})
     from ..services import audit as audit_svc
-    await audit_svc.record_inbound(db, principal, "inbound.run", detail={
-        "fn": "scenario", "scenario_id": scen.scenario_id,
-        # G4 增强(2026-11-03):场景名快照 + 凭证归属人显式化
-        # (actor_name 列已有,但 detail 自含便于按行取证)。
-        "scenario_name": scen.name,
-        "execution": resp.execution_id, "run_id": resp.run_id,
-        "client_ref": body.client_ref,
-        "credential_owner": (principal.user.display_name
-                             or principal.user.username),
-        "caller_alias": principal.caller_alias})
+    if principal.is_token:
+        # §7.2 inbound.run:资源列 = access_token/令牌 id(最近调用面);
+        # detail 带范围与目标摘要 + outOfScope 标记面
+        await audit_svc.record_inbound(db, principal, "inbound.run", detail={
+            "fn": "scenario", "scenario_id": scen.scenario_id,
+            "scenario_name": scen.name,
+            "execution": resp.execution_id, "run_id": resp.run_id,
+            "client_ref": body.client_ref,
+            "scheme_id": body.scheme_id,
+            "scope_aliases": used.aliases if used else [],
+            "scope_auths": used.auths if used else [],
+            "outOfScope": used.out_of_scope if used else {},
+        })
     await _record_inbound_activity(db, principal, resp, body=body,
                                    scen=scen)
     return resp
+
+
+def _injection_nodes(scen, body: RunRequest) -> "list | None":
+    """§3.2 注入条目物化:选中注入条目的值面并入凭证扫描源。"""
+    ids = set(body.injection_entry_ids or [])
+    if not ids:
+        return None
+    registry = (scen.payload or {}).get("assertion_registry") or {}
+    entries = registry.get("entries") or []
+    return [e for e in entries
+            if isinstance(e, dict) and e.get("id") in ids]
+
+
+async def _resolved_services(db, scen, body: RunRequest) -> dict:
+    """§7.1 ``resolvedServices``:每个被引用服务的 {url, source, alias?}
+    (三层解析只读版,与物化同一裁决)。"""
+    from ..services import service_aliases as sa_svc
+    from ..services.run_materialize import (
+        referenced_services, resolve_service_sources,
+    )
+    from ..services.scenario_store import definition_from_payload
+
+    definition = definition_from_payload(scen.payload) if scen else {}
+    steps = definition.get("steps") or []
+    base_urls = await sa_svc.base_urls_for(
+        db, referenced_services(steps))
+    return resolve_service_sources(
+        steps, declared=(definition.get("config") or {}).get("services"),
+        bindings={k: {"url": b.url}
+                  for k, b in (body.service_bindings or {}).items()},
+        alias_base_urls=base_urls)
+
+
+async def _build_trace(
+    db, scen, body: RunRequest, principal: Principal,
+    used: "at.ScopeSets | None",
+) -> dict:
+    """§7.1 执行 config_json 追溯块;dispatch 原样并入 config_json。"""
+    trace: dict = {
+        "resolvedServices": await _resolved_services(db, scen, body),
+        "builtinAuths": _builtin_auths(scen) if scen is not None else [],
+    }
+    if principal.is_token:
+        trace["token"] = {"id": principal.token.id,
+                          "name": principal.token.name,
+                          "kind": principal.token.kind}
+        trace["outOfScope"] = (used.out_of_scope if used
+                               else {"targets": [], "builtinAuths": [],
+                                     "strategyEntries": []})
+    return trace

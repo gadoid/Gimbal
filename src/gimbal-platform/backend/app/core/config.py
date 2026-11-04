@@ -127,10 +127,13 @@ class Settings(BaseSettings):
     # 这是「收不到回调」的兜底承诺(调用方超时后按 executionId 轮询)。
     EXEC_RECONCILE_INTERVAL_S: int = 300
     EXEC_RECONCILE_GRACE_S: int = 600
-    # ── 入站身份(webhook 设计 v3 P1 §4.1)───────────────────────
-    # grant(ggt_)默认有效期与上限(天);签发时 ttlDays 可选,超过上限 422
-    GRANT_DEFAULT_TTL_DAYS: int = 90
-    GRANT_MAX_TTL_DAYS: int = 365
+    # ── 访问令牌(webhook v4 §4/§6)─────────────────────────────
+    # 回调主机白名单(逗号分隔,后缀通配按点边界:*.internal 命中
+    # a.internal / a.b.internal,不命中 internal / evilinternal)。
+    # 白名单是唯一的内网防线(被测与集成系统都在内网,不能整体拒绝
+    # RFC1918)—— 按具体回调主机配置。空 = 不允许任何回调地址(令牌
+    # 仍可轮询使用)。
+    CALLBACK_HOST_ALLOWLIST: str = ""
     # ── 回调投递(webhook 设计 v3 P2 §5.2)──────────────────────
     # 单行投递总尝试上限(含首次),用尽置 failed 等保留期清扫
     WEBHOOK_MAX_ATTEMPTS: int = 5

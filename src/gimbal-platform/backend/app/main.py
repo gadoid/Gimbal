@@ -250,6 +250,11 @@ def create_app() -> FastAPI:
     app.include_router(service_aliases.router, prefix="/api")
     # P2-6(webhook 设计 v3):回调投递排查面
     app.include_router(webhook_deliveries.router, prefix="/api")
+    # 访问令牌(webhook v4 §5.1)
+    from .routers import access_tokens
+    app.include_router(access_tokens.router, prefix="/api")
+    from .routers import me
+    app.include_router(me.router, prefix="/api")
     app.include_router(environments.router, prefix="/api")
     # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
     app.include_router(catalog.router, prefix="/api")

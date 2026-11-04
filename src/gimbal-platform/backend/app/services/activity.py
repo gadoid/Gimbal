@@ -15,7 +15,7 @@ kind 取值域(写入点唯一清单,勿在别处另开):
 * ``scenario.rename``  — update 且 meta.name 变更
 * ``scenario.save_as`` — copy_scenario(另存为/复制到我的)
 * ``scenario.handoff_received`` — 分发接收(F1,actor=接收方,发送方进 detail)
-* ``inbound.run``      — 经别名入站触发执行(runs.py 场景/临时调用两分支)
+* ``inbound.run``      — 经个人令牌触发执行(runs.py 场景/临时调用两分支;平台令牌不上个人轴)
 """
 from __future__ import annotations
 

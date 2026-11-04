@@ -442,13 +442,13 @@ async def _auth_aliases_of(
     db, scen_payload: dict, bindings: dict,
 ) -> list[str]:
     """注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
-    ${auth.*} 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认,显式绑定
-    优先;查表失败降级跳过)。此前集成为「绑定 ∪ 全 definition 正则
-    扫描」且不含别名默认 —— 与 dispatch 漂移,已收敛。"""
-    from .service_aliases import exec_auth_aliases
-    return await exec_auth_aliases(
-        db, definition_from_payload(scen_payload).get("steps") or [],
-        bindings)
+    ${auth.*} 模板扫描(含 config.setup/teardown,§3.2)∪ 绑定
+    authAlias ∪ 别名表凭证默认,显式绑定优先;查表失败降级跳过)。
+    此前集成为「绑定 ∪ 全 definition 正则扫描」且不含别名默认 ——
+    与 dispatch 漂移,已收敛。"""
+    from .service_aliases import exec_auth_aliases_of_definition
+    return await exec_auth_aliases_of_definition(
+        db, definition_from_payload(scen_payload), bindings)
 
 
 # ── W0a(个人侧方案 v1.4 §2):订阅知情同意 ──────────────────────
@@ -672,7 +672,7 @@ async def _record_activity(db, inst: IntegrationTask, tpl: IntegrationTask,
     check_flipped/run_flipped)。
 
     只落**个人实例** —— 平台实例的 holder 是系统用户,没有可归属的
-    时间线;平台面的感知由通知(admin/operator)与审计覆盖。调用点
+    时间线;平台面的感知由通知(admin/member)与审计覆盖。调用点
     全部在业务 commit 之后;best-effort(activity.record 自兜底)。"""
     from . import activity
     if tpl.identity_mode != "personal" or not inst.holder_id:
@@ -750,16 +750,22 @@ async def _pause_consent_changed(
     wake()
     await _record_activity(db, inst, tpl, "integration.paused",
                            {"reason": paused_reason})
-    if inst.holder_id:
-        try:
-            from .notifications import create_notification
-            async with db_module.SessionLocal() as ndb:
-                await create_notification(
-                    ndb, user_id=inst.holder_id, type_="integration",
-                    title=f"集成任务「{tpl.name}」需要重新确认",
-                    body=message, link="/integrations")
-        except Exception:  # noqa: BLE001 — 通知是增强
-            logger.warning("integration: consent notify failed")
+    try:
+        from .notifications import create_notification
+        if tpl.identity_mode == "personal" and inst.holder_id:
+            await create_notification(
+                db, user_id=inst.holder_id, type_="integration",
+                title=f"集成任务「{tpl.name}」需要重新确认",
+                body=message, link="/integrations")
+        else:
+            # 平台实例的 holder 是系统用户(无人登录)—— 改走 member+
+            # 扇出(webhook v4 P1 修:此前点对点发给系统用户等于不可见)
+            from .access_token import fanout_members
+            await fanout_members(
+                db, f"平台集成任务「{tpl.name}」需要重新确认",
+                message, link="/integrations")
+    except Exception:  # noqa: BLE001 — 通知是增强
+        logger.warning("integration: consent notify failed")
     return {"status": "paused", "durationMs": 0, "error": message}
 
 
@@ -888,62 +894,81 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     "请在编排器钉定修订后重试(外部服务不受影响)",
                     lease=lease)
 
-            # 全量评估 2026-11-02 #6:别名的「允许入站调用」开关是运营者心中
-            # 的 kill switch —— 关闭后经该别名注册的任务(两种身份模式、含
-            # 订阅者实例)运行前一律以 run=auth 暂停(inbound_disabled)并发
-            # integration.paused 回调;重新开启后由 owner/admin 在集成详情
-            # 「启动」恢复(不自动解暂停)。吊销单个 gic_ **不**影响已注册
-            # 任务:任务的信任单元是别名而非某个凭证,否则凭证轮换(先发新
-            # 再吊旧)会把调用方的全部任务停掉。JWT 建的任务(caller 为空)
-            # 不受影响。
-            if tpl.caller_alias_name:
-                from ..models.service_alias import ServiceAlias as _SA
-                _alias_row = await db.get(_SA, tpl.caller_alias_name)
-                if _alias_row is None or not _alias_row.inbound_enabled:
+            # ── webhook v4 §3.3:定时任务运行前复核 #1–#6 ──────────
+            # #1–#4/#6 只作用于令牌注册方自己的实例(个人模式 holder =
+            # 模板属主;平台模式 = 平台唯一实例);订阅者实例按自身 JWT
+            # 身份与凭证池运行(D19),不受注册令牌影响。
+            from . import access_token as at_svc
+            from ..core.timeutil import ensure_aware as _ea
+            from ..models.access_token import AccessToken
+            _token: AccessToken | None = (
+                await db.get(AccessToken, tpl.token_id)
+                if tpl.token_id is not None else None)
+            # #5 平台模式任务(令牌注册与 JWT 创建一视同仁):场景非公共
+            # → scope_denied。场景公开后由管理者在集成详情「启动」恢复。
+            if tpl.identity_mode == "platform" \
+                    and (getattr(scen, "visibility", None) or "private") \
+                    != "public":
+                return await _finish(
+                    db, inst, tpl, "auth",
+                    "平台模式只能使用公共场景,该场景已不在允许范围;"
+                    "请将场景公开后,再在集成详情「启动」恢复",
+                    pause_reason=at_svc.PAUSE_SCOPE_DENIED, lease=lease)
+            if _token is not None and (
+                    inst.holder_id == tpl.owner_id          # 个人:注册方实例
+                    or _token.kind == at_svc.PLATFORM_KIND):  # 平台:唯一实例
+                # #1 令牌已吊销
+                if _token.revoked_at is not None:
                     return await _finish(
                         db, inst, tpl, "auth",
-                        f"别名 {tpl.caller_alias_name} 已关闭「允许入站调用」"
-                        "(或已删除),经该别名注册的任务已暂停;重新开启后"
-                        "在集成详情「启动」恢复",
-                        pause_reason="inbound_disabled", lease=lease)
-
-            # P1-5(webhook 设计 v3 §4.4):入站注册的 grant 每次实例运行
-            # 前重校验 —— 失效(撤销/过期)以 run=auth 暂停(grant_
-            # revoked,不按周期重试)并发 integration.paused 回调(D9)。
-            # 只对注册方自己的实例(个人模式 holder=grant 用户=模板
-            # owner);订阅者实例按自身身份运行,不依赖该 grant。恢复
-            # 路径(修复复核 §2):签发人重新签发 grant,调用方带新 grant
-            # 对任务 PATCH 重新绑定(同时解暂停)—— 「启动」不解此暂停。
-            if (tpl.grant_id is not None
-                    and tpl.identity_mode == "personal"
-                    and inst.holder_id == tpl.owner_id):
-                from .inbound_identity import grant_still_valid
-                grant_ok, grant_why = await grant_still_valid(
-                    db, tpl.caller_alias_name or "", tpl.grant_id)
-                if not grant_ok:
+                        f"令牌「{_token.name}」已吊销,任务暂停;请在集成详情"
+                        "「解绑令牌」后由账号接管(如只是轮换请用重新生成)",
+                        pause_reason=at_svc.PAUSE_TOKEN_REVOKED, lease=lease)
+                # #2 令牌已失效(改密/停用/admin);属主未启用为派生拒绝
+                if _token.invalidated_at is not None:
                     return await _finish(
                         db, inst, tpl, "auth",
-                        f"grant 已失效({grant_why}),执行已暂停;请签发人重新"
-                        "签发 grant,并由调用方带新 grant 对任务 PATCH 重新绑定",
-                        pause_reason="grant_revoked", lease=lease)
-
-            # M2(修复方案 §2.1):入站注册的平台模式任务每次运行前重查
-            # 场景范围 —— 场景可能被转为私有、别名属主可能变更。JWT
-            # 建的平台任务(caller 为空)不受影响。场景公开/换属主后由
-            # owner/admin 在集成详情「启动」恢复(修复复核 §3.1)。
-            if (tpl.identity_mode == "platform"
-                    and tpl.caller_alias_name):
-                from ..models.service_alias import ServiceAlias as _SA
-                from .inbound_identity import platform_scope_ok
-                _alias = await db.get(_SA, tpl.caller_alias_name)
-                if not platform_scope_ok(
-                        scen, _alias.owner_user_id if _alias else None):
+                        f"令牌「{_token.name}」已失效"
+                        f"({_token.invalidated_reason or 'unknown'}),任务暂停;"
+                        "在个人设置重新生成后自动恢复",
+                        pause_reason=at_svc.PAUSE_TOKEN_INVALIDATED, lease=lease)
+                _tok_owner = await db.get(User, _token.user_id)
+                if _tok_owner is None or not _tok_owner.is_active:
                     return await _finish(
                         db, inst, tpl, "auth",
-                        "平台模式无权使用该场景(仅公共场景或别名属主"
-                        "自己的场景);请将场景公开或改用别名属主的场景,"
-                        "再在集成详情「启动」恢复",
-                        pause_reason="scope_denied", lease=lease)
+                        f"令牌「{_token.name}」属主已停用,任务暂停;"
+                        "重新生成后自动恢复",
+                        pause_reason=at_svc.PAUSE_TOKEN_INVALIDATED, lease=lease)
+                # #3 令牌已到期
+                if _ea(_token.expires_at) <= _now():
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        f"令牌「{_token.name}」已到期,任务暂停;续期或"
+                        "重新生成后自动恢复",
+                        pause_reason=at_svc.PAUSE_TOKEN_EXPIRED, lease=lease)
+                # #4 个人令牌属主角色 < member(派生,不落库)
+                if _token.kind == at_svc.PERSONAL_KIND \
+                        and _tok_owner.role not in ("member", "admin"):
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        f"令牌「{_token.name}」属主角色已低于成员(member),"
+                        "任务暂停;恢复角色后在集成详情「启动」",
+                        pause_reason=at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
+                        lease=lease)
+                # #6 超出令牌范围(缺项按 §3.3 分类:未授权 / 已删除)
+                from ..services.scenario_store import (
+                    definition_from_payload as _dfp)
+                _bindings = dict(scheme_payload.get("serviceBindings") or {})
+                _used = await at_svc.used_sets_for_definition(
+                    db, _dfp(scen.payload), _bindings)
+                _missing = await at_svc.check_scope(
+                    db, _token, _token.user_id, _used)
+                if _missing:
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        "超出令牌授权范围:" + at_svc.missing_hint(_missing),
+                        pause_reason=at_svc.PAUSE_RESOURCE_NOT_ALLOWED,
+                        lease=lease)
 
             # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
             # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
@@ -1138,7 +1163,7 @@ async def _finish(
       无论 check 都写入(fail 的输出本身就是证据)。on_change 落盘
       基准 = 结论翻转**或** outputs 序列化变化(D8);
     - 通知对象:auth 面按身份模式定向(个人=持有人,平台=全体
-      admin/operator);结论通知按 D3(个人=持有人,平台=模板 owner)。
+      admin/member);结论通知按 D3(个人=持有人,平台=模板 owner)。
 
     P0-3.1(webhook 设计 v3):入口先做租约判定(:func:`_lease_alive`,
     行锁单事务)—— 迟到的结果(本轮已被租约回收/新一轮认领)丢弃:
@@ -1279,7 +1304,7 @@ async def _finish(
                                {"from": prev_check, "to": inst.check_status})
 
     # 通知(方案 §8):auth 面立即且按身份模式定向;普通运行失败 →
-    # 连续 FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/operator);
+    # 连续 FAIL_STREAK_NOTIFY 次才通知(P1 口径,发全体 admin/member);
     # 结论翻转通知(D9/D3)。
     auth_notify = (run_status == "auth")
     streak_notify = (run_status not in ("ok", "auth") and not auto_paused
@@ -1295,13 +1320,13 @@ async def _finish(
                     uids = [inst.holder_id]   # 凭证是持有人自己的
                 elif auto_paused:
                     # W4:自动暂停 —— 个人=持有人(启动入口在订阅面/
-                    # 功能卡);平台=全体 admin/operator
+                    # 功能卡);平台=全体 admin/member
                     if tpl.identity_mode == "personal" and inst.holder_id:
                         uids = [inst.holder_id]
                     else:
                         uids = (await ndb.execute(
                             select(User.id).where(
-                                User.role.in_(("admin", "operator")),
+                                User.role.in_(("admin", "member")),
                                 User.is_system == False)  # noqa: E712
                         )).scalars().all()
                 elif notify_check is not None:
@@ -1311,24 +1336,36 @@ async def _finish(
                             else tpl.owner_id]
                 else:
                     uids = (await ndb.execute(
-                        select(User.id).where(User.role.in_(("admin", "operator")),
+                        select(User.id).where(User.role.in_(("admin", "member")),
                                               User.is_system == False)  # noqa: E712
                     )).scalars().all()
-                if auth_notify and pause_reason == "grant_revoked":
-                    # 修复复核 §3.1:grant_revoked / scope_denied 与凭证无关,
-                    # 更新凭证也不会复活它们(revive_paused_instances 只认
-                    # auth_failed / missing_credential)—— 文案按 pause_reason
-                    # 分立,各指向自己的恢复路径。
+                if auth_notify and pause_reason in (
+                        "token_revoked", "token_invalidated",
+                        "token_expired", "token_owner_ineligible",
+                        "resource_not_allowed", "scope_denied"):
+                    # webhook v4 §3.3:令牌/范围类暂停与凭证无关,更新凭证
+                    # 不会复活它们 —— 文案按 pause_reason 分立,各指向自己
+                    # 的恢复路径。
                     title = f"集成任务「{tpl.name}」授权已失效,已暂停"
-                    body = ("入站 grant 已撤销或到期 —— 请重新签发 grant,"
-                            "并由调用方带新 grant 对该任务发一次 PATCH "
-                            "完成重新绑定(重绑即恢复执行)")
-                elif auth_notify and pause_reason == "scope_denied":
-                    title = (f"集成任务「{tpl.name}」场景已不在平台模式"
-                             "允许范围,已暂停")
-                    body = ("平台模式只能使用公共场景或别名属主自己的场景"
-                            " —— 请将场景公开(或改用别名属主的场景)后,"
-                            "在集成详情「启动」恢复")
+                    if pause_reason == "token_revoked":
+                        body = ("访问令牌已吊销(终态)—— 请在集成详情"
+                                "「解绑令牌」转由账号管理;如只是轮换"
+                                "请用重新生成")
+                    elif pause_reason == "token_invalidated":
+                        body = ("访问令牌已失效 —— 在个人设置重新生成后,"
+                                "任务自动恢复")
+                    elif pause_reason == "token_expired":
+                        body = ("访问令牌已到期 —— 在个人设置续期或重新"
+                                "生成后,任务自动恢复")
+                    elif pause_reason == "token_owner_ineligible":
+                        body = ("访问令牌属主角色已低于成员(member)—— "
+                                "恢复角色后在集成详情「启动」")
+                    elif pause_reason == "resource_not_allowed":
+                        body = ("超出令牌授权范围 —— 处置说明见任务详情;"
+                                "范围恢复后可在集成详情「启动」")
+                    else:
+                        body = ("平台模式只能使用公共场景 —— 请将场景"
+                                "公开后,在集成详情「启动」恢复")
                 elif auth_notify:
                     title = f"集成任务「{tpl.name}」凭证失效,已暂停"
                     body = ("认证失败(auth)——请在"
@@ -1570,24 +1607,40 @@ async def ensure_instance(
         return row
 
 
-async def revive_paused_instances(user_id: int | None = None) -> int:
-    """凭证复活钩子(auth_sessions 路由调用,方案 §8/设计 §3)。
+async def revive_paused_instances(
+    user_id: int | None = None, *, token_id: int | None = None,
+) -> int:
+    """恢复钩子(webhook v4 §3.3 自动恢复;凭证复活沿用方案 §8)。
 
-    恢复范围:paused_reason ∈ {auth_failed, missing_credential} 的实例
-    —— 个人模式且
-    user_id 匹配 holder;平台模式不受 user_id 过滤(平台凭证池只有
-    operator/admin 能改,改了即视为恢复信号)。恢复 = state=idle +
-    next_run_at=now(下拍调度即重试);paused_reason 清空。
-    manual 暂停的实例不受影响。返回恢复条数(审计/日志用)。
+    恢复范围(按入口分派):
+
+    * 凭证更新(auth_sessions 路由 / 平台凭证):``paused_reason ∈
+      {auth_failed, missing_credential}`` —— 个人模式且 user_id 匹配
+      holder;平台模式不受 user_id 过滤(平台凭证池只有 admin 能改,
+      改了即视为恢复信号)。
+    * 令牌续期/重新生成(``token_id``):该令牌注册方实例的
+      ``token_expired`` / ``token_invalidated`` 暂停(§3.4 自动恢复)。
+
+    恢复 = state=idle + next_run_at=now(下拍调度即重试);paused_reason
+    清空。manual 暂停的实例不受影响。返回恢复条数(审计/日志用)。
     """
     now = _now()
     async with db_module.SessionLocal() as db:
         stmt = select(IntegrationTask).where(
             IntegrationTask.template_id.isnot(None),
             IntegrationTask.state == "paused",
-            IntegrationTask.paused_reason.in_(("auth_failed",
-                                               "missing_credential")),
         )
+        if token_id is not None:
+            stmt = stmt.where(
+                IntegrationTask.template_id.in_(
+                    select(IntegrationTask.id).where(
+                        IntegrationTask.template_id.is_(None),
+                        IntegrationTask.token_id == token_id)),
+                IntegrationTask.paused_reason.in_(
+                    ("token_expired", "token_invalidated")))
+        else:
+            stmt = stmt.where(IntegrationTask.paused_reason.in_(
+                ("auth_failed", "missing_credential")))
         rows = (await db.execute(stmt)).scalars().all()
         revived = 0
         revived_pairs: list[tuple[IntegrationTask, IntegrationTask]] = []
@@ -1595,7 +1648,8 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
             tpl = await db.get(IntegrationTask, inst.template_id)
             if tpl is None:
                 continue
-            if (tpl.identity_mode == "personal" and user_id is not None
+            if token_id is None and (
+                    tpl.identity_mode == "personal" and user_id is not None
                     and inst.holder_id != user_id):
                 continue          # 他人更新凭证 ≠ 我的凭证恢复
             inst.state = "idle"
@@ -1608,8 +1662,10 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
             # 时间线 + 通知:自动恢复此前完全静默(暂停侧发通知,恢复侧
             # 没有 —— 持有人不知道任务已经自己跑起来了)
             for inst, tpl in revived_pairs:
+                via = ("token_revive" if token_id is not None
+                       else "credential_revive")
                 await _record_activity(db, inst, tpl, "integration.resumed",
-                                       {"via": "credential_revive"})
+                                       {"via": via})
             try:
                 from .notifications import create_notification
                 personal = [(i, t) for i, t in revived_pairs
@@ -1621,14 +1677,17 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
                         await create_notification(
                             ndb, user_id=inst.holder_id, type_="integration",
                             title=f"集成任务「{tpl.name}」已自动恢复",
-                            body="凭证已更新,此前因凭证问题暂停的任务"
-                                 "已恢复调度",
+                            body=("访问令牌已续期或重新生成,此前因令牌"
+                                  "暂停的任务已恢复调度"
+                                  if token_id is not None else
+                                  "凭证已更新,此前因凭证问题暂停的任务"
+                                  "已恢复调度"),
                             link="/integrations")
                     if platform_names:
-                        # 平台模式:与暂停通知同受众(admin/operator),
-                        # 多实例聚合一条,防凭证池批量复活刷屏
+                        # 平台模式:与暂停通知同受众(admin/member),
+                        # 多实例聚合一条,防批量复活刷屏
                         uids = (await ndb.execute(select(User.id).where(
-                            User.role.in_(("admin", "operator")),
+                            User.role.in_(("admin", "member")),
                             User.is_system == False  # noqa: E712
                         ))).scalars().all()
                         names = "、".join(f"「{n}」" for n in platform_names)
@@ -1637,7 +1696,7 @@ async def revive_paused_instances(user_id: int | None = None) -> int:
                                 ndb, user_id=uid, type_="integration",
                                 title=(f"平台集成任务已自动恢复"
                                        f"({len(platform_names)} 个)"),
-                                body=f"凭证更新后,以下任务已恢复调度:{names}",
+                                body=f"以下任务已恢复调度:{names}",
                                 link="/integrations")
             except Exception:  # noqa: BLE001 — 通知是增强
                 logger.warning("integration: revive notify failed")

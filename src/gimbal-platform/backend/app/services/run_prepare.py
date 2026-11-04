@@ -325,11 +325,12 @@ async def prepare_exec(
     steps = definition.get("steps") or []
     prep = ExecPrep(built_in_users=built_in_users(scenario_payload))
 
-    # ①② 凭证清单 + 解析(owner 级短会话)
+    # ①② 凭证清单 + 解析(owner 级短会话);清单扫描源含 config.setup/
+    # teardown(webhook v4 §3.2 —— setup 引用的凭证同时进清单与注入)
     if with_auth:
         async with db_factory() as s:
-            prep.aliases = await service_aliases.exec_auth_aliases(
-                s, steps, bindings)
+            prep.aliases = await service_aliases.exec_auth_aliases_of_definition(
+                s, definition, bindings)
         prep.resolved_auths = await resolve_exec_auths(
             db_factory, owner_id, prep.aliases)
         got = {a.alias for a in prep.resolved_auths}
@@ -421,7 +422,9 @@ async def graph_auth_aliases(
         for definition, bindings in units:
             steps = (definition or {}).get("steps") or []
             for a in await service_aliases.exec_auth_aliases(
-                    s, steps, bindings or {}):
+                    s, steps, bindings or {},
+                    extra_scan_nodes=service_aliases.setup_teardown_nodes(
+                        definition or {})):
                 aliases.setdefault(a, None)
     return list(aliases)
 

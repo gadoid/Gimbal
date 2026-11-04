@@ -50,7 +50,7 @@ from ..schemas.execution import (
 )
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from ..services import execution_store, run_dispatcher, scenario_store
-from ..services.inbound_identity import Principal
+from ..services.access_token import Principal
 from ..services.run_dispatcher import Conflict, NotFound
 from ._ownership import ensure_owner
 
@@ -62,6 +62,11 @@ OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
 # 入站分流版可见性(D8,webhook 设计 v3 §5.6):detail/rows/events 三个
 # 只读查询端点用;写面(删除/重跑/调试)仍走 owner 闸。取消(收尾评审
 # G2)单列:入站按 caller 别名、JWT 仍 owner 本人。
+def _can_view_token(user, tok) -> bool:
+    from ..services.access_token import can_view
+    return can_view(user, tok)
+
+
 VisibleExecution = Annotated[Execution, Depends(get_visible_execution)]
 ControllableExecution = Annotated[Execution, Depends(get_controllable_execution)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
@@ -163,7 +168,7 @@ async def list_executions(
     batch_id: Annotated[str | None, Query(max_length=64)] = None,
     created_from: Annotated[datetime | None, Query()] = None,
     created_to: Annotated[datetime | None, Query()] = None,
-    caller_alias: Annotated[str | None, Query(max_length=128)] = None,
+    token_id: Annotated[int | None, Query(alias="tokenId", ge=1)] = None,
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
@@ -178,34 +183,29 @@ async def list_executions(
     M4(§6.3):``q`` 下推(scenario_name ILIKE / id 前缀)——列表页
     检索框不再拉全量在客户端过滤。
 
-    入站凭证(webhook 设计 v3 §5.6):过滤面从「owner 本人」换成
-    「caller_alias_name 等于本别名」—— 只看经由自己别名的执行
-    (平台模式 + 经该别名注册的个人模式);JWT 调用行为不变。
+    令牌(webhook v4 §2.2):过滤面从「owner 本人」换成「token_id
+    等于当前令牌」—— 只看本令牌发起的执行;JWT 调用行为不变。
 
-    ``caller_alias``(收尾评审 2026-11-02 G3,JWT 面):别名属主或 admin
-    按别名列出**经由该别名**的执行 —— 平台模式执行 owner 是系统用户,
-    不进任何人的「我的执行」,别名详情页据此排查;非属主/不存在 404。
-    入站凭证忽略该参数(恒按本别名)。
+    ``tokenId``(JWT 面,§2.2):令牌属主按令牌列出经它发起的执行;
+    平台令牌 member+ 可查;无权 404。令牌路径忽略该参数(恒按本令牌)。
     """
     user = principal.user
     if page is not None:
         page_size = page_size or 200
         limit = page_size
         offset = (page - 1) * page_size
-    if getattr(principal, "inbound", False):
+    if getattr(principal, "is_token", False):
         base = select(Execution).where(
-            Execution.caller_alias_name == principal.caller_alias)
-    elif caller_alias:
-        from ..models.service_alias import ServiceAlias
-        alias = await session.get(ServiceAlias, caller_alias)
-        if alias is None or not (
-                user.role == "admin" or alias.owner_user_id == user.id):
+            Execution.token_id == principal.token_id)
+    elif token_id is not None:
+        from ..models.access_token import AccessToken
+        tok = await session.get(AccessToken, token_id)
+        if tok is None or not _can_view_token(user, tok):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "not_found",
-                        "message": f"alias not found: {caller_alias}"})
-        base = select(Execution).where(
-            Execution.caller_alias_name == caller_alias)
+                        "message": f"token not found: {token_id}"})
+        base = select(Execution).where(Execution.token_id == token_id)
     else:
         base = select(Execution).where(Execution.owner_id == user.id)
     if q:
@@ -874,8 +874,8 @@ async def cancel_execution(
 ) -> ExecutionOut:
     """C11 协作式取消：写 execution_jobs.cancel_requested 位。
 
-    入站凭证可取消自己经由该别名发起的执行(G2);取消后照常回调
-    ``execution.finished(status=canceled)``。
+    令牌可取消本令牌发起的执行(D25:execution.token_id == 当前令牌);
+    取消后照常回调 ``execution.finished(status=canceled)``。
 
     可取消态 = queued | running（worker 在任务起点/行边界消费 DB 位，
     收敛为 canceled）；无活任务（job 终态或无 job 行——重启僵尸）的

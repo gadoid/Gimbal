@@ -301,25 +301,55 @@ async def credential_alias_hits(
 async def exec_auth_aliases(
     db: AsyncSession, steps: list,
     bindings: dict[str, dict] | None = None,
+    *,
+    extra_scan_nodes: list | None = None,
 ) -> list[str]:
     """执行凭证注入清单 —— **五个装载入口的唯一实现,算法不得漂移**
     (N1 归一 + 评审 §3.1A:单场景执行/集成/导出经 ``run_prepare.prepare_
     exec``,Suite 编排与 Suite 预检经 ``run_prepare.graph_auth_aliases``
     直接调用):
 
-    ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps)
+    ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps
+    **+ config.setup/teardown 条目**,webhook v4 §3.2 —— setup 引用的
+    凭证此前既不进清单也不注入,令牌范围与运行时注入同时生效)
     ∪ 方案绑定 authAlias ∪ 别名表凭证默认(``credential_alias_hits``,
     显式绑定优先)。去重保序。
     """
     from .auth_ref_scan import scan_auth_aliases
     b = bindings or {}
+    nodes = list(steps or [])
+    if extra_scan_nodes:
+        nodes.extend(extra_scan_nodes)
     aliases: list[str] = [
-        *scan_auth_aliases(steps or []),
+        *scan_auth_aliases(nodes),
         *(str(v.get("authAlias")) for v in b.values()
           if isinstance(v, dict) and v.get("authAlias")),
     ]
-    hits = await credential_alias_hits(db, steps, b)
+    hits = await credential_alias_hits(db, nodes, b)
     return list(dict.fromkeys([*aliases, *hits.values()]))
+
+
+def setup_teardown_nodes(definition: dict) -> list:
+    """``config.setup`` / ``config.teardown`` 条目(策略形态,不是 step,
+    无 call.service —— 不进别名集,但 ``params`` 可含 ``${auth.*}``,
+    扫描源须并入;§3.2/D30)。"""
+    cfg = (definition or {}).get("config") or {}
+    out: list = []
+    for slot in ("setup", "teardown"):
+        entries = cfg.get(slot)
+        if isinstance(entries, list):
+            out.extend(e for e in entries if isinstance(e, dict))
+    return out
+
+
+async def exec_auth_aliases_of_definition(
+    db: AsyncSession, definition: dict,
+    bindings: dict[str, dict] | None = None,
+) -> list[str]:
+    """定义级注入清单(steps ∪ setup/teardown 扫描;§3.2 唯一口径)。"""
+    return await exec_auth_aliases(
+        db, (definition or {}).get("steps") or [], bindings,
+        extra_scan_nodes=setup_teardown_nodes(definition or {}))
 
 
 async def credential_aliases_for(

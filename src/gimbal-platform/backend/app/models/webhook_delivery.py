@@ -30,8 +30,13 @@ class WebhookDelivery(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
                                     autoincrement=True)
-    # 不建外键:投递台账不随别名删除消失(与 executions.caller 同口径)
-    alias_name: Mapped[str] = mapped_column(String(128))
+    # 回调目标 = 访问令牌(webhook v4 §6):URL 与 token_name 建行时快照;
+    # 令牌删除后投递台账保留(token_id SET NULL),签名密钥不快照、投递
+    # 时按令牌现取 —— 令牌行没了即该行失败(token_deleted)。
+    token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL"),
+        nullable=True)
+    token_name: Mapped[str] = mapped_column(String(64), default="")
     # execution.finished | integration.run_finished | integration.paused
     event_type: Mapped[str] = mapped_column(String(64))
     # 关联执行/集成实例(排查用;目标行删除后投递台账保留,置 NULL)

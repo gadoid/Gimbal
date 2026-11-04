@@ -864,9 +864,8 @@ async def dispatch_run(
     *,
     preloaded_scenario: ComposerScenario | None = None,
     chain_override: str | None = None,
-    caller_alias: str | None = None,
-    grant_id: int | None = None,
-    identity_mode: str = "personal",
+    token: "object | None" = None,
+    trace: "dict | None" = None,
 ) -> RunResponse:
     """库中场景的派发入口 = 取场景 → :func:`dispatch_target`(P3 §六)。
 
@@ -899,8 +898,7 @@ async def dispatch_run(
         db, user_id, req,
         RunTarget(scenario_id=scen.scenario_id,
                   payload=scen.payload or {}, kind="scenario"),
-        chain_override=chain_override, caller_alias=caller_alias,
-        grant_id=grant_id, identity_mode=identity_mode)
+        chain_override=chain_override, token=token, trace=trace)
 
 
 async def dispatch_target(
@@ -911,9 +909,8 @@ async def dispatch_target(
     *,
     run_id: str | None = None,
     chain_override: str | None = None,
-    caller_alias: str | None = None,
-    grant_id: int | None = None,
-    identity_mode: str = "personal",
+    token: "object | None" = None,
+    trace: "dict | None" = None,
 ) -> RunResponse:
     """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
     worker 认领驱动；本函数不再 spawn 进程内 fanout）。
@@ -932,10 +929,9 @@ async def dispatch_target(
     （legacy|server），覆盖 settings.EXEC_CHAIN；随配方与 config_json
     落档，回滚 = 开关关闭即回旧链。
 
-    入站调用面(webhook 设计 v3 §4.4):``caller_alias``/``grant_id`` 来自
-    ``principal_or_user`` 分流(JWT 调用恒 None → 不写投递行、不回调);
-    ``client_ref``/``callback_path`` 在 ``req`` 上;``identity_mode``
-    只回显进响应。
+    令牌调用面(webhook v4 §3.1):``token`` 来自 ``principal_or_user``
+    分流(JWT 调用恒 None → 不写投递行、不回调);``client_ref``/
+    ``callback_path`` 在 ``req`` 上。
     """
     if is_shutting_down():
         raise Conflict(
@@ -1044,9 +1040,8 @@ async def dispatch_target(
         # 单条发起为 None。列 + config_json 双落:列驱动筛选,config 驱动
         # 重跑配方的原样保真。
         batch_id=req.batch_id,
-        # 入站调用台账(webhook 设计 v3 §7.4):JWT 调用恒 None。
-        caller_alias_name=caller_alias,
-        grant_id=grant_id,
+        # 入站调用台账(webhook v4 §7.1):JWT 调用恒 None。
+        token_id=token.id if token is not None else None,
         client_ref=req.client_ref,
         callback_path_override=req.callback_path,
         # 台账快照列(M2):通知/列表展示用 name,场景删了执行仍可读。
@@ -1097,6 +1092,16 @@ async def dispatch_target(
             "reportDefinitionId": getattr(req, "report_definition_id", None),
             # C13:执行链留档（legacy|server;调试恒 server）
             "chain": chain,
+            # §7.1 追溯块(令牌与 JWT 都写 resolvedServices/builtinAuths;
+            # 令牌另带 token 快照与 outOfScope)
+            **({"resolvedServices": trace["resolvedServices"]}
+               if trace and trace.get("resolvedServices") is not None else {}),
+            **({"builtinAuths": trace["builtinAuths"]}
+               if trace and trace.get("builtinAuths") else {}),
+            **({"token": trace["token"]}
+               if trace and trace.get("token") else {}),
+            **({"outOfScope": trace["outOfScope"]}
+               if trace and trace.get("outOfScope") else {}),
             **({"environmentWarnings": env_warnings} if env_warnings else {}),
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
             # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
@@ -1151,8 +1156,9 @@ async def dispatch_target(
     # RS3 plate_pins 不在此回填：job 经 DB 队列异步驱动，dispatch 返回时
     # fanout 尚未解析生效修订 —— 由 _fanout 解析出后自行落库。
 
-    return RunResponse(runId=run_id, executionId=execution.id,
-                       identityMode=identity_mode)
+    return RunResponse(
+        runId=run_id, executionId=execution.id,
+        identityMode=(token.kind if token is not None else "personal"))
 
 
 # ─── C11：worker 任务体入口（payload → fanout）──────────────────
@@ -2592,16 +2598,16 @@ async def transition_execution(
                 )
                 cfg["counterDrift"] = True
             ex.config_json = cfg
-            # P2-2(webhook 设计 v3 §5.1):outbox 同事务写行 —— 入站
-            # 发起(有 caller_alias_name)且别名回调开启时写
-            # execution.finished 投递行;三条 canceled 路径也经本函数
-            # 真实迁移,满足条件即发 status=canceled(D11)。写行异常
-            # 自然传播 → 终态与投递行都不落库(「有终态无回调」不出现)。
-            if ex.caller_alias_name:
+            # P2-2(webhook v4 §6):outbox 同事务写行 —— 令牌发起
+            # (有 token_id)且令牌配了回调地址时写 execution.finished
+            # 投递行;三条 canceled 路径也经本函数真实迁移,满足条件即
+            # 发 status=canceled(D11)。写行异常自然传播 → 终态与投递
+            # 行都不落库(「有终态无回调」不出现)。
+            if ex.token_id:
                 from .webhook_outbox import enqueue_execution_finished
                 await enqueue_execution_finished(session, ex)
             await session.commit()
-            if ex.caller_alias_name:
+            if ex.token_id:
                 from .webhook_outbox import wake
                 wake()
             # 通知口径:done/failed 且有 owner(N2-2:三个异常收口路径
@@ -3151,8 +3157,7 @@ async def _create_execution(
     kind: str = "scenario",
     suite_id: int | None = None,
     plate_pins: dict | None = None,
-    caller_alias_name: str | None = None,
-    grant_id: int | None = None,
+    token_id: int | None = None,
     client_ref: str | None = None,
     callback_path_override: str | None = None,
 ) -> Execution:
@@ -3163,7 +3168,7 @@ async def _create_execution(
     重构方案 0014:kind = scenario(默认)/ suite_graph(编排执行,
     scenario_id 写占位 suite-<id>);suite_id 供 21 页归并,无 FK
     (执行台账归执行人,历史不随 Suite 删除消失)。
-    caller_*(webhook 设计 v3 §7.4):入站调用台账;JWT 调用恒 None。
+    token_id(webhook v4 §7.1):令牌调用台账;JWT 调用恒 None。
     """
     owner_name = (await db.execute(
         select(User.display_name, User.username).where(User.id == owner_id)
@@ -3182,8 +3187,7 @@ async def _create_execution(
         config_json=config_json,
         batch_id=batch_id,
         plate_pins=plate_pins,
-        caller_alias_name=caller_alias_name,
-        grant_id=grant_id,
+        token_id=token_id,
         client_ref=client_ref,
         callback_path_override=callback_path_override,
     )

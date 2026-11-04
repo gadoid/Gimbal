@@ -1,9 +1,10 @@
 """外部系统集成 P1 路由:功能(模板)CRUD + 手动执行 + 批量卡片 +
-平台凭证(admin)。
+平台凭证(admin)+ 令牌注册面。
 
-《GIMBAL-外部系统集成架构设计》§9 + 评审定稿:P1 只开放平台模式
-(personal 随 P2);模板软删(评审 E7);平台凭证 = 平台系统用户的
-auth_sessions(决策 9,复用加密与连通测试,只限 admin 管理)。
+《GIMBAL-外部系统集成架构设计》§9 + webhook v4 §5.2:模板软删(评审
+E7);平台凭证 = 平台系统用户的 auth_sessions(复用加密与连通测试,
+只限 admin 管理);令牌注册的任务按 ``token_id`` 隔离(令牌只能管理
+本令牌注册的);JWT 管理者可解绑令牌(D26)。
 """
 from __future__ import annotations
 
@@ -22,10 +23,11 @@ from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.integration_task import IntegrationTask
 from ..models.user import User
+from ..services import access_token as at_svc
 from ..services import audit as audit_svc
 from ..services import integration_runner
+from ..services.access_token import Principal
 from ..services.cron_expr import CronError, describe_cron, parse_cron
-from ..services.inbound_identity import Principal, valid_callback_path
 from ..services.run_semantics import working_preview
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -56,9 +58,10 @@ def _safe_decrypt(encrypted: str) -> str:
 
 
 def _can_manage(user, tpl: IntegrationTask) -> bool:
-    """模板改动权:owner;平台模式另含 admin(方案 §3 操作表)。"""
-    return user.id == tpl.owner_id or (
-        tpl.identity_mode == "platform" and user.role == "admin")
+    """模板改动权(§5.2 改写):平台模板 member+;个人模板属主或 admin。"""
+    if tpl.identity_mode == "platform":
+        return user.role in ("member", "admin")
+    return user.id == tpl.owner_id or user.role == "admin"
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
@@ -67,13 +70,13 @@ def _visible(user, tpl: IntegrationTask) -> bool:
         or user.role == "admin")
 
 
-def _inbound_owns(principal: Principal, tpl: IntegrationTask) -> bool:
-    """入站面的可见/管理判定(M2 规则,收尾评审 G1 推广到查/删/触发):
-    只认**调用方别名**注册的模板,已软删的不出;不满足一律 404(不泄露
-    存在性)。``_visible`` / ``_can_manage`` 对系统用户恒为真,不能用于
-    入站面。"""
+def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
+    """令牌面的可见/管理判定(§2.2):只认**本令牌**注册的模板,已软删
+    的不出;不满足一律 404(不泄露存在性)。``_visible``/``_can_manage``
+    对系统用户恒为真,不能用于令牌面。"""
     return (tpl.removed_at is None
-            and tpl.caller_alias_name == principal.caller_alias)
+            and tpl.token_id is not None
+            and tpl.token_id == principal.token_id)
 
 
 async def _my_instance(db: AsyncSession, tpl: IntegrationTask, user):
@@ -96,20 +99,23 @@ async def _tpl_instance(db: AsyncSession, tpl_id: int,
             tpl, holder_id=user.id)
         return seeded
     return (await db.execute(select(IntegrationTask).where(
-        IntegrationTask.template_id == tpl_id,
-        IntegrationTask.holder_id.is_not(None),
+            IntegrationTask.template_id == tpl_id,
+            IntegrationTask.holder_id.is_not(None),
     ).order_by(IntegrationTask.id))).scalars().first()
 
 
 def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
-             current: User, *, auth_aliases: list[str] | None = None,
+             current: User, *, token: Any = None,
+             auth_aliases: list[str] | None = None,
              subscribed: bool | None = None) -> dict:
     out = {
         "id": db_tpl.id,
         "name": db_tpl.name,
         "ownerId": db_tpl.owner_id,
         "mine": db_tpl.owner_id == current.id,
-        "canManage": current.role == "admin" or db_tpl.owner_id == current.id,
+        "canManage": current.role == "admin" or db_tpl.owner_id == current.id
+        or (db_tpl.identity_mode == "platform"
+            and current.role == "member"),
         "visibility": db_tpl.visibility,
         "identityMode": db_tpl.identity_mode,
         "targetType": db_tpl.target_type,
@@ -129,10 +135,13 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         out["authAliases"] = auth_aliases
     if subscribed is not None:
         out["subscribed"] = subscribed
-    # D12(webhook 设计 v3):公共模板对非属主隐藏 caller/client_ref —
-    # 注册方的集成关系不外泄;属主/admin(即 canManage 面)可见。
-    if current.role == "admin" or db_tpl.owner_id == current.id:
-        out["callerAliasName"] = db_tpl.caller_alias_name
+    # D12:公共模板对非属主隐藏 token/client_ref —— 注册方的集成关系
+    # 不外泄;属主/admin/member+(平台身份对象)可见。
+    if current.role in ("admin", "member") or db_tpl.owner_id == current.id:
+        out["tokenId"] = db_tpl.token_id
+        if token is not None:
+            out["tokenName"] = token.name
+            out["tokenKind"] = token.kind
         out["clientRef"] = db_tpl.client_ref
     return out
 
@@ -156,14 +165,16 @@ async def _tpl_out_full(
 ) -> dict:
     """W0b④ 消费面组装:authAliases / missingCredentials / subscribed。
     missing 的持有人:personal = 当前查看者(「我缺什么」),platform =
-    平台实例持有人。"""
+    平台实例持有人。令牌面:tokenId/tokenName 一并回显。"""
+    from ..models.access_token import AccessToken
     aliases = await integration_runner.auth_aliases_view(db, tpl)
     holder = user.id if tpl.identity_mode == "personal" else (
         inst.holder_id if inst is not None else None)
     missing = await _missing_credentials(db, aliases, holder)
     subscribed = (tpl.identity_mode == "personal"
                   and inst is not None and inst.holder_id == user.id)
-    out = _tpl_out(tpl, inst, user,
+    token = await db.get(AccessToken, tpl.token_id) if tpl.token_id else None
+    out = _tpl_out(tpl, inst, user, token=token,
                    auth_aliases=aliases, subscribed=subscribed)
     if inst is not None:
         out["instance"] = _inst_out(inst, missing=missing)
@@ -207,7 +218,7 @@ class TaskIn(BaseModel):
     cardTemplate: str = "status"
     visibility: str = "private"
     targetSystem: str = ""
-    # 入站注册面(webhook 设计 v3 §4.4;JWT 调用可带但无回调语义)
+    # 令牌注册面(§2.2);JWT 调用可带但无回调语义
     clientRef: str | None = Field(default=None, max_length=128)
     callbackPath: str | None = Field(default=None, max_length=256)
 
@@ -219,16 +230,17 @@ class TaskPatch(BaseModel):
     resultPolicy: str | None = None
     visibility: str | None = None
     targetSystem: str | None = None
-    # 入站注册面(§4.4):属主可改引用键/回调路径覆盖;caller 身份
-    # (caller_alias_name/grant_id)注册时定死,PATCH 不可改
+    # JWT 管理者解绑令牌(D26):显式 null = 解绑;令牌路径不能解绑。
+    # ``tokenId`` 其他取值一律 422(绑定关系只在创建时定)。
+    tokenId: int | None = None
     clientRef: str | None = Field(default=None, max_length=128)
     callbackPath: str | None = Field(default=None, max_length=256)
 
 
 @router.get("/tasks")
 async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
-    """可见模板:我的 + 公共(admin 全见);软删的不出。入站凭证
-    (收尾评审 G1):只回本别名注册的模板。
+    """可见模板:我的 + 公共(admin 全见);软删的不出。令牌
+    (§2.2):只回本令牌注册的模板。
 
     P3.2(已知欠账,暂记不修):每行算 authAliases / missingCredentials
     要单独装载场景 + 方案并查凭证池(N+1);当前数据量小可接受,
@@ -238,12 +250,12 @@ async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
         IntegrationTask.template_id.is_(None),
         IntegrationTask.removed_at.is_(None),
     )
-    if principal.inbound:
-        q = q.where(IntegrationTask.caller_alias_name == principal.caller_alias)
+    if principal.is_token:
+        q = q.where(IntegrationTask.token_id == principal.token_id)
     rows = (await db.execute(q.order_by(IntegrationTask.id.desc()))).scalars().all()
     out = []
     for t in rows:
-        if not principal.inbound and not _visible(user, t):
+        if not principal.is_token and not _visible(user, t):
             continue
         inst = await _my_instance(db, t, user)   # W0a①:列表只读不播种
         out.append(await _tpl_out_full(db, t, inst, user))
@@ -254,18 +266,23 @@ async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
 async def create_task(body: TaskIn, principal: PrincipalIn,
                       db: DbSession) -> dict:
     user = principal.user
-    # §4.4(webhook 设计 v3):入站调用的 identityMode 由认证结果决定
-    # —— gic_+ggt_ = personal(grant 签发人),gic_ 无 grant = platform;
-    # 请求体传入不同值 → 422(不静默改写调用方的身份预期)。JWT 用户
-    # 维持既有自由选择(platform|personal 均可)—— 平台模式任务本就
-    # 由 UI 侧用户创建,Principal.identity_mode 只约束入站执行面。
-    if principal.inbound and body.identityMode != principal.identity_mode:
+    # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主、
+    # platform → 平台身份);请求体传入不同值 → 422。JWT 用户:平台
+    # 模式要求 member+(§2.3 矩阵),个人模式不限。
+    if principal.is_token:
+        if body.identityMode != principal.identity_mode:
+            raise _bad(
+                "identity_mode_mismatch",
+                f"identityMode 由认证结果决定为 {principal.identity_mode}"
+                f"(请求体传了 {body.identityMode})")
+    elif body.identityMode == "platform" \
+            and user.role not in ("member", "admin"):
         raise _bad(
-            "identity_mode_mismatch",
-            f"identityMode 由认证结果决定为 {principal.identity_mode}"
-            f"(请求体传了 {body.identityMode})")
+            "role_forbidden",
+            "创建平台模式任务需要成员(member)及以上角色",
+            403)
     if body.callbackPath is not None \
-            and not valid_callback_path(body.callbackPath):
+            and not at_svc.valid_callback_path(body.callbackPath):
         raise _bad(
             "callback_path_invalid",
             "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
@@ -284,23 +301,19 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
-    if principal.identity_mode != "platform" \
+    if body.identityMode != "platform" \
             and scen.owner_id != user.id:
-        # §4.3:个人模式(含 JWT/grant 用户)要求场景属主。
+        # §4.3:个人模式(含 JWT/个人令牌属主)要求场景属主。
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
-    if principal.inbound and principal.identity_mode == "platform":
-        # M2(修复方案 §2.1):平台模式场景范围 —— 公共场景,或别名
-        # 属主自己的场景;团队共享别名只能用公共场景。JWT 建的平台
-        # 任务不走本闸(它们仍受只读闸约束,且由真人属主管理)。
-        from ..services.inbound_identity import platform_scope_ok
-        if not platform_scope_ok(scen, principal.caller_alias_owner_id):
+    if body.identityMode == "platform":
+        # D9(令牌与 JWT 同一检查,取消 v3 的 JWT 豁免):平台模式只认
+        # 公共场景;注册入口 422(§5.4 状态码约定)。
+        if (getattr(scen, "visibility", None) or "private") != "public":
             raise _bad(
                 "platform_scope_denied",
-                "平台模式只能使用公共场景,或经由别名属主自己的场景",
-                403)
+                "平台模式只能使用公共场景")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
-    # 场景限定)。此前 schemeId 直接入库 + runner 全局取方案,枚举
-    # rs-NNN 可跨场景引用他人方案/数据集。
+    # 场景限定)。
     if body.schemeId:
         from ..services import scheme_store
         try:
@@ -310,7 +323,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
                 "scheme_not_owned",
                 f"执行方案不存在或不属于该场景: {body.schemeId}") from None
     # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤);
-    # Y3:个人模式放行写操作(写操作必须个人身份,方案 §3)
+    # D30:config.setup/teardown 策略条目须属无副作用白名单
     if body.identityMode == "platform":
         ok, offenders = await _read_only_with_plate(db, scen)
         if not ok:
@@ -325,10 +338,9 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         target_system=body.targetSystem or "", trigger_cron=body.triggerCron,
         result_policy=body.resultPolicy, card_template=body.cardTemplate,
         updated_by=user.id,
-        # 入站注册台账(§7.4/D12):JWT 注册恒 None → 不回调;
+        # 令牌注册台账(§3.3;只落模板行):JWT 注册恒 None → 不回调;
         # 公共化不剥离 —— 仅注册方自己的实例写回调投递行
-        caller_alias_name=principal.caller_alias,
-        grant_id=principal.grant_id,
+        token_id=principal.token_id if principal.is_token else None,
         client_ref=body.clientRef,
         callback_path_override=body.callbackPath)
     db.add(tpl)
@@ -347,15 +359,30 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             await db.rollback()
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "create", "task": tpl.id, "name": tpl.name,
-        "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref})
+        "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref,
+        "identity_mode": body.identityMode})
     return await _tpl_out_full(db, tpl, inst, user)
 
 
 async def _read_only_with_plate(
     db: AsyncSession, scen: ComposerScenario,
 ) -> tuple[bool, list[str]]:
-    """P1 口径 = 全部步骤安全方法(POST+query_safe 随 P2 接 plate 元数据)。"""
-    return await integration_runner.is_scenario_read_only(scen.payload)
+    """平台模式只读闸(D30 扩展:setup/teardown 策略条目须属
+    ``_SAFE_STRATEGY_KINDS``,否则 not_read_only)。"""
+    ok, offenders = await integration_runner.is_scenario_read_only(
+        scen.payload)
+    if ok:
+        from ..services.service_aliases import setup_teardown_nodes
+        from ..services.scenario_store import definition_from_payload
+        entries = setup_teardown_nodes(
+            definition_from_payload(scen.payload))
+        for i, e in enumerate(entries):
+            kind = str(e.get("kind") or "")
+            if kind not in integration_runner._SAFE_STRATEGY_KINDS:
+                offenders.append(
+                    f"setup/teardown 条目 {i}(策略 {kind or '?'} 白名单外)")
+                ok = False
+    return ok, offenders
 
 
 @router.get("/tasks/{task_id}")
@@ -363,7 +390,7 @@ async def get_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not (
-            _inbound_owns(principal, tpl) if principal.inbound
+            _token_owns(principal, tpl) if principal.is_token
             else _visible(user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
     inst = await _my_instance(db, tpl, user)   # W0a①:详情只读不播种
@@ -376,44 +403,55 @@ async def patch_task(
 ) -> dict:
     user = principal.user
     if body.callbackPath is not None \
-            and not valid_callback_path(body.callbackPath):
+            and not at_svc.valid_callback_path(body.callbackPath):
         raise _bad(
             "callback_path_invalid",
             "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or tpl.removed_at is not None:
         raise _bad("not_found", "功能不存在", 404)
-    rebind_inst: IntegrationTask | None = None
-    grant_from = tpl.grant_id          # G4:换绑审计记前值
-    if principal.inbound:
-        # M2(修复方案 §2.2):入站调用的管理权按**调用方别名**判定 ——
-        # 只能改自己别名注册的任务;不满足 → 404(不泄露存在性)。
-        # _can_manage 对系统用户恒为真,不能用于入站面。
-        if tpl.caller_alias_name != principal.caller_alias:
+    if principal.is_token:
+        # 令牌面(§2.2):只能改本令牌注册的任务;不满足 → 404。
+        # 令牌不能解绑自己(D26:解绑 = 转 JWT 管理)。
+        if not _token_owns(principal, tpl):
             raise _bad("not_found", "功能不存在", 404)
-        if principal.grant_id is not None:
-            # 修复复核 §2(2026-11-01):带 grant 的入站 PATCH = 用**新 grant**
-            # 重新绑定任务。grant_id 注册时写死,撤销/到期(默认 90 天)后
-            # 实例暂停 grant_revoked,「启动」不解此暂停、下次运行也只会再
-            # 校验旧 grant —— 任务此前无路可救,只能删掉重建。只认同一
-            # 签发人:他人的 grant 不能接管任务(403);平台模式任务不绑定
-            # grant,带 grant 调用即身份不符(422,与创建闸同码)。
-            if tpl.identity_mode != "personal":
+        if "tokenId" in body.model_fields_set:
+            raise _bad(
+                "token_unbind_not_allowed",
+                "令牌路径不能解绑任务;解绑请由 JWT 管理者在集成详情操作",
+                403)
+    else:
+        if not _can_manage(user, tpl):
+            raise _bad("forbidden", "只有模板管理者(平台模式 member+,"
+                         "个人模式属主或 admin)能修改", 403)
+        if "tokenId" in body.model_fields_set:
+            # D26 解绑:token_id 置空、停回调、manual 暂停(钩子不再
+            # 拉起,之后手动启动;平台任务仍受 #5 与只读闸)。
+            if body.tokenId is not None:
                 raise _bad(
-                    "identity_mode_mismatch",
-                    "该任务为平台模式,不绑定 grant;请不带 X-Gimbal-Grant 调用")
-            if tpl.owner_id != user.id:
-                raise _bad(
-                    "grant_issuer_mismatch",
-                    "grant 签发人与任务属主不一致,不能用他人的 grant 重新绑定",
-                    403)
-            tpl.grant_id = principal.grant_id
-            inst0 = await _my_instance(db, tpl, user)
-            if (inst0 is not None and inst0.state == "paused"
-                    and inst0.paused_reason == "grant_revoked"):
-                rebind_inst = inst0
-    elif not _can_manage(user, tpl):
-        raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能修改", 403)
+                    "token_rebind_not_allowed",
+                    "tokenId 只能解绑(传 null);绑定关系在创建时确定")
+            if tpl.token_id is None:
+                raise _bad("token_not_bound", "该任务未绑定令牌", 409)
+            unbind_token_id = tpl.token_id
+            tpl.token_id = None
+            tpl.callback_path_override = None
+            inst = await _tpl_instance(db, tpl.id)
+            if inst is not None and inst.state != "paused":
+                inst.state = "paused"
+                inst.paused_reason = "manual"
+                inst.last_error = "令牌已解绑,任务转由账号管理;启动后恢复调度"
+            await db.commit()
+            from ..models.access_token import AccessToken
+            old_tok = await db.get(AccessToken, unbind_token_id)
+            await audit_svc.record(
+                db, actor_id=user.id,
+                actor_name=user.display_name or user.username,
+                action="token.task.unbind", resource_type="integration",
+                resource_id=str(tpl.id), resource_name=tpl.name,
+                detail={"task": tpl.id, "token": unbind_token_id,
+                        "token_name": old_tok.name if old_tok else None})
+            return await _tpl_out_full(db, tpl, inst, user)
     if body.triggerCron is not None:
         try:
             parse_cron(body.triggerCron)
@@ -448,11 +486,6 @@ async def patch_task(
         tpl.target_system = body.targetSystem
     tpl.updated_by = user.id
     await db.commit()
-    if rebind_inst is not None:
-        # 修复复核 §2:重绑即恢复 —— 复用「启动」的恢复逻辑(回 idle、立即
-        # 排期、时间线 integration.resumed);下次运行按新 grant 重校验。
-        await _resume_instance(db, tpl, rebind_inst, actor_id=user.id,
-                               via="grant_rebind")
     # W0a⑤(G-C):public→private 联动 —— 非 owner 订阅实例暂停+通知;
     # 转回 public 不自动恢复,需订阅者重新确认(再订阅)
     if body.visibility == "private" and tpl.identity_mode == "personal":
@@ -463,12 +496,6 @@ async def patch_task(
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "patch", "task": tpl.id, "name": tpl.name,
         "changed": sorted(body.model_fields_set)})
-    if (principal.inbound and principal.grant_id is not None
-            and grant_from != principal.grant_id):
-        # G4:换绑单独一条 —— 它改变的是「以谁身份跑」,比普通修改重
-        await audit_svc.record_inbound(db, principal, "inbound.grant_rebind", detail={
-            "task": tpl.id, "name": tpl.name, "grant_from": grant_from,
-            "resumed": rebind_inst is not None})
     inst = await _tpl_instance(db, tpl.id)
     return await _tpl_out_full(db, tpl, inst, user)
 
@@ -476,16 +503,16 @@ async def patch_task(
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     """软删(评审 E7):卡片走「已移除」态,订阅者可见可自行删卡。
-    入站凭证(G1):只能删自己别名注册的,否则 404。"""
+    令牌(§2.2):只能删本令牌注册的,否则 404。"""
     user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None:
         raise _bad("not_found", "功能不存在", 404)
-    if principal.inbound:
-        if not _inbound_owns(principal, tpl):
+    if principal.is_token:
+        if not _token_owns(principal, tpl):
             raise _bad("not_found", "功能不存在", 404)
     elif not _can_manage(user, tpl):
-        raise _bad("forbidden", "只有模板 owner(平台模式含 admin)能删除", 403)
+        raise _bad("forbidden", "只有模板管理者能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
     # W2(G-E):模板删除通知持有人(卡片转「已移除」态,但按 cron 等
@@ -507,27 +534,24 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     的实例(无冷却,方案 §3 操作表)。W0a① 起「点执行即订阅」收口:
     未订阅用户 409 引导走订阅确认。
 
-    入站凭证(收尾评审 G1):只能触发自己别名注册的任务(否则 404),
-    且身份须与注册时一致 —— 个人模式任务要带**同一签发人**的 grant
-    (grant 用户 = 任务属主 = 实例持有人),平台模式任务不带 grant;
-    错配 422 / 403 与 PATCH 重绑同码。"""
+    令牌(§2.2):只能触发本令牌注册的任务(否则 404),且身份须与
+    注册时一致 —— 个人模式任务的令牌属主 = 任务属主。"""
     user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not (
-            _inbound_owns(principal, tpl) if principal.inbound
+            _token_owns(principal, tpl) if principal.is_token
             else _visible(user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
-    if principal.inbound:
+    if principal.is_token:
         if tpl.identity_mode != principal.identity_mode:
             raise _bad(
                 "identity_mode_mismatch",
                 f"该任务为{'个人' if tpl.identity_mode == 'personal' else '平台'}"
-                f"模式,触发时{'须携带' if tpl.identity_mode == 'personal' else '不能携带'}"
-                " X-Gimbal-Grant")
+                f"模式,与令牌身份({principal.identity_mode})不符")
         if tpl.identity_mode == "personal" and tpl.owner_id != user.id:
             raise _bad(
-                "grant_issuer_mismatch",
-                "grant 签发人与任务属主不一致,不能用他人的 grant 触发", 403)
+                "token_owner_mismatch",
+                "令牌属主与任务属主不一致,不能触发他人任务", 403)
     # A-4/W6 手动面前置闸(版本模型 §6):working 预览场景 409 拒触发,
     # 在建实例/占冷却之前;调度路径由 integration_runner 内部同款闸兜底。
     if tpl.scenario_id:
@@ -555,8 +579,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
         # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
         inst = await db.get(IntegrationTask, seeded.id)
     # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
-    # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC(utcnow
-    # 3.12 起废弃);DB 读回仍按 ensure_aware 归一(两方言形状不同)。
+    # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC。
     from ..core.timeutil import ensure_aware
     now = datetime.now(timezone.utc)
     _last_manual = (ensure_aware(inst.last_manual_run_at)
@@ -570,9 +593,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
         wait = int(integration_runner.MANUAL_COOLDOWN_SECONDS - (
             now - _last_manual).total_seconds())
         raise _bad("cooldown", f"手动执行冷却中,约 {wait}s 后可再试", 409)
-    # C-4(2026-10-13):占用判定改条件更新(CAS) —— 此前"读 state → 写
-    # running"两步,与调度器并发或个人模式(无冷却)连点会把同一实例执行
-    # 两次;且手动路径不计入 _inflight 上限。CAS 失败 = 已被占用,409。
+    # C-4(2026-10-13):占用判定改条件更新(CAS)
     if not integration_runner._inflight_ok(tpl, inst.holder_id):
         raise _bad("inflight_limit", "在飞实例数已达上限,稍后再试", 429)
     from sqlalchemy import update as sa_update
@@ -588,8 +609,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     await db.commit()
     integration_runner._inflight_add(tpl, inst.holder_id, 1)
     try:
-        # P0-3.1:占用 CAS 写入的 now 即租约令牌 —— 迟到结果(极端
-        # 慢的一轮撞上租约回收后再次手动触发)不覆写新一轮运行
+        # P0-3.1:占用 CAS 写入的 now 即租约令牌
         result = await integration_runner.run_instance(inst.id, lease=now)
     except Exception as e:  # noqa: BLE001 — run_instance 内部已收口;兜一层
         raise _bad("run_failed", str(e)[:300], 500) from None
@@ -619,9 +639,9 @@ async def scenario_preview(
     user: CurrentUser, db: DbSession,
     scenarioId: str, schemeId: str | None = None,
 ) -> dict:
-    """W1 创建前置提示(个人侧方案 §2 W1):场景+方案(可选)的执行
-    形态预览 —— 注入凭证别名、当前用户缺失清单、working 预览标记。
-    只允许预览自己的场景(与创建闸同口径);指定方案须属该场景。"""
+    """W1 创建前置提示:场景+方案(可选)的执行形态预览 —— 注入凭证
+    别名、当前用户缺失清单、working 预览标记。只允许预览自己的场景
+    (与创建闸同口径);指定方案须属该场景。"""
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == scenarioId))).scalar()
     if scen is None:
@@ -650,8 +670,7 @@ async def subscription_summary(
     task_id: int, user: CurrentUser, db: DbSession,
 ) -> dict:
     """订阅确认摘要(W0a③):步骤系统·方法·只读标记、所需凭证别名、
-    服务地址、数据集名、cron —— 结构信息 only,不含场景全文与数据值
-    (私有场景可见性边界,§2.1)。"""
+    服务地址、数据集名、cron —— 结构信息 only。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
@@ -662,8 +681,6 @@ async def subscription_summary(
     except integration_runner.IntegrationRunError as e:
         raise _bad(e.code, e.message, 404) from None
     except PlateUnavailableError as e:
-        # P1:摘要按修订/当前定义从 plate 取 binding —— 取不到就不给
-        # 确认(fail-closed:看不出步骤读写面的摘要不能作为知情依据)
         raise _bad("plate_unavailable",
                    f"接口定义暂不可得,稍后再试: {e}", 502) from None
     except Exception as e:  # noqa: BLE001 — 别名查询失败 → 503(订阅面口径)
@@ -674,8 +691,7 @@ async def subscription_summary(
 class SubscribeIn(BaseModel):
     """P2.2:订阅回传摘要里的 fingerprint —— 确认的必须是订阅者看到
     的那份内容;与当前计算值不一致 409,前端重拉摘要后再确认。
-    **必填**(平台未上线、无旧客户端;不留「不看摘要也能订阅」的
-    口子 —— 知情同意初衷)。"""
+    **必填**。"""
     fingerprint: str = Field(min_length=1)
 
 
@@ -686,8 +702,7 @@ async def subscribe_task(
 ) -> dict:
     """显式订阅(W0a①/P-1=b):建立/刷新持有人实例 + 记录内容指纹与
     确认时刻;对 template_changed/made_private 暂停的实例 = 重新确认
-    (刷新指纹并恢复调度)。幂等。**必须回传摘要 fingerprint**,
-    缺失/为空 422。"""
+    (刷新指纹并恢复调度)。幂等。**必须回传摘要 fingerprint**。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
@@ -697,9 +712,7 @@ async def subscribe_task(
         if tpl.scenario_id else None
     if scen is None:
         raise _bad("scenario_not_found", "场景不存在", 404)
-    # P2.2:先按当前内容算指纹并与回传值比对(在 ensure_instance 之前
-    # —— 比对失败不留半确认的实例行)。摘要之后内容变了 → 409,让
-    # 前端重拉摘要;订阅者确认的永远是他在摘要里看到的那份内容。
+    # P2.2:先按当前内容算指纹并与回传值比对
     try:
         current_fp = await integration_runner.consent_fingerprint_now(
             db, tpl, scen)
@@ -784,10 +797,7 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
                            via: str) -> None:
     """「启动」的恢复逻辑(唯一实现):暂停实例回 idle、立即排期;
     fail_streak 恢复即清零(重启失败阶梯);个人模式写时间线
-    ``integration.resumed``(``via`` 记恢复路径)。前置闸由调用方负责:
-    订阅面「启动」只解 manual / fail_streak / scope_denied,带新 grant
-    的入站 PATCH 解 grant_revoked(修复复核 §2)。自服务动作不给自己
-    发通知 —— 通知面只留给异步/他人触发的恢复,如复活钩子。"""
+    ``integration.resumed``(``via`` 记恢复路径)。"""
     if inst.paused_reason == "fail_streak":
         inst.fail_streak = 0   # W4:启动即重置连续失败计数
     inst.state = "idle"
@@ -802,21 +812,28 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
             detail={"name": tpl.name, "via": via}, coalesce=False)
 
 
+#: 「启动」放行的暂停原因(§3.3 恢复入口):manual/fail_streak 可直接
+#: 恢复;scope_denied(场景公开后)/ resource_not_allowed(缺项处置后)/
+#: token_owner_ineligible(恢复角色后)条件由管理者满足后启动,下次运行
+#: 再过复核闸。token_* 三类各有专属路径,不由「启动」代偿。
+_RESUMABLE = ("manual", "fail_streak", "scope_denied",
+              "resource_not_allowed", "token_owner_ineligible")
+
+
 @router.post("/tasks/{task_id}/subscription/pause")
 async def pause_my_subscription(
     task_id: int, user: CurrentUser, db: DbSession,
 ) -> dict:
     """W0b⑥(G-D):订阅者自暂停 —— paused/manual(凭证复活钩子不覆盖
     manual,只有本人 resume 可恢复)。幂等;调度面只认 idle,暂停即
-    不再被认领。W4:个人模式 owner 自有实例同走此口(订阅面按钮对
-    owner 同样渲染);平台模式对 owner/admin 开放 —— 操作平台唯一
-    实例,其他用户 403。"""
+    不再被认领。W4:个人模式 owner 自有实例同走此口;平台模式对
+    member+ 开放 —— 操作平台唯一实例,其他用户 403。"""
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
     if tpl.identity_mode == "platform":
         if not _can_manage(user, tpl):
-            raise _bad("forbidden", "平台模式暂停/恢复仅 owner/admin 可操作", 403)
+            raise _bad("forbidden", "平台模式暂停/恢复仅 member+ 可操作", 403)
         inst = await _tpl_instance(db, tpl.id)
         if inst is None:
             raise _bad("instance_missing", "平台实例缺失", 404)
@@ -842,40 +859,47 @@ async def pause_my_subscription(
 async def resume_my_subscription(
     task_id: int, user: CurrentUser, db: DbSession,
 ) -> dict:
-    """W0b⑥:订阅者恢复。manual 与 W4 连续失败自动暂停(fail_streak)
-    可直接恢复 —— fail_streak 恢复即清零计数(重启失败阶梯);M2 的
-    scope_denied 同样可直接恢复(场景公开/换属主后由 owner/admin 启动,
-    下次运行再过范围闸,仍不满足只是再次暂停);其余暂停原因各有专属
-    路径,恢复操作不代偿:template_changed/made_private → 重新订阅确认;
-    missing_credential → 补配凭证(复活钩子自动恢复);grant_revoked →
-    调用方带新 grant PATCH 重新绑定(修复复核 §2)。inbound_disabled
-    (别名关闭「允许入站调用」,全量评估 2026-11-02 #6)同 scope_denied:
-    重新开启后由 owner/admin 启动,仍关闭则下次运行再次暂停。
-    W4:平台模式对 owner/admin 开放(恢复平台唯一实例)。"""
+    """W0b⑥:恢复(§3.3 恢复入口)。放行 ``_RESUMABLE`` 五类;其余暂停
+    原因各有专属路径,恢复操作不代偿:
+
+    * ``token_revoked`` → 409 提示先解绑(吊销是终态);
+    * ``token_expired`` / ``token_invalidated`` → 409 提示续期或重新
+      生成(完成后自动恢复);
+    * template_changed/made_private → 重新订阅确认;
+    * missing_credential → 补配凭证(复活钩子自动恢复)。
+    """
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
     if tpl.identity_mode == "platform":
         if not _can_manage(user, tpl):
-            raise _bad("forbidden", "平台模式暂停/恢复仅 owner/admin 可操作", 403)
+            raise _bad("forbidden", "平台模式暂停/恢复仅 member+ 可操作", 403)
         inst = await _tpl_instance(db, tpl.id)
         if inst is None:
             raise _bad("instance_missing", "平台实例缺失", 404)
     else:
         _subscribable(tpl, user)
         inst = await _my_subscription(db, tpl, user)
-    if inst.state == "paused" and inst.paused_reason not in (
-            "manual", "fail_streak", "scope_denied", "inbound_disabled"):
-        raise _bad(
-            "resume_not_allowed",
-            f"该暂停({inst.paused_reason})不能由恢复操作解除:"
-            "template_changed/made_private 请重新订阅确认,"
-            "missing_credential 请补配凭证,grant_revoked 请签发人重新签发"
-            " grant 并由调用方带新 grant 对任务 PATCH 重新绑定", 409)
+    reason = inst.paused_reason or ""
+    if inst.state == "paused" and reason not in _RESUMABLE:
+        if reason == at_svc.PAUSE_TOKEN_REVOKED:
+            hint = ("该暂停(token_revoked)不能由恢复操作解除:令牌已吊销"
+                    "(终态),请先在集成详情「解绑令牌」转由账号管理")
+        elif reason == at_svc.PAUSE_TOKEN_EXPIRED:
+            hint = ("该暂停(token_expired)请在个人设置对令牌续期或"
+                    "重新生成,完成后任务自动恢复")
+        elif reason == at_svc.PAUSE_TOKEN_INVALIDATED:
+            hint = ("该暂停(token_invalidated)请在个人设置重新生成令牌,"
+                    "完成后任务自动恢复")
+        else:
+            hint = ("该暂停(" + reason + ")不能由恢复操作解除:"
+                    "template_changed/made_private 请重新订阅确认,"
+                    "missing_credential 请补配凭证")
+        raise _bad("resume_not_allowed", hint, 409)
     if inst.state == "paused":
-        via = (inst.paused_reason
-               if inst.paused_reason in ("fail_streak", "scope_denied",
-                                         "inbound_disabled")
+        via = (reason if reason in ("fail_streak", "scope_denied",
+                                    "resource_not_allowed",
+                                    "token_owner_ineligible")
                else "manual")
         await _resume_instance(db, tpl, inst, actor_id=user.id, via=via)
     return await _tpl_out_full(db, tpl, inst, user)
@@ -913,9 +937,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             db, card_aliases,
             user.id if tpl.identity_mode == "personal"
             else (inst.holder_id if inst is not None else None))
-        # Y4/方案 §7:卡片输出投影 —— output_mapping {输出键 → 展示键};
-        # 缺省(空 mapping)= 全量 last_outputs(已脱敏)。kv/counter/
-        # list 模板据比渲染。
+        # Y4/方案 §7:卡片输出投影
         raw_outputs = (getattr(inst, "last_outputs", None) or {}) \
             if inst is not None else {}
         om = tpl.output_mapping if isinstance(tpl.output_mapping, dict) else {}
@@ -925,8 +947,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             if om else dict(raw_outputs)
         stale = False
         if io["lastRunAt"]:
-            # I2 双触发过期(D10,取代固定 1h):错过两次应有的触发才过期;
-            # cron 坏/无 cron 由 is_stale 内部回退 1h(fail-open 到旧行为)
+            # I2 双触发过期(D10)
             stale = integration_runner.is_stale(
                 tpl.trigger_cron, inst.last_run_at
                 if inst is not None else None)
@@ -950,7 +971,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
     return {"items": out}
 
 
-# ── 平台凭证(admin;决策 9/10)──────────────────────────────────
+# ── 平台凭证(admin;决策 9/10,D34 原地更新)─────────────────────
 
 class PlatformCredIn(BaseModel):
     alias: str = Field(min_length=1, max_length=64)
@@ -959,6 +980,16 @@ class PlatformCredIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
     tokenType: str = "Bearer"
     expiresIn: int = 7200
+
+
+class PlatformCredPatch(BaseModel):
+    """D34:原地更新(全部可选),id 不变 —— 保证轮换密码不会把凭证
+    从平台令牌范围里级联掉;删除仍级联。"""
+    url: str | None = Field(default=None, max_length=2048)
+    username: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, max_length=1024)
+    tokenType: str | None = Field(default=None, max_length=32)
+    expiresIn: int | None = Field(default=None, ge=60)
 
 
 def _require_admin(user) -> None:
@@ -1004,8 +1035,6 @@ async def create_platform_credential(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    # 特权写必审:平台凭证直接决定全体平台模式任务的认证面(admin-only)
-    from ..services import audit as audit_svc
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
@@ -1013,11 +1042,53 @@ async def create_platform_credential(
         resource_type="integration_credential", resource_id=str(row.id),
         resource_name=row.alias,
         detail={"fn": "create", "alias": row.alias})
-    # G7/Y2:平台凭证新建 = 恢复信号 → auth_failed 暂停的平台模式实例
-    # 恢复调度(revive 内部平台模式不受 user_id 过滤)。
+    # G7/Y2:平台凭证新建 = 恢复信号
     try:
-        from ..services import integration_runner as _ir
-        await _ir.revive_paused_instances(user.id)
+        await integration_runner.revive_paused_instances(user.id)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"id": row.id, "alias": row.alias}
+
+
+@router.patch("/platform-credentials/{cred_id}")
+async def patch_platform_credential(
+    cred_id: int, body: PlatformCredPatch,
+    user: CurrentUser, db: DbSession,
+) -> dict:
+    """D34 平台凭证原地更新(§5.3):字段同个人凭证 PATCH,均可选,
+    id 不变;写 ``integration.credential.write``(fn=update);成功后
+    调用 ``revive_paused_instances``(与新建同为恢复信号)。"""
+    _require_admin(user)
+    holder = await integration_runner.get_platform_user_id()
+    row = await db.get(AuthSession, cred_id)
+    if row is None or row.owner_id != holder:
+        raise _bad("not_found", "凭证不存在", 404)
+    changed: list[str] = []
+    if body.url is not None:
+        row.url = body.url
+        changed.append("url")
+    if body.username is not None and body.username:
+        row.username_enc = fernet_encrypt(body.username)
+        changed.append("username")
+    if body.password:
+        row.password_enc = fernet_encrypt(body.password)
+        changed.append("password")
+    if body.tokenType is not None and body.tokenType:
+        row.token_type = body.tokenType
+        changed.append("tokenType")
+    if body.expiresIn is not None:
+        row.expires_in = body.expiresIn
+        changed.append("expiresIn")
+    await db.commit()
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="integration.credential.write",
+        resource_type="integration_credential", resource_id=str(cred_id),
+        resource_name=row.alias,
+        detail={"fn": "update", "alias": row.alias, "changed": changed})
+    try:
+        await integration_runner.revive_paused_instances(user.id)
     except Exception:  # noqa: BLE001
         pass
     return {"id": row.id, "alias": row.alias}
@@ -1033,14 +1104,34 @@ async def delete_platform_credential(
     if row is None or row.owner_id != holder:
         raise _bad("not_found", "凭证不存在", 404)
     alias_snap = row.alias
+    # 影响面提示(§8 前端):该凭证从哪些平台令牌范围中级联移除、波及
+    # 多少任务 —— 先查再删(删除后范围行已消失)。
+    from ..models.access_token import AccessToken, AccessTokenScope
+    affected_tokens = (await db.execute(
+        select(AccessToken).join(
+            AccessTokenScope,
+            AccessTokenScope.token_id == AccessToken.id)
+        .where(AccessTokenScope.auth_id == cred_id))).scalars().all()
+    token_ids = [t.id for t in affected_tokens]
+    affected_tasks = 0
+    if token_ids:
+        from sqlalchemy import func as sa_func
+        affected_tasks = int((await db.execute(
+            select(sa_func.count()).select_from(IntegrationTask).where(
+                IntegrationTask.template_id.is_(None),
+                IntegrationTask.removed_at.is_(None),
+                IntegrationTask.token_id.in_(token_ids)))).scalar_one())
     await db.delete(row)
     await db.commit()
-    from ..services import audit as audit_svc
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="integration.credential.write",
         resource_type="integration_credential", resource_id=str(cred_id),
         resource_name=alias_snap,
-        detail={"fn": "delete", "alias": alias_snap})
-    return {"removed": True}
+        detail={"fn": "delete", "alias": alias_snap,
+                "affected_tokens": len(token_ids),
+                "affected_tasks": affected_tasks})
+    return {"removed": True,
+            "affectedTokens": len(token_ids),
+            "affectedTasks": affected_tasks}

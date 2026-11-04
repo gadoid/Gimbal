@@ -62,6 +62,33 @@ class PagerSizes(BaseModel):
         default_factory=dict, max_length=64)
 
 
+class IdentityCardPref(BaseModel):
+    """工作台身份卡自定义(webhook v4 §4.3/D17):常驻统计 ≤ 4、告警按
+    类开关、快捷入口 ≤ 4。id 合法性由前端注册表判(后端不抄一份卡表,
+    与本模块「只校形状」的口径一致);与通知开关互不影响。"""
+
+    stats: list[_IdStr] = Field(default_factory=list, max_length=4)
+    alerts: dict[_IdStr, bool] = Field(default_factory=dict, max_length=16)
+    shortcuts: list[_IdStr] = Field(default_factory=list, max_length=4)
+
+
+class NoteItem(BaseModel):
+    """便签条目(D18:便签是工作台注册卡,不进身份卡)。"""
+
+    id: _IdStr
+    text: str = Field(min_length=1, max_length=200)
+    done: bool = False
+    created_at: str = Field(default="", max_length=32)
+    done_at: str | None = Field(default=None, max_length=32)
+
+
+class NotesPref(BaseModel):
+    """便签卡数据(webhook v4 §4.3):整值覆盖,后写为准(多设备并发
+    的取舍见方案 §11 第 5 条);≤ 20 条,已完成 7 天后由前端清理。"""
+
+    items: list[NoteItem] = Field(default_factory=list, max_length=20)
+
+
 #: 白名单 = 键 → 校验模型。不在表里的键一律拒读拒写,免得这张表变成
 #: 谁都能塞的杂物间(体积/形态都没人管)。
 _MODELS: dict[str, type[BaseModel]] = {
@@ -69,6 +96,8 @@ _MODELS: dict[str, type[BaseModel]] = {
     "follows.pinned": FollowsPinned,
     "timeline.colors": TimelineColors,
     "pager.sizes": PagerSizes,
+    "identity.card": IdentityCardPref,
+    "notes": NotesPref,
 }
 
 

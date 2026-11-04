@@ -26,6 +26,14 @@ async def _load_jwt_user(db: AsyncSession, token: str) -> User:
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found or inactive")
+    # webhook v4 §3.6:改密「退出其他会话」—— access/refresh 都带 tv,
+    # 不等于当前 token_version 即 401(旧 JWT 整体失效)
+    if int(payload.get("tv") or 0) != int(user.token_version or 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_version_stale",
+                    "message": "会话已被新密码或「退出其他会话」失效,请重新登录"},
+        )
     return user
 
 
@@ -43,59 +51,59 @@ async def principal_or_user(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """入站分流依赖(webhook 设计 v3 P1 §4.2):按 Authorization 前缀
-    分流 ``Bearer gic_…``(入站凭证)/ 其余(JWT,行为与
+    """入站分流依赖(webhook v4 §2.1):按 Authorization 前缀分流
+    ``Bearer gtk_…``(访问令牌)/ 其余(JWT,行为与
     :func:`get_current_user` 完全一致)。
 
-    * 入站:凭证命中、未吊销、别名 ``inbound_enabled`` → 得到调用方
-      别名;带 ``X-Gimbal-Grant`` 则校验命中/未过期/未撤销/属同一别名,
-      失败 403;无 grant → 平台模式(owner=``__platform__`` 系统用户)。
-      认证失败(401/403)写审计(v3 定案)。
-    * JWT:JWT 请求带 ``X-Gimbal-Grant`` 直接 400 —— grant 只对入站
-      凭证有意义,混用是客户端错误,不静默忽略。
+    * 令牌::func:`app.services.access_token.authenticate` —— hash 命中
+      → 状态机(吊销/失效/到期)→ 个人令牌按属主当前角色与启用状态派生
+      判定(平台令牌跳过,``__platform__`` 种子 role='user')。失败
+      401/403 写审计 ``inbound.denied``(hash 命中的令牌行归到该令牌
+      名下,§7.2;未命中则资源列为空)。
+    * 旧前缀 ``gic_`` / ``ggt_``:401 ``token_invalid``,message 注明
+      v4 仅接受 ``gtk_``(§2.2)。
 
-    返回 :class:`~app.services.inbound_identity.Principal`(JWT 情况下
-    caller_alias=None → 该执行不回调)。
+    返回 :class:`~app.services.access_token.Principal`(JWT 情况下
+    token=None → 该执行不回调)。
     """
+    from ..services import access_token as at_svc
     from ..services import audit as audit_svc
-    from ..services.inbound_identity import (
-        CREDENTIAL_PREFIX, GRANT_HEADER, InboundAuthError, Principal,
-        resolve_inbound_principal,
-    )
+    from ..services.access_token import Principal, TokenAuthError
 
     auth = request.headers.get("authorization") or ""
-    grant_header = (request.headers.get(GRANT_HEADER) or "").strip() or None
     if not auth.lower().startswith("bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="missing bearer credential")
     token = auth[7:].strip()
-    if token.startswith(CREDENTIAL_PREFIX):
+    if token.startswith(at_svc.LEGACY_PREFIXES):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": at_svc.ERR_TOKEN_INVALID,
+                    "message": at_svc.LEGACY_TOKEN_MESSAGE},
+        )
+    if token.startswith(at_svc.TOKEN_PREFIX):
         try:
-            return await resolve_inbound_principal(db, token, grant_header)
-        except InboundAuthError as e:
-            # 认证失败入审计(v3 定案):不记完整令牌,只记哈希前 8 位
-            # 定位用。best-effort(audit.record 自吞失败)。
+            return await at_svc.authenticate(db, token)
+        except TokenAuthError as e:
+            # 认证失败入审计(§7.2):hash 命中某张令牌时(含已吊销/失效/
+            # 到期)资源列记该令牌 id;属主角色/启用面命中时同理。best-effort。
+            hit = e.token
             await audit_svc.record(
                 db, actor_id=None, actor_name="inbound",
-                action="inbound.auth_failed",
-                resource_type="alias",
-                detail={"reason": e.code, "message": e.message},
+                action="inbound.denied",
+                resource_type="access_token" if hit is not None else None,
+                resource_id=str(hit.id) if hit is not None else None,
+                detail={"reason": e.code, "message": e.message,
+                        "token_hint": hit.token_hint if hit is not None else None,
+                        "token_kind": hit.kind if hit is not None else None},
             )
             raise HTTPException(
                 status_code=e.status_code,
                 detail={"code": e.code, "message": e.message},
             ) from e
-    if grant_header:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "grant_header_on_jwt",
-                "message": "X-Gimbal-Grant 只能与入站凭证(gic_)同用",
-            })
     user = await _load_jwt_user(db, token)
-    return Principal(
-        user=user, identity_mode="personal", caller_alias=None)
+    return Principal(user=user, identity_mode="personal")
 
 
 # ── 三级单角色(M2.5,权限方案 §1)─────────────────────────────────
@@ -165,20 +173,15 @@ async def get_visible_execution(
     session: Annotated[AsyncSession, Depends(get_db)],
     execution_id: Annotated[int, Path(ge=1)],
 ):
-    """入站分流版执行可见性(webhook 设计 v3 §4.4/§5.6,D8)。
+    """执行可见性(webhook v4 §5.2/D8):只读三端点(detail/rows/events)。
 
-    比 :func:`get_owned_execution` 宽两档(只用于三个只读查询端点
-    detail/rows/events;写面端点仍走 owner 闸):
-
-    * 入站凭证:只看 ``caller_alias_name`` 等于自己别名的执行
-      (平台模式 + 经该别名注册的个人模式);
+    * 令牌:``execution.token_id == 当前令牌``,否则 404(D8 —— 令牌
+      只能查本令牌发起的执行);
     * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
-      当前用户是该执行 caller 别名的属主 —— 别名属主在执行列表页
-      看不到平台模式执行(「我的执行」按 owner 过滤),详情/排查走
-      本判定 + 别名页的投递查询。
+      当前用户 member+ —— 平台身份的执行与投递对 member+ 可见(D7)。
     """
     from ..models.execution import Execution
-    from ..models.service_alias import ServiceAlias
+    from ..models.user import User as _U
 
     ex = await session.get(Execution, execution_id)
     if ex is None:
@@ -186,8 +189,8 @@ async def get_visible_execution(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"execution not found: {execution_id}",
         )
-    if getattr(principal, "inbound", False):
-        if ex.caller_alias_name == principal.caller_alias:
+    if getattr(principal, "is_token", False):
+        if ex.token_id == principal.token_id:
             return ex
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -196,12 +199,11 @@ async def get_visible_execution(
     user = principal.user
     if ex.owner_id == user.id or user.role == "admin":
         return ex
-    if ex.owner_id is not None and ex.caller_alias_name:
-        owner = await session.get(User, ex.owner_id)
-        if owner is not None and owner.is_system:
-            alias = await session.get(ServiceAlias, ex.caller_alias_name)
-            if alias is not None and alias.owner_user_id == user.id:
-                return ex
+    if ex.owner_id is not None:
+        owner = await session.get(_U, ex.owner_id)
+        if owner is not None and owner.is_system \
+                and user.role in ("member", "admin"):
+            return ex
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"execution not found: {execution_id}",
@@ -213,25 +215,31 @@ async def get_controllable_execution(
     session: Annotated[AsyncSession, Depends(get_db)],
     execution_id: Annotated[int, Path(ge=1)],
 ):
-    """写面(取消)的入站分流版(收尾评审 2026-11-02 G2)。
+    """写面(取消)的令牌分流版(§5.2/D25)。
 
-    * 入站凭证:``caller_alias_name`` 等于自己别名 —— 与只读查询同一
-      规则,调用方能取消自己经由该别名发起的执行(平台模式 owner 是系统
-      用户、个人模式 owner 是 grant 用户,按 owner 判它们都取消不了);
-    * JWT:维持 owner 本人 —— **不**随 :func:`get_visible_execution` 放宽
-      到 admin / 别名属主,写面不扩。
+    * 令牌:``execution.token_id == 当前令牌``(D25 —— 只能取消本令牌
+      发起的执行);
+    * JWT:owner 本人;平台身份的执行(owner 为系统用户)member+ 可取消;
+      其余不扩。
 
     不满足一律 404(不泄露存在性)。
     """
     from ..models.execution import Execution
+    from ..models.user import User as _U
 
     ex = await session.get(Execution, execution_id)
     if ex is not None:
-        if getattr(principal, "inbound", False):
-            if ex.caller_alias_name == principal.caller_alias:
+        if getattr(principal, "is_token", False):
+            if ex.token_id == principal.token_id:
                 return ex
-        elif ex.owner_id == principal.user.id:
-            return ex
+        else:
+            user = principal.user
+            if ex.owner_id == user.id:
+                return ex
+            if ex.owner_id is not None and user.role in ("member", "admin"):
+                owner = await session.get(_U, ex.owner_id)
+                if owner is not None and owner.is_system:
+                    return ex
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"execution not found: {execution_id}",

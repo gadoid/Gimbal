@@ -1,12 +1,16 @@
-"""GET /api/webhook-deliveries — 回调投递排查面(webhook 设计 v3 P2-6)。
+"""GET /api/webhook-deliveries — 回调投递排查面(webhook v4 §5.2)。
 
-按 ``executionId`` / ``instanceId`` / ``aliasName`` 过滤投递行(status /
-attempts / lastError / body),供调用方与别名属主排查「回调发了没、
+按 ``executionId`` / ``instanceId`` / ``tokenId`` 过滤投递行(status /
+attempts / lastError / body),供令牌属主与 member+ 排查「回调发了没、
 为什么没收到」。
 
-可见性(与执行的 D8 口径对齐;不可见与不存在同样 404,不泄露):
-admin 全量;入站凭证只看本别名;JWT 用户 = 目标执行/实例的 owner,
-或目标 caller 别名的属主(``aliasName`` 直查时要求别名属主/admin)。
+可见性(§2.3 矩阵;不可见与不存在同样 404,不泄露):
+
+* 令牌路径:只列本令牌的投递;**不能补发**(补发只走 JWT);
+* JWT 列表:admin、执行属主、模板属主、个人令牌属主;平台身份
+  (投递目标为平台令牌)member+;
+* JWT 补发:admin、个人令牌属主;平台身份 member+。
+
 body 含脱敏后的 outputs,可见面已按属主收窄,可随行返回。
 """
 from __future__ import annotations
@@ -21,11 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import principal_or_user
 from ..core.timeutil import iso_utc_z
+from ..models.access_token import AccessToken
 from ..models.execution import Execution
 from ..models.integration_task import IntegrationTask
-from ..models.service_alias import ServiceAlias
 from ..models.webhook_delivery import WebhookDelivery
-from ..services.inbound_identity import Principal
+from ..services.access_token import Principal
 
 router = APIRouter(prefix="/webhook-deliveries", tags=["webhook-deliveries"])
 
@@ -35,11 +39,13 @@ PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 def _row_out(r: WebhookDelivery) -> dict:
     return {
-        "id": r.id, "aliasName": r.alias_name, "eventType": r.event_type,
+        "id": r.id, "tokenId": r.token_id, "tokenName": r.token_name,
+        "eventType": r.event_type,
         "executionId": r.execution_id, "instanceId": r.instance_id,
         "url": r.url, "status": r.status, "attempts": r.attempts,
         "lastError": r.last_error, "nextRetryAt": iso_utc_z(r.next_retry_at),
-        "deliveredAt": iso_utc_z(r.delivered_at), "createdAt": iso_utc_z(r.created_at),
+        "deliveredAt": iso_utc_z(r.delivered_at),
+        "createdAt": iso_utc_z(r.created_at),
         "body": r.body,
     }
 
@@ -50,6 +56,33 @@ def _not_found() -> HTTPException:
         detail={"code": "not_found", "message": "deliveries not found"})
 
 
+async def _target_token_of(
+    db: AsyncSession, execution_id: int | None, instance_id: int | None,
+    token_id: int | None,
+) -> "AccessToken | None":
+    """行级权限跟着目标走,不跟着请求参数走:优先取执行/实例行携带的
+    token_id;直接按 tokenId 查时校验调用方对该令牌的可见性。"""
+    if execution_id is not None:
+        ex = await db.get(Execution, execution_id)
+        if ex is not None and ex.token_id is not None:
+            return await db.get(AccessToken, ex.token_id)
+    if instance_id is not None:
+        inst = await db.get(IntegrationTask, instance_id)
+        if inst is not None and inst.template_id is not None:
+            tpl = await db.get(IntegrationTask, inst.template_id)
+            if tpl is not None and tpl.token_id is not None:
+                return await db.get(AccessToken, tpl.token_id)
+    if token_id is not None:
+        return await db.get(AccessToken, token_id)
+    return None
+
+
+def _may_view_token(user, tok: "AccessToken | None") -> bool:
+    """JWT 面对目标令牌的可见性:admin / 个人令牌属主 / 平台令牌 member+。"""
+    from ..services.access_token import can_view
+    return tok is not None and can_view(user, tok)
+
+
 @router.get("")
 async def list_deliveries(
     principal: PrincipalIn, db: DbSession,
@@ -57,49 +90,35 @@ async def list_deliveries(
         alias="executionId", ge=1)] = None,
     instance_id: Annotated[int | None, Query(
         alias="instanceId", ge=1)] = None,
-    alias_name: Annotated[str | None, Query(
-        alias="aliasName", max_length=128)] = None,
+    token_id: Annotated[int | None, Query(
+        alias="tokenId", ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> dict:
     user = principal.user
-    if execution_id is None and instance_id is None and alias_name is None:
+    if execution_id is None and instance_id is None and token_id is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "filter_required",
-                    "message": "executionId / instanceId / aliasName "
+                    "message": "executionId / instanceId / tokenId "
                                "至少提供一个"})
-    # 目标 caller 别名:执行/实例行携带的 caller_alias_name(覆盖
-    # aliasName 入参 —— 行级权限跟着目标走,不跟着请求参数走)。
-    target_alias = alias_name
-    allowed = user.role == "admin"
-    if execution_id is not None:
-        ex = await db.get(Execution, execution_id)
-        if ex is not None:
-            target_alias = ex.caller_alias_name
-            allowed = allowed or ex.owner_id == user.id
-    if instance_id is not None:
-        inst = await db.get(IntegrationTask, instance_id)
-        if inst is not None and inst.template_id is not None:
-            tpl = await db.get(IntegrationTask, inst.template_id)
-            if tpl is not None:
-                target_alias = tpl.caller_alias_name
-                allowed = allowed or tpl.owner_id == user.id
-    if getattr(principal, "inbound", False):
-        # 入站凭证(§5.6):只能看本别名的投递行
-        if target_alias != principal.caller_alias:
+    if getattr(principal, "is_token", False):
+        # 令牌路径(§2.2):只看本令牌的投递行
+        target = await _target_token_of(
+            db, execution_id, instance_id, principal.token_id)
+        if target is None or target.id != principal.token_id:
             raise _not_found()
-    elif not allowed:
-        # JWT 非 admin:目标 caller 别名的属主才可见(团队共享别名只归
-        # admin)。目标行不存在/无 caller → 同样 404。
-        if target_alias:
-            alias = await db.get(ServiceAlias, target_alias)
-            allowed = (alias is not None
-                       and alias.owner_user_id == user.id)
-        if not allowed:
+        target_id = principal.token_id
+    else:
+        target = await _target_token_of(db, execution_id, instance_id,
+                                        token_id)
+        if target is None:
+            # 目标行不存在 / 目标非令牌发起(JWT 执行无投递)→ 404
             raise _not_found()
+        if not (user.role == "admin" or _may_view_token(user, target)):
+            raise _not_found()
+        target_id = target.id
 
-    q = select(WebhookDelivery).where(
-        WebhookDelivery.alias_name == target_alias)
+    q = select(WebhookDelivery).where(WebhookDelivery.token_id == target_id)
     if execution_id is not None:
         q = q.where(WebhookDelivery.execution_id == execution_id)
     if instance_id is not None:
@@ -113,30 +132,29 @@ async def list_deliveries(
 async def redeliver(
     delivery_id: int, principal: PrincipalIn, db: DbSession,
 ) -> dict:
-    """人工补发(收尾评审 2026-11-02 G5):按 ``failed`` / ``delivered``
-    的投递行**新建一行** pending(同 alias / event / execution / instance /
-    url;body 同内容但 ``deliveryId`` 改为新行 id、附 ``redeliveredFrom``),
-    交回投递循环重发;原行原样保留为历史。
+    """人工补发:按 ``failed`` / ``delivered`` 的投递行**新建一行**
+    pending(同 token / event / execution / instance / url;body 同内容但
+    ``deliveryId`` 改为新行 id、附 ``redeliveredFrom``),交回投递循环
+    重发;原行原样保留为历史。
 
-    为什么不是原地重置:接收端以 ``X-Gimbal-Delivery``(= 行 id)去重
-    (§4.3),同 id 重发会被正确实现的接收端当重复丢弃 —— 补发必须换
-    新 id。body 里的 ``deliveryId`` 必须跟着换:按 body 去重的接收端
-    否则同样把补发当重复丢掉,而补发恰是接收端故障恢复后才用的。
-    签名按当前别名密钥现取。
+    为什么不是原地重置:接收端以 ``X-Gimbal-Delivery``(= 行 id)去重,
+    同 id 重发会被正确实现的接收端当重复丢弃 —— 补发必须换新 id。body
+    里的 ``deliveryId`` 必须跟着换。签名按当前令牌密钥现取。
 
-    谁能点:admin,或该行 caller 别名的**属主**(JWT);入站凭证与其他
-    用户一律 404(不泄露)。``pending`` 行(在飞 / 等待退避)409
-    ``already_pending`` —— 它本来就会发。
+    谁能点(§5.2):admin、个人令牌属主;平台身份 member+。令牌路径
+    与其他用户一律 404(不泄露)。``pending`` 行(在飞/等待退避)409
+    ``already_pending``。
     """
     from ..services import webhook_outbox
 
     user = principal.user
     row = await db.get(WebhookDelivery, delivery_id)
-    if row is None or getattr(principal, "inbound", False):
+    if row is None or getattr(principal, "is_token", False):
         raise _not_found()
     if user.role != "admin":
-        alias = await db.get(ServiceAlias, row.alias_name)
-        if alias is None or alias.owner_user_id != user.id:
+        tok = (await db.get(AccessToken, row.token_id)
+               if row.token_id is not None else None)
+        if not _may_view_token(user, tok):
             raise _not_found()
     if row.status == "pending":
         raise HTTPException(
@@ -144,7 +162,8 @@ async def redeliver(
             detail={"code": "already_pending",
                     "message": "该投递仍在队列中,无需补发"})
     fresh = WebhookDelivery(
-        alias_name=row.alias_name, event_type=row.event_type,
+        token_id=row.token_id, token_name=row.token_name,
+        event_type=row.event_type,
         execution_id=row.execution_id, instance_id=row.instance_id,
         url=row.url, body=row.body, status="pending", attempts=0)
     db.add(fresh)
@@ -157,14 +176,13 @@ async def redeliver(
         payload["deliveryId"] = fresh.id
         payload["redeliveredFrom"] = row.id
         fresh.body = json.dumps(payload, ensure_ascii=False, default=str)
-    # 全量评估 2026-11-02 #8:手工干预入审计(同事务;入站动作已在 G4 入审计,
-    # admin/属主的补发此前反而是盲区)。resource = 别名,与入站域同面查看。
+    # 手工干预入审计(resource = access_token,与令牌域同面查看)
     from ..services import audit as audit_svc
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
-        action="webhook.redeliver", resource_type="alias",
-        resource_id=row.alias_name,
+        action="webhook.redeliver", resource_type="access_token",
+        resource_id=str(row.token_id) if row.token_id is not None else None,
         detail={"delivery": row.id, "new_delivery": fresh.id,
                 "event_type": row.event_type,
                 "execution": row.execution_id, "instance": row.instance_id,

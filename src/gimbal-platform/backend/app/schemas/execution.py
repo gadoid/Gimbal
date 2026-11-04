@@ -66,12 +66,12 @@ class ExecutionOut(BaseModel):
     # 还是当前行(cases);终态且 config.cancelIgnored → 解释为何点了取消仍按
     # 真实结果收口。按任务体形态而非 Execution.kind 区分(同 cancelable 注释)。
     cancel_note: str | None = None
-    # 全量评估 2026-11-02 #9:入站身份只读投影 —— 经由谁(别名)、以谁的
-    # 身份(personal=grant 用户 / platform=系统用户)、对账键。JWT 发起的
-    # 执行四者皆 None;别名面板按别名过滤,详情页从这里看来源。
-    caller_alias: str | None = None
+    # webhook v4 §7.1:令牌只读投影 —— 经哪张令牌(token_id/tokenName,
+    # config.token 快照)、以谁身份(personal=属主 / platform=平台)、
+    # 对账键。JWT 发起的执行皆 None;令牌面板按 tokenId 过滤。
+    token_id: int | None = None
     identity_mode: str | None = None
-    grant_id: int | None = None
+    token_name: str | None = None
     client_ref: str | None = None
 
 
