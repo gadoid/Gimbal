@@ -64,19 +64,17 @@
             <li v-for="e in g.events" :key="e.key" class="tl-item" :data-testid="`wb-tl-${e.kind}`">
               <span class="tl-dot" :style="{ background: colorOf(e.kind) }" aria-hidden="true" />
               <router-link :to="e.to" class="tl-body">
-                <!-- 调用类单行(2026-11-04):标题+对账明细在前、徽标随后、时间收尾 ——
-                     顺序与其余类「信息在上、徽章在下」一致,只是压成一条线;
-                     徽标仍是同一套 kindTint 配色 -->
+                <!-- 调用类(2026-11-04):对账明细(归属人 · clientRef)并入标题行,
+                     信息一行看完;徽章独占下一行 —— 形制与其余类完全一致 -->
                 <span class="tl-line">
                   <span class="tl-title">
                     {{ e.title }}<span v-if="e.kind === 'inbound' && e.detail" class="tl-inline mono"> · {{ e.detail }}</span>
                   </span>
-                  <span v-if="e.kind === 'inbound'" class="tl-kind" :style="kindTint(e.kind)">{{ KIND_LABEL[e.kind] }}</span>
                   <span class="tl-time">{{ relTime(e.at) || shortDateTime(e.at) }}</span>
                 </span>
-                <span v-if="e.kind !== 'inbound'" class="tl-sub">
+                <span class="tl-sub">
                   <span class="tl-kind" :style="kindTint(e.kind)">{{ KIND_LABEL[e.kind] }}</span>
-                  <span v-if="e.detail" class="mono">{{ e.detail }}</span>
+                  <span v-if="e.detail && e.kind !== 'inbound'" class="mono">{{ e.detail }}</span>
                 </span>
               </router-link>
             </li>
@@ -320,9 +318,7 @@ onBeforeUnmount(() => { resize?.disconnect() })
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tl-body:hover .tl-title { @apply text-signal; }
-/* 调用类单行形态:徽标随信息之后、时间之前,不被压缩;对账明细随标题
-   行内联,小一号、淡一档,与标题同一条截断线 */
-.tl-line .tl-kind { @apply flex-none; }
+/* 调用类的对账明细并入标题行内联:小一号、淡一档,与标题同一条截断线 */
 .tl-inline { @apply text-caption font-normal text-signal-ink/45; }
 .tl-time { @apply text-caption text-signal-ink/45 flex-none; }
 .tl-sub { @apply flex items-center gap-1.5 text-caption text-signal-ink/45; }

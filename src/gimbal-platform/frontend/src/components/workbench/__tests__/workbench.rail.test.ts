@@ -174,7 +174,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
     w.unmount()
   })
 
-  it('调用类单行:信息在前、徽标随后、时间收尾,顺序与其余类一致(2026-11-04)', async () => {
+  it('调用类:信息一行(标题+明细),徽章独占下一行 —— 形制同其余类(2026-11-04)', async () => {
     vi.mocked(activityApi.getActivity).mockResolvedValue({
       events: [
         { kind: 'inbound', at: ago(1), action: 'inbound.run', executionId: 351,
@@ -187,15 +187,16 @@ describe('ActivityTimeline — 右栏时间线', () => {
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
     const row = w.find('[data-testid="wb-tl-inbound"]')
-    expect(row.find('.tl-kind').text()).toBe('调用')   // 徽标保留,配色同其余类(kindTint)
-    expect(row.find('.tl-kind').attributes('style')).toContain('color-mix')
-    expect(row.find('.tl-kind').element.parentElement!.className).toContain('tl-line')  // 与标题同一条线
-    // 行内子元素顺序 = 信息 → 徽标 → 时间(与其余类「信息在上、徽章在下」的顺序一致)
-    expect([...row.find('.tl-line').element.children].map((el) => el.className))
-      .toEqual(['tl-title', 'tl-kind', 'tl-time'])
+    // 信息行:标题与对账明细同一条线(明细并入,不再另起一行)
     expect(row.find('.tl-title').text()).toContain('调用 agent-sys → 订单创建_1')
-    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')  // 明细随标题同线
-    expect(row.find('.tl-sub').exists()).toBe(false)   // 单行:没有第二行
+    expect(row.find('.tl-title').text()).toContain('Administrator · cr-9')
+    expect([...row.find('.tl-line').element.children].map((el) => el.className))
+      .toEqual(['tl-title', 'tl-time'])
+    // 徽章在信息行的下一行,独占该行(明细已上移),配色同其余类
+    const sub = row.find('.tl-sub')
+    expect(sub.exists()).toBe(true)
+    expect(sub.text()).toBe('调用')
+    expect(sub.find('.tl-kind').attributes('style')).toContain('color-mix')
     expect(row.find('.tl-body').attributes('href')).toBe('/executions/351')
     w.unmount()
   })
