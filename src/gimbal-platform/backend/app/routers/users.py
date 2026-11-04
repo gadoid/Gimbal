@@ -557,6 +557,12 @@ async def delete_user(
         except Exception:  # noqa: BLE001
             await db.rollback()
 
+    # suite id 删前物化:publicize/purge 都会删掉本用户全部 suite,
+    # 删后再查恒空 —— 下方「引用已删 suite 的模板兜底删」(§3.6 通用
+    # 约束)需要这份清单。
+    own_suite_ids = set((await db.execute(
+        select(Suite.id).where(Suite.owner_id == user_id))).scalars())
+
     if disposal == "publicize":
         # 场景引用显式删除(无主公共资源不挂可执行引用,§7.10 表);
         # suite 引用已随下方 suite 删除级联(PG)/兜底删除(SQLite)。
@@ -721,12 +727,11 @@ async def delete_user(
         IntegrationTask.holder_id == user_id))
 
     # 通用约束:凡是会删除场景或 suite 的处置,同时删除引用它们的模板
-    # (publicize 场景转公共不删;suite 删除发生在 publicize/purge 两处置)
+    # (publicize 场景转公共不删;suite 删除发生在 publicize/purge 两处置,
+    # 引用已删 suite 的模板 —— 含其他用户保留的模板 —— 一并兜底删)
     if disposal != "transfer":
         removed_scen = set(scenario_ids) if disposal == "purge" else set()
-        removed_suites = set((await db.execute(
-            select(Suite.id).where(Suite.owner_id == user_id))).scalars()) \
-            if disposal == "purge" else set()
+        removed_suites = own_suite_ids
         cond = None
         if removed_scen:
             from sqlalchemy import or_ as _or
