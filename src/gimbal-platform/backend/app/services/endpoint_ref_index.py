@@ -146,20 +146,6 @@ def _jsonpath_root(path) -> str:
     return p[2:].split(".")[0].split("[")[0]
 
 
-def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
-    """锚点=endpoint_id 的全部 step 下标(含业务字段全空者)。
-
-    锚点行上线前的 impact 兜底直扫用;现在 parse_refs 已为零字段锚点
-    step 发锚点行,本函数仅留作索引外的直扫工具(测试/排障),生产
-    路径不再依赖。
-    """
-    out: list[int] = []
-    for i, step in enumerate(_steps(payload)):
-        if step.get("endpoint") == endpoint_id:
-            out.append(i)
-    return out
-
-
 async def sync_scenario(
     db: AsyncSession, scenario_id: str, payload: dict | None
 ) -> None:

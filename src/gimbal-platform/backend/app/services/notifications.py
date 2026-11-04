@@ -98,11 +98,6 @@ async def create_notification(
     return n
 
 
-def _upsert_stmt_factory(dialect_name: str):
-    # SQLite 已退役(2026-10-14):恒 PG insert,签名保留免动调用点
-    return pg_insert
-
-
 async def upsert_execution_finished(
     db: AsyncSession, *, user_id: int, batch_id: str, run_label: str,
 ) -> None:

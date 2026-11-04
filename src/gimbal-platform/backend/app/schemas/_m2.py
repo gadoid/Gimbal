@@ -534,13 +534,6 @@ class SuiteGraph(BaseModel):
     units: List[UnitDecl] = Field(..., min_length=1)
 
 
-class Model(BaseModel):
-    options: Optional[RunOptions] = None
-    report: Optional[ReportDefinition] = None
-    run: Union[Scenario, SuiteGraph] = Field(..., discriminator='kind')
-    subscribe: Optional[SubscribeRule] = None
-
-
 # G7（§4.2）：顶层判别联合——生成器会把它包成 RootModel，手写之。
 RunUnion = Annotated[Union[Scenario, SuiteGraph], Field(discriminator="kind")]
 

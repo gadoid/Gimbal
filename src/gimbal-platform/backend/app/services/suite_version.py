@@ -148,23 +148,3 @@ async def check_and_resolve_suite_versions(
         resolved[system] = f"{line}#{best}"
 
     return resolved
-
-
-def extract_system_lines_from_suite_mode_config(
-    mode_config: dict[str, Any],
-) -> dict[int, dict[str, str]]:
-    """从 Suite 的 mode_config.units 提取各成员（scenarioId→行号）的
-    版本声明——供 Suite 编辑页显示版本分布。
-
-    返回：``{scenarioId: {系统: 版本线}}``
-    """
-    out: dict[int, dict[str, str]] = {}
-    for unit in (mode_config.get("units") or []):
-        scen_id = unit.get("scenarioId")
-        if not scen_id:
-            continue
-        # member 的 meta.plate 在 scenario payload 里——这里只从
-        # mode_config 层面看结构（编排形态按 scenarioId 引用，不内嵌
-        # 版本声明），实际版本分布需查成员场景。
-        out[scen_id] = {}
-    return out

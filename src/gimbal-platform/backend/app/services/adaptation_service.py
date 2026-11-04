@@ -1217,27 +1217,6 @@ async def compare_scenario(
     }
 
 
-def _body_root_keys(body) -> set[str]:
-    """body 一层键(root 段匹配口径)。"""
-    return set(body.keys()) if isinstance(body, dict) else set()
-
-
-def _declared_roots(item, section: str) -> set[str]:
-    """目标修订契约的声明路径根段全集(request/responses)。"""
-    if not isinstance(item, dict):
-        return set()
-    sec = item.get(section)
-    decls = (sec.get("declarations")
-             if isinstance(sec, dict) else None) or []
-    out: set[str] = set()
-    for d in decls:
-        if isinstance(d, dict):
-            p = d.get("path")
-            if isinstance(p, str) and p.startswith("$."):
-                out.add(p[2:].split(".")[0].split("[")[0])
-    return out
-
-
 async def save_check(
     db: AsyncSession, *, scenario_id: str, target_revision: str,
     system: str | None = None,

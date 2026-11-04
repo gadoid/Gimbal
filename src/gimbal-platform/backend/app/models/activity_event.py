@@ -9,8 +9,8 @@ audit 只记特权写;notifications 是面向接收方的**有状态**提醒(已
 best-effort:独立小事务,失败只记日志不阻断业务(audit.record 口径)。
 
 ``actor_id`` 语义:**时间线归属人**,不恒等于动作发起者 ——
-``scenario.handoff_received`` 的 actor 是接收方,发送方进 detail
-(2026-09-23 评审拍板,防实现时按直觉装反)。
+历史 ``scenario.handoff_received``(F1 分发,已由引用分享取代,无写入点)
+的 actor 是接收方,发送方进 detail;存量行的读侧语义照旧。
 """
 from __future__ import annotations
 
@@ -39,8 +39,9 @@ class ActivityEvent(Base):
     actor_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    # scenario.edit / scenario.rename / scenario.save_as /
-    # scenario.handoff_received(取值域在服务层常量,DB 不设 CHECK)
+    # scenario.edit / scenario.rename / scenario.save_as / inbound.run
+    # (取值域在服务层常量,DB 不设 CHECK;历史库可能仍有
+    #  scenario.handoff_received 行,F1 分发退役后无写入点)
     kind: Mapped[str] = mapped_column(String(64))
     resource_type: Mapped[str] = mapped_column(String(32))
     resource_id: Mapped[str] = mapped_column(String(128))

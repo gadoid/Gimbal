@@ -52,7 +52,6 @@ _SAFE_STRATEGY_KINDS = frozenset({"extract", "assign", "assertion", "sleep"})
 
 # 准入上限(P1 定值;上线检查项随真实数据复核)
 GLOBAL_INFLIGHT_CAP = 2        # = 通道数
-PER_SYSTEM_CAP = 2
 PER_HOLDER_SYSTEM_CAP = 2
 # 运行租约:超时回收(running_since 超过 → idle + run_status=timeout)
 RUN_LEASE_SECONDS = 15 * 60

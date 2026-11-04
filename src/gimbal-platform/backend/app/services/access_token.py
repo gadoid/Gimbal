@@ -285,20 +285,6 @@ async def load_scope(db: AsyncSession, token_id: int) -> tuple[set, set]:
             {r.auth_id for r in rows if r.auth_id is not None})
 
 
-async def _auth_names_by_ids(
-    db: AsyncSession, owner_id: int, auth_ids: set[int],
-) -> dict[int, str]:
-    """凭证 id → 别名(按执行属主池;平台令牌即平台池)。"""
-    from ..models.auth_session import AuthSession
-
-    if not auth_ids:
-        return {}
-    rows = (await db.execute(select(AuthSession.id, AuthSession.alias).where(
-        AuthSession.owner_id == owner_id,
-        AuthSession.id.in_(auth_ids)))).all()
-    return {rid: alias for rid, alias in rows}
-
-
 async def check_scope(
     db: AsyncSession, token: AccessToken, owner_id: int,
     used: ScopeSets,
