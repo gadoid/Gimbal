@@ -417,7 +417,7 @@ beforeEach(() => {
   setActivePinia(activePinia)
   // /full 结构契约缓存已收编为**真·会话级**共享模块(原先在 <script setup>
   // 里其实是每挂载一份)→ 用例之间须显式清空,否则前一个用例拉过的端点
-  // 会让后一个用例的「预拉」断言失去意义(同 useFieldDescriptions.test.ts)
+  // 会让后一个用例的「预拉」断言失去意义
   _resetEndpointFullCacheForTest()
   // 重置 draft store(config vars 数据源)
   const draft = useScenarioDraftStore()

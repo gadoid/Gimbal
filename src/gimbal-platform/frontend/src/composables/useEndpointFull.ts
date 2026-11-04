@@ -1,12 +1,12 @@
 /**
  * useEndpointFull.ts — plate `/full` 结构契约的**会话级共享缓存**。
  * 共享面 = 判定面(四处悬空投影:编辑器 / CaseComposer / CaseDataSetsList /
- * RunPanelHost)∪ 画布渲染 ∪ useFieldDescriptions 的字段说明。
+ * RunPanelHost)∪ 画布渲染。
  * **不是唯一取数口**:`CaseComposerCatalog` 的目录面板直接调
  * `getFullEndpoint`(用户触发的浏览取数,不属判定路径,故不合并)。
  *
- * 抽取自两份同款实现(CaseComposerCanvas 的端点契约缓存、useFieldDescriptions
- * 的字段说明缓存)—— 同一模式留两份副本就会各自漂移,收成一份:
+ * 抽取自 CaseComposerCanvas 的端点契约缓存 —— 同一模式留多份副本就会
+ * 各自漂移,收成一份:
  *
  *   - 每 endpoint 一次取数;并发收敛为同一 Promise。面有 **`FULL_TTL_MS`
  *     (300s)有效期**,与后端 `endpoint_declarations` 同量级 ⇒ 到期重取,

@@ -1,7 +1,7 @@
 /**
  * AdaptationCenter 重做后的测试（RS4a Release v4.4 §5.10）。
  * 旧版测试（admin 目录变更模型）已随旧页面替换删除。
- * 新版：AdaptationFlow 为主体 + 批次表 + carry 面板 + 未索引警示。
+ * 新版：AdaptationFlow 为主体 + 批次表 + carry 面板。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -10,7 +10,6 @@ import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-  unindexedSteps: vi.fn().mockResolvedValue([]),
   errMsg: vi.fn().mockReturnValue('error'),
   openCarryBatch: vi.fn(),
   createOp: vi.fn(),

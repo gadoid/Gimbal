@@ -12,7 +12,8 @@
  * 入缓存时一次入口消毒(Ruling C7):路径不可用条目剔除、children 提升
  * (DP-7)—— 画布递归 `buildNode → suffixOf` 因此不再收到真值非串 path。
  *
- * 抽取自 CaseComposerCanvas 与 useFieldDescriptions 里各自的一份同款实现。
+ * 抽取自 CaseComposerCanvas 里的一份同款实现(历史:另有 useFieldDescriptions
+ * 副本,已随该 composable 退役删除)。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'

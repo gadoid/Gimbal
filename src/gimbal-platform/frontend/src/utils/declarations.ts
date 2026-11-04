@@ -412,7 +412,7 @@ function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {
 
 /**
  * 请求表单面平铺投影:解析态 != carry 的条目(先序,模板路径)。
- * 匹配面/描述索引(useFieldDescriptions 按名查)消费;树渲染走
+ * 匹配面(描述索引按名查)消费;树渲染走
  * buildTree(值×结构合并,实例路径),勿用本函数渲染请求体。
  */
 export function formBindings(

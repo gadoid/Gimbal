@@ -1702,7 +1702,7 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 // endpoint_id → plate /full 响应整包。所有结构渲染(请求字段表单/断言
 // 候选/响应契约/Type C 差集)都是这份缓存的 computed 切片 — 每个 endpoint
 // 一次取数(TTL 内不重取)。缓存本体已收编到共享模块 `useEndpointFull`
-// (画布 / useFieldDescriptions / 断言管理编辑器共用一份),此处只消费。
+// (画布 / 断言管理编辑器共用一份),此处只消费。
 
 
 /** 当前 step 的 /full 拉取状态(scoped,2026-09-08):预拉让全部端点并发,
