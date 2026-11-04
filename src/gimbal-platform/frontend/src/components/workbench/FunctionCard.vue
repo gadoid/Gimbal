@@ -204,7 +204,8 @@ const reconfirmText = computed(() => {
 /** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复);
  * 修复复核 §3.1:scope_denied(平台模式场景出范围)场景修复后也由
  * 「启动」恢复;inbound_disabled(调用方别名关闭入站,全量评估 #6)
- * 同口径。grant_revoked 不在此列 —— 由调用方带新 grant PATCH 重绑 */
+ * 同口径。token_* / resource_not_allowed 类暂停后端 409 拒恢复,不在
+ * 此列(先吊销页面/个人设置处置令牌)。 */
 const pausedGate = computed(() => {
   const r = data.value?.pausedReason
   return r === 'manual' || r === 'fail_streak' || r === 'scope_denied'
@@ -238,7 +239,6 @@ const badge = computed(() => {
     if (d.pausedReason === 'missing_credential') return '缺凭证'
     if (d.pausedReason === 'template_changed') return '内容已变更'
     if (d.pausedReason === 'made_private') return '已转私有'
-    if (d.pausedReason === 'grant_revoked') return '授权已失效'
     if (d.pausedReason === 'scope_denied') return '无权用该场景'
     if (d.pausedReason === 'inbound_disabled') return '入站已关闭'
     if (d.pausedReason === 'manual') return '已暂停'

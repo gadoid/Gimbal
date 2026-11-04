@@ -24,7 +24,7 @@
   <div class="lib-card p-4">
     <div class="mb-3 flex flex-wrap items-center gap-2">
       <span class="text-body font-semibold">特权写审计</span>
-      <span class="text-caption text-slate-500">特权写操作全量流水(用户 / 公告 / carry / 适配 / 场景 / 套件 / 分享 / 集成凭证…)</span>
+      <span class="text-caption text-slate-500">特权写操作全量流水(用户 / 公告 / carry / 适配 / 场景 / 套件 / 分享 / 平台凭证 / 令牌…)</span>
       <span class="flex-1"></span>
       <select
         class="audit-filter"

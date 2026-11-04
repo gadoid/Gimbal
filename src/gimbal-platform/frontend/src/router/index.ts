@@ -115,7 +115,7 @@ const routes = [
   },
   {
     // RS4a（Release v4.4 §5.10 重做）：新适配流程为主体（R22 全员）
-    // + 批次表 + carry 漂移 + 未索引警示
+    // + 批次表 + carry 漂移
     path: '/adaptations',
     component: () => import('@/views/AdaptationCenter.vue'),
     meta: { requiresAuth: true },
@@ -237,9 +237,10 @@ const routes = [
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
     // member+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
-    // 且「我的 grant」区块人人可自助签发 —— 旧 requiresAdmin 把属主与
-    // 个人模式调用方一并挡在门外(全量评估 2026-11-02 #3)。写面权限仍由
-    // 后端与子面板的 canManage 把关,放开路由不扩大写权限。
+    // 入站调用方(个人 gtk_ 令牌)也走这里的绑定面 —— 旧 requiresAdmin 把
+    // 属主与调用方一并挡在门外(全量评估 2026-11-02 #3)。令牌的签发/管理
+    // 面在 /profile#tokens(webhook v4)。写面权限仍由后端与子面板的
+    // canManage 把关,放开路由不扩大写权限。
     meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
   },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
