@@ -23,7 +23,9 @@ from app.core import db as db_module
 from app.models.webhook_delivery import WebhookDelivery
 from app.services import webhook_outbox as wo
 
-from .inbound_fixtures import body_of, deliveries, mk_token, seed_platform_user
+from .inbound_fixtures import (
+    allow_delivery_hosts, body_of, deliveries, mk_token, seed_platform_user,
+)
 from .test_access_tokens import _gtk, _register_role, _user_id
 
 CB_URL = "https://cb.example.com/hook"   # 公网可解析,投递前地址检查过
@@ -55,8 +57,8 @@ class TestMustSign:
 
         real_async_client = httpx.AsyncClient
         # 沙箱无外网 DNS:解析失败按 fail-closed 拒 —— 对拍用例放行解析
-        from app.services import access_token as at_mod
-        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        # 与投递面白名单(D16 复核)
+        allow_delivery_hosts(monkeypatch)
         await seed_platform_user()
         await _register_role(client, "wd_m", "member")
         tid, _ = await mk_token(user_id=await _user_id("wd_m"),
@@ -154,13 +156,16 @@ class TestMustSign:
 
 
 class TestHostChecks:
-    async def test_loopback_host_rejected(self, client):
+    async def test_loopback_host_rejected(self, client, monkeypatch):
+        from app.core.config import settings
         await seed_platform_user()
         tid, _ = await mk_token(kind="platform", name="lp",
                                 callback_url="https://cb.example.local/hook",
                                 callback_secret="s")
         tok = await _token_row(tid)
-        # 冻结 URL 指向 loopback(建行绕过保存校验的模拟)
+        # 白名单放行 127.0.0.1(专测 D24 私址检查);冻结 URL 指向
+        # loopback(建行绕过保存校验的模拟)
+        monkeypatch.setattr(settings, "CALLBACK_HOST_ALLOWLIST", "127.0.0.1")
         did = await _mk_delivery(token_row=tok,
                                  url="http://127.0.0.1:9000/hook")
         await wo.delivery_once(db_factory=db_module.SessionLocal)
@@ -169,6 +174,25 @@ class TestHostChecks:
             assert row.status in ("pending", "failed")
             # 至少不再无限重试成功:重试后仍会失败 —— 直接断言未 delivered
             assert row.status != "delivered"
+
+    async def test_allowlist_rechecked_at_delivery(self, client, monkeypatch):
+        """D16(评审 2026-11-05 P1):保存后再把主机移出白名单 → 投递
+        终态失败(callback_host_not_allowed),不无限重试。"""
+        from app.core.config import settings
+        await seed_platform_user()
+        tid, _ = await mk_token(kind="platform", name="wl",
+                                callback_url=CB_URL, callback_secret="s")
+        tok = await _token_row(tid)
+        did = await _mk_delivery(token_row=tok)
+        # 保存时在白名单;投递前被移出
+        monkeypatch.setattr(settings, "CALLBACK_HOST_ALLOWLIST", "other.example")
+        n = await wo.delivery_once(db_factory=db_module.SessionLocal)
+        assert n == 1
+        async with db_module.SessionLocal() as s:
+            row = await s.get(WebhookDelivery, did)
+            assert row.status == "failed"
+            assert row.last_error == "callback_host_not_allowed"
+            assert row.next_retry_at is None
 
 
 class TestOutboxWrites:

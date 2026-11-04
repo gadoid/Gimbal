@@ -479,11 +479,17 @@ def check_callback_url(url: str) -> "tuple[bool, str]":
     return _host_allowed(host, callback_allowlist()), host
 
 
-def host_is_private(host: str) -> bool:
+async def host_is_private(host: str) -> bool:
     """投递前地址检查(§6):解析结果落在 loopback / link-local /
-    0.0.0.0 / ::1 即拒。解析失败同样拒(fail-closed)。"""
+    0.0.0.0 / ::1 即拒。解析失败同样拒(fail-closed)。
+
+    DNS 解析走事件循环的 ``getaddrinfo``(评审 2026-11-05 P2-6:调用方
+    是异步投递循环,同步 ``socket.getaddrinfo`` 会阻塞整个循环)。"""
+    import asyncio
+
+    loop = asyncio.get_running_loop()
     try:
-        infos = __import__("socket").getaddrinfo(host, None)
+        infos = await loop.getaddrinfo(host, None)
     except OSError:
         return True
     for info in infos:

@@ -16,7 +16,7 @@ from app.services import integration_runner as ir
 from app.services import webhook_outbox as wo
 
 from .inbound_fixtures import (
-    mk_pending, mk_task_pair as _mk_pair, mk_token,
+    allow_delivery_hosts, mk_pending, mk_task_pair as _mk_pair, mk_token,
     seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
 )
 
@@ -112,8 +112,7 @@ class TestS2DeliveryLoop:
     async def test_slow_alias_does_not_block_others(
             self, client, monkeypatch):
         """令牌 A 的接收端挂起 2s,令牌 B 的投递不受阻(并发)。"""
-        from app.services import access_token as at_mod
-        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        allow_delivery_hosts(monkeypatch)
         slow_tid, _ = await mk_token(kind="platform", name="slow",
                                       callback_url="https://slow.example/cb",
                                       callback_secret="s")
@@ -134,8 +133,7 @@ class TestS2DeliveryLoop:
 
     async def test_same_alias_serial_by_id(self, client, monkeypatch):
         """同一令牌的两行按 id 顺序发送。"""
-        from app.services import access_token as at_mod
-        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        allow_delivery_hosts(monkeypatch)
         tid, _ = await mk_token(kind="platform", name="serial",
                                 callback_url="https://cb.example.local/1",
                                 callback_secret="s")
@@ -176,8 +174,7 @@ class TestS2DeliveryLoop:
         assert len(await wo._claim(db_module.SessionLocal)) == 1
 
     async def test_concurrent_claim_sends_once(self, client, monkeypatch):
-        from app.services import access_token as at_mod
-        monkeypatch.setattr(at_mod, "host_is_private", lambda h: False)
+        allow_delivery_hosts(monkeypatch)
         once_tid, _ = await mk_token(kind="platform", name="once",
                                       callback_secret="s")
         await mk_pending(token_id=once_tid)

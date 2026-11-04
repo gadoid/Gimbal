@@ -263,14 +263,20 @@ async def _send_one(
     if not (job.url.startswith("http://")
             or job.url.startswith("https://")):
         return False, "bad url(回调仅允许 http/https)"
+    # D16(评审 2026-11-05 P1):保存与投递各校验一次 —— 运维从白名单
+    # 移除主机后,已保存该地址的令牌不得继续投递;不通过即终态失败
+    # (``callback_host_not_allowed``,重试不会让白名单回来)。
+    from .access_token import check_callback_url, host_is_private
+    ok, _host = check_callback_url(job.url)
+    if not ok:
+        return False, "callback_host_not_allowed"
     # 投递前地址检查(§6/D24):解析一次主机,loopback / link-local /
     # 0.0.0.0 / ::1 即该行失败;解析失败同样拒(fail-closed)
     try:
         host = (urlsplit(job.url).hostname or "")
     except ValueError:
         return False, "bad url(回调地址不可解析)"
-    from .access_token import host_is_private
-    if not host or host_is_private(host):
+    if not host or await host_is_private(host):
         return False, f"callback host not allowed({host or '空主机'})"
     ts = int(time.time())
     headers = {
@@ -386,8 +392,9 @@ async def _writeback(factory, job: _Job, ok: bool,
                      err: "str | None") -> None:
     """第三段:每行独立短事务回写结果。
 
-    ``token_deleted`` / ``signing_key_missing`` 是**终态失败**:重试
-    不会让令牌行回来、密钥要等人轮换 —— 直接置 failed(§6「该行失败」),
+    ``token_deleted`` / ``signing_key_missing`` / ``callback_host_
+    not_allowed`` 是**终态失败**:重试不会让令牌行回来、密钥要等人
+    轮换、白名单要等人改配置 —— 直接置 failed(§6「该行失败」),
     不占用退避重试的窗口。"""
     async with factory() as session:
         row = await session.get(WebhookDelivery, job.id)
@@ -402,7 +409,8 @@ async def _writeback(factory, job: _Job, ok: bool,
             row.delivered_at = _now()
             row.next_retry_at = None
             row.last_error = None
-        elif err in ("token_deleted", "signing_key_missing"):
+        elif err in ("token_deleted", "signing_key_missing",
+                     "callback_host_not_allowed"):
             row.status = "failed"
             row.next_retry_at = None
             row.last_error = err

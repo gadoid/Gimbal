@@ -165,6 +165,24 @@ async def mk_pending(**over) -> int:
         return row.id
 
 
+def allow_delivery_hosts(monkeypatch, allowlist: str | None = None) -> None:
+    """投递面测试放行:D16 投递时白名单复核(评审 2026-11-05 P1)后,
+    直插的投递行 URL 也要过投递面白名单 —— 默认放开全部测试主机
+    (*.example / *.example.com / *.example.local);私址解析打桩放行
+    (沙箱无外网 DNS,真实解析一律 fail-closed 拒)。"""
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "CALLBACK_HOST_ALLOWLIST",
+        allowlist if allowlist is not None
+        else "*.example,*.example.com,*.example.local")
+
+    async def _not_private(host: str) -> bool:
+        return False
+
+    monkeypatch.setattr(at_svc, "host_is_private", _not_private)
+
+
 async def deliveries() -> "list[WebhookDelivery]":
     async with db_module.SessionLocal() as s:
         return list((await s.execute(
