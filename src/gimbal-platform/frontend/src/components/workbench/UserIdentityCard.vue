@@ -1,7 +1,8 @@
-<!-- UserIdentityCard.vue — 工作台右侧栏顶端身份卡。
-     chrome 里的 UserBadge 是「我是谁 + 登出」的窄条;这里回答的是
-     「我这个账号手上的盘子」:大字问候 + 私有场景/关注计数。
-     计数读场景 store(与三张场景卡同一份取数,不另发请求)。 -->
+<!-- UserIdentityCard.vue — 工作台右侧栏顶端身份卡(webhook v4 §8/D17;
+     原型 IdentityCard)。按 ``identity.card`` 偏好渲染:常驻统计(≤ 4,
+     可点跳转)、告警(按类开关过滤、严重度排序、最多 3 条 +「另有 N
+     条」)、快捷入口 ≤ 4;数据来自 ``/me/summary``(一次取回)。偏好与
+     预览由 IdentityCardSection 经 props 注入(preview 模式不再自取)。 -->
 <template>
   <section v-if="user" class="id-card" data-testid="wb-rail-identity">
     <div class="id-hero">
@@ -18,28 +19,71 @@
       </span>
     </div>
 
-    <dl class="id-stats">
-      <div class="id-stat">
-        <dt>私有场景</dt>
-        <dd class="mono">{{ loaded ? mineCount : '—' }}</dd>
-      </div>
-      <div class="id-stat">
-        <dt>关注</dt>
-        <dd class="mono">{{ loaded ? followCount : '—' }}</dd>
-      </div>
-    </dl>
+    <!-- 常驻统计(≤ 4;两列网格自适应) -->
+    <div class="id-stats" :class="{ grid2: statItems.length > 2 }">
+      <RouterLink
+        v-for="s in statItems" :key="s.id" class="id-stat"
+        :to="s.to" :title="s.hint"
+      >
+        <span class="label">{{ s.label }}</span>
+        <span class="value mono" :class="s.danger ? 'danger' : ''">
+          {{ loaded ? s.value : '—' }}
+        </span>
+      </RouterLink>
+    </div>
+
+    <!-- 告警(按类开关过滤;最多 3 条 +「另有 N 条」) -->
+    <div v-if="alertItems.length" class="id-alerts">
+      <RouterLink
+        v-for="a in alertItems" :key="a.id" class="id-alert"
+        :class="a.severity" :to="a.link"
+      >
+        <span class="flex min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{{ a.title }}</span>
+        <span class="action">{{ a.action }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="moreAlerts > 0" class="more" to="/notifications"
+      >另有 {{ moreAlerts }} 条 · 查看全部</RouterLink>
+    </div>
+
+    <!-- 快捷入口(≤ 4) -->
+    <div v-if="shortcutItems.length" class="id-shortcuts">
+      <RouterLink v-for="s in shortcutItems" :key="s.id" class="pill" :to="s.to">{{ s.label }}</RouterLink>
+    </div>
+
+    <div v-if="!preview" class="id-footer">
+      <RouterLink class="link" to="/profile#card">自定义身份卡</RouterLink>
+      <RouterLink class="link" to="/profile">个人设置</RouterLink>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { avatarColor, avatarInitial } from '@/utils/avatarColor'
+import http from '@/api/http'
+
+const props = defineProps<{
+  /** 偏好注入(IdentityCardSection 预览);缺省自取 identity.card */
+  config?: { stats: string[]; alerts: Record<string, boolean>; shortcuts: string[] }
+  /** 摘要注入(预览);缺省自取 /me/summary */
+  summary?: { stats: Record<string, number>; alerts: AlertItem[] }
+  /** 预览模式:不自取数据、不出底部链接 */
+  preview?: boolean
+}>()
+
+interface AlertItem {
+  id: string
+  class: string
+  severity: 'error' | 'warn' | 'info'
+  title: string
+  action: string
+  link: string
+}
 
 const auth = useAuthStore()
-const store = useScenarioComposerStore()
-
 const user = computed(() => auth.currentUser)
 const displayName = computed(() => user.value?.display_name || user.value?.username || '')
 const initial = computed(() => avatarInitial(displayName.value))
@@ -50,11 +94,77 @@ const HOUR = new Date().getHours()
 const greeting = HOUR < 6 ? '凌晨好' : HOUR < 11 ? '早上好' : HOUR < 13 ? '中午好'
   : HOUR < 18 ? '下午好' : '晚上好'
 
-const loaded = computed(() => store.windowLoaded)
-const mineCount = computed(() => store.window.filter((s) => s.visibility !== 'public').length)
-const followCount = computed(() => store.window.filter((s) => s.starred).length)
+// ── 注册表(id 与后端 /me/summary、identity.card 的键对齐)────────
+const STAT_DEFS: Record<string, { label: string; to: string; hint?: string; danger?: boolean }> = {
+  private_scenarios: { label: '私有场景', to: '/scenarios/mine', hint: '点击进入我的场景' },
+  follows: { label: '关注', to: '/scenarios/follows' },
+  tokens: { label: '访问令牌', to: '/profile#tokens', hint: '有效令牌数' },
+  today_failed: { label: '今日执行失败', to: '/executions?status=failed', danger: true },
+  subscribed_integrations: { label: '订阅的集成任务', to: '/integrations', hint: '含已暂停' },
+  auths: { label: '我的凭证', to: '/auths' },
+  unread: { label: '未读通知', to: '/notifications' },
+}
 
-onMounted(() => { void store.ensureWindow() })
+const SHORTCUT_DEFS: Record<string, { label: string; to: string }> = {
+  tokens: { label: '访问令牌', to: '/profile#tokens' },
+  auths: { label: '我的凭证', to: '/auths' },
+  password: { label: '修改密码', to: '/profile#account' },
+  notify: { label: '通知偏好', to: '/profile#notify' },
+  create_token: { label: '创建令牌', to: '/profile#tokens' },
+}
+
+const DEFAULT_STATS = ['private_scenarios', 'follows', 'tokens']
+
+// ── 数据(注入或自取)──────────────────────────────────────────
+const ownCfg = ref<{ stats: string[]; alerts: Record<string, boolean>; shortcuts: string[] } | null>(null)
+const ownSummary = ref<{ stats: Record<string, number>; alerts: AlertItem[] } | null>(null)
+const loaded = computed(() => !!(props.summary ?? ownSummary.value))
+
+const cfg = computed(() => props.config ?? ownCfg.value ?? {
+  stats: DEFAULT_STATS, alerts: {}, shortcuts: [],
+})
+const summary = computed(() => props.summary ?? ownSummary.value)
+
+const statItems = computed(() => {
+  const stats = summary.value?.stats ?? {}
+  return cfg.value.stats
+    .filter((id) => STAT_DEFS[id])
+    .map((id) => ({
+      id,
+      ...STAT_DEFS[id],
+      value: stats[id] ?? 0,
+    }))
+})
+
+const alertItems = computed(() => {
+  const all = summary.value?.alerts ?? []
+  const on = all.filter((a) => cfg.value.alerts[a.class] !== false)
+  return on.slice(0, 3)
+})
+const moreAlerts = computed(() => {
+  const all = summary.value?.alerts ?? []
+  return Math.max(0, all.filter((a) => cfg.value.alerts[a.class] !== false).length - 3)
+})
+
+const shortcutItems = computed(() =>
+  cfg.value.shortcuts
+    .filter((id) => SHORTCUT_DEFS[id])
+    .map((id) => ({ id, ...SHORTCUT_DEFS[id] })))
+
+onMounted(async () => {
+  if (props.preview) return
+  try {
+    const prefs = await http.get<{ items: Record<string, unknown> }>('/me/preferences')
+    const saved = prefs.data.items['identity.card'] as
+      { stats: string[]; alerts: Record<string, boolean>; shortcuts: string[] } | undefined
+    if (saved) ownCfg.value = saved
+  } catch { /* 偏好不可达 → 默认 */ }
+  try {
+    const out = await http.get<{ stats: Record<string, number>; alerts: AlertItem[] }>(
+      '/me/summary')
+    ownSummary.value = out.data
+  } catch { /* 摘要不可达 → 统计显示 — */ }
+})
 </script>
 
 <style scoped>
@@ -67,7 +177,6 @@ onMounted(() => { void store.ensureWindow() })
   box-shadow: 0 2px 10px rgba(16, 21, 28, 0.07);
 }
 
-/* 姓名靠左、头像放大靠右(源码顺序即视觉顺序,不做 flex 反转) */
 .id-hero {
   @apply flex items-start justify-between gap-3 border-b border-signal-line bg-signal-soft;
   padding: 16px;
@@ -93,12 +202,38 @@ onMounted(() => { void store.ensureWindow() })
   box-shadow: 0 0 0 4px white, 0 4px 14px rgba(16, 21, 28, 0.16);
 }
 
-.id-stats { @apply flex gap-2.5 m-0; padding: 14px 16px 16px; }
+/* 常驻统计:≤ 2 项单列两块;3 项三列;4 项两列网格(原型口径) */
+.id-stats { @apply flex gap-2 m-0; padding: 14px 16px 12px; }
+.id-stats.grid2 { @apply grid grid-cols-2; flex: none; }
 .id-stat {
   @apply flex flex-col gap-px flex-1 bg-signal-canvas/60 border border-signal-line rounded-empty;
   padding: 9px 12px;
 }
-.id-stat dt { @apply text-micro text-signal-ink/45; }
-.id-stat dd { @apply m-0 text-signal-ink; font-size: 19px; font-weight: 700; line-height: 24px; }
+.id-stat .label { @apply text-micro text-signal-ink/45; }
+.id-stat .value { @apply m-0 text-signal-ink; font-size: 19px; font-weight: 700; line-height: 24px; }
+.id-stat .value.danger { @apply text-signal-failed; }
+
+/* 告警条:error 红 / warn 琥珀;action 右对齐 */
+.id-alerts { @apply flex flex-col gap-1.5; padding: 0 16px 10px; }
+.id-alert {
+  @apply flex items-center gap-2 rounded-empty text-caption no-underline;
+  padding: 7px 10px;
+}
+.id-alert.error { background: #fee2e2; color: #991b1b; }
+.id-alert.warn { background: #fef3c7; color: #92400e; }
+.id-alert .action { @apply font-semibold whitespace-nowrap; }
+.more { @apply text-[11px] text-signal-ink/60 no-underline self-end; }
+
+.id-shortcuts { @apply flex flex-wrap gap-1.5; padding: 0 16px 12px; }
+.pill {
+  @apply inline-flex items-center border border-signal-line rounded-full text-caption text-signal-ink no-underline;
+  height: 24px; padding: 0 10px;
+}
+
+.id-footer {
+  @apply flex justify-between border-t border-signal-line;
+  padding: 9px 16px;
+}
+.link { @apply text-caption text-signal no-underline; }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

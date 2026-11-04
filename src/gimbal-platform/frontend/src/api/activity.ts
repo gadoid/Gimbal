@@ -30,10 +30,10 @@ export interface ActivityEventIn {
   suiteId?: number | null
   /** integration 面(边沿事件:订阅/暂停/恢复/结论翻转)。 */
   taskId?: number | null
-  /** inbound 面(2026-11-03:经别名触发的执行/临时调用)。 */
-  callerAlias?: string | null
+  /** inbound 面(webhook v4:经个人令牌触发的执行/临时调用)。 */
+  tokenId?: number | null
+  tokenName?: string | null
   clientRef?: string | null
-  credentialOwner?: string | null
 }
 
 export interface ActivityReport {

@@ -11,6 +11,8 @@ export interface UserPublic {
   /** 通知 roleVersion 比对源(ISO);旧快照缺省 */
   updated_at?: string | null
   is_active: boolean
+  /** D32:系统用户(__platform__)标记;用户管理行防御停用/删除入口 */
+  is_system?: boolean
   created_at: string
 }
 

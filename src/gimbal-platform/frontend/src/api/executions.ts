@@ -88,12 +88,12 @@ export interface Execution {
    *  带 graph 的执行 kind 仍是 scenario;终态 → 点了取消却按真实结果收口
    *  (config.cancelIgnored)的原因。 */
   cancel_note?: string | null
-  /** 入站身份只读投影(全量评估 2026-11-02 #9):经由的别名 / 身份模式
-   *  (personal=grant 用户,platform=系统用户)/ grant id / 调用方对账键。
-   *  JWT 发起的执行四者皆 null。 */
-  caller_alias?: string | null
+  /** 令牌只读投影(webhook v4 §7.1):经哪张令牌(id/名称快照)、以谁
+   *  身份(personal=属主,platform=平台系统用户)/ 调用方对账键。
+   *  JWT 发起的执行三者皆 null。 */
+  token_id?: number | null
   identity_mode?: 'personal' | 'platform' | null
-  grant_id?: number | null
+  token_name?: string | null
   client_ref?: string | null
 
 }
@@ -155,9 +155,9 @@ export function listExecutions(params?: {
   /** 发起时间范围 ISO(锚 created_at;queued 单 started_at 可空不作锚) */
   createdFrom?: string
   createdTo?: string
-  /** 按调用方别名列经由该别名的执行(收尾评审 G3):别名属主或 admin;
-   *  平台模式执行 owner 是系统用户,不进「我的执行」,别名详情页排查用。 */
-  callerAlias?: string
+  /** 按访问令牌列经它发起的执行(webhook v4):令牌属主或 admin;
+   *  平台令牌执行 owner 是系统用户,不进「我的执行」,令牌详情排查用。 */
+  tokenId?: number
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。
   return http
@@ -173,7 +173,7 @@ export function listExecutions(params?: {
         batch_id: params?.batchId,
         created_from: params?.createdFrom,
         created_to: params?.createdTo,
-        caller_alias: params?.callerAlias,
+        token_id: params?.tokenId,
       },
     })
     .then((r) => r.data)

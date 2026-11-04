@@ -31,6 +31,7 @@
     <TabsList>
       <TabsTrigger value="users" data-testid="tab-users">用户</TabsTrigger>
       <TabsTrigger value="audit" data-testid="tab-audit">审计</TabsTrigger>
+      <TabsTrigger value="tokens" data-testid="tab-tokens">访问令牌</TabsTrigger>
     </TabsList>
     <TabsContent value="users">
     <div v-if="visibleUsers.length" class="lib-card">
@@ -98,11 +99,15 @@
                   @click="onCommand('set-role', row, r)"
                 >设为 {{ roleLabel(r) }}</DropdownMenuItem>
                 <DropdownMenuItem data-testid="act-reset-pw" @click="onCommand('reset-pw', row)">重置密码</DropdownMenuItem>
-                <DropdownMenuItem data-testid="act-toggle-active" @click="onCommand(row.is_active ? 'deactivate' : 'activate', row)">
+                <DropdownMenuItem
+                  v-if="!row.is_system"
+                  data-testid="act-toggle-active" @click="onCommand(row.is_active ? 'deactivate' : 'activate', row)"
+                >
                   {{ row.is_active ? '停用账号' : '启用账号' }}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  v-if="!row.is_system"
                   data-testid="act-delete"
                   class="text-signal-failed focus:bg-signal-failed/10 focus:text-signal-failed"
                   @click="onCommand('delete', row)"
@@ -134,6 +139,12 @@
       show-jump
       @update:page-size="list.setPageSize"
     />
+    </TabsContent>
+
+    <TabsContent value="tokens">
+      <!-- webhook v4 §8:admin 令牌视图(按类型/状态/属主筛选,查看 +
+           强制失效并填写处置说明;r10.4)—— 与个人设置/集成页同组件 -->
+      <TokensSection variant="admin" />
     </TabsContent>
 
     <TabsContent value="audit">
@@ -374,6 +385,7 @@ import * as usersApi from '@/api/users'
 import { useServerList } from '@/composables/useServerList'
 import { mediumDateTime } from '@/utils/datetime'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import TokensSection from '@/components/profile/TokensSection.vue'
 import AuditLogPanel from '@/components/admin/AuditLogPanel.vue'
 import type { UserOut, ResetPasswordOut } from '@/api/users'
 import ListPage from '@/layouts/ListPage.vue'

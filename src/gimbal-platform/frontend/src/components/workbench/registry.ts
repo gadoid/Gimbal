@@ -96,6 +96,14 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     component: () => import('./NotificationsCard.vue'),
   },
   {
+    id: 'notes',
+    title: '便签',
+    description: '随手记待办与线索;已完成 7 天后自动清理,换设备同步',
+    accent: 'gold',
+    defaultSize: 'M',
+    component: () => import('./cards/NotesCard.vue'),
+  },
+  {
     id: 'my-scenarios',
     title: '我的场景',
     description: '私有编排速览 — 最近编辑直达 + 过期提醒',

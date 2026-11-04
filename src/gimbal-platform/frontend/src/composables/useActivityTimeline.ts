@@ -68,26 +68,26 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
     }
   }
   if (e.kind === 'inbound') {
-    // 2026-11-03:经别名触发的执行/临时调用上轴 —— 此前第三方调用只有
-    // 执行行,看不出「谁经哪个别名调进来的」。凭证归属人与 clientRef
-    // 是这条事件的核心信息(对账:谁的身份、哪次调用)。
+    // webhook v4(§7.3):经个人令牌触发的执行/临时调用上轴 —— 令牌名
+    // 与 clientRef 是这条事件的核心信息(对账:谁的身份、哪次调用);
+    // 平台令牌不上个人轴(D23)。深链:令牌 → /profile#tokens,执行行内。
     const d = (e.detail ?? {}) as Record<string, unknown>
-    const via = e.callerAlias ?? ''
-    const who = e.credentialOwner ?? ''
+    const via = e.tokenName ? `令牌 ${e.tokenName}` : '访问令牌'
     if (e.action === 'inbound.run' && d.fn === 'adhoc') {
       const steps = Array.isArray(d.steps) ? (d.steps as unknown[]).length : 0
       return {
         key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
         title: `调用 ${via} · 临时调用 ${steps} 步`,
-        detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
-        to: executionUrl(e.executionId!),
+        detail: e.clientRef || undefined,
+        // §7.3:点击跳令牌管理;对账明细(clientRef/执行号)在标题行内
+        to: '/profile#tokens',
       }
     }
     return {
       key: `inb-${e.executionId}-${e.at}`, kind: 'inbound', at: e.at,
       title: `调用 ${via} → ${e.scenarioName || e.scenarioId || `执行 #${e.executionId}`}`,
-      detail: [who, e.clientRef].filter(Boolean).join(' · ') || undefined,
-      to: executionUrl(e.executionId!),
+      detail: e.clientRef || undefined,
+      to: '/profile#tokens',
     }
   }
   if (e.kind === 'integration') {

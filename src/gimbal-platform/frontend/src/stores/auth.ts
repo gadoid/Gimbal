@@ -208,6 +208,8 @@ export const useAuthStore = defineStore('auth', () => {
     role,
     isAdmin,
     hasRole,
+    /** 改密(退出其他会话)后写回新 JWT —— Profile 消费。 */
+    setTokens,
     clear,
     refreshOnce,
     login,

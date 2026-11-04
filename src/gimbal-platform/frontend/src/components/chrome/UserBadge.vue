@@ -43,7 +43,13 @@
       <span v-if="auth.currentUser" class="username min-w-0 truncate text-body font-medium text-slate-50">
         {{ auth.currentUser.display_name || auth.currentUser.username }}
       </span>
-      <span class="role-chip shrink-0">{{ roleLabel }}</span>
+      <span class="flex shrink-0 items-center gap-1.5">
+        <span
+          v-if="pendingTokens" class="token-dot" title="有令牌即将到期或已失效"
+          aria-label="有令牌即将到期或已失效"
+        ></span>
+        <span class="role-chip">{{ roleLabel }}</span>
+      </span>
     </button>
     <div class="flex w-full items-center justify-between gap-2">
       <!-- 同 compact:面板弹到侧栏右侧内容区,不挤进 200px 导航轨 -->
@@ -75,6 +81,9 @@
               {{ auth.currentUser.display_name || auth.currentUser.username }}
             </span>
             <span class="role-chip">{{ roleLabel }}</span>
+            <span
+              v-if="pendingTokens" class="token-dot" aria-label="有令牌即将到期或已失效"
+            ></span>
           </span>
           <ChevronDownIcon class="h-3 w-3 text-slate-400" />
         </button>
@@ -88,6 +97,11 @@
         <DropdownMenuItem data-testid="user-badge-profile-item" @click="goProfile">
           <GearIcon class="h-3.5 w-3.5" /> 个人设置
         </DropdownMenuItem>
+        <DropdownMenuItem data-testid="user-badge-tokens-item" @click="goTokens">
+          <LockClosedIcon class="h-3.5 w-3.5" />
+          <span class="flex-1">访问令牌</span>
+          <span v-if="pendingTokens" class="pending-chip">{{ pendingTokens }} 待处理</span>
+        </DropdownMenuItem>
         <DropdownMenuItem class="text-signal-failed" data-testid="user-badge-logout" @click="onLogout">
           <ExitIcon class="h-3.5 w-3.5" /> 登出
         </DropdownMenuItem>
@@ -97,8 +111,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ChevronDownIcon, ExitIcon, GearIcon } from '@radix-icons/vue'
+import { computed, onMounted, ref } from 'vue'
+import { ChevronDownIcon, ExitIcon, GearIcon, LockClosedIcon } from '@radix-icons/vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import NotificationBell from '@/components/chrome/NotificationBell.vue'
@@ -106,6 +120,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { listAccessTokens } from '@/api/access-tokens'
 
 withDefaults(defineProps<{
   compact?: boolean
@@ -132,6 +147,23 @@ function goProfile() {
   router.push('/profile')
 }
 
+function goTokens() {
+  router.push('/profile#tokens')
+}
+
+// webhook v4 §8:用户区的待处理数口径 = 7 天内到期 + 已失效(个人令牌)。
+const pendingTokens = ref(0)
+
+onMounted(async () => {
+  if (!['member', 'admin'].includes(auth.role)) return
+  try {
+    const env = await listAccessTokens('personal')
+    pendingTokens.value = env.items.filter((t) =>
+      t.status === 'invalidated' || (t.status === 'active' && t.expiresAt
+        && new Date(t.expiresAt).getTime() - Date.now() < 7 * 86400e3)).length
+  } catch { /* 不可达时不出角标 */ }
+})
+
 async function onLogout() {
   await auth.logout()
   router.push('/login')
@@ -139,6 +171,20 @@ async function onLogout() {
 </script>
 
 <style scoped>
+.token-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #f59e0b;
+}
+.pending-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #b45309;
+}
 .role-chip {
   padding: 0 6px;
   border-radius: 999px;

@@ -57,10 +57,6 @@
         <TabsList>
           <TabsTrigger value="fields">字段默认值</TabsTrigger>
           <TabsTrigger v-if="isAliasMode" value="credential">凭证</TabsTrigger>
-          <!-- 入站与回调(webhook 设计 v3 P1):external 别名专属 -->
-          <TabsTrigger v-if="isExternalAlias" value="inbound" data-testid="tab-inbound">
-            入站与回调
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="fields">
@@ -97,16 +93,6 @@
           </div>
         </TabsContent>
 
-        <TabsContent v-if="isExternalAlias" value="inbound">
-          <InboundPanel
-            :alias-name="key"
-            :inbound-enabled="row!.inboundEnabled"
-            :callback-enabled="row!.callbackEnabled"
-            :callback-path="row!.callbackPath"
-            :can-manage="canManageInbound"
-          />
-        </TabsContent>
-
       </Tabs>
     </template>
   </section>
@@ -123,7 +109,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
-import InboundPanel from '@/components/integration/InboundPanel.vue'
 import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
@@ -143,7 +128,6 @@ const catalogNames = ref<string[]>([])
 
 const row = computed(() => aliases.value.find((a) => a.aliasName === key.value) ?? null)
 const isAliasMode = computed(() => row.value !== null)
-const isExternalAlias = computed(() => isAliasMode.value && row.value?.kind === 'external')
 const missing = computed(() =>
   !loading.value && row.value === null && !catalogNames.value.includes(key.value))
 const baseService = computed(() => row.value?.baseService ?? key.value)
@@ -157,13 +141,7 @@ const pageSubtitle = computed(() =>
     : '绑定键 = 服务名(服务级默认层);运行时解析:精确命中本服务 → 全局默认 → 无行 = 不注入')
 
 const activeTab = ref(
-  route.query.tab === 'credential' ? 'credential'
-  : route.query.tab === 'inbound' ? 'inbound'
-  : 'fields')
-
-/** 入站/回调设置与凭证管理:别名属主或 admin(团队共享别名只归 admin) */
-const canManageInbound = computed(() =>
-  auth.role === 'admin' || row.value?.ownerUserId === auth.currentUser?.id)
+  route.query.tab === 'credential' ? 'credential' : 'fields')
 
 
 onMounted(async () => {

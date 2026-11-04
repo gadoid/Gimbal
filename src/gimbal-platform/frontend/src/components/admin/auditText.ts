@@ -32,13 +32,19 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'suite.owner_fork': '复制私有套件',
   'suite.public_fork': '复制公共套件',
   // 入站身份(webhook 设计 v3 P1)+ 入站发起的操作(收尾评审 2026-11-02 G4)
-  'inbound.credential.write': '入站凭证变更',
-  'inbound.settings.write': '入站/回调设置变更',
-  'inbound.grant.write': '授权(grant)变更',
-  'inbound.grant_revoked_by_deactivation': '停用用户连带撤销授权',
-  'inbound.auth_failed': '入站认证失败',
-  'inbound.run': '经别名发起执行',
-  'inbound.task.write': '经别名变更集成任务',
+  'token.create': '签发访问令牌',
+  'token.renew': '令牌续期',
+  'token.regenerate': '令牌重新生成',
+  'token.revoke': '令牌吊销',
+  'token.invalidate': '令牌失效(改密/停用/管理员)',
+  'token.scope.write': '令牌范围变更',
+  'token.callback.write': '令牌回调地址变更',
+  'token.callback_secret.rotate': '令牌签名密钥轮换',
+  'token.task.unbind': '任务解绑令牌',
+  'integration.task.dispose': '删除用户的任务处置',
+  'inbound.run': '经令牌发起执行',
+  'inbound.denied': '令牌请求被拒',
+  'inbound.task.write': '经令牌变更集成任务',
   'inbound.grant_rebind': '集成任务换绑授权',
   // 回调投递人工干预(全量评估 2026-11-02 #8)
   'webhook.redeliver': '人工补发回调',
@@ -169,7 +175,7 @@ const INBOUND_TASK_FN_LABELS: Record<string, string> = {
 /** 入站操作的身份后缀:平台模式 / 个人模式(grant #n)。 */
 function inboundIdentity(d: Record<string, unknown>): string {
   if (s(d.identity_mode) === 'platform') return '平台模式'
-  return d.grant_id != null ? `个人模式，grant #${String(d.grant_id)}` : '个人模式'
+  return '个人模式'
 }
 
 function s(v: unknown): string {
@@ -268,31 +274,33 @@ export function describeAuditDetail(row: AuditLogRow): string {
       return `管理员发布套件「${s(d.name) || s(d.resource_name) || rid}」${Number(cascaded) > 0 ? `（连带公开 ${cascaded} 个成员场景）` : ''}`
     }
     case 'inbound.run': {
-      const via = `经别名「${rid}」`
+      const via = `经令牌「${s(d.token_name) || rid}」`
       const fn = s(d.fn)
-      if (fn === 'cancel') return `${via}取消执行 #${String(d.execution ?? '')}（${inboundIdentity(d)}）`
       const target = fn === 'adhoc'
         ? `临时调用 ${(Array.isArray(d.endpoints) ? d.endpoints : []).join('、') || '—'}`
-        : `场景「${s(d.scenario_id)}」`
+        : `场景「${s(d.scenario_name) || s(d.scenario_id)}」`
       return `${via}发起${target} → 执行 #${String(d.execution ?? '')}（${inboundIdentity(d)}）`
     }
     case 'inbound.task.write': {
       const fn = INBOUND_TASK_FN_LABELS[s(d.fn)] ?? '变更'
       const name = s(d.name) ? `「${s(d.name)}」` : `#${String(d.task ?? '')}`
-      return `经别名「${rid}」${fn}集成任务${name}（${inboundIdentity(d)}）`
+      return `经令牌「${s(d.token_name) || rid}」${fn}集成任务${name}（${inboundIdentity(d)}）`
     }
-    case 'inbound.grant_rebind': {
-      const name = s(d.name) ? `「${s(d.name)}」` : `#${String(d.task ?? '')}`
-      const from = d.grant_from != null ? `grant #${String(d.grant_from)}` : '无'
-      return `集成任务${name}换绑授权：${from} → grant #${String(d.grant_id ?? '')}${d.resumed ? '，实例已恢复' : ''}`
+    case 'inbound.denied':
+      return `令牌请求被拒：${s(d.reason) || '未知原因'}${s(d.token_hint) ? `（令牌 ${s(d.token_hint)}）` : ''}`
+    case 'token.task.unbind': {
+      const name = s(d.resource_name) || `#${String(d.task ?? '')}`
+      return `集成任务「${name}」解绑令牌 #${String(d.token ?? '')}`
+    }
+    case 'integration.task.dispose': {
+      const name = s(d.resource_name) || `#${String(rid)}`
+      return `删除用户:集成任务「${name}」处置为 ${s(d.disposal) || '?'}`
     }
     case 'webhook.redeliver': {
       const target = d.execution != null ? `执行 #${String(d.execution)}`
         : d.instance != null ? `集成实例 #${String(d.instance)}` : ''
-      return `补发别名「${rid}」的回调 ${s(d.event_type)}${target ? `（${target}）` : ''}：投递 #${String(d.delivery ?? '')} → 新投递 #${String(d.new_delivery ?? '')}`
+      return `补发令牌「${rid}」的回调 ${s(d.event_type)}${target ? `（${target}）` : ''}：投递 #${String(d.delivery ?? '')} → 新投递 #${String(d.new_delivery ?? '')}`
     }
-    case 'inbound.auth_failed':
-      return `入站认证失败：${s(d.reason) || '未知原因'}${s(d.message) ? `（${s(d.message)}）` : ''}`
     case 'suite.owner_fork':
     case 'suite.public_fork': {
       const from = s(d.resource_name) || `#${rid}`

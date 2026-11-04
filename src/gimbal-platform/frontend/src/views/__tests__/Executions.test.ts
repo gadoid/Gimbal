@@ -197,10 +197,10 @@ describe('Executions.vue — P1 detail upgrades', () => {
     wrapper.unmount()
   })
 
-  it('入站发起的执行显示「入站来源」(别名 · 身份模式 · grant);JWT 执行不显示(全量评估 #9)', async () => {
+  it('入站发起的执行显示「入站来源」(令牌 · 身份模式);JWT 执行不显示(webhook v4 §7.1)', async () => {
     const execStore = useExecutionsStore()
-    execStore.detail = { ...fakeDetail, caller_alias: 'agent-sys', identity_mode: 'personal',
-                         grant_id: 12, client_ref: 'job-7' }
+    execStore.detail = { ...fakeDetail, token_id: 3, identity_mode: 'personal', token_name: 'nightly',
+                         client_ref: 'job-7' }
     const w1 = await mountPage()
     const origin = w1.find('[data-testid="inbound-origin"]')
     expect(origin.exists()).toBe(true)

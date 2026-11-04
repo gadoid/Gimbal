@@ -40,6 +40,11 @@ export interface IntegrationTaskItem {
   /** W0b④:消费面字段(创建/列表/订阅回显) */
   authAliases?: string[]
   subscribed?: boolean
+  /** webhook v4:注册令牌(管理者视角;公共模板对非属主隐藏) */
+  tokenId?: number | null
+  tokenName?: string | null
+  tokenKind?: string | null
+  clientRef?: string | null
 }
 
 export interface FunctionCardData {
@@ -61,10 +66,11 @@ export interface FunctionCardData {
   checkStatus?: string
   checkMessage?: string
   checkChangedAt?: string | null
-  /** 暂停原因(D13 角标:auth_failed/missing_credential;
-   * W2:template_changed/made_private/manual;W4:fail_streak;
-   * 入站:grant_revoked(调用方 PATCH 重绑恢复)/scope_denied(启动恢复)/
-   * inbound_disabled(别名关闭「允许入站调用」,重新开启后启动恢复)) */
+  /** 暂停原因(§3.3 全集):auth_failed/missing_credential/
+   * template_changed/made_private/manual/fail_streak/scope_denied/
+   * token_revoked/token_invalidated/token_expired/
+   * token_owner_ineligible/resource_not_allowed —— 令牌类暂停各有
+   * 专属恢复路径(续期/重新生成自动恢复;吊销先解绑)。 */
   pausedReason?: string
   /** W4:连续失败计数(fail_streak 暂停门面显示「N 次」) */
   failStreak?: number
@@ -193,8 +199,28 @@ export async function createPlatformCredential(body: {
   return data
 }
 
-export async function deletePlatformCredential(id: number): Promise<void> {
-  await http.delete(`/integration/platform-credentials/${id}`)
+/** D34 平台凭证原地更新:id 不变(平台令牌范围不级联);字段均可选。 */
+export async function patchPlatformCredential(
+  id: number, input: { url?: string | null; username?: string | null;
+                       password?: string | null },
+): Promise<{ id: number; alias: string }> {
+  const { data } = await http.patch(
+    `/integration/platform-credentials/${id}`, input)
+  return data
+}
+
+export interface DeleteCredImpact {
+  removed: boolean
+  affectedTokens: number
+  affectedTasks: number
+}
+
+export async function deletePlatformCredential(
+  id: number,
+): Promise<DeleteCredImpact> {
+  const { data } = await http.delete(
+    `/integration/platform-credentials/${id}`)
+  return data
 }
 
 // ── W2(个人侧方案 §2):订阅 / 自管 ─────────────────────────────

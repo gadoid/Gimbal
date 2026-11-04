@@ -109,10 +109,13 @@
 
     <h3 class="recipe-title">执行信息</h3>
     <dl class="recipe">
-      <!-- 入站来源(全量评估 #9):经由谁、以谁的身份;JWT 发起的执行不显示 -->
-      <template v-if="execStore.detail?.caller_alias">
+      <!-- 入站来源(webhook v4 §7.1):经哪张令牌、以谁的身份;JWT 发起的执行不显示 -->
+      <template v-if="execStore.detail?.token_id">
         <dt>入站来源</dt>
-        <dd class="mono" data-testid="inbound-origin">{{ inboundOriginText }}</dd>
+        <dd class="mono" data-testid="inbound-origin">
+          {{ inboundOriginText }}
+          <span v-if="hasOutOfScope" class="oos-flag">含范围外目标</span>
+        </dd>
       </template>
       <template v-for="([k, label, v]) in recipeEntries" :key="k">
         <dt>{{ label }}</dt>
@@ -450,14 +453,21 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
     .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
 })
 
-/** 入站来源一行:别名 · 身份模式(个人模式带 grant id)· clientRef。 */
+/** 入站来源一行:令牌 · 身份模式 · clientRef(webhook v4 §7.1)。 */
 const inboundOriginText = computed(() => {
   const d = execStore.detail
-  if (!d?.caller_alias) return ''
-  const mode = d.identity_mode === 'personal'
-    ? `个人模式(grant #${d.grant_id ?? '?'})`
-    : '平台模式'
-  return `别名 ${d.caller_alias} · ${mode}${d.client_ref ? ` · clientRef ${d.client_ref}` : ''}`
+  if (!d?.token_id) return ''
+  const mode = d.identity_mode === 'personal' ? '个人模式' : '平台模式'
+  const name = d.token_name ? `令牌 ${d.token_name}` : `令牌 #${d.token_id}`
+  return `${name} · ${mode}${d.client_ref ? ` · clientRef ${d.client_ref}` : ''}`
+})
+
+/** §7.1 outOfScope 标记:任一非空即「含范围外目标」(D15 只记录不拦截)。 */
+const hasOutOfScope = computed(() => {
+  const oos = (execStore.detail?.config as Record<string, unknown> | undefined)?.outOfScope
+  if (!oos || typeof oos !== 'object') return false
+  const { targets, builtinAuths, strategyEntries } = oos as Record<string, unknown[]>
+  return Boolean(targets?.length || builtinAuths?.length || strategyEntries?.length)
 })
 
 /** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效。 */
@@ -728,7 +738,14 @@ async function loadExecution(): Promise<void> {
   refreshRowsIfExpanded()
 }
 
-onMounted(loadExecution)
+onMounted(() => {
+  // 令牌详情「全部调用」深链:?tokenId= 按令牌过滤列表(webhook v4 §2.2)
+  if (route.query.tokenId) {
+    const tid = Number(route.query.tokenId)
+    if (Number.isFinite(tid)) void execStore.fetchList({ tokenId: tid })
+  }
+  loadExecution()
+})
 
 watch(executionId, async (next, prev) => {
   if (!next || next === prev) return

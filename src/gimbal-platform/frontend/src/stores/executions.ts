@@ -122,10 +122,10 @@ export const useExecutionsStore = defineStore('executions', () => {
     expandedArtifacts.value = next
   }
 
-  async function fetchList(): Promise<ExecutionListItem[]> {
+  async function fetchList(params?: { tokenId?: number }): Promise<ExecutionListItem[]> {
     loading.value = true
     try {
-      const r = await api.listExecutions()
+      const r = await api.listExecutions(params)
       list.value = r.items
       total.value = r.total
       lastError.value = ''
