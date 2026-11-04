@@ -168,3 +168,20 @@ async def test_requires_auth(client: AsyncClient):
     assert (await client.put(
         "/api/me/preferences/workbench.layout",
         json={"value": _LAYOUT})).status_code in (401, 403)
+
+
+async def test_me_summary_200(client: AsyncClient):
+    """webhook v4 P3 §3:/me/summary 统计与告警一次取回。
+
+    回归钉:me_summary 曾把 `await db.execute(...).scalars()` 整链 await
+    (对 coroutine 调 .scalars → 500,2026-11-05 修复)。"""
+    from .inbound_fixtures import seed_platform_user
+    await seed_platform_user()
+    hdr = await _mk(client, "pref_summary")
+    r = await client.get("/api/me/summary", headers=hdr)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "stats" in body and "alerts" in body
+    # 无令牌无任务的全新用户:统计键齐全,值为 0
+    assert body["stats"].get("private_scenarios") == 0
+    assert body["stats"].get("tokens") == 0

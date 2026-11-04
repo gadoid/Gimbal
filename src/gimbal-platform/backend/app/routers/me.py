@@ -156,10 +156,13 @@ async def me_summary(
             "link": "/profile#tokens"})
 
     # ── 集成任务暂停(error;token/范围类成因)────────────────────
-    paused_insts = (await db.execute(select(IntegrationTask).where(
+    # 注意先 await execute 再 .scalars():写成 `await db.execute(...).scalars()`
+    # 会把整条链一起 await(对 coroutine 调 .scalars → 500,2026-11-05 修复)
+    _paused_rows = await db.execute(select(IntegrationTask).where(
         IntegrationTask.template_id.is_not(None),
         IntegrationTask.holder_id == user.id,
-        IntegrationTask.state == "paused")).scalars().all())
+        IntegrationTask.state == "paused"))
+    paused_insts = _paused_rows.scalars().all()
     task_alert_reasons = (
         at_svc.PAUSE_TOKEN_REVOKED, at_svc.PAUSE_TOKEN_INVALIDATED,
         at_svc.PAUSE_TOKEN_EXPIRED, at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
