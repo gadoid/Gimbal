@@ -998,15 +998,16 @@ async def dispatch_target(
             f"{settings.MAX_RUNS_PER_EXECUTION} (rows x injections)",
         )
     # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
-    # steps(authored 模板所在处,${auth.*} 引用一网打尽);绑定的
-    # authAlias 并入(即使 steps 未引用该 alias)。去重保序。
+    # steps + config.setup/teardown 条目(webhook v4 §3.2 —— setup 引用
+    # 的凭证此前在 runs 链不注入;与 run_prepare/integration_runner 同
+    # 口径);绑定的 authAlias 并入(即使 steps 未引用该 alias)。去重保序。
     # 注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
     # 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认,显式绑定优先)。
     # 存档口径(§4.1 拍板):config_json.serviceBindings 只记场景原始
     # 绑定,别名默认只体现于 injectedAuths 清单与实际注入的 users。
-    auth_aliases = await service_aliases.exec_auth_aliases(
+    auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
         db,
-        definition_from_payload(scenario_payload).get("steps") or [],
+        definition_from_payload(scenario_payload),
         {k: {"authAlias": b.auth_alias}
          for k, b in (req.service_bindings or {}).items()},
     )
