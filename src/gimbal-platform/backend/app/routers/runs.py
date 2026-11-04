@@ -193,6 +193,18 @@ def _deny_token_scope(missing: "list[at.ScopeMissing]") -> HTTPException:
         })
 
 
+def _scope_missing_detail(missing: "list[at.ScopeMissing]",
+                          **extra) -> dict:
+    """§7.2 ``inbound.denied`` 的范围拒绝 detail(拒绝原因与缺项;
+    令牌只记 hint 由 record_inbound 资源列承担)。"""
+    return {
+        "reason": at.ERR_RESOURCE_NOT_ALLOWED,
+        "missing": [{"kind": m.kind, "name": m.name, "deleted": m.deleted}
+                    for m in missing],
+        **extra,
+    }
+
+
 def _builtin_auths(scen) -> list[str]:
     """场景内置认证的用户名列表(§7.1:不含密码)。"""
     from ..services.run_prepare import built_in_users
@@ -243,6 +255,13 @@ async def _post_adhoc_run(
     missing = await at.check_scope(db, principal.token,
                                    principal.user.id, used)
     if missing:
+        from ..services import audit as _audit
+        await _audit.record_inbound(
+            db, principal, "inbound.denied",
+            detail=_scope_missing_detail(
+                missing, fn="adhoc",
+                endpoints=[str(dict(st).get("endpoint"))
+                           for st in body.steps]))
         raise _deny_token_scope(missing)
     target = run_dispatcher.RunTarget(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
@@ -279,7 +298,9 @@ async def _post_adhoc_run(
         "execution": resp.execution_id, "run_id": resp.run_id,
         "client_ref": body.client_ref,
         "scope_aliases": used.aliases,
-        "scope_auths": used.auths})
+        "scope_auths": used.auths,
+        # §7.2 resolvedServices 摘要(临时调用全走别名 ③层,§7.1)
+        "resolvedServices": trace["resolvedServices"]})
     await _record_inbound_activity(db, principal, resp, body=body)
     return resp
 
@@ -421,6 +442,13 @@ async def post_run(
             missing = await at.check_scope(
                 db, principal.token, user.id, used)
             if missing:
+                from ..services import audit as _audit
+                await _audit.record_inbound(
+                    db, principal, "inbound.denied",
+                    detail=_scope_missing_detail(
+                        missing, fn="scenario",
+                        scenario_id=scen.scenario_id,
+                        scheme_id=body.scheme_id))
                 raise _deny_token_scope(missing)
         # ⑥ 追溯计算(§7.1):resolvedServices / builtinAuths / outOfScope
         # —— JWT 执行同样写前两者;令牌另带 token 快照
@@ -449,6 +477,8 @@ async def post_run(
             "scheme_id": body.scheme_id,
             "scope_aliases": used.aliases if used else [],
             "scope_auths": used.auths if used else [],
+            # §7.2 resolvedServices 摘要(与 config_json §7.1 同源)
+            "resolvedServices": trace["resolvedServices"],
             "outOfScope": used.out_of_scope if used else {},
         })
     await _record_inbound_activity(db, principal, resp, body=body,
