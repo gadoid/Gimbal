@@ -131,6 +131,32 @@ class TestReadOnlyAndScrub:
         assert not ok and any("POST" in o for o in offenders)
 
     @pytest.mark.asyncio
+    async def test_read_only_setup_teardown_whitelist(self):
+        """D30(评审 2026-11-05 P1):config.setup/teardown 白名单检查在
+        is_scenario_read_only 本体 —— 各只读闸入口(注册保存/即时执行/
+        定时运行)自动一致,不再有只查 steps 的入口。"""
+        from app.services.integration_runner import is_scenario_read_only
+        base = {"definition": {"steps": STEPS_GET, "config": {}}}
+        ok, offenders = await is_scenario_read_only(base)
+        assert ok and not offenders
+        # 白名单外策略条目 → 不只读(步骤本身仍全 GET)
+        bad = {"definition": {
+            "steps": STEPS_GET,
+            "config": {"setup": [{"kind": "http_post", "params": {}}],
+                       "teardown": [{"kind": "extract", "target": "t",
+                                     "expression": "$.x"}]}}}
+        ok, offenders = await is_scenario_read_only(bad)
+        assert not ok
+        assert any("setup/teardown 条目 0" in o for o in offenders)
+        assert not any("条目 1" in o for o in offenders)  # 白名单内不报
+        # 全白名单内 → 只读
+        good = {"definition": {
+            "steps": STEPS_GET,
+            "config": {"setup": [{"kind": "sleep", "params": {"ms": 100}}]}}}
+        ok, offenders = await is_scenario_read_only(good)
+        assert ok and not offenders
+
+    @pytest.mark.asyncio
     async def test_read_only_anchored_method_from_plate(self, monkeypatch):
         """Release 6.2:锚点步骤不存 method —— 只读闸从 plate 契约解析;
         契约不可得即 fail-closed(不得放行)。"""

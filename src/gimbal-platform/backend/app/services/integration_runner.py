@@ -167,9 +167,14 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
     插件注册,将来的新策略可能有对外副作用;现有 extract / assign /
     assertion / sleep 都没有),``offenders`` 写「步骤 i(策略 X 未知)」。
     新增策略若确无副作用,显式加入该集合。
+
+    D30(评审 2026-11-05 P1):``config.setup/teardown`` 条目同受该
+    白名单约束 —— 检查并入本函数本体,注册保存 / 即时执行 / 定时
+    运行各只读闸入口自动一致,不再有只查 steps 的入口(此前任务创建
+    后场景加白名单外 setup 条目,定时与即时执行闸均放行)。
     """
-    meta_plate = (((definition_from_payload(payload) or {}).get("meta") or {})
-                  .get("plate") or {})
+    definition = definition_from_payload(payload) or {}
+    meta_plate = ((definition.get("meta") or {}).get("plate") or {})
     offenders: list[str] = []
     for i, step in enumerate(steps_from_payload(payload)):
         method, _, query_safe = await _anchored_call_shape(step, meta_plate)
@@ -186,6 +191,12 @@ async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
             kind = str(entry.get("kind") or "") if isinstance(entry, dict) else ""
             if kind not in _SAFE_STRATEGY_KINDS:
                 offenders.append(f"步骤 {i}(策略 {kind or '?'} 未知)")
+    from .service_aliases import setup_teardown_nodes
+    for i, entry in enumerate(setup_teardown_nodes(definition)):
+        kind = str(entry.get("kind") or "")
+        if kind not in _SAFE_STRATEGY_KINDS:
+            offenders.append(
+                f"setup/teardown 条目 {i}(策略 {kind or '?'} 白名单外)")
     return (not offenders, offenders)
 
 

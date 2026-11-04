@@ -325,9 +325,11 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
                 "scheme_not_owned",
                 f"执行方案不存在或不属于该场景: {body.schemeId}") from None
     # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤);
-    # D30:config.setup/teardown 策略条目须属无副作用白名单
+    # D30:setup/teardown 白名单已并入 is_scenario_read_only 本体,
+    # 与即时执行/定时运行闸同一实现。
     if body.identityMode == "platform":
-        ok, offenders = await _read_only_with_plate(db, scen)
+        ok, offenders = await integration_runner.is_scenario_read_only(
+            scen.payload)
         if not ok:
             raise _bad("not_read_only",
                        f"平台模式要求全部步骤为只读"
@@ -368,27 +370,6 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref,
         "identity_mode": body.identityMode})
     return await _tpl_out_full(db, tpl, inst, user)
-
-
-async def _read_only_with_plate(
-    db: AsyncSession, scen: ComposerScenario,
-) -> tuple[bool, list[str]]:
-    """平台模式只读闸(D30 扩展:setup/teardown 策略条目须属
-    ``_SAFE_STRATEGY_KINDS``,否则 not_read_only)。"""
-    ok, offenders = await integration_runner.is_scenario_read_only(
-        scen.payload)
-    if ok:
-        from ..services.service_aliases import setup_teardown_nodes
-        from ..services.scenario_store import definition_from_payload
-        entries = setup_teardown_nodes(
-            definition_from_payload(scen.payload))
-        for i, e in enumerate(entries):
-            kind = str(e.get("kind") or "")
-            if kind not in integration_runner._SAFE_STRATEGY_KINDS:
-                offenders.append(
-                    f"setup/teardown 条目 {i}(策略 {kind or '?'} 白名单外)")
-                ok = False
-    return ok, offenders
 
 
 async def _scheme_payload_for(
