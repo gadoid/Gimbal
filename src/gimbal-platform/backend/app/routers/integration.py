@@ -35,8 +35,10 @@ PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 router = APIRouter(prefix="/integration", tags=["integration"])
 
 
-def _bad(code: str, message: str, status: int = 422) -> HTTPException:
-    return HTTPException(status_code=status, detail={"code": code, "message": message})
+def _bad(code: str, message: str, status: int = 422,
+         **extra) -> HTTPException:
+    return HTTPException(status_code=status,
+                         detail={"code": code, "message": message, **extra})
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -272,7 +274,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
     if principal.is_token:
         if body.identityMode != principal.identity_mode:
             raise _bad(
-                "identity_mode_mismatch",
+                "identity_mode_conflict",
                 f"identityMode 由认证结果决定为 {principal.identity_mode}"
                 f"(请求体传了 {body.identityMode})")
     elif body.identityMode == "platform" \
@@ -331,6 +333,10 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
                        f"平台模式要求全部步骤为只读"
                        f"(GET/HEAD/OPTIONS 或已标 query_safe): "
                        f"{'、'.join(offenders)}")
+    if principal.is_token:
+        # 令牌注册范围闸(§5.4:注册 422;按将生效的方案核对,未指定
+        # → 运行期同源回落默认/首个)
+        await _require_token_scope(db, principal, scen, body.schemeId)
     tpl = IntegrationTask(
         name=body.name, owner_id=user.id, visibility=body.visibility,
         identity_mode=body.identityMode, target_type="scenario",
@@ -383,6 +389,51 @@ async def _read_only_with_plate(
                     f"setup/teardown 条目 {i}(策略 {kind or '?'} 白名单外)")
                 ok = False
     return ok, offenders
+
+
+async def _scheme_payload_for(
+    db: AsyncSession, scen: ComposerScenario, scheme_id: str | None,
+) -> dict | None:
+    """注册/保存面**将生效**的方案体:指定 → 必须属该场景(否则 422
+    ``scheme_not_owned``,与创建闸同码);未指定/清除 → 运行期同源
+    回落(``resolve_for_run`` 默认/首个)—— 保存闸按生效配方核对,
+    不能只看调用方传了什么。"""
+    from ..services import scheme_store
+    if scheme_id:
+        try:
+            row = await scheme_store.get_row(db, scen.scenario_id, scheme_id)
+        except KeyError:
+            raise _bad(
+                "scheme_not_owned",
+                f"执行方案不存在或不属于该场景: {scheme_id}") from None
+        return row.payload or {}
+    row = await scheme_store.resolve_for_run(db, scen.scenario_id, None)
+    return (row.payload or {}) if row is not None else None
+
+
+async def _require_token_scope(
+    db: AsyncSession, principal: Principal, scen: ComposerScenario,
+    scheme_id: str | None,
+) -> None:
+    """令牌注册/保存的范围闸(§5.4 状态码约定:注册与保存 422)。
+
+    §3.2 单一实现(``used_sets_for_definition``),与 runs ⑤ /
+    ``run_precheck`` / 定时复核 #6 同口径;运行期 #6 仍兜底(范围
+    行之后被收紧的窗口)。"""
+    from ..services.scenario_store import definition_from_payload
+    scheme_payload = await _scheme_payload_for(db, scen, scheme_id)
+    bindings = dict((scheme_payload or {}).get("serviceBindings") or {})
+    used = await at_svc.used_sets_for_definition(
+        db, definition_from_payload(scen.payload), bindings)
+    missing = await at_svc.check_scope(
+        db, principal.token, principal.user.id, used)
+    if missing:
+        raise _bad(
+            at_svc.ERR_RESOURCE_NOT_ALLOWED,
+            "超出令牌授权范围:" + at_svc._missing_summary(missing)
+            + ";" + at_svc.missing_hint(missing),
+            missing=[{"kind": m.kind, "name": m.name, "deleted": m.deleted}
+                     for m in missing])
 
 
 @router.get("/tasks/{task_id}")
@@ -464,6 +515,15 @@ async def patch_task(
         tpl.client_ref = body.clientRef
     if "callbackPath" in body.model_fields_set:
         tpl.callback_path_override = body.callbackPath
+    if "schemeId" in body.model_fields_set and principal.is_token:
+        # 令牌保存面范围闸(§5.4:PATCH 422):换方案/清除都按**将生效**
+        # 配方核对 —— 清除后回落默认方案,默认也可能引入超范围引用。
+        if tpl.scenario_id:
+            scen_row = (await db.execute(select(ComposerScenario).where(
+                ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
+            if scen_row is not None:
+                await _require_token_scope(
+                    db, principal, scen_row, body.schemeId or None)
     if body.schemeId:
         # S0①(G-A):PATCH 同创建闸,方案必须属于模板场景
         if not tpl.scenario_id:
@@ -545,7 +605,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     if principal.is_token:
         if tpl.identity_mode != principal.identity_mode:
             raise _bad(
-                "identity_mode_mismatch",
+                "identity_mode_conflict",
                 f"该任务为{'个人' if tpl.identity_mode == 'personal' else '平台'}"
                 f"模式,与令牌身份({principal.identity_mode})不符")
         if tpl.identity_mode == "personal" and tpl.owner_id != user.id:

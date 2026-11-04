@@ -98,8 +98,9 @@ async def precheck_run(
     if token is None and token_id is not None:
         from ..models.access_token import AccessToken
         token = await db.get(AccessToken, token_id)
-        if token is None or not at_svc.can_view(user, token):
-            token = None      # 不可见 = 当作没传(不带范围预检,不 404 连坐)
+        if token is None or not at_svc.can_manage(user, token):
+            token = None      # 不可管理 = 当作没传(不带范围预检,不 404 连坐;
+                              # §5.3:JWT 只能预检自己可管理的令牌)
     out: list[PrecheckResult] = []
     for item in items:
         scen_row = await scenario_store.get_row(db, item.scenario_id)
