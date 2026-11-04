@@ -743,3 +743,239 @@ class TestPlatformPremise:
             "triggerCron": "0 2 * * *"})
         assert r.status_code == 422
         assert r.json()["detail"]["code"] == "platform_scope_denied"
+
+
+# ── 接口面收口(§2.2:graph / cancel 隔离 / 平台执行可见性 / 最近调用)──
+
+
+class TestInterfaceFace:
+    async def test_token_with_graph_422(self, client):
+        """D20:令牌请求带 graph 一律 422(graph 为 JWT 专属)。"""
+        await seed_platform_user()
+        h = await _register_role(client, "if1", "member")
+        _, plain = await mk_token(user_id=await _user_id("if1"))
+        r = await client.post("/api/runs", headers=_gtk(plain), json={
+            "graph": {"mode": "aggregate",
+                      "units": [{"ref": "a", "scenarioId": "sc-x"}]}})
+        assert r.status_code == 422
+        detail = r.json()["detail"]
+        assert detail["code"] == "inbound_field_not_allowed"
+        assert "graph" in detail["message"]
+
+    async def test_cancel_isolated_by_token(self, client):
+        """D25:令牌只能取消本令牌发起的执行;他人令牌 cancel 404。"""
+        from .inbound_fixtures import mk_execution
+        await seed_platform_user()
+        h = await _register_role(client, "if2", "member")
+        tid_a, plain_a = await mk_token(user_id=await _user_id("if2"))
+        _, plain_b = await mk_token(user_id=await _user_id("if2"),
+                                    name="t-b")
+        ex_id = await mk_execution(token_id=tid_a, status="running")
+        # B 令牌看不到也取消不了 A 的执行
+        r = await client.post(f"/api/executions/{ex_id}/cancel",
+                              headers=_gtk(plain_b))
+        assert r.status_code == 404
+        # A 令牌取消自己的执行
+        r = await client.post(f"/api/executions/{ex_id}/cancel",
+                              headers=_gtk(plain_a))
+        assert r.status_code == 200, r.text
+
+    async def test_platform_execution_visibility_member_plus(self, client):
+        """§5.2:执行属主为系统用户(平台令牌发起)时 member+ 可见,user 404。"""
+        from .inbound_fixtures import mk_execution
+        await seed_platform_user()
+        ptid, _ = await mk_token(kind="platform", name="pv")
+        ex_id = await mk_execution(token_id=ptid, status="running")
+        h_member = await _register_role(client, "if3", "member")
+        r = await client.get(f"/api/executions/{ex_id}", headers=h_member)
+        assert r.status_code == 200
+        h_user = await _register_role(client, "if4", "user")
+        r = await client.get(f"/api/executions/{ex_id}", headers=h_user)
+        assert r.status_code == 404
+
+    async def test_recent_calls_success_denied_and_revoked(self, client,
+                                                           monkeypatch):
+        """§7.2 最近调用:成功与被拒同列;吊销后的被拒归到该令牌;
+        hash 未命中不出现在任何令牌下。"""
+        await seed_platform_user()
+        await seed_alias("rc-test", base_url="https://rc.local")
+        h = await _register_role(client, "if5", "member")
+        draft = _draft("sc-rc1", steps=[dict(GET_STEP, call=dict(
+            GET_STEP["call"], service="rc-test"))])
+        await client.post("/api/scenarios", headers=h, json=draft)
+        tid, plain = await mk_token(user_id=await _user_id("if5"),
+                                    scope_aliases=["rc-test"])
+        # ① 成功调用一次
+        from app.services import run_dispatcher as rd
+
+        async def _fake_fanout(*, db_factory, execution_id, **kw):
+            await rd.transition_with_retry(
+                db_factory, execution_id, rd.STATUS_DONE)
+
+        monkeypatch.setattr(rd, "_fanout", _fake_fanout)
+        r = await client.post("/api/runs", headers=_gtk(plain), json={
+            "scenarioId": "sc-rc1"})
+        assert r.status_code == 201, r.text
+        await _exec_done(r.json()["executionId"])
+        # ② 被拒一次(范围外场景)
+        draft2 = _draft("sc-rc2", steps=[dict(GET_STEP, call=dict(
+            GET_STEP["call"], service="no-such-alias"))])
+        await client.post("/api/scenarios", headers=h, json=draft2)
+        r = await client.post("/api/runs", headers=_gtk(plain), json={
+            "scenarioId": "sc-rc2"})
+        assert r.status_code == 403
+        # ③ 吊销后再被拒一次(401,hash 命中已吊销仍归档到该令牌)
+        async with db_module.SessionLocal() as s:
+            tok = await s.get(AccessToken, tid)
+            tok.revoked_at = at_svc.now_utc()
+            await s.commit()
+        r = await client.post("/api/runs", headers=_gtk(plain), json={
+            "scenarioId": "sc-rc1"})
+        assert r.status_code == 401
+        # ④ hash 未命中(随机明文)—— 不归任何令牌
+        r = await client.get("/api/executions", headers=_gtk("gtk_nope"))
+        assert r.status_code == 401
+        # 详情:三条都在(倒序:吊销后拒绝 → 超范围拒绝 → 成功)
+        r = await client.get(f"/api/access-tokens/{tid}", headers=h)
+        assert r.status_code == 200, r.text
+        calls = r.json()["recentCalls"]
+        assert len(calls) >= 3
+        kinds = [(c["denied"], c.get("reason")) for c in calls[:3]]
+        assert kinds[0] == (True, "token_invalid")   # 吊销后拒绝(最新)
+        assert kinds[1][0] is True                   # 超范围拒绝
+        assert kinds[2][0] is False                  # 成功调用
+        # 无关令牌(if5b 用户的另一张)不含这些记录
+        h_other = await _register_role(client, "if6", "member")
+        _, plain_other = await mk_token(
+            user_id=await _user_id("if6"), name="other")
+        r = await client.get("/api/access-tokens", headers=h_other)
+        other_id = r.json()["items"][0]["id"]
+        r = await client.get(f"/api/access-tokens/{other_id}",
+                             headers=h_other)
+        assert r.json()["recentCalls"] == []
+
+
+# ── 范围对象生命周期(§4.1:改名级联)与明文规格(§4.1)────────────────
+
+
+class TestScopeObjects:
+    async def test_alias_rename_cascades_scope(self, client):
+        """§4.1:别名改名级联到范围行(ON UPDATE CASCADE),授权随名走。"""
+        await seed_platform_user()
+        await seed_alias("ren-a", base_url="https://ren.local")
+        h = await _register_role(client, "so1", "member")
+        tid, _ = await mk_token(user_id=await _user_id("so1"),
+                                scope_aliases=["ren-a"])
+        from app.models.service_alias import ServiceAlias as _SA
+        async with db_module.SessionLocal() as s:
+            row = await s.get(_SA, "ren-a")
+            row.alias_name = "ren-b"
+            await s.commit()
+        r = await client.get(f"/api/access-tokens/{tid}", headers=h)
+        assert r.status_code == 200
+        assert r.json()["scope"]["aliases"] == ["ren-b"]
+
+    async def test_plaintext_and_hint_shape(self, client):
+        """§4.1:明文 = gtk_ + 43 字符 urlsafe;hint = 随机部分前4…后4。"""
+        await seed_platform_user()
+        h = await _register_role(client, "so2", "member")
+        out = await _api_token(client, h, {
+            "kind": "personal", "name": "shape", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": []}})
+        token = out["token"]
+        assert token.startswith("gtk_")
+        assert len(token) == len("gtk_") + 43   # secrets.token_urlsafe(32)
+        item = (await client.get("/api/access-tokens", headers=h)
+                ).json()["items"][0]
+        rand = token[len("gtk_"):]
+        assert item["tokenHint"] == f"{rand[:4]}…{rand[-4:]}"
+
+
+# ── 注册/保存面范围闸(§5.4 状态码约定:注册与保存 422)──────────────
+
+
+class TestRegisterScopeGate:
+    async def test_create_out_of_scope_422_then_in_scope_201(self, client):
+        """令牌注册超范围场景 → 422 resource_not_allowed;范围补齐 → 201。"""
+        await seed_platform_user()
+        await seed_alias("rg-out", base_url="https://out.local")
+        h = await _register_role(client, "rg1", "member")
+        draft = _draft("sc-rg1", steps=[dict(GET_STEP, call=dict(
+            GET_STEP["call"], service="rg-out"))])
+        await client.post("/api/scenarios", headers=h, json=draft)
+        # 空范围令牌注册 → 422(缺项「未授权」)
+        _, plain = await mk_token(user_id=await _user_id("rg1"))
+        r = await client.post("/api/integration/tasks", headers=_gtk(plain),
+                              json={"name": "t", "scenarioId": "sc-rg1",
+                                    "identityMode": "personal",
+                                    "triggerCron": "0 3 * * *"})
+        assert r.status_code == 422, r.text
+        detail = r.json()["detail"]
+        assert detail["code"] == "resource_not_allowed"
+        assert detail["missing"] == [{"kind": "alias", "name": "rg-out",
+                                      "deleted": False}]
+        # 范围补齐 → 201;JWT 注册不受令牌范围约束
+        _, plain2 = await mk_token(user_id=await _user_id("rg1"),
+                                   scope_aliases=["rg-out"])
+        r = await client.post("/api/integration/tasks", headers=_gtk(plain2),
+                              json={"name": "t2", "scenarioId": "sc-rg1",
+                                    "identityMode": "personal",
+                                    "triggerCron": "0 3 * * *"})
+        assert r.status_code == 201, r.text
+        r = await client.post("/api/integration/tasks", headers=h,
+                              json={"name": "t3", "scenarioId": "sc-rg1",
+                                    "identityMode": "personal",
+                                    "triggerCron": "0 3 * * *"})
+        assert r.status_code == 201, r.text
+
+    async def test_patch_scheme_out_of_scope_422(self, client):
+        """令牌 PATCH 换超范围方案 → 422(按将生效配方核对,§5.4 保存面)。"""
+        await seed_platform_user()
+        await seed_alias("rg-in", base_url="https://in.local")
+        h = await _register_role(client, "rg2", "member")
+        await _add_credential("rg2", alias="auth-in")
+        await _add_credential("rg2", alias="auth-out")
+        draft = _draft("sc-rg2", steps=[dict(GET_STEP, call=dict(
+            GET_STEP["call"], service="rg-in"))])
+        await client.post("/api/scenarios", headers=h, json=draft)
+        # 方案 A:绑定范围内凭证;方案 B:绑定范围外凭证
+        # (body 是 RunScheme 平铺形状,serviceBindings 在顶层)
+        r = await client.post("/api/scenarios/sc-rg2/run-schemes", headers=h,
+                              json={"name": "ok", "serviceBindings": {
+                                  "rg-in": {"authAlias": "auth-in"}}})
+        assert r.status_code == 201, r.text
+        scheme_ok = r.json().get("schemeId") or r.json().get("id")
+        r = await client.post("/api/scenarios/sc-rg2/run-schemes", headers=h,
+                              json={"name": "wide", "serviceBindings": {
+                                  "rg-in": {"authAlias": "auth-out"}}})
+        assert r.status_code == 201, r.text
+        scheme_wide = r.json().get("schemeId") or r.json().get("id")
+        # 令牌范围:别名 rg-in + 凭证 auth-in(不含 auth-out)
+        uid = await _user_id("rg2")
+        async with db_module.SessionLocal() as s:
+            auth_in = (await s.execute(sa.select(AuthSession.id).where(
+                AuthSession.owner_id == uid,
+                AuthSession.alias == "auth-in"))).scalar_one()
+        _, plain = await mk_token(user_id=uid, scope_aliases=["rg-in"],
+                                  scope_auths=[auth_in])
+        r = await client.post("/api/integration/tasks", headers=_gtk(plain),
+                              json={"name": "t", "scenarioId": "sc-rg2",
+                                    "identityMode": "personal",
+                                    "schemeId": scheme_ok,
+                                    "triggerCron": "0 3 * * *"})
+        assert r.status_code == 201, r.text
+        task_id = r.json()["id"]
+        # 换到超范围方案 → 422(缺项 = 凭证 auth-out 未授权)
+        r = await client.patch(f"/api/integration/tasks/{task_id}",
+                               headers=_gtk(plain),
+                               json={"schemeId": scheme_wide})
+        assert r.status_code == 422, r.text
+        detail = r.json()["detail"]
+        assert detail["code"] == "resource_not_allowed"
+        assert {"kind": "auth", "name": "auth-out",
+                "deleted": False} in detail["missing"]
+        # 换回范围内方案 → 200
+        r = await client.patch(f"/api/integration/tasks/{task_id}",
+                               headers=_gtk(plain),
+                               json={"schemeId": scheme_ok})
+        assert r.status_code == 200, r.text

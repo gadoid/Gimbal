@@ -93,6 +93,57 @@ async def test_pager_sizes_roundtrip(client: AsyncClient):
     assert await _get(client, hdr) == {"pager.sizes": {"sizes": {"auths": 20}}}
 
 
+async def test_identity_card_shape_roundtrip(client: AsyncClient):
+    """webhook v4 §4.3/D17:身份卡自定义 —— 统计/入口 ≤ 4,告警按类开关。"""
+    hdr = await _mk(client, "pref_card")
+    ok = {"stats": ["private_scenarios", "follows", "tokens", "auths"],
+          "alerts": {"failed": True, "expired": False},
+          "shortcuts": ["tokens", "notify"]}
+    r = await client.put(
+        "/api/me/preferences/identity.card", headers=hdr,
+        json={"value": ok})
+    assert r.status_code == 200
+    assert await _get(client, hdr) == {"identity.card": ok}
+    for bad in (
+        {"stats": ["a", "b", "c", "d", "e"]},          # 统计超 4
+        {"shortcuts": ["a", "b", "c", "d", "e"]},      # 入口超 4
+        {"alerts": {"a": "maybe"}},                    # 开关非布尔(宽松词表外)
+        {"stats": "tokens"},                           # 非列表
+    ):
+        r = await client.put(
+            "/api/me/preferences/identity.card", headers=hdr,
+            json={"value": {**ok, **bad}})
+        assert r.status_code == 422, f"{bad} 本该被拒"
+        assert r.json()["detail"]["code"] == "bad_pref_value"
+
+
+async def test_notes_shape_roundtrip(client: AsyncClient):
+    """webhook v4 §4.3/D18:便签 ≤ 20 条、每条 ≤ 200 字,整值覆盖。"""
+    hdr = await _mk(client, "pref_notes")
+    ok = {"items": [
+        {"id": "n1", "text": "查一下回调失败的三条", "done": False,
+         "created_at": "2026-11-04T10:00:00Z", "done_at": None},
+        {"id": "n2", "text": "续期 agent 令牌", "done": True,
+         "created_at": "2026-11-03T09:00:00Z",
+         "done_at": "2026-11-03T12:00:00Z"},
+    ]}
+    r = await client.put(
+        "/api/me/preferences/notes", headers=hdr, json={"value": ok})
+    assert r.status_code == 200
+    assert await _get(client, hdr) == {"notes": ok}
+    for bad in (
+        {"items": [{"id": f"n{i}", "text": "x"} for i in range(21)]},  # 超上限
+        {"items": [{"id": "n", "text": "x" * 201}]},                    # 单条过长
+        {"items": [{"id": "n", "text": ""}]},                           # 空文本
+        {"items": [{"id": "n", "text": "ok", "done": "maybe"}]},        # 非布尔
+    ):
+        r = await client.put(
+            "/api/me/preferences/notes", headers=hdr,
+            json={"value": bad})
+        assert r.status_code == 422, f"{bad} 本该被拒"
+        assert r.json()["detail"]["code"] == "bad_pref_value"
+
+
 async def test_preferences_do_not_leak_across_users(client: AsyncClient):
     owner = await _mk(client, "pref_a")
     other = await _mk(client, "pref_b")
