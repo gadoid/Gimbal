@@ -313,10 +313,6 @@
       show-jump
     />
 
-    <p class="slib-note">
-      「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
-    </p>
-
     <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
     <ShareDialog
       v-model:open="shareOpen"
@@ -454,14 +450,17 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
 
 /** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
  *  装的是全员的私有场景,视角说明必须说实话,不能对管理员自称"你的"。
- *  计数走 PageHead count 常驻;视角说明收进问号悬浮(2026-11-05 说明统一轮)。 */
-const pageSubtitle = computed(() =>
-  auth.isAdmin
+ *  计数走 PageHead count 常驻;视角说明收进问号悬浮(2026-11-05 说明统一轮);
+ *  逐页收纳批把页脚徽章/默认方案口径段并入同一弹层,页脚不再常驻长说明。 */
+const BADGE_NOTE = '「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。'
+const pageSubtitle = computed(() => {
+  const lens = auth.isAdmin
     ? (lensAll.value
       ? '全员视角:非 public 桶装的是全员的私有场景(全量)'
       : '我的:只看你创建的;切「全员视角」可看全部')
-    : '你创建或拥有的编排',
-)
+    : '你创建或拥有的编排'
+  return `${lens}\n\n${BADGE_NOTE}`
+})
 
 const formatTime = shortDateTime
 

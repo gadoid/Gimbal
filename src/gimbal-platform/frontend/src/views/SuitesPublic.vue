@@ -10,7 +10,7 @@
 <template>
   <section class="slib">
     <PageHead icon="globe" title="公共用例集"
-      subtitle="已发布到公共库的 Suite —— 不可直接运行,复制到我的后即可编辑与运行" />
+      :subtitle="pageTip" />
 
     <div class="slib-toolbar">
       <input
@@ -93,10 +93,6 @@
       show-page-size
       show-jump
     />
-
-    <p class="slib-note">
-      公共用例集没有「+ 新建」——创建永远发生在我的用例集,这里只做浏览与复用。复制得到的是完整深拷贝:编排结构、成员场景与数据集一并落地为自己的私有副本,与源互不影响;源后续的修改不会同步到副本。
-    </p>
   </section>
 </template>
 
@@ -111,6 +107,12 @@ import { MODE_LABEL } from '@/utils/suiteStructure'
 import { toast } from '@/utils/toast'
 
 const router = useRouter()
+
+/** 页头问号弹层 = 短定位 + 原页脚长说明(逐页收纳批:页脚不再常驻) */
+const pageTip = '已发布到公共库的 Suite —— 不可直接运行,复制到我的后即可编辑与运行'
+  + '\n\n'
+  + '公共用例集没有「+ 新建」——创建永远发生在我的用例集,这里只做浏览与复用。复制得到的是完整深拷贝:编排结构、成员场景与数据集一并落地为自己的私有副本,与源互不影响;源后续的修改不会同步到副本。'
+
 const items = ref<SuiteSummary[]>([])
 const loading = ref(true)
 const error = ref(false)
@@ -258,9 +260,5 @@ onMounted(reload)
   margin-top: 10px; padding: 6px 16px; font-size: 12.5px; cursor: pointer;
   color: #4338ca; background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border); border-radius: 8px;
-}
-.slib-note {
-  font-size: 12px; color: rgb(100 116 139); line-height: 1.7;
-  border-top: 1px solid rgb(100 116 139 / 15%); padding-top: 12px;
 }
 </style>

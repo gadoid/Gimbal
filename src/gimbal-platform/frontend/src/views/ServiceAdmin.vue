@@ -171,6 +171,8 @@
         <div class="svc-panel mt-3.5">
           <div class="svc-panel-head">
             <span class="svc-panel-title">{{ editing ? '编辑别名' : '登记别名' }}</span>
+            <!-- 登记口径说明:原表单下常驻段落,逐页收纳批收进问号弹层 -->
+            <QTip text="凭证按执行者本人的认证管理池解析(团队共享别名同样各拿各的);URL 必填;受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。" />
             <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -262,9 +264,6 @@
             </Button>
             <Button v-if="editing" variant="outline" data-testid="alias-cancel" @click="cancelEdit">取消</Button>
           </div>
-          <p class="slib-note">
-            凭证按<b>执行者本人</b>的认证管理池解析(团队共享别名同样各拿各的);URL 必填;受管服务登记强约束:Plate 目录不可达时暂不能登记。<b>第三方</b>不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。
-          </p>
         </div>
       </div>
     </div>
@@ -275,6 +274,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'

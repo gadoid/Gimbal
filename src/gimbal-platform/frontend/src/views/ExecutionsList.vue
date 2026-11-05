@@ -15,10 +15,11 @@
      * 展开行只放三样(§3.3):执行时注入快照 + 下一步入口(来源分析置灰:
        行级数据在认证快速失败单上不存在;事实模式待前置①,不发明假入口)
      * 同配置重跑(POST /executions/{id}/rerun,按 config_json 重建配方)
-     * 页尾图例 = 台账定位与信号口径的落地说明 -->
+     * 原型页尾图例(台账定位 + 信号口径)与 KPI 口径行已并入页头/KPI 带
+       的问号弹层(2026-11-05 逐页收纳批),页内不再常驻说明段 -->
 <template>
   <ListPage title="执行记录" icon="history" width="wide"
-    subtitle="跑了什么、跑成什么样、当时用的什么配置 — 台账只记事实,判断留给字段来源分析">
+    :subtitle="pageTip">
     <!-- ── KPI 带(§3.5;一张白卡,竖线分隔;execution 级量)────────── -->
     <div v-if="summary" class="kpi-band" data-testid="exec-kpi-band">
       <div class="kpi">
@@ -49,10 +50,11 @@
         <span class="kpi-label">反复失败场景</span>
         <span class="kpi-sub">连挂 ≥3;点信号列看清是哪条</span>
       </div>
+      <!-- 指标口径:原 kpi-foot 常驻行,逐页收纳批收进问号弹层 -->
+      <div class="kpi-tip">
+        <QTip text="计数为本人口径(owner 硬隔离,聚合不突破个体)· 通过率由筛选结果重算:搜执行号 = 该单用例口径,批次 = 批内全部执行 · 点「查询」生效 · 列表每 10s 刷新" />
+      </div>
     </div>
-    <p v-if="summary" class="kpi-foot">
-      计数为本人口径(owner 硬隔离,聚合不突破个体)· 通过率由筛选结果重算:搜执行号 = 该单用例口径,批次 = 批内全部执行 · 点「查询」生效 · 列表每 10s 刷新
-    </p>
 
     <!-- ── 筛选(§3.4:搜索 + status / 时间范围 / 批次 + 查询钮)───────
          2026-09-22 改制:筛选条件改动不再即时生效,统一点「查询」发起
@@ -257,22 +259,7 @@
       />
     </div>
 
-    <!-- ═══ 页尾图例(原型底部说明区:台账定位 + 信号口径) ═══════════ -->
-    <div class="exec-legend">
-      <p>
-        <strong>这一页只做台账,判断留给别人。</strong>
-        「为什么是这个结果」交给字段来源分析 — 它拿走 execution id 作为事实模式的数据源(一个 url 参数,不是共享状态);这里把单子记准、把信号标出来。
-        展开行只放注入快照与下一步入口,刻意不放行级表格 — 那是详情页的密度,塞进列表会把台账变成第二个详情页。
-      </p>
-      <p>
-        信号三源:连续失败 = 同场景按时间序连挂(Execution 计数器);认证快速失败 = dispatch 侧凭证解析 fail-fast,未分发任何行 — 所以「来源分析」入口是灰的,没有行可分析;
-        配置漂移依赖执行时注入快照落库(前置①),上线前不出现在这一列。
-      </p>
-      <p>
-        行级 / 步骤级结果不落库:行计数来自 Execution 计数器,行级明细在详情页(JSONL 回放),跨执行聚合(数据分析)等落库。
-        同配置重跑按 config_json 重建配方 — 一次独立执行,不进原批次。批次 = 归并键,不是执行策略。
-      </p>
-    </div>
+    <!-- ═══ 页尾图例已并入页头问号弹层(逐页收纳批) ═══════════ -->
   </ListPage>
 </template>
 
@@ -280,6 +267,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { toast } from '@/utils/toast'
 import { useExecutionsStore } from '@/stores/executions'
 import {
@@ -300,6 +288,15 @@ import type { ExecutionListItem } from '@/api/executions'
 
 const route = useRoute()
 const router = useRouter()
+
+/** 页头问号弹层 = 短定位 + 原页尾图例三段(逐页收纳批:页尾说明区不常驻) */
+const pageTip = '跑了什么、跑成什么样、当时用的什么配置 — 台账只记事实,判断留给字段来源分析'
+  + '\n\n'
+  + '这一页只做台账,判断留给别人。「为什么是这个结果」交给字段来源分析 — 它拿走 execution id 作为事实模式的数据源(一个 url 参数,不是共享状态);这里把单子记准、把信号标出来。展开行只放注入快照与下一步入口,刻意不放行级表格 — 那是详情页的密度,塞进列表会把台账变成第二个详情页。'
+  + '\n\n'
+  + '信号三源:连续失败 = 同场景按时间序连挂(Execution 计数器);认证快速失败 = dispatch 侧凭证解析 fail-fast,未分发任何行 — 所以「来源分析」入口是灰的,没有行可分析;配置漂移依赖执行时注入快照落库(前置①),上线前不出现在这一列。'
+  + '\n\n'
+  + '行级 / 步骤级结果不落库:行计数来自 Execution 计数器,行级明细在详情页(JSONL 回放),跨执行聚合(数据分析)等落库。同配置重跑按 config_json 重建配方 — 一次独立执行,不进原批次。批次 = 归并键,不是执行策略。'
 const store = useExecutionsStore()
 
 /** focusFailed:失败数字入口 → 详情页带 ?rows=failed 自动展开行级表。 */
@@ -579,9 +576,7 @@ onUnmounted(() => {
   background: #DC2626; overflow: hidden;
 }
 .kpi-pass-bar i { display: block; height: 100%; background: #15803D; }
-.kpi-foot {
-  margin: 6px 2px 0; font-size: 10.5px; color: #8B93A1;
-}
+.kpi-tip { display: flex; align-items: center; padding: 0 12px; }
 
 /* ── 筛选行 ─────────────────────────────────────────────────────── */
 .filter-row {
@@ -693,16 +688,6 @@ onUnmounted(() => {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-
-/* ── 页尾图例(原型底部说明区)──────────────────────────────────── */
-.exec-legend {
-  margin-top: 20px; padding-top: 12px; border-top: 1px solid #E1E5EB;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.exec-legend p {
-  margin: 0; font-size: 11px; color: #8B93A1; line-height: 1.8;
-}
-.exec-legend strong { color: #5B6472; font-weight: 600; }
 
 .mono { font-family: var(--font-mono, monospace); }
 .dim { color: #8B93A1; }

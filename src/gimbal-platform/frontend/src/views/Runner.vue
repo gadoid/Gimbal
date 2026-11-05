@@ -13,11 +13,12 @@
     跑不了红 + 「去方案工作台修复」),不发明用例生命周期
   * 右栏顶部「暂未支持」灰条 = 批级执行策略,一条说明,不是可操作控件
   * 底部启动条:启动的是**可跑的**那几条(跑不了的留在队列里等换方案)
-  * 页尾图例 = 设计理由的落地说明(§1.1/§1.2/§1.6/§1.7)
+  * 原型页尾图例/各内联长说明已并入页头与各区块的问号弹层
+    (2026-11-05 逐页收纳批),页内不再常驻说明段
 -->
 <template>
   <ListPage width="wide" title="执行器" icon="play"
-    subtitle="发起执行的地方:搭一条队列 — 每条选方案 → 补齐绑定 → 一次启动。以前这是编排页里的运行对话框,只能从单条用例进,独立成页之后队列才成立">
+    :subtitle="pageTip">
     <template #actions>
       <Button variant="outline" size="sm" data-testid="runner-goto-executions"
         @click="router.push('/executions')">执行记录</Button>
@@ -26,13 +27,11 @@
       </Button>
     </template>
 
-    <!-- 一次性队列说明(原型:蓝 chip + 一行字) -->
+    <!-- 一次性队列说明(原型:蓝 chip;计数常驻,语义说明收进问号弹层) -->
     <template #lead>
       <div class="queue-lead" v-if="queue.length">
         <span class="lead-chip">本次执行 · {{ queue.length }} 条 · 一次性</span>
-        <span class="lead-text">
-          引擎一次只接一条 — 队列是前端逐条顺序发起,产生 {{ queue.length }} 条独立执行,共用批次号在执行记录里归并。队列不落库,是一次性的挑选;要复用的是方案。
-        </span>
+        <QTip :text="`引擎一次只接一条 — 队列是前端逐条顺序发起,产生 ${queue.length} 条独立执行,共用批次号在执行记录里归并。队列不落库,是一次性的挑选;要复用的是方案。`" />
       </div>
     </template>
 
@@ -43,6 +42,7 @@
         <div v-if="pickerOpen" class="runner-card picker-card">
           <div class="zone-head">
             <span class="zone-name">场景库</span>
+            <QTip :text="`只列你能发起的${auth.isAdmin ? '(管理员可发起全部)' : ':你自己的场景 — 别人的跑不了,发起要过属主闸'}。`" />
             <span class="zone-spacer"></span>
             <span class="zone-hint">{{ pickerList.length }} 条可发起</span>
           </div>
@@ -65,14 +65,12 @@
                 @click="addToQueue(s.scenarioId)">＋ 加入</button>
             </div>
           </div>
-          <p class="picker-foot">
-            只列你能发起的{{ auth.isAdmin ? '(管理员可发起全部)' : ':你自己的场景 — 别人的跑不了,发起要过属主闸' }}。
-          </p>
         </div>
 
         <div class="runner-card">
           <div class="zone-head">
             <span class="zone-name">执行队列</span>
+            <QTip text="卡片上没有状态标 — 用例与方案都是无状态的。能显示的两类信息都不是用例状态:预检结果绑在「用例 × 当前所选方案 × 当前绑定」上,换方案就变;影响面(引用的接口有未处理适配变更)来自适配事件,管理员可见,同样是普通文字行。" />
             <span v-if="queue.length" class="queue-count mono">{{ queue.length }}</span>
             <span class="zone-spacer"></span>
             <span class="zone-hint">{{ queue.length ? '每条各自配方案,不是一个方案' : '空' }}</span>
@@ -137,11 +135,6 @@
             </div>
             <button class="queue-remove" title="移出队列" @click.stop="removeFromQueue(i)">×</button>
           </div>
-
-          <!-- 卡片不带状态标(§1.4):一条虚线说明,不是可操作控件 -->
-          <div class="batch-note">
-            卡片上没有状态标 — 用例与方案都是无状态的。能显示的两类信息都不是用例状态:预检结果绑在「用例 × 当前所选方案 × 当前绑定」上,换方案就变;影响面(引用的接口有未处理适配变更)来自适配事件,管理员可见,同样是普通文字行。
-          </div>
         </div>
       </div>
 
@@ -149,18 +142,17 @@
       <div class="runner-card runner-right">
         <div class="zone-head">
           <span class="zone-name">运行配置</span>
+          <QTip text="面板确认键在这里的语义是「把这套配置应用到本条」— 不直接发起;整批发起用下面的启动条。" />
           <span class="zone-spacer"></span>
           <span class="zone-hint" data-testid="runner-config-target">
             {{ selectedItem ? (selectedItem.name || selectedItem.scenarioId) : '—' }}
           </span>
         </div>
 
-        <!-- 批级执行策略:原型顶部灰条 — 一条说明,不是可操作控件(§1.2) -->
+        <!-- 批级执行策略:原型顶部灰条 — 状态 pill 常驻,长说明收进问号(§1.2) -->
         <div class="policy-strip">
           <span class="policy-pill">暂未支持</span>
-          <span class="policy-text">
-            批级执行策略(用例之间串行/并行、失败后停还是继续、整批统一绑定)本期不做 — 平台一次只发一条,没有承载它的数据结构;队列的真实含义 = 前端逐条顺序发起的 N 条独立执行。
-          </span>
+          <QTip text="批级执行策略(用例之间串行/并行、失败后停还是继续、整批统一绑定)本期不做 — 平台一次只发一条,没有承载它的数据结构;队列的真实含义 = 前端逐条顺序发起的 N 条独立执行。" />
         </div>
 
         <div v-if="!selectedItem" class="queue-empty">从队列里选一条,在这里配方案、绑定与参数。</div>
@@ -182,9 +174,6 @@
           data-testid="runner-panel"
           @confirm="(sel, opts) => applyPayload(sel, opts)"
         />
-        <p v-if="selectedItem" class="apply-hint">
-          面板确认键在这里的语义是「把这套配置应用到本条」— 不直接发起;整批发起用下面的启动条。
-        </p>
 
         <!-- 启动条(原型右栏底):启动的是可跑的条,跑不了的留在队列里 -->
         <div class="launch-bar">
@@ -209,19 +198,6 @@
         </div>
       </div>
     </div>
-
-    <!-- ═══════ 页尾图例(原型底部说明区) ═══════ -->
-    <div class="runner-legend">
-      <p>
-        <strong>设计重心从「单条运行对话框」变回「跑道 + 队列」。</strong>
-        对话框是从某一条用例里弹出来的,天然只能跑一条;独立成页的唯一实质增益是「这次回归跑这 3 条」。
-        批的真实含义:队列 = 前端逐条调 runScenario,N 条独立 execution 共用批次号在执行记录里归并;队列不落库,是一次性的挑选 — 要复用的是方案,「哪些用例一起跑」将来归套件。
-      </p>
-      <p>
-        预检走服务端(POST /run/precheck,判定复用 preview-plate 装配链):失效判定服务端唯一实现,队列 N 条不必各装配一次。
-        单条执行的总量闸(rows × 注入条目 × nRuns ≤ 200)由后端 dispatch 拦截;队列的跨执行合计待定。
-      </p>
-    </div>
   </ListPage>
 </template>
 
@@ -229,6 +205,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import RunConfigPanel from '@/components/composer/RunConfigPanel.vue'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/utils/toast'
@@ -243,6 +220,13 @@ import { composerUrl, executionsBatchUrl, scenarioSchemesUrl } from '@/utils/lin
 
 const router = useRouter()
 const auth = useAuthStore()
+
+/** 页头问号弹层 = 短定位 + 原页尾图例两段(逐页收纳批:页尾说明区不常驻) */
+const pageTip = '发起执行的地方:搭一条队列 — 每条选方案 → 补齐绑定 → 一次启动。以前这是编排页里的运行对话框,只能从单条用例进,独立成页之后队列才成立'
+  + '\n\n'
+  + '设计重心从「单条运行对话框」变回「跑道 + 队列」。对话框是从某一条用例里弹出来的,天然只能跑一条;独立成页的唯一实质增益是「这次回归跑这 3 条」。批的真实含义:队列 = 前端逐条调 runScenario,N 条独立 execution 共用批次号在执行记录里归并;队列不落库,是一次性的挑选 — 要复用的是方案,「哪些用例一起跑」将来归套件。'
+  + '\n\n'
+  + '预检走服务端(POST /run/precheck,判定复用 preview-plate 装配链):失效判定服务端唯一实现,队列 N 条不必各装配一次。单条执行的总量闸(rows × 注入条目 × nRuns ≤ 200)由后端 dispatch 拦截;队列的跨执行合计待定。'
 
 /** 单条队列项:一次性挑选,不落库(§1.2/§8)。payload = 右栏「应用」过的
  *  定制配置;缺省按所选方案展平(默认方案 = 基线)。 */
@@ -533,9 +517,9 @@ async function launchQueue() {
   background: #E7EFFF; border-radius: 999px; padding: 0 8px;
 }
 
-/* ── 顶部一次性队列说明(原型 lead 区) ────────────────────────── */
+/* ── 顶部一次性队列说明(原型 lead 区;计数 chip 常驻,语义在问号) ── */
 .queue-lead {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 14px; border-radius: 8px;
   background: #F6F8FC; border: 1px solid #E1E5EB;
 }
@@ -543,7 +527,6 @@ async function launchQueue() {
   flex: none; font-size: 11px; font-weight: 600;
   color: #2F6FED; background: #E7EFFF; border-radius: 4px; padding: 2px 8px;
 }
-.lead-text { font-size: 12px; color: #5B6472; line-height: 1.7; }
 
 /* ── 场景库面板 ────────────────────────────────────────────────── */
 .picker-search {
@@ -580,7 +563,6 @@ async function launchQueue() {
 }
 .picker-add:hover { border-color: #2F6FED; background: #E7EFFF; }
 .picker-add.is-in { color: #8B93A1; cursor: default; }
-.picker-foot { margin: 0; font-size: 11px; color: #8B93A1; }
 
 /* ── 队列项:卡片行,预检 = 文字行(无状态 pill,§1.4) ─────────── */
 .queue-empty {
@@ -640,16 +622,10 @@ async function launchQueue() {
 }
 .queue-remove:hover { background: #FEE2E2; color: #DC2626; }
 
-/* ── 卡片不带状态标(§1.4):虚线说明 ──────────────────────────── */
-.batch-note {
-  padding: 8px 12px; border: 1.5px dashed #E1E5EB;
-  border-radius: 8px; font-size: 11px; color: #5B6472; line-height: 1.7;
-}
-
 /* ── 右栏 ─────────────────────────────────────────────────────── */
 .runner-right { min-width: 0; }
 .policy-strip {
-  display: flex; align-items: baseline; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; border-radius: 8px;
   background: #F3F5F8; border: 1px solid #E1E5EB;
 }
@@ -657,8 +633,6 @@ async function launchQueue() {
   flex: none; font-size: 10px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
   color: #8B93A1; background: #EEF0F3;
 }
-.policy-text { font-size: 11px; color: #5B6472; line-height: 1.6; }
-.apply-hint { margin: 0; font-size: 11px; color: #8B93A1; }
 
 /* 启动条(原型右栏底) */
 .launch-bar {
@@ -668,16 +642,6 @@ async function launchQueue() {
 .launch-text { flex: 1; min-width: 220px; font-size: 11.5px; color: #5B6472; line-height: 1.7; }
 .launch-text strong { color: #10151C; }
 .launch-actions { display: flex; gap: 8px; }
-
-/* ── 页尾图例(原型底部说明区) ─────────────────────────────────── */
-.runner-legend {
-  margin-top: 20px; padding-top: 12px; border-top: 1px solid #E1E5EB;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.runner-legend p {
-  margin: 0; font-size: 11px; color: #8B93A1; line-height: 1.8;
-}
-.runner-legend strong { color: #5B6472; font-weight: 600; }
 
 .mono { font-family: var(--font-mono, monospace); }
 
