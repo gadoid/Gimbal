@@ -284,13 +284,17 @@ def test_expanded_declarations_pass_real_plate_validation():
     这是漂移检测一直缺的那一层：test_contract_drift 只查路由，声明树
     从来没人验过。这里用真实 plate 模型把「下钻 + 模板态纪律」闭环。
     """
-    from gimbal_plate.schema.endpoint import (
-        ApiSpec,
-        DeclarationEntry,
-        EndpointMetadata,
+    # A2 方言迁移后的模型口径：EndpointSpec/Binding 真源在方言层
+    # （ApiSpec 已删，binding 取代；responses 键 = outcome 字符串）。
+    from gimbal_plate.dialect import (
         EndpointSpec,
+        HttpBinding,
         RequestSpec,
         ResponseSpec,
+    )
+    from gimbal_plate.schema.endpoint import (
+        DeclarationEntry,
+        EndpointMetadata,
     )
     from gimbal_plate.schema.endpoint.io_spec import iter_declarations
 
@@ -325,9 +329,9 @@ def test_expanded_declarations_pass_real_plate_validation():
         system="platform",
         service="platform-service",
         name="demo",
-        api=ApiSpec(service="platform-service", method="GET", path="/api/thing"),
-        request=RequestSpec(body_type="none"),
-        responses={200: ResponseSpec(status=200, declarations=decls)},
+        binding=HttpBinding(method="GET", path="/api/thing", body_type="none"),
+        request=RequestSpec(),
+        responses={"200": ResponseSpec(declarations=decls)},
         metadata=EndpointMetadata(module="demo"),
     )
     paths = {d.path for d in iter_declarations(decls)}

@@ -1,9 +1,14 @@
 """OpenAPI → 契约**中间形态**（纯 dict，不认识 plate 的类型）。
 
 契约的唯一真源是 gimbal-platform 的 /openapi.json，人工不写任何字段。
-产物不是给人用的 —— 落成 plate 侧的定义文件是 `contract_gen_py` 的活，本模块
-只负责把 schema 展开成声明树。生成器因此放在 gimbal-bootstrap 而不是 plate
-里：plate 不认识生成器，只看得到一堆正常的 py 定义文件。
+产物不是给人用的 —— 本模块只负责把 schema 展开成声明树。生成器因此放在
+gimbal-bootstrap 而不是 plate 里：plate 不认识生成器。
+
+A2 方言迁移后 plate 侧契约的真源是仓库根 ``systems/`` 的 Markdown 交付物
+（人写人评，主线不走自动生成，见 claude/plate-design.md 附录 C）；此前的
+py 定义发射器 ``contract_gen_py`` 随 py 定义形态一并退役删除。中间形态
+保留两处消费：漂移对账（tests/test_contract_drift.py，A2 后按理由跳过）
+与 reconcile 工具。
 """
 
 from __future__ import annotations
@@ -20,10 +25,8 @@ SYSTEM = "platform"
 SERVICE = "platform-service"
 PLATFORM_BASE_URL = "http://127.0.0.1:8000"
 
-# 与 plate 的 systems/platform/system_info.py 对应的契约身份字段。
-# 提成常量是因为 `contract_gen_py` 的端点文件把这些值**写死成 plate 的常量名**
-# （`version=PLATFORM_DEFAULT_VERSION`），中间形态与常量对不上就是生成器在说谎。
-# 两边一致由 tests/test_contract_gen_py.py::test_generated_constants_match_plate_system_info 盯。
+# 契约身份字段（常量化是为了让中间形态自带稳定身份，漂移对账按 id+route 比对；
+# 此前与 plate py 定义常量互盯的一致性门随 contract_gen_py 一起退役）。
 CONTRACT_VERSION = "1.0.0"
 OWNER = "gimbal-bootstrap"
 
@@ -352,8 +355,8 @@ def check_collisions(specs: list[dict]) -> None:
 def write_json(specs: list[dict], out_path: Path, source: str) -> None:
     """把中间形态落成一份 JSON —— **给人看的调试件，不是产物**。
 
-    产物是 `contract_gen_py` 产出的 py 定义。这份 JSON 只在「想知道生成器到底
-    展开了什么」时用；plate 不读它，测试也不依赖它。
+    这份 JSON 只在「想知道生成器到底展开了什么」时用；plate 不读它，
+    测试也不依赖它。
     """
     payload = {
         "_generated_from": source,

@@ -7,8 +7,7 @@
 | 部件 | 位置 | 干什么 |
 |---|---|---|
 | 契约生成器 | `gimbal_bootstrap/contract_gen.py` | 拉平台自己的 `/openapi.json`，展开成契约的中间形态（纯 dict） |
-| 契约定义产出 | `gimbal_bootstrap/contract_gen_py.py` | 把中间形态落成 plate 侧每端点一个的 py 定义（fin 形制）。`python -m gimbal_bootstrap.contract_gen_py [--force]`，`--force` 才覆盖已存在的端点文件 |
-| 契约登记 | `src/gimbal-plate/gimbal_plate/systems/platform/endpoint/` | 126 条 platform 端点的 `EndpointSpec` 定义，按域分目录；`ALL_ENDPOINTS` 聚合导出，plate 现有的 registry 一键注册 |
+| 契约真源 | 仓库根 `systems/platform/endpoints/*.md` | A2 方言迁移后的 plate 契约真源：Markdown 交付物，人写人评（自动生成不在主线，见 `claude/plate-design.md` 附录 C）。此前的 py 定义发射器 `contract_gen_py` 随 py 形态一并退役 |
 | 用例编排 | `gimbal_bootstrap/orchestrator.py` + `cases/*.yaml` | 把每条用例建成场景、交给平台跑一遍，**步骤执行和断言求值都发生在 gimbal 那边**，编排器只负责建场景 → 发起运行 → 轮询 → 读回结果 → 清理 |
 
 平台代码改动只有一处：`app/routers/auth.py` 补了一行 `ChangePasswordIn` 的 import
@@ -54,7 +53,7 @@ python -m gimbal_bootstrap.orchestrator
 ## 漂移检测
 
 ```bash
-python -m pytest tests/test_contract_drift.py
+python -m pytest tests/test_contract_drift.py   # A2 后按理由整文件跳过,继任随附录 C
 ```
 
 **单向**：契约里登记了、平台却没了的端点算漂移；平台多出来的端点不算 ——
@@ -89,12 +88,12 @@ python -m pytest tests/test_contract_drift.py
 
 ```
 gimbal_bootstrap/
-  contract_gen.py      OpenAPI → EndpointSpec
+  contract_gen.py      OpenAPI → 契约中间形态（纯 dict）
+  contract_reconcile.py  中间形态 ↔ 已落地契约的对账
   platform_client.py   薄 HTTP 客户端，4xx/5xx 抛 PlatformError
-  case_builder.py      用例 YAML → plate Scenario definition
+  case_builder.py      用例 YAML → plate Scenario definition（契约索引经方言内核读 systems/ 真源树）
   orchestrator.py      建场景 → 发起运行 → 轮询 → 读回 gimbal 判定 → 清理
 cases/
   golden_path.yaml     T1-T8 全链路
   domains.yaml         每域一条烟雾
-tests/                 50 passed, 1 skipped
 ```

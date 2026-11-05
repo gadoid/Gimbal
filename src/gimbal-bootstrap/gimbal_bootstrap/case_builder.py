@@ -44,17 +44,32 @@ def path_shape(path: str) -> str:
 def _load_contract_index() -> dict[str, Any]:
     """plate 已装机的契约定义，按 endpoint id 索引。
 
-    进程内读，不走 HTTP：走 HTTP 拿到的是**常驻 plate 进程的旧版本**（实测它
-    还停在 115 个端点，而 checkout 里已经是 126 个），拿它当门会放过已漂移的
-    契约。仓内相对路径 import，与 tests/conftest.py 同一个理由 —— 契约验证该
-    贴着这份 checkout 跑，而不是某个已安装的旧版本。
+    A2 方言迁移后的真源 = 仓库根 ``systems/`` 的 Markdown 交付物（旧
+    ``gimbal_plate.systems`` Python 接口实例已删）；这里经方言内核
+    ``parse_markdown`` 直接解析，与 ``gimbal_plate.loader`` 同一条装载
+    路径，不走 HTTP —— 走 HTTP 拿到的是**常驻 plate 进程的旧版本**，拿它
+    当门会放过已漂移的契约。仓内相对路径 import，与 tests/conftest.py
+    同一个理由 —— 契约验证该贴着这份 checkout 跑，而不是某个已安装的旧版本。
     """
     plate_dir = Path(__file__).resolve().parents[2] / "src"
     if str(plate_dir) not in sys.path:
         sys.path.insert(0, str(plate_dir))
-    from gimbal_plate.systems.platform.endpoint import ALL_ENDPOINTS
+    from gimbal_plate.dialect import EndpointSpec, parse_markdown
+    from gimbal_plate.loader import systems_roots
 
-    return {ep.id: ep for ep in ALL_ENDPOINTS}
+    index: dict[str, Any] = {}
+    for root in systems_roots():
+        plat = root / "platform"
+        if not plat.is_dir():
+            continue
+        for md in sorted(plat.rglob("*.md")):
+            deliverable = parse_markdown(
+                md.read_text(encoding="utf-8"), source=str(md))
+            for block in deliverable.blocks("endpoint"):
+                for ep in block.models():
+                    if isinstance(ep, EndpointSpec):
+                        index[ep.id] = ep
+    return index
 
 
 def __getattr__(name: str) -> Any:
@@ -93,13 +108,15 @@ def _resolve_endpoint(step: dict[str, Any], where: str) -> str:
             f"{where}: endpoint {eid!r} 不在 plate 已装机的契约里"
             f"（平台可能已下掉这条路由，或用例写错了 id）"
         )
+    # A2 后路由坐标在 binding 上（http = HttpBinding.method/path；
+    # platform 系统的端点全为 http 协议）
     if (
-        ep.api.method != step["method"]
-        or path_shape(ep.api.path) != path_shape(step["path"])
+        ep.binding.method != step["method"]
+        or path_shape(ep.binding.path) != path_shape(step["path"])
     ):
         raise ValueError(
             f"{where}: endpoint {eid!r} 的 route 与该 step 对不上"
-            f"（{ep.api.method} {ep.api.path} vs {step['method']} {step['path']}）"
+            f"（{ep.binding.method} {ep.binding.path} vs {step['method']} {step['path']}）"
         )
     return eid
 
