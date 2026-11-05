@@ -162,16 +162,17 @@ describe('useScenarioListView(服务端化)', () => {
   })
 
   it('分页只拉目标页;total 来自信封', async () => {
+    // 默认每页 10 条(2026-11-05 分页位置轮:列表卡定高 ≈ 10 行)
     mockEnv([item(1)], 25)
     const v = useScenarioListView('mine')
     await v.load()
     expect(v.total.value).toBe(25)
-    expect(v.pageCount.value).toBe(2)
+    expect(v.pageCount.value).toBe(3)
     v.setPage(2)
     await flushPromises()
     const p = await lastCallParams()
     expect(p.page).toBe(2)
-    expect(p.page_size).toBe(20)
+    expect(p.page_size).toBe(10)
   })
 
   it('filtering 区分「筛空了」和「本来就什么都没有」', () => {

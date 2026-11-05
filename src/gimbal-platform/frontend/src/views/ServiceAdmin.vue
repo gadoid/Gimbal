@@ -401,7 +401,7 @@ const filtered = computed<ServiceAliasRow[]>(() =>
 
 // 客户端分页(2026-09-23 批次):全量拉回 + 前端过滤,页内切片渲染;
 // 每页行数存用户偏好
-const { page, pageSize, paged, pageCount } = useClientPager(() => filtered.value, 20, 'service-admin')
+const { page, pageSize, paged, pageCount } = useClientPager(() => filtered.value, 10, 'service-admin')
 
 function selectService(name: string): void {
   const prev = selectedService.value

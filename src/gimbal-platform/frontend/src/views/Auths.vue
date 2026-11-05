@@ -393,7 +393,7 @@ const list = useServerList<AuthSession, Record<string, string | number | boolean
     q: searchQuery.value.trim() || undefined,
     token_type: tokenTypeFilter.value === 'all' ? undefined : tokenTypeFilter.value,
   }),
-  pageSize: 50,
+  pageSize: 10, // 每页默认 10 条(分页位置轮:列表卡定高 ≈ 10 行)
   pagerKey: 'auths',
 })
 

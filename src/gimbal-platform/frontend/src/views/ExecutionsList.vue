@@ -363,7 +363,7 @@ const appliedBatch = ref(filterBatch.value)
 // ── 分页(2026-09-23 批次:固定 limit 200 截断 → 服务端真分页;
 //    每页行数存用户偏好)───────────────────────────────────────────
 const page = ref(1)
-const { pageSize } = usePagerSize('executions', 20)
+const { pageSize } = usePagerSize('executions', 10)
 const pageCount = computed(() => Math.max(1, Math.ceil(store.total / pageSize.value)))
 watch(page, () => { void fetchFiltered().catch(() => undefined) })
 watch(pageSize, () => {

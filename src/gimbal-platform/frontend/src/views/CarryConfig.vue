@@ -256,7 +256,7 @@ const highlightPath = computed(() => {
 // 客户端分页(2026-09-23 批次):pageBase = 当前页首行的全局下标,
 // 删行/编辑/splice 都按全局下标写 defaultRows 草稿。
 const { page, pageSize, paged, pageCount } = useClientPager(
-  () => defaultRows.value, 20, 'carry-defaults',
+  () => defaultRows.value, 10, 'carry-defaults',
 )
 const pageBase = computed(() => (page.value - 1) * pageSize.value)
 

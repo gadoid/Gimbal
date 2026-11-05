@@ -267,6 +267,8 @@ async function toggleStar(row: ScenarioListItem) {
 </script>
 
 <style scoped>
+/* 场景表行含描述行(~78px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
+.slib { --lib-card-max: 850px; }
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .author { color: #5b6472; }
 .row-expired td { opacity: 0.55; }

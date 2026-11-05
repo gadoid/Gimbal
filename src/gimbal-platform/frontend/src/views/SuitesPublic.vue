@@ -122,7 +122,7 @@ const modeFilter = ref('')
 // 分页前匹配 name/description/属主名,客户端不再二次过滤当前页)
 const total = ref(0)
 const page = ref(1)
-const { pageSize } = usePagerSize('suite-public', 20)
+const { pageSize } = usePagerSize('suite-public', 10)
 
 const modeFilters = [
   { key: '', label: '全部' },
@@ -197,6 +197,8 @@ onMounted(reload)
 </script>
 
 <style scoped>
+/* Suite 表行含描述行(~72px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
+.slib { --lib-card-max: 820px; }
 /* 与 SuiteLibrary(我的用例集)同一套列表规范:lib-card 容器、
    13px 表格、indigo 主按钮系、card-empty 空态。 */
 .slib { display: flex; flex-direction: column; gap: 14px; }
@@ -223,7 +225,8 @@ onMounted(reload)
   padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
 }
 .slib-public-link:hover { background: var(--accent-soft); }
-.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; overflow: hidden; }
+/* overflow 交给全局 .lib-card(卡内滑轨,分页位置轮);这里只压边框圆角 */
+.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; }
 .slib-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .slib-table th {
   text-align: left; font-weight: 500; font-size: 12px; color: rgb(100 116 139);

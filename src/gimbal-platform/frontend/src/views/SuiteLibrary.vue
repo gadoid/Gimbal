@@ -240,7 +240,7 @@ const modeFilter = ref('')
 // 服务端分页(搜索/模式过滤也走服务端 —— 客户端只过滤当前页会跨页丢行)
 const total = ref(0)
 const page = ref(1)
-const { pageSize } = usePagerSize('suite-library', 20)
+const { pageSize } = usePagerSize('suite-library', 10)
 
 // 浏览镜头(§5.1):默认我的;admin 可切全员视角(记本地)
 const lensAll = ref(false)
@@ -483,6 +483,8 @@ onMounted(() => void loadShareBadges())
 </script>
 
 <style scoped>
+/* Suite 表行含描述行(~72px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
+.slib { --lib-card-max: 820px; }
 .slib { display: flex; flex-direction: column; gap: 14px; }
 .slib-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .slib-search {
@@ -521,7 +523,8 @@ onMounted(() => void loadShareBadges())
 }
 .slib-create:hover { background: var(--accent-hover); }
 .slib-create:disabled { opacity: .5; cursor: not-allowed; }
-.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; overflow: hidden; }
+/* overflow 交给全局 .lib-card(卡内滑轨,分页位置轮);这里只压边框圆角 */
+.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; }
 .slib-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .slib-table th {
   text-align: left; font-weight: 500; font-size: 12px; color: rgb(100 116 139);

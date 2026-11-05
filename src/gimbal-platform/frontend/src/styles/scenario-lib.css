@@ -171,13 +171,25 @@
 }
 .slib-create:hover { background: #265fd4; }
 
-/* ── .lib-card 表格外层容器(§五 复用组件)────────────────────── */
+/* ── .lib-card 表格外层容器(§五 复用组件)──────────────────────
+   2026-11-05 分页位置轮:容器定高 ≈ 10 行(短行家族 560px),每页行数
+   超出定高时在卡内滚动(右侧滑轨),不再把页面撑长;行高的家族(场景
+   表含描述行,~78px/行)在页面根上抬 --lib-card-max。分页条随 Pagination
+   组件统一落右下角。 */
 .lib-card {
   background: #fff;
   border: 1px solid var(--sl-line);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
-  overflow: hidden;
+  max-height: var(--lib-card-max, 560px);
+  overflow-y: auto;
+}
+/* 卡内滚动时表头钉在卡顶(th 自带实底色,不会透行) */
+.lib-card .slib-table thead th,
+.lib-card .sig-th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 /* ── 表头规范:冷蓝白带 + 深海军蓝字 + 细墨线(全站唯一实现)────────

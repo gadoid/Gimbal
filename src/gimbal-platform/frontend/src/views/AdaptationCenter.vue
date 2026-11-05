@@ -36,7 +36,9 @@
         <div v-else-if="batchRows.length === 0" class="ac-empty">
           {{ auth.isAdmin ? '暂无批次' : '暂无触碰你场景的批次' }}
         </div>
-        <table v-else class="ac-table">
+        <!-- 分页位置轮:批次表进 lib-card(定高卡内滑轨 + 表头钉顶) -->
+        <div v-else class="lib-card">
+          <table class="ac-table">
           <thead>
             <tr>
               <th>batchId</th>
@@ -61,7 +63,8 @@
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
         <Pagination
           v-if="batchPageCount > 1"
           v-model:page="batchPage"
@@ -138,7 +141,7 @@ const batchRows = ref<BatchOut[]>([])
 const batchTotal = ref(0)
 const batchStatus = ref('')
 const batchPage = ref(1)
-const { pageSize: batchPageSize } = usePagerSize('adaptation-batches', 20)
+const { pageSize: batchPageSize } = usePagerSize('adaptation-batches', 10)
 const batchPageCount = computed(() =>
   Math.max(1, Math.ceil(batchTotal.value / batchPageSize.value)))
 const batchesLoading = ref(false)
@@ -318,9 +321,11 @@ onMounted(() => {
 .ac-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .ac-table th {
   text-align: left; font-size: 11px; font-weight: 600;
-  color: var(--sl-ink-soft, #64748b);
+  color: var(--sl-th-ink, var(--sl-ink-soft, #64748b));
+  background: var(--sl-th-bg, #f4f7fd); /* 实底:卡内滚动钉顶不透行 */
   padding: 6px 8px; border-bottom: 1px solid var(--sl-line, #e1e5eb);
   white-space: nowrap;
+  position: sticky; top: 0; z-index: 1;
 }
 .ac-table td {
   padding: 7px 8px;

@@ -31,7 +31,9 @@ import type { ScenarioListItem } from '@/types/scenario-composer'
 
 export type ScenarioListRow = ScenarioListItem
 
-export const LIST_PAGE_SIZE = 20
+/** 每页默认 10 条(2026-11-05 分页位置轮:列表卡定高 ≈ 10 行,
+ *  更大档位在卡内滑轨滚动;用户手选的行数走 pager.sizes 偏好)。 */
+export const LIST_PAGE_SIZE = 10
 
 /** 分桶:mine = 「我的场景」页(浏览镜头,scope=mine——自己创建的全部
  *  含已发布;admin 默认同样只见自己的,「全员视角」是显式开关),public

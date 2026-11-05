@@ -6,11 +6,16 @@
      2026-09-23 分页批次:补齐「每页行数选择 + 跳转输入」两项,均默认关闭
      (showPageSize/showJump),既有调用点(场景库/认证/审计面板)行为不变。
      开启 showPageSize 后即使只有一页也渲染(用户需要随时改每页行数);
-     未开启时维持原契约:总数不超过一页整体不渲染。 -->
+     未开启时维持原契约:总数不超过一页整体不渲染。
+
+     2026-11-05 分页位置轮:分页条从 inline(随父容器时左时右)改为
+     flex w-full + justify-end —— 全站一律落在列表右下角;配套:列表卡
+     .lib-card 定高 ~10 行(场景页行高走高档 --lib-card-max),每页行数
+     默认 10,选更大档位时列表在卡内滑轨滚动而不是把页面撑长。 -->
 <template>
   <nav
     v-if="pageCount > 1 || (showPageSize && total > 0)"
-    class="inline-flex flex-wrap items-center justify-end gap-1"
+    class="flex w-full flex-wrap items-center justify-end gap-1"
     aria-label="分页"
     data-testid="pager"
   >
