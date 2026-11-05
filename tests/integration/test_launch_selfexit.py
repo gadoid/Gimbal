@@ -95,8 +95,10 @@ def test_launch_stdin_eof_cancels_at_step_boundary(tmp_path: Path) -> None:
     proc.stdin.close()                         # 父进程死亡的最小模拟
     # 在飞请求(≤1s)跑完 + 步骤边界取消 + 收尾 —— 预期 ~2-4s;
     # 守卫失效则是「盲跑僵尸」:剩余 ~11 步 ≥11s(上限放 8s 判定)
+    # communicate 而非 wait:wait 不排空 stdout,管道缓冲(Linux 64KB/
+    # Windows ~4KB)写满会把子进程挂死,误报成守卫失效
     try:
-        proc.wait(timeout=8.0)
+        proc.communicate(timeout=8.0)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5.0)
@@ -114,10 +116,14 @@ def test_launch_devnull_stdin_runs_to_completion(tmp_path: Path) -> None:
     _write_case(case, port, steps=3)           # ~3-4s
 
     proc = _spawn(case, stdin_pipe=False)
+    # communicate 而非 wait:3 步的 jsonl 流 ≈13KB,wait() 不排空 stdout,
+    # Windows 匿名管道 ~4KB 缓冲写满即把子进程写阻塞挂死(60s 假超时;
+    # Linux 64KB 缓冲下恰好放得过 —— 本用例曾在 Windows 上稳定挂死)
     try:
-        rc = proc.wait(timeout=60.0)
+        proc.communicate(timeout=60.0)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5.0)
         raise AssertionError("launch 正常路径 60s 未跑完 —— 与守卫无关的故障")
+    rc = proc.returncode
     assert rc == 0, f"3 步全过用例应 rc=0,得到 {rc}"

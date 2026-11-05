@@ -22,13 +22,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 import logging
 logging.basicConfig(level=logging.WARNING)
 
-# S-6 鉴权:测试设 token 绕过回环检查(TestClient 的 client.host 不是回环地址)
-os.environ.setdefault("GIMBAL_SERVER_TOKEN", "test-token")
+import pytest
 
 from fastapi.testclient import TestClient
 
 from gimbal.cli.context import CLIContext
 from gimbal.core.server import ServerConfig, create_app
+
+
+# S-6 鉴权:测试设 token 绕过回环检查(TestClient 的 client.host 不是回环地址)。
+# autouse + monkeypatch:用例内 set、离场即还原 —— 此前是模块级
+# setdefault,污染整个 pytest 进程环境:字母序靠后的 test_server_selfexit
+# 拉起的真子进程继承该变量开了鉴权,POST /runs 401(仅全量跑复现,
+# 单文件跑永远绿,典型顺序依赖假绿)。
+@pytest.fixture(autouse=True)
+def _server_token(monkeypatch):
+    monkeypatch.setenv("GIMBAL_SERVER_TOKEN", "test-token")
 
 LEGAL_TARGET = {
     "kind": "scenario",
