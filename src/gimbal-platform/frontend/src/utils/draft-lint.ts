@@ -7,7 +7,7 @@
  * 无法区分合法列名与拼错的变量名,判了必误报。
  */
 import { assignVarRefs, deriveVarRegistry, varUsages } from './var-registry'
-import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
+import { stepEndpointId } from '@/types/plate'
 
 export function lintDraft(definition: {
   steps?: any[]

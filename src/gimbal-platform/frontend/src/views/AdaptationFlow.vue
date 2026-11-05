@@ -102,7 +102,7 @@
             <div class="mono fd-ep">{{ endpoint }}</div>
             <span v-for="a in fd.added" :key="a" class="fd-chip add">+ {{ a }}</span>
             <span v-for="r in fd.removed" :key="r" class="fd-chip del">− {{ r }}</span>
-            <span v-for="(c, p) in fd.changed" :key="p" class="fd-chip chg">~ {{ p }}</span>
+            <span v-for="(_, p) in fd.changed" :key="p" class="fd-chip chg">~ {{ p }}</span>
           </div>
         </div>
         <div v-if="compareResult.drafted_ops?.length" class="mf-item">

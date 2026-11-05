@@ -293,7 +293,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { toast } from '@/utils/toast'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { assertablePaths, formBindings, responseBindings } from '@/utils/declarations'
@@ -305,7 +305,7 @@ const props = defineProps<{
   /** M1/6.1:系统 → 场景声明的修订(meta.plate)——目录按系统分别取数 */
   plateRefOf?: (system: string) => string;
 }>()
-const emit = defineEmits<{ back: []; add: [any] }>()
+defineEmits<{ back: []; add: [any] }>()
 
 const authStore = useAuthStore()
 

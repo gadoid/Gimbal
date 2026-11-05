@@ -79,7 +79,7 @@ const scenarioCache = new Map<string, Scenario>()
 import { computed, onMounted, ref } from 'vue'
 import type { OpOut } from '@/api/adaptations'
 import { getScenario } from '@/api/scenario-composer'
-import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
+import { stepHeaders } from '@/types/plate'
 
 const props = defineProps<{ op: OpOut }>()
 

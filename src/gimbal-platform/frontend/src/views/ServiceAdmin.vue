@@ -285,7 +285,7 @@ import {
   type ServiceAliasRow,
 } from '@/api/service-aliases'
 import { listAll as listMyCredentials, type AuthSession } from '@/api/auth_sessions'
-import { listEnvironments, type EnvironmentRow } from '@/api/environments'
+import { type EnvironmentRow } from '@/api/environments'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'

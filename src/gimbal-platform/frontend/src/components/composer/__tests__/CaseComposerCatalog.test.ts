@@ -23,7 +23,6 @@ describe('CaseComposerCatalog — scoped error', () => {
 
   it('某系统按修订取数失败 → 显示错误卡片,不列该系统接口', async () => {
     // working 全量成功;fin 系统的修订查询返回 404
-    let callCount = 0
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       if (url.includes('ref=')) {
         // 修订查询 → 404
@@ -60,7 +59,6 @@ describe('CaseComposerCatalog — scoped error', () => {
     expect(err.text()).toContain('release_not_found')
 
     // 失败系统(fin)的接口不在列表中;未声明系统(wms)的接口在
-    const items = w.vm.$data || {}
     // 通过 component 内部状态验证——Catalog 的 all ref 不直接暴露,
     // 用 DOM 判断:接口树里不应出现 fin.a.x
     expect(w.text()).not.toContain('fin.a.x')

@@ -103,7 +103,7 @@ describe('useEndpointFull — /full 会话级缓存', () => {
   })
 
   it('EF-6(新): 响应式 — computed 读 getEndpointFull 会在回填后自动重算', async () => {
-    const spy = vi.spyOn(api, 'getFullEndpoint').mockResolvedValue(FULL)
+    vi.spyOn(api, 'getFullEndpoint').mockResolvedValue(FULL)
     const seen = computed(() => getEndpointFull('ep-r') === undefined ? 'none' : 'have')
     expect(seen.value).toBe('none')
     await ensureEndpointFull('ep-r')

@@ -167,7 +167,7 @@ describe('AdaptationBatchDetail', () => {
 
   it('回滚:确认 → rollbackBatch → restored/conflicts 面板', async () => {
     login(true)
-    const confirmSpy = vi.spyOn(confirmModule, 'confirmAction')
+    vi.spyOn(confirmModule, 'confirmAction')
       .mockResolvedValue(true)   // 新栈确认(取消/ESC=false 语义在 confirmAction 单测)
     const rbSpy = vi.spyOn(api, 'rollbackBatch').mockResolvedValue({
       batchId: 'bt-1', status: 'rolled_back',

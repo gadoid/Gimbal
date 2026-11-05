@@ -12,7 +12,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import { FOLLOW_CAP, FollowCapError } from '@/composables/useFollowLayout'
 import type {
-  Scenario, ScenarioListItem, ScenarioPage,
+  ScenarioListItem, ScenarioPage,
   ScenarioDraft, DataSetSummary,
 } from '@/types/scenario-composer'
 

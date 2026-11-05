@@ -156,7 +156,7 @@ import { shortDateTime } from '@/utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
+useAuthStore()
 
 const task = ref<IntegrationTaskItem | null>(null)
 const tokenDetail = ref<Awaited<ReturnType<typeof getAccessToken>> | null>(null)

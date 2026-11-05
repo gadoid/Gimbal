@@ -42,7 +42,7 @@ import { computed, onMounted, ref } from 'vue'
 import { listScenarioOptions } from '@/api/scenario-composer'
 import type { MemberRole } from '@/api/suites'
 
-const props = defineProps<{ memberIds: Set<string> }>()
+defineProps<{ memberIds: Set<string> }>()
 defineEmits<{
   (e: 'add', scenarioId: string, role: MemberRole): void
 }>()

@@ -105,7 +105,7 @@
  * 服务模式;都 miss → missing(不猜)。?tab=credential 支持外部深链
  * (认证管理反查面板的别名 chip)。
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
@@ -113,13 +113,12 @@ import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import { useAuthStore } from '@/stores/auth'
-import { toast } from '@/utils/toast'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
+useAuthStore()
 
 const key = computed(() => String(route.params.alias ?? ''))
 const loading = ref(true)

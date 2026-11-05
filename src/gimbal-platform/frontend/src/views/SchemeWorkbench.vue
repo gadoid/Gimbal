@@ -103,9 +103,6 @@ function discardDraft() {
   dirty.value = false
 }
 
-const steps = computed(() =>
-  (scenarioDraft.value?.definition.steps ?? []) as Array<Record<string, unknown>>)
-
 /** 注入区条目行:id + 步骤/jsonpath 摘要(旧形状条目无 path,用 name 摘要)。 */
 const injectionEntries = computed(() => registry.value.entries.map((e) => ({
   id: e.id,

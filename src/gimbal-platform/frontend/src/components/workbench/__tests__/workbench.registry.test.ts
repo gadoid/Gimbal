@@ -8,7 +8,7 @@
  * - 故障隔离:卡片抛渲染异常只落本槽 error 态,工作台其余部分在。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'
 import { workbenchRegistry } from '@/components/workbench/registry'
@@ -44,12 +44,6 @@ const ENTRIES = [
   { id: 4, name: 'extra', description: '', entry_kind: 'literal', value: 'X', spec: null,
     created_at: '', updated_at: '' },
 ]
-
-function q(sel: string): DOMWrapper<Element> {
-  const el = document.body.querySelector(sel)
-  if (!el) throw new Error(`body 里找不到 ${sel}`)
-  return new DOMWrapper(el)
-}
 
 function mountPage() {
   return mount(WorkbenchView, {

@@ -97,14 +97,12 @@ it('remove() 同时出清该 id 的工件展开态', async () => {
 it('SSE 事件帧驱动刷新;done 帧终收敛;已知终态跳过 rows(P2-06)', async () => {
   vi.useFakeTimers()
   const frames: string[] = []
-  let closeStream!: () => void
   const fetchMock = vi.fn().mockImplementation(() => {
     const enc = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const push = (text: string) => controller.enqueue(enc.encode(text))
         for (const f of frames.splice(0)) push(f)
-        closeStream = () => { try { controller.close() } catch { /* 已关 */ } }
       },
     })
     return Promise.resolve({

@@ -309,7 +309,7 @@ import UnbindTokenDialog from '@/components/integration/UnbindTokenDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
-  runIntegrationTask, patchIntegrationTask, listPlatformCredentials,
+  runIntegrationTask, listPlatformCredentials,
   createPlatformCredential, patchPlatformCredential, deletePlatformCredential, integrationErr, fetchScenarioPreview,
   unsubscribeIntegrationTask, pauseMySubscription, resumeMySubscription,
   RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf,
@@ -454,10 +454,6 @@ async function removeTask(t: IntegrationTaskItem): Promise<void> {
 
 // ── W2:订阅面(订阅确认弹窗 / 退订 / 订阅者自暂停恢复) ─────────
 const subTask = ref<IntegrationTaskItem | null>(null)
-
-/** §3.3 恢复入口:可「启动」的暂停;token_* 专属路径走各自的处置动作 */
-const RESUMABLE = ['manual', 'fail_streak', 'scope_denied',
-                   'resource_not_allowed', 'token_owner_ineligible']
 
 function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   const r = t.instance?.pausedReason

@@ -5,7 +5,7 @@
  *   - plateReachable=false → 降级横幅(§2.4);
  *   - 点瓦片 → 线索板深链(占位路由)。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'

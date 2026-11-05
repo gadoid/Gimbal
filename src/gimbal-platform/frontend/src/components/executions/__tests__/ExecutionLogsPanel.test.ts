@@ -5,7 +5,7 @@
  * ②done 帧收口;③筛选变更重连(带参);④open/close 生命周期(收起断流)。
  * 视口锚定依赖布局(offsetTop),jsdom 全 0,断言其逻辑分支不炸即可。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ExecutionLogsPanel from '@/components/executions/ExecutionLogsPanel.vue'

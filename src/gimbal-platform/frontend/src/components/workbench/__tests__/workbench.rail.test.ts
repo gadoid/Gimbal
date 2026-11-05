@@ -38,14 +38,6 @@ const as = (over: Record<string, unknown> = {}) => ({
   id: 3, username: 'alice', display_name: 'Alice Zhang', is_admin: false,
   created_at: '2026-01-05T08:00:00Z', ...over,
 })
-const scen = (id: string, vis: 'private' | 'public', at: string) => ({
-  meta: {
-    scenarioId: id, name: `场景 ${id}`, module: 'm', priority: 1, author: 'Alice',
-    owner: 'Alice', tags: [], system: [], updateTime: at,
-  },
-  steps: [], config: { vars: {} }, tags: [], starred: false, visibility: vis,
-}) as never
-
 function mountWithRouter(component: object) {
   const router = createRouter({
     history: createMemoryHistory(),

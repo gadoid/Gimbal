@@ -24,9 +24,6 @@ vi.mock('@/utils/toast', () => ({
  * 惯例):attachTo body + document.querySelectorAll 检索 + 原生 click。 */
 const q = (sel: string) =>
   document.querySelector(sel) as HTMLElement | null
-const qAll = (sel: string) =>
-  [...document.querySelectorAll(sel)] as HTMLElement[]
-
 const SCENARIOS = [
   { id: 'sc-1', name: '下单' },
   { id: 'sc-2', name: '查单' },

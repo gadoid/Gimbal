@@ -302,7 +302,7 @@ import { confirmAction, promptAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import type {
-  DataSetSelection, SchemeV2, ServiceBinding,
+  DataSetSelection, SchemeV2,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
@@ -311,8 +311,8 @@ import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembly'
-import type { FieldState, MetaView, ScenarioView, StepView } from '@/types/plate'
-import { stepCall, stepEndpointId, stepService, stepMethod, stepPath } from '@/types/plate'
+import type { FieldState, ScenarioView, StepView } from '@/types/plate'
+import { stepCall, stepEndpointId, stepService } from '@/types/plate'
 import { classifyServices } from '@/api/service-aliases'
 
 const STEPS = [

@@ -9,7 +9,7 @@
  * 渲染端 ConfirmHost 只是把 acceptDialog/cancelDialog 接到 Dialog
  * 事件上,行为真源在本模块,直接驱动总线即测。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   acceptDialog,
   cancelDialog,

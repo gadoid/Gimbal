@@ -353,10 +353,6 @@ watch(() => props.schemes, (list) => {
 // 存量,声明 URL 兜底;自建方案态绑定只读(概要行展示)。
 const bindings = ref<Record<string, ServiceBinding>>({})
 
-function declaredUrlOf(svc: string): string | null {
-  return props.serviceRows.find((r) => r.service === svc)?.declaredUrl ?? null
-}
-
 // serviceRows 变化(异步补齐/场景变更)→ 补行、清孤儿;行内 v-model 直写
 // bindings[svc].authAlias,必须保证每个 svc 有落点对象。声明行预填声明 URL。
 // 依赖含 selected:深链自建方案挂载时本 watch guard return 过一次,切回

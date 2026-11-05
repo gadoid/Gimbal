@@ -9,7 +9,7 @@
  * 2026-09-22(任务6):alias 下拉换 CredentialSelect 样式化组件(自管
  * 面板,无 portal),交互 = 点触发器 → 点选项;预填态直接读触发器文案。
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import AuthSelectorModal from '@/components/AuthSelectorModal.vue'
 import type { AuthSession } from '@/api/auth_sessions'

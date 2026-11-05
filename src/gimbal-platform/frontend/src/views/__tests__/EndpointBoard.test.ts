@@ -6,7 +6,7 @@
  *   - 视角筛选 chip。
  * vue-flow 在 jsdom 需要 ResizeObserver 桩。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'

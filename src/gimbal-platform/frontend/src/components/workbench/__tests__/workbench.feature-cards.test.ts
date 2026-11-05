@@ -7,13 +7,12 @@
  * - 取数失败只落本卡空态,网格其余部分照常在。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 import * as composerApi from '@/api/scenario-composer'
-import * as executionsApi from '@/api/executions'
 import * as adaptationsApi from '@/api/adaptations'
 import * as authSessionsApi from '@/api/auth_sessions'
 import * as catalogServices from '@/utils/catalog-services'

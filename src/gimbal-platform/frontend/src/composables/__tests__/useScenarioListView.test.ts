@@ -199,7 +199,7 @@ describe('useScenarioListView(服务端化)', () => {
     const mine = useScenarioListView('mine')
     await flushPromises()
     expect(mine.groupsState.value).toBe('ready')
-    const pub = useScenarioListView('public')
+    useScenarioListView('public')
     await flushPromises()
     expect(vi.mocked(groupApi.listFilterGroups).mock.calls.map((c) => c[0]))
       .toEqual(['mine', 'public'])

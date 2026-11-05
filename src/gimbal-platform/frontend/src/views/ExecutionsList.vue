@@ -272,12 +272,11 @@ import { toast } from '@/utils/toast'
 import { useExecutionsStore } from '@/stores/executions'
 import {
   cancelExecution, getExecutionsSummary, listExecutions, rerunExecution,
-  type ExecutionsSummary, type Execution, type ExecutionStatus,
+  type ExecutionsSummary, type ExecutionStatus,
 } from '@/api/executions'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { isScenarioBacked } from '@/utils/executionKind'
 import { executionUrl, runnerUrl } from '@/utils/links'
-import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -485,11 +484,6 @@ async function rerun(row: ExecutionListItem) {
   } finally {
     rerunningId.value = null
   }
-}
-
-async function remove(id: number) {
-  await removeExecution(id, (i) => store.remove(i))
-  await fetchFiltered().catch(() => undefined)
 }
 
 /** P4 协作式取消:按服务端 cancelable 标志显示;说明文案(等在飞单元还是

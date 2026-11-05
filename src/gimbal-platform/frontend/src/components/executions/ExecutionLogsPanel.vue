@@ -20,7 +20,6 @@ import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { executionLogsStreamUrl } from '@/api/executions'
 import { readSseStream } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui/button'
 
 interface LogRow {
   id: number

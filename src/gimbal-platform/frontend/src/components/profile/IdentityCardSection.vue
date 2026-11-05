@@ -169,7 +169,6 @@ function toggleStat(id: string) {
 function move(index: number, delta: number) {
   const arr = STATS.map((s) => s.id)
   const from = index
-  const to = index + delta
   const current = arr[from]
   const curIdx = cfg.value.stats.indexOf(current)
   if (curIdx < 0) {

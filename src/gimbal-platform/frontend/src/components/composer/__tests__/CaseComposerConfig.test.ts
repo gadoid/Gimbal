@@ -204,7 +204,7 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
   })
 
   it('CFG-LOCK-4: 锁状态不参与 vars 值折叠(锁不是值形状变化)', async () => {
-    const { w, config } = mountWithParent(LOCKED_CFG())
+    const { config } = mountWithParent(LOCKED_CFG())
     await flush()
     expect(config.value.vars).toEqual({ 'fin.env': 'qa', 'fin.amount': 100 })
   })

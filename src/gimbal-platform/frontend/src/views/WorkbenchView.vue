@@ -144,7 +144,7 @@ const placeholderFnDefs = computed<WorkbenchCardDef[]>(() =>
  *  布局存档(服务端 + 本地镜像)由 useUserPreference 统一盯 auth 身份,
  *  不再需要调用方传用户名。 */
 const eligibleIds = computed(() => visibleRegistry.value.map((d) => d.id))
-const { orderedIds, add, remove, move, reset, sizeOf, setSize } =
+const { orderedIds, add, remove, reset, sizeOf, setSize } =
   useWorkbenchLayout(eligibleIds)
 
 /** draggable item-key:元素本身是 string id,键 = 自身 */

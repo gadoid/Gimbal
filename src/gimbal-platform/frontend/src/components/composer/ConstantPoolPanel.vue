@@ -60,7 +60,7 @@ import { copyText } from '@/utils/clipboard'
 import { useSharedInsertTarget } from '@/composables/useInsertTarget'
 import type { ConstantEntry } from '@/types/constants'
 
-const props = defineProps<{ entries: ConstantEntry[] }>()
+defineProps<{ entries: ConstantEntry[] }>()
 const emit = defineEmits<{
   seedVar: [name: string, spec: Record<string, unknown>]
 }>()

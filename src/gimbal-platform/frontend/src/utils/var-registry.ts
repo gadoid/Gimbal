@@ -11,7 +11,7 @@
  * 草稿对象,后端零改动。
  */
 import { parseTplRefs, type TplRef } from './tpl-refs'
-import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
+import { stepHeaders } from '@/types/plate'
 
 // ── 注册表 ────────────────────────────────────────────────────────
 
