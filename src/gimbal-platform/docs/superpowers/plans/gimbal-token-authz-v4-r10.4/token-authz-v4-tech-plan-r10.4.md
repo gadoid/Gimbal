@@ -17,6 +17,7 @@
 | r10.3 | 基线更新到 `3973f5a`，锚点全量复核无漂移；开工前置已满足 |
 | **r10.4** | 与原型逐项对齐：admin 强制失效带处置说明；用户区与个人设置的待处理数口径（到期 + 失效） |
 | **r10.5** | 实现收口（2026-11-04 评审修复轮）：0034 补建三表 `token_id` FK SET NULL（0033 只加列未建约束）；注册/保存面范围闸落地（§5.4 状态码约定：任务创建与 PATCH 换方案 422，按将生效配方核对）；额度改事务内锁属主行计数（§5.1 兑现）；范围拒绝补写 `inbound.denied` 审计（§7.2 兑现，runs 两处调用点）；`inbound.run` detail 补 `resolvedServices` 摘要；runs 链注入清单并入 setup/teardown 扫描（`exec_auth_aliases_of_definition`，与集成链同口径）；`invalidate` 对已吊销 409（已失效保持幂等）；precheck JWT `tokenId` 权限 `can_view`→`can_manage`；`identity_mode_mismatch` 按 §5.4 删除清单退役，防呆校验改名 `identity_mode_conflict`；publicize 删 suite 补删引用模板（§3.6 通用约束，含 suite id 删前物化修复）；命名补录：`invalidation_note` 列（§4.1）、`platform_user_missing`（§5.4）、`inbound.run(fn=cancel)`（§7.2） |
+| **r10.6** | 实现收口第二轮（2026-11-05 评审）：解绑确认框第 3 条说明按任务身份模式区分（平台任务解绑后仍以平台身份、平台凭证池运行）；解绑目标实例显式定位（§5.2 `PATCH /tasks/{id}`：personal = 属主实例、platform = 平台唯一实例，不再取「id 最小的实例」）；投递记录查看与补发的前端入口排入 §10 P4（§2.3 已有权限、后端接口在，前端死代码已删待重接） |
 
 **r10 简化**（每项都核对过代码与上下游，没有能力损失）：
 
@@ -545,7 +546,7 @@ JWT 执行同样写 `resolvedServices` 与 `builtinAuths`。
 | P1 | 后端令牌授权全量（下表 5 个提交） | P0 | 大 |
 | P2 | 个人设置重构、令牌界面（三处入口）与对话框、改密选项、chrome 用户区；移除别名入站 tab；平台凭证编辑与删除提示 | P1 | 中 |
 | P3 | `/me/summary`、身份卡自定义、便签卡 | P2 | 中 |
-| P4 | 集成指南按新模型重写；执行详情范围外标记 | P1 | 小 |
+| P4 | 集成指南按新模型重写；执行详情范围外标记；投递记录查看与补发入口（§2.3 权限与后端 `GET /api/webhook-deliveries`、`POST /{id}/redeliver` 已在，前端入口缺失——原调用文件已作死代码删除；原型 Tokens 页「全部调用与回调记录」链接，按 §2.3 权限落点：列表 = 属主/执行属主/模板属主/平台 member+，补发 = 个人令牌属主/平台 member+/admin，令牌路径只列不能补发） | P1 | 小 |
 
 P0 与 P3 中与令牌无关的部分可并行。
 
