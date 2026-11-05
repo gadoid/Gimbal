@@ -23,8 +23,10 @@
       <div class="grid grid-cols-1 gap-6 p-5 md:grid-cols-2">
         <!-- 昵称 -->
         <form class="flex flex-col gap-2.5" @submit.prevent="onSaveName">
-          <h2 class="m-0 text-body font-semibold">昵称</h2>
-          <label class="text-caption font-medium text-signal-ink/60" for="nick">展示在场景归属、审计记录里的名字</label>
+          <div class="flex items-center gap-1.5">
+            <h2 class="m-0 text-body font-semibold">昵称</h2>
+            <span class="slib-q" title="展示在场景归属、审计记录里的名字;与用户名双向查重">?</span>
+          </div>
           <div class="flex gap-2">
             <Input id="nick" v-model="displayName" class="flex-1" data-testid="profile-display-name"
                    :placeholder="auth.currentUser?.username" maxlength="128" />
@@ -32,7 +34,6 @@
               {{ savingName ? '保存中…' : '保存' }}
             </Button>
           </div>
-          <span class="text-caption text-signal-ink/60">与用户名双向查重</span>
           <p v-if="nameError" class="m-0 text-caption text-signal-failed">{{ nameError }}</p>
         </form>
 
@@ -67,10 +68,7 @@
     <section id="notify" class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5">
       <div class="flex items-center gap-1.5">
         <h2 class="m-0 text-body font-semibold">通知</h2>
-        <span
-          class="inline-flex h-[18px] w-[18px] cursor-help items-center justify-center rounded-full border border-signal-line bg-white text-[11px] leading-none text-signal-ink/60"
-          title="关闭的类型不再入库，与铃铛面板同一份开关"
-        >?</span>
+        <span class="slib-q" title="关闭的类型不再入库，与铃铛面板同一份开关">?</span>
       </div>
       <div class="grid grid-cols-1 gap-x-6 md:grid-cols-2">
         <label

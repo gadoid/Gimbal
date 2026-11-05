@@ -84,7 +84,9 @@
 }
 /* 页头问号悬浮提示(2026-11-05 统一轮):页面说明文字不常驻,收进
    标题旁的圆圈问号 + title 原生悬浮;状态/计数仍常驻(count / .slib-sub)。
-   首例 = TokensSection 区块头,页头统一后共用此类。 */
+   外圈 2px 中灰 + 问号 600 加粗拉开层次(初版 1px 浅灰在白底上糊成
+   一团,评审反馈"太丑";深灰外圈试过一档太重,浏览器双盲评后定稿
+   此档),hover 整体加深一档提示可交互。 */
 .slib-q {
   display: inline-flex;
   height: 18px;
@@ -92,12 +94,17 @@
   cursor: help;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--sl-line);
+  border: 2px solid var(--sl-ink-3);
   border-radius: 9999px;
   background: #fff;
-  color: var(--sl-ink-3);
+  color: var(--sl-ink-2);
   font-size: 11px;
+  font-weight: 600;
   line-height: 1;
+}
+.slib-q:hover {
+  border-color: var(--sl-ink-2);
+  color: var(--sl-ink);
 }
 /* 常驻状态行(统计/视角等随数据变化的信息),不再是页面说明的载体 */
 .slib-sub {

@@ -9,10 +9,9 @@
         <SlibIcon name="pencil" :size="14" />
       </span>
       <span class="chead-title">便签</span>
+      <span class="slib-q" title="最多 20 条 · 每条 200 字 · 已完成 7 天后自动清理">?</span>
       <span class="text-caption text-signal-ink/60">
-        <template v-if="size === 'L'">
-          {{ items.length }} / 20 · 每条 200 字 · 已完成 7 天后自动清理
-        </template>
+        <template v-if="size === 'L'">{{ items.length }} / 20</template>
         <template v-else-if="size === 'M'">{{ items.length }} / 20</template>
         <template v-else>{{ openCount }} 条未完成</template>
       </span>

@@ -6,13 +6,10 @@
      处置说明,r10.4)。 -->
 <template>
   <section id="tokens" class="flex flex-col gap-4" data-testid="tokens-section">
-    <!-- 分区头 -->
+    <!-- 分区头(说明按 kind 收进问号悬浮,2026-11-05 归集轮) -->
     <div class="flex flex-wrap items-center gap-2">
       <h2 class="m-0 text-[16px] leading-[22px] font-semibold">访问令牌</h2>
-      <span
-        class="slib-q"
-        title="令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码"
-      >?</span>
+      <span class="slib-q" :title="sectionTip">?</span>
       <span class="text-caption text-signal-ink/60">
         已用 {{ quota.used }} · 上限 {{ quota.limit }}（不含已吊销）
       </span>
@@ -26,10 +23,6 @@
         </Button>
       </template>
     </div>
-
-    <p v-if="kind === 'platform'" class="m-0 text-caption text-signal-ink/60">
-      平台令牌代表平台系统用户（__platform__）执行：只能使用公共场景与只读步骤；全平台共享额度，member+ 可管理。
-    </p>
 
     <!-- admin 筛选 -->
     <div v-if="mode === 'admin'" class="flex flex-wrap items-center gap-2">
@@ -439,6 +432,11 @@ const expanded = ref<number | null>(null)
 
 const canCreate = computed(() =>
   props.variant !== 'admin' && ['member', 'admin'].includes(auth.role))
+
+/** 区块说明(问号悬浮,按 kind):个人 = 授权面;平台 = 平台身份约束 */
+const sectionTip = computed(() => kind.value === 'platform'
+  ? '平台令牌代表平台系统用户（__platform__）执行：只能使用公共场景与只读步骤；全平台共享额度，member+ 可管理。'
+  : '令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码。')
 
 const kindLabel = computed(() =>
   kind.value === 'platform' ? '平台令牌' : '访问令牌')
