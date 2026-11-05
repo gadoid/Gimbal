@@ -60,7 +60,8 @@ describe('router — 角色矩阵守卫', () => {
     loginAs('admin')
     expect(await nav('/admin/users')).toBe('/admin/users')
     loginAs('user')
-    expect(await nav('/profile')).toBe('/profile')
+    // 子页面化:/profile 空子路径重定向到账号子页 —— 可达性断言落到重定向目标
+    expect(await nav('/profile')).toBe('/profile/account')
   })
 })
 

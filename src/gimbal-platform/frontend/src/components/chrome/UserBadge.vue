@@ -148,7 +148,7 @@ function goProfile() {
 }
 
 function goTokens() {
-  router.push('/profile#tokens')
+  router.push('/profile/tokens')
 }
 
 // webhook v4 §8:用户区的待处理数口径 = 7 天内到期 + 已失效(个人令牌)。

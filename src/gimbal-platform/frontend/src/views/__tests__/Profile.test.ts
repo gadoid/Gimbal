@@ -1,13 +1,15 @@
 /**
- * Profile — 个人设置页(P2-1)。
- * 钉住:昵称自改走 PATCH /users/{self};改密走 /auth/change-password
- * 且旧密码错误有人话;通知偏好开关入面板。
+ * Profile — 个人设置 · 子页面结构(原型 Main/Tokens/CardSettings)。
+ * 钉住:账号页昵称自改走 PATCH /users/{self};改密走 /auth/change-password
+ * 且旧密码错误有人话;通知偏好开关入面板;'' 重定向吞掉旧锚点深链
+ * (#tokens → /profile/tokens,#card → /profile/card)。
  */
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Profile from '@/views/Profile.vue'
+import ProfileAccount from '@/views/ProfileAccount.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as profileApi from '@/api/profile'
 import * as usersApi from '@/api/users'
@@ -15,7 +17,6 @@ import * as notificationsApi from '@/api/notifications'
 
 vi.mock('@/api/profile', () => ({
   changePassword: vi.fn(),
-  // P3 身份卡数据面:/me/summary
   getSummary: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/api/users', () => ({ patch: vi.fn() }))
@@ -26,54 +27,31 @@ vi.mock('@/api/notifications', () => ({
     execution_finished: '执行完成', announcement: '平台公告',
   },
 }))
-// P2 令牌区块(TokensSection)不能打真网络
+// TokensSection 不能打真网络
 vi.mock('@/api/access-tokens', () => ({
   listAccessTokens: vi.fn().mockResolvedValue(
     { items: [], quota: { used: 0, limit: 5 } }),
   getScopeCandidates: vi.fn().mockResolvedValue({ aliases: [], auths: [] }),
 }))
 
-// P2 锚点分区的滚动高亮用 IntersectionObserver(jsdom 不提供,给记录式
-// 空实现 —— observe 只吃 Element;曾把组件实例(cardEl)喂进去炸掉
-// mounted 钩子,这里把参数记下来钉死只允许 Element,2026-11-05)
-const ioObserved: unknown[] = []
-beforeAll(() => {
-  if (!('IntersectionObserver' in globalThis)) {
-    class IO {
-      observe(target: unknown): void { ioObserved.push(target) }
-      unobserve(): void { /* noop */ }
-      disconnect(): void { /* noop */ }
-      takeRecords(): IntersectionObserverEntry[] { return [] }
-    }
-    ;(globalThis as Record<string, unknown>).IntersectionObserver = IO
-  }
-})
-
-function mountPage() {
+function mountAccount() {
   const auth = useAuthStore()
   auth.accessToken = 'tok'
   auth.currentUser = {
     id: 7, username: 'alice', display_name: 'Alice', role: 'user',
     is_active: true, is_admin: false,
   } as never
-  // P2 锚点分区后页面含 RouterLink(令牌深链等)→ 注入 router
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:all(.*)', component: { template: '<div/>' } }],
   })
-  return mount(Profile, {
-    global: {
-      plugins: [router],
-      stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
-    },
-  })
+  return mount(ProfileAccount, { global: { plugins: [router] } })
 }
 
-describe('Profile — 个人设置(P2-1)', () => {
+describe('ProfileAccount — 账号与通知子页(原型 Main)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    // clearAllMocks 会清掉工厂里的默认返回值 —— 重建
     vi.mocked(notificationsApi.getPreferences).mockResolvedValue({ off: [] })
     vi.mocked(notificationsApi.putPreferences).mockResolvedValue({ off: [] })
   })
@@ -83,12 +61,8 @@ describe('Profile — 个人设置(P2-1)', () => {
       id: 7, username: 'alice', display_name: 'Alice2', role: 'user',
       is_active: true, created_at: 'x',
     } as never)
-    const w = mountPage()
+    const w = mountAccount()
     await flushPromises()
-    // 锚点分区滚动高亮:observe 的每个目标都必须是 Element(组件 ref
-    // 须取 $el,直接喂组件实例会 TypeError 炸 mounted)
-    expect(ioObserved.length).toBeGreaterThan(0)
-    expect(ioObserved.every((t) => t instanceof Element)).toBe(true)
     await w.find('[data-testid="profile-display-name"]').setValue('Alice2')
     await w.find('[data-testid="profile-save-name"]').trigger('submit')
     await flushPromises()
@@ -99,7 +73,7 @@ describe('Profile — 个人设置(P2-1)', () => {
   it('改密:changePassword(old, new);旧密码错给出人话', async () => {
     vi.mocked(profileApi.changePassword).mockRejectedValue(
       Object.assign(new Error('422 bad_old_password'), { status: 422 }))
-    const w = mountPage()
+    const w = mountAccount()
     await flushPromises()
     await w.find('[data-testid="profile-old-pw"]').setValue('wrong-old')
     await w.find('[data-testid="profile-new-pw"]').setValue('NewPass-123')
@@ -107,21 +81,84 @@ describe('Profile — 个人设置(P2-1)', () => {
     await flushPromises()
     expect(profileApi.changePassword).toHaveBeenCalledWith(
       'wrong-old', 'NewPass-123',
-      // v4 D12:改密两个勾选默认开(令牌失效 + 退出其他会话)
       { invalidateTokens: true, logoutOthers: true })
     expect(w.text()).toContain('旧密码不正确')
     w.unmount()
   })
 
   it('通知偏好:开关切换写回 putPreferences', async () => {
-    const w = mountPage()
+    const w = mountAccount()
     await flushPromises()
     expect(notificationsApi.getPreferences).toHaveBeenCalled()
-    // Switch(radix)点击即翻转 → emit update:modelValue(真实用户路径)
     const sw = w.find('[data-testid="profile-pref-announcement"]')
     await sw.trigger('click')
     await flushPromises()
     expect(notificationsApi.putPreferences).toHaveBeenCalledWith(['announcement'])
+    w.unmount()
+  })
+})
+
+describe('Profile 布局与重定向(子页面化)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  function mkRouter(start: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{
+        path: '/profile',
+        component: Profile,
+        children: [
+          {
+            path: '',
+            redirect: (to: { hash: string }) => ({
+              path: to.hash === '#tokens' ? '/profile/tokens'
+                : to.hash === '#card' ? '/profile/card'
+                  : '/profile/account',
+              hash: '',
+            }),
+          },
+          { path: 'account', component: ProfileAccount },
+          { path: 'tokens', component: { template: '<div data-testid="page-tokens"/>' } },
+          { path: 'card', component: { template: '<div data-testid="page-card"/>' } },
+        ],
+      }],
+    })
+    router.push(start)
+    return router.isReady().then(() => router)
+  }
+
+  it.each([
+    ['/profile#tokens', '/profile/tokens'],
+    ['/profile#card', '/profile/card'],
+    ['/profile', '/profile/account'],
+    ['/profile#notify', '/profile/account'],
+  ])('旧深链 %s → %s', async (from, to) => {
+    const router = await mkRouter(from)
+    expect(router.currentRoute.value.fullPath).toBe(to)
+  })
+
+  it('布局:头 + 分区导航四项,按路由高亮', async () => {
+    const router = await mkRouter('/profile/tokens')
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+    auth.currentUser = {
+      id: 7, username: 'alice', display_name: 'Alice', role: 'member',
+      is_active: true, is_admin: false,
+    } as never
+    const w = mount(Profile, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(w.text()).toContain('个人设置')
+    expect(w.text()).toContain('alice · 成员')
+    const nav = w.find('nav[aria-label="个人设置分区"]')
+    expect(nav.text()).toContain('账号')
+    expect(nav.text()).toContain('访问令牌')
+    expect(nav.text()).toContain('工作台身份卡')
+    expect(nav.text()).toContain('通知')
+    // 当前 tokens 子页渲染(桩 RouterView 由 vue-router 注入真实子路由)
+    expect(w.find('[data-testid="page-tokens"]').exists()).toBe(true)
     w.unmount()
   })
 })

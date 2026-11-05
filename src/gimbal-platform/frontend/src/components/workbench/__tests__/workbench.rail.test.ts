@@ -199,7 +199,7 @@ describe('ActivityTimeline — 右栏时间线', () => {
     expect(sub.text()).toBe('调用')
     expect(sub.find('.tl-kind').attributes('style')).toContain('color-mix')
     // §7.3:调用行深链令牌管理(对账明细在标题行内)
-    expect(row.find('.tl-body').attributes('href')).toBe('/profile#tokens')
+    expect(row.find('.tl-body').attributes('href')).toBe('/profile/tokens')
     w.unmount()
   })
 

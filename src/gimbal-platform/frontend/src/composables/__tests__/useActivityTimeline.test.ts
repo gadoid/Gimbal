@@ -110,10 +110,10 @@ describe('useActivityTimeline', () => {
     expect(t.events.value[0]!.title)
       .toContain('调用 令牌 agent-sys → 订单创建_1')
     expect(t.events.value[0]!.detail).toBe('cr-9')       // 对账明细 = clientRef
-    expect(t.events.value[0]!.to).toBe('/profile#tokens')
+    expect(t.events.value[0]!.to).toBe('/profile/tokens')
     expect(t.events.value[1]!.title).toContain('调用 令牌 agent-sys · 临时调用 2 步')
     expect(t.events.value[1]!.detail).toBeUndefined()     // 无 clientRef 即无明细
-    expect(t.events.value[1]!.to).toBe('/profile#tokens')
+    expect(t.events.value[1]!.to).toBe('/profile/tokens')
     expect(t.counts.value.inbound).toBe(2)
   })
 

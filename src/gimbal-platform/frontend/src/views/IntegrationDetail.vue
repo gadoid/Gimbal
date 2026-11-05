@@ -86,7 +86,7 @@
             <dd class="flex flex-wrap items-center gap-2">
               <span class="mono">{{ tokenText }}</span>
               <span v-if="tokenStatus" class="idtl-pill" :class="tokenStatus.cls">{{ tokenStatus.text }}</span>
-              <RouterLink class="idtl-link text-[12px]" to="/profile#tokens">查看令牌</RouterLink>
+              <RouterLink class="idtl-link text-[12px]" to="/profile/tokens">查看令牌</RouterLink>
             </dd>
             <dt>回调</dt>
             <dd class="mono">{{ tokenDetail?.callbackUrl || '未设置（令牌可轮询使用）' }}</dd>
@@ -264,7 +264,7 @@ const banner = computed<{
         tone: 'amber', title: '已暂停 · 所属令牌已到期',
         desc: '续期或重新生成令牌后，任务自动恢复。',
         actions: [
-          { label: '去续期', primary: true, to: '/profile#tokens' },
+          { label: '去续期', primary: true, to: '/profile/tokens' },
           { ...resume, disabled: true },
         ],
       }
@@ -273,7 +273,7 @@ const banner = computed<{
         tone: 'red', title: '已暂停 · 所属令牌已失效',
         desc: '令牌因改密、停用或管理员强制失效而不可用。令牌属主「重新生成」后，任务自动恢复。',
         actions: [
-          { label: '去重新生成', primary: true, to: '/profile#tokens' },
+          { label: '去重新生成', primary: true, to: '/profile/tokens' },
           { ...resume, disabled: true },
         ],
       }
@@ -290,7 +290,7 @@ const banner = computed<{
         desc: '场景用到的以下资源不在令牌范围内。处理后在这里启动。',
         missing,
         actions: [
-          { label: '编辑令牌范围', to: '/profile#tokens' },
+          { label: '编辑令牌范围', to: '/profile/tokens' },
           { label: '去认证管理', to: '/auths' },
           resume,
         ],

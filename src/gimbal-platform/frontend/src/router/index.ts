@@ -97,10 +97,30 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 个人设置(P2-1):全员
+    // 个人设置(P2-1;原型 Main/Tokens/CardSettings = 子页面而非同页
+    // 锚点):Profile.vue 只做布局(头 + 分区导航 + RouterView),内容
+    // 在三个子页;'' 重定向吞掉旧 #tokens/#card 深链(书签兼容)。
     path: '/profile',
     component: () => import('@/views/Profile.vue'),
     meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        // hash: '' 显式丢弃旧锚点 —— 不给 hash 时重定向会继承
+        redirect: (to: { hash: string }) => ({
+          path: to.hash === '#tokens' ? '/profile/tokens'
+            : to.hash === '#card' ? '/profile/card'
+              : '/profile/account',
+          hash: '',
+        }),
+      },
+      // Main.html:账号(昵称/改密)+ 通知
+      { path: 'account', component: () => import('@/views/ProfileAccount.vue') },
+      // Tokens.html:访问令牌(个人视角)
+      { path: 'tokens', component: () => import('@/views/ProfileTokens.vue') },
+      // CardSettings.html:工作台身份卡
+      { path: 'card', component: () => import('@/views/ProfileCard.vue') },
+    ],
   },
   {
     path: '/auths',
@@ -247,7 +267,7 @@ const routes = [
     // member+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
     // 入站调用方(个人 gtk_ 令牌)也走这里的绑定面 —— 旧 requiresAdmin 把
     // 属主与调用方一并挡在门外(全量评估 2026-11-02 #3)。令牌的签发/管理
-    // 面在 /profile#tokens(webhook v4)。写面权限仍由后端与子面板的
+    // 面在 /profile/tokens(webhook v4)。写面权限仍由后端与子面板的
     // canManage 把关,放开路由不扩大写权限。
     meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
   },

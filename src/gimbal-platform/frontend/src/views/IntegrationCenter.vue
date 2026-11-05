@@ -464,9 +464,9 @@ function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   const r = t.instance?.pausedReason
   if (r === 'token_revoked') return { label: '解绑令牌后接管' }
   if (r === 'token_expired' || r === 'token_invalidated')
-    return { label: '去续期/重新生成', to: '/profile#tokens' }
+    return { label: '去续期/重新生成', to: '/profile/tokens' }
   if (r === 'token_owner_ineligible') return { label: '恢复角色后启动' }
-  if (r === 'resource_not_allowed') return { label: '补范围后启动', to: '/profile#tokens' }
+  if (r === 'resource_not_allowed') return { label: '补范围后启动', to: '/profile/tokens' }
   if (r === 'scope_denied') return { label: '公开场景后启动' }
   return { label: '启动' }
 }

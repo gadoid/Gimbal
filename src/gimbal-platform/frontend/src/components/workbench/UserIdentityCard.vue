@@ -52,7 +52,7 @@
     </div>
 
     <div v-if="!preview" class="id-footer">
-      <RouterLink class="link" to="/profile#card">自定义身份卡</RouterLink>
+      <RouterLink class="link" to="/profile/card">自定义身份卡</RouterLink>
       <RouterLink class="link" to="/profile">个人设置</RouterLink>
     </div>
   </section>
@@ -98,7 +98,7 @@ const greeting = HOUR < 6 ? '凌晨好' : HOUR < 11 ? '早上好' : HOUR < 13 ? 
 const STAT_DEFS: Record<string, { label: string; to: string; hint?: string; danger?: boolean }> = {
   private_scenarios: { label: '私有场景', to: '/scenarios/mine', hint: '点击进入我的场景' },
   follows: { label: '关注', to: '/scenarios/follows' },
-  tokens: { label: '访问令牌', to: '/profile#tokens', hint: '有效令牌数' },
+  tokens: { label: '访问令牌', to: '/profile/tokens', hint: '有效令牌数' },
   today_failed: { label: '今日执行失败', to: '/executions?status=failed', danger: true },
   subscribed_integrations: { label: '订阅的集成任务', to: '/integrations', hint: '含已暂停' },
   auths: { label: '我的凭证', to: '/auths' },
@@ -106,11 +106,11 @@ const STAT_DEFS: Record<string, { label: string; to: string; hint?: string; dang
 }
 
 const SHORTCUT_DEFS: Record<string, { label: string; to: string }> = {
-  tokens: { label: '访问令牌', to: '/profile#tokens' },
+  tokens: { label: '访问令牌', to: '/profile/tokens' },
   auths: { label: '我的凭证', to: '/auths' },
-  password: { label: '修改密码', to: '/profile#account' },
-  notify: { label: '通知偏好', to: '/profile#notify' },
-  create_token: { label: '创建令牌', to: '/profile#tokens' },
+  password: { label: '修改密码', to: '/profile/account' },
+  notify: { label: '通知偏好', to: '/profile/account' },
+  create_token: { label: '创建令牌', to: '/profile/tokens' },
 }
 
 const DEFAULT_STATS = ['private_scenarios', 'follows', 'tokens']
