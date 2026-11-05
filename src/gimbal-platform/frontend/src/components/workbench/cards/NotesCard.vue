@@ -55,7 +55,7 @@
         <div class="flex overflow-hidden rounded-md border border-signal-line" role="group" aria-label="筛选">
           <button
             v-for="f in NOTE_FILTERS" :key="f" type="button"
-            class="h-6.5 border-0 px-2.5 text-caption"
+            class="h-[26px] border-0 px-2.5 text-caption"
             :class="filter === f ? 'bg-[#E7EFFF] text-[#1F55C4]' : 'bg-signal-card text-signal-ink'"
             :style="f !== 'all' ? 'border-left: 1px solid var(--color-signal-line)' : ''"
             @click="filter = f"
@@ -78,7 +78,7 @@
         <span class="flex-1 break-all" :class="n.done ? 'line-through' : ''">{{ n.text }}</span>
         <span class="whitespace-nowrap text-signal-ink/60">{{ relTime(n.createdAt) }}</span>
         <button
-          type="button" class="h-5.5 w-5.5 border-0 bg-transparent p-0 text-signal-ink/60 hover:text-signal-failed"
+          type="button" class="h-[22px] w-[22px] border-0 bg-transparent p-0 text-signal-ink/60 hover:text-signal-failed"
           aria-label="删除" @click="remove(n)"
         >
           <Cross2Icon class="h-3.5 w-3.5" />
@@ -87,7 +87,7 @@
       <div class="flex justify-end">
         <button
           v-if="doneItems.length" type="button"
-          class="h-6.5 rounded border border-signal-line bg-signal-card px-2.5 text-caption"
+          class="h-[26px] rounded border border-signal-line bg-signal-card px-2.5 text-caption"
           @click="clearDone"
         >清空已完成（{{ doneItems.length }}）</button>
       </div>

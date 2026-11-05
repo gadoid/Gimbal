@@ -15,7 +15,7 @@
       </div>
 
       <!-- 常驻统计 -->
-      <section class="flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+      <section class="flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card p-5">
         <div class="mb-1.5 flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">常驻统计</h3>
           <span class="text-caption text-signal-ink/60">最多 4 项 · 上移排序 · 已选 {{ cfg.stats.length }}</span>
@@ -45,7 +45,7 @@
       </section>
 
       <!-- 告警 -->
-      <section class="flex flex-col rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+      <section class="flex flex-col rounded-card border border-signal-line bg-signal-card p-5">
         <div class="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <h3 class="m-0 text-body font-semibold">告警</h3>
           <span class="text-caption text-signal-ink/60">按严重程度排序，最多显示 3 条；与「通知」开关互不影响</span>
@@ -64,7 +64,7 @@
       </section>
 
       <!-- 快捷入口 -->
-      <section class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+      <section class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5">
         <div class="flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">快捷入口</h3>
           <span class="text-caption text-signal-ink/60">最多 4 个 · 已选 {{ cfg.shortcuts.length }}</span>
