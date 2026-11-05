@@ -12,6 +12,22 @@
 # 根 tests 撞);其实测对账门(test_contract_reconcile_live)依赖运行中
 # 服务与干净数据,属深度验证,不入合并门(文件内已有 GIMBAL_SB_USERNAME
 # 跳过守卫)。
+#
+# ── 环境前置(缺了不是降级跳过,是整步假红;2026-11-05 收敛复跑的三处
+#    失败全部源于环境缺这些,不是代码问题)──────────────────────────
+#   1. 可编辑安装两个包:
+#      pip install -e src/gimbal-platform/backend
+#        gimbal/plate 步的根 tests/ 有用例 import 平台后端 app.*
+#        (test_jsonpath_cross_check / test_structure_ops /
+#         test_launcher_dual_read 等);自举步 openapi 的进程内回落
+#        (contract_gen.fetch_openapi)同样 import 平台后端。
+#      pip install -e src/gimbal
+#        backend 步的 6 条 CLI e2e 连真执行器。
+#   2. TEST_DATABASE_URL=postgresql+asyncpg://gimbal:gimbal@127.0.0.1:15432/gimbal
+#      backend 步 conftest 缺它直接退出(每测试独立 schema 自动建删);
+#      库用 docker compose -f compose.pg.yml 起。
+#   3. DATABASE_URL:收敛复跑中自举一条用例设了才过(本机 8000 有常驻
+#      后端时 openapi 走 HTTP,不触发该路径);按说明配好环境再判红。
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
