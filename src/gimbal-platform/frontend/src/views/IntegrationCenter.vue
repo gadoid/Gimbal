@@ -35,7 +35,11 @@
         <tr v-for="t in filtered" :key="t.id" :data-testid="`ig-row-${t.id}`">
           <td>
             <div class="ig-name">
-              {{ t.name }}
+              <RouterLink
+                :to="`/integrations/${t.id}`" class="ig-name-link"
+                :data-testid="`ig-name-${t.id}`"
+                :title="`查看「${t.name}」详情`"
+              >{{ t.name }}</RouterLink>
               <span v-if="t.mine" class="ig-chip mine">我的</span>
               <span v-else class="ig-chip">公共</span>
             </div>
@@ -108,30 +112,13 @@
       </tbody>
     </table>
 
-    <!-- 解绑令牌确认(D26:4 条说明,原型 IntegrationDetail)。
-         注:reka Dialog teleport 容器不落 attr fallthrough,检索以
-         内层 ig-unbind-confirm 为准(测试同 Suites 惯例)。 -->
-    <Dialog :open="!!unbindTask" @update:open="(v) => !v && (unbindTask = null)">
-      <DialogContent class="max-w-md">
-        <DialogHeader>
-          <DialogTitle>把「{{ unbindTask?.name }}」转为我管理？</DialogTitle>
-          <DialogDescription>解绑任务所属的访问令牌，转由你的账号管理</DialogDescription>
-        </DialogHeader>
-        <ul class="m-0 flex flex-col gap-1.5 pl-5 text-caption text-signal-ink/70">
-          <li>任务与令牌 {{ unbindTask?.tokenName ?? `#${unbindTask?.tokenId}` }} 解除绑定，此后不再受这张令牌的状态与范围约束。</li>
-          <li>不再向令牌的回调地址推送事件；需要结果请在 Gimbal 内查看或订阅通知。</li>
-          <!-- 第 3 条按身份模式区分(评审 2026-11-05 P2):平台任务解绑后
-               仍以平台身份运行,固定写「以你的身份」会误导 member -->
-          <li v-if="unbindTask?.identityMode === 'platform'">平台任务解绑后仍以平台身份、平台凭证池运行；仅公共场景与只读约束不变。</li>
-          <li v-else>个人任务解绑后以你的身份、你的凭证池运行。</li>
-          <li>解绑后任务处于暂停，确认无误后点「启动」。</li>
-        </ul>
-        <DialogFooter>
-          <Button variant="outline" @click="unbindTask = null">取消</Button>
-          <Button data-testid="ig-unbind-confirm" @click="doUnbind">解绑</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <!-- 解绑令牌确认(D26:4 条说明,原型 IntegrationDetail)——与集成
+         详情页共用组件;第 3 条按身份模式区分。注:reka Dialog teleport
+         容器不落 attr fallthrough,检索以内层 ig-unbind-confirm 为准。 -->
+    <UnbindTokenDialog
+      :open="!!unbindTask" :task="unbindTask"
+      @close="unbindTask = null" @done="load"
+    />
 
     <!-- 新建功能 -->
     <Transition name="pop">
@@ -316,7 +303,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import UnbindTokenDialog from '@/components/integration/UnbindTokenDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
@@ -340,6 +329,8 @@ import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
 const loading = ref(true)
 const tasks = ref<IntegrationTaskItem[]>([])
@@ -478,21 +469,6 @@ function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   if (r === 'resource_not_allowed') return { label: '补范围后启动', to: '/profile#tokens' }
   if (r === 'scope_denied') return { label: '公开场景后启动' }
   return { label: '启动' }
-}
-
-async function doUnbind(): Promise<void> {
-  // D26 解绑:确认框带 4 条说明(原型 IntegrationDetail「解绑令牌 ·
-  // 确认」),不再用 window.confirm 一句话带过
-  const t = unbindTask.value
-  if (!t) return
-  try {
-    await patchIntegrationTask(t.id, { tokenId: null })
-    toast.success('已解绑;任务暂停待你启动')
-    unbindTask.value = null
-    await load()
-  } catch (e) {
-    toast.error(integrationErr(e))
-  }
 }
 
 function needsReconfirm(t: IntegrationTaskItem): boolean {
@@ -748,6 +724,12 @@ async function _legacyRemoveCred(c: PlatformCredential): Promise<void> {
 }
 
 onMounted(() => {
+  // ?task= 旧深链(令牌详情「打开」等历史入口)→ 集成详情页
+  const qTask = Number(route.query.task || 0)
+  if (qTask > 0) {
+    void router.replace(`/integrations/${qTask}`)
+    return
+  }
   void load()
   void loadCreds()
   void loadCredRefs()
@@ -761,6 +743,8 @@ onMounted(() => {
   border: 1px dashed rgb(100 116 139 / 30%); border-radius: 10px;
 }
 .ig-name { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.ig-name-link { color: inherit; text-decoration: none; }
+.ig-name-link:hover { color: var(--color-signal, #2f6fed); text-decoration: underline; }
 .ig-token { font-size: 11.5px; color: rgb(100 116 139); margin-top: 2px; }
 .ig-chip {
   font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 400;

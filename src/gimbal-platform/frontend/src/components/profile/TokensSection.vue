@@ -177,23 +177,24 @@
               <td class="whitespace-nowrap px-3 py-3" :class="taskClass(t)">{{ taskSummary(t) }}</td>
               <td class="whitespace-nowrap px-4 py-3 text-right" @click.stop>
                 <template v-if="t.status !== 'revoked'">
-                  <Button
-                    v-if="t.status !== 'invalidated'" variant="outline" size="sm"
-                    :class="t.status === 'expired' ? 'btn-emphasis' : ''"
+                  <button
+                    v-if="t.status !== 'invalidated'" type="button" class="row-btn"
+                    :class="t.status === 'expired' ? 'row-btn-primary' : ''"
                     :disabled="busy" data-testid="token-renew" @click="renew(t)"
-                  >续期</Button>
-                  <Button
-                    variant="outline" size="sm" :class="t.status === 'invalidated' ? 'btn-emphasis' : ''"
+                  >续期</button>
+                  <button
+                    type="button" class="row-btn"
+                    :class="t.status === 'invalidated' ? 'row-btn-primary' : ''"
                     :disabled="busy" data-testid="token-regenerate" @click="regenerate(t)"
-                  >重新生成</Button>
-                  <Button
-                    variant="outline" size="sm" class="text-red-600"
+                  >重新生成</button>
+                  <button
+                    type="button" class="row-btn row-btn-danger"
                     :disabled="busy" data-testid="token-revoke" @click="askRevoke(t)"
-                  >吊销</Button>
-                  <Button
-                    v-if="mode === 'admin'" variant="outline" size="sm" class="text-red-600"
+                  >吊销</button>
+                  <button
+                    v-if="mode === 'admin'" type="button" class="row-btn row-btn-danger"
                     :disabled="busy || t.status === 'invalidated'" @click="askInvalidate(t)"
-                  >强制失效</Button>
+                  >强制失效</button>
                 </template>
                 <span v-else class="text-caption text-signal-ink/50">仅查看</span>
               </td>
@@ -238,7 +239,7 @@
                         class="flex flex-col gap-1 rounded-md border border-signal-line bg-signal-card px-2.5 py-2 text-caption"
                       >
                         <div class="flex items-center gap-2.5">
-                          <RouterLink :to="`/integrations?task=${task.id}`" class="min-w-0 flex-1 truncate text-signal-ink hover:underline">
+                          <RouterLink :to="`/integrations/${task.id}`" class="min-w-0 flex-1 truncate text-signal-ink hover:underline">
                             {{ task.name }}
                           </RouterLink>
                           <span class="text-signal-ink/60">{{ task.cronText }}</span>
@@ -303,7 +304,7 @@
               class="flex items-center gap-2.5 rounded-md border border-signal-line bg-white px-2.5 py-2 text-[12px]"
             >
               <span class="flex-1">{{ t.name }}</span>
-              <RouterLink :to="`/integrations?task=${t.id}`" class="text-signal hover:underline">打开</RouterLink>
+              <RouterLink :to="`/integrations/${t.id}`" class="text-signal hover:underline">打开</RouterLink>
             </div>
             <span class="text-caption text-signal-ink/60">解绑后任务改由你的账号管理，不再向这张令牌的回调地址推送事件。</span>
           </div>
@@ -860,5 +861,18 @@ onMounted(() => void reload())
   color: #fff;
   border-color: var(--color-signal, #2f6fed);
 }
+/* 行操作钮(原型 Tokens:26px / 4px 圆角 / 12px;危险红字描边;
+   强调态蓝底白字 —— 续期对到期、重新生成对失效) */
+.row-btn {
+  height: 26px; padding: 0 10px; margin-left: 6px;
+  border: 1px solid #e1e5eb; border-radius: 4px;
+  background: #fff; color: #10151c; font-size: 12px; cursor: pointer;
+}
+.row-btn:first-child { margin-left: 0; }
+.row-btn:hover { background: #f6f8fc; }
+.row-btn:disabled { opacity: .5; cursor: not-allowed; }
+.row-btn-danger { color: #dc2626; }
+.row-btn-primary { border-color: #2f6fed; background: #2f6fed; color: #fff; }
+.row-btn-primary:hover { background: #1f55c4; }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

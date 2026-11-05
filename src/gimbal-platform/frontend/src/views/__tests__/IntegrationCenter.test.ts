@@ -80,9 +80,13 @@ async function mountPage(isAdmin = false) {
   } as never
   const w = mount(IntegrationCenter, {
     // attachTo body:reka Dialog teleport 目标(document.querySelector 检索,
-    // Suites.test 同款惯例)—— 解绑确认框断言需要
+    // Suites.test 同款惯例)—— 解绑确认框断言需要。RouterLink 用透传
+    // slot 的 stub:默认自动 stub 不执行作用域插槽,行名链接文本会丢。
     attachTo: document.body,
-    global: { plugins: [router, pinia], stubs: { RouterLink: true } },
+    global: {
+      plugins: [router, pinia],
+      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+    },
   })
   await flushPromises()
   return w

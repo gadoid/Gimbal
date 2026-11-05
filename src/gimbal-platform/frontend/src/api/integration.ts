@@ -112,6 +112,16 @@ export async function listIntegrationTasks(): Promise<IntegrationTaskItem[]> {
   return data.items
 }
 
+/** 集成详情(webhook v4 §8 原型 IntegrationDetail):GET /tasks/{id}
+ *  出参与列表行同构(_tpl_out_full),含 instance/authAliases/
+ *  missingCredentials/tokenId/tokenName。 */
+export async function getIntegrationTask(
+  id: number | string,
+): Promise<IntegrationTaskItem> {
+  const { data } = await http.get<IntegrationTaskItem>(`/integration/tasks/${id}`)
+  return data
+}
+
 export async function createIntegrationTask(body: {
   name: string
   scenarioId: string

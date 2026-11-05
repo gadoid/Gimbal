@@ -198,6 +198,14 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // 集成详情(webhook v4 §8;原型 IntegrationDetail × 9 变体):
+    // 暂停横幅按 §3.3 分型,身份与令牌/最近运行;?task= 旧深链由
+    // IntegrationCenter 重定向进来。
+    path: '/integrations/:taskId',
+    component: () => import('@/views/IntegrationDetail.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // 数据分析(执行设计 §4:本期延后)— 说明页:前置(行级/步骤级结果
     // 落库)+ 已在别处的两个去向。侧边栏入口置灰但可点(§4.4:留个灰
     // 入口,点进来撞上那条说明;本页正常高亮 + 琥珀「延后」小标)。
