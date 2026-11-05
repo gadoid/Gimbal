@@ -158,7 +158,12 @@ def test_every_case_file_step_is_bound_to_its_contract_entry():
 
 
 def test_definition_passes_plate_validation():
-    """用真实 plate 的 Scenario 模型校验 —— 少一个必填字段就会炸。"""
+    """用真实 plate 的 Scenario 模型校验 —— 少一个必填字段就会炸。
+
+    模型校验 import 的是本仓 plate,不依赖服务,始终跑;convert 实测段
+    需要本机 plate(8765)在跑 —— 不可达即跳过该段,不再让无服务环境
+    必然红(评审 2026-11-05 收敛检查)。
+    """
     import httpx
     from gimbal_plate.schema.scenario import Scenario
 
@@ -167,7 +172,11 @@ def test_definition_passes_plate_validation():
     # 契约本身必须合法
     Scenario.model_validate(d)
 
-    # 且必须真的被 plate 的 convert 接受
+    # 且必须真的被 plate 的 convert 接受(探活:任意响应即算在跑)
+    try:
+        httpx.get("http://127.0.0.1:8765/", timeout=1.0)
+    except httpx.TransportError:
+        pytest.skip("本机 plate(8765)不可达 — convert 实测段跳过")
     resp = httpx.post(
         "http://127.0.0.1:8765/api/scenario/action/convert",
         json={"consumer": "gimbal", "scenario": d},
