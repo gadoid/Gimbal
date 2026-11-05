@@ -152,7 +152,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { toTypedSchema } from '@vee-validate/zod'
+import { toTypedSchema } from '@/utils/zod-typed-schema'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
 import { Button } from '@/components/ui/button'
@@ -198,7 +198,8 @@ const schema = toTypedSchema(z
       '密码强度不足：至少 8 位且包含字母和数字',
     ),
     confirmPassword: z.string().min(1, '请再次输入密码'),
-    privacyChecked: z.literal(true, { errorMap: () => ({ message: '请先同意隐私协议' }) }),
+    // zod4:errorMap 出参形态退役,单条文案走 error 字符串
+    privacyChecked: z.literal(true, { error: '请先同意隐私协议' }),
   })
   .refine((v) => v.password === v.confirmPassword, {
     path: ['confirmPassword'],

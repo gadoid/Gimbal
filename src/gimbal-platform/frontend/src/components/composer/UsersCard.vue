@@ -161,7 +161,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { toTypedSchema } from '@vee-validate/zod'
+import { toTypedSchema } from '@/utils/zod-typed-schema'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
 import { toast } from '@/utils/toast'
