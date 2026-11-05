@@ -106,6 +106,23 @@ async def _tpl_instance(db: AsyncSession, tpl_id: int,
     ).order_by(IntegrationTask.id))).scalars().first()
 
 
+async def _managed_instance(
+    db: AsyncSession, tpl: IntegrationTask,
+) -> IntegrationTask | None:
+    """管理动作(解绑 D26 等)的目标实例 —— 显式按身份模式定位
+    (评审 2026-11-05 P2):personal = 属主(注册方)自己的实例;
+    platform = 平台系统用户的唯一实例。此前解绑取「该模板 id 最小的
+    实例」,结果只是靠创建顺序碰巧正确 —— 订阅者实例先建时暂停会
+    落到别人头上。"""
+    holder = tpl.owner_id if tpl.identity_mode == "personal" \
+        else await integration_runner.get_platform_user_id()
+    if holder is None:
+        return None
+    return (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id == tpl.id,
+        IntegrationTask.holder_id == holder))).scalar()
+
+
 def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
              current: User, *, token: Any = None,
              auth_aliases: list[str] | None = None,
@@ -471,7 +488,9 @@ async def patch_task(
             unbind_token_id = tpl.token_id
             tpl.token_id = None
             tpl.callback_path_override = None
-            inst = await _tpl_instance(db, tpl.id)
+            # 目标实例显式定位(评审 2026-11-05 P2):按身份模式取
+            # 属主/平台实例,不再取「id 最小的实例」(靠创建顺序)。
+            inst = await _managed_instance(db, tpl)
             if inst is not None:
                 at_svc.remap_detach_pause(
                     inst, "令牌已解绑,任务转由账号管理;启动后恢复调度")

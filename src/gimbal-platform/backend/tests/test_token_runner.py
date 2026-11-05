@@ -370,6 +370,48 @@ class TestUnbind:
                                headers=h_owner, json={"tokenId": 123})
         assert r.status_code == 422
 
+    async def test_unbind_pauses_owner_instance_not_min_id(self, client):
+        """解绑目标实例显式定位(评审 2026-11-05 P2):个人模板存在
+        id 更小的订阅者实例时,解绑暂停必须仍落属主(注册方)实例 ——
+        旧实现取「该模板 id 最小的实例」,正确只是靠创建顺序。"""
+        await seed_platform_user()
+        uid = await _uid("ub5_owner")
+        sub_id = await _uid("ub5_sub", role="user")
+        tid, _ = await mk_token(user_id=uid)
+        async with db_module.SessionLocal() as s:
+            tpl = IntegrationTask(name="w-sub", owner_id=uid,
+                                  identity_mode="personal",
+                                  scenario_id="sc-w", token_id=tid)
+            s.add(tpl)
+            await s.flush()
+            # 订阅者实例先建(id 更小)—— 旧实现会错拿到它
+            sub = IntegrationTask(name="w-sub", owner_id=uid,
+                                  template_id=tpl.id, holder_id=sub_id,
+                                  state="idle")
+            s.add(sub)
+            await s.flush()
+            own = IntegrationTask(name="w-sub", owner_id=uid,
+                                  template_id=tpl.id, holder_id=uid,
+                                  state="idle")
+            s.add(own)
+            await s.commit()
+            tpl_id, sub_iid, own_iid = tpl.id, sub.id, own.id
+        assert sub_iid < own_iid
+        login = await client.post("/api/auth/login", json={
+            "username": "ub5_owner", "password": "x"})
+        h_owner = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r = await client.patch(f"/api/integration/tasks/{tpl_id}",
+                               headers=h_owner, json={"tokenId": None})
+        assert r.status_code == 200, r.text
+        async with db_module.SessionLocal() as s:
+            own_inst = await s.get(IntegrationTask, own_iid)
+            assert own_inst.state == "paused"
+            assert own_inst.paused_reason == "manual"
+            # 订阅者实例不受解绑影响(订阅者自己的凭证与令牌无关)
+            sub_inst = await s.get(IntegrationTask, sub_iid)
+            assert sub_inst.state == "idle"
+            assert not sub_inst.paused_reason
+
 
 async def _state_of(inst_id: int) -> str:
     async with db_module.SessionLocal() as s:

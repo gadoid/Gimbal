@@ -403,4 +403,19 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     expect(api.patchIntegrationTask).toHaveBeenCalledWith(3, { tokenId: null })
     w.unmount()
   })
+
+  it('D26 解绑确认框第 3 条按身份模式区分:平台任务仍以平台身份运行(评审 2026-11-05 P2)', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ id: 7, tokenId: 11, tokenName: 'plat-token',
+               identityMode: 'platform', canManage: true }),
+    ])
+    vi.mocked(api.patchIntegrationTask).mockResolvedValue(mkTask())
+    const w = await mountPage(true)
+    await w.find('[data-testid="ig-unbind-7"]').trigger('click')
+    await flushPromises()
+    const txt = document.body.textContent || ''
+    expect(txt).toContain('平台任务解绑后仍以平台身份、平台凭证池运行')
+    expect(txt).not.toContain('以你的身份、你的凭证池运行')
+    w.unmount()
+  })
 })
