@@ -14,7 +14,7 @@
     <div class="slib-head-text">
       <div class="slib-title-row">
         <h2 class="slib-title">{{ title }}</h2>
-        <span v-if="subtitle" class="slib-q" :title="subtitle">?</span>
+        <QTip v-if="subtitle" :text="subtitle" />
         <span v-if="count" class="slib-count">{{ count }}</span>
       </div>
       <p v-if="meta" class="slib-sub">{{ meta }}</p>
@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import SlibIcon, { type SlibIconName } from '@/components/scenario-lib/SlibIcon.vue'
+import QTip from '@/components/scenario-lib/QTip.vue'
 
 defineProps<{
   icon: SlibIconName

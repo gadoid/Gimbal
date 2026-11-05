@@ -83,10 +83,10 @@
   color: var(--sl-ink-3);
 }
 /* 页头问号悬浮提示(2026-11-05 统一轮):页面说明文字不常驻,收进
-   标题旁的圆圈问号 + title 原生悬浮;状态/计数仍常驻(count / .slib-sub)。
-   外圈 2px 中灰 + 问号 600 加粗拉开层次(初版 1px 浅灰在白底上糊成
-   一团,评审反馈"太丑";深灰外圈试过一档太重,浏览器双盲评后定稿
-   此档),hover 整体加深一档提示可交互。 */
+   标题旁的问号图标 + title 原生悬浮;状态/计数仍常驻(count / .slib-sub)。
+   图标本体 = radix QuestionMarkCircled(QTip 组件,描边风格与侧栏/
+   页头一致);文字拼 CSS 圆圈的两个版本(1px 浅灰 / 2px 中灰加粗)
+   连续被评"丑",已废弃。 */
 .slib-q {
   display: inline-flex;
   height: 18px;
@@ -94,16 +94,9 @@
   cursor: help;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--sl-ink-3);
-  border-radius: 9999px;
-  background: #fff;
-  color: var(--sl-ink-2);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
+  color: var(--sl-ink-3);
 }
 .slib-q:hover {
-  border-color: var(--sl-ink-2);
   color: var(--sl-ink);
 }
 /* 常驻状态行(统计/视角等随数据变化的信息),不再是页面说明的载体 */

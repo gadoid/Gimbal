@@ -9,7 +9,7 @@
     <!-- 分区头(说明按 kind 收进问号悬浮,2026-11-05 归集轮) -->
     <div class="flex flex-wrap items-center gap-2">
       <h2 class="m-0 text-[16px] leading-[22px] font-semibold">访问令牌</h2>
-      <span class="slib-q" :title="sectionTip">?</span>
+      <QTip :text="sectionTip" />
       <span class="text-caption text-signal-ink/60">
         已用 {{ quota.used }} · 上限 {{ quota.limit }}（不含已吊销）
       </span>
@@ -390,6 +390,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {

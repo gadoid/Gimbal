@@ -19,7 +19,7 @@
             <SlibIcon :name="icon" :size="15" />
           </span>
           <h1 class="m-0 text-display font-semibold text-signal-ink">{{ title }}</h1>
-          <span v-if="subtitle" class="slib-q" :title="subtitle">?</span>
+          <QTip v-if="subtitle" :text="subtitle" />
         </div>
         <div class="flex items-center gap-2"><slot name="actions" /></div>
       </div>
@@ -36,6 +36,7 @@
 
 <script setup lang="ts">
 import SlibIcon, { type SlibIconName } from '@/components/scenario-lib/SlibIcon.vue'
+import QTip from '@/components/scenario-lib/QTip.vue'
 
 defineProps<{
   title: string

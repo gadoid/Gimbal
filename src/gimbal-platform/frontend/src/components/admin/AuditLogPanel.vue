@@ -24,7 +24,7 @@
   <div class="lib-card p-4">
     <div class="mb-3 flex flex-wrap items-center gap-2">
       <span class="text-body font-semibold">特权写审计</span>
-      <span class="slib-q" title="特权写操作全量流水(用户 / 公告 / carry / 适配 / 场景 / 套件 / 分享 / 平台凭证 / 令牌…)">?</span>
+      <QTip text="特权写操作全量流水(用户 / 公告 / carry / 适配 / 场景 / 套件 / 分享 / 平台凭证 / 令牌…)" />
       <span class="flex-1"></span>
       <select
         class="audit-filter"
@@ -101,6 +101,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { listAuditLogs, type AuditLogRow } from '@/api/admin'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { usePagerSize } from '@/composables/usePagerSize'
 import { mediumDateTime } from '@/utils/datetime'
 import {

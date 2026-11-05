@@ -9,7 +9,7 @@
         <SlibIcon name="pencil" :size="14" />
       </span>
       <span class="chead-title">便签</span>
-      <span class="slib-q" title="最多 20 条 · 每条 200 字 · 已完成 7 天后自动清理">?</span>
+      <QTip text="最多 20 条 · 每条 200 字 · 已完成 7 天后自动清理" />
       <span class="text-caption text-signal-ink/60">
         <template v-if="size === 'L'">{{ items.length }} / 20</template>
         <template v-else-if="size === 'M'">{{ items.length }} / 20</template>
@@ -97,6 +97,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { Cross2Icon } from '@radix-icons/vue'
 import { Input } from '@/components/ui/input'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'

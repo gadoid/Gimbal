@@ -25,7 +25,7 @@
         <form class="flex flex-col gap-2.5" @submit.prevent="onSaveName">
           <div class="flex items-center gap-1.5">
             <h2 class="m-0 text-body font-semibold">昵称</h2>
-            <span class="slib-q" title="展示在场景归属、审计记录里的名字;与用户名双向查重">?</span>
+            <QTip text="展示在场景归属、审计记录里的名字;与用户名双向查重" />
           </div>
           <div class="flex gap-2">
             <Input id="nick" v-model="displayName" class="flex-1" data-testid="profile-display-name"
@@ -68,7 +68,7 @@
     <section id="notify" class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5">
       <div class="flex items-center gap-1.5">
         <h2 class="m-0 text-body font-semibold">通知</h2>
-        <span class="slib-q" title="关闭的类型不再入库，与铃铛面板同一份开关">?</span>
+        <QTip text="关闭的类型不再入库，与铃铛面板同一份开关" />
       </div>
       <div class="grid grid-cols-1 gap-x-6 md:grid-cols-2">
         <label
@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { toast } from '@/utils/toast'
 import { changePassword } from '@/api/profile'
 import { patch as patchUser } from '@/api/users'

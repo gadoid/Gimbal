@@ -9,7 +9,7 @@
     <div class="flex min-w-0 flex-1 flex-col gap-5">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="m-0 text-[16px] leading-[22px] font-semibold">工作台身份卡</h2>
-        <span class="slib-q" title="改动即时保存，换设备同步">?</span>
+        <QTip text="改动即时保存，换设备同步" />
         <div class="flex-grow" />
         <Button variant="outline" size="sm" data-testid="card-reset" @click="reset">恢复默认</Button>
       </div>
@@ -18,7 +18,7 @@
       <section class="flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card p-5">
         <div class="mb-1.5 flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">常驻统计</h3>
-          <span class="slib-q" title="最多 4 项 · 上移排序">?</span>
+          <QTip text="最多 4 项 · 上移排序" />
           <span class="text-caption text-signal-ink/60">已选 {{ cfg.stats.length }}</span>
         </div>
         <template v-for="(s, i) in STATS" :key="s.id">
@@ -49,7 +49,7 @@
       <section class="flex flex-col rounded-card border border-signal-line bg-signal-card p-5">
         <div class="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <h3 class="m-0 text-body font-semibold">告警</h3>
-          <span class="slib-q" title="按严重程度排序，最多显示 3 条；与「通知」开关互不影响">?</span>
+          <QTip text="按严重程度排序，最多显示 3 条；与「通知」开关互不影响" />
         </div>
         <label
           v-for="a in ALERTS" :key="a.id"
@@ -68,7 +68,7 @@
       <section class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5">
         <div class="flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">快捷入口</h3>
-          <span class="slib-q" title="最多 4 个">?</span>
+          <QTip text="最多 4 个" />
           <span class="text-caption text-signal-ink/60">已选 {{ cfg.shortcuts.length }}</span>
         </div>
         <div class="flex flex-wrap gap-2.5">
@@ -96,6 +96,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
+import QTip from '@/components/scenario-lib/QTip.vue'
 import { Switch } from '@/components/ui/switch'
 import UserIdentityCard from '@/components/workbench/UserIdentityCard.vue'
 import http from '@/api/http'

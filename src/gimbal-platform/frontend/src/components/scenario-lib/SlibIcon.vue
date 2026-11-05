@@ -81,7 +81,7 @@
 import type { Component } from 'vue'
 import {
   BellIcon, CounterClockwiseClockIcon, GearIcon, HomeIcon, Pencil2Icon,
-  PieChartIcon, PlayIcon, Share2Icon, StackIcon,
+  PieChartIcon, PlayIcon, QuestionMarkCircledIcon, Share2Icon, StackIcon,
 } from '@radix-icons/vue'
 
 /** 页头图标名(PageHead 的取值域)+ 卡头/页头补充的几种。 */
@@ -90,6 +90,7 @@ export type SlibIconName =
   | 'activity' | 'key' | 'network' | 'database' | 'clock'
   | 'history' | 'gear' | 'play'
   | 'stack' | 'share' | 'pie' | 'home' | 'bell' | 'pencil'
+  | 'help'
 
 const RADIX: Partial<Record<SlibIconName, Component>> = {
   // 执行记录 / 执行器 / 用户管理三页页面上没有图标,全站唯一的一颗就是侧
@@ -108,6 +109,9 @@ const RADIX: Partial<Record<SlibIconName, Component>> = {
   pie: PieChartIcon,
   home: HomeIcon,
   bell: BellIcon,
+  // 问号悬浮提示(2026-11-05 说明统一轮):文字拼圆圈两轮都被评"丑",
+  // 换正经图标;直接渲染 radix 同一颗,描边风格与侧栏/页头一致。
+  help: QuestionMarkCircledIcon,
 }
 
 withDefaults(defineProps<{
