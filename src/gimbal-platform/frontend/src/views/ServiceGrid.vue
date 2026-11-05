@@ -9,7 +9,8 @@
     <PageHead
       icon="grid"
       :title="`服务画像 · ${service}`"
-      :subtitle="loading ? '正在读取覆盖与执行信号…' : `${stats.total} 个接口 · 点瓦片进线索板`"
+      :meta="loading ? '正在读取覆盖与执行信号…' : `${stats.total} 个接口`"
+      subtitle="点瓦片进线索板"
     >
       <template #right>
         <router-link class="goto-link" to="/services">← 服务清单</router-link>

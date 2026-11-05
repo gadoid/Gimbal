@@ -10,8 +10,9 @@
       icon="network"
       title="接口线索板"
       :count="endpointId"
-      :subtitle="board ? `${board.subject.name} · ${service}` : `热力网格 · ${service}`"
-      :hint="board ? `${board.subject.method} ${board.subject.path}` : undefined"
+      :hint="board
+        ? `${board.subject.name} · ${service} — ${board.subject.method} ${board.subject.path}`
+        : `热力网格 · ${service}`"
     >
       <template #right>
         <div class="svc-stats tight" data-testid="board-filters">

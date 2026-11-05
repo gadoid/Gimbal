@@ -12,7 +12,8 @@
      (消息列单行省略,全文走右抽屉)。 -->
 <template>
   <ListPage title="日志分析" icon="history" width="wide"
-    :subtitle="`执行 #${executionId} — 事件与日志按执行上下文标签筛选`">
+    :meta="`执行 #${executionId}`"
+    subtitle="事件与日志按执行上下文标签筛选">
     <template #actions>
       <Button variant="outline" size="sm" @click="goDetail">← 执行详情</Button>
       <Button variant="outline" size="sm" data-testid="copy-link" @click="copyLink">

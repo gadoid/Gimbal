@@ -82,6 +82,24 @@
   font-size: 12px;
   color: var(--sl-ink-3);
 }
+/* 页头问号悬浮提示(2026-11-05 统一轮):页面说明文字不常驻,收进
+   标题旁的圆圈问号 + title 原生悬浮;状态/计数仍常驻(count / .slib-sub)。
+   首例 = TokensSection 区块头,页头统一后共用此类。 */
+.slib-q {
+  display: inline-flex;
+  height: 18px;
+  width: 18px;
+  cursor: help;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sl-line);
+  border-radius: 9999px;
+  background: #fff;
+  color: var(--sl-ink-3);
+  font-size: 11px;
+  line-height: 1;
+}
+/* 常驻状态行(统计/视角等随数据变化的信息),不再是页面说明的载体 */
 .slib-sub {
   margin: 4px 0 0;
   color: var(--sl-ink-2);

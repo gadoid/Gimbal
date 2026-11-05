@@ -57,12 +57,18 @@ describe('ListPage — slot 条件渲染', () => {
     w.unmount()
   })
 
-  it('subtitle:prop 与 slot 共存时 slot 优先(具名插槽回退语义)', () => {
+  it('subtitle:收进标题旁问号悬浮(title),meta:常驻状态行(2026-11-05 说明统一轮)', () => {
+    const bare = mount(ListPage, { props: { title: 't' } })
+    expect(bare.find('.slib-q').exists()).toBe(false)
+    expect(bare.find('header p').exists()).toBe(false)
+    bare.unmount()
+
     const w = mount(ListPage, {
-      props: { title: 't', subtitle: 'prop 版' },
-      slots: { subtitle: 'slot 版' },
+      props: { title: 't', subtitle: '页面说明', meta: 'N 个用户' },
     })
-    expect(w.find('header p').text()).toBe('slot 版')
+    // 说明不常驻:以问号 title 悬浮;状态行走原副标位置
+    expect(w.find('.slib-q').attributes('title')).toBe('页面说明')
+    expect(w.find('header p').text()).toBe('N 个用户')
     w.unmount()
   })
 })

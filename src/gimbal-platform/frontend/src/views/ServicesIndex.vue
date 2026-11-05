@@ -7,7 +7,8 @@
     <PageHead
       icon="grid"
       title="服务画像"
-      :subtitle="loading ? '正在读取 Plate 目录…' : `${services.length} 个服务 · 选择服务进入热力网格`"
+      :meta="loading ? '正在读取 Plate 目录…' : `${services.length} 个服务`"
+      subtitle="选择服务进入热力网格"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>

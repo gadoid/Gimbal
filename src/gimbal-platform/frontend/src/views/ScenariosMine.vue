@@ -6,6 +6,7 @@
     <PageHead
       icon="folder"
       title="我的场景"
+      :count="`共 ${total} 个`"
       :subtitle="pageSubtitle"
     />
 
@@ -452,13 +453,14 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
 })
 
 /** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
- *  装的是全员的私有场景,副标题必须说实话,不能对管理员自称"你的"。 */
+ *  装的是全员的私有场景,视角说明必须说实话,不能对管理员自称"你的"。
+ *  计数走 PageHead count 常驻;视角说明收进问号悬浮(2026-11-05 说明统一轮)。 */
 const pageSubtitle = computed(() =>
   auth.isAdmin
     ? (lensAll.value
-        ? `共 ${total.value} 个场景 · 全员视角(全量)`
-        : `共 ${total.value} 个场景 · 我的(切「全员视角」看全部)`)
-    : `共 ${total.value} 个场景 · 你创建或拥有的编排`,
+      ? '全员视角:非 public 桶装的是全员的私有场景(全量)'
+      : '我的:只看你创建的;切「全员视角」可看全部')
+    : '你创建或拥有的编排',
 )
 
 const formatTime = shortDateTime

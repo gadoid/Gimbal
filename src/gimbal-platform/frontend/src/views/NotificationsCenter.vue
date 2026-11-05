@@ -98,7 +98,8 @@ const hasUnread = computed(() => unread.value > 0)
 <template>
   <section class="slib nt-page">
     <PageHead icon="bell" title="通知"
-      :subtitle="`未读 ${unread} 条 · 按时间倒序,未读优先 · 通知类型可在「个人资料 → 通知偏好」按类关闭`">
+      :meta="`未读 ${unread} 条 · 按时间倒序`"
+      subtitle="未读优先展示;通知类型可在「个人资料 → 通知偏好」按类关闭">
       <template #right>
         <button
           v-if="tab === 'notify' && hasUnread"

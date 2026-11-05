@@ -9,7 +9,7 @@
       icon="lock"
       title="认证管理"
       :count="listTotal ? `${listTotal} 条凭证` : undefined"
-      :subtitle="metaText"
+      :meta="metaText"
     />
 
     <div class="slib-toolbar">

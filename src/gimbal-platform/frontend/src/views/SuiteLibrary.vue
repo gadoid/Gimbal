@@ -7,7 +7,7 @@
      开 30 预检;⋯ 重命名 / 复制 / 分享 / 发布(下架)/ 删除。 -->
 <template>
   <section class="slib">
-    <PageHead icon="stack" title="我的用例集" :subtitle="subtitle" />
+    <PageHead icon="stack" title="我的用例集" :count="`共 ${total} 个`" :subtitle="subtitle" />
 
     <div class="slib-toolbar">
       <input
@@ -261,9 +261,10 @@ const modeFilters = [
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
+// 计数走 count 常驻;说明收进问号悬浮(2026-11-05 说明统一轮)
 const subtitle = computed(() => lensAll.value
-  ? `一组场景及其运行编排 · 共 ${total.value} 个 · 全员视角`
-  : `一组场景及其运行编排 · 共 ${total.value} 个 · 你创建的(草稿也在这里,带「草稿」标记)`)
+  ? '一组场景及其运行编排 · 全员视角'
+  : '一组场景及其运行编排 · 你创建的(草稿也在这里,带「草稿」标记)')
 
 // 搜索(防抖)/模式筛选 → 回第 1 页重拉;翻页直接拉
 let qTimer: ReturnType<typeof setTimeout> | undefined

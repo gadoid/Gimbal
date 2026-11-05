@@ -10,7 +10,7 @@
     <div class="flex flex-wrap items-center gap-2">
       <h2 class="m-0 text-[16px] leading-[22px] font-semibold">访问令牌</h2>
       <span
-        class="inline-flex h-[18px] w-[18px] cursor-help items-center justify-center rounded-full border border-signal-line bg-white text-[11px] leading-none text-signal-ink/60"
+        class="slib-q"
         title="令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码"
       >?</span>
       <span class="text-caption text-signal-ink/60">
