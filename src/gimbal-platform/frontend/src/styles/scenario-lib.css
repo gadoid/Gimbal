@@ -82,22 +82,29 @@
   font-size: 12px;
   color: var(--sl-ink-3);
 }
-/* 页头问号悬浮提示(2026-11-05 统一轮):页面说明文字不常驻,收进
-   标题旁的问号图标 + title 原生悬浮;状态/计数仍常驻(count / .slib-sub)。
-   图标本体 = radix QuestionMarkCircled(QTip 组件,描边风格与侧栏/
-   页头一致);文字拼 CSS 圆圈的两个版本(1px 浅灰 / 2px 中灰加粗)
-   连续被评"丑",已废弃。 */
+/* 问号说明图标(2026-11-05 说明统一轮):说明文字点击弹出(QTip
+   组件,radix QuestionMarkCircled 描边图标),不常驻;状态/计数仍
+   常驻(count / .slib-sub)。触发器是 button,带整套重置与焦点环;
+   文字拼 CSS 圆圈与 title 悬浮两个前身已废弃。 */
 .slib-q {
   display: inline-flex;
   height: 18px;
   width: 18px;
-  cursor: help;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
   align-items: center;
   justify-content: center;
   color: var(--sl-ink-3);
 }
 .slib-q:hover {
   color: var(--sl-ink);
+}
+.slib-q:focus-visible {
+  border-radius: 9999px;
+  outline: 2px solid var(--sl-accent);
+  outline-offset: 2px;
 }
 /* 常驻状态行(统计/视角等随数据变化的信息),不再是页面说明的载体 */
 .slib-sub {

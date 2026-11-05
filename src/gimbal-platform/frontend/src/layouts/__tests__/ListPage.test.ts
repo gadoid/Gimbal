@@ -57,7 +57,7 @@ describe('ListPage — slot 条件渲染', () => {
     w.unmount()
   })
 
-  it('subtitle:收进标题旁问号悬浮(title),meta:常驻状态行(2026-11-05 说明统一轮)', () => {
+  it('subtitle:收进标题旁问号弹层(data-tip),meta:常驻状态行(2026-11-05 说明统一轮)', () => {
     const bare = mount(ListPage, { props: { title: 't' } })
     expect(bare.find('.slib-q').exists()).toBe(false)
     expect(bare.find('header p').exists()).toBe(false)
@@ -66,8 +66,8 @@ describe('ListPage — slot 条件渲染', () => {
     const w = mount(ListPage, {
       props: { title: 't', subtitle: '页面说明', meta: 'N 个用户' },
     })
-    // 说明不常驻:以问号 title 悬浮;状态行走原副标位置
-    expect(w.find('.slib-q').attributes('title')).toBe('页面说明')
+    // 说明不常驻:点问号弹出(触发器 data-tip 挂文本);状态行走原副标位置
+    expect(w.find('.slib-q').attributes('data-tip')).toBe('页面说明')
     expect(w.find('header p').text()).toBe('N 个用户')
     w.unmount()
   })

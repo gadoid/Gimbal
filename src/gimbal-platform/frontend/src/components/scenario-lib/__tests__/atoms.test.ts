@@ -40,12 +40,12 @@ describe('StarToggle — 关注开关', () => {
 })
 
 describe('PageHead — 三页统一页头', () => {
-  it('标题 / 计数 / 问号悬浮说明 / meta 状态行按需渲染(2026-11-05 说明统一轮)', () => {
+  it('标题 / 计数 / 问号弹层说明 / meta 状态行按需渲染(2026-11-05 说明统一轮)', () => {
     const w = mount(PageHead, { props: { icon: 'folder', title: '我的场景', count: '共 8 个', subtitle: 'sub', meta: 'meta 行' } })
     expect(w.find('.slib-title').text()).toBe('我的场景')
     expect(w.find('.slib-count').text()).toBe('共 8 个')
-    // 说明不常驻:收进问号 title 悬浮;状态行(meta)留在原副标位置
-    expect(w.find('.slib-q').attributes('title')).toBe('sub')
+    // 说明不常驻:点问号弹出(触发器 data-tip 挂文本);状态行(meta)留在原副标位置
+    expect(w.find('.slib-q').attributes('data-tip')).toBe('sub')
     expect(w.find('.slib-sub').text()).toBe('meta 行')
     const bare = mount(PageHead, { props: { icon: 'star', title: '关注' } })
     expect(bare.find('.slib-count').exists()).toBe(false)
