@@ -608,7 +608,6 @@ async function regenerate(t: AccessTokenListItem) {
   try {
     const out = await regenerateAccessToken(t.id)
     secretOut.value = {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       title: `访问令牌已重新生成 · ${t.name}`,
       subtitle: '旧明文已立即作废；经它注册的任务不受影响，失效/到期暂停的已自动恢复',
       token: out.token,

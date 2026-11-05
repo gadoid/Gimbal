@@ -148,7 +148,6 @@ export interface StructureItem {
   endpoint: string
   reason: string
   opType: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: any
 }
 

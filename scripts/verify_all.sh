@@ -68,6 +68,7 @@ for step in "${STEPS[@]}"; do
       ;;
     frontend)
       run_step "platform frontend typecheck" bash -c "cd '$ROOT/src/gimbal-platform/frontend' && npm run typecheck"
+      run_step "platform frontend lint" bash -c "cd '$ROOT/src/gimbal-platform/frontend' && npm run lint"
       run_step "platform frontend vitest" bash -c "cd '$ROOT/src/gimbal-platform/frontend' && npx vitest run --silent"
       ;;
     bootstrap)

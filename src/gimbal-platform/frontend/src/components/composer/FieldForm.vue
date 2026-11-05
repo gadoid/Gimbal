@@ -779,7 +779,6 @@
                  降级 text 输入,不拒显) -->
             <textarea
               v-else-if="r.f.ui_kind === 'json' || isStructured(getValue(r.f))"
-              v-if="r.f.ui_kind === 'json' || isStructured(getValue(r.f))"
               class="ctl ctl-code"
               rows="3"
               :value="formatJson(getValue(r.f))"
