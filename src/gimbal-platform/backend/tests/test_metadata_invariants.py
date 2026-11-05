@@ -83,16 +83,20 @@ def test_datetime_columns_use_utcdatetime_decorator():
 
 
 def test_json_columns_render_jsonb_on_pg():
-    """JSON 一律 JSONB(§0 原则 5):所有 JSON 列在 PG 方言编译为 JSONB。"""
+    """JSON 一律 JSONB(§0 原则 5):所有 JSON 列在 PG 方言编译为 JSONB。
+
+    唯一例外曾是 b3-5 退役的那张 ext 目录表的 request_schema 列
+    (properties 键序 → 表单 declarations 顺序,JSONB 按键长/字节序重排)
+    —— 表已退役,例外清零;新的键序敏感列需重新评估显式承载
+    (x-order 盖章 + 读侧按序)。表名见 docs/adr 退役日志。
+    """
     from sqlalchemy.dialects import postgresql
     from sqlalchemy.types import JSON
 
-    # (properties 键序 → 表单 declarations 顺序;JSONB 按键长/字节序
-    # 重排)。显式承载 = x-order 盖章 + 读侧按序,列留 JSON 兜底。
     offenders = []
     for t, c in _all_columns():
         if isinstance(c.type, JSON):
             rendered = c.type.compile(dialect=postgresql.dialect())
-            if rendered.upper() != "JSONB" and (t, c.name) not in ORDER_SENSITIVE:
+            if rendered.upper() != "JSONB":
                 offenders.append(f"{t}.{c.name}({rendered})")
     assert not offenders, f"存在 PG 侧非 JSONB 的 JSON 列: {offenders}"

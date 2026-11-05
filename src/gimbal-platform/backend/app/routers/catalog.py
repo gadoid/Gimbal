@@ -55,29 +55,6 @@ async def _fetch_and_aggregate() -> CatalogServicesOut:
                 id=str(it["id"]), service=str(it["service"])))
     return CatalogServicesOut(services=services, endpoints=endpoint_refs)
 
-    by_service: dict[str, CatalogServiceRow] = {}
-    endpoint_refs: list[CatalogEndpointRef] = []
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        service = str(it.get("service") or "")
-        system = str(it.get("system") or "")
-        if not service or not system:
-            continue
-        row = by_service.get(service)
-        if row is None:
-            by_service[service] = CatalogServiceRow(
-                name=service, system=system, endpointCount=1)
-        else:
-            row.endpointCount += 1
-        if it.get("id"):
-            endpoint_refs.append(CatalogEndpointRef(
-                id=str(it["id"]), service=service))
-    return CatalogServicesOut(
-        services=sorted(by_service.values(), key=lambda r: r.name),
-        endpoints=endpoint_refs,
-    )
-
 
 async def _cached_payload() -> CatalogServicesOut:
     """30s TTL。降级结果(plate 不可达)不进缓存 —— 恢复后立刻可见。"""
