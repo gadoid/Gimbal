@@ -905,6 +905,11 @@ async def pause_my_subscription(
     if inst.state != "paused" or inst.paused_reason != "manual":
         inst.state = "paused"
         inst.paused_reason = "manual"
+        # 清掉上一轮运行的失败说明:manual 横幅/快照的 lastError 面只该
+        # 出解绑与处置写入的备注(remap_detach_pause),陈旧运行错误当
+        # 暂停说明展示会误导(评审 2026-11-05 收敛检查);与重新确认
+        # 解除暂停时的清空同口径。
+        inst.last_error = ""
         await db.commit()
         # 时间线:自暂停(状态确变才记,幂等重按不刷屏)
         from ..services import activity as activity_svc

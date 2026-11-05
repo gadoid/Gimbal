@@ -4,7 +4,7 @@ missingCredentials / subscribed,任务行与卡片) + ⑥订阅者自管
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
@@ -144,12 +144,20 @@ async def test_pause_resume_and_revive_scope(client):
         f"/api/integration/tasks/{tid}/subscription/pause", headers=u3)
     assert r.status_code == 404, r.text
 
-    # 自暂停 → paused/manual;凭证复活钩子不覆盖 manual
+    # 自暂停 → paused/manual;陈旧运行错误随暂停清空(不当暂停说明
+    # 展示,评审 2026-11-05 收敛检查);凭证复活钩子不覆盖 manual
+    stale = await _inst(tid, uid2)
+    async with db_module.SessionLocal() as db:
+        await db.execute(sa_update(IntegrationTask).where(
+            IntegrationTask.id == stale.id).values(
+                last_error="上一轮运行失败:boom"))
+        await db.commit()
     r = await client.post(
         f"/api/integration/tasks/{tid}/subscription/pause", headers=u2)
     assert r.status_code == 200, r.text
     inst = await _inst(tid, uid2)
     assert inst.state == "paused" and inst.paused_reason == "manual"
+    assert inst.last_error == ""
     await ir.revive_paused_instances(user_id=uid2)
     inst = await _inst(tid, uid2)
     assert inst.paused_reason == "manual"
