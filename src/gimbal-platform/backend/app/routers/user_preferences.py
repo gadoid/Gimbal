@@ -9,6 +9,12 @@
 
 值本身是前端专有形态(卡片 id、色板 ``var(--avatar-N)`` 名),后端只校
 **形状与体积**:校字段就得把卡片注册表抄一份到后端,发版必漂。
+
+2026-11-05 前端评审 P1-2:所有白名单模型改 ``extra="forbid"`` —— 此前
+便签条目以驼峰 ``createdAt``/``doneAt`` 提交,与字段名 ``created_at``
+不一致被**静默丢弃**(存成空串/None,前端的 7 天自动清理因此永不触发);
+拒收未知字段后,这类漂移会直接 422,不再无声吞数据。``NoteItem`` 同时
+补 camelCase 别名双向兼容(读旧存档仍认下划线)。
 """
 from __future__ import annotations
 
@@ -16,7 +22,8 @@ import json
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, StrictInt, StringConstraints, ValidationError
+from pydantic import (AliasChoices, BaseModel, ConfigDict, Field, StrictInt,
+                      StringConstraints, ValidationError)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +44,8 @@ class WorkbenchLayout(BaseModel):
     """启用卡有序列表 + 每卡尺寸。``order`` 里的 id 是不是真存在的卡由
     前端注册表判(读侧静默过滤),这里只管形状。"""
 
+    model_config = ConfigDict(extra="forbid")
+
     order: list[_IdStr] = Field(default_factory=list, max_length=64)
     sizes: dict[_IdStr, Literal["S", "M", "L"]] = Field(default_factory=dict)
 
@@ -47,8 +56,12 @@ class FollowsPinned(BaseModel):
 
     ids: list[_IdStr] = Field(default_factory=list, max_length=20)
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class TimelineColors(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     execution: _IdStr = ""
     scenario: _IdStr = ""
     adaptation: _IdStr = ""
@@ -57,6 +70,8 @@ class TimelineColors(BaseModel):
 class PagerSizes(BaseModel):
     """各列表页「每页行数」(2026-09-23 分页批次)。键 = 页面标识 slug
     (前端定,如 ``scenarios-mine``/``auths``),值 = 1..500;整值覆盖。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     sizes: dict[_IdStr, Annotated[StrictInt, Field(ge=1, le=500)]] = Field(
         default_factory=dict, max_length=64)
@@ -67,24 +82,42 @@ class IdentityCardPref(BaseModel):
     类开关、快捷入口 ≤ 4。id 合法性由前端注册表判(后端不抄一份卡表,
     与本模块「只校形状」的口径一致);与通知开关互不影响。"""
 
+    model_config = ConfigDict(extra="forbid")
+
     stats: list[_IdStr] = Field(default_factory=list, max_length=4)
     alerts: dict[_IdStr, bool] = Field(default_factory=dict, max_length=16)
     shortcuts: list[_IdStr] = Field(default_factory=list, max_length=4)
 
 
 class NoteItem(BaseModel):
-    """便签条目(D18:便签是工作台注册卡,不进身份卡)。"""
+    """便签条目(D18:便签是工作台注册卡,不进身份卡)。
+
+    前端用驼峰 ``createdAt``/``doneAt``(2026-11-05 评审 P1-2:此前无别名
+    也无 forbid,驼峰被静默丢弃 → 存量里 created_at 是空串、done_at 是
+    None,「已完成 7 天清理」永不触发)。别名双向兼容:读旧存档仍认
+    下划线,出入都以驼峰为准。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     id: _IdStr
     text: str = Field(min_length=1, max_length=200)
     done: bool = False
-    created_at: str = Field(default="", max_length=32)
-    done_at: str | None = Field(default=None, max_length=32)
+    # 入参认驼峰(前端形态)与下划线(修复前的存量档),出参恒驼峰
+    created_at: str = Field(
+        default="", max_length=32,
+        validation_alias=AliasChoices("created_at", "createdAt"),
+        serialization_alias="createdAt")
+    done_at: str | None = Field(
+        default=None, max_length=32,
+        validation_alias=AliasChoices("done_at", "doneAt"),
+        serialization_alias="doneAt")
 
 
 class NotesPref(BaseModel):
     """便签卡数据(webhook v4 §4.3):整值覆盖,后写为准(多设备并发
     的取舍见方案 §11 第 5 条);≤ 20 条,已完成 7 天后由前端清理。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     items: list[NoteItem] = Field(default_factory=list, max_length=20)
 
@@ -149,7 +182,9 @@ async def put_preference(
             detail={"code": "bad_pref_value",
                     "message": f"{'.'.join(str(x) for x in first.get('loc', []))}: "
                                f"{first.get('msg', '形态不符')}"}) from e
-    payload = clean.model_dump()
+    # by_alias:NoteItem 等以驼峰出入(与前端 TS 类型同名);无别名的
+    # 模型 by_alias 为恒等,统一走这一条出口。
+    payload = clean.model_dump(by_alias=True)
     if len(json.dumps(payload, ensure_ascii=False).encode()) > _MAX_VALUE_BYTES:
         raise HTTPException(
             status_code=422,

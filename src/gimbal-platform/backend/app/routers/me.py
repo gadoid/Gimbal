@@ -158,16 +158,26 @@ async def me_summary(
     # ── 集成任务暂停(error;token/范围类成因)────────────────────
     # 注意先 await execute 再 .scalars():写成 `await db.execute(...).scalars()`
     # 会把整条链一起 await(对 coroutine 调 .scalars → 500,2026-11-05 修复)
+    #
+    # 2026-11-05 评审 P2-7:范围不再只看本人持有 —— 平台模式模板的暂停
+    # 对 member+ 全员可见(与站内通知的 fanout_members 同口径;平台实例
+    # 的 holder 是系统用户,按 holder 过滤等于永远不可见)。告警直接深链
+    # 到实例详情页(此前统一跳列表页),并补上凭证认证失败(auth_failed)。
+    from sqlalchemy import or_
+    _platform_tpl_ids = select(IntegrationTask.id).where(
+        IntegrationTask.template_id.is_(None),
+        IntegrationTask.identity_mode != "personal")
+    _paused_conds = [IntegrationTask.holder_id == user.id]
+    if user.role in ("member", "admin"):
+        _paused_conds.append(IntegrationTask.template_id.in_(_platform_tpl_ids))
     _paused_rows = await db.execute(select(IntegrationTask).where(
-        IntegrationTask.template_id.is_not(None),
-        IntegrationTask.holder_id == user.id,
-        IntegrationTask.state == "paused"))
+        IntegrationTask.state == "paused", or_(*_paused_conds)))
     paused_insts = _paused_rows.scalars().all()
     task_alert_reasons = (
         at_svc.PAUSE_TOKEN_REVOKED, at_svc.PAUSE_TOKEN_INVALIDATED,
         at_svc.PAUSE_TOKEN_EXPIRED, at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
         at_svc.PAUSE_RESOURCE_NOT_ALLOWED, at_svc.PAUSE_SCOPE_DENIED,
-        "missing_credential", "fail_streak")
+        "missing_credential", "fail_streak", "auth_failed")
     reason_labels = {
         at_svc.PAUSE_TOKEN_REVOKED: "令牌已吊销",
         at_svc.PAUSE_TOKEN_INVALIDATED: "令牌已失效",
@@ -177,6 +187,7 @@ async def me_summary(
         at_svc.PAUSE_SCOPE_DENIED: "场景非公共",
         "missing_credential": "缺少凭证",
         "fail_streak": "连续失败",
+        "auth_failed": "凭证认证失败",
     }
     for inst in paused_insts:
         if inst.paused_reason not in task_alert_reasons:
@@ -188,7 +199,7 @@ async def me_summary(
             "class": "integration_paused", "severity": "error",
             "title": f"{name} {reason_labels.get(inst.paused_reason,
                                                   '已暂停')}",
-            "action": "查看", "link": "/integrations"})
+            "action": "查看", "link": f"/integrations/{inst.id}"})
 
     # ── 访问令牌即将到期(warn;7 天内)──────────────────────────
     expiring = (await db.execute(select(AccessToken).where(

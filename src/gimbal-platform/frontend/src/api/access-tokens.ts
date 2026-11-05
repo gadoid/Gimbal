@@ -111,12 +111,16 @@ export interface UnsatisfiedTask {
 }
 
 export function listAccessTokens(
-  kind: TokenKind, opts?: { all?: boolean; owner?: number; status?: TokenStatus },
+  kind: TokenKind | 'all',
+  opts?: { all?: boolean; owner?: number; ownerName?: string; status?: TokenStatus },
 ): Promise<TokenListEnvelope> {
+  // kind='all' 仅 admin ?all=1 视图有效(后端不按类型收窄);
+  // ownerName = 用户名/昵称模糊(评审 P2-6:管理员通常不知道数字 id)
   return http
     .get<TokenListEnvelope>('/access-tokens', {
       params: { kind, all: opts?.all || undefined,
-                owner: opts?.owner, status: opts?.status },
+                owner: opts?.owner, ownerName: opts?.ownerName || undefined,
+                status: opts?.status },
     })
     .then((r) => r.data)
 }

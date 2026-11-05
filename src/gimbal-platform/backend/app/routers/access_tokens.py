@@ -14,7 +14,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
@@ -198,11 +198,15 @@ async def list_tokens(
     kind: Annotated[str, Query(max_length=16)] = "personal",
     all_view: Annotated[bool, Query(alias="all")] = False,
     owner: Annotated[int | None, Query(ge=1)] = None,
+    owner_name: Annotated[str | None, Query(alias="ownerName",
+                                            max_length=64)] = None,
     status_filter: Annotated[str | None, Query(alias="status",
                                                max_length=16)] = None,
 ) -> dict:
     """令牌列表。``kind=personal``:本人;``kind=platform``:member+;
-    ``all=1``(admin):全部,可按属主/状态过滤。不返回明文与密钥。"""
+    ``all=1``(admin):全部,可按属主(id 或用户名/昵称模糊,2026-11-05
+    评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
+    personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
     if all_view:
         if user.role != "admin":
             raise _bad("role_forbidden", "查看全部令牌仅 admin", 403)
@@ -211,6 +215,11 @@ async def list_tokens(
             q = q.where(AccessToken.kind == kind)
         if owner is not None:
             q = q.where(AccessToken.user_id == owner)
+        if owner_name:
+            matched = (await db.execute(select(User.id).where(or_(
+                User.username.ilike(f"%{owner_name}%"),
+                User.display_name.ilike(f"%{owner_name}%"))))).scalars().all()
+            q = q.where(AccessToken.user_id.in_(matched or [-1]))
         if status_filter in ("active", "expired", "invalidated", "revoked"):
             # 状态是派生值:先取全部再过滤(量级 = 全平台令牌数,可接受)
             rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()

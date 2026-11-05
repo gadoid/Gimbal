@@ -7,12 +7,23 @@
 import http from './http'
 import type { CardSize } from '@/components/workbench/registry'
 
+/** 便签条目(与后端 NoteItem 同形态:驼峰,2026-11-05 评审 P1-2 定稿) */
+export interface NoteItemDTO {
+  id: string
+  text: string
+  done: boolean
+  createdAt: string
+  doneAt: string | null
+}
+
 export interface PrefValues {
   'workbench.layout': { order: string[]; sizes: Record<string, CardSize> }
   'follows.pinned': { ids: string[] }
   'timeline.colors': { execution: string; scenario: string; adaptation: string }
   /** 各列表页「每页行数」(2026-09-23 分页批次):键 = 页面 slug */
   'pager.sizes': { sizes: Record<string, number> }
+  /** 便签卡(webhook v4 §4.3/D18) */
+  notes: { items: NoteItemDTO[] }
 }
 
 export type PrefKey = keyof PrefValues

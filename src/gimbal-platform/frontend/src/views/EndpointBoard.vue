@@ -304,8 +304,13 @@ const flowNodes = computed<Node[]>(() => {
     })),
   ]
   for (const n of board.value?.nodes ?? []) {
-    const saved = localStorage.getItem(posKey(n.id))
-    const position = saved ? (JSON.parse(saved) as { x: number; y: number }) : basePosition(n, counters)
+    // 已存值可能损坏(JSON.parse 抛错会让整块画布挂掉)→ 坏值当没存过
+    let position: { x: number; y: number } | null = null
+    try {
+      const saved = localStorage.getItem(posKey(n.id))
+      position = saved ? (JSON.parse(saved) as { x: number; y: number }) : null
+    } catch { position = null }
+    if (!position) position = basePosition(n, counters)
     nodes.push({
       id: n.id,
       type: 'board',

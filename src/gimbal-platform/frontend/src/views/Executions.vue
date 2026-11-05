@@ -739,11 +739,6 @@ async function loadExecution(): Promise<void> {
 }
 
 onMounted(() => {
-  // 令牌详情「全部调用」深链:?tokenId= 按令牌过滤列表(webhook v4 §2.2)
-  if (route.query.tokenId) {
-    const tid = Number(route.query.tokenId)
-    if (Number.isFinite(tid)) void execStore.fetchList({ tokenId: tid })
-  }
   loadExecution()
 })
 

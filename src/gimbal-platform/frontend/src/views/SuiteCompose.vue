@@ -415,7 +415,8 @@ function nodeIdExists(id: string): boolean {
 onMounted(async () => {
   if (!route.params.id) {
     loaded.value = true
-    if (!localStorage.getItem(GUIDE_OFF_KEY)) guideOpen.value = true
+    // 隐私模式/禁用存储下 getItem 会抛 — 引导弹层只是增强,不让页面挂掉
+    try { if (!localStorage.getItem(GUIDE_OFF_KEY)) guideOpen.value = true } catch { /* 存储不可达 → 不弹引导 */ }
     return
   }
   try {
@@ -856,7 +857,7 @@ function removeSlot(id: string): void {
 }
 
 function rememberGuideOff(): void {
-  localStorage.setItem(GUIDE_OFF_KEY, '1')
+  try { localStorage.setItem(GUIDE_OFF_KEY, '1') } catch { /* 同上:写不进就每次再弹 */ }
 }
 
 // ── 试跑选中段(control.only;串联另可 toNode,管理页已覆盖)─────

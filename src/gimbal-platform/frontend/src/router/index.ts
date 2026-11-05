@@ -174,8 +174,10 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // C6/P3-04:调试台(运行中调试执行的命令/输出/事件代理)
-    path: '/executions/:id(\d+)/debug',
+    // C6/P3-04:调试台(运行中调试执行的命令/输出/事件代理)。
+    // 正则须写 \\d+(普通字符串里 \d 就是字母 d,路由永远匹配不上 —
+    // 2026-11-05 前端评审 P1-1 复现修复)
+    path: '/executions/:id(\\d+)/debug',
     component: () => import('@/views/DebugConsole.vue'),
     meta: { requiresAuth: true },
   },
@@ -272,6 +274,12 @@ const routes = [
     meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
   },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
+
+  // catch-all 404(评审 P2-5):坏深链落 NotFound,而不是空白页
+  {
+    path: '/:pathMatch(.*)*',
+    component: () => import('@/views/NotFound.vue'),
+  },
 ]
 
 const router = createRouter({

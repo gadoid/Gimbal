@@ -101,17 +101,11 @@ import QTip from '@/components/scenario-lib/QTip.vue'
 import { Cross2Icon } from '@radix-icons/vue'
 import { Input } from '@/components/ui/input'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
-import http from '@/api/http'
+import { getPreferences, putPreference, type NoteItemDTO } from '@/api/preferences'
 import { toast } from '@/utils/toast'
 import { useCardSize } from '../registry'
 
-interface NoteItem {
-  id: string
-  text: string
-  done: boolean
-  createdAt: string
-  doneAt?: string | null
-}
+type NoteItem = NoteItemDTO
 
 const MAX_ITEMS = 20
 const MAX_TEXT = 200
@@ -139,13 +133,20 @@ function pruneDone(list: NoteItem[]): NoteItem[] {
   return list.filter((n) => !n.done || !n.doneAt || new Date(n.doneAt).getTime() > cutoff)
 }
 
-async function persist(next: NoteItem[]) {
+// 保存串行化(评审 P3-11):每次改动立即整值 PUT,不排队的话连续快速
+// 操作可能乱序到达,后发先至把新状态覆盖成旧状态。链式排队,快照在入队
+// 时取定(浅拷贝逐条),不受后续改动影响。
+let saveChain: Promise<void> = Promise.resolve()
+function persist(next: NoteItem[]): void {
   items.value = pruneDone(next).slice(0, MAX_ITEMS)
-  try {
-    await http.put('/me/preferences/notes', { value: { items: items.value } })
-  } catch {
-    toast.error('便签保存失败')
-  }
+  const snapshot = items.value.map((n) => ({ ...n }))
+  saveChain = saveChain.then(async () => {
+    try {
+      await putPreference('notes', { items: snapshot })
+    } catch {
+      toast.error('便签保存失败')
+    }
+  })
 }
 
 function add() {
@@ -158,7 +159,7 @@ function add() {
   draft.value = ''
   void persist([...items.value, {
     id: Math.random().toString(36).slice(2, 10),
-    text, done: false, createdAt: nowIso(),
+    text, done: false, createdAt: nowIso(), doneAt: null,
   }])
 }
 
@@ -173,8 +174,12 @@ function clearDone() {
   void persist(items.value.filter((x) => !x.done))
 }
 
-function relTime(iso: string) {
+function relTime(iso?: string | null) {
+  if (!iso) return ''
   const d = new Date(iso)
+  // 修复前存量(P1-2:created_at 被后端静默丢弃)读出来是 undefined →
+  // new Date(NaN) 会格式化成「NaN-NaN」;坏值不如不显示。
+  if (Number.isNaN(d.getTime())) return ''
   const today = new Date()
   const sameDay = d.toDateString() === today.toDateString()
   const yesterday = new Date(today.getTime() - 86400e3).toDateString() === d.toDateString()
@@ -185,8 +190,7 @@ function relTime(iso: string) {
 
 onMounted(async () => {
   try {
-    const prefs = await http.get<{ items: Record<string, { items?: NoteItem[] }> }>('/me/preferences')
-    const saved = prefs.data.items['notes']
+    const saved = (await getPreferences())['notes']
     if (saved && Array.isArray(saved.items)) items.value = pruneDone(saved.items)
   } catch { /* 偏好不可达 → 空便签 */ }
 })

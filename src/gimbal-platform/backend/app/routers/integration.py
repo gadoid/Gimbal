@@ -1064,6 +1064,38 @@ def _require_admin(user) -> None:
         raise _bad("forbidden", "平台凭证仅 admin 可管理", 403)
 
 
+async def _cred_usage(db: AsyncSession, cred_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """凭证 → (引用它的平台令牌数, 波及的非模板任务数)。
+
+    删除接口的影响面提示(§8)与列表的「被引用」列(2026-11-05 前端评审
+    P2-3:此前前端逐张令牌拼字符串估算,N+1 请求且同凭证多令牌时计数
+    恒停 1)共用这一段口径:范围行在的令牌都算,任务只数非模板、未删除、
+    经 token_id 直连的。两条聚合查询,不随凭证数放大。"""
+    from ..models.access_token import AccessToken, AccessTokenScope
+    if not cred_ids:
+        return {}
+    tokens_by_auth: dict[int, set[int]] = {cid: set() for cid in cred_ids}
+    scope_rows = (await db.execute(
+        select(AccessTokenScope.auth_id, AccessToken.id).join(
+            AccessToken, AccessToken.id == AccessTokenScope.token_id)
+        .where(AccessTokenScope.auth_id.in_(cred_ids)))).all()
+    for auth_id, token_id in scope_rows:
+        tokens_by_auth.setdefault(auth_id, set()).add(token_id)
+    all_token_ids = [t for ids in tokens_by_auth.values() for t in ids]
+    tasks_by_token: dict[int, int] = {}
+    if all_token_ids:
+        from sqlalchemy import func as sa_func
+        task_rows = (await db.execute(
+            select(IntegrationTask.token_id, sa_func.count()).where(
+                IntegrationTask.template_id.is_(None),
+                IntegrationTask.removed_at.is_(None),
+                IntegrationTask.token_id.in_(all_token_ids))
+            .group_by(IntegrationTask.token_id))).all()
+        tasks_by_token = {tid: int(n) for tid, n in task_rows}
+    return {cid: (len(ids), sum(tasks_by_token.get(t, 0) for t in ids))
+            for cid, ids in tokens_by_auth.items()}
+
+
 @router.get("/platform-credentials")
 async def list_platform_credentials(
     user: CurrentUser, db: DbSession,
@@ -1074,10 +1106,14 @@ async def list_platform_credentials(
         return {"items": []}
     rows = (await db.execute(select(AuthSession).where(
         AuthSession.owner_id == holder))).scalars().all()
+    usage = await _cred_usage(db, [r.id for r in rows])
     return {"items": [{
         "id": r.id, "alias": r.alias, "url": r.url,
         "username": _safe_decrypt(r.username_enc),
         "tokenType": r.token_type, "expiresIn": r.expires_in,
+        # 被引用列直出(P2-3):前端不再逐令牌估算
+        "refTokens": usage.get(r.id, (0, 0))[0],
+        "refTasks": usage.get(r.id, (0, 0))[1],
     } for r in rows]}
 
 
@@ -1172,22 +1208,10 @@ async def delete_platform_credential(
         raise _bad("not_found", "凭证不存在", 404)
     alias_snap = row.alias
     # 影响面提示(§8 前端):该凭证从哪些平台令牌范围中级联移除、波及
-    # 多少任务 —— 先查再删(删除后范围行已消失)。
-    from ..models.access_token import AccessToken, AccessTokenScope
-    affected_tokens = (await db.execute(
-        select(AccessToken).join(
-            AccessTokenScope,
-            AccessTokenScope.token_id == AccessToken.id)
-        .where(AccessTokenScope.auth_id == cred_id))).scalars().all()
-    token_ids = [t.id for t in affected_tokens]
-    affected_tasks = 0
-    if token_ids:
-        from sqlalchemy import func as sa_func
-        affected_tasks = int((await db.execute(
-            select(sa_func.count()).select_from(IntegrationTask).where(
-                IntegrationTask.template_id.is_(None),
-                IntegrationTask.removed_at.is_(None),
-                IntegrationTask.token_id.in_(token_ids)))).scalar_one())
+    # 多少任务 —— 先查再删(删除后范围行已消失);口径与列表「被引用」
+    # 列共用 _cred_usage(P2-3)。
+    usage = await _cred_usage(db, [cred_id])
+    affected_tokens_n, affected_tasks = usage.get(cred_id, (0, 0))
     await db.delete(row)
     await db.commit()
     await audit_svc.record(
@@ -1197,8 +1221,8 @@ async def delete_platform_credential(
         resource_type="integration_credential", resource_id=str(cred_id),
         resource_name=alias_snap,
         detail={"fn": "delete", "alias": alias_snap,
-                "affected_tokens": len(token_ids),
+                "affected_tokens": affected_tokens_n,
                 "affected_tasks": affected_tasks})
     return {"removed": True,
-            "affectedTokens": len(token_ids),
+            "affectedTokens": affected_tokens_n,
             "affectedTasks": affected_tasks}

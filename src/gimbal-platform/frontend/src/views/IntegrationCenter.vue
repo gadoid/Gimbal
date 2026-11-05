@@ -231,7 +231,7 @@
             <td class="mono">{{ c.alias }}</td>
             <td>{{ c.url || '—' }}</td>
             <td>{{ c.username }}</td>
-            <td class="text-secondary">{{ credRefs[c.id] ?? '未被引用' }}</td>
+            <td class="text-secondary">{{ c.refTokens ? `${c.refTokens} 张平台令牌 · ${c.refTasks ?? 0} 个任务` : '未被引用' }}</td>
             <td class="ig-ops">
               <button type="button" class="ig-act" data-testid="ig-cred-edit" @click="editCred(c)">编辑</button>
               <button type="button" class="ig-act danger" @click="removeCred(c)">删除</button>
@@ -324,7 +324,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { listScenarioOptions, listRunSchemes } from '@/api/scenario-composer'
-import { listAccessTokens } from '@/api/access-tokens'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 
@@ -645,25 +644,6 @@ const credEditBusy = ref(false)
 const deletingCred = ref<PlatformCredential | null>(null)
 const deletingImpact = ref<{ affectedTokens: number; affectedTasks: number } | null>(null)
 const credDelBusy = ref(false)
-/** 凭证 → 「N 张平台令牌 · M 个任务」引用摘要(删除影响面提示) */
-const credRefs = ref<Record<number, string>>({})
-
-async function loadCredRefs(): Promise<void> {
-  if (!auth.isAdmin) return
-  try {
-    const env = await listAccessTokens('platform')
-    for (const t of env.items) {
-      const d = await import('@/api/access-tokens').then((m) => m.getAccessToken(t.id))
-      for (const a of d.scope.auths) {
-        const prev = credRefs.value[a.id] ?? ''
-        credRefs.value[a.id] = prev
-          ? `${prev.split('·')[0].trim()} · ${(Number(prev.split('·')[1]?.trim().split(' ')[0]) || 0) + t.taskCounts.total} 个任务`
-          : `1 张平台令牌 · ${t.taskCounts.total} 个任务`
-      }
-    }
-  } catch { /* 影响面摘要是增强,不可达时显示「未被引用」 */ }
-}
-
 function editCred(c: PlatformCredential): void {
   editingCred.value = c
   credEdit.url = c.url || ''
@@ -692,12 +672,10 @@ async function saveCredEdit(): Promise<void> {
 
 async function removeCred(c: PlatformCredential): Promise<void> {
   deletingCred.value = c
-  deletingImpact.value = null
-  // 预估影响面(前端按平台令牌范围统计;后端删除响应另有精确数)
-  const summary = (credRefs.value[c.id] || '').match(/(\d+) 张平台令牌 · (\d+) 个任务/)
+  // 影响面:列表随行直出的精确计数(P2-3;与删除接口同一段后端口径)
   deletingImpact.value = {
-    affectedTokens: summary ? Number(summary[1]) : 0,
-    affectedTasks: summary ? Number(summary[2]) : 0,
+    affectedTokens: c.refTokens ?? 0,
+    affectedTasks: c.refTasks ?? 0,
   }
 }
 
@@ -709,21 +687,10 @@ async function confirmDeleteCred(): Promise<void> {
     toast.success(`已删除(影响 ${out.affectedTokens} 张平台令牌、${out.affectedTasks} 个任务)`)
     deletingCred.value = null
     await loadCreds()
-    await loadCredRefs()
   } catch (e) {
     toast.error(integrationErr(e))
   } finally {
     credDelBusy.value = false
-  }
-}
-
-async function _legacyRemoveCred(c: PlatformCredential): Promise<void> {
-  if (!window.confirm(`删除平台凭证「${c.alias}」?`)) return
-  try {
-    await deletePlatformCredential(c.id)
-    await loadCreds()
-  } catch (e) {
-    toast.error(integrationErr(e))
   }
 }
 
@@ -736,7 +703,6 @@ onMounted(() => {
   }
   void load()
   void loadCreds()
-  void loadCredRefs()
 })
 </script>
 

@@ -192,6 +192,9 @@ export interface PlatformCredential {
   username: string
   tokenType: string
   expiresIn: number
+  /** 被引用直出(评审 P2-3):引用此凭证的平台令牌数 / 波及任务数 */
+  refTokens?: number
+  refTasks?: number
 }
 
 export async function listPlatformCredentials(): Promise<PlatformCredential[]> {

@@ -702,7 +702,7 @@
         <!-- file (placeholder) -->
         <div v-else-if="item.f.ui_kind === 'file' || item.f.ui_kind === 'binary'" class="ctl-file">
           <span class="file-tag">{{ item.f.ui_kind }}</span>
-          <span class="file-hint">文件上传 — TODO</span>
+          <span class="file-hint">暂不支持文件字段</span>
         </div>
 
         <!-- unknown (Type B) — text fallback -->

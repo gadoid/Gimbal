@@ -31,11 +31,13 @@
         <SelectContent>
           <SelectItem value="personal">个人令牌</SelectItem>
           <SelectItem value="platform">平台令牌</SelectItem>
+          <SelectItem value="">全部</SelectItem>
         </SelectContent>
       </Select>
       <Select v-model="adminStatus" class="w-32">
         <SelectTrigger class="h-8"><SelectValue placeholder="全部状态" /></SelectTrigger>
         <SelectContent>
+          <SelectItem value="">全部</SelectItem>
           <SelectItem value="active">有效</SelectItem>
           <SelectItem value="expired">已到期</SelectItem>
           <SelectItem value="invalidated">已失效</SelectItem>
@@ -43,8 +45,8 @@
         </SelectContent>
       </Select>
       <Input
-        :model-value="adminOwner" type="number" placeholder="按属主 id 筛选"
-        class="h-8 w-40" @update:model-value="(v) => (adminOwner = String(v || ''))"
+        v-model="adminOwner" placeholder="按属主筛选(id / 用户名 / 昵称)"
+        class="h-8 w-52"
       />
     </div>
 
@@ -411,6 +413,7 @@ import {
 } from '@/api/access-tokens'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
 import TokenSecretDialog from '@/components/profile/TokenSecretDialog.vue'
 import ScopeEditDialog from '@/components/profile/ScopeEditDialog.vue'
 
@@ -421,8 +424,14 @@ const props = withDefaults(defineProps<{
 
 const auth = useAuthStore()
 const mode = computed(() => props.variant)
+// kind = 语义面(标签/说明/创建);listKind = 取数面 —— admin 视图选
+// 「全部」时传 'all'(后端 ?all=1 视图不按类型收窄,2026-11-05 评审 P2-6)。
 const kind = computed<TokenKind>(() =>
-  props.variant === 'admin' ? adminKind.value : props.variant)
+  props.variant === 'admin' ? (adminKind.value || 'personal') : props.variant)
+const listKind = computed<TokenKind | 'all'>(() =>
+  props.variant === 'admin'
+    ? (adminKind.value === '' ? 'all' : adminKind.value)
+    : props.variant)
 
 const loading = ref(false)
 const busy = ref(false)
@@ -440,13 +449,27 @@ const sectionTip = computed(() => kind.value === 'platform'
   : '令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码。')
 
 const kindLabel = computed(() =>
-  kind.value === 'platform' ? '平台令牌' : '访问令牌')
+  kind.value === 'platform' ? '平台令牌' : '访问令牌')  // 「全部」时按访问令牌称呼
 
-// ── admin 筛选 ────────────────────────────────────────────────
-const adminKind = ref<TokenKind>('personal')
+// ── admin 筛选(2026-11-05 评审 P2-6)──────────────────────────
+// kind/status 补「全部」(此前选了就退不回去);属主筛选支持用户名/昵称
+// (管理员通常不知道数字 id),输入防抖 300ms(此前每敲一字发一次请求)。
+const adminKind = ref<TokenKind | ''>('personal')
 const adminStatus = ref<TokenStatus | ''>('')
 const adminOwner = ref('')
-watch([adminKind, adminStatus, adminOwner], () => void reload())
+watch([adminKind, adminStatus], () => void reload())
+watch(adminOwner, () => {
+  clearTimeout(ownerDebounce)
+  ownerDebounce = window.setTimeout(() => void reload(), 300)
+})
+let ownerDebounce = 0
+
+/** 纯数字按属主 id 精确筛,其余按用户名/昵称模糊筛 */
+const ownerFilter = computed(() => {
+  const v = adminOwner.value.trim()
+  if (!v) return {}
+  return /^\d+$/.test(v) ? { owner: Number(v) } : { ownerName: v }
+})
 
 // ── 创建表单 ──────────────────────────────────────────────────
 const creating = ref(false)
@@ -517,10 +540,10 @@ async function submitCreate() {
 async function reload() {
   loading.value = true
   try {
-    const env = await listAccessTokens(kind.value, {
+    const env = await listAccessTokens(listKind.value, {
       all: props.variant === 'admin' || undefined,
-      owner: props.variant === 'admin' && adminOwner.value
-        ? Number(adminOwner.value) : undefined,
+      owner: props.variant === 'admin' ? ownerFilter.value.owner : undefined,
+      ownerName: props.variant === 'admin' ? ownerFilter.value.ownerName : undefined,
       status: props.variant === 'admin' && adminStatus.value
         ? (adminStatus.value as TokenStatus) : undefined,
     })
@@ -573,6 +596,14 @@ async function renew(t: AccessTokenListItem) {
 }
 
 async function regenerate(t: AccessTokenListItem) {
+  // P2-4:一点旧明文立即作废,正在用它的调用方马上 401 —— 与吊销同级
+  // 的破坏性,先确认再动。
+  const ok = await confirmAction(
+    '旧明文将立即作废，正在使用它的调用方会立刻开始 401，需要换上新令牌。'
+    + '令牌 id 与经它注册的任务不变，失效/到期暂停的会自动恢复。',
+    `重新生成「${t.name}」？`,
+    { type: 'warning', confirmButtonText: '重新生成' })
+  if (!ok) return
   busy.value = true
   try {
     const out = await regenerateAccessToken(t.id)

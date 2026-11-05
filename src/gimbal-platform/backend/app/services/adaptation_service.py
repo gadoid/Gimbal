@@ -318,7 +318,7 @@ async def _notify_adaptation_applied(
             title=f"适配批次已应用:{batch.endpoint_id}",
             body=f"你的场景 {scen_id}({entity})已被适配批次 {batch.batch_id} 触碰,"
                  f"请留意字段变更(批次由 {batch.operator_name or 'operator'} 处理)。",
-            link=f"/adaptations/{batch.batch_id}",
+            link=f"/adaptations/batches/{batch.batch_id}",
             commit=False,
         )
         await db.commit()
