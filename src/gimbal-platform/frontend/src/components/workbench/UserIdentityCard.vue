@@ -202,32 +202,34 @@ onMounted(async () => {
   box-shadow: 0 0 0 4px white, 0 4px 14px rgba(16, 21, 28, 0.16);
 }
 
-/* 常驻统计:≤ 2 项单列两块;3 项三列;4 项两列网格(原型口径) */
-.id-stats { @apply flex gap-2 m-0; padding: 14px 16px 12px; }
+/* 常驻统计:≤ 2 项单列两块;3 项三列;4 项两列网格(原型口径)。
+   间距微调(2026-11-05):tile 内 label/value 留 3px、块间 10px ——
+   原 1px/8px 在 288px 预览宽下数字贴标签,读起来挤。 */
+.id-stats { @apply flex gap-2.5 m-0; padding: 14px 16px 12px; }
 .id-stats.grid2 { @apply grid grid-cols-2; flex: none; }
 .id-stat {
-  @apply flex flex-col gap-px flex-1 bg-signal-canvas/60 border border-signal-line rounded-empty;
-  padding: 9px 12px;
+  @apply flex flex-col gap-[3px] flex-1 bg-signal-canvas/60 border border-signal-line rounded-empty;
+  padding: 10px 12px;
 }
 .id-stat .label { @apply text-micro text-signal-ink/45; }
-.id-stat .value { @apply m-0 text-signal-ink; font-size: 19px; font-weight: 700; line-height: 24px; }
+.id-stat .value { @apply m-0 text-signal-ink; font-size: 19px; font-weight: 700; line-height: 26px; }
 .id-stat .value.danger { @apply text-signal-failed; }
 
 /* 告警条:error 红 / warn 琥珀;action 右对齐 */
-.id-alerts { @apply flex flex-col gap-1.5; padding: 0 16px 10px; }
+.id-alerts { @apply flex flex-col gap-2; padding: 0 16px 12px; }
 .id-alert {
   @apply flex items-center gap-2 rounded-empty text-caption no-underline;
-  padding: 7px 10px;
+  padding: 8px 12px;
 }
 .id-alert.error { background: #fee2e2; color: #991b1b; }
 .id-alert.warn { background: #fef3c7; color: #92400e; }
 .id-alert .action { @apply font-semibold whitespace-nowrap; }
 .more { @apply text-[11px] text-signal-ink/60 no-underline self-end; }
 
-.id-shortcuts { @apply flex flex-wrap gap-1.5; padding: 0 16px 12px; }
+.id-shortcuts { @apply flex flex-wrap gap-2.5; padding: 0 16px 14px; }
 .pill {
   @apply inline-flex items-center border border-signal-line rounded-full text-caption text-signal-ink no-underline;
-  height: 24px; padding: 0 10px;
+  height: 26px; padding: 0 12px;
 }
 
 .id-footer {

@@ -6,7 +6,7 @@
 <template>
   <section class="flex flex-wrap items-start gap-5 rounded-card">
     <!-- 配置列 -->
-    <div class="flex min-w-0 flex-1 flex-col gap-4">
+    <div class="flex min-w-0 flex-1 flex-col gap-5">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="m-0 text-[16px] leading-[22px] font-semibold">工作台身份卡</h2>
         <span class="text-caption text-signal-ink/60">改动即时保存，换设备同步</span>
@@ -15,64 +15,64 @@
       </div>
 
       <!-- 常驻统计 -->
-      <section class="flex flex-col gap-2.5 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
-        <div class="flex items-baseline gap-2">
+      <section class="flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+        <div class="mb-1.5 flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">常驻统计</h3>
           <span class="text-caption text-signal-ink/60">最多 4 项 · 上移排序 · 已选 {{ cfg.stats.length }}</span>
         </div>
         <template v-for="(s, i) in STATS" :key="s.id">
-          <label class="flex items-center gap-2.5 rounded-md px-2 py-1.75"
+          <label class="flex items-center gap-3 rounded-md px-3 py-2.5"
                  :class="selected(s.id) ? 'bg-signal-soft' : ''">
-            <span class="flex w-6 flex-none flex-col">
+            <span class="flex w-7 flex-none flex-col gap-0.5">
               <button
-                type="button" class="h-3 leading-none text-signal-ink/40 hover:text-signal disabled:opacity-30"
+                type="button" class="h-4 leading-none text-signal-ink/40 hover:text-signal disabled:opacity-30"
                 :disabled="i === 0" aria-label="上移" @click="move(i, -1)"
               >▲</button>
               <button
-                type="button" class="h-3 leading-none text-signal-ink/40 hover:text-signal disabled:opacity-30"
+                type="button" class="h-4 leading-none text-signal-ink/40 hover:text-signal disabled:opacity-30"
                 :disabled="i === STATS.length - 1" aria-label="下移" @click="move(i, 1)"
               >▼</button>
             </span>
             <input
-              type="checkbox" class="h-[15px] w-[15px]" :checked="selected(s.id)"
+              type="checkbox" class="h-[15px] w-[15px] flex-none" :checked="selected(s.id)"
               :disabled="!selected(s.id) && cfg.stats.length >= 4"
               @change="toggleStat(s.id)"
             />
-            <span class="flex-1">{{ s.label }}</span>
-            <span class="text-caption text-signal-ink/60">{{ s.hint }}</span>
+            <span class="min-w-0 flex-1">{{ s.label }}</span>
+            <span class="flex-none text-right text-caption text-signal-ink/60">{{ s.hint }}</span>
           </label>
         </template>
       </section>
 
       <!-- 告警 -->
-      <section class="flex flex-col gap-1 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
-        <div class="mb-1.5 flex items-baseline gap-2">
+      <section class="flex flex-col rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+        <div class="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <h3 class="m-0 text-body font-semibold">告警</h3>
           <span class="text-caption text-signal-ink/60">按严重程度排序，最多显示 3 条；与「通知」开关互不影响</span>
         </div>
         <label
           v-for="a in ALERTS" :key="a.id"
-          class="flex items-center gap-3 border-b border-signal-line py-2.25 last:border-0"
+          class="flex items-center gap-3 border-b border-signal-line py-3 last:border-0"
         >
           <span class="h-2 w-2 flex-none rounded-full" :class="a.severity === 'error' ? 'bg-red-600' : a.severity === 'warn' ? 'bg-amber-600' : 'bg-signal'" />
-          <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span class="flex min-w-0 flex-1 flex-col gap-1">
             <span>{{ a.label }}</span>
-            <span class="text-caption text-signal-ink/60">{{ a.hint }}</span>
+            <span class="text-caption leading-snug text-signal-ink/60">{{ a.hint }}</span>
           </span>
           <Switch :model-value="alertOn(a.id)" @update:model-value="(v: boolean) => toggleAlert(a.id, v)" />
         </label>
       </section>
 
       <!-- 快捷入口 -->
-      <section class="flex flex-col gap-2.5 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
+      <section class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card px-4.5 py-4">
         <div class="flex items-baseline gap-2">
           <h3 class="m-0 text-body font-semibold">快捷入口</h3>
           <span class="text-caption text-signal-ink/60">最多 4 个 · 已选 {{ cfg.shortcuts.length }}</span>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2.5">
           <button
             v-for="s in SHORTCUTS" :key="s.id" type="button"
-            class="h-7 rounded-full border px-3 text-caption"
+            class="h-8 rounded-full border px-3.5 text-caption"
             :class="shortcutOn(s.id)
               ? 'border-signal bg-[#E7EFFF] text-[#1F55C4]'
               : 'border-signal-line bg-white text-signal-ink'"
