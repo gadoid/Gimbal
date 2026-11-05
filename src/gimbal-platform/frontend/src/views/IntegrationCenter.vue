@@ -462,11 +462,15 @@ const RESUMABLE = ['manual', 'fail_streak', 'scope_denied',
 
 function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   const r = t.instance?.pausedReason
+  // 令牌处置入口按类型分流(与详情页 tokenManageTo 同规则):平台令牌
+  // 在集成页,个人令牌在个人设置 —— 目前 to 仅备用(label 作 title),
+  // 接线导航时别再写死 /profile/tokens。
+  const tokenPage = t.tokenKind === 'platform' ? '/integrations' : '/profile/tokens'
   if (r === 'token_revoked') return { label: '解绑令牌后接管' }
   if (r === 'token_expired' || r === 'token_invalidated')
-    return { label: '去续期/重新生成', to: '/profile/tokens' }
+    return { label: '去续期/重新生成', to: tokenPage }
   if (r === 'token_owner_ineligible') return { label: '恢复角色后启动' }
-  if (r === 'resource_not_allowed') return { label: '补范围后启动', to: '/profile/tokens' }
+  if (r === 'resource_not_allowed') return { label: '补范围后启动', to: tokenPage }
   if (r === 'scope_denied') return { label: '公开场景后启动' }
   return { label: '启动' }
 }

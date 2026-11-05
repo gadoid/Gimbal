@@ -1,8 +1,9 @@
 <!-- IntegrationDetail.vue — 集成详情(webhook v4 §8;原型
      IntegrationDetail × 9 变体)。面包屑 + 标题(模式/状态 pill) +
      按暂停原因分型的横幅(文案/配色/动作逐变体对齐原型) + 身份与令牌
-     (dl + 解绑行) + 最近运行(按场景查执行)。令牌状态/回调/缺项从
-     令牌详情(getAccessToken)取,仅管理者可见。 -->
+     (dl + 解绑行) + 最近运行(实例快照:定时运行不落执行记录,不能
+     按场景查)。令牌状态/回调/缺项从令牌详情(getAccessToken)取,
+     仅管理者可见。 -->
 <template>
   <section class="slib idtl">
     <!-- 面包屑 + 标题 + 状态 pills + 操作 -->
@@ -86,7 +87,7 @@
             <dd class="flex flex-wrap items-center gap-2">
               <span class="mono">{{ tokenText }}</span>
               <span v-if="tokenStatus" class="idtl-pill" :class="tokenStatus.cls">{{ tokenStatus.text }}</span>
-              <RouterLink class="idtl-link text-[12px]" to="/profile/tokens">查看令牌</RouterLink>
+              <RouterLink class="idtl-link text-[12px]" :to="tokenManageTo">查看令牌</RouterLink>
             </dd>
             <dt>回调</dt>
             <dd class="mono">{{ tokenDetail?.callbackUrl || '未设置（令牌可轮询使用）' }}</dd>
@@ -111,24 +112,24 @@
         </div>
       </section>
 
-      <!-- 最近运行 -->
+      <!-- 最近运行(实例快照):执行历史接口只记当前用户的手动执行,
+           定时运行不落执行记录,平台任务按场景查永远为空 —— 短期投影
+           实例自身;真正的任务运行历史需后端新增记录(单独评估)。 -->
       <section class="idtl-card">
         <h2 class="m-0 text-[14px] leading-5 font-semibold">最近运行</h2>
-        <div v-if="runsLoading" class="py-3 text-center text-caption text-signal-ink/60">装载中…</div>
-        <template v-else-if="runs.length">
-          <div
-            v-for="r in runs" :key="r.id"
-            class="flex items-center gap-2.5 border-b border-[#EEF0F3] py-2 text-[12px] last:border-b-0"
-          >
-            <span class="mono text-signal-ink/60">#{{ r.id }}</span>
-            <span class="flex-1">{{ fmtTime(r.started_at ?? r.finished_at ?? '') }}</span>
-            <span class="idtl-pill" :class="runPill(r.status).cls">{{ runPill(r.status).text }}</span>
-          </div>
-        </template>
-        <div v-else class="py-3 text-center text-caption text-signal-ink/60">还没有执行记录</div>
-        <p v-if="task?.scenarioId" class="m-0 text-caption text-signal-ink/50">
-          按任务场景（{{ task.scenarioId }}）检索的全部执行；含手动与定时触发。
-        </p>
+        <dl class="idtl-dl">
+          <dt>上次运行</dt>
+          <dd>{{ task?.instance?.lastRunAt ? fmtTime(task.instance.lastRunAt) : '还未运行过' }}</dd>
+          <dt>运行状态</dt>
+          <dd class="flex items-center gap-2">
+            <span v-if="lastRunPill" class="idtl-pill" :class="lastRunPill.cls">{{ lastRunPill.text }}</span>
+            <template v-else>—</template>
+          </dd>
+          <template v-if="task?.instance?.lastError">
+            <dt>错误信息</dt>
+            <dd class="text-[#B91C1C]">{{ task.instance.lastError }}</dd>
+          </template>
+        </dl>
       </section>
     </div>
 
@@ -149,7 +150,6 @@ import {
   RUN_BADGE_TEXT, type IntegrationTaskItem,
 } from '@/api/integration'
 import { getAccessToken } from '@/api/access-tokens'
-import { listExecutions, type ExecutionListItem } from '@/api/executions'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
@@ -160,8 +160,6 @@ const auth = useAuthStore()
 
 const task = ref<IntegrationTaskItem | null>(null)
 const tokenDetail = ref<Awaited<ReturnType<typeof getAccessToken>> | null>(null)
-const runs = ref<ExecutionListItem[]>([])
-const runsLoading = ref(true)
 const running = ref(false)
 const unbindOpen = ref(false)
 const loadErr = ref('')
@@ -179,18 +177,7 @@ async function reload(): Promise<void> {
   }
 }
 
-onMounted(async () => {
-  await reload()
-  runsLoading.value = true
-  try {
-    if (task.value?.scenarioId) {
-      const env = await listExecutions({ scenarioId: task.value.scenarioId, pageSize: 10 })
-      runs.value = env.items
-    }
-  } catch { /* 执行历史不可达 → 空态 */ } finally {
-    runsLoading.value = false
-  }
-})
+onMounted(() => reload())
 
 // ── 状态 pill(原型:平台模式 #EEF4FF/#1F3B73;个人 #F6F8FC/#4A5A72;
 //    运行中绿;已暂停琥珀)────────────────────────────────────────
@@ -228,6 +215,11 @@ const tokenStatus = computed(() => {
   return st ? TOKEN_ST[st] ?? null : null
 })
 
+/** 令牌管理入口按类型分流(§5.1 三入口):平台令牌在集成页,个人令牌
+ *  在个人设置 —— 两页互看不到对方类型,跳错页等于没有入口。 */
+const tokenManageTo = computed(() =>
+  task.value?.tokenKind === 'platform' ? '/integrations' : '/profile/tokens')
+
 // ── 暂停横幅(§3.3 分型;文案/动作逐变体对齐原型)────────────────
 interface BannerAction {
   label: string
@@ -264,7 +256,7 @@ const banner = computed<{
         tone: 'amber', title: '已暂停 · 所属令牌已到期',
         desc: '续期或重新生成令牌后，任务自动恢复。',
         actions: [
-          { label: '去续期', primary: true, to: '/profile/tokens' },
+          { label: '去续期', primary: true, to: tokenManageTo.value },
           { ...resume, disabled: true },
         ],
       }
@@ -273,7 +265,7 @@ const banner = computed<{
         tone: 'red', title: '已暂停 · 所属令牌已失效',
         desc: '令牌因改密、停用或管理员强制失效而不可用。令牌属主「重新生成」后，任务自动恢复。',
         actions: [
-          { label: '去重新生成', primary: true, to: '/profile/tokens' },
+          { label: '去重新生成', primary: true, to: tokenManageTo.value },
           { ...resume, disabled: true },
         ],
       }
@@ -290,7 +282,7 @@ const banner = computed<{
         desc: '场景用到的以下资源不在令牌范围内。处理后在这里启动。',
         missing,
         actions: [
-          { label: '编辑令牌范围', to: '/profile/tokens' },
+          { label: '编辑令牌范围', to: tokenManageTo.value },
           { label: '去认证管理', to: '/auths' },
           resume,
         ],
@@ -308,15 +300,17 @@ const banner = computed<{
         ],
       }
     case 'manual':
+      // 暂停来源多样(本人暂停/解绑接管/删除用户处置),没有统一文案 ——
+      // 优先实例 lastError,缺省回通用文案。
       return {
         tone: 'neutral', title: '已暂停 · 待启动',
-        desc: '已解绑令牌，任务改由你的账号管理。确认无误后启动。',
+        desc: i.lastError || '任务已手动暂停。确认无误后启动。',
         actions: [{ ...resume, primary: true }],
       }
     case 'fail_streak':
       return {
         tone: 'amber', title: `已暂停 · 连续失败（${i.failStreak ?? '多'} 次）`,
-        desc: '连续多次运行失败已自动暂停；处理故障后在在这里启动。',
+        desc: '连续多次运行失败已自动暂停；处理故障后在这里启动。',
         actions: [{ ...resume, primary: true }],
       }
     case 'auth_failed':
@@ -420,18 +414,18 @@ async function remove(): Promise<void> {
   }
 }
 
-// ── 最近运行 ────────────────────────────────────────────────────
+// ── 最近运行(实例快照;runStatus 人话映射与集成中心同源)────────
 function fmtTime(iso: string): string {
   return shortDateTime(iso)
 }
-function runPill(st: string): { text: string; cls: string } {
-  if (st === 'passed' || st === 'done') return { text: '通过', cls: 'ip-ok' }
-  if (st === 'failed') return { text: '失败', cls: 'ip-bad' }
-  if (st === 'running') return { text: '运行中', cls: 'ip-run' }
-  if (st === 'queued') return { text: '排队中', cls: 'ip-mute' }
-  if (st === 'canceled') return { text: '已取消', cls: 'ip-mute' }
-  return { text: st, cls: 'ip-mute' }
-}
+const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
+  const i = task.value?.instance
+  if (!i) return null
+  if (i.state === 'running') return { text: '运行中', cls: 'ip-run' }
+  if (!i.lastRunAt || !i.runStatus) return null
+  if (i.runStatus === 'ok') return { text: '运行正常', cls: 'ip-ok' }
+  return { text: RUN_BADGE_TEXT[i.runStatus] || '执行失败', cls: 'ip-bad' }
+})
 </script>
 
 <style scoped>
