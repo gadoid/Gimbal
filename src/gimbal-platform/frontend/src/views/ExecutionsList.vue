@@ -351,8 +351,9 @@ const STATUS_OPTIONS: Record<string, string> = {
 const query = ref('')
 // ?status= 深链(身份卡「今日执行失败」等入口;评审 P2-7):到达即预置
 // 并随首查生效 —— 此前列表页不读这个参数,链接打开后没有过滤。
+// Object.hasOwn 而非 in:原型链键(?status=constructor)不能当状态命中。
 const filterStatus = ref(
-  typeof route.query.status === 'string' && route.query.status in STATUS_OPTIONS
+  typeof route.query.status === 'string' && Object.hasOwn(STATUS_OPTIONS, route.query.status)
     ? route.query.status : '')
 const filterWindow = ref('')
 /** 批次归并视图:执行器队列发起后 ?batch_id= 深链到达;chip 可清除。 */

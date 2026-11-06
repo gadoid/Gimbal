@@ -22,13 +22,17 @@ const platformRow: api.AccessTokenListItem = {
   issuerName: '王同学',
 }
 
-async function mountVariant(variant: 'personal' | 'platform') {
+async function mountVariant(variant: 'personal' | 'platform' | 'admin') {
+  const errors: unknown[] = []
   const w = mount(TokensSection, {
-    global: { plugins: [createPinia()] },
+    global: {
+      plugins: [createPinia()],
+      config: { errorHandler: (e) => { errors.push(e) } },
+    },
     props: { variant },
   })
   await flushPromises()
-  return w
+  return Object.assign(w, { errors })
 }
 
 describe('TokensSection — 平台令牌签发人列', () => {
@@ -70,6 +74,52 @@ describe('TokensSection — 平台令牌签发人列', () => {
     } as never)
     const w = await mountVariant('personal')
     expect(w.find('[data-testid="token-list"]').text()).not.toContain('签发人')
+    w.unmount()
+  })
+})
+
+/** admin 视图(2026-11-05 修复轮评审 N1):「全部」曾用空串 value,
+ * reka-ui SelectItem 挂载即抛错;改哨兵 'all' 后挂载干净,且 'all'
+ * 映射为 kind 不收窄 / status 不传。 */
+describe('TokensSection — admin 视图筛选', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    vi.spyOn(api, 'listAccessTokens').mockResolvedValue({
+      items: [{ ...platformRow, kind: 'personal', ownerId: 7, ownerName: 'alice' }],
+      quota: { used: 1, limit: 5 },
+    } as never)
+  })
+
+  it('挂载不抛错,首屏按个人令牌 + 不带状态筛选取数', async () => {
+    const w = await mountVariant('admin')
+    expect(w.errors).toEqual([])
+    expect(w.find('[data-testid="token-list"]').text()).toContain('alice')
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('personal', expect.objectContaining({
+      all: true, status: undefined,
+    }))
+    w.unmount()
+  })
+
+  it('类型/状态选「全部」→ listKind=all、status 不传;选具体状态则透传', async () => {
+    const w = await mountVariant('admin')
+    const vm = w.vm as unknown as { adminKind: string; adminStatus: string }
+    vm.adminKind = 'all'
+    await flushPromises()
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
+      status: undefined,
+    }))
+    vm.adminStatus = 'revoked'
+    await flushPromises()
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
+      status: 'revoked',
+    }))
+    vm.adminStatus = 'all'
+    await flushPromises()
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
+      status: undefined,
+    }))
+    expect(w.errors).toEqual([])
     w.unmount()
   })
 })

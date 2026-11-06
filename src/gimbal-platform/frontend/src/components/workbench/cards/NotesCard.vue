@@ -133,6 +133,22 @@ function pruneDone(list: NoteItem[]): NoteItem[] {
   return list.filter((n) => !n.done || !n.doneAt || new Date(n.doneAt).getTime() > cutoff)
 }
 
+/** 读入归一(2026-11-05 修复轮评审 N3):修复前的存量条目是下划线键
+ * (created_at / done_at),GET 原样返回。不归一的话 toggle 追加 doneAt
+ * 后同一条目两种键并存,后端 AliasChoices 先取 done_at、doneAt 成了多余
+ * 字段被 extra=forbid 422 拒收 —— 整值 PUT,之后每次保存都失败。
+ * 只保留 NoteItemDTO 的五个驼峰键,下划线键与其它杂键一并丢弃。 */
+function normalizeNote(raw: Record<string, unknown>): NoteItem {
+  const str = (v: unknown) => (typeof v === 'string' ? v : null)
+  return {
+    id: String(raw.id ?? ''),
+    text: String(raw.text ?? ''),
+    done: raw.done === true,
+    createdAt: str(raw.createdAt) ?? str(raw.created_at) ?? '',
+    doneAt: str(raw.doneAt) ?? str(raw.done_at),
+  }
+}
+
 // 保存串行化(评审 P3-11):每次改动立即整值 PUT,不排队的话连续快速
 // 操作可能乱序到达,后发先至把新状态覆盖成旧状态。链式排队,快照在入队
 // 时取定(浅拷贝逐条),不受后续改动影响。
@@ -191,7 +207,10 @@ function relTime(iso?: string | null) {
 onMounted(async () => {
   try {
     const saved = (await getPreferences())['notes']
-    if (saved && Array.isArray(saved.items)) items.value = pruneDone(saved.items)
+    if (saved && Array.isArray(saved.items)) {
+      items.value = pruneDone(saved.items.map(
+        (n) => normalizeNote(n as unknown as Record<string, unknown>)))
+    }
   } catch { /* 偏好不可达 → 空便签 */ }
 })
 </script>

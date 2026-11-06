@@ -162,7 +162,9 @@ async def me_summary(
     # 2026-11-05 评审 P2-7:范围不再只看本人持有 —— 平台模式模板的暂停
     # 对 member+ 全员可见(与站内通知的 fanout_members 同口径;平台实例
     # 的 holder 是系统用户,按 holder 过滤等于永远不可见)。告警直接深链
-    # 到实例详情页(此前统一跳列表页),并补上凭证认证失败(auth_failed)。
+    # 到集成详情页(此前统一跳列表页),并补上凭证认证失败(auth_failed)。
+    # 详情页路由参数是模板 id(GET /integration/tasks/{id} 对实例 id 404),
+    # 链接取 inst.template_id 而非 inst.id(2026-11-05 修复轮评审 N2)。
     from sqlalchemy import or_
     _platform_tpl_ids = select(IntegrationTask.id).where(
         IntegrationTask.template_id.is_(None),
@@ -199,7 +201,7 @@ async def me_summary(
             "class": "integration_paused", "severity": "error",
             "title": f"{name} {reason_labels.get(inst.paused_reason,
                                                   '已暂停')}",
-            "action": "查看", "link": f"/integrations/{inst.id}"})
+            "action": "查看", "link": f"/integrations/{inst.template_id}"})
 
     # ── 访问令牌即将到期(warn;7 天内)──────────────────────────
     expiring = (await db.execute(select(AccessToken).where(

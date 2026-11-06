@@ -31,13 +31,13 @@
         <SelectContent>
           <SelectItem value="personal">个人令牌</SelectItem>
           <SelectItem value="platform">平台令牌</SelectItem>
-          <SelectItem value="">全部</SelectItem>
+          <SelectItem value="all">全部</SelectItem>
         </SelectContent>
       </Select>
       <Select v-model="adminStatus" class="w-32">
         <SelectTrigger class="h-8"><SelectValue placeholder="全部状态" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="">全部</SelectItem>
+          <SelectItem value="all">全部</SelectItem>
           <SelectItem value="active">有效</SelectItem>
           <SelectItem value="expired">已到期</SelectItem>
           <SelectItem value="invalidated">已失效</SelectItem>
@@ -427,11 +427,11 @@ const mode = computed(() => props.variant)
 // kind = 语义面(标签/说明/创建);listKind = 取数面 —— admin 视图选
 // 「全部」时传 'all'(后端 ?all=1 视图不按类型收窄,2026-11-05 评审 P2-6)。
 const kind = computed<TokenKind>(() =>
-  props.variant === 'admin' ? (adminKind.value || 'personal') : props.variant)
-const listKind = computed<TokenKind | 'all'>(() =>
   props.variant === 'admin'
-    ? (adminKind.value === '' ? 'all' : adminKind.value)
+    ? (adminKind.value === 'all' ? 'personal' : adminKind.value)
     : props.variant)
+const listKind = computed<TokenKind | 'all'>(() =>
+  props.variant === 'admin' ? adminKind.value : props.variant)
 
 const loading = ref(false)
 const busy = ref(false)
@@ -454,8 +454,10 @@ const kindLabel = computed(() =>
 // ── admin 筛选(2026-11-05 评审 P2-6)──────────────────────────
 // kind/status 补「全部」(此前选了就退不回去);属主筛选支持用户名/昵称
 // (管理员通常不知道数字 id),输入防抖 300ms(此前每敲一字发一次请求)。
-const adminKind = ref<TokenKind | ''>('personal')
-const adminStatus = ref<TokenStatus | ''>('')
+// 「全部」用哨兵 'all':reka-ui SelectItem 禁空串 value(空串保留给
+// 「清空选择」),挂载即抛错(2026-11-05 修复轮评审 N1)。
+const adminKind = ref<TokenKind | 'all'>('personal')
+const adminStatus = ref<TokenStatus | 'all'>('all')
 const adminOwner = ref('')
 watch([adminKind, adminStatus], () => void reload())
 watch(adminOwner, () => {
@@ -544,8 +546,8 @@ async function reload() {
       all: props.variant === 'admin' || undefined,
       owner: props.variant === 'admin' ? ownerFilter.value.owner : undefined,
       ownerName: props.variant === 'admin' ? ownerFilter.value.ownerName : undefined,
-      status: props.variant === 'admin' && adminStatus.value
-        ? (adminStatus.value as TokenStatus) : undefined,
+      status: props.variant === 'admin' && adminStatus.value !== 'all'
+        ? adminStatus.value : undefined,
     })
     items.value = env.items
     quota.value = env.quota

@@ -448,6 +448,73 @@ class TestLifecycle:
         r = await client.get("/api/access-tokens?all=1", headers=h)
         assert r.status_code == 403
 
+    async def test_admin_owner_name_filter(self, client):
+        """2026-11-05 修复轮评审 P3-4/P3-3:ownerName 按用户名/昵称模糊
+        (不区分大小写);输入里的 % / _ 按字面匹配,不当 LIKE 通配符
+        (未转义时 '%'/'_' 会命中全部属主)。"""
+        ha = await _register_role(client, "ownalpha", "member")
+        hb = await _register_role(client, "ownbeta", "member")
+        async with db_module.SessionLocal() as s:
+            await s.execute(sa.update(User).where(
+                User.username == "ownalpha").values(display_name="Alice Liddell"))
+            await s.execute(sa.update(User).where(
+                User.username == "ownbeta").values(display_name="50%_off"))
+            await s.commit()
+        for h, name in ((ha, "tok-a"), (hb, "tok-b")):
+            await _api_token(client, h, {
+                "kind": "personal", "name": name, "ttlDays": 30,
+                "scope": {"aliases": [], "authIds": []}})
+        h_admin = await _admin_headers(client)
+
+        async def names(q: str) -> list[str]:
+            r = await client.get("/api/access-tokens", headers=h_admin,
+                                 params={"all": "1", "kind": "all", "ownerName": q})
+            assert r.status_code == 200, r.text
+            return sorted(i["name"] for i in r.json()["items"])
+
+        assert await names("alpha") == ["tok-a"]        # 用户名
+        assert await names("LIDDELL") == ["tok-a"]      # 昵称,不分大小写
+        assert await names("%") == ["tok-b"]            # 字面 %
+        assert await names("_") == ["tok-b"]            # 字面 _
+        assert await names("nobody") == []
+
+    async def test_platform_credentials_ref_counts(self, client):
+        """2026-11-05 修复轮评审 P3-4:平台凭证列表「被引用」列(P2-3
+        _cred_usage)—— refTokens = 范围含该凭证的令牌数;refTasks = 这些
+        令牌直连的非模板、未删除任务数。同凭证多令牌按令牌累加。"""
+        from .inbound_fixtures import mk_task_pair
+        from app.models.integration_task import IntegrationTask
+        from datetime import datetime, timezone
+
+        await seed_platform_user()
+        cred_a = await _add_credential("__platform__", "cred-a")
+        cred_b = await _add_credential("__platform__", "cred-b")
+        cred_c = await _add_credential("__platform__", "cred-c")   # 无引用
+        h = await _register_role(client, "refcnt", "member")
+        t1 = await _api_token(client, h, {
+            "kind": "platform", "name": "t1", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": [cred_a]}})
+        t2 = await _api_token(client, h, {
+            "kind": "platform", "name": "t2", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": [cred_a, cred_b]}})
+        await mk_task_pair(name="live-1", token_id=t1["id"], identity_mode="platform")
+        gone, _, _ = await mk_task_pair(
+            name="gone-1", token_id=t1["id"], identity_mode="platform")
+        await mk_task_pair(name="live-2", token_id=t2["id"], identity_mode="platform")
+        async with db_module.SessionLocal() as s:
+            await s.execute(sa.update(IntegrationTask).where(
+                IntegrationTask.id == gone).values(
+                removed_at=datetime.now(timezone.utc)))
+            await s.commit()
+
+        r = await client.get("/api/integration/platform-credentials",
+                             headers=await _admin_headers(client))
+        assert r.status_code == 200, r.text
+        refs = {i["id"]: (i["refTokens"], i["refTasks"]) for i in r.json()["items"]}
+        assert refs[cred_a] == (2, 2)   # t1(1 活 + 1 软删不计)+ t2(1)
+        assert refs[cred_b] == (1, 1)
+        assert refs[cred_c] == (0, 0)
+
 
 async def _admin_headers(client: AsyncClient) -> dict:
     """直插 admin(mk_user 口令 = x;首注 admin 规则不可依赖 —— 各测试

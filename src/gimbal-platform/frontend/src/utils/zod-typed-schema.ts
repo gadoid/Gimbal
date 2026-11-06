@@ -5,7 +5,7 @@
  * GHSA-mrhx-c7xc-m3w5(超大集合校验内存耗尽)的修复版——桥没有官方
  * zod 4 支持,按其 v4.15.1 适配器语义移植到本地:
  *  - parse:safeParseAsync → issue 按 vee 路径语法聚合(数组下标转
- *    中括号),invalid_union 展平子错误;
+ *    中括号),invalid_union 展平子错误(zod4 子路径相对,拼父路径);
  *  - cast:parse 失败时退 defaults 合并(zod 不支持不校验的 cast);
  *  - describe:按路径走 shape 判 required/exists。
  * 内部探测从 zod3 的 _def.typeName 换成 zod4 的 instanceof。
@@ -16,7 +16,9 @@ interface IssueLike {
   code?: string
   message: string
   path: (string | number | symbol)[]
-  unionErrors?: { issues: IssueLike[] }[]
+  /** zod4 invalid_union:每个分支一组子 issue(二维);子 issue 的 path
+   * 相对 union 自身(zod3 的 unionErrors 是绝对路径) */
+  errors?: IssueLike[][]
 }
 
 type FieldError = { errors: string[]; path?: string }
@@ -61,7 +63,10 @@ function processIssues(issues: IssueLike[], errors: Record<string, FieldError>):
   for (const issue of issues) {
     const path = normalizeFormPath(issue.path.map(String).join('.'))
     if (issue.code === 'invalid_union') {
-      processIssues(issue.unionErrors?.flatMap((ue) => ue.issues) ?? [], errors)
+      // 子 issue 路径拼上 union 自身路径,才能挂到 vee 字段上
+      processIssues((issue.errors ?? []).flat().map((sub) => ({
+        ...sub, path: [...issue.path, ...sub.path],
+      })), errors)
       if (!path) continue
     }
     if (!errors[path]) errors[path] = { errors: [], path }
@@ -74,10 +79,9 @@ function getDefaults(schema: ZodType): Record<string, unknown> | undefined {
   if (!(schema instanceof ZodObject)) return undefined
   return Object.fromEntries(Object.entries(schema.shape).map(([key, value]) => {
     if (value instanceof ZodDefault) {
-      // zod4 默认值在 def.defaultValue(zod3 是 _def.defaultValue)
-      const def = (value as unknown as { _def?: { defaultValue?: () => unknown }; def?: { defaultValue?: () => unknown } })
-      const dv = def.def?.defaultValue ?? def._def?.defaultValue
-      return [key, dv ? dv() : undefined]
+      // zod4 的 def.defaultValue 是值本身(工厂形态 .default(() => …) 也是
+      // getter 每次取新值),不是 zod3 的 _def.defaultValue() 函数
+      return [key, (value as ZodDefault<ZodType>).def.defaultValue]
     }
     if (value instanceof ZodObject) return [key, getDefaults(value)]
     return [key, undefined]

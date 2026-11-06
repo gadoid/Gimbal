@@ -216,9 +216,12 @@ async def list_tokens(
         if owner is not None:
             q = q.where(AccessToken.user_id == owner)
         if owner_name:
+            # 转义 LIKE 通配符:输入里的 % / _ 按字面匹配(修复轮评审 P3-3)
+            pat = "%" + (owner_name.replace("\\", "\\\\")
+                         .replace("%", "\\%").replace("_", "\\_")) + "%"
             matched = (await db.execute(select(User.id).where(or_(
-                User.username.ilike(f"%{owner_name}%"),
-                User.display_name.ilike(f"%{owner_name}%"))))).scalars().all()
+                User.username.ilike(pat, escape="\\"),
+                User.display_name.ilike(pat, escape="\\"))))).scalars().all()
             q = q.where(AccessToken.user_id.in_(matched or [-1]))
         if status_filter in ("active", "expired", "invalidated", "revoked"):
             # 状态是派生值:先取全部再过滤(量级 = 全平台令牌数,可接受)
