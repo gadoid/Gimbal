@@ -261,6 +261,9 @@ class _NullView:
     def record_assertion(self, result) -> None:
         pass
 
+    def record_extracted(self, key, value) -> None:
+        pass
+
 
 class ScenarioRunner:
     """驱动整个 Scenario 的执行。

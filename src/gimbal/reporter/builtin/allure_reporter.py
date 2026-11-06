@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from gimbal.core.runner import RunResult
 from gimbal.events.types import (
-    FrameworkEvent, HttpRequestEvent, HttpResponseEvent,
+    FrameworkEvent, CallExchangeEvent,
     ScenarioEndEvent, ScenarioStartEvent, StepEndEvent, StepFailedEvent,
     StepStartEvent, VariablePromotedEvent,
 )
@@ -27,8 +27,8 @@ class AllureReporter(ReporterBase):
     interested_events: tuple = (
         "scenario.start", "scenario.end",
         "step.start", "step.end",
-        "step.failed", "http.request",
-        "http.response", "variable.promoted",
+        "step.failed", "call.exchange",
+        "variable.promoted",
     )
 
     def __init__(self) -> None:
@@ -51,10 +51,11 @@ class AllureReporter(ReporterBase):
                 self._close_step(event, status="passed")
             elif isinstance(event, StepFailedEvent):
                 self._close_step_failed(event)
-            elif isinstance(event, HttpRequestEvent):
-                self._attach_request(event)
-            elif isinstance(event, HttpResponseEvent):
-                self._attach_response(event)
+            elif isinstance(event, CallExchangeEvent):
+                # 2026-11-06：http.* 停发；附件内容取自已脱敏的调用证据
+                v = event.summary()
+                self._attach_request(v)
+                self._attach_response(v)
             elif isinstance(event, ScenarioEndEvent):
                 self._close_scenario(event)
             elif isinstance(event, VariablePromotedEvent):
@@ -151,11 +152,11 @@ class AllureReporter(ReporterBase):
         except Exception:
             pass
 
-    def _attach_request(self, ev):
-        self._attach_text("request.txt", f"{ev.method} {ev.url}\n\n{ev.request_body!r}")
+    def _attach_request(self, v):
+        self._attach_text("request.txt", f"{v['method']} {v['url']}\n\n{v['request_body']!r}")
 
-    def _attach_response(self, ev):
-        self._attach_text(f"response-{ev.status_code}.txt", f"status={ev.status_code} duration_ms={ev.duration_ms:.2f}\n\n{ev.response_body!r}")
+    def _attach_response(self, v):
+        self._attach_text(f"response-{v['status_code']}.txt", f"status={v['status_code']} duration_ms={v['duration_ms']:.2f}\n\n{v['response_body']!r}")
 
     def _record_promotion(self, ev):
         pass

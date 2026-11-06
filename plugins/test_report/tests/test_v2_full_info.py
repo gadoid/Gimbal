@@ -24,7 +24,7 @@ from gimbal.events.types import (
     SuiteStartEvent, SuiteEndEvent,
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent, StepFailedEvent,
-    HttpRequestEvent, HttpResponseEvent,
+    HttpRequestEvent, HttpResponseEvent, CallExchangeEvent,
     VariablePromotedEvent,
 )
 
@@ -428,15 +428,12 @@ class TestPluginV2EndToEnd:
             step_name="GET /health", strategy_kind="http",
             description="smoke check", timestamp=_ts(),
         ))
-        bus.publish(HttpRequestEvent(
-            run_id="rv2", step_id="s1", method="GET",
-            url="http://api/health", request_headers={"X-T": "v"},
-            request_body={"probe": 1},
-        ))
-        bus.publish(HttpResponseEvent(
-            run_id="rv2", step_id="s1", method="GET",
-            url="http://api/health", status_code=200, duration_ms=12.0,
-            response_body={"status": "ok"},
+        # 2026-11-06：引擎停发 http.*，插件改订阅 call.exchange
+        bus.publish(CallExchangeEvent(
+            run_id="rv2", step_id="s1", protocol="http", duration_ms=12.0,
+            result={"request": {"method": "GET", "url": "http://api/health",
+                                "headers": {"X-T": "v"}, "body": {"probe": 1}},
+                    "response": {"status": 200, "body": {"status": "ok"}}},
         ))
         bus.publish(StepEndEvent(
             run_id="rv2", scenario_id="sc1", step_id="s1",
@@ -454,14 +451,11 @@ class TestPluginV2EndToEnd:
             run_id="rv2", scenario_id="sc1", step_id="s2",
             step_name="POST /login", strategy_kind="http", timestamp=_ts(),
         ))
-        bus.publish(HttpRequestEvent(
-            run_id="rv2", step_id="s2", method="POST",
-            url="http://api/login", request_body={"user": "x"},
-        ))
-        bus.publish(HttpResponseEvent(
-            run_id="rv2", step_id="s2", method="POST",
-            url="http://api/login", status_code=401, duration_ms=50.0,
-            response_body={"error": "unauthorized"},
+        bus.publish(CallExchangeEvent(
+            run_id="rv2", step_id="s2", protocol="http", duration_ms=50.0,
+            result={"request": {"method": "POST", "url": "http://api/login",
+                                "body": {"user": "x"}},
+                    "response": {"status": 401, "body": {"error": "unauthorized"}}},
         ))
         bus.publish(StepFailedEvent(
             step_id="s2", error="auth failed", phase="http_call",

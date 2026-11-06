@@ -7,8 +7,7 @@ from typing import Any
 from gimbal.core.runner import RunResult
 from gimbal.events.types import (
     FrameworkEvent,
-    HttpRequestEvent,
-    HttpResponseEvent,
+    CallExchangeEvent,
     ScenarioEndEvent,
     ScenarioStartEvent,
     StepEndEvent,
@@ -63,7 +62,7 @@ class ConsoleReporter(ReporterBase):
                           or not sys.stderr.isatty())
         self._verbosity = str(ctx.user("verbosity", "normal"))
         if self._verbosity == "verbose":
-            for et in ("http.request", "http.response"):
+            for et in ("call.exchange",):
                 sid = ctx.bus.subscribe(
                     self.on_event, event_type=et,
                     mode=ctx.subscription_mode,
@@ -118,17 +117,17 @@ class ConsoleReporter(ReporterBase):
                     f"    ! STEP FAILED phase={event.phase} step_id={event.step_id} error={event.error[:200]}",
                     _RED, not nc,
                 ))
-            elif isinstance(event, HttpRequestEvent):
+            elif isinstance(event, CallExchangeEvent):
+                # 2026-11-06：http.* 停发，verbose 调用行取自 call.exchange
                 self._http_count += 1
                 if self._verbosity == "verbose":
+                    v = event.summary()
                     self._stream(_color(
-                        f"      → {event.method} {event.url}",
+                        f"      → {v['method']} {v['url']}",
                         _GREY, not nc,
                     ))
-            elif isinstance(event, HttpResponseEvent):
-                if self._verbosity == "verbose":
                     self._stream(_color(
-                        f"      ← {event.status_code} ({event.duration_ms:.1f}ms)",
+                        f"      ← {v['status_code']} ({v['duration_ms']:.1f}ms)",
                         _GREY, not nc,
                     ))
         except Exception:

@@ -183,3 +183,35 @@ def test_m2_gen2_migrate_noop():
     d = {"kind": "scenario", "meta": {"name": "n"}, "steps": []}
     out = migrate_definition(d, from_generation=1)
     assert out == d
+
+
+# ── P0-1(2026-11-06):真实 Call 模型(Auth 为 str 枚举)也必须命中声明分派 ──
+# 上面的 _Call 用纯字符串,掩盖了 str(Auth.bearer) == "Auth.bearer" 的问题:
+# 运行期 step.call 是 gimbal.schema.Call,auth 是枚举成员。
+
+def _real_call(auth: str, auth_signer=None):
+    from gimbal.schema import Call
+    return Call.model_validate({"protocol": "http", "user": "u1", "auth": auth,
+                                "auth_signer": auth_signer})
+
+
+def test_real_call_model_bearer_dispatches():
+    h = _inject(_Session(auth_signer="md5sign"), _real_call("bearer"))
+    assert h == {"Authorization": "Bearer abc123"}
+
+
+def test_real_call_model_basic_dispatches():
+    h = _inject(_Session(), _real_call("basic"))
+    assert set(h) == {"Authorization"}
+    assert h["Authorization"].startswith("Basic ")
+
+
+def test_real_call_model_custom_signer_dispatches():
+    h = _inject(_Session(auth_signer="md5sign"),
+                _real_call("custom", auth_signer="standard.bearer"))
+    assert h == {"Authorization": "Bearer abc123"}
+
+
+def test_real_call_model_none_keeps_legacy_md5():
+    h = _inject(_Session(), _real_call("none"))
+    assert set(h) == {"token", "timestamp"}

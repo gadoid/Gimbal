@@ -202,7 +202,8 @@ class ProtocolExecutor(ABC):
                    call_result: CallResult, result: StrategyResult) -> None:
         """送达后的协议命名空间扩展点（默认无操作）。
 
-        http 适配器在此发送 http.response 事件；
+        （2026-11-06 起 http 适配器不再在此发送 http.response；调用证据
+        统一由模板方法发布 call.exchange。）
         认证头在 send 内部原生注入（call.user → token/timestamp）。
         """
         return None

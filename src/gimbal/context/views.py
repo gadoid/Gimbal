@@ -29,6 +29,8 @@ class StrategyContextView(Protocol):
 
     def record_assertion(self, result: AssertionResult) -> None: ...
 
+    def record_extracted(self, key: str, value: Any) -> None: ...
+
     def attach_artifact(
         self, name: str, ref: ArtifactRef,
         *, to: ContextLayer = ContextLayer.SCENARIO,
@@ -90,7 +92,12 @@ class StepContextAdapter:
     
     def record_assertion(self, result: AssertionResult) -> None:
         self._ctx.outcome.assertions.append(result)
-    
+
+    def record_extracted(self, key: str, value: Any) -> None:
+        """步骤级提取（scope=step，只进 scratch）的产物登记——与提升路径
+        同进 outcome.extracted，供 step.end.extracts 投影。"""
+        self._ctx.outcome.extracted[key] = value
+
     def attach_artifact(
         self, name: str, ref: ArtifactRef,
         *, to: ContextLayer = ContextLayer.SCENARIO,

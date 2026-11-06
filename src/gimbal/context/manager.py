@@ -172,6 +172,7 @@ class ContextManager:
         # 浅拷贝快照：as_dict 返回内部 dict 引用，紧随其后的 scratch.clear()
         # 会把按引用保存的 exchange 一并清空（历史 bug —— 归档的 exchange 恒空）
         scratch_snapshot = dict(ctx.scratch.as_dict())
+        call_evidence = None
         if "call" in scratch_snapshot:   # F 定稿：唯一证据键
             # P0-3：scratch 存原值；归档是证据出口，call 键复核为证据形态
             # （脱敏 + 截断），原值不出 scratch
@@ -179,6 +180,8 @@ class ContextManager:
             call_raw = scratch_snapshot["call"]
             if isinstance(call_raw, dict):
                 exchange["call"] = evidence_from_call_dict(call_raw)
+                # step.end 报告面（调用摘要 / 失败现场）复用同一份证据形态
+                call_evidence = exchange["call"]
             self._archive.save_exchange(
                 exchange, ctx.step_id,
                 scenario_id=getattr(ctx.parent, "scenario_id", None),
@@ -188,7 +191,8 @@ class ContextManager:
         ctx.scratch.clear()
 
         ctx.seal()
-        self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
+        self._event_bus.publish(project_step_completed(
+            ctx, ctx.parent.run_id, call_evidence=call_evidence))
         logger.info("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
                     ctx.step_id, status.value, ctx.outcome.duration_ms)
 

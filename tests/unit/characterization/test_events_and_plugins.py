@@ -90,9 +90,13 @@ def mock_httpx(status=200, body=None):
 class TestEventShapes:
     """钉死事件形状（collector/test_report 的消费面）。"""
 
-    def test_http_request_response_event_shapes(self):
+    def test_http_events_retired_call_exchange_summary(self):
+        """2026-11-06：引擎停发 http.request/http.response（与 call.exchange
+        重复，且 http.request 的请求头未脱敏）。调用的扁平视图改由
+        CallExchangeEvent.summary() 提供，字段口径与原 http.* 对齐。"""
         engine, bus, *_ = make_engine()
-        got: dict[str, list] = {"http.request": [], "http.response": []}
+        got: dict[str, list] = {"http.request": [], "http.response": [],
+                                "call.exchange": []}
         for et in got:
             bus.subscribe(lambda e, et=et: got[et].append(e), et)
 
@@ -100,18 +104,33 @@ class TestEventShapes:
             result = engine.run(http_scenario())
         assert result.passed == 1
 
-        req = got["http.request"][0]
-        assert req.step_id == "step-000"
-        assert req.method == "POST"
-        assert req.url == "https://svc.example/p"
-        assert req.request_body == {"b": 1}
-        assert req.request_headers == {}
+        assert got["http.request"] == []
+        assert got["http.response"] == []
+        ev = got["call.exchange"][0]
+        assert ev.step_id == "step-000"
+        v = ev.summary()
+        assert v["method"] == "POST"
+        assert v["url"] == "https://svc.example/p"
+        assert v["request_body"] == {"b": 1}
+        assert v["status_code"] == 200
+        assert v["response_body"] == {"code": 0}
+        assert v["duration_ms"] >= 0
 
-        resp = got["http.response"][0]
-        assert resp.step_id == "step-000"
-        assert resp.status_code == 200
-        assert resp.response_body == {"code": 0}
-        assert resp.duration_ms >= 0
+    def test_step_end_carries_report_fields(self):
+        """B1：step.end 自带步骤名/调用摘要/断言明细；通过的步骤不带失败证据。"""
+        engine, bus, *_ = make_engine()
+        got = []
+        bus.subscribe(lambda e: got.append(e), "step.end")
+        with mock_httpx(200, {"code": 0})[0]:
+            engine.run(http_scenario())
+        ev = got[0]
+        assert ev.step_name
+        assert ev.call_summary == "POST https://svc.example/p"
+        assert ev.assertion_count == len(ev.assertions)
+        for a in ev.assertions:
+            assert set(a) == {"name", "target", "operator", "expected",
+                              "actual", "passed", "message"}
+        assert ev.failure_evidence is None
 
     def test_call_exchange_event_shape_with_result_envelope(self):
         engine, bus, *_ = make_engine()

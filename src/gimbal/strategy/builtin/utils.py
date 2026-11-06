@@ -143,10 +143,12 @@ def _evaluate(operator, actual: Any, expected: Any) -> tuple[bool, str]:
         else:
             return False, f"Unknown operator: {op}"
 
+        # 2026-11-06:原 FAIL 文案 "expected <actual> eq <expected>" 读起来
+        # 像「期望值是 actual」,与事实相反;改为实际/期望显式标注
         msg = (
             f"PASS: {actual!r} {op.value} {expected!r}"
             if ok
-            else f"FAIL: expected {actual!r} {op.value} {expected!r}"
+            else f"FAIL: actual {actual!r}, expected {op.value} {expected!r}"
         )
         return ok, msg
     except Exception as exc:

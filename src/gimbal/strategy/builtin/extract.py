@@ -21,11 +21,6 @@ class ExtractExecutor(StrategyExecutor):
     def execute(self, spec: "Extract", view: "StepContextAdapter") -> StrategyResult:
         """执行提取策略：用 JSONPath spec.expression 从 scratch 取值后按 spec.scope 写入目标层（step/scenario/...）。"""
         try:
-            logger.info(
-                "[ExtractExecutor] 执行提取: expression={} target={} scope={}",
-                spec.expression, spec.target, spec.scope
-            )
-
             # 1. 从 scratch 用 JSONPath 取值
             scratch = view.get_scratch_dict()
             value = jget(scratch, spec.expression)
@@ -54,18 +49,25 @@ class ExtractExecutor(StrategyExecutor):
 
             # 3. 根据 scope 决定写入目标
             from gimbal.schema import Scope
+            from gimbal.protocols.result import is_sensitive_path, redact_value
+            shown = redact_value(value) if is_sensitive_path(spec.target) else value
             if spec.scope == Scope.STEP:
                 view.write_scratch(spec.target, value)
+                # 步骤级提取也记入 outcome.extracted(提升路径已由
+                # promote_variable 记录),step.end.extracts 据此投影
+                record = getattr(view, "record_extracted", None)
+                if callable(record):
+                    record(spec.target, value)
                 logger.info(
-                    "[ExtractExecutor] 写入 scratch: {}={!r}",
-                    spec.target, value
+                    "[ExtractExecutor] 提取: {} = {!r} ({} ← {})",
+                    spec.target, shown, "step", spec.expression
                 )
             else:
                 target_layer = _scope_to_layer(spec.scope)
                 view.promote_variable(spec.target, value, to=target_layer)
                 logger.info(
-                    "[ExtractExecutor] 提升变量: {}={!r} layer={}",
-                    spec.target, value, target_layer.value
+                    "[ExtractExecutor] 提取: {} = {!r} ({} ← {})",
+                    spec.target, shown, target_layer.value, spec.expression
                 )
 
             return StrategyResult(

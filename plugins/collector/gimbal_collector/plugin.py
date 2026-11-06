@@ -52,8 +52,8 @@ class CollectorPlugin(Plugin):
         ctx.register_event("scenario.end",      self._handle_scenario_end)
         ctx.register_event("step.start",        self._handle_step_start)
         ctx.register_event("step.end",          self._handle_step_end)
-        ctx.register_event("http.request",      self._handle_http_request)
-        ctx.register_event("http.response",     self._handle_http_response)
+        # 2026-11-06：引擎停发 http.*，调用证据统一走 call.exchange（已脱敏）
+        ctx.register_event("call.exchange", self._handle_call_exchange)
         ctx.register_event("variable.promoted", self._handle_variable_promoted)
 
         # 重建 store（on_deactivate 之后会重置；activate 重新开）
@@ -93,6 +93,9 @@ class CollectorPlugin(Plugin):
 
     def _handle_http_response(self, event: Any) -> None:
         self._store.on_http_response(event)
+
+    def _handle_call_exchange(self, event: Any) -> None:
+        self._store.on_call_exchange(event)
 
     def _handle_variable_promoted(self, event: Any) -> None:
         self._store.on_variable_promoted(event)

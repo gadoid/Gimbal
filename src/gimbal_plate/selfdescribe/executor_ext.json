@@ -558,7 +558,7 @@
     "capabilities": [
       "reporter"
     ],
-    "events": 14,
+    "events": 13,
     "hooks": 0
   },
   {
@@ -1341,10 +1341,15 @@
     "fields": [
       "assertion_count",
       "assertion_passed",
+      "assertions",
       "attempt",
+      "call_summary",
+      "description",
       "duration_ms",
       "endpoint",
       "error_brief",
+      "extracts",
+      "failure_evidence",
       "module",
       "promotion_count",
       "protocol",
@@ -1357,6 +1362,7 @@
       "status",
       "step",
       "step_id",
+      "step_name",
       "timestamp",
       "unit"
     ]

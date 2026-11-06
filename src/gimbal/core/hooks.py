@@ -34,8 +34,8 @@ class HookPoint(str, Enum):
     """拦截埋点（S-3 二分后只保留拦截点；观察一律走事件总线）。
 
     新增拦截点：在此处加一个枚举值，主流程经 ``ask_decision`` 询问；
-    观察（run/scenario/step 生命周期、http 收发）对应事件
-    run.start / scenario.start / step.start / http.request / http.response …
+    观察（run/scenario/step 生命周期、调用收发）对应事件
+    run.start / scenario.start / step.start / call.exchange …
     —— 订阅事件，不注册 hook。
 
     拦截点（v2 §拦截表；S-3 起 STRATEGY_AFTER 观察位退役）：

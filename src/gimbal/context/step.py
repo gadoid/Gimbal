@@ -101,6 +101,10 @@ class AssertionResult(BaseModel):
     expected: Any
     actual: Any
     message: Optional[str] = None
+    # 报告/步骤落库用(2026-11-06 日志报告整理 B1):断言目标与操作符原文,
+    # 让 step.end 自带「哪条断言、比的什么」,不必回读 strategy_spec
+    target: Optional[str] = None
+    operator: Optional[str] = None
 
 
 class ErrorInfo(BaseModel):
