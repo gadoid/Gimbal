@@ -191,7 +191,7 @@ class StepStateMachine:
     def run(self) -> StepRunResult:
         """驱动状态机运行直到终态，返回执行结果。"""
         t_start = datetime.now(timezone.utc)
-        logger.info("[SM {}] 状态机开始执行", self._step_id)
+        logger.debug("[SM {}] 状态机开始执行", self._step_id)
 
         # 埋点：STEP_START 事件
 
@@ -257,7 +257,7 @@ class StepStateMachine:
             self._try_advance(StepState.ERROR, reason=str(exc))
 
         duration_ms = (datetime.now(timezone.utc) - t_start).total_seconds() * 1000
-        logger.info("[SM {}] 状态机执行完成: final_state={} duration_ms={:.2f}",
+        logger.debug("[SM {}] 状态机执行完成: final_state={} duration_ms={:.2f}",
                     self._step_id, self._state.value, duration_ms)
 
         # 埋点：STEP_FAILED 事件（step.start/end 由 ContextManager 投影发布）
@@ -301,7 +301,7 @@ class StepStateMachine:
 
     def _handle_invoking(self) -> StepState:
         """发出协议调用（ProtocolRegistry 分派），把结果写入 context。"""
-        logger.info("[SM {}] 开始协议调用", self._step_id)
+        logger.debug("[SM {}] 开始协议调用", self._step_id)
         result = self._do_call()
         self._phase_results.append(PhaseResult(phase="calling", results=[result]))
 
@@ -313,9 +313,10 @@ class StepStateMachine:
             # ③(2026-10-13):协议执行器的类型化分类随行携带(空=未分类)
             self._error_kind = getattr(result, "error_kind", "") or ""
             logger.warning("[SM {}] 协议调用失败: status={} message={}，进入 TEARDOWN",
-                          self._step_id, result.status, result.message)
+                          self._step_id, getattr(result.status, "value", result.status),
+                          result.message)
             return StepState.TEARDOWN
-        logger.info("[SM {}] 协议调用成功，进入 EXTRACTING", self._step_id)
+        logger.debug("[SM {}] 协议调用成功，进入 EXTRACTING", self._step_id)
         return StepState.EXTRACTING
 
     def _handle_extracting(self) -> StepState:
@@ -367,7 +368,7 @@ class StepStateMachine:
                 self._step_id, self._error,
             )
             return StepState.FAILED
-        logger.info(
+        logger.debug(
             "[SM {}] VERIFYING 阶段通过 (soft_failures={})，进入 PASSED",
             self._step_id, pr.any_failed,
         )
@@ -408,7 +409,7 @@ class StepStateMachine:
             )
             return StepState.PASSED
 
-        logger.info(
+        logger.debug(
             "[SM {}] TEARDOWN 阶段完成，进入 PASSED (soft_failures={})",
             self._step_id, pr.any_failed,
         )
@@ -434,14 +435,14 @@ class StepStateMachine:
 
     def _run_phase(self, phase: str) -> PhaseResult:
         """通过 dispatcher 分发执行指定 phase 的所有策略，返回聚合的 PhaseResult（包含所有 StrategyResult）。"""
-        logger.debug("[SM {}] 执行策略阶段: phase={}", self._step_id, phase)
+        logger.debug("[SM {}] 执行策略阶段: phase={}", self._step_id, getattr(phase, "value", phase))
         results = self._dispatcher.dispatch_phase(
             phase, self._step_schema.strategy, self._view
         )
         passed_count = sum(1 for r in results if r.passed)
         failed_count = sum(1 for r in results if r.failed)
         logger.debug("[SM {}] 策略阶段完成: phase={} total={} passed={} failed={}",
-                    self._step_id, phase, len(results), passed_count, failed_count)
+                    self._step_id, getattr(phase, "value", phase), len(results), passed_count, failed_count)
         return PhaseResult(phase=phase, results=results)
 
     def _has_phase(self, phase: str) -> bool:
@@ -499,7 +500,7 @@ class StepStateMachine:
         if isinstance(spec, StrategyResult):
             return spec
 
-        logger.info("[SM {}] 协议调用: protocol={} executor={} kind={}",
+        logger.debug("[SM {}] 协议调用: protocol={} executor={} kind={}",
                     self._step_id, call.protocol, type(executor).__name__,
                     getattr(spec, "kind", "?"))
 
@@ -509,8 +510,9 @@ class StepStateMachine:
         # 计时与异常兜底同在模板内；http 命名空间钩子/事件在适配器自己的
         # send/after_send 里（v2.1 批次 A 契约）。
         result = executor.execute(spec, self._view)
-        logger.info("[SM {}] 协议调用返回: protocol={} status={} duration_ms={:.2f}",
-                    self._step_id, call.protocol, result.status, result.duration_ms)
+        logger.debug("[SM {}] 协议调用返回: protocol={} status={} duration_ms={:.2f}",
+                    self._step_id, call.protocol, getattr(result.status, "value", result.status),
+                    result.duration_ms)
         return result
 
     # 历史名兼容：既有调用方/测试直接调 _do_http_call

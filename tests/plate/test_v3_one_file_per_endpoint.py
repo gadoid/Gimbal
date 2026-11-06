@@ -29,7 +29,8 @@ def test_each_endpoint_file_exports_one_endpointspec() -> None:
             assert len(models) == 1 and isinstance(models[0], EndpointSpec)
             count += 1
     # 149 → 198(141f2b1c 自举端点注册批 +49 platform)→ 200(b3-7:+jira 2)
-    assert count == 200
+    #     → 202(2026-11-06 日志报告整理 B4/B5:+report/batch-summary 2)
+    assert count == 202
 
 
 def test_endpoint_filename_matches_id() -> None:

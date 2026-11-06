@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from gimbal.plugins.loader import PluginLoader
 from gimbal.events import InMemoryEventBus
 from gimbal.events.types import (
-    RunStartEvent, RunEndEvent,
+    RunStartEvent, RunFinishedEvent,
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent,
 )
@@ -108,7 +108,7 @@ def test_e2e_via_plugin_loader(tmp_path):
     bus.publish(ScenarioEndEvent(
         run_id="e2e-1", scenario_id="demo_sc", status="passed", step_count=2, timestamp=_ts(),
     ))
-    bus.publish(RunEndEvent(
+    bus.publish(RunFinishedEvent(
         run_id="e2e-1", total=2, passed=2, failed=0, error=0, timestamp=_ts(),
     ))
     bus.stop()

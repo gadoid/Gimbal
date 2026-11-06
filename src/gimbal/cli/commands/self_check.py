@@ -124,7 +124,7 @@ def self_check(ctx: typer.Context) -> None:
     from gimbal.core.hooks import HookPoint
     from gimbal.events.types import (
         EventType,
-        RunStartEvent, RunEndEvent,
+        RunStartEvent,
         StepStartEvent, StepEndEvent, StepFailedEvent,
         HttpRequestEvent, HttpResponseEvent,
         ScenarioStartEvent, ScenarioEndEvent,
@@ -165,9 +165,9 @@ def self_check(ctx: typer.Context) -> None:
         # ── B. 订阅全部事件类型（演示 Issue 4 修复后的对称 API）──
         event_types = [
             EventType.STEP_START, EventType.STEP_END, EventType.STEP_FAILED,
-            EventType.HTTP_REQUEST, EventType.HTTP_RESPONSE,
+            EventType.CALL_EXCHANGE,
             EventType.SCENARIO_START, EventType.SCENARIO_END,
-            EventType.RUN_START, EventType.RUN_END,
+            EventType.RUN_START, EventType.RUN_FINISHED,
         ]
         for ev_type in event_types:
             # 两种风格都支持：EventType 枚举 或 字符串字面量

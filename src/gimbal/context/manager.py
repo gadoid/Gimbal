@@ -50,7 +50,7 @@ class ContextManager:
             channels=channels,
         )
         ctx.seal()
-        logger.info("[ContextManager] FrameworkContext created: run_id={}", run_id)
+        logger.debug("[ContextManager] FrameworkContext created: run_id={}", run_id)
         return ctx
 
     # ── Suite ─────────────────────────────────────────
@@ -87,7 +87,7 @@ class ContextManager:
         object.__setattr__(ctx, "status", status)
         ctx.seal()
         self._archive.save_suite(ctx)
-        logger.info("[ContextManager] SuiteContext finalized: suite_id={} status={}", ctx.suite_id, status)
+        logger.debug("[ContextManager] SuiteContext finalized: suite_id={} status={}", ctx.suite_id, status)
 
     # ── Scenario ──────────────────────────────────────
     def derive_scenario_context(
@@ -115,7 +115,7 @@ class ContextManager:
         # 生命周期事件唯一发布者裁定（上轮评审 #5）：scenario.start/end 由
         # ScenarioRunner 发布（携带 meta 与真实 step_count）；ContextManager
         # 只发 step.start/end（计数字段最全）与 variable.promoted
-        logger.info("[ContextManager] ScenarioContext created: scenario_id={} suite_id={}",
+        logger.debug("[ContextManager] ScenarioContext created: scenario_id={} suite_id={}",
                     scenario_id, suite_ctx.suite_id)
         return ctx
 
@@ -125,7 +125,7 @@ class ContextManager:
         object.__setattr__(ctx, "status", status)
         ctx.seal()
         self._archive.save_scenario(ctx)
-        logger.info("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
+        logger.debug("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
                     ctx.scenario_id, status, len(ctx.step_refs))
 
     # ── Step ──────────────────────────────────────────
@@ -172,6 +172,7 @@ class ContextManager:
         # 浅拷贝快照：as_dict 返回内部 dict 引用，紧随其后的 scratch.clear()
         # 会把按引用保存的 exchange 一并清空（历史 bug —— 归档的 exchange 恒空）
         scratch_snapshot = dict(ctx.scratch.as_dict())
+        call_evidence = None
         if "call" in scratch_snapshot:   # F 定稿：唯一证据键
             # P0-3：scratch 存原值；归档是证据出口，call 键复核为证据形态
             # （脱敏 + 截断），原值不出 scratch
@@ -179,6 +180,8 @@ class ContextManager:
             call_raw = scratch_snapshot["call"]
             if isinstance(call_raw, dict):
                 exchange["call"] = evidence_from_call_dict(call_raw)
+                # step.end 报告面（调用摘要 / 失败现场）复用同一份证据形态
+                call_evidence = exchange["call"]
             self._archive.save_exchange(
                 exchange, ctx.step_id,
                 scenario_id=getattr(ctx.parent, "scenario_id", None),
@@ -188,8 +191,9 @@ class ContextManager:
         ctx.scratch.clear()
 
         ctx.seal()
-        self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
-        logger.info("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
+        self._event_bus.publish(project_step_completed(
+            ctx, ctx.parent.run_id, call_evidence=call_evidence))
+        logger.debug("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
                     ctx.step_id, status.value, ctx.outcome.duration_ms)
 
     # ── 内部:把 Channels 的 Promotion 转事件 ──────────

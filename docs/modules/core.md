@@ -102,7 +102,8 @@ class HookPoint(str, Enum):
     FRAMEWORK_TEARDOWN = "framework.teardown"
     # Run 生命周期
     RUN_START = "run.start"
-    RUN_END   = "run.end"
+    RUN_END   = "run.end"        # 2026-11-06 起不再发布（并入 run.finished）
+    RUN_FINISHED = "run.finished"
     # Suite 生命周期
     SUITE_START = "suite.start"
     SUITE_END   = "suite.end"
@@ -371,8 +372,8 @@ print(engine.artifacts)        # 列出所有 ReportArtifact
 2. 触发 `RUN_START` 事件
 3. 启动所有 reporter（`reporter_runtime.begin_all`）
 4. 按 `Scenario` / `Suite` 分发到 `_run_scenario` / `_run_suite`
-5. 触发 `RUN_END` 事件
-6. 终结所有 reporter，产出 `ReportArtifact` 列表（`reporter_runtime.finalize_all`）
+5. 终结所有 reporter，产出 `ReportArtifact` 列表（`reporter_runtime.finalize_all`）
+6. 发布 `run.finished`（run 结束的唯一事件 / jsonl 终线；2026-11-06 起 `run.end` 并入此事件）
 
 ### RunResult
 
@@ -510,8 +511,8 @@ Engine(configuration)                                    ← core/runner.py
   │           └── for scenario in suite.suite: ScenarioRunner.run(...)
   │                 （fail_fast 时未通过即 break）
   │     │
-  │     ├── 触发 RUN_END 事件
-  │     └── reporter_runtime.finalize_all(result)  → 写入 engine.artifacts
+  │     ├── reporter_runtime.finalize_all(result)  → 写入 engine.artifacts
+  │     └── 发布 run.finished（run 结束的唯一事件 / jsonl 终线）
   │
   ▼
 RunResult

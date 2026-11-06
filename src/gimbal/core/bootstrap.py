@@ -82,10 +82,10 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     # 3. 日志（用最终配置重新设置，确保 bootstrap 阶段的日志也受控制）
     from gimbal.log.integration import configure_logging_from_bootstrap
     configure_logging_from_bootstrap(cfg)
-    logger.info("[bootstrap] 配置加载完成: env={} mode={}", cfg.env, cfg.mode)
+    logger.debug("[bootstrap] 配置加载完成: env={} mode={}", cfg.env, cfg.mode)
 
     # 4. 基础设施
-    logger.info("[bootstrap] 初始化基础设施...")
+    logger.debug("[bootstrap] 初始化基础设施...")
     from gimbal.events.bus import InMemoryEventBus
     from gimbal.context.archive import InMemoryArchive
     from gimbal.context.manager import ContextManager
@@ -104,7 +104,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         hook_registry=hook_registry, event_bus=event_bus, auth_registry=auth_registry,
     )
 
-    logger.info(
+    logger.debug(
         "[bootstrap] 基础设施初始化完成: EventBus, Archive, ContextManager, "
         "Dispatcher, HookRegistry, PluginRegistry"
     )
@@ -119,7 +119,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         dispatcher=dispatcher,
         protocol_registry=getattr(dispatcher, "protocols", None),
     )
-    logger.info("[bootstrap] 插件加载完成: count={}", len(plugins))
+    logger.debug("[bootstrap] 插件加载完成: count={}", len(plugins))
 
     # 6. 触发 FRAMEWORK_INIT 钩子（在插件激活后；允许插件"接管"框架启动）
     from gimbal.core.hooks import HookPoint
@@ -143,13 +143,19 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     register_builtin_reporters(reporter_registry)
     reporter_runtime = ReporterRuntime(reporter_registry)
     reporter_runtime.setup(bus=event_bus, config=cfg)
-    logger.info("[bootstrap] Reporter runtime 就绪: builtins={}", reporter_registry.available())
+    logger.debug("[bootstrap] Reporter runtime 就绪: builtins={}", reporter_registry.available())
 
     # 8. 构造变量生成器并注入 cfg（cfg 是 frozen=True，只能用 model_copy）
     from gimbal.generator import Generator, build_default_registry
     generator = Generator(build_default_registry())
     cfg = cfg.model_copy(update={"generator": generator})
-    logger.info("[bootstrap] 变量生成器已就绪: kinds={}", generator._registry.kinds())
+    logger.debug("[bootstrap] 变量生成器已就绪: kinds={}", generator._registry.kinds())
+    # 启动阶段只留这一行 INFO(2026-11-06 日志整理:原 6+ 行逐组件 INFO 降 DEBUG)
+    logger.info(
+        "[bootstrap] 就绪: env={} mode={} plugins={} reporters={} generators={}",
+        cfg.env, cfg.mode, len(plugins), len(reporter_registry.available()),
+        len(generator._registry.kinds()),
+    )
 
     # 9. Run 级元数据（纯环境变量读取;Engine.run 内 reporter 订阅后发布）
     from gimbal.core.run_meta import collect_run_meta

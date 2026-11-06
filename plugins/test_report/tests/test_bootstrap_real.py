@@ -29,7 +29,7 @@ from gimbal.cli.context import CLIContext
 from gimbal.plugins.loader import PluginLoader
 from gimbal.events import InMemoryEventBus
 from gimbal.events.types import (
-    RunStartEvent, RunEndEvent,
+    RunStartEvent, RunFinishedEvent,
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent,
 )
@@ -111,7 +111,7 @@ def test_bootstrap_real_world(tmp_path):
     bus.publish(ScenarioEndEvent(
         run_id="rb-1", scenario_id="rb-sc", status="failed", step_count=2, timestamp=ts()
     ))
-    bus.publish(RunEndEvent(
+    bus.publish(RunFinishedEvent(
         run_id="rb-1", total=2, passed=1, failed=1, error=0, timestamp=ts()
     ))
     bus.stop()

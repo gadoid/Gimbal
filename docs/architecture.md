@@ -64,7 +64,7 @@ CLI (Typer)
             │       ├── _publish_run_meta(configuration)        # 发布 RunMetaEvent（此时 reporter_runtime 已 setup 但未 begin_all，无内置 reporter 订阅）
             │       │
             │       ├── engine = Engine(configuration)
-            │       │     └── engine.run(scenario | suite)   # 内部：FrameworkContext → RUN_START → reporter_runtime.begin_all → 分发 → RUN_END → reporter_runtime.finalize_all
+            │       │     └── engine.run(scenario | suite)   # 内部：FrameworkContext → RUN_START → reporter_runtime.begin_all → 分发 → reporter_runtime.finalize_all → run.finished
             │       └── _print_run_report(result, fmt, artifacts)  # 终端/JSON 输出
             │
             └── self-check            # bootstrap + exercise event_bus / hook_registry
@@ -203,7 +203,7 @@ TEARDOWN                                 # 执行清理策略
 
 - `EventType` / `HookPoint` 分别在 `events/types.py` 与 `core/hooks.py` 定义枚举；新增埋点只需要在枚举里加一行。
 - 插件通过 `PluginContext.register_event()` / `register_hook()` 注册时，会携带 `plugin_name`，卸载时由框架按名字精确清理。
-- **双侧同名埋点**：部分关键事件在 `EventType` 与 `HookPoint` **值完全相同**——例如 `framework.init` / `framework.teardown` / `run.start` / `run.end` / `scenario.start` / `scenario.end` / `step.start` / `step.end` / `step.failed` 既是 Event 也是 Hook。这种设计让"先观察后介入"或"先拦截后通知"两种用法可自由组合。Event 在主流程中由框架 `bus.publish()` 主动发出，Hook 由主流程在执行前/后显式 `trigger()` 调用；两者互不替代。
+- **双侧同名埋点**：部分关键事件在 `EventType` 与 `HookPoint` **值完全相同**——例如 `framework.init` / `framework.teardown` / `run.start` / `scenario.start` / `scenario.end` / `step.start` / `step.end` / `step.failed` 既是 Event 也是 Hook。这种设计让"先观察后介入"或"先拦截后通知"两种用法可自由组合。Event 在主流程中由框架 `bus.publish()` 主动发出，Hook 由主流程在执行前/后显式 `trigger()` 调用；两者互不替代。
 
 ## 设计原则
 
@@ -320,7 +320,7 @@ class CLIContext(BaseModel):
      ├── PENDING → BEFORE_REQUEST → CALLING → AFTER_REQUEST → VERIFYING → TEARDOWN
      ├── 循环直到终态
      └── 返回 StepRunResult
-8. emit RunEndEvent
-9. reporter_runtime.finalize_all(result) → list[ReportArtifact]
+8. reporter_runtime.finalize_all(result) → list[ReportArtifact]
+9. emit RunFinishedEvent（run 结束的唯一事件 / jsonl 终线；2026-11-06 起 run.end 并入）
 10. _print_run_report(result, fmt, artifacts)   # 终端 / JSON 输出
 ```

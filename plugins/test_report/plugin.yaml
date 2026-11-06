@@ -4,7 +4,7 @@ entry_point: test_report.plugin:ReportPlugin
 category: reporter
 description: |
   Auto-loads on framework bootstrap and emits a single-file HTML test
-  report at ``run.end``.  No CLI flags required — only the plugin
+  report at ``run.finished``.  No CLI flags required — only the plugin
   config below.
 
   v2 collects **full process information**: framework version, run meta,

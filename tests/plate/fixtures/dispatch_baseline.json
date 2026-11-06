@@ -643,6 +643,7 @@
   "platform.environments.post_root": {},
   "platform.environments.put_by_env_id": {},
   "platform.executions.delete_by_execution_id": {},
+  "platform.executions.get_batch_summary": {},
   "platform.executions.get_by_execution_id": {},
   "platform.executions.get_by_execution_id_case_artifact": {},
   "platform.executions.get_by_execution_id_debug": {},
@@ -650,6 +651,7 @@
   "platform.executions.get_by_execution_id_events": {},
   "platform.executions.get_by_execution_id_events_counts": {},
   "platform.executions.get_by_execution_id_events_stream": {},
+  "platform.executions.get_by_execution_id_report": {},
   "platform.executions.get_by_execution_id_rows": {},
   "platform.executions.get_by_execution_id_scenario_snapshot": {},
   "platform.executions.get_root": {},
@@ -1445,6 +1447,7 @@
   "platform.environments.post_root": {},
   "platform.environments.put_by_env_id": {},
   "platform.executions.delete_by_execution_id": {},
+  "platform.executions.get_batch_summary": {},
   "platform.executions.get_by_execution_id": {},
   "platform.executions.get_by_execution_id_case_artifact": {},
   "platform.executions.get_by_execution_id_debug": {},
@@ -1452,6 +1455,7 @@
   "platform.executions.get_by_execution_id_events": {},
   "platform.executions.get_by_execution_id_events_counts": {},
   "platform.executions.get_by_execution_id_events_stream": {},
+  "platform.executions.get_by_execution_id_report": {},
   "platform.executions.get_by_execution_id_rows": {},
   "platform.executions.get_by_execution_id_scenario_snapshot": {},
   "platform.executions.get_root": {},
@@ -3638,6 +3642,25 @@
       "headers": {},
       "kind": "call",
       "method": "GET",
+      "path": "/api/executions/batch-summary",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_batch_summary",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
       "path": "/api/executions/{execution_id}",
       "protocol": "http",
       "service": "fin",
@@ -3758,6 +3781,25 @@
       "timeout": 30.0
      },
      "description": "ab:platform.executions.get_by_execution_id_events_stream",
+     "kind": "step",
+     "request": {
+      "body": {},
+      "kind": "request"
+     },
+     "strategy": []
+    },
+    {
+     "call": {
+      "auth": "none",
+      "headers": {},
+      "kind": "call",
+      "method": "GET",
+      "path": "/api/executions/{execution_id}/report",
+      "protocol": "http",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "description": "ab:platform.executions.get_by_execution_id_report",
      "kind": "step",
      "request": {
       "body": {},
@@ -5727,6 +5769,7 @@
   "platform.environments.post_root",
   "platform.environments.put_by_env_id",
   "platform.executions.delete_by_execution_id",
+  "platform.executions.get_batch_summary",
   "platform.executions.get_by_execution_id",
   "platform.executions.get_by_execution_id_case_artifact",
   "platform.executions.get_by_execution_id_debug",
@@ -5734,6 +5777,7 @@
   "platform.executions.get_by_execution_id_events",
   "platform.executions.get_by_execution_id_events_counts",
   "platform.executions.get_by_execution_id_events_stream",
+  "platform.executions.get_by_execution_id_report",
   "platform.executions.get_by_execution_id_rows",
   "platform.executions.get_by_execution_id_scenario_snapshot",
   "platform.executions.get_root",

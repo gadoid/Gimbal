@@ -1,6 +1,6 @@
 """builtin/html_reporter.py — HtmlReporter（事件驱动 + finalize 落盘）。
 
-订阅 scenario.* / step.* / http.* 事件，在 finalize 时把累积的状态
+订阅 scenario.* / step.* / call.exchange 事件，在 finalize 时把累积的状态
 一次性渲染成自包含 HTML。当事件未触发（如 dry-run）时回落到
 RunResult.details 以保持兼容。
 """
@@ -13,9 +13,8 @@ from typing import Any
 
 from gimbal.core.runner import RunResult
 from gimbal.events.types import (
+    CallExchangeEvent,
     FrameworkEvent,
-    HttpRequestEvent,
-    HttpResponseEvent,
     RunMetaEvent,
     ScenarioEndEvent,
     ScenarioStartEvent,
@@ -182,8 +181,7 @@ class HtmlReporter(ReporterBase):
         "step.start",
         "step.end",
         "step.failed",
-        "http.request",
-        "http.response",
+        "call.exchange",
         "run.meta",
     )
 
@@ -278,21 +276,17 @@ class HtmlReporter(ReporterBase):
                 })
                 rec["status"] = "failed"
                 rec["error"] = event.error
-            elif isinstance(event, HttpRequestEvent):
+            elif isinstance(event, CallExchangeEvent):
+                # 2026-11-06：http.request/response 停发，调用摘要取自
+                # call.exchange（已脱敏）；一次调用 = 一条请求 + 一条响应
                 self._http_count += 1
                 sc_id = self._current_scenario
-                self._http_calls[(sc_id, event.step_id)].append({
-                    "kind": "request",
-                    "method": event.method,
-                    "url": event.url,
-                })
-            elif isinstance(event, HttpResponseEvent):
-                sc_id = self._current_scenario
-                self._http_calls[(sc_id, event.step_id)].append({
-                    "kind": "response",
-                    "status_code": event.status_code,
-                    "duration_ms": event.duration_ms,
-                })
+                v = event.summary()
+                calls = self._http_calls[(sc_id, event.step_id)]
+                calls.append({"kind": "request", "method": v["method"], "url": v["url"]})
+                calls.append({"kind": "response",
+                              "status_code": v["status_code"] or 0,
+                              "duration_ms": v["duration_ms"]})
             elif isinstance(event, RunMetaEvent):
                 # 缓存 run_meta；后到的覆盖先到的（CLI 通常只发一次）
                 self._run_meta = dict(event.meta or {})

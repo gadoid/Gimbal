@@ -134,7 +134,7 @@ class ReporterRuntime:
         self._bus = bus
         self._config = config
         self._state = "ready"
-        logger.info("[ReporterRuntime] setup 完成: bus={}", type(bus).__name__)
+        logger.debug("[ReporterRuntime] setup 完成: bus={}", type(bus).__name__)
 
     # ── 阶段 2：启动 ─────────────────────────────────────────────────────
 
@@ -195,7 +195,7 @@ class ReporterRuntime:
                 logger.exception("[ReporterRuntime] reporter.begin 失败: name={}", name)
 
         self._state = "running"
-        logger.info(
+        logger.debug(
             "[ReporterRuntime] begin_all: reporters={} subscriptions={}",
             [getattr(r, "name", "?") for r in self._reporters],
             sum(len(c.subscription_ids) for c in self._contexts.values()),
@@ -250,7 +250,7 @@ class ReporterRuntime:
             if not art.name:
                 object.__setattr__(art, "name", name) if art.__class__ is ReportArtifact else None
             artifacts.append(art)
-            logger.info(
+            logger.debug(
                 "[ReporterRuntime] reporter.finalize 完成: name={} path={} media={}",
                 art.name,
                 art.path,
@@ -277,7 +277,7 @@ class ReporterRuntime:
                     self._error_log.add(name, "shutdown", exc)
                     logger.exception("[ReporterRuntime] unsubscribe 失败: sub_id={}", sid)
         self._state = "closed"
-        logger.info(
+        logger.debug(
             "[ReporterRuntime] shutdown 完成: errors={}",
             len(self._error_log.entries),
         )

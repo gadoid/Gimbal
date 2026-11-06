@@ -120,7 +120,8 @@ class TestGates:
         assert r.success, r.message
         assert r.revision == "1.0#1"
         # 126 → 175(141f2b1c 自举端点注册批 +49,2026-10-12 补钉)
-        assert r.manifest["summary"]["endpoints"] == 175
+        #     → 177(2026-11-06 日志报告整理 B4/B5:+report/batch-summary 2)
+        assert r.manifest["summary"]["endpoints"] == 177
         # P2 内容交付后 statements 增多;原切片 10 条作为下限断言
         assert r.manifest["summary"]["statements"] >= 10
         # 11 = 原切片 10 + 三级角色更名(0011)补的 value:user.role.user

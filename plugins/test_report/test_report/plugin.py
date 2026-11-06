@@ -5,15 +5,17 @@
   1. 提供 ``plugin.yaml`` 作为唯一配置文件
   2. ``gimbal-bootstrap`` 时由 ``PluginLoader.discover`` 自动发现，不需要
      用户在 CLI 传任何参数
-  3. ``run.end`` 事件触发时，根据 ``default_config.output_path`` 把累积的
-     run/suite/scenario/step/http/promotion 全量数据渲染为单文件 HTML 报告
+  3. ``run.finished`` 事件触发时，根据 ``default_config.output_path`` 把累积的
+     run/suite/scenario/step/call/promotion 全量数据渲染为单文件 HTML 报告
+     （2026-11-06 引擎停发 run.end，改订 run 结束的唯一事件 run.finished）
 
 设计原则：
   - 与 ``gimbal-collector`` 一样的扁平订阅：聚合在 ``ReportStore``，渲染
     在 ``HtmlRenderer``，flush 在 plugin 自身 —— 单一 ``Plugin`` 类承担，
     不去注册为 ``Reporter``（CI 摘要里不会出现；这符合"默默生成"语义）
-  - ``run.end`` 用 ``priority=1``（最晚跑）保证所有 step / http / promotion
-    事件先入库
+  - ``run.finished`` 是 run 的最后一个事件，此前 step / call / promotion
+    事件都已入库；用 ``priority=1`` 订阅（总线按 priority 升序调用），先于
+    jsonl sink 写出终线，报告文件在终线之前就位
   - flush 失败用 ``logger.exception`` 兜底，绝不影响 framework 退出码
 """
 from __future__ import annotations
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReportPlugin(Plugin):
-    """订阅框架事件 → 累积到 ReportStore → run.end 时落盘 HTML。"""
+    """订阅框架事件 → 累积到 ReportStore → run.finished 时落盘 HTML。"""
 
     manifest = PluginManifest(
         name="gimbal-test-report",
@@ -39,7 +41,7 @@ class ReportPlugin(Plugin):
         entry_point="test_report.plugin:ReportPlugin",
         description=(
             "Auto-activates on bootstrap and emits a single-file HTML test "
-            "report at run.end. Zero CLI args required. v2 collects full "
+            "report at run.finished. Zero CLI args required. v2 collects full "
             "process information: HTTP exchanges, variable promotions, "
             "suite grouping, framework version, and run meta."
         ),
@@ -64,12 +66,12 @@ class ReportPlugin(Plugin):
         # 重置 store（避免上次 deactivate 残留）
         self._store = ReportStore()
 
-        # 14 个事件订阅。run.end 用 priority=1 让它最后执行
-        # 这样所有 step / http / promotion 事件都已入库。
+        # 14 个事件订阅。run.finished 是 run 的最后一个事件（此前 step / call /
+        # promotion 都已入库）；priority=1 先于 jsonl sink（默认 100）写出终线
         ctx.register_event("framework.init",     self._handle_framework_init)
         ctx.register_event("run.start",          self._handle_run_start)
         ctx.register_event("run.meta",           self._handle_run_meta)
-        ctx.register_event("run.end",            self._handle_run_end, priority=1)
+        ctx.register_event("run.finished",       self._handle_run_finished, priority=1)
         ctx.register_event("suite.start",        self._handle_suite_start)
         ctx.register_event("suite.end",          self._handle_suite_end)
         ctx.register_event("scenario.start",     self._handle_scenario_start)
@@ -77,8 +79,8 @@ class ReportPlugin(Plugin):
         ctx.register_event("step.start",         self._handle_step_start)
         ctx.register_event("step.end",           self._handle_step_end)
         ctx.register_event("step.failed",        self._handle_step_failed)
-        ctx.register_event("http.request",       self._handle_http_request)
-        ctx.register_event("http.response",      self._handle_http_response)
+        # 2026-11-06：引擎停发 http.*，调用证据统一走 call.exchange（已脱敏）
+        ctx.register_event("call.exchange", self._handle_call_exchange)
         ctx.register_event("variable.promoted",  self._handle_variable_promoted)
 
         logger.info(
@@ -103,8 +105,8 @@ class ReportPlugin(Plugin):
     def _handle_run_meta(self, event: Any) -> None:
         self._store.on_run_meta(event)
 
-    def _handle_run_end(self, event: Any) -> None:
-        self._store.on_run_end(event)
+    def _handle_run_finished(self, event: Any) -> None:
+        self._store.on_run_finished(event)
         self._flush(event)
 
     def _handle_suite_start(self, event: Any) -> None:
@@ -134,6 +136,9 @@ class ReportPlugin(Plugin):
     def _handle_http_response(self, event: Any) -> None:
         self._store.on_http_response(event)
 
+    def _handle_call_exchange(self, event: Any) -> None:
+        self._store.on_call_exchange(event)
+
     def _handle_variable_promoted(self, event: Any) -> None:
         self._store.on_variable_promoted(event)
 
@@ -149,7 +154,7 @@ class ReportPlugin(Plugin):
         if report is None:
             logger.warning(
                 "[TestReportPlugin] flush skipped: no run captured "
-                "(run.start not seen before run.end?)"
+                "(run.start not seen before run.finished?)"
             )
             return
 

@@ -112,6 +112,8 @@ class LaunchResult:
     # 但防御性保留原文以防未来混入噪声)。
     stdout: str = ""
     argv: list[str] = field(default_factory=list)
+    # B6(R11 轻量版):server 链借出的槽位号(launch 链恒 None)
+    server_slot: int | None = None
 
     @property
     def run_result(self) -> dict[str, Any]:

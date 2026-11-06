@@ -2,7 +2,7 @@
 
 > **模块**：[`plugins/collector/`](../../../plugins/collector)（本地开发插件）
 > **状态**：**已实现**，跑通端到端（[tests/unit/test_collector_plugin.py](../../../../tests/unit/test_collector_plugin.py) 9 个测试 + 真实 `PluginLoader` 路径验证）
-> **核心能力**：订阅 9 个框架事件（run/scenario/step/http/promotion），在 `run.end` 时落盘 JSON 报告
+> **核心能力**：订阅 9 个框架事件（run/scenario/step/http/promotion），在 `run.finished` 时落盘 JSON 报告（2026-11-06 起引擎停发 `run.end`，改订 run 结束的唯一事件 `run.finished`）
 
 ---
 
@@ -12,7 +12,7 @@
 
 ```
 事件总线
-  ├─ run.start / run.end                 ─→ ReportStore.on_run_*
+  ├─ run.start / run.finished            ─→ ReportStore.on_run_*
   ├─ scenario.start / scenario.end       ─→ ReportStore.on_scenario_*
   ├─ step.start / step.end               ─→ ReportStore.on_step_*
   ├─ http.request / http.response        ─→ ReportStore.on_http_*
@@ -33,7 +33,7 @@
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | [`plugins/collector/plugin.yaml`](../../../plugins/collector/plugin.yaml) | — | PluginSpec 清单（name / version / entry_point / category） |
-| [`plugins/collector/gimbal_collector/plugin.py`](../../../plugins/collector/gimbal_collector/plugin.py) | ~110 | `CollectorPlugin` 入口；9 个事件订阅 + run.end 落盘 |
+| [`plugins/collector/gimbal_collector/plugin.py`](../../../plugins/collector/gimbal_collector/plugin.py) | ~110 | `CollectorPlugin` 入口；9 个事件订阅 + run.finished 落盘 |
 | [`plugins/collector/gimbal_collector/report_data.py`](../../../plugins/collector/gimbal_collector/report_data.py) | ~95 | `RunReport` / `ScenarioReport` / `StepReport` / `HttpExchange` 数据类 |
 | [`plugins/collector/gimbal_collector/store.py`](../../../plugins/collector/gimbal_collector/store.py) | ~155 | `ReportStore` 事件聚合（含 thread lock、深拷贝 snapshot） |
 | [`plugins/collector/gimbal_collector/renderers/json_renderer.py`](../../../plugins/collector/gimbal_collector/renderers/json_renderer.py) | ~30 | JSON 落盘 |
@@ -226,11 +226,9 @@ scenario_id: str = ""
 
 `InMemoryEventBus._safe_call`（[events/bus.py:136-144](../../../../src/gimbal/events/bus.py#L136-L144)）已经 `try/except` 兜底，再加一层 wrapper 是冗余。日志靠 `EventBus` 的 `logger.exception` 输出。
 
-### 2.4 `run.end` 注册两次（同事件多 handler）
+### 2.4 `run.finished` 一个 handler 内先写统计再落盘
 
-`store.on_run_end`（写最终统计）和 `_flush`（落盘）都注册到 `run.end`。`_flush` 用 `priority=1`（最低），确保在 store 收完所有数据后跑。
-
-不合并成一个 handler 是为了**关注点分离**：store 只管状态，flush 只管 I/O。
+`_handle_run_finished` 先调 `store.on_run_finished`（写最终统计）再 `_flush`（落盘）：store 只管状态，flush 只管 I/O，顺序在同一 handler 内固定。订阅用 `priority=1`——总线按 priority **升序**调用，先于 jsonl sink（默认 100）写出终线，报告文件在终线之前就位。（2026-11-06 前订阅的是 `run.end`，该事件已并入 `run.finished`。）
 
 ### 2.5 `scenario_id` 用 `_current_scenario_id` 跟踪
 
@@ -261,7 +259,7 @@ renderer 遍历时新事件可能并发写入（`mode=ASYNC` 时），深拷贝�
 
 ### 3.2 真实框架路径验证
 
-`PluginLoader.discover(plugins_dir="plugins") → load_all → activate_all → bus.publish(真实 Pydantic 事件) → run.end 触发落盘 → deactivate_all`。生成的报告：
+`PluginLoader.discover(plugins_dir="plugins") → load_all → activate_all → bus.publish(真实 Pydantic 事件) → run.finished 触发落盘 → deactivate_all`。生成的报告：
 
 ```json
 {

@@ -125,7 +125,7 @@ def test_no_color_honored():
 def test_verbose_http_events():
     from gimbal.reporter.builtin.console import ConsoleReporter
     from gimbal.reporter.protocol import ReportContext
-    from gimbal.events.types import HttpRequestEvent, HttpResponseEvent
+    from gimbal.events.types import CallExchangeEvent
     from gimbal.events.bus import InMemoryEventBus
     from gimbal.events.subscription import SubscriptionMode
 
@@ -142,9 +142,11 @@ def test_verbose_http_events():
     saved = sys.stderr
     sys.stderr = io.StringIO()
     try:
-     r.on_event(HttpRequestEvent(method="GET", url="http://x/y", step_id="s1"))
-     r.on_event(HttpResponseEvent(
-      method="GET", url="http://x/y", status_code=200, duration_ms=5.0, step_id="s1",
+     # 2026-11-06：http.* 停发，verbose 调用行取自 call.exchange
+     r.on_event(CallExchangeEvent(
+      step_id="s1", protocol="http", duration_ms=5.0,
+      result={"request": {"method": "GET", "url": "http://x/y"},
+              "response": {"status": 200}},
      ))
      captured = sys.stderr.getvalue()
     finally:

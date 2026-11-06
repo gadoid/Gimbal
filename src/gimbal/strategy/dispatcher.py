@@ -203,7 +203,7 @@ class StrategyDispatcher:
         )
 
         results: list[StrategyResult] = []
-        logger.debug("[StrategyDispatcher] Phase dispatch starting: phase={} strategy_count={}", phase, len(phase_specs))
+        logger.debug("[StrategyDispatcher] Phase dispatch starting: phase={} strategy_count={}", getattr(phase, "value", phase), len(phase_specs))
         for spec in phase_specs:
             result = self.dispatch(spec, view)
             results.append(result)
@@ -212,11 +212,13 @@ class StrategyDispatcher:
             if result.failed:
                 on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
                 if on_failure == FailurePolicy.ABORT:
-                    logger.warning("[StrategyDispatcher] Phase aborting due to failure: phase={} strategy_id={}",
-                                 phase, result.strategy_id)
+                    # 失败本身已由策略执行器(断言失败)与状态机各记一条 WARNING,
+                    # 此处只是中止机制的痕迹,降 DEBUG 免三连告警
+                    logger.debug("[StrategyDispatcher] Phase aborting due to failure: phase={} strategy_id={}",
+                                 getattr(phase, "value", phase), result.strategy_id)
                     break   # 硬中止，后续策略不再执行
 
-        logger.debug("[StrategyDispatcher] Phase dispatch completed: phase={} result_count={}", phase, len(results))
+        logger.debug("[StrategyDispatcher] Phase dispatch completed: phase={} result_count={}", getattr(phase, "value", phase), len(results))
         return results
 
 

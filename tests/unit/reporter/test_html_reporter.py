@@ -51,7 +51,7 @@ def test_on_event_accumulates_state():
     from gimbal.reporter.builtin.html_reporter import HtmlReporter
     from gimbal.events.types import (
         ScenarioStartEvent, ScenarioEndEvent, StepStartEvent, StepEndEvent,
-        StepFailedEvent, HttpRequestEvent, HttpResponseEvent,
+        StepFailedEvent, CallExchangeEvent,
     )
     r = HtmlReporter()
     r.on_event(ScenarioStartEvent(scenario_id="sc-1", scenario_name="Demo", step_count=2, suite_id="s"))
@@ -66,9 +66,9 @@ def test_on_event_accumulates_state():
         assertion_count=2, assertion_passed=1, promotion_count=0,
         error_brief="AssertionError: expected 200, got 500",
     ))
-    r.on_event(HttpRequestEvent(method="GET", url="http://x/users/1", step_id="s2"))
-    r.on_event(HttpResponseEvent(method="GET", url="http://x/users/1", status_code=500,
-                                  duration_ms=50.0, step_id="s2"))
+    r.on_event(CallExchangeEvent(step_id="s2", protocol="http", duration_ms=50.0,
+                       result={"request": {"method": "GET", "url": "http://x/users/1"},
+                               "response": {"status": 500}}))
     r.on_event(ScenarioEndEvent(scenario_id="sc-1", status="failed", step_count=2, suite_id="s"))
 
     assert "sc-1" in r._scenarios
@@ -89,7 +89,7 @@ def test_finalize_writes_html_with_steps_and_http():
     from gimbal.reporter.builtin.html_reporter import HtmlReporter
     from gimbal.events.types import (
         ScenarioStartEvent, ScenarioEndEvent, StepStartEvent, StepEndEvent,
-        HttpRequestEvent, HttpResponseEvent,
+        CallExchangeEvent,
     )
     from gimbal.core.runner import RunResult
 
@@ -104,12 +104,12 @@ def test_finalize_writes_html_with_steps_and_http():
         r.on_event(StepEndEvent(scenario_id="sc-1", step_id="s2", status="failed", duration_ms=20.0,
                                  assertion_count=2, assertion_passed=1, promotion_count=0,
                                  error_brief="AssertionError: 500"))
-        r.on_event(HttpRequestEvent(method="POST", url="http://x/login", step_id="s1"))
-        r.on_event(HttpResponseEvent(method="POST", url="http://x/login", status_code=200,
-                                      duration_ms=8.0, step_id="s1"))
-        r.on_event(HttpRequestEvent(method="GET", url="http://x/users/1", step_id="s2"))
-        r.on_event(HttpResponseEvent(method="GET", url="http://x/users/1", status_code=500,
-                                      duration_ms=20.0, step_id="s2"))
+        r.on_event(CallExchangeEvent(step_id="s1", protocol="http", duration_ms=8.0,
+                       result={"request": {"method": "POST", "url": "http://x/login"},
+                               "response": {"status": 200}}))
+        r.on_event(CallExchangeEvent(step_id="s2", protocol="http", duration_ms=20.0,
+                       result={"request": {"method": "GET", "url": "http://x/users/1"},
+                               "response": {"status": 500}}))
         r.on_event(ScenarioEndEvent(scenario_id="sc-1", status="failed", step_count=2, suite_id="s"))
 
         rr = RunResult(exit_code=1, total=1, passed=0, failed=1, details=[{

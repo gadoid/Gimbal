@@ -6,6 +6,7 @@ exec_runs 子表已随存量数据清理退役(V1 兼容层),删除整单不再�
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -409,11 +410,30 @@ async def insert_events(db: AsyncSession, execution_id: int,
         return
     rows: list[dict] = []
     evidences: list[dict] = []
+    steps: list[dict] = []
+    # step.end 的 error_brief 对断言失败为空(失败文案在先到的 step.failed
+    # 里):同批内按 (unit, attempt, step) 记下,补进步骤行
+    failed_err: dict[tuple, str] = {}
     for d in events:
         et = str(d.get("event_type") or "")
+        if et == "step.failed" and d.get("error"):
+            failed_err[(str(d.get("unit") or ""), str(d.get("attempt") or ""),
+                        str(d.get("step_id") or d.get("step") or ""))] = str(d["error"])
         payload = dict(d)
+        # B3:逐行链在 _row_on_event 注入的行号(不进事件 payload)
+        row_seq = payload.pop("row_seq", None)
         message = None
         evidence = None
+        if et == "step.end":
+            # B3:步骤结果行(报告数据源)。失败证据只进步骤表——事件表
+            # 已有 call.exchange 证据,不在 payload 里再存一份
+            fe = payload.pop("failure_evidence", None)
+            step_row = _step_row(execution_id, payload, row_seq, fe)
+            if not step_row["error"] and step_row["status"] in ("failed", "error"):
+                step_row["error"] = failed_err.get(
+                    (str(d.get("unit") or ""), str(d.get("attempt") or ""),
+                     step_row["step_id"]))
+            steps.append(step_row)
         if et == "call.exchange":
             evidence = payload.pop("result", None)
             req = evidence.get("request") if isinstance(evidence, dict) else None
@@ -459,6 +479,63 @@ async def insert_events(db: AsyncSession, execution_id: int,
         ev_stmt = ev_stmt.on_conflict_do_nothing(
             index_elements=["execution_id", "seq"])
         await db.execute(ev_stmt)
+    if steps:
+        await _upsert_steps(db, steps)
+
+
+# ── B3(2026-11-06 日志报告整理):步骤结果行 ─────────────────────────
+
+_STEP_UPDATE_COLS = (
+    "event_seq", "step_name", "description", "call_summary", "status",
+    "duration_ms", "error", "assertion_count", "assertion_passed",
+    "assertions", "extracts", "failure_evidence", "ended_at",
+)
+
+
+def _step_row(execution_id: int, d: dict, row_seq: Any,
+              failure_evidence: Any) -> dict:
+    """step.end 事件 dict → execution_steps 行(缺字段的旧引擎事件按缺省落)。"""
+    from datetime import datetime, timezone
+    try:
+        rs = int(row_seq) if row_seq is not None else -1
+    except (TypeError, ValueError):
+        rs = -1
+    return {
+        "execution_id": execution_id,
+        "row_seq": rs,
+        "unit": str(d.get("unit") or d.get("scenario_id") or ""),
+        "attempt": str(d.get("attempt") or ""),
+        "step_id": str(d.get("step_id") or d.get("step") or ""),
+        "event_seq": int(d.get("seq") or 0),
+        "step_name": str(d.get("step_name") or "")[:255],
+        "description": d.get("description"),
+        "call_summary": str(d.get("call_summary") or "")[:1024],
+        "status": str(d.get("status") or "")[:16],
+        "duration_ms": float(d.get("duration_ms") or 0.0),
+        "error": d.get("error_brief"),
+        "assertion_count": int(d.get("assertion_count") or 0),
+        "assertion_passed": int(d.get("assertion_passed") or 0),
+        "assertions": list(d.get("assertions") or []),
+        "extracts": list(d.get("extracts") or []),
+        "failure_evidence": failure_evidence if isinstance(failure_evidence, dict) else None,
+        "ended_at": _parse_ts(d.get("timestamp")) or datetime.now(timezone.utc),
+    }
+
+
+async def _upsert_steps(db: AsyncSession, steps: list[dict]) -> None:
+    """同键后到覆盖(恢复重跑重放同一步骤时取最新)。"""
+    from ..models.execution import ExecutionStep
+    insert_ = _dialect_insert(db)
+    # 同批同键去重(PG ON CONFLICT 不允许一条语句内两次命中同一行)
+    dedup: dict[tuple, dict] = {}
+    for s in steps:
+        dedup[(s["row_seq"], s["unit"], s["attempt"], s["step_id"])] = s
+    stmt = insert_(ExecutionStep).values(list(dedup.values()))
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["execution_id", "row_seq", "unit", "attempt", "step_id"],
+        set_={c: getattr(stmt.excluded, c) for c in _STEP_UPDATE_COLS},
+    )
+    await db.execute(stmt)
 
 
 async def insert_logs(db: AsyncSession, execution_id: int,
@@ -758,3 +835,161 @@ async def purge_expired_events(
             delete(ExecutionEventEvidence).where(
                 ExecutionEventEvidence.execution_id.in_(ids)))
         await db.commit()
+
+
+# ── B4(2026-11-06 日志报告整理):执行报告(打开时从步骤表渲染)──────
+
+_STEP_FAIL_STATES = ("failed", "error")
+
+
+def _step_out(s) -> dict:
+    """ExecutionStep → 报告步骤项(camelCase;断言 / 提取原样透出,已脱敏)。"""
+    return {
+        "rowSeq": s.row_seq, "unit": s.unit, "attempt": s.attempt,
+        "stepId": s.step_id, "stepName": s.step_name,
+        "description": s.description, "callSummary": s.call_summary,
+        "status": s.status, "durationMs": round(float(s.duration_ms or 0.0), 2),
+        "error": s.error,
+        "assertionCount": s.assertion_count, "assertionPassed": s.assertion_passed,
+        "assertions": list(s.assertions or []),
+        "extracts": list(s.extracts or []),
+        "hasEvidence": s.failure_evidence is not None,
+    }
+
+
+async def build_report(session: AsyncSession, ex: Execution) -> dict:
+    """执行报告:概览 + 行/单元分组的步骤表 + 失败聚焦。
+
+    数据源只有 execution_steps + 行台账(不读文本日志、不读事件表),
+    所以事件 14 天清扫后报告不变;失败现场取步骤行自带的
+    ``failure_evidence``(引擎侧已脱敏 + 截断)。
+
+    分组:逐行链按 ``row_seq`` 对上 execution_rows.seq;graph 链
+    (row_seq=-1)按 ``unit`` 成组。还没有行记录的步骤(运行中)归入
+    以 unit 命名的临时组。
+    """
+    from ..models.execution import ExecutionStep
+    from . import run_dispatcher
+
+    steps = (await session.execute(
+        select(ExecutionStep).where(ExecutionStep.execution_id == ex.id)
+        .order_by(ExecutionStep.row_seq, ExecutionStep.unit,
+                  ExecutionStep.attempt, ExecutionStep.event_seq,
+                  ExecutionStep.id))).scalars().all()
+    rows, _total = await run_dispatcher.execution_rows_page(
+        session, ex.id, page=1, page_size=1000)
+
+    def _row_key(r: dict) -> int:
+        return int(r.get("seq") if r.get("seq") is not None else -1)
+
+    groups: list[dict] = []
+    by_seq: dict[int, dict] = {}
+    for r in rows:
+        g = {
+            "key": f"row-{_row_key(r)}", "rowSeq": _row_key(r),
+            "unit": r.get("unitId") or r.get("unit_id") or "",
+            "datasetId": r.get("datasetId") or r.get("dataset_id"),
+            "rowIndex": r.get("rowIndex", r.get("row_index", 0)),
+            "rep": r.get("rep", 0),
+            "status": r.get("status", ""),
+            "caseDir": r.get("caseDir") or r.get("case_dir") or "",
+            "serverSlot": r.get("serverSlot", r.get("server_slot")),
+            "steps": [],
+        }
+        groups.append(g)
+        by_seq[g["rowSeq"]] = g
+    by_unit: dict[str, dict] = {}
+    for s in steps:
+        item = _step_out(s)
+        g = by_seq.get(s.row_seq) if s.row_seq >= 0 else None
+        if g is None:
+            # graph 链 / 行未落库:按 unit 成组(行台账里同 unit 的行优先)
+            g = by_unit.get(s.unit)
+            if g is None:
+                g = next((x for x in groups
+                          if x["unit"] == s.unit and not x["steps"]
+                          and s.row_seq < 0), None)
+            if g is None:
+                g = {"key": f"unit-{s.unit}", "rowSeq": s.row_seq,
+                     "unit": s.unit, "datasetId": None, "rowIndex": 0,
+                     "rep": 0, "status": "", "caseDir": "",
+                     "serverSlot": None, "steps": []}
+                groups.append(g)
+            by_unit[s.unit] = g
+        g["steps"].append(item)
+
+    n_steps = len(steps)
+    n_failed = sum(1 for s in steps if s.status in _STEP_FAIL_STATES)
+    n_passed = sum(1 for s in steps if s.status == "passed")
+    n_assert = sum(int(s.assertion_count or 0) for s in steps)
+    n_assert_ok = sum(int(s.assertion_passed or 0) for s in steps)
+
+    failure = None
+    first = next((s for s in steps if s.status in _STEP_FAIL_STATES), None)
+    if first is not None:
+        failure = {
+            **_step_out(first),
+            "failedAssertions": [a for a in (first.assertions or [])
+                                 if not a.get("passed")],
+            "evidence": first.failure_evidence,
+        }
+
+    duration_ms = None
+    if ex.started_at and ex.finished_at:
+        duration_ms = round((ex.finished_at - ex.started_at).total_seconds() * 1000, 1)
+    return {
+        "execution": {
+            "id": ex.id, "scenarioId": ex.scenario_id,
+            "scenarioName": ex.scenario_name or "", "status": ex.status,
+            "kind": ex.kind, "suiteId": ex.suite_id, "batchId": ex.batch_id,
+            "startedAt": ex.started_at.isoformat() if ex.started_at else None,
+            "finishedAt": ex.finished_at.isoformat() if ex.finished_at else None,
+            "durationMs": duration_ms,
+            "totalRuns": ex.total_runs, "passed": ex.passed,
+            "failed": ex.failed, "skipped": ex.skipped,
+        },
+        "summary": {
+            "steps": n_steps, "stepsPassed": n_passed, "stepsFailed": n_failed,
+            "stepsOther": n_steps - n_passed - n_failed,
+            "assertions": n_assert, "assertionsPassed": n_assert_ok,
+        },
+        "groups": groups,
+        "failure": failure,
+        # 无步骤行 = 早于步骤落库的执行或旧引擎:前端提示看工件 / 事件
+        "hasStepData": n_steps > 0,
+    }
+
+
+async def batch_summary(session: AsyncSession, principal: Any,
+                        batch_id: str) -> dict:
+    """B5:批次汇总——成员执行清单 + 状态计数 + 时间跨度。
+
+    成员逐个过执行可读判定(deps.can_view_execution),不可见的剔除,
+    计数只算可见成员(不泄露批次里别人的执行)。
+    """
+    from ..core.deps import can_view_execution
+
+    members = (await session.execute(
+        select(Execution).where(Execution.batch_id == batch_id)
+        .order_by(Execution.id))).scalars().all()
+    visible = [ex for ex in members
+               if await can_view_execution(principal, ex, session)]
+    counts: dict[str, int] = {}
+    for ex in visible:
+        counts[ex.status] = counts.get(ex.status, 0) + 1
+    starts = [ex.started_at for ex in visible if ex.started_at]
+    ends = [ex.finished_at for ex in visible if ex.finished_at]
+    active = any(ex.status in (STATUS_QUEUED, STATUS_RUNNING) for ex in visible)
+    return {
+        "batchId": batch_id,
+        "total": len(visible),
+        "counts": counts,
+        "startedAt": min(starts).isoformat() if starts else None,
+        "finishedAt": (max(ends).isoformat() if ends and not active else None),
+        "active": active,
+        "members": [{
+            "id": ex.id, "scenarioId": ex.scenario_id,
+            "scenarioName": ex.scenario_name or "", "status": ex.status,
+            "passed": ex.passed, "failed": ex.failed, "totalRuns": ex.total_runs,
+        } for ex in visible],
+    }

@@ -45,7 +45,10 @@ class EventType(str, Enum):
 
     # Run 生命周期
     RUN_START = "run.start"
+    # run.end 2026-11-06 起引擎不再发布（并入 run.finished），保留供旧 jsonl 重放
     RUN_END = "run.end"
+    # run 终态（计数 + 判定；jsonl 终线）——run 结束的唯一事件
+    RUN_FINISHED = "run.finished"
     # Run 级元数据（CI/CD / git / 构建上下文等），由 CLI 在 bootstrap 之后 publish
     RUN_META = "run.meta"
 
@@ -62,9 +65,11 @@ class EventType(str, Enum):
     STEP_END = "step.end"
     STEP_FAILED = "step.failed"
 
-    # HTTP 调用
+    # HTTP 调用（2026-11-06 起引擎不再发布，保留供旧 jsonl 重放与订阅兼容）
     HTTP_REQUEST = "http.request"
     HTTP_RESPONSE = "http.response"
+    # 协议中立调用证据（已脱敏 + 截断）——调用收发的唯一观察事件
+    CALL_EXCHANGE = "call.exchange"
 
     # Context 提升（合并自旧 context/events.py 的 VariablePromotedEvent）
     CONTEXT_PROMOTION = "context.promotion"  # 兼容旧订阅；新订阅应使用 VARIABLE_PROMOTED
@@ -128,6 +133,11 @@ class RunStartEvent(FrameworkEvent):
 
 
 class RunEndEvent(FrameworkEvent):
+    """（2026-11-06 起引擎不再发布，类保留供旧 jsonl 重放。）
+
+    与 run.finished 计数完全重叠；订阅方改订 ``run.finished``
+    （:class:`RunFinishedEvent` 字段是本类的超集）。
+    """
     event_type: Literal["run.end"] = "run.end"
     total: int
     passed: int
@@ -233,6 +243,22 @@ class StepEndEvent(FrameworkEvent):
     # 实际执行的重试次数（来自 StepOutcome.retry_count）。0 表示一次成功。
     retry_count: int = 0
     error_brief: Optional[str] = None
+    # ── 报告 / 步骤落库面（2026-11-06 日志报告整理 B1）──────────
+    # step.end 自带「这一步是什么、每条断言与提取的结果」，平台按本事件
+    # 落 execution_steps，报告从步骤表渲染，不再读文本日志。
+    step_name: str = ""
+    description: Optional[str] = None
+    # 调用摘要（"GET http://host/path"；无调用的步骤为空）。不叫 endpoint：
+    # endpoint 是调用边界的日志/事件标签名，同名字段会与标签面撞键
+    call_summary: str = ""
+    # [{name, target, operator, expected, actual, passed, message}]
+    # 敏感目标已脱敏；超长值截断（_compact）
+    assertions: list[dict] = Field(default_factory=list)
+    # [{target, value}]（敏感键脱敏、超长截断）
+    extracts: list[dict] = Field(default_factory=list)
+    # 仅 failed/error 步骤：调用证据（与 call.exchange 同形，已脱敏 + 截断）。
+    # 事件/证据表 14 天清扫后，报告的失败现场仍可从步骤表取到。
+    failure_evidence: Optional[dict] = None
 
 
 class StepFailedEvent(FrameworkEvent):
@@ -242,7 +268,10 @@ class StepFailedEvent(FrameworkEvent):
     phase: str
 
 
-# ── HTTP 级 ───────────────────────────────────────────
+# ── HTTP 级（2026-11-06 起引擎不再发布，类保留供旧 jsonl 重放）──
+# 停发理由：http.request 携带未脱敏的请求头（Authorization 明文入库），
+# 且与 call.exchange（已脱敏 + 截断、协议中立）重复。消费方改读
+# CallExchangeEvent.summary()。
 class HttpRequestEvent(FrameworkEvent):
     event_type: Literal["http.request"] = "http.request"
     step_id: str
@@ -280,6 +309,31 @@ class CallExchangeEvent(FrameworkEvent):
     # 统一证据形状（脱敏 + 截断后）：
     # {protocol, request, response: {status, meta, body}, elapsed_ms, auth_expired}
     result: Optional[dict] = None
+
+    def summary(self) -> dict:
+        """证据的扁平视图（2026-11-06：http.request/response 停发后，
+        报告器/插件统一从本事件取请求与响应）。
+
+        键：method / url / request_headers / request_body / status_code /
+        duration_ms / response_body。值全部来自已脱敏 + 截断的 ``result``。
+        """
+        res = self.result or {}
+        req = res.get("request") or {}
+        resp = res.get("response") or {}
+        raw_status = resp.get("status")
+        try:
+            status_code: Optional[int] = int(raw_status) if raw_status is not None else None
+        except (TypeError, ValueError):
+            status_code = None
+        return {
+            "method": str(req.get("method", "") or ""),
+            "url": str(req.get("url", "") or ""),
+            "request_headers": dict(req.get("headers") or {}),
+            "request_body": req.get("body"),
+            "status_code": status_code,
+            "duration_ms": float(self.duration_ms or res.get("elapsed_ms") or 0.0),
+            "response_body": resp.get("body"),
+        }
 
 
 # ── Context 提升 ─────────────────────────────────────
@@ -322,9 +376,11 @@ class PluginDeactivatedEvent(FrameworkEvent):
 class RunFinishedEvent(FrameworkEvent):
     """run 判定终态事件（stdout jsonl 最后一行；平台读此行即得结果）。
 
-    与 run.end（统计事件）并存：run.end 在 reporter 终结前发出；
-    run.finished 是 jsonl 流的**终线信号**（之后引擎不再发事件），
-    携带完整判定（计数 + blocked/repaired/halted + details 摘要）。
+    run 结束的唯一事件（2026-11-06 起 run.end 并入本事件）：jsonl 流的
+    **终线信号**（之后引擎不再发事件），携带完整判定（计数 + blocked/
+    repaired/halted + details 摘要）。在 reporter finalize 之后发布；
+    需要在终线写出前落盘的插件以小 priority 订阅（总线按 priority 升序
+    同步调用，jsonl sink 为默认 100）。
     """
     event_type: Literal["run.finished"] = "run.finished"
     exit_code: int = 0

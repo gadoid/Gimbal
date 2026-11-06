@@ -2,7 +2,7 @@ from .user import User
 from .auth_session import AuthSession
 from .constant_entry import ConstantEntry
 from .execution import (
-    Execution, ExecutionRow, ExecutionSnapshot, ExecutionJob,
+    Execution, ExecutionRow, ExecutionSnapshot, ExecutionJob, ExecutionStep,
 )
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet

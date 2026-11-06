@@ -204,7 +204,10 @@ class EventType(str, Enum):
 
     # Run 生命周期
     RUN_START = "run.start"
+    # run.end 2026-11-06 起引擎不再发布（并入 run.finished），保留供旧 jsonl 重放
     RUN_END = "run.end"
+    # run 终态（计数 + 判定；jsonl 终线）——run 结束的唯一事件
+    RUN_FINISHED = "run.finished"
     # Run 级元数据（CI/CD / git / 构建上下文等），由 CLI 在 bootstrap 之后 publish
     RUN_META = "run.meta"
 
@@ -274,7 +277,8 @@ class StepStartEvent(FrameworkEvent):
 | `FrameworkInitEvent` | `framework.init` | `framework_version` |
 | `FrameworkTeardownEvent` | `framework.teardown` | — |
 | `RunStartEvent` | `run.start` | `env`, `mode` |
-| `RunEndEvent` | `run.end` | `total`, `passed`, `failed`, `error`, `skipped` (默认 0) |
+| `RunEndEvent` | `run.end` | **2026-11-06 起不再发布**（并入 `run.finished`；类保留供旧 jsonl 重放） |
+| `RunFinishedEvent` | `run.finished` | run 结束的唯一事件 / jsonl 终线：`exit_code`, `total`, `passed`, `failed`, `error`, `skipped`, `halted`, `blocked`, `repaired`, `attempts`, `details` |
 | `RunMetaEvent` | `run.meta` | `meta: dict[str, Any]`（CI/CD / git / 触发人 / 业务自定义 KV） |
 | `SuiteStartEvent` | `suite.start` | `suite_id`, `suite_name` |
 | `SuiteEndEvent` | `suite.end` | `suite_id`, `status` |

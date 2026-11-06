@@ -183,3 +183,97 @@ def test_m2_gen2_migrate_noop():
     d = {"kind": "scenario", "meta": {"name": "n"}, "steps": []}
     out = migrate_definition(d, from_generation=1)
     assert out == d
+
+
+# ── P0-1(2026-11-06):真实 Call 模型(Auth 为 str 枚举)也必须命中声明分派 ──
+# 上面的 _Call 用纯字符串,掩盖了 str(Auth.bearer) == "Auth.bearer" 的问题:
+# 运行期 step.call 是 gimbal.schema.Call,auth 是枚举成员。
+
+def _real_call(auth: str, auth_signer=None):
+    from gimbal.schema import Call
+    return Call.model_validate({"protocol": "http", "user": "u1", "auth": auth,
+                                "auth_signer": auth_signer})
+
+
+def test_real_call_model_bearer_dispatches():
+    h = _inject(_Session(auth_signer="md5sign"), _real_call("bearer"))
+    assert h == {"Authorization": "Bearer abc123"}
+
+
+def test_real_call_model_basic_dispatches():
+    h = _inject(_Session(), _real_call("basic"))
+    assert set(h) == {"Authorization"}
+    assert h["Authorization"].startswith("Basic ")
+
+
+def test_real_call_model_custom_signer_dispatches():
+    h = _inject(_Session(auth_signer="md5sign"),
+                _real_call("custom", auth_signer="standard.bearer"))
+    assert h == {"Authorization": "Bearer abc123"}
+
+
+def test_real_call_model_none_keeps_legacy_md5():
+    h = _inject(_Session(), _real_call("none"))
+    assert set(h) == {"token", "timestamp"}
+
+
+# ── P0-1 续:端到端——声明经预处理器重建 Call 后仍在(此前被丢,恒 none)──
+
+def test_engine_path_applies_declared_bearer():
+    from gimbal.auth.session import AuthSession
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    sess = AuthSession(username="u", password="p")
+    sess.apply_token("T1", 3600)
+    engine, *_ = make_engine(auth_session=("tester", sess))
+    sc = http_scenario()
+    sc.steps[0] = Step(
+        call=Call(protocol="http", service="svc", method="GET", path="/p",
+                  user="tester", auth="bearer"),
+        request=Request(kind="request", body={}), strategy=[])
+    patcher, client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    headers = client.request.call_args.kwargs.get("headers") or {}
+    assert headers.get("Authorization") == "Bearer T1"
+    assert "token" not in headers and "timestamp" not in headers
+
+
+# ── M3 锚点同缺陷族:step.endpoint 经预处理重建后仍在,调用边界标签用锚点──
+
+def test_engine_path_endpoint_label_uses_anchor():
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    engine, bus, *_ = make_engine()
+    got: list = []
+    bus.subscribe(got.append)
+    sc = http_scenario()
+    sc.steps[0] = Step(
+        kind="step", endpoint="fin.cost.amount_list",
+        call=Call(protocol="http", service="svc", method="GET", path="/p"),
+        request=Request(kind="request", body={}), strategy=[])
+    patcher, _client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    labeled = {e.endpoint for e in got if getattr(e, "endpoint", None)}
+    assert labeled == {"fin.cost.amount_list"}, labeled
+
+
+def test_engine_path_endpoint_label_derived_without_anchor():
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    engine, bus, *_ = make_engine()
+    got: list = []
+    bus.subscribe(got.append)
+    sc = http_scenario()          # 无锚点 = 手写原始调用
+    patcher, _client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    labeled = {e.endpoint for e in got if getattr(e, "endpoint", None)}
+    assert labeled == {"svc POST /p"}, labeled

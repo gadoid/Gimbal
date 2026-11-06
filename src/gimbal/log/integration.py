@@ -117,11 +117,16 @@ def configure_logging_from_cli(cli_ctx: "CLIContext") -> None:
     no_color = cli_ctx.no_color or ("NO_COLOR" in os.environ)
     level = cli_ctx.log_level.upper() if cli_ctx.log_level else "INFO"
 
-    # 早期阶段：不开启文件 sink，不开启 JSON（尚不知道最终配置）
+    # 早期阶段：不开启文件 sink。JSON 与 bootstrap 同口径（2026-11-06 日志
+    # 整理）：非 tty 或 GIMBAL_LOG_JSON 时直接 JSON——否则 bootstrap 之前的
+    # 早期告警（ConfigLoader 等）以彩色文本混进 stderr，平台泵按「不可解析」
+    # 丢弃，同一输出流里出现两种格式
+    json_mode = bool(os.environ.get("GIMBAL_LOG_JSON", "")
+                     or not sys.stderr.isatty())
     logging_cfg = LoggingConfig(
         level=level,
         no_color=no_color,
-        json_mode=False,
+        json_mode=json_mode,
         show_path=level == "DEBUG",
         diagnose=level == "DEBUG",
     )

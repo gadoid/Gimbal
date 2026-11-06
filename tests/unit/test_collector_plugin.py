@@ -73,7 +73,7 @@ class TestReportStore(unittest.TestCase):
         s.on_step_end(ev("step.end", step_id="st-1", status="passed",
                          duration_ms=12.5, assertion_count=1, assertion_passed=1))
         s.on_scenario_end(ev("scenario.end", scenario_id="sc-1", status="passed"))
-        s.on_run_end(ev("run.end", total=1, passed=1, failed=0, error=0))
+        s.on_run_finished(ev("run.finished", total=1, passed=1, failed=0, error=0))
 
         r = s.snapshot()
         self.assertIsNotNone(r)
@@ -196,16 +196,20 @@ class TestEndToEnd(unittest.TestCase):
             bus.publish(ev("run.start", env="dev", mode="run"))
             bus.publish(ev("scenario.start", scenario_id="sc-1", scenario_name="login"))
             bus.publish(ev("step.start", step_id="st-1", step_name="GET /login"))
-            bus.publish(ev("http.request", step_id="st-1", method="GET", url="/api/login",
-                           request_body=None, request_headers={}))
-            bus.publish(ev("http.response", step_id="st-1", method="GET", url="/api/login",
-                           status_code=200, duration_ms=5.0, response_body={"token": "abc"}))
+            # 2026-11-06：引擎停发 http.*，调用证据只走 call.exchange
+            from gimbal.events.types import CallExchangeEvent
+            bus.publish(CallExchangeEvent(
+                step_id="st-1", protocol="http", status="passed", duration_ms=5.0,
+                result={"protocol": "http",
+                        "request": {"method": "GET", "url": "/api/login", "headers": {}},
+                        "response": {"status": 200, "meta": {}, "body": {"token": "abc"}},
+                        "elapsed_ms": 5.0}))
             bus.publish(ev("step.end", step_id="st-1", status="passed", duration_ms=5.0,
                            assertion_count=0, assertion_passed=0))
             bus.publish(ev("scenario.end", scenario_id="sc-1", status="passed"))
-            bus.publish(ev("run.end", total=1, passed=1, failed=0, error=0))
+            bus.publish(ev("run.finished", total=1, passed=1, failed=0, error=0))
 
-            # run.end 是同步事件，handler 跑完文件应已写
+            # run.finished 是同步事件，handler 跑完文件应已写
             report_file = out / "run-run-001.json"
             self.assertTrue(report_file.exists(), f"expected {report_file} to exist")
             data = json.loads(report_file.read_text(encoding="utf-8"))

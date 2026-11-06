@@ -114,6 +114,9 @@ class AuditLog(Base):
     __table_args__ = (
         Index("ix_audit_created", "created_at"),
         Index("ix_audit_action", "action", "created_at"),
+        # 0033 建(令牌「最近调用」查询,v4 §7.2);此前漏声明,增量升级门
+        # compare_metadata 一直报 1 项库有模型无 —— 补齐即消(2026-11-06)
+        Index("ix_audit_resource", "resource_type", "resource_id"),
     )
 
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)

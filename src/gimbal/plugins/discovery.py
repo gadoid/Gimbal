@@ -47,5 +47,5 @@ def discover_entry_points(group: Optional[str] = None) -> list[tuple[str, str]]:
         out.append((ep.name, entry))
 
     if out:
-        logger.info("[Discovery] found %d entry-point plugin(s) in group=%s", len(out), group)
+        logger.debug("[Discovery] found %d entry-point plugin(s) in group=%s", len(out), group)
     return out

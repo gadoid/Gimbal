@@ -179,6 +179,8 @@ class RowState:
     unit_id: str = ""
     branch: str = "main"
     attempts: int = 1
+    # B6(R11 轻量版):server 链执行本行的槽位号;launch 链 None
+    server_slot: int | None = None
 
 
 # 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
@@ -243,6 +245,9 @@ async def execution_rows_page(
                 "rep": r.rep, "status": r.status, "caseDir": r.case_dir or "",
                 "startedAt": _dt_to_iso(r.started_at),
                 "finishedAt": _dt_to_iso(r.finished_at),
+                "serverSlot": r.server_slot,
+                # B4:报告按 unit 归组 graph 链步骤(行 API 响应模型不含此键)
+                "unitId": r.unit_id or "",
             }
             for r in rows
         ], int(total)
@@ -507,6 +512,7 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
                 status=state.status, case_dir=state.case_dir or "",
                 started_at=_iso_to_dt(state.started_at),
                 finished_at=_iso_to_dt(state.finished_at),
+                server_slot=state.server_slot,
             ))
             try:
                 await session.commit()
@@ -524,7 +530,8 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
                             unit_id=state.unit_id, branch=state.branch,
                             attempts=state.attempts,
                             started_at=_iso_to_dt(state.started_at),
-                            finished_at=_iso_to_dt(state.finished_at))
+                            finished_at=_iso_to_dt(state.finished_at),
+                            server_slot=state.server_slot)
                 )
                 await session.commit()
     except Exception as e:  # noqa: BLE001
@@ -2080,8 +2087,12 @@ async def _fanout(
                         # 行级 sem 界定)P2-04 事件投影:本行的 scenario.end/run.finished
                         # 单独摘出(状态/attempts/unit 由此投影;无事件路径
                         # —— PlateMock/旧引擎 —— 回退 launch 结果推导)。
-                        def _row_on_event(d: dict, _p=proj) -> None:
+                        def _row_on_event(d: dict, _p=proj, _seq=seq) -> None:
                             et = d.get("event_type")
+                            # B3:步骤结果按行归属(同场景多行的 unit 标签相同,
+                            # 只能靠行号区分);insert_events 取走、不进 payload
+                            if et == "step.end":
+                                d = {**d, "row_seq": _seq}
                             if et == "scenario.end":
                                 _p["status"] = d.get("status")
                                 _p["unit"] = d.get("unit") or _p["unit"]
@@ -2100,6 +2111,9 @@ async def _fanout(
                                 case_path, halt_at=halt_at, n_runs=n_runs,
                                 debug=debug, on_event=_row_on_event,
                                 m2_info=m2_info)
+                            # B6:记下槽位——case-artifact 的引擎日志按它路由到
+                            # server-engine[-N].log(多 worker 时不再 404)
+                            state.server_slot = getattr(result, "server_slot", None)
                         else:
                             result = await gimbal_launcher.launch(
                                 case_path,

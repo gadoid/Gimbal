@@ -4,7 +4,8 @@
   - build_spec = render：URL 拼装 + service 路由（D7 per-step 查表）；
   - send = 传输：HTTP_BEFORE_SEND 钩子（http 命名空间，可原地改写 headers）
     → httpx 传输 → CallResult（统一证据形状）；
-  - after_send：HTTP_AFTER_RECV 钩子 + HttpRequest/HttpResponse 事件；
+  - after_send：基类默认（2026-11-06 起不再发 http.request/http.response，
+    调用证据只走模板方法统一发布的 call.exchange）；
   - execute 为基类模板方法（scratch 只写 ``call`` 证据键——批次 F 终态，
     旧键 response_* 已退役，存量断言/提取路径经 scripts/migrate_legacy_case.py
     迁移），本类不再覆写。
@@ -15,7 +16,6 @@ v2.1 终态契约（批次 F-2b：auth_headers/response_body_extract 已退役�
   - HTTP_BEFORE_SEND payload 的 headers 与实际请求 headers 是**同一对象**，
     钩子原地改写必须影响真实请求；被 STOP 中断 → 不发请求，ERROR 结果
     （文案 "HTTP request blocked by hook"）；
-  - 事件形状 HttpRequestEvent/HttpResponseEvent 字段不变；
   - scratch 唯一证据键 = call（v2.1 F 终态）；
   - 本模块的 logger 不搬迁（测试按模块 patch warning）。
 """
@@ -66,7 +66,7 @@ class _CallSpec:
 
 
 class CallExecutor(ProtocolExecutor):
-    """http 协议适配器：render（路由）+ send（httpx 传输）+ after_send（钩子/事件）。
+    """http 协议适配器：render（路由）+ send（httpx 传输）。
 
     由状态机在 INVOKING 阶段经 ProtocolRegistry 分派，传入 build_spec 产物
     _CallSpec；执行模板（含 scratch 双写与统一证据）在 ProtocolExecutor 基类。
@@ -229,7 +229,11 @@ class CallExecutor(ProtocolExecutor):
         """
         call = getattr(pctx, "call", None)
         user = getattr(call, "user", None)
-        call_auth = str(getattr(call, "auth", "") or "")
+        # P0-1(2026-11-06):call.auth 是 Auth(str, Enum)。Python ≥3.11 上
+        # str(Auth.bearer) == "Auth.bearer",原写法让 bearer/basic/custom
+        # 分支永远不命中、全部回落 md5;取 .value(字符串输入原样保留)
+        raw_auth = getattr(call, "auth", "")
+        call_auth = str(getattr(raw_auth, "value", raw_auth) or "")
         if call_auth == "none":
             call_auth = ""
         if not user and not call_auth:
@@ -277,8 +281,6 @@ class CallExecutor(ProtocolExecutor):
             import httpx
 
             logger.info("[CallExecutor] HTTP 请求: {} {}", method, url)
-
-            self._emit_http_request(pctx, method, url, headers, body)
 
             t_start = time.monotonic()
             with httpx.Client(timeout=timeout) as client:
@@ -396,51 +398,9 @@ class CallExecutor(ProtocolExecutor):
             logger.warning("[CallExecutor] 凭证刷新失败（仍按原样重发一次）: {}", exc)
             return True
 
-    # ── after_send：http 命名空间钩子/事件（送达后）────────────
-
-    def after_send(self, spec, view, call_result: CallResult, result: StrategyResult) -> None:
-        """送达后扩展点（批次 F-2b：HTTP_AFTER_RECV 钩子退役，只剩事件）。"""
-        pctx = getattr(spec, "pctx", None)
-        self._emit_http_response(pctx, call_result)
-
-    # ── http 命名空间埋点（payload/事件形状不变）──────────────
-
-    def _emit_http_request(self, pctx, method: str, url: str, headers: dict, body) -> None:
-        """向 event_bus 发送 HttpRequestEvent 事件（method、url、request_body、request_headers 浅拷贝）。"""
-        bus = getattr(self, "_bus", None)
-        if bus is None:
-            return
-        try:
-            from gimbal.events.types import HttpRequestEvent
-            bus.publish(HttpRequestEvent(
-                step_id=getattr(pctx, "step_id", ""),
-                method=method,
-                url=url,
-                request_body=body,
-                request_headers=dict(headers or {}),
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_REQUEST failed", getattr(pctx, "step_id", "?"))
-
-    def _emit_http_response(self, pctx, call_result: CallResult) -> None:
-        """向 event_bus 发送 HttpResponseEvent 事件；数据取自 CallResult。"""
-        bus = getattr(self, "_bus", None)
-        if bus is None:
-            return
-        try:
-            from gimbal.events.types import HttpResponseEvent
-            raw_status = call_result.status
-            try:
-                status_code = int(raw_status) if raw_status is not None else 0
-            except (ValueError, TypeError):
-                status_code = 0
-            bus.publish(HttpResponseEvent(
-                step_id=getattr(pctx, "step_id", ""),
-                method=call_result.request.get("method", ""),
-                url=call_result.request.get("url", ""),
-                status_code=status_code,
-                duration_ms=float(call_result.elapsed_ms or 0.0),
-                response_body=call_result.body,
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[SM {}] emit HTTP_RESPONSE failed", getattr(pctx, "step_id", "?"))
+    # ── http.request / http.response 停发（2026-11-06）─────────────
+    # 原 after_send 发布 http.response、发送前发布 http.request。两者与
+    # 模板方法统一发布的 call.exchange（已脱敏 + 截断、协议中立）重复，
+    # 且 http.request 的 request_headers 未脱敏（Authorization 明文进
+    # 平台事件表）。消费方改读 CallExchangeEvent.summary()；after_send
+    # 回到基类默认（无操作）。

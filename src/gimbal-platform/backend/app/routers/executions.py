@@ -19,7 +19,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, Field
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
@@ -154,6 +154,27 @@ async def executions_summary(
 
 
 # ── list ────────────────────────────────────────────────────────
+# ── B5 批次汇总(2026-11-06 日志报告整理)───────────────────────
+# 必须声明在 /{execution_id} 之前(否则路径参数先匹配)。新接口按 v4
+# §2.2「新增接口默认不接令牌」只认 JWT。
+@router.get("/batch-summary")
+async def get_batch_summary(
+    user: CurrentUser, session: DbSession,
+    batch_id: Annotated[str, Query(alias="batchId", min_length=1, max_length=64)],
+) -> dict:
+    """批次(队列逐条发起 / suite 聚合运行)成员清单 + 状态计数 + 时间跨度。
+
+    成员逐个过执行可读判定,不可见的剔除;一个都不可见 → 404。
+    """
+    out = await execution_store.batch_summary(
+        session, Principal(user=user, identity_mode="personal"), batch_id)
+    if out["total"] == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "batch_not_found", "message": batch_id})
+    return out
+
+
 @router.get("", response_model=ExecutionListOut)
 async def list_executions(
     principal: PrincipalIn,
@@ -339,6 +360,28 @@ async def get_execution(
     except Exception:  # noqa: BLE001
         out.current_plate = None
     return out
+
+
+# ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
+@router.get("/{execution_id}/report")
+async def get_execution_report(
+    execution_id: Annotated[int, Path(ge=1)],
+    user: CurrentUser, session: DbSession,
+) -> dict:
+    """执行报告:概览 / 行(单元)分组步骤表 / 失败聚焦。
+
+    打开时从 execution_steps 渲染(不读文本日志与事件表——事件 14 天
+    清扫后报告不变)。可见性与执行详情同一判定(can_view_execution);
+    新接口按 v4 §2.2 默认只认 JWT,不接访问令牌。
+    """
+    from ..core.deps import can_view_execution
+    ex = await session.get(Execution, execution_id)
+    if ex is None or not await can_view_execution(
+            Principal(user=user, identity_mode="personal"), ex, session):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"execution not found: {execution_id}")
+    return await execution_store.build_report(session, ex)
 
 
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────
@@ -692,6 +735,7 @@ async def get_execution_event_counts(ex: OwnedExecution, session: DbSession) -> 
 @router.get("/{execution_id}/case-artifact", response_class=PlainTextResponse)
 async def get_case_artifact(
     ex: OwnedExecution,
+    session: DbSession,
     case: Annotated[str, Query(max_length=128)],
     file: Annotated[str, Query(max_length=32)],
 ) -> PlainTextResponse:
@@ -721,16 +765,26 @@ async def get_case_artifact(
     path = rdir / case / name
     if not path.is_file() and file == "engine-log":
         # R11:server 链各槽位写 run 级 server-engine-N.log(槽位 0 沿用
-        # 无序号名)。当前无 case→槽位映射,多 worker 并行时回落到固定
-        # 文件会拿到**别的 worker** 的日志——仅当 run 目录只有一个
-        # worker 日志(单实例/调试)时回落才是正确文件;多 worker 且
-        # case 无自带日志 → 404 不再返回错误内容。彻底修(执行行记录
-        # 槽位、按 case 精确路由)见 S1.5。
-        worker_logs = sorted(rdir.glob("server-engine*.log"))
-        if len(worker_logs) <= 1:
-            fallback = rdir / "server-engine.log"
-            if fallback.is_file():
-                path = fallback
+        # 无序号名)。B6(2026-11-06):执行行记录了槽位号 → 按槽位精确
+        # 路由。槽位日志是该槽位上所有 case 的合并日志(引擎侧按 case
+        # 拆分留待后续),但至少是**本 case 所在 worker** 的那一份。
+        # 无槽位记录的存量行沿用旧口径:仅单 worker 日志时回落,多 worker → 404。
+        from ..models.execution import ExecutionRow
+        slot = (await session.execute(
+            select(ExecutionRow.server_slot).where(
+                ExecutionRow.execution_id == ex.id,
+                ExecutionRow.case_dir == case))).scalars().first()
+        if slot is not None:
+            slot_log = rdir / ("server-engine.log" if slot == 0
+                               else f"server-engine-{slot}.log")
+            if slot_log.is_file():
+                path = slot_log
+        else:
+            worker_logs = sorted(rdir.glob("server-engine*.log"))
+            if len(worker_logs) <= 1:
+                fallback = rdir / "server-engine.log"
+                if fallback.is_file():
+                    path = fallback
     if not path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

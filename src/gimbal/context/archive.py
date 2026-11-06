@@ -70,7 +70,7 @@ class InMemoryArchive:
         status = getattr(ctx, "status", "unknown")
         with self._lock:
             self._suites[key] = ctx
-        logger.info(
+        logger.debug(
             "[Archive] Suite saved: suite_id={} status={} total_suites={}",
             key, status, len(self._suites),
         )
@@ -81,7 +81,7 @@ class InMemoryArchive:
         step_count = len(getattr(ctx, "step_refs", []))
         with self._lock:
             self._scenarios[key] = ctx
-        logger.info(
+        logger.debug(
             "[Archive] Scenario saved: scenario_id={} status={} step_count={} total_scenarios={}",
             key, status, step_count, len(self._scenarios),
         )
@@ -96,7 +96,7 @@ class InMemoryArchive:
             self._steps[store_key] = ctx
         logger.debug(
             "[Archive] Step saved: key={} status={} duration_ms={:.2f} total_steps={}",
-            store_key, status, duration_ms, len(self._steps),
+            store_key, getattr(status, "value", status), duration_ms, len(self._steps),
         )
 
     def save_exchange(self, exchange: Any, step_id: str, *, scenario_id: Optional[str] = None) -> None:

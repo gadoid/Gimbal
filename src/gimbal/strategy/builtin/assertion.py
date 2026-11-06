@@ -22,12 +22,7 @@ class AssertionExecutor(StrategyExecutor):
             # actual/expected 只以脱敏形态进断言记录（outcome.assertions →
             # 归档）与日志；**判定仍用 scratch 原值**（P0-3 语义不变）
             sensitive = is_sensitive_path(spec.target)
-
-            logger.info(
-                "[AssertionExecutor] 执行断言: target={} operator={} expected={}",
-                spec.target, spec.operator,
-                redact_value(spec.expected) if sensitive else spec.expected
-            )
+            op = getattr(spec.operator, "value", spec.operator)
 
             # 统一从 scratch 用 JSONPath 取值
             # target 是 scratch 路径:协议归一树 $.call.response.status /
@@ -49,20 +44,12 @@ class AssertionExecutor(StrategyExecutor):
                         from_layer=ContextLayer.SCENARIO
                     )
 
-            logger.info(
-                "[AssertionExecutor] 实际值: target={} actual={}",
-                spec.target, redact_value(actual) if sensitive else actual
-            )
-
             passed, msg = _evaluate(spec.operator, actual, spec.expected)
             if sensitive:
-                # 消息同样只携带脱敏形态；PASS/FAIL 前缀仍来自原值判定，
-                # 失败时可看出"值不一致"而不泄露原值
-                masked = redact_value(actual)
-                msg = (
-                    f"PASS: {masked} {spec.operator.value} {masked}" if passed
-                    else f"FAIL: expected {masked} {spec.operator.value} {masked}"
-                )
+                # 消息只携带脱敏形态；PASS/FAIL 来自原值判定。不再把同一个
+                # 掩码打两遍（读不出任何信息）——只说明判定结果与操作符
+                msg = (f"PASS: {spec.target} ({op}) [redacted]" if passed
+                       else f"FAIL: {spec.target} ({op}) [redacted] —— 值不满足")
             human_msg = spec.message or msg
             # B-2(2026-10-13):响应状态断言失败且实际值 401/403 → 追加
             # 结构化标记(引擎 _error_kind_of 据此判 auth,平台集成侧
@@ -82,9 +69,12 @@ class AssertionExecutor(StrategyExecutor):
                 expected=redact_value(spec.expected) if sensitive else spec.expected,
                 actual=redact_value(actual) if sensitive else actual,
                 message=human_msg,
+                target=str(spec.target),
+                operator=str(op),
             ))
 
             status = StrategyStatus.PASSED if passed else StrategyStatus.FAILED
+            # 一条断言一行日志（原「执行 / 实际值 / 结果」三行合一）
             if passed:
                 logger.info("[AssertionExecutor] 断言通过: {}", human_msg)
             else:

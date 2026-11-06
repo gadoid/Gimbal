@@ -178,6 +178,9 @@ class ExecutionRowOut(BaseModel):
     case_dir: str = Field(default="", alias="caseDir")
     started_at: str | None = Field(default=None, alias="startedAt")
     finished_at: str | None = Field(default=None, alias="finishedAt")
+    # B6(R11 轻量版):server 链槽位号(引擎日志 = server-engine[-N].log);
+    # launch 链 / 存量行 None
+    server_slot: int | None = Field(default=None, alias="serverSlot")
 
 
 class ExecutionRowsOut(BaseModel):

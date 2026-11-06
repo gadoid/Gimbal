@@ -107,7 +107,8 @@ class ReportStore:
         # 用完清掉，避免污染下一次 run（理论上一个 process 只一个 framework）
         self._pending_framework_version = ""
 
-    def on_run_end(self, event: Any) -> None:
+    def on_run_finished(self, event: Any) -> None:
+        """run.finished（run 结束的唯一事件，2026-11-06 起取代 run.end）。"""
         rid = getattr(event, "run_id", None)
         report = self._find_run(rid)
         if report is None:
@@ -300,6 +301,23 @@ class ReportStore:
         ex.status_code = _to_int(getattr(event, "status_code", None), default=0) or None
         ex.duration_ms = _to_float(getattr(event, "duration_ms", None)) or None
         ex.response_body = getattr(event, "response_body", None)
+
+    # ── call.exchange（2026-11-06：引擎停发 http.request/response）──
+    def on_call_exchange(self, event) -> None:
+        """一次调用证据 → 复用请求/响应两段的既有落库逻辑（值已脱敏）。"""
+        from types import SimpleNamespace
+        summary = getattr(event, "summary", None)
+        if not callable(summary):
+            return
+        v = summary()
+        step_id = getattr(event, "step_id", "") or ""
+        self.on_http_request(SimpleNamespace(
+            step_id=step_id, method=v["method"], url=v["url"],
+            request_body=v["request_body"], request_headers=v["request_headers"]))
+        self.on_http_response(SimpleNamespace(
+            step_id=step_id, method=v["method"], url=v["url"],
+            status_code=v["status_code"], duration_ms=v["duration_ms"],
+            response_body=v["response_body"]))
 
     # ── 7. Variable Promotion ──
     def on_variable_promoted(self, event: Any) -> None:
