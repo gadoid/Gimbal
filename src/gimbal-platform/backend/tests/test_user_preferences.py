@@ -264,9 +264,6 @@ async def test_me_summary_platform_pause_fanout(client: AsyncClient):
         await s.execute(sa_update(IntegrationTask).where(
             IntegrationTask.id == inst_id).values(
             state="paused", paused_reason="auth_failed"))
-        # 公开模板:下面核对深链对 member 真能打开(_visible 放行 public)
-        await s.execute(sa_update(IntegrationTask).where(
-            IntegrationTask.id == tpl_id).values(visibility="public"))
         await s.commit()
 
     member_hdr = await _mk(client, "pref_sum_fanout")
@@ -281,7 +278,8 @@ async def test_me_summary_platform_pause_fanout(client: AsyncClient):
     assert paused, "member 应看到平台任务暂停告警"
     assert paused[0]["title"].startswith("平台探活")
     assert "凭证认证失败" in paused[0]["title"]
-    # 深链取模板 id,且该链接对应的详情接口真能打开(实例 id 会 404)
+    # 深链取模板 id,且该链接对应的详情接口真能打开(实例 id 会 404);
+    # 模板保持默认 private —— 平台模板对 member+ 恒可见(_visible 放宽)
     assert paused[0]["link"] == f"/integrations/{tpl_id}"
     r = await client.get(f"/api/integration/tasks/{tpl_id}", headers=member_hdr)
     assert r.status_code == 200, r.text

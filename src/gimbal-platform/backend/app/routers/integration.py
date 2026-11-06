@@ -67,9 +67,18 @@ def _can_manage(user, tpl: IntegrationTask) -> bool:
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
+    """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用)。
+
+    平台模板对 member+ 恒可见,与 ``_can_manage``(D7:任一 member 可管
+    平台任务)及暂停告警/通知的 member+ 扇出同口径 —— 此前 private 平台
+    模板对非属主 member 不可见,却能改能删、能收到告警,点进去 404
+    (2026-11-05 修复轮评审 N2 延伸)。visibility 对平台模板只区分
+    user 角色是否可见。"""
     return tpl.removed_at is None and (
         tpl.owner_id == user.id or tpl.visibility == "public"
-        or user.role == "admin")
+        or user.role == "admin"
+        or (tpl.identity_mode == "platform"
+            and user.role in ("member", "admin")))
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:

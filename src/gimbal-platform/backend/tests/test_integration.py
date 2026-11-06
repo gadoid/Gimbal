@@ -295,6 +295,44 @@ class TestIntegrationRouter:
                               json={"ids": [f"fn:{tid}"]})
         assert r.json()["items"][0]["state"] == "removed"
 
+    async def test_private_platform_template_visible_to_members(self, client):
+        """_visible 放宽(2026-11-05 修复轮评审 N2 延伸):private 平台
+        模板对 member+ 恒可见(列表/详情/关注卡),与 _can_manage(D7)及
+        暂停告警扇出同口径;user 角色仍不可见;个人模式模板口径不变
+        (private 仅属主/admin)。"""
+        from sqlalchemy import update as sa_update
+        from .inbound_fixtures import mk_task_pair
+
+        await _seed_platform_user()
+        await register_and_login(client, "vis_owner", "vis_ownerpass123")
+        h_member = await register_and_login(client, "vis_mem", "vis_mempass123")
+        h_user = await register_and_login(client, "vis_usr", "vis_usrpass123")
+        async with db_module.SessionLocal() as s:
+            await s.execute(sa_update(User).where(
+                User.username.in_(("vis_owner", "vis_mem"))).values(role="member"))
+            owner_id = (await s.execute(select(User.id).where(
+                User.username == "vis_owner"))).scalar_one()
+            await s.commit()
+        plat, _, _ = await mk_task_pair(
+            name="私有平台", identity_mode="platform", owner_id=owner_id)
+        pers, _, _ = await mk_task_pair(
+            name="私有个人", identity_mode="personal", owner_id=owner_id)
+
+        async def sees(h: dict, tid: int) -> bool:
+            listed = any(t["id"] == tid for t in (await client.get(
+                "/api/integration/tasks", headers=h)).json()["items"])
+            detail = (await client.get(
+                f"/api/integration/tasks/{tid}", headers=h)).status_code
+            card = (await client.post("/api/integration/cards", headers=h,
+                                      json={"ids": [f"fn:{tid}"]})).json()
+            card_seen = card["items"][0]["state"] != "removed"
+            assert listed == (detail == 200) == card_seen, (listed, detail, card)
+            return listed
+
+        assert await sees(h_member, plat) is True    # 放宽点
+        assert await sees(h_user, plat) is False     # user 角色不变
+        assert await sees(h_member, pers) is False   # 个人模式不变
+
     async def test_platform_credentials_admin_gate(self, client):
         await _seed_platform_user()
         # 首个真人注册者成为 admin(系统用户不计 —— 整体评审 2026-10-15
