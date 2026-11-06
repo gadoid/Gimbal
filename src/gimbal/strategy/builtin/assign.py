@@ -31,7 +31,7 @@ class AssignExecutor(StrategyExecutor):
 
         try:
             logger.debug("[AssignExecutor] 执行赋值: target={} source={} scope={}",
-                        spec.target, spec.source, spec.scope)
+                        spec.target, spec.source, getattr(spec.scope, "value", spec.scope))
 
             # 解析 source：是模板还是字面量
             value = _resolve_source_value(spec.source, view, spec.scope)

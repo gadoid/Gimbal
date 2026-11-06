@@ -150,7 +150,7 @@ class PluginLoader:
         except Exception as e:  # noqa: BLE001
             logger.debug("[PluginLoader] entry-point discovery skipped: %s", e)
 
-        logger.info("[PluginLoader] discovered %d plugin(s): %s",
+        logger.debug("[PluginLoader] discovered %d plugin(s): %s",
                     len(specs), [s.name for s in specs])
         return specs
 
@@ -193,7 +193,7 @@ class PluginLoader:
         plugins: list[Plugin] = []
         for spec in specs:
             if not self.is_enabled(spec):
-                logger.info("[PluginLoader] skip disabled plugin: %s", spec.name)
+                logger.debug("[PluginLoader] skip disabled plugin: %s", spec.name)
                 continue
             try:
                 plugin = self._load_one(spec)
@@ -299,7 +299,7 @@ class PluginLoader:
             registry.register(plugin, self._spec_of(plugin))
             activated.append(plugin)
 
-        logger.info("[PluginLoader] activated %d / %d plugin(s)",
+        logger.debug("[PluginLoader] activated %d / %d plugin(s)",
                     len(activated), len(plugins))
         return activated
 
@@ -402,7 +402,7 @@ class PluginLoader:
                 report.succeeded.append(plugin.name)
                 logger.debug("[PluginLoader] deactivated: plugin=%s", plugin.name)
 
-        logger.info(
+        logger.debug(
             "[PluginLoader] deactivate_all done: ok=%d failed=%d",
             len(report.succeeded), len(report.failed),
         )

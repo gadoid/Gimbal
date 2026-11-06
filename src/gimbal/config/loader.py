@@ -137,7 +137,8 @@ class ConfigLoader:
     def _load_yaml_file(self, path: Path, label: str) -> dict[str, Any]:
         """读取单个 YAML 文件，返回 dict。文件不存在时返回空 dict（非错误）。"""
         if not path.exists():
-            logger.warning("[ConfigLoader] 配置文件不存在，跳过: {}", path)
+            # 可选配置层缺省是常态,不是告警(2026-11-06 日志整理)
+            logger.debug("[ConfigLoader] 配置文件不存在，跳过: {}", path)
             return {}
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -273,15 +274,15 @@ class ConfigLoader:
         """从当前目录向上逐级查找 gimbal.yaml，返回其所在目录。
         
         查找顺序：cwd → parent → ... → 文件系统根目录
-        找不到时回退到 cwd，并输出 warning。
+        找不到时回退到 cwd（DEBUG 记录；缺省是常态，不告警）。
         """
         current = Path.cwd()
         for directory in [current, *current.parents]:
             if (directory / "pyproject.toml").exists():
-                logger.warning("[ConfigLoader] 项目根目录: {}", directory)
+                logger.debug("[ConfigLoader] 项目根目录: {}", directory)
                 return directory
-        logger.warning(
-            "[ConfigLoader] 未找到 gimbal.yaml（已遍历至 {}），使用当前目录: {}",
+        logger.debug(
+            "[ConfigLoader] 未找到项目根（已遍历至 {}），使用当前目录: {}",
             current.anchor,   # 文件系统根，Windows 是 C:\，Linux 是 /
             current,
         )

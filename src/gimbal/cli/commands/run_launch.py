@@ -354,20 +354,23 @@ def launch(
 
     # 5. suite/scenario 从资产仓库查询对应的suite和scenario信息,进行实例化
     # 6. dry-run 打印解析结果
-    if dry_run:
-        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        raise typer.Exit(code=0)
-
     #7. schema + 资产有效性检查，对数据类进行格式检查，对资产进行有效性检查
     #    按 kind 分派：suite 走 Engine._run_suite（支持 execution.parallel 并行分派），
     #    scenario 走单场景路径；runtime_control 仅对 scenario 有意义。
+    #    2026-11-06：校验前移到 dry-run 之前——此前 --dry-run 只回显不校验，
+    #    结构错误（如 setup 条目多余字段）要到真跑才暴露
     from pydantic import TypeAdapter
     from gimbal.schema import RunUnion
     try:
         target = TypeAdapter(RunUnion).validate_python(payload)
     except Exception as exc:
-        typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
+        typer.secho(f"用例格式校验失败:\n{format_validation_error(exc)}",
+                    fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
+
+    if dry_run:
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        raise typer.Exit(code=0)
 
     # 7.1 N4 乘法入口：--n-runs/--retry/--parallel 下沉给执行器
     #     （平台不再自己循环 nRuns；批次 D 的单元乘法是唯一执行方）。
@@ -533,3 +536,62 @@ def apply_multiplication(target, *, n_runs: int = 1, retry: int = 0,
                 "policy": base.model_copy(update={"parallel": parallel})})
         return target
     return target
+
+
+# ── 校验错误摘要（2026-11-06 日志整理）──────────────────────────────
+# pydantic 原文带联合判别前缀与 errors.pydantic.dev 链接，定位靠人肉；
+# 这里压成「字段路径: 问题（修复提示）」逐行输出。
+
+_VALIDATION_HINTS = {
+    "missing": "缺少必填字段",
+    "extra_forbidden": "该位置不支持此字段——检查拼写，或确认字段属于哪一层",
+    "union_tag_invalid": "kind 取值不在允许范围",
+    "literal_error": "取值不在允许范围",
+    "enum": "取值不在允许范围",
+}
+
+
+def _loc_path(loc) -> str:
+    """('scenario','steps',0,'strategy',1,'extract','expression') →
+    steps[0].strategy[1](extract).expression——去掉顶层联合判别，判别
+    标签以 (kind) 形式附在所属节点后。"""
+    parts: list[str] = []
+    items = list(loc)
+    if items and items[0] in ("scenario", "suite_graph", "SuiteGraph", "Scenario"):
+        items = items[1:]
+    for it in items:
+        if isinstance(it, int):
+            if parts:
+                parts[-1] += f"[{it}]"
+            else:
+                parts.append(f"[{it}]")
+        elif parts and str(it) in ("extract", "assign", "assertion", "sleep", "call"):
+            parts[-1] += f"({it})"
+        elif str(it).startswith(("tagged-union", "function-")):
+            continue
+        else:
+            parts.append(str(it))
+    return ".".join(parts) or "(根)"
+
+
+def format_validation_error(exc: Exception) -> str:
+    """pydantic ValidationError → 逐条「路径: 问题（提示）」；其它异常原样。"""
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return str(exc)
+    try:
+        items = errors(include_url=False)
+    except TypeError:
+        items = errors()
+    lines = []
+    for e in items:
+        etype = str(e.get("type", ""))
+        hint = _VALIDATION_HINTS.get(etype, "")
+        msg = str(e.get("msg", ""))
+        val = e.get("input")
+        shown = ""
+        if etype == "extra_forbidden" and val is not None:
+            shown = f"（值: {str(val)[:60]}）"
+        lines.append(f"  - {_loc_path(e.get('loc', ()))}: {msg}{shown}"
+                     + (f" —— {hint}" if hint else ""))
+    return "\n".join(lines) if lines else str(exc)

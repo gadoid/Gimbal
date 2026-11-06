@@ -221,7 +221,7 @@ class StepRunner:
             else StepStatus.ERROR
         self._ctx_manager.finalize_step(step_ctx, step_status)
         logger.debug("[StepRunner] StepContext finalized: step_id={} status={}",
-                     step_id, step_status)
+                     step_id, step_status.value)
 
         return result
 

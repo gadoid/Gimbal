@@ -440,7 +440,7 @@ class Engine:
         from gimbal.core.scenario_runner import ScenarioRunner
         from gimbal.scheduler.plan import PlanScheduler
 
-        logger.info(
+        logger.debug(
             "[Engine] 开始执行 Plan: suite_id={} mode={} units={} parallel={} implicit={}",
             plan.suite_id, plan.mode, len(plan.units), plan.policy.parallel, plan.implicit,
         )

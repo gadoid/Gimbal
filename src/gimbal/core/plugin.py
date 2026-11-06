@@ -223,7 +223,7 @@ class Plugin(ABC):
         try:
             self.on_load()
             self.state = PluginState.LOADED
-            logger.info("[Plugin:%s] loaded (v%s)", self.manifest.name, self.manifest.version)
+            logger.debug("[Plugin:%s] loaded (v%s)", self.manifest.name, self.manifest.version)
         except Exception as e:  # noqa: BLE001
             self.state = PluginState.FAILED
             self.error = str(e)
@@ -239,7 +239,7 @@ class Plugin(ABC):
         try:
             self.on_activate(ctx)
             self.state = PluginState.ACTIVATED
-            logger.info(
+            logger.debug(
                 "[Plugin:%s] activated (events=%d hooks=%d)",
                 self.manifest.name,
                 ctx.event_count,
@@ -271,7 +271,7 @@ class Plugin(ABC):
             # 框架会负责清理：event_bus.unsubscribe_plugin(name) + hook_registry.unregister_plugin(name)
             # 走 name-based 路径，无需 id 列表（PluginContext 内只记 event_count/hook_count 供日志）
             self.state = PluginState.DEACTIVATED
-            logger.info("[Plugin:%s] deactivated", self.manifest.name)
+            logger.debug("[Plugin:%s] deactivated", self.manifest.name)
 
     # ── 子类覆写点 ──
     def on_load(self) -> None:
