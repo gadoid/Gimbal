@@ -62,6 +62,8 @@ describe('router — 角色矩阵守卫', () => {
     loginAs('user')
     // 子页面化:/profile 空子路径重定向到账号子页 —— 可达性断言落到重定向目标
     expect(await nav('/profile')).toBe('/profile/account')
+    // 通知与账号同页:旧 #notify 深链保留锚点(由账号子页滚到通知区)
+    expect(await nav('/profile#notify')).toBe('/profile/account#notify')
   })
 })
 

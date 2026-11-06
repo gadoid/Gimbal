@@ -100,6 +100,8 @@ const routes = [
     // 个人设置(P2-1;原型 Main/Tokens/CardSettings = 子页面而非同页
     // 锚点):Profile.vue 只做布局(头 + 分区导航 + RouterView),内容
     // 在三个子页;'' 重定向吞掉旧 #tokens/#card 深链(书签兼容)。
+    // 通知与账号同页(Main.html):#notify 落账号子页并保留锚点,由
+    // ProfileAccount 滚到通知区(此前锚点被丢弃,停在账号卡顶部)。
     path: '/profile',
     component: () => import('@/views/Profile.vue'),
     meta: { requiresAuth: true },
@@ -111,7 +113,7 @@ const routes = [
           path: to.hash === '#tokens' ? '/profile/tokens'
             : to.hash === '#card' ? '/profile/card'
               : '/profile/account',
-          hash: '',
+          hash: to.hash === '#notify' ? '#notify' : '',
         }),
       },
       // Main.html:账号(昵称/改密)+ 通知

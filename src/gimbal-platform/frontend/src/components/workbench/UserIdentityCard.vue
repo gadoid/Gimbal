@@ -109,7 +109,7 @@ const SHORTCUT_DEFS: Record<string, { label: string; to: string }> = {
   tokens: { label: '访问令牌', to: '/profile/tokens' },
   auths: { label: '我的凭证', to: '/auths' },
   password: { label: '修改密码', to: '/profile/account' },
-  notify: { label: '通知偏好', to: '/profile/account' },
+  notify: { label: '通知偏好', to: '/profile/account#notify' },
   create_token: { label: '创建令牌', to: '/profile/tokens' },
 }
 

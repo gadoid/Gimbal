@@ -117,7 +117,7 @@ describe('Profile 布局与重定向(子页面化)', () => {
               path: to.hash === '#tokens' ? '/profile/tokens'
                 : to.hash === '#card' ? '/profile/card'
                   : '/profile/account',
-              hash: '',
+              hash: to.hash === '#notify' ? '#notify' : '',
             }),
           },
           { path: 'account', component: ProfileAccount },
@@ -134,10 +134,83 @@ describe('Profile 布局与重定向(子页面化)', () => {
     ['/profile#tokens', '/profile/tokens'],
     ['/profile#card', '/profile/card'],
     ['/profile', '/profile/account'],
-    ['/profile#notify', '/profile/account'],
+    ['/profile#notify', '/profile/account#notify'],
   ])('旧深链 %s → %s', async (from, to) => {
     const router = await mkRouter(from)
     expect(router.currentRoute.value.fullPath).toBe(to)
+  })
+
+  function loginMember() {
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+    auth.currentUser = {
+      id: 7, username: 'alice', display_name: 'Alice', role: 'member',
+      is_active: true, is_admin: false,
+    } as never
+  }
+
+  it('「通知」链到 #notify 并独立高亮;「账号」只在无锚点时高亮', async () => {
+    const router = await mkRouter('/profile/account#notify')
+    loginMember()
+    const w = mount(Profile, { global: { plugins: [router] } })
+    await flushPromises()
+    const notify = w.find('[data-testid="profile-nav-notify"]')
+    const account = w.find('[data-testid="profile-nav-account"]')
+    expect(notify.attributes('href')).toBe('/profile/account#notify')
+    expect(notify.attributes('aria-current')).toBe('page')
+    expect(account.attributes('aria-current')).toBeUndefined()
+    await router.push('/profile/account')
+    await flushPromises()
+    expect(account.attributes('aria-current')).toBe('page')
+    expect(notify.attributes('aria-current')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('进入 #notify 滚到通知区;同页切回账号回顶部,再切通知再滚', async () => {
+    // jsdom 未实现 scrollIntoView / scrollTo
+    const scrolled: Element[] = []
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const router = await mkRouter('/profile/account#notify')
+    loginMember()
+    const w = mount(Profile, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(scrolled.map((el) => el.id)).toEqual(['notify'])
+    await router.push('/profile/account')
+    await flushPromises()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    await router.push('/profile/account#notify')
+    await flushPromises()
+    expect(scrolled.map((el) => el.id)).toEqual(['notify', 'notify'])
+    w.unmount()
+    scrollTo.mockRestore()
+    delete (Element.prototype as Partial<Element>).scrollIntoView
+  })
+
+  it('已在 #notify 再点「通知」仍滚到通知区;已在账号再点「账号」回顶部', async () => {
+    const scrolled: Element[] = []
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const router = await mkRouter('/profile/account#notify')
+    loginMember()
+    // attachTo:侧栏按 document.getElementById 找通知区,须挂进文档
+    const w = mount(Profile, { global: { plugins: [router] }, attachTo: document.body })
+    await flushPromises()
+    scrolled.length = 0
+    // 路由不变(同 fullPath 导航被短路),只能靠点击处理补滚动
+    await w.find('[data-testid="profile-nav-notify"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/profile/account#notify')
+    expect(scrolled.map((el) => el.id)).toEqual(['notify'])
+    await router.push('/profile/account')
+    await flushPromises()
+    scrollTo.mockClear()
+    await w.find('[data-testid="profile-nav-account"]').trigger('click')
+    await flushPromises()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    w.unmount()
+    scrollTo.mockRestore()
+    delete (Element.prototype as Partial<Element>).scrollIntoView
   })
 
   it('布局:头 + 分区导航四项,按路由高亮', async () => {

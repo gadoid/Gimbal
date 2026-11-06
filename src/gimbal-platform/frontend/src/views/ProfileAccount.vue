@@ -64,8 +64,11 @@
       </div>
     </section>
 
-    <!-- 通知 -->
-    <section id="notify" class="flex flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5">
+    <!-- 通知(#notify 锚点:侧栏「通知」/身份卡「通知偏好」深链到这里) -->
+    <section
+      id="notify" ref="notifyEl"
+      class="flex scroll-mt-4 flex-col gap-3 rounded-card border border-signal-line bg-signal-card p-5"
+    >
       <div class="flex items-center gap-1.5">
         <h2 class="m-0 text-body font-semibold">通知</h2>
         <QTip text="关闭的类型不再入库，与铃铛面板同一份开关" />
@@ -88,7 +91,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import QTip from '@/components/scenario-lib/QTip.vue'
 import { toast } from '@/utils/toast'
@@ -194,7 +198,24 @@ async function togglePref(t: SwitchableType, on: boolean) {
   }
 }
 
+// ── #notify 锚点滚动 ─────────────────────────────────────────
+// 通知与账号同页:侧栏「通知」/身份卡「通知偏好」链到 #notify。首次进入
+// 在挂载后滚;已在本页时只变 hash、组件不重建,由 watch 接管(切回「账号」
+// 回到顶部)。此前链接不带锚点,点「通知」停在账号卡顶部。
+const route = useRoute()
+const notifyEl = ref<HTMLElement | null>(null)
+
+function scrollToNotify() {
+  notifyEl.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+watch(() => route.hash, (hash, prev) => {
+  if (hash === '#notify') scrollToNotify()
+  else if (prev === '#notify') window.scrollTo({ top: 0, behavior: 'smooth' })
+})
+
 onMounted(async () => {
+  if (route.hash === '#notify') scrollToNotify()
   if (['member', 'admin'].includes(auth.role)) {
     try {
       activeTokenCount.value = (await listAccessTokens('personal')).quota.used
