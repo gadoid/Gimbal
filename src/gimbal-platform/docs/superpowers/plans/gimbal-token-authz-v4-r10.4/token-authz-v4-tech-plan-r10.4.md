@@ -18,6 +18,7 @@
 | **r10.4** | 与原型逐项对齐：admin 强制失效带处置说明；用户区与个人设置的待处理数口径（到期 + 失效） |
 | **r10.5** | 实现收口（2026-11-04 评审修复轮）：0034 补建三表 `token_id` FK SET NULL（0033 只加列未建约束）；注册/保存面范围闸落地（§5.4 状态码约定：任务创建与 PATCH 换方案 422，按将生效配方核对）；额度改事务内锁属主行计数（§5.1 兑现）；范围拒绝补写 `inbound.denied` 审计（§7.2 兑现，runs 两处调用点）；`inbound.run` detail 补 `resolvedServices` 摘要；runs 链注入清单并入 setup/teardown 扫描（`exec_auth_aliases_of_definition`，与集成链同口径）；`invalidate` 对已吊销 409（已失效保持幂等）；precheck JWT `tokenId` 权限 `can_view`→`can_manage`；`identity_mode_mismatch` 按 §5.4 删除清单退役，防呆校验改名 `identity_mode_conflict`；publicize 删 suite 补删引用模板（§3.6 通用约束，含 suite id 删前物化修复）；命名补录：`invalidation_note` 列（§4.1）、`platform_user_missing`（§5.4）、`inbound.run(fn=cancel)`（§7.2） |
 | **r10.6** | 实现收口第二轮（2026-11-05 评审）：解绑确认框第 3 条说明按任务身份模式区分（平台任务解绑后仍以平台身份、平台凭证池运行）；解绑目标实例显式定位（§5.2 `PATCH /tasks/{id}`：personal = 属主实例、platform = 平台唯一实例，不再取「id 最小的实例」）；投递记录查看与补发的前端入口排入 §10 P4（§2.3 已有权限、后端接口在，前端死代码已删待重接） |
+| **r10.7** | 平台任务可见性定规则（2026-11-06，前端修复轮评审 N2 延伸）：平台模式模板对 member+ 恒可见，`visibility` 只决定普通 user 能否看到（§2.3 矩阵新增两行与说明、§5.2 `_visible` 落点、§9 用例）。此前 private 平台模板对非属主 member 不可见，却按 `_can_manage`（D7）可改可删、暂停告警也扇出给 member+，点进详情 404；前端新建平台任务缺省 private，现网必现。新建表单可见性文案按身份模式区分（平台：「仅成员可见 / 全员可见」；个人：「私有（只有我）/ 公共（可被订阅）」），列表他人模板标签按可见性显示 |
 
 **r10 简化**（每项都核对过代码与上下游，没有能力损失）：
 
@@ -144,12 +145,16 @@ v4 按三段收敛：
 | 管理平台凭证池 | ✗ | ✗ | ✓ |
 | 创建个人模式集成任务 | ✓ | ✓ | ✓ |
 | 创建平台模式任务，或把任务改为平台模式 | ✗ | ✓ | ✓ |
+| 查看平台模式任务（列表 / 详情 / 立即执行 / 关注卡）（r10.7） | 仅 `public` | ✓（不论 `visibility`） | ✓ |
+| 查看个人模式任务（同上） | 属主或 `public` | 属主或 `public` | ✓ |
 | 管理平台模式任务（含 `__platform__` 名下） | ✗ | ✓ | ✓ |
 | 管理个人模式任务 | 属主 | 属主 | ✓ |
 | 解绑任务的令牌 | 个人任务属主 | 个人任务属主；平台任务 | ✓ |
 | 查看平台身份的执行与投递 | ✗ | ✓ | ✓ |
 | 查看、补发个人令牌的投递 | 令牌属主 | 令牌属主 | ✓ |
 | 停用 / 删除用户 | ✗ | ✗ | ✓（系统用户 409） |
+
+**平台任务可见性（r10.7 定规则，勿回退）**：平台模式任务对 member+ 恒可见，`visibility` 只控制普通 user 能否看到 —— 对平台任务，`private` 的含义是「成员可见、普通 user 不可见」，**不是**「只有我」；「私有（只有我）/ 公共（可被订阅）」只是个人模式任务的语义。三处口径必须一致：可见（`_visible`）、可管理（`_can_manage`，D7 任一 member 可管）、暂停告警与通知扇出（`fanout_members`、`/me/summary` 平台暂停告警，均 member+）。若把平台任务按「私有 = 只有我」收窄可见性，非属主 member 会收到告警、能改能删，却打不开详情（404「功能不存在」）—— 这正是 r10.7 修掉的缺陷。要收窄，三处须一起改。令牌面不受此规则影响：令牌只见本令牌注册的模板（`_token_owns`，§2.2）。
 
 ---
 
@@ -376,6 +381,7 @@ access_token_scopes
 | 位置 | 现状 | 改为 |
 |---|---|---|
 | `routers/integration.py:58-61` `_can_manage` | 平台模板仅属主或 admin | 平台模板 member+；个人模板属主或 admin |
+| `routers/integration.py:69` `_visible`（r10.7） | 属主、`public` 或 admin；private 平台模板对非属主 member 不可见 | 增一支：平台模板对 member+ 恒可见（与 `_can_manage`、告警扇出同口径，见 §2.3 说明）；user 角色与个人模板口径不变。作用于列表、详情、立即执行、关注卡批量取数、订阅前置 |
 | `integration.py` `create_task`（约 254-300）与 PATCH 改模式 | JWT 可自由选平台模式，无角色门槛、无场景范围检查（`:291` 只拦令牌注册） | 平台模式要求 member+（403 `role_forbidden`）且场景公共（422 `platform_scope_denied`），令牌与 JWT 同一检查；个人模式要求场景属主（`:287` 不变） |
 | `integration.py:844-880` 恢复放行列表 | `manual / fail_streak / scope_denied / inbound_disabled` | `manual / fail_streak / scope_denied / resource_not_allowed / token_owner_ineligible`（§3.3） |
 | `core/deps.py:197-204` `get_visible_execution` | 平台执行仅 admin 或别名属主可见 | 执行属主为系统用户时 member+ 可见；令牌分支按 `token_id` |
@@ -521,7 +527,7 @@ JWT 执行同样写 `resolvedServices` 与 `builtinAuths`。
 | 认证 | 有效 / 到期 / 失效 / 吊销 / 角色不足 / 属主未启用；不存在与吊销同为 401 `token_invalid`；旧前缀 401 带迁移文案；平台令牌不因 `__platform__` role=user 被拒；JWT 不受影响；令牌调用任何管理端点 401；refresh 携带旧 `tv` 401 |
 | 范围 | 子集判定；空维度合法且拒绝任何该类资源；凭证池为空的 member 能建令牌；别名删除与改名级联；缺项两类在 403 响应、预检、任务详情、通知中一致；平台凭证 PATCH 后 id 与范围不变、任务不暂停；平台凭证删除后级联、任务暂停标「对象已不存在」；临时调用；范围外标记不拦截；setup/teardown 的 `${auth.*}` 计入范围且运行时被注入；平台场景含白名单外策略 → `not_read_only` |
 | 生命周期 | §3.4 每条转移；续期 now + ttlDays、> 365 拒绝；已失效续期 409；重新生成后旧明文 401、任务不受影响；admin 强制失效后属主重新生成任务自动恢复；额度 5 并发创建；平台额度跨 member 竞争；明文与 hint 规格；user 角色只能查看与吊销；已吊销令牌写操作 409、再吊销幂等 |
-| 平台模式 | JWT 创建平台任务：user 403、私有场景 422；JWT 平台任务运行前场景转私有 → `scope_denied`；令牌注册同；解绑后的平台任务仍受 #5 |
+| 平台模式 | JWT 创建平台任务：user 403、私有场景 422；JWT 平台任务运行前场景转私有 → `scope_denied`；令牌注册同；解绑后的平台任务仍受 #5；private 平台模板对非属主 member 可见、对 user 不可见，个人模式口径不变，列表 / 详情 / 关注卡三面一致（`test_private_platform_template_visible_to_members`）；平台暂停告警深链按缺省 private 模板可打开（`test_me_summary_platform_pause_fanout`） |
 | 任务联动 | 六种暂停原因；续期与重新生成自动恢复；恢复放行列表（含 `token_revoked` 409）；订阅者实例不受注册令牌影响；解绑（`manual`、不被钩子拉起、启动后运行） |
 | 权限 | §2.3 矩阵逐行；`can_manage` 三类主体；admin 视图不返回明文与密钥 |
 | graph / cancel / 临时调用 | 令牌带 graph 422；令牌只能取消本令牌执行；JWT 与平台令牌临时调用 403 |

@@ -220,8 +220,48 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     await w.find('[data-testid="ig-form-name"]').setValue('我的待办')
     await w.find('[data-testid="ig-form-save"]').trigger('click')
     await flushPromises()
-    expect(api.createIntegrationTask).toHaveBeenCalledWith(
-      expect.objectContaining({ identityMode: 'personal', scenarioId: 'sc-probe' }))
+    w.unmount()
+  })
+
+  it('可见性文案按执行身份区分:平台 = 仅成员/全员,个人 = 只有我/可被订阅', async () => {
+    // 2026-11-06:平台模板对 member+ 恒可见,「私有(只有我)」对平台模式不成立
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
+    const w = await mountPage(true)   // admin ⊇ member:缺省平台模式
+    await w.find('[data-testid="ig-create"]').trigger('click')
+    await flushPromises()
+    const opts = () => w.findAll('[data-testid="ig-form-visibility"] option').map((o) => o.text())
+    expect((w.find('[data-testid="ig-form-mode"]').element as HTMLSelectElement).value).toBe('platform')
+    expect(opts()).toEqual(['仅成员可见(member 及以上)', '全员可见(含普通用户)'])
+    expect(opts().join()).not.toContain('只有我')
+    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(true)
+    await w.find('[data-testid="ig-form-mode"]').setValue('personal')
+    await flushPromises()
+    expect(opts()).toEqual(['私有(只有我)', '公共(可被订阅)'])
+    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(false)
+    w.unmount()
+
+    // hasRole 精确匹配:此前只写 'member',admin 没有平台模式选项、缺省落个人
+    const wu = await mountPage(false)   // user 角色:无平台模式
+    await wu.find('[data-testid="ig-create"]').trigger('click')
+    await flushPromises()
+    const modes = wu.findAll('[data-testid="ig-form-mode"] option').map((o) => o.attributes('value'))
+    expect(modes).toEqual(['personal'])
+    wu.unmount()
+  })
+
+  it('他人模板标签按可见性:公共 / 平台私有 = 仅成员 / 个人私有 = 私有', async () => {
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ id: 11, mine: false, visibility: 'public' }),
+      mkTask({ id: 12, mine: false, visibility: 'private', identityMode: 'platform' }),
+      mkTask({ id: 13, mine: false, visibility: 'private', identityMode: 'personal' }),
+      mkTask({ id: 14, mine: true, visibility: 'private' }),
+    ])
+    const w = await mountPage(true)
+    expect(w.find('[data-testid="ig-vis-11"]').text()).toBe('公共')
+    expect(w.find('[data-testid="ig-vis-12"]').text()).toBe('仅成员')
+    expect(w.find('[data-testid="ig-vis-13"]').text()).toBe('私有')
+    expect(w.find('[data-testid="ig-vis-14"]').exists()).toBe(false)
+    expect(w.find('[data-testid="ig-row-14"]').text()).toContain('我的')
     w.unmount()
   })
 

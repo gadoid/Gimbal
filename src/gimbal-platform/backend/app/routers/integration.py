@@ -73,7 +73,8 @@ def _visible(user, tpl: IntegrationTask) -> bool:
     平台任务)及暂停告警/通知的 member+ 扇出同口径 —— 此前 private 平台
     模板对非属主 member 不可见,却能改能删、能收到告警,点进去 404
     (2026-11-05 修复轮评审 N2 延伸)。visibility 对平台模板只区分
-    user 角色是否可见。"""
+    user 角色是否可见。规则见 v4 技术方案 §2.3「平台任务可见性」(r10.7):
+    勿按「私有 = 只有我」收窄,要收窄须与 _can_manage、告警扇出一起改。"""
     return tpl.removed_at is None and (
         tpl.owner_id == user.id or tpl.visibility == "public"
         or user.role == "admin"

@@ -41,7 +41,7 @@
                 :title="`查看「${t.name}」详情`"
               >{{ t.name }}</RouterLink>
               <span v-if="t.mine" class="ig-chip mine">我的</span>
-              <span v-else class="ig-chip">公共</span>
+              <span v-else class="ig-chip" :data-testid="`ig-vis-${t.id}`">{{ visibilityChip(t) }}</span>
             </div>
             <!-- §8:任务常驻显示所属令牌(解绑入口在操作列的管理菜单里) -->
             <div
@@ -132,14 +132,17 @@
           <label class="ig-field">执行身份
             <select v-model="form.identityMode" data-testid="ig-form-mode">
               <!-- §2.3:平台模式要求 member+;user 角色不显示该选项 -->
-              <option v-if="auth.hasRole('member')" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
+              <option v-if="auth.hasRole('member', 'admin')" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
               <option value="personal">个人模式(我的凭证 · 读写)</option>
             </select>
           </label>
+          <!-- 可见性文案按执行身份区分:平台模板对 member+ 恒可见(_visible,
+               2026-11-06),可见性只决定普通 user 能否看到;个人模板才是
+               「只有我 / 可被订阅」。不隐藏 —— 平台模式下它仍是有效开关。 -->
           <label class="ig-field">可见性
             <select v-model="form.visibility" data-testid="ig-form-visibility">
-              <option value="private">私有(只有我)</option>
-              <option value="public">公共(可被订阅)</option>
+              <option value="private">{{ visibilityLabels.private }}</option>
+              <option value="public">{{ visibilityLabels.public }}</option>
             </select>
           </label>
         </div>
@@ -179,6 +182,9 @@
           平台模式以平台系统用户执行,仅公共场景且只读(全部步骤 GET/HEAD/OPTIONS);
           结果进工作台卡片(添加卡片 → 功能)。
         </p>
+        <p v-if="form.identityMode === 'platform'" class="ig-hint" data-testid="ig-form-platform-vis-hint">
+          平台任务对成员(member)及以上始终可见、可管理;可见性只决定普通用户能否看到。
+        </p>
         <template v-else>
           <p class="ig-hint">
             个人模式以<b>我的凭证</b>执行,读写皆可,边界 = 我在第三方系统的权限;
@@ -214,7 +220,7 @@
                         @close="subTask = null" @done="load" />
 
     <!-- 平台令牌(webhook v4 §8:member+;身份说明 + 三入口复用) -->
-    <section v-if="auth.hasRole('member')" class="ig-tokens">
+    <section v-if="auth.hasRole('member', 'admin')" class="ig-tokens">
       <h3>平台令牌
         <span class="ig-hint-inline">代表平台系统用户(__platform__)执行;只读 + 仅公共场景;member+ 可管理</span>
       </h3>
@@ -522,6 +528,13 @@ function canPauseRow(t: IntegrationTaskItem): boolean {
     || (t.identityMode === 'platform' && t.canManage)
 }
 
+/** 非本人模板的可见性标签:平台 private 对 member+ 可见(_visible 放宽,
+ * 2026-11-06),不能再一律标「公共」;admin 看他人私有个人模板标「私有」。 */
+function visibilityChip(t: IntegrationTaskItem): string {
+  if (t.visibility === 'public') return '公共'
+  return t.identityMode === 'platform' ? '仅成员' : '私有'
+}
+
 // ── 新建 ───────────────────────────────────────────────────────
 const createOpen = ref(false)
 const creating = ref(false)
@@ -530,9 +543,12 @@ const scenarios = ref<{ scenarioId: string; name: string }[]>([])
 const schemes = ref<{ schemeId: string; name: string; isDefault: boolean }[]>([])
 const form = reactive({
   name: '', scenarioId: '', schemeId: '',
-  identityMode: auth.hasRole('member') ? 'platform' : 'personal',
+  identityMode: auth.hasRole('member', 'admin') ? 'platform' : 'personal',
   triggerCron: '*/5 * * * *', resultPolicy: 'latest', visibility: 'private',
 })
+const visibilityLabels = computed(() => form.identityMode === 'platform'
+  ? { private: '仅成员可见(member 及以上)', public: '全员可见(含普通用户)' }
+  : { private: '私有(只有我)', public: '公共(可被订阅)' })
 /** W1:创建前置预览(凭证别名/缺失/working 预警;场景或方案变化时刷新) */
 const preview = ref<ScenarioPreview | null>(null)
 const previewLoading = ref(false)
