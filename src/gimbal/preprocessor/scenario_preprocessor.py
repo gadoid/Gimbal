@@ -293,6 +293,10 @@ class ScenarioPreprocessor:
         resolved = Step(
             kind=step.kind,
             description=step.description,
+            # M3 溯源锚点（plate 接口 id）是声明字段，与 call.auth 同理
+            # 原样带过（不做模板展开）—— 此前重建时被丢弃，调用边界
+            # endpoint 标签（P1-01）恒为推导值，锚定步骤拿不到接口 id。
+            endpoint=step.endpoint,
             call=self._resolve_call(step.call, root),
             request=self._resolve_request(step.request, root) if step.request is not None else None,
             strategy=[self._resolve_strategy(s, root) for s in step.strategy],

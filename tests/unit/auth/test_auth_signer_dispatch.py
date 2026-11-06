@@ -239,3 +239,41 @@ def test_engine_path_applies_declared_bearer():
     headers = client.request.call_args.kwargs.get("headers") or {}
     assert headers.get("Authorization") == "Bearer T1"
     assert "token" not in headers and "timestamp" not in headers
+
+
+# ── M3 锚点同缺陷族:step.endpoint 经预处理重建后仍在,调用边界标签用锚点──
+
+def test_engine_path_endpoint_label_uses_anchor():
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    engine, bus, *_ = make_engine()
+    got: list = []
+    bus.subscribe(got.append)
+    sc = http_scenario()
+    sc.steps[0] = Step(
+        kind="step", endpoint="fin.cost.amount_list",
+        call=Call(protocol="http", service="svc", method="GET", path="/p"),
+        request=Request(kind="request", body={}), strategy=[])
+    patcher, _client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    labeled = {e.endpoint for e in got if getattr(e, "endpoint", None)}
+    assert labeled == {"fin.cost.amount_list"}, labeled
+
+
+def test_engine_path_endpoint_label_derived_without_anchor():
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    engine, bus, *_ = make_engine()
+    got: list = []
+    bus.subscribe(got.append)
+    sc = http_scenario()          # 无锚点 = 手写原始调用
+    patcher, _client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    labeled = {e.endpoint for e in got if getattr(e, "endpoint", None)}
+    assert labeled == {"svc POST /p"}, labeled

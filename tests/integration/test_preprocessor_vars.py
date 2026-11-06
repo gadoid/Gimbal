@@ -128,6 +128,29 @@ class TestLiteralVar:
         assert steps[0].request.body["x"] is None
 
 
+class TestStepAnchorPreserved:
+    """M3 溯源锚点(step.endpoint)是声明字段,模板展开重建时必须原样带过。
+
+    与 call.auth 同一缺陷族:此前 _resolve_step 只带五个字段重建,锚点被丢,
+    运行期调用边界 endpoint 标签(P1-01)恒为推导值,锚定步骤拿不到接口 id。
+    """
+
+    def test_endpoint_anchor_survives_preprocessing(self):
+        sc = _make_scenario(body={"a": 1})
+        sc.steps[0] = Step(
+            kind="step", endpoint="fin.cost.amount_list",
+            call=Call(protocol="http", service="s", method="POST",
+                      path="/x", headers={}, timeout=30),
+            request=Request(kind="request", body={}), strategy=[])
+        steps, _, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
+        assert steps[0].endpoint == "fin.cost.amount_list"
+
+    def test_unanchored_step_stays_none(self):
+        steps, _, _ = ScenarioPreprocessor(
+            _make_scenario(body={}), _make_cfg()).run()
+        assert steps[0].endpoint is None
+
+
 class TestPrecedence:
     def test_cli_var_wins_over_scenario_var(self):
         """CLI vars 与 scenario vars 同名时 CLI 赢。"""
