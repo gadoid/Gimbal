@@ -211,3 +211,18 @@ class TestServerSlot:
         pool._started = 1
         res = await pool.run_case("x.json")
         assert res.server_slot == 3
+
+
+class TestStepErrorFill:
+
+    async def test_error_taken_from_step_failed_in_same_batch(self, db):
+        eid = await _mk_execution(db)
+        await execution_store.insert_events(db, eid, [
+            {"event_type": "step.failed", "seq": 1, "step_id": "step-000",
+             "unit": "sc-1", "attempt": "1.1",
+             "error": "[verifying] FAIL: actual '7', expected eq '8'", "phase": "failed"},
+            _step_end(2, row_seq=0, status="failed"),
+        ])
+        await db.commit()
+        (st,) = await _steps(db, eid)
+        assert st.error == "[verifying] FAIL: actual '7', expected eq '8'"

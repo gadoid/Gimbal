@@ -411,8 +411,14 @@ async def insert_events(db: AsyncSession, execution_id: int,
     rows: list[dict] = []
     evidences: list[dict] = []
     steps: list[dict] = []
+    # step.end 的 error_brief 对断言失败为空(失败文案在先到的 step.failed
+    # 里):同批内按 (unit, attempt, step) 记下,补进步骤行
+    failed_err: dict[tuple, str] = {}
     for d in events:
         et = str(d.get("event_type") or "")
+        if et == "step.failed" and d.get("error"):
+            failed_err[(str(d.get("unit") or ""), str(d.get("attempt") or ""),
+                        str(d.get("step_id") or d.get("step") or ""))] = str(d["error"])
         payload = dict(d)
         # B3:逐行链在 _row_on_event 注入的行号(不进事件 payload)
         row_seq = payload.pop("row_seq", None)
@@ -422,7 +428,12 @@ async def insert_events(db: AsyncSession, execution_id: int,
             # B3:步骤结果行(报告数据源)。失败证据只进步骤表——事件表
             # 已有 call.exchange 证据,不在 payload 里再存一份
             fe = payload.pop("failure_evidence", None)
-            steps.append(_step_row(execution_id, payload, row_seq, fe))
+            step_row = _step_row(execution_id, payload, row_seq, fe)
+            if not step_row["error"] and step_row["status"] in ("failed", "error"):
+                step_row["error"] = failed_err.get(
+                    (str(d.get("unit") or ""), str(d.get("attempt") or ""),
+                     step_row["step_id"]))
+            steps.append(step_row)
         if et == "call.exchange":
             evidence = payload.pop("result", None)
             req = evidence.get("request") if isinstance(evidence, dict) else None
