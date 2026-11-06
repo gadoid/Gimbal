@@ -128,8 +128,10 @@ def require_role(*roles: str):
 
 
 async def require_admin(user: CurrentUser) -> User:
-    """Admin 门(require_role("admin") 的具名形态;既有 AdminUser 消费面不变)。"""
-    if user.role != "admin":
+    """Admin 门(require_role("super_admin") 的具名形态;既有 AdminUser
+    消费面不变 —— 原 admin 级在 authz W1 更名(2026-11-07)后即
+    super_admin,权限边界不变。"""
+    if user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin_only: this route requires an administrator",
@@ -138,9 +140,10 @@ async def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
-# member = 技术运营权(适配/别名/默认值/信号);admin 天然包含(§1.1)。
-# (2026-09-29 三级更名:原 operator 级现叫 member,原 member 级现叫 user。)
-MemberUser = Annotated[User, Depends(require_role("member", "admin"))]
+# 技术运营权(适配/别名/默认值/信号):新命名下原 member 级 = admin、
+# 原 admin 级 = super_admin(authz W1 2026-11-07 更名,权限边界不变;
+# 更早 2026-09-29 曾把原 operator 级命名为 member)。
+MemberUser = Annotated[User, Depends(require_role("admin", "super_admin"))]
 
 
 async def get_owned_execution(
@@ -172,20 +175,22 @@ async def can_view_execution(principal, ex, session: AsyncSession) -> bool:
     """执行可读判定(单一实现;get_visible_execution 与报告 / 批次汇总共用)。
 
     * 令牌:``execution.token_id == 当前令牌``(D8);
-    * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
-      当前用户 member+ —— 平台身份的执行与投递对 member+ 可见(D7)。
+    * JWT:owner 本人;super_admin;或执行 owner 为系统用户(平台模式)且
+      当前用户 admin+ —— 平台身份的执行与投递对 admin+ 可见(D7)。
+    (authz W1 2026-11-07 更名:原 admin 级 = super_admin,原 member 级
+    = admin,权限边界不变。)
     """
     from ..models.user import User as _U
 
     if getattr(principal, "is_token", False):
         return ex.token_id == principal.token_id
     user = principal.user
-    if ex.owner_id == user.id or user.role == "admin":
+    if ex.owner_id == user.id or user.role == "super_admin":
         return True
     if ex.owner_id is not None:
         owner = await session.get(_U, ex.owner_id)
         if owner is not None and owner.is_system \
-                and user.role in ("member", "admin"):
+                and user.role in ("admin", "super_admin"):
             return True
     return False
 
@@ -219,7 +224,7 @@ async def get_controllable_execution(
 
     * 令牌:``execution.token_id == 当前令牌``(D25 —— 只能取消本令牌
       发起的执行);
-    * JWT:owner 本人;平台身份的执行(owner 为系统用户)member+ 可取消;
+    * JWT:owner 本人;平台身份的执行(owner 为系统用户)admin+ 可取消;
       其余不扩。
 
     不满足一律 404(不泄露存在性)。
@@ -236,7 +241,7 @@ async def get_controllable_execution(
             user = principal.user
             if ex.owner_id == user.id:
                 return ex
-            if ex.owner_id is not None and user.role in ("member", "admin"):
+            if ex.owner_id is not None and user.role in ("admin", "super_admin"):
                 owner = await session.get(_U, ex.owner_id)
                 if owner is not None and owner.is_system:
                     return ex

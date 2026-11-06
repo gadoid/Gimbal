@@ -640,7 +640,7 @@ async def _record_admin_visibility_audit(
 ) -> None:
     """admin 越属主的可见性变更入审计(属主自发布/自下架不记 —— 与
     suite.admin_unpublish 同口径,只记越属主那一半)。"""
-    if user.role != "admin" or user.id == row.owner_id:
+    if user.role != "super_admin" or user.id == row.owner_id:
         return
     from ..services import audit as audit_svc
     await audit_svc.record(
@@ -715,7 +715,7 @@ async def unpublish_scenario(
         # 级联 UPDATE 须显式提交(属主自下架不走通知分支的隐式 commit;
         # set_visibility 内部已提交的是场景行,不含本条 suite UPDATE)
         await db.commit()
-        if user.role == "admin":
+        if user.role == "super_admin":
             from ..services import notifications as _ns
             for h in _hit:
                 if h.owner_id is not None and h.owner_id != user.id:
@@ -733,7 +733,7 @@ async def unpublish_scenario(
 
     # 通知接线(P1b,权限方案 §3.2):admin 下架**他人** public 场景是
     # 全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
-    if user.role == "admin" and row.owner_id is not None and row.owner_id != user.id:
+    if user.role == "super_admin" and row.owner_id is not None and row.owner_id != user.id:
         from ..services import notifications as notify_svc
         from ..core.timeutil import ensure_aware
         try:
@@ -901,7 +901,7 @@ async def delete_scenario(
         resource_type="scenario", resource_id=scenario_id,
         detail={"name": name, **extra})
     # 审计:admin 越属主删除(属主自删不记)
-    if user.role == "admin" and user.id != owner_id:
+    if user.role == "super_admin" and user.id != owner_id:
         from ..services import audit as audit_svc
         await audit_svc.record(
             db, actor_id=user.id,

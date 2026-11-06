@@ -269,7 +269,7 @@ async def test_me_summary_platform_pause_fanout(client: AsyncClient):
     member_hdr = await _mk(client, "pref_sum_fanout")
     async with SessionLocal() as s:
         await s.execute(sa_update(User).where(
-            User.username == "pref_sum_fanout").values(role="member"))
+            User.username == "pref_sum_fanout").values(role="admin"))
         await s.commit()
     r = await client.get("/api/me/summary", headers=member_hdr)
     assert r.status_code == 200

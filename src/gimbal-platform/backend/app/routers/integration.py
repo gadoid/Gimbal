@@ -60,26 +60,28 @@ def _safe_decrypt(encrypted: str) -> str:
 
 
 def _can_manage(user, tpl: IntegrationTask) -> bool:
-    """模板改动权(§5.2 改写):平台模板 member+;个人模板属主或 admin。"""
+    """模板改动权(§5.2 改写):平台模板 admin+;个人模板属主或
+    super_admin。(authz W1 更名:原 member 级 = admin、原 admin 级 =
+    super_admin,权限边界不变。)"""
     if tpl.identity_mode == "platform":
-        return user.role in ("member", "admin")
-    return user.id == tpl.owner_id or user.role == "admin"
+        return user.role in ("admin", "super_admin")
+    return user.id == tpl.owner_id or user.role == "super_admin"
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
     """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用)。
 
-    平台模板对 member+ 恒可见,与 ``_can_manage``(D7:任一 member 可管
-    平台任务)及暂停告警/通知的 member+ 扇出同口径 —— 此前 private 平台
-    模板对非属主 member 不可见,却能改能删、能收到告警,点进去 404
+    平台模板对 admin+ 恒可见,与 ``_can_manage``(D7:任一 admin 可管
+    平台任务)及暂停告警/通知的 admin+ 扇出同口径 —— 此前 private 平台
+    模板对非属主 admin 不可见,却能改能删、能收到告警,点进去 404
     (2026-11-05 修复轮评审 N2 延伸)。visibility 对平台模板只区分
     user 角色是否可见。规则见 v4 技术方案 §2.3「平台任务可见性」(r10.7):
     勿按「私有 = 只有我」收窄,要收窄须与 _can_manage、告警扇出一起改。"""
     return tpl.removed_at is None and (
         tpl.owner_id == user.id or tpl.visibility == "public"
-        or user.role == "admin"
+        or user.role == "super_admin"
         or (tpl.identity_mode == "platform"
-            and user.role in ("member", "admin")))
+            and user.role in ("admin", "super_admin")))
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -142,9 +144,9 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "name": db_tpl.name,
         "ownerId": db_tpl.owner_id,
         "mine": db_tpl.owner_id == current.id,
-        "canManage": current.role == "admin" or db_tpl.owner_id == current.id
+        "canManage": current.role == "super_admin" or db_tpl.owner_id == current.id
         or (db_tpl.identity_mode == "platform"
-            and current.role == "member"),
+            and current.role == "admin"),
         "visibility": db_tpl.visibility,
         "identityMode": db_tpl.identity_mode,
         "targetType": db_tpl.target_type,
@@ -165,8 +167,8 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
     if subscribed is not None:
         out["subscribed"] = subscribed
     # D12:公共模板对非属主隐藏 token/client_ref —— 注册方的集成关系
-    # 不外泄;属主/admin/member+(平台身份对象)可见。
-    if current.role in ("admin", "member") or db_tpl.owner_id == current.id:
+    # 不外泄;属主/super_admin/admin+(平台身份对象)可见。
+    if current.role in ("super_admin", "admin") or db_tpl.owner_id == current.id:
         out["tokenId"] = db_tpl.token_id
         if token is not None:
             out["tokenName"] = token.name
@@ -297,7 +299,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
     user = principal.user
     # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主、
     # platform → 平台身份);请求体传入不同值 → 422。JWT 用户:平台
-    # 模式要求 member+(§2.3 矩阵),个人模式不限。
+    # 模式要求 admin+(§2.3 矩阵),个人模式不限。
     if principal.is_token:
         if body.identityMode != principal.identity_mode:
             raise _bad(
@@ -305,10 +307,10 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
                 f"identityMode 由认证结果决定为 {principal.identity_mode}"
                 f"(请求体传了 {body.identityMode})")
     elif body.identityMode == "platform" \
-            and user.role not in ("member", "admin"):
+            and user.role not in ("admin", "super_admin"):
         raise _bad(
             "role_forbidden",
-            "创建平台模式任务需要成员(member)及以上角色",
+            "创建平台模式任务需要 admin 及以上角色",
             403)
     if body.callbackPath is not None \
             and not at_svc.valid_callback_path(body.callbackPath):
@@ -1070,8 +1072,8 @@ class PlatformCredPatch(BaseModel):
 
 
 def _require_admin(user) -> None:
-    if user.role != "admin":
-        raise _bad("forbidden", "平台凭证仅 admin 可管理", 403)
+    if user.role != "super_admin":
+        raise _bad("forbidden", "平台凭证仅 super_admin 可管理", 403)
 
 
 async def _cred_usage(db: AsyncSession, cred_ids: list[int]) -> dict[int, tuple[int, int]]:

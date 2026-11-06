@@ -60,7 +60,7 @@ class TestMustSign:
         # 与投递面白名单(D16 复核)
         allow_delivery_hosts(monkeypatch)
         await seed_platform_user()
-        await _register_role(client, "wd_m", "member")
+        await _register_role(client, "wd_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd_m"),
                                 callback_url=CB_URL,
                                 callback_secret="sec-1")
@@ -100,7 +100,7 @@ class TestMustSign:
         """必带签名(§6):密钥为空 → failed(signing_key_missing),
         绝不无签名发送。"""
         await seed_platform_user()
-        await _register_role(client, "wd2_m", "member")
+        await _register_role(client, "wd2_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd2_m"),
                                 callback_url=CB_URL,
                                 callback_secret=None)
@@ -138,7 +138,7 @@ class TestMustSign:
 
     async def test_undecryptable_secret_fails(self, client):
         await seed_platform_user()
-        await _register_role(client, "wd3_m", "member")
+        await _register_role(client, "wd3_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd3_m"),
                                 callback_url=CB_URL)
         from app.models.access_token import AccessToken as _AT
@@ -200,7 +200,7 @@ class TestOutboxWrites:
         """终态迁移段同款写行:caller = {tokenId, tokenName}。"""
         from app.models.execution import Execution
         await seed_platform_user()
-        await _register_role(client, "ow_m", "member")
+        await _register_role(client, "ow_m", "admin")
         uid = await _user_id("ow_m")
         tid, _ = await mk_token(user_id=uid, name="nightly",
                                 callback_url=CB_URL, callback_secret="s")
@@ -244,7 +244,7 @@ class TestOutboxWrites:
 class TestListAndRedeliver:
     async def test_token_sees_only_own_deliveries(self, client):
         await seed_platform_user()
-        await _register_role(client, "dl_m", "member")
+        await _register_role(client, "dl_m", "admin")
         t1, p1 = await mk_token(user_id=await _user_id("dl_m"),
                                 callback_url=CB_URL, callback_secret="s")
         t2, p2 = await mk_token(kind="platform", name="other",
@@ -264,7 +264,7 @@ class TestListAndRedeliver:
 
     async def test_owner_redeliver_creates_new_row(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "rd_m", "member")
+        h = await _register_role(client, "rd_m", "admin")
         uid = await _user_id("rd_m")
         t1, _ = await mk_token(user_id=uid, callback_url=CB_URL,
                                callback_secret="s")

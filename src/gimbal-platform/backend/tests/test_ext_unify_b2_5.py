@@ -159,7 +159,7 @@ class TestEnvironmentsRejectIntegration:
         async with db_module.SessionLocal() as s:
             u = (await s.execute(select(User).where(
                 User.username == "b25_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await s.commit()
         eid = await self._mk_env(client, h)
         r = await client.put(f"/api/environments/{eid}", headers=h,
@@ -179,7 +179,7 @@ class TestEnvironmentsRejectIntegration:
         async with db_module.SessionLocal() as s:
             u = (await s.execute(select(User).where(
                 User.username == "b25_admin2"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await s.commit()
         eid = await self._mk_env(client, h)
         r = await client.put(f"/api/environments/{eid}", headers=h,
@@ -199,7 +199,7 @@ class TestEnvironmentsRejectIntegration:
         async with db_module.SessionLocal() as s:
             u = (await s.execute(select(User).where(
                 User.username == "b25_admin3"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await s.commit()
 
         def boom():

@@ -956,12 +956,12 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         f"令牌「{_token.name}」已到期,任务暂停;续期或"
                         "重新生成后自动恢复",
                         pause_reason=at_svc.PAUSE_TOKEN_EXPIRED, lease=lease)
-                # #4 个人令牌属主角色 < member(派生,不落库)
+                # #4 个人令牌属主角色 < admin(派生,不落库)
                 if _token.kind == at_svc.PERSONAL_KIND \
-                        and _tok_owner.role not in ("member", "admin"):
+                        and _tok_owner.role not in ("admin", "super_admin"):
                     return await _finish(
                         db, inst, tpl, "auth",
-                        f"令牌「{_token.name}」属主角色已低于成员(member),"
+                        f"令牌「{_token.name}」属主角色已低于 admin,"
                         "任务暂停;恢复角色后在集成详情「启动」",
                         pause_reason=at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
                         lease=lease)
@@ -1330,13 +1330,13 @@ async def _finish(
                     uids = [inst.holder_id]   # 凭证是持有人自己的
                 elif auto_paused:
                     # W4:自动暂停 —— 个人=持有人(启动入口在订阅面/
-                    # 功能卡);平台=全体 admin/member
+                    # 功能卡);平台=全体 super_admin/admin
                     if tpl.identity_mode == "personal" and inst.holder_id:
                         uids = [inst.holder_id]
                     else:
                         uids = (await ndb.execute(
                             select(User.id).where(
-                                User.role.in_(("admin", "member")),
+                                User.role.in_(("super_admin", "admin")),
                                 User.is_system == False)  # noqa: E712
                         )).scalars().all()
                 elif notify_check is not None:
@@ -1346,7 +1346,7 @@ async def _finish(
                             else tpl.owner_id]
                 else:
                     uids = (await ndb.execute(
-                        select(User.id).where(User.role.in_(("admin", "member")),
+                        select(User.id).where(User.role.in_(("super_admin", "admin")),
                                               User.is_system == False)  # noqa: E712
                     )).scalars().all()
                 if auth_notify and pause_reason in (
@@ -1694,10 +1694,10 @@ async def revive_paused_instances(
                                   "已恢复调度"),
                             link="/integrations")
                     if platform_names:
-                        # 平台模式:与暂停通知同受众(admin/member),
+                        # 平台模式:与暂停通知同受众(super_admin/admin),
                         # 多实例聚合一条,防批量复活刷屏
                         uids = (await ndb.execute(select(User.id).where(
-                            User.role.in_(("admin", "member")),
+                            User.role.in_(("super_admin", "admin")),
                             User.is_system == False  # noqa: E712
                         ))).scalars().all()
                         names = "、".join(f"「{n}」" for n in platform_names)

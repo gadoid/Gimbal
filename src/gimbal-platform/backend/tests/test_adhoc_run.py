@@ -103,7 +103,7 @@ async def _personal(client, username: str, *,
     """直插 member + 个人令牌(范围 = 被调别名 ∪ 属主凭证)→ 请求头。
     范围对象须先种好(FK);别名/凭证按各用例的种子取。"""
     from .inbound_fixtures import mk_user
-    await mk_user(username, role="member")
+    await mk_user(username, role="admin")
     uid = await _user_id(username)
     auth_ids: list[int] = []
     if cred_aliases:

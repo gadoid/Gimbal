@@ -136,7 +136,7 @@ async def _get_owned(db: AsyncSession, user, did: int,
                                          "message": f"definition not found: {did}"})
     if row.owner_id == user.id:
         return row
-    if row.owner_id is None and allow_public_read and user.role == "admin":
+    if row.owner_id is None and allow_public_read and user.role == "super_admin":
         return row   # 公共区 admin 可改
     if row.owner_id is None and allow_public_read:
         return row   # 公共区全员可读(修改/删除限 admin/owner)
@@ -163,7 +163,7 @@ async def update_definition(
                                          "message": "not found"})
     # 私有 = 仅 owner;公共 = admin 也可改
     is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "admin"
+    is_public_admin = row.owner_id is None and user.role == "super_admin"
     if not (is_owner or is_public_admin):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
@@ -189,7 +189,7 @@ async def delete_definition(
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "admin"
+    is_public_admin = row.owner_id is None and user.role == "super_admin"
     if not (is_owner or is_public_admin):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})

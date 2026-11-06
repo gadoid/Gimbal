@@ -321,7 +321,7 @@ async def stale_scenarios(
     scope: str | None = Query(default=None),
 ) -> dict:
     """RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看自己。"""
-    user_id = user.id if (scope == "mine" or user.role != "admin") else None
+    user_id = user.id if (scope == "mine" or user.role != "super_admin") else None
     try:
         items = await adaptation_service.stale_scenarios(db, user_id=user_id)
     except PlateUnavailableError as e:

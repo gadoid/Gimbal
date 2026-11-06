@@ -55,7 +55,7 @@ async def publish_scenario(scenario_id: str) -> None:
         await s.commit()
 
 
-async def mk_user(username: str, *, role: str = "member") -> int:
+async def mk_user(username: str, *, role: str = "admin") -> int:
     """直插一个活跃真人用户(幂等;不经注册接口,免 admin 提权副作用)。"""
     async with db_module.SessionLocal() as s:
         uid = (await s.execute(sa.select(User.id).where(
@@ -129,7 +129,7 @@ async def mk_task_pair(*, name="w-task", token_id=None,
                 User.is_system == False))).scalar()  # noqa: E712
             if owner is None:
                 u = User(username="w_owner", display_name="o",
-                         password_hash=hash_password("x"), role="member")
+                         password_hash=hash_password("x"), role="admin")
                 s.add(u)
                 await s.commit()
                 owner = u.id

@@ -80,9 +80,10 @@ class UserPublic(BaseModel):
     display_name: str
     # M6-3:物理列已删 —— API 字面保留(前端旧缓存 fallback),由 role 派生
     is_admin: bool = False
-    # 三级角色(M2.5,/auth/me 经 MeOut 包裹 UserPublic 自动下发;
-    # 2026-09-29 更名:user | member | admin,原 member→user、operator→member)
-    role: Literal["user", "member", "admin"] = "user"
+    # 三级角色(authz W1 2026-11-07 更名:user | admin | super_admin,
+    # 原 member→admin、原 admin→super_admin,权限边界不变;更早的
+    # 2026-09-29 更名是原 member→user、operator→member)
+    role: Literal["user", "admin", "super_admin"] = "user"
     is_active: bool
     # D32:系统用户标记(用户管理行防御:停用/删除入口对其隐藏)
     is_system: bool = False
@@ -95,14 +96,14 @@ class UserPublic(BaseModel):
     def _derive_is_admin(cls, data):
         if isinstance(data, dict):
             if "is_admin" not in data and "role" in data:
-                return {**data, "is_admin": data["role"] == "admin"}
+                return {**data, "is_admin": data["role"] in ("admin", "super_admin")}
             return data
         role = getattr(data, "role", None)
         if role is not None and getattr(data, "is_admin", None) is None:
             from types import SimpleNamespace
 
             merged = dict(getattr(data, "__dict__", {}))
-            merged["is_admin"] = role == "admin"
+            merged["is_admin"] = role in ("admin", "super_admin")
             return SimpleNamespace(**merged)
         return data
 

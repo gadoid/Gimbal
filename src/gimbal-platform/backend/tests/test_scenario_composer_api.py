@@ -447,7 +447,7 @@ async def test_create_dataset_admin_can_create_under_any_scenario(
 
     async with db_module.SessionLocal() as session:
         await session.execute(
-            update(User).where(User.username == "alice").values(role="admin")
+            update(User).where(User.username == "alice").values(role="super_admin")
         )
         await session.commit()
 

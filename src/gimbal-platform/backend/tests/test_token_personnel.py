@@ -20,7 +20,7 @@ from .test_access_tokens import (
 class TestChangePassword:
     async def test_defaults_invalidate_tokens_and_logout_others(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "cp_m", "member")
+        h = await _register_role(client, "cp_m", "admin")
         # 两套登录(JWT)+ 一张令牌
         other = await client.post("/api/auth/login", json={
             "username": "cp_m", "password": "pw123456"})
@@ -48,7 +48,7 @@ class TestChangePassword:
 
     async def test_opt_out_keeps_tokens_and_sessions(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "cp2_m", "member")
+        h = await _register_role(client, "cp2_m", "admin")
         other = await client.post("/api/auth/login", json={
             "username": "cp2_m", "password": "pw123456"})
         _, plain = await mk_token(user_id=await _user_id("cp2_m"))
@@ -66,7 +66,7 @@ class TestChangePassword:
 
     async def test_platform_tokens_unaffected(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "cp3_m", "member")
+        h = await _register_role(client, "cp3_m", "admin")
         _, plain = await mk_token(kind="platform", name="pt")
         r = await client.post("/api/auth/change-password", headers=h, json={
             "old_password": "pw123456", "new_password": "newpw12345"})
@@ -78,7 +78,7 @@ class TestChangePassword:
         """改密失效 → 注册方实例 token_invalidated 暂停;重新生成自动恢复。"""
         from .inbound_fixtures import mk_task_pair
         await seed_platform_user()
-        h = await _register_role(client, "cp4_m", "member")
+        h = await _register_role(client, "cp4_m", "admin")
         uid = await _user_id("cp4_m")
         tid, _ = await mk_token(user_id=uid)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
@@ -105,7 +105,7 @@ class TestDeactivation:
         from .test_access_tokens import _admin_headers
         await seed_platform_user()
         await _register(client, "first_admin")  # 首注 admin
-        h = await _register_role(client, "da_m", "member")
+        h = await _register_role(client, "da_m", "admin")
         uid = await _user_id("da_m")
         tid, plain = await mk_token(user_id=uid)
         h_admin = await _admin_headers(client)
@@ -156,7 +156,7 @@ class TestDeleteUserDisposal:
     async def _seed_owner_with_task(self, username: str,
                                     identity_mode: str = "personal"):
         from .inbound_fixtures import mk_task_pair, mk_user
-        await mk_user(username, role="member")
+        await mk_user(username, role="admin")
         uid = await _user_id(username)
         tid, _ = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(
@@ -168,7 +168,7 @@ class TestDeleteUserDisposal:
         await seed_platform_user()
         await _register(client, "df_a0")           # 首注(无关)
         h_admin = await self._admin(client)
-        await _register_role(client, "df_transferee", "member")
+        await _register_role(client, "df_transferee", "admin")
         transfee_id = await _user_id("df_transferee")
         uid, tid, tpl_id, inst_id = await self._seed_owner_with_task(
             "df_owner1")

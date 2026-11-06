@@ -43,9 +43,11 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(128), default="")
     password_hash: Mapped[str] = mapped_column(Text)
-    # 三级单角色(权限方案 §1):user | member | admin —— 权威。
-    # 取值约束在应用层(UserPatchIn 的 Literal),DB 不设 CHECK 以免
-    # 预留值空间被方言差异锁死(§8「superadmin 真出现再加」)。
+    # 三级单角色(authz W1 2026-11-07 更名):user | admin | super_admin
+    # —— 权威。原 member→admin、原 admin→super_admin,权限边界不变
+    # (2026-09-29 更名同款先例;迁移 0036)。取值约束在应用层
+    # (UserPatchIn 的 Literal),DB 不设 CHECK 以免预留值空间被方言
+    # 差异锁死。
     # (is_admin 过渡镜像列已随 M6-3 删除;API 字面由 UserPublic 派生)
     role: Mapped[str] = mapped_column(String(16), default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -58,6 +60,10 @@ class User(Base):
     # 裸 SQL 种子(__platform__)插入靠它兜 0(与 0033 迁移同口径)。
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0"))
+    # authz W6:管理员重置密码后置真;除改密与 auth 三件外一律 403
+    # password_change_required(列随迁移 0036 一并加)。
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )

@@ -64,14 +64,15 @@ def _require_view(user: User, tok: AccessToken) -> None:
 def _require_manage(user: User, tok: AccessToken, *,
                     allow_owner_user_role: bool = False) -> None:
     """写面。个人令牌的属主 user 角色只在吊销端点豁免(§2.3:查看与
-    吊销自己的令牌是 user 级能力,其余写面 member+)。"""
-    if user.role == "admin":
+    吊销自己的令牌是 user 级能力,其余写面 admin+ —— authz W1 更名后
+    原 member 级 = admin)。"""
+    if user.role == "super_admin":
         return
     if tok.kind == at.PLATFORM_KIND:
-        if user.role == "member":
+        if user.role == "admin":
             return
     elif tok.user_id == user.id:
-        if user.role == "member" or allow_owner_user_role:
+        if user.role == "admin" or allow_owner_user_role:
             return
     raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
@@ -208,7 +209,7 @@ async def list_tokens(
     评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
     personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
     if all_view:
-        if user.role != "admin":
+        if user.role != "super_admin":
             raise _bad("role_forbidden", "查看全部令牌仅 admin", 403)
         q = select(AccessToken)
         if kind in ("personal", "platform"):
@@ -231,8 +232,8 @@ async def list_tokens(
             rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()
     else:
         if kind == at.PLATFORM_KIND:
-            if user.role not in ("member", "admin"):
-                raise _bad("role_forbidden", "平台令牌仅 member+ 可见", 403)
+            if user.role not in ("admin", "super_admin"):
+                raise _bad("role_forbidden", "平台令牌仅 admin+ 可见", 403)
             q = select(AccessToken).where(AccessToken.kind == kind)
         elif kind == at.PERSONAL_KIND:
             q = select(AccessToken).where(
@@ -277,12 +278,12 @@ async def scope_candidates(
     """范围候选(§5.1):全部服务别名 + 本人凭证池(平台令牌 = 平台
     凭证池,只列别名)。"""
     if kind == at.PLATFORM_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "平台令牌仅 member+ 可签发", 403)
+        if user.role not in ("admin", "super_admin"):
+            raise _bad("role_forbidden", "平台令牌仅 admin+ 可签发", 403)
         holder = await integration_runner.get_platform_user_id()
     elif kind == at.PERSONAL_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 member+", 403)
+        if user.role not in ("admin", "super_admin"):
+            raise _bad("role_forbidden", "签发个人令牌需 admin+", 403)
         holder = user.id
     else:
         raise _bad("kind_invalid", "kind ∈ personal | platform")
@@ -325,14 +326,14 @@ async def create_token(
     if body.kind not in (at.PERSONAL_KIND, at.PLATFORM_KIND):
         raise _bad("kind_invalid", "kind ∈ personal | platform")
     if body.kind == at.PLATFORM_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发平台令牌需 member+", 403)
+        if user.role not in ("admin", "super_admin"):
+            raise _bad("role_forbidden", "签发平台令牌需 admin+", 403)
         owner_id = await integration_runner.get_platform_user_id()
         if owner_id is None:
             raise _bad("platform_user_missing", "平台系统用户缺失", 500)
     else:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 member+", 403)
+        if user.role not in ("admin", "super_admin"):
+            raise _bad("role_forbidden", "签发个人令牌需 admin+", 403)
         owner_id = user.id
 
     callback_secret_plain: "str | None" = None
@@ -687,7 +688,7 @@ async def invalidate_token(
     """admin 强制失效(D33):原因 ``admin``,处置说明随通知下发;
     属主重新生成后任务自动恢复。"""
     tok = await _get_token(db, token_id)
-    if user.role != "admin":
+    if user.role != "super_admin":
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
     if tok.revoked_at is not None:
         # 已吊销 = 终态只读,写操作 409(§3.4);改密/停用链的已失效

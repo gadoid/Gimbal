@@ -309,7 +309,7 @@ class TestIntegrationRouter:
         h_user = await register_and_login(client, "vis_usr", "vis_usrpass123")
         async with db_module.SessionLocal() as s:
             await s.execute(sa_update(User).where(
-                User.username.in_(("vis_owner", "vis_mem"))).values(role="member"))
+                User.username.in_(("vis_owner", "vis_mem"))).values(role="admin"))
             owner_id = (await s.execute(select(User.id).where(
                 User.username == "vis_owner"))).scalar_one()
             await s.commit()
@@ -345,7 +345,7 @@ class TestIntegrationRouter:
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "ig_cred"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         r = await client.post("/api/integration/platform-credentials",
                               headers=h, json={

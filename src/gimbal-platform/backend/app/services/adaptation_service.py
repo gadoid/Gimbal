@@ -980,7 +980,7 @@ async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
     from fastapi import HTTPException
     from app.services.scenario_store import owned_scenario_ids
 
-    if getattr(user, 'role', '') == 'admin':
+    if getattr(user, 'role', '') == 'super_admin':
         return
     owned = await owned_scenario_ids(db, user)
     for sid in scenario_ids:

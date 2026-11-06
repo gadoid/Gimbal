@@ -81,7 +81,7 @@ class TestAuditPlatformCredentials:
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "hz_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         r = await client.post("/api/integration/platform-credentials",
                               headers=h, json={
@@ -127,7 +127,7 @@ class TestAuditAdminCrossOwner:
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "ax_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "ax_admin", "ax_adminpass123")
         r = await client.post("/api/scenarios/sc-ax-1/publish",
@@ -167,7 +167,7 @@ class TestAuditAdminCrossOwner:
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "as_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "as_admin", "as_adminpass123")
         r = await client.post(f"/api/suites/{suite_id}/publish", headers=h_admin)

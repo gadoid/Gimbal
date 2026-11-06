@@ -136,7 +136,7 @@ async def create_alias(
     """登记别名(M2.5,权限方案 §1.2 两类归属拆行):
     团队共享(owner_user_id 空)= member+;个人默认(owner_user_id
     非空,即「归属字段」)= admin —— 人事/内容权不落进技术运营角色。"""
-    if body.owner_user_id is not None and user.role != "admin":
+    if body.owner_user_id is not None and user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin_only: personal aliases (ownerUserId) are managed by admins",
@@ -176,7 +176,7 @@ async def patch_alias(
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
     )).scalar_one_or_none()
-    if row is not None and row.owner_user_id is not None and user.role != "admin":
+    if row is not None and row.owner_user_id is not None and user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin_only: personal aliases are managed by admins",
@@ -215,7 +215,7 @@ async def delete_alias(
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
     )).scalar_one_or_none()
-    if row is not None and row.owner_user_id is not None and user.role != "admin":
+    if row is not None and row.owner_user_id is not None and user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="admin_only: personal aliases are managed by admins",

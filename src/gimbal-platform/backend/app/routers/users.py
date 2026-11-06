@@ -73,9 +73,10 @@ def _gen_random_password(length: int = 12) -> str:
 
 
 async def _count_admins(db: AsyncSession) -> int:
-    """How many users currently hold the ``admin`` role(role 权威)。"""
+    """末位管理员保护计数:按 ``super_admin`` 计(authz W1 更名后原
+    admin 级 = super_admin;若仍按 admin 计,迁移后计数为 0、保护失效)。"""
     return (
-        await db.execute(select(func.count()).select_from(User).where(User.role == "admin"))
+        await db.execute(select(func.count()).select_from(User).where(User.role == "super_admin"))
     ).scalar_one()
 
 
@@ -227,7 +228,7 @@ async def patch_user(
     prev_role, prev_active = target.role, target.is_active
 
     # ── authorization (privilege-escalation fix) ──
-    if caller.role != "admin":
+    if caller.role != "super_admin":
         if target.id != caller.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -241,8 +242,8 @@ async def patch_user(
 
     demoting_admin = (
         "role" in data
-        and data["role"] != "admin"
-        and target.role == "admin"
+        and data["role"] != "super_admin"
+        and target.role == "super_admin"
     )
     if demoting_admin:
         admin_total = await _count_admins(db)
@@ -366,7 +367,7 @@ async def reset_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
-    if caller.role != "admin" and caller.id != target.id:
+    if caller.role != "super_admin" and caller.id != target.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(RESET_OTHER_PASSWORD, "只有管理员或本人可以重置该密码"),
@@ -444,13 +445,13 @@ async def delete_user(
                     "message": "系统用户(__platform__)受保护,不能删除"},
         )
 
-    if caller.role != "admin":
+    if caller.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(ADMIN_REQUIRED, "需要管理员权限"),
         )
 
-    if target.role == "admin":
+    if target.role == "super_admin":
         admin_total = await _count_admins(db)
         if admin_total <= 1:
             raise HTTPException(

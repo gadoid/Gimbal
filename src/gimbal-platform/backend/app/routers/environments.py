@@ -49,7 +49,7 @@ class EnvironmentView(BaseModel):
 
 
 def _require_env_write(env: Environment, user: Any) -> None:
-    if user.role != "admin" and env.owner_id != user.id:
+    if user.role != "super_admin" and env.owner_id != user.id:
         raise HTTPException(403, "environment writes are owner/admin only")
 
 

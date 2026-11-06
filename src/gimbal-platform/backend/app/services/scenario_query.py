@@ -62,7 +62,7 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     """
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
-    is_admin = getattr(user, "role", None) == "admin"
+    is_admin = getattr(user, "role", None) == "super_admin"
     if user is not None and is_admin:
         return None
     owner = ComposerScenario.owner_id

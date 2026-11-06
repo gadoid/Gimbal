@@ -29,7 +29,7 @@ def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
     ``detail`` is passed through verbatim to the HTTPException so each
     router keeps its existing error contract.
     """
-    if user.role != "admin" and not _user_matches(user, owner_id):
+    if user.role != "super_admin" and not _user_matches(user, owner_id):
         raise HTTPException(status_code=403, detail=detail)
 
 
@@ -42,7 +42,7 @@ def can_read_scenario(
     """读侧规则(场景库收紧后):admin 全可见;public 所有登录用户
     可读;private 仅属主(owner_id)可见。
     """
-    if user.role == "admin":
+    if user.role == "super_admin":
         return True
     if visibility == "public":
         return True
@@ -114,7 +114,7 @@ async def can_run_scenario(
     """执行判定(§7.6):属主 ∨ admin ∨ 引用(public 不开执行,
     公共资源执行仍需先 fork —— 不变量 7)。owner_id=None(公共化
     无主)时仅 admin/历史引用可跑。"""
-    if user.role == "admin" or _user_matches(user, owner_id or -1):
+    if user.role == "super_admin" or _user_matches(user, owner_id or -1):
         return True
     return await has_scenario_ref(db, user.id, scenario_id)
 
@@ -132,7 +132,7 @@ async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
 
 async def can_read_suite(db, user: Any, suite: Any) -> bool:
     """suite 读判定(§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
-    if user.role == "admin" or _user_matches(user, suite.owner_id):
+    if user.role == "super_admin" or _user_matches(user, suite.owner_id):
         return True
     if (suite.visibility or "private") == "public":
         return True
@@ -142,6 +142,6 @@ async def can_read_suite(db, user: Any, suite: Any) -> bool:
 async def can_run_suite(db, user: Any, suite: Any) -> bool:
     """suite 执行判定(§7.6):属主 ∨ admin ∨ suite 引用
     (运行时再逐成员 can_run_scenario)。"""
-    if user.role == "admin" or _user_matches(user, suite.owner_id):
+    if user.role == "super_admin" or _user_matches(user, suite.owner_id):
         return True
     return await has_suite_ref(db, user.id, suite.id)

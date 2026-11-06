@@ -95,7 +95,7 @@ class TestPreRunChecks:
     async def test_owner_role_demoted_pauses(self, client):
         await seed_platform_user()
         await self._scenario()
-        uid = await _uid("to_owner", role="member")
+        uid = await _uid("to_owner", role="admin")
         tid, _ = await mk_token(user_id=uid)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
         async with db_module.SessionLocal() as s:
@@ -173,7 +173,7 @@ class TestPreRunChecks:
         assert "sx-alias" in err
 
 
-async def _uid(username: str, *, role: str = "member") -> int:
+async def _uid(username: str, *, role: str = "admin") -> int:
     from .inbound_fixtures import mk_user
     return await mk_user(username, role=role)
 
@@ -185,7 +185,7 @@ class TestResumeAndRevive:
         / scope_denied 放行。"""
         from .test_access_tokens import _register_role
         await seed_platform_user()
-        h = await _register_role(client, "rv_m", "member")
+        h = await _register_role(client, "rv_m", "admin")
         uid = await _uid("rv_owner")
         tid, _ = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
@@ -219,7 +219,7 @@ class TestResumeAndRevive:
         """重新生成 → token_invalidated/token_expired 暂停自动恢复。"""
         from .test_access_tokens import _api_token, _register_role
         await seed_platform_user()
-        h = await _register_role(client, "gr_m", "member")
+        h = await _register_role(client, "gr_m", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "gr", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -244,7 +244,7 @@ class TestResumeAndRevive:
         """续期 → token_expired 暂停自动恢复(§3.4)。"""
         from .test_access_tokens import _api_token, _register_role
         await seed_platform_user()
-        h = await _register_role(client, "rn_m", "member")
+        h = await _register_role(client, "rn_m", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "rn", "ttlDays": 1,
             "scope": {"aliases": [], "authIds": []}})
@@ -273,7 +273,7 @@ class TestUnbind:
         「先解绑」,解绑后仍 409,死循环。"""
         from .test_access_tokens import _register_role
         await seed_platform_user()
-        await _register_role(client, "ub2_m", "member")
+        await _register_role(client, "ub2_m", "admin")
         uid = await _uid("ub2_owner")
         tid, _ = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
@@ -337,7 +337,7 @@ class TestUnbind:
         停回调;令牌路径不能解绑。"""
         from .test_access_tokens import _register_role
         await seed_platform_user()
-        h = await _register_role(client, "ub_m", "member")
+        h = await _register_role(client, "ub_m", "admin")
         uid = await _uid("ub_owner")
         tid, plain = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)

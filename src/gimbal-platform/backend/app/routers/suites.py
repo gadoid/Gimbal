@@ -57,13 +57,13 @@ async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
 def _require_read(user: CurrentUser, suite: Suite) -> None:
     """读闸(同步快路径):private → 属主 ∨ admin,否则 404(不泄露)。
     P2 引用/公共读由 ``_require_read_async`` 承担(§7.6)。"""
-    if user.role != "admin" and user.id != suite.owner_id             and suite.visibility != "public":
+    if user.role != "super_admin" and user.id != suite.owner_id             and suite.visibility != "public":
         raise not_found_404("suite", str(suite.id))
 
 
 async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
     """读闸(完整判定,§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
-    if user.role == "admin" or user.id == suite.owner_id             or suite.visibility == "public":
+    if user.role == "super_admin" or user.id == suite.owner_id             or suite.visibility == "public":
         return
     from ._ownership import has_suite_ref
     if not await has_suite_ref(db, user.id, suite.id):
@@ -73,7 +73,7 @@ async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
 async def _require_run_async(db, user: CurrentUser, suite: Suite) -> None:
     """运行闸(§7.6 can_run_suite):属主 ∨ admin ∨ suite 引用。
     写闸(_require_write)不变 —— 成员管理仍是属主 ∨ admin。"""
-    if user.role == "admin" or user.id == suite.owner_id:
+    if user.role == "super_admin" or user.id == suite.owner_id:
         return
     from ._ownership import has_suite_ref
     if not await has_suite_ref(db, user.id, suite.id):
@@ -160,7 +160,7 @@ async def _access_and_caps(
     须已过;access 为 None 仅发生在公共读者,能力位全 False。"""
     if user.id == suite.owner_id:
         access = "owner"
-    elif user.role == "admin":
+    elif user.role == "super_admin":
         access = "admin"
     elif suite.visibility == "public":
         access = "public"
@@ -252,7 +252,7 @@ async def list_suites(
         clauses = [Suite.visibility == "public"]
     elif scope == "mine":
         clauses = [Suite.owner_id == user.id]
-    elif user.role == "admin":
+    elif user.role == "super_admin":
         clauses = []
     else:
         clauses = [or_(
@@ -430,7 +430,7 @@ async def delete_suite(
         db, actor_id=actor_id, kind="suite.deleted",
         resource_type="suite", resource_id=str(suite_id),
         detail={"name": suite_name, **extra})
-    if user.role == "admin" and user.id != suite_owner:
+    if user.role == "super_admin" and user.id != suite_owner:
         from ..services import audit as audit_svc
         await audit_svc.record(
             db, actor_id=user.id,
@@ -1566,7 +1566,7 @@ async def publish_suite(
             detail={"name": sid, "via": "suite_publish",
                     "suiteId": suite.id, "suiteName": suite.name})
     # 审计:admin 越属主发布(可见性扩张;属主自发布不记)
-    if user.role == "admin" and user.id != suite.owner_id:
+    if user.role == "super_admin" and user.id != suite.owner_id:
         from ..services import audit as audit_svc
         await audit_svc.record(
             db, actor_id=user.id,
@@ -1592,7 +1592,7 @@ async def unpublish_suite(
     suite.visibility = "private"
     await db.commit()
     await db.refresh(suite)
-    if user.role == "admin" and suite.owner_id != user.id:
+    if user.role == "super_admin" and suite.owner_id != user.id:
         try:
             await notify_svc.create_notification(
                 db, user_id=suite.owner_id,
@@ -1634,7 +1634,7 @@ async def suites_of_scenario(
         select(SuiteMember.suite_id)
         .where(SuiteMember.scenario_id == scenario_id)
     )]
-    if user.role != "admin":
+    if user.role != "super_admin":
         clauses.append(Suite.owner_id == user.id)
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())

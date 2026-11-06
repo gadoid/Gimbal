@@ -93,17 +93,17 @@ async def register(
         username=payload.username,
         display_name=payload.display_name,
         password_hash=hash_password(payload.password),
-        role="admin" if first else "user",
+        role="super_admin" if first else "user",
     )
     db.add(user)
     await db.flush()
     if first:
         # 并发双管理员窗口自愈(仓内审计 P9):count-then-insert 竞态会让
-        # 两个并发首注册都拿到 admin —— 插入后复检,若已有更早的 admin
-        # 在场,本单降级回 user。
+        # 两个并发首注册都拿到 super_admin —— 插入后复检,若已有更早的
+        # super_admin 在场,本单降级回 user。
         earlier = (await db.execute(
             select(func.count()).select_from(User).where(
-                User.role == "admin", User.id < user.id,
+                User.role == "super_admin", User.id < user.id,
                 User.is_system == False)  # noqa: E712
         )).scalar_one()
         if earlier:

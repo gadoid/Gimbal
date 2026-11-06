@@ -36,12 +36,12 @@ async def test_audit_snapshots_resource_name_and_from_values(client):
 
     # 角色变更 user → member:审计留 from/to + 名称快照
     r = await client.patch(f"/api/users/{uid}", headers=admin,
-                           json={"role": "member"})
+                           json={"role": "admin"})
     assert r.status_code == 200, r.text
     row = await _latest(client, admin, "user.role_change")
     d = row["detail"]
     assert d["resource_name"] == "rk_member"
-    assert d["role_from"] == "user" and d["role"] == "member"
+    assert d["role_from"] == "user" and d["role"] == "admin"
     assert d["changed"] == ["role"]
 
     # 停用:is_active_from 留前值

@@ -205,10 +205,10 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
             # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
             raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
                                  "令牌属主已停用", token=tok)
-        if user.role not in ("member", "admin"):
+        if user.role not in ("admin", "super_admin"):
             raise TokenAuthError(
                 403, ERR_TOKEN_OWNER_INELIGIBLE,
-                "个人令牌要求属主角色不低于成员(member)", token=tok)
+                "个人令牌要求属主角色不低于 admin", token=tok)
 
     # last_used_at 节流回写:轻提交,失败不影响判定
     if (tok.last_used_at is None or (
@@ -427,19 +427,20 @@ def can_manage(user: User, token: AccessToken) -> bool:
     """写面管理权:个人令牌 = 属主且 member+;平台令牌 = member+。
 
     user 角色只能查看与吊销自己的令牌(由路由各端点单独放行只读面);
-    admin 的越属主操作(查看全部、强制失效)在路由层显式判定。
+    super_admin 的越属主操作(查看全部、强制失效)在路由层显式判定。
+    (authz W1 更名:原 member 级 = admin、原 admin 级 = super_admin。)
     """
     if token.kind == PLATFORM_KIND:
-        return user.role in ("member", "admin")
-    return user.id == token.user_id and user.role in ("member", "admin")
+        return user.role in ("admin", "super_admin")
+    return user.id == token.user_id and user.role in ("admin", "super_admin")
 
 
 def can_view(user: User, token: AccessToken) -> bool:
-    """读面:自己的令牌(user 角色含);平台令牌 member+;admin 全部。"""
-    if user.role == "admin":
+    """读面:自己的令牌(user 角色含);平台令牌 admin+;super_admin 全部。"""
+    if user.role == "super_admin":
         return True
     if token.kind == PLATFORM_KIND:
-        return user.role == "member"
+        return user.role == "admin"
     return token.user_id == user.id
 
 
@@ -564,13 +565,14 @@ async def token_task_instances(
 
 async def fanout_members(db: AsyncSession, title: str, body: str,
                          link: str = "/integrations") -> None:
-    """平台身份事件扇出给 member+(§3.3 通知;修复 v3 扇出仍选
-    operator 的缺陷 —— 09-29 更名后平台任务通知只到 admin)。"""
+    """平台身份事件扇出给 admin+(§3.3 通知;修复 v3 扇出仍选
+    operator 的缺陷 —— 09-29 更名后平台任务通知只到 admin。
+    authz W1 更名后口径 = super_admin + admin,两轮更名的同款坑不再犯)。"""
     from ..services.notifications import create_notification
 
     uids = (await db.execute(
         select(User.id).where(
-            User.role.in_(("admin", "member")),
+            User.role.in_(("super_admin", "admin")),
             User.is_system == False)  # noqa: E712
     )).scalars().all()
     for uid in uids:

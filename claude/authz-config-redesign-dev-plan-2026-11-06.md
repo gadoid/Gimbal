@@ -19,7 +19,7 @@
 
 | # | 项 | 说明 |
 |---|---|---|
-| T0.1 | **角色夹具收敛** | 现状三处并存：`helpers.py` 的 `register_and_login` / `login_user`、`inbound_fixtures.py` 的 `mk_user(username, role=…)`、`test_access_tokens.py` 的 `_register_role` / `_admin_headers`。在 `tests/helpers.py` 收敛出 `role_user(db, name, role)` + `role_headers(client, name, role)` 组合，矩阵与各模块共用；`mk_user` 默认值改 `"user"`（77 处 `"member"` 字面量的替换随 W1 一起做） |
+| T0.1 | **角色夹具收敛** | 现状三处并存：`helpers.py` 的 `register_and_login` / `login_user`、`inbound_fixtures.py` 的 `mk_user(username, role=…)`、`test_access_tokens.py` 的 `_register_role` / `_admin_headers`。在 `tests/helpers.py` 收敛出 `role_user(db, name, role)` + `role_headers(client, name, role)` 组合，矩阵与各模块共用；`mk_user` 默认值改 **`"admin"`**（语义等价：原默认即 member 级 = 新 admin——初版写 `"user"` 会静默翻转隐式调用点语义，实现时修正；77 处 `"member"` 字面量的替换随 W1 一起做） |
 | T0.2 | **表定义放 app 侧** | 表 A（能力×角色）与表 B（对象×动词）定义成 `routers/_ownership.py` 里的常量结构，测试 import 生成参数化矩阵——避免测试与实现两张表漂移。**另维护人工审定快照** `tests/authz_expected.yaml`（约 20 条关键期望，评审 R7）：矩阵从表生成只能证明代码与表一致，快照证明表本身是对的；表变更必须同步改快照，快照即评审门 |
 | T0.3 | **grep 守卫测试** | 新建 `tests/test_grep_guard_role_literals.py`：读 `app/routers/`、`app/services/` 源码，禁止 `.role` 与 `'user'/'admin'/'super_admin'/'member'` 的字面量比较；豁免 `_ownership.py`；白名单已知误报（`suites.py` 的 `m.role == "main"`、integration_task 的 `identity_mode` 比较等）。**正则覆盖三种形状**（评审 R5）：属性比较 `.role ==`、SQL 集合 `.role.in_(`、SQLAlchemy 列比较 `User.role ==`——`access_token.py:573` 与扇出三处用的就是 `.in_`，`users.py:78`、`auth.py:106` 用列比较。无先例，按 `test_metadata_invariants.py` 的「钉不变量」风格写 |
 | T0.4 | **alembic 逐版本迁移测试** | 新建 `tests/test_migrations.py`：临时 schema → `stamp` 旧 head → `upgrade` → 断言 → `downgrade` 断言，参照 `test_empty_db_bootstrap.py` 的 schema 手法；0036 / 0037 各一组 |
@@ -39,7 +39,7 @@
 | `routers/auth.py:96/106` | 首注册者 `role="admin"` 与自愈判断 `role == "admin"` → `super_admin` |
 | `routers/users.py:75-79/248/454` | `_count_admins` 与末位管理员保护按 `super_admin` 计数 |
 | `schemas/auth.py:93-107` | `_derive_is_admin` 派生口径 → `role IN ('admin','super_admin')`（物理列已随 `0004` 删除，无写点） |
-| `tests/inbound_fixtures.py:58` | `mk_user` 默认 `role="member"` → `"user"` |
+| `tests/inbound_fixtures.py:58` | `mk_user` 默认 `role="member"` → `"admin"`（语义等价：原默认即 member 级 = 新 admin；隐式调用面实测仅 1 处） |
 
 ### 清理项（老旧测试）
 

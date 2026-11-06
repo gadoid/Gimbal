@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 # 字段约束与 RegisterIn 同源(auth.py 是唯一权威)。
@@ -12,9 +10,9 @@ from .auth import DisplayNameField, PasswordField, UsernameField
 from .page import PageOut
 
 
-# 三级单角色(2026-09-29 更名:user | member | admin;原 member→user、
-# 原 operator→member,权限边界不变)。
-Role = Literal["user", "member", "admin"]
+# 三级单角色(authz W1 2026-11-07 更名:user | admin | super_admin;
+# 原 member→admin、原 admin→super_admin,权限边界不变)。
+Role = Literal["user", "admin", "super_admin"]
 
 
 class UserCreateIn(BaseModel):

@@ -170,7 +170,7 @@ async def me_summary(
         IntegrationTask.template_id.is_(None),
         IntegrationTask.identity_mode != "personal")
     _paused_conds = [IntegrationTask.holder_id == user.id]
-    if user.role in ("member", "admin"):
+    if user.role in ("admin", "super_admin"):
         _paused_conds.append(IntegrationTask.template_id.in_(_platform_tpl_ids))
     _paused_rows = await db.execute(select(IntegrationTask).where(
         IntegrationTask.state == "paused", or_(*_paused_conds)))

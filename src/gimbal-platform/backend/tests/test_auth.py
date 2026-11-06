@@ -10,8 +10,9 @@ from __future__ import annotations
 from httpx import AsyncClient
 
 
-async def test_first_register_becomes_admin(client: AsyncClient) -> None:
-    """The very first registered user is promoted to admin."""
+async def test_first_register_becomes_super_admin(client: AsyncClient) -> None:
+    """The very first registered user is promoted to super_admin
+    (authz W1 更名后首注册者角色;is_admin 派生口径含 super_admin)。"""
     resp = await client.post(
         "/api/auth/register",
         json={
@@ -23,14 +24,15 @@ async def test_first_register_becomes_admin(client: AsyncClient) -> None:
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["user"]["username"] == "alice"
+    assert body["user"]["role"] == "super_admin"
     assert body["user"]["is_admin"] is True
     assert body["user"]["is_active"] is True
     assert body["token_type"] == "bearer"
     assert body["access_token"] and body["refresh_token"]
 
 
-async def test_second_register_is_member(client: AsyncClient) -> None:
-    """A second registration yields a non-admin member."""
+async def test_second_register_is_user(client: AsyncClient) -> None:
+    """A second registration yields a plain user (non-admin)."""
     r1 = await client.post(
         "/api/auth/register",
         json={"username": "alice", "password": "secret123"},

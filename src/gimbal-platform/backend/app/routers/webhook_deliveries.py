@@ -114,7 +114,7 @@ async def list_deliveries(
         if target is None:
             # 目标行不存在 / 目标非令牌发起(JWT 执行无投递)→ 404
             raise _not_found()
-        if not (user.role == "admin" or _may_view_token(user, target)):
+        if not (user.role == "super_admin" or _may_view_token(user, target)):
             raise _not_found()
         target_id = target.id
 
@@ -151,7 +151,7 @@ async def redeliver(
     row = await db.get(WebhookDelivery, delivery_id)
     if row is None or getattr(principal, "is_token", False):
         raise _not_found()
-    if user.role != "admin":
+    if user.role != "super_admin":
         tok = (await db.get(AccessToken, row.token_id)
                if row.token_id is not None else None)
         if not _may_view_token(user, tok):

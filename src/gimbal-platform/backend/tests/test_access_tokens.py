@@ -212,7 +212,7 @@ class TestAuthFork:
 class TestTokenApi:
     async def test_create_one_time_plaintext(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "mk_member", "member")
+        h = await _register_role(client, "mk_member", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "agent", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -227,7 +227,7 @@ class TestTokenApi:
     async def test_create_with_callback_returns_secret_once(self, client):
         from app.core.config import settings
         await seed_platform_user()
-        h = await _register_role(client, "cb_member", "member")
+        h = await _register_role(client, "cb_member", "admin")
         from app.core import db as dbm
         import app.services.access_token as at
         orig = at.callback_allowlist
@@ -247,7 +247,7 @@ class TestTokenApi:
 
     async def test_callback_host_not_allowed_422(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "cb2_member", "member")
+        h = await _register_role(client, "cb2_member", "admin")
         r = await client.post("/api/access-tokens", headers=h, json={
             "kind": "personal", "name": "bad", "ttlDays": 30,
             "callbackUrl": "https://evil.example.com/hook",
@@ -257,7 +257,7 @@ class TestTokenApi:
 
     async def test_personal_quota_5(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "q_member", "member")
+        h = await _register_role(client, "q_member", "admin")
         for i in range(5):
             await _api_token(client, h, {
                 "kind": "personal", "name": f"t{i}", "ttlDays": 30,
@@ -278,8 +278,8 @@ class TestTokenApi:
 
     async def test_platform_quota_shared_across_members(self, client):
         await seed_platform_user()
-        h1 = await _register_role(client, "pq1", "member")
-        h2 = await _register_role(client, "pq2", "member")
+        h1 = await _register_role(client, "pq1", "admin")
+        h2 = await _register_role(client, "pq2", "admin")
         for i in range(5):
             r = await client.post("/api/access-tokens", headers=h1, json={
                 "kind": "platform", "name": f"pt{i}", "ttlDays": 30,
@@ -295,7 +295,7 @@ class TestTokenApi:
     async def test_user_role_cannot_create_but_can_revoke(self, client):
         """user 角色:不能签发(403);可查看与吊销自己的(§2.3)。"""
         await seed_platform_user()
-        h_member = await _register_role(client, "u_member", "member")
+        h_member = await _register_role(client, "u_member", "admin")
         out = await _api_token(client, h_member, {
             "kind": "personal", "name": "give", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -328,7 +328,7 @@ class TestTokenApi:
 class TestLifecycle:
     async def _mk(self, client, username):
         await seed_platform_user()
-        h = await _register_role(client, username, "member")
+        h = await _register_role(client, username, "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "lc", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -404,7 +404,7 @@ class TestLifecycle:
 
     async def test_admin_force_invalidate_with_note(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "fi_member", "member")
+        h = await _register_role(client, "fi_member", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "fi", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -431,8 +431,8 @@ class TestLifecycle:
 
     async def test_admin_all_view_and_filters(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "av1", "member")
-        h2 = await _register_role(client, "av2", "member")
+        h = await _register_role(client, "av1", "admin")
+        h2 = await _register_role(client, "av2", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "mine", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -452,8 +452,8 @@ class TestLifecycle:
         """2026-11-05 修复轮评审 P3-4/P3-3:ownerName 按用户名/昵称模糊
         (不区分大小写);输入里的 % / _ 按字面匹配,不当 LIKE 通配符
         (未转义时 '%'/'_' 会命中全部属主)。"""
-        ha = await _register_role(client, "ownalpha", "member")
-        hb = await _register_role(client, "ownbeta", "member")
+        ha = await _register_role(client, "ownalpha", "admin")
+        hb = await _register_role(client, "ownbeta", "admin")
         async with db_module.SessionLocal() as s:
             await s.execute(sa.update(User).where(
                 User.username == "ownalpha").values(display_name="Alice Liddell"))
@@ -490,7 +490,7 @@ class TestLifecycle:
         cred_a = await _add_credential("__platform__", "cred-a")
         cred_b = await _add_credential("__platform__", "cred-b")
         cred_c = await _add_credential("__platform__", "cred-c")   # 无引用
-        h = await _register_role(client, "refcnt", "member")
+        h = await _register_role(client, "refcnt", "admin")
         t1 = await _api_token(client, h, {
             "kind": "platform", "name": "t1", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": [cred_a]}})
@@ -520,7 +520,7 @@ async def _admin_headers(client: AsyncClient) -> dict:
     """直插 admin(mk_user 口令 = x;首注 admin 规则不可依赖 —— 各测试
     注册顺序不同)。"""
     from .inbound_fixtures import mk_user
-    await mk_user("root_admin", role="admin")
+    await mk_user("root_admin", role="super_admin")
     r = await client.post("/api/auth/login", json={
         "username": "root_admin", "password": "x"})
     assert r.status_code == 200
@@ -535,7 +535,7 @@ class TestScopeApi:
         await seed_platform_user()
         await seed_alias("fin-test")
         await seed_alias("logi-test")
-        h = await _register_role(client, "sc1", "member")
+        h = await _register_role(client, "sc1", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "sc", "ttlDays": 30,
             "scope": {"aliases": ["fin-test"], "authIds": []}})
@@ -562,7 +562,7 @@ class TestScopeApi:
 
     async def test_scope_unknown_objects_422(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "sc2", "member")
+        h = await _register_role(client, "sc2", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "sc2", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -575,7 +575,7 @@ class TestScopeApi:
     async def test_platform_scope_candidates_only_alias(self, client):
         """平台令牌范围候选:平台凭证池只列别名(§5.1/D5)。"""
         await seed_platform_user()
-        h = await _register_role(client, "sc3", "member")
+        h = await _register_role(client, "sc3", "admin")
         r = await client.get(
             "/api/access-tokens/scope-candidates?kind=platform", headers=h)
         assert r.status_code == 200
@@ -590,7 +590,7 @@ class TestRunScope:
         await seed_platform_user()
         await seed_alias("fin-test", base_url="https://fin.local")
         await seed_alias("wms-test", base_url="https://wms.local")
-        h = await _register_role(client, "rs1", "member")
+        h = await _register_role(client, "rs1", "admin")
         # 场景引用 fin-test(经别名解析)+ authored 直连 svc-direct
         draft = _draft("sc-rs1", steps=[GET_STEP])
         draft["definition"]["config"]["services"] = {"svc": ""}
@@ -620,7 +620,7 @@ class TestRunScope:
     async def test_scope_deleted_object_classification(self, client):
         await seed_platform_user()
         await seed_alias("gone-test", base_url="https://gone.local")
-        h = await _register_role(client, "rs2", "member")
+        h = await _register_role(client, "rs2", "admin")
         draft = _draft("sc-rs3", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="gone-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -640,7 +640,7 @@ class TestRunScope:
     async def test_scope_ok_passes_and_audited(self, client, monkeypatch):
         await seed_platform_user()
         await seed_alias("ok-test", base_url="https://ok.local")
-        h = await _register_role(client, "rs3", "member")
+        h = await _register_role(client, "rs3", "admin")
         draft = _draft("sc-rs4", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="ok-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -676,7 +676,7 @@ class TestRunScope:
                                                             monkeypatch):
         """D15:直连地址(①②层)只记录不拦截 —— outOfScope 标记。"""
         await seed_platform_user()
-        h = await _register_role(client, "rs4", "member")
+        h = await _register_role(client, "rs4", "admin")
         draft = _draft("sc-rs5", steps=[GET_STEP])
         draft["definition"]["config"]["services"] = {"svc": "https://direct.local"}
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -703,7 +703,7 @@ class TestRunScope:
                                                      monkeypatch):
         """§3.2:config.setup/teardown 条目的 ${auth.*} 计入凭证集。"""
         await seed_platform_user()
-        h = await _register_role(client, "rs5", "member")
+        h = await _register_role(client, "rs5", "admin")
         cred_id = await _add_credential("rs5", alias="setup-cred")
         draft = _draft("sc-rs6", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="free-svc"))])
@@ -740,7 +740,7 @@ class TestPrecheck:
     async def test_precheck_token_scope(self, client):
         await seed_platform_user()
         await seed_alias("pc-test", base_url="https://pc.local")
-        h = await _register_role(client, "pc1", "member")
+        h = await _register_role(client, "pc1", "admin")
         draft = _draft("sc-pc1", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="pc-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -771,7 +771,7 @@ class TestPrecheck:
 class TestPlatformPremise:
     async def test_platform_private_scenario_403(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "pp1", "member")
+        h = await _register_role(client, "pp1", "admin")
         await client.post("/api/scenarios", headers=h,
                           json=_draft("sc-pp1", steps=[GET_STEP]))
         _, plain = await mk_token(kind="platform", name="ppt")
@@ -782,7 +782,7 @@ class TestPlatformPremise:
 
     async def test_platform_public_scenario_readonly_gate(self, client):
         await seed_platform_user()
-        h = await _register_role(client, "pp2", "member")
+        h = await _register_role(client, "pp2", "admin")
         await client.post("/api/scenarios", headers=h,
                           json=_draft("sc-pp2", steps=[POST_STEP]))
         from .inbound_fixtures import publish_scenario
@@ -804,7 +804,7 @@ class TestPlatformPremise:
             "triggerCron": "0 2 * * *"})
         assert r.status_code == 403
         assert r.json()["detail"]["code"] == "role_forbidden"
-        h_member = await _register_role(client, "pp3", "member")
+        h_member = await _register_role(client, "pp3", "admin")
         r = await client.post("/api/integration/tasks", headers=h_member, json={
             "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
             "triggerCron": "0 2 * * *"})
@@ -819,7 +819,7 @@ class TestInterfaceFace:
     async def test_token_with_graph_422(self, client):
         """D20:令牌请求带 graph 一律 422(graph 为 JWT 专属)。"""
         await seed_platform_user()
-        h = await _register_role(client, "if1", "member")
+        h = await _register_role(client, "if1", "admin")
         _, plain = await mk_token(user_id=await _user_id("if1"))
         r = await client.post("/api/runs", headers=_gtk(plain), json={
             "graph": {"mode": "aggregate",
@@ -833,7 +833,7 @@ class TestInterfaceFace:
         """D25:令牌只能取消本令牌发起的执行;他人令牌 cancel 404。"""
         from .inbound_fixtures import mk_execution
         await seed_platform_user()
-        h = await _register_role(client, "if2", "member")
+        h = await _register_role(client, "if2", "admin")
         tid_a, plain_a = await mk_token(user_id=await _user_id("if2"))
         _, plain_b = await mk_token(user_id=await _user_id("if2"),
                                     name="t-b")
@@ -853,7 +853,7 @@ class TestInterfaceFace:
         await seed_platform_user()
         ptid, _ = await mk_token(kind="platform", name="pv")
         ex_id = await mk_execution(token_id=ptid, status="running")
-        h_member = await _register_role(client, "if3", "member")
+        h_member = await _register_role(client, "if3", "admin")
         r = await client.get(f"/api/executions/{ex_id}", headers=h_member)
         assert r.status_code == 200
         h_user = await _register_role(client, "if4", "user")
@@ -866,7 +866,7 @@ class TestInterfaceFace:
         hash 未命中不出现在任何令牌下。"""
         await seed_platform_user()
         await seed_alias("rc-test", base_url="https://rc.local")
-        h = await _register_role(client, "if5", "member")
+        h = await _register_role(client, "if5", "admin")
         draft = _draft("sc-rc1", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="rc-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -912,7 +912,7 @@ class TestInterfaceFace:
         assert kinds[1][0] is True                   # 超范围拒绝
         assert kinds[2][0] is False                  # 成功调用
         # 无关令牌(if5b 用户的另一张)不含这些记录
-        h_other = await _register_role(client, "if6", "member")
+        h_other = await _register_role(client, "if6", "admin")
         _, plain_other = await mk_token(
             user_id=await _user_id("if6"), name="other")
         r = await client.get("/api/access-tokens", headers=h_other)
@@ -930,7 +930,7 @@ class TestScopeObjects:
         """§4.1:别名改名级联到范围行(ON UPDATE CASCADE),授权随名走。"""
         await seed_platform_user()
         await seed_alias("ren-a", base_url="https://ren.local")
-        h = await _register_role(client, "so1", "member")
+        h = await _register_role(client, "so1", "admin")
         tid, _ = await mk_token(user_id=await _user_id("so1"),
                                 scope_aliases=["ren-a"])
         from app.models.service_alias import ServiceAlias as _SA
@@ -945,7 +945,7 @@ class TestScopeObjects:
     async def test_plaintext_and_hint_shape(self, client):
         """§4.1:明文 = gtk_ + 43 字符 urlsafe;hint = 随机部分前4…后4。"""
         await seed_platform_user()
-        h = await _register_role(client, "so2", "member")
+        h = await _register_role(client, "so2", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "shape", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
@@ -966,7 +966,7 @@ class TestRegisterScopeGate:
         """令牌注册超范围场景 → 422 resource_not_allowed;范围补齐 → 201。"""
         await seed_platform_user()
         await seed_alias("rg-out", base_url="https://out.local")
-        h = await _register_role(client, "rg1", "member")
+        h = await _register_role(client, "rg1", "admin")
         draft = _draft("sc-rg1", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="rg-out"))])
         await client.post("/api/scenarios", headers=h, json=draft)
@@ -999,7 +999,7 @@ class TestRegisterScopeGate:
         """令牌 PATCH 换超范围方案 → 422(按将生效配方核对,§5.4 保存面)。"""
         await seed_platform_user()
         await seed_alias("rg-in", base_url="https://in.local")
-        h = await _register_role(client, "rg2", "member")
+        h = await _register_role(client, "rg2", "admin")
         await _add_credential("rg2", alias="auth-in")
         await _add_credential("rg2", alias="auth-out")
         draft = _draft("sc-rg2", steps=[dict(GET_STEP, call=dict(

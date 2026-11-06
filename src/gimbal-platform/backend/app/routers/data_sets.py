@@ -89,7 +89,7 @@ async def list_data_sets(
     data (the previous behaviour) is a cross-user disclosure, so non-admin
     callers only see data-sets whose parent scenario they own.
     """
-    if user.role == "admin":
+    if user.role == "super_admin":
         return await data_set_store.list_summaries(db, scenario_id=scenarioId)
     # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
     from ._ownership import referenced_scenario_ids
