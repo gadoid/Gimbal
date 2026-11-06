@@ -215,3 +215,27 @@ def test_real_call_model_custom_signer_dispatches():
 def test_real_call_model_none_keeps_legacy_md5():
     h = _inject(_Session(), _real_call("none"))
     assert set(h) == {"token", "timestamp"}
+
+
+# ── P0-1 续:端到端——声明经预处理器重建 Call 后仍在(此前被丢,恒 none)──
+
+def test_engine_path_applies_declared_bearer():
+    from gimbal.auth.session import AuthSession
+    from gimbal.schema import Call, Request, Step
+    from tests.unit.characterization.test_events_and_plugins import (
+        http_scenario, make_engine, mock_httpx,
+    )
+    sess = AuthSession(username="u", password="p")
+    sess.apply_token("T1", 3600)
+    engine, *_ = make_engine(auth_session=("tester", sess))
+    sc = http_scenario()
+    sc.steps[0] = Step(
+        call=Call(protocol="http", service="svc", method="GET", path="/p",
+                  user="tester", auth="bearer"),
+        request=Request(kind="request", body={}), strategy=[])
+    patcher, client = mock_httpx(200, {"ok": 1})
+    with patcher:
+        engine.run(sc)
+    headers = client.request.call_args.kwargs.get("headers") or {}
+    assert headers.get("Authorization") == "Bearer T1"
+    assert "token" not in headers and "timestamp" not in headers

@@ -309,7 +309,12 @@ class ScenarioPreprocessor:
             k: self._resolve_nested(v, root) if isinstance(v, (dict, list)) else self._resolve_value(v, root)
             for k, v in extra.items()
         }
-        return Call(protocol=call.protocol, **resolved_extra)
+        # P0-1 续(2026-11-06):auth / auth_signer 是 Call 的**声明字段**
+        # (不在 model_extra 里),此前重建时被丢弃 → 运行期 call.auth 恒为
+        # none,plate binding 声明的 bearer/basic/custom 全部回落 md5。
+        # 两者是声明值(binding 透传),不做模板展开,原样带过去。
+        return Call(protocol=call.protocol, auth=call.auth,
+                    auth_signer=call.auth_signer, **resolved_extra)
 
     def _resolve_request(self, request, root: dict):
         """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例。"""
