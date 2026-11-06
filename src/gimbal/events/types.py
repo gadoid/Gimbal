@@ -45,7 +45,10 @@ class EventType(str, Enum):
 
     # Run 生命周期
     RUN_START = "run.start"
+    # run.end 2026-11-06 起引擎不再发布（并入 run.finished），保留供旧 jsonl 重放
     RUN_END = "run.end"
+    # run 终态（计数 + 判定；jsonl 终线）——run 结束的唯一事件
+    RUN_FINISHED = "run.finished"
     # Run 级元数据（CI/CD / git / 构建上下文等），由 CLI 在 bootstrap 之后 publish
     RUN_META = "run.meta"
 
@@ -130,6 +133,11 @@ class RunStartEvent(FrameworkEvent):
 
 
 class RunEndEvent(FrameworkEvent):
+    """（2026-11-06 起引擎不再发布，类保留供旧 jsonl 重放。）
+
+    与 run.finished 计数完全重叠；订阅方改订 ``run.finished``
+    （:class:`RunFinishedEvent` 字段是本类的超集）。
+    """
     event_type: Literal["run.end"] = "run.end"
     total: int
     passed: int
@@ -368,9 +376,11 @@ class PluginDeactivatedEvent(FrameworkEvent):
 class RunFinishedEvent(FrameworkEvent):
     """run 判定终态事件（stdout jsonl 最后一行；平台读此行即得结果）。
 
-    与 run.end（统计事件）并存：run.end 在 reporter 终结前发出；
-    run.finished 是 jsonl 流的**终线信号**（之后引擎不再发事件），
-    携带完整判定（计数 + blocked/repaired/halted + details 摘要）。
+    run 结束的唯一事件（2026-11-06 起 run.end 并入本事件）：jsonl 流的
+    **终线信号**（之后引擎不再发事件），携带完整判定（计数 + blocked/
+    repaired/halted + details 摘要）。在 reporter finalize 之后发布；
+    需要在终线写出前落盘的插件以小 priority 订阅（总线按 priority 升序
+    同步调用，jsonl sink 为默认 100）。
     """
     event_type: Literal["run.finished"] = "run.finished"
     exit_code: int = 0

@@ -20,7 +20,7 @@ from gimbal.core.hooks import HookRegistry
 from gimbal.events import InMemoryEventBus
 from gimbal.events.types import (
     FrameworkInitEvent,
-    RunStartEvent, RunMetaEvent, RunEndEvent,
+    RunStartEvent, RunMetaEvent, RunFinishedEvent,
     SuiteStartEvent, SuiteEndEvent,
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent, StepFailedEvent,
@@ -474,7 +474,7 @@ class TestPluginV2EndToEnd:
         bus.publish(SuiteEndEvent(
             run_id="rv2", suite_id="sA", status="failed", timestamp=_ts(),
         ))
-        bus.publish(RunEndEvent(
+        bus.publish(RunFinishedEvent(
             run_id="rv2", total=2, passed=1, failed=1, error=0,
             timestamp=_ts(),
         ))

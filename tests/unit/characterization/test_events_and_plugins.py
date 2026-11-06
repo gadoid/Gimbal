@@ -132,6 +132,22 @@ class TestEventShapes:
                               "actual", "passed", "message"}
         assert ev.failure_evidence is None
 
+    def test_run_end_retired_run_finished_is_last(self):
+        """2026-11-06：run.end 并入 run.finished（计数完全重叠）。引擎不再
+        发 run.end；run.finished 只发一次、是最后一个事件，计数与结果一致。"""
+        engine, bus, *_ = make_engine()
+        seen: list = []
+        bus.subscribe(lambda e: seen.append(e))
+        with mock_httpx(200, {"code": 0})[0]:
+            result = engine.run(http_scenario())
+        types = [e.event_type for e in seen]
+        assert "run.end" not in types
+        assert types.count("run.finished") == 1
+        assert types[-1] == "run.finished"
+        fin = seen[-1]
+        assert (fin.total, fin.passed, fin.failed, fin.error, fin.skipped) == (
+            result.total, result.passed, result.failed, result.error, result.skipped)
+
     def test_call_exchange_event_shape_with_result_envelope(self):
         engine, bus, *_ = make_engine()
         got = []

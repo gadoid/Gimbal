@@ -48,7 +48,8 @@ class ReportStore:
             self._current_scenario_id = None
             self._current_step_id = None
 
-    def on_run_end(self, event) -> None:
+    def on_run_finished(self, event) -> None:
+        """run.finished（run 结束的唯一事件，2026-11-06 起取代 run.end）。"""
         with self._lock:
             if self._run is None:
                 return

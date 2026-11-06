@@ -208,10 +208,9 @@ class Engine:
             logger.exception("[Engine] 执行异常: {}", e)
             result = RunResult(exit_code=2, error=1)
 
-        # 4. 触发 RUN_END 事件
-        self._emit_run_end(framework_ctx, result)
-
-        # 5. 终结所有 reporter，产出 ReportArtifact 列表（仅写入 metadata，artifact 本身由 reporter 落盘）
+        # 4. 终结所有 reporter，产出 ReportArtifact 列表（仅写入 metadata，artifact 本身由 reporter 落盘）
+        #    （原 run.end 事件 2026-11-06 并入 run.finished：计数完全重叠，
+        #    插件改订终线事件）
         self._artifacts: list = []
         if reporter_runtime is not None:
             try:
@@ -219,9 +218,9 @@ class Engine:
             except Exception:  # noqa: BLE001
                 logger.exception("[Engine] reporter_runtime.finalize_all 失败（已隔离）")
 
-        # 6. 终线事件 run.finished（S-5）：判定终态事件化——stdout jsonl 的
+        # 5. 终线事件 run.finished（S-5）：run 结束的唯一事件——stdout jsonl 的
         #    最后一行 / SSE 的 done 前最后事件 / server 终态查询共用此事件；
-        #    在 reporter finalize 之后发布（reporter 不消费终线，transport 消费）
+        #    在 reporter finalize 之后发布（reporter 不消费终线；插件与 transport 消费）
         self._emit_run_finished(framework_ctx, result)
         # P1-04：订阅覆盖到终线之后再卸载（run.finished 是常见订阅对象）
         if attached_subscribe is not None:
@@ -391,31 +390,6 @@ class Engine:
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[Engine] emit RUN_START failed")
-
-    def _emit_run_end(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
-        """向 event_bus 发布 RunEndEvent 事件（带统计信息）。
-
-        入参:
-            framework_ctx: 本次 run 的 framework 上下文。
-            result:        本次 run 的 RunResult 结果。
-        副作用:
-            发布事件，失败仅记 debug 日志。
-        """
-        bus = self._ictx.event_bus
-        if bus is None:
-            return
-        try:
-            from gimbal.events.types import RunEndEvent
-            bus.publish(RunEndEvent(
-                run_id=framework_ctx.run_id,
-                total=result.total,
-                passed=result.passed,
-                failed=result.failed,
-                error=result.error,
-                skipped=result.skipped,
-            ))
-        except Exception:  # noqa: BLE001
-            logger.debug("[Engine] emit RUN_END failed")
 
     # ── 内部分发 ─────────────────────────────────────────────────────────────
 

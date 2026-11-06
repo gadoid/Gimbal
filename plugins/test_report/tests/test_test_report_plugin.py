@@ -23,7 +23,7 @@ from gimbal.core.plugin import PluginContext
 from gimbal.core.hooks import HookRegistry
 from gimbal.events import InMemoryEventBus
 from gimbal.events.types import (
-    RunStartEvent, RunMetaEvent, RunEndEvent,
+    RunStartEvent, RunMetaEvent, RunFinishedEvent,
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent, StepFailedEvent,
 )
@@ -152,7 +152,7 @@ class TestReportStore:
             run_id="r1", scenario_id="sc1", status="failed", step_count=2,
             timestamp=_ts(),
         ))
-        s.on_run_end(RunEndEvent(
+        s.on_run_finished(RunFinishedEvent(
             run_id="r1", total=2, passed=1, failed=1, error=0, timestamp=_ts(),
         ))
 
@@ -184,9 +184,9 @@ class TestReportStore:
         snap = s.snapshot()
         assert "ghost" not in snap._loose_scenarios["sc1"].steps
 
-    def test_run_end_without_run_start_returns_none(self):
+    def test_run_finished_without_run_start_returns_none(self):
         s = ReportStore()
-        # 既不调 run.start 也不调 run.end → snapshot 应为 None
+        # 既不调 run.start 也不调 run.finished → snapshot 应为 None
         assert s.snapshot() is None
 
 
@@ -225,7 +225,7 @@ class TestTestReportPlugin:
         bus.publish(ScenarioEndEvent(
             run_id="r1", scenario_id="sc1", status="failed", step_count=2, timestamp=_ts()
         ))
-        bus.publish(RunEndEvent(
+        bus.publish(RunFinishedEvent(
             run_id="r1", total=2, passed=1, failed=1, error=0, timestamp=_ts()
         ))
 
@@ -243,15 +243,15 @@ class TestTestReportPlugin:
         assert "Gimbal Test Report" in text or "Gimbal" in text
 
     def test_no_run_means_no_file(self, tmp_path):
-        """没有 run.start 就 run.end → 不应写文件（sanity）。"""
+        """没有 run.start 就 run.finished → 不应写文件（sanity）。"""
         out = tmp_path / "report.html"
         bus = InMemoryEventBus()
         plugin = ReportPlugin()
         plugin.load()
         ctx = _make_ctx(bus, {"output_path": str(out)})
         plugin.activate(ctx)
-        # 直接发 run.end,不做任何 run.start
-        bus.publish(RunEndEvent(run_id="r0", total=0, passed=0, failed=0, error=0))
+        # 直接发 run.finished,不做任何 run.start
+        bus.publish(RunFinishedEvent(run_id="r0", total=0, passed=0, failed=0, error=0))
         plugin.deactivate()
         bus.stop()
         # store snapshot → None,_flush 提前返回,不写文件
@@ -271,7 +271,7 @@ class TestTestReportPlugin:
         plugin.activate(ctx)
         # 不应该抛
         bus.publish(RunStartEvent(run_id="r1", env="", mode=""))
-        bus.publish(RunEndEvent(run_id="r1", total=0, passed=0, failed=0, error=0))
+        bus.publish(RunFinishedEvent(run_id="r1", total=0, passed=0, failed=0, error=0))
         plugin.deactivate()
         bus.stop()
 
@@ -285,7 +285,7 @@ class TestTestReportPlugin:
         ctx = _make_ctx(bus, {"output_path": str(out)})
         plugin.activate(ctx)
         bus.publish(RunStartEvent(run_id="r1", env="", mode=""))
-        bus.publish(RunEndEvent(run_id="r1", total=1, passed=1, failed=0, error=0))
+        bus.publish(RunFinishedEvent(run_id="r1", total=1, passed=1, failed=0, error=0))
         plugin.deactivate()
         bus.stop()
         assert out.exists()
@@ -314,7 +314,7 @@ class TestPluginDiscovery:
 
         bus = ctx.event_bus  # type: ignore[assignment]
         bus.publish(RunStartEvent(run_id="r1", env="dev", mode=""))
-        bus.publish(RunEndEvent(run_id="r1", total=0, passed=0, failed=0, error=0))
+        bus.publish(RunFinishedEvent(run_id="r1", total=0, passed=0, failed=0, error=0))
         plugin.deactivate()
         bus.stop()  # type: ignore[attr-defined]
         assert (tmp_path / "auto.html").exists()

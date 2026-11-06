@@ -107,7 +107,8 @@ class ReportStore:
         # 用完清掉，避免污染下一次 run（理论上一个 process 只一个 framework）
         self._pending_framework_version = ""
 
-    def on_run_end(self, event: Any) -> None:
+    def on_run_finished(self, event: Any) -> None:
+        """run.finished（run 结束的唯一事件，2026-11-06 起取代 run.end）。"""
         rid = getattr(event, "run_id", None)
         report = self._find_run(rid)
         if report is None:
