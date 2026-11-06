@@ -138,6 +138,125 @@ export interface ExecutionRow {
   caseDir: string
   startedAt: string | null
   finishedAt: string | null
+  /** B6(R11 轻量版):server 链槽位号 → 引擎日志 server-engine[-N].log;
+   *  launch 链 / 存量行为 null(日志在 case 目录自带) */
+  serverSlot?: number | null
+}
+
+// ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
+/** 一条断言的结果(引擎 step.end 投影;敏感目标已脱敏、超长值已截断)。 */
+export interface ReportAssertion {
+  name: string
+  target: string | null
+  operator: string | null
+  expected: unknown
+  actual: unknown
+  passed: boolean
+  message: string | null
+}
+
+export interface ReportExtract {
+  target: string
+  value: unknown
+}
+
+export interface ReportStep {
+  rowSeq: number
+  unit: string
+  attempt: string
+  stepId: string
+  stepName: string
+  description: string | null
+  callSummary: string
+  status: string
+  durationMs: number
+  error: string | null
+  assertionCount: number
+  assertionPassed: number
+  assertions: ReportAssertion[]
+  extracts: ReportExtract[]
+  hasEvidence: boolean
+}
+
+/** 调用证据(与 call.exchange 同形;已脱敏,请求/响应体 16K 截断)。 */
+export interface ReportEvidence {
+  protocol?: string
+  request?: { method?: string; url?: string; headers?: Record<string, unknown>; body?: unknown }
+  response?: { status?: unknown; meta?: Record<string, unknown>; body?: unknown }
+  elapsed_ms?: number
+}
+
+export interface ReportGroup {
+  key: string
+  rowSeq: number
+  unit: string
+  datasetId: string | null
+  rowIndex: number
+  rep: number
+  status: string
+  caseDir: string
+  serverSlot: number | null
+  steps: ReportStep[]
+}
+
+export interface ExecutionReport {
+  execution: {
+    id: number
+    scenarioId: string
+    scenarioName: string
+    status: ExecutionStatus
+    kind: string
+    suiteId: number | null
+    batchId: string | null
+    startedAt: string | null
+    finishedAt: string | null
+    durationMs: number | null
+    totalRuns: number
+    passed: number
+    failed: number
+    skipped: number
+  }
+  summary: {
+    steps: number
+    stepsPassed: number
+    stepsFailed: number
+    stepsOther: number
+    assertions: number
+    assertionsPassed: number
+  }
+  groups: ReportGroup[]
+  failure: (ReportStep & { failedAssertions: ReportAssertion[]; evidence: ReportEvidence | null }) | null
+  /** false = 早于步骤落库的执行或旧引擎:报告无步骤数据,看「执行明细」工件 */
+  hasStepData: boolean
+}
+
+export function getExecutionReport(id: number): Promise<ExecutionReport> {
+  return http.get<ExecutionReport>(`/executions/${id}/report`).then((r) => r.data)
+}
+
+// ── B5 批次汇总 ────────────────────────────────────────────────
+export interface BatchSummary {
+  batchId: string
+  total: number
+  counts: Partial<Record<ExecutionStatus, number>>
+  startedAt: string | null
+  finishedAt: string | null
+  active: boolean
+  members: Array<{
+    id: number
+    scenarioId: string
+    scenarioName: string
+    status: ExecutionStatus
+    passed: number
+    failed: number
+    totalRuns: number
+  }>
+}
+
+export function getBatchSummary(batchId: string): Promise<BatchSummary> {
+  return http
+    .get<BatchSummary>('/executions/batch-summary', { params: { batchId } })
+    .then((r) => r.data)
 }
 
 export function listExecutions(params?: {

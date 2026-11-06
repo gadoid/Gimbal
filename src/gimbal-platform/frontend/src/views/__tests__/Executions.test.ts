@@ -22,7 +22,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Executions from '@/views/Executions.vue'
 import ExecutionsList from '@/views/ExecutionsList.vue'
-import { listExecutions } from '@/api/executions'
+import { getBatchSummary, listExecutions } from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
 import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot, getExecutionEvents } from '@/api/executions'
 import { previewPlateDraft } from '@/api/scenario-composer'
@@ -42,6 +42,17 @@ vi.mock('@/api/executions', async (importOriginal) => {
     getExecutionEvents: vi.fn().mockResolvedValue({ items: [], count: 0 }),
     // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
     getScenarioSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
+    // B5 批次横幅:默认 404(无横幅),批次用例按需覆写
+    getBatchSummary: vi.fn().mockRejectedValue(new Error('no batch')),
+    // B4 报告 tab(默认视图):默认空报告,报告用例按需覆写
+    getExecutionReport: vi.fn().mockResolvedValue({
+      execution: { id: 1, scenarioId: 'sc_demo', scenarioName: '', status: 'done',
+        kind: 'scenario', suiteId: null, batchId: null, startedAt: null,
+        finishedAt: null, durationMs: null, totalRuns: 0, passed: 0, failed: 0, skipped: 0 },
+      summary: { steps: 0, stepsPassed: 0, stepsFailed: 0, stepsOther: 0,
+        assertions: 0, assertionsPassed: 0 },
+      groups: [], failure: null, hasStepData: false,
+    }),
   }
 })
 
@@ -95,7 +106,7 @@ const fakeDetail = {
 
 async function mountPage(id = 1) {
   const router = makeRouter()
-  router.push(`/executions/${id}`)
+  router.push(`/executions/${id}#detail`)
   await router.isReady()
   const wrapper = mount(Executions, {
     global: { plugins: [router] },
@@ -471,7 +482,7 @@ describe('Executions.vue — S1 失败根因深链(锚点限定本 unit)', () =>
     execStore.detail = detail7
     execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
     const router = makeRouter()
-    router.push('/executions/7')
+    router.push('/executions/7#detail')
     await router.isReady()
     const w = mount(Executions, { global: { plugins: [router] } })
     await flushPromises()
@@ -808,5 +819,76 @@ describe('Executions.vue — 修订台账 (W21)', () => {
   it('无任何版本信息(老执行)→ 台账区不渲染', async () => {
     const w = await mountLedger({})
     expect(w.find('[data-testid="revision-ledger"]').exists()).toBe(false)
+  })
+})
+
+describe('Executions.vue — B4 报告 tab', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('默认视图是「报告」;切到「执行明细」才渲染执行信息', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(execStore.detail)
+    const router = makeRouter()
+    router.push('/executions/1')
+    await router.isReady()
+    const w = mount(Executions, { global: { plugins: [router] }, attachTo: document.body })
+    await flushPromises()
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('执行信息')
+    // reka Tabs 在 mousedown 上切换
+    await w.get('[data-testid="tab-detail"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    expect(w.text()).toContain('执行信息')
+    w.unmount()
+  })
+
+  it('?rows=failed 深链直达「执行明细」', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail, id: 7 }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(execStore.detail)
+    const router = makeRouter()
+    router.push('/executions/7?rows=failed')
+    await router.isReady()
+    const w = mount(Executions, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(w.text()).toContain('执行信息')
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+describe('ExecutionsList — B5 批次汇总横幅', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('?batch_id= 深链:显示批次计数与用时;清除批次后横幅消失', async () => {
+    vi.mocked(listExecutions).mockResolvedValue({
+      items: [], total: 0, page: 1, pageSize: 10, failedTotal: 0 } as never)
+    vi.mocked(getBatchSummary).mockResolvedValue({
+      batchId: 'b-1', total: 3, counts: { done: 2, failed: 1 },
+      startedAt: '2026-11-06T01:00:00Z', finishedAt: '2026-11-06T01:01:30Z',
+      active: false, members: [],
+    })
+    const router = makeRouter()
+    router.push('/executions?batch_id=b-1')
+    await router.isReady()
+    const w = mount(ExecutionsList, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(getBatchSummary).toHaveBeenCalledWith('b-1')
+    const banner = w.get('[data-testid="exec-batch-banner"]').text()
+    expect(banner).toContain('共 3 条')
+    expect(banner).toContain('完成 2')
+    expect(banner).toContain('失败 1')
+    expect(banner).toContain('用时 1m30s')
+
+    await w.get('.batch-clear').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="exec-batch-banner"]').exists()).toBe(false)
+    w.unmount()
   })
 })

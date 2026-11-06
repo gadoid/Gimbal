@@ -168,6 +168,28 @@ async def get_owned_execution(
     return ex
 
 
+async def can_view_execution(principal, ex, session: AsyncSession) -> bool:
+    """执行可读判定(单一实现;get_visible_execution 与报告 / 批次汇总共用)。
+
+    * 令牌:``execution.token_id == 当前令牌``(D8);
+    * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
+      当前用户 member+ —— 平台身份的执行与投递对 member+ 可见(D7)。
+    """
+    from ..models.user import User as _U
+
+    if getattr(principal, "is_token", False):
+        return ex.token_id == principal.token_id
+    user = principal.user
+    if ex.owner_id == user.id or user.role == "admin":
+        return True
+    if ex.owner_id is not None:
+        owner = await session.get(_U, ex.owner_id)
+        if owner is not None and owner.is_system \
+                and user.role in ("member", "admin"):
+            return True
+    return False
+
+
 async def get_visible_execution(
     principal: Annotated["object", Depends(principal_or_user)],
     session: Annotated[AsyncSession, Depends(get_db)],
@@ -175,39 +197,17 @@ async def get_visible_execution(
 ):
     """执行可见性(webhook v4 §5.2/D8):只读三端点(detail/rows/events)。
 
-    * 令牌:``execution.token_id == 当前令牌``,否则 404(D8 —— 令牌
-      只能查本令牌发起的执行);
-    * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
-      当前用户 member+ —— 平台身份的执行与投递对 member+ 可见(D7)。
+    判定见 :func:`can_view_execution`;不可见与不存在同为 404(不泄露存在性)。
     """
     from ..models.execution import Execution
-    from ..models.user import User as _U
 
     ex = await session.get(Execution, execution_id)
-    if ex is None:
+    if ex is None or not await can_view_execution(principal, ex, session):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"execution not found: {execution_id}",
         )
-    if getattr(principal, "is_token", False):
-        if ex.token_id == principal.token_id:
-            return ex
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"execution not found: {execution_id}",
-        )
-    user = principal.user
-    if ex.owner_id == user.id or user.role == "admin":
-        return ex
-    if ex.owner_id is not None:
-        owner = await session.get(_U, ex.owner_id)
-        if owner is not None and owner.is_system \
-                and user.role in ("member", "admin"):
-            return ex
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"execution not found: {execution_id}",
-    )
+    return ex
 
 
 async def get_controllable_execution(

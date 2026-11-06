@@ -19,7 +19,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, Field
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
@@ -154,6 +154,27 @@ async def executions_summary(
 
 
 # ── list ────────────────────────────────────────────────────────
+# ── B5 批次汇总(2026-11-06 日志报告整理)───────────────────────
+# 必须声明在 /{execution_id} 之前(否则路径参数先匹配)。新接口按 v4
+# §2.2「新增接口默认不接令牌」只认 JWT。
+@router.get("/batch-summary")
+async def get_batch_summary(
+    user: CurrentUser, session: DbSession,
+    batch_id: Annotated[str, Query(alias="batchId", min_length=1, max_length=64)],
+) -> dict:
+    """批次(队列逐条发起 / suite 聚合运行)成员清单 + 状态计数 + 时间跨度。
+
+    成员逐个过执行可读判定,不可见的剔除;一个都不可见 → 404。
+    """
+    out = await execution_store.batch_summary(
+        session, Principal(user=user, identity_mode="personal"), batch_id)
+    if out["total"] == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "batch_not_found", "message": batch_id})
+    return out
+
+
 @router.get("", response_model=ExecutionListOut)
 async def list_executions(
     principal: PrincipalIn,
@@ -339,6 +360,28 @@ async def get_execution(
     except Exception:  # noqa: BLE001
         out.current_plate = None
     return out
+
+
+# ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
+@router.get("/{execution_id}/report")
+async def get_execution_report(
+    execution_id: Annotated[int, Path(ge=1)],
+    user: CurrentUser, session: DbSession,
+) -> dict:
+    """执行报告:概览 / 行(单元)分组步骤表 / 失败聚焦。
+
+    打开时从 execution_steps 渲染(不读文本日志与事件表——事件 14 天
+    清扫后报告不变)。可见性与执行详情同一判定(can_view_execution);
+    新接口按 v4 §2.2 默认只认 JWT,不接访问令牌。
+    """
+    from ..core.deps import can_view_execution
+    ex = await session.get(Execution, execution_id)
+    if ex is None or not await can_view_execution(
+            Principal(user=user, identity_mode="personal"), ex, session):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"execution not found: {execution_id}")
+    return await execution_store.build_report(session, ex)
 
 
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────

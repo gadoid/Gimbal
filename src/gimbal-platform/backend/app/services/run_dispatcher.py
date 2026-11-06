@@ -246,6 +246,8 @@ async def execution_rows_page(
                 "startedAt": _dt_to_iso(r.started_at),
                 "finishedAt": _dt_to_iso(r.finished_at),
                 "serverSlot": r.server_slot,
+                # B4:报告按 unit 归组 graph 链步骤(行 API 响应模型不含此键)
+                "unitId": r.unit_id or "",
             }
             for r in rows
         ], int(total)

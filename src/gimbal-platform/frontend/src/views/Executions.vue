@@ -107,187 +107,202 @@
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
 
-    <h3 class="recipe-title">执行信息</h3>
-    <dl class="recipe">
-      <!-- 入站来源(webhook v4 §7.1):经哪张令牌、以谁的身份;JWT 发起的执行不显示 -->
-      <template v-if="execStore.detail?.token_id">
-        <dt>入站来源</dt>
-        <dd class="mono" data-testid="inbound-origin">
-          {{ inboundOriginText }}
-          <span v-if="hasOutOfScope" class="oos-flag">含范围外目标</span>
-        </dd>
-      </template>
-      <template v-for="([k, label, v]) in recipeEntries" :key="k">
-        <dt>{{ label }}</dt>
-        <dd class="mono">{{ formatRecipeValue(v) }}</dd>
-      </template>
-    </dl>
+    <!-- B4(2026-11-06 日志报告整理):报告为首选视图;原执行信息 / 修订台账 /
+         行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
+         内容与行为不变,保留排障用途 -->
+    <Tabs v-model="detailTab" class="detail-tabs">
+      <TabsList>
+        <TabsTrigger value="report" data-testid="tab-report">报告</TabsTrigger>
+        <TabsTrigger value="detail" data-testid="tab-detail">执行明细</TabsTrigger>
+      </TabsList>
+      <TabsContent value="report">
+        <ExecutionReportPanel :execution-id="executionId" :running="!isTerminalDetail" />
+      </TabsContent>
+      <TabsContent value="detail">
+      <h3 class="recipe-title">执行信息</h3>
+      <dl class="recipe">
+        <!-- 入站来源(webhook v4 §7.1):经哪张令牌、以谁的身份;JWT 发起的执行不显示 -->
+        <template v-if="execStore.detail?.token_id">
+          <dt>入站来源</dt>
+          <dd class="mono" data-testid="inbound-origin">
+            {{ inboundOriginText }}
+            <span v-if="hasOutOfScope" class="oos-flag">含范围外目标</span>
+          </dd>
+        </template>
+        <template v-for="([k, label, v]) in recipeEntries" :key="k">
+          <dt>{{ label }}</dt>
+          <dd class="mono">{{ formatRecipeValue(v) }}</dd>
+        </template>
+      </dl>
 
-    <!-- W21 修订台账:当时修订 vs 重跑将使用的修订(场景当前声明) -->
-    <template v-if="ledgerRows.length">
-      <h3 class="recipe-title">修订台账</h3>
-      <table class="ex-table ledger-table" data-testid="revision-ledger">
-        <thead>
-          <tr><th>系统</th><th>当时修订</th><th>重跑将使用</th><th>一致性</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in ledgerRows" :key="row.system">
-            <td class="mono">{{ row.system }}</td>
-            <td>
-              <span v-if="row.then" class="mono pin-badge pinned">{{ row.then }}</span>
-              <span v-else class="pin-badge working" title="执行时未钉修订(working/预览执行)">未钉 · 预览</span>
-            </td>
-            <td>
-              <span v-if="row.now" class="mono">{{ row.now }}</span>
-              <span v-else-if="row.now === null" class="dim">—</span>
-              <span v-else class="pin-badge working" title="场景当前声明 working">working</span>
-            </td>
-            <td>
-              <span v-if="row.integration" class="dim"
-                    title="第三方系统恒取当前定义(定义标识见当时修订列),无版本可比">第三方 · 实时定义</span>
-              <span v-else-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
-              <span v-else class="dim">一致</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="rows-hint">
-        构建身份 m2：<span class="mono" :title="execStore.detail.m2_hash ?? ''">{{
-          execStore.detail.m2_hash ? execStore.detail.m2_hash.slice(0, 12) : '未记录(历史执行)'
-        }}</span>
-      </p>
-    </template>
-
-    <h3 class="rows-title">行级明细</h3>
-    <!-- 批 3/AD7:实时日志面板(行内抽屉;展开即 tail,收起即断流 —— 连接数预算) -->
-    <ExecutionLogsPanel
-      v-if="logsPanelOpen" ref="logsPanelRef"
-      :execution-id="executionId" :running="!isTerminalDetail"
-      data-testid="logs-panel-mount"
-    />
-    <div class="rows-head">
-      <p class="rows-hint">
-        每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
-      </p>
-      <Button
-        variant="link"
-        size="sm"
-        class="h-7 px-2"
-        :data-testid="`exec-row-${execStore.detail.id}`"
-        @click="toggleRows"
-      >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</Button>
-    </div>
-    <div v-if="isExpanded" class="rows-panel">
-      <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
-      <p v-else-if="rows.length === 0" class="rows-empty">
-        无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
-      </p>
-      <table v-else class="ex-table slib-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>数据集</th>
-            <th>注入条目</th>
-            <th>行</th>
-            <th>重复</th>
-            <th>状态</th>
-            <th>耗时</th>
-            <th>case 目录</th>
-            <th>工件</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="row in pagedRows" :key="row.seq">
-            <tr class="ex-table-row">
-              <td class="mono">{{ row.seq }}</td>
-              <td>{{
-                row.datasetName
-                  ?? (row.datasetId
-                    ? row.datasetId
-                    : (row.injectionId ? '注入直跑' : '场景本体'))
-              }}</td>
+      <!-- W21 修订台账:当时修订 vs 重跑将使用的修订(场景当前声明) -->
+      <template v-if="ledgerRows.length">
+        <h3 class="recipe-title">修订台账</h3>
+        <table class="ex-table ledger-table" data-testid="revision-ledger">
+          <thead>
+            <tr><th>系统</th><th>当时修订</th><th>重跑将使用</th><th>一致性</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in ledgerRows" :key="row.system">
+              <td class="mono">{{ row.system }}</td>
               <td>
-                <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
-                <span v-else>—</span>
+                <span v-if="row.then" class="mono pin-badge pinned">{{ row.then }}</span>
+                <span v-else class="pin-badge working" title="执行时未钉修订(working/预览执行)">未钉 · 预览</span>
               </td>
-              <td class="mono">{{ row.rowIndex }}</td>
-              <td class="mono">{{ row.rep }}</td>
               <td>
-                <span :class="['row-tag', rowStatusClass(row.status)]" :title="row.status">{{ rowStatusText(row.status) }}</span>
+                <span v-if="row.now" class="mono">{{ row.now }}</span>
+                <span v-else-if="row.now === null" class="dim">—</span>
+                <span v-else class="pin-badge working" title="场景当前声明 working">working</span>
               </td>
-              <td class="mono">{{ rowDuration(row) }}</td>
-              <td class="mono dim">{{ row.caseDir || '—' }}</td>
               <td>
-                <span class="row-actions">
-                  <Button
-                    v-if="row.status === 'failed'"
-                    variant="link" size="sm" class="h-6 px-1.5"
-                    :data-testid="`row-view-logs-${row.seq}`"
-                    @click="gotoRowLogs(row)"
-                  >查看日志</Button>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    class="h-6 px-1.5"
-                    :disabled="!row.caseDir"
-                    :data-testid="`row-artifact-${row.seq}-engine-log`"
-                    @click="toggleArtifact(row, 'engine-log')"
-                  >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</Button>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    class="h-6 px-1.5"
-                    :disabled="!row.caseDir"
-                    :data-testid="`row-artifact-${row.seq}-result`"
-                    @click="toggleArtifact(row, 'result')"
-                  >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</Button>
-                </span>
+                <span v-if="row.integration" class="dim"
+                      title="第三方系统恒取当前定义(定义标识见当时修订列),无版本可比">第三方 · 实时定义</span>
+                <span v-else-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
+                <span v-else class="dim">一致</span>
               </td>
             </tr>
-            <tr
-              v-for="a in loadedArtifacts(row)"
-              :key="`${row.seq}-${a.file}-artifact`"
-              class="ex-table-artifact"
-            >
-              <td colspan="9">
-                <div class="artifact-head">
-                  <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志，原始文件 — 含未入库级别）' : 'result.json（步骤明细）' }}</span>
-                  <div class="artifact-tools">
-                    <label
-                      v-if="a.file === 'engine-log' && a.hasAnsi"
-                      class="raw-toggle"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="rawAnsiKeys.has(a.key)"
-                        @change="toggleRawAnsi(a.key, ($event.target as HTMLInputElement).checked)"
-                      />
-                      显示原始(含颜色码)
-                    </label>
-                    <span class="mono dim">{{ row.caseDir }}</span>
-                  </div>
-                </div>
-                <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{
-                  a.file === 'engine-log' && !rawAnsiKeys.has(a.key)
-                    ? stripAnsi(a.content) : a.content
-                }}</pre>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <!-- 2026-09-23 分页批次:行级表客户端切片(store 的 rows 缓存与
-           轮询刷新语义不变,只换渲染切片) -->
-      <div v-if="rowsPageCount > 1 || rows.length > 0" class="mt-2 flex justify-end">
-        <Pagination
-          v-model:page="rowsPage"
-          v-model:page-size="rowsPageSize"
-          :total="rows.length"
-          show-page-size
-          show-jump
-        />
+          </tbody>
+        </table>
+        <p class="rows-hint">
+          构建身份 m2：<span class="mono" :title="execStore.detail.m2_hash ?? ''">{{
+            execStore.detail.m2_hash ? execStore.detail.m2_hash.slice(0, 12) : '未记录(历史执行)'
+          }}</span>
+        </p>
+      </template>
+
+      <h3 class="rows-title">行级明细</h3>
+      <!-- 批 3/AD7:实时日志面板(行内抽屉;展开即 tail,收起即断流 —— 连接数预算) -->
+      <ExecutionLogsPanel
+        v-if="logsPanelOpen" ref="logsPanelRef"
+        :execution-id="executionId" :running="!isTerminalDetail"
+        data-testid="logs-panel-mount"
+      />
+      <div class="rows-head">
+        <p class="rows-hint">
+          每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
+        </p>
+        <Button
+          variant="link"
+          size="sm"
+          class="h-7 px-2"
+          :data-testid="`exec-row-${execStore.detail.id}`"
+          @click="toggleRows"
+        >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</Button>
       </div>
-    </div>
+      <div v-if="isExpanded" class="rows-panel">
+        <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
+        <p v-else-if="rows.length === 0" class="rows-empty">
+          无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
+        </p>
+        <table v-else class="ex-table slib-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>数据集</th>
+              <th>注入条目</th>
+              <th>行</th>
+              <th>重复</th>
+              <th>状态</th>
+              <th>耗时</th>
+              <th>case 目录</th>
+              <th>工件</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="row in pagedRows" :key="row.seq">
+              <tr class="ex-table-row">
+                <td class="mono">{{ row.seq }}</td>
+                <td>{{
+                  row.datasetName
+                    ?? (row.datasetId
+                      ? row.datasetId
+                      : (row.injectionId ? '注入直跑' : '场景本体'))
+                }}</td>
+                <td>
+                  <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
+                  <span v-else>—</span>
+                </td>
+                <td class="mono">{{ row.rowIndex }}</td>
+                <td class="mono">{{ row.rep }}</td>
+                <td>
+                  <span :class="['row-tag', rowStatusClass(row.status)]" :title="row.status">{{ rowStatusText(row.status) }}</span>
+                </td>
+                <td class="mono">{{ rowDuration(row) }}</td>
+                <td class="mono dim">{{ row.caseDir || '—' }}</td>
+                <td>
+                  <span class="row-actions">
+                    <Button
+                      v-if="row.status === 'failed'"
+                      variant="link" size="sm" class="h-6 px-1.5"
+                      :data-testid="`row-view-logs-${row.seq}`"
+                      @click="gotoRowLogs(row)"
+                    >查看日志</Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      class="h-6 px-1.5"
+                      :disabled="!row.caseDir"
+                      :title="slotHint(row)"
+                      :data-testid="`row-artifact-${row.seq}-engine-log`"
+                      @click="toggleArtifact(row, 'engine-log')"
+                    >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      class="h-6 px-1.5"
+                      :disabled="!row.caseDir"
+                      :data-testid="`row-artifact-${row.seq}-result`"
+                      @click="toggleArtifact(row, 'result')"
+                    >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</Button>
+                  </span>
+                </td>
+              </tr>
+              <tr
+                v-for="a in loadedArtifacts(row)"
+                :key="`${row.seq}-${a.file}-artifact`"
+                class="ex-table-artifact"
+              >
+                <td colspan="9">
+                  <div class="artifact-head">
+                    <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志，原始文件 — 含未入库级别）' : 'result.json（步骤明细）' }}</span>
+                    <div class="artifact-tools">
+                      <label
+                        v-if="a.file === 'engine-log' && a.hasAnsi"
+                        class="raw-toggle"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="rawAnsiKeys.has(a.key)"
+                          @change="toggleRawAnsi(a.key, ($event.target as HTMLInputElement).checked)"
+                        />
+                        显示原始(含颜色码)
+                      </label>
+                      <span class="mono dim">{{ row.caseDir }}</span>
+                    </div>
+                  </div>
+                  <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{
+                    a.file === 'engine-log' && !rawAnsiKeys.has(a.key)
+                      ? stripAnsi(a.content) : a.content
+                  }}</pre>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <!-- 2026-09-23 分页批次:行级表客户端切片(store 的 rows 缓存与
+             轮询刷新语义不变,只换渲染切片) -->
+        <div v-if="rowsPageCount > 1 || rows.length > 0" class="mt-2 flex justify-end">
+          <Pagination
+            v-model:page="rowsPage"
+            v-model:page-size="rowsPageSize"
+            :total="rows.length"
+            show-page-size
+            show-jump
+          />
+        </div>
+      </div>
+      </TabsContent>
+    </Tabs>
   </HubDetailPage>
 
   <section v-else-if="execStore.pollError" class="state error-state">
@@ -326,6 +341,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Pagination } from '@/components/ui/pagination'
 import { useClientPager } from '@/composables/useClientPager'
 import ExecutionLogsPanel from '@/components/executions/ExecutionLogsPanel.vue'
+import ExecutionReportPanel from '@/components/executions/ExecutionReportPanel.vue'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { hasAnsi, stripAnsi } from '@/utils/ansi'
 
 const route = useRoute()
@@ -495,6 +512,14 @@ const isExpanded = computed(() => execStore.expanded.has(executionId.value))
 const { page: rowsPage, pageSize: rowsPageSize, paged: pagedRows, pageCount: rowsPageCount }
   = useClientPager(() => rows.value, 50, 'execution-rows')
 
+/** B6:server 链槽位提示——引擎日志是该槽位所有 case 的合并日志。 */
+function slotHint(row: ExecutionRow): string | undefined {
+  const slot = row.serverSlot
+  if (slot === null || slot === undefined) return undefined
+  const file = slot === 0 ? 'server-engine.log' : `server-engine-${slot}.log`
+  return `server 槽位 ${slot}:${file}(该槽位上所有 case 的合并日志)`
+}
+
 function toggleRows(): void {
   if (!execStore.detail) return
   execStore.toggleExpanded(execStore.detail.id)
@@ -601,11 +626,16 @@ let stop: (() => void) | null = null
 // 实时日志面板(批 3):行内抽屉,展开即 tail、收起即断流(D3/§8)。
 // 展开态是页面局部 ref(非 store):离开详情页 = 断流,天然符合连接预算。
 const logsPanelOpen = ref(false)
+// B4:详情页视图(报告首选;深链 #detail / 行级操作切到明细)
+const detailTab = ref<'report' | 'detail'>(
+  route.hash === '#detail' || route.query.rows === 'failed' ? 'detail' : 'report')
 const logsPanelRef = ref<InstanceType<typeof ExecutionLogsPanel> | null>(null)
 const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.detail?.status ?? ''))
 
 function toggleLogsPanel(): void {
   logsPanelOpen.value = !logsPanelOpen.value
+  // 日志面板挂在「执行明细」里:打开时切过去,否则点了看不到
+  if (logsPanelOpen.value) detailTab.value = 'detail'
   if (logsPanelOpen.value) void nextTick(() => logsPanelRef.value?.open())
   else logsPanelRef.value?.close()
 }
@@ -721,6 +751,7 @@ async function loadExecution(): Promise<void> {
   // 自动展开行级表格(失败用例清单即行级表),省一次手动点击
   if (route.query.rows === 'failed') {
     execStore.toggleExpanded(executionId.value)
+    detailTab.value = 'detail'
   }
   try {
     await execStore.fetchDetail(executionId.value)
@@ -756,6 +787,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.detail-tabs {
+  margin-bottom: 8px;
+}
+
 /* W21 修订台账 */
 .ledger-table { margin-bottom: 8px; }
 .pin-badge {

@@ -84,6 +84,16 @@
       </span>
     </div>
 
+    <!-- B5(2026-11-06 日志报告整理):批次汇总横幅——批次筛生效时显示
+         成员状态计数与时间跨度(只算本人可见的成员) -->
+    <div v-if="appliedBatch && batchInfo" class="batch-banner mt-3.5" data-testid="exec-batch-banner">
+      <span class="batch-banner-title">批次 {{ batchInfo.batchId }}</span>
+      <span>共 {{ batchInfo.total }} 条</span>
+      <span v-for="(n, st) in batchInfo.counts" :key="st"
+            :class="['batch-count', `status-${st}`]">{{ executionStatusText(String(st)) }} {{ n }}</span>
+      <span class="batch-span">{{ batchSpanText }}</span>
+    </div>
+
     <div v-if="store.loading && store.list.length === 0" class="loading-state mt-3.5">加载中…</div>
     <div v-else-if="filtered.length > 0" class="lib-card mt-3.5">
       <Table class="exec-table min-w-[1180px] table-fixed">
@@ -273,6 +283,7 @@ import { useExecutionsStore } from '@/stores/executions'
 import {
   cancelExecution, getExecutionsSummary, listExecutions, rerunExecution,
   type ExecutionsSummary, type ExecutionStatus,
+  getBatchSummary,
 } from '@/api/executions'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { isScenarioBacked } from '@/utils/executionKind'
@@ -283,7 +294,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Pagination } from '@/components/ui/pagination'
 import { usePagerSize } from '@/composables/usePagerSize'
-import type { ExecutionListItem } from '@/api/executions'
+import type { BatchSummary, ExecutionListItem } from '@/api/executions'
 
 const route = useRoute()
 const router = useRouter()
@@ -390,6 +401,7 @@ function applyFilters(): void {
   if (page.value !== 1) page.value = 1 // watch 拉取
   else void fetchFiltered()
   refreshSummary()
+  void refreshBatch()
 }
 
 let listSeq = 0
@@ -423,6 +435,32 @@ async function fetchFiltered(): Promise<void> {
     if (seq === listSeq) store.lastError = e instanceof Error ? e.message : 'fetch failed'
   }
 }
+
+// ── B5 批次汇总 ───────────────────────────────────────────────
+const batchInfo = ref<BatchSummary | null>(null)
+let batchSeq = 0
+async function refreshBatch(): Promise<void> {
+  const seq = ++batchSeq
+  const id = appliedBatch.value
+  if (!id) { batchInfo.value = null; return }
+  try {
+    const r = await getBatchSummary(id)
+    if (seq === batchSeq) batchInfo.value = r
+  } catch {
+    if (seq === batchSeq) batchInfo.value = null   // 不可见/不存在:不显示横幅
+  }
+}
+watch(appliedBatch, () => { void refreshBatch() }, { immediate: true })
+
+const batchSpanText = computed(() => {
+  const b = batchInfo.value
+  if (!b?.startedAt) return ''
+  const start = new Date(b.startedAt)
+  if (b.active || !b.finishedAt) return `开始 ${start.toLocaleString()} · 进行中`
+  const secs = Math.max(0, (new Date(b.finishedAt).getTime() - start.getTime()) / 1000)
+  const dur = secs < 60 ? `${secs.toFixed(1)}s` : `${Math.floor(secs / 60)}m${Math.round(secs % 60)}s`
+  return `开始 ${start.toLocaleString()} · 用时 ${dur}`
+})
 
 // 批次 chip = 信号列点选而来,选 + 查一步到位(仍即时生效)
 function filterByBatch(batchId: string) {
@@ -517,6 +555,8 @@ const POLL_MS = 10_000
 function pollOnce(): void {
   fetchFiltered().catch(() => undefined)
   refreshSummary()
+  // 批次进行中才跟刷横幅(终态批次不再变)
+  if (appliedBatch.value && batchInfo.value?.active) void refreshBatch()
 }
 
 function startPolling(): void {
@@ -594,6 +634,36 @@ onUnmounted(() => {
 .filter-spacer { flex: 1; }
 .filter-count { font-size: 11.5px; color: #5B6472; }
 .filter-count strong { color: #DC2626; font-weight: 700; }
+.batch-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.batch-banner-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.batch-count {
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.batch-span {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+}
+
 .batch-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 999px;
