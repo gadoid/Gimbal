@@ -34,10 +34,29 @@ async def login_user(
 ) -> dict[str, str]:
     """Login only (no register) → Bearer headers."""
     r = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
+        "/api/auth/login", json={"username": username, "password": password},
     )
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+async def role_headers(
+    client: AsyncClient,
+    username: str,
+    *,
+    role: str = "user",
+    password: str = "x",
+) -> dict[str, str]:
+    """直插指定角色用户并登录 → Bearer 头(authz T0.1 公共入口)。
+
+    取代散在各测试文件的私有提权 helper(``_register_role`` /
+    ``_admin_headers``):直插不经注册面,免「首注自动管理员」的注册
+    顺序依赖。直插原语仍是 ``inbound_fixtures.mk_user``(幂等)。
+    """
+    from .inbound_fixtures import mk_user
+
+    await mk_user(username, role=role)
+    return await login_user(client, username, password)
 
 
 def make_draft(
