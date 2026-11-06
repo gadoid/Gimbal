@@ -692,6 +692,7 @@ async def get_execution_event_counts(ex: OwnedExecution, session: DbSession) -> 
 @router.get("/{execution_id}/case-artifact", response_class=PlainTextResponse)
 async def get_case_artifact(
     ex: OwnedExecution,
+    session: DbSession,
     case: Annotated[str, Query(max_length=128)],
     file: Annotated[str, Query(max_length=32)],
 ) -> PlainTextResponse:
@@ -721,16 +722,26 @@ async def get_case_artifact(
     path = rdir / case / name
     if not path.is_file() and file == "engine-log":
         # R11:server 链各槽位写 run 级 server-engine-N.log(槽位 0 沿用
-        # 无序号名)。当前无 case→槽位映射,多 worker 并行时回落到固定
-        # 文件会拿到**别的 worker** 的日志——仅当 run 目录只有一个
-        # worker 日志(单实例/调试)时回落才是正确文件;多 worker 且
-        # case 无自带日志 → 404 不再返回错误内容。彻底修(执行行记录
-        # 槽位、按 case 精确路由)见 S1.5。
-        worker_logs = sorted(rdir.glob("server-engine*.log"))
-        if len(worker_logs) <= 1:
-            fallback = rdir / "server-engine.log"
-            if fallback.is_file():
-                path = fallback
+        # 无序号名)。B6(2026-11-06):执行行记录了槽位号 → 按槽位精确
+        # 路由。槽位日志是该槽位上所有 case 的合并日志(引擎侧按 case
+        # 拆分留待后续),但至少是**本 case 所在 worker** 的那一份。
+        # 无槽位记录的存量行沿用旧口径:仅单 worker 日志时回落,多 worker → 404。
+        from ..models.execution import ExecutionRow
+        slot = (await session.execute(
+            select(ExecutionRow.server_slot).where(
+                ExecutionRow.execution_id == ex.id,
+                ExecutionRow.case_dir == case))).scalars().first()
+        if slot is not None:
+            slot_log = rdir / ("server-engine.log" if slot == 0
+                               else f"server-engine-{slot}.log")
+            if slot_log.is_file():
+                path = slot_log
+        else:
+            worker_logs = sorted(rdir.glob("server-engine*.log"))
+            if len(worker_logs) <= 1:
+                fallback = rdir / "server-engine.log"
+                if fallback.is_file():
+                    path = fallback
     if not path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

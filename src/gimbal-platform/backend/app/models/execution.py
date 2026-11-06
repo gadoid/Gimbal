@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON, BigInteger, Boolean, ForeignKey, Index, Integer, String, Text, false,
+    JSON, BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -191,11 +191,61 @@ class ExecutionRow(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
     )
+    # B6(2026-11-06 日志报告整理,R11 轻量版):server 链执行本行的槽位号
+    # ——对应 run 目录下 server-engine.log(槽位 0)/ server-engine-N.log。
+    # launch 链与旧行为 None(引擎日志在 case 目录自带)。
+    server_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 事件流折叠的终态键:同 (execution_id, seq) 后行覆盖前行
     __table_args__ = (
         # 事件流折叠的终态键:同 (execution_id, seq) 后行覆盖前行;
         # upsert 冲突面,M6 写路径依赖
         Index("uq_execution_row_seq", "execution_id", "seq", unique=True),
+    )
+
+
+class ExecutionStep(Base):
+    """步骤结果(B3,2026-11-06 日志报告整理):每个 ``step.end`` 一行。
+
+    报告从本表渲染(不读文本日志);保留期随执行行——没有独立清扫,
+    执行删除 CASCADE。事件 / 证据表 14 天清扫后,失败步骤的请求与
+    响应摘要仍在 ``failure_evidence``(引擎侧已脱敏 + 16K 截断)。
+
+    唯一键 (execution_id, row_seq, unit, attempt, step_id):
+    * ``row_seq``:逐行链(数据集行 × 注入)的行号,与 execution_rows.seq
+      同值;graph 链一次执行多单元,无行号,记 -1,按 ``unit`` 归属。
+    * ``attempt``:执行器 attempt 标签("1.1"、"1.2"……)。重试 / 乘法
+      执行的每次尝试各占一行,后一次不覆盖前一次的失败现场。
+    """
+
+    __tablename__ = "execution_steps"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
+                                    autoincrement=True)
+    execution_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("executions.id", ondelete="CASCADE")
+    )
+    row_seq: Mapped[int] = mapped_column(Integer, default=-1)
+    unit: Mapped[str] = mapped_column(String(255), default="")
+    attempt: Mapped[str] = mapped_column(String(16), default="")
+    step_id: Mapped[str] = mapped_column(String(64))
+    # 引擎事件 seq(执行域单调,ingester 重映射后):同一单元内步骤排序
+    event_seq: Mapped[int] = mapped_column(Integer, default=0)
+    step_name: Mapped[str] = mapped_column(String(255), default="")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    call_summary: Mapped[str] = mapped_column(String(1024), default="")
+    status: Mapped[str] = mapped_column(String(16))
+    duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assertion_count: Mapped[int] = mapped_column(Integer, default=0)
+    assertion_passed: Mapped[int] = mapped_column(Integer, default=0)
+    assertions: Mapped[list] = mapped_column(JsonVar, default=list)
+    extracts: Mapped[list] = mapped_column(JsonVar, default=list)
+    failure_evidence: Mapped[dict | None] = mapped_column(JsonVar, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    __table_args__ = (
+        Index("uq_execution_step_key", "execution_id", "row_seq", "unit",
+              "attempt", "step_id", unique=True),
     )
 
 

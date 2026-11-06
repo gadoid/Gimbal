@@ -22,6 +22,8 @@ docstring），本模块不再单靠协作式回收：
 """
 from __future__ import annotations
 
+import dataclasses
+
 import asyncio
 import json
 import os
@@ -490,6 +492,8 @@ class ServerSessionPool:
 
     async def _spawn(self, slot: int) -> ServerSession:
         s = ServerSession()
+        # B6:槽位号随实例走,run_case 回填到 LaunchResult.server_slot
+        s.slot = slot
         await s.start(engine_log_path=self._log_path(slot), cwd=self._cwd,
                       on_log=self._on_log, log_counters=self._log_counters)
         self._live.append(s)
@@ -516,7 +520,11 @@ class ServerSessionPool:
         """借槽位实例执行一个 case（借出 → run_case → 归还）。"""
         s = await self._acquire()
         try:
-            return await s.run_case(case_path, **kwargs)
+            result = await s.run_case(case_path, **kwargs)
+            slot = getattr(s, "slot", None)
+            if slot is not None and dataclasses.is_dataclass(result):
+                result = dataclasses.replace(result, server_slot=slot)
+            return result
         finally:
             self._idle.put_nowait(s)
 

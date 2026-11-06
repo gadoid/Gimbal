@@ -6,6 +6,7 @@ exec_runs 子表已随存量数据清理退役(V1 兼容层),删除整单不再�
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -409,11 +410,19 @@ async def insert_events(db: AsyncSession, execution_id: int,
         return
     rows: list[dict] = []
     evidences: list[dict] = []
+    steps: list[dict] = []
     for d in events:
         et = str(d.get("event_type") or "")
         payload = dict(d)
+        # B3:逐行链在 _row_on_event 注入的行号(不进事件 payload)
+        row_seq = payload.pop("row_seq", None)
         message = None
         evidence = None
+        if et == "step.end":
+            # B3:步骤结果行(报告数据源)。失败证据只进步骤表——事件表
+            # 已有 call.exchange 证据,不在 payload 里再存一份
+            fe = payload.pop("failure_evidence", None)
+            steps.append(_step_row(execution_id, payload, row_seq, fe))
         if et == "call.exchange":
             evidence = payload.pop("result", None)
             req = evidence.get("request") if isinstance(evidence, dict) else None
@@ -459,6 +468,63 @@ async def insert_events(db: AsyncSession, execution_id: int,
         ev_stmt = ev_stmt.on_conflict_do_nothing(
             index_elements=["execution_id", "seq"])
         await db.execute(ev_stmt)
+    if steps:
+        await _upsert_steps(db, steps)
+
+
+# ── B3(2026-11-06 日志报告整理):步骤结果行 ─────────────────────────
+
+_STEP_UPDATE_COLS = (
+    "event_seq", "step_name", "description", "call_summary", "status",
+    "duration_ms", "error", "assertion_count", "assertion_passed",
+    "assertions", "extracts", "failure_evidence", "ended_at",
+)
+
+
+def _step_row(execution_id: int, d: dict, row_seq: Any,
+              failure_evidence: Any) -> dict:
+    """step.end 事件 dict → execution_steps 行(缺字段的旧引擎事件按缺省落)。"""
+    from datetime import datetime, timezone
+    try:
+        rs = int(row_seq) if row_seq is not None else -1
+    except (TypeError, ValueError):
+        rs = -1
+    return {
+        "execution_id": execution_id,
+        "row_seq": rs,
+        "unit": str(d.get("unit") or d.get("scenario_id") or ""),
+        "attempt": str(d.get("attempt") or ""),
+        "step_id": str(d.get("step_id") or d.get("step") or ""),
+        "event_seq": int(d.get("seq") or 0),
+        "step_name": str(d.get("step_name") or "")[:255],
+        "description": d.get("description"),
+        "call_summary": str(d.get("call_summary") or "")[:1024],
+        "status": str(d.get("status") or "")[:16],
+        "duration_ms": float(d.get("duration_ms") or 0.0),
+        "error": d.get("error_brief"),
+        "assertion_count": int(d.get("assertion_count") or 0),
+        "assertion_passed": int(d.get("assertion_passed") or 0),
+        "assertions": list(d.get("assertions") or []),
+        "extracts": list(d.get("extracts") or []),
+        "failure_evidence": failure_evidence if isinstance(failure_evidence, dict) else None,
+        "ended_at": _parse_ts(d.get("timestamp")) or datetime.now(timezone.utc),
+    }
+
+
+async def _upsert_steps(db: AsyncSession, steps: list[dict]) -> None:
+    """同键后到覆盖(恢复重跑重放同一步骤时取最新)。"""
+    from ..models.execution import ExecutionStep
+    insert_ = _dialect_insert(db)
+    # 同批同键去重(PG ON CONFLICT 不允许一条语句内两次命中同一行)
+    dedup: dict[tuple, dict] = {}
+    for s in steps:
+        dedup[(s["row_seq"], s["unit"], s["attempt"], s["step_id"])] = s
+    stmt = insert_(ExecutionStep).values(list(dedup.values()))
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["execution_id", "row_seq", "unit", "attempt", "step_id"],
+        set_={c: getattr(stmt.excluded, c) for c in _STEP_UPDATE_COLS},
+    )
+    await db.execute(stmt)
 
 
 async def insert_logs(db: AsyncSession, execution_id: int,
