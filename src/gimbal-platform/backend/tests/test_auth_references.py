@@ -54,7 +54,14 @@ async def _seed(owner_ids: dict[str, int]) -> None:
                     sid, steps=steps, **{"name": sid})),
                 owner=owner, owner_id=owner_ids[owner])
             if visibility != "private":
-                await scenario_store.set_visibility(s, sid, visibility)
+                # S1.3 起 set_visibility 退役:公共行(迁移形态)直改
+                from app.services.zone import apply_public, public_project_id
+                from app.models.composer_scenario import ComposerScenario as _CS
+                from sqlalchemy import update as _upd
+                await s.execute(_upd(_CS).where(
+                    _CS.scenario_id == sid).values(
+                    visibility="public",
+                    project_id=await public_project_id(s)))
 
         await _create("sc-own-tpl", "own_user", "private",
                       [_tpl_step("fin.order.add", "${auth.qa1.token}")])

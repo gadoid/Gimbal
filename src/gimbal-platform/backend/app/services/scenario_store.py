@@ -410,31 +410,6 @@ def payload_for_viewer(payload: dict | None, *, viewer_id: int | None,
     return strip_builtin_credentials(_copy.deepcopy(payload or {}))
 
 
-async def set_visibility(
-    db: AsyncSession, scenario_id: str, visibility: str,
-    *, viewer_id: int | None = None,
-) -> Scenario:
-    """发布/下架:翻转 visibility(public ↔ private)。KeyError on miss.
-
-    authz W6 修订:发布不再改原件(不剥 config.users、不删数据集敏感
-    列)—— 原件是作者的工作副本,剥离会让作者自己执行缺凭证且下架
-    无法恢复;他人拿到的读/拷贝/执行形态各自脱敏。``viewer_id`` 用于
-    回包形态(steward 下架他人公共场景时回包同样脱敏)。"""
-    if visibility not in ("public", "private"):
-        raise ValueError(f"bad_visibility: {visibility}")
-    row = await _get_row(db, scenario_id)
-    # S1.1 影子写:visibility ⇔ project_id 同步翻转(公共项目 id 一查
-    # 会话缓存);S1.9 删列后本函数收敛为只写 project_id
-    from .zone import apply_private, apply_public, public_project_id
-    if visibility == "public":
-        apply_public(row, await public_project_id(db))
-    else:
-        apply_private(row)
-    await db.commit()
-    await db.refresh(row)
-    return await to_read_shape(db, row, user_id=viewer_id)
-
-
 async def resolve_name_conflict(
     db: AsyncSession, owner_id: int, desired_name: str
 ) -> tuple[str, bool]:

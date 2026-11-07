@@ -52,6 +52,11 @@ class Project(Base):
 class ProjectMember(Base):
     """普通项目的成员行;公共项目不落行(见模块注释)。"""
 
+    # 成员角色常量(比较单点:角色字面量守卫的清零终态不回退 ——
+    # 用户角色字面量在表 A/表 B,成员角色只在模型常量)
+    ROLE_ADMIN = "admin"
+    ROLE_MEMBER = "member"
+
     __tablename__ = "project_members"
     __table_args__ = (
         # 「我的项目」反查(/auth/me.projects、visibility_clause)

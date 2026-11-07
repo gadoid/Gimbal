@@ -186,6 +186,17 @@
 
 ---
 
+## 六·补、S1.4 实现记录（2026-11-08）
+
+- `app/routers/projects.py`(新):POST/GET/PATCH/DELETE `/api/projects` + `/api/projects/{id}/members`。
+- **建项目 = Admin+**(MemberUser/ops.write),`firstAdminUserId` 须在职非系统用户(422),重名 409 `project_name_taken`;首个项目管理员随建落行。
+- **管理面门 `_require_manage`** = 项目管理员 ∨ Admin+:非成员 404(不泄露)、成员非 padmin 403(可见但无权)。
+- **末位项目管理员保护**:最后一个 admin 降级/移除 409 `last_project_admin`(Admin+ 同样受限 —— 结构性约束,非权限边界;与末位 Super Admin 同口径)。
+- **删项目 = 仅 Admin+**:公共项目 409 `public_project_protected`;四对象表任一挂靠 409 `project_not_empty`(先清空或迁走,不级联删);成员行随 CASCADE。
+- 列表:Admin+ 全量(含公共项目行);普通用户 = 我所在的(me.projects 同口径);详情带 `myRole`。建/删/成员变更入审计(admin 面)。
+- 顺带清理(死代码):`scenario_store.set_visibility` 删除(发布/下架 S1.3 改复制语义后零消费;唯一测试夹具改 `apply_public` 直改)。
+- 测试 `test_authz_s14_projects.py` 7 用例:建项目三闸/首管无效/重名、列表与详情可见性、PATCH 三方、删项目(有内容 409→清空 204→路人 403)、公共项目保护、成员 CRUD 矩阵 + me.projects 联动、末位保护(含 Admin+ 受限与提拔后可移除)。
+
 ## 七、S1.5 suite 同区约束（迁移 0041）
 
 ### 清理项

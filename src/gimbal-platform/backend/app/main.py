@@ -27,6 +27,7 @@ from .routers import (
     data_sets,
     integration,
     notifications,
+    projects,
     endpoint_catalog,
     executions,
     generator_catalog,
@@ -229,6 +230,7 @@ def create_app() -> FastAPI:
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(constants.router, prefix="/api")
+    app.include_router(projects.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
