@@ -7,8 +7,8 @@ publish/分享端点随 P2)。
 (绕过应用层直写也被约束拒绝),**admin 无豁免**(admin 经组把 A 的
 内容洗给 B 的通道不存在,§7.7)。
 
-P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ admin,
-非属主 GET 详情 404;写 = 属主 ∨ admin(治理)。
+P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ public ∨ 引用,
+非属主 GET 详情 404;写 = 属主单判(authz W3)。
 """
 from __future__ import annotations
 
@@ -1032,7 +1032,7 @@ async def run_suite(
         if entry["req"] is None:
             skipped.append({"scenarioId": sid, "reason": entry["skip_reason"]})
             continue
-        # §8.2:逐成员 can_run_scenario(属主 ∨ admin ∨ 引用;引用者
+        # §8.2:逐成员 can_run_scenario(属主 ∨ 引用;引用者
         # 经 suite 引用覆盖全部成员 —— 正常态全过,守边界)。
         _scen = scen_rows.get(sid)
         if _scen is not None and not await _can_run(

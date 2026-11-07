@@ -271,7 +271,7 @@ async def get_references(
 ) -> AuthReferencesOut:
     """反查面板:谁在用这个凭证名(配套方案 §1.3)。四类引用,读时实时
     扫(单一事实源,不建反向索引);计数照给、场景名按 can_read_scenario
-    过滤(admin 全量 / public / owner),剩余 = hidden_count(§1.4)。
+    过滤(public / owner / 引用;authz W3 起 admin 无旁路),剩余 = hidden_count(§1.4)。
     名字命中 ≠ 对象引用 — 引用解析按执行者本人池,文案须如实。"""
     return AuthReferencesOut.model_validate(
         await auth_references.references(session, user=user, alias=alias))

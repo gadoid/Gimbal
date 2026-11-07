@@ -411,7 +411,12 @@ class TestAuditDeadKeyRetired:
     def test_adaptation_batch_apply_removed_from_registry(self):
         from app.services.audit import AUDIT_ACTIONS
         assert "adaptation.batch.apply" not in AUDIT_ACTIONS
-        for a in ("integration.credential.write", "scenario.admin_delete",
-                  "scenario.admin_publish", "scenario.admin_unpublish",
-                  "suite.admin_delete", "suite.admin_publish"):
+        for a in ("integration.credential.write",
+                  "scenario.admin_unpublish", "suite.admin_unpublish"):
             assert a in AUDIT_ACTIONS, a
+        # authz W3 死键退役:越属主旁路消亡的五个动作不再登记
+        # (历史行照常展示,只是词表/过滤 chip 不再提供)
+        for dead in ("share.admin_revoke", "scenario.admin_delete",
+                     "scenario.admin_publish", "suite.admin_delete",
+                     "suite.admin_publish"):
+            assert dead not in AUDIT_ACTIONS, dead

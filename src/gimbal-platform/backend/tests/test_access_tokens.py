@@ -448,6 +448,25 @@ class TestLifecycle:
         r = await client.get("/api/access-tokens?all=1", headers=h)
         assert r.status_code == 403
 
+    async def test_detail_gate_owner_platform_and_manage(self, client):
+        """authz W4 详情闸三态:本人 200;admin(ops.write,无
+        users.manage)他人个人令牌 404;super_admin(管理面,dev-plan
+        W4「勿扩大化」保留)200。执行/投递面的收敛不受此影响。"""
+        h_owner = await _register_role(client, "dgv_o", "admin")
+        made = (await client.post("/api/access-tokens", headers=h_owner, json={
+            "kind": "personal", "name": "dgv", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": []}}))
+        assert made.status_code == 201, made.text
+        tid = made.json()["id"]
+        r = await client.get(f"/api/access-tokens/{tid}", headers=h_owner)
+        assert r.status_code == 200, r.text
+        h_ops = await _register_role(client, "dgv_a", "admin")
+        r = await client.get(f"/api/access-tokens/{tid}", headers=h_ops)
+        assert r.status_code == 404, r.text
+        h_root = await _admin_headers(client)
+        r = await client.get(f"/api/access-tokens/{tid}", headers=h_root)
+        assert r.status_code == 200, r.text
+
     async def test_admin_owner_name_filter(self, client):
         """2026-11-05 修复轮评审 P3-4/P3-3:ownerName 按用户名/昵称模糊
         (不区分大小写);输入里的 % / _ 按字面匹配,不当 LIKE 通配符

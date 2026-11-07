@@ -18,7 +18,7 @@ template/scheme 引用**(它们会在下次运行时真正失效);别名绑定�
 同名凭证,阻断过度。
 
 可见性(§1.4):计数照给,场景名按 ``can_read_scenario`` 过滤
-(admin 全量 / public / owner),剩余计为 hidden — 只给数不泄露标题。
+(public / owner / 引用;authz W3 起 admin 无旁路),剩余计为 hidden — 只给数不泄露标题。
 实时扫是 O(场景数 × payload) 的全表扫描:内部平台量级可接受,
 面板点开才算;扛不住的那天扩 scenario_endpoint_refs 写路径,不另起表。
 """

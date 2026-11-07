@@ -57,7 +57,15 @@ async def _get_token(db: AsyncSession, token_id: int) -> AccessToken:
 
 
 def _require_view(user: User, tok: AccessToken) -> None:
-    if not at.can_view(user, tok):
+    """详情闸 = can_view(本人 ∨ 平台令牌面)∨ users.manage(管理面)。
+
+    authz W4 的执行可见收敛只收紧**运营面**(executions/webhook 投递
+    按 tokenId 查走的 can_view);令牌详情是用户管理职责的一部分
+    (dev-plan W4「勿扩大化」:super_admin 可 all=1 列表 + 强制失效,
+    详情随管理面保留)。"""
+    from ._ownership import has_capability
+
+    if not at.can_view(user, tok) and not has_capability(user, "users.manage"):
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
 

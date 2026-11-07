@@ -39,11 +39,11 @@ _SHAPES = (
 # → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
 _ALLOWLIST: frozenset[str] = frozenset({
     # W5 令牌(签发门/使用门/平台入口)
-    'routers/access_tokens.py:69:if user.role == "super_admin":',
-    'routers/access_tokens.py:72:if user.role == "admin":',
-    'routers/access_tokens.py:75:if user.role == "admin" or allow_owner_user_role:',
-    'routers/access_tokens.py:212:if user.role != "super_admin":',
-    'routers/access_tokens.py:691:if user.role != "super_admin":',
+    'routers/access_tokens.py:77:if user.role == "super_admin":',
+    'routers/access_tokens.py:80:if user.role == "admin":',
+    'routers/access_tokens.py:83:if user.role == "admin" or allow_owner_user_role:',
+    'routers/access_tokens.py:220:if user.role != "super_admin":',
+    'routers/access_tokens.py:699:if user.role != "super_admin":',
     # W9 环境(越属主读旁路,W9 补审计时一并定去留)
     'routers/environments.py:52:if user.role != "super_admin" and env.owner_id != user.id:',
     # C1 平台退役(平台凭证管理面)

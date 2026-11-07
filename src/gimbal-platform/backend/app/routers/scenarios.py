@@ -106,7 +106,7 @@ async def _require_visibility_actor(
 
 def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
     """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。
-    纯判(属主/admin/public);引用分支由 ``_require_reader_async``
+    纯判(属主/public;authz W3 起 admin 无旁路);引用分支由 ``_require_reader_async``
     承担(P2 §7.6:引用者可读定义)。"""
     if not can_read_scenario(
         user,
@@ -121,7 +121,7 @@ def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
 async def _require_reader_async(
     db, user: CurrentUser, row: ComposerScenario
 ) -> None:
-    """读闸(完整判定 §7.6):public ∨ 属主 ∨ admin ∨ 引用。"""
+    """读闸(完整判定 §7.6,表 B scenario.read):public ∨ 属主 ∨ 引用。"""
     from ._ownership import can_read_scenario_row
     if not await can_read_scenario_row(db, user, row):
         raise HTTPException(
@@ -491,7 +491,7 @@ async def list_scenarios(
 ) -> ScenarioListOut | ScenarioOptionsOut:
     """列表(Page 信封 + M1 响应投影,PG迁移方案 §4.1/§7 M1)。
 
-    读侧收紧:admin 全量;普通用户 = public + 自己的。可选
+    读侧收紧(authz W3 后全角色同镜头):public + 自己的 + 被引用的。可选
     ``visibility=public|private`` 再过滤一层,供前端"公共 / 我的"分组
     标签使用。
 
@@ -958,7 +958,7 @@ async def export_scenario(
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise HTTPException(404, f"scenario_not_found: {scenario_id}")
-    # 读闸同详情页:public ∨ 属主 ∨ admin ∨ 引用(404 不泄露存在性)。
+    # 读闸同详情页:public ∨ 属主 ∨ 引用(404 不泄露存在性)。
     # (旧代码直接调三参 can_read_scenario —— 签名收紧后即 500,2026-10-12)
     await _require_reader_async(db, user, row)
     from ..services.scenario_store import definition_from_payload
