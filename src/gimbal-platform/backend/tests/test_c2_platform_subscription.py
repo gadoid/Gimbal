@@ -18,10 +18,10 @@ from app.models.integration_task import IntegrationTask
 from app.models.user import User
 from app.services import integration_runner as ir
 from tests.helpers import make_draft, register_and_login
-from tests.test_integration_consent_fixes import (
-    ANCHORED_STEPS, FULLS, _subscribe, _task_body,
+from tests.test_integration_consent_fixes import ANCHORED_STEPS, FULLS, _subscribe
+from tests.test_scenario_composer_plate_integration import (  # noqa: F401 — 模块级导入即 fixture 注册
+    PlateMock, plate_mock,
 )
-from tests.test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 
 
 async def _uid(username: str) -> int:
@@ -130,7 +130,7 @@ class TestPlatformTemplateSubscription:
             tpl_row.trigger_cron = "*/10 * * * *"
             await s.commit()
 
-        out = await ir.run_instance(inst.id)
+        await ir.run_instance(inst.id)
         inst = await _inst(tid, uid_sub)
         assert inst.state == "paused"
         assert inst.paused_reason == "template_changed"
