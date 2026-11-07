@@ -121,7 +121,7 @@ async def mk_execution(*, token_id=None, status="running", total=1,
 
 async def mk_task_pair(*, name="w-task", token_id=None,
                        identity_mode="personal",
-                       owner_id=None) -> "tuple[int, int, int]":
+                       owner_id=None, scenario_id="sc-w") -> "tuple[int, int, int]":
     """(tpl_id, inst_id, owner_id);holder = 模板 owner(注册方自己的实例)。"""
     async with db_module.SessionLocal() as s:
         if owner_id is None:
@@ -139,7 +139,7 @@ async def mk_task_pair(*, name="w-task", token_id=None,
                 User.is_system == True))).scalar()  # noqa: E712
         tpl = IntegrationTask(name=name, owner_id=owner_id,
                               identity_mode=identity_mode,
-                              scenario_id="sc-w", token_id=token_id)
+                              scenario_id=scenario_id, token_id=token_id)
         s.add(tpl)
         await s.flush()
         inst = IntegrationTask(

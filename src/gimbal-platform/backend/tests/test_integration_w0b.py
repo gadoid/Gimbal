@@ -103,10 +103,18 @@ async def test_consumer_fields_lifecycle(client):
 
 
 async def test_platform_task_fields(client):
-    """④:平台模式任务 authAliases 照出、subscribed 恒 False。"""
+    """④:平台模式任务 authAliases 照出、subscribed 恒 False。
+    (authz W5 后平台任务不能经 API 新建,直插造数;C1 退役时删)"""
+    from .inbound_fixtures import mk_task_pair, publish_scenario
+    from tests.test_integration import _uid_of
+
     u1 = await register_and_login(client, "w0b_c", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b2",
-                         identityMode="platform", visibility="private")
+    await client.post("/api/scenarios", headers=u1,
+                      json=make_draft("sc-w0b2", steps=AUTH_STEPS))
+    await publish_scenario("sc-w0b2")
+    tid, _inst, _own = await mk_task_pair(
+        name="w0b2", identity_mode="platform",
+        owner_id=await _uid_of("w0b_c"), scenario_id="sc-w0b2")
     item = await _item(client, u1, tid)
     assert item["authAliases"] == ["gitlab"]
     assert item["subscribed"] is False
@@ -255,8 +263,16 @@ async def test_pause_resume_platform_and_owner_rows(client):
 
     u1 = await register_and_login(client, "w0b_k", "pw123456")
     u2 = await register_and_login(client, "w0b_l", "pw123456")
-    tid_p = await _mk_task(client, u1, "sc-w0b6",
-                           identityMode="platform", visibility="public")
+    # authz W5:平台任务不能经 API 新建 —— 直插(挂公共场景,C1 删)
+    from .inbound_fixtures import mk_task_pair, publish_scenario
+    from tests.test_integration import _uid_of
+
+    await client.post("/api/scenarios", headers=u1,
+                      json=make_draft("sc-w0b6", steps=AUTH_STEPS))
+    await publish_scenario("sc-w0b6")
+    tid_p, _pi, _own = await mk_task_pair(
+        name="w0b6", identity_mode="platform",
+        owner_id=await _uid_of("w0b_k"), scenario_id="sc-w0b6")
     async with db_module.SessionLocal() as s:
         await ir.ensure_instance(await s.get(IntegrationTask, tid_p))
 

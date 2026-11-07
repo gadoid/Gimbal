@@ -92,7 +92,10 @@ class TestPreRunChecks:
         await self._run(inst_id)
         assert await _pause_reason(inst_id) == "token_expired"
 
-    async def test_owner_role_demoted_pauses(self, client):
+    async def test_owner_role_demoted_no_longer_pauses(self, client):
+        """authz W5:「属主角色低于 admin」暂停原因不再产生 —— user 角色
+        属主的个人令牌任务照常进入执行链(不再 auth 暂停;0036 已把
+        存量该原因实例恢复)。"""
         await seed_platform_user()
         await self._scenario()
         uid = await _uid("to_owner", role="admin")
@@ -103,7 +106,7 @@ class TestPreRunChecks:
             u.role = "user"
             await s.commit()
         await self._run(inst_id)
-        assert await _pause_reason(inst_id) == "token_owner_ineligible"
+        assert await _pause_reason(inst_id) != "token_owner_ineligible"
 
     async def test_owner_deactivated_pauses(self, client):
         await seed_platform_user()

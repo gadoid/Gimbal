@@ -1,9 +1,10 @@
 """访问令牌路由(webhook v4 §5.1)— 个人与平台令牌一组接口。
 
-权限由 ``can_manage(user, token)`` 统一判定:个人令牌 = 属主且 member+
-(user 角色只能查看与吊销自己的);平台令牌 = member+;admin 另有查看
-全部(``?all=1``)与强制失效。三处前端入口(个人设置、集成页平台令牌、
-用户管理页)复用同一组接口。
+authz W5:所有注册用户可签发 / 使用 / 管理自己的个人令牌(写面 =
+属主 ∨ users.manage 管理);平台令牌**入口已关**(签发/scope 候选 →
+410,C1 退役存量),存量平台令牌的列表与写面暂维持 ops.write。
+super_admin 另有查看全部(``?all=1``)与强制失效(用户管理职责,
+dev-plan W4「勿扩大化」)。
 
 令牌明文与回调签名密钥只展示一次(D10);已吊销令牌只读(§3.4)。
 """
@@ -28,6 +29,7 @@ from ..models.permission import AuditLog
 from ..models.service_alias import ServiceAlias
 from ..models.user import User
 from ..services import access_token as at
+from ._ownership import has_capability
 from ..services import audit as audit_svc
 from ..services import integration_runner
 from ..services.cron_expr import describe_cron
@@ -63,25 +65,20 @@ def _require_view(user: User, tok: AccessToken) -> None:
     按 tokenId 查走的 can_view);令牌详情是用户管理职责的一部分
     (dev-plan W4「勿扩大化」:super_admin 可 all=1 列表 + 强制失效,
     详情随管理面保留)。"""
-    from ._ownership import has_capability
-
     if not at.can_view(user, tok) and not has_capability(user, "users.manage"):
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
 
-def _require_manage(user: User, tok: AccessToken, *,
-                    allow_owner_user_role: bool = False) -> None:
-    """写面。个人令牌的属主 user 角色只在吊销端点豁免(§2.3:查看与
-    吊销自己的令牌是 user 级能力,其余写面 admin+ —— authz W1 更名后
-    原 member 级 = admin)。"""
-    if user.role == "super_admin":
-        return
+def _require_manage(user: User, tok: AccessToken) -> None:
+    """写面(authz W5,表 A 驱动):个人令牌 = 属主(任意角色)∨
+    users.manage(管理面);平台令牌 = ops.write(C1 退役存量前维持)。
+    旧口径「admin+ 可代管他人个人令牌 / 属主 user 角色仅吊销豁免」
+    随签发开放一并收编 —— 代管是用户管理职责,归 users.manage。"""
     if tok.kind == at.PLATFORM_KIND:
-        if user.role == "admin":
+        if has_capability(user, "ops.write"):
             return
-    elif tok.user_id == user.id:
-        if user.role == "admin" or allow_owner_user_role:
-            return
+    elif tok.user_id == user.id or has_capability(user, "users.manage"):
+        return
     raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
 
@@ -217,7 +214,7 @@ async def list_tokens(
     评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
     personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
     if all_view:
-        if user.role != "super_admin":
+        if not has_capability(user, "users.manage"):
             raise _bad("capability_forbidden", "查看全部令牌需能力 users.manage", 403)
         q = select(AccessToken)
         if kind in ("personal", "platform"):
@@ -286,15 +283,14 @@ async def scope_candidates(
     """范围候选(§5.1):全部服务别名 + 本人凭证池(平台令牌 = 平台
     凭证池,只列别名)。"""
     if kind == at.PLATFORM_KIND:
-        if user.role not in ("admin", "super_admin"):
-            raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
-        holder = await integration_runner.get_platform_user_id()
-    elif kind == at.PERSONAL_KIND:
-        if user.role not in ("admin", "super_admin"):
-            raise _bad("capability_forbidden", "签发个人令牌需能力 ops.write", 403)
-        holder = user.id
-    else:
+        # authz W5:平台入口关闭(M1 410,C1 删端点;存量平台令牌的
+        # scope 编辑走 PUT,不经此候选端点)
+        raise _bad(
+            "platform_mode_closed",
+            "平台令牌入口已关闭:入站调用请使用个人令牌", 410)
+    if kind != at.PERSONAL_KIND:
         raise _bad("kind_invalid", "kind ∈ personal | platform")
+    holder = user.id
     aliases = (await db.execute(
         select(ServiceAlias.alias_name).order_by(ServiceAlias.alias_name))
     ).scalars().all()
@@ -334,15 +330,11 @@ async def create_token(
     if body.kind not in (at.PERSONAL_KIND, at.PLATFORM_KIND):
         raise _bad("kind_invalid", "kind ∈ personal | platform")
     if body.kind == at.PLATFORM_KIND:
-        if user.role not in ("admin", "super_admin"):
-            raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
-        owner_id = await integration_runner.get_platform_user_id()
-        if owner_id is None:
-            raise _bad("platform_user_missing", "平台系统用户缺失", 500)
-    else:
-        if user.role not in ("admin", "super_admin"):
-            raise _bad("capability_forbidden", "签发个人令牌需能力 ops.write", 403)
-        owner_id = user.id
+        # authz W5:平台入口关闭 —— 新签发一律 410(M1 关闭、C1 删)
+        raise _bad(
+            "platform_mode_closed",
+            "平台令牌已停止签发:入站调用请使用个人令牌", 410)
+    owner_id = user.id
 
     callback_secret_plain: "str | None" = None
     if body.callbackUrl:
@@ -696,7 +688,7 @@ async def invalidate_token(
     """admin 强制失效(D33):原因 ``admin``,处置说明随通知下发;
     属主重新生成后任务自动恢复。"""
     tok = await _get_token(db, token_id)
-    if user.role != "super_admin":
+    if not has_capability(user, "users.manage"):
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
     if tok.revoked_at is not None:
         # 已吊销 = 终态只读,写操作 409(§3.4);改密/停用链的已失效
@@ -729,7 +721,7 @@ async def revoke_token(token_id: int, user: CurrentUser, db: DbSession) -> dict:
     """吊销(软删,终态):响应带 ``pendingTasks``;再吊销幂等 200。
     user 角色可吊销自己的令牌(§2.3)。"""
     tok = await _get_token(db, token_id)
-    _require_manage(user, tok, allow_owner_user_role=True)
+    _require_manage(user, tok)
     if tok.revoked_at is not None:
         return {"id": tok.id, "revoked": True, "pendingTasks": []}
     tok.revoked_at = at.now_utc()

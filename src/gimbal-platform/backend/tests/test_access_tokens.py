@@ -159,15 +159,17 @@ class TestAuthFork:
         assert r.status_code == 401
         assert r.json()["detail"]["code"] == "token_invalidated"
 
-    async def test_owner_role_user_403(self, client):
+    async def test_owner_role_user_can_use(self, client):
+        """authz W5:「属主角色不低于 admin」使用门删除 —— user 角色的
+        个人令牌照常调用(token_owner_ineligible 不再产生,存量由
+        0036 恢复)。"""
         await seed_platform_user()
         await _register(client, "role_first")   # 占首注(admin)
         from .inbound_fixtures import mk_user
         uid = await mk_user("role_u", role="user")
         _, plain = await mk_token(user_id=uid)
         r = await client.get("/api/executions", headers=_gtk(plain))
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "token_owner_ineligible"
+        assert r.status_code == 200, r.text
 
     async def test_owner_deactivated_401(self, client):
         await seed_platform_user()
@@ -276,48 +278,41 @@ class TestTokenApi:
             "scope": {"aliases": [], "authIds": []}})
         assert r.status_code == 201
 
-    async def test_platform_quota_shared_across_members(self, client):
+    async def test_platform_issuance_closed_410(self, client):
+        """authz W5:平台令牌签发入口关闭 —— 任何角色(含 super_admin)
+        一律 410 platform_mode_closed(M1 关闭、C1 删;存量照跑)。"""
         await seed_platform_user()
-        h1 = await _register_role(client, "pq1", "admin")
-        h2 = await _register_role(client, "pq2", "admin")
-        for i in range(5):
-            r = await client.post("/api/access-tokens", headers=h1, json={
-                "kind": "platform", "name": f"pt{i}", "ttlDays": 30,
-                "scope": {"aliases": [], "authIds": []}})
-            assert r.status_code == 201
-        # 跨 member 竞争同一额度
-        r = await client.post("/api/access-tokens", headers=h2, json={
-            "kind": "platform", "name": "pt5", "ttlDays": 30,
+        h_admin = await _admin_headers(client)
+        r = await client.post("/api/access-tokens", headers=h_admin, json={
+            "kind": "platform", "name": "pt", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
-        assert r.status_code == 409
-        assert r.json()["detail"]["code"] == "token_limit_reached"
+        assert r.status_code == 410
+        assert r.json()["detail"]["code"] == "platform_mode_closed"
 
-    async def test_user_role_cannot_create_but_can_revoke(self, client):
-        """user 角色:不能签发(403);可查看与吊销自己的(§2.3)。"""
+    async def test_user_role_can_issue_and_revoke(self, client):
+        """authz W5:user 角色可签发、查看与吊销(乃至管理)自己的
+        个人令牌(签发门删除)。"""
         await seed_platform_user()
-        h_member = await _register_role(client, "u_member", "admin")
-        out = await _api_token(client, h_member, {
-            "kind": "personal", "name": "give", "ttlDays": 30,
-            "scope": {"aliases": [], "authIds": []}})
-        # 把令牌挪给 user 角色用户(直插模拟:user 原本签不了)
         await _register(client, "plain_u")
-        uid_plain = await _user_id("plain_u")
-        async with db_module.SessionLocal() as s:
-            tok = (await s.execute(sa.select(AccessToken).where(
-                AccessToken.id == out["id"] if "id" in out else
-                AccessToken.token_hash == at_svc.sha256_hex(out["token"]))
-            )).scalar_one()
-            tok.user_id = uid_plain
-            await s.commit()
-            tid = tok.id
+        login = await client.post("/api/auth/login", json={
+            "username": "plain_u", "password": "pw123456"})
+        h_own = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        # user 角色直接签发(W5:不再 403)
+        out = await _api_token(client, h_own, {
+            "kind": "personal", "name": "mine", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": []}})
+        tid = out["id"] if "id" in out else None
+        if tid is None:
+            async with db_module.SessionLocal() as s:
+                tok = (await s.execute(sa.select(AccessToken).where(
+                    AccessToken.token_hash == at_svc.sha256_hex(out["token"]))
+                )).scalar_one()
+                tid = tok.id
         h_plain = await _register(client, "plain_u2")  # 另一个 user:404
         r = await client.delete(f"/api/access-tokens/{tid}",
                                 headers=h_plain)
         assert r.status_code == 404
-        # 属主(user 角色)可吊销
-        login = await client.post("/api/auth/login", json={
-            "username": "plain_u", "password": "pw123456"})
-        h_own = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        # 属主(user 角色)可吊销自己的
         r = await client.delete(f"/api/access-tokens/{tid}", headers=h_own)
         assert r.status_code == 200
 
@@ -436,9 +431,8 @@ class TestLifecycle:
         await _api_token(client, h, {
             "kind": "personal", "name": "mine", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
-        await _api_token(client, h2, {
-            "kind": "platform", "name": "pt", "ttlDays": 30,
-            "scope": {"aliases": [], "authIds": []}})
+        # 平台令牌签发已 410(authz W5),存量面用直插造数
+        await mk_token(kind="platform", name="pt")
         h_admin = await _admin_headers(client)
         r = await client.get("/api/access-tokens?all=1", headers=h_admin)
         assert r.status_code == 200
@@ -510,16 +504,15 @@ class TestLifecycle:
         cred_b = await _add_credential("__platform__", "cred-b")
         cred_c = await _add_credential("__platform__", "cred-c")   # 无引用
         h = await _register_role(client, "refcnt", "admin")
-        t1 = await _api_token(client, h, {
-            "kind": "platform", "name": "t1", "ttlDays": 30,
-            "scope": {"aliases": [], "authIds": [cred_a]}})
-        t2 = await _api_token(client, h, {
-            "kind": "platform", "name": "t2", "ttlDays": 30,
-            "scope": {"aliases": [], "authIds": [cred_a, cred_b]}})
-        await mk_task_pair(name="live-1", token_id=t1["id"], identity_mode="platform")
+        # 平台令牌签发已 410(authz W5),直插造数(带凭证范围行)
+        t1, _plain1 = await mk_token(
+            kind="platform", name="t1", scope_auths=[cred_a])
+        t2, _plain2 = await mk_token(
+            kind="platform", name="t2", scope_auths=[cred_a, cred_b])
+        await mk_task_pair(name="live-1", token_id=t1, identity_mode="platform")
         gone, _, _ = await mk_task_pair(
-            name="gone-1", token_id=t1["id"], identity_mode="platform")
-        await mk_task_pair(name="live-2", token_id=t2["id"], identity_mode="platform")
+            name="gone-1", token_id=t1, identity_mode="platform")
+        await mk_task_pair(name="live-2", token_id=t2, identity_mode="platform")
         async with db_module.SessionLocal() as s:
             await s.execute(sa.update(IntegrationTask).where(
                 IntegrationTask.id == gone).values(
@@ -591,15 +584,24 @@ class TestScopeApi:
                              json={"aliases": ["no-such"], "authIds": []})
         assert r.status_code == 422
 
-    async def test_platform_scope_candidates_only_alias(self, client):
-        """平台令牌范围候选:平台凭证池只列别名(§5.1/D5)。"""
+    async def test_platform_scope_candidates_closed_410(self, client):
+        """authz W5:平台令牌的范围候选随签发入口一并 410(个人令牌
+        候选 = 全部服务别名 + 本人凭证池,不再限角色)。"""
         await seed_platform_user()
         h = await _register_role(client, "sc3", "admin")
         r = await client.get(
             "/api/access-tokens/scope-candidates?kind=platform", headers=h)
-        assert r.status_code == 200
-        assert all(set(a.keys()) == {"id", "alias"}
-                   for a in r.json()["auths"])
+        assert r.status_code == 410
+        assert r.json()["detail"]["code"] == "platform_mode_closed"
+        # personal 候选对 user 角色开放(签发门删除的另一半)
+        from .inbound_fixtures import mk_user
+        await mk_user("sc3_u", role="user")
+        login = await client.post("/api/auth/login", json={
+            "username": "sc3_u", "password": "x"})
+        hu = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r2 = await client.get(
+            "/api/access-tokens/scope-candidates?kind=personal", headers=hu)
+        assert r2.status_code == 200, r2.text
 
 
 class TestRunScope:
@@ -812,23 +814,19 @@ class TestPlatformPremise:
         assert r.status_code == 403
         assert r.json()["detail"]["code"] == "not_read_only"
 
-    async def test_jwt_platform_task_private_422(self, client):
-        """JWT 创建平台任务:user 403;私有场景 422(§5.2)。"""
+    async def test_platform_task_creation_closed_410(self, client):
+        """authz W5:平台模式任务新建一律 410(角色无关 —— 原 user 403 /
+        admin 私有场景 422 的分支都被入口关闭取代;M1 关闭、C1 删)。"""
         await seed_platform_user()
         h_user = await _register_role(client, "pp_user", "user")
         await client.post("/api/scenarios", headers=h_user,
                           json=_draft("sc-pp3", steps=[GET_STEP]))
-        r = await client.post("/api/integration/tasks", headers=h_user, json={
-            "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
-            "triggerCron": "0 2 * * *"})
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "capability_forbidden"
-        h_member = await _register_role(client, "pp3", "admin")
-        r = await client.post("/api/integration/tasks", headers=h_member, json={
-            "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
-            "triggerCron": "0 2 * * *"})
-        assert r.status_code == 422
-        assert r.json()["detail"]["code"] == "platform_scope_denied"
+        for h in (h_user, await _admin_headers(client)):
+            r = await client.post("/api/integration/tasks", headers=h, json={
+                "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
+                "triggerCron": "0 2 * * *"})
+            assert r.status_code == 410, r.text
+            assert r.json()["detail"]["code"] == "platform_mode_closed"
 
 
 # ── 接口面收口(§2.2:graph / cancel 隔离 / 平台执行可见性 / 最近调用)──

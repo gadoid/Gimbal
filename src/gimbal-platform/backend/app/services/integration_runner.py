@@ -957,15 +957,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         f"令牌「{_token.name}」已到期,任务暂停;续期或"
                         "重新生成后自动恢复",
                         pause_reason=at_svc.PAUSE_TOKEN_EXPIRED, lease=lease)
-                # #4 个人令牌属主角色 < admin(派生,不落库)
-                if _token.kind == at_svc.PERSONAL_KIND \
-                        and _tok_owner.role not in ("admin", "super_admin"):
-                    return await _finish(
-                        db, inst, tpl, "auth",
-                        f"令牌「{_token.name}」属主角色已低于 admin,"
-                        "任务暂停;恢复角色后在集成详情「启动」",
-                        pause_reason=at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
-                        lease=lease)
+                # (#4「个人令牌属主角色低于 admin 即暂停」的产生逻辑已随
+                # authz W5 删除 —— 所有注册用户可使用个人令牌;存量该
+                # 原因的暂停实例由 0036 迁移恢复,常量保留供历史展示)
                 # #6 超出令牌范围(缺项按 §3.3 分类:未授权 / 已删除)
                 from ..services.scenario_store import (
                     definition_from_payload as _dfp)

@@ -65,8 +65,9 @@ class IntegrationTask(Base):
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # P1 只有 platform;personal 随 P2(订阅生成实例/缺凭证态)开放
-    identity_mode: Mapped[str] = mapped_column(String(16), default="platform")
+    # authz W5:默认反转 personal(平台模式停止新建,存量至 C1 退役;
+    # 更早的 P1 只有 platform、P2 开放 personal)
+    identity_mode: Mapped[str] = mapped_column(String(16), default="personal")
     # 评审 E6:scenario 先行,suite 随后(target_type + 两个可空引用)
     target_type: Mapped[str] = mapped_column(String(16), default="scenario")
     scenario_id: Mapped[str] = mapped_column(String(128), nullable=True)

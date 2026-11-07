@@ -51,6 +51,16 @@ STEPS_POST = [{
 }]
 
 
+async def _uid_of(username: str) -> int:
+    from app.core import db as _dbm
+    from sqlalchemy import select as _sel
+
+    from app.models.user import User
+    async with _dbm.SessionLocal() as s:
+        return (await s.execute(_sel(User.id).where(
+            User.username == username))).scalar_one()
+
+
 def _task_body(sid: str, **over) -> dict:
     body = {
         "name": "保活探针", "scenarioId": sid, "identityMode": "platform",
@@ -218,15 +228,22 @@ class TestIntegrationRouter:
     async def test_create_rejects_write_scenario_and_bad_cron(self, client):
         h = await register_and_login(client, "ig_mk", "ig_mkpass123")
         await _mk_scenario(client, h, "sc-ig-post", STEPS_POST, publish=True)
-        # 写场景 → 只读闸拒
+        # 写场景:只读闸是平台模式专属 —— 平台新建已 410(authz W5,
+        # 入口闸先于只读闸);personal 放行写场景(Y3 口径,不改)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-post"))
-        assert r.status_code == 422
-        assert r.json()["detail"]["code"] == "not_read_only"
+                              json=_task_body("sc-ig-post",
+                                              identityMode="platform"))
+        assert r.status_code == 410
+        assert r.json()["detail"]["code"] == "platform_mode_closed"
+        r = await client.post("/api/integration/tasks", headers=h,
+                              json=_task_body("sc-ig-post",
+                                              identityMode="personal"))
+        assert r.status_code == 201, r.text
         # cron 坏 → 拒
         await _mk_scenario(client, h, "sc-ig-get", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-get", triggerCron="bad"))
+                              json=_task_body("sc-ig-get", identityMode="personal",
+                                              triggerCron="bad"))
         assert r.status_code == 422
         assert r.json()["detail"]["code"] == "cron_invalid"
         # Y3:个人模式已解禁(201);坏 identityMode 仍 422
@@ -235,7 +252,7 @@ class TestIntegrationRouter:
         assert r.status_code == 201, r.text
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-get", identityMode="bogus"))
-        assert r.status_code == 422
+        assert r.status_code == 422, r.text
         # 他人场景 → 拒(v4:个人模式要求场景属主;平台模式用他人公共
         # 场景合法,故此处走个人模式保住属主闸)
         h2 = await register_and_login(client, "ig_mk2", "ig_mk2pass123")
@@ -249,11 +266,14 @@ class TestIntegrationRouter:
         await _seed_platform_user()
         h = await register_and_login(client, "ig_ok", "ig_okpass123")
         await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET, publish=True)
+        # authz W5:平台模式新建 410;通用流程走 personal(默认值反转后
+        # 省略字段 = personal,这里显式传以对齐旧断言形状)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-ok", visibility="public"))
+                              json=_task_body("sc-ig-ok", visibility="public",
+                                              identityMode="personal"))
         assert r.status_code == 201, r.text
         out = r.json()
-        assert out["identityMode"] == "platform"
+        assert out["identityMode"] == "personal"
         assert out["cronText"].startswith("每 5 分钟")
         assert out["instance"]["state"] in ("idle", "none")
 
@@ -262,7 +282,8 @@ class TestIntegrationRouter:
         h = await register_and_login(client, "ig_del", "ig_delpass123")
         await _mk_scenario(client, h, "sc-ig-del", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-del", visibility="public"))
+                              json=_task_body("sc-ig-del", visibility="public",
+                                              identityMode="personal"))
         tid = r.json()["id"]
         # 其他人可见公共模板
         h2 = await register_and_login(client, "ig_del2", "ig_del2pass123")
@@ -283,7 +304,8 @@ class TestIntegrationRouter:
         h = await register_and_login(client, "ig_card", "ig_cardpass123")
         await _mk_scenario(client, h, "sc-ig-card", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-card"))
+                              json=_task_body("sc-ig-card",
+                                              identityMode="personal"))
         tid = r.json()["id"]
         # 本人批量取卡 → idle;陌生人 → removed(私有模板)
         r = await client.post("/api/integration/cards", headers=h,
@@ -371,7 +393,7 @@ class TestIntegrationRouter:
         h = await register_and_login(client, "ig_run", "ig_runpass123")
         await _mk_scenario(client, h, "sc-ig-run", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-run"))
+                              json=_task_body("sc-ig-run", identityMode="personal"))
         tid = r.json()["id"]
 
         # 桩:plate convert 透传 + 通道回 passed
@@ -420,10 +442,10 @@ class TestIntegrationRouter:
                 IntegrationTask.template_id == tid))).scalar()
             assert inst.last_outputs["token"] == "***"
             assert inst.last_outputs["order_id"] == "O1"
-        # 冷却:60s 内再点 → 409
+        # 冷却是平台模式专属;personal(W5 后唯一可建模式)无冷却 ——
+        # 60s 内再点照常执行(平台冷却面随 C1 退役)
         r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
-        assert r.status_code == 409
-        assert r.json()["detail"]["code"] == "cooldown"
+        assert r.status_code == 200, r.text
 
     async def test_manual_run_rejects_working_preview(self, client, plate_mock):
         """A-4/W6(版本模型 §6):任一受管系统 working(含未钉修订)→
@@ -442,7 +464,7 @@ class TestIntegrationRouter:
         plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
         await _mk_scenario(client, h, "sc-ig-wp", anchored, publish=True)
         tid = (await client.post("/api/integration/tasks", headers=h,
-                                 json=_task_body("sc-ig-wp"))).json()["id"]
+                                 json=_task_body("sc-ig-wp", identityMode="personal"))).json()["id"]
 
         # 未钉修订(锚点系统缺声明)→ 409 working_preview
         r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
@@ -480,13 +502,14 @@ class TestIntegrationRouter:
         plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
         await _mk_scenario(client, h, "sc-ig-wp2", anchored, publish=True)
         await client.post("/api/integration/tasks", headers=h,
-                          json=_task_body("sc-ig-wp2"))
+                          json=_task_body("sc-ig-wp2", identityMode="personal"))
         from app.services import integration_runner as ir
         async with db_module.SessionLocal() as db:
             tpl = (await db.execute(select(IntegrationTask).where(
                 IntegrationTask.scenario_id == "sc-ig-wp2",
                 IntegrationTask.template_id.is_(None)))).scalar_one()
-            inst = await ir.ensure_instance(tpl)
+            # personal 实例需显式 holder(订阅即创建)
+            inst = await ir.ensure_instance(tpl, holder_id=tpl.owner_id)
             out = await ir.run_instance(inst.id)
         assert out["status"] == "failed"
         assert "拒绝触发" in (out.get("error") or "")
@@ -512,10 +535,10 @@ class TestIntegrationRouter:
                             plate={"fin": "1.0#1"})
         assert (await client.post(
             "/api/scenarios", headers=h, json=pinned)).status_code in (200, 201)
-        from .inbound_fixtures import publish_scenario
-        await publish_scenario("sc-ig-pdown")  # v4:平台模式只认公共场景
-        await client.post("/api/integration/tasks", headers=h,
-                          json=_task_body("sc-ig-pdown"))
+        # 只读闸是平台模式专属 —— authz W5 后平台任务不能经 API 新建,
+        # 直插平台模板 + 平台实例(holder = __platform__)保住这条闸面
+        # (C1 退役平台时本用例一并删除)
+        from .inbound_fixtures import mk_task_pair
         from app.services import integration_runner as ir
         from app.services import plate_client
 
@@ -524,16 +547,19 @@ class TestIntegrationRouter:
                 f"plate_unavailable: connection refused ({endpoint_id}@{ref})")
 
         monkeypatch.setattr(plate_client, "get_endpoint_full_at", _unreachable)
+        _tpl_id, inst_id, _own = await mk_task_pair(
+            name="pdown", identity_mode="platform",
+            owner_id=await _uid_of("ig_pdown"))
+        # 直插模板挂到已发布的钉定场景上(只读闸的取数对象)
         async with db_module.SessionLocal() as db:
-            tpl = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.scenario_id == "sc-ig-pdown",
-                IntegrationTask.template_id.is_(None)))).scalar_one()
-            inst = await ir.ensure_instance(tpl)
-            out = await ir.run_instance(inst.id)
+            tpl = await db.get(IntegrationTask, _tpl_id)
+            tpl.scenario_id = "sc-ig-pdown"
+            await db.commit()
+        out = await ir.run_instance(inst_id)
         assert out["status"] == "failed"
         assert (out.get("error") or "") == "只读检查未通过: plate 不可达"
         async with db_module.SessionLocal() as db:
-            row = await db.get(IntegrationTask, inst.id)
+            row = await db.get(IntegrationTask, inst_id)
             assert row.run_status == "channel"
             assert row.state == "idle"   # 收口,不再卡 running
             assert row.last_error == "只读检查未通过: plate 不可达"
@@ -874,9 +900,9 @@ async def test_cards_output_projection(client):
         "request": {"kind": "request", "body": {}}, "strategy": []}])
     await client.post("/api/scenarios", headers=u, json=draft)
     from .inbound_fixtures import publish_scenario
-    await publish_scenario("sc-p5")  # v4:平台模式只认公共场景
+    await publish_scenario("sc-p5")  # 模板可见性口径不变
     r = await client.post("/api/integration/tasks", headers=u,
-                          json=_task_body("sc-p5"))
+                          json=_task_body("sc-p5", identityMode="personal"))
     tid = r.json()["id"]
 
     from app.core import db as db_module

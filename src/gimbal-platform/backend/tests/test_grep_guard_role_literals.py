@@ -28,9 +28,13 @@ _SHAPES = (
     re.compile(r'\bUser\.role\s*[=!]=\s*["\'](user|admin|super_admin|member)["\']'),
 )
 
-# 存量冻结(2026-11-07,W3 私有区收编 26 处 + W4 执行可见收编 4 处后
-# 剩余 17 处;W5-W9/C1 随各模块收编逐行删除 —— 全部删空即本守卫的
-# 终点)。
+# 存量冻结(2026-11-07,W3 收编 26 处 + W4 执行可见收编 4 处 + W5 令牌
+# 收编 5 处后剩余 12 处;W6-W9/C1 随各模块收编逐行删除 —— 全部删空
+# 即本守卫的终点)。
+# W5 已收编:access_tokens _require_manage 三处 + all=1/强制失效
+# users.manage 面、签发/scope 候选门删除与平台 410、
+# services/access_token 使用门、runner #4 暂停产生逻辑、
+# integration 创建平台门 → has_capability / 410 / 删除。
 # W3 已收编:suites 60/66/76/163/255/433/1569/1595/1637、scenarios
 # 643/718/736/904、shares 206/268/319/348/359、integration 68/82/
 # 147/149、data_sets 92、adaptations 78/324、report_definitions
@@ -38,12 +42,6 @@ _SHAPES = (
 # W4 已收编:webhook_deliveries 117/154、access_token.can_view 440/443
 # → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
 _ALLOWLIST: frozenset[str] = frozenset({
-    # W5 令牌(签发门/使用门/平台入口)
-    'routers/access_tokens.py:77:if user.role == "super_admin":',
-    'routers/access_tokens.py:80:if user.role == "admin":',
-    'routers/access_tokens.py:83:if user.role == "admin" or allow_owner_user_role:',
-    'routers/access_tokens.py:220:if user.role != "super_admin":',
-    'routers/access_tokens.py:699:if user.role != "super_admin":',
     # W9 环境(越属主读旁路,W9 补审计时一并定去留)
     'routers/environments.py:52:if user.role != "super_admin" and env.owner_id != user.id:',
     # C1 平台退役(平台凭证管理面)

@@ -205,10 +205,9 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
             # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
             raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
                                  "令牌属主已停用", token=tok)
-        if user.role not in ("admin", "super_admin"):
-            raise TokenAuthError(
-                403, ERR_TOKEN_OWNER_INELIGIBLE,
-                "个人令牌要求属主角色不低于 admin", token=tok)
+        # (authz W5:「属主角色不低于 admin」的使用门已删 —— 所有注册
+        # 用户可使用个人令牌;ERR_TOKEN_OWNER_INELIGIBLE 常量保留,
+        # 兼容历史行/存量暂停实例的展示与 0036 恢复)
 
     # last_used_at 节流回写:轻提交,失败不影响判定
     if (tok.last_used_at is None or (

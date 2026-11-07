@@ -9,7 +9,7 @@ E7);平台凭证 = 平台系统用户的 auth_sessions(复用加密与连通测�
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -244,7 +244,9 @@ class TaskIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     scenarioId: str = Field(min_length=1, max_length=128)
     schemeId: str | None = None
-    identityMode: str = "platform"
+    # authz W5:默认反转 personal(M1.x 后收窄为仅 personal);
+    # Literal 校验防任意串
+    identityMode: Literal["personal", "platform"] = "personal"
     triggerCron: str = "*/5 * * * *"
     resultPolicy: str = "latest"
     cardTemplate: str = "status"
@@ -299,28 +301,26 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
                       db: DbSession) -> dict:
     user = principal.user
     # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主、
-    # platform → 平台身份);请求体传入不同值 → 422。JWT 用户:平台
-    # 模式要求 admin+(§2.3 矩阵),个人模式不限。
+    # platform → 平台身份);请求体传入不同值 → 422。
     if principal.is_token:
         if body.identityMode != principal.identity_mode:
             raise _bad(
                 "identity_mode_conflict",
                 f"identityMode 由认证结果决定为 {principal.identity_mode}"
                 f"(请求体传了 {body.identityMode})")
-    elif body.identityMode == "platform" \
-            and user.role not in ("admin", "super_admin"):
+    if body.identityMode == "platform":
+        # authz W5:平台模式入口关闭 —— 新建一律 410(M1 关闭,C1 删
+        # 分支;存量平台任务照跑、可订阅至退役)
         raise _bad(
-            "capability_forbidden",
-            "创建平台模式任务需能力 ops.write",
-            403)
+            "platform_mode_closed",
+            "平台模式已停止新建:请使用个人模式(用自己的凭证执行)", 410)
     if body.callbackPath is not None \
             and not at_svc.valid_callback_path(body.callbackPath):
         raise _bad(
             "callback_path_invalid",
             "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
-    if body.identityMode not in ("platform", "personal"):
-        raise _bad("identity_mode_invalid",
-                   "identityMode ∈ platform | personal")
+    # (identityMode 合法性由 TaskIn 的 Literal 校验承担,W5 起冗余的
+    # 手工校验删除)
     try:
         parse_cron(body.triggerCron)
     except CronError as e:
