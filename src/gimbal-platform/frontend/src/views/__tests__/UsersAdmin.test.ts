@@ -63,7 +63,7 @@ function loginAs(id: number, isAdmin = true) {
     id, username: 'x', role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
   } as never
   auth.capabilities = isAdmin
-    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
 }
 
 beforeEach(() => {

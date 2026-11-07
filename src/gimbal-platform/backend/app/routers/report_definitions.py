@@ -136,7 +136,7 @@ async def create_definition(
 
 async def _get_owned(db: AsyncSession, user, did: int) -> ReportDefinitionRow:
     # 表 B report_definition.read:owner ∨ public(公共行全员可读;
-    # 修改 = 维护者单判 / 删除的 maintain 面 = users.manage ∧ 公共,在写端点另判)。
+    # 修改 = 维护者单判 / 删除的 steward 面 = ops.write ∧ 公共,在写端点另判)。
     # authz W3:角色字面量收编进表 B,super_admin 中间分支本就冗余删除。
     from ._ownership import can_pure
 
@@ -196,7 +196,8 @@ async def delete_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 表 B report_definition.delete:owner ∨ maintain(同 update 口径)
+    # 表 B report_definition.delete:owner ∨ steward(Admin+ 下架公共定义,
+    # 与场景/suite 下架同口径)
     from ._ownership import can_pure
 
     if not can_pure(user, "report_definition", "delete", row):

@@ -475,6 +475,9 @@ export interface PrecheckResult {
   danglingEntryIds: string[]
   /** steps 引用了、但声明 URL 与绑定 URL 双缺的 service */
   unboundServices: string[]
+  /** authz W6:场景依赖属主内置凭证、而我名下没有同名别名的清单
+   * (执行人 ≠ 属主时内置凭证当空 → 跑起来必在认证段失败);空 = 无告警 */
+  builtinAuthShadowed?: string[]
 }
 
 /** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */

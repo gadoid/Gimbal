@@ -98,12 +98,15 @@ async def list_data_sets(
     """
     # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
     from ._ownership import referenced_scenario_ids
-    own_ids = (await scenario_store.owned_scenario_ids(db, user)) |         await referenced_scenario_ids(db, user.id)
+    owned = await scenario_store.owned_scenario_ids(db, user)
+    own_ids = owned | await referenced_scenario_ids(db, user.id)
     if scenarioId is not None:
         # Scope to the requested scenario (still visibility-filtered).
         own_ids = own_ids & {scenarioId}
     # Ownership filter pushed down as a SQL IN (was: full list + Python filter).
-    return await data_set_store.list_summaries(db, scenario_ids=own_ids)
+    # authz W6:引用闭包读者(非属主)的预览剥敏感列
+    return await data_set_store.list_summaries(
+        db, scenario_ids=own_ids, owned_ids=set(owned))
 
 
 @router.get("/{dataset_id}", response_model=DataSet)
@@ -120,7 +123,10 @@ async def get_data_set(
     if scen is None or not await can_read_scenario_row(db, user, scen):
         raise not_found_404("data_set", dataset_id)
     try:
-        return await data_set_store.get(db, dataset_id)
+        # authz W6:非属主读剥敏感列(原件不动)
+        return await data_set_store.get(
+            db, dataset_id, redact=scenario_store.is_foreign_viewer(
+                user.id, scen.owner_id))
     except KeyError as e:
         raise key_error_404(e)
 

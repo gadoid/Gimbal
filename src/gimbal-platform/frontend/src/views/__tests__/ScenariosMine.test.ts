@@ -213,7 +213,7 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     const { useAuthStore } = await import('@/stores/auth')
     const auth = useAuthStore()
     auth.currentUser = { id: 1, username: 'root', display_name: 'root', role: 'super_admin', is_admin: true } as never
-    auth.capabilities = ['users.manage', 'ops.write', 'alias.write', 'platform.alerts']
+    auth.capabilities = ['users.manage', 'ops.write', 'alias.write']
     const w = mountPage([scen('sc-a', 'private', 1)])
     await flushPromises()
     // 默认镜头 = 我的;全员视角是显式动作(§5.1),不再是默认全知。

@@ -119,6 +119,14 @@
                       {{ item.precheck.unboundServices.length }} 条服务引用未声明 — 现场填 URL 即可(右栏「用户与服务」)
                     </span>
                   </template>
+                  <span
+                    v-if="item.precheck.builtinAuthShadowed?.length"
+                    class="pc-warn"
+                    :data-testid="`precheck-shadowed-${i}`"
+                  >
+                    此场景依赖属主的内置凭证({{ item.precheck.builtinAuthShadowed.join('、') }}),你的凭证里没有同名别名 — 执行会在认证阶段失败;
+                    <a class="pc-fix" @click.stop href="/auths">去「我的凭证」补齐 ↗</a>
+                  </span>
                 </template>
                 <template v-else>
                   <span class="pc-fatal">这个方案跑不了,换一个方案就能跑。</span>

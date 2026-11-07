@@ -334,8 +334,9 @@ def test_0037_report_def_visibility_backfill():
 
 # ── 0038_platform_retire(authz C1)─────────────────────────────────
 def test_0038_platform_retire():
-    """四步各断言:① __platform__ 自持实例删;② 模板 personal ∧ public;
-    ③ 系统用户会话与平台令牌删;④ 约束生效(写 platform 即拒)。"""
+    """四步各断言:① __platform__ 自持实例删;② 模板 personal ∧ public
+    ∧ 属主 __platform__(实例行同改,个人模板不动);③ 系统用户会话与
+    平台令牌删;④ 约束生效(写 platform 即拒)。"""
     from alembic import command
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
@@ -374,6 +375,14 @@ def test_0038_platform_retire():
                     name="plat-tpl", owner_id=root.id,
                     template_id=tpl.id, holder_id=sub.id, state="idle")
                 s.add_all([inst, sub_inst])
+                # 对照:root 的个人公共模板 —— 属主不随平台模板改
+                own = IntegrationTask(
+                    name="own-tpl", owner_id=root.id, visibility="public",
+                    identity_mode="personal", target_type="scenario",
+                    scenario_id="sc-2", target_system="fin",
+                    trigger_cron="*/5 * * * *", result_policy="latest",
+                    card_template="status", state="idle")
+                s.add(own)
                 # 平台凭证池(系统用户会话)与平台令牌
                 from app.models.auth_session import AuthSession
                 from app.models.access_token import AccessToken
@@ -387,7 +396,7 @@ def test_0038_platform_retire():
                                   expires_at=datetime.now(_tz.utc)
                                   + timedelta(days=1)))
                 s.commit()
-                plat_id, sub_id = plat.id, sub.id
+                plat_id, sub_id, root_id = plat.id, sub.id, root.id
             command.stamp(_cfg(sync_url), "0037_report_def_maintainer")
             command.upgrade(_cfg(sync_url), "0038_platform_retire")
 
@@ -397,11 +406,19 @@ def test_0038_platform_retire():
                     "SELECT holder_id FROM integration_tasks "
                     "WHERE template_id IS NOT NULL"))]
                 assert holders == [(sub_id,)], holders
-                # ② 模板 personal ∧ public
+                # ② 模板 personal ∧ public ∧ 属主 __platform__
                 row = c.execute(text(
-                    "SELECT identity_mode, visibility FROM integration_tasks "
-                    "WHERE template_id IS NULL")).one()
-                assert row == ("personal", "public")
+                    "SELECT identity_mode, visibility, owner_id "
+                    "FROM integration_tasks "
+                    "WHERE template_id IS NULL AND name = 'plat-tpl'")).one()
+                assert row == ("personal", "public", plat_id)
+                # 订阅实例 owner_id 镜像模板属主;个人模板属主不动
+                assert c.execute(text(
+                    "SELECT owner_id FROM integration_tasks "
+                    "WHERE template_id IS NOT NULL")).scalar() == plat_id
+                assert c.execute(text(
+                    "SELECT owner_id FROM integration_tasks "
+                    "WHERE name = 'own-tpl'")).scalar() == root_id
                 # ③ 会话/令牌删空
                 assert c.execute(text(
                     "SELECT count(*) FROM auth_sessions")).scalar() == 0
@@ -416,7 +433,7 @@ def test_0038_platform_retire():
                         c2.execute(text(
                             "UPDATE integration_tasks "
                             "SET identity_mode='platform' "
-                            "WHERE template_id IS NULL"))
+                            "WHERE template_id IS NULL AND name = 'plat-tpl'"))
             command.downgrade(_cfg(sync_url), "0037_report_def_maintainer")
             with eng.connect() as c:
                 assert c.execute(text(

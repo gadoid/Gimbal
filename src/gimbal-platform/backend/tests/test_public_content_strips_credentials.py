@@ -3,10 +3,10 @@
 主规则(评审 R3):``run_prepare.built_in_users`` 只在执行人 == 场景
 属主时生效 —— 一条规则覆盖 share_ref 引用执行 / 订阅执行 / 平台身份
 / 存量公开场景,不需要数据迁移。
-附加清理:公开(发布,含 suite 级联)与拷贝(copy_scenario 单点,
-覆盖复制到我的/分享拷贝/引用转副本/suite fork)删 ``config.users``;
-随场景公开的数据集剥敏感列(10.6)。「订阅时剥离」不成立(E1:订阅
-引用活的公共场景,公开时机已剥)。
+原件不动(修订):发布不再剥离 —— 作者自己执行照常带内置凭证与敏感
+列,下架无损。凡交到非属主手里的形态各自脱敏:读(详情/draft/数据集,
+含引用闭包)、跨属主拷贝(copy_scenario 单点;同属主另存为保留)、
+执行(属主规则 + 非属主数据集剥敏感列 + 快照/任务参数去 config.users)。
 """
 from __future__ import annotations
 
@@ -29,6 +29,13 @@ _USERS = {"gitlab": {"username": "u", "password": "p", "token": "t"}}
 def _draft_with_users(sid: str, *, users: dict | None = None) -> dict:
     draft = make_draft(sid, steps=[_GET_STEP])
     draft["definition"]["config"]["users"] = users if users is not None else dict(_USERS)
+    return draft
+
+
+def _draft_with_vars(sid: str) -> dict:
+    """内置凭证 + 声明 amount/password 两个变量(数据集行列须已声明)。"""
+    draft = _draft_with_users(sid)
+    draft["definition"]["config"]["vars"] = {"amount": 1, "password": ""}
     return draft
 
 
@@ -69,8 +76,10 @@ async def test_prepare_exec_main_rule_wired():
 
 # ── ② 附加清理:公开与拷贝入口后 payload 无 config.users ────────────
 class TestStripping:
-    async def test_publish_strips_users_and_dataset_sensitive_columns(
+    async def test_publish_keeps_original_readers_desensitized(
             self, client: AsyncClient):
+        """发布不改原件(作者自己照常用凭证与敏感列,下架无损);非属主
+        读面(详情 / draft / 数据集详情 / 数据集列表预览)各自脱敏。"""
         from sqlalchemy import select as sa_select
 
         from app.core import db as db_module
@@ -82,22 +91,68 @@ class TestStripping:
             "amount": 1, "api_key": "k", "userToken": "t", "note": "n"}
         h = await role_headers(client, "sc_own")
         await client.post("/api/scenarios", headers=h, json=draft)
-        await client.post(
+        r = await client.post(
             "/api/scenarios/sc-w6-pub/data-sets", headers=h,
             json={"name": "ds", "rows": [
                 {"amount": 1, "api_key": "k", "userToken": "t", "note": "n"}]})
-        assert (await client.post(
-            "/api/scenarios/sc-w6-pub/publish", headers=h)).status_code == 200
+        ds_id = r.json()["datasetId"]
+        r = await client.post("/api/scenarios/sc-w6-pub/publish", headers=h)
+        assert r.status_code == 200
+        assert r.json()["config"]["users"] == _USERS   # 属主回包原样
 
+        # 原件不动
         async with db_module.SessionLocal() as s:
             row = (await s.execute(sa_select(ComposerScenario).where(
                 ComposerScenario.scenario_id == "sc-w6-pub"))).scalar_one()
-            cfg = (row.payload or {}).get("definition", {}).get("config", {})
-            assert not cfg.get("users")            # 场景内置凭证剥
+            assert row.payload["definition"]["config"]["users"] == _USERS
             ds = (await s.execute(sa_select(ComposerDataSet).where(
                 ComposerDataSet.scenario_id == "sc-w6-pub"))).scalar_one()
-            # ③ 数据集:敏感列剥、非敏感列保留
-            assert ds.rows and set(ds.rows[0]) == {"amount", "note"}
+            assert set(ds.rows[0]) == {"amount", "api_key", "userToken", "note"}
+
+        # 属主读:原样
+        r = await client.get("/api/scenarios/sc-w6-pub", headers=h)
+        assert r.json()["config"]["users"] == _USERS
+        r = await client.get(f"/api/data-sets/{ds_id}", headers=h)
+        assert set(r.json()["rows"][0]) == {"amount", "api_key", "userToken", "note"}
+
+        # 非属主读(公共可读):config.users 空、数据集敏感列剥
+        h_o = await role_headers(client, "sc_rdr", role="user")
+        r = await client.get("/api/scenarios/sc-w6-pub", headers=h_o)
+        assert r.status_code == 200 and not r.json()["config"].get("users")
+        r = await client.get("/api/scenarios/sc-w6-pub/draft", headers=h_o)
+        assert not r.json()["definition"]["config"].get("users")
+        r = await client.get(f"/api/data-sets/{ds_id}", headers=h_o)
+        assert r.status_code == 200
+        assert r.json()["rows"] == [{"amount": 1, "note": "n"}]
+
+        # 下架后属主数据完好(此前发布即删列,下架恢复不了)
+        await client.post("/api/scenarios/sc-w6-pub/unpublish", headers=h)
+        r = await client.get(f"/api/data-sets/{ds_id}", headers=h)
+        assert set(r.json()["rows"][0]) == {"amount", "api_key", "userToken", "note"}
+
+    async def test_ref_reader_dataset_list_preview_redacted(
+            self, client: AsyncClient):
+        """引用闭包读者的数据集列表预览剥敏感列(属主原样)。"""
+        h_owner = await role_headers(client, "sc_lpo")
+        await client.post("/api/scenarios", headers=h_owner,
+                          json=_draft_with_vars("sc-w6-lp"))
+        await client.post(
+            "/api/scenarios/sc-w6-lp/data-sets", headers=h_owner,
+            json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
+        await role_headers(client, "sc_lpr", role="user")
+        roster = (await client.get(
+            "/api/users/roster", headers=h_owner)).json()["items"]
+        rid = next(u["id"] for u in roster if u["username"] == "sc_lpr")
+        r = await client.post("/api/shares", headers=h_owner, json={
+            "resourceType": "scenario", "resourceId": "sc-w6-lp",
+            "granteeUserId": rid, "mode": "ref"})
+        assert r.status_code == 201, r.text
+        h_r = await role_headers(client, "sc_lpr", role="user")
+        r = await client.get("/api/data-sets?scenarioId=sc-w6-lp", headers=h_r)
+        assert r.json()[0]["preview"] == [{"amount": 1}]
+        r = await client.get("/api/data-sets?scenarioId=sc-w6-lp",
+                             headers=h_owner)
+        assert r.json()[0]["preview"] == [{"amount": 1, "password": "pw"}]
 
     async def test_copy_strips_users(self, client: AsyncClient):
         """「复制到我的」剥离(引用转副本/分享拷贝/suite fork 全走
@@ -130,6 +185,66 @@ class TestStripping:
                 ComposerScenario.scenario_id == new_sid))).scalar_one()
             cfg = (row.payload or {}).get("definition", {}).get("config", {})
             assert not cfg.get("users")
+
+    async def test_self_save_as_keeps_credentials(self, client: AsyncClient):
+        """作者给自己「另存为」(同属主拷贝)保留内置凭证与数据集敏感列
+        —— 凭证本就是自己的;剥离只发生在跨属主拷贝。"""
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.composer_data_set import ComposerDataSet
+        from app.models.composer_scenario import ComposerScenario
+
+        h = await role_headers(client, "sc_sav")
+        await client.post("/api/scenarios", headers=h,
+                          json=_draft_with_vars("sc-w6-sav"))
+        await client.post(
+            "/api/scenarios/sc-w6-sav/data-sets", headers=h,
+            json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
+        r = await client.post("/api/scenarios/sc-w6-sav/copy", headers=h,
+                              json={"name": "my copy"})
+        assert r.status_code == 201, r.text
+        new_sid = r.json()["meta"]["scenarioId"]
+
+        async with db_module.SessionLocal() as s:
+            row = (await s.execute(sa_select(ComposerScenario).where(
+                ComposerScenario.scenario_id == new_sid))).scalar_one()
+            cfg = (row.payload or {}).get("definition", {}).get("config", {})
+            assert cfg.get("users") == _USERS
+            ds = (await s.execute(sa_select(ComposerDataSet).where(
+                ComposerDataSet.scenario_id == new_sid))).scalar_one()
+            assert ds.rows == [{"amount": 1, "password": "pw"}]
+
+    async def test_cross_owner_copy_strips_dataset_columns(
+            self, client: AsyncClient):
+        """跨属主拷贝(引用转副本)数据集敏感列剥、非敏感列保留。"""
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.composer_data_set import ComposerDataSet
+
+        h_owner = await role_headers(client, "sc_cdo")
+        await client.post("/api/scenarios", headers=h_owner,
+                          json=_draft_with_vars("sc-w6-cd"))
+        await client.post(
+            "/api/scenarios/sc-w6-cd/data-sets", headers=h_owner,
+            json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
+        await role_headers(client, "sc_cdc", role="user")
+        roster = (await client.get(
+            "/api/users/roster", headers=h_owner)).json()["items"]
+        other_id = next(u["id"] for u in roster if u["username"] == "sc_cdc")
+        r = await client.post("/api/shares", headers=h_owner, json={
+            "resourceType": "scenario", "resourceId": "sc-w6-cd",
+            "granteeUserId": other_id, "mode": "ref"})
+        share_id = r.json()["id"]
+        h_other = await role_headers(client, "sc_cdc", role="user")
+        r = await client.post(f"/api/shares/{share_id}/fork", headers=h_other)
+        assert r.status_code == 201, r.text
+        new_sid = r.json()["scenarioId"]
+        async with db_module.SessionLocal() as s:
+            ds = (await s.execute(sa_select(ComposerDataSet).where(
+                ComposerDataSet.scenario_id == new_sid))).scalar_one()
+            assert ds.rows == [{"amount": 1}]
 
     async def test_suite_fork_members_stripped(self, client: AsyncClient):
         """suite fork(deep_copy_suite 三入口之一)成员副本剥离。"""
@@ -263,3 +378,135 @@ class TestPrecheckAlarm:
         assert r.status_code == 201, r.text
         out = await self._precheck(client, h_exec, "sc-w6-al")
         assert out["builtinAuthShadowed"] == []
+
+
+# ── ⑥ 执行侧非属主脱敏(原件不剥之后的执行兜底)──────────────────────
+class TestForeignExecutionDesensitized:
+    async def _run_capture(self, client, monkeypatch, h, ds_id) -> tuple:
+        import asyncio
+
+        from app.core import db as db_module
+        from app.models.execution import ExecutionSnapshot
+        from app.services import run_dispatcher as rd
+
+        cap: list[dict] = []
+
+        async def _fake_fanout(*, db_factory, execution_id, **kw):
+            cap.append(kw)
+            await rd.transition_with_retry(
+                db_factory, execution_id, rd.STATUS_DONE)
+
+        monkeypatch.setattr(rd, "_fanout", _fake_fanout)
+        r = await client.post("/api/runs", headers=h, json={
+            "scenarioId": "sc-w6-ex", "dataSetIds": [ds_id]})
+        assert r.status_code == 201, r.text
+        eid = r.json()["executionId"]
+        for _ in range(200):
+            if cap:
+                break
+            await asyncio.sleep(0.05)
+        assert cap, "fanout 未被调度"
+        async with db_module.SessionLocal() as s:
+            snap = (await s.get(ExecutionSnapshot, eid)).snapshot
+        return cap[-1], snap
+
+    async def test_ref_executor_gets_desensitized_shapes(
+            self, client: AsyncClient, monkeypatch):
+        h_owner = await role_headers(client, "ex_own")
+        await client.post("/api/scenarios", headers=h_owner,
+                          json=_draft_with_vars("sc-w6-ex"))
+        r = await client.post(
+            "/api/scenarios/sc-w6-ex/data-sets", headers=h_owner,
+            json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
+        ds_id = r.json()["datasetId"]
+
+        # 属主自跑:凭证与敏感列原样进执行
+        kw, snap = await self._run_capture(client, monkeypatch, h_owner, ds_id)
+        assert snap["definition"]["config"]["users"] == _USERS
+        assert kw["datasets"][0]["rows"][0][1] == {"amount": 1, "password": "pw"}
+
+        # 引用执行人:快照/任务参数无 config.users,数据集敏感列剥
+        await role_headers(client, "ex_ref", role="user")
+        roster = (await client.get(
+            "/api/users/roster", headers=h_owner)).json()["items"]
+        rid = next(u["id"] for u in roster if u["username"] == "ex_ref")
+        r = await client.post("/api/shares", headers=h_owner, json={
+            "resourceType": "scenario", "resourceId": "sc-w6-ex",
+            "granteeUserId": rid, "mode": "ref"})
+        assert r.status_code == 201, r.text
+        h_ref = await role_headers(client, "ex_ref", role="user")
+        kw, snap = await self._run_capture(client, monkeypatch, h_ref, ds_id)
+        assert not snap["definition"]["config"].get("users")
+        assert not kw["scenario_payload"]["definition"]["config"].get("users")
+        assert kw["datasets"][0]["rows"][0][1] == {"amount": 1}
+
+
+async def test_graph_units_strip_rows_for_foreign_runner(
+        client: AsyncClient):
+    """graph 编排单元:执行人 ≠ 场景属主 → 选中行的敏感列不进合成
+    场景;属主自跑原样。"""
+    import json
+
+    from app.core import db as db_module
+    from app.services import graph_dispatch
+
+    h = await role_headers(client, "gx_own")
+    await client.post("/api/scenarios", headers=h,
+                      json=_draft_with_vars("sc-w6-gx"))
+    r = await client.post(
+        "/api/scenarios/sc-w6-gx/data-sets", headers=h,
+        json={"name": "ds", "rows": [{"amount": 7, "password": "pw-secret"}]})
+    ds_id = r.json()["datasetId"]
+    from sqlalchemy import select as sa_select
+
+    from app.models.user import User
+
+    async with db_module.SessionLocal() as s:
+        owner_id = (await s.execute(sa_select(User.id).where(
+            User.username == "gx_own"))).scalar_one()
+    unit = {"ref": "u1", "scenarioId": "sc-w6-gx",
+            "row": {"datasetId": ds_id, "rowIndex": 0}}
+
+    async with db_module.SessionLocal() as s:
+        own = await graph_dispatch.resolve_graph_units(s, [unit], owner_id)
+        foreign = await graph_dispatch.resolve_graph_units(
+            s, [unit], owner_id + 999)
+    assert "pw-secret" in json.dumps(own[0]["composed"], default=str)
+    assert "pw-secret" not in json.dumps(foreign[0]["composed"], default=str)
+
+
+# ── ⑦ suite 预检同算内置凭证告警(此前只有单场景预检算)──────────────
+async def test_suite_validate_reports_builtin_auth_shadowed(
+        client: AsyncClient):
+    h_owner = await role_headers(client, "sv_own")
+    await client.post("/api/scenarios", headers=h_owner,
+                      json=_draft_with_users("sc-w6-sv"))
+    r = await client.post("/api/suites", headers=h_owner,
+                          json={"name": "w6-sv", "description": ""})
+    sid = r.json()["suiteId"]
+    await client.post(f"/api/suites/{sid}/members", headers=h_owner,
+                      json={"scenarioIds": ["sc-w6-sv"],
+                            "publishUnpublished": False})
+
+    # 属主自查:不告警
+    r = await client.post(f"/api/suites/{sid}/validate", headers=h_owner)
+    assert r.status_code == 200, r.text
+    assert not [i for i in r.json()["items"]
+                if i["code"] == "builtin_auth_shadowed"]
+
+    # 引用给 bob:bob 预检列出缺的别名
+    await role_headers(client, "sv_bob", role="user")
+    roster = (await client.get(
+        "/api/users/roster", headers=h_owner)).json()["items"]
+    bob_id = next(u["id"] for u in roster if u["username"] == "sv_bob")
+    r = await client.post("/api/shares", headers=h_owner, json={
+        "resourceType": "suite", "resourceId": str(sid),
+        "granteeUserId": bob_id, "mode": "ref"})
+    assert r.status_code == 201, r.text
+    h_bob = await role_headers(client, "sv_bob", role="user")
+    r = await client.post(f"/api/suites/{sid}/validate", headers=h_bob)
+    assert r.status_code == 200, r.text
+    hits = [i for i in r.json()["items"]
+            if i["code"] == "builtin_auth_shadowed"]
+    assert hits and hits[0]["units"] == ["sc-w6-sv"]
+    assert "gitlab" in hits[0]["message"]

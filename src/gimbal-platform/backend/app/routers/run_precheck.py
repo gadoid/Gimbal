@@ -109,29 +109,6 @@ async def precheck_run(
         if token is None or not at_svc.can_manage(user, token):
             token = None      # 不可管理 = 当作没传(不带范围预检,不 404 连坐;
                               # §5.3:JWT 只能预检自己可管理的令牌)
-    from ..services import run_prepare as _rp
-
-    async def _builtin_shadowed(scen_row) -> list[str]:
-        """authz W6 预检告警(N9/E2):三条件同时满足才告警(防噪)。
-
-        ① 执行人 ≠ 场景属主(内置凭证主规则生效面);② 场景
-        config.users 非空;③ 这些用户(别名)在执行人自己的认证会话
-        里解析不到 —— 主规则已把作者凭证当空,执行人自己又没有,跑
-        起来必在认证段失败,提前说清。任一不满足 = 空清单。
-        """
-        uid = user.id if user is not None else None
-        if uid is None or scen_row.owner_id is None or uid == scen_row.owner_id:
-            return []                       # ① 不满足(含令牌匿名面兜底)
-        users = _rp.built_in_users(scen_row.payload)
-        if not users:
-            return []                       # ② 不满足
-        from ..core import db as _dbm
-
-        # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混
-        resolved = await _rp.resolve_exec_auths(
-            _dbm.SessionLocal, uid, sorted(users))
-        return sorted(set(users) - {a.alias for a in resolved})   # ③
-
     out: list[PrecheckResult] = []
     for item in items:
         scen_row = await scenario_store.get_row(db, item.scenario_id)
@@ -146,9 +123,34 @@ async def precheck_run(
             ))
             continue
         one = await _precheck_one(db, scen_row, item, token=token)
-        one.builtin_auth_shadowed = await _builtin_shadowed(scen_row)
+        one.builtin_auth_shadowed = await builtin_auth_shadowed(
+            user.id if user is not None else None, scen_row)
         out.append(one)
     return out
+
+
+async def builtin_auth_shadowed(executor_id: int | None,
+                                scen_row) -> list[str]:
+    """authz W6 预检告警(N9/E2):三条件同时满足才告警(防噪)。
+
+    ① 执行人 ≠ 场景属主(内置凭证主规则生效面);② 场景 config.users
+    非空;③ 这些用户(别名)在执行人自己的认证会话里解析不到 —— 主规则
+    已把作者凭证当空,执行人自己又没有,跑起来必在认证段失败,提前说
+    清。任一不满足 = 空清单。单场景预检与 suite 预检(validate)共用。
+    """
+    from ..core import db as _dbm
+    from ..services import run_prepare as _rp
+
+    if (executor_id is None or scen_row.owner_id is None
+            or executor_id == scen_row.owner_id):
+        return []                       # ① 不满足(含令牌匿名面兜底)
+    users = _rp.built_in_users(scen_row.payload)
+    if not users:
+        return []                       # ② 不满足
+    # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混
+    resolved = await _rp.resolve_exec_auths(
+        _dbm.SessionLocal, executor_id, sorted(users))
+    return sorted(set(users) - {a.alias for a in resolved})   # ③
 
 
 async def _precheck_one(

@@ -698,7 +698,8 @@ async def publish_scenario(
     await _require_visibility_actor(db, user, row, verb="publish")
     was_public = (row.visibility or "private") == "public"
     try:
-        out = await scenario_store.set_visibility(db, scenario_id, "public")
+        out = await scenario_store.set_visibility(
+            db, scenario_id, "public", viewer_id=user.id)
     except KeyError as e:
         raise key_error_404(e)
     if not was_public:   # 状态确变才记:重复发布不刷事件/审计
@@ -725,7 +726,8 @@ async def unpublish_scenario(
     await _require_visibility_actor(db, user, row, verb="unpublish")
     was_public = (row.visibility or "private") == "public"
     try:
-        result = await scenario_store.set_visibility(db, scenario_id, "private")
+        result = await scenario_store.set_visibility(
+            db, scenario_id, "private", viewer_id=user.id)
     except KeyError as e:
         raise key_error_404(e)
     if was_public:   # 状态确变才记:重复下架不刷事件/审计
@@ -862,8 +864,9 @@ async def get_scenario_draft(
     await _require_reader_async(db, user, row)
     # 方案读写唯一面 = /run-schemes CRUD(阶段④:V1 sidecar 读侧回填下线,
     # draft 不再携带 runSchemes 键;存量 payload 中的同键被 extra=ignore
-    # 静默忽略)。
-    payload = dict(row.payload or {})
+    # 静默忽略)。authz W6:非属主读不带内置凭证(原件不动)。
+    payload = scenario_store.payload_for_viewer(
+        row.payload, viewer_id=user.id, owner_id=row.owner_id)
     try:
         return ScenarioDraft.model_validate(payload)
     except Exception as e:  # noqa: BLE001

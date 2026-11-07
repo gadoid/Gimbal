@@ -179,6 +179,8 @@
 
 ### C2 平台模板转为订阅制
 
+> **2026-11-07 修订**：归属在 0038 第②步落地（模板与实例行属主改 `__platform__`），维护规则 = `ops.write`（`integration._can_manage`）；内置凭证/数据集剥离、通知受众、报告定义下架的修订见方案第十二节。
+
 - 平台模板就是 `owner = __platform__` 的公共集成模板，由 Admin+ 维护。
 - 把知情同意指纹的检查扩展到平台模板（`integration_runner.py:991-999`）。**顺序依赖（双条件）**：指纹闸现状只对 `identity_mode == "personal"` 且非持有人实例生效（`:991-993`），平台模板完全绕过；且闸内有 `visibility != "public" → made_private` 暂停（`:994-999`），而平台模板默认 private——C2 必须排在 C1 迁移（`identity_mode → personal` **且** `visibility → public`）之后，届时订阅实例自动落入指纹闸。
 - 实现 `platform` 系统的静态令牌认证方式：使用执行人的个人令牌，以 bearer 方式施加，不走登录。

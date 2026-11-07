@@ -514,10 +514,8 @@ def remap_detach_pause(inst, message: str) -> None:
 async def token_task_instances(
     db: AsyncSession, tok: AccessToken,
 ) -> "list[tuple[object, object]]":
-    """该令牌注册方自己的实例(#1–#4/#6 作用域,§3.3):
-
-    个人模式 = holder=模板属主(= 令牌属主)的实例;平台模式 = 平台唯一
-    实例(holder = 令牌属主)。订阅者实例不在列。
+    """该令牌注册方自己的实例(#1–#4/#6 作用域,§3.3):holder = 模板
+    属主(= 令牌属主)的实例。订阅者实例不在列。
     """
     from ..models.integration_task import IntegrationTask
 
@@ -527,46 +525,19 @@ async def token_task_instances(
         IntegrationTask.token_id == tok.id))).scalars().all()
     out: list[tuple[object, object]] = []
     for tpl in tpls:
-        if tpl.identity_mode == "personal":
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id,
-                IntegrationTask.holder_id == tpl.owner_id))).scalar()
-        else:
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id,
-                IntegrationTask.holder_id == tok.user_id))).scalar()
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id == tpl.owner_id))).scalar()
         if inst is not None:
             out.append((tpl, inst))
     return out
-
-
-async def fanout_members(db: AsyncSession, title: str, body: str,
-                         link: str = "/integrations") -> None:
-    """平台身份事件扇出给 admin+(§3.3 通知;修复 v3 扇出仍选
-    operator 的缺陷 —— 09-29 更名后平台任务通知只到 admin。
-    authz W1 更名后口径 = super_admin + admin,两轮更名的同款坑不再犯)。"""
-    from ..services.notifications import create_notification
-    from ..routers._ownership import roles_with
-
-    uids = (await db.execute(
-        select(User.id).where(
-            User.role.in_(roles_with("platform.alerts")),
-            User.is_system == False)  # noqa: E712
-    )).scalars().all()
-    for uid in uids:
-        try:
-            await create_notification(
-                db, user_id=uid, type_="integration",
-                title=title, body=body, link=link)
-        except Exception:  # noqa: BLE001 — 通知是增强
-            pass
 
 
 async def pause_token_instances(
     db: AsyncSession, tok: AccessToken, paused_reason: str, message: str,
 ) -> list[dict]:
     """令牌失效/吊销/停用 → 暂停注册方实例 + ``integration.paused``
-    回调 + 通知(个人点对点发属主;平台扇出 member+)。
+    回调 + 通知(点对点发令牌属主)。
 
     已暂停的实例不动(不覆盖真实成因)。调用方负责 commit。
     """
@@ -598,16 +569,13 @@ async def pause_token_instances(
              ("已吊销" if paused_reason == PAUSE_TOKEN_REVOKED else "已失效")
              + (f",{len(names)} 个任务暂停" if names else ""))
     body = message + (f";任务:{label}" if names else "")
-    if tok.kind == PERSONAL_KIND:
-        from ..services.notifications import create_notification
-        try:
-            await create_notification(
-                db, user_id=tok.user_id, type_="integration",
-                title=title, body=body, link="/profile#tokens")
-        except Exception:  # noqa: BLE001
-            pass
-    else:
-        await fanout_members(db, title, body)
+    from ..services.notifications import create_notification
+    try:
+        await create_notification(
+            db, user_id=tok.user_id, type_="integration",
+            title=title, body=body, link="/profile#tokens")
+    except Exception:  # noqa: BLE001
+        pass
     return names
 
 

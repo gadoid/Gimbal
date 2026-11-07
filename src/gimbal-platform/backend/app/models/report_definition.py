@@ -18,7 +18,7 @@ class ReportDefinitionRow(Base):
     """报告定义(私有/公共分立 visibility;owner = 维护者,恒非空)。
 
     authz W9-2:公共定义有维护者(owner_id 不再置 None —— 公共 ≠ 无主);
-    编辑权 = 维护者,Admin+ 仅可下架(delete,maintain)。遗留无主公共行
+    编辑权 = 维护者,Admin+ 仅可下架(delete,steward)。遗留无主公共行
     (owner_id NULL)由 0037 回填 visibility='public',保持全员可读、
     编辑面冻结(无人是维护者)。"""
     __tablename__ = "report_definitions"

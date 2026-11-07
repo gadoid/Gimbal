@@ -14,10 +14,10 @@ import { useAuthStore } from '@/stores/auth'
 /** 与后端表 A(tests/authz_expected.yaml)人工对齐的期望矩阵 */
 const EXPECTED: Record<string, string[]> = {
   user: [],
-  admin: ['ops.write', 'alias.write', 'platform.alerts'],
-  super_admin: ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'],
+  admin: ['ops.write', 'alias.write'],
+  super_admin: ['users.manage', 'ops.write', 'alias.write'],
 }
-const ALL_CAPS = ['users.manage', 'ops.write', 'alias.write', 'platform.alerts']
+const ALL_CAPS = ['users.manage', 'ops.write', 'alias.write']
 
 describe('auth — can() 三角色矩阵(对齐后端表 A)', () => {
   beforeEach(() => setActivePinia(createPinia()))

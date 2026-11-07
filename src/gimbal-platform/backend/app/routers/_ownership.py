@@ -39,8 +39,6 @@ CAPABILITIES: dict[str, frozenset[str]] = {
     # 「Admin 维护服务别名注册表」;authz W7:导入门放开给 User 后,
     # 建名仍是 Admin 面(User 只能 reuse/map 到已有别名)
     "alias.write": frozenset({"admin", "super_admin"}),
-    # 平台身份事件告警受众 —— 与 ops.write 同口径(原 member+ 扇出)
-    "platform.alerts": frozenset({"admin", "super_admin"}),
 }
 
 # 权威顺序(低 → 高);roles_with 按此序输出,SQL in_ 与展示都稳定。
@@ -81,11 +79,10 @@ def has_capability(user: Any, cap: str) -> bool:
 #   steward   ops.write 能力(表 A)∧ 对象公共 —— Admin+ 的公共治理
 #             (下架公共对象,R6:admin 对他人对象没有发布权,对私有
 #             对象没有任何动词)
-#   maintain  users.manage 能力 ∧ 对象公共 —— report_definition 的
-#             下架面(W9-2 起编辑归维护者,Admin+ 仅可下架)
 # 角色不在表 B 出现:角色差由表 A 表达;对象级判定对同谓词主体同权。
-# W3 收窄后 admin 与普通用户在对象级唯一的差别就是 steward/maintain
-# 两个「公共态 × 能力」谓词。表 B 变更必须同步 tests/authz_expected.yaml
+# W3 收窄后 admin 与普通用户在对象级唯一的差别就是 steward 这个
+# 「公共态 × 能力」谓词(另:平台模板由 ops.write 维护,见
+# integration._can_manage)。表 B 变更必须同步 tests/authz_expected.yaml
 # 的 table_b 段(人工审定快照,R7)。
 
 TABLE_B: dict[str, dict[str, frozenset[str]]] = {
@@ -120,11 +117,11 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "write":     frozenset({"owner"}),
     },
     # authz W9-2:公共定义有维护者 —— 编辑(owner 单判)只有维护者;
-    # delete(下架)再给 maintain(Admin+ 治理面,方案 §1.4)
+    # delete(下架)再给 steward(Admin+ 治理面,与场景/suite 下架同口径)
     "report_definition": {
         "read":      frozenset({"owner", "public"}),
         "write":     frozenset({"owner"}),
-        "delete":    frozenset({"owner", "maintain"}),
+        "delete":    frozenset({"owner", "steward"}),
     },
 }
 
@@ -140,7 +137,7 @@ def obj_is_public(obj_type: str, obj: Any) -> bool:
 
 
 def can_pure(user: Any, obj_type: str, verb: str, obj: Any) -> bool:
-    """表 B 求值(纯谓词版):owner/public/steward/maintain,不查库。
+    """表 B 求值(纯谓词版):owner/public/steward,不查库。
 
     ``ref`` 谓词恒为 False —— 需要引用闭包的判定用 async :func:`can`。
     未登记的 (对象, 动词) 是编码错误,即刻 KeyError(与 roles_with
@@ -155,9 +152,6 @@ def can_pure(user: Any, obj_type: str, verb: str, obj: Any) -> bool:
         return True
     if "steward" in preds and obj_is_public(obj_type, obj) \
             and has_capability(user, "ops.write"):
-        return True
-    if "maintain" in preds and obj_is_public(obj_type, obj) \
-            and has_capability(user, "users.manage"):
         return True
     return False
 

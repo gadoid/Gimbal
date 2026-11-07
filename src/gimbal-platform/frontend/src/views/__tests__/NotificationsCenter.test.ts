@@ -49,7 +49,7 @@ async function mountPage(role: 'user' | 'super_admin') {
   } as never
   // authz W8:审计 tab = users.manage 面
   auth.capabilities = role === 'super_admin'
-    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
   vi.mocked(api.list).mockResolvedValue(
     { items: ITEMS, unread: 1, total: ITEMS.length, page: 1, pageSize: 20 } as never)
   const w = mount(NotificationsCenter, { global: { plugins: [router, pinia] } })

@@ -60,7 +60,7 @@ function setAuth(isAdmin: boolean): void {
     role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
   } as never
   auth.capabilities = isAdmin
-    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
 }
 
 function mountPage() {

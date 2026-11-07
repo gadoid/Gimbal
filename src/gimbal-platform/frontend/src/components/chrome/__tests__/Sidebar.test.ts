@@ -47,7 +47,7 @@ async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
     is_admin: opts.isAdmin,
   } as never
   auth.capabilities = opts.isAdmin
-    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts']
+    ? ['users.manage', 'ops.write', 'alias.write']
     : []
 
   const router = makeRouter()

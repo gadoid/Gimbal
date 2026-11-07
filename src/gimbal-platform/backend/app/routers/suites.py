@@ -515,9 +515,8 @@ async def add_members(
                                 "be published to join (confirm to publish "
                                 "them and their datasets)"),
                     "pendingPublish": [sid]})
+            # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
             scen.visibility = "public"
-            # authz W6:级联公开同闸 —— 内置凭证与数据集敏感列剥离
-            await scenario_store.strip_credentials_for_public(db, scen)
         db.add(SuiteMember(
             suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
             sort=next_sort,
@@ -1145,6 +1144,22 @@ def _executor_compile(graph: dict) -> list[dict]:
     return errs
 
 
+async def _shadowed_item(user_id: int, scen, name: str) -> dict | None:
+    """authz W6 内置凭证告警(与单场景预检同一实现 builtin_auth_shadowed):
+    成员依赖属主内置凭证、发起人名下又没有同名别名 → 执行必在认证段
+    失败,提前说清(否则被分享人只看到 401)。"""
+    from .run_precheck import builtin_auth_shadowed
+
+    aliases = await builtin_auth_shadowed(user_id, scen)
+    if not aliases:
+        return None
+    return _vitem(
+        "warn", "builtin_auth_shadowed",
+        f"「{name}」依赖属主的内置凭证 {aliases},你的凭证里没有同名别名 ——"
+        f"执行会在认证阶段失败;请在「我的凭证」补齐同名别名",
+        units=[scen.scenario_id])
+
+
 @router.post("/{suite_id}/validate")
 async def validate_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
@@ -1206,6 +1221,9 @@ async def validate_suite(
                 continue
             scheme = await _default_scheme_of(db, m.scenario_id)
             if scheme is None:
+                if (sh := await _shadowed_item(
+                        user.id, scen, _name_of(m.scenario_id, scen))):
+                    items.append(sh)
                 items.append(_vitem("warn", "no_scheme",
                                     f"「{_name_of(m.scenario_id, scen)}」没有运行方案,将以裸基线发起",
                                     units=[m.scenario_id]))
@@ -1213,6 +1231,9 @@ async def validate_suite(
                 continue
             pc = await _precheck_one(db, scen, PrecheckItem(
                 scenarioId=m.scenario_id, schemeId=scheme["schemeId"]))
+            if (sh := await _shadowed_item(
+                    user.id, scen, _name_of(m.scenario_id, scen))):
+                items.append(sh)
             if not pc.scheme_valid:
                 detail = []
                 if pc.dead_dataset_ids:
@@ -1253,12 +1274,16 @@ async def validate_suite(
                                     else m.scenario_id)
 
         not_runnable: list[str] = []
+        shadowed: list[dict] = []
         for m in members:
             scen = await scenario_store.get_row(db, m.scenario_id)
             if scen is None or not await _can_run(
                     db, user, scenario_id=m.scenario_id,
                     owner_id=scen.owner_id if scen else None):
                 not_runnable.append(names[m.scenario_id])
+            elif (sh := await _shadowed_item(
+                    user.id, scen, names[m.scenario_id])):
+                shadowed.append(sh)
         if not_runnable:
             # 图不能跳过单元 —— 整体禁跑并列出(重构方案已定)
             items.append(_vitem("error", "units_not_runnable",
@@ -1269,6 +1294,7 @@ async def validate_suite(
                     "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
                     "degraded": False, "inFlight": None, "items": items}
 
+        items.extend(shadowed)
         est = sum(int((units_cfg.get(m.scenario_id) or {}).get("repeat") or 1)
                   * int((units_cfg.get(m.scenario_id) or {}).get("nRuns") or 1)
                   for m in members)
@@ -1542,9 +1568,8 @@ async def publish_suite(
         scen = await scenario_store.get_row(db, m.scenario_id)
         if scen is not None and (scen.visibility or "private") != "public":
             unpublished.append(m.scenario_id)
+            # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
             scen.visibility = "public"
-            # authz W6:级联公开同闸 —— 内置凭证与数据集敏感列剥离
-            await scenario_store.strip_credentials_for_public(db, scen)
     suite.visibility = "public"
     await db.commit()
     await db.refresh(suite)

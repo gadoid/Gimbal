@@ -230,6 +230,39 @@ async def test_fail_streak_auto_pause_and_resume(client):
     assert inst.fail_streak == 0 and inst.next_run_at is not None
 
 
+async def test_fail_streak_notifies_holder_only(client):
+    """连续失败通知(第 FAIL_STREAK_NOTIFY 次)只发持有人 —— 任务名与
+    错误信息属私有区,Admin+ 不再收到(平台时期的群发兜底已退役)。"""
+    from app.models.permission import Notification
+    from app.services import integration_runner as ir
+    from tests.helpers import role_headers
+
+    u1 = await register_and_login(client, "w0b_sn1", "pw123456")
+    u2 = await register_and_login(client, "w0b_sn2", "pw123456")
+    await role_headers(client, "w0b_snadm", role="admin")
+    tid = await _mk_task(client, u1, "sc-w0bsn")
+    uid1, uid2 = await _user_id("w0b_sn1"), await _user_id("w0b_sn2")
+    uid_adm = await _user_id("w0b_snadm")
+    await _subscribe(client, u2, tid)
+    inst_id = (await _inst(tid, uid2)).id
+
+    async with db_module.SessionLocal() as s:
+        row = await s.get(IntegrationTask, inst_id)
+        row.fail_streak = ir.FAIL_STREAK_NOTIFY - 1
+        await s.commit()
+    async with db_module.SessionLocal() as s:
+        await ir._finish(s, await s.get(IntegrationTask, inst_id),
+                         await s.get(IntegrationTask, tid),
+                         "transport", "secret-host 连不通")
+
+    async with db_module.SessionLocal() as s:
+        rows = (await s.execute(select(Notification).where(
+            Notification.title.contains("连续失败")))).scalars().all()
+    got = {n.user_id for n in rows}
+    assert got == {uid2}, [(n.user_id, n.title) for n in rows]
+    assert uid1 not in got and uid_adm not in got
+
+
 async def test_pause_resume_owner_rows(client):
     """W4:个人模式 owner 自有实例走订阅面端点暂停/恢复 —— 集成页
     owner 行的暂停/恢复按钮即此口径(authz C1:平台行分支退役)。"""

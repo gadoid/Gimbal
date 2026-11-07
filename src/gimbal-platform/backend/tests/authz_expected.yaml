@@ -10,11 +10,10 @@
 #                     (W5 令牌签发、W7 导入开放至全体用户,不再覆盖)
 #   alias.write      别名注册表新建条目(导入 decision=create 建名)——
 #                     Admin 职责(§2.1);W7 起导入门放开后建名仍是 Admin 面
-#   platform.alerts  平台身份事件告警受众 —— 与 ops.write 同口径
 table_a:
   user: []                       # user 级:自有内容读写不走表 A(对象级规则在表 B,W3 起)
-  admin: [ops.write, alias.write, platform.alerts]
-  super_admin: [users.manage, ops.write, alias.write, platform.alerts]
+  admin: [ops.write, alias.write]
+  super_admin: [users.manage, ops.write, alias.write]
 
 # 具名门 → 能力映射(deps.py;名字保留是 W8 前的兼容期)
 gates:
@@ -26,14 +25,13 @@ roles_with:
   users.manage: [super_admin]
   ops.write: [admin, super_admin]
   alias.write: [admin, super_admin]
-  platform.alerts: [admin, super_admin]
 
 # 表 B(authz W3):对象 × 动词 → 放行谓词(o=owner 属主 / pub=public
-# 公共态 / ref=引用分享被授予人 / ste=steward:ops.write ∧ 公共 /
-# mnt=maintain:users.manage ∧ 公共)。人工审定期望:
+# 公共态 / ref=引用分享被授予人 / ste=steward:ops.write ∧ 公共)。
+# 人工审定期望:
 #   * admin/super_admin 对他人**私有**对象没有任何动词(全 404/403)
-#   * 唯一的越属主能力 = steward 下架公共对象(scenario/suite.unpublish)
-#     与 maintain 下架公共报告定义(W9-2 起编辑归维护者,admin 仅下架)
+#   * 唯一的越属主能力 = steward 下架公共对象(scenario/suite.unpublish、
+#     report_definition.delete —— W9-2 起编辑归维护者,Admin+ 仅下架)
 #   * 发布(publish)一律 owner —— admin 对他人对象没有发布权(R6)
 table_b:
   scenario:
@@ -60,4 +58,4 @@ table_b:
   report_definition:
     read:      [o, pub]
     write:     [o]           # authz W9-2:编辑权 = 维护者单判
-    delete:    [o, mnt]      # 下架 = 维护者 ∨ Admin+(治理面)
+    delete:    [o, ste]      # 下架 = 维护者 ∨ Admin+(治理面)

@@ -992,6 +992,26 @@ async def dispatch_target(
      skipped_while_degraded) = await compute_run_fanout(
         db, target.scenario_id, scenario_payload, req)
 
+    # authz W6:执行人 ≠ 场景属主(引用执行 / suite 聚合跑他人成员)——
+    # 原件不剥(发布不改原件),执行形态在此脱敏:数据集敏感列剥、
+    # payload 去 config.users(快照/任务参数不落作者明文;内置凭证主
+    # 规则在 prepare_exec 本就当空,两者同口径)。adhoc 无存储属主不判。
+    _scen_owner_id = (
+        (_sr.owner_id if (_sr := await get_row(
+            db, target.scenario_id)) is not None else None)
+        if getattr(target, "kind", "scenario") == "scenario"
+        and target.scenario_id else None)
+    if _scen_owner_id is not None and user_id != _scen_owner_id:
+        from .scenario_store import (
+            strip_builtin_credentials, strip_sensitive_columns)
+        scenario_payload = strip_builtin_credentials(
+            copy.deepcopy(scenario_payload))
+        fanout_datasets = [
+            {**fd, "rows": [(i, (strip_sensitive_columns([r])[0]
+                                 if r else r))
+                            for i, r in fd["rows"]]}
+            for fd in fanout_datasets]
+
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
@@ -1152,11 +1172,7 @@ async def dispatch_target(
                 # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
                 # adhoc(临时调用)无存储属主 → None = 不判(payload
                 # 由调用者即席提供,执行人天然是作者)
-                "scenario_owner_id": (
-                    (_sr.owner_id if (_sr := await get_row(
-                        db, target.scenario_id)) is not None else None)
-                    if getattr(target, "kind", "scenario") == "scenario"
-                    and target.scenario_id else None),
+                "scenario_owner_id": _scen_owner_id,
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,

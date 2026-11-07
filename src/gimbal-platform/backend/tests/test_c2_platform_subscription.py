@@ -8,6 +8,8 @@
    重新确认恢复;存量订阅实例迁移后照跑(钉 0038 的 visibility=
    'public' 双条件改写 —— 只改 identity_mode 的话闸内
    visibility != public → made_private 会暂停全部订阅,评审 R1)。
+③ 平台模板维护口径:__platform__ 持有、Admin+(ops.write)维护;恒
+   公共;维护面不外溢到他人的个人公共模板。
 """
 from __future__ import annotations
 
@@ -159,3 +161,133 @@ class TestPlatformTemplateSubscription:
         # 指纹一致 + 场景公共:不因可见性暂停(R1:visibility 改写钉)
         assert inst.paused_reason != "made_private"
         assert inst.paused_reason != "template_changed"
+
+
+# ── ③ 平台模板维护口径(__platform__ 持有、Admin+ 维护)────────────
+class TestPlatformTemplateMaintenance:
+    async def test_admin_maintains_user_cannot(
+            self, client: AsyncClient, plate_mock: PlateMock):
+        """Admin+(ops.write)可改/删平台模板;普通用户 403;canManage
+        随之下发。平台模板恒公共:转私有 409。"""
+        from tests.helpers import role_headers
+
+        tid, _ = await _mk_platform_template(client, plate_mock,
+                                             sid="sc-c2m")
+        h_user = await role_headers(client, "c2_mu", role="user")
+        h_adm = await role_headers(client, "c2_ma", role="admin")
+
+        r = await client.get(f"/api/integration/tasks/{tid}", headers=h_user)
+        assert r.status_code == 200 and r.json()["canManage"] is False
+        r = await client.get(f"/api/integration/tasks/{tid}", headers=h_adm)
+        assert r.status_code == 200 and r.json()["canManage"] is True
+
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=h_user,
+                               json={"triggerCron": "*/10 * * * *"})
+        assert r.status_code == 403, r.text
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=h_adm,
+                               json={"triggerCron": "*/10 * * * *"})
+        assert r.status_code == 200, r.text
+        assert r.json()["triggerCron"] == "*/10 * * * *"
+
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=h_adm, json={"visibility": "private"})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "platform_template_public"
+
+        r = await client.post("/api/integration/cards", headers=h_adm,
+                              json={"ids": [f"fn:{tid}"]})
+        assert r.json()["items"][0]["canManage"] is True
+
+        r = await client.delete(f"/api/integration/tasks/{tid}",
+                                headers=h_user)
+        assert r.status_code == 403, r.text
+        r = await client.delete(f"/api/integration/tasks/{tid}",
+                                headers=h_adm)
+        assert r.status_code == 200, r.text
+
+    async def test_admin_cannot_manage_personal_public_template(
+            self, client: AsyncClient):
+        """维护面只覆盖 __platform__ 持有的模板 —— 他人的个人公共模板
+        Admin+ 无改动权(对象级规则不因角色越属主)。"""
+        from tests.helpers import role_headers
+
+        h_own = await register_and_login(client, "c2_po")
+        r = await client.post("/api/scenarios", headers=h_own,
+                              json=make_draft("sc-c2p"))
+        assert r.status_code in (200, 201), r.text
+        async with db_module.SessionLocal() as s:
+            tpl = IntegrationTask(
+                name="c2-personal-tpl", owner_id=await _uid("c2_po"),
+                visibility="public", identity_mode="personal",
+                scenario_id="sc-c2p", trigger_cron="*/5 * * * *",
+                result_policy="latest", card_template="status")
+            s.add(tpl)
+            await s.commit()
+            tid = tpl.id
+        h_adm = await role_headers(client, "c2_pa", role="admin")
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=h_adm, json={"name": "x"})
+        assert r.status_code == 403, r.text
+
+
+# ── ④ 订阅执行:持有人 ≠ 场景属主 → 数据集敏感列不进执行 ──────────────
+async def test_subscriber_run_strips_dataset_sensitive_columns(
+        client: AsyncClient, plate_mock: PlateMock, monkeypatch):
+    """原件不剥(authz W6 修订)后,订阅执行由运行面兜底:选中行的敏感
+    列剥离后才合成;指纹仍按原行算(同一模板全订阅者同一指纹)。"""
+    from sqlalchemy import select as sa_select
+
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.services import run_prepare
+
+    plate_mock.fulls.update(FULLS)
+    h_own = await register_and_login(client, "c2_dso")
+    draft = make_draft("sc-c2ds", steps=ANCHORED_STEPS,
+                       plate={"jira": "1.0#1"}, system=["jira"])
+    draft["definition"]["config"]["vars"] = {"amount": 1, "password": ""}
+    r = await client.post("/api/scenarios", headers=h_own, json=draft)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/scenarios/sc-c2ds/data-sets", headers=h_own,
+                          json={"name": "ds", "rows": [
+                              {"amount": 3, "password": "pw-secret"}]})
+    ds_id = r.json()["datasetId"]
+    async with db_module.SessionLocal() as s:
+        sch = (await s.execute(sa_select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-c2ds"))).scalars().first()
+        sch.payload = {**(sch.payload or {}), "dataSetIds": [ds_id]}
+        await s.commit()
+    from tests.inbound_fixtures import publish_scenario
+
+    await publish_scenario("sc-c2ds")
+    async with db_module.SessionLocal() as s:
+        tpl = IntegrationTask(
+            name="c2-ds-tpl", owner_id=await _uid("c2_dso"),
+            visibility="public", identity_mode="personal",
+            scenario_id="sc-c2ds", target_system="jira",
+            trigger_cron="*/5 * * * *", result_policy="latest",
+            card_template="status")
+        s.add(tpl)
+        await s.commit()
+        tid = tpl.id
+
+    h_sub = await register_and_login(client, "c2_dss")
+    r = await _subscribe(client, h_sub, tid)
+    assert r.status_code in (200, 201), r.text
+    inst = await _inst(tid, await _uid("c2_dss"))
+
+    seen: list[dict] = []
+    orig = run_prepare.compose_scenario
+
+    def _spy(payload, row, *a, **kw):
+        seen.append(dict(row))
+        return orig(payload, row, *a, **kw)
+
+    monkeypatch.setattr(run_prepare, "compose_scenario", _spy)
+    await ir.run_instance(inst.id)
+    inst = await _inst(tid, await _uid("c2_dss"))
+    assert inst.paused_reason != "template_changed"   # 指纹未漂移
+    assert seen, "未走到合成"
+    assert seen[-1].get("amount") == 3
+    assert "password" not in seen[-1]

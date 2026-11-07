@@ -64,7 +64,7 @@ function login(admin: boolean) {
     role: admin ? 'super_admin' : 'user', is_admin: admin,
   } as never
   auth.capabilities = admin
-    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
 }
 
 async function mountPage() {

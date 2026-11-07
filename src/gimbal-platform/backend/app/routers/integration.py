@@ -1,10 +1,10 @@
 """外部系统集成 P1 路由:功能(模板)CRUD + 手动执行 + 批量卡片 +
-平台凭证(admin)+ 令牌注册面。
+令牌注册面。
 
 《GIMBAL-外部系统集成架构设计》§9 + webhook v4 §5.2:模板软删(评审
-E7);平台凭证 = 平台系统用户的 auth_sessions(复用加密与连通测试,
-只限 admin 管理);令牌注册的任务按 ``token_id`` 隔离(令牌只能管理
-本令牌注册的);JWT 管理者可解绑令牌(D26)。
+E7);令牌注册的任务按 ``token_id`` 隔离(令牌只能管理本令牌注册的);
+JWT 管理者可解绑令牌(D26)。平台模板(属主 ``__platform__``)由 Admin+
+维护(``_can_manage``);平台凭证面随 authz C1 退役。
 """
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser, principal_or_user
-from ..core.security import fernet_decrypt
 from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.integration_task import IntegrationTask
@@ -52,19 +51,24 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z"
 
 
-def _safe_decrypt(encrypted: str) -> str:
-    """FERNET_KEY 轮换后旧行不可解 → 掩码(行仍可见可重录),不炸列表。"""
-    try:
-        return fernet_decrypt(encrypted)
-    except ValueError:
-        return "(不可解密,请重录)"
+async def _platform_uid(db: AsyncSession) -> int | None:
+    """``__platform__`` 系统用户 id(平台模板的持有者;无则 None)。"""
+    return (await db.execute(
+        select(User.id).where(User.is_system == True)  # noqa: E712
+        .order_by(User.id).limit(1))).scalar()
 
 
-def _can_manage(user, tpl: IntegrationTask) -> bool:
-    """模板改动权(§5.2 改写):属主单判(authz C1:平台模式退役,
-    admin+ 维护面随 identity_mode=platform 分支删除;__platform__
-    持有的公共模板由 C2 另立维护口径)。"""
-    return user.id == tpl.owner_id
+def _can_manage(user, tpl: IntegrationTask,
+                platform_uid: int | None) -> bool:
+    """模板改动权(§5.2 改写):属主 ∨ 平台模板 × ops.write。
+
+    平台模板 = 属主为 ``__platform__`` 的公共模板(方案:「由
+    __platform__ 持有、Admin+ 维护」,不因创建人离开失去维护者;
+    0038 把原平台模板归到 __platform__ 名下)。"""
+    if user.id == tpl.owner_id:
+        return True
+    return (platform_uid is not None and tpl.owner_id == platform_uid
+            and has_capability(user, "ops.write"))
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
@@ -188,6 +192,7 @@ async def _tpl_out_full(
     token = await db.get(AccessToken, tpl.token_id) if tpl.token_id else None
     out = _tpl_out(tpl, inst, user, token=token,
                    auth_aliases=aliases, subscribed=subscribed)
+    out["canManage"] = _can_manage(user, tpl, await _platform_uid(db))
     if inst is not None:
         out["instance"] = _inst_out(inst, missing=missing)
     return out
@@ -438,9 +443,15 @@ async def patch_task(
                 "令牌路径不能解绑任务;解绑请由 JWT 管理者在集成详情操作",
                 403)
     else:
-        if not _can_manage(user, tpl):
-            raise _bad("forbidden", "只有模板管理者(平台模式 member+,"
-                         "个人模式属主或 admin)能修改", 403)
+        plat_uid = await _platform_uid(db)
+        if not _can_manage(user, tpl, plat_uid):
+            raise _bad("forbidden", "只有模板属主(平台模板:Admin+)"
+                         "能修改", 403)
+        if (body.visibility == "private" and plat_uid is not None
+                and tpl.owner_id == plat_uid):
+            raise _bad("platform_template_public",
+                       "平台模板恒为公共,不能转私有(不再需要可删除)",
+                       409)
         if "tokenId" in body.model_fields_set:
             # D26 解绑:token_id 置空、停回调、按 §3.6 实例暂停规则处置
             # (钩子不再拉起,之后手动启动;平台任务仍受 #5 与只读闸)。
@@ -541,7 +552,7 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
     if principal.is_token:
         if not _token_owns(principal, tpl):
             raise _bad("not_found", "功能不存在", 404)
-    elif not _can_manage(user, tpl):
+    elif not _can_manage(user, tpl, await _platform_uid(db)):
         raise _bad("forbidden", "只有模板管理者能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
@@ -924,6 +935,7 @@ class CardsIn(BaseModel):
 async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
     """工作台把布局里的 fn:<id> 一次发出;只回状态/时间/摘要,不回整行。"""
     out: list[dict] = []
+    plat_uid = await _platform_uid(db)
     for raw in body.ids:
         if not raw.startswith("fn:"):
             continue
@@ -971,7 +983,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "identityMode": tpl.identity_mode, "stale": stale,
-            "canManage": _can_manage(user, tpl),
+            "canManage": _can_manage(user, tpl, plat_uid),
             "authAliases": card_aliases,
             "missingCredentials": card_missing,
             "outputs": card_outputs,

@@ -89,6 +89,11 @@ async def resolve_graph_units(
                     f"unit {u['ref']!r}: rowIndex {ri} out of range for "
                     f"{ds_id} (0..{len(rows) - 1})")
             row_dict = rows[ri] or {}
+        if row_dict and scenario_store.is_foreign_viewer(
+                owner_id, scen.owner_id):
+            # authz W6:跑他人场景(引用/suite 成员)—— 数据集敏感列剥
+            # (原件不动;内置凭证由 materialize 处属主规则当空)
+            row_dict = scenario_store.strip_sensitive_columns([row_dict])[0]
         composed = compose_scenario(payload, row_dict)
 
         entries = u.get("injectionEntryIds") or []

@@ -15,8 +15,8 @@ import { useAuthStore } from '@/stores/auth'
 /** 与后端表 A(tests/authz_expected.yaml)对齐的期望矩阵(人工审定)。 */
 const CAPS_BY_ROLE: Record<string, string[]> = {
   user: [],
-  admin: ['ops.write', 'alias.write', 'platform.alerts'],
-  super_admin: ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'],
+  admin: ['ops.write', 'alias.write'],
+  super_admin: ['users.manage', 'ops.write', 'alias.write'],
 }
 
 function loginAs(role: keyof typeof CAPS_BY_ROLE = 'user', signedIn = true) {

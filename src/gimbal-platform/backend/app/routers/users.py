@@ -703,8 +703,8 @@ async def delete_user(
             disposed_tasks.append((tpl, "transfer"))
         elif disposal == "publicize":
             # 模板连同全部实例删除;通知受影响订阅者(authz C1:平台
-            # 模板转挂 __platform__ 的分支随平台模式退役 —— C2 若要
-            # 「保公共资产」再改本分支为转持有者)
+            # 模板转挂 __platform__ 的分支随平台模式退役;平台模板本就
+            # 归 __platform__ 持有,不经过个人账号处置)
             holders = (await db.execute(select(IntegrationTask.holder_id).where(
                 IntegrationTask.template_id == tpl.id,
                 IntegrationTask.holder_id.is_not(None),

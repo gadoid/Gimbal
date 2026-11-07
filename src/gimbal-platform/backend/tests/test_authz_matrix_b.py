@@ -9,7 +9,7 @@
    (行上无 visibility),只矩阵化 write 面。
 3. 端点验收(impl W3)—— admin/super_admin 操作他人私有对象一律
    404 且无通知;Admin+ 唯一越属主动词 = 下架公共对象(steward,
-   R6:无发布权);report_definition 的 maintain 面 = super_admin。
+   R6:无发布权;报告定义下架同口径)。
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ _EXPECTED = yaml.safe_load(
 # 谓词缩写(快照)→ 语义
 _ABBR = {
     "o": "owner", "pub": "public", "ref": "ref",
-    "ste": "steward", "mnt": "maintain",
+    "ste": "steward",
 }
 
 
@@ -56,8 +56,6 @@ def _expected_from_snapshot(preds, *, is_owner, is_public, role):
         if abbr == "pub" and is_public:
             return True
         if abbr == "ste" and is_public and "ops.write" in _CAPS[role]:
-            return True
-        if abbr == "mnt" and is_public and "users.manage" in _CAPS[role]:
             return True
     return False
 
@@ -373,7 +371,7 @@ class TestReportDefinitionMaintain:
     async def test_only_maintainer_edits_public_definition(
             self, client: AsyncClient):
         """编辑权 = 维护者:admin 与 super_admin 都不能改他人维护的
-        公共定义(W9-2 起删除 maintain 编辑面);维护者本人 200。"""
+        公共定义(W9-2 起编辑 = 维护者单判);维护者本人 200。"""
         from tests.helpers import role_headers
 
         h_owner = await role_headers(client, "mb_rdmt")
@@ -399,12 +397,12 @@ class TestReportDefinitionMaintain:
                              json={"name": "maintainer-ok"})
         assert r.status_code == 200, r.text
 
-        # 下架(maintain = users.manage ∧ 公共):super_admin 204;
-        # admin(无 users.manage)404
-        h = await role_headers(client, "mb_rdadm2", role="admin")
+        # 下架(steward = ops.write ∧ 公共,与场景/suite 同口径):
+        # 普通用户 404;admin 204
+        h = await role_headers(client, "mb_rdusr2", role="user")
         r = await client.delete(f"/api/report-definitions/{did}", headers=h)
         assert r.status_code == 404, r.text
-        h2 = await role_headers(client, "mb_rdsup2", role="super_admin")
+        h2 = await role_headers(client, "mb_rdadm2", role="admin")
         r = await client.delete(f"/api/report-definitions/{did}", headers=h2)
         assert r.status_code == 204, r.text
 
@@ -425,4 +423,4 @@ class TestReportDefinitionMaintain:
                              json={"name": "frozen"})
         assert r.status_code == 404, r.text     # 编辑冻结(写 = owner 单判)
         r = await client.delete(f"/api/report-definitions/{did}", headers=h2)
-        assert r.status_code == 204, r.text     # 下架面(maintain)
+        assert r.status_code == 204, r.text     # 下架面(steward)
