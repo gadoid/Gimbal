@@ -35,6 +35,7 @@ from ..core.config import settings
 from ..models.composer_scenario import ComposerScenario
 from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.integration_task import IntegrationTask
+from ..routers._ownership import roles_with as _authz_roles
 from ..models.user import User
 from .cron_expr import next_fire
 from .run_materialize import materialize_run_copy, referenced_services
@@ -1336,7 +1337,7 @@ async def _finish(
                     else:
                         uids = (await ndb.execute(
                             select(User.id).where(
-                                User.role.in_(("super_admin", "admin")),
+                                User.role.in_(_authz_roles("platform.alerts")),
                                 User.is_system == False)  # noqa: E712
                         )).scalars().all()
                 elif notify_check is not None:
@@ -1346,7 +1347,7 @@ async def _finish(
                             else tpl.owner_id]
                 else:
                     uids = (await ndb.execute(
-                        select(User.id).where(User.role.in_(("super_admin", "admin")),
+                        select(User.id).where(User.role.in_(_authz_roles("platform.alerts")),
                                               User.is_system == False)  # noqa: E712
                     )).scalars().all()
                 if auth_notify and pause_reason in (
@@ -1697,7 +1698,7 @@ async def revive_paused_instances(
                         # 平台模式:与暂停通知同受众(super_admin/admin),
                         # 多实例聚合一条,防批量复活刷屏
                         uids = (await ndb.execute(select(User.id).where(
-                            User.role.in_(("super_admin", "admin")),
+                            User.role.in_(_authz_roles("platform.alerts")),
                             User.is_system == False  # noqa: E712
                         ))).scalars().all()
                         names = "、".join(f"「{n}」" for n in platform_names)

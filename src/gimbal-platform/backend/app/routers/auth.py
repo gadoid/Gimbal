@@ -17,6 +17,7 @@ from ..core.security import (
     verify_password,
 )
 from ..models.user import User
+from ._ownership import roles_with as _roles_with
 from ..schemas.auth import (
     ChangePasswordIn,
     LoginIn,
@@ -103,7 +104,8 @@ async def register(
         # super_admin 在场,本单降级回 user。
         earlier = (await db.execute(
             select(func.count()).select_from(User).where(
-                User.role == "super_admin", User.id < user.id,
+                User.role.in_(_roles_with("users.manage")),
+                User.id < user.id,
                 User.is_system == False)  # noqa: E712
         )).scalar_one()
         if earlier:
@@ -257,4 +259,8 @@ async def refresh(
 # ── GET /me ──────────────────────────────────────────────────────
 @router.get("/me", response_model=MeOut)
 async def me(user: CurrentUser) -> MeOut:
-    return MeOut(user=_user_public(user))
+    # authz W2:capabilities 按表 A 求值(前端 can() 的依据)
+    from ._ownership import capabilities_of
+
+    return MeOut(user=_user_public(user),
+                 capabilities=capabilities_of(user.role))

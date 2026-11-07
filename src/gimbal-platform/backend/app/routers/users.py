@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import hash_password
+from ._ownership import roles_with
 from ..models.user import User
 from ..models.auth_session import AuthSession
 from ..models.constant_entry import ConstantEntry
@@ -76,7 +77,8 @@ async def _count_admins(db: AsyncSession) -> int:
     """末位管理员保护计数:按 ``super_admin`` 计(authz W1 更名后原
     admin 级 = super_admin;若仍按 admin 计,迁移后计数为 0、保护失效)。"""
     return (
-        await db.execute(select(func.count()).select_from(User).where(User.role == "super_admin"))
+        await db.execute(select(func.count()).select_from(User).where(
+            User.role.in_(roles_with("users.manage"))))
     ).scalar_one()
 
 

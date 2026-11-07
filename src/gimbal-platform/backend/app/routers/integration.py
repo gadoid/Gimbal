@@ -309,8 +309,8 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
     elif body.identityMode == "platform" \
             and user.role not in ("admin", "super_admin"):
         raise _bad(
-            "role_forbidden",
-            "创建平台模式任务需要 admin 及以上角色",
+            "capability_forbidden",
+            "创建平台模式任务需能力 ops.write",
             403)
     if body.callbackPath is not None \
             and not at_svc.valid_callback_path(body.callbackPath):

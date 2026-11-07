@@ -210,7 +210,7 @@ async def list_tokens(
     personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
     if all_view:
         if user.role != "super_admin":
-            raise _bad("role_forbidden", "查看全部令牌仅 admin", 403)
+            raise _bad("capability_forbidden", "查看全部令牌需能力 users.manage", 403)
         q = select(AccessToken)
         if kind in ("personal", "platform"):
             q = q.where(AccessToken.kind == kind)
@@ -233,7 +233,7 @@ async def list_tokens(
     else:
         if kind == at.PLATFORM_KIND:
             if user.role not in ("admin", "super_admin"):
-                raise _bad("role_forbidden", "平台令牌仅 admin+ 可见", 403)
+                raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
             q = select(AccessToken).where(AccessToken.kind == kind)
         elif kind == at.PERSONAL_KIND:
             q = select(AccessToken).where(
@@ -279,11 +279,11 @@ async def scope_candidates(
     凭证池,只列别名)。"""
     if kind == at.PLATFORM_KIND:
         if user.role not in ("admin", "super_admin"):
-            raise _bad("role_forbidden", "平台令牌仅 admin+ 可签发", 403)
+            raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
         holder = await integration_runner.get_platform_user_id()
     elif kind == at.PERSONAL_KIND:
         if user.role not in ("admin", "super_admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 admin+", 403)
+            raise _bad("capability_forbidden", "签发个人令牌需能力 ops.write", 403)
         holder = user.id
     else:
         raise _bad("kind_invalid", "kind ∈ personal | platform")
@@ -327,13 +327,13 @@ async def create_token(
         raise _bad("kind_invalid", "kind ∈ personal | platform")
     if body.kind == at.PLATFORM_KIND:
         if user.role not in ("admin", "super_admin"):
-            raise _bad("role_forbidden", "签发平台令牌需 admin+", 403)
+            raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
         owner_id = await integration_runner.get_platform_user_id()
         if owner_id is None:
             raise _bad("platform_user_missing", "平台系统用户缺失", 500)
     else:
         if user.role not in ("admin", "super_admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 admin+", 403)
+            raise _bad("capability_forbidden", "签发个人令牌需能力 ops.write", 403)
         owner_id = user.id
 
     callback_secret_plain: "str | None" = None

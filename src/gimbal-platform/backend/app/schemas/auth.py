@@ -126,3 +126,6 @@ class MeOut(BaseModel):
     """Response shape for GET /auth/me."""
 
     user: UserPublic
+    # authz W2:按表 A 求出的能力列表(_ownership.capabilities_of)。
+    # 前端 can() 的唯一依据(W8 迁移后取代 role/isAdmin 判断)。
+    capabilities: list[str] = Field(default_factory=list)

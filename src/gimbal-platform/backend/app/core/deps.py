@@ -106,20 +106,29 @@ async def principal_or_user(
     return Principal(user=user, identity_mode="personal")
 
 
-# ── 三级单角色(M2.5,权限方案 §1)─────────────────────────────────
+# ── 能力门(authz W2,表 A 驱动)───────────────────────────────────
 # role 不进 JWT:每请求查库,升降级即时生效(§1.3)。前端守卫只是 UX,
-# 这些依赖才是边界(§0.4)。
-def require_role(*roles: str):
-    """角色门工厂:允许的角色集合;不满足 → 403。"""
-    allowed = frozenset(roles)
+# 这些依赖才是边界(§0.4)。表 A(_ownership.CAPABILITIES)是唯一规则
+# 来源,错误契约统一 {code: capability_forbidden, capability}
+# (取代旧的 role_forbidden / admin_only 两种形状,方案 9.7)。
+
+
+def require_capability(capability: str):
+    """能力门工厂:表 A 判定;不满足 → 403 capability_forbidden。"""
+    # 延迟 import:routers 包 __init__ 会拉起各 router → 回引本模块,
+    # 顶部 import 会成环(_ownership 自身只依赖 models,无环)。
+    from ..routers._ownership import roles_with
+
+    allowed = roles_with(capability)
 
     async def _dep(user: CurrentUser) -> User:
         if user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
-                    "code": "role_forbidden",
-                    "message": f"requires role in {sorted(allowed)}",
+                    "code": "capability_forbidden",
+                    "capability": capability,
+                    "message": f"requires capability: {capability}",
                 },
             )
         return user
@@ -128,22 +137,26 @@ def require_role(*roles: str):
 
 
 async def require_admin(user: CurrentUser) -> User:
-    """Admin 门(require_role("super_admin") 的具名形态;既有 AdminUser
-    消费面不变 —— 原 admin 级在 authz W1 更名(2026-11-07)后即
-    super_admin,权限边界不变。"""
-    if user.role != "super_admin":
+    """users.manage 能力门的具名形态(表 A:super_admin —— 原 admin 级,
+    W1 更名后)。既有 AdminUser 消费面不变。"""
+    from ..routers._ownership import roles_with
+
+    if user.role not in roles_with("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: this route requires an administrator",
+            detail={
+                "code": "capability_forbidden",
+                "capability": "users.manage",
+                "message": "requires capability: users.manage",
+            },
         )
     return user
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
-# 技术运营权(适配/别名/默认值/信号):新命名下原 member 级 = admin、
-# 原 admin 级 = super_admin(authz W1 2026-11-07 更名,权限边界不变;
-# 更早 2026-09-29 曾把原 operator 级命名为 member)。
-MemberUser = Annotated[User, Depends(require_role("admin", "super_admin"))]
+# 技术运营面(原 member+,W1 更名后 = admin+)。名字保留:9 个 router 的
+# import 面不动,判定已由表 A 驱动;W8 后端清理时可整体更名。
+MemberUser = Annotated[User, Depends(require_capability("ops.write"))]
 
 
 async def get_owned_execution(

@@ -803,7 +803,7 @@ class TestPlatformPremise:
             "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
             "triggerCron": "0 2 * * *"})
         assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "role_forbidden"
+        assert r.json()["detail"]["code"] == "capability_forbidden"
         h_member = await _register_role(client, "pp3", "admin")
         r = await client.post("/api/integration/tasks", headers=h_member, json={
             "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",

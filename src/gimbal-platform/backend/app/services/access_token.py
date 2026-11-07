@@ -569,10 +569,11 @@ async def fanout_members(db: AsyncSession, title: str, body: str,
     operator 的缺陷 —— 09-29 更名后平台任务通知只到 admin。
     authz W1 更名后口径 = super_admin + admin,两轮更名的同款坑不再犯)。"""
     from ..services.notifications import create_notification
+    from ..routers._ownership import roles_with
 
     uids = (await db.execute(
         select(User.id).where(
-            User.role.in_(("super_admin", "admin")),
+            User.role.in_(roles_with("platform.alerts")),
             User.is_system == False)  # noqa: E712
     )).scalars().all()
     for uid in uids:

@@ -18,6 +18,46 @@ from fastapi import HTTPException
 from ..models.composer_scenario import ComposerScenario
 
 
+# ── 表 A(authz W2,方案 §2.3):能力 × 角色 —— 唯一规则来源 ──────────
+# 角色权威取值 user | admin | super_admin(W1 更名后)。三处消费:
+#   * ``core.deps.require_capability``(能力门,错误 capability_forbidden)
+#   * ``roles_with(cap)``(SQL 人群选择:告警扇出/通知)
+#   * ``/auth/me`` 的 capabilities 下发(``capabilities_of``)
+# v1 收编三个门面;W3-W9 随表 B 各模块把行内比较逐批收编进来,
+# 能力集只增不改既有语义(收编一处、grep 守卫白名单缩一行)。
+# 表 A 变更必须同步 tests/authz_expected.yaml(人工审定快照,R7)。
+
+CAPABILITIES: dict[str, frozenset[str]] = {
+    # 用户管理(开号/角色/停用/删除/重置密码)—— 原 admin 级专属
+    "users.manage": frozenset({"super_admin"}),
+    # 技术运营(适配/别名/环境/导入/令牌签发/公告面)—— 原 member+ 级
+    "ops.write": frozenset({"admin", "super_admin"}),
+    # 平台身份事件告警受众 —— 与 ops.write 同口径(原 member+ 扇出)
+    "platform.alerts": frozenset({"admin", "super_admin"}),
+}
+
+# 权威顺序(低 → 高);roles_with 按此序输出,SQL in_ 与展示都稳定。
+ROLES: tuple[str, ...] = ("user", "admin", "super_admin")
+
+
+def capabilities_of(role: str) -> list[str]:
+    """角色 → 能力列表(按 CAPABILITIES 定义序;/auth/me 下发口径)。"""
+    return [cap for cap, allowed in CAPABILITIES.items() if role in allowed]
+
+
+def roles_with(cap: str) -> tuple[str, ...]:
+    """能力 → 角色元组(SQL ``in_`` 人群选择)。
+
+    09-29 与 W1 两轮角色更名都发生过「扇出 in_ 写死旧角色、漏发新
+    级别」的同款事故;人群选择改由表 A 驱动,更名只动表。
+    (W1 的四个扇出点与首注册/末位保护已收编为表驱动。)
+    """
+    allowed = CAPABILITIES.get(cap)
+    if allowed is None:
+        raise KeyError(f"unknown capability: {cap!r}(表 A 未登记)")
+    return tuple(r for r in ROLES if r in allowed)
+
+
 def _user_matches(user: Any, owner_id: int) -> bool:
     """Canonical identity match for the composer tables."""
     return user.id == owner_id
