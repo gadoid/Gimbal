@@ -70,99 +70,127 @@ def has_capability(user: Any, cap: str) -> bool:
     return role in CAPABILITIES.get(cap, ())
 
 
-# ── 表 B(authz W3,方案 §2.3):对象 × 动词 —— 对象级规则唯一来源 ──
-# 单元格 = 谓词名集合(命中其一即放行),谓词定义紧跟表后:
-#   owner     主体是对象属主(user.id == obj.owner_id)
-#   public    对象处于公共态 —— visibility=="public"(W9-2 起
-#             report_definition 同口径:公共定义带维护者 owner)
-#   ref       主体持有该对象的引用分享(§7.6;需查库,只进 async can)
-#   steward   ops.write 能力(表 A)∧ 对象公共 —— Admin+ 的公共治理
-#             (下架公共对象,R6:admin 对他人对象没有发布权,对私有
-#             对象没有任何动词)
-# 角色不在表 B 出现:角色差由表 A 表达;对象级判定对同谓词主体同权。
-# W3 收窄后 admin 与普通用户在对象级唯一的差别就是 steward 这个
-# 「公共态 × 能力」谓词(另:平台模板由 ops.write 维护,见
-# integration._can_manage)。表 B 变更必须同步 tests/authz_expected.yaml
-# 的 table_b 段(人工审定快照,R7)。
+# ── 表 B(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 ──────────────
+# 单元格 = 谓词名集合(命中其一即放行)。谓词按**区**取效(S1 三区:
+# project_id 空 = 私有区 / 普通项目 / 公共项目),同格内各区谓词互斥:
+#   owner     私有区属主(user.id == obj.owner_id ∧ project_id IS NULL
+#             —— D1:project_id 非空时属主身份不给任何权限)
+#   ref       主体持有该对象的引用分享(§7.6;需查库,只进 async can;
+#             仅私有区对象,S7 退役)
+#   member    对象所属普通项目的成员(任意角色;公共项目不落成员行)
+#   padmin    对象所属普通项目的项目管理员
+#   maintainer 公共项目对象的 owner_id(S1-b 例外:公共项目写权跟
+#             维护者走 —— owner_id 在公共项目的语义 = 维护者)
+#   public_reader 对象在公共项目(全员可读)
+#   public_admin  对象在公共项目 ∧ ops.write(Admin+ 的公共治理,
+#             取代 W3 的 steward:下架公共对象,R6 不变)
+# 数据集/运行方案行上没有 project_id —— 读随父场景(§7.4 引用闭包,
+# 实际判定走 can_read_scenario_row / 父场景 can()),写属主单判。
+# 角色不在表 B 出现:角色差由表 A 表达。表 B 变更必须同步
+# tests/authz_expected.yaml 的 table_b 段(人工审定快照,R7)。
+# publish 的 maintainer:影子期已公共对象再「发布」是空操作,放行
+# 维护者避免无谓 403;S1.3 起该格语义 = 重新发布(维护者更新公共副本)。
 
 TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     "scenario": {
-        "read":      frozenset({"owner", "public", "ref"}),
-        "copy":      frozenset({"owner", "public", "ref"}),
-        "run":       frozenset({"owner", "ref"}),
-        "write":     frozenset({"owner"}),
-        "delete":    frozenset({"owner"}),
-        # 发布(私有→公共的可见性扩张)是属主动作;admin 对他人对象
-        # 无发布权(R6)—— 已公共对象再「发布」本是空操作,不损失什么
-        "publish":   frozenset({"owner"}),
-        # 下架:Admin+ 仅对**已是公共**的对象(steward)
-        "unpublish": frozenset({"owner", "steward"}),
+        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
+        "copy":      frozenset({"owner", "ref", "member", "public_reader"}),
+        "run":       frozenset({"owner", "ref", "member"}),  # 公共不可执行
+        "write":     frozenset({"owner", "member", "maintainer"}),
+        "delete":    frozenset({"owner", "member", "maintainer",
+                                "public_admin"}),
+        "publish":   frozenset({"owner", "padmin", "maintainer"}),
+        # 下架 = 对公共副本(维护者撤下 / Admin+ 治理);私有区无下架
+        "unpublish": frozenset({"maintainer", "public_admin"}),
     },
     "suite": {
-        "read":      frozenset({"owner", "public", "ref"}),
-        "run":       frozenset({"owner", "ref"}),
-        "write":     frozenset({"owner"}),
-        "delete":    frozenset({"owner"}),
-        "publish":   frozenset({"owner"}),
-        "unpublish": frozenset({"owner", "steward"}),
+        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
+        "run":       frozenset({"owner", "ref", "member"}),
+        "write":     frozenset({"owner", "member", "maintainer"}),
+        "delete":    frozenset({"owner", "member", "maintainer",
+                                "public_admin"}),
+        "publish":   frozenset({"owner", "padmin", "maintainer"}),
+        "unpublish": frozenset({"maintainer", "public_admin"}),
     },
-    # 数据集/运行方案没有自己的可见性 —— 读随父场景(§7.4 引用闭包),
+    # 数据集/运行方案:读/执行随父场景(§7.4 引用闭包,can_read_
+    # scenario_row 承担,这里的 member/public_reader 只是口径登记),
     # 写属主单判
     "data_set": {
-        "read":      frozenset({"owner", "public", "ref"}),
+        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
         "write":     frozenset({"owner"}),
     },
     "run_scheme": {
-        "read":      frozenset({"owner", "public", "ref"}),
+        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
         "write":     frozenset({"owner"}),
     },
-    # authz W9-2:公共定义有维护者 —— 编辑(owner 单判)只有维护者;
-    # delete(下架)再给 steward(Admin+ 治理面,与场景/suite 下架同口径)
+    # W9-2 语义换轴:编辑 = 私有区属主 ∨ 公共项目维护者;下架(delete)
+    # = 维护者 ∨ Admin+(public_admin)
     "report_definition": {
-        "read":      frozenset({"owner", "public"}),
-        "write":     frozenset({"owner"}),
-        "delete":    frozenset({"owner", "steward"}),
+        "read":      frozenset({"owner", "public_reader"}),
+        "write":     frozenset({"owner", "maintainer"}),
+        "delete":    frozenset({"owner", "maintainer", "public_admin"}),
     },
 }
 
 
 def _pred_owner(user: Any, obj: Any) -> bool:
+    """owner 谓词(D1):私有区属主 —— project_id 非空时属主身份不
+    给任何权限(公共项目的维护者例外走 maintainer 谓词,S1-b)。"""
+    if getattr(obj, "project_id", None) is not None:
+        return False
     return _user_matches(user, obj.owner_id)
 
 
-def obj_is_public(obj_type: str, obj: Any) -> bool:
-    """public 谓词:对象是否处于公共态(visibility 列;authz W9-2 起
-    report_definition 同口径 —— 公共定义带维护者,不再以无主为公共)。"""
-    return (getattr(obj, "visibility", None) or "private") == "public"
+def can_pure(
+    user: Any, obj_type: str, verb: str, obj: Any, *,
+    public_project_id: int | None = None,
+    project_roles: dict[int, str] | None = None,
+) -> bool:
+    """表 B 求值(可注入上下文的纯函数版)。
 
-
-def can_pure(user: Any, obj_type: str, verb: str, obj: Any) -> bool:
-    """表 B 求值(纯谓词版):owner/public/steward,不查库。
-
-    ``ref`` 谓词恒为 False —— 需要引用闭包的判定用 async :func:`can`。
-    未登记的 (对象, 动词) 是编码错误,即刻 KeyError(与 roles_with
-    同口径,而非静默拒绝)。
+    ``public_project_id`` / ``project_roles``(主体在普通项目的角色表)
+    由调用方注入:不传则 public_reader/maintainer/public_admin/member/
+    padmin 谓词按「无上下文」恒 False(影子期这些对象只经 :func:`can`
+    判定)。``ref`` 谓词恒 False —— 需要引用闭包的判定用 async
+    :func:`can`。未登记的 (对象, 动词) 是编码错误,即刻 KeyError
+    (与 roles_with 同口径,而非静默拒绝)。
     """
     preds = TABLE_B.get(obj_type, {}).get(verb)
     if preds is None:
         raise KeyError(f"table B 未登记: {obj_type}.{verb}")
     if "owner" in preds and _pred_owner(user, obj):
         return True
-    if "public" in preds and obj_is_public(obj_type, obj):
-        return True
-    if "steward" in preds and obj_is_public(obj_type, obj) \
-            and has_capability(user, "ops.write"):
-        return True
+    pid = getattr(obj, "project_id", None)
+    in_public = (public_project_id is not None and pid == public_project_id)
+    if in_public:
+        if "public_reader" in preds:
+            return True
+        if "maintainer" in preds and _user_matches(user, obj.owner_id):
+            return True
+        if "public_admin" in preds and has_capability(user, "ops.write"):
+            return True
+    elif pid is not None and project_roles:
+        role_here = project_roles.get(pid)
+        if role_here is not None:
+            if "member" in preds:
+                return True
+            if "padmin" in preds and role_here == "admin":
+                return True
     return False
 
 
 async def can(db, user: Any, obj_type: str, verb: str, obj: Any) -> bool:
-    """表 B 求值(完整版,含 ref 谓词)—— 对象级判定唯一入口。
+    """表 B 求值(完整版,含 ref 与项目谓词)—— 对象级判定唯一入口。
 
-    obj 需带 ``owner_id``;suite 另带 ``id``、场景系对象另带
-    ``scenario_id``(ref 谓词按对象类型解析,见 ``_pred_ref``)。
+    obj 需带 ``owner_id`` 与 ``project_id``;suite 另带 ``id``、场景系
+    对象另带 ``scenario_id``(ref 谓词按对象类型解析,见 ``_pred_ref``)。
+    公共项目 id 与主体项目角色一次查询、会话内缓存(services.zone)。
     """
-    if can_pure(user, obj_type, verb, obj):
+    from ..services.zone import my_project_roles, public_project_id
+
+    if can_pure(user, obj_type, verb, obj,
+                public_project_id=await public_project_id(db),
+                project_roles=await my_project_roles(db, user.id)):
         return True
     preds = TABLE_B[obj_type][verb]
     if "ref" in preds and await _pred_ref(db, obj_type, obj, user.id):
@@ -184,30 +212,16 @@ def _user_matches(user: Any, owner_id: int) -> bool:
 
 
 def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
-    """403 unless ``user`` is the row owner —— 表 B 各 write/delete
-    动词的属主单判投影(authz W3:admin 越属主旁路已删,私有区一律
-    归属主;发布/下架的 steward 动词不经此函数,走 ``can_pure``)。
+    """403 unless ``user`` is the row owner —— 表 B 私有区各 write/
+    delete 动词的属主单判投影(authz W3:admin 越属主旁路已删;对象
+    在项目/公共项目时属主身份不给权限 D1,项目动词不经此函数,走
+    ``can()``)。
 
     ``detail`` is passed through verbatim to the HTTPException so each
     router keeps its existing error contract.
     """
     if not _user_matches(user, owner_id):
         raise HTTPException(status_code=403, detail=detail)
-
-
-def can_read_scenario(
-    user: Any,
-    *,
-    owner_id: int,
-    visibility: str = "private",
-) -> bool:
-    """读侧纯判(表 B scenario.read):public 所有登录用户可读;
-    private 仅属主可见。admin 不再有旁路(W3);引用分支由
-    ``can_read_scenario_row`` 承担。
-    """
-    if visibility == "public":
-        return True
-    return _user_matches(user, owner_id)
 
 
 # ── 引用分享(权限域二期 P2,§7.6)────────────────────────────────
@@ -271,24 +285,26 @@ async def has_suite_ref(db, user_id: int, suite_id: int) -> bool:
 
 async def can_run_scenario(
     db, user: Any, *, scenario_id: str, owner_id: int | None,
+    project_id: int | None = None,
 ) -> bool:
-    """执行判定(表 B scenario.run):属主 ∨ 引用(public 不开执行,
-    公共资源执行仍需先 fork —— 不变量 7;W3 起 admin 同样无旁路)。
-    owner_id=None(公共化无主)时仅历史引用可跑。"""
-    if owner_id is not None and _user_matches(user, owner_id):
-        return True
-    return await has_scenario_ref(db, user.id, scenario_id)
+    """执行判定(表 B scenario.run = owner ∨ ref ∨ member):私有区
+    属主 ∨ 引用;普通项目成员可跑;公共项目不开执行(公共资源跑需
+    先 fork,不变量 7;W3 起 admin 同样无旁路)。owner 谓词带区守卫
+    (D1:project_id 非空时属主身份不给权限);owner_id=None(孤儿)
+    时仅引用 / 项目分支可过。"""
+    if project_id is None:
+        if owner_id is not None and _user_matches(user, owner_id):
+            return True
+        return await has_scenario_ref(db, user.id, scenario_id)
+    from ..services.zone import my_project_roles
+    return project_id in await my_project_roles(db, user.id)
 
 
 async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
-    """读判定(对象级,含引用):行对象须有 scenario_id/owner_id/
-    visibility。纯判(owner/public)先行,引用分支只在前者不通过
-    时查库。"""
-    if can_read_scenario(
-        user, owner_id=row.owner_id or -1,
-        visibility=row.visibility or "private"):
-        return True
-    return await has_scenario_ref(db, user.id, row.scenario_id)
+    """读判定(对象级,含引用与项目谓词):行对象须有 scenario_id/
+    owner_id/project_id。S1.1 起统一走 :func:`can`(表 B scenario.read
+    = owner ∨ ref ∨ member ∨ public_reader),不再各写一支。"""
+    return await can(db, user, "scenario", "read", row)
 
 
 # (W3 收编后 suite 读写判定统一走 can()/can_pure() 查表 B;曾有的

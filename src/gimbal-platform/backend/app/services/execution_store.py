@@ -28,21 +28,29 @@ async def scenario_display_map(
     由调用方回落自己行上的 scenario_name 快照(快照是执行者自己的
     记录,照常显示)。
     """
-    from ..routers._ownership import can_read_scenario
-
     ids = sorted({s for s in scenario_ids if s})
     if not ids:
         return {}
     rows = (await db.execute(
         select(ComposerScenario.scenario_id, ComposerScenario.name,
-               ComposerScenario.owner_id, ComposerScenario.visibility)
+               ComposerScenario.owner_id, ComposerScenario.project_id)
         .where(ComposerScenario.scenario_id.in_(ids))
     )).all()
+    # S1.1:读面谓词单点 can_pure(表 B scenario.read + 项目上下文;
+    # ref 读者不进执行展示面 —— 引用是编排读面,执行台账跟发起人)
+    from types import SimpleNamespace
+
+    from ..routers._ownership import can_pure
+    from .zone import my_project_roles, public_project_id
+    ctx = dict(public_project_id=await public_project_id(db),
+               project_roles=await my_project_roles(db, user.id))
     return {
-        sid: (str(name or "") if can_read_scenario(
-                  user, owner_id=owner_id, visibility=vis or "private")
+        sid: (str(name or "") if can_pure(
+                  user, "scenario", "read",
+                  SimpleNamespace(owner_id=owner_id, project_id=pid),
+                  **ctx)
               else "", True)
-        for sid, name, owner_id, vis in rows
+        for sid, name, owner_id, pid in rows
     }
 
 

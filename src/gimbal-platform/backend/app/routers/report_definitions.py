@@ -126,8 +126,13 @@ async def create_definition(
         name=body.name, description=body.description,
         definition=_validated_definition(body),
         owner_id=user.id,
-        visibility="public" if body.public else "private",
     )
+    # S1.1 影子写:公共态 = visibility + project_id 同步(services.zone)
+    from ..services.zone import apply_private, apply_public, public_project_id
+    if body.public:
+        apply_public(row, await public_project_id(db))
+    else:
+        apply_private(row)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -135,16 +140,15 @@ async def create_definition(
 
 
 async def _get_owned(db: AsyncSession, user, did: int) -> ReportDefinitionRow:
-    # 表 B report_definition.read:owner ∨ public(公共行全员可读;
-    # 修改 = 维护者单判 / 删除的 steward 面 = ops.write ∧ 公共,在写端点另判)。
-    # authz W3:角色字面量收编进表 B,super_admin 中间分支本就冗余删除。
-    from ._ownership import can_pure
+    # 表 B report_definition.read:owner ∨ public_reader(S1.1 项目维度
+    # 谓词,async can;修改 = 维护者 / 删除的 public_admin 面在写端点另判)。
+    from ._ownership import can
 
     row = await db.get(ReportDefinitionRow, did)
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": f"definition not found: {did}"})
-    if can_pure(user, "report_definition", "read", row):
+    if await can(db, user, "report_definition", "read", row):
         return row
     raise HTTPException(404, detail={"code": "not_found",
                                      "message": f"definition not found: {did}"})
@@ -167,11 +171,11 @@ async def update_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 表 B report_definition.write(authz W9-2):维护者单判 —— admin
-    # 不再可编辑他人维护的公共定义(公共 ≠ 无主)。
-    from ._ownership import can_pure
+    # 表 B report_definition.write(S1.1):私有区属主 ∨ 公共项目维护者
+    # (admin 不再可编辑他人维护的公共定义,公共 ≠ 无主)。
+    from ._ownership import can
 
-    if not can_pure(user, "report_definition", "write", row):
+    if not await can(db, user, "report_definition", "write", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     if body.name is not None:
@@ -180,9 +184,15 @@ async def update_definition(
         row.description = body.description
     if body.definition is not None:
         row.definition = body.definition
-    # authz W9-2:公共/私有切换不动 owner(维护者恒定;编辑权随 owner)
+    # 公共/私有切换不动 owner(维护者恒定;编辑权随 owner);影子写
+    # visibility ⇔ project_id 同步翻转(S1.1)
     if body.public is not None:
-        row.visibility = "public" if body.public else "private"
+        from ..services.zone import apply_private, apply_public, \
+            public_project_id
+        if body.public:
+            apply_public(row, await public_project_id(db))
+        else:
+            apply_private(row)
     await db.commit()
     await db.refresh(row)
     return _to_out(row).model_dump()
@@ -196,11 +206,11 @@ async def delete_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 表 B report_definition.delete:owner ∨ steward(Admin+ 下架公共定义,
-    # 与场景/suite 下架同口径)
-    from ._ownership import can_pure
+    # 表 B report_definition.delete(S1.1):owner ∨ maintainer ∨
+    # public_admin(Admin+ 下架公共定义,与场景/suite 下架同口径)
+    from ._ownership import can
 
-    if not can_pure(user, "report_definition", "delete", row):
+    if not await can(db, user, "report_definition", "delete", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     await db.delete(row)

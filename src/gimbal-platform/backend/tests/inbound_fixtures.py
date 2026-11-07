@@ -46,12 +46,18 @@ async def seed_alias(name: str = "agent-sys", **over) -> None:
 
 
 async def publish_scenario(scenario_id: str) -> None:
-    """场景可见性是列(发布走独立端点),测试里直改。"""
+    """场景可见性是列(发布走独立端点),测试里直改。
+
+    S1.1 影子不变式:public ⇔ project_id=公共项目 —— 直改必须成对
+    (services.zone.apply_public),否则新读面(表 B/visibility_clause)
+    把它当私有。"""
     from app.models.composer_scenario import ComposerScenario
+    from app.services.zone import public_project_id
     async with db_module.SessionLocal() as s:
         row = (await s.execute(sa.select(ComposerScenario).where(
             ComposerScenario.scenario_id == scenario_id))).scalar_one()
         row.visibility = "public"
+        row.project_id = await public_project_id(s)
         await s.commit()
 
 

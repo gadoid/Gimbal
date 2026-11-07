@@ -259,10 +259,24 @@ async def refresh(
 
 # ── GET /me ──────────────────────────────────────────────────────
 @router.get("/me", response_model=MeOut)
-async def me(user: CurrentUser) -> MeOut:
-    # authz W2:capabilities 按表 A 求值(前端 can() 的依据)
-    from ._ownership import capabilities_of
+async def me(user: CurrentUser,
+             db: Annotated[AsyncSession, Depends(get_db)]) -> MeOut:
+    # authz W2:capabilities 按表 A 求值(前端 can() 的依据);
+    # S1.1:projects = 我所在的普通项目(切换器数据源;公共项目不落
+    # 成员行,不在此列 —— 全员可读是表 B 派生,不需要成员关系)
+    from sqlalchemy import select
 
+    from ._ownership import capabilities_of
+    from ..models.project import Project, ProjectMember
+
+    rows = (await db.execute(
+        select(Project.id, Project.name, Project.kind, ProjectMember.role)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .where(ProjectMember.user_id == user.id)
+        .order_by(Project.id))).all()
     return MeOut(user=_user_public(user),
                  capabilities=capabilities_of(user.role),
-                 must_change_password=bool(user.must_change_password))
+                 must_change_password=bool(user.must_change_password),
+                 projects=[{"id": pid, "name": name, "kind": kind,
+                            "role": role}
+                           for pid, name, kind, role in rows])

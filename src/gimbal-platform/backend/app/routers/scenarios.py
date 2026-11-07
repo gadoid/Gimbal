@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ._ownership import can_read_scenario, ensure_owner
+from ._ownership import ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
@@ -87,34 +87,22 @@ async def _require_visibility_actor(
     db, user: CurrentUser, row: ComposerScenario, *, verb: str,
 ) -> None:
     """发布/下架闸(表 B scenario.{publish,unpublish},authz W3):
-    owner 全可;Admin+ 仅对**已是公共**的对象有下架权(steward,
-    R6 —— admin 对他人对象没有发布权)。完全不可见(含 ref 不达)
+    私有区 owner / 公共项目维护者(maintainer)可发布与下架;Admin+
+    仅对公共项目对象有下架权(public_admin,R6 —— admin 对他人对象
+    没有发布权)。完全不可见(含 ref 不达)
     → 404(不泄露存在性);可读但无权 → 403。"""
-    from ._ownership import can_pure, can_read_scenario_row
+    from ._ownership import can, can_read_scenario_row
 
     if not await can_read_scenario_row(db, user, row):
         raise HTTPException(
             status_code=404,
             detail=f"scenario_not_found: {row.scenario_id}")
-    if not can_pure(user, "scenario", verb, row):
+    # S1.1:谓词含项目维度(padmin / maintainer),走 async can
+    if not await can(db, user, "scenario", verb, row):
         raise HTTPException(
             status_code=403,
             detail="not_owner: only the owner (or an operator, for "
                    "already-public scenarios) can change visibility",
-        )
-
-
-def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
-    """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。
-    纯判(属主/public;authz W3 起 admin 无旁路);引用分支由 ``_require_reader_async``
-    承担(P2 §7.6:引用者可读定义)。"""
-    if not can_read_scenario(
-        user,
-        owner_id=row.owner_id or -1,
-        visibility=row.visibility or "private",
-    ):
-        raise HTTPException(
-            status_code=404, detail=f"scenario_not_found: {row.scenario_id}"
         )
 
 
@@ -432,49 +420,7 @@ async def scenario_facets(
             for dim, pairs in out.items()
         }
 
-    # SQLite 兜底:可见集全量行上 Python 聚合(本地量小)
-    rows = await scenario_store.list_rows(db)
-    visible = [
-        r for r in rows
-        if can_read_scenario(
-            user, owner_id=r.owner_id, visibility=r.visibility or "private")
-    ]
-    if scope == "mine":
-        visible = [r for r in visible if r.owner_id == user.id]
-    if visibility:
-        visible = [r for r in visible
-                   if (r.visibility or "private") == visibility]
-    if q:
-        ql = q.lower()
-
-        def _hit(r):
-            from ..services.scenario_store import _meta_from_row
-            m = _meta_from_row(r)
-            hay = [r.scenario_id or "", m.name or "", m.module or "",
-                   *(getattr(r, "system", None) or []),
-                   m.description or "", *(m.tags or [])]
-            return any(ql in (h or "").lower() for h in hay)
-
-        visible = [r for r in visible if _hit(r)]
-
-    from ..services.scenario_store import _meta_from_row
-    from collections import Counter
-    mod, sys_, tag, auth, prio = (Counter() for _ in range(5))
-    for r in visible:
-        m = _meta_from_row(r)
-        mod[m.module or ""] += 1
-        sys_.update(m.system or [])
-        tag.update(m.tags or [])
-        auth[m.author or ""] += 1
-        prio[m.priority] += 1
-    return {
-        "modules": [{"value": k, "count": n} for k, n in mod.most_common()],
-        "systems": [{"value": k, "count": n} for k, n in sys_.most_common()],
-        "tags": [{"value": k, "count": n} for k, n in tag.most_common()],
-        "authors": [{"value": k, "count": n} for k, n in auth.most_common()],
-        "priorities": [{"value": k, "count": n} for k, n in prio.most_common()],
-    }
-
+    # (SQLite 兜底聚合分支已随 SQLite 退役删除:PG 分支无条件 return)
 
 # ── 3) GET / (list) ────────────────────────────────────────────────
 @router.get("", response_model=ScenarioListOut | ScenarioOptionsOut)
@@ -575,13 +521,18 @@ async def list_scenarios(
         db, q=q, system=system, module=module, priority=priority,
         tag=tag, author=author, updated_within=updated_within,
     )
-    # P2 引用分支(§7.6 SQLite 兜底,与 visibility_clause 同口径):
-    # 纯判先行,不通过者用一次引用集合复核(团队规模有界,取集合可接受)。
+    # P2 引用分支(§7.6,与 visibility_clause 同口径):纯判先行
+    #(表 B scenario.read + 项目上下文,谓词单点 can_pure),不通过者
+    # 用一次引用集合复核(团队规模有界,取集合可接受)。
+    # 本分支仅 starred=false(排除收藏)走 Python 侧,其余走 SQL 分支。
+    from ._ownership import can_pure
+    from ..services.zone import my_project_roles, public_project_id
+    _ctx = dict(
+        public_project_id=await public_project_id(db),
+        project_roles=await my_project_roles(db, user.id))
     _pure_readable = [
         r for r in rows
-        if can_read_scenario(
-            user, owner_id=r.owner_id or -1,
-            visibility=r.visibility or "private")
+        if can_pure(user, "scenario", "read", r, **_ctx)
     ]
     _maybe = [r for r in rows if r not in _pure_readable]
     if _maybe:
@@ -677,7 +628,8 @@ async def _record_admin_visibility_audit(
 ) -> None:
     """Admin+ 越属主的可见性变更入审计(属主自发布/自下架不记 —— 与
     suite.admin_unpublish 同口径,只记越属主那一半)。W3 后越属主
-    只剩 steward 下架公共对象一条路,入口闸已保证主体是 Admin+。"""
+    只剩 public_admin 下架公共项目对象一条路,入口闸已保证主体是
+    Admin+。"""
     if user.id == row.owner_id:
         return
     from ..services import audit as audit_svc
@@ -720,9 +672,9 @@ async def publish_scenario(
 async def unpublish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
-    """下架:visibility → private,仅 owner 可读。表 B
-    scenario.unpublish = owner ∨ steward(Admin+ 仅对已是公共的对象,
-    W3 收口:私有对象的下架权归属主)。"""
+    """下架:公共副本退出公共项目(影子期 = visibility → private +
+    project_id → NULL)。表 B scenario.unpublish = maintainer ∨
+    public_admin(S1.1;维护者撤下自己的公共内容,Admin+ 治理下架)。"""
     row = await _load_row(db, scenario_id)
     await _require_visibility_actor(db, user, row, verb="unpublish")
     was_public = (row.visibility or "private") == "public"
@@ -753,9 +705,10 @@ async def unpublish_scenario(
         .where(_SM.scenario_id == scenario_id,
                _Suite.visibility == "public"))).all()
     if _hit:
+        # 影子写:visibility 与 project_id 同步翻转(services.zone)
         await db.execute(_upd(_Suite).where(
             _Suite.id.in_([h.id for h in _hit]))
-            .values(visibility="private"))
+            .values(visibility="private", project_id=None))
         # 级联 UPDATE 须显式提交(属主自下架不走通知分支的隐式 commit;
         # set_visibility 内部已提交的是场景行,不含本条 suite UPDATE)
         await db.commit()

@@ -353,7 +353,7 @@ async def post_run(
         from ._ownership import can_run_scenario
         if not await can_run_scenario(
                 db, user, scenario_id=scen.scenario_id,
-                owner_id=scen.owner_id):
+                owner_id=scen.owner_id, project_id=scen.project_id):
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -382,7 +382,8 @@ async def post_run(
                     )
                 if not await can_run_scenario(
                         db, user, scenario_id=unit_scen.scenario_id,
-                        owner_id=unit_scen.owner_id):
+                        owner_id=unit_scen.owner_id,
+                        project_id=unit_scen.project_id):
                     raise HTTPException(
                         status_code=403,
                         detail={

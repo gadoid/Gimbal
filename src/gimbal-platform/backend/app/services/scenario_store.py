@@ -419,7 +419,13 @@ async def set_visibility(
     if visibility not in ("public", "private"):
         raise ValueError(f"bad_visibility: {visibility}")
     row = await _get_row(db, scenario_id)
-    row.visibility = visibility
+    # S1.1 影子写:visibility ⇔ project_id 同步翻转(公共项目 id 一查
+    # 会话缓存);S1.9 删列后本函数收敛为只写 project_id
+    from .zone import apply_private, apply_public, public_project_id
+    if visibility == "public":
+        apply_public(row, await public_project_id(db))
+    else:
+        apply_private(row)
     await db.commit()
     await db.refresh(row)
     return await to_read_shape(db, row, user_id=viewer_id)

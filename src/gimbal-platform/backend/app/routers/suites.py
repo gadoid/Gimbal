@@ -165,7 +165,7 @@ async def _access_and_caps(
     """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
     须已过;access 为 None 仅发生在公共读者,能力位全 False。
     W3 起 admin 与公共读者同权(Admin+ 仅剩下架公共对象,服务端
-    steward 判定,不进此投影)。"""
+    public_admin 判定,不进此投影)。"""
     if user.id == suite.owner_id:
         access = "owner"
     elif suite.visibility == "public":
@@ -516,7 +516,8 @@ async def add_members(
                                 "them and their datasets)"),
                     "pendingPublish": [sid]})
             # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
-            scen.visibility = "public"
+            from ..services.zone import apply_public, public_project_id
+            apply_public(scen, await public_project_id(db))
         db.add(SuiteMember(
             suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
             sort=next_sort,
@@ -716,8 +717,10 @@ async def put_composition(
         else:
             row.role = m.role
             row.sort = idx
+    from ..services.zone import apply_public, public_project_id
+    _pid = await public_project_id(db)
     for sid in pending_publish:  # 确认发布:成员随组公开(数据集随场景)
-        scen_rows[sid].visibility = "public"
+        apply_public(scen_rows[sid], _pid)
 
     suite.mode = body.mode
     cfg = dict(body.modeConfig or {})
@@ -825,7 +828,8 @@ async def _run_orchestration(
         scen = await scenario_store.get_row(db, m.scenario_id)
         if scen is None or not await _can_run(
                 db, user, scenario_id=m.scenario_id,
-                owner_id=scen.owner_id if scen else None):
+                owner_id=scen.owner_id if scen else None,
+                project_id=scen.project_id if scen else None):
             not_runnable.append(m.scenario_id)
     if not_runnable:
         raise HTTPException(status_code=403, detail={
@@ -1037,7 +1041,8 @@ async def run_suite(
         # 经 suite 引用覆盖全部成员 —— 正常态全过,守边界)。
         _scen = scen_rows.get(sid)
         if _scen is not None and not await _can_run(
-                db, user, scenario_id=sid, owner_id=_scen.owner_id):
+                db, user, scenario_id=sid, owner_id=_scen.owner_id,
+                project_id=_scen.project_id):
             skipped.append({"scenarioId": sid, "reason": "not_runnable"})
             continue
         try:
@@ -1214,7 +1219,8 @@ async def validate_suite(
                                     units=[m.scenario_id]))
                 continue
             if not await _can_run(db, user, scenario_id=m.scenario_id,
-                                  owner_id=scen.owner_id):
+                                  owner_id=scen.owner_id,
+                                  project_id=scen.project_id):
                 items.append(_vitem("warn", "not_runnable",
                                     f"成员「{_name_of(m.scenario_id, scen)}」不可运行,发起时跳过",
                                     units=[m.scenario_id]))
@@ -1279,7 +1285,8 @@ async def validate_suite(
             scen = await scenario_store.get_row(db, m.scenario_id)
             if scen is None or not await _can_run(
                     db, user, scenario_id=m.scenario_id,
-                    owner_id=scen.owner_id if scen else None):
+                    owner_id=scen.owner_id if scen else None,
+                    project_id=scen.project_id if scen else None):
                 not_runnable.append(names[m.scenario_id])
             elif (sh := await _shadowed_item(
                     user.id, scen, names[m.scenario_id])):
@@ -1569,8 +1576,10 @@ async def publish_suite(
         if scen is not None and (scen.visibility or "private") != "public":
             unpublished.append(m.scenario_id)
             # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
-            scen.visibility = "public"
-    suite.visibility = "public"
+            from ..services.zone import apply_public, public_project_id
+            apply_public(scen, await public_project_id(db))
+    from ..services.zone import apply_public as _ap, public_project_id as _pp
+    _ap(suite, await _pp(db))
     await db.commit()
     await db.refresh(suite)
     out = _summary(suite, len(members))
@@ -1600,25 +1609,27 @@ async def unpublish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
     """下架 suite 本体(成员各自的 public 状态独立保留,§9)。表 B
-    suite.unpublish = owner ∨ steward(Admin+ 仅对已是公共的对象,
-    W3 收口);越属主下架 → 通知属主 + 入审计(§10;属主自下架不通知
-    不入)。"""
+    suite.unpublish = maintainer ∨ public_admin(S1.1:维护者撤下、
+    Admin+ 治理下架);越属主下架 → 通知属主 + 入审计(§10;属主自
+    下架不通知不入)。"""
     from ..services import audit as audit_svc
     from ..services import notifications as notify_svc
-    from ._ownership import can, can_pure
+    from ._ownership import can
 
     suite = await _load_suite(db, suite_id)
     if not await can(db, user, "suite", "read", suite):
         raise not_found_404("suite", str(suite_id))
-    if not can_pure(user, "suite", "unpublish", suite):
+    # S1.1:unpublish = maintainer ∨ public_admin(项目维度谓词,async)
+    if not await can(db, user, "suite", "unpublish", suite):
         raise HTTPException(status_code=403, detail={
             "code": "not_owner",
             "message": "only the owner (or an operator, for "
                        "already-public suites) can unpublish"})
-    suite.visibility = "private"
+    from ..services.zone import apply_private
+    apply_private(suite)
     await db.commit()
     await db.refresh(suite)
-    # 入口闸保证越属主 ⇔ Admin+ ∧ 原为公共(steward)
+    # 入口闸保证越属主 ⇔ Admin+ ∧ 公共项目(public_admin)
     if suite.owner_id != user.id:
         try:
             await notify_svc.create_notification(

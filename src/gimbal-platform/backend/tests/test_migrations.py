@@ -167,7 +167,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0040_project_zone"
+            assert _revision(sync_url) == "0041_public_shadow_backfill"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -727,5 +727,85 @@ def test_0040_project_zone():
                 assert c.execute(text(
                     "SELECT count(*) FROM report_definitions "
                     "WHERE name = 'rd-orphan'")).scalar() == 1
+        finally:
+            eng.dispose()
+
+
+# ── 0041_public_shadow_backfill(authz M2a S1.1)────────────────────
+def test_0041_public_shadow_backfill():
+    """0040→S1.1 发版窗口期里「发布」只翻 visibility 的漏网行,由 0041
+    回填进公共项目(幂等;对象四表 + 集成模板行;私有行不动)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.integration_task import IntegrationTask
+    from app.models.user import User
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            # 真实时序:create_all(0040+ 形态)→ 撤列回 0039 → stamp →
+            # upgrade 0040(种子 + 空表迁移)→ **再造窗口期漏网行** →
+            # upgrade head(0041 回填)
+            Base.metadata.create_all(eng)
+            _to_0039_shape(eng)
+            command.stamp(_cfg(sync_url), "0039_drop_identity_mode")
+            command.upgrade(_cfg(sync_url), "0040_project_zone")
+            with Session(eng) as s:
+                author = User(username="author", display_name="",
+                              password_hash="x", role="user")
+                s.add(author)
+                s.flush()
+                # 窗口期发布形态:visibility=public ∧ project_id NULL
+                # (0040 已跑完,不会被步③迁走)
+                s.add_all([
+                    ComposerScenario(scenario_id="sc-win", owner_id=author.id,
+                                     visibility="public", payload={}),
+                    ComposerScenario(scenario_id="sc-keep", owner_id=author.id,
+                                     payload={}),
+                    IntegrationTask(name="tpl-win", owner_id=author.id,
+                                    visibility="public",
+                                    target_type="scenario",
+                                    scenario_id="sc-win",
+                                    target_system="fin",
+                                    trigger_cron="*/5 * * * *",
+                                    result_policy="latest",
+                                    card_template="status", state="idle"),
+                ])
+                s.commit()
+            with eng.connect() as c:
+                # 回填前:漏网行 project_id 为空
+                assert c.execute(text(
+                    "SELECT count(*) FROM composer_scenarios "
+                    "WHERE visibility='public' "
+                    "AND project_id IS NULL")).scalar() == 1
+            command.upgrade(_cfg(sync_url), "head")
+            assert _revision(sync_url) == "0041_public_shadow_backfill"
+
+            with eng.connect() as c:
+                pid = c.execute(text(
+                    "SELECT id FROM projects WHERE kind='public'")).scalar()
+                assert pid is not None
+                assert c.execute(text(
+                    "SELECT project_id FROM composer_scenarios "
+                    "WHERE scenario_id='sc-win'")).scalar() == pid
+                assert c.execute(text(
+                    "SELECT project_id FROM composer_scenarios "
+                    "WHERE scenario_id='sc-keep'")).scalar() is None
+                assert c.execute(text(
+                    "SELECT project_id FROM integration_tasks "
+                    "WHERE name='tpl-win' "
+                    "AND template_id IS NULL")).scalar() == pid
+            # 幂等:重复跑 0041 不重复改(种子仍恰一行)
+            command.stamp(_cfg(sync_url), "0040_project_zone")
+            command.upgrade(_cfg(sync_url), "head")
+            with eng.connect() as c:
+                assert c.execute(text(
+                    "SELECT count(*) FROM projects "
+                    "WHERE kind='public'")).scalar() == 1
         finally:
             eng.dispose()

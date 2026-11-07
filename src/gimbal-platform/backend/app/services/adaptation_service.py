@@ -994,7 +994,9 @@ async def _ensure_batch_scope(db, scenario_id: str, *, batch_id: str,
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise KeyError(f"scenario_not_found: {scenario_id}")
-    if (row.visibility or "private") == "public":
+    # S1.1 闸升级:批次可代改 = 公共 + 项目场景(project_id 非空;
+    # 影子写保证与 visibility 判定等价,普通项目 S1.3/S1.4 起才有内容)
+    if row.project_id is not None:
         return
     if notify and row.owner_id is not None:
         from . import notifications as notify_svc

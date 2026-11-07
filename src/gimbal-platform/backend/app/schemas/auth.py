@@ -128,3 +128,6 @@ class MeOut(BaseModel):
     # authz W6:管理员重置密码后的强制改密位(前端路由守卫的跳转
     # 依据,比等 403 更早;改密成功即复位)
     must_change_password: bool = False
+    # M2a S1.1:我所在的普通项目(前端项目切换器数据源;公共项目
+    # 不落成员行,不在此列)。id/name/kind(normal|public)/role(admin|member)
+    projects: list[dict] = Field(default_factory=list)

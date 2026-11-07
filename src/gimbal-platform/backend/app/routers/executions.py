@@ -228,7 +228,16 @@ async def list_executions(
                         "message": f"token not found: {token_id}"})
         base = select(Execution).where(Execution.token_id == token_id)
     else:
-        base = select(Execution).where(Execution.owner_id == user.id)
+        # S1.1:发起人本人 ∨ 我所在普通项目的执行(与
+        # can_view_execution 同口径;快照列免联表)
+        from sqlalchemy import select as _sel
+
+        from ..models.project import ProjectMember
+        base = select(Execution).where(or_(
+            Execution.owner_id == user.id,
+            Execution.project_id.in_(
+                _sel(ProjectMember.project_id).where(
+                    ProjectMember.user_id == user.id))))
     if q:
         # G1 扩口径:快照名/活名都可命中(改名后旧名仍可搜到历史执行);
         # 活名子查询套可见性谓词(吃 trgm),与展示投影同口径。
@@ -895,7 +904,7 @@ async def rerun_execution(
     from ._ownership import can_run_scenario
     if not await can_run_scenario(
             session, user, scenario_id=scen.scenario_id,
-            owner_id=scen.owner_id):
+            owner_id=scen.owner_id, project_id=scen.project_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

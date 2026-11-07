@@ -27,15 +27,15 @@
 | 子片 | 内容 | 迁移 |
 |---|---|---|
 | S1.0 | 数据模型：项目两表 + 公共项目种子 + 对象表 `project_id` + 平台模板标记 + 存量公开内容迁入公共项目 | 0040 |
-| S1.1 | 授权核心：表 B 项目维度 + `visibility_clause` + 执行可见 | — |
+| S1.1 | 授权核心：表 B 项目维度 + `visibility_clause` + 执行可见 | 0041（窗口期回填，见 §三） |
 | S1.2 | 写面归类：132 处属主比较逐处归类 + 属主比较守卫 | — |
 | S1.3 | 发布新语义：发布 = 复制到公共项目、重新发布、下架 | — |
 | S1.4 | 项目管理：项目 / 成员 CRUD | — |
-| S1.5 | suite 同区约束（替换同属主组合外键） | 0041 |
+| S1.5 | suite 同区约束（替换同属主组合外键） | 0042 |
 | S1.6 | 转移维护者（S1-e）+ 删用户处置联动 | — |
 | S1.7 | 平台模板（D8–D10） | 随 0040 |
 | S1.8 | 前端：项目切换器、项目镜头、成员管理页、发布 / 转移对话框 | — |
-| S1.9 | 收口：删 `visibility` 列（读写全部切到项目谓词之后） | 0042 |
+| S1.9 | 收口：删 `visibility` 列（读写全部切到项目谓词之后） | 0043 |
 
 依赖：S1.0 → S1.1 → 其余并行；S1.9 最后。
 
@@ -267,6 +267,18 @@
 |---|---|---|
 | S1-f | 普通项目里谁能删除内容 | **项目成员**（放宽；删除记入动态流与审计） |
 | S1-g | 谁能创建项目 | **Admin+**，创建时指定首个项目管理员 |
+
+## 三·补、S1.1 实现记录（2026-11-08）
+
+- **迁移 0041**（窗口期回填，数据迁移无 schema 变更）：0040 与 S1.1 分开发版的窗口期里「发布」仍只翻 `visibility`；S1.1 读面切到项目维度后这些漏网行必须回填（语句同 0040 步③，幂等）。**迁移序号顺延：S1.5 → 0042、S1.9 → 0043**。
+- **表 B 落点**：`can_pure` 收上下文参数（`public_project_id` / `project_roles`，`can()` 经 `services/zone.py` 会话级缓存注入）；steward → public_admin、public → public_reader 换轴；owner 谓词带区守卫（D1）。快照缩写换新（o/ref/mem/pad/mnt/pr/pa），矩阵测试区轴重写（主体 × 私有/普通项目/公共项目，期望从快照推导）。
+- **影子写**：`visibility` 与 `project_id` 的同步翻转全部走 `services.zone.apply_public/apply_private`（场景 set_visibility、suite 发布/下架/级联、报告定义创建/更新、集成模板可见性、删用户 publicize 处置、场景下架的 suite 级联 UPDATE）。
+- **执行可见**：`can_view_execution` 加「我所在普通项目的执行」分支（快照列免联表；公共项目无执行、成员表无公共行 → 天然排除）；执行列表 JWT 面基础条件同步；summary KPI 带保持「本人发起」口径。
+- **`/auth/me.projects`**：我所在的普通项目 `[{id,name,kind,role}]`（S1.8 切换器数据源；公共项目不落成员行不在此列）。
+- **D5 闸升级**：`_ensure_batch_scope` 从 `visibility=='public'` 改判 `project_id IS NOT NULL`（公共 + 项目场景可被批次代改）。
+- **顺带清理（死代码）**：`_require_reader`（零调用）、`can_read_scenario`（收编后零调用）、facets 的 SQLite 兜底分支（PG 分支无条件 return，不可达）删除；列表 `starred=false` 的 Python 分支（仍可达）谓词改走 `can_pure` 单点。
+- **测试基建**：conftest `fresh_db` 补公共项目种子（迁移链由 0040/0041 种，测试走 create_all 不跑迁移）；`inbound_fixtures.publish_scenario` 补 `project_id` 同步（直改必须成对，否则新读面当私有）。
+- 新增 `tests/test_authz_s11_projects.py`：项目读面（成员 200 / 非成员与移出创建人 404 / admin 不旁路）、run 谓词、执行可见三方 + 移出回归、`me.projects`、影子写翻转、D5 批次对项目场景 201。
 
 ## 十四、开工前完整性复核（2026-11-08，D5 已上线后）
 

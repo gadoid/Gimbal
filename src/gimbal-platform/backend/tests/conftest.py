@@ -109,6 +109,14 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
         await conn.run_sync(
             lambda ddl: Base.metadata.create_all(ddl, checkfirst=False),
         )
+        # M2a S1.1:公共项目行是运行时依赖(迁移链 0040/0041 种子;
+        # 测试走 create_all 不跑迁移 → 补同一颗种子,幂等)
+        from sqlalchemy import text
+
+        await conn.execute(text(
+            "INSERT INTO projects (name, kind, description, created_at) "
+            "SELECT '公共', 'public', '', now() WHERE NOT EXISTS ("
+            "  SELECT 1 FROM projects WHERE kind = 'public')"))
 
     try:
         yield

@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.composer_scenario import ComposerScenario
 from ..models.service_alias import ServiceAlias
-from ..routers._ownership import can_read_scenario
 from .auth_ref_scan import scan_auth_aliases
 from .scenario_store import definition_from_payload
 
@@ -51,6 +50,9 @@ class ScenarioRef:
     owner_id: int
     visibility: str
     name: str
+    # S1.1:区维度(读面谓词 can_pure 按 project_id 判;影子期与
+    # visibility 同步翻转)
+    project_id: int | None = None
     kinds: set[str] = field(default_factory=set)
 
 
@@ -108,6 +110,7 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
                         scenario_id=row.scenario_id,
                         owner_id=row.owner_id,
                         visibility=row.visibility or "private",
+                        project_id=row.project_id,
                         name=name,
                     )
                     per_scenario[(a, row.scenario_id)] = ref
@@ -129,9 +132,18 @@ async def references(
     """反查面板数据:别名绑定行 + 场景引用(可见名 + 不可见计数)。"""
     by_alias = await _scan_scenario_refs(db)
     hits = by_alias.get(alias, [])
+    # S1.1:读面谓词单点 can_pure(表 B scenario.read + 项目上下文)
+    from types import SimpleNamespace
+
+    from ..routers._ownership import can_pure
+    from .zone import my_project_roles, public_project_id
+    _ctx = dict(public_project_id=await public_project_id(db),
+                project_roles=await my_project_roles(db, user.id))
     visible = [r for r in hits
-               if can_read_scenario(user, owner_id=r.owner_id,
-                                    visibility=r.visibility)]
+               if can_pure(user, "scenario", "read",
+                           SimpleNamespace(owner_id=r.owner_id,
+                                           project_id=r.project_id),
+                           **_ctx)]
     alias_rows = await alias_rows_for(db, alias)
     return {
         "alias_refs": [

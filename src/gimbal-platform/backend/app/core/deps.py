@@ -211,16 +211,23 @@ async def get_owned_execution(
 async def can_view_execution(principal, ex, session: AsyncSession) -> bool:
     """执行可读判定(单一实现;get_visible_execution 与报告 / 批次汇总共用)。
 
-    执行及其一切子资源只有属主可见(authz W4,方案 §9.3):
+    执行及其子资源的可见面(authz W4 + M2a S1.1):
     * 令牌:``execution.token_id == 当前令牌``(D8);
-    * JWT:owner 本人。
+    * JWT:发起人本人 ∨ **我所在普通项目的执行**(executions.project_id
+      派发快照;公共项目无执行,project_members 无公共项目行,天然排除)。
 
     admin/super_admin 的越属主旁路与「平台身份执行对 admin+ 可见」的
     平台分支均已删(W4)——admin 排查走审计日志。
     """
     if getattr(principal, "is_token", False):
         return ex.token_id == principal.token_id
-    return ex.owner_id == principal.user.id
+    if ex.owner_id == principal.user.id:
+        return True
+    if ex.project_id is not None:
+        from ..services.zone import my_project_roles
+        return ex.project_id in await my_project_roles(
+            session, principal.user.id)
+    return False
 
 
 async def get_visible_execution(

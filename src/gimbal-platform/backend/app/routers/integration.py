@@ -509,7 +509,13 @@ async def patch_task(
     if body.resultPolicy in ("latest", "on_change"):
         tpl.result_policy = body.resultPolicy
     if body.visibility in ("private", "public"):
-        tpl.visibility = body.visibility
+        # S1.1 影子写:visibility ⇔ project_id 同步(services.zone)
+        from ..services.zone import (apply_private, apply_public,
+                                     public_project_id)
+        if body.visibility == "public":
+            apply_public(tpl, await public_project_id(db))
+        else:
+            apply_private(tpl)
     if body.targetSystem is not None:
         tpl.target_system = body.targetSystem
     tpl.updated_by = user.id

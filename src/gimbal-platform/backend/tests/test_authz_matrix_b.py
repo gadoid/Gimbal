@@ -1,15 +1,16 @@
-"""表 B 矩阵(authz W3,方案 §2.3):对象 × 动词 × 主体。
+"""表 B 矩阵(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 × 主体 × 区。
 
 三层:
 1. 快照对拍 —— TABLE_B 与 authz_expected.yaml 的 table_b 段逐格
    一致(表改了没改快照即红;与 matrix_a 的 R7 门同构)。
-2. 谓词矩阵 —— can_pure() 在(owner / 他人 user / admin / super_admin)
-   × (private / public)上的结果由快照谓词推导,不是由实现反推
-   (自证循环防线)。data_set/run_scheme 的 public 谓词随父场景
-   (行上无 visibility),只矩阵化 write 面。
-3. 端点验收(impl W3)—— admin/super_admin 操作他人私有对象一律
-   404 且无通知;Admin+ 唯一越属主动词 = 下架公共对象(steward,
-   R6:无发布权;报告定义下架同口径)。
+2. 谓词矩阵 —— can_pure() 在主体(属主 / 路人 / admin / super_admin /
+   项目成员 / 项目管理员 / 移出项目的创建人)× 区(私有 / 普通项目 /
+   公共项目)上的结果由快照谓词推导,不是由实现反推(自证循环防线)。
+   data_set/run_scheme 的读谓词随父场景(行上无 project_id),
+   只矩阵化 write 面。
+3. 端点验收(impl W3 / S1.1)—— admin/super_admin 操作他人私有对象
+   一律 404 且无通知;Admin+ 唯一越属主动词 = 下架公共项目对象
+   (public_admin,R6:无发布权;报告定义下架同口径)。
 """
 from __future__ import annotations
 
@@ -23,10 +24,10 @@ from httpx import AsyncClient
 _EXPECTED = yaml.safe_load(
     Path(__file__).with_name("authz_expected.yaml").read_text(encoding="utf-8"))
 
-# 谓词缩写(快照)→ 语义
+# 谓词缩写(快照)→ 语义(S1.1 项目维度)
 _ABBR = {
-    "o": "owner", "pub": "public", "ref": "ref",
-    "ste": "steward",
+    "o": "owner", "ref": "ref", "mem": "member", "pad": "padmin",
+    "mnt": "maintainer", "pr": "public_reader", "pa": "public_admin",
 }
 
 
@@ -44,33 +45,50 @@ def test_table_b_matches_reviewed_snapshot():
 
 
 # ── 谓词矩阵(期望从快照推导;ref 谓词不在 can_pure 面,矩阵恒 False)──
-_CAPS = {  # 表 A 的快照(能力面只取矩阵需要的两个)
-    "user": set(), "admin": {"ops.write"}, "super_admin": {"ops.write", "users.manage"},
+_CAPS = {  # 表 A 的快照(能力面只取矩阵需要的一个)
+    "user": set(), "admin": {"ops.write"},
+    "super_admin": {"ops.write", "users.manage"},
 }
 
+# 区常量:普通项目 P=500(成员 uid 3/4),公共项目 PUBLIC=900
+_P, _PUBLIC = 500, 900
 
-def _expected_from_snapshot(preds, *, is_owner, is_public, role):
+# 主体:(role, uid, memberships) —— memberships: {project_id: 角色}
+# 「移出项目的创建人」= uid 1(普通项目对象 owner_id=1)∧ memberships
+# 空 —— D1 的关键回归形态:创建人身份在项目里不给任何谓词
+_SUBJECTS = [
+    ("user", 1, {}, "owner(私有属主/项目创建人)"),
+    ("user", 2, {}, "other-user(路人)"),
+    ("admin", 2, {}, "admin"),
+    ("super_admin", 2, {}, "super_admin"),
+    ("user", 3, {_P: "member"}, "member(项目成员)"),
+    ("user", 4, {_P: "admin"}, "padmin(项目管理员)"),
+]
+
+
+def _expected_from_snapshot(preds, *, uid, role, memberships, obj):
+    """由快照谓词推导期望(ref 恒 False;区互斥,按对象 project_id 判)。"""
+    zone = getattr(obj, "project_id", None)
     for abbr in preds:
-        if abbr == "o" and is_owner:
+        if abbr == "o" and zone is None and uid == obj.owner_id:
             return True
-        if abbr == "pub" and is_public:
+        if abbr == "mem" and zone == _P and _P in memberships:
             return True
-        if abbr == "ste" and is_public and "ops.write" in _CAPS[role]:
+        if abbr == "pad" and zone == _P \
+                and memberships.get(_P) == "admin":
+            return True
+        if abbr == "mnt" and zone == _PUBLIC and uid == obj.owner_id:
+            return True
+        if abbr == "pr" and zone == _PUBLIC:
+            return True
+        if abbr == "pa" and zone == _PUBLIC \
+                and "ops.write" in _CAPS[role]:
             return True
     return False
 
 
-_OWNER_ID = 1          # 属主固定 uid=1;其余主体 uid=2
-_SUBJECTS = [          # (role, uid, 说明)
-    ("user", _OWNER_ID, "owner-user"),
-    ("user", 2, "other-user"),
-    ("admin", 2, "admin"),
-    ("super_admin", 2, "super_admin"),
-]
-
-
 def _matrix_cases():
-    """(obj_type, verb, role, uid, 对象) 全叉积;期望由快照推导。"""
+    """(obj_type, verb, role, uid, memberships, 对象) 全叉积。"""
     from app.routers._ownership import TABLE_B
 
     cases = []
@@ -78,44 +96,61 @@ def _matrix_cases():
         for verb in verbs:
             if obj_type in ("data_set", "run_scheme") and verb != "write":
                 continue  # 读/执行随父场景判定(can_read_scenario_row)
-            for role, uid, _label in _SUBJECTS:
+            for role, uid, mem, _label in _SUBJECTS:
                 if obj_type == "report_definition":
-                    # authz W9-2:公共态 = visibility(公共定义带维护者);
-                    # 遗留无主公共行(owner NULL,0037 回填)另设一态
-                    states = [  # (对象, is_public, 说明);owner 谓词按行判
-                        (SimpleNamespace(owner_id=_OWNER_ID,
-                                         visibility="private"), False, "私有"),
-                        (SimpleNamespace(owner_id=_OWNER_ID,
-                                         visibility="public"), True, "公共"),
-                        (SimpleNamespace(owner_id=None,
-                                         visibility="public"), True, "遗留无主公共"),
+                    states = [  # (对象, 说明)
+                        (SimpleNamespace(owner_id=1, project_id=None),
+                         "私有"),
+                        (SimpleNamespace(owner_id=1, project_id=_P),
+                         "普通项目"),
+                        (SimpleNamespace(owner_id=1, project_id=_PUBLIC),
+                         "公共"),
+                        (SimpleNamespace(owner_id=None, project_id=_PUBLIC),
+                         "遗留无主公共(0037)"),
                     ]
                 else:
                     states = [
-                        (SimpleNamespace(owner_id=_OWNER_ID,
-                                         visibility="private"), False, "私有"),
-                        (SimpleNamespace(owner_id=_OWNER_ID,
-                                         visibility="public"), True, "公共"),
+                        (SimpleNamespace(owner_id=1, project_id=None),
+                         "私有"),
+                        (SimpleNamespace(owner_id=1, project_id=_P),
+                         "普通项目"),
+                        (SimpleNamespace(owner_id=1, project_id=_PUBLIC),
+                         "公共"),
                     ]
-                for obj, is_public, state_label in states:
+                for obj, state_label in states:
                     exp = _expected_from_snapshot(
                         _EXPECTED["table_b"][obj_type][verb],
-                        is_owner=(obj.owner_id == uid),  # None 永不匹配
-                        is_public=is_public, role=role)
+                        uid=uid, role=role, memberships=mem, obj=obj)
                     cases.append(pytest.param(
-                        obj_type, verb, role, uid, obj, exp,
+                        obj_type, verb, role, uid, mem, obj, exp,
                         id=f"{obj_type}.{verb}[{role}:{state_label}]"))
     return cases
 
 
 @pytest.mark.parametrize(
-    "obj_type,verb,role,uid,obj,expected", _matrix_cases())
-def test_can_pure_matrix(obj_type, verb, role, uid, obj, expected):
-    """can_pure 与快照推导逐格对拍(ref 谓词由端点层覆盖)。"""
+    "obj_type,verb,role,uid,memberships,obj,expected", _matrix_cases())
+def test_can_pure_matrix(obj_type, verb, role, uid, memberships, obj,
+                         expected):
+    """can_pure 与快照推导逐格对拍(公共项目 id 与项目角色表以上下文
+    注入 —— 同 can() 的运行时做法;ref 谓词由端点层覆盖)。"""
     from app.routers._ownership import can_pure
 
     user = SimpleNamespace(role=role, id=uid)
-    assert can_pure(user, obj_type, verb, obj) is expected
+    assert can_pure(user, obj_type, verb, obj,
+                    public_project_id=_PUBLIC,
+                    project_roles=memberships) is expected
+
+
+def test_can_pure_without_zone_context_fails_closed():
+    """不注入上下文时公共/项目谓词恒 False(fail-closed,影子期快路径
+    的语义:无 project_roles 传入即按「无项目」收口)。"""
+    from app.routers._ownership import can_pure
+
+    user = SimpleNamespace(role="admin", id=2)
+    pub = SimpleNamespace(owner_id=1, project_id=_PUBLIC)
+    assert can_pure(user, "scenario", "read", pub) is False
+    proj = SimpleNamespace(owner_id=1, project_id=_P)
+    assert can_pure(user, "scenario", "write", proj) is False
 
 
 def test_can_pure_unknown_object_or_verb_raises():
@@ -333,13 +368,16 @@ class TestReportDefinitionMaintain:
                              owner_id: int | None) -> int:
         from app.core import db as db_module
         from app.models.report_definition import ReportDefinitionRow
+        from app.services.zone import public_project_id
 
         async with db_module.SessionLocal() as db:
             row = ReportDefinitionRow(
                 name="mb-pub-def", description="",
                 definition={"selection": {}, "projection": []},
                 owner_id=owner_id,
-                visibility="public" if public else "private")
+                # 影子不变式(S1.1):public ⇔ project_id=公共项目
+                visibility="public" if public else "private",
+                project_id=await public_project_id(db) if public else None)
             db.add(row)
             await db.commit()
             await db.refresh(row)

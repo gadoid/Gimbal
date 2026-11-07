@@ -652,10 +652,13 @@ async def delete_user(
         if scenario_ids:
             # owner_id 显式置空(SET NULL 语义;SQLite 方言 FK 不强制的
             # 双方言兜底),owner_name 快照保留原作者署名
+            from ..services.zone import public_project_id
             await db.execute(
                 sa_update(ComposerScenario)
                 .where(ComposerScenario.owner_id == user_id)
-                .values(visibility="public", owner_id=None))
+                # 影子写:公共态同步 project_id(S1.1)
+                .values(visibility="public", owner_id=None,
+                        project_id=await public_project_id(db)))
     elif disposal == "transfer":
         if scenario_ids:
             transferee_label = transferee.display_name or transferee.username
