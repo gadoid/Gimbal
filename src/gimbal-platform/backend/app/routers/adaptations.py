@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser, CurrentUser
+from ..core.deps import CurrentUser, MemberUser
 from ..schemas.adaptations import (
     BatchDetail,
     BatchListOut,
@@ -54,7 +54,7 @@ async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedSte
 
 @router.post("/carry-batches", response_model=BatchDetail, status_code=201)
 async def open_carry_batch(
-    user: AdminUser, body: CarryBatchIn, db: DbSession,
+    user: MemberUser, body: CarryBatchIn, db: DbSession,
 ) -> BatchDetail:
     """开 carry 值表批(漂移面板入口,spec §7);ops 经既有
     POST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。"""
@@ -100,7 +100,7 @@ async def list_batches(
 
 
 @router.get("/batches/{batch_id}", response_model=BatchDetail)
-async def get_batch(batch_id: str, user: AdminUser, db: DbSession) -> BatchDetail:
+async def get_batch(batch_id: str, user: MemberUser, db: DbSession) -> BatchDetail:
     try:
         detail = await adaptation_service.get_batch_detail(
             db, batch_id, viewer=user)
@@ -111,13 +111,13 @@ async def get_batch(batch_id: str, user: AdminUser, db: DbSession) -> BatchDetai
 
 @router.post("/batches/{batch_id}/ops", response_model=OpOut, status_code=201)
 async def create_op(
-    user: AdminUser, batch_id: str, body: OpCreateIn, db: DbSession,
+    user: MemberUser, batch_id: str, body: OpCreateIn, db: DbSession,
 ) -> OpOut:
     """人工补 op(renameVar / 数据集 op —— 自动草案之外,§5.4)。
 
-    authz 收尾:批次内的写操作(补 op / 应用 / 跳过 / 改 payload / 回滚)
-    与批次详情同门(users.manage)—— 此前仅需登录,任何用户可经批次
-    改写全局 carry 与他人场景。"""
+    authz D5:批次是 Admin+ 的运维面(ops.write,方案 2.1);场景 / 数据集
+    op 只作用于公共场景(S1 后含项目场景),私有场景 409 并通知属主自行
+    适配(私有区对任何平台角色不可写,方案 1.3)。"""
     try:
         op = await adaptation_service.create_op(
             db, batch_id,
@@ -129,13 +129,13 @@ async def create_op(
     except ValueError as e:
         raise value_error_http(e, codes={
             "batch_not_active": 409, "bad_op_type": 400,
-            "op_needs_dataset": 400,
+            "op_needs_dataset": 400, "private_scenario_owner_only": 409,
         }) from e
     return OpOut.model_validate(op)
 
 
 @router.post("/ops/{op_id}/apply", response_model=OpOut)
-async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
+async def apply_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
     """逐条应用:幂等重放 / C5 冲突标 conflict / 末条完成推戳。"""
     try:
         op = await adaptation_service.apply_op(db, op_id)
@@ -159,7 +159,7 @@ async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
 
 
 @router.post("/ops/{op_id}/skip", response_model=OpOut)
-async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
+async def skip_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
     """跳过一条 pending op(末条跳过同样收敛 completed + 推戳)。"""
     try:
         op = await adaptation_service.skip_op(db, op_id)
@@ -174,7 +174,7 @@ async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
 
 @router.patch("/ops/{op_id}", response_model=OpOut)
 async def patch_op(
-    user: AdminUser, op_id: int, body: OpPatchIn, db: DbSession,
+    user: MemberUser, op_id: int, body: OpPatchIn, db: DbSession,
 ) -> OpOut:
     """仅 pending 可整包替换 payload(mapValue 骨架补值 / 参数修正)。"""
     try:
@@ -188,7 +188,7 @@ async def patch_op(
 
 @router.post("/batches/{batch_id}/rollback", response_model=RollbackReport)
 async def rollback_batch(
-    user: AdminUser, batch_id: str, db: DbSession,
+    user: MemberUser, batch_id: str, db: DbSession,
     force: bool = Query(default=False),
 ) -> RollbackReport:
     """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。

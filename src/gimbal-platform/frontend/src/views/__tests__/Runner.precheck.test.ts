@@ -11,7 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Runner from '@/views/Runner.vue'
-import { precheckRun } from '@/api/scenario-composer'
+import { listScenarioOptions, precheckRun } from '@/api/scenario-composer'
 import type { PrecheckResult } from '@/api/scenario-composer'
 
 vi.mock('@/api/scenario-composer', async (importOriginal) => {
@@ -70,6 +70,20 @@ async function mountAndQueue() {
   await flushPromises()
   return w
 }
+
+describe('Runner 场景选择器', () => {
+  beforeEach(() => { setActivePinia(createPinia()) })
+
+  it('一律 scope=mine(管理员对他人私有场景无执行权,不再「全列」)', async () => {
+    const { useAuthStore } = await import('@/stores/auth')
+    useAuthStore().capabilities = ['users.manage', 'ops.write', 'alias.write']
+    vi.mocked(listScenarioOptions).mockClear()
+    await mountAndQueue()
+    const calls = vi.mocked(listScenarioOptions).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    for (const [params] of calls) expect(params).toMatchObject({ scope: 'mine' })
+  })
+})
 
 describe('Runner 预检行 · 内置凭证告警', () => {
   beforeEach(() => {

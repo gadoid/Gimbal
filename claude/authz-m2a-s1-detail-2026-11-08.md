@@ -234,25 +234,23 @@
 
 ---
 
-## 十二、D5 适配批次（可在 S1 之前单独做）
+## 十二、D5 适配批次（已实现，2026-11-08）
 
 ### 清理项
 
-- 批次相关端点的 `AdminUser` 门（开 carry 批次、批次详情、补 op / 应用 / 跳过 / 改 payload / 回滚）。
-- `notify_cross_owner` 与适配完成通知的链接指向批次详情页（`/adaptations/batches/{id}`，属主打不开）。
+- 批次端点的 `AdminUser`（users.manage）门 7 处 → `MemberUser`（ops.write）：开 carry 批次、批次详情、补 op、应用、跳过、改 payload、回滚。前端 AdaptationCenter / AdaptationBatchDetail 本来就按 `ops.write` 显示操作——此前普通 Admin 看得到按钮、点了 403，D5 后前后端一致。
+- 通知链接不再指向批次详情页（属主多半没有 ops.write）：`_notify_adaptation_applied` 与 `notify_cross_owner` 改指场景详情页 `/scenarios/{id}/detail`。
+- 顺修（M1 遗留）：执行器场景选择器对 `users.manage` 不加 `scope=mine`、QTip 写「管理员可发起全部」——W3 起管理员对他人私有场景无执行权，改为一律 `scope=mine`。
 
 ### 实现项
 
-- 门统一为 `ops.write`（Admin+）。
-- 批次作用范围：carry op 照旧；场景 / 数据集 op 只允许作用于**公共 / 项目场景**（S1 前 = `visibility=public`）；对私有场景补 op → 409 `private_scenario_owner_only`，并给属主发「待适配」通知。
-- 通知落点：链接到属主自己的单场景适配页（对比 → 保存检查 → 提交，属主闸已在），带上批次草拟的 op 作为预填（`/adaptations/new?scenario=…&fromBatch=…`）。
-- `notify_cross_owner` 的链接同改。
+- 批次的场景 / 数据集 op 只作用于**公共场景**（S1 后含项目场景）：`create_op` 对私有场景 → 409 `private_scenario_owner_only`，同时给属主发 `adaptation_pending` 通知；D5 之前已补的存量 op 在 `apply_op` 同闸，标 conflict 不落。
+- 属主获取通知后自行适配（D5 裁定）：通知链接 `/adaptations?scenario={id}`，适配页读取 `?scenario=` 预选场景，属主走既有单场景流程（对比 → 保存检查 → 提交；属主闸在 submit 内）。原计划「预填批次草拟的 op」不做：私有场景的 op 在批次侧即被拒，不落库；单场景对比会按 plate 修订差异自动起草 op，属主据此适配即可，通知正文写明批次要做的变更类型。
 
-### 测试项
+### 测试项（已加）
 
-- Admin 可开批次 / 应用；普通用户 403；对私有场景补 op 409 且属主收到通知；属主从通知进入、以预填 op 提交成功；通知链接不再指向批次详情。
-
----
+- `test_authz_wrapup.py`：普通用户 403（capability = ops.write）、Admin 过门（对不存在 id 404）；私有场景 op 409 且属主收到链接正确的通知；公共场景 op 201。
+- 前端：`AdaptationFlow` 的 `?scenario=` 预选；`Runner` 选择器恒 `scope=mine`。
 
 ## 十三、裁定（本文新增项，2026-11-08 已定）
 

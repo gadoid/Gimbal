@@ -42,7 +42,7 @@
         <div v-if="pickerOpen" class="runner-card picker-card">
           <div class="zone-head">
             <span class="zone-name">场景库</span>
-            <QTip :text="`只列你能发起的${auth.can('users.manage') ? '(管理员可发起全部)' : ':你自己的场景 — 别人的跑不了,发起要过属主闸'}。`" />
+            <QTip text="只列你能发起的:你自己的场景 — 别人的跑不了,发起要过属主闸。" />
             <span class="zone-spacer"></span>
             <span class="zone-hint">{{ pickerList.length }} 条可发起</span>
           </div>
@@ -218,7 +218,6 @@ import RunConfigPanel from '@/components/composer/RunConfigPanel.vue'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
-import { useAuthStore } from '@/stores/auth'
 import { listScenarioOptions, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
 import type { PrecheckResult, SchemeV2, DataSetSelection } from '@/api/scenario-composer'
 import type { RunOptions } from '@/types/m2'
@@ -227,7 +226,6 @@ import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembl
 import { composerUrl, executionsBatchUrl, scenarioSchemesUrl } from '@/utils/links'
 
 const router = useRouter()
-const auth = useAuthStore()
 
 /** 页头问号弹层 = 短定位 + 原页尾图例两段(逐页收纳批:页尾说明区不常驻) */
 const pageTip = '发起执行的地方:搭一条队列 — 每条选方案 → 补齐绑定 → 一次启动。以前这是编排页里的运行对话框,只能从单条用例进,独立成页之后队列才成立'
@@ -267,13 +265,13 @@ const filteredPicker = computed(() => {
 // 只作用于已加载页,场景过百后第 101 条会静默丢失;带 q 重拉修复。
 async function loadPicker(q = ''): Promise<void> {
   try {
-    // 发起要过属主闸(runs 路由 ensure_owner):member 只列自己创建的
-    // (scope=mine,含自己已发布的——owner 可跑自己的公共场景;与场景
-    // 库 mine 镜头同口径);admin 全列。
+    // 发起要过属主闸(owner ∨ 引用):一律只列自己创建的(scope=mine,
+    // 含自己已发布的)。authz W3 起管理员对他人私有场景无执行权,
+    // 「管理员全列」只会列出跑不了的场景
     const env = await listScenarioOptions({
       page_size: 100,
       q: q || undefined,
-      ...(auth.can('users.manage') ? {} : { scope: 'mine' as const }),
+      scope: 'mine',
     })
     pickerList.value = env.items
   } catch (e) {

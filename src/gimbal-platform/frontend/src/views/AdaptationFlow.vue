@@ -213,6 +213,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import StructureOpEditor, { toOps, incompleteReason } from '@/components/adaptations/StructureOpEditor.vue'
@@ -229,7 +230,9 @@ import type {
 const stepLabels = ['选择', '比较', '检查', '提交']
 
 const step = ref(1)
-const scenarioId = ref('')
+const route = useRoute()
+// authz D5:批次对私有场景只发「待适配」通知,链接 ?scenario= 预选
+const scenarioId = ref(typeof route.query.scenario === 'string' ? route.query.scenario : '')
 const targetRevision = ref('')
 
 const compareResult = ref<CompareResult | null>(null)

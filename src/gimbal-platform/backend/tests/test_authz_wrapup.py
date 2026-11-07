@@ -59,10 +59,11 @@ async def test_admin_cannot_patch_other_users(client: AsyncClient):
     assert r.status_code == 200, r.text
 
 
-async def test_batch_op_endpoints_require_users_manage(client: AsyncClient):
-    """④ 适配批次内写操作(补 op / 应用 / 跳过 / 改 payload / 回滚)与批次
-    详情同门 users.manage —— 此前仅需登录,任何用户可经批次改写全局
-    carry 与他人场景。门在取数之前,不存在的 id 也先 403。"""
+async def test_batch_op_endpoints_require_ops_write(client: AsyncClient):
+    """④ 适配批次内写操作(补 op / 应用 / 跳过 / 改 payload / 回滚)门 =
+    ops.write(Admin+,authz D5 由 users.manage 下放,方案 2.1)—— 此前
+    仅需登录。门在取数之前:普通用户对不存在的 id 也先 403;Admin 过门
+    后才是 404。"""
     h_user = await role_headers(client, "wu_bu", role="user")
     h_adm = await role_headers(client, "wu_ba", role="admin")
     calls = [
@@ -73,14 +74,69 @@ async def test_batch_op_endpoints_require_users_manage(client: AsyncClient):
         ("patch", "/api/adaptations/ops/999999", {"payload": {}}),
         ("post", "/api/adaptations/batches/no-such/rollback", None),
     ]
-    for h in (h_user, h_adm):
-        for method, path, body in calls:
-            kw = {"headers": h}
-            if body is not None:
-                kw["json"] = body
-            r = await getattr(client, method)(path, **kw)
-            assert r.status_code == 403, (method, path, r.text)
-            assert r.json()["detail"]["code"] == "capability_forbidden"
-    h_sa = await role_headers(client, "wu_bs", role="super_admin")
-    r = await client.post("/api/adaptations/ops/999999/apply", headers=h_sa)
-    assert r.status_code == 404, r.text
+    for method, path, body in calls:
+        kw = {"headers": h_user}
+        if body is not None:
+            kw["json"] = body
+        r = await getattr(client, method)(path, **kw)
+        assert r.status_code == 403, (method, path, r.text)
+        assert r.json()["detail"]["capability"] == "ops.write"
+        kw["headers"] = h_adm
+        r = await getattr(client, method)(path, **kw)
+        assert r.status_code == 404, (method, path, r.text)
+
+
+async def _open_carry_batch(client, h) -> str:
+    r = await client.post("/api/adaptations/carry-batches", headers=h, json={})
+    assert r.status_code == 201, r.text
+    return r.json()["batchId"]
+
+
+async def test_batch_scenario_op_private_refused_owner_notified(
+        client: AsyncClient):
+    """⑤ authz D5:批次的场景 op 只作用于公共场景;私有场景 409
+    private_scenario_owner_only,属主收「待适配」通知,链接到自己的单
+    场景适配入口(?scenario= 预选)。"""
+    from sqlalchemy import select as sa_select
+
+    from app.core import db as db_module
+    from app.models.permission import Notification
+    from app.models.user import User
+
+    h_owner = await role_headers(client, "wu_po", role="user")
+    r = await client.post("/api/scenarios", headers=h_owner,
+                          json=make_draft("sc-wu-priv"))
+    assert r.status_code in (200, 201), r.text
+    h_adm = await role_headers(client, "wu_pa", role="admin")
+    bid = await _open_carry_batch(client, h_adm)
+    r = await client.post(f"/api/adaptations/batches/{bid}/ops", headers=h_adm,
+                          json={"opType": "renameField",
+                                "scenarioId": "sc-wu-priv",
+                                "payload": {"from": "$.a", "to": "$.b"}})
+    assert r.status_code == 409, r.text
+    assert "private_scenario_owner_only" in r.text
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa_select(User.id).where(
+            User.username == "wu_po"))).scalar_one()
+        notes = (await s.execute(sa_select(Notification).where(
+            Notification.user_id == uid,
+            Notification.type == "adaptation_pending"))).scalars().all()
+    assert notes and notes[0].link == "/adaptations?scenario=sc-wu-priv"
+
+
+async def test_batch_scenario_op_public_allowed(client: AsyncClient):
+    """公共场景照常可由批次补 op(Admin+ 的运维面)。"""
+    from tests.inbound_fixtures import publish_scenario
+
+    h_owner = await role_headers(client, "wu_puo", role="user")
+    r = await client.post("/api/scenarios", headers=h_owner,
+                          json=make_draft("sc-wu-pub"))
+    assert r.status_code in (200, 201), r.text
+    await publish_scenario("sc-wu-pub")
+    h_adm = await role_headers(client, "wu_pua", role="admin")
+    bid = await _open_carry_batch(client, h_adm)
+    r = await client.post(f"/api/adaptations/batches/{bid}/ops", headers=h_adm,
+                          json={"opType": "renameField",
+                                "scenarioId": "sc-wu-pub",
+                                "payload": {"from": "$.a", "to": "$.b"}})
+    assert r.status_code == 201, r.text
