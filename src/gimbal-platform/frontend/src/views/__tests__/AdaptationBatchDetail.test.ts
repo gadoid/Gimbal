@@ -61,7 +61,7 @@ function login(admin: boolean) {
   auth.accessToken = 'tok'
   auth.currentUser = {
     id: admin ? 1 : 2, username: 'u',
-    role: admin ? 'super_admin' : 'user', is_admin: admin,
+    role: admin ? 'super_admin' : 'user',
   } as never
   auth.capabilities = admin
     ? ['users.manage', 'ops.write', 'alias.write'] : []

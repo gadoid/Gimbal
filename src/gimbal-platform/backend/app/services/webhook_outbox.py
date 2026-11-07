@@ -211,8 +211,7 @@ async def _enqueue_integration_event(
 ) -> "int | None":
     if tpl.token_id is None:
         return None
-    if tpl.identity_mode == "personal" \
-            and inst.holder_id != tpl.owner_id:
+    if inst.holder_id != tpl.owner_id:
         return None
     token = await _load_token(db, tpl.token_id)
     target = await _callback_target(db, token, tpl.callback_path_override)
@@ -223,7 +222,9 @@ async def _enqueue_integration_event(
         "taskName": tpl.name,
         "instanceId": inst.id,
         "clientRef": tpl.client_ref,
-        "identityMode": tpl.identity_mode,
+        # 回调载荷契约字段:平台模式退役后恒 personal(外部注册方
+        # 可能已解析该键,保留常量不删)
+        "identityMode": "personal",
         "caller": _caller_payload(token),
         **fields,
     }

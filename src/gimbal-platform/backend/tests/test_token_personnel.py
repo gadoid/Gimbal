@@ -140,14 +140,13 @@ class TestDeleteUserDisposal:
         from .test_access_tokens import _admin_headers
         return await _admin_headers(client)
 
-    async def _seed_owner_with_task(self, username: str,
-                                    identity_mode: str = "personal"):
+    async def _seed_owner_with_task(self, username: str):
         from .inbound_fixtures import mk_task_pair, mk_user
         await mk_user(username, role="admin")
         uid = await _user_id(username)
         tid, _ = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(
-            token_id=tid, owner_id=uid, identity_mode=identity_mode,
+            token_id=tid, owner_id=uid,
             name=f"{username}-task")
         return uid, tid, tpl_id, inst_id
 

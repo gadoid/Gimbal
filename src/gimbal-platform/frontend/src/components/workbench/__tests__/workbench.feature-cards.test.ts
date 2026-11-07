@@ -57,7 +57,7 @@ function setAuth(isAdmin: boolean): void {
   const auth = useAuthStore()
   auth.currentUser = {
     id: 1, username: 'alice', display_name: 'A',
-    role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
+    role: isAdmin ? 'super_admin' : 'user',
   } as never
   auth.capabilities = isAdmin
     ? ['users.manage', 'ops.write', 'alias.write'] : []

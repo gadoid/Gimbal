@@ -20,7 +20,7 @@ vi.mock('@/api/preferences', () => ({
 
 const as = (username: string) => {
   useAuthStore().currentUser = {
-    id: 1, username, display_name: username, is_admin: false,
+    id: 1, username, display_name: username,
   } as never
 }
 

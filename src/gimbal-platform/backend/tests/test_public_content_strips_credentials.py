@@ -41,10 +41,11 @@ def _draft_with_vars(sid: str) -> dict:
 
 # ── ① 主规则:谓词矩阵(built_in_users / prepare_exec 两层)────────
 @pytest.mark.parametrize("executor,owner,expect_kept", [
-    (1, 1, True),     # 执行人 = 属主 → 生效
-    (2, 1, False),    # 引用执行 / 订阅执行 / 平台身份 → 当空
-    (None, 1, True),  # 展示/清单面(不判)→ 原样
-    (1, None, True),  # adhoc(无存储属主)→ 原样
+    (1, 1, True),       # 执行人 = 属主 → 生效
+    (2, 1, False),      # 引用执行 / 订阅执行 / 非属主导出 → 当空
+    (None, 1, False),   # fail-closed:执行人未知 → 当空(此前放行)
+    (1, None, False),   # fail-closed:孤儿场景(属主已删)→ 当空(此前放行)
+    (None, None, False),
 ])
 def test_built_in_users_main_rule(executor, owner, expect_kept):
     from app.services.run_prepare import built_in_users
@@ -510,3 +511,117 @@ async def test_suite_validate_reports_builtin_auth_shadowed(
             if i["code"] == "builtin_auth_shadowed"]
     assert hits and hits[0]["units"] == ["sc-w6-sv"]
     assert "gitlab" in hits[0]["message"]
+
+
+# ── ⑧ 最终产物零作者凭证(断言产物,不断言中间层)───────────────────
+# 此前用例只钉 prep.built_in_users 与数据集行(中间层);materialize 以
+# converted.config.users 为合并基座,作者明文照样进产物 —— 这里逐条链
+# 断言**最终产物**(导出回包 / suite 编排单元 / 订阅执行 case / 单场景
+# case.json)。plate convert 用 echo:converted 原样带回 config.users,
+# 与真实 plate 同形(泄漏正是经由这里)。
+_SECRET = "author-secret-pw-9f3"
+_SECRET_USERS = {"gitlab": {"url": "https://git.example", "username": "author-acct",
+                            "password": _SECRET, "token_type": "Bearer",
+                            "expires_in": 7200}}
+
+
+def _echo_convert(monkeypatch):
+    from app.services import plate_client as pc
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+
+
+async def _mk_secret_scenario(client, h, sid: str, *, public: bool = False):
+    draft = make_draft(sid, steps=[_GET_STEP])
+    draft["definition"]["config"]["users"] = dict(_SECRET_USERS)
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code in (200, 201), r.text
+    if public:
+        from tests.inbound_fixtures import publish_scenario
+
+        await publish_scenario(sid)
+
+
+class TestFinalProductsNoAuthorCredentials:
+    async def test_export_by_non_owner(self, client: AsyncClient, monkeypatch):
+        """导出:任何登录用户导出他人公共场景 —— 产物无作者明文;属主
+        导出照旧带(10-14 口径,行为不变)。"""
+        _echo_convert(monkeypatch)
+        h_owner = await role_headers(client, "fp_exo")
+        await _mk_secret_scenario(client, h_owner, "sc-fp-ex", public=True)
+        h_o = await role_headers(client, "fp_exr", role="user")
+        r = await client.get("/api/scenarios/sc-fp-ex/export", headers=h_o)
+        assert r.status_code == 200, r.text
+        assert _SECRET not in r.text and "author-acct" not in r.text
+        r = await client.get("/api/scenarios/sc-fp-ex/export", headers=h_owner)
+        assert r.status_code == 200, r.text
+        assert r.json()["config"]["users"] == _SECRET_USERS
+
+    async def test_suite_graph_unit_for_non_owner(
+            self, client: AsyncClient, monkeypatch):
+        """suite graph 编排:非属主组装出的单元场景无作者 config.users;
+        属主组装照旧带。"""
+        import json
+
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.user import User
+        from app.services import graph_dispatch
+
+        _echo_convert(monkeypatch)
+        h_owner = await role_headers(client, "fp_gro")
+        await _mk_secret_scenario(client, h_owner, "sc-fp-gr")
+        await role_headers(client, "fp_grr", role="user")
+        async with db_module.SessionLocal() as s:
+            ids = dict((await s.execute(sa_select(User.username, User.id).where(
+                User.username.in_(["fp_gro", "fp_grr"])))).all())
+        spec = {"mode": "chain",
+                "units": [{"ref": "a", "scenarioId": "sc-fp-gr"}]}
+        async with db_module.SessionLocal() as s:
+            foreign = await graph_dispatch.materialize_graph(
+                s, ids["fp_grr"], spec)
+        assert _SECRET not in json.dumps(foreign, default=str)
+        async with db_module.SessionLocal() as s:
+            own = await graph_dispatch.materialize_graph(s, ids["fp_gro"], spec)
+        assert own["units"][0]["scenario"]["config"]["users"] == _SECRET_USERS
+
+    async def test_single_run_case_file_for_ref_executor(
+            self, client: AsyncClient, monkeypatch):
+        """单场景执行:引用执行人落盘的 case.json 无作者明文。"""
+        import asyncio
+        from pathlib import Path
+
+        from app.services import gimbal_launcher as gl
+        from tests.helpers import launch_ok
+
+        _echo_convert(monkeypatch)
+        cases: list[str] = []
+
+        async def _fake_launch(case_path, **kw):
+            cases.append(Path(case_path).read_text(encoding="utf-8"))
+            return launch_ok()
+        monkeypatch.setattr(gl, "launch", _fake_launch)
+
+        h_owner = await role_headers(client, "fp_sro")
+        await _mk_secret_scenario(client, h_owner, "sc-fp-sr")
+        await role_headers(client, "fp_srr", role="user")
+        roster = (await client.get(
+            "/api/users/roster", headers=h_owner)).json()["items"]
+        rid = next(u["id"] for u in roster if u["username"] == "fp_srr")
+        r = await client.post("/api/shares", headers=h_owner, json={
+            "resourceType": "scenario", "resourceId": "sc-fp-sr",
+            "granteeUserId": rid, "mode": "ref"})
+        assert r.status_code == 201, r.text
+        h_ref = await role_headers(client, "fp_srr", role="user")
+        r = await client.post("/api/runs", headers=h_ref, json={
+            "scenarioId": "sc-fp-sr", "dataSetIds": []})
+        assert r.status_code == 201, r.text
+        for _ in range(200):
+            if cases:
+                break
+            await asyncio.sleep(0.05)
+        assert cases, "case.json 未落盘"
+        assert _SECRET not in cases[-1] and "author-acct" not in cases[-1]

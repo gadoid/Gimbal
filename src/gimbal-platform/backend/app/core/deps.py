@@ -131,6 +131,19 @@ async def principal_or_user(
 # (取代旧的 role_forbidden / admin_only 两种形状,方案 9.7)。
 
 
+def capability_error(capability: str) -> HTTPException:
+    """403 ``capability_forbidden``(统一错误契约)—— 能力门之外的行内
+    判定(如「个人别名仅 users.manage」)同款形状,不再各写一份。"""
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "capability_forbidden",
+            "capability": capability,
+            "message": f"requires capability: {capability}",
+        },
+    )
+
+
 def require_capability(capability: str):
     """能力门工厂:表 A 判定;不满足 → 403 capability_forbidden。"""
     # 延迟 import:routers 包 __init__ 会拉起各 router → 回引本模块,
@@ -141,14 +154,7 @@ def require_capability(capability: str):
 
     async def _dep(user: CurrentUser) -> User:
         if user.role not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "code": "capability_forbidden",
-                    "capability": capability,
-                    "message": f"requires capability: {capability}",
-                },
-            )
+            raise capability_error(capability)
         return user
 
     return _dep

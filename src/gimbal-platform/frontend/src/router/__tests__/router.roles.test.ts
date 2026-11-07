@@ -122,7 +122,8 @@ describe('auth store — can() 矩阵与旧快照迁移(authz W8)', () => {
 
   it('旧快照(W8 前)无 capabilities → can() 恒 false;role 兜底显示 user', () => {
     const auth = useAuthStore()
-    // 旧快照形态:role 可能还是更名前的 'member'/'operator'
+    // 旧快照形态:role 可能还是更名前的 'member'/'operator',且带已停发的
+    // is_admin 派生位 —— 二者都不得授予任何能力
     auth.currentUser = { id: 2, username: 'old', role: 'member', is_admin: true } as never
     expect(auth.can('users.manage')).toBe(false)
     expect(auth.can('ops.write')).toBe(false)

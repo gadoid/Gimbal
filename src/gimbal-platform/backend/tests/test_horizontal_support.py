@@ -301,7 +301,7 @@ class TestIntegrationTimeline:
         async with db_module.SessionLocal() as db:
             tpl = IntegrationTask(
                 name="iv-task", owner_id=holder_id,
-                identity_mode="personal", target_type="scenario",
+                target_type="scenario",
                 scenario_id="sc-iv-1", trigger_cron="*/5 * * * *",
                 result_policy="latest", visibility="public",
                 card_template="status")

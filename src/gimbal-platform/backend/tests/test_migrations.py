@@ -114,11 +114,21 @@ _ROLE_FORMS = [
 ]
 
 
+def _add_legacy_identity_mode(eng) -> None:
+    """create_all 是当前模型(identity_mode 列已随 0039 删除);0039 之前
+    的存量库带该列 —— 补回,供 0036–0038 的迁移语句操作。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "ALTER TABLE integration_tasks ADD COLUMN identity_mode "
+            "VARCHAR(16) NOT NULL DEFAULT 'personal'")
+
+
 def _to_0035_shape(eng) -> None:
     """create_all 是当前模型(已含新列);撤掉新列模拟 0035 存量库。"""
     with eng.begin() as conn:
         conn.exec_driver_sql(
             "ALTER TABLE users DROP COLUMN must_change_password")
+    _add_legacy_identity_mode(eng)
 
 
 @pytest.mark.parametrize("seed", _ROLE_FORMS)
@@ -151,7 +161,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0038_platform_retire"
+            assert _revision(sync_url) == "0039_drop_identity_mode"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -227,7 +237,7 @@ def test_0036_revives_token_owner_ineligible():
     def _tpl(name: str, owner: int) -> IntegrationTask:
         return IntegrationTask(
             name=name, owner_id=owner, visibility="private",
-            identity_mode="platform", target_type="scenario",
+            target_type="scenario",
             scenario_id="sc-1", target_system="fin",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status", state="paused",
@@ -362,7 +372,7 @@ def test_0038_platform_retire():
                 # 平台模板(私有)+ 平台唯一实例 + 订阅者实例
                 tpl = IntegrationTask(
                     name="plat-tpl", owner_id=root.id, visibility="private",
-                    identity_mode="platform", target_type="scenario",
+                    target_type="scenario",
                     scenario_id="sc-1", target_system="fin",
                     trigger_cron="*/5 * * * *", result_policy="latest",
                     card_template="status", state="idle")
@@ -378,7 +388,7 @@ def test_0038_platform_retire():
                 # 对照:root 的个人公共模板 —— 属主不随平台模板改
                 own = IntegrationTask(
                     name="own-tpl", owner_id=root.id, visibility="public",
-                    identity_mode="personal", target_type="scenario",
+                    target_type="scenario",
                     scenario_id="sc-2", target_system="fin",
                     trigger_cron="*/5 * * * *", result_policy="latest",
                     card_template="status", state="idle")
@@ -397,6 +407,12 @@ def test_0038_platform_retire():
                                   + timedelta(days=1)))
                 s.commit()
                 plat_id, sub_id, root_id = plat.id, sub.id, root.id
+            # 0039 前的存量形态:补回 identity_mode 列,平台模板行置 platform
+            _add_legacy_identity_mode(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "UPDATE integration_tasks SET identity_mode='platform' "
+                    "WHERE name = 'plat-tpl' AND template_id IS NULL")
             command.stamp(_cfg(sync_url), "0037_report_def_maintainer")
             command.upgrade(_cfg(sync_url), "0038_platform_retire")
 
@@ -440,5 +456,49 @@ def test_0038_platform_retire():
                     "SELECT count(*) FROM pg_constraint "
                     "WHERE conname = "
                     "'ck_integration_identity_personal'")).scalar() == 0
+        finally:
+            eng.dispose()
+
+
+# ── 0039_drop_identity_mode(authz 收尾)───────────────────────────
+def test_0039_drop_identity_mode():
+    """0038 终态(列 + CHECK)→ 0039 删约束与列;downgrade 还原列(回填
+    personal)与约束。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+
+    def _cols(c) -> set[str]:
+        return {r[0] for r in c.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'integration_tasks' "
+            "AND table_schema = current_schema()"))}
+
+    def _ck(c) -> int:
+        return c.execute(text(
+            "SELECT count(*) FROM pg_constraint "
+            "WHERE conname = 'ck_integration_identity_personal'")).scalar()
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            _add_legacy_identity_mode(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "ALTER TABLE integration_tasks ADD CONSTRAINT "
+                    "ck_integration_identity_personal "
+                    "CHECK (identity_mode = 'personal')")
+            command.stamp(_cfg(sync_url), "0038_platform_retire")
+            command.upgrade(_cfg(sync_url), "0039_drop_identity_mode")
+            with eng.connect() as c:
+                assert "identity_mode" not in _cols(c)
+                assert _ck(c) == 0
+            command.downgrade(_cfg(sync_url), "0038_platform_retire")
+            with eng.connect() as c:
+                assert "identity_mode" in _cols(c)
+                assert _ck(c) == 1
         finally:
             eng.dispose()

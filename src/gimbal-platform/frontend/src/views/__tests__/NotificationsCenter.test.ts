@@ -45,7 +45,7 @@ async function mountPage(role: 'user' | 'super_admin') {
   setActivePinia(pinia)
   const auth = useAuthStore()
   auth.currentUser = {
-    id: 1, username: 'x', role, is_admin: role === 'super_admin',
+    id: 1, username: 'x', role,
   } as never
   // authz W8:审计 tab = users.manage 面
   auth.capabilities = role === 'super_admin'

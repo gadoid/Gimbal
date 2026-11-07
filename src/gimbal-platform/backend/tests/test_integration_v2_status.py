@@ -130,14 +130,14 @@ class TestClassifyOutcome:
 
 # ── _finish 状态推进(§2.3)────────────────────────────────────────
 
-async def _seed_pair(*, mode="personal", holder=1, owner=1,
+async def _seed_pair(*, holder=1, owner=1,
                      cron="*/5 * * * *") -> tuple[int, int]:
     """模板 + 实例行;返回 (tpl_id, inst_id)。"""
     async with db_module.SessionLocal() as s:
         await ensure_fk_users(s, owner, holder)
         s.add(IntegrationTask(
             name="v2用例", owner_id=owner, visibility="public",
-            identity_mode=mode, scenario_id="sc-v2", target_system="fin",
+            scenario_id="sc-v2", target_system="fin",
             trigger_cron=cron, result_policy="latest"))
         await s.flush()
         tpl_id = (await s.execute(sa.select(IntegrationTask.id).order_by(
@@ -393,7 +393,7 @@ class TestLegacyMapSql:
             await ensure_fk_users(s, 1, 2, 3, 4, 5)
             s.add(IntegrationTask(
                 name="tpl", owner_id=1, visibility="public",
-                identity_mode="platform", scenario_id="sc-v2-mig",
+                scenario_id="sc-v2-mig",
                 trigger_cron="*/5 * * * *"))
             await s.flush()
             tpl_id = (await s.execute(sa.select(IntegrationTask.id).order_by(

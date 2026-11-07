@@ -57,7 +57,7 @@ describe('AddToSuiteDialog', () => {
       { suiteId: 2, name: '回归集', description: '', visibility: 'private',
         mode: 'aggregate', memberCount: 12, createdAt: null, updatedAt: null },
     ]))
-    vi.mocked(suitesApi.addSuiteMembers).mockResolvedValue({} as never)
+    vi.mocked(suitesApi.addSuiteMembers).mockResolvedValue({ } as never)
   })
 
   it('打开即拉我的 suite(scope=mine),单选后提交传勾选 id 全集', async () => {

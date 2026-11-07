@@ -206,8 +206,8 @@ def _scope_missing_detail(missing: "list[at.ScopeMissing]",
 
 def _builtin_auths(scen) -> list[str]:
     """场景内置认证的用户名列表(§7.1:不含密码)。"""
-    from ..services.run_prepare import built_in_users
-    return sorted(str(k) for k in built_in_users(scen.payload))
+    from ..services.run_prepare import built_in_user_aliases
+    return built_in_user_aliases(scen.payload)
 
 
 async def _post_adhoc_run(

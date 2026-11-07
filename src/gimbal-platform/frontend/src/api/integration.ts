@@ -25,7 +25,6 @@ export interface IntegrationTaskItem {
   mine: boolean
   canManage: boolean
   visibility: string
-  identityMode: string
   targetType: string
   scenarioId: string | null
   suiteId: number | null
@@ -55,7 +54,6 @@ export interface FunctionCardData {
   lastRunAt?: string | null
   lastError?: string
   cronText?: string
-  identityMode?: string
   stale?: boolean
   /** Y4:卡片输出投影(output_mapping 投影/空 mapping = 全量;已脱敏) */
   outputs?: Record<string, unknown>
@@ -126,7 +124,6 @@ export async function createIntegrationTask(body: {
   name: string
   scenarioId: string
   schemeId?: string | null
-  identityMode?: string
   triggerCron?: string
   resultPolicy?: string
   visibility?: string

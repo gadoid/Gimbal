@@ -82,7 +82,7 @@ describe('工作台卡头图标 = 功能页那颗', () => {
     localStorage.clear()
     // authz W8:17 张卡含三张能力门卡 —— 注入表 A 全能力(super_admin)
     const auth = useAuthStore()
-    auth.currentUser = { id: 1, username: 'admin', display_name: 'A', role: 'super_admin', is_admin: true } as never
+    auth.currentUser = { id: 1, username: 'admin', display_name: 'A', role: 'super_admin' } as never
     auth.capabilities = ['users.manage', 'ops.write', 'alias.write']
   })
 

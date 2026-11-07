@@ -59,7 +59,7 @@ from .scenario_store import definition_from_payload
 __all__ = [
     "ResolvedAuth", "AuthResolveError", "MissingAuthAliases",
     "resolve_exec_auths", "compose_scenario", "coerce_row_value",
-    "built_in_users", "find_dataset_by_id", "ExecPrep", "prepare_exec",
+    "built_in_users", "built_in_user_aliases", "find_dataset_by_id", "ExecPrep", "prepare_exec",
     "graph_auth_aliases", "unit_carry_contexts",
 ]
 
@@ -177,21 +177,29 @@ async def resolve_exec_auths(
     return resolved
 
 
+def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
+    """场景内置认证的别名清单(只给名字,不给凭证)—— 展示 / 预检告警
+    用(§7.1 内置认证清单、builtin_auth_shadowed)。"""
+    def_cfg = definition_from_payload(scenario_payload).get("config") or {}
+    users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+    return sorted(str(k) for k in (users or {}))
+
+
 def built_in_users(
     scenario_payload: dict | None, *,
-    executor_id: int | None = None,
-    scenario_owner_id: int | None = None,
+    executor_id: int | None,
+    scenario_owner_id: int | None,
 ) -> dict[str, Any]:
-    """场景 definition.config.users(merge 策略保留基座)。
+    """场景 definition.config.users —— 仅当执行人 == 场景属主时返回。
 
-    authz W6 主规则(评审 R3):内置凭证**只在执行人 == 场景属主时
-    生效**,其余(share_ref 引用执行 / 订阅执行 / 平台身份 / 存量公开
-    场景)一律当空 —— 一条规则覆盖全部执行路径,不需要数据迁移。
-    两参缺省 None = 不判(展示/清单面,如 §7.1 的内置认证清单与预检
-    的「场景有内置凭证」判定要看原始内容)。
+    authz W6 主规则(评审 R3):其余(share_ref 引用执行 / 订阅执行 /
+    非属主导出 / suite 跑他人成员)一律当空。**fail-closed**:两参必填,
+    任一为 None(属主已删的孤儿场景、调用方漏传)同样当空 —— 此前 None
+    = 不判直接放行。作者即席提供 payload 的路径(草稿预览、临时调用)
+    由调用方显式传 ``scenario_owner_id = executor_id``。只要名字的展示面
+    用 :func:`built_in_user_aliases`。
     """
-    if (executor_id is not None and scenario_owner_id is not None
-            and executor_id != scenario_owner_id):
+    if executor_id is None or executor_id != scenario_owner_id:
         return {}
     def_cfg = definition_from_payload(scenario_payload).get("config") or {}
     users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}

@@ -159,14 +159,13 @@ class TestIntegrationRouter:
     async def test_create_ok_and_instance_seeded(self, client):
         h = await register_and_login(client, "ig_ok", "ig_okpass123")
         await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET, publish=True)
-        # authz W5:平台模式新建 410;通用流程走 personal(默认值反转后
-        # 省略字段 = personal,这里显式传以对齐旧断言形状)
+        # identityMode 是兼容字段(列已删,0039):显式传 personal 照常建
         r = await client.post("/api/integration/tasks", headers=h,
                               json=_task_body("sc-ig-ok", visibility="public",
                                               identityMode="personal"))
         assert r.status_code == 201, r.text
         out = r.json()
-        assert out["identityMode"] == "personal"
+        assert "identityMode" not in out
         assert out["cronText"].startswith("每 5 分钟")
         assert out["instance"]["state"] in ("idle", "none")
 
@@ -344,7 +343,7 @@ async def test_non_auth_failure_keeps_running(client):
     async with db_module.SessionLocal() as s:
         s.add(IntegrationTask(
             name="普通失败", owner_id=1, visibility="public",
-            identity_mode="personal", scenario_id="sc-x",
+            scenario_id="sc-x",
             target_system="fin", trigger_cron="*/5 * * * *",
             result_policy="latest"))
         await s.commit()

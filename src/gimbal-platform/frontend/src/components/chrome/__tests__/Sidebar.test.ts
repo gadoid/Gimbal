@@ -44,7 +44,6 @@ async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
     username: 'alice',
     display_name: 'Alice',
     role: opts.isAdmin ? 'super_admin' : 'user',
-    is_admin: opts.isAdmin,
   } as never
   auth.capabilities = opts.isAdmin
     ? ['users.manage', 'ops.write', 'alias.write']

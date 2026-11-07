@@ -438,14 +438,14 @@ function isSelf(row: UserOut): boolean {
 }
 
 /** authz W1 三级角色(user | admin | super_admin)。列表行来自后端实时
- * 响应,role 一定是新值;is_admin 回落只兜极旧缓存。 */
+ * 响应,role 一定是新值(is_admin 派生位已停发)。 */
 type Role = 'user' | 'admin' | 'super_admin'
 const ROLE_LABELS: Record<Role, string> = { user: '用户', admin: '管理员', super_admin: '超级管理员' }
 const OTHER_ROLES: Role[] = ['user', 'admin', 'super_admin']
 function roleOf(u: UserOut): Role {
   const r = (u as { role?: Role }).role
   if (r === 'user' || r === 'admin' || r === 'super_admin') return r
-  return u.is_admin ? 'super_admin' : 'user'
+  return 'user'
 }
 function roleLabel(r: Role): string { return ROLE_LABELS[r] }
 function roleChipClass(r: Role): string {

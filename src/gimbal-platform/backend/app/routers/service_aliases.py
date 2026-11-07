@@ -19,7 +19,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser, MemberUser
+from ..core.deps import CurrentUser, MemberUser, capability_error
+from ._ownership import has_capability
 from ..models.service_alias import ServiceAlias
 from ..services import service_aliases
 from ..services.service_aliases import UnknownBaseService
@@ -136,11 +137,9 @@ async def create_alias(
     """登记别名(M2.5,权限方案 §1.2 两类归属拆行):
     团队共享(owner_user_id 空)= member+;个人默认(owner_user_id
     非空,即「归属字段」)= admin —— 人事/内容权不落进技术运营角色。"""
-    if body.owner_user_id is not None and user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: personal aliases (ownerUserId) are managed by admins",
-        )
+    if body.owner_user_id is not None and not has_capability(
+            user, "users.manage"):
+        raise capability_error("users.manage")
     try:
         created = await service_aliases.create_alias(
             db, alias_name=body.alias_name, environment_id=body.environment_id,
@@ -176,11 +175,9 @@ async def patch_alias(
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
     )).scalar_one_or_none()
-    if row is not None and row.owner_user_id is not None and user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: personal aliases are managed by admins",
-        )
+    if (row is not None and row.owner_user_id is not None
+            and not has_capability(user, "users.manage")):
+        raise capability_error("users.manage")
     try:
         explicit_env = ("environment_id" in body.model_fields_set
                         or "environmentId" in body.model_fields_set)
@@ -215,11 +212,9 @@ async def delete_alias(
     row = (await db.execute(
         select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
     )).scalar_one_or_none()
-    if row is not None and row.owner_user_id is not None and user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: personal aliases are managed by admins",
-        )
+    if (row is not None and row.owner_user_id is not None
+            and not has_capability(user, "users.manage")):
+        raise capability_error("users.manage")
     await service_aliases.delete_alias(db, alias_name)
     from ..services import audit as audit_svc
 

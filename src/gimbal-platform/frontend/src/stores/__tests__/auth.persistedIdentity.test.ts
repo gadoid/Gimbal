@@ -39,7 +39,7 @@ describe('auth — 身份快照入档', () => {
     const auth = useAuthStore()
     auth.accessToken = 'a'
     auth.refreshToken = 'r'
-    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_admin: false, is_active: true, created_at: 'x' } as never
+    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_active: true, created_at: 'x' } as never
     await nextTick()
     expect(get()).toMatchObject({ accessToken: 'a', user: { username: 'bob' } })
   })
@@ -48,7 +48,7 @@ describe('auth — 身份快照入档', () => {
     const auth = useAuthStore()
     auth.accessToken = 'a'
     auth.refreshToken = 'r'
-    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob' } as never
     await nextTick()
     expect(get()?.user?.username).toBe('bob')
     auth.clear()

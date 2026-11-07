@@ -80,8 +80,7 @@
             >{{ runningId === t.id ? '执行中…' : '立即执行' }}</button>
             <!-- W2:个人模式订阅面 —— 订阅/重新确认走知情确认弹窗 -->
             <button
-              v-if="t.identityMode === 'personal' && !t.canManage
-                    && (!t.subscribed || needsReconfirm(t))"
+              v-if="!t.canManage && (!t.subscribed || needsReconfirm(t))"
               type="button" class="ig-act" :data-testid="`ig-sub-${t.id}`"
               @click="subTask = t"
             >{{ needsReconfirm(t) ? '重新确认' : '订阅' }}</button>
@@ -92,7 +91,7 @@
                     :title="isPaused(t) && !resumablePause(t) ? pausedAction(t).label : ''"
                     @click="togglePause(t)"
             >{{ isPaused(t) ? '恢复' : '暂停' }}</button>
-            <button v-if="t.identityMode === 'personal' && t.subscribed && !t.canManage"
+            <button v-if="t.subscribed && !t.canManage"
                     type="button" class="ig-act danger" :data-testid="`ig-unsub-${t.id}`"
                     @click="doUnsubscribe(t)"
             >退订</button>
@@ -129,14 +128,8 @@
           <input v-model="form.name" data-testid="ig-form-name" placeholder="如:下单服务保活" />
         </label>
         <div class="ig-field-row">
-          <label class="ig-field">执行身份
-            <select v-model="form.identityMode" data-testid="ig-form-mode">
-              <option value="personal">个人模式(我的凭证 · 读写)</option>
-            </select>
-          </label>
-          <!-- 可见性文案按执行身份区分:平台模板对 member+ 恒可见(_visible,
-               2026-11-06),可见性只决定普通 user 能否看到;个人模板才是
-               「只有我 / 可被订阅」。不隐藏 —— 平台模式下它仍是有效开关。 -->
+          <!-- 执行身份恒为个人(平台模式退役,identity_mode 列已删):
+               可见性 = 「只有我 / 可被订阅」 -->
           <label class="ig-field">可见性
             <select v-model="form.visibility" data-testid="ig-form-visibility">
               <option value="private">{{ visibilityLabels.private }}</option>
@@ -436,7 +429,6 @@ const scenarios = ref<{ scenarioId: string; name: string }[]>([])
 const schemes = ref<{ schemeId: string; name: string; isDefault: boolean }[]>([])
 const form = reactive({
   name: '', scenarioId: '', schemeId: '',
-  identityMode: 'personal',
   triggerCron: '*/5 * * * *', resultPolicy: 'latest', visibility: 'private',
 })
 const visibilityLabels = computed(() =>
@@ -500,7 +492,6 @@ async function save(): Promise<void> {
       name: form.name.trim(),
       scenarioId: form.scenarioId,
       schemeId: form.schemeId || null,
-      identityMode: form.identityMode,
       triggerCron: form.triggerCron.trim(),
       resultPolicy: form.resultPolicy,
       visibility: form.visibility,

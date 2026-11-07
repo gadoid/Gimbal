@@ -31,9 +31,9 @@ vi.mock('@/utils/toast', () => ({
 }))
 
 const USERS = [
-  { id: 1, username: 'root', display_name: 'Root', role: 'super_admin', is_admin: true, is_active: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 2, username: 'alice', display_name: '', role: 'user', is_admin: false, is_active: true, created_at: '2026-02-01T00:00:00Z' },
-  { id: 3, username: 'bob', display_name: 'Bob', role: 'user', is_admin: false, is_active: false, created_at: '2026-03-01T00:00:00Z' },
+  { id: 1, username: 'root', display_name: 'Root', role: 'super_admin', is_active: true, created_at: '2026-01-01T00:00:00Z' },
+  { id: 2, username: 'alice', display_name: '', role: 'user', is_active: true, created_at: '2026-02-01T00:00:00Z' },
+  { id: 3, username: 'bob', display_name: 'Bob', role: 'user', is_active: false, created_at: '2026-03-01T00:00:00Z' },
 ]
 
 /** Portal 内元素查询(shadcn Dialog/DropdownMenu 渲染在 body) */
@@ -60,7 +60,7 @@ async function mountPage() {
 function loginAs(id: number, isAdmin = true) {
   const auth = useAuthStore()
   auth.currentUser = {
-    id, username: 'x', role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
+    id, username: 'x', role: isAdmin ? 'super_admin' : 'user',
   } as never
   auth.capabilities = isAdmin
     ? ['users.manage', 'ops.write', 'alias.write'] : []
@@ -90,7 +90,7 @@ beforeEach(() => {
       ({ ...USERS.find((u) => u.id === id)!, ...p })) as never,
   )
   vi.mocked(usersApi.create).mockResolvedValue(
-    { id: 99, username: 'newbie', display_name: '', is_admin: false, is_active: true, created_at: 'x' } as never,
+    { id: 99, username: 'newbie', display_name: '', is_active: true, created_at: 'x' } as never,
   )
 })
 

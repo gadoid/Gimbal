@@ -48,7 +48,7 @@ async def test_list_users_contains_self(client: AsyncClient) -> None:
     items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["username"] == "admin_one"
-    assert items[0]["is_admin"] is True
+    assert items[0]["role"] == "super_admin"
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,6 @@ async def test_create_user_roles_and_admin_gate(client: AsyncClient) -> None:
     )
     assert r.status_code == 201, r.text
     assert r.json()["role"] == "admin"
-    assert r.json()["is_admin"] is True  # 派生口径含 admin 与 super_admin
 
     # user 读用户列表 → 403(收紧:admin+ 可见)
     r = await client.get("/api/users", headers=_bearer(plain_user))
@@ -159,7 +158,6 @@ async def test_member_cannot_escalate_or_demote(client: AsyncClient) -> None:
     # Follow-up: user 角色未变(M2.5:列表已收 admin+,改走 /auth/me)
     me = await client.get("/api/auth/me", headers=member)
     assert me.json()["user"]["role"] == "user"
-    assert me.json()["user"]["is_admin"] is False
 
 
 @pytest.mark.asyncio

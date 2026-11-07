@@ -47,8 +47,11 @@ def materialize_run_copy(
 ) -> dict[str, Any]:
     """返回物化后的深拷贝;入参不可变(纯函数)。
 
-    * users:merge 基座 ``{**built_in_users, **converted.config.users}``
-      (内置认证以场景定义为唯一可信源),resolved_auths 按别名覆盖/追加
+    * users:**唯一来源** = ``built_in_users``(属主规则已裁定:执行人 ≠
+      场景属主即为空)+ resolved_auths 按别名覆盖/追加。``converted.config.
+      users``(plate convert 原样带回的作者内置凭证)一律丢弃 —— 此前以它
+      为合并基座,非属主时 built_in_users 虽空,作者明文仍从 converted 进
+      最终产物(导出 / suite 编排 / 订阅执行全部泄漏)
     * services:显式绑定 url > 场景 authored > **别名 base_url**(F4 方案
       B,2026-09-23 批次;仅对 steps 实际引用的 service 键生效,未引用键
       原样保留;D2 env 补缺层已退役)。``alias_base_urls`` 由调用方经
@@ -192,9 +195,9 @@ def _apply_services(cfg: dict, *, steps: list,
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:
-    if not resolved_auths:
-        return                       # 无 auths:users 原样(V1 语义:清单空 = 不注入)
-    users: dict[str, Any] = {**built_in_users, **cfg["users"]}
+    # authz W6 收口:不读 cfg["users"](converted 带回的作者凭证),也不因
+    # 清单空而「原样返回」—— 那正是非属主拿到作者明文的两条通道
+    users: dict[str, Any] = dict(built_in_users)
     for r in resolved_auths:
         users[r.alias] = {
             "url": r.url,

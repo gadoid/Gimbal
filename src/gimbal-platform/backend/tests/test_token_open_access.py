@@ -78,14 +78,9 @@ class TestTokenOpenAccess:
         assert r.status_code == 200, r.text
         assert len(r.json()["items"]) == 1
 
-    async def test_task_default_identity_mode_personal(self, client):
-        """省略 identityMode 的创建请求 → 落库 personal(A2:防省略
-        字段漏网建成平台任务;模型与 TaskIn 双侧默认一致)。"""
-        from sqlalchemy import select as sa_select
-
-        from app.core import db as db_module
-        from app.models.integration_task import IntegrationTask
-
+    async def test_task_identity_mode_compat_field(self, client):
+        """identity_mode 列删除(0039)后 identityMode 只是兼容字段:省略 /
+        传 personal 照常建;传 platform → 422;回包不再带该键。"""
         h = await role_headers(client, "tk_dflt", role="user")
         r = await client.post("/api/scenarios", headers=h,
                               json=make_draft("sc-tk-dflt", steps=[_GET_STEP]))
@@ -93,9 +88,12 @@ class TestTokenOpenAccess:
         r = await client.post("/api/integration/tasks", headers=h, json={
             "name": "默认模式", "scenarioId": "sc-tk-dflt"})
         assert r.status_code == 201, r.text
-        assert r.json()["identityMode"] == "personal"
-        async with db_module.SessionLocal() as s:
-            row = (await s.execute(sa_select(IntegrationTask).where(
-                IntegrationTask.scenario_id == "sc-tk-dflt",
-                IntegrationTask.template_id.is_(None)))).scalar_one()
-            assert row.identity_mode == "personal"
+        assert "identityMode" not in r.json()
+        r = await client.post("/api/integration/tasks", headers=h, json={
+            "name": "显式个人", "scenarioId": "sc-tk-dflt",
+            "identityMode": "personal"})
+        assert r.status_code == 201, r.text
+        r = await client.post("/api/integration/tasks", headers=h, json={
+            "name": "平台", "scenarioId": "sc-tk-dflt",
+            "identityMode": "platform"})
+        assert r.status_code == 422, r.text

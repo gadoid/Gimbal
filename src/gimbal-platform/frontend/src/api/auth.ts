@@ -5,8 +5,6 @@ export interface UserPublic {
   id: number
   username: string
   display_name: string
-  /** 已废弃的派生位(后端保留仅为旧缓存兜底,W8 起前端不再消费) */
-  is_admin: boolean
   /** 三级角色(authz W1 更名:user | admin | super_admin);仅作展示,
    *  权限判定一律走 MeOut.capabilities 的 can()(W8) */
   role?: 'user' | 'admin' | 'super_admin'

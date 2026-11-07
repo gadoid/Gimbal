@@ -104,7 +104,7 @@ function mountPage() {
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(api, 'getScenario').mockResolvedValue(scenario())
-  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({} as never)
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({ } as never)
   vi.spyOn(api, 'listDataSets').mockResolvedValue([] as never)
   vi.spyOn(aliasApi, 'classifyServices').mockResolvedValue({
     plate: [], external: ['pay-service'], unknown: ['ghost-svc'],

@@ -66,7 +66,7 @@ beforeEach(() => {
   // 布局偏好实例是模块作用域单例:不清零会带着上一条用例的 order 进来
   resetUserPreferencesForTest()
   vi.clearAllMocks()
-  useAuthStore().currentUser = { id: 1, username: 'alice', is_admin: false } as never
+  useAuthStore().currentUser = { id: 1, username: 'alice' } as never
   vi.mocked(constantsApi.list).mockResolvedValue([] as never)
   vi.mocked(executionsApi.listExecutions).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200, failedTotal: 0 })
   vi.mocked(scenarioApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)

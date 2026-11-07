@@ -208,7 +208,7 @@ describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
   })
 
   it('external 别名:显式 base_service 下拉(只列 integration 服务),登记透传', async () => {
-    const create = vi.spyOn(api, 'createAlias').mockResolvedValue({} as never)
+    const create = vi.spyOn(api, 'createAlias').mockResolvedValue({ } as never)
     const w = await mountPage()
     await flushPromises()
     expect(w.find('[data-testid="alias-baseservice-trigger"]').exists())

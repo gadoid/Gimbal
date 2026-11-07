@@ -78,8 +78,6 @@ class UserPublic(BaseModel):
     id: int
     username: str
     display_name: str
-    # M6-3:物理列已删 —— API 字面保留(前端旧缓存 fallback),由 role 派生
-    is_admin: bool = False
     # 三级角色(authz W1 2026-11-07 更名:user | admin | super_admin,
     # 原 member→admin、原 admin→super_admin,权限边界不变;更早的
     # 2026-09-29 更名是原 member→user、operator→member)
@@ -93,19 +91,17 @@ class UserPublic(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _derive_is_admin(cls, data):
-        if isinstance(data, dict):
-            if "is_admin" not in data and "role" in data:
-                return {**data, "is_admin": data["role"] in ("admin", "super_admin")}
+    def _snapshot_orm(cls, data):
+        """ORM 行先取 ``__dict__`` 快照再校验:commit 后已过期的属性
+        (如 ``updated_at``)不在快照里 → 走字段默认,不触发异步会话外的
+        懒加载(MissingGreenlet)。原随 is_admin 派生一并承担,派生位停发
+        后单独保留。"""
+        if isinstance(data, dict) or not hasattr(data, "__dict__"):
             return data
-        role = getattr(data, "role", None)
-        if role is not None and getattr(data, "is_admin", None) is None:
-            from types import SimpleNamespace
+        from types import SimpleNamespace
 
-            merged = dict(getattr(data, "__dict__", {}))
-            merged["is_admin"] = role in ("admin", "super_admin")
-            return SimpleNamespace(**merged)
-        return data
+        return SimpleNamespace(**{
+            k: v for k, v in vars(data).items() if not k.startswith("_sa_")})
 
     @field_serializer("created_at")
     def _iso(self, v: datetime | None) -> str | None:

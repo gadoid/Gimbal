@@ -21,11 +21,17 @@ from pathlib import Path
 
 _APP = Path(__file__).resolve().parents[1] / "app"
 
+_ROLE_LIT = r'["\'](user|admin|super_admin|member)["\']'
 _SHAPES = (
     # ① 属性比较 ② SQL 集合 ③ SQLAlchemy 列比较(角色字面四种)
-    re.compile(r'\.role\s*[=!]=\s*["\'](user|admin|super_admin|member)["\']'),
+    re.compile(r'\.role\s*[=!]=\s*' + _ROLE_LIT),
     re.compile(r'\.role\.in_\(\s*\('),
-    re.compile(r'\bUser\.role\s*[=!]=\s*["\'](user|admin|super_admin|member)["\']'),
+    re.compile(r'\bUser\.role\s*[=!]=\s*' + _ROLE_LIT),
+    # ④ getattr 形态(收尾补扫:adaptation_service 的 super_admin 旁路
+    #    正是以 getattr(user, 'role', '') == 'super_admin' 漏过前三种)
+    re.compile(r'getattr\([^)]*["\']role["\'][^)]*\)\s*[=!]=\s*' + _ROLE_LIT),
+    # ⑤ 元组/列表成员 role in ("admin", ...) / role not in [...]
+    re.compile(r'\brole\s+(not\s+)?in\s*[(\[]\s*' + _ROLE_LIT),
 )
 
 # 存量冻结(2026-11-07,W3 收编 26 处 + W4 执行可见收编 4 处 + W5 令牌
@@ -41,18 +47,10 @@ _SHAPES = (
 # 139/166/192 → 表 B can()/can_pure()/has_capability()。
 # W4 已收编:webhook_deliveries 117/154、access_token.can_view 440/443
 # → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
-_ALLOWLIST: frozenset[str] = frozenset({
-    # W7 导入(别名归属口径)
-    'routers/service_aliases.py:139:if body.owner_user_id is not None and user.role != "super_admin":',
-    'routers/service_aliases.py:179:if row is not None and row.owner_user_id is not None and user.role != "super_admin":',
-    'routers/service_aliases.py:218:if row is not None and row.owner_user_id is not None and user.role != "super_admin":',
-    # W6 用户管理(重置密码/停用/删除保护)
-    'routers/users.py:233:if caller.role != "super_admin":',
-    'routers/users.py:248:and target.role == "super_admin"',
-    'routers/users.py:371:if caller.role != "super_admin" and caller.id != target.id:',
-    'routers/users.py:498:if caller.role != "super_admin":',
-    'routers/users.py:504:if target.role == "super_admin":',
-})
+# 收尾(2026-11-07):users.py 用户管理 6 处、service_aliases.py 个人别名
+# 3 处收编为 has_capability("users.manage") / roles_with —— 白名单清零,
+# 守卫进入终态(任何角色字面量比较一律红)。
+_ALLOWLIST: frozenset[str] = frozenset()
 
 
 def _scan() -> set[str]:

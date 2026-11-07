@@ -201,8 +201,8 @@ async def _materialized_executable(
             ui_field_states=(ui or {}).get("fieldStates") or {},
             resolve_mode="none", with_auth=overlay is not None,
             # authz W6 主规则:落库行的导出走 owner_id(执行人)≠ 属主
-            # ⇒ 内置 users 当空;preview-plate 的草稿不传(None = 不判,
-            # 草稿由本人即席提供,执行人天然是作者)
+            # ⇒ 内置 users 当空(fail-closed:None 同样当空);preview-plate
+            # 的草稿由本人即席提供,调用方显式传 scenario_owner_id=本人
             scenario_owner_id=scenario_owner_id)
     except run_prepare.AuthResolveError as e:
         # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
@@ -215,9 +215,9 @@ async def _materialized_executable(
         converted,
         service_bindings=service_bindings,
         resolved_auths=prep.resolved_auths,
-        # 默认导出零注入:内置 users 基座也归零(_apply_users 对空
-        # resolved_auths 原样返回,此处显式归零与旧行为逐字段等价)
-        built_in_users=prep.built_in_users if overlay is not None else {},
+        # users 唯一来源 = 属主规则裁定后的内置凭证(属主导出照旧带
+        # 明文 —— 10-14 口径;非属主为空)+ overlay 解析的凭证
+        built_in_users=prep.built_in_users,
         carry_context=prep.carry_ctx,
         alias_base_urls=prep.alias_base_urls,
     )
@@ -243,7 +243,8 @@ async def preview_plate(
     try:
         converted = await _materialized_executable(
             db, definition=scenario_dict, ui=body.ui,
-            owner_id=user.id, overlay=body.overlay)
+            owner_id=user.id, overlay=body.overlay,
+            scenario_owner_id=user.id)   # 草稿:执行人即作者
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(
             status_code=502,

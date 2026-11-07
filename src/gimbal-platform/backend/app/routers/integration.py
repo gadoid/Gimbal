@@ -96,10 +96,9 @@ async def _my_instance(db: AsyncSession, tpl: IntegrationTask, user):
 
 async def _tpl_instance(db: AsyncSession, tpl_id: int,
                        user=None, tpl=None):
-    """模板实例:P1 口径 = 平台唯一实例;Y3 起个人模式按当前用户
-    定位/创建(订阅即创建,方案 §4)。user/tpl 缺省时维持旧行为。"""
-    if user is not None and tpl is not None \
-            and tpl.identity_mode == "personal":
+    """模板实例:按当前用户定位/创建(订阅即创建,方案 §4);user/tpl
+    缺省时取首个有持有人的实例(只读回包用)。"""
+    if user is not None and tpl is not None:
         seeded = await integration_runner.ensure_instance(
             tpl, holder_id=user.id)
         return seeded
@@ -135,7 +134,6 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "mine": db_tpl.owner_id == current.id,
         "canManage": db_tpl.owner_id == current.id,
         "visibility": db_tpl.visibility,
-        "identityMode": db_tpl.identity_mode,
         "targetType": db_tpl.target_type,
         "scenarioId": db_tpl.scenario_id,
         "suiteId": db_tpl.suite_id,
@@ -229,9 +227,8 @@ class TaskIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     scenarioId: str = Field(min_length=1, max_length=128)
     schemeId: str | None = None
-    # authz W5:默认反转 personal(M1.x 后收窄为仅 personal);
-    # Literal 校验防任意串
-    # authz C1:平台模式退役 —— 只接受 personal(传 platform → 422)
+    # 兼容字段:平台模式退役、identity_mode 列删除(0039)后不再落库;
+    # 只接受 personal(传 platform → 422),旧调用方带上也不报错
     identityMode: Literal["personal"] = "personal"
     triggerCron: str = "*/5 * * * *"
     resultPolicy: str = "latest"
@@ -286,15 +283,6 @@ async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
 async def create_task(body: TaskIn, principal: PrincipalIn,
                       db: DbSession) -> dict:
     user = principal.user
-    # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主);
-    # 请求体传入不同值 → 422。authz C1:platform 取值随 TaskIn 的
-    # Literal 收敛直接 422(W5 的 410 platform_mode_closed 退役)。
-    if principal.is_token:
-        if body.identityMode != principal.identity_mode:
-            raise _bad(
-                "identity_mode_conflict",
-                f"identityMode 由认证结果决定为 {principal.identity_mode}"
-                f"(请求体传了 {body.identityMode})")
     if body.callbackPath is not None \
             and not at_svc.valid_callback_path(body.callbackPath):
         raise _bad(
@@ -331,7 +319,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         await _require_token_scope(db, principal, scen, body.schemeId)
     tpl = IntegrationTask(
         name=body.name, owner_id=user.id, visibility=body.visibility,
-        identity_mode=body.identityMode, target_type="scenario",
+        target_type="scenario",
         scenario_id=body.scenarioId, scheme_id=body.schemeId,
         target_system=body.targetSystem or "", trigger_cron=body.triggerCron,
         result_policy=body.resultPolicy, card_template=body.cardTemplate,
@@ -357,8 +345,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             await db.rollback()
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "create", "task": tpl.id, "name": tpl.name,
-        "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref,
-        "identity_mode": body.identityMode})
+        "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref})
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -529,7 +516,7 @@ async def patch_task(
     await db.commit()
     # W0a⑤(G-C):public→private 联动 —— 非 owner 订阅实例暂停+通知;
     # 转回 public 不自动恢复,需订阅者重新确认(再订阅)
-    if body.visibility == "private" and tpl.identity_mode == "personal":
+    if body.visibility == "private":
         await integration_runner.pause_subscriber_instances(
             tpl, paused_reason="made_private",
             message="模板已转为私有,执行已暂停;模板重新公开后请重新"
@@ -558,12 +545,11 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
     await db.commit()
     # W2(G-E):模板删除通知持有人(卡片转「已移除」态,但按 cron 等
     # 结果的用户只见「过期」—— 发一条人话通知)
-    if tpl.identity_mode == "personal":
-        await integration_runner.notify_subscribers(
-            tpl,
-            title=f"集成任务「{tpl.name}」已删除",
-            message="模板已被创建者删除,你的订阅随之失效;"
-                    "卡片会显示「已移除」,可自行删卡")
+    await integration_runner.notify_subscribers(
+        tpl,
+        title=f"集成任务「{tpl.name}」已删除",
+        message="模板已被创建者删除,你的订阅随之失效;"
+                "卡片会显示「已移除」,可自行删卡")
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "delete", "task": tpl.id, "name": tpl.name})
     return {"removed": True}
@@ -584,12 +570,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
             else _visible(user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
     if principal.is_token:
-        if tpl.identity_mode != principal.identity_mode:
-            raise _bad(
-                "identity_mode_conflict",
-                f"该任务为{'个人' if tpl.identity_mode == 'personal' else '平台'}"
-                f"模式,与令牌身份({principal.identity_mode})不符")
-        if tpl.identity_mode == "personal" and tpl.owner_id != user.id:
+        if tpl.owner_id != user.id:
             raise _bad(
                 "token_owner_mismatch",
                 "令牌属主与任务属主不一致,不能触发他人任务", 403)
@@ -603,22 +584,15 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
                 "working_preview",
                 "场景声明 working(预览执行),集成任务拒绝触发:"
                 "请先在编排器钉定修订(外部服务不受影响)", 409)
-    # W0a①(P-1=b 播种收口):个人模式不再隐式建实例 —— 未订阅 409
-    # 引导订阅确认,不建不跑;平台模式维持 ensure(唯一平台实例兜底)。
-    if tpl.identity_mode == "personal":
-        inst = (await db.execute(select(IntegrationTask).where(
-            IntegrationTask.template_id == tpl.id,
-            IntegrationTask.holder_id == user.id))).scalar()
-        if inst is None:
-            raise _bad(
-                "subscription_required",
-                "尚未订阅该个人模式任务,请先订阅确认后再执行", 409)
-    else:
-        seeded = await integration_runner.ensure_instance(tpl)
-        if seeded is None:
-            raise _bad("instance_missing", "平台系统用户缺失(迁移 0015 未执行?)", 500)
-        # ensure_instance 用的是独立会话;冷却与占用判定在本会话的行上做
-        inst = await db.get(IntegrationTask, seeded.id)
+    # W0a①(P-1=b 播种收口):不隐式建实例 —— 未订阅 409 引导订阅
+    # 确认,不建不跑。
+    inst = (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id == tpl.id,
+        IntegrationTask.holder_id == user.id))).scalar()
+    if inst is None:
+        raise _bad(
+            "subscription_required",
+            "尚未订阅该任务,请先订阅确认后再执行", 409)
     # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
     # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC。
     now = datetime.now(timezone.utc)
@@ -656,11 +630,9 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
 # ── W0a(个人侧方案 §2):订阅知情同意 ────────────────────────────
 
 def _subscribable(tpl: IntegrationTask, user) -> None:
-    """订阅面前置:模板行/可见/未删 + 仅个人模式(平台模式无订阅概念)。"""
+    """订阅面前置:模板行/可见/未删。"""
     if tpl.template_id is not None or not _visible(user, tpl):
         raise _bad("not_found", "功能不存在", 404)
-    if tpl.identity_mode != "personal":
-        raise _bad("not_subscribable", "仅个人模式任务支持订阅", 422)
 
 
 @router.get("/scenario-preview")
@@ -774,17 +746,16 @@ async def subscribe_task(
     await db.refresh(inst)
     # 时间线:订阅(重新确认解除待确认暂停时,补记一条 resumed 配对)
     from ..services import activity as activity_svc
-    if tpl.identity_mode == "personal":
+    await activity_svc.record(
+        db, actor_id=user.id, kind="integration.subscribed",
+        resource_type="integration", resource_id=str(tpl.id),
+        detail={"name": tpl.name}, coalesce=False)
+    if was_reconfirm:
         await activity_svc.record(
-            db, actor_id=user.id, kind="integration.subscribed",
+            db, actor_id=user.id, kind="integration.resumed",
             resource_type="integration", resource_id=str(tpl.id),
-            detail={"name": tpl.name}, coalesce=False)
-        if was_reconfirm:
-            await activity_svc.record(
-                db, actor_id=user.id, kind="integration.resumed",
-                resource_type="integration", resource_id=str(tpl.id),
-                detail={"name": tpl.name, "via": "reconfirm"},
-                coalesce=False)
+            detail={"name": tpl.name, "via": "reconfirm"},
+            coalesce=False)
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -805,11 +776,10 @@ async def unsubscribe_task(
         await db.commit()
         # 时间线:退订(与 subscribed 成对)
         from ..services import activity as activity_svc
-        if tpl.identity_mode == "personal":
-            await activity_svc.record(
-                db, actor_id=user.id, kind="integration.unsubscribed",
-                resource_type="integration", resource_id=str(tpl.id),
-                detail={"name": tpl.name}, coalesce=False)
+        await activity_svc.record(
+            db, actor_id=user.id, kind="integration.unsubscribed",
+            resource_type="integration", resource_id=str(tpl.id),
+            detail={"name": tpl.name}, coalesce=False)
 
 
 async def _my_subscription(db: AsyncSession, tpl: IntegrationTask, user: User):
@@ -834,11 +804,10 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
     inst.next_run_at = datetime.now(timezone.utc)
     await db.commit()
     from ..services import activity as activity_svc
-    if tpl.identity_mode == "personal":
-        await activity_svc.record(
-            db, actor_id=actor_id, kind="integration.resumed",
-            resource_type="integration", resource_id=str(tpl.id),
-            detail={"name": tpl.name, "via": via}, coalesce=False)
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="integration.resumed",
+        resource_type="integration", resource_id=str(tpl.id),
+        detail={"name": tpl.name, "via": via}, coalesce=False)
 
 
 #: 「启动」放行的暂停原因(§3.3 恢复入口):manual/fail_streak 可直接
@@ -874,12 +843,11 @@ async def pause_my_subscription(
         await db.commit()
         # 时间线:自暂停(状态确变才记,幂等重按不刷屏)
         from ..services import activity as activity_svc
-        if tpl.identity_mode == "personal":
-            await activity_svc.record(
-                db, actor_id=user.id, kind="integration.paused",
-                resource_type="integration", resource_id=str(tpl.id),
-                detail={"name": tpl.name, "reason": "manual"},
-                coalesce=False)
+        await activity_svc.record(
+            db, actor_id=user.id, kind="integration.paused",
+            resource_type="integration", resource_id=str(tpl.id),
+            detail={"name": tpl.name, "reason": "manual"},
+            coalesce=False)
     return await _tpl_out_full(db, tpl, inst, user)
 
 
@@ -955,9 +923,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
         # W0b④:消费面字段(W3 凭证引导用:角标定位缺失别名)
         card_aliases = await integration_runner.auth_aliases_view(db, tpl)
         card_missing = await _missing_credentials(
-            db, card_aliases,
-            user.id if tpl.identity_mode == "personal"
-            else (inst.holder_id if inst is not None else None))
+            db, card_aliases, user.id)
         # Y4/方案 §7:卡片输出投影
         raw_outputs = (getattr(inst, "last_outputs", None) or {}) \
             if inst is not None else {}
@@ -982,7 +948,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "failStreak": io["failStreak"],
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
-            "identityMode": tpl.identity_mode, "stale": stale,
+            "stale": stale,
             "canManage": _can_manage(user, tpl, plat_uid),
             "authAliases": card_aliases,
             "missingCredentials": card_missing,

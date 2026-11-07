@@ -12,7 +12,7 @@ from httpx import AsyncClient
 
 async def test_first_register_becomes_super_admin(client: AsyncClient) -> None:
     """The very first registered user is promoted to super_admin
-    (authz W1 更名后首注册者角色;is_admin 派生口径含 super_admin)。"""
+    (authz W1 更名后首注册者角色;is_admin 派生位已停发,只有 role)。"""
     resp = await client.post(
         "/api/auth/register",
         json={
@@ -25,7 +25,7 @@ async def test_first_register_becomes_super_admin(client: AsyncClient) -> None:
     body = resp.json()
     assert body["user"]["username"] == "alice"
     assert body["user"]["role"] == "super_admin"
-    assert body["user"]["is_admin"] is True
+    assert "is_admin" not in body["user"]   # 派生位已停发(authz 收尾)
     assert body["user"]["is_active"] is True
     assert body["token_type"] == "bearer"
     assert body["access_token"] and body["refresh_token"]
@@ -43,7 +43,7 @@ async def test_second_register_is_user(client: AsyncClient) -> None:
         json={"username": "bob", "password": "secret123"},
     )
     assert r2.status_code == 201, r2.text
-    assert r2.json()["user"]["is_admin"] is False
+    assert r2.json()["user"]["role"] == "user"
 
 
 async def test_login_wrong_password_401(client: AsyncClient) -> None:

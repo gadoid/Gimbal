@@ -349,7 +349,6 @@ class TestUnbind:
         tid, _ = await mk_token(user_id=uid)
         async with db_module.SessionLocal() as s:
             tpl = IntegrationTask(name="w-sub", owner_id=uid,
-                                  identity_mode="personal",
                                   scenario_id="sc-w", token_id=tid)
             s.add(tpl)
             await s.flush()

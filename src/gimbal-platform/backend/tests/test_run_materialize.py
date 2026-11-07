@@ -49,7 +49,9 @@ def test_no_env_leaves_gap_visible() -> None:
 
 
 def test_auths_merge_over_builtin() -> None:
-    out = materialize_run_copy(_converted(), resolved_auths=[_auth("qa1")])
+    builtin = _converted()["config"]["users"]   # 属主执行:内置凭证经 built_in_users 进
+    out = materialize_run_copy(_converted(), resolved_auths=[_auth("qa1")],
+                               built_in_users=builtin)
     users = out["config"]["users"]
     assert users["builtin"]["username"] == "b"          # 内置保留
     assert users["qa1"]["url"] == "https://auth-url"     # 注入覆盖同名
@@ -58,18 +60,20 @@ def test_auths_merge_over_builtin() -> None:
     assert users["qa1"]["expires_in"] == 7200
 
 
-def test_built_in_users_base_precedes_converted_users() -> None:
-    """merge 基座 = built_in_users(definition.config.users,pre-convert)
-    先铺,converted 自带 users 后铺,auths 最后覆盖 — 与现 _inject_exec_users
-    ``{**built_in, **cfg.users}`` 同构(内置认证以场景定义为唯一可信源)。"""
+def test_converted_users_are_discarded() -> None:
+    """authz W6 收口:users 唯一来源 = built_in_users(属主规则已裁定)+
+    resolved_auths;plate convert 原样带回的 ``converted.config.users``
+    (作者内置凭证)一律丢弃 —— 此前它是合并基座,非属主时作者明文仍进
+    最终产物。"""
     src = _converted()
     src["config"]["users"]["from-converted"] = {"url": "https://c", "username": "c",
                                                 "password": "c", "expires_in": 1,
                                                 "token_type": "Bearer"}
     out = materialize_run_copy(src, resolved_auths=[_auth("qa1")],
                                built_in_users={"from-definition": {"url": "https://d"}})
-    assert "from-definition" in out["config"]["users"]
-    assert "from-converted" in out["config"]["users"]
+    users = out["config"]["users"]
+    assert set(users) == {"from-definition", "qa1"}
+    assert "from-converted" not in users and "builtin" not in users
 
 
 def test_config_created_when_missing() -> None:
@@ -80,9 +84,13 @@ def test_config_created_when_missing() -> None:
     assert out["config"]["users"] == {}
 
 
-def test_no_auths_leaves_users_untouched() -> None:
-    out = materialize_run_copy(_converted())
-    assert set(out["config"]["users"]) == {"builtin"}
+def test_no_auths_users_equal_built_in() -> None:
+    """清单为空不再「原样返回」converted 的 users:非属主(built_in_users
+    空)→ 空;属主 → 恰为内置凭证。"""
+    assert materialize_run_copy(_converted())["config"]["users"] == {}
+    builtin = _converted()["config"]["users"]
+    out = materialize_run_copy(_converted(), built_in_users=builtin)
+    assert out["config"]["users"] == builtin
 
 
 def test_pure_function_input_not_mutated() -> None:

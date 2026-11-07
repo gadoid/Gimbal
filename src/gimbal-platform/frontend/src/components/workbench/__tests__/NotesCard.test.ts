@@ -20,7 +20,7 @@ describe('NotesCard — 存量下划线键归一', () => {
           created_at: '2026-11-01T00:00:00Z', done_at: null },
       ] },
     } as never)
-    vi.spyOn(prefs, 'putPreference').mockResolvedValue({} as never)
+    vi.spyOn(prefs, 'putPreference').mockResolvedValue({ } as never)
   })
 
   it('勾选完成:PUT 载荷只有驼峰键,createdAt 取自 created_at', async () => {

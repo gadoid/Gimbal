@@ -24,6 +24,12 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # fresh 链(baseline 按当前模型建表,identity_mode 列已随 0039 删除):
+    # 无平台存量,四步全部不适用 —— 空转
+    if "identity_mode" not in {
+            c["name"] for c in sa.inspect(bind).get_columns(
+                "integration_tasks")}:
+        return
 
     # ① 平台唯一实例删除(holder = 系统用户;实例行 template_id 非空)
     bind.execute(sa.text(

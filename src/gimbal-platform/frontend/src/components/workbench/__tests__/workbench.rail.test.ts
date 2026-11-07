@@ -35,7 +35,7 @@ vi.mock('@/utils/catalog-services', () => ({
 }))
 
 const as = (over: Record<string, unknown> = {}) => ({
-  id: 3, username: 'alice', display_name: 'Alice Zhang', is_admin: false,
+  id: 3, username: 'alice', display_name: 'Alice Zhang',
   created_at: '2026-01-05T08:00:00Z', ...over,
 })
 function mountWithRouter(component: object) {
@@ -75,7 +75,7 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     expect(w.find('.id-role').text()).toBe('用户')
     expect(w.find('.id-joined').exists()).toBe(false)                 // 加入时间已撤
 
-    useAuthStore().currentUser = as({ role: 'super_admin', is_admin: true }) as never
+    useAuthStore().currentUser = as({ role: 'super_admin'}) as never
     const admin = mountWithRouter(UserIdentityCard)
     expect(admin.find('.id-role').text()).toBe('超级管理员')
     expect(admin.find('.id-role').classes()).toContain('super_admin')

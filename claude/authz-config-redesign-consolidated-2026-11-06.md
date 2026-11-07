@@ -397,3 +397,11 @@ M1–C3 落地后的一轮评审，六项，均已在 `feat/authz-m1` 实现：
 4. **内置凭证预检告警上页面**。`builtinAuthShadowed` 此前只在接口返回：执行器预检行补告警并指向「我的凭证」；suite 预检（`/suites/{id}/validate`）同算（聚合逐主体成员、编排逐单元），条目 `builtin_auth_shadowed`。
 5. **平台模板归属落地**。0038 第②步把原平台模板（及其实例行）属主改为 `__platform__`；模板改动权 = 属主 ∨（属主为 `__platform__` ∧ `ops.write`），即 Admin+ 维护；平台模板恒公共（转私有 409 `platform_template_public`）；维护面不外溢到他人的个人公共模板。
 6. **报告定义下架统一 Admin+**。表 B `report_definition.delete` 由 `[o, mnt]`（Super Admin）改为 `[o, ste]`，与场景 / suite 下架同口径；`maintain` 谓词随之删除。
+
+### 12.1 M1 收尾（2026-11-07）
+
+- **grep 守卫白名单清零**：`users.py` 用户管理 6 处、`service_aliases.py` 个人别名 3 处收编为 `has_capability("users.manage")` / `roles_with`；个人别名的旧 `admin_only: …` 字符串错误统一为 `capability_forbidden`（9.7 收口）。守卫补两种形状（`getattr(…, 'role', …) ==` 与 `role in (…)`）——补扫发现 `adaptation_service._ensure_edit_rights` 的 super_admin 旁路（可适配他人私有场景，违反 1.3），已删，适配编辑权 = 属主单判。
+- **`/auth/me` 停发 `is_admin`**（11.3 决定）：前端已无消费，类型与旧缓存回落一并删除。
+- **0039 删 `identity_mode` 列**（C1 约定「下一次迁移删列」）：后端恒真分支收敛；任务回包与卡片不再带 `identityMode`；`TaskIn.identityMode` 保留为只接受 `personal` 的兼容字段；**回调载荷的 `identityMode` 保留为常量 `"personal"`**（外部注册方可能已解析）；0030 / 0038 加 fresh 链守卫（baseline 按当前模型建表时无该列）。
+- **适配批次内写操作补门**（M2a 调研发现）：补 op / 应用 / 跳过 / 改 payload / 回滚此前仅需登录——任何用户可经批次改写全局 carry 与他人场景；现与批次详情同门（`users.manage`）。批次是否下放 Admin+、能否作用于私有场景，列为 M2a 待定 D5（`claude/authz-m2a-plan-2026-11-07.md`）。
+- **非属主内置凭证泄漏（必须修）**：`materialize_run_copy` 合并 users 以 `converted.config.users`（plate convert 原样带回的作者凭证）为基座，且凭证清单为空时直接原样返回——属主规则在导出 / suite 编排 / 订阅执行三条链上形同虚设（导出是本轮「发布不改原件」引入的回归，任何登录用户可导出他人公共场景拿到明文；单场景执行因派发前已剥离才生效）。改为 users **唯一来源** = `built_in_users`（属主规则裁定）+ 解析出的凭证，丢弃 converted 的 users；`built_in_users` 改 **fail-closed**（执行人或属主任一为空即当空；草稿预览与临时调用由调用方显式声明「执行人即作者」；只要名字的展示面改用 `built_in_user_aliases`）；suite 编排此前把合成后的场景传给 `built_in_users`（解不出 users，属主凭证全靠 converted 漏过来），改为落库容器 payload。新增四条**最终产物**断言（导出回包 / 编排单元 / 订阅执行物化产物 / 单场景 case.json），去掉旧用例里钉住泄漏行为的三条断言。平台模板场景归属等三项口径问题见 M2a 规划 D8–D10。

@@ -30,7 +30,7 @@ vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), inf
 function mkTask(over: Partial<api.IntegrationTaskItem> = {}): api.IntegrationTaskItem {
   return {
     id: 20, name: '物流轨迹同步', ownerId: 5, mine: false, canManage: true,
-    visibility: 'public', identityMode: 'personal', targetType: 'scenario',
+    visibility: 'public', targetType: 'scenario',
     scenarioId: 'sc-w', suiteId: null, schemeId: null, targetSystem: '',
     triggerCron: '0 * * * *', cronText: '每小时', resultPolicy: 'latest',
     cardTemplate: 'status', removed: false,

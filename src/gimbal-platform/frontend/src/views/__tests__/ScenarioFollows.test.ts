@@ -124,7 +124,7 @@ describe('ScenarioFollows — 关注页', () => {
     localStorage.clear()
     // 常驻席存档按用户名分键:未登录时 whenReady() 不 resolve,页面会
     // 停在「等身份」上 —— 这正是要钉的行为,所以用例必须带身份进。
-    useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'Alice', is_admin: false } as never
+    useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'Alice' } as never
     // 常驻席是 module 作用域单例:不清零会带着上一条用例的顺序进下一条,
     // 播种/回收断言就看的是别人的状态了。
     resetUserPreferencesForTest()
@@ -232,7 +232,7 @@ describe('ScenarioFollows — 关注页', () => {
     expect(localStorage.getItem('gimbal.scenario-follows.pinned:')).toBeNull()
     expect(w.findAll('.fav-card')).toHaveLength(0)
 
-    useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'Alice', is_admin: false } as never
+    useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'Alice' } as never
     await flushPromises()
     expect(readPinned()).toEqual(['f-a', 'f-b'])
     expect(w.findAll('.fav-name').map((n) => n.text())).toEqual(['f-a', 'f-b'])

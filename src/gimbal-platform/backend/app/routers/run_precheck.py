@@ -144,7 +144,7 @@ async def builtin_auth_shadowed(executor_id: int | None,
     if (executor_id is None or scen_row.owner_id is None
             or executor_id == scen_row.owner_id):
         return []                       # ① 不满足(含令牌匿名面兜底)
-    users = _rp.built_in_users(scen_row.payload)
+    users = _rp.built_in_user_aliases(scen_row.payload)
     if not users:
         return []                       # ② 不满足
     # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混

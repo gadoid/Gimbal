@@ -236,9 +236,12 @@ async def materialize_graph(
             service_bindings=merged_bindings,
             resolved_auths=exec_auths,
             # authz W6 主规则:executor(dispatch 的 owner_id)≠ 单元
-            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证,R3)
+            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证,R3)。
+            # 源取落库容器 payload(与其余执行链同源)—— composed 是
+            # 合成后的场景形状,definition_from_payload 解不出 users,
+            # 此前属主凭证全靠 converted 漏过来
             built_in_users=run_prepare.built_in_users(
-                composed, executor_id=owner_id,
+                r["scenario_row"].payload, executor_id=owner_id,
                 scenario_owner_id=r["scenario_row"].owner_id),
             carry_context=carry_ctxs[i],
             alias_base_urls=alias_urls,

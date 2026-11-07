@@ -996,11 +996,13 @@ async def dispatch_target(
     # 原件不剥(发布不改原件),执行形态在此脱敏:数据集敏感列剥、
     # payload 去 config.users(快照/任务参数不落作者明文;内置凭证主
     # 规则在 prepare_exec 本就当空,两者同口径)。adhoc 无存储属主不判。
+    # 临时调用(adhoc):payload 由调用者即席提供,执行人即作者 —— 显式
+    # 记为本人(built_in_users fail-closed,None 会把作者自己的也当空)
     _scen_owner_id = (
         (_sr.owner_id if (_sr := await get_row(
             db, target.scenario_id)) is not None else None)
         if getattr(target, "kind", "scenario") == "scenario"
-        and target.scenario_id else None)
+        and target.scenario_id else user_id)
     if _scen_owner_id is not None and user_id != _scen_owner_id:
         from .scenario_store import (
             strip_builtin_credentials, strip_sensitive_columns)
@@ -1170,8 +1172,8 @@ async def dispatch_target(
                 "owner_id": user_id,
                 # authz W6:场景属主随任务下发,内置凭证主规则在
                 # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
-                # adhoc(临时调用)无存储属主 → None = 不判(payload
-                # 由调用者即席提供,执行人天然是作者)
+                # adhoc(临时调用)= 执行人本人(上方 _scen_owner_id;
+                # built_in_users fail-closed,None 一律当空)
                 "scenario_owner_id": _scen_owner_id,
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,

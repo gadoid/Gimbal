@@ -191,9 +191,8 @@ const runningState = computed(() => data.value?.state === 'running')
 const router = useRouter()
 const subOpen = ref(false)
 const tid = computed(() => Number(cardId.value.slice(3)))
-/** 未订阅的个人功能卡(播种收口后 cards 只查不建,state=none) */
-const notSubscribed = computed(() =>
-  data.value?.state === 'none' && data.value?.identityMode === 'personal')
+/** 未订阅的功能卡(播种收口后 cards 只查不建,state=none) */
+const notSubscribed = computed(() => data.value?.state === 'none')
 /** 待重新确认(模板内容已变更/已转私有) */
 const reconfirmText = computed(() => {
   const r = data.value?.pausedReason
@@ -213,16 +212,13 @@ const pausedGate = computed(() => {
 })
 /** 与后端 FAIL_STREAK_AUTO_PAUSE 同值(failStreak 缺失时的显示兜底) */
 const FAIL_STREAK_AUTO_PAUSE = 5
-/** W4:L 档「暂停」入口 —— 个人模式已订阅且在跑(非暂停/移除)才有 */
+/** W4:L 档「暂停」入口 —— 已订阅且在跑(非暂停/移除)才有 */
 const canPause = computed(() => {
   const d = data.value
-  return !!d && d.identityMode === 'personal'
-    && (d.state === 'idle' || d.state === 'running')
+  return !!d && (d.state === 'idle' || d.state === 'running')
 })
-/** W4:暂停门面的「启动/恢复」按钮可见性 —— 个人模式(自己的实例)
- * 或模板管理者(owner;平台模式含 admin) */
-const canRestart = computed(() =>
-  data.value?.identityMode === 'personal' || !!data.value?.canManage)
+/** W4:暂停门面的「启动/恢复」按钮可见性 —— 卡片即本人实例,恒可 */
+const canRestart = computed(() => !!data.value)
 
 // ── 集成线 v2(§2.5):状态叠加层 ─────────────────────────────────
 

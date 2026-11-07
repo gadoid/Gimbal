@@ -101,8 +101,7 @@ async def _mk_platform_template(client: AsyncClient, plate_mock: PlateMock,
     async with db_module.SessionLocal() as s:
         tpl = IntegrationTask(
             name="c2-platform-tpl", owner_id=plat_uid,
-            visibility="public", identity_mode="personal",
-            scenario_id=sid, target_system="jira",
+            visibility="public", scenario_id=sid, target_system="jira",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status")
         s.add(tpl)
@@ -220,8 +219,7 @@ class TestPlatformTemplateMaintenance:
         async with db_module.SessionLocal() as s:
             tpl = IntegrationTask(
                 name="c2-personal-tpl", owner_id=await _uid("c2_po"),
-                visibility="public", identity_mode="personal",
-                scenario_id="sc-c2p", trigger_cron="*/5 * * * *",
+                visibility="public", scenario_id="sc-c2p", trigger_cron="*/5 * * * *",
                 result_policy="latest", card_template="status")
             s.add(tpl)
             await s.commit()
@@ -264,8 +262,7 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
     async with db_module.SessionLocal() as s:
         tpl = IntegrationTask(
             name="c2-ds-tpl", owner_id=await _uid("c2_dso"),
-            visibility="public", identity_mode="personal",
-            scenario_id="sc-c2ds", target_system="jira",
+            visibility="public", scenario_id="sc-c2ds", target_system="jira",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status")
         s.add(tpl)
@@ -291,3 +288,54 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
     assert seen, "未走到合成"
     assert seen[-1].get("amount") == 3
     assert "password" not in seen[-1]
+
+
+# ── ⑤ 订阅执行最终产物零作者凭证(断言 materialize 产物,不断言中间层)──
+async def test_subscriber_run_product_has_no_author_credentials(
+        client: AsyncClient, plate_mock: PlateMock, monkeypatch):
+    """持有人 ≠ 场景属主:convert 原样带回作者 config.users(echo),落进
+    用例文件的物化产物里不得出现作者明文 —— 此前 materialize 以 converted
+    的 users 为合并基座,call.auth 直引别名的写法还会直接用作者账号。"""
+    import json
+
+    secret = "author-secret-sub-77"
+    plate_mock.fulls.update(FULLS)
+    h_own = await register_and_login(client, "c2_fpo")
+    draft = make_draft("sc-c2fp", steps=ANCHORED_STEPS,
+                       plate={"jira": "1.0#1"}, system=["jira"])
+    draft["definition"]["config"]["users"] = {
+        "jira-svc": {"url": "https://jira", "username": "author-acct",
+                     "password": secret}}
+    r = await client.post("/api/scenarios", headers=h_own, json=draft)
+    assert r.status_code in (200, 201), r.text
+    from tests.inbound_fixtures import publish_scenario
+
+    await publish_scenario("sc-c2fp")
+    async with db_module.SessionLocal() as s:
+        tpl = IntegrationTask(
+            name="c2-fp-tpl", owner_id=await _uid("c2_fpo"),
+            visibility="public", scenario_id="sc-c2fp", target_system="jira",
+            trigger_cron="*/5 * * * *", result_policy="latest",
+            card_template="status")
+        s.add(tpl)
+        await s.commit()
+        tid = tpl.id
+    h_sub = await register_and_login(client, "c2_fps")
+    r = await _subscribe(client, h_sub, tid)
+    assert r.status_code in (200, 201), r.text
+    inst = await _inst(tid, await _uid("c2_fps"))
+
+    plate_mock.behaviour = "echo"
+    products: list[dict] = []
+    orig = ir.materialize_run_copy
+
+    def _spy(*a, **kw):
+        out = orig(*a, **kw)
+        products.append(out)
+        return out
+
+    monkeypatch.setattr(ir, "materialize_run_copy", _spy)
+    await ir.run_instance(inst.id)
+    assert products, "未走到物化"
+    dumped = json.dumps(products[-1], default=str)
+    assert secret not in dumped and "author-acct" not in dumped

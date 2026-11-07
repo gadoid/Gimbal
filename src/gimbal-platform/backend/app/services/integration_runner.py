@@ -886,8 +886,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # (地址③层/carry)由下方 prepare_exec 独立构建(失败降级语义)
             # —— 指纹与执行是两个关注点,失败策略不同(评审 §3.1A 定案;
             # 此前地址集与物化共用一份,归一后物化改吃 prep.alias_base_urls)。
-            consent_gate = (tpl.identity_mode == "personal"
-                            and inst.holder_id is not None
+            consent_gate = (inst.holder_id is not None
                             and inst.holder_id != tpl.owner_id)
             # P2.3:非 owner 实例只在 public 模板上执行。W0a⑤ 的联动暂停
             # 只覆盖转私有那一刻 idle 的行 —— 运行中实例跑完回 idle 会被

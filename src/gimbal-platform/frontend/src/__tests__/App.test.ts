@@ -28,7 +28,7 @@ async function mountApp(path: string, opts: { authed: boolean }) {
   const auth = useAuthStore()
   if (opts.authed) {
     auth.accessToken = 'tok'
-    auth.currentUser = { id: 1, username: 'alice', display_name: 'Alice', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'alice', display_name: 'Alice' } as never
   }
   const router = makeRouter(path)
   router.push(path)

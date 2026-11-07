@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import hash_password
-from ._ownership import roles_with
+from ._ownership import has_capability, roles_with
 from ..models.user import User
 from ..services import access_token as at_svc
 from ..models.auth_session import AuthSession
@@ -230,7 +230,7 @@ async def patch_user(
     prev_role, prev_active = target.role, target.is_active
 
     # ── authorization (privilege-escalation fix) ──
-    if caller.role != "super_admin":
+    if not has_capability(caller, "users.manage"):
         if target.id != caller.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -242,10 +242,12 @@ async def patch_user(
                 detail=code_detail(MEMBER_PATCH_FORBIDDEN, "只有管理员可以变更角色"),
             )
 
+    # 末位保护按表 A 判「是否用户管理者」(更名只动表,不动这里)
+    managers = roles_with("users.manage")
     demoting_admin = (
         "role" in data
-        and data["role"] != "super_admin"
-        and target.role == "super_admin"
+        and data["role"] not in managers
+        and target.role in managers
     )
     if demoting_admin:
         admin_total = await _count_admins(db)
@@ -368,7 +370,7 @@ async def reset_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
-    if caller.role != "super_admin" and caller.id != target.id:
+    if not has_capability(caller, "users.manage") and caller.id != target.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(RESET_OTHER_PASSWORD, "只有管理员或本人可以重置该密码"),
@@ -495,13 +497,13 @@ async def delete_user(
                     "message": "系统用户(__platform__)受保护,不能删除"},
         )
 
-    if caller.role != "super_admin":
+    if not has_capability(caller, "users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(ADMIN_REQUIRED, "需要管理员权限"),
         )
 
-    if target.role == "super_admin":
+    if target.role in roles_with("users.manage"):
         admin_total = await _count_admins(db)
         if admin_total <= 1:
             raise HTTPException(
@@ -784,7 +786,7 @@ async def delete_user(
             detail={"disposal": how,
                     "new_owner": (transferee.id if how == "transfer"
                                   and disposal == "transfer" else None),
-                    "identity_mode": tpl.identity_mode})
+                    })
 
     # 受让人通知(§3.6):并入 resource_transferred —— 场景或集成任务
     # 任一非空即发;正文逐个列出任务及当前状态

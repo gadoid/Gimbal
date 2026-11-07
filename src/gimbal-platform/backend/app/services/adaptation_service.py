@@ -976,12 +976,13 @@ async def _ensure_dataset_snapshot(
 
 
 async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
-    """R22：适配权限跟随场景编辑权——admin 或场景 owner。"""
+    """R22：适配权限跟随场景编辑权——表 B scenario.write = 属主单判。
+
+    authz 收尾：原 super_admin 旁路删除（私有区对任何平台角色不可见，
+    方案 1.3；Admin+ 对他人对象唯一的动词是下架公共对象）。"""
     from fastapi import HTTPException
     from app.services.scenario_store import owned_scenario_ids
 
-    if getattr(user, 'role', '') == 'super_admin':
-        return
     owned = await owned_scenario_ids(db, user)
     for sid in scenario_ids:
         if str(sid) not in owned:

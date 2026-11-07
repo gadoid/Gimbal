@@ -263,7 +263,7 @@ describe('Auths — 被引用列与反查侧板(配套方案 §1)', () => {
   it('原型对齐:抽屉底部拦截预警(本人场景 × 模板/方案才计数)', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
-    auth.currentUser = { id: 1, username: 'u', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'u' } as never
 
     const w = mountPage()
     await flushPromises()

@@ -111,9 +111,13 @@ async def get_batch(batch_id: str, user: AdminUser, db: DbSession) -> BatchDetai
 
 @router.post("/batches/{batch_id}/ops", response_model=OpOut, status_code=201)
 async def create_op(
-    user: CurrentUser, batch_id: str, body: OpCreateIn, db: DbSession,
+    user: AdminUser, batch_id: str, body: OpCreateIn, db: DbSession,
 ) -> OpOut:
-    """人工补 op(renameVar / 数据集 op —— 自动草案之外,§5.4)。"""
+    """人工补 op(renameVar / 数据集 op —— 自动草案之外,§5.4)。
+
+    authz 收尾:批次内的写操作(补 op / 应用 / 跳过 / 改 payload / 回滚)
+    与批次详情同门(users.manage)—— 此前仅需登录,任何用户可经批次
+    改写全局 carry 与他人场景。"""
     try:
         op = await adaptation_service.create_op(
             db, batch_id,
@@ -131,7 +135,7 @@ async def create_op(
 
 
 @router.post("/ops/{op_id}/apply", response_model=OpOut)
-async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
+async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
     """逐条应用:幂等重放 / C5 冲突标 conflict / 末条完成推戳。"""
     try:
         op = await adaptation_service.apply_op(db, op_id)
@@ -155,7 +159,7 @@ async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
 
 
 @router.post("/ops/{op_id}/skip", response_model=OpOut)
-async def skip_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
+async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
     """跳过一条 pending op(末条跳过同样收敛 completed + 推戳)。"""
     try:
         op = await adaptation_service.skip_op(db, op_id)
@@ -170,7 +174,7 @@ async def skip_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
 
 @router.patch("/ops/{op_id}", response_model=OpOut)
 async def patch_op(
-    user: CurrentUser, op_id: int, body: OpPatchIn, db: DbSession,
+    user: AdminUser, op_id: int, body: OpPatchIn, db: DbSession,
 ) -> OpOut:
     """仅 pending 可整包替换 payload(mapValue 骨架补值 / 参数修正)。"""
     try:
@@ -184,7 +188,7 @@ async def patch_op(
 
 @router.post("/batches/{batch_id}/rollback", response_model=RollbackReport)
 async def rollback_batch(
-    user: CurrentUser, batch_id: str, db: DbSession,
+    user: AdminUser, batch_id: str, db: DbSession,
     force: bool = Query(default=False),
 ) -> RollbackReport:
     """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。
@@ -291,7 +295,7 @@ async def submit_adaptation(user: CurrentUser, db: DbSession,
                             body: SubmitIn) -> dict:
     """RS4a 提交:按场景单事务(快照 → 应用 op → meta.plate → 审计/通知)。
 
-    R22:编辑权随场景(_ensure_edit_rights,admin 或 owner)。
+    R22:编辑权随场景(_ensure_edit_rights,属主单判 —— 表 B scenario.write)。
     """
     try:
         return await adaptation_service.submit_adaptation(
