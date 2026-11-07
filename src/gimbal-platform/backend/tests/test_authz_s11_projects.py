@@ -303,3 +303,128 @@ class TestD5GateProjectScenarios:
                                     "scenarioId": "sc-s11-d5",
                                     "payload": {"from": "$.a", "to": "$.b"}})
         assert r.status_code == 201, r.text
+
+
+class TestProjectWriteZone:
+    """S1.2 写闸区感知:成员可写/可删项目内容;移出创建人与非成员不行
+    (表 B write/delete = owner ∨ member ∨ maintainer / +public_admin)。"""
+
+    async def test_member_updates_and_creator_cannot(self, client):
+        h_owner = await role_headers(client, "s12_cr", role="user")
+        r = await client.post("/api/scenarios", headers=h_owner,
+                              json=make_draft("sc-s12-a"))
+        assert r.status_code in (200, 201), r.text
+        await role_headers(client, "s12_mem", role="user")
+        pid = await _mk_project("s12-proj", members={"s12_mem": "member"})
+        await _move_scenario_to_project("sc-s12-a", pid)
+
+        # 成员 PUT(全量 draft)→ 200
+        h_mem = await role_headers(client, "s12_mem", role="user")
+        r = await client.put("/api/scenarios/sc-s12-a", headers=h_mem,
+                             json=make_draft("sc-s12-a"))
+        assert r.status_code == 200, r.text
+        # 移出项目的创建人(读闸即 404)与非成员 404
+        r = await client.put("/api/scenarios/sc-s12-a", headers=h_owner,
+                             json=make_draft("sc-s12-a"))
+        assert r.status_code == 404, r.text
+
+    async def test_member_deletes_project_scenario(self, client):
+        """S1-f:普通项目里成员即可删除(删除记入动态流与审计由
+        activity/audit 面覆盖,这里钉住权限面)。"""
+        h_owner = await role_headers(client, "s12_cr2", role="user")
+        r = await client.post("/api/scenarios", headers=h_owner,
+                              json=make_draft("sc-s12-b"))
+        assert r.status_code in (200, 201), r.text
+        await role_headers(client, "s12_mem2", role="user")
+        pid = await _mk_project("s12-proj2", members={"s12_mem2": "member"})
+        await _move_scenario_to_project("sc-s12-b", pid)
+        h_mem = await role_headers(client, "s12_mem2", role="user")
+        r = await client.delete("/api/scenarios/sc-s12-b", headers=h_mem)
+        assert r.status_code == 204, r.text
+
+    async def test_member_patches_project_suite(self, client):
+        h_owner = await role_headers(client, "s12_cr3", role="user")
+        await client.post("/api/scenarios", headers=h_owner,
+                          json=make_draft("sc-s12-c"))
+        r = await client.post("/api/suites", headers=h_owner,
+                              json={"name": "s12-suite", "description": ""})
+        assert r.status_code == 201, r.text
+        suite_id = r.json()["suiteId"]
+        # 成员加入项目(场景与 suite 同进项目)
+        await role_headers(client, "s12_mem3", role="user")
+        pid = await _mk_project("s12-proj3", members={"s12_mem3": "member"})
+        await _move_scenario_to_project("sc-s12-c", pid)
+        from app.core import db as db_module
+        from sqlalchemy import select as sa_select
+        from app.models.suite import Suite
+
+        async with db_module.SessionLocal() as db:
+            row = (await db.execute(sa_select(Suite).where(
+                Suite.id == suite_id))).scalar_one()
+            row.project_id = pid
+            await db.commit()
+
+        h_mem = await role_headers(client, "s12_mem3", role="user")
+        r = await client.patch(f"/api/suites/{suite_id}", headers=h_mem,
+                               json={"description": "成员改的"})
+        assert r.status_code == 200, r.text
+        # 成员列表可见该 suite(zone_read_clause)
+        r = await client.get("/api/suites", headers=h_mem)
+        assert r.status_code == 200
+        assert any(x["suiteId"] == suite_id for x in r.json()["items"])
+
+    async def test_report_definitions_list_zone(self, client):
+        """报告定义列表三区:项目定义对成员可见,对路人不可见。"""
+        from app.core import db as db_module
+        from app.models.report_definition import ReportDefinitionRow
+
+        await role_headers(client, "s12_cr4", role="user")
+        await role_headers(client, "s12_mem4", role="user")
+        await role_headers(client, "s12_out4", role="user")
+        pid = await _mk_project("s12-proj4", members={"s12_mem4": "member"})
+        async with db_module.SessionLocal() as db:
+            db.add(ReportDefinitionRow(
+                name="s12-rd", description="",
+                definition={"selection": {}, "projection": []},
+                owner_id=await _uid("s12_cr4"), project_id=pid))
+            await db.commit()
+
+        h_mem = await role_headers(client, "s12_mem4", role="user")
+        r = await client.get("/api/report-definitions", headers=h_mem)
+        assert any(d["name"] == "s12-rd" for d in r.json()["items"])
+        h_out = await role_headers(client, "s12_out4", role="user")
+        r = await client.get("/api/report-definitions", headers=h_out)
+        assert not any(d["name"] == "s12-rd" for d in r.json()["items"])
+
+    async def test_shadow_owner_runs_own_public_scenario(self, client):
+        """影子期例外:发布把原件翻进公共项目,维护者保留直接执行权
+        (否则作者发布后自己的集成任务/手动执行全断);路人仍不可
+        (公共不可执行,S1.3 起例外随「发布 = 复制」删除)。"""
+        from app.core import db as db_module
+        from app.routers._ownership import can_run_scenario
+        from app.services.zone import public_project_id
+
+        h = await role_headers(client, "s11_sho", role="user")
+        r = await client.post("/api/scenarios", headers=h,
+                              json=make_draft("sc-s11-sho"))
+        assert r.status_code in (200, 201), r.text
+        r = await client.post("/api/scenarios/sc-s11-sho/publish", headers=h)
+        assert r.status_code == 200, r.text
+        await role_headers(client, "s11_shx", role="user")
+
+        class _U:
+            def __init__(self, uid: int):
+                self.id = uid
+
+        async with db_module.SessionLocal() as db:
+            row = await _scenario_row("sc-s11-sho")
+            assert await can_run_scenario(
+                db, _U(await _uid("s11_sho")),
+                scenario_id="sc-s11-sho",
+                owner_id=row.owner_id,
+                project_id=await public_project_id(db)) is True
+            assert await can_run_scenario(
+                db, _U(await _uid("s11_shx")),
+                scenario_id="sc-s11-sho",
+                owner_id=row.owner_id,
+                project_id=row.project_id) is False

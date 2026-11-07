@@ -87,10 +87,12 @@ def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
 async def list_definitions(
     user: CurrentUser, db: DbSession,
 ) -> dict:
+    # S1.2:列表三区(私有区属主 ∨ 我所在项目 ∨ 公共项目;无引用分支)
+    from ..services.zone import zone_read_clause
+
     rows = (await db.execute(
         select(ReportDefinitionRow)
-        .where((ReportDefinitionRow.owner_id == user.id)
-               | (ReportDefinitionRow.visibility == "public"))
+        .where(zone_read_clause(ReportDefinitionRow, user.id))
         .order_by(ReportDefinitionRow.id.desc())
     )).scalars().all()
     return {"items": [_to_out(r).model_dump() for r in rows]}

@@ -300,9 +300,15 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
-    if scen.owner_id != user.id:
-        # §4.3:个人模式(含 JWT/个人令牌属主)要求场景属主。
-        raise _bad("scenario_not_owned", "只能引用自己创建的场景")
+    # S1.2:引用闸 = 可执行判(自己的 ∨ 项目内可跑的;公共项目场景
+    # 不可执行 —— 公共内容走订阅,不走个人模板)
+    from ._ownership import can_run_scenario
+
+    if not await can_run_scenario(
+            db, user, scenario_id=scen.scenario_id,
+            owner_id=scen.owner_id, project_id=scen.project_id):
+        raise _bad("scenario_not_owned",
+                   "只能引用你可执行的场景(自己的 / 项目内的)")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
     # 场景限定)。
     if body.schemeId:
@@ -653,8 +659,14 @@ async def scenario_preview(
         ComposerScenario.scenario_id == scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {scenarioId}", 404)
-    if scen.owner_id != user.id:
-        raise _bad("scenario_not_owned", "只能引用自己创建的场景")
+    # S1.2:预览与创建闸同口径(可执行判,区感知)
+    from ._ownership import can_run_scenario
+
+    if not await can_run_scenario(
+            db, user, scenario_id=scen.scenario_id,
+            owner_id=scen.owner_id, project_id=scen.project_id):
+        raise _bad("scenario_not_owned",
+                   "只能引用你可执行的场景(自己的 / 项目内的)")
     if schemeId:
         from ..services import scheme_store
         try:

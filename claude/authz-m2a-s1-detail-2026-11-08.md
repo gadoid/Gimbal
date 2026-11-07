@@ -88,7 +88,7 @@
 | 动词 | 私有区 | 普通项目 | 公共项目 |
 |---|---|---|---|
 | read / copy | owner, ref | member | public_reader |
-| run | owner, ref | member | — （公共不可执行） |
+| run | owner, ref | member | — （公共不可执行;**影子期例外**：维护者可跑自己在公共项目的行 —— 发布 = 复制落地前原件被翻进公共项目,否则作者发布后自己的集成/执行全断;S1.3 起删） |
 | write | owner | member | maintainer |
 | delete | owner | member（S1-f） | maintainer, public_admin（= 下架） |
 | publish（复制到公共项目） | owner | padmin | — |
@@ -113,22 +113,20 @@
 
 ---
 
-## 四、S1.2 写面归类
+## 四、S1.2 写面归类（已实现,2026-11-08）
 
-### 清理项
+### 实施记录
 
-- 调研计数：routers + services 中属主等值比较约 132 处。逐处归入三类并改写：
-  1. **私有区属主判定**：改为调用 `can(…, verb, obj)`（区感知），不再直接比 `owner_id`；
-  2. **个人数据**（认证会话、常量池、通知、偏好等本来就只属于个人的对象）：保持 `owner_id == user.id`，进白名单；
-  3. **删用户处置**（`users.py` 处置段）：保持，进白名单。
+- **实际计数**：`.owner_id` 等值 86 处 + `ensure_owner` 调用 5 处 + `.holder_id` 若干,共 **88 条白名单条目**（path:行内容:计数 三元组锚定,免行号漂移）。
+- **收编（第 1 类,表 B 已有动词）**：场景 PUT/DELETE（`_require_owner` 加 verb 参）、suite 写闸（`_require_write` 加 verb;delete/publish 端点分别传 delete/publish）、数据集 / 运行方案（随父场景:父场景 `can(write)`,表 B data_set/run_scheme.write 同步登记为 [o, mem, mnt]）、suite 列表与场景反查套件、报告定义列表（三区 `zone_read_clause` 单点,新增于 services/zone.py）、集成模板引用场景的闸（创建 + 预览,→ `can_run_scenario`）。
+- **白名单四类终态**：个人数据（凭证会话 / 常量池 / 执行台账 / 集成实例 holder / 环境注册表行）、工具与镜头（重名消解 / cross_owner 脱敏判定 / scope=mine / 展示徽标 / 本人 KPI）、通知与审计分支（越属主下架才通知）、删用户处置（cat3）。
+- **待收编（非终态,随切片删行）**：integration 模板闸（S1.7）、shares 引用面（S7 退役）、suites 同属主成员约束（S1.5 换同区触发器）。
+- **守卫**：`tests/test_grep_guard_owner_compare.py`,与角色守卫同构双断言（新增/计数上涨即红;条目失效/计数下降即红）,已做变异验证（加 rogue 行 → 红并点名,回滚 → 绿）。豁免 `_ownership.py` / `zone.py`（谓词单点）。
+- **顺带修 S1.1 回归（本切片测试发现）**：`can_run_scenario` 的 owner 区守卫让**作者发布后自己的场景不能跑了**（影子期发布把原件翻进公共项目,集成任务 / 手动执行全断,test_integration 9 红）—— 加影子期例外:维护者可跑自己在公共项目的行,S1.3（发布 = 复制,原件回私有区）落地时删除（表 B run 公共 = — 的终态不变,见 §三矩阵注）。
 
-### 实现项
+### 原计划（保留存档）
 
-- 新增守卫 `tests/test_grep_guard_owner_compare.py`（同角色字面量守卫的双断言形态）：routers / services 中 `owner_id ==` / `!= user.id` 形状冻结白名单，只减不增；第 2、3 类是终态白名单，第 1 类收编完即删行。
-
-### 测试项
-
-- 守卫双断言（新增即红 / 白名单失效条目即红）。
+- 调研计数约 132 处（实际 88 条,口径为三元组条目数）;三类改写口径不变;守卫双断言。
 
 ---
 

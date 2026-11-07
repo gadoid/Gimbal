@@ -64,23 +64,17 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     """
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
-    from sqlalchemy import and_, select as sa_select
+    # S1.2:三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
+    # 列表同款);ref 分支仅限私有区对象(S7 退役),谓词单点 =
+    # _ownership.ref_exists_clauses(禁自写)。
+    from sqlalchemy import and_
 
-    from ..models.project import Project, ProjectMember
-    owner = ComposerScenario.owner_id
-    # S1.1 三区(表 B scenario.read):私有区(属主 ∧ project_id 空)∨
-    # 我所在的普通项目 ∨ 公共项目 ∨ 引用(仅私有区对象,S7 退役)。
-    # 谓词单点 = _ownership.ref_exists_clauses(禁自写)。
     from ..routers._ownership import ref_exists_clauses
+    from .zone import zone_read_clause
     viewer = user.id if user is not None else viewer_id
     direct, via_suite = ref_exists_clauses(viewer)
-    my_projects = sa_select(ProjectMember.project_id).where(
-        ProjectMember.user_id == viewer)
-    public_pid = sa_select(Project.id).where(Project.kind == "public")
     return or_(
-        and_(owner == viewer, ComposerScenario.project_id.is_(None)),
-        ComposerScenario.project_id.in_(my_projects),
-        ComposerScenario.project_id.in_(public_pid),
+        zone_read_clause(ComposerScenario, viewer),
         and_(ComposerScenario.project_id.is_(None), direct),
         and_(ComposerScenario.project_id.is_(None), via_suite),
     )

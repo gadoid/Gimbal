@@ -58,14 +58,14 @@ table_b:
     delete:    [o, mem, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
-  # 数据集/运行方案:读/执行随父场景(行上无 project_id,实际判定走
-  # 父场景 can_read_scenario_row);这里只登记口径,矩阵只测 write
+  # 数据集/运行方案:读写随父场景(行上无 project_id,实际判定 =
+  # 父场景 can();S1.2 写闸已切换,登记与父场景动词同形)
   data_set:
     read:      [o, ref, mem, pr]
-    write:     [o]
+    write:     [o, mem, mnt]
   run_scheme:
     read:      [o, ref, mem, pr]
-    write:     [o]
+    write:     [o, mem, mnt]
   report_definition:
     read:      [o, pr]
     write:     [o, mnt]       # W9-2 语义换轴:私有区属主 ∨ 公共项目维护者

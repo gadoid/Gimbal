@@ -31,7 +31,6 @@ from ..core.deps import CurrentUser
 from ..models.execution import Execution
 from ..models.suite import Suite, SuiteMember
 from ._error_mapping import not_found_404
-from ._ownership import ensure_owner
 from ..schemas.scenario_composer import RunRequest
 from ..schemas.suite import (
     SuiteCompositionIn, SuiteCreateIn, SuiteDetailOut, SuiteLookupItem,
@@ -79,19 +78,20 @@ async def _require_run_async(db, user: CurrentUser, suite: Suite) -> None:
         raise not_found_404("suite", str(suite.id))
 
 
-async def _require_write(db, user: CurrentUser, suite: Suite) -> None:
-    """写闸(表 B suite.write/delete = 属主单判,W3):读判含 suite
-    引用 —— 完全不可见才 404(不泄露);可读(public/ref)但非属主 →
-    403(不与可读性自相矛盾)。"""
+async def _require_write(db, user: CurrentUser, suite: Suite, *,
+                    verb: str = "write") -> None:
+    """写闸(表 B suite.{write,delete,publish},S1.2 区感知):读判
+    先行(不可见 → 404);可读但无权 → 403。表 B = owner ∨ member ∨
+    maintainer(publish = owner ∨ padmin ∨ maintainer)。"""
     from ._ownership import can
 
     if not await can(db, user, "suite", "read", suite):
         raise not_found_404("suite", str(suite.id))
-    ensure_owner(
-        user, suite.owner_id,
-        {"code": "not_owner",
-         "message": "only the suite's owner can manage it"},
-    )
+    if not await can(db, user, "suite", verb, suite):
+        raise HTTPException(status_code=403, detail={
+            "code": "not_owner",
+            "message": "only the suite's owner (or a project member / "
+                       "maintainer) can manage it"})
 
 
 def _iso(v) -> str | None:
@@ -252,16 +252,19 @@ async def list_suites(
     # visibility=public(§5.1,场景列表同款):显式传时 scope 不叠加,
     # 只出公共 Suite —— 公共库页口径(重构方案 D-3 公共 Suite 分区)。
     from sqlalchemy import exists, select as _select
+    from ..models.project import Project
     from ..models.share_ref import ShareRef
+    from ..services.zone import zone_read_clause
     if visibility == "public":
-        clauses = [Suite.visibility == "public"]
+        # S1.2:公共页口径换轴 —— 公共项目(影子期与 visibility 等价)
+        clauses = [Suite.project_id.in_(
+            _select(Project.id).where(Project.kind == "public"))]
     elif scope == "mine":
-        clauses = [Suite.owner_id == user.id]
+        clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)
     else:
-        # W3:admin 与普通用户同镜头(自己的 ∨ 公共 ∨ 被引用的)
+        # S1.2 三区(表 B suite.read = zone_read_clause)∨ 引用
         clauses = [or_(
-            Suite.owner_id == user.id,
-            Suite.visibility == "public",
+            zone_read_clause(Suite, user.id),
             exists(_select(ShareRef.id).where(
                 ShareRef.grantee_user_id == user.id,
                 ShareRef.suite_id == Suite.id)).correlate(Suite),
@@ -403,7 +406,7 @@ async def delete_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> Response:
     suite = await _load_suite(db, suite_id)
-    await _require_write(db, user, suite)
+    await _require_write(db, user, suite, verb="delete")
     suite_name, suite_owner = suite.name, suite.owner_id
     # 重构方案:有引用者时,删除后通知引用者(与处置路径
     # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
@@ -1564,7 +1567,7 @@ async def publish_suite(
     owner;W3 起 Admin+ 对他人对象无发布权,R6)。"""
     from ..models.composer_scenario import ComposerScenario
     suite = await _load_suite(db, suite_id)
-    await _require_write(db, user, suite)
+    await _require_write(db, user, suite, verb="publish")
     if _is_draft(suite):
         raise HTTPException(status_code=409, detail={
             "code": "suite_is_draft",
@@ -1662,15 +1665,17 @@ async def suites_of_scenario(
     scen = await scenario_store.get_row(db, scenario_id)
     if scen is None:
         raise not_found_404("scenario", scenario_id)
-    ensure_owner(
-        user, scen.owner_id,
-        {"code": "not_owner",
-         "message": "only the scenario's owner can view its suites"},
-    )
+    # S1.2:反查闸 = 场景读判(成员可见项目场景的所属 suite);
+    # 子句 = 套件三区(与列表同口径)
+    from ._ownership import can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, scen):
+        raise not_found_404("scenario", scenario_id)
+    from ..services.zone import zone_read_clause
     clauses = [Suite.id.in_(
         select(SuiteMember.suite_id)
         .where(SuiteMember.scenario_id == scenario_id)
-    ), Suite.owner_id == user.id]
+    ), zone_read_clause(Suite, user.id)]
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()

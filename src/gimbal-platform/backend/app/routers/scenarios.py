@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ._ownership import ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
@@ -64,8 +63,11 @@ async def _load_row(
 
 
 async def _require_owner(
-    db, user: CurrentUser, row: ComposerScenario,
+    db, user: CurrentUser, row: ComposerScenario, *, verb: str = "write",
 ) -> None:
+    """写闸(表 B scenario.{write,delete},S1.2 区感知):读判先行
+    (不可见 → 404 不泄露存在性);可读但无写权 → 403。表 B =
+    owner(私有区)∨ member(项目)∨ maintainer(公共项目)。"""
     # owner_id (int user.id) is the single ownership authority
     # (canonical rule in _ownership;表 B write/delete = 属主单判,W3 起
     # admin 无旁路 —— 私有区归属主)。读判含 ref:被引用者可读 ⇒ 403
@@ -76,11 +78,14 @@ async def _require_owner(
         raise HTTPException(
             status_code=404,
             detail=f"scenario_not_found: {row.scenario_id}")
-    ensure_owner(
-        user,
-        row.owner_id,
-        "not_owner: only the scenario's owner can modify it",
-    )
+    from ._ownership import can
+
+    if not await can(db, user, "scenario", verb, row):
+        raise HTTPException(
+            403,
+            detail="not_owner: only the scenario's owner (or a project "
+                   "member / maintainer) can modify it",
+        )
 
 
 async def _require_visibility_actor(
@@ -870,7 +875,7 @@ async def delete_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> None:
     row = await _load_row(db, scenario_id)
-    await _require_owner(db, user, row)
+    await _require_owner(db, user, row, verb="delete")
     owner_id, name = row.owner_id, row.name
     # 引用者名单必须在删除**之前**取 —— share_refs 行随 FK CASCADE 消失
     from sqlalchemy import select as _sel

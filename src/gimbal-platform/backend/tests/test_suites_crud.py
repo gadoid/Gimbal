@@ -282,9 +282,10 @@ async def test_scenario_lookup_suites(client: AsyncClient) -> None:
     assert r.status_code == 200
     assert {x["name"] for x in r.json()} == {"回归", "冒烟"}
 
-    # 非场景属主反查 → 403;幽灵场景 → 404
+    # 非场景属主反查 → 404(S1.2 起读判先行,不可见与不存在同为
+    # 404 不泄露存在性;旧 403 口径随 ensure_owner 收编退役)
     carol = await register_and_login(client, "lk_carol", "lk_carol_pass123")
     assert (await client.get("/api/scenarios/sc-lk-1/suites",
-                             headers=carol)).status_code == 403
+                             headers=carol)).status_code == 404
     assert (await client.get("/api/scenarios/sc-lk-ghost/suites",
                              headers=bob)).status_code == 404

@@ -51,6 +51,23 @@ async def my_project_roles(db: AsyncSession, user_id: int) -> dict[int, str]:
     return roles
 
 
+def zone_read_clause(model, viewer_id: int):
+    """三区读谓词(带 owner_id + project_id 的任意模型):私有区属主 ∨
+    我所在的普通项目 ∨ 公共项目 —— 场景 / suite / 报告定义列表共用
+    (ref 分支由调用方叠加,且仅限私有区对象)。SQL 谓词单点,与
+    ``routers._ownership.can`` 的表 B 求值同口径。"""
+    from sqlalchemy import and_, or_, select as sa_select
+
+    my = sa_select(ProjectMember.project_id).where(
+        ProjectMember.user_id == viewer_id)
+    pub = sa_select(Project.id).where(Project.kind == "public")
+    return or_(
+        and_(model.owner_id == viewer_id, model.project_id.is_(None)),
+        model.project_id.in_(my),
+        model.project_id.in_(pub),
+    )
+
+
 def apply_public(row: Any, public_pid: int | None) -> None:
     """影子写:置公共态(visibility=public ∧ project_id=公共项目)。"""
     row.visibility = "public"

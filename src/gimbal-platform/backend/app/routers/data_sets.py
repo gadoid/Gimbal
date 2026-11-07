@@ -17,12 +17,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ._ownership import ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
@@ -51,18 +50,20 @@ async def _require_scenario_owner(
     read the scenario either (authz W3:读判含 ref —— 完全不可见才 404,
     引用者/公共读者可读 ⇒ 403,不与可读性自相矛盾)。
     """
-    from ._ownership import can_read_scenario_row
+    from ._ownership import can, can_read_scenario_row
 
     scen = await _load_scenario(db, scenario_id)
     if scen is None:
         raise not_found_404("scenario", scenario_id)
     if not await can_read_scenario_row(db, user, scen):
         raise not_found_404("scenario", scenario_id)
-    ensure_owner(
-        user,
-        scen.owner_id,
-        "not_owner: only the scenario's owner can manage its data sets",
-    )
+    # S1.2:数据集随父场景 —— 写权 = 父场景 can(write)(owner ∨ 项目
+    # 成员 ∨ 公共维护者),不再属主单判
+    if not await can(db, user, "scenario", "write", scen):
+        raise HTTPException(
+            403,
+            detail="not_owner: only the scenario's owner (or a project "
+                   "member / maintainer) can manage its data sets")
     return scen
 
 

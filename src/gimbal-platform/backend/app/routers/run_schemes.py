@@ -15,7 +15,6 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..models.composer_scenario import ComposerScenario
 from ._error_mapping import not_found_404
-from ._ownership import ensure_owner
 from ..schemas.scenario_composer import RunScheme
 from ..services import scheme_store, scenario_store
 
@@ -31,16 +30,17 @@ async def _load_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
 
 
 async def _require_owner(db, user: CurrentUser, row: ComposerScenario) -> None:
-    """写闸(表 B scenario.write,authz W3):读判含 ref —— 完全不可见
-    才 404(不泄露);可读(公共/引用)但非属主 → 403。"""
-    from ._ownership import can_read_scenario_row
+    """写闸(表 B scenario.write,S1.2 区感知):运行方案随父场景,
+    写权 = 父场景 can(write)(owner ∨ 项目成员 ∨ 公共维护者)。"""
+    from ._ownership import can, can_read_scenario_row
 
     if not await can_read_scenario_row(db, user, row):
         raise not_found_404("scenario", row.scenario_id)
-    ensure_owner(
-        user, row.owner_id,
-        "not_owner: only the scenario's owner can manage run schemes",
-    )
+    if not await can(db, user, "scenario", "write", row):
+        raise HTTPException(
+            403,
+            detail="not_owner: only the scenario's owner (or a project "
+                   "member / maintainer) can manage run schemes")
 
 
 def _to_payload(s: RunScheme) -> dict:

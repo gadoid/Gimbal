@@ -112,16 +112,16 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "publish":   frozenset({"owner", "padmin", "maintainer"}),
         "unpublish": frozenset({"maintainer", "public_admin"}),
     },
-    # 数据集/运行方案:读/执行随父场景(§7.4 引用闭包,can_read_
-    # scenario_row 承担,这里的 member/public_reader 只是口径登记),
-    # 写属主单判
+    # 数据集/运行方案行上没有 project_id:读写都随父场景(§7.4 引用
+    # 闭包 —— 实际判定 = 父场景 can(read/write);S1.2 写闸已切换,
+    # 这里的登记与父场景动词同形,矩阵只测 write)
     "data_set": {
         "read":      frozenset({"owner", "ref", "member", "public_reader"}),
-        "write":     frozenset({"owner"}),
+        "write":     frozenset({"owner", "member", "maintainer"}),
     },
     "run_scheme": {
         "read":      frozenset({"owner", "ref", "member", "public_reader"}),
-        "write":     frozenset({"owner"}),
+        "write":     frozenset({"owner", "member", "maintainer"}),
     },
     # W9-2 语义换轴:编辑 = 私有区属主 ∨ 公共项目维护者;下架(delete)
     # = 维护者 ∨ Admin+(public_admin)
@@ -291,13 +291,23 @@ async def can_run_scenario(
     属主 ∨ 引用;普通项目成员可跑;公共项目不开执行(公共资源跑需
     先 fork,不变量 7;W3 起 admin 同样无旁路)。owner 谓词带区守卫
     (D1:project_id 非空时属主身份不给权限);owner_id=None(孤儿)
-    时仅引用 / 项目分支可过。"""
+    时仅引用 / 项目分支可过。**影子期例外**:维护者可跑自己在公共
+    项目的行(见函数体注释,S1.3 随「发布 = 复制」删除)。"""
     if project_id is None:
         if owner_id is not None and _user_matches(user, owner_id):
             return True
         return await has_scenario_ref(db, user.id, scenario_id)
-    from ..services.zone import my_project_roles
-    return project_id in await my_project_roles(db, user.id)
+    from ..services.zone import my_project_roles, public_project_id
+    if project_id in await my_project_roles(db, user.id):
+        return True
+    # 影子期例外(S1.3 收敛):发布 = 复制落地前,公共项目行仍是作者的
+    # 工作原件(发布把原件翻进公共项目)—— 维护者(owner_id)保留直接
+    # 执行权,否则作者发布后自己的集成任务 / 手动执行全断。S1.3 起
+    # public=副本、原件回私有区,本分支随之删除(表 B run 公共 = —)。
+    if owner_id is not None and _user_matches(user, owner_id) \
+            and project_id == await public_project_id(db):
+        return True
+    return False
 
 
 async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
