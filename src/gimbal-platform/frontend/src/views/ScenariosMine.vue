@@ -53,7 +53,7 @@
            权威);选 JSON 文件 → 本地解析 → 确认对话框(析出映射/认证
            引用/ID 冲突)。MemberUser 收紧见 routers/scenario_import.py。 -->
       <button
-        v-if="auth.hasRole('member', 'admin')"
+        v-if="auth.can('ops.write')"
         type="button"
         class="slib-import"
         data-testid="mine-import"
@@ -454,7 +454,7 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
  *  逐页收纳批把页脚徽章/默认方案口径段并入同一弹层,页脚不再常驻长说明。 */
 const BADGE_NOTE = '「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。'
 const pageSubtitle = computed(() => {
-  const lens = auth.isAdmin
+  const lens = auth.can('users.manage')
     ? (lensAll.value
       ? '全员视角:非 public 桶装的是全员的私有场景(全量)'
       : '我的:只看你创建的;切「全员视角」可看全部')

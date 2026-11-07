@@ -1,27 +1,38 @@
 /**
- * router — 角色矩阵路由守卫(P2-4,权限方案 §5)。
- * 钉住:未登录 → /login 带回跳;user 访问 member/admin 页 → 弹回
- * /home;member 过 admin 页 → 弹回;全员页(/profile 等)不受限;
- * admin 全通。(2026-09-29 三级更名:原 member→user、operator→member)
+ * router — 能力矩阵路由守卫(authz W8;原 P2-4 角色矩阵的换代)。
+ * 钉住:未登录 → /login 带回跳;无能力者访问 requiresCap 页 → 弹回
+ * /home;持能力者放行;全员页(/profile 等)不受限;super_admin(表 A
+ * 全能力)全通。能力来自 /auth/me.capabilities(store.can 查它,
+ * 角色字面量已清零)。
+ * 另钉 authz W6 只能改密门:must_change_password → 一切页面重定向
+ * /change-password(带 redirect),改密位复位后放行。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
-function loginAs(role: 'user' | 'member' | 'admin', signedIn = true) {
+/** 与后端表 A(tests/authz_expected.yaml)对齐的期望矩阵(人工审定)。 */
+const CAPS_BY_ROLE: Record<string, string[]> = {
+  user: [],
+  admin: ['ops.write', 'alias.write', 'platform.alerts'],
+  super_admin: ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'],
+}
+
+function loginAs(role: keyof typeof CAPS_BY_ROLE = 'user', signedIn = true) {
   const auth = useAuthStore()
   auth.accessToken = signedIn ? 'tok' : ''
   auth.currentUser = {
     id: 1, username: 'u', display_name: 'u', role, is_active: true,
   } as never
+  auth.capabilities = CAPS_BY_ROLE[role]
 }
 
 async function nav(path: string) {
   return router.push(path).then(() => router.currentRoute.value.fullPath)
 }
 
-describe('router — 角色矩阵守卫', () => {
+describe('router — 能力矩阵守卫(authz W8)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     router.push('/').catch(() => undefined)
@@ -34,70 +45,87 @@ describe('router — 角色矩阵守卫', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/scenarios/mine')
   })
 
-  it('user 访问 admin 页(/admin/users)→ 弹回 /home', async () => {
+  it('user(无能力)访问 users.manage / ops.write 页 → 均弹回 /home', async () => {
     loginAs('user')
     expect(await nav('/admin/users')).toBe('/home')
+    expect(await nav('/service-admin')).toBe('/home')
   })
 
-  it('member 访问 admin 页 → 弹回;member 访问 member 页放行', async () => {
-    loginAs('member')
+  it('admin(ops.write)访问 ops 页放行、users.manage 页弹回', async () => {
+    loginAs('admin')
     expect(await nav('/admin/users')).toBe('/home')
-    // member 页(服务信息管理 = member+)放行
-    const to = await nav('/service-admin')
-    expect(to).toBe('/service-admin')
+    // 服务信息管理 = ops.write(原 member+ 更名面)
+    expect(await nav('/service-admin')).toBe('/service-admin')
   })
 
-  it('member 可达别名详情页(后端按 admin ∨ 属主放行入站管理、grant 人人可签;' +
-     '路由守卫与后端权限对拍 —— 全量评估 2026-11-02 #3)', async () => {
-    loginAs('member')
-    expect(await nav('/service-admin/agent-sys')).toBe('/service-admin/agent-sys')
+  it('ops.write 持有者可达别名详情页;无能力者弹回(后端按 admin ∨ 属主' +
+     '放行入站管理;路由守卫与后端表 A 对拍)', async () => {
+    loginAs('admin')
+    expect(await nav('/service-admin/agent-sys')).toBe('/service-admin/agent-sys'
+    )
     loginAs('user')
     // 换一个路由参数,避免同路径重复导航被 vue-router 短路、守卫不再执行
     expect(await nav('/service-admin/other-sys')).toBe('/home')
   })
 
-  it('admin 全通 + /profile 全员可达', async () => {
-    loginAs('admin')
+  it('super_admin(表 A 全能力)全通 + /profile 全员可达', async () => {
+    loginAs('super_admin')
     expect(await nav('/admin/users')).toBe('/admin/users')
     loginAs('user')
     // 子页面化:/profile 空子路径重定向到账号子页 —— 可达性断言落到重定向目标
     expect(await nav('/profile')).toBe('/profile/account')
-    // 通知与账号同页:旧 #notify 深链保留锚点(由账号子页滚到通知区)
     expect(await nav('/profile#notify')).toBe('/profile/account#notify')
   })
 })
 
-describe('auth store — hasRole 矩阵', () => {
+describe('router — authz W6 只能改密门', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    router.push('/').catch(() => undefined)
+  })
+
+  it('must_change_password 为真 → 一切页面重定向 /change-password(带回跳)', async () => {
+    loginAs('user')
+    const auth = useAuthStore()
+    auth.mustChangePassword = true
+    await nav('/scenarios/mine')
+    expect(router.currentRoute.value.path).toBe('/change-password')
+    expect(router.currentRoute.value.query.redirect).toBe('/scenarios/mine')
+    // 改密页本身放行(唯一出口;不再追加 redirect 嵌套)
+    await nav('/change-password')
+    expect(router.currentRoute.value.path).toBe('/change-password')
+  })
+
+  it('改密位复位(fetchMe 成功路径)→ 原目标放行', async () => {
+    loginAs('user')
+    const auth = useAuthStore()
+    auth.mustChangePassword = true
+    await nav('/scenarios/mine')
+    auth.mustChangePassword = false
+    expect(await nav('/scenarios/mine')).toBe('/scenarios/mine')
+  })
+})
+
+describe('auth store — can() 矩阵与旧快照迁移(authz W8)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('三级角色判定 + 旧缓存回落(无 role → is_admin;operator → member)', () => {
+  it('can() 按 capabilities 判定,与角色字段无关', () => {
     const auth = useAuthStore()
-    auth.currentUser = { id: 1, username: 'm', role: 'user', is_admin: false } as never
-    expect(auth.hasRole('user')).toBe(true)
-    expect(auth.hasRole('member', 'admin')).toBe(false)
-    auth.currentUser = { id: 2, username: 'o', role: 'member' } as never
-    expect(auth.hasRole('member', 'admin')).toBe(true)
-    expect(auth.hasRole('admin')).toBe(false)
-    // 更名前的旧快照携带 operator → 就地归并为 member
-    auth.currentUser = { id: 4, username: 'old_op', role: 'operator' } as never
-    expect(auth.hasRole('member', 'admin')).toBe(true)
-    expect(auth.hasRole('user')).toBe(false)
-    // 旧缓存无 role → is_admin 派生口径(M6-3 后端派生,前端兜底同语义)
-    auth.currentUser = { id: 3, username: 'legacy', is_admin: true } as never
-    expect(auth.hasRole('admin')).toBe(true)
+    auth.currentUser = { id: 1, username: 'm', role: 'user' } as never
+    auth.capabilities = ['ops.write']
+    expect(auth.can('ops.write')).toBe(true)
+    expect(auth.can('users.manage')).toBe(false)
+    // 能力列表为空 = 全不可(角色字段不参与判定)
+    auth.capabilities = []
+    expect(auth.can('ops.write')).toBe(false)
   })
-})
 
-describe('API 403 面(P2-4):角色越权时前端提示不炸', () => {
-  it('user 调 admin-only 端点 → 403 detail 透出', async () => {
-    // 单元面:直接断言 http 层对 403 的错误形状(接线在各页的 showError)
-    const { ApiError } = await import('@/api/http')
-    const err = new ApiError(403, 403, 'member_only')
-    expect(err.status).toBe(403)
+  it('旧快照(W8 前)无 capabilities → can() 恒 false;role 兜底显示 user', () => {
+    const auth = useAuthStore()
+    // 旧快照形态:role 可能还是更名前的 'member'/'operator'
+    auth.currentUser = { id: 2, username: 'old', role: 'member', is_admin: true } as never
+    expect(auth.can('users.manage')).toBe(false)
+    expect(auth.can('ops.write')).toBe(false)
+    expect(auth.role).toBe('user')
   })
-})
-
-vi.mock('vue-router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('vue-router')>()
-  return actual
 })

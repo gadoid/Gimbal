@@ -129,7 +129,7 @@ const hasUnread = computed(() => unread.value > 0)
           @click="tab = 'notify'"
         >通知<span v-if="hasUnread" class="nt-dot">{{ unread }}</span></button>
         <button
-          v-if="auth.isAdmin"
+          v-if="auth.can('users.manage')"
           type="button"
           class="nt-tab"
           :class="{ active: tab === 'audit' }"
@@ -176,7 +176,7 @@ const hasUnread = computed(() => unread.value > 0)
       </div>
 
       <!-- ── 审计 tab(仅 admin):复用面板,数据口径不变 ───────── -->
-      <div v-if="tab === 'audit' && auth.isAdmin">
+      <div v-if="tab === 'audit' && auth.can('users.manage')">
         <AuditLogPanel />
         <p class="nt-note">
           审计只记特权写(角色变更/删号/重置密码/公告/carry/适配/别名);

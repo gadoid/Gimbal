@@ -4,7 +4,7 @@
  */
 import http from './http'
 
-export type Role = 'user' | 'member' | 'admin'
+export type Role = 'user' | 'admin' | 'super_admin'
 
 export interface NotificationItem {
   id: number

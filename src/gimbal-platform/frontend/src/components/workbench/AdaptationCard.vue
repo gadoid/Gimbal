@@ -76,7 +76,7 @@ const wbT = (suffix: string) => `wb-card-adaptations-${suffix}`
 
 onMounted(async () => {
   try {
-    const env = await listBatches({ scope: auth.isAdmin ? undefined : 'mine' })
+    const env = await listBatches({ scope: auth.can('ops.write') ? undefined : 'mine' })
     const list = env.items
     batches.value = list.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   } catch {

@@ -131,8 +131,9 @@
         <div class="ig-field-row">
           <label class="ig-field">执行身份
             <select v-model="form.identityMode" data-testid="ig-form-mode">
-              <!-- §2.3:平台模式要求 member+;user 角色不显示该选项 -->
-              <option v-if="auth.hasRole('member', 'admin')" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
+              <!-- authz W5:平台模式入口 M1 隐藏(后端创建已 410
+                   platform_mode_closed;C1 删) -->
+              <option v-if="PLATFORM_MODE_OPEN" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
               <option value="personal">个人模式(我的凭证 · 读写)</option>
             </select>
           </label>
@@ -219,16 +220,16 @@
     <SubscriptionDialog :open="!!subTask" :task-id="subTask?.id || 0"
                         @close="subTask = null" @done="load" />
 
-    <!-- 平台令牌(webhook v4 §8:member+;身份说明 + 三入口复用) -->
-    <section v-if="auth.hasRole('member', 'admin')" class="ig-tokens">
+    <!-- 平台令牌(webhook v4 §8;authz W5:M1 隐藏,C1 删) -->
+    <section v-if="PLATFORM_MODE_OPEN" class="ig-tokens">
       <h3>平台令牌
         <span class="ig-hint-inline">代表平台系统用户(__platform__)执行;只读 + 仅公共场景;member+ 可管理</span>
       </h3>
       <TokensSection variant="platform" />
     </section>
 
-    <!-- 平台凭证(admin;D34 原地更新) -->
-    <section v-if="auth.isAdmin" class="ig-creds" data-testid="ig-creds">
+    <!-- 平台凭证(D34 原地更新;authz W5:M1 隐藏,C1 删) -->
+    <section v-if="PLATFORM_MODE_OPEN" class="ig-creds" data-testid="ig-creds">
       <h3>平台凭证 <span class="ig-hint-inline">平台模式执行时使用;仅 admin 可管理</span></h3>
       <table class="slib-table">
         <thead><tr><th>别名</th><th>登录地址</th><th>用户名</th><th>被引用</th><th></th></tr></thead>
@@ -312,7 +313,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import UnbindTokenDialog from '@/components/integration/UnbindTokenDialog.vue'
-import { useAuthStore } from '@/stores/auth'
 import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
   runIntegrationTask, listPlatformCredentials,
@@ -333,7 +333,8 @@ import { listScenarioOptions, listRunSchemes } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 
-const auth = useAuthStore()
+/** authz W5:平台模式入口 M1 隐藏(创建/令牌/凭证三面;C1 连代码删) */
+const PLATFORM_MODE_OPEN = false
 const route = useRoute()
 const router = useRouter()
 
@@ -543,7 +544,7 @@ const scenarios = ref<{ scenarioId: string; name: string }[]>([])
 const schemes = ref<{ schemeId: string; name: string; isDefault: boolean }[]>([])
 const form = reactive({
   name: '', scenarioId: '', schemeId: '',
-  identityMode: auth.hasRole('member', 'admin') ? 'platform' : 'personal',
+  identityMode: 'personal',
   triggerCron: '*/5 * * * *', resultPolicy: 'latest', visibility: 'private',
 })
 const visibilityLabels = computed(() => form.identityMode === 'platform'
@@ -629,7 +630,7 @@ const creds = ref<PlatformCredential[]>([])
 const cred = reactive({ alias: '', url: '', username: '', password: '' })
 
 async function loadCreds(): Promise<void> {
-  if (!auth.isAdmin) return
+  if (!PLATFORM_MODE_OPEN) return
   try {
     creds.value = await listPlatformCredentials()
   } catch {

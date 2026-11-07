@@ -1,4 +1,4 @@
-<!-- UsersSummaryCard.vue — 工作台注册卡:用户管理(adminOnly,→ /admin/users)。
+<!-- UsersSummaryCard.vue — 工作台注册卡:用户管理(cap: users.manage,→ /admin/users)。
      数据走 useUsersStore(与完整页同一个 store),不另开口子;停用判定
      与 UsersAdmin.vue 同一条谓词(!is_active)—— §7 第 6 条计数同源。
      三档密度(§4):S = 用户数 + 停用数;M/L = 用户行 5/8。 -->
@@ -29,8 +29,8 @@
         <div v-for="u in visible" :key="u.id" class="us-row wrow" :data-testid="`wb-us-row-${u.username}`">
           <span class="wrow-name mono" :title="u.username">{{ u.username }}</span>
           <span class="us-display" :title="u.display_name">{{ u.display_name || '—' }}</span>
-          <span v-if="u.role === 'admin'" class="wrow-tag tag-admin">管理员</span>
-          <span v-else-if="u.role === 'member'" class="wrow-tag tag-op">成员</span>
+          <span v-if="u.role === 'super_admin'" class="wrow-tag tag-admin">超级管理员</span>
+          <span v-else-if="u.role === 'admin'" class="wrow-tag tag-op">管理员</span>
           <span v-if="!u.is_active" class="wrow-tag tag-inactive">已停用</span>
         </div>
         <p v-if="rows.length > visible.length" class="more-hint">

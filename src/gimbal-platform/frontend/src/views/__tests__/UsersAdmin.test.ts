@@ -31,9 +31,9 @@ vi.mock('@/utils/toast', () => ({
 }))
 
 const USERS = [
-  { id: 1, username: 'root', display_name: 'Root', is_admin: true, is_active: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 2, username: 'alice', display_name: '', is_admin: false, is_active: true, created_at: '2026-02-01T00:00:00Z' },
-  { id: 3, username: 'bob', display_name: 'Bob', is_admin: false, is_active: false, created_at: '2026-03-01T00:00:00Z' },
+  { id: 1, username: 'root', display_name: 'Root', role: 'super_admin', is_admin: true, is_active: true, created_at: '2026-01-01T00:00:00Z' },
+  { id: 2, username: 'alice', display_name: '', role: 'user', is_admin: false, is_active: true, created_at: '2026-02-01T00:00:00Z' },
+  { id: 3, username: 'bob', display_name: 'Bob', role: 'user', is_admin: false, is_active: false, created_at: '2026-03-01T00:00:00Z' },
 ]
 
 /** Portal 内元素查询(shadcn Dialog/DropdownMenu 渲染在 body) */
@@ -56,8 +56,14 @@ async function mountPage() {
   return w
 }
 
+/** authz W8:用户管理页 = users.manage 面(super_admin 全能力注入)。 */
 function loginAs(id: number, isAdmin = true) {
-  useAuthStore().currentUser = { id, username: 'x', is_admin: isAdmin } as never
+  const auth = useAuthStore()
+  auth.currentUser = {
+    id, username: 'x', role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
+  } as never
+  auth.capabilities = isAdmin
+    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
 }
 
 beforeEach(() => {
@@ -96,7 +102,7 @@ describe('UsersAdmin — 列表与筛选', () => {
   it('渲染用户表:元信息、自助标记「你」、停用行划线', async () => {
     loginAs(1)
     const w = await mountPage()
-    expect(w.text()).toContain('3 个用户 · 2 启用 · 1 admin')
+    expect(w.text()).toContain('3 个用户 · 2 启用 · 1 超级管理员')
     expect(w.find('[data-testid="user-row-1"]').text()).toContain('你')
     expect(w.find('[data-testid="user-row-1"]').text()).toContain('root')
     expect(w.find('[data-testid="user-row-3"]').classes()).toContain('inactive-row')
@@ -148,7 +154,7 @@ describe('UsersAdmin — 创建用户', () => {
     w.unmount()
   })
 
-  it('合法 + admin 角色 → create(映射 is_admin) + toast + 关闭', async () => {
+  it('合法 + super_admin 角色 → create(直送 role) + toast + 关闭', async () => {
     loginAs(1)
     const w = await mountPage()
     await w.find('[data-testid="open-create"]').trigger('click')
@@ -167,7 +173,7 @@ describe('UsersAdmin — 创建用户', () => {
       username: 'newbie',
       display_name: undefined,
       password: 'GoodPass123',
-      is_admin: true,
+      role: 'super_admin',
     })
     expect(vi.mocked(toast.success).mock.calls[0][0]).toContain('已创建用户 newbie')
     w.unmount()

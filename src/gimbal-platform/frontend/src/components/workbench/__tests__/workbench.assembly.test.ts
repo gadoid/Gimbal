@@ -81,10 +81,10 @@ async function waitCards(w: ReturnType<typeof mountPage>, n: number) {
 }
 
 /** 本文件的用例都是 member(alice is_admin: false)—— member 的默认板
- *  = 注册表去掉 adminOnly,那三张卡压根不该铺给他。 */
+ *  = 注册表去掉能力门卡,那三张卡压根不该铺给他。 */
 function memberIds(): string[] {
-  // M2.5:member 可见 = 无任何角色门控的卡(adminOnly 与 roles 都不算)
-  return workbenchRegistry.filter((d) => !d.adminOnly && !d.roles).map((d) => d.id)
+  // authz W8:无能力者可见 = 无能力门的卡
+  return workbenchRegistry.filter((d) => !d.cap).map((d) => d.id)
 }
 
 describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {

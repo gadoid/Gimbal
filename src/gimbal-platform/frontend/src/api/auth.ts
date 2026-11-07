@@ -5,9 +5,11 @@ export interface UserPublic {
   id: number
   username: string
   display_name: string
+  /** 已废弃的派生位(后端保留仅为旧缓存兜底,W8 起前端不再消费) */
   is_admin: boolean
-  /** M2.5 三级角色;旧快照可能缺省 → 前端回落 is_admin */
-  role?: 'user' | 'member' | 'admin'
+  /** 三级角色(authz W1 更名:user | admin | super_admin);仅作展示,
+   *  权限判定一律走 MeOut.capabilities 的 can()(W8) */
+  role?: 'user' | 'admin' | 'super_admin'
   /** 通知 roleVersion 比对源(ISO);旧快照缺省 */
   updated_at?: string | null
   is_active: boolean
@@ -25,6 +27,10 @@ export interface TokenOut {
 
 export interface MeOut {
   user: UserPublic
+  /** 表 A 求出的能力列表(authz W2;前端 can() 的唯一依据,W8) */
+  capabilities?: string[]
+  /** 管理员重置密码后的强制改密位(authz W6;路由守卫跳 /change-password) */
+  must_change_password?: boolean
 }
 
 export function register(payload: {

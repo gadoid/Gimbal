@@ -244,7 +244,7 @@ const { pageSize } = usePagerSize('suite-library', 10)
 
 // 浏览镜头(§5.1):默认我的;admin 可切全员视角(记本地)
 const lensAll = ref(false)
-const lensAvailable = computed(() => !!auth.isAdmin)
+const lensAvailable = computed(() => auth.can('users.manage'))
 function toggleLens(): void {
   lensAll.value = !lensAll.value
   page.value = 1

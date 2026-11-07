@@ -60,7 +60,7 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
   })
 
-  it('姓名靠左、头像放大靠右;角色徽标按 is_admin 分档', () => {
+  it('姓名靠左、头像放大靠右;角色徽标按角色枚举分档(W1 三级)', () => {
     useAuthStore().currentUser = as() as never
     const w = mountWithRouter(UserIdentityCard)
     const avatar = w.find('.avatar')
@@ -75,10 +75,10 @@ describe('UserIdentityCard — 右栏身份卡', () => {
     expect(w.find('.id-role').text()).toBe('用户')
     expect(w.find('.id-joined').exists()).toBe(false)                 // 加入时间已撤
 
-    useAuthStore().currentUser = as({ is_admin: true }) as never
+    useAuthStore().currentUser = as({ role: 'super_admin', is_admin: true }) as never
     const admin = mountWithRouter(UserIdentityCard)
-    expect(admin.find('.id-role').text()).toBe('管理员')
-    expect(admin.find('.id-role').classes()).toContain('admin')
+    expect(admin.find('.id-role').text()).toBe('超级管理员')
+    expect(admin.find('.id-role').classes()).toContain('super_admin')
   })
 
   it('统计来自 /me/summary;摘要未到达时占位 — 而不是假 0(P3 §3)', async () => {

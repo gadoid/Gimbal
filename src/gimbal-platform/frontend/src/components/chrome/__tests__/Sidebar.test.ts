@@ -34,6 +34,8 @@ function makeRouter() {
   })
 }
 
+/** authz W8:能力注入取代 is_admin —— superAdmin = 表 A 全能力,
+ *  普通用户 = 无能力(nav 的能力门条目全部隐藏)。 */
 async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
   const auth = useAuthStore()
   auth.accessToken = 'tok'
@@ -41,8 +43,12 @@ async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
     id: 1,
     username: 'alice',
     display_name: 'Alice',
+    role: opts.isAdmin ? 'super_admin' : 'user',
     is_admin: opts.isAdmin,
   } as never
+  auth.capabilities = opts.isAdmin
+    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts']
+    : []
 
   const router = makeRouter()
   router.push(opts.path ?? '/scenarios/mine')
@@ -129,7 +135,7 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     setActivePinia(createPinia())
   })
 
-  it('member 不见 用户管理/传递字段/服务信息管理,其余 14 条可见', async () => {
+  it('无能力者不见 用户管理/传递字段/服务信息管理,其余 14 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')

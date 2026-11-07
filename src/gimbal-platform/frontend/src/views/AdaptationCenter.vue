@@ -34,7 +34,7 @@
 
         <div v-if="batchesLoading" class="ac-empty">加载中…</div>
         <div v-else-if="batchRows.length === 0" class="ac-empty">
-          {{ auth.isAdmin ? '暂无批次' : '暂无触碰你场景的批次' }}
+          {{ auth.can('ops.write') ? '暂无批次' : '暂无触碰你场景的批次' }}
         </div>
         <!-- 分页位置轮:批次表进 lib-card(定高卡内滑轨 + 表头钉顶) -->
         <div v-else class="lib-card">
@@ -46,7 +46,7 @@
               <th>状态</th>
               <th>操作人</th>
               <th>时间</th>
-              <th v-if="auth.isAdmin"></th>
+              <th v-if="auth.can('ops.write')"></th>
             </tr>
           </thead>
           <tbody>
@@ -58,7 +58,7 @@
               </td>
               <td class="ac-nowrap">{{ (b as any).operatorName || '—' }}</td>
               <td class="mono ac-nowrap">{{ formatDate(b.createdAt) }}</td>
-              <td v-if="auth.isAdmin" class="ac-center">
+              <td v-if="auth.can('ops.write')" class="ac-center">
                 <router-link :to="`/adaptations/batches/${b.batchId}`" class="ac-link">详情</router-link>
               </td>
             </tr>
@@ -74,7 +74,7 @@
       </div>
 
       <!-- 右栏：carry 漂移（admin-only；member 隐藏整栏） -->
-      <div v-if="auth.isAdmin" class="ac-panel">
+      <div v-if="auth.can('ops.write')" class="ac-panel">
         <div class="ac-panel-head">
           <h3 class="ac-panel-title">carry 漂移</h3>
           <span v-if="carryDrift.length" class="ac-panel-count mono">{{ carryDriftTotal }}</span>
@@ -146,10 +146,10 @@ const batchPageCount = computed(() =>
   Math.max(1, Math.ceil(batchTotal.value / batchPageSize.value)))
 const batchesLoading = ref(false)
 
-watch(batchPage, () => void loadBatches(auth.isAdmin ? undefined : 'mine'))
+watch(batchPage, () => void loadBatches(auth.can('ops.write') ? undefined : 'mine'))
 watch(batchPageSize, () => {
   if (batchPage.value !== 1) batchPage.value = 1
-  else void loadBatches(auth.isAdmin ? undefined : 'mine')
+  else void loadBatches(auth.can('ops.write') ? undefined : 'mine')
 })
 
 const BATCH_STATUS_OPTS = [
@@ -164,7 +164,7 @@ function setBatchStatus(v: string): void {
   if (batchStatus.value === v) return
   batchStatus.value = v
   if (batchPage.value !== 1) batchPage.value = 1
-  else void loadBatches(auth.isAdmin ? undefined : 'mine')
+  else void loadBatches(auth.can('ops.write') ? undefined : 'mine')
 }
 
 const batchStatusClass: Record<string, string> = {
@@ -259,8 +259,8 @@ async function openCarryBatchFromDrift(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadBatches(auth.isAdmin ? undefined : 'mine')
-  if (auth.isAdmin) void loadCarryDrift()
+  void loadBatches(auth.can('ops.write') ? undefined : 'mine')
+  if (auth.can('ops.write')) void loadCarryDrift()
 })
 </script>
 

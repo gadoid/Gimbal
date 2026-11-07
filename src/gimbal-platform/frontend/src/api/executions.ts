@@ -274,8 +274,8 @@ export function listExecutions(params?: {
   /** 发起时间范围 ISO(锚 created_at;queued 单 started_at 可空不作锚) */
   createdFrom?: string
   createdTo?: string
-  /** 按访问令牌列经它发起的执行(webhook v4):令牌属主或 admin;
-   *  平台令牌执行 owner 是系统用户,不进「我的执行」,令牌详情排查用。 */
+  /** 按访问令牌列经它发起的执行(webhook v4)。authz W4:执行可见收敛为
+   *  属主∨本令牌(admin 旁路已删)—— 后端只回调用方自己可见的行。 */
   tokenId?: number
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。

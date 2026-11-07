@@ -1,7 +1,7 @@
 <!-- AdaptationBatchDetail —— 批次工作台(spec §6,admin-only):
      头部(版本/状态/回滚)→ ops 列表(预览 + 状态驱动操作组 + 合并勾选)
      → 构造对话框 → 快照折叠。member 直入 → 403「仅管理员」占位(§8);
-     页内 isAdmin 只读分支保留作双保险。 -->
+     页内能力门只读分支保留作双保险(authz W8:can('users.manage'))。 -->
 <template>
   <HubDetailPage v-if="detail" width="wide" :title="`批次 ${detail.batchId}`" icon="activity">
     <template #meta>
@@ -11,7 +11,7 @@
     <template #actions>
       <PageBack to="/adaptations" label="变更适配" />
       <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
-      <template v-if="auth.hasRole('member', 'admin')">
+      <template v-if="auth.can('ops.write')">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
           构造 op
         </Button>
@@ -41,7 +41,7 @@
       </p>
     </template>
 
-    <Alert v-if="!auth.hasRole('member', 'admin')" class="mb-3">
+    <Alert v-if="!auth.can('ops.write')" class="mb-3">
       <AlertTitle>owner 只读视图:仅查看 op 与快照,操作请联系管理员</AlertTitle>
     </Alert>
 
@@ -49,7 +49,7 @@
       <div v-for="op in paged" :key="op.id" class="op-row">
         <div class="op-head">
           <input
-            v-if="auth.hasRole('member', 'admin') && selectable(op)"
+            v-if="auth.can('ops.write') && selectable(op)"
             type="checkbox"
             class="op-check"
             :data-testid="`op-check-${op.id}`"
@@ -62,7 +62,7 @@
           </span>
           <span v-if="op.appliedAt" class="hint">{{ op.appliedAt }}</span>
           <span v-if="op.note" class="hint note">{{ op.note }}</span>
-          <span v-if="auth.hasRole('member', 'admin') && op.status === 'pending'" class="op-actions">
+          <span v-if="auth.can('ops.write') && op.status === 'pending'" class="op-actions">
             <Button
               size="sm"
               class="op-action"
@@ -237,11 +237,11 @@ const statusClass: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-800',
 }
 
-// F1:member 直入本页 → GET /batches/{id} 为 admin-only,403 detail 含
-// admin_only(http.ts 归一后 status=403)→ 渲染 §8「仅管理员」占位而非误报 404。
+// authz W8(9.7 统一契约):403 按 code 分发 —— capability_forbidden
+// (getBatch 是 users.manage 面)显 §8「仅管理员」占位而非误报 404;
+// 其他 403(如 password_change_required,守卫会引去改密页)不误占。
 function isAdminOnly(e: unknown): boolean {
-  return e instanceof ApiError
-    && (e.status === 403 || e.message.includes('admin_only'))
+  return e instanceof ApiError && e.code === 'capability_forbidden'
 }
 
 async function reload(): Promise<void> {

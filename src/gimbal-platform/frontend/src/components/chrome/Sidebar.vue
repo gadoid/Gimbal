@@ -1,7 +1,7 @@
 <!-- Sidebar.vue — 四域侧边栏(重构方案 Phase 1:导航范式更换)+ 整体折叠。
      结构基准 = F-sitemap:工作台入口置顶,场景 / 服务(分组标签,不可点)
      / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
-     "管理"深链承接)。沿用 TopNav 的两条既有语义:adminOnly 过滤
+     "管理"深链承接)。沿用 TopNav 的既有语义:能力门条目过滤
      (用户管理 / 传递字段仅 admin 可见)与变更适配 pendingCount 徽标
      (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
      折叠态(« 钮切换,localStorage 持久化):200px → 56px 图标轨道 —
@@ -147,10 +147,8 @@ interface SidebarEntry {
   path: string
   label: string
   icon: Component
-  /** Render only for admins (route guard would bounce members anyway). */
-  adminOnly?: boolean
-    /** M2.5:角色白名单(adminOnly 的泛化;适配/别名/默认值 = operator+) */
-    roles?: string[]
+  /** authz W8:表 A 能力名 —— 只对持有者渲染(路由守卫同门兜底)。 */
+  cap?: string
   /** 未落地入口:置灰且不可点(字段来源分析 — E2 未建,无页面可落)。 */
   disabled?: boolean
   disabledTitle?: string
@@ -206,11 +204,11 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, roles: ['member', 'admin'] },
+      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
       // 服务信息管理的键详情,本页只剩跨服务兜底层)
-      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['member', 'admin'] },
+      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, cap: 'ops.write' },
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
     ],
   },
@@ -229,7 +227,7 @@ const groups: SidebarGroup[] = [
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
     { path: '/integrations', label: '集成', icon: Share2Icon },
   ] },
-  { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
+  { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' }] },
 ]
 
 interface FlatEntry extends SidebarEntry {
@@ -237,14 +235,12 @@ interface FlatEntry extends SidebarEntry {
   firstOfGroup: boolean
 }
 
-// Hide admin-only entries from members entirely (previously it rendered
-// for everyone and clicking it bounced off the router guard).
+// authz W8:能力门条目只对持有者渲染(能力来自 /auth/me,表 A 求值;
+// 路由守卫 requiresCap 同门兜底)。
 const flatEntries = computed<FlatEntry[]>(() =>
   groups.flatMap((g) =>
     g.entries
-      .filter((e) => !e.adminOnly && !e.roles
-        || (e.adminOnly && auth.isAdmin)
-        || (e.roles && auth.hasRole(...e.roles)))
+      .filter((e) => !e.cap || auth.can(e.cap))
       .map((e, i) => ({ ...e, group: g.label, firstOfGroup: i === 0 })),
   ),
 )

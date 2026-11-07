@@ -15,10 +15,8 @@
       </span>
       <div class="flex-grow" />
       <template v-if="mode !== 'admin'">
-        <span v-if="!canCreate" class="text-caption text-signal-ink/60">
-          签发需要成员（member）及以上角色
-        </span>
-        <Button v-else size="sm" data-testid="token-create-toggle" @click="creating = !creating">
+        <!-- authz W5:个人令牌签发开放至全体用户(原 member+ 门删除) -->
+        <Button size="sm" data-testid="token-create-toggle" @click="creating = !creating">
           {{ creating ? '收起' : '创建访问令牌' }}
         </Button>
       </template>
@@ -251,7 +249,8 @@
                   <div class="flex flex-col gap-2">
                     <div class="flex items-center justify-between">
                       <span class="text-caption font-semibold">最近调用（含被拒）</span>
-                      <RouterLink class="text-signal hover:underline" :to="{ path: '/executions', query: { tokenId: String(t.id) } }">全部调用与回调记录</RouterLink>
+                      <!-- authz W4 定案:原 /executions?tokenId= 深链已死(执行列表
+                           无令牌筛选,且执行可见已收敛属主∨本令牌)— 删链接 -->
                     </div>
                     <div
                       v-for="c in detailOf(t)?.recentCalls ?? []" :key="c.id"
@@ -411,7 +410,6 @@ import {
   type ScopeCandidates, type TokenCreatedOut, type TokenKind,
   type TokenStatus,
 } from '@/api/access-tokens'
-import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
 import TokenSecretDialog from '@/components/profile/TokenSecretDialog.vue'
@@ -422,7 +420,6 @@ const props = withDefaults(defineProps<{
   variant?: 'personal' | 'platform' | 'admin'
 }>(), { variant: 'personal' })
 
-const auth = useAuthStore()
 const mode = computed(() => props.variant)
 // kind = 语义面(标签/说明/创建);listKind = 取数面 —— admin 视图选
 // 「全部」时传 'all'(后端 ?all=1 视图不按类型收窄,2026-11-05 评审 P2-6)。
@@ -433,15 +430,16 @@ const kind = computed<TokenKind>(() =>
 const listKind = computed<TokenKind | 'all'>(() =>
   props.variant === 'admin' ? adminKind.value : props.variant)
 
+// authz W5:个人令牌签发开放至全体用户 —— 非 admin 视图均可创建
+// (平台签发口已 410,platform 变体随入口隐藏)。
+const canCreate = computed(() => props.variant !== 'admin')
+
 const loading = ref(false)
 const busy = ref(false)
 const items = ref<AccessTokenListItem[]>([])
 const quota = ref({ used: 0, limit: 5 })
 const details = ref<Map<number, AccessTokenDetail>>(new Map())
 const expanded = ref<number | null>(null)
-
-const canCreate = computed(() =>
-  props.variant !== 'admin' && ['member', 'admin'].includes(auth.role))
 
 /** 区块说明(问号悬浮,按 kind):个人 = 授权面;平台 = 平台身份约束 */
 const sectionTip = computed(() => kind.value === 'platform'

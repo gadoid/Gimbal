@@ -25,11 +25,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { listAccessTokens } from '@/api/access-tokens'
-import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
-const auth = useAuthStore()
-
 const pendingCount = ref(0)
 
 const onAccount = computed(() => route.path === '/profile/account')
@@ -63,7 +60,7 @@ function onReclick(item: { id: string; active: boolean }) {
 }
 
 onMounted(async () => {
-  if (!['member', 'admin'].includes(auth.role)) return
+  // authz W5:个人令牌开放至全体用户 —— 角色门删除,人人可有待处理角标
   try {
     const env = await listAccessTokens('personal')
     pendingCount.value = env.items.filter((t) =>

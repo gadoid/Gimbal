@@ -117,6 +117,9 @@ const typeOptions = (Object.keys(NOTIFICATION_TYPE_LABELS) as SwitchableType[])
   .map((type) => ({ type, label: NOTIFICATION_TYPE_LABELS[type] }))
 
 async function poll() {
+  // authz W6 只能改密门:强制改密期间其余接口一律 403 —— 轮询停摆
+  // (评审 R4),改密成功后下一个 tick 自然恢复。
+  if (auth.mustChangePassword) return
   try {
     const out = await api.unreadCount()
     count.value = out.count
@@ -134,6 +137,7 @@ async function poll() {
 }
 
 async function loadList() {
+  if (auth.mustChangePassword) return
   loading.value = true
   try {
     const out = await api.list({ page: 1, pageSize: 30 })
@@ -145,6 +149,7 @@ async function loadList() {
 }
 
 async function loadPrefs() {
+  if (auth.mustChangePassword) return
   try {
     const p = await api.getPreferences()
     off.value = new Set(p.off)

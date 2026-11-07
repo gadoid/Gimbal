@@ -996,4 +996,5 @@ async def export_scenario(
 
 # ── R19 导入端点已退役(W3/W4,场景导入 v2.3 方案):可执行形态 +
 # 析出映射 + 单事务落库的新端点在 routers/scenario_import.py
-# (MemberUser + precheck 两阶段),注册先于本模块的 /{scenario_id}。
+# (authz W7:CurrentUser + precheck 两阶段,create 建名另需 alias.write
+# 能力),注册先于本模块的 /{scenario_id}。

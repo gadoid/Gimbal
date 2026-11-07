@@ -56,7 +56,7 @@ export function useScenarioListView(bucket: Bucket) {
   // 拿到的集合与可见性上限严格一致。
   const lensAll = ref(
     bucket === 'mine'
-      && auth.isAdmin
+      && auth.can('users.manage')
       && window.localStorage.getItem(LENS_KEY) === 'all',
   )
 
@@ -268,7 +268,7 @@ export function useScenarioListView(bucket: Bucket) {
     store,
     q, filters,
     // 浏览镜头(mine 桶):admin 显式「全员视角」开关。
-    lensAll, lensAvailable: bucket === 'mine' && auth.isAdmin, toggleLens,
+    lensAll, lensAvailable: bucket === 'mine' && auth.can('users.manage'), toggleLens,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

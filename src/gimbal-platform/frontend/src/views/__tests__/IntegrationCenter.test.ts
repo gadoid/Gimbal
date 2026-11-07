@@ -178,13 +178,14 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('平台凭证区仅 admin 渲染;普通用户无', async () => {
+  it('平台入口 M1 隐藏(authz W5):凭证区/平台令牌区对任何角色都不渲染', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
     const user = await mountPage(false)
     expect(user.find('[data-testid="ig-creds"]').exists()).toBe(false)
     user.unmount()
     const admin = await mountPage(true)
-    expect(admin.find('[data-testid="ig-creds"]').exists()).toBe(true)
+    expect(admin.find('[data-testid="ig-creds"]').exists()).toBe(false)
+    expect(admin.find('.ig-tokens').exists()).toBe(false)   // 平台令牌区块同闸
     admin.unmount()
   })
 
@@ -223,30 +224,20 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('可见性文案按执行身份区分:平台 = 仅成员/全员,个人 = 只有我/可被订阅', async () => {
-    // 2026-11-06:平台模板对 member+ 恒可见,「私有(只有我)」对平台模式不成立
+  it('authz W5:平台模式入口 M1 隐藏 —— 身份下拉只剩个人,缺省恒 personal', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
-    const w = await mountPage(true)   // admin ⊇ member:缺省平台模式
-    await w.find('[data-testid="ig-create"]').trigger('click')
-    await flushPromises()
-    const opts = () => w.findAll('[data-testid="ig-form-visibility"] option').map((o) => o.text())
-    expect((w.find('[data-testid="ig-form-mode"]').element as HTMLSelectElement).value).toBe('platform')
-    expect(opts()).toEqual(['仅成员可见(member 及以上)', '全员可见(含普通用户)'])
-    expect(opts().join()).not.toContain('只有我')
-    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(true)
-    await w.find('[data-testid="ig-form-mode"]').setValue('personal')
-    await flushPromises()
-    expect(opts()).toEqual(['私有(只有我)', '公共(可被订阅)'])
-    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(false)
-    w.unmount()
-
-    // hasRole 精确匹配:此前只写 'member',admin 没有平台模式选项、缺省落个人
-    const wu = await mountPage(false)   // user 角色:无平台模式
-    await wu.find('[data-testid="ig-create"]').trigger('click')
-    await flushPromises()
-    const modes = wu.findAll('[data-testid="ig-form-mode"] option').map((o) => o.attributes('value'))
-    expect(modes).toEqual(['personal'])
-    wu.unmount()
+    // admin 与 user 同口径:平台选项不渲染(创建面后端已 410)
+    for (const admin of [true, false]) {
+      const w = await mountPage(admin)
+      await w.find('[data-testid="ig-create"]').trigger('click')
+      await flushPromises()
+      const modes = w.findAll('[data-testid="ig-form-mode"] option').map((o) => o.attributes('value'))
+      expect(modes).toEqual(['personal'])
+      expect((w.find('[data-testid="ig-form-mode"]').element as HTMLSelectElement).value).toBe('personal')
+      const opts = w.findAll('[data-testid="ig-form-visibility"] option').map((o) => o.text())
+      expect(opts).toEqual(['私有(只有我)', '公共(可被订阅)'])
+      w.unmount()
+    }
   })
 
   it('他人模板标签按可见性:公共 / 平台私有 = 仅成员 / 个人私有 = 私有', async () => {

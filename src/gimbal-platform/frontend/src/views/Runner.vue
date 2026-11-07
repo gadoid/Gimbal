@@ -42,7 +42,7 @@
         <div v-if="pickerOpen" class="runner-card picker-card">
           <div class="zone-head">
             <span class="zone-name">场景库</span>
-            <QTip :text="`只列你能发起的${auth.isAdmin ? '(管理员可发起全部)' : ':你自己的场景 — 别人的跑不了,发起要过属主闸'}。`" />
+            <QTip :text="`只列你能发起的${auth.can('users.manage') ? '(管理员可发起全部)' : ':你自己的场景 — 别人的跑不了,发起要过属主闸'}。`" />
             <span class="zone-spacer"></span>
             <span class="zone-hint">{{ pickerList.length }} 条可发起</span>
           </div>
@@ -265,7 +265,7 @@ async function loadPicker(q = ''): Promise<void> {
     const env = await listScenarioOptions({
       page_size: 100,
       q: q || undefined,
-      ...(auth.isAdmin ? {} : { scope: 'mine' as const }),
+      ...(auth.can('users.manage') ? {} : { scope: 'mine' as const }),
     })
     pickerList.value = env.items
   } catch (e) {

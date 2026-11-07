@@ -1,9 +1,9 @@
 /**
  * 工作台补登的功能页卡 —— 服务画像 / 认证管理 / 变更适配 / 执行器,
- * 以及三张 adminOnly 卡(服务信息管理 / 默认值 / 用户管理)。
+ * 以及三张能力门卡(服务信息管理 / 默认值 = ops.write;用户管理 = users.manage)。
  * 钉住 §7 的三条契约:
  * - 每张卡复用完整页的取数与判定谓词,不另开口子、不另算一套计数;
- * - adminOnly 卡对 member 完全不出现;
+ * - 能力门卡对无能力者完全不出现;
  * - 取数失败只落本卡空态,网格其余部分照常在。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -52,8 +52,15 @@ vi.mock('@/utils/catalog-services', () => ({
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
 }))
 
+/** authz W8:能力注入。superAdmin = 表 A 全能力;false = 普通用户(无能力)。 */
 function setAuth(isAdmin: boolean): void {
-  useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'A', is_admin: isAdmin } as never
+  const auth = useAuthStore()
+  auth.currentUser = {
+    id: 1, username: 'alice', display_name: 'A',
+    role: isAdmin ? 'super_admin' : 'user', is_admin: isAdmin,
+  } as never
+  auth.capabilities = isAdmin
+    ? ['users.manage', 'ops.write', 'alias.write', 'platform.alerts'] : []
 }
 
 function mountPage() {
@@ -94,7 +101,7 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('功能页卡登记(§7 第 2 条:registry 集中注册)', () => {
-  it('member:公共卡进网格(含新增的用例集×2/通知),三张受限卡完全不出现', async () => {
+  it('普通用户:公共卡进网格(含新增的用例集×2/通知),三张能力门卡完全不出现', async () => {
     const w = mountPage()
     await waitCard(w, 'services')
     for (const id of ['services', 'auths', 'adaptations', 'runner',
@@ -107,7 +114,7 @@ describe('功能页卡登记(§7 第 2 条:registry 集中注册)', () => {
     w.unmount()
   })
 
-  it('admin:三张 adminOnly 卡进网格', async () => {
+  it('超级管理员:三张能力门卡进网格', async () => {
     setAuth(true)
     const w = mountPage()
     await waitCard(w, 'users')
