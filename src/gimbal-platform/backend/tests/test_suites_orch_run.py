@@ -264,10 +264,11 @@ async def test_rerun_intercepted_and_runs_visibility(client, monkeypatch):
     assert r.status_code == 201, r.text
     r = await client.get(f"/api/suites/{sid}/runs", headers=bob)
     assert r.status_code == 200 and r.json()["items"] == []
-    # 真 admin = fresh_db 首个注册者(rv_boot);admin 同样只见自己发起的
+    # 真 admin = fresh_db 首个注册者(rv_boot);authz W3:admin 对他人
+    # 私有 suite 同样 404(越属主旁路删除,读不到 runs 面)
     admin = await register_and_login(client, "rv_boot", "rv_bootpass123")
     r = await client.get(f"/api/suites/{sid}/runs", headers=admin)
-    assert r.status_code == 200 and r.json()["items"] == []
+    assert r.status_code == 404
 
 
 async def test_rerun_failed_units(client, monkeypatch):

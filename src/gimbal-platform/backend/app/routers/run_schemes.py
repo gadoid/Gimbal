@@ -30,10 +30,16 @@ async def _load_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
     return row
 
 
-def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
+async def _require_owner(db, user: CurrentUser, row: ComposerScenario) -> None:
+    """写闸(表 B scenario.write,authz W3):读判含 ref —— 完全不可见
+    才 404(不泄露);可读(公共/引用)但非属主 → 403。"""
+    from ._ownership import can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, row):
+        raise not_found_404("scenario", row.scenario_id)
     ensure_owner(
         user, row.owner_id,
-        "not_owner: only the scenario's owner (or admin) can manage run schemes",
+        "not_owner: only the scenario's owner can manage run schemes",
     )
 
 
@@ -60,7 +66,7 @@ async def create_run_scheme(
     user: CurrentUser, db: DbSession, scenario_id: str, body: RunScheme,
 ) -> dict:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     try:
         return await scheme_store.create_scheme(db, scenario_id,
             name=body.name, payload=_to_payload(body))
@@ -78,7 +84,7 @@ async def update_run_scheme(
     body: RunScheme,
 ) -> dict:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     try:
         return await scheme_store.update_scheme(db, scenario_id, scheme_id,
             name=body.name, payload=_to_payload(body))
@@ -99,7 +105,7 @@ async def delete_run_scheme(
     user: CurrentUser, db: DbSession, scenario_id: str, scheme_id: str,
 ) -> Response:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     try:
         await scheme_store.delete_scheme(db, scenario_id, scheme_id)
     except KeyError:

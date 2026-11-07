@@ -74,7 +74,8 @@ async def test_owner_enforced(client):
     # P2 §8.2:读端点从 owner 闸(403)改 can_read(§7.6)—— 私有场景
     # 对非读者不可见 → 404(仓规:不可见 404、可见不可写才 403)
     assert (await client.get(BASE, headers=bob)).status_code == 404
-    assert (await client.post(BASE, headers=bob, json=_body("B"))).status_code == 403
+    # authz W3:写闸与读闸同口径 —— bob 读不到 alice 的私有场景,404
+    assert (await client.post(BASE, headers=bob, json=_body("B"))).status_code == 404
 
 
 async def test_update_delete_404_unknown_scheme_id(client):
@@ -94,9 +95,10 @@ async def test_update_delete_owner_enforced(client):
     made = (await client.post(BASE, headers=alice, json=_body("A"))).json()
     bob = await _member(client, "bob")
     assert (await client.put(
-        f"{BASE}/{made['schemeId']}", headers=bob, json=_body("B"))).status_code == 403
+        f"{BASE}/{made['schemeId']}", headers=bob,
+        json=_body("B"))).status_code == 404
     assert (await client.delete(
-        f"{BASE}/{made['schemeId']}", headers=bob)).status_code == 403
-    # bob 的 403 未动 alice 的数据(仅默认方案 + A)
+        f"{BASE}/{made['schemeId']}", headers=bob)).status_code == 404
+    # bob 的 404 未动 alice 的数据(仅默认方案 + A)
     lst = (await client.get(BASE, headers=alice)).json()
     assert [s["name"] for s in lst if not s["isDefault"]] == ["A"]

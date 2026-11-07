@@ -93,9 +93,9 @@ async def test_publish_unpublish_cycle(client: AsyncClient) -> None:
     carol = await _register_and_login(client, "carol", "carolpass123")
     await client.post("/api/scenarios", headers=bob, json=_draft())
 
-    # 非属主不能发布
+    # 非属主不能发布(他人私有先 404,不泄露存在性 —— authz W3)
     r = await client.post("/api/scenarios/sc-test/publish", headers=carol)
-    assert r.status_code == 403
+    assert r.status_code == 404
 
     # 属主发布 → carol 可见
     r = await client.post("/api/scenarios/sc-test/publish", headers=bob)
@@ -340,7 +340,8 @@ async def test_resolve_name_conflict_clamps_base_even_without_conflict(
 
 # ── 浏览镜头 scope(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1)──
 async def test_scope_mine_admin_default_lens(client: AsyncClient) -> None:
-    """admin 的 scope=mine 只见自己创建的——全员视角不再是默认镜头。
+    """admin 与普通用户同镜头(authz W3:私有区收窄):默认(all)不含
+    他人 private,scope=mine 只见自己创建的。
 
     首注册用户 bootstrap 为 admin:直接用它当 admin,再注册一个普通
     成员建私有场景。
@@ -354,9 +355,10 @@ async def test_scope_mine_admin_default_lens(client: AsyncClient) -> None:
     def ids(resp) -> set:
         return {s["meta"]["scenarioId"] for s in resp.json()["items"]}
 
-    # 默认(all):admin 全量可见(既有行为不变)
+    # 默认(all):admin 与普通用户同镜头(authz W3 收窄)—— 他人
+    # private 不可见,只剩公共 + 自己的 + 被引用的
     r = await client.get("/api/scenarios", headers=admin)
-    assert "sc-lens-bob" in ids(r)
+    assert "sc-lens-bob" not in ids(r)
     # scope=mine:admin 只看自己创建的,他人的 private 不再涌入
     r = await client.get("/api/scenarios", headers=admin, params={"scope": "mine"})
     assert "sc-lens-bob" not in ids(r)

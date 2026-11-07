@@ -45,11 +45,12 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
     assert r.json()["memberCount"] == 2
     assert [m["scenarioId"] for m in r.json()["members"]] == ["sc-su-a", "sc-su-b"]
 
-    # 详情:属主可读;非属主 404(不泄露);admin 可读(治理)
+    # 详情:属主可读;非属主 404(不泄露);admin 同样 404
+    # (authz W3:私有区收窄,admin 越属主旁路删除)
     r = await client.get(f"/api/suites/{sid}", headers=bob)
     assert r.status_code == 200 and r.json()["name"] == "回归集"
     r = await client.get(f"/api/suites/{sid}", headers=admin)
-    assert r.status_code == 200
+    assert r.status_code == 404
     carol = await register_and_login(client, "su_carol", "su_carol_pass123")
     assert (await client.get(f"/api/suites/{sid}", headers=carol)
             ).status_code == 404
@@ -69,7 +70,8 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
     r = await client.get("/api/suites", headers=carol)
     assert r.json()["total"] == 0
     r = await client.get("/api/suites", headers=admin)
-    assert r.json()["total"] == 2  # admin all = 全量
+    # authz W3:admin 与普通用户同镜头 —— 他人私有不进列表(全量分支已删)
+    assert r.json()["total"] == 0
 
     # 排序:整表重排
     r = await client.patch(f"/api/suites/{sid}/members/order", headers=bob,
@@ -225,10 +227,11 @@ async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
                           json={"scenarioIds": ["sc-mb-ghost"]})
     assert r.status_code == 404
 
-    # bob 往 admin 的组里加(非属主写)→ 403
+    # bob 往 admin 的组里加(非属主写)→ 404(authz W3:他人私有先
+    # 404 不泄露 —— bob 本就读不到这个私有 suite)
     r = await client.post(f"/api/suites/{sid}/members", headers=bob,
                           json={"scenarioIds": ["sc-mb-bob"]})
-    assert r.status_code == 403
+    assert r.status_code == 404
 
     # 库层兜底:绕过应用层直写他人场景 → 约束拒绝。仅 PG 断言
     #(SQLite 测试库不强制 FK —— 仓内既有口径,与 user_stars 的

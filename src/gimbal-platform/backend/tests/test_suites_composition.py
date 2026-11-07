@@ -243,9 +243,10 @@ async def test_access_and_capabilities(client: AsyncClient) -> None:
     assert d["access"] == "ref" and d["canEdit"] is False
     assert d["canRun"] is True and d["canShare"] is False
 
-    d = (await client.get(f"/api/suites/{sid}", headers=admin)).json()
-    assert d["access"] == "admin" and d["canEdit"] is True
-    assert d["canShare"] is False  # admin 不可代发(§8.1)
+    # authz W3:admin 对他人私有 suite 一律 404(access 投影的 admin
+    # 分支随越属主旁路消亡;公共对象上 admin = public 读者)
+    assert (await client.get(f"/api/suites/{sid}",
+                             headers=admin)).status_code == 404
 
     # carol(无引用)私有套件 → 404;发布后 → public 读者,可读不可跑
     assert (await client.get(f"/api/suites/{sid}",

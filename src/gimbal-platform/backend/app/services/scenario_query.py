@@ -54,7 +54,9 @@ def updated_cutoff(updated_within: str | None) -> datetime | None:
 
 
 def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all"):
-    """可见性谓词:admin 全量;member = public + 自己的(None = 全量)。
+    """可见性谓词(authz W3 后):所有角色同口径 = public + 自己的 +
+    被引用的(None = 全量,匿名统计面用)。admin 全量分支已随私有区
+    收窄删除 —— 表 B scenario.read,越属主旁路不复存在。
 
     scope=mine(浏览镜头,《Suite成员层、引用分享与浏览镜头》§5.1):
     只看自己创建的(含已发布),对 admin 同样生效——镜头是查询偏好,
@@ -62,12 +64,9 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     """
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
-    is_admin = getattr(user, "role", None) == "super_admin"
-    if user is not None and is_admin:
-        return None
     owner = ComposerScenario.owner_id
-    # P2 引用分支(§7.6):非 admin 的可见性上限 + 引用(直接 ∨ 经
-    # suite 成员)。谓词单点 = _ownership.ref_exists_clauses(禁自写)。
+    # P2 引用分支(§7.6):可见性上限 + 引用(直接 ∨ 经 suite 成员)。
+    # 谓词单点 = _ownership.ref_exists_clauses(禁自写)。
     from ..routers._ownership import ref_exists_clauses
     viewer = user.id if user is not None else viewer_id
     direct, via_suite = ref_exists_clauses(viewer)

@@ -252,8 +252,9 @@ async def test_scenario_referrers_includes_indirect(
                          headers=owner)
     assert r.json()["items"] == []
 
-    # 治理面闸:非属主 403;未知场景 404;admin 可查
-    # (rf_admin 是 fresh_db 首个注册者 = 真 admin,M2.5 口径)
+    # 治理面闸:非属主 403;未知场景 404;admin 同样 403
+    # (rf_admin 是 fresh_db 首个注册者 = 真 admin;authz W3:引用者
+    # 名单是属主治理面,admin 越属主旁路删除)
     assert (await client.get(
         "/api/shares/referrers?scenarioId=sc-rf-1",
         headers=carol)).status_code == 403
@@ -262,11 +263,12 @@ async def test_scenario_referrers_includes_indirect(
         headers=owner)).status_code == 404
     assert (await client.get(
         "/api/shares/referrers?scenarioId=sc-rf-1",
-        headers=admin)).status_code == 200
+        headers=admin)).status_code == 403
 
 
 async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
-    """撤销:属主可撤(通知被分享人);admin 可撤(入审计);退订免通知。"""
+    """撤销:属主可撤(通知被分享人);退订免通知。authz W3:admin 越属主
+    撤销旁路删除 —— 撤销权 = 属主 ∨ 被分享人,admin 对他人分享 404。"""
     # fresh_db 下首个注册者 = 真 admin(M2.5 口径);rv_admin 即 admin
     admin = await register_and_login(client, "rv_admin", "rv_admin_pass123")
     owner = await register_and_login(client, "rv_owner", "rv_owner_pass123")
@@ -276,7 +278,7 @@ async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     roster = (await client.get(
         "/api/users/roster", headers=owner)).json()["items"]
     bob_id = next(u["id"] for u in roster if u["username"] == "rv_bob")
-    # 属主撤
+    # 属主撤(通知被分享人)
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "scenario", "resourceId": "sc-rv-1",
         "granteeUserId": bob_id, "mode": "ref"})
@@ -285,17 +287,17 @@ async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     assert r.status_code == 204
     assert (await client.get("/api/scenarios/sc-rv-1/draft",
                              headers=bob)).status_code == 404
+    notes = (await client.get("/api/notifications", headers=bob)).json()
+    items = notes.get("items") or notes.get("data", {}).get("items") or []
+    assert any("撤销" in (n.get("title") or "") for n in items)
 
-    # admin 撤(入审计)——rv_admin 是本测试首个注册者 = 真 admin
+    # admin 撤他人分享 → 404(撤销权收归属主/被分享人;不泄露存在性)
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "scenario", "resourceId": "sc-rv-1",
         "granteeUserId": bob_id, "mode": "ref"})
     rid2 = r.json()["id"]
     r = await client.delete(f"/api/shares/{rid2}", headers=admin)
-    assert r.status_code == 204
-    notes = (await client.get("/api/notifications", headers=bob)).json()
-    items = notes.get("items") or notes.get("data", {}).get("items") or []
-    assert any("撤销" in (n.get("title") or "") for n in items)
+    assert r.status_code == 404
 
 
 async def test_publish_linkage(client: AsyncClient) -> None:

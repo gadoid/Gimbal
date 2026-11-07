@@ -55,36 +55,42 @@ async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
 
 
 def _require_read(user: CurrentUser, suite: Suite) -> None:
-    """读闸(同步快路径):private → 属主 ∨ admin,否则 404(不泄露)。
-    P2 引用/公共读由 ``_require_read_async`` 承担(§7.6)。"""
-    if user.role != "super_admin" and user.id != suite.owner_id             and suite.visibility != "public":
+    """读闸(同步快路径,表 B suite.read 的纯判):private → 属主,
+    否则 404(不泄露)。P2 引用/公共读由 ``_require_read_async`` 承担
+    (§7.6)。W3 起 admin 无旁路。"""
+    if user.id != suite.owner_id             and (suite.visibility or "private") != "public":
         raise not_found_404("suite", str(suite.id))
 
 
 async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
-    """读闸(完整判定,§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
-    if user.role == "super_admin" or user.id == suite.owner_id             or suite.visibility == "public":
-        return
-    from ._ownership import has_suite_ref
-    if not await has_suite_ref(db, user.id, suite.id):
+    """读闸(完整判定,表 B suite.read):public ∨ 属主 ∨ suite 引用。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "read", suite):
         raise not_found_404("suite", str(suite.id))
 
 
 async def _require_run_async(db, user: CurrentUser, suite: Suite) -> None:
-    """运行闸(§7.6 can_run_suite):属主 ∨ admin ∨ suite 引用。
-    写闸(_require_write)不变 —— 成员管理仍是属主 ∨ admin。"""
-    if user.role == "super_admin" or user.id == suite.owner_id:
-        return
-    from ._ownership import has_suite_ref
-    if not await has_suite_ref(db, user.id, suite.id):
+    """运行闸(表 B suite.run):属主 ∨ suite 引用(W3 起 admin 无旁路)。
+    写闸(_require_write)= 属主单判 —— 成员管理归属主。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "run", suite):
         raise not_found_404("suite", str(suite.id))
 
 
-def _require_write(user: CurrentUser, suite: Suite) -> None:
+async def _require_write(db, user: CurrentUser, suite: Suite) -> None:
+    """写闸(表 B suite.write/delete = 属主单判,W3):读判含 suite
+    引用 —— 完全不可见才 404(不泄露);可读(public/ref)但非属主 →
+    403(不与可读性自相矛盾)。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "read", suite):
+        raise not_found_404("suite", str(suite.id))
     ensure_owner(
         user, suite.owner_id,
         {"code": "not_owner",
-         "message": "only the suite's owner (or admin) can manage it"},
+         "message": "only the suite's owner can manage it"},
     )
 
 
@@ -157,11 +163,11 @@ async def _access_and_caps(
     db: AsyncSession, user: CurrentUser, suite: Suite,
 ) -> dict:
     """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
-    须已过;access 为 None 仅发生在公共读者,能力位全 False。"""
+    须已过;access 为 None 仅发生在公共读者,能力位全 False。
+    W3 起 admin 与公共读者同权(Admin+ 仅剩下架公共对象,服务端
+    steward 判定,不进此投影)。"""
     if user.id == suite.owner_id:
         access = "owner"
-    elif user.role == "super_admin":
-        access = "admin"
     elif suite.visibility == "public":
         access = "public"
     else:
@@ -172,10 +178,9 @@ async def _access_and_caps(
         return {}
     return {
         "access": access,
-        # 写 = 属主 ∨ admin(治理);public 先复制再跑(不变量 7);
-        # admin 不可代发分享(§8.1)
-        "canEdit": access in ("owner", "admin"),
-        "canRun": access in ("owner", "admin", "ref"),
+        # 写 = 属主(表 B suite.write);public 先复制再跑(不变量 7)
+        "canEdit": access == "owner",
+        "canRun": access in ("owner", "ref"),
         "canShare": access == "owner",
     }
 
@@ -252,9 +257,8 @@ async def list_suites(
         clauses = [Suite.visibility == "public"]
     elif scope == "mine":
         clauses = [Suite.owner_id == user.id]
-    elif user.role == "super_admin":
-        clauses = []
     else:
+        # W3:admin 与普通用户同镜头(自己的 ∨ 公共 ∨ 被引用的)
         clauses = [or_(
             Suite.owner_id == user.id,
             Suite.visibility == "public",
@@ -369,7 +373,7 @@ async def patch_suite(
     user: CurrentUser, db: DbSession, suite_id: int, body: SuitePatchIn,
 ) -> SuiteSummaryOut:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     if body.name is not None and body.name != suite.name:
         dup = (await db.execute(
             select(func.count()).where(Suite.owner_id == suite.owner_id,
@@ -399,7 +403,7 @@ async def delete_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> Response:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     suite_name, suite_owner = suite.name, suite.owner_id
     # 重构方案:有引用者时,删除后通知引用者(与处置路径
     # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
@@ -430,15 +434,7 @@ async def delete_suite(
         db, actor_id=actor_id, kind="suite.deleted",
         resource_type="suite", resource_id=str(suite_id),
         detail={"name": suite_name, **extra})
-    if user.role == "super_admin" and user.id != suite_owner:
-        from ..services import audit as audit_svc
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="suite.admin_delete",
-            resource_type="suite", resource_id=str(suite_id),
-            resource_name=suite_name,
-            detail={"ownerId": suite_owner, "name": suite_name})
+    # (W3 删除收敛为属主单判:suite.admin_delete 审计随越属主旁路消亡)
     return Response(status_code=204)
 
 
@@ -481,7 +477,7 @@ async def add_members(
     场景 —— 他人场景(含不存在的)一律 404,不泄露存在性;admin 也
     无豁免。库层组合外键兜底直写。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
 
     existing = {m.scenario_id for m in await _ordered_members(db, suite.id)}
     next_sort = (
@@ -541,7 +537,7 @@ async def reorder_members(
 ) -> SuiteDetailOut:
     """整表排序:列表顺序即 sort(0..n-1);清单必须恰为当前成员全集。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     members = {m.scenario_id: m for m in await _ordered_members(db, suite.id)}
     incoming = list(dict.fromkeys(body.scenarioIds))
     if set(incoming) != set(members) or len(incoming) != len(members):
@@ -561,7 +557,7 @@ async def remove_member(
     user: CurrentUser, db: DbSession, suite_id: int, scenario_id: str,
 ) -> Response:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     m = await db.get(SuiteMember, (suite_id, scenario_id))
     if m is not None:
         await db.delete(m)
@@ -663,7 +659,7 @@ async def put_composition(
     替代 members/order)。rev 乐观锁 —— 冲突 409 附最新内容;任何改
     成员或编排的路径(本端点、加/移成员、场景删除清理)都推进 rev。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     if body.rev != suite.rev:
         # 先物化再 rollback:rollback 会过期 suite 实例,事后访问属性
         # 触发异步懒加载(MissingGreenlet,本仓已文档化的陷阱)
@@ -1529,10 +1525,11 @@ async def publish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
     """发布:级联发布未发布成员(确认框由前端承载;数据集随场景
-    可见性公开,《权限一期》口径)。属主 ∨ admin(§8.1 写 = 治理)。"""
+    可见性公开,《权限一期》口径)。属主动作(表 B suite.publish =
+    owner;W3 起 Admin+ 对他人对象无发布权,R6)。"""
     from ..models.composer_scenario import ComposerScenario
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     if _is_draft(suite):
         raise HTTPException(status_code=409, detail={
             "code": "suite_is_draft",
@@ -1565,17 +1562,7 @@ async def publish_suite(
             resource_type="scenario", resource_id=sid,
             detail={"name": sid, "via": "suite_publish",
                     "suiteId": suite.id, "suiteName": suite.name})
-    # 审计:admin 越属主发布(可见性扩张;属主自发布不记)
-    if user.role == "super_admin" and user.id != suite.owner_id:
-        from ..services import audit as audit_svc
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="suite.admin_publish",
-            resource_type="suite", resource_id=str(suite.id),
-            resource_name=suite.name,
-            detail={"ownerId": suite.owner_id, "name": suite.name,
-                    "cascaded": len(unpublished)})
+    # (W3 发布收敛为属主单判:suite.admin_publish 审计随越属主旁路消亡)
     return out
 
 
@@ -1583,16 +1570,27 @@ async def publish_suite(
 async def unpublish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
-    """下架 suite 本体(成员各自的 public 状态独立保留,§9)。admin
-    下架他人 suite → 通知属主 + 入审计(§10;属主自下架不通知不入)。"""
+    """下架 suite 本体(成员各自的 public 状态独立保留,§9)。表 B
+    suite.unpublish = owner ∨ steward(Admin+ 仅对已是公共的对象,
+    W3 收口);越属主下架 → 通知属主 + 入审计(§10;属主自下架不通知
+    不入)。"""
     from ..services import audit as audit_svc
     from ..services import notifications as notify_svc
+    from ._ownership import can, can_pure
+
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    if not await can(db, user, "suite", "read", suite):
+        raise not_found_404("suite", str(suite_id))
+    if not can_pure(user, "suite", "unpublish", suite):
+        raise HTTPException(status_code=403, detail={
+            "code": "not_owner",
+            "message": "only the owner (or an operator, for "
+                       "already-public suites) can unpublish"})
     suite.visibility = "private"
     await db.commit()
     await db.refresh(suite)
-    if user.role == "super_admin" and suite.owner_id != user.id:
+    # 入口闸保证越属主 ⇔ Admin+ ∧ 原为公共(steward)
+    if suite.owner_id != user.id:
         try:
             await notify_svc.create_notification(
                 db, user_id=suite.owner_id,
@@ -1620,22 +1618,19 @@ async def suites_of_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str,
 ) -> list[SuiteLookupItem]:
     """场景详情「所属 suite」反查:自己的 suite(成员 ⊆ 自己的场景,
-    场景属主视角天然成立);admin 另见全量(治理)。"""
+    场景属主视角天然成立)。W3:admin 全量治理分支删除,一律本人镜头。"""
     scen = await scenario_store.get_row(db, scenario_id)
     if scen is None:
         raise not_found_404("scenario", scenario_id)
     ensure_owner(
         user, scen.owner_id,
         {"code": "not_owner",
-         "message": "only the scenario's owner (or admin) can view "
-                    "its suites"},
+         "message": "only the scenario's owner can view its suites"},
     )
     clauses = [Suite.id.in_(
         select(SuiteMember.suite_id)
         .where(SuiteMember.scenario_id == scenario_id)
-    )]
-    if user.role != "super_admin":
-        clauses.append(Suite.owner_id == user.id)
+    ), Suite.owner_id == user.id]
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()

@@ -179,8 +179,10 @@ def test_0036_role_rename(seed):
                 col = conn.exec_driver_sql(
                     "select data_type, column_default"
                     " from information_schema.columns"
-                    " where table_name = 'users'"
-                    "   and column_name = 'must_change_password'").first()
+                    f" where table_schema = '{_schema}'"
+                    "   and table_name = 'users'"
+                    "   and column_name = 'must_change_password'"
+                ).first()
                 assert col is not None, "列未加回"
                 assert col[0] == "boolean"
                 assert col[1] and "false" in col[1]
@@ -195,9 +197,12 @@ def test_0036_role_rename(seed):
                 back = {u: r for u, r in conn.exec_driver_sql(
                     "select username, role from users").fetchall()}
                 assert back == {row[0]: row[1] for row in seed}, back
+                # schema 过滤不可省:库里可能有其他测试残留的 t_* schema
+                # (information_schema 不过滤会数到别人的 users 表)
                 has = conn.exec_driver_sql(
                     "select count(*) from information_schema.columns"
-                    " where table_name = 'users'"
+                    f" where table_schema = '{_schema}'"
+                    "   and table_name = 'users'"
                     "   and column_name = 'must_change_password'"
                 ).scalar_one()
                 assert has == 0

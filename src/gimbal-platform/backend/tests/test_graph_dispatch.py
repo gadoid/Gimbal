@@ -253,11 +253,13 @@ class TestGraphUnitAuthz:
         assert r.json()["detail"]["code"] == "scenario_not_found"
 
     async def test_admin_gate_open_for_units(self, client):
+        """authz W3 翻转:admin 对他人 unit 场景不再有越属主授权
+        (表 B scenario.run = owner ∨ ref);admin 自己的 unit 照常过闸。"""
         admin = await register_and_login(client, "gauth4", "gauth4pass123")
         member = await register_and_login(client, "gauth5", "gauth5pass123")
         await _mk_scenario(client, member, "sc-g-mem5")
         await _mk_scenario(client, admin, "sc-g-adm4")
-        # admin 对 unit 场景有矩阵授权(全量可见可管可跑)→ 过闸
+        # 混入他人私有 unit → 403 not_owner
         r = await client.post("/api/runs", headers=admin, json={
             "scenarioId": "sc-g-adm4",
             "graph": {"units": [
@@ -265,7 +267,16 @@ class TestGraphUnitAuthz:
                 {"ref": "b", "scenarioId": "sc-g-mem5"},
             ]},
         })
-        assert r.status_code == 201, r.text
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == "not_owner"
+        # 全自有的 unit → 过闸
+        r2 = await client.post("/api/runs", headers=admin, json={
+            "scenarioId": "sc-g-adm4",
+            "graph": {"units": [
+                {"ref": "a", "scenarioId": "sc-g-adm4"},
+            ]},
+        })
+        assert r2.status_code == 201, r2.text
 
 
 class TestGraphCompositionInline:

@@ -116,8 +116,16 @@ async def test_run_suite_dup_guard_per_initiator(client: AsyncClient) -> None:
     # 重构方案顺手修正:409 深链参数 batchId= -> batch_id=
     assert f"batch_id={fake_batch}" in detail["link"]
 
-    # admin(另一发起人)发起自己的批次:不受 bob 在途批次影响
+    # 另一发起人(引用被授予人;authz W3 后 admin 无越属主执行权)
+    # 发起自己的批次:不受 bob 在途批次影响(防重按 (suite, 发起人))
     admin = await register_and_login(client, "dg_admin", "dg_admin_pass123")
+    roster = (await client.get(
+        "/api/users/roster", headers=bob)).json()["items"]
+    admin_id = next(u["id"] for u in roster if u["username"] == "dg_admin")
+    r = await client.post("/api/shares", headers=bob, json={
+        "resourceType": "suite", "resourceId": str(sid),
+        "granteeUserId": admin_id, "mode": "ref"})
+    assert r.status_code == 201, r.text
     r = await client.post(f"/api/suites/{sid}/run", headers=admin)
     assert r.status_code == 201, r.text
     second_batch = r.json()["batchId"]

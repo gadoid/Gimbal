@@ -23,3 +23,37 @@ roles_with:
   users.manage: [super_admin]
   ops.write: [admin, super_admin]
   platform.alerts: [admin, super_admin]
+
+# 表 B(authz W3):对象 × 动词 → 放行谓词(o=owner 属主 / pub=public
+# 公共态 / ref=引用分享被授予人 / ste=steward:ops.write ∧ 公共 /
+# mnt=maintain:users.manage ∧ 公共)。人工审定期望:
+#   * admin/super_admin 对他人**私有**对象没有任何动词(全 404/403)
+#   * 唯一的越属主能力 = steward 下架公共对象(scenario/suite.unpublish)
+#     与 maintain 维护无主公共报告定义(W9 改维护者制前现状)
+#   * 发布(publish)一律 owner —— admin 对他人对象没有发布权(R6)
+table_b:
+  scenario:
+    read:      [o, pub, ref]
+    copy:      [o, pub, ref]
+    run:       [o, ref]
+    write:     [o]
+    delete:    [o]
+    publish:   [o]
+    unpublish: [o, ste]
+  suite:
+    read:      [o, pub, ref]
+    run:       [o, ref]
+    write:     [o]
+    delete:    [o]
+    publish:   [o]
+    unpublish: [o, ste]
+  data_set:
+    read:      [o, pub, ref]
+    write:     [o]
+  run_scheme:
+    read:      [o, pub, ref]
+    write:     [o]
+  report_definition:
+    read:      [o, pub]
+    write:     [o, mnt]
+    delete:    [o, mnt]

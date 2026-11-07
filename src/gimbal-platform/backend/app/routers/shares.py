@@ -31,7 +31,6 @@ from ..schemas.share import (
     ReferrerViaSuite, ScenarioReferrerOut, ScenarioReferrersOut,
     ShareCopyOut, ShareCreateIn, ShareRefOut,
 )
-from ..services import audit as audit_svc
 from ..services.suite_copy import (
     deep_copy_suite, suite_owner_display)
 from ..services import notifications as notify_svc
@@ -196,15 +195,14 @@ async def list_shares(
     stmt = select(ShareRef)
     if direction == "out":
         # 属主治理面 = 我名下资源的引用;P2 资源属主可从行推导,
-        # 逐资源查询成本可接受(团队规模有界)
+        # 逐资源查询成本可接受(团队规模有界)。W3:admin 全量治理
+        # 分支删除 —— 撤销权与可见性同口径,仅本人。
         own_scen = select(ComposerScenario.scenario_id).where(
             ComposerScenario.owner_id == user.id)
         own_suite = select(Suite.id).where(Suite.owner_id == user.id)
         stmt = select(ShareRef).where(or_(
             ShareRef.scenario_id.in_(own_scen),
             ShareRef.suite_id.in_(own_suite)))
-        if user.role == "super_admin":
-            stmt = select(ShareRef)  # admin 治理:全量
     else:
         stmt = select(ShareRef).where(ShareRef.grantee_user_id == user.id)
     if resourceType == "scenario":
@@ -265,7 +263,8 @@ async def scenario_referrers(
     ).scalar_one_or_none()
     if scen is None:
         raise HTTPException(404, "scenario_not_found")
-    if user.id != scen.owner_id and user.role != "super_admin":
+    # W3:属主单判(admin 越属主旁路删除;403 契约沿用)
+    if user.id != scen.owner_id:
         raise HTTPException(403, "not_owner")
 
     direct_refs = (await db.execute(select(ShareRef).where(
@@ -316,8 +315,10 @@ async def delete_share(
     if ref is None:
         raise HTTPException(404, "share_not_found")
     is_grantee = ref.grantee_user_id == user.id
-    if is_grantee and user.role != "super_admin":
-        await db.delete(ref)          # 退订(§7.7):删行,不通知
+    if is_grantee:
+        # 退订(§7.7):删行,不通知(W3:被分享人退订不再因角色被
+        # 推进「撤销」分支 —— 越属主撤销旁路已删)
+        await db.delete(ref)
         await db.commit()
         # 时间线:退订(与 share_ref/share_copy 的「建立」面成对;
         # 不通知属主是既有口径,时间线只记本人轴)
@@ -331,7 +332,8 @@ async def delete_share(
             resource_id=ref.scenario_id or str(ref.suite_id),
             detail={})
         return
-    # 撤销:资源属主 ∨ admin
+    # 撤销:资源属主(W3:admin 越属主撤销旁路删除;非属主与非被分享
+    # 人一律 404,与资源行不存在的口径合并 —— 不泄露他人分享的存在性)
     owned = False
     res_name: str | None = None  # 资源名快照(资源删除后审计仍可读)
     if ref.scenario_id is not None:
@@ -345,25 +347,18 @@ async def delete_share(
             Suite.id == ref.suite_id))).scalar_one_or_none()
         owned = s is not None and s.owner_id == user.id
         res_name = s.name if s is not None else None
-    if not owned and user.role != "super_admin":
-        raise HTTPException(403, "not_owner")
+    if not owned:
+        raise HTTPException(404, "share_not_found")
     await db.delete(ref)
     await db.commit()
-    # 通知被分享人(§10);admin 撤销入审计
+    # 通知被分享人(§10)。(W3:share.admin_revoke 审计随越属主撤销
+    # 旁路消亡 —— 到这里的撤销者必是资源属主)
     name = ref.scenario_id or f"suite#{ref.suite_id}"
     await _notify(db, ref.grantee_user_id, "share_ref_revoked",
                  f"引用已撤销:{name}",
                  f"分享者撤销了「{name}」的引用分享,下一次访问即失效",
                  resource_id=ref.scenario_id or (
                      str(ref.suite_id) if ref.suite_id else None))
-    if user.role == "super_admin" and not owned:
-        await audit_svc.record(
-            db, actor_id=user.id, actor_name=user.username,
-            action="share.admin_revoke",
-            resource_type=ref.scenario_id and "scenario" or "suite",
-            resource_id=ref.scenario_id or str(ref.suite_id),
-            resource_name=res_name,
-            detail={"granteeUserId": ref.grantee_user_id})
     # 时间线:撤销双事件(撤销者轴 + 被分享人轴 —— 「共享给我的」
     # 列表变化对双方都是可见状态变更;与建立面 share_ref 成对)
     rev_kind = ("scenario.share_ref_revoked" if ref.scenario_id is not None

@@ -134,11 +134,14 @@ async def test_references_four_kinds_and_visibility(client):
     assert by_sid["sc-own-tpl"] == own_id
     assert by_sid["sc-other-pub"] != own_id
 
-    # admin:全可见(私有也见名,can_read_scenario 口径)
+    # admin:与普通用户同镜头(authz W3 收窄)—— 他人 private 同样
+    # hidden(can_read_scenario 无旁路);公共照见
     r = await client.get(f"/api/auths/{ALIAS}/references", headers=admin)
     vis = {v["scenario_id"] for v in r.json()["scenario_refs"]["visible"]}
-    assert "sc-other-prv" in vis
-    assert r.json()["scenario_refs"]["hidden_count"] == 0
+    assert "sc-other-pub" in vis
+    assert "sc-other-prv" not in vis
+    # own_user 的 3 个私有 + other 的 1 个私有 = 4 条对 admin 隐藏
+    assert r.json()["scenario_refs"]["hidden_count"] == 4
 
 
 async def test_list_carries_counts_snapshot_not_counted(client):

@@ -4,7 +4,9 @@ One canonical rule for the V3 composer routers (scenarios, data-sets,
 runs):
 
 * row ownership = ``owner_id`` (int user id) — the single authority
-* admins bypass everything
+* rules come from Table A (capability × role) and Table B (object ×
+  verb) below; no role literals at the call sites
+  (authz W3 私有区收窄:admin 对他人私有对象不再有旁路)
 
 Each call-site keeps its own 403 ``detail`` payload (string or dict) so
 API responses stay byte-identical.
@@ -58,18 +60,138 @@ def roles_with(cap: str) -> tuple[str, ...]:
     return tuple(r for r in ROLES if r in allowed)
 
 
+def has_capability(user: Any, cap: str) -> bool:
+    """JWT 主体的能力判定(表 A 驱动)。行内角色比较应收编到这里或
+    ``can()``/``can_pure()``,不再写角色字面量(grep 守卫)。"""
+    role = getattr(user, "role", None)
+    return role in CAPABILITIES.get(cap, ())
+
+
+# ── 表 B(authz W3,方案 §2.3):对象 × 动词 —— 对象级规则唯一来源 ──
+# 单元格 = 谓词名集合(命中其一即放行),谓词定义紧跟表后:
+#   owner     主体是对象属主(user.id == obj.owner_id)
+#   public    对象处于公共态 —— scenario/suite: visibility=="public";
+#             report_definition: owner_id IS NULL(无主公共行)
+#   ref       主体持有该对象的引用分享(§7.6;需查库,只进 async can)
+#   steward   ops.write 能力(表 A)∧ 对象公共 —— Admin+ 的公共治理
+#             (下架公共对象,R6:admin 对他人对象没有发布权,对私有
+#             对象没有任何动词)
+#   maintain  users.manage 能力 ∧ 对象公共 —— report_definition 的
+#             无主公共行维护(W9 改维护者制之前的现状保留)
+# 角色不在表 B 出现:角色差由表 A 表达;对象级判定对同谓词主体同权。
+# W3 收窄后 admin 与普通用户在对象级唯一的差别就是 steward/maintain
+# 两个「公共态 × 能力」谓词。表 B 变更必须同步 tests/authz_expected.yaml
+# 的 table_b 段(人工审定快照,R7)。
+
+TABLE_B: dict[str, dict[str, frozenset[str]]] = {
+    "scenario": {
+        "read":      frozenset({"owner", "public", "ref"}),
+        "copy":      frozenset({"owner", "public", "ref"}),
+        "run":       frozenset({"owner", "ref"}),
+        "write":     frozenset({"owner"}),
+        "delete":    frozenset({"owner"}),
+        # 发布(私有→公共的可见性扩张)是属主动作;admin 对他人对象
+        # 无发布权(R6)—— 已公共对象再「发布」本是空操作,不损失什么
+        "publish":   frozenset({"owner"}),
+        # 下架:Admin+ 仅对**已是公共**的对象(steward)
+        "unpublish": frozenset({"owner", "steward"}),
+    },
+    "suite": {
+        "read":      frozenset({"owner", "public", "ref"}),
+        "run":       frozenset({"owner", "ref"}),
+        "write":     frozenset({"owner"}),
+        "delete":    frozenset({"owner"}),
+        "publish":   frozenset({"owner"}),
+        "unpublish": frozenset({"owner", "steward"}),
+    },
+    # 数据集/运行方案没有自己的可见性 —— 读随父场景(§7.4 引用闭包),
+    # 写属主单判
+    "data_set": {
+        "read":      frozenset({"owner", "public", "ref"}),
+        "write":     frozenset({"owner"}),
+    },
+    "run_scheme": {
+        "read":      frozenset({"owner", "public", "ref"}),
+        "write":     frozenset({"owner"}),
+    },
+    "report_definition": {
+        "read":      frozenset({"owner", "public"}),
+        "write":     frozenset({"owner", "maintain"}),
+        "delete":    frozenset({"owner", "maintain"}),
+    },
+}
+
+
+def _pred_owner(user: Any, obj: Any) -> bool:
+    return _user_matches(user, obj.owner_id)
+
+
+def obj_is_public(obj_type: str, obj: Any) -> bool:
+    """public 谓词:对象是否处于公共态(见 TABLE_B 注释的两种形态)。"""
+    if obj_type == "report_definition":
+        return obj.owner_id is None
+    return (getattr(obj, "visibility", None) or "private") == "public"
+
+
+def can_pure(user: Any, obj_type: str, verb: str, obj: Any) -> bool:
+    """表 B 求值(纯谓词版):owner/public/steward/maintain,不查库。
+
+    ``ref`` 谓词恒为 False —— 需要引用闭包的判定用 async :func:`can`。
+    未登记的 (对象, 动词) 是编码错误,即刻 KeyError(与 roles_with
+    同口径,而非静默拒绝)。
+    """
+    preds = TABLE_B.get(obj_type, {}).get(verb)
+    if preds is None:
+        raise KeyError(f"table B 未登记: {obj_type}.{verb}")
+    if "owner" in preds and _pred_owner(user, obj):
+        return True
+    if "public" in preds and obj_is_public(obj_type, obj):
+        return True
+    if "steward" in preds and obj_is_public(obj_type, obj) \
+            and has_capability(user, "ops.write"):
+        return True
+    if "maintain" in preds and obj_is_public(obj_type, obj) \
+            and has_capability(user, "users.manage"):
+        return True
+    return False
+
+
+async def can(db, user: Any, obj_type: str, verb: str, obj: Any) -> bool:
+    """表 B 求值(完整版,含 ref 谓词)—— 对象级判定唯一入口。
+
+    obj 需带 ``owner_id``;suite 另带 ``id``、场景系对象另带
+    ``scenario_id``(ref 谓词按对象类型解析,见 ``_pred_ref``)。
+    """
+    if can_pure(user, obj_type, verb, obj):
+        return True
+    preds = TABLE_B[obj_type][verb]
+    if "ref" in preds and await _pred_ref(db, obj_type, obj, user.id):
+        return True
+    return False
+
+
+async def _pred_ref(db, obj_type: str, obj: Any, user_id: int) -> bool:
+    """ref 谓词:suite 按套件引用,场景系按场景引用(直接 ∨ 经 suite)。"""
+    if obj_type == "suite":
+        return await has_suite_ref(db, user_id, obj.id)
+    scen_id = getattr(obj, "scenario_id", None)
+    return scen_id is not None and await has_scenario_ref(db, user_id, scen_id)
+
+
 def _user_matches(user: Any, owner_id: int) -> bool:
     """Canonical identity match for the composer tables."""
     return user.id == owner_id
 
 
 def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
-    """403 unless ``user`` is the row owner or an admin.
+    """403 unless ``user`` is the row owner —— 表 B 各 write/delete
+    动词的属主单判投影(authz W3:admin 越属主旁路已删,私有区一律
+    归属主;发布/下架的 steward 动词不经此函数,走 ``can_pure``)。
 
     ``detail`` is passed through verbatim to the HTTPException so each
     router keeps its existing error contract.
     """
-    if user.role != "super_admin" and not _user_matches(user, owner_id):
+    if not _user_matches(user, owner_id):
         raise HTTPException(status_code=403, detail=detail)
 
 
@@ -79,11 +201,10 @@ def can_read_scenario(
     owner_id: int,
     visibility: str = "private",
 ) -> bool:
-    """读侧规则(场景库收紧后):admin 全可见;public 所有登录用户
-    可读;private 仅属主(owner_id)可见。
+    """读侧纯判(表 B scenario.read):public 所有登录用户可读;
+    private 仅属主可见。admin 不再有旁路(W3);引用分支由
+    ``can_read_scenario_row`` 承担。
     """
-    if user.role == "super_admin":
-        return True
     if visibility == "public":
         return True
     return _user_matches(user, owner_id)
@@ -151,18 +272,18 @@ async def has_suite_ref(db, user_id: int, suite_id: int) -> bool:
 async def can_run_scenario(
     db, user: Any, *, scenario_id: str, owner_id: int | None,
 ) -> bool:
-    """执行判定(§7.6):属主 ∨ admin ∨ 引用(public 不开执行,
-    公共资源执行仍需先 fork —— 不变量 7)。owner_id=None(公共化
-    无主)时仅 admin/历史引用可跑。"""
-    if user.role == "super_admin" or _user_matches(user, owner_id or -1):
+    """执行判定(表 B scenario.run):属主 ∨ 引用(public 不开执行,
+    公共资源执行仍需先 fork —— 不变量 7;W3 起 admin 同样无旁路)。
+    owner_id=None(公共化无主)时仅历史引用可跑。"""
+    if owner_id is not None and _user_matches(user, owner_id):
         return True
     return await has_scenario_ref(db, user.id, scenario_id)
 
 
 async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
     """读判定(对象级,含引用):行对象须有 scenario_id/owner_id/
-    visibility。纯判(owner/admin/public)先行,引用分支只在前者
-    不通过时查库。"""
+    visibility。纯判(owner/public)先行,引用分支只在前者不通过
+    时查库。"""
     if can_read_scenario(
         user, owner_id=row.owner_id or -1,
         visibility=row.visibility or "private"):
@@ -171,8 +292,9 @@ async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
 
 
 async def can_read_suite(db, user: Any, suite: Any) -> bool:
-    """suite 读判定(§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
-    if user.role == "super_admin" or _user_matches(user, suite.owner_id):
+    """suite 读判定(表 B suite.read):public ∨ 属主 ∨ suite 引用
+    (W3 起 admin 无旁路)。"""
+    if _user_matches(user, suite.owner_id):
         return True
     if (suite.visibility or "private") == "public":
         return True
@@ -180,8 +302,8 @@ async def can_read_suite(db, user: Any, suite: Any) -> bool:
 
 
 async def can_run_suite(db, user: Any, suite: Any) -> bool:
-    """suite 执行判定(§7.6):属主 ∨ admin ∨ suite 引用
-    (运行时再逐成员 can_run_scenario)。"""
-    if user.role == "super_admin" or _user_matches(user, suite.owner_id):
+    """suite 执行判定(表 B suite.run):属主 ∨ suite 引用
+    (运行时再逐成员 can_run_scenario;W3 起 admin 无旁路)。"""
+    if _user_matches(user, suite.owner_id):
         return True
     return await has_suite_ref(db, user.id, suite.id)

@@ -104,8 +104,9 @@ async def test_update_scenario_owner_forbidden_403(client: AsyncClient) -> None:
         headers=bob,
         json=_make_draft(name="Bob rewrites"),
     )
-    # Owner check is by display_name; default owner is "alice", so 403.
-    assert r.status_code == 403
+    # Owner check is by display_name; default owner is "alice".
+    # (authz W3:他人私有先 404 不泄露,bob 读不到 alice 的私有场景)
+    assert r.status_code == 404
 
 
 async def test_create_scenario_owner_cannot_be_spoofed(
@@ -313,7 +314,8 @@ async def test_delete_dataset_requires_ownership(client: AsyncClient) -> None:
         json={"name": "t", "rows": []},
     )
     ds_id = r.json()["datasetId"]
-    assert (await client.delete(f"/api/data-sets/{ds_id}", headers=bob)).status_code == 403
+    # (authz W3:bob 读不到 alice 的私有场景 → 404 不泄露)
+    assert (await client.delete(f"/api/data-sets/{ds_id}", headers=bob)).status_code == 404
     assert (await client.delete(f"/api/data-sets/{ds_id}", headers=alice)).status_code == 204
 
 
@@ -419,8 +421,8 @@ async def test_member_cannot_attach_dataset_to_unowned_scenario(
         headers=bob,
         json={"name": "ds", "rows": [{"x": 1}]},
     )
-    assert r.status_code == 403
-    assert "not_owner" in r.json()["detail"]
+    # (authz W3:他人私有场景先 404 不泄露)
+    assert r.status_code == 404
 
 
 async def test_create_dataset_requires_scenario_ownership(client: AsyncClient) -> None:
@@ -433,8 +435,8 @@ async def test_create_dataset_requires_scenario_ownership(client: AsyncClient) -
         headers=bob,
         json={"name": "ds by bob", "rows": [{"x": 1}]},
     )
-    assert r.status_code == 403
-    assert "not_owner" in r.json()["detail"]
+    # (authz W3:他人私有场景先 404 不泄露)
+    assert r.status_code == 404
 
 
 async def test_create_dataset_admin_can_create_under_any_scenario(

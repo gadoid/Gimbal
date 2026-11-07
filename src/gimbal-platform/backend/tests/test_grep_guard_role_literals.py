@@ -28,54 +28,37 @@ _SHAPES = (
     re.compile(r'\bUser\.role\s*[=!]=\s*["\'](user|admin|super_admin|member)["\']'),
 )
 
-# 存量冻结(2026-11-07,W2 收编 SQL 六处后剩余 47 处属性形状;W3-W9
-# 随表 B 收编逐行删除 —— 全部删空即本守卫的终点)。
+# 存量冻结(2026-11-07,W3 私有区收编 26 处后剩余 21 处;W4-W9/C1
+# 随各模块收编逐行删除 —— 全部删空即本守卫的终点)。
+# W3 已收编:suites 60/66/76/163/255/433/1569/1595/1637、scenarios
+# 643/718/736/904、shares 206/268/319/348/359、integration 68/82/
+# 147/149、data_sets 92、adaptations 78/324、report_definitions
+# 139/166/192 → 表 B can()/can_pure()/has_capability()。
 _ALLOWLIST: frozenset[str] = frozenset({
+    # W5 令牌(签发门/使用门/平台入口)
     'routers/access_tokens.py:69:if user.role == "super_admin":',
     'routers/access_tokens.py:72:if user.role == "admin":',
     'routers/access_tokens.py:75:if user.role == "admin" or allow_owner_user_role:',
     'routers/access_tokens.py:212:if user.role != "super_admin":',
     'routers/access_tokens.py:691:if user.role != "super_admin":',
-    'routers/adaptations.py:78:if scope != "mine" and user.role == "user":',
-    'routers/adaptations.py:324:user_id = user.id if (scope == "mine" or user.role != "super_admin") else None',
-    'routers/data_sets.py:92:if user.role == "super_admin":',
+    # W9 环境(越属主读旁路,W9 补审计时一并定去留)
     'routers/environments.py:52:if user.role != "super_admin" and env.owner_id != user.id:',
-    'routers/integration.py:68:return user.id == tpl.owner_id or user.role == "super_admin"',
-    'routers/integration.py:82:or user.role == "super_admin"',
-    'routers/integration.py:147:"canManage": current.role == "super_admin" or db_tpl.owner_id == current.id',
-    'routers/integration.py:149:and current.role == "admin"),',
-    'routers/integration.py:1075:if user.role != "super_admin":',
-    'routers/report_definitions.py:139:if row.owner_id is None and allow_public_read and user.role == "super_admin":',
-    'routers/report_definitions.py:166:is_public_admin = row.owner_id is None and user.role == "super_admin"',
-    'routers/report_definitions.py:192:is_public_admin = row.owner_id is None and user.role == "super_admin"',
-    'routers/scenarios.py:643:if user.role != "super_admin" or user.id == row.owner_id:',
-    'routers/scenarios.py:718:if user.role == "super_admin":',
-    'routers/scenarios.py:736:if user.role == "super_admin" and row.owner_id is not None and row.owner_id != user.id:',
-    'routers/scenarios.py:904:if user.role == "super_admin" and user.id != owner_id:',
+    # C1 平台退役(平台凭证管理面)
+    'routers/integration.py:1076:if user.role != "super_admin":',
+    # W7 导入(别名归属口径)
     'routers/service_aliases.py:139:if body.owner_user_id is not None and user.role != "super_admin":',
     'routers/service_aliases.py:179:if row is not None and row.owner_user_id is not None and user.role != "super_admin":',
     'routers/service_aliases.py:218:if row is not None and row.owner_user_id is not None and user.role != "super_admin":',
-    'routers/shares.py:206:if user.role == "super_admin":',
-    'routers/shares.py:268:if user.id != scen.owner_id and user.role != "super_admin":',
-    'routers/shares.py:319:if is_grantee and user.role != "super_admin":',
-    'routers/shares.py:348:if not owned and user.role != "super_admin":',
-    'routers/shares.py:359:if user.role == "super_admin" and not owned:',
-    'routers/suites.py:60:if user.role != "super_admin" and user.id != suite.owner_id             and suite.visibility != "public":',
-    'routers/suites.py:66:if user.role == "super_admin" or user.id == suite.owner_id             or suite.visibility == "public":',
-    'routers/suites.py:76:if user.role == "super_admin" or user.id == suite.owner_id:',
-    'routers/suites.py:163:elif user.role == "super_admin":',
-    'routers/suites.py:255:elif user.role == "super_admin":',
-    'routers/suites.py:433:if user.role == "super_admin" and user.id != suite_owner:',
-    'routers/suites.py:1569:if user.role == "super_admin" and user.id != suite.owner_id:',
-    'routers/suites.py:1595:if user.role == "super_admin" and suite.owner_id != user.id:',
-    'routers/suites.py:1637:if user.role != "super_admin":',
+    # W6 用户管理(重置密码/停用/删除保护)
     'routers/users.py:233:if caller.role != "super_admin":',
     'routers/users.py:248:and target.role == "super_admin"',
     'routers/users.py:372:if caller.role != "super_admin" and caller.id != target.id:',
     'routers/users.py:450:if caller.role != "super_admin":',
     'routers/users.py:456:if target.role == "super_admin":',
+    # W4 执行可见(投递面 admin 旁路)
     'routers/webhook_deliveries.py:117:if not (user.role == "super_admin" or _may_view_token(user, target)):',
     'routers/webhook_deliveries.py:154:if user.role != "super_admin":',
+    # W4 执行可见(令牌读面)
     'services/access_token.py:440:if user.role == "super_admin":',
     'services/access_token.py:443:return user.role == "admin"',
 })

@@ -47,16 +47,21 @@ async def _require_scenario_owner(
 ) -> ComposerScenario:
     """Load the scenario, verify ownership, and return the row.
 
-    Returns 404 on miss (no existence leak).  403 when the caller is
-    neither owner nor admin.
+    Returns 404 on miss (no existence leak) and when the caller can't
+    read the scenario either (authz W3:读判含 ref —— 完全不可见才 404,
+    引用者/公共读者可读 ⇒ 403,不与可读性自相矛盾)。
     """
+    from ._ownership import can_read_scenario_row
+
     scen = await _load_scenario(db, scenario_id)
     if scen is None:
+        raise not_found_404("scenario", scenario_id)
+    if not await can_read_scenario_row(db, user, scen):
         raise not_found_404("scenario", scenario_id)
     ensure_owner(
         user,
         scen.owner_id,
-        "not_owner: only the scenario's owner (or admin) can manage its data sets",
+        "not_owner: only the scenario's owner can manage its data sets",
     )
     return scen
 
@@ -86,11 +91,11 @@ async def list_data_sets(
     """List summaries scoped to the caller.
 
     Data-set rows are business parameter matrices — listing every user's
-    data (the previous behaviour) is a cross-user disclosure, so non-admin
-    callers only see data-sets whose parent scenario they own.
+    data would be a cross-user disclosure, so callers only see data-sets
+    whose parent scenario they own or hold a share-ref into
+    (P2 §7.4 引用闭包). authz W3: super_admin 全量分支删除 ——
+    admin 与普通用户同镜头,排查走审计。
     """
-    if user.role == "super_admin":
-        return await data_set_store.list_summaries(db, scenario_id=scenarioId)
     # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
     from ._ownership import referenced_scenario_ids
     own_ids = (await scenario_store.owned_scenario_ids(db, user)) |         await referenced_scenario_ids(db, user.id)

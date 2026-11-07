@@ -104,6 +104,10 @@ class TestAuditPlatformCredentials:
 # ── 审计:admin 越属主的删除/可见性变更 ────────────────────────────
 
 class TestAuditAdminCrossOwner:
+    """authz W3 翻转:admin 越属主旁路删除后,越属主只剩 steward 下架
+    公共对象一条路(发布/删除对他人对象 404,admin_publish/admin_delete
+    审计面随能力一起消亡);保留下架的审计与受影响人事件。"""
+
     async def test_scenario_visibility_and_delete(self, client):
         await register_and_login(client, "ax_admin", "ax_adminpass123")
         h_owner = await register_and_login(client, "ax_owner", "ax_ownerpass123")
@@ -122,34 +126,44 @@ class TestAuditAdminCrossOwner:
         r = await client.post("/api/scenarios/sc-ax-1/unpublish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
+        # 属主自下架不通知本人、不入审计
+        assert not await _audit_rows("scenario.admin_unpublish")
+        assert not await _notifications(owner_id, "scenario_unpublished")
 
-        # admin 越属主:发布/下架/删除三条审计 + 事件落受影响人轴
+        # admin(super_admin)越属主:私有对象发布/下架/删除一律 404
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "ax_admin"))).scalar()
             u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "ax_admin", "ax_adminpass123")
-        r = await client.post("/api/scenarios/sc-ax-1/publish",
-                              headers=h_admin)
-        assert r.status_code == 200, r.text
+        for method, path in (
+            ("post", "/api/scenarios/sc-ax-1/publish"),
+            ("post", "/api/scenarios/sc-ax-1/unpublish"),
+            ("delete", "/api/scenarios/sc-ax-1"),
+        ):
+            r = await getattr(client, method)(path, headers=h_admin)
+            assert r.status_code == 404, (path, r.status_code)
+
+        # 属主再发布 → admin steward 下架公共对象:200 + 审计 + 通知 +
+        # 事件落受影响人轴(detail.by 记操作者)
+        assert (await client.post("/api/scenarios/sc-ax-1/publish",
+                                  headers=h_owner)).status_code == 200
         r = await client.post("/api/scenarios/sc-ax-1/unpublish",
                               headers=h_admin)
         assert r.status_code == 200, r.text
-        r = await client.delete("/api/scenarios/sc-ax-1", headers=h_admin)
-        assert r.status_code == 204, r.text
-        assert len(await _audit_rows("scenario.admin_publish")) == 1
         assert len(await _audit_rows("scenario.admin_unpublish")) == 1
-        assert len(await _audit_rows("scenario.admin_delete")) == 1
-        # 时间线:自发布 + admin 发布各一条 published(同理 unpublished),
-        # admin 那两条 detail.by 记操作者;deleted 仅 admin 一条
-        for kind in ("scenario.published", "scenario.unpublished"):
-            rows = await _activity_rows(owner_id, kind)
-            assert len(rows) == 2, kind
-            assert sum(1 for x in rows if x.detail.get("by")) == 1, kind
-        rows = await _activity_rows(owner_id, "scenario.deleted")
-        assert len(rows) == 1
-        assert rows[0].detail.get("by") == "ax_admin"
+        assert len(await _notifications(owner_id, "scenario_unpublished")) == 1
+        rows = await _activity_rows(owner_id, "scenario.unpublished")
+        assert len(rows) == 2  # 自下架 + admin 下架
+        by_rows = [x for x in rows if x.detail.get("by")]
+        assert len(by_rows) == 1
+        assert by_rows[0].detail.get("by") == "ax_admin"
+
+        # 越属主删除已不可达:admin_delete 审计面消亡;对象仍在
+        assert not await _audit_rows("scenario.admin_delete")
+        assert (await client.get(
+            "/api/scenarios/sc-ax-1", headers=h_owner)).status_code == 200
 
     async def test_suite_publish_delete_audited(self, client):
         await register_and_login(client, "as_admin", "as_adminpass123")
@@ -170,15 +184,27 @@ class TestAuditAdminCrossOwner:
             u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "as_admin", "as_adminpass123")
-        r = await client.post(f"/api/suites/{suite_id}/publish", headers=h_admin)
-        assert r.status_code == 200, r.text
+        # 私有 suite:admin 发布/删除一律 404(发布/删除无 steward 动词)
+        assert (await client.post(
+            f"/api/suites/{suite_id}/publish",
+            headers=h_admin)).status_code == 404
+        assert (await client.delete(
+            f"/api/suites/{suite_id}", headers=h_admin)).status_code == 404
+        # 属主发布 → admin steward 下架:审计 + 通知属主;
+        # suite.admin_publish/admin_delete 审计面随能力消亡
+        assert (await client.post(
+            f"/api/suites/{suite_id}/publish",
+            headers=h_owner)).status_code == 200
         # 级联公开成员场景:scenario.published(via=suite_publish)落属主轴
         rows = await _activity_rows(owner_id, "scenario.published")
         assert len(rows) == 1 and rows[0].detail.get("via") == "suite_publish"
-        r = await client.delete(f"/api/suites/{suite_id}", headers=h_admin)
-        assert r.status_code == 204, r.text
-        assert len(await _audit_rows("suite.admin_publish")) == 1
-        assert len(await _audit_rows("suite.admin_delete")) == 1
+        r = await client.delete(f"/api/suites/{suite_id}/publish",
+                                headers=h_admin)
+        assert r.status_code == 200, r.text
+        assert len(await _audit_rows("suite.admin_unpublish")) == 1
+        assert len(await _notifications(owner_id, "scenario_unpublished")) == 1
+        assert not await _audit_rows("suite.admin_publish")
+        assert not await _audit_rows("suite.admin_delete")
 
 
 # ── 通知:场景删除通知引用者(N1)───────────────────────────────────

@@ -130,16 +130,17 @@ async def create_definition(
 
 async def _get_owned(db: AsyncSession, user, did: int,
                      *, allow_public_read=True) -> ReportDefinitionRow:
+    # 表 B report_definition.read:owner ∨ public(无主公共行全员可读;
+    # 修改/删除的 maintain 面 = users.manage ∧ 公共,在写端点另判)。
+    # authz W3:角色字面量收编进表 B,super_admin 中间分支本就冗余删除。
+    from ._ownership import can_pure
+
     row = await db.get(ReportDefinitionRow, did)
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": f"definition not found: {did}"})
-    if row.owner_id == user.id:
+    if can_pure(user, "report_definition", "read", row):
         return row
-    if row.owner_id is None and allow_public_read and user.role == "super_admin":
-        return row   # 公共区 admin 可改
-    if row.owner_id is None and allow_public_read:
-        return row   # 公共区全员可读(修改/删除限 admin/owner)
     raise HTTPException(404, detail={"code": "not_found",
                                      "message": f"definition not found: {did}"})
 
@@ -161,10 +162,11 @@ async def update_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 私有 = 仅 owner;公共 = admin 也可改
-    is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "super_admin"
-    if not (is_owner or is_public_admin):
+    # 表 B report_definition.write:owner ∨ maintain(users.manage ∧ 公共
+    # 无主行;W9 改维护者制之前的现状保留)。私有 = 仅 owner。
+    from ._ownership import can_pure
+
+    if not can_pure(user, "report_definition", "write", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     if body.name is not None:
@@ -188,9 +190,10 @@ async def delete_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "super_admin"
-    if not (is_owner or is_public_admin):
+    # 表 B report_definition.delete:owner ∨ maintain(同 update 口径)
+    from ._ownership import can_pure
+
+    if not can_pure(user, "report_definition", "delete", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     await db.delete(row)

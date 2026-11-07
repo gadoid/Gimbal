@@ -29,6 +29,7 @@ from ..services import integration_runner
 from ..services.access_token import Principal
 from ..services.cron_expr import CronError, describe_cron, parse_cron
 from ..services.run_semantics import working_preview
+from ._ownership import has_capability
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
@@ -60,18 +61,19 @@ def _safe_decrypt(encrypted: str) -> str:
 
 
 def _can_manage(user, tpl: IntegrationTask) -> bool:
-    """模板改动权(§5.2 改写):平台模板 admin+;个人模板属主或
-    super_admin。(authz W1 更名:原 member 级 = admin、原 admin 级 =
-    super_admin,权限边界不变。)"""
+    """模板改动权(§5.2 改写):平台模板 admin+(ops.write,表 A 驱动);
+    个人模板属主单判(W3:super_admin 越属主旁路删除,私有区归属主;
+    平台模板 C1 退役前维持 Admin+ 维护)。"""
     if tpl.identity_mode == "platform":
-        return user.role in ("admin", "super_admin")
-    return user.id == tpl.owner_id or user.role == "super_admin"
+        return has_capability(user, "ops.write")
+    return user.id == tpl.owner_id
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
     """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用)。
 
-    平台模板对 admin+ 恒可见,与 ``_can_manage``(D7:任一 admin 可管
+    个人模板:属主 ∨ public(W3:super_admin 越属主旁路删除)。平台
+    模板对 admin+ 恒可见,与 ``_can_manage``(D7:任一 admin 可管
     平台任务)及暂停告警/通知的 admin+ 扇出同口径 —— 此前 private 平台
     模板对非属主 admin 不可见,却能改能删、能收到告警,点进去 404
     (2026-11-05 修复轮评审 N2 延伸)。visibility 对平台模板只区分
@@ -79,9 +81,8 @@ def _visible(user, tpl: IntegrationTask) -> bool:
     勿按「私有 = 只有我」收窄,要收窄须与 _can_manage、告警扇出一起改。"""
     return tpl.removed_at is None and (
         tpl.owner_id == user.id or tpl.visibility == "public"
-        or user.role == "super_admin"
         or (tpl.identity_mode == "platform"
-            and user.role in ("admin", "super_admin")))
+            and has_capability(user, "ops.write")))
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -144,9 +145,9 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "name": db_tpl.name,
         "ownerId": db_tpl.owner_id,
         "mine": db_tpl.owner_id == current.id,
-        "canManage": current.role == "super_admin" or db_tpl.owner_id == current.id
+        "canManage": db_tpl.owner_id == current.id
         or (db_tpl.identity_mode == "platform"
-            and current.role == "admin"),
+            and has_capability(current, "ops.write")),
         "visibility": db_tpl.visibility,
         "identityMode": db_tpl.identity_mode,
         "targetType": db_tpl.target_type,
@@ -167,8 +168,8 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
     if subscribed is not None:
         out["subscribed"] = subscribed
     # D12:公共模板对非属主隐藏 token/client_ref —— 注册方的集成关系
-    # 不外泄;属主/super_admin/admin+(平台身份对象)可见。
-    if current.role in ("super_admin", "admin") or db_tpl.owner_id == current.id:
+    # 不外泄;属主/ops.write(平台身份对象面,表 A 驱动)可见。
+    if has_capability(current, "ops.write") or db_tpl.owner_id == current.id:
         out["tokenId"] = db_tpl.token_id
         if token is not None:
             out["tokenName"] = token.name

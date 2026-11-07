@@ -63,14 +63,45 @@ async def _load_row(
     return row
 
 
-def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
+async def _require_owner(
+    db, user: CurrentUser, row: ComposerScenario,
+) -> None:
     # owner_id (int user.id) is the single ownership authority
-    # (canonical rule in _ownership).
+    # (canonical rule in _ownership;表 B write/delete = 属主单判,W3 起
+    # admin 无旁路 —— 私有区归属主)。读判含 ref:被引用者可读 ⇒ 403
+    # 而非 404(不与可读性自相矛盾);完全不可见才 404(不泄露存在性)。
+    from ._ownership import can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, row):
+        raise HTTPException(
+            status_code=404,
+            detail=f"scenario_not_found: {row.scenario_id}")
     ensure_owner(
         user,
         row.owner_id,
-        "not_owner: only the scenario's owner (or admin) can modify it",
+        "not_owner: only the scenario's owner can modify it",
     )
+
+
+async def _require_visibility_actor(
+    db, user: CurrentUser, row: ComposerScenario, *, verb: str,
+) -> None:
+    """发布/下架闸(表 B scenario.{publish,unpublish},authz W3):
+    owner 全可;Admin+ 仅对**已是公共**的对象有下架权(steward,
+    R6 —— admin 对他人对象没有发布权)。完全不可见(含 ref 不达)
+    → 404(不泄露存在性);可读但无权 → 403。"""
+    from ._ownership import can_pure, can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, row):
+        raise HTTPException(
+            status_code=404,
+            detail=f"scenario_not_found: {row.scenario_id}")
+    if not can_pure(user, "scenario", verb, row):
+        raise HTTPException(
+            status_code=403,
+            detail="not_owner: only the owner (or an operator, for "
+                   "already-public scenarios) can change visibility",
+        )
 
 
 def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
@@ -638,9 +669,10 @@ def _axis_actor(user, row) -> tuple[int | None, dict]:
 async def _record_admin_visibility_audit(
     db, user, row, scenario_id: str, action: str,
 ) -> None:
-    """admin 越属主的可见性变更入审计(属主自发布/自下架不记 —— 与
-    suite.admin_unpublish 同口径,只记越属主那一半)。"""
-    if user.role != "super_admin" or user.id == row.owner_id:
+    """Admin+ 越属主的可见性变更入审计(属主自发布/自下架不记 —— 与
+    suite.admin_unpublish 同口径,只记越属主那一半)。W3 后越属主
+    只剩 steward 下架公共对象一条路,入口闸已保证主体是 Admin+。"""
+    if user.id == row.owner_id:
         return
     from ..services import audit as audit_svc
     await audit_svc.record(
@@ -654,9 +686,11 @@ async def _record_admin_visibility_audit(
 async def publish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
-    """发布:visibility → public,所有登录用户可读(取代 V1 公共库)。"""
+    """发布:visibility → public,所有登录用户可读(取代 V1 公共库)。
+    属主动作(表 B scenario.publish = owner;W3 起 Admin+ 对他人对象
+    无发布权,R6 —— 对已公共对象再发布本是空操作,不损失什么)。"""
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_visibility_actor(db, user, row, verb="publish")
     was_public = (row.visibility or "private") == "public"
     try:
         out = await scenario_store.set_visibility(db, scenario_id, "public")
@@ -664,14 +698,14 @@ async def publish_scenario(
         raise key_error_404(e)
     if not was_public:   # 状态确变才记:重复发布不刷事件/审计
         # 时间线:可见性跃迁(直接路径;suite 级联路径在 suites.py 落)
+        # (越属主者到不了这里 —— 入口闸对非属主只放行已是公共的对象,
+        # was_public 必为真,audit 面 scenario.admin_publish 随旁路消亡)
         from ..services import activity as activity_svc
         actor_id, extra = _axis_actor(user, row)
         await activity_svc.record(
             db, actor_id=actor_id, kind="scenario.published",
             resource_type="scenario", resource_id=scenario_id,
             detail={"name": row.name, **extra})
-        await _record_admin_visibility_audit(
-            db, user, row, scenario_id, "scenario.admin_publish")
     return out
 
 
@@ -679,9 +713,11 @@ async def publish_scenario(
 async def unpublish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
-    """下架:visibility → private,仅 owner/admin 可读。"""
+    """下架:visibility → private,仅 owner 可读。表 B
+    scenario.unpublish = owner ∨ steward(Admin+ 仅对已是公共的对象,
+    W3 收口:私有对象的下架权归属主)。"""
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_visibility_actor(db, user, row, verb="unpublish")
     was_public = (row.visibility or "private") == "public"
     try:
         result = await scenario_store.set_visibility(db, scenario_id, "private")
@@ -715,7 +751,9 @@ async def unpublish_scenario(
         # 级联 UPDATE 须显式提交(属主自下架不走通知分支的隐式 commit;
         # set_visibility 内部已提交的是场景行,不含本条 suite UPDATE)
         await db.commit()
-        if user.role == "super_admin":
+        # 越属主下架(steward,入口闸保证 Admin+ ∧ 原为公共)才通知
+        # 受连带 suite 的属主;属主自下架不通知(与下段属主通知同口径)
+        if row.owner_id != user.id:
             from ..services import notifications as _ns
             for h in _hit:
                 if h.owner_id is not None and h.owner_id != user.id:
@@ -731,9 +769,12 @@ async def unpublish_scenario(
                     except Exception:  # noqa: BLE001
                         pass
 
-    # 通知接线(P1b,权限方案 §3.2):admin 下架**他人** public 场景是
-    # 全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
-    if user.role == "super_admin" and row.owner_id is not None and row.owner_id != user.id:
+    # 通知接线(P1b,权限方案 §3.2;authz W3 收口):Admin+ 下架**他人**
+    # 场景是全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
+    # was_public 一并钉进条件 —— 入口闸已保证越属主 ⇔ 原为公共,重复
+    # 声明防未来闸变化时误发(dev-plan「:736 收窄」)。
+    if (was_public and row.owner_id is not None
+            and row.owner_id != user.id):
         from ..services import notifications as notify_svc
         from ..core.timeutil import ensure_aware
         try:
@@ -840,7 +881,7 @@ async def put_scenario(
     body: ScenarioDraft,
 ) -> Scenario:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     try:
         return await scenario_store.update(
             db,
@@ -867,7 +908,7 @@ async def delete_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> None:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     owner_id, name = row.owner_id, row.name
     # 引用者名单必须在删除**之前**取 —— share_refs 行随 FK CASCADE 消失
     from sqlalchemy import select as _sel
@@ -900,16 +941,8 @@ async def delete_scenario(
         db, actor_id=actor_id, kind="scenario.deleted",
         resource_type="scenario", resource_id=scenario_id,
         detail={"name": name, **extra})
-    # 审计:admin 越属主删除(属主自删不记)
-    if user.role == "super_admin" and user.id != owner_id:
-        from ..services import audit as audit_svc
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="scenario.admin_delete",
-            resource_type="scenario", resource_id=scenario_id,
-            resource_name=name,
-            detail={"ownerId": owner_id, "name": name})
+    # (W3 删除收敛为属主单判:scenario.admin_delete 审计随 admin 越属主
+    # 旁路一并消亡 —— 越属主删除在入口闸就 403/404,到不了这里)
 
 
 # ── R19（Release v4.4 §6.5）:导入导出以 meta.plate 为契约 ──────────

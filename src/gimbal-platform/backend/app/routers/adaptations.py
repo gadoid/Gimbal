@@ -72,10 +72,12 @@ async def list_batches(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ) -> BatchListOut:
-    """批次列表:member/admin 全量;user 仅 ``scope=mine``(C13 owner
-    知情视图;M2.5 起技术运营权归 member 级,权限方案 §1.2)。M4(§6.3):
-    status 精确 + Page 信封。"""
-    if scope != "mine" and user.role == "user":
+    """批次列表:ops.write(admin+)全量;user 仅 ``scope=mine``(C13
+    owner 知情视图;技术运营权归 admin+ 级,权限方案 §1.2 —— 判定走
+    表 A,authz W3 收编)。M4(§6.3): status 精确 + Page 信封。"""
+    from ._ownership import has_capability
+
+    if scope != "mine" and not has_capability(user, "ops.write"):
         from fastapi import status as http_status
 
         raise HTTPException(
@@ -320,8 +322,10 @@ async def stale_scenarios(
     user: CurrentUser, db: DbSession,
     scope: str | None = Query(default=None),
 ) -> dict:
-    """RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看自己。"""
-    user_id = user.id if (scope == "mine" or user.role != "super_admin") else None
+    """RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看
+    自己;authz W3:super_admin 全量分支删除,所有角色同镜头(仅自己)——
+    他人场景的适配状态由属主自见,排查走审计。"""
+    user_id = user.id
     try:
         items = await adaptation_service.stale_scenarios(db, user_id=user_id)
     except PlateUnavailableError as e:
