@@ -75,14 +75,14 @@ def has_capability(user: Any, cap: str) -> bool:
 # ── 表 B(authz W3,方案 §2.3):对象 × 动词 —— 对象级规则唯一来源 ──
 # 单元格 = 谓词名集合(命中其一即放行),谓词定义紧跟表后:
 #   owner     主体是对象属主(user.id == obj.owner_id)
-#   public    对象处于公共态 —— scenario/suite: visibility=="public";
-#             report_definition: owner_id IS NULL(无主公共行)
+#   public    对象处于公共态 —— visibility=="public"(W9-2 起
+#             report_definition 同口径:公共定义带维护者 owner)
 #   ref       主体持有该对象的引用分享(§7.6;需查库,只进 async can)
 #   steward   ops.write 能力(表 A)∧ 对象公共 —— Admin+ 的公共治理
 #             (下架公共对象,R6:admin 对他人对象没有发布权,对私有
 #             对象没有任何动词)
 #   maintain  users.manage 能力 ∧ 对象公共 —— report_definition 的
-#             无主公共行维护(W9 改维护者制之前的现状保留)
+#             下架面(W9-2 起编辑归维护者,Admin+ 仅可下架)
 # 角色不在表 B 出现:角色差由表 A 表达;对象级判定对同谓词主体同权。
 # W3 收窄后 admin 与普通用户在对象级唯一的差别就是 steward/maintain
 # 两个「公共态 × 能力」谓词。表 B 变更必须同步 tests/authz_expected.yaml
@@ -119,9 +119,11 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "read":      frozenset({"owner", "public", "ref"}),
         "write":     frozenset({"owner"}),
     },
+    # authz W9-2:公共定义有维护者 —— 编辑(owner 单判)只有维护者;
+    # delete(下架)再给 maintain(Admin+ 治理面,方案 §1.4)
     "report_definition": {
         "read":      frozenset({"owner", "public"}),
-        "write":     frozenset({"owner", "maintain"}),
+        "write":     frozenset({"owner"}),
         "delete":    frozenset({"owner", "maintain"}),
     },
 }
@@ -132,9 +134,8 @@ def _pred_owner(user: Any, obj: Any) -> bool:
 
 
 def obj_is_public(obj_type: str, obj: Any) -> bool:
-    """public 谓词:对象是否处于公共态(见 TABLE_B 注释的两种形态)。"""
-    if obj_type == "report_definition":
-        return obj.owner_id is None
+    """public 谓词:对象是否处于公共态(visibility 列;authz W9-2 起
+    report_definition 同口径 —— 公共定义带维护者,不再以无主为公共)。"""
     return (getattr(obj, "visibility", None) or "private") == "public"
 
 

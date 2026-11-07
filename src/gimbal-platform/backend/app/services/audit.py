@@ -22,6 +22,7 @@ AUDIT_ACTIONS = (
     "adaptation.op.apply",
     "adaptation.batch.rollback",
     "alias.write",        # 别名登记/改/删
+    "environment.write",  # 环境建/改/删(authz W9-3)
     # I4(集成线 v2 §3.2):外部目录只读标记 admin 写(误标 = 平台账号
     # 可能执行写操作,须留痕)
     "external_endpoint.query_safe",

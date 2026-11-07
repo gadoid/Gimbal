@@ -28,13 +28,15 @@ class ReportDefinitionOut(BaseModel):
     description: str
     definition: dict
     ownerId: int | None
+    # authz W9-2:公共态看 visibility(公共定义有维护者 ownerId ≠ None)
     isPublic: bool
     createdAt: str | None = None
 
     model_config = {"from_attributes": True}
     # alias 映射
     def __init__(self, **kw):
-        kw.setdefault("isPublic", kw.pop("owner_id", None) is None)
+        kw.setdefault("isPublic",
+                      kw.pop("visibility", "private") == "public")
         kw.setdefault("ownerId", kw.pop("owner_id", None))
         kw.setdefault("createdAt", str(kw.pop("created_at", "") or ""))
         super().__init__(**kw)
@@ -75,7 +77,8 @@ def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
     return ReportDefinitionOut(
         id=row.id, name=row.name, description=row.description,
         definition=row.definition, owner_id=row.owner_id,
-        isPublic=row.owner_id is None,
+        visibility=row.visibility,
+        isPublic=(row.visibility or "private") == "public",
         createdAt=str(row.created_at) if row.created_at else None,
     )
 
@@ -87,7 +90,7 @@ async def list_definitions(
     rows = (await db.execute(
         select(ReportDefinitionRow)
         .where((ReportDefinitionRow.owner_id == user.id)
-               | (ReportDefinitionRow.owner_id.is_(None)))
+               | (ReportDefinitionRow.visibility == "public"))
         .order_by(ReportDefinitionRow.id.desc())
     )).scalars().all()
     return {"items": [_to_out(r).model_dump() for r in rows]}
@@ -117,10 +120,13 @@ def _validated_definition(body) -> dict:
 async def create_definition(
     user: CurrentUser, db: DbSession, body: ReportDefinitionCreate,
 ) -> dict:
+    # authz W9-2:公共定义建维护者(owner 不置 None)—— 编辑权 =
+    # 维护者;公共态由 visibility 独立表达
     row = ReportDefinitionRow(
         name=body.name, description=body.description,
         definition=_validated_definition(body),
-        owner_id=None if body.public else user.id,
+        owner_id=user.id,
+        visibility="public" if body.public else "private",
     )
     db.add(row)
     await db.commit()
@@ -130,8 +136,8 @@ async def create_definition(
 
 async def _get_owned(db: AsyncSession, user, did: int,
                      *, allow_public_read=True) -> ReportDefinitionRow:
-    # 表 B report_definition.read:owner ∨ public(无主公共行全员可读;
-    # 修改/删除的 maintain 面 = users.manage ∧ 公共,在写端点另判)。
+    # 表 B report_definition.read:owner ∨ public(公共行全员可读;
+    # 修改 = 维护者单判 / 删除的 maintain 面 = users.manage ∧ 公共,在写端点另判)。
     # authz W3:角色字面量收编进表 B,super_admin 中间分支本就冗余删除。
     from ._ownership import can_pure
 
@@ -162,8 +168,8 @@ async def update_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 表 B report_definition.write:owner ∨ maintain(users.manage ∧ 公共
-    # 无主行;W9 改维护者制之前的现状保留)。私有 = 仅 owner。
+    # 表 B report_definition.write(authz W9-2):维护者单判 —— admin
+    # 不再可编辑他人维护的公共定义(公共 ≠ 无主)。
     from ._ownership import can_pure
 
     if not can_pure(user, "report_definition", "write", row):
@@ -175,8 +181,9 @@ async def update_definition(
         row.description = body.description
     if body.definition is not None:
         row.definition = body.definition
+    # authz W9-2:公共/私有切换不动 owner(维护者恒定;编辑权随 owner)
     if body.public is not None:
-        row.owner_id = None if body.public else user.id
+        row.visibility = "public" if body.public else "private"
     await db.commit()
     await db.refresh(row)
     return _to_out(row).model_dump()

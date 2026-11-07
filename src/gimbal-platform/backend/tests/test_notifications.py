@@ -133,7 +133,8 @@ async def test_announcement_fanout_and_expiry(client: AsyncClient):
         assert any(i["type"] == "announcement" and i["title"] == "今晚停服迁移"
                    for i in rr.json()["items"])
 
-    # member 发公告 → 403(admin only)
+    # user 发公告 → 403(authz W9-4:公告归 Admin+ / ops.write;
+    # admin 角色面在 test_w9_small_items)
     rr = await client.post(
         "/api/notifications/announcements", headers=member,
         json={"title": "x"})

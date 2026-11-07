@@ -49,7 +49,10 @@ class EnvironmentView(BaseModel):
 
 
 def _require_env_write(env: Environment, user: Any) -> None:
-    if user.role != "super_admin" and env.owner_id != user.id:
+    # authz W9-3:super_admin 判定收编表 A(users.manage;守卫白名单销项)
+    from ._ownership import has_capability
+
+    if env.owner_id != user.id and not has_capability(user, "users.manage"):
         raise HTTPException(403, "environment writes are owner/admin only")
 
 
@@ -79,6 +82,15 @@ async def create_environment(
     db.add(env)
     await db.commit()
     await db.refresh(env)
+    # authz W9-3:环境写操作补审计(对比 users.py 写法;配置面变更留痕)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "create", "lines": body.lines})
     return env
 
 
@@ -124,6 +136,15 @@ async def update_environment(
         env.lines = body.lines
     await db.commit()
     await db.refresh(env)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "update",
+                "description": body.description, "lines": body.lines})
     return env
 
 
@@ -143,5 +164,14 @@ async def delete_environment(
     if ref:
         raise HTTPException(
             409, f"environment is referenced by alias '{ref}'")
+    name = env.name
     await db.delete(env)
     await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env_id), resource_name=name,
+        detail={"op": "delete"})

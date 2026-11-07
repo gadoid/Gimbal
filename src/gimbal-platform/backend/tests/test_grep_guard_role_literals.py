@@ -42,8 +42,6 @@ _SHAPES = (
 # W4 已收编:webhook_deliveries 117/154、access_token.can_view 440/443
 # → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
 _ALLOWLIST: frozenset[str] = frozenset({
-    # W9 环境(越属主读旁路,W9 补审计时一并定去留)
-    'routers/environments.py:52:if user.role != "super_admin" and env.owner_id != user.id:',
     # C1 平台退役(平台凭证管理面)
     'routers/integration.py:1076:if user.role != "super_admin":',
     # W7 导入(别名归属口径)

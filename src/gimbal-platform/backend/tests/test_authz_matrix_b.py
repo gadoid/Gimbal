@@ -82,9 +82,15 @@ def _matrix_cases():
                 continue  # 读/执行随父场景判定(can_read_scenario_row)
             for role, uid, _label in _SUBJECTS:
                 if obj_type == "report_definition":
+                    # authz W9-2:公共态 = visibility(公共定义带维护者);
+                    # 遗留无主公共行(owner NULL,0037 回填)另设一态
                     states = [  # (对象, is_public, 说明);owner 谓词按行判
-                        (SimpleNamespace(owner_id=_OWNER_ID), False, "私有"),
-                        (SimpleNamespace(owner_id=None), True, "无主公共"),
+                        (SimpleNamespace(owner_id=_OWNER_ID,
+                                         visibility="private"), False, "私有"),
+                        (SimpleNamespace(owner_id=_OWNER_ID,
+                                         visibility="public"), True, "公共"),
+                        (SimpleNamespace(owner_id=None,
+                                         visibility="public"), True, "遗留无主公共"),
                     ]
                 else:
                     states = [
@@ -323,8 +329,10 @@ class TestSuiteNarrowed:
 
 
 class TestReportDefinitionMaintain:
-    async def _mk_public_definition(self, client) -> int:
-        """直插一条无主公共定义(maintain 面的靶子)。"""
+    """authz W9-2:公共定义建维护者 —— 编辑 = 维护者单判,Admin+ 仅下架。"""
+
+    async def _mk_definition(self, client, *, public: bool,
+                             owner_id: int | None) -> int:
         from app.core import db as db_module
         from app.models.report_definition import ReportDefinitionRow
 
@@ -332,34 +340,89 @@ class TestReportDefinitionMaintain:
             row = ReportDefinitionRow(
                 name="mb-pub-def", description="",
                 definition={"selection": {}, "projection": []},
-                owner_id=None)
+                owner_id=owner_id,
+                visibility="public" if public else "private")
             db.add(row)
             await db.commit()
             await db.refresh(row)
             return row.id
 
-    async def test_admin_cannot_edit_ownerless_public_definition(
+    async def test_public_definition_owner_is_maintainer(
             self, client: AsyncClient):
+        """新建公共定义:owner = 创建者(公共 ≠ 无主),isPublic=True。"""
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.report_definition import ReportDefinitionRow
         from tests.helpers import role_headers
 
-        did = await self._mk_public_definition(client)
-        # admin(ops.write 无 users.manage)→ 404
-        h = await role_headers(client, "mb_rdadm", role="admin")
-        r = await client.put(f"/api/report-definitions/{did}", headers=h,
-                             json={"name": "renamed"})
-        assert r.status_code == 404, r.text
-        r = await client.delete(f"/api/report-definitions/{did}", headers=h)
-        assert r.status_code == 404, r.text
-        # super_admin(maintain = users.manage ∧ 公共)→ 200(现状保留至 W9)
-        h2 = await role_headers(client, "mb_rdsup", role="super_admin")
-        r = await client.put(f"/api/report-definitions/{did}", headers=h2,
-                             json={"name": "renamed"})
+        h = await role_headers(client, "mb_rdown")
+        r = await client.post("/api/report-definitions", headers=h, json={
+            "name": "mb-new-pub", "description": "",
+            "selection": {}, "projection": {}, "public": True})
+        assert r.status_code in (200, 201), r.text
+        did = r.json()["id"]
+        out = r.json()
+        assert out["isPublic"] is True and out["ownerId"] is not None
+        async with db_module.SessionLocal() as db:
+            row = (await db.execute(sa_select(ReportDefinitionRow).where(
+                ReportDefinitionRow.id == did))).scalar_one()
+            assert row.owner_id is not None      # 公共定义必有维护者
+            assert row.visibility == "public"
+
+    async def test_only_maintainer_edits_public_definition(
+            self, client: AsyncClient):
+        """编辑权 = 维护者:admin 与 super_admin 都不能改他人维护的
+        公共定义(W9-2 起删除 maintain 编辑面);维护者本人 200。"""
+        from tests.helpers import role_headers
+
+        h_owner = await role_headers(client, "mb_rdmt")
+        uid = 1  # 由 role_headers 直插;真实 id 从 roster 取
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.user import User
+
+        async with db_module.SessionLocal() as db:
+            uid = (await db.execute(sa_select(User.id).where(
+                User.username == "mb_rdmt"))).scalar_one()
+        did = await self._mk_definition(
+            client, public=True, owner_id=uid)
+
+        for role, name in (("admin", "mb_rdadm"), ("super_admin", "mb_rdsup")):
+            h = await role_headers(client, name, role=role)
+            r = await client.put(f"/api/report-definitions/{did}", headers=h,
+                                 json={"name": "stolen"})
+            assert r.status_code == 404, (role, r.text)
+
+        r = await client.put(f"/api/report-definitions/{did}", headers=h_owner,
+                             json={"name": "maintainer-ok"})
         assert r.status_code == 200, r.text
 
-    async def test_ownerless_definition_readable_by_everyone(self, client):
+        # 下架(maintain = users.manage ∧ 公共):super_admin 204;
+        # admin(无 users.manage)404
+        h = await role_headers(client, "mb_rdadm2", role="admin")
+        r = await client.delete(f"/api/report-definitions/{did}", headers=h)
+        assert r.status_code == 404, r.text
+        h2 = await role_headers(client, "mb_rdsup2", role="super_admin")
+        r = await client.delete(f"/api/report-definitions/{did}", headers=h2)
+        assert r.status_code == 204, r.text
+
+    async def test_legacy_ownerless_public_rows(
+            self, client: AsyncClient):
+        """遗留无主公共行(0037 回填 visibility=public,owner 保持 NULL):
+        全员可读、编辑面冻结(无人是维护者)、Admin+ 可下架。"""
         from tests.helpers import role_headers
 
-        did = await self._mk_public_definition(client)
+        did = await self._mk_definition(
+            client, public=True, owner_id=None)
         h = await role_headers(client, "mb_rdtype", role="user")
         r = await client.get(f"/api/report-definitions/{did}", headers=h)
         assert r.status_code == 200, r.text
+
+        h2 = await role_headers(client, "mb_rdsup3", role="super_admin")
+        r = await client.put(f"/api/report-definitions/{did}", headers=h2,
+                             json={"name": "frozen"})
+        assert r.status_code == 404, r.text     # 编辑冻结(写 = owner 单判)
+        r = await client.delete(f"/api/report-definitions/{did}", headers=h2)
+        assert r.status_code == 204, r.text     # 下架面(maintain)

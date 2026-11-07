@@ -1656,6 +1656,9 @@ async def get_version_distribution(
     suite = await db.get(Suite, suite_id)
     if suite is None:
         raise HTTPException(404, "suite not found")
+    # authz W9-1:补读闸(与 suite 读面同口径 —— 不可读 = 404 不泄露;
+    # 此前任何登录用户可读他人私有 suite 的成员清单与版本线)
+    await _require_read_async(db, user, suite)
     units = (suite.mode_config or {}).get("units") or {}
     items: list[dict] = []
     distribution: dict[str, dict[str, int]] = {}

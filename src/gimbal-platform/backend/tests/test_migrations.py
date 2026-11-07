@@ -151,7 +151,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0036_role_rename"
+            assert _revision(sync_url) == "0037_report_def_maintainer"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -282,3 +282,51 @@ def test_0036_revives_token_owner_ineligible():
         finally:
             eng.dispose()
 
+
+
+# ── 0037_report_def_maintainer(authz W9-2)─────────────────────────
+def test_0037_report_def_visibility_backfill():
+    """公共态从 owner_id IS NULL 改为 visibility 列:存量无主行回填
+    public(owner 保持 NULL);有主行保持 private;downgrade drop 列
+    即回旧口径(无主 = 公共)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.report_definition import ReportDefinitionRow
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            # 存量库形状:create_all 已带新列 → 手动 drop 还原 0036 侧
+            with eng.begin() as c:
+                c.execute(text(
+                    "ALTER TABLE report_definitions DROP COLUMN visibility"))
+                # 造数据:无主 = 旧公共态;有主 = 私有
+                c.execute(text(
+                    "INSERT INTO report_definitions "
+                    "(name, description, definition, owner_id) VALUES "
+                    "('legacy-pub', '', '{}', NULL), "
+                    "('owned', '', '{}', 7)"))
+            with Session(eng) as s2:
+                pass
+            command.stamp(_cfg(sync_url), "0036_role_rename")
+            command.upgrade(_cfg(sync_url), "0037_report_def_maintainer")
+
+            with eng.connect() as c:
+                rows = {r: (v, o) for r, v, o in c.execute(text(
+                    "SELECT name, visibility, owner_id "
+                    "FROM report_definitions"))}
+            # 无主 → public(owner 不动);有主 → private
+            assert rows["legacy-pub"] == ("public", None)
+            assert rows["owned"] == ("private", 7)
+
+            command.downgrade(_cfg(sync_url), "0036_role_rename")
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "report_definitions")}
+            assert "visibility" not in cols
+        finally:
+            eng.dispose()
