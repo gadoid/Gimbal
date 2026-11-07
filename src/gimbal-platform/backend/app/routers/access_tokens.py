@@ -31,7 +31,6 @@ from ..models.user import User
 from ..services import access_token as at
 from ._ownership import has_capability
 from ..services import audit as audit_svc
-from ..services import integration_runner
 from ..services.cron_expr import describe_cron
 
 router = APIRouter(prefix="/access-tokens", tags=["access-tokens"])
@@ -209,8 +208,9 @@ async def list_tokens(
     status_filter: Annotated[str | None, Query(alias="status",
                                                max_length=16)] = None,
 ) -> dict:
-    """令牌列表。``kind=personal``:本人;``kind=platform``:member+;
-    ``all=1``(admin):全部,可按属主(id 或用户名/昵称模糊,2026-11-05
+    """令牌列表。``kind=personal``:本人;``kind=platform``:ops.write
+    (存量平台令牌,C1 前维持);``all=1``(users.manage):全部,可按属主
+    (id 或用户名/昵称模糊,2026-11-05
     评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
     personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
     if all_view:

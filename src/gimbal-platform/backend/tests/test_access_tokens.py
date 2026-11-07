@@ -341,6 +341,64 @@ class TestLifecycle:
             if t["id"] == tid)
         assert item["status"] == "active"
 
+    async def test_renew_gate_owner_any_role_admin_narrowed(self, client):
+        """authz W5 写面矩阵:属主(任意角色,含 user)可续期自己的;
+        admin(ops.write,无 users.manage)代管他人个人令牌 → 404;
+        super_admin(users.manage 管理面)→ 200。"""
+        from .inbound_fixtures import mk_user
+        h_admin = await _register_role(client, "lcg_a", "admin")
+        out = await _api_token(client, h_admin, {
+            "kind": "personal", "name": "lcg", "ttlDays": 30,
+            "scope": {"aliases": [], "authIds": []}})
+        tid = (await client.get("/api/access-tokens", headers=h_admin)
+               ).json()["items"][0]["id"]
+        # admin(旧口径可代管)→ 404
+        h_other_admin = await _register_role(client, "lcg_b", "admin")
+        r = await client.post(
+            f"/api/access-tokens/{tid}/renew", headers=h_other_admin,
+            json={"ttlDays": 90})
+        assert r.status_code == 404, r.text
+        # super_admin 管理面 → 200
+        h_root = await _admin_headers(client)
+        r = await client.post(
+            f"/api/access-tokens/{tid}/renew", headers=h_root,
+            json={"ttlDays": 90})
+        assert r.status_code == 200, r.text
+        # user 角色属主管理自己的 → 200(把令牌挪给 user 属主)
+        await mk_user("lcg_u", role="user")
+        async with db_module.SessionLocal() as s2:
+            tok = await s2.get(AccessToken, tid)
+            tok.user_id = (await s2.execute(
+                sa.select(User.id).where(User.username == "lcg_u"))
+            ).scalar_one()
+            await s2.commit()
+        login = await client.post("/api/auth/login", json={
+            "username": "lcg_u", "password": "x"})
+        h_u = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r = await client.post(
+            f"/api/access-tokens/{tid}/renew", headers=h_u,
+            json={"ttlDays": 90})
+        assert r.status_code == 200, r.text
+
+    async def test_platform_list_face_retained_until_c1(self, client):
+        """authz W5:存量平台令牌的列表面维持 ops.write —— admin 200
+        (带数据),user 403(C1 退役平台时本用例随端点一并删除)。"""
+        await seed_platform_user()
+        await mk_token(kind="platform", name="pl-face")
+        h_admin = await _register_role(client, "plf_a", "admin")
+        r = await client.get("/api/access-tokens?kind=platform",
+                             headers=h_admin)
+        assert r.status_code == 200, r.text
+        assert any(t["name"] == "pl-face" for t in r.json()["items"])
+        from .inbound_fixtures import mk_user
+        await mk_user("plf_u", role="user")
+        login = await client.post("/api/auth/login", json={
+            "username": "plf_u", "password": "x"})
+        h_u = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        r = await client.get("/api/access-tokens?kind=platform", headers=h_u)
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == "capability_forbidden"
+
     async def test_renew_invalidated_409(self, client):
         h, tid, _ = await self._mk(client, "lc2")
         async with db_module.SessionLocal() as s:

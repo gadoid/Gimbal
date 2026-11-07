@@ -423,15 +423,16 @@ async def used_sets_for_adhoc(db: AsyncSession, steps: list) -> ScopeSets:
 
 
 def can_manage(user: User, token: AccessToken) -> bool:
-    """写面管理权:个人令牌 = 属主且 member+;平台令牌 = member+。
-
-    user 角色只能查看与吊销自己的令牌(由路由各端点单独放行只读面);
-    super_admin 的越属主操作(查看全部、强制失效)在路由层显式判定。
-    (authz W1 更名:原 member 级 = admin、原 admin 级 = super_admin。)
+    """写面管理权(authz W5,与路由 ``_require_manage`` 同口径):
+    个人令牌 = 属主(任意角色)∨ users.manage(管理面);平台令牌 =
+    ops.write(C1 退役存量前维持)。消费面:run_precheck 的 tokenId
+    预检(user 属主自己的令牌可按其范围预检)。
     """
+    from ..routers._ownership import has_capability
+
     if token.kind == PLATFORM_KIND:
-        return user.role in ("admin", "super_admin")
-    return user.id == token.user_id and user.role in ("admin", "super_admin")
+        return has_capability(user, "ops.write")
+    return user.id == token.user_id or has_capability(user, "users.manage")
 
 
 def can_view(user: User, token: AccessToken) -> bool:
