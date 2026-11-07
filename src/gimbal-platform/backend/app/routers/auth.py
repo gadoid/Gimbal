@@ -168,6 +168,7 @@ async def change_password(
             detail={"code": "bad_old_password", "msg": "旧密码不正确"},
         )
     row.password_hash = hash_password(payload.new_password)
+    row.must_change_password = False
     invalidated = 0
     if payload.invalidate_tokens:
         # 个人令牌全部落库失效(§3.6):停用/改密是仅有的两个失效入口;
@@ -263,4 +264,5 @@ async def me(user: CurrentUser) -> MeOut:
     from ._ownership import capabilities_of
 
     return MeOut(user=_user_public(user),
-                 capabilities=capabilities_of(user.role))
+                 capabilities=capabilities_of(user.role),
+                 must_change_password=bool(user.must_change_password))

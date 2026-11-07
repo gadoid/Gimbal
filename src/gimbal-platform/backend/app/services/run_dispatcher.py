@@ -1148,6 +1148,15 @@ async def dispatch_target(
                 "datasets": fanout_datasets,
                 "injections": selected_entries,
                 "owner_id": user_id,
+                # authz W6:场景属主随任务下发,内置凭证主规则在
+                # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
+                # adhoc(临时调用)无存储属主 → None = 不判(payload
+                # 由调用者即席提供,执行人天然是作者)
+                "scenario_owner_id": (
+                    (_sr.owner_id if (_sr := await get_row(
+                        db, target.scenario_id)) is not None else None)
+                    if getattr(target, "kind", "scenario") == "scenario"
+                    and target.scenario_id else None),
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,
@@ -1752,6 +1761,7 @@ async def _fanout(
     service_bindings: dict[str, ServiceBinding] | None = None,
     chain: str = "legacy",
     debug: "dict | None" = None,
+    scenario_owner_id: int | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
@@ -1887,7 +1897,8 @@ async def _fanout(
     _ui_fs = ((scenario_payload or {}).get("ui") or {}).get("fieldStates") or {}
     prep = await prepare_exec(
         db_factory, scenario_payload, owner_id=owner_id,
-        ui_field_states=_ui_fs, resolve_mode="single", with_auth=False)
+        ui_field_states=_ui_fs, resolve_mode="single", with_auth=False,
+        scenario_owner_id=scenario_owner_id)
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。

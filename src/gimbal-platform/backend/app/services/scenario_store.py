@@ -351,6 +351,64 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     await db.commit()
 
 
+
+# ── authz W6:明文凭证不随公开/拷贝扩散(方案 9.1 附加清理 / 10.6)────
+# 列名敏感启发与 scenario_import._SENSITIVE_RE 同源(密改一处两处同步:
+# 导入模块 import 本常量,避免两张正则漂移)
+import re as _re
+
+SENSITIVE_COLUMN_RE = _re.compile(
+    r"(password|secret|token|key)", _re.IGNORECASE)
+
+
+def strip_builtin_credentials(payload: dict) -> dict:
+    """删除 ``definition.config.users``(内置凭证基座),原地返回。
+
+    剥离时机(评审 E1 定案):
+    * 公开(发布)—— 订阅执行引用活的公共场景、无拷贝动作可剥,
+      公开时机剥 = 订阅路径同一道闸;
+    * 拷贝(copy_scenario 单点,覆盖「复制到我的 / 分享拷贝 / 引用
+      转副本 / suite fork」全部入口)—— 接收者库不落明文。
+    """
+    definition = payload.get("definition")
+    if isinstance(definition, dict):
+        cfg = definition.get("config")
+        if isinstance(cfg, dict) and cfg.get("users"):
+            cfg["users"] = {}
+    return payload
+
+
+def strip_sensitive_columns(rows: list) -> list:
+    """数据集行敏感列剥离(10.6):键名命中 SENSITIVE_COLUMN_RE 的列
+    删除,非敏感列保留;返回新列表(不改入参)。"""
+    return [
+        {k: v for k, v in (row or {}).items()
+         if not SENSITIVE_COLUMN_RE.search(str(k))}
+        for row in (rows or [])
+    ]
+
+
+async def strip_credentials_for_public(db: AsyncSession, row) -> None:
+    """场景公开前的凭证剥离(config.users + 数据集敏感列)。
+
+    修改**未提交** —— 由调用方事务收口(set_visibility 内部 commit;
+    suites 级联发布与自身 UPDATE 同事务)。幂等。
+    """
+    import copy as _copy
+
+    if (row.payload or {}).get("definition", {}).get("config", {}).get("users"):
+        payload = _copy.deepcopy(row.payload)
+        strip_builtin_credentials(payload)
+        row.payload = payload          # JSON 列需整体再赋值才被追踪
+    dss = (await db.execute(
+        select(ComposerDataSet).where(
+            ComposerDataSet.scenario_id == row.scenario_id))
+    ).scalars().all()
+    for ds in dss:
+        if ds.rows:
+            ds.rows = strip_sensitive_columns(ds.rows)
+
+
 async def set_visibility(
     db: AsyncSession, scenario_id: str, visibility: str
 ) -> Scenario:
@@ -359,6 +417,10 @@ async def set_visibility(
         raise ValueError(f"bad_visibility: {visibility}")
     row = await _get_row(db, scenario_id)
     row.visibility = visibility
+    if visibility == "public":
+        # authz W6:公开即剥离(明文凭证不进公共区;作者副本同样剥 ——
+        # 10-08 决策把「设为公共」定为凭证出库的闸口)
+        await strip_credentials_for_public(db, row)
     await db.commit()
     await db.refresh(row)
     return await to_read_shape(db, row)
@@ -427,6 +489,9 @@ async def copy_scenario(
     new_sid = f"{scenario_id}-copy-{suffix}"[:128]
 
     payload = _copy.deepcopy(src.payload or {})
+    # authz W6:跨属主拷贝剥离内置凭证(单点:复制到我的 / 分享拷贝 /
+    # 引用转副本 / suite fork 全走这里;E1 —— 订阅不复制,无此路径)
+    strip_builtin_credentials(payload)
     copied_name = new_name or ""
     definition = payload.get("definition")
     if isinstance(definition, dict):
@@ -462,7 +527,7 @@ async def copy_scenario(
             scenario_id=new_sid,
             name=ds.name,
             description=ds.description,
-            rows=_copy.deepcopy(ds.rows or []),
+            rows=strip_sensitive_columns(_copy.deepcopy(ds.rows or [])),
             # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉
             # 场景的解锁语义静默丢失
             var_unlocks=list(ds.var_unlocks or []),

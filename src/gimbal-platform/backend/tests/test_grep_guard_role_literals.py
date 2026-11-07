@@ -54,8 +54,8 @@ _ALLOWLIST: frozenset[str] = frozenset({
     'routers/users.py:233:if caller.role != "super_admin":',
     'routers/users.py:248:and target.role == "super_admin"',
     'routers/users.py:372:if caller.role != "super_admin" and caller.id != target.id:',
-    'routers/users.py:450:if caller.role != "super_admin":',
-    'routers/users.py:456:if target.role == "super_admin":',
+    'routers/users.py:500:if caller.role != "super_admin":',
+    'routers/users.py:506:if target.role == "super_admin":',
 })
 
 

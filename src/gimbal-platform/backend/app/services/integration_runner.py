@@ -1035,7 +1035,10 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     db_module.SessionLocal, scen.payload,
                     owner_id=holder or -1, bindings=bindings,
                     ui_field_states=_ui_fs,
-                    auth_policy="strict", resolve_mode="none")
+                    auth_policy="strict", resolve_mode="none",
+                    # authz W6 主规则:订阅执行(holder ≠ 场景属主)不带
+                    # 作者内置凭证;平台身份执行同理(executor=__platform__)
+                    scenario_owner_id=scen.owner_id)
             except MissingAuthAliases as e:
                 # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
                 # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error

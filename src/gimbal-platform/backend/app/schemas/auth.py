@@ -129,3 +129,6 @@ class MeOut(BaseModel):
     # authz W2:按表 A 求出的能力列表(_ownership.capabilities_of)。
     # 前端 can() 的唯一依据(W8 迁移后取代 role/isAdmin 判断)。
     capabilities: list[str] = Field(default_factory=list)
+    # authz W6:管理员重置密码后的强制改密位(前端路由守卫的跳转
+    # 依据,比等 403 更早;改密成功即复位)
+    must_change_password: bool = False

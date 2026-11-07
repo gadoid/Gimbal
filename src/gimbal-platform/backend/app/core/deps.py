@@ -40,8 +40,26 @@ async def _load_jwt_user(db: AsyncSession, token: str) -> User:
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> User:
-    return await _load_jwt_user(db, token)
+    user = await _load_jwt_user(db, token)
+    # authz W6 只能改密门:must_change_password 为真 → 一律 403
+    # password_change_required,白名单三口(评审 R4:前端登录态靠
+    # /auth/me 证明 —— 拦了 me,改密页永远到不了):
+    #   /api/auth/me(响应带 must_change_password,路由守卫跳转依据)
+    #   /api/auth/refresh(会话续期)
+    #   /api/auth/change-password(唯一的出口)
+    # 令牌路径不进此门(重置已把个人令牌整体失效,天然覆盖)。
+    if user.must_change_password and request.url.path not in (
+            "/api/auth/me", "/api/auth/refresh", "/api/auth/change-password"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "password_change_required",
+                "message": "密码已被重置,请先修改密码后再使用其他功能",
+            },
+        )
+    return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

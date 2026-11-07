@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import principal_or_user
-from ._ownership import can_read_scenario
+from ._ownership import can_read_scenario_row
 from ..models import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..services import run_dispatcher, scenario_store, scheme_store
@@ -76,6 +76,13 @@ class PrecheckResult(BaseModel):
     # §7.1 范围外目标(直连地址/内置认证/白名单外策略,只记录不拦截)
     out_of_scope_targets: list[dict] = Field(
         default_factory=list, alias="outOfScopeTargets")
+    # authz W6 预检告警(N9/E2):内置凭证主规则生效后,被分享人经
+    # 引用执行不再带走作者凭证 —— 三条件同时满足才列出(钉「不吵」):
+    # ① 执行人 ≠ 场景属主;② 场景 config.users 非空;③ 这些用户
+    # (别名)在执行人自己的认证会话里解析不到。值为解析不到的别名
+    # 清单;空 = 无告警
+    builtin_auth_shadowed: list[str] = Field(
+        default_factory=list, alias="builtinAuthShadowed")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -101,20 +108,45 @@ async def precheck_run(
         if token is None or not at_svc.can_manage(user, token):
             token = None      # 不可管理 = 当作没传(不带范围预检,不 404 连坐;
                               # §5.3:JWT 只能预检自己可管理的令牌)
+    from ..services import run_prepare as _rp
+
+    async def _builtin_shadowed(scen_row) -> list[str]:
+        """authz W6 预检告警(N9/E2):三条件同时满足才告警(防噪)。
+
+        ① 执行人 ≠ 场景属主(内置凭证主规则生效面);② 场景
+        config.users 非空;③ 这些用户(别名)在执行人自己的认证会话
+        里解析不到 —— 主规则已把作者凭证当空,执行人自己又没有,跑
+        起来必在认证段失败,提前说清。任一不满足 = 空清单。
+        """
+        uid = user.id if user is not None else None
+        if uid is None or scen_row.owner_id is None or uid == scen_row.owner_id:
+            return []                       # ① 不满足(含令牌匿名面兜底)
+        users = _rp.built_in_users(scen_row.payload)
+        if not users:
+            return []                       # ② 不满足
+        from ..core import db as _dbm
+
+        # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混
+        resolved = await _rp.resolve_exec_auths(
+            _dbm.SessionLocal, uid, sorted(users))
+        return sorted(set(users) - {a.alias for a in resolved})   # ③
+
     out: list[PrecheckResult] = []
     for item in items:
         scen_row = await scenario_store.get_row(db, item.scenario_id)
-        if scen_row is None or not can_read_scenario(
-            user,
-            owner_id=scen_row.owner_id,
-            visibility=scen_row.visibility or "private",
-        ):
+        # authz W6:读闸升为 ref-aware(can_read_scenario_row)—— 引用
+        # 被分享人本就可跑(§7.6),预检的 found 与内置凭证告警都应
+        # 服务到他们;纯判会把 ref 读者当「不存在」。
+        if scen_row is None or not await can_read_scenario_row(
+                db, user, scen_row):
             out.append(PrecheckResult(
                 scenario_id=item.scenario_id, scheme_id=item.scheme_id, found=False,
                 scheme_found=False, scheme_valid=False,
             ))
             continue
-        out.append(await _precheck_one(db, scen_row, item, token=token))
+        one = await _precheck_one(db, scen_row, item, token=token)
+        one.builtin_auth_shadowed = await _builtin_shadowed(scen_row)
+        out.append(one)
     return out
 
 

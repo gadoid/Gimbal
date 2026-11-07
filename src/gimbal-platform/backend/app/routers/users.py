@@ -377,6 +377,31 @@ async def reset_password(
 
     new_pw = _gen_random_password(12)
     target.password_hash = hash_password(new_pw)
+    # authz W6(方案 10.1):重置不再是接管通道 —— 三件套:
+    # ① must_change_password(只能改密门,deps.CurrentUser 403
+    #    password_change_required,白名单 /auth/me//auth/refresh/
+    #    /auth/change-password);
+    # ② 本人全部个人令牌落库失效(REASON_PASSWORD,与自服务改密同款);
+    # ③ token_version + 1(旧 JWT access/refresh 整体失效)。
+    # 临时密码仍返回给管理员一次(R8 定死:当前没有其他通道交给用户,
+    # 方案接受「能接管、做不到悄悄接管」——审计 + 通知 + 强制改密在)。
+    from datetime import datetime, timezone as _tz
+
+    from sqlalchemy import update as _sa_update
+
+    from ..models.access_token import AccessToken
+    from ..services import access_token as at_svc
+
+    target.must_change_password = True
+    target.token_version = int(target.token_version or 0) + 1
+    res = await db.execute(_sa_update(AccessToken).where(
+        AccessToken.user_id == target.id,
+        AccessToken.kind == at_svc.PERSONAL_KIND,
+        AccessToken.revoked_at.is_(None),
+        AccessToken.invalidated_at.is_(None),
+    ).values(invalidated_at=datetime.now(_tz.utc),
+             invalidated_reason=at_svc.REASON_PASSWORD))
+    invalidated = int(res.rowcount or 0)
     await db.commit()
     from ..services import audit as audit_svc
 
@@ -388,6 +413,31 @@ async def reset_password(
         resource_name=target.display_name or target.username,
         detail={"username": target.username, "self": caller.id == target.id},
     )
+    # 通知本人(强制改密 + 令牌失效两件事都说清)
+    try:
+        from ..services.notifications import create_notification
+
+        await create_notification(
+            db, user_id=target.id, type_="account",
+            title="密码已被管理员重置",
+            body=("管理员重置了你的密码,请使用临时密码登录后立即修改;"
+                  f"你的 {invalidated} 张个人令牌已同步失效(经它们注册的"
+                  "任务已暂停,改密后到「个人设置 → 访问令牌」重新生成)"),
+            link="/profile#security")
+    except Exception:  # noqa: BLE001 — 通知是增强,不阻断
+        pass
+    # 逐令牌暂停注册方实例(与自服务改密同款,§3.4)
+    toks = (await db.execute(select(AccessToken).where(
+        AccessToken.user_id == target.id,
+        AccessToken.kind == at_svc.PERSONAL_KIND,
+        AccessToken.invalidated_reason == at_svc.REASON_PASSWORD,
+        AccessToken.invalidated_at.is_not(None),
+    ))).scalars().all()
+    for tok in toks:
+        await at_svc.pause_token_instances(
+            db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
+            "令牌因密码重置失效;重新生成后任务自动恢复")
+    await db.commit()
     return {
         "user_id": target.id,
         "username": target.username,

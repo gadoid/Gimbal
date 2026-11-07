@@ -155,6 +155,7 @@ async def _materialized_executable(
     ui: dict | None,
     owner_id: int,
     overlay: ExportOverlay | None = None,
+    scenario_owner_id: int | None = None,
 ) -> dict:
     """plate /convert + 执行同源物化 —— preview-plate 与 /export 共用(W1)。
 
@@ -198,7 +199,11 @@ async def _materialized_executable(
             run_dispatcher.session_factory, {"definition": clean},
             owner_id=owner_id, bindings=service_bindings,
             ui_field_states=(ui or {}).get("fieldStates") or {},
-            resolve_mode="none", with_auth=overlay is not None)
+            resolve_mode="none", with_auth=overlay is not None,
+            # authz W6 主规则:落库行的导出走 owner_id(执行人)≠ 属主
+            # ⇒ 内置 users 当空;preview-plate 的草稿不传(None = 不判,
+            # 草稿由本人即席提供,执行人天然是作者)
+            scenario_owner_id=scenario_owner_id)
     except run_prepare.AuthResolveError as e:
         # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
         # 副作用,直接拒答 422 而非 500)。
@@ -969,6 +974,7 @@ async def export_scenario(
             definition=definition_from_payload(payload),
             ui=payload.get("ui") or {},
             owner_id=user.id,
+            scenario_owner_id=row.owner_id,
         )
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(

@@ -177,8 +177,22 @@ async def resolve_exec_auths(
     return resolved
 
 
-def built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
-    """场景 definition.config.users(merge 策略保留基座)。"""
+def built_in_users(
+    scenario_payload: dict | None, *,
+    executor_id: int | None = None,
+    scenario_owner_id: int | None = None,
+) -> dict[str, Any]:
+    """场景 definition.config.users(merge 策略保留基座)。
+
+    authz W6 主规则(评审 R3):内置凭证**只在执行人 == 场景属主时
+    生效**,其余(share_ref 引用执行 / 订阅执行 / 平台身份 / 存量公开
+    场景)一律当空 —— 一条规则覆盖全部执行路径,不需要数据迁移。
+    两参缺省 None = 不判(展示/清单面,如 §7.1 的内置认证清单与预检
+    的「场景有内置凭证」判定要看原始内容)。
+    """
+    if (executor_id is not None and scenario_owner_id is not None
+            and executor_id != scenario_owner_id):
+        return {}
     def_cfg = definition_from_payload(scenario_payload).get("config") or {}
     users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
     return dict(users or {})
@@ -292,6 +306,7 @@ async def prepare_exec(
     auth_policy: str = "lenient",
     resolve_mode: str = "single",
     with_auth: bool = True,
+    scenario_owner_id: int | None = None,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
@@ -323,7 +338,11 @@ async def prepare_exec(
 
     definition = definition_from_payload(scenario_payload)
     steps = definition.get("steps") or []
-    prep = ExecPrep(built_in_users=built_in_users(scenario_payload))
+    # authz W6 主规则:executor(owner_id = 凭证池归属,即执行人)≠
+    # 场景属主 ⇒ 内置 users 基座当空(R3)
+    prep = ExecPrep(built_in_users=built_in_users(
+        scenario_payload, executor_id=owner_id,
+        scenario_owner_id=scenario_owner_id))
 
     # ①② 凭证清单 + 解析(owner 级短会话);清单扫描源含 config.setup/
     # teardown(webhook v4 §3.2 —— setup 引用的凭证同时进清单与注入)

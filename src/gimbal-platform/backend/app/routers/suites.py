@@ -516,6 +516,8 @@ async def add_members(
                                 "them and their datasets)"),
                     "pendingPublish": [sid]})
             scen.visibility = "public"
+            # authz W6:级联公开同闸 —— 内置凭证与数据集敏感列剥离
+            await scenario_store.strip_credentials_for_public(db, scen)
         db.add(SuiteMember(
             suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
             sort=next_sort,
@@ -1541,6 +1543,8 @@ async def publish_suite(
         if scen is not None and (scen.visibility or "private") != "public":
             unpublished.append(m.scenario_id)
             scen.visibility = "public"
+            # authz W6:级联公开同闸 —— 内置凭证与数据集敏感列剥离
+            await scenario_store.strip_credentials_for_public(db, scen)
     suite.visibility = "public"
     await db.commit()
     await db.refresh(suite)
