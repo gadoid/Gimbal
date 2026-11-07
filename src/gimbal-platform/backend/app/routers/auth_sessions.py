@@ -315,6 +315,9 @@ async def test_auth(
 ) -> TestResult:
     """Dial the stored credential against ``url`` (probe service)."""
     a = await _get_owned(session, auth_id, user.id)
+    if not a.url:
+        # authz C2:静态令牌方式无登录端点,不探测(令牌直接施加)
+        return TestResult(ok=True, message="静态令牌认证:无登录流程,不做拨测")
     try:
         username = fernet_decrypt(a.username_enc)
         password = fernet_decrypt(a.password_enc)

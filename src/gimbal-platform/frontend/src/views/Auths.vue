@@ -437,7 +437,8 @@ const schema = toTypedSchema(z.object({
   alias: z.string()
     .min(1, '请输入 alias')
     .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
-  url: z.string().min(1, '请输入登录 URL').url('URL 格式不正确'),
+  // authz C2:静态令牌认证(自举系统 platform 等)—— 登录 URL 可空
+  url: z.string().url('URL 格式不正确').or(z.literal('')),
   username: z.string().min(1, '请输入 username'),
   // 编辑态可留空(= 不修改) — 创建态必填由 onSubmitForm 补判
   password: z.string(),

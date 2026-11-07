@@ -75,7 +75,10 @@ class AuthReferencesOut(BaseModel):
 
 class AuthSessionCreateIn(BaseModel):
     alias: str = Field(min_length=1, max_length=64)
-    url: str = Field(min_length=1, max_length=512)
+    # authz C2:静态令牌认证方式(自举系统 platform 等)—— 免登录 URL,
+    # password 存令牌本体,执行期按 token_type 直接施加,不走登录。
+    # url 留空 = 静态方式;登录式(url 非空)与既有行为逐字段一致。
+    url: str = Field(default="", max_length=512)
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
     token_type: str = Field(default="Bearer")
@@ -83,7 +86,7 @@ class AuthSessionCreateIn(BaseModel):
 
 
 class AuthSessionPatchIn(BaseModel):
-    url: str | None = Field(default=None, min_length=1, max_length=512)
+    url: str | None = Field(default=None, max_length=512)
     username: str | None = Field(default=None, min_length=1)
     password: str | None = Field(default=None, min_length=1)
     token_type: str | None = None
