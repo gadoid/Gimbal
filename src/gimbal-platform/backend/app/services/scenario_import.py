@@ -38,18 +38,26 @@ from .run_materialize import referenced_services
 MAX_BODY_BYTES = 5 * 1024 * 1024
 _SCENARIO_ID_RE = re.compile(r"^sc-[a-z0-9-]+$")
 # 敏感路径命名启发(方案 §4:面无 ui_kind 类型信息时的退化判定,
-# 漏检残余已拍板接受 —— 内网 + 当前面基本无密码类字段)
-_SENSITIVE_RE = re.compile(r"(password|secret|token|key)", re.IGNORECASE)
+# 漏检残余已拍板接受 —— 内网 + 当前面基本无密码类字段)。
+# authz W6 单源化:与数据集敏感列共用 scenario_store.SENSITIVE_COLUMN_RE
+# (同一启发,密改一处两处同步;W6 提交曾声称同源但未落地,review 补)
+_SENSITIVE_RE = scenario_store.SENSITIVE_COLUMN_RE
 
 _MISSING = object()
 
 
 class ImportRejected(Exception):
-    """可映射的导入错误(code + http + message),路由层统一转 HTTPException。"""
+    """可映射的导入错误(code + http + message),路由层统一转 HTTPException。
 
-    def __init__(self, code: str, http: int, message: str):
+    ``capability``(可选):能力门错误(9.7 统一契约)附带的能力名,
+    路由层并入 detail(authz W7:alias.write)。
+    """
+
+    def __init__(self, code: str, http: int, message: str,
+                 capability: str | None = None):
         super().__init__(message)
         self.code, self.http, self.message = code, http, message
+        self.capability = capability
 
 
 # ── 体积门 + 解析(方案 §1/§3.2-1:原始 Request,解析前拒绝)────────
@@ -443,6 +451,19 @@ async def land(
                 ("reuse", "map", "create") or not m.get("serviceKey")):
             raise ImportRejected("invalid_file", 422, f"非法映射项: {m!r}")
         by_key[m["serviceKey"]] = m
+
+    # authz W7:decision=create(在别名注册表新建条目)需 alias.write
+    # 能力(方案 §2.1「Admin 维护服务别名注册表」;导入门已放开给
+    # 全体用户,建名仍是 Admin 面)。任一映射要求 create 而无能力 →
+    # 整体 403 不落库(单事务语义;此时还没做任何 plate/本地写)。
+    from ..routers._ownership import has_capability
+
+    if any(m["decision"] == "create" for m in by_key.values()) and not (
+            has_capability(user, "alias.write")):
+        raise ImportRejected(
+            "capability_forbidden", 403,
+            "新建别名需要 alias.write 能力;请改用「映射到已有别名」",
+            capability="alias.write")
 
     # ── 事务外:plate 调用(P7-④)──────────────────────────────────
     try:

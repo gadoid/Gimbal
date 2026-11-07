@@ -6,12 +6,15 @@
 #
 # 能力语义(v1,W2 收编的门面;W3-W9 只增不改语义):
 #   users.manage     用户管理(开号/角色/停用/删除/重置密码)——原 admin 级
-#   ops.write        技术运营(适配/别名/环境/导入/令牌签发/公告面)——原 member+ 级
+#   ops.write        技术运营(适配/别名 CRUD/环境/公告面)——原 member+ 级
+#                     (W5 令牌签发、W7 导入开放至全体用户,不再覆盖)
+#   alias.write      别名注册表新建条目(导入 decision=create 建名)——
+#                     Admin 职责(§2.1);W7 起导入门放开后建名仍是 Admin 面
 #   platform.alerts  平台身份事件告警受众 —— 与 ops.write 同口径
 table_a:
   user: []                       # user 级:自有内容读写不走表 A(对象级规则在表 B,W3 起)
-  admin: [ops.write, platform.alerts]
-  super_admin: [users.manage, ops.write, platform.alerts]
+  admin: [ops.write, alias.write, platform.alerts]
+  super_admin: [users.manage, ops.write, alias.write, platform.alerts]
 
 # 具名门 → 能力映射(deps.py;名字保留是 W8 前的兼容期)
 gates:
@@ -22,6 +25,7 @@ gates:
 roles_with:
   users.manage: [super_admin]
   ops.write: [admin, super_admin]
+  alias.write: [admin, super_admin]
   platform.alerts: [admin, super_admin]
 
 # 表 B(authz W3):对象 × 动词 → 放行谓词(o=owner 属主 / pub=public

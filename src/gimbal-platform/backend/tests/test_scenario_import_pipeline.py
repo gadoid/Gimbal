@@ -2,10 +2,12 @@
 
 覆盖:析出三分支(复用/映射/新建)、P5「有接管者才清除」不变量、
 敏感路径不进 carry、config.users 清空、URL 清除条件、ID 重铸、
-mapping_stale、user 角色 403、体积门、格式判别。
+mapping_stale、authz W7 门(User 可导入 + create 需 alias.write)、
+体积门、格式判别。
 """
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import select
 
 from app.core import db as db_module
@@ -267,17 +269,81 @@ async def test_land_mapping_stale(client, plate_mock: PlateMock):
         ).scalar_one_or_none() is None
 
 
-async def test_import_user_role_403(client, plate_mock: PlateMock):
+# ── authz W7:导入门开放 + alias.write 能力闸(方案 §七/§2.1)───────
+# 原「user 角色 403」门删除(review B17:现状导入 member+ 专属);新口径
+# = User 可导入,但 decision=create(注册表建名)需 alias.write 能力。
+
+@pytest.mark.parametrize("decision", ["map", "reuse"])
+async def test_import_open_to_user_map_reuse(
+        client, plate_mock: PlateMock, decision):
+    """User(原 403 面)precheck 200 + map/reuse 到已有服务全流程 201。"""
     _mock_faces(plate_mock)
-    await register_and_login(client, "admin0", "admin0pass123")  # 首个= admin
+    async with db_module.SessionLocal() as db:
+        # 三路径本机等值种子:reuse 全命中;map 只要有接管者即可
+        await carry_store.put_bindings(
+            db, "fin-service",
+            {"$.remark": "压测-张三", "$.appCode": "TRACE-V2",
+             "$.api_token": "sk-live"},
+            updated_by_id=None, updated_by_name="seed")
+        await db.commit()
+    await register_and_login(client, "admin0", "admin0pass123")  # 占首注位
     plain = await register_and_login(client, "plainuser", "pw123456")  # role=user
-    for path, kwargs in (
-        ("/api/scenarios/import/precheck", {"json": {"bundle": _bundle()}}),
-        ("/api/scenarios/import",
-         {"json": {"bundle": _bundle(), "mappings": []}}),
-    ):
-        r = await client.post(path, headers=plain, **kwargs)
-        assert r.status_code == 403, (path, r.status_code)
+
+    r = await client.post("/api/scenarios/import/precheck", headers=plain,
+                          json={"bundle": _bundle()})
+    assert r.status_code == 200, r.text          # 门已放开(不再是 403)
+    assert r.json()["blocking"] is False
+
+    r = await client.post("/api/scenarios/import", headers=plain, json={
+        "bundle": _bundle(),
+        "mappings": [{"serviceKey": "fin-service", "decision": decision}]})
+    assert r.status_code == 201, r.text
+    assert r.json()["scenarioId"] == _SCENARIO_ID
+    defn = await _stored_definition(_SCENARIO_ID)
+    # 未接管路径两种决策都保留字面值(keep_me 无声明,永不被清)
+    assert defn["steps"][0]["request"]["body"]["keep_me"] == "always"
+
+
+async def test_import_user_create_requires_alias_write(
+        client, plate_mock: PlateMock):
+    """decision=create 建名仍需 alias.write(§2.1 Admin 职责):User 403
+    capability_forbidden(9.7 契约,含 capability 字段),整体不落库。"""
+    _mock_faces(plate_mock)
+    await register_and_login(client, "admin0", "admin0pass123")
+    plain = await register_and_login(client, "plainuser", "pw123456")
+    r = await client.post("/api/scenarios/import", headers=plain, json={
+        "bundle": _bundle(),
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}]})
+    assert r.status_code == 403, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "capability_forbidden"
+    assert detail["capability"] == "alias.write"
+    async with db_module.SessionLocal() as db:
+        assert (await db.execute(select(ServiceAlias).where(
+            ServiceAlias.alias_name == "fin-service-qa"))
+        ).scalar_one_or_none() is None
+        assert (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == _SCENARIO_ID))
+        ).scalar_one_or_none() is None
+
+
+async def test_import_admin_create_still_works(client, plate_mock: PlateMock):
+    """Admin(原 member 级)有 alias.write:create 照旧建名(test_land_
+    create_branch 钉的是首注 super_admin,这里钉显式 admin 角色)。"""
+    _mock_faces(plate_mock)
+    from .helpers import role_headers
+
+    h = await role_headers(client, "imp_admin7", role="admin")
+    r = await client.post("/api/scenarios/import", headers=h, json={
+        "bundle": _bundle(),
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}]})
+    assert r.status_code == 201, r.text
+    async with db_module.SessionLocal() as db:
+        assert (await db.execute(select(ServiceAlias).where(
+            ServiceAlias.alias_name == "fin-service-qa"))
+        ).scalar_one() is not None
 
 
 # ── 一致性判定 + 按步骤清除(合入评估 §1 修复,Codfish 规则)──────

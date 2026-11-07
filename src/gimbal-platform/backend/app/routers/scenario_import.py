@@ -1,7 +1,8 @@
 """场景导入流水线端点(W3/W4,场景导入 v2.3 方案 §3)。
 
-* 权限 ``MemberUser``(P1:导入含建别名/写 carry,与别名写权限一致;
-  旧 R19 端点的 ``CurrentUser`` 随本模块上线收紧);
+* 权限 ``CurrentUser``(authz W7:导入开放至全体用户 —— User 可导入
+  并映射到已有别名;``decision=create`` 建新别名另需 ``alias.write``
+  能力,services 层 land() 拒 403 capability_forbidden);
 * 体积门在 ``scenario_import.read_bundle``(N3:原始 Request +
   Content-Length 预检 + 限长读,json.loads 之前拒绝);
 * 注册必须在 scenarios.router 之前(``/scenarios/import`` 先于
@@ -16,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import MemberUser
+from ..core.deps import CurrentUser
 from ..services import scenario_import
 
 router = APIRouter(prefix="/scenarios/import", tags=["scenarios"])
@@ -25,8 +26,10 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 def _http(e: scenario_import.ImportRejected) -> HTTPException:
-    return HTTPException(
-        status_code=e.http, detail={"code": e.code, "message": e.message})
+    detail: dict = {"code": e.code, "message": e.message}
+    if e.capability:                       # 9.7 能力门契约:附能力名(W7)
+        detail["capability"] = e.capability
+    return HTTPException(status_code=e.http, detail=detail)
 
 
 async def _read(request: Request) -> dict:
@@ -38,7 +41,7 @@ async def _read(request: Request) -> dict:
 
 @router.post("/precheck")
 async def import_precheck(
-    user: MemberUser, db: DbSession, request: Request,
+    user: CurrentUser, db: DbSession, request: Request,
 ) -> dict:
     """纯读预检(方案 §3.1):结论走 200 信封,fatal 作为字段返回。"""
     body = await _read(request)
@@ -52,7 +55,7 @@ async def import_precheck(
 
 @router.post("", status_code=201)
 async def import_scenario(
-    user: MemberUser, db: DbSession, request: Request,
+    user: CurrentUser, db: DbSession, request: Request,
 ) -> dict:
     """一次性落库(方案 §3.3):``{bundle, idMode?, newId?, mappings?}``。"""
     body = await _read(request)

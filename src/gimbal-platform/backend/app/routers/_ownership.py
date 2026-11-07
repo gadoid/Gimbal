@@ -32,8 +32,13 @@ from ..models.composer_scenario import ComposerScenario
 CAPABILITIES: dict[str, frozenset[str]] = {
     # 用户管理(开号/角色/停用/删除/重置密码)—— 原 admin 级专属
     "users.manage": frozenset({"super_admin"}),
-    # 技术运营(适配/别名/环境/导入/令牌签发/公告面)—— 原 member+ 级
+    # 技术运营(适配/别名 CRUD/环境/公告面)—— 原 member+ 级(W5 起
+    # 令牌签发、W7 起导入已开放至全体用户,不再由此能力覆盖)
     "ops.write": frozenset({"admin", "super_admin"}),
+    # 别名注册表新建条目(导入 decision=create 建名)—— 方案 §2.1
+    # 「Admin 维护服务别名注册表」;authz W7:导入门放开给 User 后,
+    # 建名仍是 Admin 面(User 只能 reuse/map 到已有别名)
+    "alias.write": frozenset({"admin", "super_admin"}),
     # 平台身份事件告警受众 —— 与 ops.write 同口径(原 member+ 扇出)
     "platform.alerts": frozenset({"admin", "super_admin"}),
 }
@@ -291,19 +296,5 @@ async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
     return await has_scenario_ref(db, user.id, row.scenario_id)
 
 
-async def can_read_suite(db, user: Any, suite: Any) -> bool:
-    """suite 读判定(表 B suite.read):public ∨ 属主 ∨ suite 引用
-    (W3 起 admin 无旁路)。"""
-    if _user_matches(user, suite.owner_id):
-        return True
-    if (suite.visibility or "private") == "public":
-        return True
-    return await has_suite_ref(db, user.id, suite.id)
-
-
-async def can_run_suite(db, user: Any, suite: Any) -> bool:
-    """suite 执行判定(表 B suite.run):属主 ∨ suite 引用
-    (运行时再逐成员 can_run_scenario;W3 起 admin 无旁路)。"""
-    if _user_matches(user, suite.owner_id):
-        return True
-    return await has_suite_ref(db, user.id, suite.id)
+# (W3 收编后 suite 读写判定统一走 can()/can_pure() 查表 B;曾有的
+# can_read_suite/can_run_suite 便捷包装零消费者,authz W6 review 删除)

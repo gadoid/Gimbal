@@ -173,7 +173,13 @@ class TestStripping:
 
     async def test_import_strips_users_regression(self):
         """④ 导入路径既有剥离(P2:config.users 不落库)的回归钉。"""
+        from app.services import scenario_import, scenario_store
         from app.services.scenario_store import strip_builtin_credentials
+
+        # 敏感启发单源钉(W6 review):导入的敏感路径正则与数据集
+        # 敏感列正则是同一对象,防两张表漂移
+        assert (scenario_import._SENSITIVE_RE
+                is scenario_store.SENSITIVE_COLUMN_RE)
 
         payload = {"definition": {"config": {
             "users": dict(_USERS), "timePolicy": {}}}}
