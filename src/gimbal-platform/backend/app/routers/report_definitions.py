@@ -134,8 +134,7 @@ async def create_definition(
     return _to_out(row).model_dump()
 
 
-async def _get_owned(db: AsyncSession, user, did: int,
-                     *, allow_public_read=True) -> ReportDefinitionRow:
+async def _get_owned(db: AsyncSession, user, did: int) -> ReportDefinitionRow:
     # 表 B report_definition.read:owner ∨ public(公共行全员可读;
     # 修改 = 维护者单判 / 删除的 maintain 面 = users.manage ∧ 公共,在写端点另判)。
     # authz W3:角色字面量收编进表 B,super_admin 中间分支本就冗余删除。
