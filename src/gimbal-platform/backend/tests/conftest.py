@@ -117,6 +117,13 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
             "INSERT INTO projects (name, kind, description, created_at) "
             "SELECT '公共', 'public', '', now() WHERE NOT EXISTS ("
             "  SELECT 1 FROM projects WHERE kind = 'public')"))
+        # M2a S1.5:suite_members 同区触发器(迁移链由 0042 挂;测试
+        # 库走 create_all → 同一 DDL 单源补挂,端点测试获得与生产
+        # 一致的库层兜底)
+        from app.services.zone import SUITE_ZONE_TRIGGER_DDL
+
+        for stmt in SUITE_ZONE_TRIGGER_DDL:
+            await conn.execute(text(stmt))
 
     try:
         yield

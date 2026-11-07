@@ -167,7 +167,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0041_public_shadow_backfill"
+            assert _revision(sync_url) == "0042_suite_member_zone"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -784,7 +784,7 @@ def test_0041_public_shadow_backfill():
                     "WHERE visibility='public' "
                     "AND project_id IS NULL")).scalar() == 1
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0041_public_shadow_backfill"
+            assert _revision(sync_url) == "0042_suite_member_zone"
 
             with eng.connect() as c:
                 pid = c.execute(text(
@@ -807,5 +807,138 @@ def test_0041_public_shadow_backfill():
                 assert c.execute(text(
                     "SELECT count(*) FROM projects "
                     "WHERE kind='public'")).scalar() == 1
+        finally:
+            eng.dispose()
+
+
+# ── 0042_suite_member_zone(authz M2a S1.5)─────────────────────────
+def _to_0041_shape(eng) -> None:
+    """create_all 是当前模型(无 owner_id / 简化 FK / 无触发器);补回
+    0041 形态:owner_id 列 + 组合外键 + 目标唯一索引,删简化 FK。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members ADD COLUMN owner_id INTEGER")
+        conn.exec_driver_sql(
+            "UPDATE suite_members sm SET owner_id = cs.owner_id "
+            "FROM composer_scenarios cs "
+            "WHERE cs.scenario_id = sm.scenario_id")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members "
+            "ALTER COLUMN owner_id SET NOT NULL")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members DROP CONSTRAINT "
+            "IF EXISTS fk_suite_members_suite_id")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members DROP CONSTRAINT "
+            "IF EXISTS fk_suite_members_scenario_id")
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_suites_id_owner "
+            "ON suites (id, owner_id)")
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_composer_sid_owner "
+            "ON composer_scenarios (scenario_id, owner_id)")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members ADD CONSTRAINT fk_suite_members_suite "
+            "FOREIGN KEY (suite_id, owner_id) "
+            "REFERENCES suites (id, owner_id) ON DELETE CASCADE")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members ADD CONSTRAINT "
+            "fk_suite_members_scenario "
+            "FOREIGN KEY (scenario_id, owner_id) "
+            "REFERENCES composer_scenarios (scenario_id, owner_id) "
+            "ON DELETE CASCADE")
+
+
+def test_0042_suite_member_zone():
+    """① 拆旧(列/组合 FK/uq 索引)② 简化 FK ③ 同区触发器;存量成员
+    行不变;直插违例被触发器拒;downgrade 还原组合外键形态。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.suite import Suite, SuiteMember
+    from app.models.user import User
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            with Session(eng) as s:
+                alice = User(username="alice", display_name="",
+                             password_hash="x", role="user")
+                bob = User(username="bob", display_name="",
+                           password_hash="x", role="user")
+                s.add_all([alice, bob])
+                s.flush()
+                s.add_all([
+                    ComposerScenario(scenario_id="sc-a", owner_id=alice.id,
+                                     payload={}),
+                    ComposerScenario(scenario_id="sc-b", owner_id=bob.id,
+                                     payload={}),
+                    Suite(name="s", owner_id=alice.id),
+                ])
+                s.commit()
+            _to_0041_shape(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "INSERT INTO suite_members "
+                    "(suite_id, scenario_id, owner_id, role, sort, added_at) "
+                    "SELECT s.id, 'sc-a', cs.owner_id, 'main', 0, now() "
+                    "FROM suites s, composer_scenarios cs "
+                    "WHERE cs.scenario_id = 'sc-a'")
+            command.stamp(_cfg(sync_url), "0041_public_shadow_backfill")
+            command.upgrade(_cfg(sync_url), "head")
+            assert _revision(sync_url) == "0042_suite_member_zone"
+
+            with eng.connect() as c:
+                cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'suite_members' "
+                    "AND table_schema = current_schema()"))}
+                assert "owner_id" not in cols
+                fks = {r[0] for r in c.execute(text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conrelid = 'suite_members'::regclass "
+                    "AND contype = 'f'"))}
+                assert "fk_suite_members_suite" not in fks
+                assert "fk_suite_members_scenario" not in fks
+                assert {"fk_suite_members_suite_id",
+                        "fk_suite_members_scenario_id"} <= fks
+                # 触发器在;存量成员行不变(同属主对 → 同区合法)
+                assert c.execute(text(
+                    "SELECT count(*) FROM pg_trigger WHERE tgname = "
+                    "'trg_suite_member_same_zone'")).scalar() == 1
+                assert c.execute(text(
+                    "SELECT suite_id, scenario_id, sort FROM suite_members "
+                    "ORDER BY sort")).all() == [(1, "sc-a", 0)]
+                # 直插违例(私有套件 + 他人场景)被触发器拒
+                import pytest as _pytest
+                import sqlalchemy as _sa
+                with _pytest.raises(Exception):
+                    with c.begin():
+                        c.execute(text(
+                            "INSERT INTO suite_members "
+                            "(suite_id, scenario_id, role, sort, added_at) "
+                            "VALUES (1, 'sc-b', 'main', 1, now())"))
+
+            command.downgrade(_cfg(sync_url), "0041_public_shadow_backfill")
+            with eng.connect() as c:
+                cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'suite_members' "
+                    "AND table_schema = current_schema()"))}
+                assert "owner_id" in cols
+                # owner_id 按场景属主回填
+                assert c.execute(text(
+                    "SELECT sm.owner_id FROM suite_members sm "
+                    "JOIN composer_scenarios cs "
+                    "ON cs.scenario_id = sm.scenario_id "
+                    "WHERE sm.scenario_id = 'sc-a'")).scalar() == (
+                    c.execute(text(
+                        "SELECT owner_id FROM composer_scenarios "
+                        "WHERE scenario_id = 'sc-a'")).scalar())
         finally:
             eng.dispose()

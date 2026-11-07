@@ -621,20 +621,15 @@ async def delete_user(
         # suite 引用已随下方 suite 删除级联(PG)/兜底删除(SQLite)。
         await db.execute(sa_delete(_ShareRef).where(
             _ShareRef.scenario_id.in_(_own_scen_q)))
-        await db.execute(
-            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
+        # S1.5 起成员行无 owner_id 冗余列:套件删除经 FK CASCADE 收
+        # 成员行,不再按属主单独清扫
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
     elif disposal == "transfer":
         await db.execute(
             sa_update(Suite).where(Suite.owner_id == user_id)
             .values(owner_id=transferee.id))
-        await db.execute(
-            sa_update(SuiteMember).where(SuiteMember.owner_id == user_id)
-            .values(owner_id=transferee.id))
     else:  # purge
-        await db.execute(
-            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
         # SQLite 兜底:FK 不强制的方言显式清引用(PG 已级联)

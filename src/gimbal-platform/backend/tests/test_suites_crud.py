@@ -222,9 +222,11 @@ async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
     # (mb_admin 是首位注册 = admin)
     admin = await register_and_login(client, "mb_admin", "mb_admin_pass123")
     sid = await _mk_suite(client, admin, "洗白组")
+    # S1.5:他人场景 → 422 suite_member_cross_zone(旧同属主 404 退役)
     r = await client.post(f"/api/suites/{sid}/members", headers=admin,
                           json={"scenarioIds": ["sc-mb-bob"]})
-    assert r.status_code == 404, r.text
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "suite_member_cross_zone"
 
     # 幽灵场景 → 404
     r = await client.post(f"/api/suites/{sid}/members", headers=admin,
@@ -237,20 +239,24 @@ async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
                           json={"scenarioIds": ["sc-mb-bob"]})
     assert r.status_code == 404
 
-    # 库层兜底:绕过应用层直写他人场景 → 约束拒绝。仅 PG 断言
-    #(SQLite 测试库不强制 FK —— 仓内既有口径,与 user_stars 的
-    # Python 兜底同理由;dev/生产 PG 上组合外键真实生效)。
+    # 库层兜底(S1.5):绕过应用层直写他人场景 → 同区触发器拒绝
+    #(conftest 建库即挂与 0042 同源的触发器,PG 面真实生效)。
     if db_module.engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+
         async with db_module.SessionLocal() as s:
-            s.add(SuiteMember(suite_id=sid, scenario_id="sc-mb-bob",
-                              owner_id=1, sort=0))
             try:
+                await s.execute(text(
+                    "INSERT INTO suite_members "
+                    "(suite_id, scenario_id, role, sort, added_at) "
+                    "VALUES (:sid, 'sc-mb-bob', 'main', 0, now())"),
+                    {"sid": sid})
                 await s.commit()
                 raised = False
             except Exception:
                 raised = True
                 await s.rollback()
-            assert raised, "组合外键必须拒绝跨属主成员行"
+            assert raised, "同区触发器必须拒绝跨属主成员行"
 
 
 async def test_scenario_delete_cascades_membership(client: AsyncClient) -> None:

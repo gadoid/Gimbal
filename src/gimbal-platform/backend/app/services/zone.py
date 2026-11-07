@@ -68,6 +68,62 @@ def zone_read_clause(model, viewer_id: int):
     )
 
 
+SUITE_ZONE_TRIGGER_DDL = (
+    # S1.5 同区触发器(与 ensure_member_same_zone 同口径;0042 迁移与
+    # 测试建库共用本单源 —— 测试库走 create_all 不跑迁移,由 conftest
+    # 挂同一条触发器,保证端点测试有与生产一致的库层兜底)
+    """
+    CREATE OR REPLACE FUNCTION suite_member_same_zone()
+    RETURNS trigger AS $$
+    DECLARE
+        s_pid int; s_owner int; c_pid int; c_owner int;
+    BEGIN
+        SELECT project_id, owner_id INTO s_pid, s_owner
+          FROM suites WHERE id = NEW.suite_id;
+        SELECT project_id, owner_id INTO c_pid, c_owner
+          FROM composer_scenarios WHERE scenario_id = NEW.scenario_id;
+        IF (s_pid IS NULL AND c_pid IS NULL) THEN
+            IF s_owner IS DISTINCT FROM c_owner THEN
+                RAISE EXCEPTION
+                  'suite_member_cross_zone: 私有套件只能加入自己的场景';
+            END IF;
+        ELSIF s_pid IS DISTINCT FROM c_pid THEN
+            RAISE EXCEPTION
+              'suite_member_cross_zone: 套件与成员场景须同区';
+        END IF;
+        RETURN NEW;
+    END $$ LANGUAGE plpgsql
+    """,
+    "DROP TRIGGER IF EXISTS trg_suite_member_same_zone ON suite_members",
+    """
+    CREATE TRIGGER trg_suite_member_same_zone
+    BEFORE INSERT OR UPDATE OF suite_id, scenario_id ON suite_members
+    FOR EACH ROW EXECUTE FUNCTION suite_member_same_zone()
+    """,
+)
+
+
+def ensure_member_same_zone(
+    *, suite_project_id: int | None, suite_owner_id: int | None,
+    scen_project_id: int | None, scen_owner_id: int | None,
+    scenario_id: str,
+) -> None:
+    """S1.5 同区约束(应用层单点):套件成员场景与套件**同 project_id**;
+    都为空(私有区)时再要求**同属主**(私有套件仍只放本人的场景)。
+    项目套件自此可容纳其他成员的场景。违例 raise ValueError
+    ``suite_member_cross_zone``(端点转 422;DB 触发器 0042 兜底
+    直插绕过应用层的写法)。"""
+    if suite_project_id is None and scen_project_id is None:
+        if suite_owner_id != scen_owner_id:
+            raise ValueError(
+                "suite_member_cross_zone: "
+                f"私有套件只能加入自己的场景({scenario_id} 属于他人)")
+    elif suite_project_id != scen_project_id:
+        raise ValueError(
+            "suite_member_cross_zone: "
+            f"套件与成员场景须同区({scenario_id} 不在本套件的项目里)")
+
+
 def apply_public(row: Any, public_pid: int | None) -> None:
     """影子写:置公共态(visibility=public ∧ project_id=公共项目)。"""
     row.visibility = "public"

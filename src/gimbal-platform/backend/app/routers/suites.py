@@ -494,8 +494,7 @@ async def add_members(
         if sid in existing:
             continue
         scen = await scenario_store.get_row(db, sid)
-        # 一刀切(§6.3):scenario 属主 ≠ suite 属主 → 404。
-        if scen is None or scen.owner_id != suite.owner_id:
+        if scen is None:
             await db.rollback()
             raise not_found_404("scenario", sid)
         if len(existing) + added + 1 > settings.SUITE_MEMBER_CAP:
@@ -504,26 +503,26 @@ async def add_members(
                 "code": "suite_member_cap_exceeded",
                 "message": (f"suite member cap is "
                             f"{settings.SUITE_MEMBER_CAP}")})
-        # P2 §7.9(不变量第二入口):公共 suite 加未发布成员不直接拒绝,
-        # 走发布确认 —— 无 publishUnpublished 标志 → 409 列出待发布成员
-        #(前端弹确认框「这些成员及其数据集将一并公开」);有标志 →
-        # 成员发布 + 入组同事务完成(数据集随场景可见性公开)。
-        if (suite.visibility == "public"
-                and (scen.visibility or "private") != "public"):
-            if not body.publishUnpublished:
-                await db.rollback()
-                raise HTTPException(status_code=409, detail={
-                    "code": "suite_member_publish_required",
-                    "message": ("suite is public: unpublished members must "
-                                "be published to join (confirm to publish "
-                                "them and their datasets)"),
-                    "pendingPublish": [sid]})
-            # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
-            from ..services.zone import apply_public, public_project_id
-            apply_public(scen, await public_project_id(db))
+        # S1.5 同区约束(单点 zone.ensure_member_same_zone):成员与套件
+        # 同 project_id;私有区同空时同属主 —— 项目套件可容纳其他成员
+        # 的场景,跨区/私有他人 → 422(旧「同属主一刀切 404」退役;
+        # 公共套件是副本,加成员走原件 + 重发布,S1.3 前置 422 兜住)
+        from ..services.zone import ensure_member_same_zone
+
+        try:
+            ensure_member_same_zone(
+                suite_project_id=suite.project_id,
+                suite_owner_id=suite.owner_id,
+                scen_project_id=scen.project_id,
+                scen_owner_id=scen.owner_id, scenario_id=sid)
+        except ValueError as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "suite_member_cross_zone",
+                        "message": str(e).split(": ", 1)[1]}) from None
         db.add(SuiteMember(
-            suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
-            sort=next_sort,
+            suite_id=suite.id, scenario_id=sid, sort=next_sort,
         ))
         next_sort += 1
         added += 1
@@ -682,27 +681,26 @@ async def put_composition(
             "code": "suite_member_cap_exceeded",
             "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
 
-    # 成员属主校验(§6.3 一刀切)+ 公共不变量(§7.9 第二入口,与
-    # add_members 同一套:无标志 → 409 列出待发布,有标志 → 同事务公开)
-    scen_rows: dict[str, object] = {}
-    pending_publish: list[str] = []
+    # S1.5 同区校验(与 add_members 同一单点);不存在 → 404
+    from ..services.zone import ensure_member_same_zone
+
     for m in body.members:
         scen = await scenario_store.get_row(db, m.scenarioId)
-        if scen is None or scen.owner_id != suite.owner_id:
+        if scen is None:
             await db.rollback()
             raise not_found_404("scenario", m.scenarioId)
-        scen_rows[m.scenarioId] = scen
-        if (suite.visibility == "public"
-                and (scen.visibility or "private") != "public"):
-            pending_publish.append(m.scenarioId)
-    if pending_publish and not body.publishUnpublished:
-        await db.rollback()
-        raise HTTPException(status_code=409, detail={
-            "code": "suite_member_publish_required",
-            "message": ("suite is public: unpublished members must be "
-                        "published to join (confirm to publish them and "
-                        "their datasets)"),
-            "pendingPublish": pending_publish})
+        try:
+            ensure_member_same_zone(
+                suite_project_id=suite.project_id,
+                suite_owner_id=suite.owner_id,
+                scen_project_id=scen.project_id,
+                scen_owner_id=scen.owner_id, scenario_id=m.scenarioId)
+        except ValueError as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "suite_member_cross_zone",
+                        "message": str(e).split(": ", 1)[1]}) from None
 
     # 差量重写成员表(保留 added_at;删行交给组合外键语义外的显式删除)
     incoming_ids = {m.scenarioId for m in body.members}
@@ -716,14 +714,10 @@ async def put_composition(
         if row is None:
             db.add(SuiteMember(
                 suite_id=suite.id, scenario_id=m.scenarioId,
-                owner_id=suite.owner_id, role=m.role, sort=idx))
+                role=m.role, sort=idx))
         else:
             row.role = m.role
             row.sort = idx
-    from ..services.zone import apply_public, public_project_id
-    _pid = await public_project_id(db)
-    for sid in pending_publish:  # 确认发布:成员随组公开(数据集随场景)
-        apply_public(scen_rows[sid], _pid)
 
     suite.mode = body.mode
     cfg = dict(body.modeConfig or {})
@@ -735,15 +729,6 @@ async def put_composition(
     await db.refresh(suite)
     # 时间线:整体保存确认发布的成员场景(级联路径之二,与 publish
     # 端点同款 scenario.published/via 标注)
-    if pending_publish:
-        from ..services import activity as activity_svc
-        for sid in pending_publish:
-            await activity_svc.record(
-                db, actor_id=suite.owner_id, kind="scenario.published",
-                resource_type="scenario", resource_id=sid,
-                detail={"name": getattr(scen_rows[sid], "name", sid),
-                        "via": "suite_composition",
-                        "suiteId": suite.id, "suiteName": suite.name})
     return await _detail_out(db, user, suite)
 
 
@@ -1655,7 +1640,7 @@ async def publish_suite(
     for m in members:
         db.add(SuiteMember(
             suite_id=copy.id, scenario_id=sid_map[m.scenario_id],
-            owner_id=suite.owner_id, role=m.role, sort=m.sort))
+            role=m.role, sort=m.sort))
     await db.commit()
     await db.refresh(copy)
     # 时间线:记在原套件轴(副本创建即发布动作)

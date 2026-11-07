@@ -3,12 +3,10 @@
 《Suite成员层、引用分享与浏览镜头-设计方案》§6.2/§6.3:
 - **成员关系只存本表**(唯一真相源);模式配置以 JSON 存在
   ``suites.mode_config``、按 id 引用成员,不存成员清单 —— 不双写。
-- **组合外键是唯一的安全设计点**:suite 里只能放属主自己的场景,
-  由库层保证、admin 也不例外;应用层先校验返回 404(不泄露存在性),
-  库约束兜底(绕过应用层直写也会被拒)。
-- **约束延迟到提交时检查**(DEFERRABLE INITIALLY DEFERRED),配合
-  离职转让路径:suite / 场景 / 成员表三处 owner_id 同一事务改写,
-  单独转让 suite 内某一个场景会被提交拒绝,迫使处置整体进行。
+- **S1.5 同区约束取代同属主组合外键**:成员场景与套件同 project_id
+  (私有区同空时同属主)—— 应用层单点 ``zone.ensure_member_same_zone``
+  (422),0042 触发器兜底直插;旧组合外键与成员表冗余 ``owner_id``
+  列随 0042 删除(简化 FK 保留 suite/场景删除级联)。
 - **``suites.owner_id`` 不加 ON DELETE**:用户在处置完成前删不掉,
   作为「必须先走处置」的兜底(§7.10)。
 - visibility 与场景同口径;P1 无 suite 发布入口(恒 private,
@@ -33,8 +31,6 @@ class Suite(Base):
     __table_args__ = (
         # 同属主组名不重(§6.3)
         Index("uq_suites_owner_name", "owner_id", "name", unique=True),
-        # 组合外键目标:成员表 FK 引用 (id, owner_id)
-        Index("uq_suites_id_owner", "id", "owner_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -68,25 +64,24 @@ class Suite(Base):
 
 
 class SuiteMember(Base):
-    """suite 成员行:PK (suite_id, scenario_id);owner_id 为组合外键的
-    冗余属主列 —— 与 suite 属主、场景属主三方一致由库层钉死。"""
+    """suite 成员行:PK (suite_id, scenario_id)。
+
+    S1.5 起同区约束取代旧同属主组合外键:成员场景与套件同
+    ``project_id``(私有区同空时同属主)—— 应用层单点
+    ``zone.ensure_member_same_zone``(422),DB 触发器(0042)兜底直插;
+    旧组合外键与冗余 ``owner_id`` 列随 0042 删除。简化 FK 保留级联
+    (suite/场景删除时成员行自收;scenario 侧 DEFERRED 配合删除顺序)。"""
 
     __tablename__ = "suite_members"
     __table_args__ = (
-        # 组合外键(§6.3 安全设计点):成员必须属于 suite 属主自己的
-        # 场景;CASCADE = suite/场景删除时成员行自收;DEFERRED 配合
-        # 转让路径的三表同事务 owner 改写。
         ForeignKeyConstraint(
-            ["suite_id", "owner_id"],
-            ["suites.id", "suites.owner_id"],
-            ondelete="CASCADE", deferrable=True, initially="DEFERRED",
-            name="fk_suite_members_suite",
+            ["suite_id"], ["suites.id"],
+            ondelete="CASCADE", name="fk_suite_members_suite_id",
         ),
         ForeignKeyConstraint(
-            ["scenario_id", "owner_id"],
-            ["composer_scenarios.scenario_id", "composer_scenarios.owner_id"],
+            ["scenario_id"], ["composer_scenarios.scenario_id"],
             ondelete="CASCADE", deferrable=True, initially="DEFERRED",
-            name="fk_suite_members_scenario",
+            name="fk_suite_members_scenario_id",
         ),
         # 反查「场景在哪些 suite」(§6.3;场景详情反查与级联提示的驱动面)
         Index("ix_suite_members_scenario", "scenario_id"),
@@ -96,10 +91,8 @@ class SuiteMember(Base):
         Integer, primary_key=True)
     scenario_id: Mapped[str] = mapped_column(
         String(128), primary_key=True)
-    # 冗余属主列(组合外键用;与 suite.owner_id / 场景.owner_id 一致)
-    owner_id: Mapped[int] = mapped_column(Integer)
     # 成员角色(重构方案约束 1,推翻 P2 设计 §6.1):main/before/after;
-    # 前置/后置也是成员 —— 属主约束与引用闭包经成员表单一真相源覆盖
+    # 前置/后置也是成员 —— 同区约束经成员表单一真相源覆盖
     role: Mapped[str] = mapped_column(String(16), default="main")
     # 组跑的默认顺序(§6.6:按 sort 遍历)
     sort: Mapped[int] = mapped_column(Integer, default=0)

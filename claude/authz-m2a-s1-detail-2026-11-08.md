@@ -214,7 +214,16 @@
 
 ---
 
-## 八、S1.6 转移维护者（S1-e）
+## 七·补、S1.5 实现记录（2026-11-08,迁移 0042）
+
+- **应用层单点** `zone.ensure_member_same_zone`(套件与成员同 `project_id`;私有区同空时同属主):`add_members`/`put_composition` 两处共用,违例 422 `suite_member_cross_zone` —— 旧「同属主一刀切 404」与「公共套件加未发布成员 409 级联确认」(`suite_member_publish_required`/`publishUnpublished` 联动)随之退役(公共套件是副本,加成员走原件 + 重发布,S1.3 前置 422 已兜住)。
+- **模型**:SuiteMember 删 `owner_id` 冗余列与两条同属主组合外键,换两条简化 FK(suite_id CASCADE / scenario_id CASCADE DEFERRED,级联语义不变);`uq_suites_id_owner`/`uq_composer_sid_owner`(纯 FK 目标唯一索引)删除;users.py 处置段的成员行清扫/转让改写按套件作用域(FK CASCADE 收成员)。
+- **DB 兜底**:同区触发器 DDL 单源 `zone.SUITE_ZONE_TRIGGER_DDL` —— 0042 迁移与 conftest 建库共用(测试库走 create_all 不跑迁移,由 conftest 挂同一条触发器,端点测试获得与生产一致的库层约束)。
+- **解锁**:项目套件可容纳**其他成员**的场景(同区、属主无关)—— D1「权限只看项目角色」的成员层落地。
+- **迁移 0042**:① 拆旧(守卫 fresh 链)② 简化 FK ③ 触发器;downgrade 还原组合外键形态(owner_id 按场景属主回填;**S1.5 后跨属主成员不保证可 downgrade**,生产回滚走备份)。**迁移序号顺延:S1.9 → 0043**。
+- 测试:test_0042(拆旧/新 FK/触发器在/存量成员不变/直插违例被拒/downgrade 回填)+ `test_authz_s15_suite_zone`(私有他人 422、自己 200、跨区双向 422、composition 同闸、跨属主解锁 200、直插触发器拒);过期断言改造:composition 他人场景 404→422、crud 直插夹具改触发器口径、disposal 转让断言去成员行 owner。守卫重生成 88→85 条。
+
+## 八、S1.6 转移维护者(S1-e)
 
 ### 实现项
 

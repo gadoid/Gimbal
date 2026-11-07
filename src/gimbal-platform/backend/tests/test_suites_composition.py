@@ -132,9 +132,11 @@ async def test_composition_validation(client: AsyncClient) -> None:
                         config={"units": {"sc-cv-a": {"map": {"x": 1}}}}))
     assert r.status_code == 422
 
-    # 他人场景 → 404(§6.3 一刀切,composition 同口径)
+    # 他人场景 → 422 suite_member_cross_zone(S1.5 同区约束取代
+    # 同属主一刀切;不存在的场景仍是 404)
     r = await put(_comp(0, [{"scenarioId": "sc-cv-x"}]))
-    assert r.status_code == 404
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "suite_member_cross_zone"
 
     # 校验失败不落库:rev 仍是 0,合法保存仍可用 rev 0
     r = await put(_comp(0, [{"scenarioId": "sc-cv-a"}], mode="aggregate"))
