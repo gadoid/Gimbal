@@ -77,11 +77,12 @@ class TestAuditAdminCrossOwner:
         r = await client.post("/api/scenarios/sc-ax-1/publish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
-        # 重复发布 = 状态未变:不刷事件
+        # S1.3 重发布 = 副本重建(内容更新),事件随副本创建再落;
+        # 只断言「事件存在且无越属主审计」(计数语义随复制改变)
         r = await client.post("/api/scenarios/sc-ax-1/publish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
-        assert len(await _activity_rows(owner_id, "scenario.published")) == 1
+        assert len(await _activity_rows(owner_id, "scenario.published")) >= 1
         assert not await _audit_rows("scenario.admin_publish")
         r = await client.post("/api/scenarios/sc-ax-1/unpublish",
                               headers=h_owner)
@@ -109,7 +110,7 @@ class TestAuditAdminCrossOwner:
         # 事件落受影响人轴(detail.by 记操作者)
         assert (await client.post("/api/scenarios/sc-ax-1/publish",
                                   headers=h_owner)).status_code == 200
-        r = await client.post("/api/scenarios/sc-ax-1/unpublish",
+        r = await client.post("/api/scenarios/sc-ax-1-public/unpublish",
                               headers=h_admin)
         assert r.status_code == 200, r.text
         assert len(await _audit_rows("scenario.admin_unpublish")) == 1
@@ -135,8 +136,7 @@ class TestAuditAdminCrossOwner:
         assert r.status_code == 201, r.text
         suite_id = r.json()["suiteId"]
         r = await client.post(f"/api/suites/{suite_id}/members", headers=h_owner,
-                              json={"scenarioIds": ["sc-as-1"],
-                                    "publishUnpublished": True})
+                              json={"scenarioIds": ["sc-as-1"]})
         assert r.status_code == 200, r.text
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
@@ -153,12 +153,17 @@ class TestAuditAdminCrossOwner:
         # 属主发布 → admin steward 下架:审计 + 通知属主;
         # suite.admin_publish/admin_delete 审计面随能力消亡
         assert (await client.post(
-            f"/api/suites/{suite_id}/publish",
-            headers=h_owner)).status_code == 200
-        # 级联公开成员场景:scenario.published(via=suite_publish)落属主轴
+            "/api/scenarios/sc-as-1/publish",
+            headers=h_owner)).status_code == 200   # S1.3:成员先发布
+        r = await client.post(f"/api/suites/{suite_id}/publish",
+                              headers=h_owner)
+        assert r.status_code == 200
+        copy_suite_id = r.json()["suiteId"]
+        # S1.3:无级联 —— 成员各自走场景发布;只断言发布事件存在
         rows = await _activity_rows(owner_id, "scenario.published")
-        assert len(rows) == 1 and rows[0].detail.get("via") == "suite_publish"
-        r = await client.delete(f"/api/suites/{suite_id}/publish",
+        assert rows
+        # Admin+ 治理下架作用在公共副本上
+        r = await client.delete(f"/api/suites/{copy_suite_id}/publish",
                                 headers=h_admin)
         assert r.status_code == 200, r.text
         assert len(await _audit_rows("suite.admin_unpublish")) == 1
@@ -337,6 +342,9 @@ class TestIntegrationTimeline:
                             plate={"jira": "1.0#1"},
                             system=["jira"]))
         assert r.status_code in (200, 201), r.text
+        from .inbound_fixtures import publish_scenario
+
+        await publish_scenario("sc-il-1")   # S1.3:公共模板引用副本
         r = await client.post("/api/integration/tasks", headers=h_owner,
                               json=_task_body("sc-il-1", name="il-fn",
                                               visibility="public"))

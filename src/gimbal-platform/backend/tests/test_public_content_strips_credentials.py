@@ -99,7 +99,9 @@ class TestStripping:
         ds_id = r.json()["datasetId"]
         r = await client.post("/api/scenarios/sc-w6-pub/publish", headers=h)
         assert r.status_code == 200
-        assert r.json()["config"]["users"] == _USERS   # 属主回包原样
+        # S1.3 发布 = 复制:回包是公共副本,凭证/敏感列**落库即无**
+        assert r.json()["meta"]["scenarioId"] == "sc-w6-pub-public"
+        assert not r.json()["config"].get("users")
 
         # 原件不动
         async with db_module.SessionLocal() as s:
@@ -116,13 +118,20 @@ class TestStripping:
         r = await client.get(f"/api/data-sets/{ds_id}", headers=h)
         assert set(r.json()["rows"][0]) == {"amount", "api_key", "userToken", "note"}
 
-        # 非属主读(公共可读):config.users 空、数据集敏感列剥
+        # 非属主读**公共副本**:落库即无凭证、数据集敏感列剥
         h_o = await role_headers(client, "sc_rdr", role="user")
-        r = await client.get("/api/scenarios/sc-w6-pub", headers=h_o)
+        copy_sid = "sc-w6-pub-public"
+        r = await client.get(f"/api/scenarios/{copy_sid}", headers=h_o)
         assert r.status_code == 200 and not r.json()["config"].get("users")
-        r = await client.get("/api/scenarios/sc-w6-pub/draft", headers=h_o)
+        r = await client.get(f"/api/scenarios/{copy_sid}/draft", headers=h_o)
         assert not r.json()["definition"]["config"].get("users")
-        r = await client.get(f"/api/data-sets/{ds_id}", headers=h_o)
+        from sqlalchemy import select as _sel
+
+        from app.models.composer_data_set import ComposerDataSet as _DS
+        async with db_module.SessionLocal() as s2:
+            copy_ds = (await s2.execute(_sel(_DS.dataset_id).where(
+                _DS.scenario_id == copy_sid))).scalar_one()
+        r = await client.get(f"/api/data-sets/{copy_ds}", headers=h_o)
         assert r.status_code == 200
         assert r.json()["rows"] == [{"amount": 1, "note": "n"}]
 
@@ -552,7 +561,9 @@ class TestFinalProductsNoAuthorCredentials:
         h_owner = await role_headers(client, "fp_exo")
         await _mk_secret_scenario(client, h_owner, "sc-fp-ex", public=True)
         h_o = await role_headers(client, "fp_exr", role="user")
-        r = await client.get("/api/scenarios/sc-fp-ex/export", headers=h_o)
+        # S1.3:非属主只能读公共副本(原件恒私有);副本落库即无明文
+        r = await client.get(
+            "/api/scenarios/sc-fp-ex-public/export", headers=h_o)
         assert r.status_code == 200, r.text
         assert _SECRET not in r.text and "author-acct" not in r.text
         r = await client.get("/api/scenarios/sc-fp-ex/export", headers=h_owner)

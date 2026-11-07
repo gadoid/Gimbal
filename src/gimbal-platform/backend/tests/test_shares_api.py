@@ -309,34 +309,41 @@ async def test_publish_linkage(client: AsyncClient) -> None:
     await _mk(client, owner, "sc-pb-2")
     suite_id = await _mk_suite(client, owner, "发布集", "sc-pb-1")
 
-    # suite 先发布:级联发布未发布成员(sc-pb-1 一并 public)
+    # S1.3:成员先发布,套件发布 = 深拷贝(不再级联代发布)
+    assert (await client.post(
+        "/api/scenarios/sc-pb-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
     assert r.status_code == 200
+    copy_id = r.json()["suiteId"]
     assert r.json()["visibility"] == "public"
-    assert r.json()["publishedMembers"] == ["sc-pb-1"]  # 级联回执(§7.9)
 
-    # 公共 suite 加第二个私有成员 → 409 列出;确认后发布+入组同事务
+    # 原件套件加第二个未发布成员 → 正常(原件是私有工作区);
+    # 重发布 → 422 suite_member_not_public 列出;发布后重发布成功
     r = await client.post(f"/api/suites/{suite_id}/members", headers=owner,
                           json={"scenarioIds": ["sc-pb-2"]})
-    assert r.status_code == 409
-    assert r.json()["detail"]["code"] == "suite_member_publish_required"
-    r = await client.post(f"/api/suites/{suite_id}/members", headers=owner,
-                          json={"scenarioIds": ["sc-pb-2"],
-                                "publishUnpublished": True})
     assert r.status_code == 200, r.text
+    r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "suite_member_not_public"
+    assert (await client.post(
+        "/api/scenarios/sc-pb-2/publish", headers=owner)).status_code == 200
+    assert (await client.post(
+        f"/api/suites/{suite_id}/publish", headers=owner)).status_code == 200
 
-    # 成员下架 ⇒ 公共 suite 连带下架
+    # 成员下架(原件上)⇒ 其副本删除 ⇒ 公共套件副本连带下架
     r = await client.post("/api/scenarios/sc-pb-1/unpublish", headers=owner)
     assert r.status_code == 200
-    detail = (await client.get(f"/api/suites/{suite_id}",
+    detail = (await client.get(f"/api/suites/{copy_id}",
                                headers=owner)).json()
-    assert detail["visibility"] == "private"
+    r = await client.get(f"/api/suites/{copy_id}", headers=owner)
+    assert r.status_code == 404 and "suite_not_found" in r.text
 
-    # suite unpublish:成员 public 状态独立保留
+    # suite unpublish(原件上):成员场景的公共副本独立保留
     await client.post("/api/scenarios/sc-pb-1/publish", headers=owner)
     await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
     r = await client.delete(f"/api/suites/{suite_id}/publish",
                             headers=owner)
     assert r.status_code == 200
-    pub = (await client.get("/api/scenarios/sc-pb-1", headers=owner)).json()
+    pub = (await client.get("/api/scenarios/sc-pb-1-public",
+                            headers=owner)).json()
     assert pub["visibility"] == "public"

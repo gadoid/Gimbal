@@ -72,15 +72,18 @@ def _task_body(sid: str, **over) -> dict:
 
 
 async def _mk_scenario(client: AsyncClient, h: dict, sid: str,
-                       steps: list, *, publish: bool = False) -> None:
-    """建草稿场景;publish=True 时直改可见性为公共(v4 §5.2:平台模式
-    只认公共场景,平台任务种子须先发布)。"""
+                       steps: list, *, publish: bool = False) -> str:
+    """建草稿场景;publish=True 时发布(S1.3 = 复制到公共项目),返回
+    任务应引用的 id:公共模板须引用公共副本(<原 id>-public),私有/
+    个人模板照旧引用原件。"""
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=steps))
     assert r.status_code in (200, 201), r.text
     if publish:
         from .inbound_fixtures import publish_scenario
         await publish_scenario(sid)
+        return f"{sid}-public"
+    return sid
 
 
 async def _seed_platform_user() -> None:
@@ -158,10 +161,11 @@ class TestIntegrationRouter:
                    for u in r.json()["items"])
     async def test_create_ok_and_instance_seeded(self, client):
         h = await register_and_login(client, "ig_ok", "ig_okpass123")
-        await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET, publish=True)
+        _sid = await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET,
+                                  publish=True)
         # identityMode 是兼容字段(列已删,0039):显式传 personal 照常建
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-ok", visibility="public",
+                              json=_task_body(_sid, visibility="public",
                                               identityMode="personal"))
         assert r.status_code == 201, r.text
         out = r.json()
@@ -171,9 +175,10 @@ class TestIntegrationRouter:
 
     async def test_soft_delete_and_visibility(self, client):
         h = await register_and_login(client, "ig_del", "ig_delpass123")
-        await _mk_scenario(client, h, "sc-ig-del", STEPS_GET, publish=True)
+        _sid = await _mk_scenario(client, h, "sc-ig-del", STEPS_GET,
+                                  publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-del", visibility="public",
+                              json=_task_body(_sid, visibility="public",
                                               identityMode="personal"))
         tid = r.json()["id"]
         # 其他人可见公共模板
@@ -384,8 +389,10 @@ async def test_personal_mode_lifecycle(client):
         "request": {"kind": "request", "body": {}}, "strategy": []}])
     r = await client.post("/api/scenarios", headers=u1, json=draft)
     assert r.status_code in (200, 201), r.text
+    # S1.3:公共模板须引用公共副本 —— 先发布(= 复制)再建任务
+    await client.post("/api/scenarios/sc-p1/publish", headers=u1)
     r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
-        "sc-p1", identityMode="personal", visibility="public"))
+        "sc-p1-public", identityMode="personal", visibility="public"))
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
 

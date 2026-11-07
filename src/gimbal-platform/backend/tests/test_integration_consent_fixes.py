@@ -65,7 +65,9 @@ FULLS = {
 
 
 def _task_body(sid: str, **over) -> dict:
-    body = {"name": "fixes", "scenarioId": sid, "identityMode": "personal",
+    # S1.3:公共模板引用公共副本(<原 id>-public;夹具建场景即发布)
+    body = {"name": "fixes", "scenarioId": f"{sid}-public",
+            "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}
     body.update(over)
@@ -77,6 +79,9 @@ async def _mk_scenario(client, h, sid: str, plate: dict) -> None:
                           json=make_draft(sid, steps=ANCHORED_STEPS,
                                           plate=plate, system=["jira"]))
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario(sid)
 
 
 async def _user_id(username: str) -> int:
@@ -145,6 +150,9 @@ async def test_fingerprint_covers_meta_plate(client, plate_mock):
         "sc-fix2", steps=ANCHORED_STEPS, plate={"jira": "1.0#2"},
         system=["jira"]))
     assert r.status_code == 200, r.text
+    # S1.3:模板引用公共副本 —— 重发布刷新副本,指纹才会变
+    assert (await client.post(
+        "/api/scenarios/sc-fix2/publish", headers=u1)).status_code == 200
 
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
     assert r.status_code == 200, r.text
@@ -175,6 +183,9 @@ async def test_fingerprint_covers_carry_field_states(client, plate_mock):
     draft["ui"] = {"fieldStates": {"0": {"$.body.query": "carry"}}}
     r = await client.put("/api/scenarios/sc-fs", headers=u1, json=draft)
     assert r.status_code == 200, r.text
+    # S1.3:模板引用公共副本 —— 重发布刷新副本,指纹才会变
+    assert (await client.post(
+        "/api/scenarios/sc-fs/publish", headers=u1)).status_code == 200
 
     fp2 = (await client.get(
         f"/api/integration/tasks/{tid}/subscription-summary",
@@ -232,6 +243,9 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
                        plate={"jira": "1.0#1"})
     r = await client.post("/api/scenarios", headers=u1, json=draft)
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario("sc-cfp")
     r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
         "sc-cfp", identityMode="personal", visibility="public"))
     assert r.status_code == 201, r.text
@@ -269,6 +283,9 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
                      "method": "GET", "path": "/x", "headers": {}},
             "request": {"kind": "request", "body": {}}, "strategy": []}]))
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario("sc-cfa")
     tid = (await client.post("/api/integration/tasks", headers=u1,
                              json=_task_body("sc-cfa"))).json()["id"]
 
@@ -286,7 +303,7 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
     # 显式绑定优先:绑定 authAlias=other 的服务键不吃默认
     async with dbm.SessionLocal() as db:
         db.add(ComposerRunScheme(
-            scheme_id="rs-cfa", scenario_id="sc-cfa", name="s",
+            scheme_id="rs-cfa", scenario_id="sc-cfa-public", name="s",
             payload={"serviceBindings": {"svc2": {"authAlias": "other"}}}))
         await db.commit()
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,

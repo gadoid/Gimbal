@@ -1558,14 +1558,49 @@ async def rerun_failed_units(
 
 
 # ── P2 §7.9/§9:suite 发布 / 下架 ────────────────────────────────
+def _remap_config(cfg, sid_map: dict[str, str]):
+    """mode_config 的成员 id 重铸(发布深拷贝:成员引用指向公共副本)。"""
+    if isinstance(cfg, dict):
+        return {
+            (sid_map.get(k, k) if isinstance(k, str) else k):
+                _remap_config(v, sid_map)
+            for k, v in cfg.items()}
+    if isinstance(cfg, list):
+        return [_remap_config(v, sid_map) for v in cfg]
+    return sid_map.get(cfg, cfg) if isinstance(cfg, str) else cfg
+
+
+async def _find_public_suite_copy(db, suite_id: int):
+    """套件的公共副本(forked_from_id = 套件 id ∧ 公共项目)。"""
+    from ..services.zone import public_project_id
+
+    pid = await public_project_id(db)
+    if pid is None:
+        return None
+    return (await db.execute(
+        select(Suite).where(
+            Suite.forked_from_id == suite_id,
+            Suite.project_id == pid))).scalar_one_or_none()
+
+
 @router.post("/{suite_id}/publish", response_model=SuiteSummaryOut)
 async def publish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
-    """发布:级联发布未发布成员(确认框由前端承载;数据集随场景
-    可见性公开,《权限一期》口径)。属主动作(表 B suite.publish =
-    owner;W3 起 Admin+ 对他人对象无发布权,R6)。"""
-    from ..models.composer_scenario import ComposerScenario
+    """发布 = 深拷贝到公共项目(S1.3,s1-detail §五):
+
+    * 成员场景必须**已发布**(公共副本存在;深拷贝的成员行指向各成员
+      的公共副本,副本链与套件副本同区);有未发布成员 → 422
+      ``suite_member_not_public``(不再级联代发布 —— 成员先各自走
+      场景发布)。
+    * 套件副本:forked_from_id = 原套件 id,owner 不动(= 维护者),
+      mode_config 成员 id 重铸到公共副本 id;重发布 = 删旧副本重建。
+    * 表 B suite.publish = owner ∨ padmin ∨ maintainer(R6)。
+    """
+    from datetime import datetime, timezone
+
+    from ..services.zone import public_project_id
+
     suite = await _load_suite(db, suite_id)
     await _require_write(db, user, suite, verb="publish")
     if _is_draft(suite):
@@ -1573,75 +1608,154 @@ async def publish_suite(
             "code": "suite_is_draft",
             "message": "草稿不可发布(完成编排后可发布)"})
     members = await _ordered_members(db, suite.id)
-    unpublished: list[str] = []
+    pending: list[str] = []
+    sid_map: dict[str, str] = {}
     for m in members:
-        scen = await scenario_store.get_row(db, m.scenario_id)
-        if scen is not None and (scen.visibility or "private") != "public":
-            unpublished.append(m.scenario_id)
-            # 原件不剥(authz W6 修订:他人读/拷贝/执行各自脱敏)
-            from ..services.zone import apply_public, public_project_id
-            apply_public(scen, await public_project_id(db))
-    from ..services.zone import apply_public as _ap, public_project_id as _pp
-    _ap(suite, await _pp(db))
+        copy = await scenario_store.find_public_copy(db, m.scenario_id)
+        if copy is None:
+            pending.append(m.scenario_id)
+        else:
+            sid_map[m.scenario_id] = copy.scenario_id
+    if pending:
+        raise HTTPException(status_code=422, detail={
+            "code": "suite_member_not_public",
+            "message": "套件成员场景尚未发布到公共项目,请先发布成员场景",
+            "pendingMembers": pending})
+
+    pid = await public_project_id(db)
+    if pid is None:
+        raise HTTPException(status_code=409, detail={
+            "code": "public_project_missing",
+            "message": "公共项目未初始化"})
+    # 重发布:删旧副本(成员随 FK CASCADE)再重建
+    existing = await _find_public_suite_copy(db, suite.id)
+    if existing is not None:
+        await db.delete(existing)
+        await db.flush()
+    # 副本名:同属主下不与原件/其他套件撞名(uq_suites_owner_name)
+    base = f"{suite.name}(公共)"
+    taken = set((await db.execute(
+        select(Suite.name).where(Suite.owner_id == suite.owner_id)))
+        .scalars().all())
+    name, n = base, 2
+    while name in taken:
+        name = f"{base}({n})"
+        n += 1
+    copy = Suite(
+        name=name, description=suite.description,
+        owner_id=suite.owner_id, visibility="public", project_id=pid,
+        mode=suite.mode,
+        mode_config=_remap_config(dict(suite.mode_config or {}), sid_map),
+        rev=0,
+        forked_from_id=suite.id,
+        forked_from_owner_name=suite.forked_from_owner_name,
+        forked_from_at=datetime.now(timezone.utc).replace(tzinfo=None))
+    db.add(copy)
+    await db.flush()
+    for m in members:
+        db.add(SuiteMember(
+            suite_id=copy.id, scenario_id=sid_map[m.scenario_id],
+            owner_id=suite.owner_id, role=m.role, sort=m.sort))
     await db.commit()
-    await db.refresh(suite)
-    out = _summary(suite, len(members))
-    out.publishedMembers = unpublished  # 级联清单:确认框的事实面回执
-    # 时间线:suite 发布 + 被级联公开的成员场景(级联绕过
-    # set_visibility,须在此单独落 —— 此前成员被连带公开完全无痕)
+    await db.refresh(copy)
+    # 时间线:记在原套件轴(副本创建即发布动作)
     from ..services import activity as activity_svc
+
     actor_id = user.id if user.id == suite.owner_id else suite.owner_id
     extra = {} if user.id == suite.owner_id else {
         "by": user.display_name or user.username}
     await activity_svc.record(
         db, actor_id=actor_id, kind="suite.published",
         resource_type="suite", resource_id=str(suite.id),
-        detail={"name": suite.name, "cascaded": len(unpublished), **extra})
-    for sid in unpublished:
-        await activity_svc.record(
-            db, actor_id=suite.owner_id, kind="scenario.published",
-            resource_type="scenario", resource_id=sid,
-            detail={"name": sid, "via": "suite_publish",
-                    "suiteId": suite.id, "suiteName": suite.name})
-    # (W3 发布收敛为属主单判:suite.admin_publish 审计随越属主旁路消亡)
-    return out
+        detail={"name": suite.name, "publicCopyId": copy.id,
+                "cascaded": 0, **extra})
+    return _summary(copy, len(members))
 
 
 @router.delete("/{suite_id}/publish", response_model=SuiteSummaryOut)
 async def unpublish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
-    """下架 suite 本体(成员各自的 public 状态独立保留,§9)。表 B
-    suite.unpublish = maintainer ∨ public_admin(S1.1:维护者撤下、
-    Admin+ 治理下架);越属主下架 → 通知属主 + 入审计(§10;属主自
-    下架不通知不入)。"""
+    """下架 = 删除套件公共副本(S1.3)。三条路径与场景下架同构:
+
+    * 私有原件上调用:找到其公共副本删除(属主动作;成员场景的公共
+      副本不受影响 —— 各自独立);
+    * 公共副本上调用:maintainer ∨ public_admin 直接删;
+    * 存量迁入的无原件公共行 409(先复制到私有区留底)。
+
+    连带:引用该套件副本的公共模板软删(「已移除」+ 通知持有人)。
+    回包 = 原套件 summary(下架后回到私有态)。
+    """
     from ..services import audit as audit_svc
+    from ..services import integration_runner as _ir
     from ..services import notifications as notify_svc
     from ._ownership import can
+    from ..services.zone import public_project_id
 
     suite = await _load_suite(db, suite_id)
-    if not await can(db, user, "suite", "read", suite):
-        raise not_found_404("suite", str(suite_id))
-    # S1.1:unpublish = maintainer ∨ public_admin(项目维度谓词,async)
-    if not await can(db, user, "suite", "unpublish", suite):
+    pid = await public_project_id(db)
+
+    if suite.project_id is None:
+        copy = await _find_public_suite_copy(db, suite.id)
+        if copy is None:
+            if not await can(db, user, "suite", "read", suite):
+                raise not_found_404("suite", str(suite_id))
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "该套件没有公共副本(未发布)"})
+        if not await can(db, user, "suite", "write", suite):
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "only the suite's owner can unpublish it"})
+        copy_id = copy.id
+    elif pid is not None and suite.project_id == pid:
+        if not await can(db, user, "suite", "read", suite):
+            raise not_found_404("suite", str(suite_id))
+        if not await can(db, user, "suite", "unpublish", suite):
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "only the owner (or an operator, for "
+                           "already-public suites) can unpublish"})
+        if suite.forked_from_id is None:
+            raise HTTPException(status_code=409, detail={
+                "code": "public_copy_is_original",
+                "message": "这份公共套件没有私有副本(存量迁入),"
+                           "先复制到私有区留底再下架"})
+        copy = suite
+        suite = await _load_suite(db, copy.forked_from_id)
+        copy_id = copy.id
+    else:
+        # 普通项目套件:无下架语义 → 403
+        if not await can(db, user, "suite", "read", suite):
+            raise not_found_404("suite", str(suite_id))
         raise HTTPException(status_code=403, detail={
             "code": "not_owner",
-            "message": "only the owner (or an operator, for "
-                       "already-public suites) can unpublish"})
-    from ..services.zone import apply_private
-    apply_private(suite)
+            "message": "项目套件不在公共项目,无下架语义"})
+
+    # 连带:引用该套件副本的公共模板软删,再删副本(成员随 CASCADE)
+    tpls = await _ir.retire_templates_for_public_target(
+        db, suite_id=copy_id)
+    await db.delete(copy)
     await db.commit()
-    await db.refresh(suite)
-    # 入口闸保证越属主 ⇔ Admin+ ∧ 公共项目(public_admin)
-    if suite.owner_id != user.id:
+    for tpl in tpls:
+        try:
+            await _ir.notify_subscribers(
+                tpl,
+                title=f"集成任务「{tpl.name}」已移除",
+                message="引用的公共套件已下架,订阅随之失效;"
+                        "卡片会显示「已移除」,可自行删卡")
+        except Exception:  # noqa: BLE001
+            pass
+    # 越属主下架(Admin+ 治理):通知 + 审计
+    if copy.owner_id != user.id:
         try:
             await notify_svc.create_notification(
-                db, user_id=suite.owner_id,
+                db, user_id=copy.owner_id,
                 type_="scenario_unpublished",
                 title=f"你的公共 Suite 已被下架:{suite.name}",
-                body=(f"管理员 {user.display_name or user.username} 将 Suite "
-                      f"「{suite.name}」从公共库下架(现为私有;成员场景的"
-                      f"公共状态不受影响)。"),
+                body=(f"管理员 {user.display_name or user.username} 下架了 "
+                      f"Suite「{suite.name}」的公共副本(原件仍在你的"
+                      f"私有区;成员场景的公共状态不受影响)。"),
                 link=f"/suites/{suite.id}")
         except Exception:  # noqa: BLE001
             pass
@@ -1651,7 +1765,16 @@ async def unpublish_suite(
             action="suite.admin_unpublish",
             resource_type="suite", resource_id=str(suite.id),
             resource_name=suite.name,
-            detail={"name": suite.name})
+            detail={"name": suite.name, "publicCopyId": copy_id})
+    from ..services import activity as activity_svc
+
+    actor_id = user.id if user.id == suite.owner_id else suite.owner_id
+    extra = {} if user.id == suite.owner_id else {
+        "by": user.display_name or user.username}
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="suite.unpublished",
+        resource_type="suite", resource_id=str(suite.id),
+        detail={"name": suite.name, "publicCopyId": copy_id, **extra})
     return _summary(suite, await _member_count(db, suite.id))
 
 

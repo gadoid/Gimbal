@@ -709,6 +709,38 @@ async def _pause_consent_changed(
     return {"status": "paused", "durationMs": 0, "error": message}
 
 
+async def retire_templates_for_public_target(
+    db, *, scenario_id: str | None = None,
+    suite_id: int | None = None,
+) -> list:
+    """S1.3 公共内容下架连带:引用该场景/套件**公共副本**的公共模板
+    软删(``removed_at``;订阅卡片转「已移除」态)。返回软删的模板,
+    调用方在提交后用 :func:`notify_subscribers` 发人话通知(与模板
+    删除同口径)。平台模板(is_platform_template)同样软删 —— 其引用
+    的公共场景下架后无内容可执行。"""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from ..models.integration_task import IntegrationTask
+
+    conds = [
+        IntegrationTask.template_id.is_(None),
+        IntegrationTask.removed_at.is_(None),
+        IntegrationTask.visibility == "public",
+    ]
+    if scenario_id is not None:
+        conds.append(IntegrationTask.scenario_id == scenario_id)
+    if suite_id is not None:
+        conds.append(IntegrationTask.suite_id == suite_id)
+    tpls = (await db.execute(
+        select(IntegrationTask).where(*conds))).scalars().all()
+    now = datetime.now(timezone.utc)
+    for tpl in tpls:
+        tpl.removed_at = now
+    return tpls
+
+
 async def notify_subscribers(
     tpl: IntegrationTask, *, title: str, message: str,
 ) -> int:

@@ -234,11 +234,22 @@ class TestStewardUnpublish:
                 select(User.id).where(
                     User.username == "mb_upown"))).scalar_one()
 
+        # S1.3:发布 = 复制 —— Admin+ 的治理下架作用在**公共副本**上
+        # (原件恒私有,admin 不可见);回包 = 原件的读形态(private)
         h_admin = await role_headers(client, "mb_upadm", role="admin")
         r = await client.post(
-            "/api/scenarios/sc-mb-up/unpublish", headers=h_admin)
+            "/api/scenarios/sc-mb-up-public/unpublish", headers=h_admin)
         assert r.status_code == 200, r.text
         assert r.json()["visibility"] == "private"
+        from app.models.composer_scenario import ComposerScenario as _CS
+
+        async with db_module.SessionLocal() as db:
+            assert (await db.execute(select(_CS.scenario_id).where(
+                _CS.scenario_id == "sc-mb-up-public"))).scalar_one_or_none() \
+                is None, "公共副本应已删除"
+            assert (await db.execute(select(_CS.scenario_id).where(
+                _CS.scenario_id == "sc-mb-up"))).scalar_one() == "sc-mb-up", \
+                "原件保留"
         async with db_module.SessionLocal() as db:
             audits = (await db.execute(select(AuditLog).where(
                 AuditLog.action == "scenario.admin_unpublish"))).scalars().all()
@@ -282,9 +293,11 @@ class TestStewardUnpublish:
         await _mk_scenario(client, h_owner, "sc-mb-pu")
         assert (await client.post(
             "/api/scenarios/sc-mb-pu/publish", headers=h_owner)).status_code == 200
+        # S1.3:发布 = 复制后,原件恒私有 —— admin 对他人私有原件不可见
+        # (读闸 404;R6 精神不变:admin 无发布权,不再是隐式空操作)
         h_admin = await role_headers(client, "mb_puadm", role="super_admin")
         r = await client.post("/api/scenarios/sc-mb-pu/publish", headers=h_admin)
-        assert r.status_code == 403, r.text
+        assert r.status_code == 404, r.text
 
 
 class TestSuiteNarrowed:
@@ -330,16 +343,24 @@ class TestSuiteNarrowed:
 
         h_owner = await role_headers(client, "mb_supown")
         suite_id = await self._mk_suite(client, h_owner)
+        # S1.3:先发布成员场景(套件深拷贝的前置),套件发布回包 = 公共副本
         assert (await client.post(
-            f"/api/suites/{suite_id}/publish", headers=h_owner)).status_code == 200
+            "/api/scenarios/sc-mb-su/publish",
+            headers=h_owner)).status_code == 200
+        r = await client.post(
+            f"/api/suites/{suite_id}/publish", headers=h_owner)
+        assert r.status_code == 200, r.text
+        copy_suite_id = r.json()["suiteId"]
+        assert copy_suite_id != suite_id
         async with db_module.SessionLocal() as db:
             owner_id = (await db.execute(
                 select(User.id).where(
                     User.username == "mb_supown"))).scalar_one()
 
+        # Admin+ 治理下架作用在公共副本上;回包 = 原件 summary(private)
         h_admin = await role_headers(client, "mb_supadm", role="admin")
         r = await client.delete(
-            f"/api/suites/{suite_id}/publish", headers=h_admin)
+            f"/api/suites/{copy_suite_id}/publish", headers=h_admin)
         assert r.status_code == 200, r.text
         assert r.json()["visibility"] == "private"
         async with db_module.SessionLocal() as db:

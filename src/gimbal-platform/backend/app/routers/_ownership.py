@@ -291,23 +291,14 @@ async def can_run_scenario(
     属主 ∨ 引用;普通项目成员可跑;公共项目不开执行(公共资源跑需
     先 fork,不变量 7;W3 起 admin 同样无旁路)。owner 谓词带区守卫
     (D1:project_id 非空时属主身份不给权限);owner_id=None(孤儿)
-    时仅引用 / 项目分支可过。**影子期例外**:维护者可跑自己在公共
-    项目的行(见函数体注释,S1.3 随「发布 = 复制」删除)。"""
+    时仅引用 / 项目分支可过。S1.3 起发布 = 复制:原件恒私有(属主
+    可跑),公共副本对所有人不可执行 —— 无维护者例外。"""
     if project_id is None:
         if owner_id is not None and _user_matches(user, owner_id):
             return True
         return await has_scenario_ref(db, user.id, scenario_id)
-    from ..services.zone import my_project_roles, public_project_id
-    if project_id in await my_project_roles(db, user.id):
-        return True
-    # 影子期例外(S1.3 收敛):发布 = 复制落地前,公共项目行仍是作者的
-    # 工作原件(发布把原件翻进公共项目)—— 维护者(owner_id)保留直接
-    # 执行权,否则作者发布后自己的集成任务 / 手动执行全断。S1.3 起
-    # public=副本、原件回私有区,本分支随之删除(表 B run 公共 = —)。
-    if owner_id is not None and _user_matches(user, owner_id) \
-            and project_id == await public_project_id(db):
-        return True
-    return False
+    from ..services.zone import my_project_roles
+    return project_id in await my_project_roles(db, user.id)
 
 
 async def can_read_scenario_row(db, user: Any, row: Any) -> bool:

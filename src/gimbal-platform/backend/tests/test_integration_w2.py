@@ -37,8 +37,11 @@ async def test_delete_notifies_subscribers(client):
     r = await client.post("/api/scenarios", headers=u1,
                           json=make_draft("sc-w2", steps=STEPS))
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario("sc-w2")   # S1.3:公共模板引用公共副本
     r = await client.post("/api/integration/tasks", headers=u1, json={
-        "name": "W2", "scenarioId": "sc-w2", "identityMode": "personal",
+        "name": "W2", "scenarioId": "sc-w2-public", "identityMode": "personal",
         "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
         "visibility": "public"})
     assert r.status_code == 201, r.text

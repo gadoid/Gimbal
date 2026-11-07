@@ -112,6 +112,7 @@ async def create_in_transaction(
     owner: str = "",
     owner_id: int | None = None,
     visibility: str = "private",
+    project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
     forked_from_at: "datetime | None" = None,
@@ -159,6 +160,7 @@ async def create_in_transaction(
         owner_name=server_owned.owner,
         owner_id=owner_id,
         visibility=visibility,
+        project_id=project_id,
         payload=payload,
         forked_from_id=forked_from_id,
         forked_from_owner_name=forked_from_owner_name,
@@ -178,6 +180,7 @@ async def create(
     owner: str = "",
     owner_id: int | None = None,
     visibility: str = "private",
+    project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
     forked_from_at: "datetime | None" = None,
@@ -203,7 +206,8 @@ async def create(
     try:
         row = await create_in_transaction(
             db, draft, owner=owner, owner_id=owner_id,
-            visibility=visibility, forked_from_id=forked_from_id,
+            visibility=visibility, project_id=project_id,
+            forked_from_id=forked_from_id,
             forked_from_owner_name=forked_from_owner_name,
             forked_from_at=forked_from_at)
         await db.commit()
@@ -473,6 +477,13 @@ async def copy_scenario(
     activity_detail: dict | None = None,
     origin_id: str | None = None,
     origin_owner_name: str | None = None,
+    # S1.3 发布新语义:确定性副本 id(公共副本 = <原 id>@public)、
+    # 落库可见性/项目、剥离口径(cross_owner = 跨属主才剥,默认;
+    # always = 发布复制恒剥,同属主也剥 —— 公共副本不落明文)
+    new_sid: str | None = None,
+    visibility: str = "private",
+    project_id: int | None = None,
+    strip: str = "cross_owner",
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
@@ -491,15 +502,17 @@ async def copy_scenario(
 
     src = await _get_row(db, scenario_id)
     suffix = _uuid4().hex[:6]
-    new_sid = f"{scenario_id}-copy-{suffix}"[:128]
+    new_sid = (new_sid if new_sid is not None
+               else f"{scenario_id}-copy-{suffix}")[:128]
 
     payload = _copy.deepcopy(src.payload or {})
     # authz W6:跨属主拷贝剥离内置凭证与数据集敏感列(单点:复制到我的 /
     # 分享拷贝 / 引用转副本 / suite fork / 变更适配副本全走这里;E1 ——
     # 订阅不复制,无此路径)。同属主(作者另存为、给自己做适配副本)
-    # 凭证本就是自己的,原样保留。
+    # 凭证本就是自己的,原样保留。S1.3 发布复制走 strip="always":
+    # 公共副本不落明文,属主也一样(原件仍在属主手里)。
     cross_owner = src.owner_id != new_owner_id
-    if cross_owner:
+    if cross_owner or strip == "always":
         strip_builtin_credentials(payload)
     copied_name = new_name or ""
     definition = payload.get("definition")
@@ -515,6 +528,7 @@ async def copy_scenario(
     from datetime import datetime as _dt, timezone as _tz
     await create(
         db, draft, owner=new_owner, owner_id=new_owner_id,
+        visibility=visibility, project_id=project_id,
         forked_from_id=origin_id or scenario_id,
         forked_from_owner_name=origin_owner_name
         or (src.owner_name or ""),
@@ -536,7 +550,8 @@ async def copy_scenario(
             scenario_id=new_sid,
             name=ds.name,
             description=ds.description,
-            rows=(strip_sensitive_columns(ds.rows or []) if cross_owner
+            rows=(strip_sensitive_columns(ds.rows or [])
+                  if (cross_owner or strip == "always")
                   else _copy.deepcopy(ds.rows or [])),
             # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉
             # 场景的解锁语义静默丢失
@@ -712,6 +727,71 @@ async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
 
 
 # ─── helpers ──────────────────────────────────────────────────────
+# ── 发布新语义(S1.3):发布 = 复制到公共项目 ────────────────────────
+
+def public_copy_id(scenario_id: str) -> str:
+    """公共副本的确定性 id:<原 id>-public(≤128 截断;scenarioId 模式
+    只允许小写字母数字连字符,不能用 @)。重发布/下架按它定位,
+    不需要查 forked_from 索引。"""
+    return f"{scenario_id}-public"[:128]
+
+
+async def find_public_copy(
+    db: AsyncSession, scenario_id: str
+) -> "ComposerScenario | None":
+    """原件的公共副本(forked_from_id = 原 id ∧ 公共项目);无 → None。"""
+    from .zone import public_project_id
+
+    pid = await public_project_id(db)
+    if pid is None:
+        return None
+    return (await db.execute(
+        select(ComposerScenario).where(
+            ComposerScenario.forked_from_id == scenario_id,
+            ComposerScenario.project_id == pid))).scalar_one_or_none()
+
+
+async def publish_copy(
+    db: AsyncSession, scenario_id: str,
+) -> "tuple[Scenario, bool]":
+    """发布 = 复制到公共项目(S1.3,s1-detail §五):
+
+    * 副本 id = :func:`public_copy_id`(确定性);**恒剥离**内置凭证与
+      数据集敏感列(strip="always",同属主也剥 —— 公共副本不落明文,
+      原件仍在属主手里);``forked_from_id`` = 原件 id;owner_id 不动
+      (= 维护者);原件不动(private、可继续执行/维护)。
+    * 重发布 = 删旧副本再复制(全级联:数据集/方案/suite 引用清洗),
+      同 id 覆盖内容 —— 订阅者经指纹闸在下次执行暂停待确认。
+    Returns ``(公共副本读形态, 是否新建)``。
+    """
+    from .zone import public_project_id
+
+    src = await _get_row(db, scenario_id)
+    pid = await public_project_id(db)
+    if pid is None:
+        raise ValueError("public_project_missing: 公共项目未种子")
+    copy_sid = public_copy_id(scenario_id)
+    existing = await get_row(db, copy_sid)
+    created = existing is None
+    if existing is not None:
+        await delete(db, copy_sid)
+    meta = ((src.payload or {}).get("definition") or {}).get("meta") or {}
+    out = await copy_scenario(
+        db, scenario_id,
+        new_owner=src.owner_name or "", new_owner_id=src.owner_id,
+        new_name=str(meta.get("name") or scenario_id),  # 公共列表显示原名
+        new_sid=copy_sid, visibility="public", project_id=pid,
+        strip="always", activity_kind="scenario.published",
+        activity_detail={"via": "publish_copy",
+                         "sourceScenarioId": scenario_id})
+    return out, created
+
+
+async def unpublish_public_copy(db: AsyncSession, copy_sid: str) -> None:
+    """下架 = 删除公共副本(:func:`delete` 全级联)。KeyError on miss."""
+    await delete(db, copy_sid)
+
+
 async def get_row(
     db: AsyncSession, scenario_id: str
 ) -> ComposerScenario | None:

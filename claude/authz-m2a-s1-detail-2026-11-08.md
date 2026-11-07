@@ -130,9 +130,21 @@
 
 ---
 
-## 五、S1.3 发布新语义（S1-a）
+## 五、S1.3 发布新语义（S1-a,已实现 2026-11-08）
 
-### 实现项
+### 实施记录
+
+- **store 单点**：`copy_scenario` 扩参（`new_sid` 确定性副本 id / `visibility` / `project_id` / `strip="cross_owner"|"always"`）;`create`/`create_in_transaction` 透传 `project_id`;新增 `public_copy_id`（`<原 id>-public`,scenarioId 模式不允许 @）/ `find_public_copy` / `publish_copy`（重发布 = 删旧副本全级联再复制,同 id 覆盖）/ `unpublish_public_copy`。
+- **场景发布**：POST publish = `publish_copy`;已在公共项目的行（存量迁移/副本本体）再发布空操作;时间线记在原件轴（detail 带 publicCopyId/republished）。
+- **下架**：三路径 —— 私有原件上调用（属主动作删副本）/ 公共副本上调用（maintainer ∨ public_admin）/ 无原件迁移行 409 `public_copy_is_original`（先复制到私有区留底）;连带:引用副本的公共模板软删「已移除」+ 通知持有人（`integration_runner.retire_templates_for_public_target` 单点）、含副本的公共套件副本一并下架;回包 = 原件读形态。
+- **suite 发布**：成员场景未发布 → 422 `suite_member_not_public`（不再级联代发布）;深拷贝 = suite 行 + 成员行指向各成员公共副本（`_remap_config` 重铸 mode_config 成员 id）+ forked_from_id = 原套件 id;副本名 `(公共)` 后缀防同属主撞名;重发布 = 删旧副本重建。下架三路径同场景（含套件引用模板连带）。
+- **集成公开闸**：创建与更新 visibility=public → 引用场景/套件必须在公共项目（422 `scenario_not_public`）+ 主体为维护者（表 B write 投影）;私有/个人模板照旧可执行判。预览闸同口径（可执行 ∨ 公共副本维护者）。
+- **run 例外收敛**：删除 S1.2 影子期维护者例外 —— 原件恒私有可跑,公共副本对所有人不可执行（表 B run 公共 = — 的终态落地）。
+- **公共项目禁直接新建**：现有创建面均无项目上下文（无 API 可直建入项目）,禁约随 S1.4 的项目上下文创建面一并落;报告定义的 `public=True` 保留「建即公开」快捷方式（定义无凭证可剥离,等价于创建+复制;S1.4 需要时再加 forked_from）。
+- **夹具**：`inbound_fixtures.publish_scenario` 走 `publish_copy`（返回副本 id —— 公共读面用副本 id,执行/集成面用原件 id）;`test_integration._mk_scenario(publish=True)` 同口径返回应引用 id。
+- 测试:`TestS13PublishSemantics`（重发布同 id 刷新 / 迁移行 409 / suite 422 + 深拷贝成员指向副本 + 下架 / 集成创建与切公开 422）;过期断言改造:strips 发布面（回包副本落库即无凭证）、wrapup 批次（副本 id）、matrix_b 三个 steward 端点（下架作用在副本上;admin 对他人私有原件 404）、suites composition/copy 四例（成员先发布）。
+
+### 实现项（原计划,存档）
 
 | 动作 | 新语义 |
 |---|---|

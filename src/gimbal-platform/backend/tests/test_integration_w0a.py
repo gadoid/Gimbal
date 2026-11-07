@@ -44,7 +44,9 @@ STEPS = [{
 
 
 def _task_body(sid: str, **over) -> dict:
-    body = {"name": "W0a", "scenarioId": sid, "identityMode": "personal",
+    # S1.3:公共模板引用公共副本(<原 id>-public;夹具建场景即发布)
+    body = {"name": "W0a", "scenarioId": f"{sid}-public",
+            "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}
     body.update(over)
@@ -55,6 +57,9 @@ async def _mk_scenario(client, h, sid: str) -> None:
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=STEPS))
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario(sid)
 
 
 async def _mk_task(client, h, sid: str) -> int:

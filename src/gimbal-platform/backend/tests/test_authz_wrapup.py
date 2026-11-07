@@ -132,11 +132,12 @@ async def test_batch_scenario_op_public_allowed(client: AsyncClient):
     r = await client.post("/api/scenarios", headers=h_owner,
                           json=make_draft("sc-wu-pub"))
     assert r.status_code in (200, 201), r.text
-    await publish_scenario("sc-wu-pub")
+    # S1.3:发布 = 复制 —— 原件恒私有(批次 409),公共副本可代改
+    copy_sid = await publish_scenario("sc-wu-pub")
     h_adm = await role_headers(client, "wu_pua", role="admin")
     bid = await _open_carry_batch(client, h_adm)
     r = await client.post(f"/api/adaptations/batches/{bid}/ops", headers=h_adm,
                           json={"opType": "renameField",
-                                "scenarioId": "sc-wu-pub",
+                                "scenarioId": copy_sid,
                                 "payload": {"from": "$.a", "to": "$.b"}})
     assert r.status_code == 201, r.text

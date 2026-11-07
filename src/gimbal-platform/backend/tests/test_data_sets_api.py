@@ -84,18 +84,28 @@ class TestPublicScenarioReadThrough:
         assert (await client.post(
             "/api/scenarios/sc-ds-u/publish", headers=h_owner)).status_code == 200
 
+        # S1.3:公共读面 = 副本 —— 非属主单读副本数据集可及;
+        # 列表是「自有 ∨ 引用闭包」镜头(§7.4),公共父场景不进闭包
+        # (单读可及、列表不铺开 —— 现状口径,钉住防漂移)
         h_other = await role_headers(client, "ds_uoth", role="user")
-        r = await client.get(f"/api/data-sets/{ds_id}", headers=h_other)
+        from sqlalchemy import select as _sel
+
+        from app.core import db as _dbm
+        from app.models.composer_data_set import ComposerDataSet as _DS
+
+        async with _dbm.SessionLocal() as _s:
+            copy_ds = (await _s.execute(_sel(_DS.dataset_id).where(
+                _DS.scenario_id == "sc-ds-u-public"))).scalar_one()
+        r = await client.get(f"/api/data-sets/{copy_ds}", headers=h_other)
         assert r.status_code == 200, r.text
-        # 列表是「自有 ∨ 引用闭包」镜头(§7.4),公共父场景不进闭包:
-        # 单读可及、列表不铺开 —— 现状口径,钉住防漂移
         listed = (await client.get(
-            "/api/data-sets?scenarioId=sc-ds-u", headers=h_other)).json()
-        assert listed == []
+            "/api/data-sets?scenarioId=sc-ds-u-public", headers=h_other)
+        ).json()
+        assert listed == []   # 列表不铺开(现状口径钉住)
         # 公开 ≠ 可写:非属主(含 admin)改/删 → 403
         h_admin = await role_headers(client, "ds_uadm", role="admin")
         assert (await client.put(
-            f"/api/data-sets/{ds_id}", headers=h_admin,
+            f"/api/data-sets/{copy_ds}", headers=h_admin,
             json={"name": "ds", "rows": []})).status_code == 403
         assert (await client.delete(
-            f"/api/data-sets/{ds_id}", headers=h_admin)).status_code == 403
+            f"/api/data-sets/{copy_ds}", headers=h_admin)).status_code == 403

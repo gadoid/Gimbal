@@ -645,31 +645,100 @@ async def _record_admin_visibility_audit(
         resource_type="scenario", resource_id=scenario_id,
         resource_name=row.name,
         detail={"ownerId": row.owner_id, "name": row.name})
+async def _take_down_public_copy(
+    db, user, *, copy_row, original_id: str | None,
+) -> None:
+    """下架公共副本(S1.3):删副本(delete 全级联)+ 连带 —— 引用它的
+    公共模板软删(卡片「已移除」,通知持有人)、含它的公共套件副本
+    一并下架(通知维护者;本人操作不通知)。"""
+    from sqlalchemy import select as _sel
+
+    from ..models.suite import Suite as _Suite, SuiteMember as _SM
+    from ..services import integration_runner as _ir
+
+    copy_sid = copy_row.scenario_id
+    # ① 引用副本的公共模板 → 软删(随 delete 的事务一并提交)
+    tpls = await _ir.retire_templates_for_public_target(
+        db, scenario_id=copy_sid)
+    # ② 含副本的公共套件副本 → 一并下架(成员随 FK CASCADE;引用
+    #    套件的公共模板同样软删)
+    hit = (await db.execute(
+        _sel(_Suite).join(_SM, _SM.suite_id == _Suite.id)
+        .where(_SM.scenario_id == copy_sid,
+               _Suite.project_id.is_not(None)))).scalars().all()
+    suite_tpls = []
+    for su in hit:
+        suite_tpls += await _ir.retire_templates_for_public_target(
+            db, suite_id=su.id)
+    # ③ 删副本(内部提交;模板软删骑同一事务)
+    await scenario_store.unpublish_public_copy(db, copy_sid)
+    for su in hit:
+        await db.delete(su)
+        await db.commit()
+    # ④ 人话通知(best-effort,提交后)
+    for tpl in tpls + suite_tpls:
+        try:
+            await _ir.notify_subscribers(
+                tpl,
+                title=f"集成任务「{tpl.name}」已移除",
+                message="引用的公共内容已下架,订阅随之失效;"
+                        "卡片会显示「已移除」,可自行删卡")
+        except Exception:  # noqa: BLE001
+            pass
+    for su in hit:
+        if su.owner_id is not None and su.owner_id != user.id:
+            from ..services import notifications as _ns
+            try:
+                await _ns.create_notification(
+                    db, user_id=su.owner_id,
+                    type_="scenario_unpublished",
+                    title="你的公共 Suite 已连带下架",
+                    body=f"成员场景 {original_id or copy_sid} 下架,"
+                         f"其所属公共 Suite 副本已一并下架。",
+                    link=f"/suites/{su.id}")
+            except Exception:  # noqa: BLE001
+                pass
+
+
 @router.post("/{scenario_id}/publish", response_model=Scenario)
 async def publish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
-    """发布:visibility → public,所有登录用户可读(取代 V1 公共库)。
-    属主动作(表 B scenario.publish = owner;W3 起 Admin+ 对他人对象
-    无发布权,R6 —— 对已公共对象再发布本是空操作,不损失什么)。"""
+    """发布 = 复制到公共项目(S1.3,s1-detail §五):
+
+    * 公共副本 id = ``<原 id>-public``,**恒剥离**内置凭证与数据集
+      敏感列(同属主也剥 —— 公共副本不落明文,原件仍在属主手里);
+      ``forked_from_id`` = 原件 id;owner_id 不动(= 维护者)。
+    * 原件不动:恒 private(可继续执行/维护);重发布 = 同 id 覆盖
+      副本内容(订阅者经指纹闸在下次执行暂停待确认)。
+    * 已在公共项目上的行(存量迁入的无原件公共内容)再发布为空操作。
+    * 表 B scenario.publish = owner ∨ padmin ∨ maintainer(R6:Admin+
+      对他人对象无发布权)。
+    """
+    from ..services.zone import public_project_id
+
     row = await _load_row(db, scenario_id)
+    pid = await public_project_id(db)
+    if pid is not None and row.project_id == pid:
+        # 已在公共项目(存量迁移行 / 副本本体):无原件可复制 → 空操作
+        await _require_visibility_actor(db, user, row, verb="publish")
+        return await scenario_store.get(db, scenario_id, user_id=user.id)
     await _require_visibility_actor(db, user, row, verb="publish")
-    was_public = (row.visibility or "private") == "public"
+    republished = (await scenario_store.find_public_copy(
+        db, scenario_id)) is not None
     try:
-        out = await scenario_store.set_visibility(
-            db, scenario_id, "public", viewer_id=user.id)
+        out, _created = await scenario_store.publish_copy(db, scenario_id)
     except KeyError as e:
         raise key_error_404(e)
-    if not was_public:   # 状态确变才记:重复发布不刷事件/审计
-        # 时间线:可见性跃迁(直接路径;suite 级联路径在 suites.py 落)
-        # (越属主者到不了这里 —— 入口闸对非属主只放行已是公共的对象,
-        # was_public 必为真,audit 面 scenario.admin_publish 随旁路消亡)
-        from ..services import activity as activity_svc
-        actor_id, extra = _axis_actor(user, row)
-        await activity_svc.record(
-            db, actor_id=actor_id, kind="scenario.published",
-            resource_type="scenario", resource_id=scenario_id,
-            detail={"name": row.name, **extra})
+    # 时间线:发布/重发布记在原件轴(副本自身时间线随复制已有事件)
+    from ..services import activity as activity_svc
+
+    actor_id, extra = _axis_actor(user, row)
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="scenario.published",
+        resource_type="scenario", resource_id=scenario_id,
+        detail={"name": row.name, "publicCopyId": out.meta.scenario_id,
+                "republished": republished, **extra})
     return out
 
 
@@ -677,88 +746,96 @@ async def publish_scenario(
 async def unpublish_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
-    """下架:公共副本退出公共项目(影子期 = visibility → private +
-    project_id → NULL)。表 B scenario.unpublish = maintainer ∨
-    public_admin(S1.1;维护者撤下自己的公共内容,Admin+ 治理下架)。"""
+    """下架 = 删除公共副本(S1.3)。三条路径:
+
+    * 私有原件上调用:找到其公共副本删除(属主动作);
+    * 公共副本上调用:maintainer ∨ public_admin 直接删;
+    * 存量迁入的无原件公共行(forked_from_id 为空)409 —— 只有这一
+      份内容,先「复制到私有区」留底再下架。
+
+    连带:引用副本的公共模板转「已移除」(软删 + 通知持有人);含
+    副本的公共套件副本一并下架。回包 = 原件的读形态(下架后回到
+    私有态;无原件路径不可能走到回包)。
+    """
+    from ..services.zone import public_project_id
+
+    from ._ownership import can
+
     row = await _load_row(db, scenario_id)
-    await _require_visibility_actor(db, user, row, verb="unpublish")
-    was_public = (row.visibility or "private") == "public"
-    try:
-        result = await scenario_store.set_visibility(
-            db, scenario_id, "private", viewer_id=user.id)
-    except KeyError as e:
-        raise key_error_404(e)
-    if was_public:   # 状态确变才记:重复下架不刷事件/审计
-        # 时间线:可见性跃迁 + admin 越属主审计
+    pid = await public_project_id(db)
+
+    if row.project_id is None:
+        # 私有原件:删它的公共副本(没有 → 常规闸 403,行为同旧)
+        copy_row = await scenario_store.find_public_copy(db, scenario_id)
+        if copy_row is None:
+            await _require_visibility_actor(
+                db, user, row, verb="unpublish")
+            raise HTTPException(  # pragma: no cover — 闸必拒
+                403, detail="not_owner")
+        if not await can(db, user, "scenario", "write", row):
+            raise HTTPException(
+                403,
+                detail="not_owner: only the scenario's owner can "
+                       "unpublish it")
+        await _take_down_public_copy(
+            db, user, copy_row=copy_row, original_id=scenario_id)
         from ..services import activity as activity_svc
+
         actor_id, extra = _axis_actor(user, row)
         await activity_svc.record(
             db, actor_id=actor_id, kind="scenario.unpublished",
             resource_type="scenario", resource_id=scenario_id,
-            detail={"name": row.name, **extra})
+            detail={"name": row.name,
+                    "publicCopyId": copy_row.scenario_id, **extra})
+        return await scenario_store.get(db, scenario_id, user_id=user.id)
+
+    if pid is not None and row.project_id == pid:
+        # 公共行:维护者撤下 / Admin+ 治理下架
+        await _require_visibility_actor(db, user, row, verb="unpublish")
+        if row.forked_from_id is None:
+            raise HTTPException(status_code=409, detail={
+                "code": "public_copy_is_original",
+                "message": "这份公共内容没有私有原件(存量迁入),"
+                           "先「复制到私有区」留底再下架"})
+        original_id = row.forked_from_id
+        await _take_down_public_copy(
+            db, user, copy_row=row, original_id=original_id)
+        from ..services import activity as activity_svc
+
+        orig = await scenario_store.get_row(db, original_id)
+        actor_id, extra = _axis_actor(
+            user, orig if orig is not None else row)
+        await activity_svc.record(
+            db, actor_id=actor_id, kind="scenario.unpublished",
+            resource_type="scenario", resource_id=original_id,
+            detail={"name": row.name, "publicCopyId": scenario_id,
+                    **extra})
+        # 越属主下架(Admin+ 治理):入审计 + 通知维护者
         await _record_admin_visibility_audit(
             db, user, row, scenario_id, "scenario.admin_unpublish")
-    # P2 §7.9 连带下架:公共 suite ⇒ 成员全 public。场景下架时,其所
-    # 属的公共 suite 一并下架(属主即 suite 属主——组合外键保证;自
-    # 下架不通知,admin 下架通知 suite 属主,与既有 admin 下架通知口径
-    # 一致)。未发布 suite 里的成员无联动。
-    from ..models.suite import Suite as _Suite, SuiteMember as _SM
-    from sqlalchemy import select as _sel, update as _upd
-    _hit = (await db.execute(
-        _sel(_Suite.id, _Suite.owner_id).join(
-            _SM, _SM.suite_id == _Suite.id)
-        .where(_SM.scenario_id == scenario_id,
-               _Suite.visibility == "public"))).all()
-    if _hit:
-        # 影子写:visibility 与 project_id 同步翻转(services.zone)
-        await db.execute(_upd(_Suite).where(
-            _Suite.id.in_([h.id for h in _hit]))
-            .values(visibility="private", project_id=None))
-        # 级联 UPDATE 须显式提交(属主自下架不走通知分支的隐式 commit;
-        # set_visibility 内部已提交的是场景行,不含本条 suite UPDATE)
-        await db.commit()
-        # 越属主下架(steward,入口闸保证 Admin+ ∧ 原为公共)才通知
-        # 受连带 suite 的属主;属主自下架不通知(与下段属主通知同口径)
-        if row.owner_id != user.id:
-            from ..services import notifications as _ns
-            for h in _hit:
-                if h.owner_id is not None and h.owner_id != user.id:
-                    try:
-                        await _ns.create_notification(
-                            db, user_id=h.owner_id,
-                            type_="scenario_unpublished",
-                            title="你的公共 Suite 已连带下架",
-                            body=(f"管理员 {user.display_name or user.username} "
-                                  f"下架了成员场景 {scenario_id},其所属的公共"
-                                  f"所属 Suite 已一并下架(现为私有)。"),
-                            link=f"/suites/{h.id}")
-                    except Exception:  # noqa: BLE001
-                        pass
+        if row.owner_id is not None and row.owner_id != user.id:
+            from ..services import notifications as notify_svc
 
-    # 通知接线(P1b,权限方案 §3.2;authz W3 收口):Admin+ 下架**他人**
-    # 场景是全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
-    # was_public 一并钉进条件 —— 入口闸已保证越属主 ⇔ 原为公共,重复
-    # 声明防未来闸变化时误发(dev-plan「:736 收窄」)。
-    if (was_public and row.owner_id is not None
-            and row.owner_id != user.id):
-        from ..services import notifications as notify_svc
-        from ..core.timeutil import ensure_aware
-        try:
-            await notify_svc.create_notification(
-                db,
-                user_id=row.owner_id,
-                type_="scenario_unpublished",
-                title=f"你的公共场景已被下架:{scenario_id}",
-                body=f"管理员 {user.display_name or user.username} 将 "
-                     f"{scenario_id} 从公共库下架(现为私有,仅你与管理员可见)。",
-                link=f"/scenarios/{scenario_id}/detail",
-            )
-        except Exception:  # noqa: BLE001 — 通知失败不阻断下架
-            pass
-    return result
+            try:
+                await notify_svc.create_notification(
+                    db, user_id=row.owner_id,
+                    type_="scenario_unpublished",
+                    title=f"你的公共场景已被下架:{original_id}",
+                    body=f"管理员 {user.display_name or user.username} "
+                         f"下架了 {original_id} 的公共副本"
+                         f"(原件仍在你的私有区)。",
+                    link=f"/scenarios/{original_id}/detail")
+            except Exception:  # noqa: BLE001
+                pass
+        return await scenario_store.get(
+            db, original_id, user_id=user.id)
+
+    # 普通项目场景:无下架语义(不在公共项目)→ 常规闸 403
+    await _require_visibility_actor(db, user, row, verb="unpublish")
+    raise HTTPException(  # pragma: no cover — 闸必拒
+        403, detail="not_owner")
 
 
-# ── 4.2) POST /{id}/copy — 深拷贝到我的(取代 V1 公共库"复制") ─────
 @router.post(
     "/{scenario_id}/copy", response_model=Scenario, status_code=status.HTTP_201_CREATED
 )

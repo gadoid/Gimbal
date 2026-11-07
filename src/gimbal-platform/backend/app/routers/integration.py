@@ -300,11 +300,20 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
-    # S1.2:引用闸 = 可执行判(自己的 ∨ 项目内可跑的;公共项目场景
-    # 不可执行 —— 公共内容走订阅,不走个人模板)
-    from ._ownership import can_run_scenario
+    # S1.3 引用闸按模板可见性分流:私有/个人模板 = 可执行判(自己的 ∨
+    # 项目内可跑的);公共模板 = 引用公共副本 ∧ 维护者(表 B write 投影
+    # —— 公共副本对谁都不可直接执行,公共内容走订阅而非直跑)
+    from ._ownership import can, can_run_scenario
 
-    if not await can_run_scenario(
+    if body.visibility == "public":
+        from ..services.zone import public_project_id
+
+        if scen.project_id != await public_project_id(db):
+            raise _bad("scenario_not_public",
+                       "场景未发布到公共项目,先发布场景再公开模板", 422)
+        if not await can(db, user, "scenario", "write", scen):
+            raise _bad("scenario_not_owned", "只能引用你维护的公共场景")
+    elif not await can_run_scenario(
             db, user, scenario_id=scen.scenario_id,
             owner_id=scen.owner_id, project_id=scen.project_id):
         raise _bad("scenario_not_owned",
@@ -493,6 +502,8 @@ async def patch_task(
         # 令牌保存面范围闸(§5.4:PATCH 422):换方案/清除都按**将生效**
         # 配方核对 —— 清除后回落默认方案,默认也可能引入超范围引用。
         if tpl.scenario_id:
+            from ..models.composer_scenario import ComposerScenario
+
             scen_row = (await db.execute(select(ComposerScenario).where(
                 ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
             if scen_row is not None:
@@ -515,6 +526,29 @@ async def patch_task(
     if body.resultPolicy in ("latest", "on_change"):
         tpl.result_policy = body.resultPolicy
     if body.visibility in ("private", "public"):
+        # S1.3:模板公开 → 引用目标必须已在公共项目(与创建闸同款)
+        if body.visibility == "public":
+            from ..services.zone import public_project_id
+
+            if tpl.target_type == "suite":
+                from ..models.suite import Suite
+
+                su = await db.get(Suite, tpl.suite_id)
+                if su is None or su.project_id != await public_project_id(db):
+                    raise _bad("scenario_not_public",
+                               "套件未发布到公共项目,先发布套件再公开模板",
+                               422)
+            else:
+                from ..models.composer_scenario import ComposerScenario
+
+                scen = (await db.execute(select(ComposerScenario).where(
+                    ComposerScenario.scenario_id == tpl.scenario_id))
+                    ).scalar()
+                if scen is None or scen.project_id != (
+                        await public_project_id(db)):
+                    raise _bad("scenario_not_public",
+                               "场景未发布到公共项目,先发布场景再公开模板",
+                               422)
         # S1.1 影子写:visibility ⇔ project_id 同步(services.zone)
         from ..services.zone import (apply_private, apply_public,
                                      public_project_id)
@@ -659,12 +693,15 @@ async def scenario_preview(
         ComposerScenario.scenario_id == scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {scenarioId}", 404)
-    # S1.2:预览与创建闸同口径(可执行判,区感知)
-    from ._ownership import can_run_scenario
+    # S1.3:预览与创建闸同口径(可执行判 ∨ 公共副本维护者)
+    from ._ownership import can, can_run_scenario
+    from ..services.zone import public_project_id
 
-    if not await can_run_scenario(
-            db, user, scenario_id=scen.scenario_id,
-            owner_id=scen.owner_id, project_id=scen.project_id):
+    if not (await can_run_scenario(
+                db, user, scenario_id=scen.scenario_id,
+                owner_id=scen.owner_id, project_id=scen.project_id)
+            or (scen.project_id == await public_project_id(db)
+                and await can(db, user, "scenario", "write", scen))):
         raise _bad("scenario_not_owned",
                    "只能引用你可执行的场景(自己的 / 项目内的)")
     if schemeId:

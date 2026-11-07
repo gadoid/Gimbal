@@ -213,9 +213,11 @@ async def test_draft_lifecycle_and_caps(
     assert r.status_code == 200 and not r.json()["isDraft"]
     detail = (await client.get(f"/api/suites/{draft_id}", headers=owner)).json()
     assert detail["rev"] == 1
-    # 清草稿后可发布
+    # 清草稿后可发布(S1.3:成员先发布,套件发布 = 深拷贝)
     await client.post(f"/api/suites/{draft_id}/members", headers=owner,
                       json={"scenarioIds": ["sc-df-1"]})
+    assert (await client.post(
+        "/api/scenarios/sc-df-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{draft_id}/publish", headers=owner)
     assert r.status_code == 200, r.text
 
@@ -248,10 +250,14 @@ async def test_access_and_capabilities(client: AsyncClient) -> None:
     assert (await client.get(f"/api/suites/{sid}",
                              headers=admin)).status_code == 404
 
-    # carol(无引用)私有套件 → 404;发布后 → public 读者,可读不可跑
+    # carol(无引用)私有套件 → 404;S1.3 发布 = 深拷贝(成员先发布),
+    # 公共副本对 carol = public 读者,可读不可跑
     assert (await client.get(f"/api/suites/{sid}",
                              headers=carol)).status_code == 404
-    await client.post(f"/api/suites/{sid}/publish", headers=owner)
-    d = (await client.get(f"/api/suites/{sid}", headers=carol)).json()
+    await client.post("/api/scenarios/sc-ac-1/publish", headers=owner)
+    r = await client.post(f"/api/suites/{sid}/publish", headers=owner)
+    assert r.status_code == 200, r.text
+    copy_id = r.json()["suiteId"]
+    d = (await client.get(f"/api/suites/{copy_id}", headers=carol)).json()
     assert d["access"] == "public" and d["canRun"] is False
     assert d["canEdit"] is False and d["canShare"] is False

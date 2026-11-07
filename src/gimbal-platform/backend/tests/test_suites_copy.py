@@ -97,9 +97,15 @@ async def test_public_fork_endpoint(client: AsyncClient) -> None:
     await _mk(client, owner, "sc-pf-1")
     sid = await _mk_suite(client, owner, "公共编排集")
     await _compose(client, owner, sid)
-    await client.post(f"/api/suites/{sid}/publish", headers=owner)
+    # S1.3:成员先发布,套件发布 = 深拷贝;公共读者 fork 的是副本
+    for _m in ("sc-x-a", "sc-x-b"):
+        assert (await client.post(
+            f"/api/scenarios/{_m}/publish", headers=owner)).status_code == 200
+    r = await client.post(f"/api/suites/{sid}/publish", headers=owner)
+    assert r.status_code == 200, r.text
+    pub_id = r.json()["suiteId"]
 
-    r = await client.post(f"/api/suites/{sid}/fork", headers=carol)
+    r = await client.post(f"/api/suites/{pub_id}/fork", headers=carol)
     assert r.status_code == 201, r.text
     out = r.json()
     assert out["mode"] == "compose" and out["memberCount"] == 2
@@ -111,7 +117,7 @@ async def test_public_fork_endpoint(client: AsyncClient) -> None:
     # 回落 username —— register_and_login 的 display_name = username)
     lst = (await client.get(
         "/api/suites?visibility=public", headers=carol)).json()
-    hit = [i for i in lst["items"] if i["suiteId"] == sid]
+    hit = [i for i in lst["items"] if i["suiteId"] == pub_id]
     assert hit and hit[0]["ownerName"] == "pf_owner"
 
     # 属主自复制私有 Suite(02 ⋯ 菜单「复制」):201,编排随副本重映射,

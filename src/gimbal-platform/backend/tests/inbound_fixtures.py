@@ -45,20 +45,15 @@ async def seed_alias(name: str = "agent-sys", **over) -> None:
         await s.commit()
 
 
-async def publish_scenario(scenario_id: str) -> None:
-    """场景可见性是列(发布走独立端点),测试里直改。
-
-    S1.1 影子不变式:public ⇔ project_id=公共项目 —— 直改必须成对
-    (services.zone.apply_public),否则新读面(表 B/visibility_clause)
-    把它当私有。"""
-    from app.models.composer_scenario import ComposerScenario
-    from app.services.zone import public_project_id
+async def publish_scenario(scenario_id: str) -> str:
+    """S1.3 发布 = 复制到公共项目(store 单点,不走 HTTP):原件恒私有
+    (可跑/私有读面),公共副本 id = <原 id>-public(恒剥离)。返回
+    副本 id —— 需要「公共可读形态」的断言用它;需要原件的(执行/
+    集成任务)继续用原 id。"""
+    from app.services import scenario_store
     async with db_module.SessionLocal() as s:
-        row = (await s.execute(sa.select(ComposerScenario).where(
-            ComposerScenario.scenario_id == scenario_id))).scalar_one()
-        row.visibility = "public"
-        row.project_id = await public_project_id(s)
-        await s.commit()
+        out, _ = await scenario_store.publish_copy(s, scenario_id)
+        return out.meta.scenario_id
 
 
 async def mk_user(username: str, *, role: str = "admin") -> int:

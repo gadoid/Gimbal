@@ -105,6 +105,8 @@ async def test_list_visibility_public(client: AsyncClient) -> None:
     r = await client.post(f"/api/suites/{pub}/members", headers=owner,
                           json={"scenarioIds": ["sc-vp-1"]})
     assert r.status_code == 200, r.text
+    assert (await client.post(
+        "/api/scenarios/sc-vp-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{pub}/publish", headers=owner)
     assert r.status_code == 200, r.text
 
@@ -113,16 +115,16 @@ async def test_list_visibility_public(client: AsyncClient) -> None:
 
     r = await client.get("/api/suites?visibility=public", headers=bob)
     assert r.status_code == 200
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # scope 不叠加:同传 mine 仍只出公共(§5.1 显式 visibility 优先)
     r = await client.get("/api/suites?visibility=public&scope=mine",
                          headers=bob)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # admin 同口径
     r = await client.get("/api/suites?visibility=public", headers=admin)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
 
 async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
@@ -138,6 +140,8 @@ async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
     r = await client.post(f"/api/suites/{pub}/members", headers=owner,
                           json={"scenarioIds": ["sc-qp-1"]})
     assert r.status_code == 200, r.text
+    assert (await client.post(
+        "/api/scenarios/sc-qp-1/publish", headers=owner)).status_code == 200
     assert (await client.post(f"/api/suites/{pub}/publish", headers=owner)
             ).status_code == 200
 
@@ -161,7 +165,7 @@ async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
     # q 按发布者名命中公共页口径(owner 的 display_name/username)
     r = await client.get(
         "/api/suites?visibility=public&q=qp_owner", headers=bob)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # mode 过滤:bob 名下(镜头 mine)都是默认 aggregate;chain 命中 0
     r = await client.get("/api/suites?scope=mine&mode=chain", headers=bob)

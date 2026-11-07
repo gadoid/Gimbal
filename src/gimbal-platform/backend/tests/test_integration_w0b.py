@@ -50,7 +50,12 @@ async def _mk_task(client, h, sid: str, **over) -> int:
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=AUTH_STEPS))
     assert r.status_code in (200, 201), r.text
-    body = {"name": "W0b", "scenarioId": sid, "identityMode": "personal",
+    # S1.3:公共模板引用公共副本 —— 建场景即发布(= 复制)
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario(sid)
+    body = {"name": "W0b", "scenarioId": f"{sid}-public",
+            "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}
     body.update(over)

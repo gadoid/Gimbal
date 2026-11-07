@@ -97,23 +97,25 @@ async def test_publish_unpublish_cycle(client: AsyncClient) -> None:
     r = await client.post("/api/scenarios/sc-test/publish", headers=carol)
     assert r.status_code == 404
 
-    # 属主发布 → carol 可见
+    # 属主发布(S1.3 = 复制)→ carol 可见的是公共副本
     r = await client.post("/api/scenarios/sc-test/publish", headers=bob)
     assert r.status_code == 200
     assert r.json()["visibility"] == "public"
+    assert r.json()["meta"]["scenarioId"] == "sc-test-public"
     assert (
-        await client.get("/api/scenarios/sc-test", headers=carol)
+        await client.get("/api/scenarios/sc-test-public", headers=carol)
     ).status_code == 200
-    # visibility 过滤参数:public 桶里有它
+    # visibility 过滤参数:public 桶里是副本
     r = await client.get("/api/scenarios?visibility=public", headers=carol)
-    assert "sc-test" in {s["meta"]["scenarioId"] for s in r.json()["items"]}
+    assert "sc-test-public" in {
+        s["meta"]["scenarioId"] for s in r.json()["items"]}
 
-    # 下架 → carol 再次 404
+    # 下架(在原件上)→ 副本删除,carol 再次 404
     r = await client.post("/api/scenarios/sc-test/unpublish", headers=bob)
     assert r.status_code == 200
     assert r.json()["visibility"] == "private"
     assert (
-        await client.get("/api/scenarios/sc-test", headers=carol)
+        await client.get("/api/scenarios/sc-test-public", headers=carol)
     ).status_code == 404
 
 
@@ -133,11 +135,12 @@ async def test_copy_deep_copies_scenario_datasets(client: AsyncClient) -> None:
     assert r.status_code == 404
 
     await client.post("/api/scenarios/sc-test/publish", headers=bob)
-    r = await client.post("/api/scenarios/sc-test/copy", headers=carol)
+    # S1.3:公共读面 = 副本;carol 复制的是副本
+    r = await client.post("/api/scenarios/sc-test-public/copy", headers=carol)
     assert r.status_code == 201, r.text
     body = r.json()
     new_sid = body["meta"]["scenarioId"]
-    assert new_sid.startswith("sc-test-copy-")
+    assert new_sid.startswith("sc-test-public-copy-")
     assert new_sid != "sc-test"
     assert body["meta"]["owner"] == "carol"
     assert body["visibility"] == "private"
@@ -164,13 +167,17 @@ async def test_delete_scenario_clears_stars(client: AsyncClient) -> None:
     carol = await _register_and_login(client, "carol", "carolpass123")
     await client.post("/api/scenarios", headers=bob, json=_draft())
     await client.post("/api/scenarios/sc-test/publish", headers=bob)
+    # S1.3:公共读面 = 副本;星标打到副本上
     r = await client.post(
-        "/api/scenarios/sc-test/star", headers=carol, json={"starred": True}
-    )
+        "/api/scenarios/sc-test-public/star", headers=carol,
+        json={"starred": True})
     assert r.status_code == 204
 
-    # bob 删除 → user_stars 不应残留孤儿行(CASCADE 接管,M6-2)
-    r = await client.delete("/api/scenarios/sc-test", headers=bob)
+    # carol 删不了副本(非维护者);bob 删副本 → user_stars 不应残留
+    # 孤儿行(CASCADE 接管,M6-2)
+    r = await client.delete("/api/scenarios/sc-test-public", headers=carol)
+    assert r.status_code in (403, 404)
+    r = await client.delete("/api/scenarios/sc-test-public", headers=bob)
     assert r.status_code == 204
     from sqlalchemy import select as _select
 
@@ -179,7 +186,8 @@ async def test_delete_scenario_clears_stars(client: AsyncClient) -> None:
 
     async with _db.SessionLocal() as _s:
         orphan = (await _s.execute(
-            _select(UserStar).where(UserStar.scenario_id == "sc-test")
+            _select(UserStar).where(
+                UserStar.scenario_id == "sc-test-public")
         )).scalar_one_or_none()
     assert orphan is None
 
@@ -384,9 +392,10 @@ async def test_scope_mine_includes_own_public(client: AsyncClient) -> None:
     dave = await _register_and_login(client, "lensdave", "lensdavepass123")
     r = await client.get("/api/scenarios", headers=dave, params={"scope": "mine"})
     assert "sc-lens-mine" not in ids(r)
-    # 他人默认(all)能看到(public)
+    # 他人默认(all)能看到的是公共副本(S1.3)
     r = await client.get("/api/scenarios", headers=dave)
-    assert "sc-lens-mine" in ids(r)
+    assert "sc-lens-mine-public" in ids(r)
+    assert "sc-lens-mine" not in ids(r)
 
 
 async def test_scope_not_stacked_on_public_visibility(client: AsyncClient) -> None:
@@ -405,7 +414,7 @@ async def test_scope_not_stacked_on_public_visibility(client: AsyncClient) -> No
         "/api/scenarios", headers=dave,
         params={"visibility": "public", "scope": "mine"})
     ids = {s["meta"]["scenarioId"] for s in r.json()["items"]}
-    assert "sc-lens-pub" in ids
+    assert "sc-lens-pub-public" in ids   # S1.3:公共页 = 公共副本
 
 
 async def test_facets_scope_mine(client: AsyncClient) -> None:
