@@ -28,12 +28,15 @@ _SHAPES = (
     re.compile(r'\bUser\.role\s*[=!]=\s*["\'](user|admin|super_admin|member)["\']'),
 )
 
-# 存量冻结(2026-11-07,W3 私有区收编 26 处后剩余 21 处;W4-W9/C1
-# 随各模块收编逐行删除 —— 全部删空即本守卫的终点)。
+# 存量冻结(2026-11-07,W3 私有区收编 26 处 + W4 执行可见收编 4 处后
+# 剩余 17 处;W5-W9/C1 随各模块收编逐行删除 —— 全部删空即本守卫的
+# 终点)。
 # W3 已收编:suites 60/66/76/163/255/433/1569/1595/1637、scenarios
 # 643/718/736/904、shares 206/268/319/348/359、integration 68/82/
 # 147/149、data_sets 92、adaptations 78/324、report_definitions
 # 139/166/192 → 表 B can()/can_pure()/has_capability()。
+# W4 已收编:webhook_deliveries 117/154、access_token.can_view 440/443
+# → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
 _ALLOWLIST: frozenset[str] = frozenset({
     # W5 令牌(签发门/使用门/平台入口)
     'routers/access_tokens.py:69:if user.role == "super_admin":',
@@ -55,12 +58,6 @@ _ALLOWLIST: frozenset[str] = frozenset({
     'routers/users.py:372:if caller.role != "super_admin" and caller.id != target.id:',
     'routers/users.py:450:if caller.role != "super_admin":',
     'routers/users.py:456:if target.role == "super_admin":',
-    # W4 执行可见(投递面 admin 旁路)
-    'routers/webhook_deliveries.py:117:if not (user.role == "super_admin" or _may_view_token(user, target)):',
-    'routers/webhook_deliveries.py:154:if user.role != "super_admin":',
-    # W4 执行可见(令牌读面)
-    'services/access_token.py:440:if user.role == "super_admin":',
-    'services/access_token.py:443:return user.role == "admin"',
 })
 
 

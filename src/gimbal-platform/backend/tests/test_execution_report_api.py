@@ -133,6 +133,29 @@ class TestReport:
         bob = await register_and_login(client, "bob", "bobpass12345")
         r = await client.get(f"/api/executions/{eid}/report", headers=bob)
         assert r.status_code == 404
+        # authz W4:负例扩展到 admin/super_admin 主体(执行只认属主)
+        from tests.helpers import role_headers
+
+        for role in ("admin", "super_admin"):
+            h = await role_headers(client, f"rp_{role}", role=role)
+            r2 = await client.get(
+                f"/api/executions/{eid}/report", headers=h)
+            assert r2.status_code == 404, role
+
+
+    async def test_report_rejects_access_token(self, client):
+        """B4 按 v4 §2.2 只认 JWT:访问令牌(Authization Bearer 明文)
+        打报告接口 → 401,authz W4 前后不变(钉契约)。"""
+        from .inbound_fixtures import mk_token
+
+        await register_and_login(client)
+        eid = await _seed(await _me("alice"))
+        uid = await _me("alice")
+        _tid, plain = await mk_token(user_id=uid)
+        r = await client.get(
+            f"/api/executions/{eid}/report",
+            headers={"Authorization": f"Bearer {plain}"})
+        assert r.status_code == 401, r.text
 
 
 class TestBatchSummary:
@@ -162,7 +185,9 @@ class TestBatchSummary:
         root = await register_and_login(client, "root", "rootpass12345")
         r3 = await client.get("/api/executions/batch-summary",
                               params={"batchId": "b-1"}, headers=root)
-        assert r3.json()["total"] == 3              # admin 全局可读
+        # authz W4:root(首注 super_admin)对他人批次不再可读 —— 自己
+        # 的成员为 0 → 404(全局可读旁路已删,admin 排查走审计)
+        assert r3.status_code == 404
 
     async def test_batch_summary_unknown_404(self, client):
         headers = await register_and_login(client)

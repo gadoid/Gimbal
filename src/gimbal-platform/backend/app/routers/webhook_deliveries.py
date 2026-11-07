@@ -78,7 +78,8 @@ async def _target_token_of(
 
 
 def _may_view_token(user, tok: "AccessToken | None") -> bool:
-    """JWT 面对目标令牌的可见性:admin / 个人令牌属主 / 平台令牌 member+。"""
+    """JWT 面对目标令牌的可见性:个人令牌属主 / 平台令牌 admin+
+    (authz W4:越属主旁路删除,判定单点 = services.access_token.can_view)。"""
     from ..services.access_token import can_view
     return tok is not None and can_view(user, tok)
 
@@ -114,7 +115,9 @@ async def list_deliveries(
         if target is None:
             # 目标行不存在 / 目标非令牌发起(JWT 执行无投递)→ 404
             raise _not_found()
-        if not (user.role == "super_admin" or _may_view_token(user, target)):
+        # authz W4:super_admin 越属主旁路删除 —— 只认 _may_view_token
+        # (本人令牌 ∨ 平台令牌,平台面 C1 退役前维持)
+        if not _may_view_token(user, target):
             raise _not_found()
         target_id = target.id
 
@@ -141,9 +144,9 @@ async def redeliver(
     同 id 重发会被正确实现的接收端当重复丢弃 —— 补发必须换新 id。body
     里的 ``deliveryId`` 必须跟着换。签名按当前令牌密钥现取。
 
-    谁能点(§5.2):admin、个人令牌属主;平台身份 member+。令牌路径
-    与其他用户一律 404(不泄露)。``pending`` 行(在飞/等待退避)409
-    ``already_pending``。
+    谁能点(§5.2,authz W4 后):个人令牌属主;平台令牌面 admin+。
+    admin 越属主旁路已删;令牌路径与其他用户一律 404(不泄露)。
+    ``pending`` 行(在飞/等待退避)409 ``already_pending``。
     """
     from ..services import webhook_outbox
 
@@ -151,11 +154,10 @@ async def redeliver(
     row = await db.get(WebhookDelivery, delivery_id)
     if row is None or getattr(principal, "is_token", False):
         raise _not_found()
-    if user.role != "super_admin":
-        tok = (await db.get(AccessToken, row.token_id)
-               if row.token_id is not None else None)
-        if not _may_view_token(user, tok):
-            raise _not_found()
+    tok = (await db.get(AccessToken, row.token_id)
+           if row.token_id is not None else None)
+    if not _may_view_token(user, tok):
+        raise _not_found()
     if row.status == "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

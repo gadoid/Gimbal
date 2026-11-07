@@ -848,14 +848,19 @@ class TestInterfaceFace:
         assert r.status_code == 200, r.text
 
     async def test_platform_execution_visibility_member_plus(self, client):
-        """§5.2:执行属主为系统用户(平台令牌发起)时 member+ 可见,user 404。"""
+        """§5.2(authz W4 后):平台令牌发起的执行只有**本令牌**可见;
+        JWT 一律 404(admin+ 的平台身份执行旁路已删,D7 随平台模式
+        退役前先行收口;平台面 C1 处置)。"""
         from .inbound_fixtures import mk_execution
         await seed_platform_user()
-        ptid, _ = await mk_token(kind="platform", name="pv")
+        ptid, plain = await mk_token(kind="platform", name="pv")
         ex_id = await mk_execution(token_id=ptid, status="running")
+        h_token = _gtk(plain)
+        r = await client.get(f"/api/executions/{ex_id}", headers=h_token)
+        assert r.status_code == 200, r.text
         h_member = await _register_role(client, "if3", "admin")
         r = await client.get(f"/api/executions/{ex_id}", headers=h_member)
-        assert r.status_code == 200
+        assert r.status_code == 404
         h_user = await _register_role(client, "if4", "user")
         r = await client.get(f"/api/executions/{ex_id}", headers=h_user)
         assert r.status_code == 404

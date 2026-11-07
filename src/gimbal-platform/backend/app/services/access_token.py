@@ -436,11 +436,11 @@ def can_manage(user: User, token: AccessToken) -> bool:
 
 
 def can_view(user: User, token: AccessToken) -> bool:
-    """读面:自己的令牌(user 角色含);平台令牌 admin+;super_admin 全部。"""
-    if user.role == "super_admin":
-        return True
+    """读面:自己的令牌;平台令牌 admin+(平台身份对象,C1 退役前
+    维持)。authz W4:super_admin 越属主旁路删除 —— 他人个人令牌
+    对 admin/super_admin 同样不可见,排查走审计。"""
     if token.kind == PLATFORM_KIND:
-        return user.role == "admin"
+        return user.role in ("admin", "super_admin")
     return token.user_id == user.id
 
 

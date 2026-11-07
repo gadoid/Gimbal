@@ -290,6 +290,33 @@ class TestListAndRedeliver:
         assert payload["redeliveredFrom"] == old_id
 
 
+    async def test_admin_cannot_see_or_redeliver_others_deliveries(self, client):
+        """authz W4:投递面只认属主 —— admin/super_admin 的越属主查看
+        与补发旁路删除,一律 404(平台令牌面 C1 退役前维持 admin+)。"""
+        await seed_platform_user()
+        await _register_role(client, "wa_m", "admin")
+        uid = await _user_id("wa_m")
+        t1, _ = await mk_token(user_id=uid, callback_url=CB_URL,
+                               callback_secret="s")
+        tok = await _token_row(t1)
+        d1 = await _mk_delivery(token_row=tok, status="failed")
+        for role in ("admin", "super_admin"):
+            h = await _register_role(client, f"wa_{role}", role)
+            # 列表:按他人令牌查 → 404
+            r = await client.get(
+                f"/api/webhook-deliveries?tokenId={t1}", headers=h)
+            assert r.status_code == 404, role
+            # 补发他人投递 → 404
+            r = await client.post(
+                f"/api/webhook-deliveries/{d1}/redeliver", headers=h)
+            assert r.status_code == 404, role
+        # 属主照常
+        h_owner = await _register_role(client, "wa_m", "admin")
+        r = await client.post(
+            f"/api/webhook-deliveries/{d1}/redeliver", headers=h_owner)
+        assert r.status_code == 201, r.text
+
+
 async def _row(did: int) -> WebhookDelivery:
     async with db_module.SessionLocal() as s:
         return await s.get(WebhookDelivery, did)

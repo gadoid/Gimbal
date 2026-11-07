@@ -187,25 +187,16 @@ async def get_owned_execution(
 async def can_view_execution(principal, ex, session: AsyncSession) -> bool:
     """执行可读判定(单一实现;get_visible_execution 与报告 / 批次汇总共用)。
 
+    执行及其一切子资源只有属主可见(authz W4,方案 §9.3):
     * 令牌:``execution.token_id == 当前令牌``(D8);
-    * JWT:owner 本人;super_admin;或执行 owner 为系统用户(平台模式)且
-      当前用户 admin+ —— 平台身份的执行与投递对 admin+ 可见(D7)。
-    (authz W1 2026-11-07 更名:原 admin 级 = super_admin,原 member 级
-    = admin,权限边界不变。)
-    """
-    from ..models.user import User as _U
+    * JWT:owner 本人。
 
+    admin/super_admin 的越属主旁路与「平台身份执行对 admin+ 可见」的
+    平台分支均已删(W4)——admin 排查走审计日志。
+    """
     if getattr(principal, "is_token", False):
         return ex.token_id == principal.token_id
-    user = principal.user
-    if ex.owner_id == user.id or user.role == "super_admin":
-        return True
-    if ex.owner_id is not None:
-        owner = await session.get(_U, ex.owner_id)
-        if owner is not None and owner.is_system \
-                and user.role in ("admin", "super_admin"):
-            return True
-    return False
+    return ex.owner_id == principal.user.id
 
 
 async def get_visible_execution(
@@ -237,27 +228,20 @@ async def get_controllable_execution(
 
     * 令牌:``execution.token_id == 当前令牌``(D25 —— 只能取消本令牌
       发起的执行);
-    * JWT:owner 本人;平台身份的执行(owner 为系统用户)admin+ 可取消;
-      其余不扩。
+    * JWT:owner 本人。
 
+    平台分支已删(authz W4):admin+ 不再可取消平台身份的他人执行。
     不满足一律 404(不泄露存在性)。
     """
     from ..models.execution import Execution
-    from ..models.user import User as _U
 
     ex = await session.get(Execution, execution_id)
     if ex is not None:
         if getattr(principal, "is_token", False):
             if ex.token_id == principal.token_id:
                 return ex
-        else:
-            user = principal.user
-            if ex.owner_id == user.id:
-                return ex
-            if ex.owner_id is not None and user.role in ("admin", "super_admin"):
-                owner = await session.get(_U, ex.owner_id)
-                if owner is not None and owner.is_system:
-                    return ex
+        elif ex.owner_id == principal.user.id:
+            return ex
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"execution not found: {execution_id}",
