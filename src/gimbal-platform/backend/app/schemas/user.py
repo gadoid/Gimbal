@@ -36,6 +36,9 @@ class UserDeleteIn(BaseModel):
 
     disposal: Literal["publicize", "transfer", "purge"] = "publicize"
     transfer_to: int | None = None
+    # S1-e 删用户联动:**公共项目内容**的默认受让人 = 执行删除的
+    # Admin(处置对话框可改选;私有区内容仍走 transfer_to)
+    public_transfer_to: int | None = None
 
 
 class UserPatchIn(BaseModel):

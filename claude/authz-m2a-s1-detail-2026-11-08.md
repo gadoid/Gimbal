@@ -236,7 +236,16 @@
 
 ---
 
-## 九、S1.7 平台模板（D8–D10）
+## 八·补、S1.6 实现记录（2026-11-08）
+
+- **共用单点** `services/maintenance_transfer.transfer_maintenance`:改 owner_id → 动态流 `*.maintainer_transferred`(detail from/to/by)→ 新旧维护者通知(best-effort);集成模板连带(令牌解绑 `token_id=NULL` + 原维护者自有实例删除;订阅实例不动)—— 实现从 users.py 处置段抽出共用,处置段模板转让改走同款逻辑。
+- **表 B 登记** `transfer: [mnt, pa]` 四类(scenario/suite/report_definition + **integration_template 新增登记**,其余动词 S1.7 收编);快照与矩阵同步。
+- **端点** `POST /{scenarios|suites|report-definitions}/{id}/transfer`、`POST /api/integration/tasks/{id}/transfer`:仅公共项目对象(否则 404);谓词判权走 `can()`(非维护者公共读者 403);受让人在职非系统且非当前维护者(422 `transferee_invalid`)。
+- **删用户联动**:处置入参增 `public_transfer_to`(缺省 = 执行删除的 Admin);transfer 分支按「公共项目行 → public_transferee,其余 → transferee」分流(场景/suite/模板);**报告定义处置补齐**(此前删用户零处理留悬空 owner:transfer 分流同款,publicize/purge 置 NULL)。
+- **顺带修 S1.3 影子写缺口**:集成模板**创建面**漏同步 project_id(公共模板不落公共项目,transfer 404)—— 补 `apply_public`。
+- 测试 `test_authz_s16_transfer.py` 7 用例:门矩阵(路人 403/维护者与 Admin+ 200/私有 404)、受让人 422、写权交接(原维护者 403/新维护者与 Admin+ 可再转)、通知与动态流 from/to、模板连带(令牌解绑/自有实例清/订阅实例留)、删用户默认联动与 `public_transfer_to` 改选。守卫重生成 85→90 条。
+
+## 九、S1.7 平台模板(D8–D10)
 
 ### 实现项
 

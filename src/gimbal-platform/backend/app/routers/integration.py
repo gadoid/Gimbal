@@ -344,6 +344,11 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         token_id=principal.token_id if principal.is_token else None,
         client_ref=body.clientRef,
         callback_path_override=body.callbackPath)
+    # S1.3 影子写(创建面):public ⇔ project_id 同步(与更新面同款;
+    # 此前漏了创建路径,公共模板不落公共项目)
+    if body.visibility == "public":
+        from ..services.zone import apply_public, public_project_id
+        apply_public(tpl, await public_project_id(db))
     db.add(tpl)
     await db.commit()
     await db.refresh(tpl)
@@ -599,6 +604,43 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "delete", "task": tpl.id, "name": tpl.name})
     return {"removed": True}
+
+
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/tasks/{task_id}/transfer")
+async def transfer_task(
+    task_id: int, principal: PrincipalIn, db: DbSession,
+    body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者(表 B integration_template.transfer = maintainer
+    ∨ public_admin;仅公共项目模板)。连带:解绑注册令牌(回调停发)、
+    删除原维护者自有实例;订阅实例不动(指纹不含属主)。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    user = principal.user
+    tpl = await db.get(IntegrationTask, task_id)
+    if (tpl is None or tpl.template_id is not None
+            or tpl.removed_at is not None
+            or tpl.project_id != await public_project_id(db)):
+        raise _bad("not_found", "功能不存在", 404)
+    if not await can(db, user, "integration_template", "transfer", tpl):
+        raise _bad("forbidden", "只有维护者(或 Admin+)能转移公共模板", 403)
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == tpl.owner_id):
+        raise _bad("transferee_invalid",
+                   "受让人须为在职、非系统用户(且非当前维护者)", 422)
+    await mt.transfer_maintenance(
+        db, obj=tpl, obj_type="integration_template", to_user=to_user,
+        actor=user, obj_name=tpl.name)
+    return {"transferredTo": to_user.id, "taskId": task_id}
 
 
 @router.post("/tasks/{task_id}/run")

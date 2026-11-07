@@ -527,6 +527,23 @@ async def delete_user(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="transfer_to 用户不存在(或与被删用户相同)",
             )
+        # S1-e:公共项目内容默认受让人 = 执行删除的 Admin(可改选);
+        # 校验同款(在场、非目标本人)
+        public_transferee = None
+        pub_tid = (getattr(body, "public_transfer_to", None)
+                   or caller.id)
+        if pub_tid == caller.id:
+            public_transferee = caller
+        else:
+            public_transferee = (await db.execute(
+                select(User).where(User.id == pub_tid)
+            )).scalar_one_or_none()
+        if (public_transferee is None
+                or public_transferee.id == target.id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="public_transfer_to 用户不存在(或与被删用户相同)",
+            )
 
     from sqlalchemy import update as sa_update
 
@@ -626,6 +643,14 @@ async def delete_user(
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
     elif disposal == "transfer":
+        # S1-e:公共项目套件默认转给执行 Admin;其余走 transfer_to
+        from ..services.zone import public_project_id as _ppid
+
+        await db.execute(
+            sa_update(Suite).where(
+                Suite.owner_id == user_id,
+                Suite.project_id == await _ppid(db))
+            .values(owner_id=public_transferee.id))
         await db.execute(
             sa_update(Suite).where(Suite.owner_id == user_id)
             .values(owner_id=transferee.id))
@@ -656,6 +681,19 @@ async def delete_user(
                         project_id=await public_project_id(db)))
     elif disposal == "transfer":
         if scenario_ids:
+            # S1-e:公共项目内容(维护者位)默认转给执行删除的 Admin
+            # (public_transfer_to 可改选);私有区内容走 transfer_to
+            from ..services.zone import public_project_id
+
+            pub_label = (public_transferee.display_name
+                         or public_transferee.username)
+            await db.execute(
+                sa_update(ComposerScenario)
+                .where(ComposerScenario.owner_id == user_id,
+                       ComposerScenario.project_id
+                       == await public_project_id(db))
+                .values(owner_id=public_transferee.id,
+                        owner_name=pub_label))
             transferee_label = transferee.display_name or transferee.username
             await db.execute(
                 sa_update(ComposerScenario)
@@ -664,6 +702,27 @@ async def delete_user(
     else:  # purge
         for sid in scenario_ids:
             await scenario_store.delete(db, sid)
+
+    # ── 报告定义处置(S1.6 补:此前删用户零处理,owner 悬空)─────
+    if disposal == "transfer":
+        from ..models.report_definition import ReportDefinitionRow
+        from ..services.zone import public_project_id as _ppid3
+
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id,
+                ReportDefinitionRow.project_id == await _ppid3(db))
+            .values(owner_id=public_transferee.id))
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id)
+            .values(owner_id=transferee.id))
+    else:
+        from ..models.report_definition import ReportDefinitionRow
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id)
+            .values(owner_id=None))
 
     # ── 访问令牌 + 集成任务处置(webhook v4 §3.6)──────────────────
     # 修现存外键缺陷:此前 delete_user 对 integration_tasks 零处理,
@@ -691,12 +750,19 @@ async def delete_user(
     )).scalar()
     disposed_tasks: list[tuple[IntegrationTask, str]] = []
 
+    from ..services import maintenance_transfer as _mt
+    from ..services.zone import public_project_id as _ppid2
+
+    _pub_pid = await _ppid2(db)
     for tpl in own_tpls:
         if disposal == "transfer":
-            tpl.owner_id = transferee.id
+            # S1-e:公共项目模板默认转给执行 Admin(维护者位),连带
+            # 走共用服务(令牌解绑 + 原属主自有实例删除);私有模板
+            # 转给 transfer_to(同款连带,处置口径不变)
+            _to = (public_transferee if tpl.project_id == _pub_pid
+                   else transferee)
+            tpl.owner_id = _to.id
             tpl.token_id = None
-            # 原属主注册方实例删除;受让人启动时以属主身份自建实例
-            # (authz C1:平台实例处置分支随平台模式退役)
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id,
                 IntegrationTask.holder_id == user_id))

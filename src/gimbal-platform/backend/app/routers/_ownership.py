@@ -102,6 +102,8 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "publish":   frozenset({"owner", "padmin", "maintainer"}),
         # 下架 = 对公共副本(维护者撤下 / Admin+ 治理);私有区无下架
         "unpublish": frozenset({"maintainer", "public_admin"}),
+        # S1-e 转移维护者:仅公共项目对象(私有区不适用)
+        "transfer":  frozenset({"maintainer", "public_admin"}),
     },
     "suite": {
         "read":      frozenset({"owner", "ref", "member", "public_reader"}),
@@ -111,6 +113,7 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
                                 "public_admin"}),
         "publish":   frozenset({"owner", "padmin", "maintainer"}),
         "unpublish": frozenset({"maintainer", "public_admin"}),
+        "transfer":  frozenset({"maintainer", "public_admin"}),
     },
     # 数据集/运行方案行上没有 project_id:读写都随父场景(§7.4 引用
     # 闭包 —— 实际判定 = 父场景 can(read/write);S1.2 写闸已切换,
@@ -129,6 +132,12 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "read":      frozenset({"owner", "public_reader"}),
         "write":     frozenset({"owner", "maintainer"}),
         "delete":    frozenset({"owner", "maintainer", "public_admin"}),
+        "transfer":  frozenset({"maintainer", "public_admin"}),
+    },
+    # S1.6 起登记(S1.7 全面收编读写面):转移维护者 = mnt ∨ pa,
+    # 仅公共项目模板(私有模板无维护者语义,走删用户处置的转让)
+    "integration_template": {
+        "transfer":  frozenset({"maintainer", "public_admin"}),
     },
 }
 

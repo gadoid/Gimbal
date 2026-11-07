@@ -51,6 +51,7 @@ table_b:
     delete:    [o, mem, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
+    transfer:  [mnt, pa]
   suite:
     read:      [o, ref, mem, pr]
     run:       [o, ref, mem]
@@ -58,6 +59,7 @@ table_b:
     delete:    [o, mem, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
+    transfer:  [mnt, pa]
   # 数据集/运行方案:读写随父场景(行上无 project_id,实际判定 =
   # 父场景 can();S1.2 写闸已切换,登记与父场景动词同形)
   data_set:
@@ -70,3 +72,7 @@ table_b:
     read:      [o, pr]
     write:     [o, mnt]       # W9-2 语义换轴:私有区属主 ∨ 公共项目维护者
     delete:    [o, mnt, pa]   # 维护者撤下 ∨ Admin+ 下架(同场景/suite)
+    transfer:  [mnt, pa]
+  # S1.6 登记(S1.7 全面收编读写面);私有模板无维护者语义不适用
+  integration_template:
+    transfer:  [mnt, pa]

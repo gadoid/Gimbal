@@ -1763,6 +1763,41 @@ async def unpublish_suite(
     return _summary(suite, await _member_count(db, suite.id))
 
 
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/{suite_id}/transfer")
+async def transfer_suite(
+    user: CurrentUser, db: DbSession, suite_id: int, body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者(表 B suite.transfer = maintainer ∨
+    public_admin;仅公共项目副本,私有/项目套件不适用)。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    suite = await _load_suite(db, suite_id)
+    if suite.project_id != await public_project_id(db):
+        raise not_found_404("suite", str(suite_id))
+    if not await can(db, user, "suite", "transfer", suite):
+        raise HTTPException(status_code=403, detail={
+            "code": "not_maintainer",
+            "message": "只有维护者(或 Admin+)能转移公共内容的维护者"})
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == suite.owner_id):
+        raise HTTPException(status_code=422, detail={
+            "code": "transferee_invalid",
+            "message": "受让人须为在职、非系统用户(且非当前维护者)"})
+    await mt.transfer_maintenance(
+        db, obj=suite, obj_type="suite", to_user=to_user, actor=user,
+        obj_name=suite.name)
+    return {"transferredTo": to_user.id, "suiteId": suite_id}
+
+
 # ── 反查:场景在哪些 suite ─────────────────────────────────────────
 @lookup_router.get("/{scenario_id}/suites", response_model=list[SuiteLookupItem])
 async def suites_of_scenario(

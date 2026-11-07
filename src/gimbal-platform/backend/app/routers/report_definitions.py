@@ -200,6 +200,42 @@ async def update_definition(
     return _to_out(row).model_dump()
 
 
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/{definition_id}/transfer")
+async def transfer_definition(
+    user: CurrentUser, db: DbSession, definition_id: int,
+    body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者(表 B report_definition.transfer = maintainer ∨
+    public_admin;仅公共项目定义,私有定义不适用)。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    row = await db.get(ReportDefinitionRow, definition_id)
+    if row is None or row.project_id != await public_project_id(db):
+        raise HTTPException(404, detail={"code": "not_found",
+                                         "message": f"definition not found: {definition_id}"})
+    if not await can(db, user, "report_definition", "transfer", row):
+        raise HTTPException(404, detail={"code": "not_found",
+                                         "message": "not found"})
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == row.owner_id):
+        raise HTTPException(422, detail={
+            "code": "transferee_invalid",
+            "message": "受让人须为在职、非系统用户(且非当前维护者)"})
+    await mt.transfer_maintenance(
+        db, obj=row, obj_type="report_definition", to_user=to_user,
+        actor=user, obj_name=row.name)
+    return {"transferredTo": to_user.id, "definitionId": definition_id}
+
+
 @router.delete("/{definition_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_definition(
     user: CurrentUser, db: DbSession, definition_id: int,

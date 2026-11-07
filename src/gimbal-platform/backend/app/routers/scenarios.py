@@ -944,6 +944,43 @@ async def put_scenario(
         })
 
 
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/{scenario_id}/transfer")
+async def transfer_scenario(
+    user: CurrentUser, db: DbSession, scenario_id: str,
+    body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者:仅公共项目副本(表 B scenario.transfer =
+    maintainer ∨ public_admin;私有原件不适用 —— 走「另存为/分发」)。
+    受让人在职非系统;新旧维护者都收通知,动态流记 from/to。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    row = await _load_row(db, scenario_id)
+    if row.project_id != await public_project_id(db):
+        raise HTTPException(404, detail=f"scenario_not_found: {scenario_id}")
+    if not await can(db, user, "scenario", "transfer", row):
+        raise HTTPException(403, detail={
+            "code": "not_maintainer",
+            "message": "只有维护者(或 Admin+)能转移公共内容的维护者"})
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == row.owner_id):
+        raise HTTPException(422, detail={
+            "code": "transferee_invalid",
+            "message": "受让人须为在职、非系统用户(且非当前维护者)"})
+    await mt.transfer_maintenance(
+        db, obj=row, obj_type="scenario", to_user=to_user, actor=user,
+        obj_name=row.name or scenario_id)
+    return {"transferredTo": to_user.id, "scenarioId": scenario_id}
+
+
 # ── 7) DELETE /{id} ────────────────────────────────────────────────
 @router.delete(
     "/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT
