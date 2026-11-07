@@ -45,6 +45,9 @@ class Suite(Base):
         ForeignKey("users.id"), index=True)
     # 与场景同口径;P1 恒 private(发布入口随 P2)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # 项目区(M2a S1.0):空 = 私有区;同区约束(S1.5/0041)按本列判
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True)
     # aggregate(默认)/chain/fanout/compose(重构方案四模式)
     mode: Mapped[str] = mapped_column(String(32), default="aggregate")
     # 按 id 引用成员的模式配置,不存成员清单(§6.2 不双写)

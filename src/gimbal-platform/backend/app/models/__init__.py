@@ -29,6 +29,8 @@ from .activity_event import ActivityEvent
 # 访问令牌(webhook v4)+ 回调投递行
 from .access_token import AccessToken, AccessTokenScope
 from .webhook_delivery import WebhookDelivery
+# 项目区(M2a S1.0:只建表不上码;授权面随 S1.1+)
+from .project import Project, ProjectMember
 
 __all__ = [
     "User",
@@ -60,6 +62,8 @@ __all__ = [
     "AccessToken",
     "AccessTokenScope",
     "WebhookDelivery",
+    "Project",
+    "ProjectMember",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

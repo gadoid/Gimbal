@@ -77,7 +77,7 @@ def test_full_chain_from_empty():
     新迁移加入后自动纳入覆盖)。"""
     from alembic import command
     from alembic.script import ScriptDirectory
-    from sqlalchemy import create_engine, inspect
+    from sqlalchemy import create_engine, inspect, text
 
     with temp_schema() as (_schema, sync_url):
         command.upgrade(_cfg(sync_url), "head")
@@ -89,10 +89,16 @@ def test_full_chain_from_empty():
         try:
             with eng.connect() as conn:
                 names = set(inspect(conn).get_table_names())
+                # 0040:fresh 链上两表由 baseline 建出、公共项目由 0040 种
+                public_n = conn.execute(text(
+                    "SELECT count(*) FROM projects "
+                    "WHERE kind = 'public'")).scalar()
         finally:
             eng.dispose()
-        for required in ("users", "integration_tasks", "access_tokens"):
+        for required in ("users", "integration_tasks", "access_tokens",
+                         "projects", "project_members"):
             assert required in names, f"缺表 {required}"
+        assert public_n == 1  # 公共项目恰一行(种子对 fresh 链同样生效)
 
 
 # ── 0036_role_rename(authz W1)─────────────────────────────────────
@@ -161,7 +167,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0039_drop_identity_mode"
+            assert _revision(sync_url) == "0040_project_zone"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -500,5 +506,226 @@ def test_0039_drop_identity_mode():
             with eng.connect() as c:
                 assert "identity_mode" in _cols(c)
                 assert _ck(c) == 1
+        finally:
+            eng.dispose()
+
+
+# ── 0040_project_zone(authz M2a S1.0)───────────────────────────────
+def _to_0039_shape(eng) -> None:
+    """create_all 是当前模型(已含 project_id / is_platform_template 与
+    projects 两表);撤掉这些模拟 0039 存量库(PG 删列连带删索引与 FK,
+    成员表先于项目表删)。"""
+    with eng.begin() as conn:
+        for t in ("composer_scenarios", "suites", "integration_tasks",
+                  "report_definitions", "executions"):
+            conn.exec_driver_sql(f"ALTER TABLE {t} DROP COLUMN project_id")
+        conn.exec_driver_sql(
+            "ALTER TABLE integration_tasks "
+            "DROP COLUMN is_platform_template")
+        conn.exec_driver_sql("DROP TABLE project_members")
+        conn.exec_driver_sql("DROP TABLE projects")
+
+
+def test_0040_project_zone():
+    """六步分别断言(s1-detail §二):① 两表 + 公共项目种子(created_by
+    = __platform__,成员行恒空);② 加列;③ visibility='public' 迁入公共
+    项目 —— 私有不动、集成实例行不迁、executions 不回填、无主公共报告
+    定义照迁(0037 遗留);④ 平台模板标记仅限 removed_at IS NULL;
+    ⑤ 软删挂靠模板连同实例删(订阅实例/软删的平台模板保留);⑥ visibility
+    列仍在。downgrade 还原 schema 且公开行 visibility 未动。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.user import User
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.suite import Suite
+    from app.models.report_definition import ReportDefinitionRow
+    from app.models.integration_task import IntegrationTask
+    from app.models.execution import Execution
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            with Session(eng) as s:
+                plat = User(username="__platform__", display_name="",
+                            password_hash="x", role="user", is_system=True)
+                author = User(username="author", display_name="作者",
+                              password_hash="x", role="user")
+                other = User(username="other", display_name="路人",
+                             password_hash="x", role="user")
+                s.add_all([plat, author, other])
+                s.flush()
+                s.add_all([
+                    ComposerScenario(scenario_id="sc-pub",
+                                     owner_id=author.id,
+                                     visibility="public", payload={}),
+                    ComposerScenario(scenario_id="sc-priv",
+                                     owner_id=author.id, payload={}),
+                    Suite(name="套件-公开", owner_id=author.id,
+                          visibility="public"),
+                    Suite(name="套件-私有", owner_id=author.id),
+                    # 0037 遗留:无主公共报告定义(编辑面冻结)
+                    ReportDefinitionRow(name="rd-orphan", owner_id=None,
+                                        visibility="public"),
+                    ReportDefinitionRow(name="rd-pub", owner_id=author.id,
+                                        visibility="public"),
+                    ReportDefinitionRow(name="rd-priv", owner_id=author.id),
+                ])
+                tpl_pub = IntegrationTask(  # 个人公共模板(维护者=创建人)
+                    name="个人公共", owner_id=author.id, visibility="public",
+                    target_type="scenario", scenario_id="sc-pub",
+                    target_system="fin", trigger_cron="*/5 * * * *",
+                    result_policy="latest", card_template="status",
+                    state="idle")
+                tpl_priv = IntegrationTask(  # 个人私有模板 —— 留在私有区
+                    name="个人私有", owner_id=author.id,
+                    target_type="scenario", scenario_id="sc-priv",
+                    target_system="fin", trigger_cron="*/5 * * * *",
+                    result_policy="latest", card_template="status",
+                    state="idle")
+                tpl_platform = IntegrationTask(  # 平台模板(0038 归属形态)
+                    name="平台模板", owner_id=plat.id, visibility="public",
+                    target_type="scenario", scenario_id="sc-pub",
+                    target_system="fin", trigger_cron="*/5 * * * *",
+                    result_policy="latest", card_template="status",
+                    state="idle")
+                tpl_refugee = IntegrationTask(  # 删用户软删后挂靠的模板
+                    name="挂靠", owner_id=plat.id, visibility="public",
+                    target_type="scenario", scenario_id="sc-pub",
+                    target_system="fin", trigger_cron="*/5 * * * *",
+                    result_policy="latest", card_template="status",
+                    state="idle", removed_at=datetime.now(timezone.utc))
+                s.add_all([tpl_pub, tpl_priv, tpl_platform, tpl_refugee])
+                s.flush()
+                s.add_all([
+                    # 挂靠模板的他人订阅实例(「已移除」态死卡,随模板删)
+                    IntegrationTask(name="挂靠", owner_id=plat.id,
+                                    template_id=tpl_refugee.id,
+                                    holder_id=other.id, state="idle"),
+                    # 个人公共 / 平台模板的订阅实例 —— 保留
+                    IntegrationTask(name="个人公共", owner_id=author.id,
+                                    template_id=tpl_pub.id,
+                                    holder_id=other.id, state="idle"),
+                    IntegrationTask(name="平台模板", owner_id=plat.id,
+                                    template_id=tpl_platform.id,
+                                    holder_id=other.id, state="idle"),
+                    # 存量执行:project_id 不回填(可见性保持仅发起人)
+                    Execution(scenario_id="sc-pub", owner_id=author.id),
+                ])
+                s.commit()
+                plat_id, author_id = plat.id, author.id
+            _to_0039_shape(eng)
+            command.stamp(_cfg(sync_url), "0039_drop_identity_mode")
+            command.upgrade(_cfg(sync_url), "0040_project_zone")
+
+            def _cols(c, table: str) -> set[str]:
+                return {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' "
+                    "AND table_schema = current_schema()"))}
+
+            with eng.connect() as c:
+                # ① 公共项目恰一行:名称「公共」、created_by=__platform__;
+                #    成员行恒空(公共项目不落成员行)
+                pid = c.execute(text(
+                    "SELECT id FROM projects WHERE kind = 'public'"
+                )).scalar()
+                assert pid is not None
+                assert c.execute(text(
+                    "SELECT count(*), min(name), min(created_by) "
+                    "FROM projects")).one() == (1, "公共", plat_id)
+                assert c.execute(text(
+                    "SELECT count(*) FROM project_members")).scalar() == 0
+                # ② 加列(对象表 + 执行快照)
+                for t in ("composer_scenarios", "suites", "integration_tasks",
+                          "report_definitions", "executions"):
+                    assert "project_id" in _cols(c, t), t
+                assert "is_platform_template" in _cols(c, "integration_tasks")
+                # ③ 公开内容迁入公共项目;私有不动;无主公共定义照迁
+                assert c.execute(text(
+                    "SELECT project_id FROM composer_scenarios "
+                    "WHERE scenario_id = 'sc-pub'")).scalar() == pid
+                assert c.execute(text(
+                    "SELECT project_id FROM composer_scenarios "
+                    "WHERE scenario_id = 'sc-priv'")).scalar() is None
+                assert c.execute(text(
+                    "SELECT project_id FROM suites "
+                    "WHERE name = '套件-公开'")).scalar() == pid
+                assert c.execute(text(
+                    "SELECT project_id FROM suites "
+                    "WHERE name = '套件-私有'")).scalar() is None
+                for rd, want in (("rd-pub", pid), ("rd-orphan", pid),
+                                 ("rd-priv", None)):
+                    assert c.execute(text(
+                        "SELECT project_id FROM report_definitions "
+                        f"WHERE name = '{rd}'")).scalar() == want, rd
+                # 集成:模板行迁入、实例行不迁(实例归持有人)
+                for name, want in (("个人公共", pid), ("个人私有", None),
+                                   ("平台模板", pid)):
+                    assert c.execute(text(
+                        "SELECT project_id FROM integration_tasks "
+                        f"WHERE name = '{name}' "
+                        "AND template_id IS NULL")).scalar() == want, name
+                assert c.execute(text(
+                    "SELECT count(*) FROM integration_tasks "
+                    "WHERE template_id IS NOT NULL "
+                    "AND project_id IS NOT NULL")).scalar() == 0
+                # executions 不回填
+                assert c.execute(text(
+                    "SELECT count(*) FROM executions "
+                    "WHERE project_id IS NOT NULL")).scalar() == 0
+                # ④ 平台模板标记:仅 live 平台属主行;个人公共模板不标
+                assert c.execute(text(
+                    "SELECT is_platform_template FROM integration_tasks "
+                    "WHERE name = '平台模板' "
+                    "AND template_id IS NULL")).scalar() is True
+                assert c.execute(text(
+                    "SELECT is_platform_template FROM integration_tasks "
+                    "WHERE name = '个人公共' "
+                    "AND template_id IS NULL")).scalar() is False
+                # ⑤ 挂靠模板连同其实例删除;订阅实例保留
+                assert c.execute(text(
+                    "SELECT count(*) FROM integration_tasks "
+                    "WHERE name = '挂靠'")).scalar() == 0
+                inst = c.execute(text(
+                    "SELECT name, count(*) FROM integration_tasks "
+                    "WHERE template_id IS NOT NULL "
+                    "GROUP BY name ORDER BY name")).all()
+                assert inst == [("个人公共", 1), ("平台模板", 1)], inst
+                # ⑥ visibility 影子未删
+                assert "visibility" in _cols(c, "composer_scenarios")
+                # 公共项目恰一行:部分唯一索引拦第二个 public
+                # (独立连接,失败即回滚 —— 0038 约束检查同款)
+                import sqlalchemy as sa_exc
+                with pytest.raises(sa_exc.exc.IntegrityError):
+                    with eng.connect() as c2:
+                        with c2.begin():
+                            c2.execute(text(
+                                "INSERT INTO projects (name, kind, "
+                                "created_at) VALUES ("
+                                "'又一个公共', 'public', now())"))
+
+            command.downgrade(_cfg(sync_url), "0039_drop_identity_mode")
+            with eng.connect() as c:
+                # schema 还原;公开行 visibility 未动(读法回到 0039 代码)
+                for t in ("composer_scenarios", "suites", "integration_tasks",
+                          "report_definitions", "executions"):
+                    assert "project_id" not in _cols(c, t), t
+                assert "is_platform_template" not in _cols(
+                    c, "integration_tasks")
+                assert "projects" not in {
+                    r[0] for r in c.execute(text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = current_schema()"))}
+                assert c.execute(text(
+                    "SELECT visibility FROM composer_scenarios "
+                    "WHERE scenario_id = 'sc-pub'")).scalar() == "public"
+                assert c.execute(text(
+                    "SELECT count(*) FROM report_definitions "
+                    "WHERE name = 'rd-orphan'")).scalar() == 1
         finally:
             eng.dispose()

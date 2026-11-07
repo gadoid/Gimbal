@@ -88,6 +88,12 @@ class Execution(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     owner_name: Mapped[str] = mapped_column(String(128), default="")
+    # 项目区快照(M2a S1.0):派发时记场景所属项目,执行列表按项目过滤
+    # 不必联表;场景之后被删 / 下架不影响历史执行的可见性。无 FK——
+    # 对齐 suite_id 先例(台账不随对象删除消失);存量行不回填
+    # (历史执行可见性保持「仅发起人」,与迁移前一致)。
+    project_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), default=STATUS_QUEUED)
     # queued / running(认证解析通过、行分发开始)/ done / failed / canceled
     # 批次键(执行设计 §1.2/§6):前端队列一次挑 N 条逐条发起时共用一个

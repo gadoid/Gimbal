@@ -83,6 +83,11 @@ class ComposerScenario(Base):
         index=True,
     )
     visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # 项目区(M2a S1.0):空 = 私有区;公共项目 = 公开内容(S1.9 删
+    # visibility 列前,两者由影子写保持一致)。不加 ON DELETE:项目
+    # 删除前置 409 清空(S1.4),库层 FK 兜底拦住漏网内容。
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True)
     # 副本来源三件套(权限域二期 P2,§7.3/§13.4-债1):场景与 suite 的
     # 副本共用此套字段,「副本 · 来自某人」徽标与将来对比原件的依据。
     forked_from_id: Mapped[str | None] = mapped_column(

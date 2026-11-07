@@ -41,6 +41,7 @@ from sqlalchemy import (
     BigInteger, Boolean, ForeignKey, Index, Integer, String, Text,
 )
 from sqlalchemy import func
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -65,6 +66,16 @@ class IntegrationTask(Base):
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # 项目区(M2a S1.0):仅模板行使用 —— 公共项目 = 公开模板(可订阅),
+    # 实例行恒空(实例归持有人,个人对象)。S1.7 起 _can_manage 判定
+    # 平台模板改用下方 is_platform_template,不再比对属主。
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True)
+    # D10 显式标记:「平台维护的保活模板」与「个人发布的公共模板」的
+    # 区分依据(0038 起靠属主 == __platform__ 判定,软删挂靠行会误伤)
+    is_platform_template: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false())
+    # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
     # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
     # 评审 E6:scenario 先行,suite 随后(target_type + 两个可空引用)
     target_type: Mapped[str] = mapped_column(String(16), default="scenario")

@@ -5,7 +5,7 @@ schema 与执行器侧 ``gimbal.schema.report_definition.ReportDefinition``
 """
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -36,5 +36,8 @@ class ReportDefinitionRow(Base):
         Integer, nullable=True, index=True)
     # 公共态标记(W9-2 起;private | public)
     visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # 项目区(M2a S1.0):空 = 私有区;公共项目 = 公开定义
+    project_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("projects.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())
