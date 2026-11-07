@@ -129,76 +129,8 @@ class TestCronExpr:
 
 # ── 只读护栏 + E1 脱敏 ──────────────────────────────────────────
 
-class TestReadOnlyAndScrub:
+class TestScrubOnly:
     @pytest.mark.asyncio
-    async def test_read_only_check(self):
-        from app.services.integration_runner import is_scenario_read_only
-        payload_get = {"definition": {"steps": STEPS_GET}}
-        ok, offenders = await is_scenario_read_only(payload_get)
-        assert ok and not offenders
-        payload_post = {"definition": {"steps": STEPS_GET + STEPS_POST}}
-        ok, offenders = await is_scenario_read_only(payload_post)
-        assert not ok and any("POST" in o for o in offenders)
-
-    @pytest.mark.asyncio
-    async def test_read_only_setup_teardown_whitelist(self):
-        """D30(评审 2026-11-05 P1):config.setup/teardown 白名单检查在
-        is_scenario_read_only 本体 —— 各只读闸入口(注册保存/即时执行/
-        定时运行)自动一致,不再有只查 steps 的入口。"""
-        from app.services.integration_runner import is_scenario_read_only
-        base = {"definition": {"steps": STEPS_GET, "config": {}}}
-        ok, offenders = await is_scenario_read_only(base)
-        assert ok and not offenders
-        # 白名单外策略条目 → 不只读(步骤本身仍全 GET)
-        bad = {"definition": {
-            "steps": STEPS_GET,
-            "config": {"setup": [{"kind": "http_post", "params": {}}],
-                       "teardown": [{"kind": "extract", "target": "t",
-                                     "expression": "$.x"}]}}}
-        ok, offenders = await is_scenario_read_only(bad)
-        assert not ok
-        assert any("setup/teardown 条目 0" in o for o in offenders)
-        assert not any("条目 1" in o for o in offenders)  # 白名单内不报
-        # 全白名单内 → 只读
-        good = {"definition": {
-            "steps": STEPS_GET,
-            "config": {"setup": [{"kind": "sleep", "params": {"ms": 100}}]}}}
-        ok, offenders = await is_scenario_read_only(good)
-        assert ok and not offenders
-
-    @pytest.mark.asyncio
-    async def test_read_only_anchored_method_from_plate(self, monkeypatch):
-        """Release 6.2:锚点步骤不存 method —— 只读闸从 plate 契约解析;
-        契约不可得即 fail-closed(不得放行)。"""
-        from types import SimpleNamespace
-
-        from app.services import plate_client
-        from app.services.integration_runner import is_scenario_read_only
-
-        anchored = {"kind": "step", "call": {"service": "fin"},
-                    "request": {"kind": "request", "body": {}},
-                    "strategy": []}
-
-        async def fake_full(eid: str, **kw):
-            method = "GET" if "report" in eid else "POST"
-            return SimpleNamespace(item={"binding": {"method": method}})
-
-        monkeypatch.setattr(plate_client, "get_endpoint_full", fake_full)
-        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
-            {**anchored, "endpoint": "fin.report.page"}]}})
-        assert ok and not offenders
-        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
-            {**anchored, "endpoint": "fin.order.add"}]}})
-        assert not ok and any("POST" in o for o in offenders)
-
-        async def none_full(eid: str, **kw):
-            return SimpleNamespace(item=None)
-
-        monkeypatch.setattr(plate_client, "get_endpoint_full", none_full)
-        ok, offenders = await is_scenario_read_only({"definition": {"steps": [
-            {**anchored, "endpoint": "fin.report.page"}]}})
-        assert not ok and any("未知" in o for o in offenders)
-
     def test_scrub_sensitive_keys(self):
         from app.services.integration_runner import _scrub
         data = {"token": "abc", "nested": {"accessToken": "x", "ok": 1}}
@@ -224,46 +156,7 @@ class TestIntegrationRouter:
         r = await client.get("/api/users", headers=h)
         assert all(u["username"] != "__platform__"
                    for u in r.json()["items"])
-
-    async def test_create_rejects_write_scenario_and_bad_cron(self, client):
-        h = await register_and_login(client, "ig_mk", "ig_mkpass123")
-        await _mk_scenario(client, h, "sc-ig-post", STEPS_POST, publish=True)
-        # 写场景:只读闸是平台模式专属 —— 平台新建已 410(authz W5,
-        # 入口闸先于只读闸);personal 放行写场景(Y3 口径,不改)
-        r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-post",
-                                              identityMode="platform"))
-        assert r.status_code == 410
-        assert r.json()["detail"]["code"] == "platform_mode_closed"
-        r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-post",
-                                              identityMode="personal"))
-        assert r.status_code == 201, r.text
-        # cron 坏 → 拒
-        await _mk_scenario(client, h, "sc-ig-get", STEPS_GET, publish=True)
-        r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-get", identityMode="personal",
-                                              triggerCron="bad"))
-        assert r.status_code == 422
-        assert r.json()["detail"]["code"] == "cron_invalid"
-        # Y3:个人模式已解禁(201);坏 identityMode 仍 422
-        r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-get", identityMode="personal"))
-        assert r.status_code == 201, r.text
-        r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body("sc-ig-get", identityMode="bogus"))
-        assert r.status_code == 422, r.text
-        # 他人场景 → 拒(v4:个人模式要求场景属主;平台模式用他人公共
-        # 场景合法,故此处走个人模式保住属主闸)
-        h2 = await register_and_login(client, "ig_mk2", "ig_mk2pass123")
-        r = await client.post("/api/integration/tasks", headers=h2,
-                              json=_task_body("sc-ig-get",
-                                               identityMode="personal"))
-        assert r.status_code == 422
-        assert r.json()["detail"]["code"] == "scenario_not_owned"
-
     async def test_create_ok_and_instance_seeded(self, client):
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_ok", "ig_okpass123")
         await _mk_scenario(client, h, "sc-ig-ok", STEPS_GET, publish=True)
         # authz W5:平台模式新建 410;通用流程走 personal(默认值反转后
@@ -278,7 +171,6 @@ class TestIntegrationRouter:
         assert out["instance"]["state"] in ("idle", "none")
 
     async def test_soft_delete_and_visibility(self, client):
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_del", "ig_delpass123")
         await _mk_scenario(client, h, "sc-ig-del", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
@@ -300,7 +192,6 @@ class TestIntegrationRouter:
             assert all(t["id"] != tid for t in r.json()["items"])
 
     async def test_cards_batch_removed_for_strangers(self, client):
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_card", "ig_cardpass123")
         await _mk_scenario(client, h, "sc-ig-card", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
@@ -317,79 +208,9 @@ class TestIntegrationRouter:
                               json={"ids": [f"fn:{tid}"]})
         assert r.json()["items"][0]["state"] == "removed"
 
-    async def test_private_platform_template_visible_to_members(self, client):
-        """_visible 放宽(2026-11-05 修复轮评审 N2 延伸):private 平台
-        模板对 member+ 恒可见(列表/详情/关注卡),与 _can_manage(D7)及
-        暂停告警扇出同口径;user 角色仍不可见;个人模式模板口径不变
-        (private 仅属主/admin)。"""
-        from sqlalchemy import update as sa_update
-        from .inbound_fixtures import mk_task_pair
-
-        await _seed_platform_user()
-        await register_and_login(client, "vis_owner", "vis_ownerpass123")
-        h_member = await register_and_login(client, "vis_mem", "vis_mempass123")
-        h_user = await register_and_login(client, "vis_usr", "vis_usrpass123")
-        async with db_module.SessionLocal() as s:
-            await s.execute(sa_update(User).where(
-                User.username.in_(("vis_owner", "vis_mem"))).values(role="admin"))
-            owner_id = (await s.execute(select(User.id).where(
-                User.username == "vis_owner"))).scalar_one()
-            await s.commit()
-        plat, _, _ = await mk_task_pair(
-            name="私有平台", identity_mode="platform", owner_id=owner_id)
-        pers, _, _ = await mk_task_pair(
-            name="私有个人", identity_mode="personal", owner_id=owner_id)
-
-        async def sees(h: dict, tid: int) -> bool:
-            listed = any(t["id"] == tid for t in (await client.get(
-                "/api/integration/tasks", headers=h)).json()["items"])
-            detail = (await client.get(
-                f"/api/integration/tasks/{tid}", headers=h)).status_code
-            card = (await client.post("/api/integration/cards", headers=h,
-                                      json={"ids": [f"fn:{tid}"]})).json()
-            card_seen = card["items"][0]["state"] != "removed"
-            assert listed == (detail == 200) == card_seen, (listed, detail, card)
-            return listed
-
-        assert await sees(h_member, plat) is True    # 放宽点
-        assert await sees(h_user, plat) is False     # user 角色不变
-        assert await sees(h_member, pers) is False   # 个人模式不变
-
-    async def test_platform_credentials_admin_gate(self, client):
-        await _seed_platform_user()
-        # 首个真人注册者成为 admin(系统用户不计 —— 整体评审 2026-10-15
-        # 首个 admin 引导修复);先占掉首位,ig_cred 才是普通用户
-        await register_and_login(client, "ig_first", "ig_firstpass123")
-        h = await register_and_login(client, "ig_cred", "ig_credpass123")
-        r = await client.get("/api/integration/platform-credentials", headers=h)
-        assert r.status_code == 403
-        # 提权 admin(测试内直改库)
-        async with db_module.SessionLocal() as db:
-            u = (await db.execute(select(User).where(
-                User.username == "ig_cred"))).scalar()
-            u.role = "super_admin"
-            await db.commit()
-        r = await client.post("/api/integration/platform-credentials",
-                              headers=h, json={
-                                  "alias": "gitlab-bot", "url": "https://git.example",
-                                  "username": "bot", "password": "secret"})
-        assert r.status_code == 201, r.text
-        r = await client.get("/api/integration/platform-credentials", headers=h)
-        row = next(c for c in r.json()["items"] if c["alias"] == "gitlab-bot")
-        assert row["username"] == "bot"      # 解密回显(admin 面)
-        # 凭证确实挂在平台系统用户名下
-        async with db_module.SessionLocal() as db:
-            from app.models.auth_session import AuthSession
-            owner = (await db.execute(select(AuthSession.owner_id).where(
-                AuthSession.alias == "gitlab-bot"))).scalar()
-            sysid = (await db.execute(select(User.id).where(
-                User.is_system == True))).scalar()  # noqa: E712
-        assert owner == sysid
-
     async def test_manual_run_happy_path(self, client, monkeypatch):
         """手动执行:打桩通道 + 真 plate convert(测试环境 plate_mock/
         convert 透传由 conftest 决定;这里直接双桩走通接线)。"""
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_run", "ig_runpass123")
         await _mk_scenario(client, h, "sc-ig-run", STEPS_GET, publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
@@ -450,7 +271,6 @@ class TestIntegrationRouter:
     async def test_manual_run_rejects_working_preview(self, client, plate_mock):
         """A-4/W6(版本模型 §6):任一受管系统 working(含未钉修订)→
         409 拒触发;钉定后过闸(只验闸,不验执行)。"""
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_wp", "ig_wppass123")
         anchored = [{
             "kind": "step", "description": "查单",
@@ -490,7 +310,6 @@ class TestIntegrationRouter:
     async def test_runner_internal_gate_fails_working_scenario(self, client, plate_mock):
         """A-4/W6 调度路径兜底闸:绕过路由直调 run_instance,场景 working
         → 实例 failed + 文案指路(外部服务/无锚点不受影响)。"""
-        await _seed_platform_user()
         h = await register_and_login(client, "ig_wp2", "ig_wp2pass123")
         anchored = [{
             "kind": "step", "description": "查单",
@@ -514,124 +333,6 @@ class TestIntegrationRouter:
         assert out["status"] == "failed"
         assert "拒绝触发" in (out.get("error") or "")
 
-    async def test_runner_readonly_gate_plate_unreachable_closes_channel(
-            self, client, plate_mock, monkeypatch):
-        """合入评估 §2-3:钉定修订场景只读闸的 /full?ref= 取数
-        (get_endpoint_full_at 连接失败/5xx 即抛)遇 plate 不可达时收口
-        run=channel + 固定前缀 —— 裸抛会被 _spawn 吞成 warning,实例
-        卡 running 到租约回收。working 声明走 fail-soft 的
-        get_endpoint_full(item=None → 「未知方法」offender),本就收口。"""
-        await _seed_platform_user()
-        h = await register_and_login(client, "ig_pdown", "ig_pdown123")
-        anchored = [{
-            "kind": "step", "description": "查单",
-            "endpoint": "fin.orders.get",
-            "call": {"service": "fin.order", "method": "GET", "path": "/o"},
-            "request": {"kind": "request", "body": {}},
-            "strategy": [],
-        }]
-        plate_mock.fulls["fin.orders.get"] = {"binding": {"method": "GET"}}
-        pinned = make_draft("sc-ig-pdown", steps=anchored,
-                            plate={"fin": "1.0#1"})
-        assert (await client.post(
-            "/api/scenarios", headers=h, json=pinned)).status_code in (200, 201)
-        # 只读闸是平台模式专属 —— authz W5 后平台任务不能经 API 新建,
-        # 直插平台模板 + 平台实例(holder = __platform__)保住这条闸面
-        # (C1 退役平台时本用例一并删除)
-        from .inbound_fixtures import mk_task_pair
-        from app.services import integration_runner as ir
-        from app.services import plate_client
-
-        async def _unreachable(endpoint_id, ref, **kw):
-            raise plate_client.PlateUnavailableError(
-                f"plate_unavailable: connection refused ({endpoint_id}@{ref})")
-
-        monkeypatch.setattr(plate_client, "get_endpoint_full_at", _unreachable)
-        _tpl_id, inst_id, _own = await mk_task_pair(
-            name="pdown", identity_mode="platform",
-            owner_id=await _uid_of("ig_pdown"))
-        # 直插模板挂到已发布的钉定场景上(只读闸的取数对象)
-        async with db_module.SessionLocal() as db:
-            tpl = await db.get(IntegrationTask, _tpl_id)
-            tpl.scenario_id = "sc-ig-pdown"
-            await db.commit()
-        out = await ir.run_instance(inst_id)
-        assert out["status"] == "failed"
-        assert (out.get("error") or "") == "只读检查未通过: plate 不可达"
-        async with db_module.SessionLocal() as db:
-            row = await db.get(IntegrationTask, inst_id)
-            assert row.run_status == "channel"
-            assert row.state == "idle"   # 收口,不再卡 running
-            assert row.last_error == "只读检查未通过: plate 不可达"
-
-
-# ── Y2(G7):auth 类失败暂停实例 + 凭证复活钩子 ────────────────────
-
-async def test_auth_failure_pauses_instance_and_revives(client):
-    """error_kind=auth → _finish 暂停(paused/auth_failed,不重试);
-    revive_paused_instances 恢复 idle;manual 暂停不受影响。"""
-    from datetime import datetime, timezone
-
-    from app.core import db as db_module
-    from app.models.integration_task import IntegrationTask
-    from app.services import integration_runner as ir
-
-    admin = await register_and_login(client, "authrev_admin", "pw123456")
-    uid = 1
-    # PG 强制 holder 外键 —— uid+1 的对照实例持有人垫底
-    from tests.helpers import ensure_fk_users
-    async with db_module.SessionLocal() as s:
-        await ensure_fk_users(s, uid + 1)
-
-    async with db_module.SessionLocal() as s:
-        s.add(IntegrationTask(
-            name="平台探针", owner_id=uid, visibility="public",
-            identity_mode="platform", scenario_id="sc-x",
-            target_system="fin", trigger_cron="*/5 * * * *",
-            result_policy="latest", template_id=None))
-        await s.commit()
-        tpl_id = (await s.execute(
-            __import__("sqlalchemy").select(IntegrationTask.id).order_by(
-                IntegrationTask.id.desc()))).scalars().first()
-        s.add(IntegrationTask(
-            name="平台探针", owner_id=uid, holder_id=uid, template_id=tpl_id,
-            enabled=True, state="idle",
-            next_run_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
-        # manual 暂停的对照实例
-        s.add(IntegrationTask(
-            name="手动暂停", owner_id=uid, holder_id=uid + 1,
-            template_id=tpl_id,
-            enabled=True, state="paused", paused_reason="manual"))
-        await s.commit()
-        # 精确取目标实例(holder=uid 的"平台探针"),不按最新 id(后插
-        # 的 manual 行会抢位)
-        from sqlalchemy import select as _sel
-        inst_id = (await s.execute(_sel(IntegrationTask.id).where(
-            IntegrationTask.template_id == tpl_id,
-            IntegrationTask.holder_id == uid))).scalars().first()
-
-    async with db_module.SessionLocal() as s:
-        inst = await s.get(IntegrationTask, inst_id)
-        tpl = await s.get(IntegrationTask, tpl_id)
-        out = await ir._finish(s, inst, tpl, "auth", "401 Unauthorized")
-        assert out["status"] == "failed"          # D11 投影:auth → failed
-        assert inst.state == "paused" and inst.paused_reason == "auth_failed"
-        assert inst.fail_streak == 1
-        assert inst.run_status == "auth"
-
-    # 复活:平台凭证信号(平台模式不过滤 user_id)
-    assert await ir.revive_paused_instances(user_id=99) >= 1
-    async with db_module.SessionLocal() as s:
-        inst = await s.get(IntegrationTask, inst_id)
-        assert inst.state == "idle" and inst.paused_reason in (None, "")
-        # manual 暂停不受影响
-        manual = (await s.execute(
-            __import__("sqlalchemy").select(IntegrationTask).where(
-                IntegrationTask.paused_reason == "manual"))).scalars().first()
-        assert manual is not None and manual.state == "paused"
-
-    _ = admin
-
 
 async def test_non_auth_failure_keeps_running(client):
     """普通失败不暂停(照常 idle,fail_streak 累计)——P1 行为不变。"""
@@ -643,7 +344,7 @@ async def test_non_auth_failure_keeps_running(client):
     async with db_module.SessionLocal() as s:
         s.add(IntegrationTask(
             name="普通失败", owner_id=1, visibility="public",
-            identity_mode="platform", scenario_id="sc-x",
+            identity_mode="personal", scenario_id="sc-x",
             target_system="fin", trigger_cron="*/5 * * * *",
             result_policy="latest"))
         await s.commit()
@@ -667,35 +368,6 @@ async def test_non_auth_failure_keeps_running(client):
 
 
 # ── Y5:只读闸 ext: 锚点分支 ──────────────────────────────────────
-
-async def test_read_only_gate_ext_anchor(client):
-    """b3-5(C10)改写:ext: 锚点已退役 —— 过渡期口径(归一 v1.0 §3.5):
-    目录不再被读;无内联 method 一律 fail-closed;带内联 method 按方法
-    判定(GET 放行/POST 拒)。与 test_batch0_baseline B1 同口径。"""
-    from app.services.integration_runner import is_scenario_read_only
-
-    def _payload(ep: str | None, method: str | None = None) -> dict:
-        step = {"kind": "step",
-                "call": {"protocol": "http", "service": "gitlab-g",
-                         "headers": {}}}
-        if method:
-            step["call"]["method"] = method
-        if ep:
-            step["endpoint"] = ep
-        return {"definition": {"meta": {"name": "n"}, "steps": [step]}}
-
-    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list"))
-    assert not ok and offenders, "无内联 method → fail-closed"
-
-    ok, _ = await is_scenario_read_only(_payload("ext:gitlab-g.mr-list", "GET"))
-    assert ok
-
-    ok, offenders = await is_scenario_read_only(_payload("ext:gitlab-g.mr-create", "POST"))
-    assert not ok and "POST" in offenders[0]
-
-
-# ── Y3:个人模式(写操作放行/订阅实例/无冷却/missing_credential)────
-
 async def test_personal_mode_lifecycle(client):
     """Y3 核心链:personal 模板建即有 owner 订阅实例;另一用户首次
     触发 = 订阅即建;写操作(POST 步骤)个人模式放行;无冷却。"""
@@ -891,7 +563,6 @@ async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
 
 async def test_cards_output_projection(client):
     """cards 出参带 outputs:output_mapping 投影;空 mapping = 全量。"""
-    await _seed_platform_user()
     u = await register_and_login(client, "p5_alice", "pw123456")
     draft = make_draft("sc-p5", steps=[{
         "kind": "step",

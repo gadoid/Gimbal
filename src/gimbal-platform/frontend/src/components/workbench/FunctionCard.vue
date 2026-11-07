@@ -60,7 +60,7 @@
                 @click="doResume">启动</button>
       </p>
       <p v-else class="fn-note warn">
-        {{ data?.identityMode === 'platform' ? '已暂停(管理员)' : '已由你暂停' }}
+        {{ '已由你暂停' }}
         <button v-if="canRestart" type="button" class="fn-run"
                 :data-testid="`${t}-resume`"
                 @click="doResume">恢复执行</button>

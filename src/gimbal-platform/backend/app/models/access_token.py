@@ -1,7 +1,7 @@
 """AccessToken / AccessTokenScope — 访问令牌(webhook v4 §4.1)。
 
 v4 三段收敛的左侧身份:**单一令牌 ``gtk_``**,绑定一个用户(个人令牌)
-或平台系统用户 ``__platform__``(平台令牌)。调用方不在 Gimbal 登记 ——
+(authz C1:平台令牌随平台模式退役,只承载个人令牌)。调用方不在 Gimbal 登记 ——
 令牌下管理授权范围(允许使用的服务别名与凭证),调用、注册、每次定时
 运行前由平台计算本次用到的别名与凭证并核对子集关系。
 
@@ -36,7 +36,7 @@ class AccessToken(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
                                     autoincrement=True)
-    # 个人 = 属主;平台 = __platform__ 系统用户(随用户整删 CASCADE)
+    # 令牌属主(随用户整删 CASCADE;C1 后恒本人)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), default="personal")

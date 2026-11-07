@@ -171,9 +171,8 @@ const INBOUND_TASK_FN_LABELS: Record<string, string> = {
   run: '触发',
 }
 
-/** 入站操作的身份后缀:平台模式 / 个人模式。 */
+/** 入站操作的身份后缀(authz C1:平台模式退役,恒个人)。 */
 function inboundIdentity(d: Record<string, unknown>): string {
-  if (s(d.identity_mode) === 'platform') return '平台模式'
   return '个人模式'
 }
 

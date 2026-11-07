@@ -35,10 +35,10 @@ from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import hash_password
 from ._ownership import roles_with
 from ..models.user import User
+from ..services import access_token as at_svc
 from ..models.auth_session import AuthSession
 from ..models.constant_entry import ConstantEntry
 from ..models.service_alias import ServiceAlias
-from ..schemas.page import PageOut
 from ..schemas.user import (
     UserCreateIn,
     UserDeleteIn,
@@ -291,8 +291,7 @@ async def patch_user(
             from sqlalchemy import update as _sa_update
 
             from ..models.access_token import AccessToken
-            from ..services import access_token as at_svc
-
+        
             # RETURNING 只取本次 UPDATE 命中的行(评审 2026-11-05 P2:
             # 按 invalidated_reason==deactivated 重取会把上一轮停用
             # 失效、尚未重新生成的历史令牌再通知一遍)
@@ -390,7 +389,6 @@ async def reset_password(
     from sqlalchemy import update as _sa_update
 
     from ..models.access_token import AccessToken
-    from ..services import access_token as at_svc
 
     target.must_change_password = True
     target.token_version = int(target.token_version or 0) + 1
@@ -673,7 +671,6 @@ async def delete_user(
     # 用户都会违反外键而失败。处置沿用三选一,受让人沿用同一 transferee。
     from ..models.access_token import AccessToken
     from ..models.integration_task import IntegrationTask
-    from ..services import access_token as at_svc
     from ..services.webhook_outbox import fail_pending_of_token
 
     # 个人令牌:删除前其 pending 投递显式置 failed(token_deleted),再随
@@ -698,51 +695,35 @@ async def delete_user(
         if disposal == "transfer":
             tpl.owner_id = transferee.id
             tpl.token_id = None
-            if tpl.identity_mode == "personal":
-                # 原属主注册方实例删除;受让人启动时以属主身份自建实例
-                await db.execute(sa_delete(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id,
-                    IntegrationTask.holder_id == user_id))
-            else:
-                inst = (await db.execute(select(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))).scalars().first()
-                if inst is not None:
-                    at_svc.remap_detach_pause(
-                        inst, "任务属主账号已删除,处置后待启动")
+            # 原属主注册方实例删除;受让人启动时以属主身份自建实例
+            # (authz C1:平台实例处置分支随平台模式退役)
+            await db.execute(sa_delete(IntegrationTask).where(
+                IntegrationTask.template_id == tpl.id,
+                IntegrationTask.holder_id == user_id))
             disposed_tasks.append((tpl, "transfer"))
         elif disposal == "publicize":
-            if tpl.identity_mode == "personal":
-                # 模板连同全部实例删除;通知受影响订阅者
-                holders = (await db.execute(select(IntegrationTask.holder_id).where(
-                    IntegrationTask.template_id == tpl.id,
-                    IntegrationTask.holder_id.is_not(None),
-                    IntegrationTask.holder_id != user_id))).scalars().all()
-                for uid in holders:
-                    try:
-                        await create_notification(
-                            db, user_id=uid, type_="integration",
-                            title=f"集成任务「{tpl.name}」已删除",
-                            body="任务属主账号已注销,模板随之删除;"
-                                 "卡片会显示「已移除」,可自行删卡")
-                    except Exception:  # noqa: BLE001
-                        await db.rollback()
-                await db.execute(sa_delete(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))
-                # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
-                # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
-                # 属主为系统用户的个人模式僵尸模板)
-                await db.delete(tpl)
-            else:
-                # owner → __platform__、token 置空;平台实例暂停待 member+
-                # 确认后启动(publicize 会把该用户的私有场景转公共,
-                # scope_denied 的成因随之消除)
-                tpl.owner_id = platform_user_id or tpl.owner_id
-                tpl.token_id = None
-                inst = (await db.execute(select(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))).scalars().first()
-                if inst is not None:
-                    at_svc.remap_detach_pause(
-                        inst, "任务属主账号已删除,处置后待启动")
+            # 模板连同全部实例删除;通知受影响订阅者(authz C1:平台
+            # 模板转挂 __platform__ 的分支随平台模式退役 —— C2 若要
+            # 「保公共资产」再改本分支为转持有者)
+            holders = (await db.execute(select(IntegrationTask.holder_id).where(
+                IntegrationTask.template_id == tpl.id,
+                IntegrationTask.holder_id.is_not(None),
+                IntegrationTask.holder_id != user_id))).scalars().all()
+            for uid in holders:
+                try:
+                    await create_notification(
+                        db, user_id=uid, type_="integration",
+                        title=f"集成任务「{tpl.name}」已删除",
+                        body="任务属主账号已注销,模板随之删除;"
+                             "卡片会显示「已移除」,可自行删卡")
+                except Exception:  # noqa: BLE001
+                    await db.rollback()
+            await db.execute(sa_delete(IntegrationTask).where(
+                IntegrationTask.template_id == tpl.id))
+            # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
+            # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
+            # 属主为系统用户的僵尸模板)
+            await db.delete(tpl)
             disposed_tasks.append((tpl, "publicize"))
         else:  # purge
             # 模板连同实例删除(purge 删除场景;scenario_id 无外键,
@@ -753,8 +734,9 @@ async def delete_user(
             disposed_tasks.append((tpl, "purge"))
 
     # 剩余行(保留的模板及其实例)的 owner_id 跟随新属主(transfer →
-    # 受让人;publicize 平台模板 → __platform__),否则删除用户行违反
-    # integration_tasks.owner_id 外键(实例行同样带 owner_id 列)。
+    # 受让人;publicize/purge 之外的软删模板 → __platform__ 兜底),
+    # 否则删除用户行违反 integration_tasks.owner_id 外键(实例行同样
+    # 带 owner_id 列)。
     # 无条件执行:被删用户可能只剩已软删(removed_at 非空)的模板,
     # disposed_tasks 为空但这些行仍在,外键照样违反(评审 P2)。
     new_owner_id = (transferee.id if disposal == "transfer"
@@ -776,11 +758,10 @@ async def delete_user(
         removed_scen = set(scenario_ids) if disposal == "purge" else set()
         removed_suites = own_suite_ids
         cond = None
+        from sqlalchemy import or_ as _or
         if removed_scen:
-            from sqlalchemy import or_ as _or
             cond = IntegrationTask.scenario_id.in_(removed_scen)
         if removed_suites:
-            from sqlalchemy import or_ as _or
             suite_cond = IntegrationTask.suite_id.in_(removed_suites)
             cond = _or(cond, suite_cond) if cond is not None else suite_cond
         if cond is not None:
@@ -810,15 +791,7 @@ async def delete_user(
     transfer_tasks = [(t, h) for t, h in disposed_tasks if h == "transfer"]
     transfer_notify_detail: list[str] = []
     for tpl, _ in transfer_tasks:
-        if tpl.identity_mode == "personal":
-            transfer_notify_detail.append(f"「{tpl.name}」需启动以建立实例")
-        else:
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id))).scalars().first()
-            note = "已暂停待启动"
-            if inst is not None and inst.paused_reason == "scope_denied":
-                note += "(场景当前为私有,需先公开再启动)"
-            transfer_notify_detail.append(f"「{tpl.name}」{note}")
+        transfer_notify_detail.append(f"「{tpl.name}」需启动以建立实例")
 
     # ── 台账/线索板 SET NULL(显式:SQLite 方言 FK 不强制)─────────
     user_execs = list((await db.execute(

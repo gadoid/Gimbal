@@ -75,7 +75,7 @@ async def principal_or_user(
 
     * 令牌::func:`app.services.access_token.authenticate` —— hash 命中
       → 状态机(吊销/失效/到期)→ 个人令牌按属主当前角色与启用状态派生
-      判定(平台令牌跳过,``__platform__`` 种子 role='user')。失败
+      判定。失败
       401/403 写审计 ``inbound.denied``(hash 命中的令牌行归到该令牌
       名下,§7.2;未命中则资源列为空)。
     * 旧前缀 ``gic_`` / ``ggt_``:401 ``token_invalid``,message 注明

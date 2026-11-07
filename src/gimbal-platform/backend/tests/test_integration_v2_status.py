@@ -300,28 +300,6 @@ class TestEdgeMergeNotifications:
             tpl = await s.get(IntegrationTask, tpl_id)
             await ir._finish(s, inst, tpl, "ok", "", check_status="fail")
         assert await _notify_count() == before
-
-    async def test_platform_mode_notify_goes_to_owner(self, client):
-        """D3:平台模式结论通知发模板 owner(实例 holder 是系统用户)。"""
-        await register_and_login(client, "v2_own", "pw123456")
-        tpl_id, inst_id = await _seed_pair(mode="platform", holder=2,
-                                           owner=1)
-        async with db_module.SessionLocal() as s:
-            inst = await s.get(IntegrationTask, inst_id)
-            inst.check_notified_status = "fail"
-            inst.check_notified_at = datetime.now(UTC) - timedelta(hours=1)
-            inst.check_status = "fail"
-            await s.commit()
-        async with db_module.SessionLocal() as s:
-            inst = await s.get(IntegrationTask, inst_id)
-            tpl = await s.get(IntegrationTask, tpl_id)
-            await ir._finish(s, inst, tpl, "ok", "", check_status="pass")
-        async with db_module.SessionLocal() as s:
-            rows = (await s.execute(sa.select(Notification).where(
-                Notification.type == "integration"))).scalars().all()
-            assert rows and all(r.user_id == 1 for r in rows)
-
-
 class TestDualTriggerStaleness:
     """D10:now > next_fire(cron, next_fire(cron, last_run)) + 2min。"""
 

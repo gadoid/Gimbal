@@ -48,7 +48,7 @@ vi.mock('@/utils/toast', () => ({
 function mkTask(over: Partial<api.IntegrationTaskItem> = {}): api.IntegrationTaskItem {
   return {
     id: 3, name: '下单服务保活', ownerId: 1, mine: true, canManage: true,
-    visibility: 'public', identityMode: 'platform', targetType: 'scenario',
+    visibility: 'public', identityMode: 'personal', targetType: 'scenario',
     scenarioId: 'sc-probe', suiteId: null, schemeId: null, targetSystem: '',
     triggerCron: '*/5 * * * *', cronText: '每 5 分钟', resultPolicy: 'on_change',
     cardTemplate: 'status', removed: false,
@@ -240,16 +240,14 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     }
   })
 
-  it('他人模板标签按可见性:公共 / 平台私有 = 仅成员 / 个人私有 = 私有', async () => {
+  it('他人模板标签按可见性:公共 / 私有(authz C1:平台行口径退役)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
       mkTask({ id: 11, mine: false, visibility: 'public' }),
-      mkTask({ id: 12, mine: false, visibility: 'private', identityMode: 'platform' }),
       mkTask({ id: 13, mine: false, visibility: 'private', identityMode: 'personal' }),
       mkTask({ id: 14, mine: true, visibility: 'private' }),
     ])
     const w = await mountPage(true)
     expect(w.find('[data-testid="ig-vis-11"]').text()).toBe('公共')
-    expect(w.find('[data-testid="ig-vis-12"]').text()).toBe('仅成员')
     expect(w.find('[data-testid="ig-vis-13"]').text()).toBe('私有')
     expect(w.find('[data-testid="ig-vis-14"]').exists()).toBe(false)
     expect(w.find('[data-testid="ig-row-14"]').text()).toContain('我的')
@@ -333,26 +331,25 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('W4 owner 行与平台模式同样出暂停/恢复(owner 不出退订)', async () => {
-    // 平台模式 owner/admin 行 → 暂停按钮 + 调用
-    vi.mocked(api.listIntegrationTasks).mockResolvedValue([mkTask()])
+  it('W4 owner 行出暂停/恢复(owner 不出退订;authz C1:平台行分支退役)', async () => {
+    // 个人模式 owner 行(canManage + 自有实例)→ 暂停出、退订不出
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ identityMode: 'personal', mine: true, canManage: true,
+               subscribed: true }),
+    ])
     vi.mocked(api.pauseMySubscription).mockResolvedValue(mkTask())
-    let w = await mountPage()
+    const w = await mountPage()
     expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
     await w.find('[data-testid="ig-pause-3"]').trigger('click')
     await flushPromises()
     expect(api.pauseMySubscription).toHaveBeenCalledWith(3)
     w.unmount()
 
-    // 个人模式 owner 行(canManage + 自有实例)→ 暂停出、退订不出
-    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ identityMode: 'personal', mine: true, canManage: true,
-               subscribed: true }),
-    ])
-    w = await mountPage()
-    expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
-    expect(w.find('[data-testid="ig-unsub-3"]').exists()).toBe(false)
-    w.unmount()
+    // 退订不出(owner 自有实例)
+    const w2 = await mountPage()
+    expect(w2.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
+    expect(w2.find('[data-testid="ig-unsub-3"]').exists()).toBe(false)
+    w2.unmount()
   })
 
   it('W2 已订阅:自暂停显示恢复;退订确认后调用;待确认显示重新确认与文案', async () => {
@@ -439,18 +436,17 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('D26 解绑确认框第 3 条按身份模式区分:平台任务仍以平台身份运行(评审 2026-11-05 P2)', async () => {
+  it('D26 解绑确认框:解绑后以你的身份、你的凭证池运行(authz C1 单口径)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ id: 7, tokenId: 11, tokenName: 'plat-token',
-               identityMode: 'platform', canManage: true }),
+      mkTask({ id: 7, tokenId: 11, tokenName: 'reg-token',
+               identityMode: 'personal', canManage: true }),
     ])
     vi.mocked(api.patchIntegrationTask).mockResolvedValue(mkTask())
     const w = await mountPage(true)
     await w.find('[data-testid="ig-unbind-7"]').trigger('click')
     await flushPromises()
     const txt = document.body.textContent || ''
-    expect(txt).toContain('平台任务解绑后仍以平台身份、平台凭证池运行')
-    expect(txt).not.toContain('以你的身份、你的凭证池运行')
+    expect(txt).toContain('任务解绑后以你的身份、你的凭证池运行')
     w.unmount()
   })
 })

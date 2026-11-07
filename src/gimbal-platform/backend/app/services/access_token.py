@@ -1,7 +1,7 @@
 """访问令牌服务(webhook v4 §2–§6)— 认证、状态机、范围、回调白名单。
 
 单一令牌 ``gtk_``:``Authorization: Bearer gtk_…`` 绑定一个用户(个人
-令牌)或平台系统用户 ``__platform__``(平台令牌)。本模块承载:
+令牌)。authz C1:平台令牌随平台模式退役,本模块只承载个人令牌。本模块承载:
 
 * :func:`authenticate` — §3.1 ①:hash 命中 → 状态机判定 → 个人令牌按
   属主当前角色与启用状态派生判定(不落库);
@@ -51,7 +51,6 @@ LAST_USED_THROTTLE = 60.0
 ERR_TOKEN_INVALID = "token_invalid"                # 401
 ERR_TOKEN_EXPIRED = "token_expired"                # 401
 ERR_TOKEN_INVALIDATED = "token_invalidated"        # 401
-ERR_TOKEN_OWNER_INELIGIBLE = "token_owner_ineligible"  # 403
 ERR_RESOURCE_NOT_ALLOWED = "resource_not_allowed"  # 403 / 422
 ERR_ADHOC_PERSONAL_ONLY = "adhoc_personal_token_only"  # 403
 ERR_REGENERATE_REQUIRED = "regenerate_required"    # 409
@@ -63,7 +62,6 @@ ERR_CALLBACK_HOST_NOT_ALLOWED = "callback_host_not_allowed"  # 422
 PAUSE_TOKEN_REVOKED = "token_revoked"
 PAUSE_TOKEN_INVALIDATED = "token_invalidated"
 PAUSE_TOKEN_EXPIRED = "token_expired"
-PAUSE_TOKEN_OWNER_INELIGIBLE = "token_owner_ineligible"
 PAUSE_SCOPE_DENIED = "scope_denied"
 PAUSE_RESOURCE_NOT_ALLOWED = "resource_not_allowed"
 
@@ -72,7 +70,6 @@ REASON_PASSWORD = "password"
 REASON_DEACTIVATED = "deactivated"
 REASON_ADMIN = "admin"
 
-PLATFORM_KIND = "platform"
 PERSONAL_KIND = "personal"
 
 LEGACY_TOKEN_MESSAGE = (
@@ -105,12 +102,12 @@ class Principal:
     """分流后的统一调用方身份(webhook v4 §2.1)。
 
     JWT:``token=None``、identity_mode=personal(前端发起,不回调);
-    个人令牌:personal(属主 = 执行 owner,凭证取属主池);
-    平台令牌:platform(``__platform__`` 系统用户 = 执行 owner)。
+    个人令牌:personal(属主 = 执行 owner,凭证取属主池)。
+    (authz C1:platform 取值随平台令牌退役;字段保留兼容入站协议。)
     """
 
     user: User
-    identity_mode: str                 # personal | platform
+    identity_mode: str                 # personal(C1 后恒一值)
     token: AccessToken | None = None
 
     @property
@@ -158,20 +155,13 @@ def valid_callback_path(path: str) -> bool:
 # ── 认证(§3.1 ①)───────────────────────────────────────────────
 
 
-async def _platform_user(db: AsyncSession) -> User | None:
-    return (await db.execute(
-        select(User).where(User.is_system == True)  # noqa: E712
-    )).scalar_one_or_none()
-
-
 async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
     """``gtk_…`` → :class:`Principal`;失败抛 :class:`TokenAuthError`。
 
     校验链:hash 命中 → 未吊销(吊销与不存在同为 401 ``token_invalid``,
-    防探测)→ 未失效 → 未到期 → 个人令牌按属主**当前**角色与启用状态
-    派生判定(角色 < member → 403;未启用 → 401;平台令牌跳过 ——
-    ``__platform__`` 种子 role='user',按角色判会全拒,§3.1)。
-    成功即回写 ``last_used_at``(60s 节流;单次轻提交)。
+    防探测)→ 未失效 → 未到期 → 按属主**当前**启用状态派生判定
+    (未启用 → 401)。成功即回写 ``last_used_at``(60s 节流;单次轻提交)。
+    authz C1:平台令牌的 ``__platform__`` 用户映射分支随平台模式退役。
     """
     now = now_utc()
     tok = (await db.execute(select(AccessToken).where(
@@ -189,25 +179,18 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
         raise TokenAuthError(401, ERR_TOKEN_EXPIRED, "访问令牌已到期",
                              token=tok)
 
-    if tok.kind == PLATFORM_KIND:
-        user = await _platform_user(db)
-        if user is None or user.id != tok.user_id:
-            # 平台系统用户缺失/漂移:迁移 0015 种子未跑或令牌行指向他人
-            raise TokenAuthError(
-                503, "platform_user_missing",
-                "平台系统用户缺失(迁移 0015 种子未执行?)", token=tok)
-    else:
-        user = await db.get(User, tok.user_id)
-        if user is None:
-            raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
-                                 "令牌属主已被删除", token=tok)
-        if not user.is_active:
-            # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
-            raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
-                                 "令牌属主已停用", token=tok)
-        # (authz W5:「属主角色不低于 admin」的使用门已删 —— 所有注册
-        # 用户可使用个人令牌;ERR_TOKEN_OWNER_INELIGIBLE 常量保留,
-        # 兼容历史行/存量暂停实例的展示与 0036 恢复)
+    if tok.kind != PERSONAL_KIND:
+        # authz C1:kind 只剩 personal(0038 删尽平台令牌;防御性拒绝)
+        raise TokenAuthError(401, ERR_TOKEN_INVALID,
+                             "令牌类型已退役", token=tok)
+    user = await db.get(User, tok.user_id)
+    if user is None:
+        raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
+                             "令牌属主已被删除", token=tok)
+    if not user.is_active:
+        # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
+        raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
+                             "令牌属主已停用", token=tok)
 
     # last_used_at 节流回写:轻提交,失败不影响判定
     if (tok.last_used_at is None or (
@@ -291,9 +274,8 @@ async def check_scope(
 ) -> "list[ScopeMissing] | None":
     """子集判定:全在范围内返回 None;否则返回缺项(按 §3.3 分类)。
 
-    ``owner_id`` = 执行属主(平台令牌 = ``__platform__`` id),凭证存在性
-    按其凭证池判。范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个
-    查对象表分类。
+    ``owner_id`` = 执行属主(= 令牌属主),凭证存在性按其凭证池判。
+    范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个查对象表分类。
 
     ``scope`` 可传入预载的 (别名集, 凭证 id 集) 免重查(§3.2 单一实现:
     详情页/PUT 试算的逐任务预检与运行前复核同走本函数,不另起一份)。
@@ -424,23 +406,18 @@ async def used_sets_for_adhoc(db: AsyncSession, steps: list) -> ScopeSets:
 
 def can_manage(user: User, token: AccessToken) -> bool:
     """写面管理权(authz W5,与路由 ``_require_manage`` 同口径):
-    个人令牌 = 属主(任意角色)∨ users.manage(管理面);平台令牌 =
-    ops.write(C1 退役存量前维持)。消费面:run_precheck 的 tokenId
-    预检(user 属主自己的令牌可按其范围预检)。
+    属主(任意角色)∨ users.manage(管理面)。消费面:run_precheck 的
+    tokenId 预检(user 属主自己的令牌可按其范围预检)。authz C1:
+    平台令牌分支随平台模式退役。
     """
     from ..routers._ownership import has_capability
 
-    if token.kind == PLATFORM_KIND:
-        return has_capability(user, "ops.write")
     return user.id == token.user_id or has_capability(user, "users.manage")
 
 
 def can_view(user: User, token: AccessToken) -> bool:
-    """读面:自己的令牌;平台令牌 admin+(平台身份对象,C1 退役前
-    维持)。authz W4:super_admin 越属主旁路删除 —— 他人个人令牌
-    对 admin/super_admin 同样不可见,排查走审计。"""
-    if token.kind == PLATFORM_KIND:
-        return user.role in ("admin", "super_admin")
+    """读面:自己的令牌。authz W4:super_admin 越属主旁路删除 ——
+    他人个人令牌对 admin/super_admin 同样不可见,排查走审计。"""
     return token.user_id == user.id
 
 
@@ -540,7 +517,7 @@ async def token_task_instances(
     """该令牌注册方自己的实例(#1–#4/#6 作用域,§3.3):
 
     个人模式 = holder=模板属主(= 令牌属主)的实例;平台模式 = 平台唯一
-    实例(holder = ``__platform__`` = 令牌属主)。订阅者实例不在列。
+    实例(holder = 令牌属主)。订阅者实例不在列。
     """
     from ..models.integration_task import IntegrationTask
 

@@ -92,7 +92,7 @@ async def record(
 async def record_inbound(db: AsyncSession, principal, action: str, *,
                          detail: dict | None = None) -> None:
     """令牌发起的操作统一落审计(webhook v4 §7.2):JWT 调用方 no-op;
-    actor 取 Principal.user(令牌属主或 ``__platform__``),资源列 =
+    actor 取 Principal.user(令牌属主),资源列 =
     ``access_token`` / 令牌 id —— 令牌「最近调用」即按资源列取
     ``inbound.run`` ∪ ``inbound.denied``。detail 恒带令牌快照。"""
     if not getattr(principal, "is_token", False):

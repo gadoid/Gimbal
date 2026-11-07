@@ -78,10 +78,8 @@ async def mk_token(
     """直插一张令牌 + 范围行,返回 (id, 明文)。"""
     plaintext = at_svc.generate_plaintext()
     now = datetime.now(timezone.utc)
-    if kind == "platform":
-        user_id = await seed_platform_user()
-    elif user_id is None:
-        raise ValueError("personal token needs user_id")
+    if user_id is None:
+        raise ValueError("token needs user_id (authz C1:platform 夹具退役)")
     async with db_module.SessionLocal() as s:
         tok = AccessToken(
             user_id=user_id, kind=kind, name=name,
@@ -120,7 +118,7 @@ async def mk_execution(*, token_id=None, status="running", total=1,
 
 
 async def mk_task_pair(*, name="w-task", token_id=None,
-                       identity_mode="personal",
+                       identity_mode="personal",  # C1 后恒 personal(参数保留兼容)
                        owner_id=None, scenario_id="sc-w") -> "tuple[int, int, int]":
     """(tpl_id, inst_id, owner_id);holder = 模板 owner(注册方自己的实例)。"""
     async with db_module.SessionLocal() as s:

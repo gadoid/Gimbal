@@ -42,8 +42,6 @@ _SHAPES = (
 # W4 已收编:webhook_deliveries 117/154、access_token.can_view 440/443
 # → 执行可见单点 can_view_execution / can_view(属主 ∨ 本令牌)。
 _ALLOWLIST: frozenset[str] = frozenset({
-    # C1 平台退役(平台凭证管理面)
-    'routers/integration.py:1076:if user.role != "super_admin":',
     # W7 导入(别名归属口径)
     'routers/service_aliases.py:139:if body.owner_user_id is not None and user.role != "super_admin":',
     'routers/service_aliases.py:179:if row is not None and row.owner_user_id is not None and user.role != "super_admin":',
@@ -51,9 +49,9 @@ _ALLOWLIST: frozenset[str] = frozenset({
     # W6 用户管理(重置密码/停用/删除保护)
     'routers/users.py:233:if caller.role != "super_admin":',
     'routers/users.py:248:and target.role == "super_admin"',
-    'routers/users.py:372:if caller.role != "super_admin" and caller.id != target.id:',
-    'routers/users.py:500:if caller.role != "super_admin":',
-    'routers/users.py:506:if target.role == "super_admin":',
+    'routers/users.py:371:if caller.role != "super_admin" and caller.id != target.id:',
+    'routers/users.py:498:if caller.role != "super_admin":',
+    'routers/users.py:504:if target.role == "super_admin":',
 })
 
 

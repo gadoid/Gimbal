@@ -89,10 +89,10 @@ export interface Execution {
    *  (config.cancelIgnored)的原因。 */
   cancel_note?: string | null
   /** 令牌只读投影(webhook v4 §7.1):经哪张令牌(id/名称快照)、以谁
-   *  身份(personal=属主,platform=平台系统用户)/ 调用方对账键。
+   *  身份(authz C1 后恒 personal=属主)/ 调用方对账键。
    *  JWT 发起的执行三者皆 null。 */
   token_id?: number | null
-  identity_mode?: 'personal' | 'platform' | null
+  identity_mode?: 'personal' | null
   token_name?: string | null
   client_ref?: string | null
 

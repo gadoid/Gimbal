@@ -172,7 +172,7 @@ async def _enqueue_execution_finished(
         # P3:非场景形态(adhoc)的 scenario_id 是占位 id,不对外暴露
         "scenarioId": ex.scenario_id if is_scenario_backed(ex.kind) else None,
         "release": release,
-        # 身份:kind=personal → 属主本人;platform → 平台身份
+        # 身份:authz C1 后恒 personal(字段保留兼容既有回调消费方)
         "identityMode": token.kind,
         "caller": _caller_payload(token),
         "status": ex.status,

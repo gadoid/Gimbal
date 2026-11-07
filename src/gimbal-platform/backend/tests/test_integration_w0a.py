@@ -258,23 +258,3 @@ async def test_unstamped_instance_treated_as_unconfirmed(client):
     inst = await _inst(tid, uid2)
     assert inst.state == "paused" and inst.paused_reason == "template_changed"
 
-
-async def test_platform_task_not_subscribable(client):
-    """平台模式任务无订阅概念:subscribe/摘要 → 422 not_subscribable。
-    (authz W5 后平台任务不能经 API 新建,直插造数;C1 退役时删)"""
-    from .inbound_fixtures import mk_task_pair, publish_scenario
-    from tests.test_integration import _uid_of
-
-    u1 = await register_and_login(client, "w0a_k", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0f")
-    await publish_scenario("sc-w0f")  # v4:平台模式只认公共场景
-    tid, _inst, _own = await mk_task_pair(
-        name="w0f", identity_mode="platform",
-        owner_id=await _uid_of("w0a_k"), scenario_id="sc-w0f")
-    # 平台任务:前置摘要即 422(助手不适用),直连断言订阅闸
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
-                          headers=u1, json={"fingerprint": "x"})
-    assert r.status_code == 422 and "not_subscribable" in r.text, r.text
-    r = await client.get(f"/api/integration/tasks/{tid}/subscription-summary",
-                         headers=u1)
-    assert r.status_code == 422, r.text

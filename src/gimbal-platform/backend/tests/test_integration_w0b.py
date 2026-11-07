@@ -12,9 +12,6 @@ from app.models.auth_session import AuthSession
 from app.models.integration_task import IntegrationTask
 from app.models.user import User
 from tests.helpers import make_draft, register_and_login
-from tests.test_scenario_composer_plate_integration import (  # noqa: F401
-    plate_mock,
-)
 
 async def _subscribe(client, h, tid: int):
     """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
@@ -100,25 +97,6 @@ async def test_consumer_fields_lifecycle(client):
     r = await client.get(f"/api/integration/tasks/{tid}", headers=u2)
     assert r.status_code == 200, r.text
     assert r.json()["instance"]["missingCredentials"] == []
-
-
-async def test_platform_task_fields(client):
-    """④:平台模式任务 authAliases 照出、subscribed 恒 False。
-    (authz W5 后平台任务不能经 API 新建,直插造数;C1 退役时删)"""
-    from .inbound_fixtures import mk_task_pair, publish_scenario
-    from tests.test_integration import _uid_of
-
-    u1 = await register_and_login(client, "w0b_c", "pw123456")
-    await client.post("/api/scenarios", headers=u1,
-                      json=make_draft("sc-w0b2", steps=AUTH_STEPS))
-    await publish_scenario("sc-w0b2")
-    tid, _inst, _own = await mk_task_pair(
-        name="w0b2", identity_mode="platform",
-        owner_id=await _uid_of("w0b_c"), scenario_id="sc-w0b2")
-    item = await _item(client, u1, tid)
-    assert item["authAliases"] == ["gitlab"]
-    assert item["subscribed"] is False
-
 
 async def test_cards_carry_consumer_fields(client):
     """④:卡片出参带 authAliases / missingCredentials(W3 凭证引导)。"""
@@ -252,59 +230,10 @@ async def test_fail_streak_auto_pause_and_resume(client):
     assert inst.fail_streak == 0 and inst.next_run_at is not None
 
 
-async def test_pause_resume_platform_and_owner_rows(client):
-    """W4:平台模式暂停/恢复对 owner/admin 开放(操作平台唯一实例,
-    其余用户 403);个人模式 owner 自有实例同走订阅面端点 —— 集成页
-    owner 行的暂停/恢复按钮即此口径。"""
-    from tests.test_integration import _seed_platform_user
-
-    await _seed_platform_user()
-    from app.services import integration_runner as ir
-
+async def test_pause_resume_owner_rows(client):
+    """W4:个人模式 owner 自有实例走订阅面端点暂停/恢复 —— 集成页
+    owner 行的暂停/恢复按钮即此口径(authz C1:平台行分支退役)。"""
     u1 = await register_and_login(client, "w0b_k", "pw123456")
-    u2 = await register_and_login(client, "w0b_l", "pw123456")
-    # authz W5:平台任务不能经 API 新建 —— 直插(挂公共场景,C1 删)
-    from .inbound_fixtures import mk_task_pair, publish_scenario
-    from tests.test_integration import _uid_of
-
-    await client.post("/api/scenarios", headers=u1,
-                      json=make_draft("sc-w0b6", steps=AUTH_STEPS))
-    await publish_scenario("sc-w0b6")
-    tid_p, _pi, _own = await mk_task_pair(
-        name="w0b6", identity_mode="platform",
-        owner_id=await _uid_of("w0b_k"), scenario_id="sc-w0b6")
-    async with db_module.SessionLocal() as s:
-        await ir.ensure_instance(await s.get(IntegrationTask, tid_p))
-
-    async def _pinst() -> IntegrationTask | None:
-        async with db_module.SessionLocal() as s:
-            return (await s.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tid_p,
-                IntegrationTask.holder_id.is_not(None),
-            ).order_by(IntegrationTask.id))).scalars().first()
-
-    # 普通用户(可见但非 owner/admin)→ 403;暂停/恢复同口径
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/pause", headers=u2)
-    assert r.status_code == 403, r.text
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/resume", headers=u2)
-    assert r.status_code == 403, r.text
-
-    # owner 暂停/恢复平台唯一实例
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/pause", headers=u1)
-    assert r.status_code == 200, r.text
-    inst = await _pinst()
-    assert inst is not None
-    assert inst.state == "paused" and inst.paused_reason == "manual"
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/resume", headers=u1)
-    assert r.status_code == 200, r.text
-    inst = await _pinst()
-    assert inst.state == "idle" and inst.paused_reason in ("", None)
-
-    # 个人模式 owner 行:创建即播种自有实例,暂停/恢复直达
     tid_o = await _mk_task(client, u1, "sc-w0b7")
     uid1 = await _user_id("w0b_k")
     r = await client.post(

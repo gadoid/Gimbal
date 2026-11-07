@@ -99,16 +99,3 @@ class TestTokenOpenAccess:
                 IntegrationTask.scenario_id == "sc-tk-dflt",
                 IntegrationTask.template_id.is_(None)))).scalar_one()
             assert row.identity_mode == "personal"
-
-    async def test_platform_task_creation_closed_for_user_and_admin(
-            self, client: AsyncClient):
-        """任务创建的 410 在 test_access_tokens 已钉 admin 侧;此处钉
-        user 侧 + 与签发/候选面的一致性(三面同 code)。"""
-        h = await role_headers(client, "tk_pc", role="user")
-        await client.post("/api/scenarios", headers=h,
-                          json=make_draft("sc-tk-pc", steps=[_GET_STEP]))
-        r = await client.post("/api/integration/tasks", headers=h, json={
-            "name": "平台", "scenarioId": "sc-tk-pc",
-            "identityMode": "platform"})
-        assert r.status_code == 410, r.text
-        assert r.json()["detail"]["code"] == "platform_mode_closed"

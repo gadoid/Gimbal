@@ -15,7 +15,6 @@ from sqlalchemy import select
 
 from app.core import db as db_module
 from app.models.activity_event import ActivityEvent
-from app.models.composer_scenario import ComposerScenario
 from app.models.integration_task import IntegrationTask
 from app.models.permission import AuditLog, Notification
 from app.models.user import User
@@ -27,15 +26,6 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
 )
 
 
-async def _seed_platform_user() -> None:
-    from app.core.security import hash_password
-    async with db_module.SessionLocal() as db:
-        exists = (await db.execute(select(User).where(
-            User.is_system == True))).scalar()  # noqa: E712
-        if exists is None:
-            db.add(User(username="__platform__", display_name="平台系统",
-                        password_hash=hash_password("x"), is_system=True))
-            await db.commit()
 
 
 async def _audit_rows(action: str) -> list[AuditLog]:
@@ -72,36 +62,6 @@ async def _mk_scenario(client, h, sid: str) -> None:
 
 
 # ── 审计:平台凭证(admin-only 特权写)──────────────────────────────
-
-class TestAuditPlatformCredentials:
-    async def test_create_and_delete_audited(self, client):
-        await _seed_platform_user()
-        await register_and_login(client, "hz_first", "hz_firstpass123")
-        h = await register_and_login(client, "hz_admin", "hz_adminpass123")
-        async with db_module.SessionLocal() as db:
-            u = (await db.execute(select(User).where(
-                User.username == "hz_admin"))).scalar()
-            u.role = "super_admin"
-            await db.commit()
-        r = await client.post("/api/integration/platform-credentials",
-                              headers=h, json={
-                                  "alias": "hz-bot", "url": "https://x",
-                                  "username": "bot", "password": "s3cret"})
-        assert r.status_code == 201, r.text
-        rows = await _audit_rows("integration.credential.write")
-        assert len(rows) == 1 and rows[0].detail["fn"] == "create"
-        assert rows[0].resource_type == "integration_credential"
-        cred_id = r.json()["id"]
-        r = await client.delete(
-            f"/api/integration/platform-credentials/{cred_id}", headers=h)
-        assert r.status_code == 200, r.text
-        rows = await _audit_rows("integration.credential.write")
-        assert len(rows) == 2 and rows[0].detail["fn"] == "delete"
-        # 删除后审计仍可读(resource_name 折叠在 detail)
-        assert rows[0].detail.get("resource_name") == "hz-bot"
-
-
-# ── 审计:admin 越属主的删除/可见性变更 ────────────────────────────
 
 class TestAuditAdminCrossOwner:
     """authz W3 翻转:admin 越属主旁路删除后,越属主只剩 steward 下架
@@ -366,7 +326,6 @@ class TestIntegrationTimeline:
             ANCHORED_STEPS, FULLS, _subscribe, _task_body,
         )
         plate_mock.fulls.update(FULLS)
-        await _seed_platform_user()
         await register_and_login(client, "il_first", "il_firstpass123")
         h_owner = await register_and_login(client, "il_owner",
                                            "il_ownerpass123")

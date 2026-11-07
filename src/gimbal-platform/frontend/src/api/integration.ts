@@ -185,56 +185,6 @@ export async function fetchScenarioPreview(
 }
 
 // ── 平台凭证(admin)────────────────────────────────────────────
-export interface PlatformCredential {
-  id: number
-  alias: string
-  url: string
-  username: string
-  tokenType: string
-  expiresIn: number
-  /** 被引用直出(评审 P2-3):引用此凭证的平台令牌数 / 波及任务数 */
-  refTokens?: number
-  refTasks?: number
-}
-
-export async function listPlatformCredentials(): Promise<PlatformCredential[]> {
-  const { data } = await http.get<{ items: PlatformCredential[] }>(
-    '/integration/platform-credentials')
-  return data.items
-}
-
-export async function createPlatformCredential(body: {
-  alias: string; url?: string; username: string; password: string
-  tokenType?: string; expiresIn?: number
-}): Promise<{ id: number; alias: string }> {
-  const { data } = await http.post(
-    '/integration/platform-credentials', body)
-  return data
-}
-
-/** D34 平台凭证原地更新:id 不变(平台令牌范围不级联);字段均可选。 */
-export async function patchPlatformCredential(
-  id: number, input: { url?: string | null; username?: string | null;
-                       password?: string | null },
-): Promise<{ id: number; alias: string }> {
-  const { data } = await http.patch(
-    `/integration/platform-credentials/${id}`, input)
-  return data
-}
-
-export interface DeleteCredImpact {
-  removed: boolean
-  affectedTokens: number
-  affectedTasks: number
-}
-
-export async function deletePlatformCredential(
-  id: number,
-): Promise<DeleteCredImpact> {
-  const { data } = await http.delete(
-    `/integration/platform-credentials/${id}`)
-  return data
-}
 
 // ── W2(个人侧方案 §2):订阅 / 自管 ─────────────────────────────
 

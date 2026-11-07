@@ -25,7 +25,6 @@ from ..models.composer_scenario import ComposerScenario
 from ..models.execution import Execution
 from ..models.integration_task import IntegrationTask
 from ..models.permission import Notification
-from ..models.user import User
 from ..services import access_token as at_svc
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -158,33 +157,24 @@ async def me_summary(
     # ── 集成任务暂停(error;token/范围类成因)────────────────────
     # 注意先 await execute 再 .scalars():写成 `await db.execute(...).scalars()`
     # 会把整条链一起 await(对 coroutine 调 .scalars → 500,2026-11-05 修复)
-    #
-    # 2026-11-05 评审 P2-7:范围不再只看本人持有 —— 平台模式模板的暂停
-    # 对 member+ 全员可见(与站内通知的 fanout_members 同口径;平台实例
-    # 的 holder 是系统用户,按 holder 过滤等于永远不可见)。告警直接深链
-    # 到集成详情页(此前统一跳列表页),并补上凭证认证失败(auth_failed)。
-    # 详情页路由参数是模板 id(GET /integration/tasks/{id} 对实例 id 404),
-    # 链接取 inst.template_id 而非 inst.id(2026-11-05 修复轮评审 N2)。
-    from sqlalchemy import or_
-    _platform_tpl_ids = select(IntegrationTask.id).where(
-        IntegrationTask.template_id.is_(None),
-        IntegrationTask.identity_mode != "personal")
-    _paused_conds = [IntegrationTask.holder_id == user.id]
-    if user.role in ("admin", "super_admin"):
-        _paused_conds.append(IntegrationTask.template_id.in_(_platform_tpl_ids))
+    # 2026-11-05 评审 P2-7:告警直接深链到集成详情页(此前统一跳列表页),
+    # 并补上凭证认证失败(auth_failed)。详情页路由参数是模板 id(GET
+    # /integration/tasks/{id} 对实例 id 404),链接取 inst.template_id
+    # 而非 inst.id(2026-11-05 修复轮评审 N2)。authz C1:平台模板暂停对
+    # admin+ 全员可见的并集分支随平台模式退役 —— 恒按本人持有过滤。
     _paused_rows = await db.execute(select(IntegrationTask).where(
-        IntegrationTask.state == "paused", or_(*_paused_conds)))
+        IntegrationTask.state == "paused",
+        IntegrationTask.holder_id == user.id))
     paused_insts = _paused_rows.scalars().all()
     task_alert_reasons = (
         at_svc.PAUSE_TOKEN_REVOKED, at_svc.PAUSE_TOKEN_INVALIDATED,
-        at_svc.PAUSE_TOKEN_EXPIRED, at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE,
+        at_svc.PAUSE_TOKEN_EXPIRED,
         at_svc.PAUSE_RESOURCE_NOT_ALLOWED, at_svc.PAUSE_SCOPE_DENIED,
         "missing_credential", "fail_streak", "auth_failed")
     reason_labels = {
         at_svc.PAUSE_TOKEN_REVOKED: "令牌已吊销",
         at_svc.PAUSE_TOKEN_INVALIDATED: "令牌已失效",
         at_svc.PAUSE_TOKEN_EXPIRED: "令牌已到期",
-        at_svc.PAUSE_TOKEN_OWNER_INELIGIBLE: "令牌属主角色不足",
         at_svc.PAUSE_RESOURCE_NOT_ALLOWED: "超出令牌范围",
         at_svc.PAUSE_SCOPE_DENIED: "场景非公共",
         "missing_credential": "缺少凭证",

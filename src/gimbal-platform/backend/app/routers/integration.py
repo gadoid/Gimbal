@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser, principal_or_user
-from ..core.security import fernet_decrypt, fernet_encrypt
+from ..core.security import fernet_decrypt
 from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.integration_task import IntegrationTask
@@ -61,28 +61,17 @@ def _safe_decrypt(encrypted: str) -> str:
 
 
 def _can_manage(user, tpl: IntegrationTask) -> bool:
-    """模板改动权(§5.2 改写):平台模板 admin+(ops.write,表 A 驱动);
-    个人模板属主单判(W3:super_admin 越属主旁路删除,私有区归属主;
-    平台模板 C1 退役前维持 Admin+ 维护)。"""
-    if tpl.identity_mode == "platform":
-        return has_capability(user, "ops.write")
+    """模板改动权(§5.2 改写):属主单判(authz C1:平台模式退役,
+    admin+ 维护面随 identity_mode=platform 分支删除;__platform__
+    持有的公共模板由 C2 另立维护口径)。"""
     return user.id == tpl.owner_id
 
 
 def _visible(user, tpl: IntegrationTask) -> bool:
-    """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用)。
-
-    个人模板:属主 ∨ public(W3:super_admin 越属主旁路删除)。平台
-    模板对 admin+ 恒可见,与 ``_can_manage``(D7:任一 admin 可管
-    平台任务)及暂停告警/通知的 admin+ 扇出同口径 —— 此前 private 平台
-    模板对非属主 admin 不可见,却能改能删、能收到告警,点进去 404
-    (2026-11-05 修复轮评审 N2 延伸)。visibility 对平台模板只区分
-    user 角色是否可见。规则见 v4 技术方案 §2.3「平台任务可见性」(r10.7):
-    勿按「私有 = 只有我」收窄,要收窄须与 _can_manage、告警扇出一起改。"""
+    """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用):
+    属主 ∨ public(authz C1:平台的 admin+ 恒可见分支随平台模式退役)。"""
     return tpl.removed_at is None and (
-        tpl.owner_id == user.id or tpl.visibility == "public"
-        or (tpl.identity_mode == "platform"
-            and has_capability(user, "ops.write")))
+        tpl.owner_id == user.id or tpl.visibility == "public")
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -95,13 +84,10 @@ def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
 
 
 async def _my_instance(db: AsyncSession, tpl: IntegrationTask, user):
-    """当前用户的实例(**只读**,W0a① 播种收口):personal 按 holder
-    查不建;platform 维持平台唯一实例口径(不建,创建时已有)。"""
-    if tpl.identity_mode == "personal":
-        return (await db.execute(select(IntegrationTask).where(
-            IntegrationTask.template_id == tpl.id,
-            IntegrationTask.holder_id == user.id))).scalar()
-    return await _tpl_instance(db, tpl.id)
+    """当前用户的实例(**只读**,W0a① 播种收口):按 holder 查不建。"""
+    return (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id == tpl.id,
+        IntegrationTask.holder_id == user.id))).scalar()
 
 
 async def _tpl_instance(db: AsyncSession, tpl_id: int,
@@ -122,13 +108,11 @@ async def _tpl_instance(db: AsyncSession, tpl_id: int,
 async def _managed_instance(
     db: AsyncSession, tpl: IntegrationTask,
 ) -> IntegrationTask | None:
-    """管理动作(解绑 D26 等)的目标实例 —— 显式按身份模式定位
-    (评审 2026-11-05 P2):personal = 属主(注册方)自己的实例;
-    platform = 平台系统用户的唯一实例。此前解绑取「该模板 id 最小的
-    实例」,结果只是靠创建顺序碰巧正确 —— 订阅者实例先建时暂停会
-    落到别人头上。"""
-    holder = tpl.owner_id if tpl.identity_mode == "personal" \
-        else await integration_runner.get_platform_user_id()
+    """管理动作(解绑 D26 等)的目标实例 —— 注册方(属主)自己的实例
+    (评审 2026-11-05 P2:此前取「该模板 id 最小的实例」,只是靠创建
+    顺序碰巧正确 —— 订阅者实例先建时暂停会落到别人头上)。authz C1:
+    平台唯一实例分支随平台模式退役。"""
+    holder = tpl.owner_id
     if holder is None:
         return None
     return (await db.execute(select(IntegrationTask).where(
@@ -145,9 +129,7 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "name": db_tpl.name,
         "ownerId": db_tpl.owner_id,
         "mine": db_tpl.owner_id == current.id,
-        "canManage": db_tpl.owner_id == current.id
-        or (db_tpl.identity_mode == "platform"
-            and has_capability(current, "ops.write")),
+        "canManage": db_tpl.owner_id == current.id,
         "visibility": db_tpl.visibility,
         "identityMode": db_tpl.identity_mode,
         "targetType": db_tpl.target_type,
@@ -196,15 +178,13 @@ async def _tpl_out_full(
     inst: IntegrationTask | None, user: User,
 ) -> dict:
     """W0b④ 消费面组装:authAliases / missingCredentials / subscribed。
-    missing 的持有人:personal = 当前查看者(「我缺什么」),platform =
-    平台实例持有人。令牌面:tokenId/tokenName 一并回显。"""
+    missing 的持有人 = 当前查看者(「我缺什么」)。令牌面:tokenId/
+    tokenName 一并回显。authz C1:平台持有人口径退役。"""
     from ..models.access_token import AccessToken
     aliases = await integration_runner.auth_aliases_view(db, tpl)
-    holder = user.id if tpl.identity_mode == "personal" else (
-        inst.holder_id if inst is not None else None)
+    holder = user.id
     missing = await _missing_credentials(db, aliases, holder)
-    subscribed = (tpl.identity_mode == "personal"
-                  and inst is not None and inst.holder_id == user.id)
+    subscribed = (inst is not None and inst.holder_id == user.id)
     token = await db.get(AccessToken, tpl.token_id) if tpl.token_id else None
     out = _tpl_out(tpl, inst, user, token=token,
                    auth_aliases=aliases, subscribed=subscribed)
@@ -246,7 +226,8 @@ class TaskIn(BaseModel):
     schemeId: str | None = None
     # authz W5:默认反转 personal(M1.x 后收窄为仅 personal);
     # Literal 校验防任意串
-    identityMode: Literal["personal", "platform"] = "personal"
+    # authz C1:平台模式退役 —— 只接受 personal(传 platform → 422)
+    identityMode: Literal["personal"] = "personal"
     triggerCron: str = "*/5 * * * *"
     resultPolicy: str = "latest"
     cardTemplate: str = "status"
@@ -300,27 +281,20 @@ async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
 async def create_task(body: TaskIn, principal: PrincipalIn,
                       db: DbSession) -> dict:
     user = principal.user
-    # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主、
-    # platform → 平台身份);请求体传入不同值 → 422。
+    # §2.2:令牌调用的 identityMode 由认证结果决定(personal → 属主);
+    # 请求体传入不同值 → 422。authz C1:platform 取值随 TaskIn 的
+    # Literal 收敛直接 422(W5 的 410 platform_mode_closed 退役)。
     if principal.is_token:
         if body.identityMode != principal.identity_mode:
             raise _bad(
                 "identity_mode_conflict",
                 f"identityMode 由认证结果决定为 {principal.identity_mode}"
                 f"(请求体传了 {body.identityMode})")
-    if body.identityMode == "platform":
-        # authz W5:平台模式入口关闭 —— 新建一律 410(M1 关闭,C1 删
-        # 分支;存量平台任务照跑、可订阅至退役)
-        raise _bad(
-            "platform_mode_closed",
-            "平台模式已停止新建:请使用个人模式(用自己的凭证执行)", 410)
     if body.callbackPath is not None \
             and not at_svc.valid_callback_path(body.callbackPath):
         raise _bad(
             "callback_path_invalid",
             "callbackPath 必须是以 / 开头的路径段(不含协议与主机)")
-    # (identityMode 合法性由 TaskIn 的 Literal 校验承担,W5 起冗余的
-    # 手工校验删除)
     try:
         parse_cron(body.triggerCron)
     except CronError as e:
@@ -333,17 +307,9 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
-    if body.identityMode != "platform" \
-            and scen.owner_id != user.id:
+    if scen.owner_id != user.id:
         # §4.3:个人模式(含 JWT/个人令牌属主)要求场景属主。
         raise _bad("scenario_not_owned", "只能引用自己创建的场景")
-    if body.identityMode == "platform":
-        # D9(令牌与 JWT 同一检查,取消 v3 的 JWT 豁免):平台模式只认
-        # 公共场景;注册入口 422(§5.4 状态码约定)。
-        if (getattr(scen, "visibility", None) or "private") != "public":
-            raise _bad(
-                "platform_scope_denied",
-                "平台模式只能使用公共场景")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
     # 场景限定)。
     if body.schemeId:
@@ -354,17 +320,6 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             raise _bad(
                 "scheme_not_owned",
                 f"执行方案不存在或不属于该场景: {body.schemeId}") from None
-    # 平台模式只读闸(方案 §3:保存前检查并列出不满足的步骤);
-    # D30:setup/teardown 白名单已并入 is_scenario_read_only 本体,
-    # 与即时执行/定时运行闸同一实现。
-    if body.identityMode == "platform":
-        ok, offenders = await integration_runner.is_scenario_read_only(
-            scen.payload)
-        if not ok:
-            raise _bad("not_read_only",
-                       f"平台模式要求全部步骤为只读"
-                       f"(GET/HEAD/OPTIONS 或已标 query_safe): "
-                       f"{'、'.join(offenders)}")
     if principal.is_token:
         # 令牌注册范围闸(§5.4:注册 422;按将生效的方案核对,未指定
         # → 运行期同源回落默认/首个)
@@ -385,7 +340,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
     await db.commit()
     await db.refresh(tpl)
     inst = await integration_runner.ensure_instance(
-        tpl, holder_id=user.id if body.identityMode == "personal" else None)
+        tpl, holder_id=user.id)
     if inst is not None:
         # W0a③:owner 实例留底内容指纹(执行闸只对非 owner 生效);
         # 别名查询失败不阻断创建(owner 无闸,best-effort)
@@ -655,19 +610,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
         inst = await db.get(IntegrationTask, seeded.id)
     # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
     # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC。
-    from ..core.timeutil import ensure_aware
     now = datetime.now(timezone.utc)
-    _last_manual = (ensure_aware(inst.last_manual_run_at)
-                    if inst.last_manual_run_at is not None else None)
-    # Y3/方案 §3 操作表:冷却只对平台模式(任意订阅者触发需限频);
-    # 个人模式 = 实例持有人自己,无限冷却
-    if tpl.identity_mode == "platform" \
-            and inst.last_manual_run_at is not None and (
-            now - _last_manual).total_seconds() \
-            < integration_runner.MANUAL_COOLDOWN_SECONDS:
-        wait = int(integration_runner.MANUAL_COOLDOWN_SECONDS - (
-            now - _last_manual).total_seconds())
-        raise _bad("cooldown", f"手动执行冷却中,约 {wait}s 后可再试", 409)
     # C-4(2026-10-13):占用判定改条件更新(CAS)
     if not integration_runner._inflight_ok(tpl, inst.holder_id):
         raise _bad("inflight_limit", "在飞实例数已达上限,稍后再试", 429)
@@ -888,11 +831,12 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
 
 
 #: 「启动」放行的暂停原因(§3.3 恢复入口):manual/fail_streak 可直接
-#: 恢复;scope_denied(场景公开后)/ resource_not_allowed(缺项处置后)/
-#: token_owner_ineligible(恢复角色后)条件由管理者满足后启动,下次运行
-#: 再过复核闸。token_* 三类各有专属路径,不由「启动」代偿。
+#: 恢复;scope_denied(场景公开后)/ resource_not_allowed(缺项处置后)
+#: 条件由管理者满足后启动,下次运行再过复核闸。token_* 三类各有专属
+#: 路径,不由「启动」代偿。authz C1:token_owner_ineligible 随 W5/0036
+#: 退役(存量已由迁移恢复,不再产生)。
 _RESUMABLE = ("manual", "fail_streak", "scope_denied",
-              "resource_not_allowed", "token_owner_ineligible")
+              "resource_not_allowed")
 
 
 @router.post("/tasks/{task_id}/subscription/pause")
@@ -906,15 +850,8 @@ async def pause_my_subscription(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    if tpl.identity_mode == "platform":
-        if not _can_manage(user, tpl):
-            raise _bad("forbidden", "平台模式暂停/恢复仅 member+ 可操作", 403)
-        inst = await _tpl_instance(db, tpl.id)
-        if inst is None:
-            raise _bad("instance_missing", "平台实例缺失", 404)
-    else:
-        _subscribable(tpl, user)
-        inst = await _my_subscription(db, tpl, user)
+    _subscribable(tpl, user)
+    inst = await _my_subscription(db, tpl, user)
     if inst.state != "paused" or inst.paused_reason != "manual":
         inst.state = "paused"
         inst.paused_reason = "manual"
@@ -951,15 +888,8 @@ async def resume_my_subscription(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    if tpl.identity_mode == "platform":
-        if not _can_manage(user, tpl):
-            raise _bad("forbidden", "平台模式暂停/恢复仅 member+ 可操作", 403)
-        inst = await _tpl_instance(db, tpl.id)
-        if inst is None:
-            raise _bad("instance_missing", "平台实例缺失", 404)
-    else:
-        _subscribable(tpl, user)
-        inst = await _my_subscription(db, tpl, user)
+    _subscribable(tpl, user)
+    inst = await _my_subscription(db, tpl, user)
     reason = inst.paused_reason or ""
     if inst.state == "paused" and reason not in _RESUMABLE:
         if reason == at_svc.PAUSE_TOKEN_REVOKED:
@@ -978,8 +908,7 @@ async def resume_my_subscription(
         raise _bad("resume_not_allowed", hint, 409)
     if inst.state == "paused":
         via = (reason if reason in ("fail_streak", "scope_denied",
-                                    "resource_not_allowed",
-                                    "token_owner_ineligible")
+                                    "resource_not_allowed")
                else "manual")
         await _resume_instance(db, tpl, inst, actor_id=user.id, via=via)
     return await _tpl_out_full(db, tpl, inst, user)
@@ -1049,193 +978,3 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "cardTemplate": tpl.card_template or "status",
         })
     return {"items": out}
-
-
-# ── 平台凭证(admin;决策 9/10,D34 原地更新)─────────────────────
-
-class PlatformCredIn(BaseModel):
-    alias: str = Field(min_length=1, max_length=64)
-    url: str = ""
-    username: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=1, max_length=1024)
-    tokenType: str = "Bearer"
-    expiresIn: int = 7200
-
-
-class PlatformCredPatch(BaseModel):
-    """D34:原地更新(全部可选),id 不变 —— 保证轮换密码不会把凭证
-    从平台令牌范围里级联掉;删除仍级联。"""
-    url: str | None = Field(default=None, max_length=2048)
-    username: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, max_length=1024)
-    tokenType: str | None = Field(default=None, max_length=32)
-    expiresIn: int | None = Field(default=None, ge=60)
-
-
-def _require_admin(user) -> None:
-    if user.role != "super_admin":
-        raise _bad("forbidden", "平台凭证仅 super_admin 可管理", 403)
-
-
-async def _cred_usage(db: AsyncSession, cred_ids: list[int]) -> dict[int, tuple[int, int]]:
-    """凭证 → (引用它的平台令牌数, 波及的非模板任务数)。
-
-    删除接口的影响面提示(§8)与列表的「被引用」列(2026-11-05 前端评审
-    P2-3:此前前端逐张令牌拼字符串估算,N+1 请求且同凭证多令牌时计数
-    恒停 1)共用这一段口径:范围行在的令牌都算,任务只数非模板、未删除、
-    经 token_id 直连的。两条聚合查询,不随凭证数放大。"""
-    from ..models.access_token import AccessToken, AccessTokenScope
-    if not cred_ids:
-        return {}
-    tokens_by_auth: dict[int, set[int]] = {cid: set() for cid in cred_ids}
-    scope_rows = (await db.execute(
-        select(AccessTokenScope.auth_id, AccessToken.id).join(
-            AccessToken, AccessToken.id == AccessTokenScope.token_id)
-        .where(AccessTokenScope.auth_id.in_(cred_ids)))).all()
-    for auth_id, token_id in scope_rows:
-        tokens_by_auth.setdefault(auth_id, set()).add(token_id)
-    all_token_ids = [t for ids in tokens_by_auth.values() for t in ids]
-    tasks_by_token: dict[int, int] = {}
-    if all_token_ids:
-        from sqlalchemy import func as sa_func
-        task_rows = (await db.execute(
-            select(IntegrationTask.token_id, sa_func.count()).where(
-                IntegrationTask.template_id.is_(None),
-                IntegrationTask.removed_at.is_(None),
-                IntegrationTask.token_id.in_(all_token_ids))
-            .group_by(IntegrationTask.token_id))).all()
-        tasks_by_token = {tid: int(n) for tid, n in task_rows}
-    return {cid: (len(ids), sum(tasks_by_token.get(t, 0) for t in ids))
-            for cid, ids in tokens_by_auth.items()}
-
-
-@router.get("/platform-credentials")
-async def list_platform_credentials(
-    user: CurrentUser, db: DbSession,
-) -> dict:
-    _require_admin(user)
-    holder = await integration_runner.get_platform_user_id()
-    if holder is None:
-        return {"items": []}
-    rows = (await db.execute(select(AuthSession).where(
-        AuthSession.owner_id == holder))).scalars().all()
-    usage = await _cred_usage(db, [r.id for r in rows])
-    return {"items": [{
-        "id": r.id, "alias": r.alias, "url": r.url,
-        "username": _safe_decrypt(r.username_enc),
-        "tokenType": r.token_type, "expiresIn": r.expires_in,
-        # 被引用列直出(P2-3):前端不再逐令牌估算
-        "refTokens": usage.get(r.id, (0, 0))[0],
-        "refTasks": usage.get(r.id, (0, 0))[1],
-    } for r in rows]}
-
-
-@router.post("/platform-credentials", status_code=201)
-async def create_platform_credential(
-    body: PlatformCredIn, user: CurrentUser, db: DbSession,
-) -> dict:
-    _require_admin(user)
-    holder = await integration_runner.get_platform_user_id()
-    if holder is None:
-        raise _bad("platform_user_missing", "平台系统用户缺失", 500)
-    dup = (await db.execute(select(AuthSession).where(
-        AuthSession.owner_id == holder,
-        AuthSession.alias == body.alias))).scalar()
-    if dup is not None:
-        raise _bad("alias_dup", f"别名已存在: {body.alias}", 409)
-    row = AuthSession(
-        owner_id=holder, alias=body.alias, url=body.url,
-        username_enc=fernet_encrypt(body.username),
-        password_enc=fernet_encrypt(body.password),
-        token_type=body.tokenType, expires_in=body.expiresIn)
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
-    await audit_svc.record(
-        db, actor_id=user.id,
-        actor_name=user.display_name or user.username,
-        action="integration.credential.write",
-        resource_type="integration_credential", resource_id=str(row.id),
-        resource_name=row.alias,
-        detail={"fn": "create", "alias": row.alias})
-    # G7/Y2:平台凭证新建 = 恢复信号
-    try:
-        await integration_runner.revive_paused_instances(user.id)
-    except Exception:  # noqa: BLE001
-        pass
-    return {"id": row.id, "alias": row.alias}
-
-
-@router.patch("/platform-credentials/{cred_id}")
-async def patch_platform_credential(
-    cred_id: int, body: PlatformCredPatch,
-    user: CurrentUser, db: DbSession,
-) -> dict:
-    """D34 平台凭证原地更新(§5.3):字段同个人凭证 PATCH,均可选,
-    id 不变;写 ``integration.credential.write``(fn=update);成功后
-    调用 ``revive_paused_instances``(与新建同为恢复信号)。"""
-    _require_admin(user)
-    holder = await integration_runner.get_platform_user_id()
-    row = await db.get(AuthSession, cred_id)
-    if row is None or row.owner_id != holder:
-        raise _bad("not_found", "凭证不存在", 404)
-    changed: list[str] = []
-    if body.url is not None:
-        row.url = body.url
-        changed.append("url")
-    if body.username is not None and body.username:
-        row.username_enc = fernet_encrypt(body.username)
-        changed.append("username")
-    if body.password:
-        row.password_enc = fernet_encrypt(body.password)
-        changed.append("password")
-    if body.tokenType is not None and body.tokenType:
-        row.token_type = body.tokenType
-        changed.append("tokenType")
-    if body.expiresIn is not None:
-        row.expires_in = body.expiresIn
-        changed.append("expiresIn")
-    await db.commit()
-    await audit_svc.record(
-        db, actor_id=user.id,
-        actor_name=user.display_name or user.username,
-        action="integration.credential.write",
-        resource_type="integration_credential", resource_id=str(cred_id),
-        resource_name=row.alias,
-        detail={"fn": "update", "alias": row.alias, "changed": changed})
-    try:
-        await integration_runner.revive_paused_instances(user.id)
-    except Exception:  # noqa: BLE001
-        pass
-    return {"id": row.id, "alias": row.alias}
-
-
-@router.delete("/platform-credentials/{cred_id}")
-async def delete_platform_credential(
-    cred_id: int, user: CurrentUser, db: DbSession,
-) -> dict:
-    _require_admin(user)
-    holder = await integration_runner.get_platform_user_id()
-    row = await db.get(AuthSession, cred_id)
-    if row is None or row.owner_id != holder:
-        raise _bad("not_found", "凭证不存在", 404)
-    alias_snap = row.alias
-    # 影响面提示(§8 前端):该凭证从哪些平台令牌范围中级联移除、波及
-    # 多少任务 —— 先查再删(删除后范围行已消失);口径与列表「被引用」
-    # 列共用 _cred_usage(P2-3)。
-    usage = await _cred_usage(db, [cred_id])
-    affected_tokens_n, affected_tasks = usage.get(cred_id, (0, 0))
-    await db.delete(row)
-    await db.commit()
-    await audit_svc.record(
-        db, actor_id=user.id,
-        actor_name=user.display_name or user.username,
-        action="integration.credential.write",
-        resource_type="integration_credential", resource_id=str(cred_id),
-        resource_name=alias_snap,
-        detail={"fn": "delete", "alias": alias_snap,
-                "affected_tokens": affected_tokens_n,
-                "affected_tasks": affected_tasks})
-    return {"removed": True,
-            "affectedTokens": affected_tokens_n,
-            "affectedTasks": affected_tasks}

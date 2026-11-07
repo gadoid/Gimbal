@@ -235,8 +235,6 @@ async def test_me_summary_200(client: AsyncClient):
 
     回归钉:me_summary 曾把 `await db.execute(...).scalars()` 整链 await
     (对 coroutine 调 .scalars → 500,2026-11-05 修复)。"""
-    from .inbound_fixtures import seed_platform_user
-    await seed_platform_user()
     hdr = await _mk(client, "pref_summary")
     r = await client.get("/api/me/summary", headers=hdr)
     assert r.status_code == 200, r.text
@@ -246,55 +244,3 @@ async def test_me_summary_200(client: AsyncClient):
     assert body["stats"].get("private_scenarios") == 0
     assert body["stats"].get("tokens") == 0
 
-
-async def test_me_summary_platform_pause_fanout(client: AsyncClient):
-    """2026-11-05 评审 P2-7 回归钉:平台模式任务的暂停告警对 member 可见
-    (平台实例 holder 是系统用户,按 holder 过滤等于永不可见);告警深链
-    到集成详情(模板 id —— 修复轮评审 N2:此前误用实例 id,详情页 404);
-    auth_failed(凭证认证失败)在告警范围内;普通 user 角色
-    不看平台暂停(与通知 fanout_members 的 member+ 口径一致)。"""
-    from .inbound_fixtures import seed_platform_user, mk_task_pair
-    from app.core.db import SessionLocal
-    from sqlalchemy import update as sa_update
-
-    await seed_platform_user()
-    tpl_id, inst_id, _ = await mk_task_pair(
-        name="平台探活", identity_mode="platform")
-    async with SessionLocal() as s:
-        await s.execute(sa_update(IntegrationTask).where(
-            IntegrationTask.id == inst_id).values(
-            state="paused", paused_reason="auth_failed"))
-        await s.commit()
-
-    member_hdr = await _mk(client, "pref_sum_fanout")
-    async with SessionLocal() as s:
-        await s.execute(sa_update(User).where(
-            User.username == "pref_sum_fanout").values(role="admin"))
-        await s.commit()
-    r = await client.get("/api/me/summary", headers=member_hdr)
-    assert r.status_code == 200
-    paused = [a for a in r.json()["alerts"]
-              if a["class"] == "integration_paused"]
-    assert paused, "member 应看到平台任务暂停告警"
-    assert paused[0]["title"].startswith("平台探活")
-    assert "凭证认证失败" in paused[0]["title"]
-    # 深链取模板 id,且该链接对应的详情接口真能打开(实例 id 会 404);
-    # 模板保持默认 private —— 平台模板对 member+ 恒可见(_visible 放宽)
-    assert paused[0]["link"] == f"/integrations/{tpl_id}"
-    r = await client.get(f"/api/integration/tasks/{tpl_id}", headers=member_hdr)
-    assert r.status_code == 200, r.text
-    r = await client.get(f"/api/integration/tasks/{inst_id}", headers=member_hdr)
-    assert r.status_code == 404
-
-    # 普通 user(role=user)不看平台暂停:告警里没有这一类
-    user_hdr = await register_and_login(
-        client, "pref_sum_plain", "pref-sum-plain-pass-123")
-    from app.core.db import SessionLocal as _S
-    async with _S() as s:
-        await s.execute(sa_update(User).where(
-            User.username == "pref_sum_plain").values(role="user"))
-        await s.commit()
-    r = await client.get("/api/me/summary", headers=user_hdr)
-    assert r.status_code == 200
-    assert not [a for a in r.json()["alerts"]
-                if a["class"] == "integration_paused"]

@@ -10,17 +10,15 @@ dev-plan W4「勿扩大化」)。
 """
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..core.security import fernet_encrypt
 from ..core.timeutil import iso_utc_z
 from ..models.access_token import AccessToken, AccessTokenScope
 from ..models.auth_session import AuthSession
@@ -69,14 +67,11 @@ def _require_view(user: User, tok: AccessToken) -> None:
 
 
 def _require_manage(user: User, tok: AccessToken) -> None:
-    """写面(authz W5,表 A 驱动):个人令牌 = 属主(任意角色)∨
-    users.manage(管理面);平台令牌 = ops.write(C1 退役存量前维持)。
-    旧口径「admin+ 可代管他人个人令牌 / 属主 user 角色仅吊销豁免」
-    随签发开放一并收编 —— 代管是用户管理职责,归 users.manage。"""
-    if tok.kind == at.PLATFORM_KIND:
-        if has_capability(user, "ops.write"):
-            return
-    elif tok.user_id == user.id or has_capability(user, "users.manage"):
+    """写面(authz W5,表 A 驱动):属主(任意角色)∨ users.manage
+    (管理面)。旧口径「admin+ 可代管他人个人令牌 / 属主 user 角色仅
+    吊销豁免」随签发开放一并收编 —— 代管是用户管理职责,归
+    users.manage。authz C1:平台令牌分支随平台模式退役。"""
+    if tok.user_id == user.id or has_capability(user, "users.manage"):
         return
     raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
@@ -151,7 +146,6 @@ async def _task_bindings(db: AsyncSession, tpl, scen) -> dict:
 def _token_out(
     tok: AccessToken, *, scope: dict, tasks: dict,
     owner_label: "str | None" = None, include_owner: bool = False,
-    issuer_label: "str | None" = None,
 ) -> dict:
     out: dict[str, Any] = {
         "id": tok.id,
@@ -178,10 +172,6 @@ def _token_out(
     if include_owner:
         out["ownerId"] = tok.user_id
         out["ownerName"] = owner_label
-    if issuer_label is not None:
-        # 平台令牌的「签发人」列(原型 Tokens--platform;属主恒
-        # __platform__ 无信息量,签发人 = created_by,方案 §11.3)
-        out["issuerName"] = issuer_label
     return out
 
 
@@ -208,16 +198,15 @@ async def list_tokens(
     status_filter: Annotated[str | None, Query(alias="status",
                                                max_length=16)] = None,
 ) -> dict:
-    """令牌列表。``kind=personal``:本人;``kind=platform``:ops.write
-    (存量平台令牌,C1 前维持);``all=1``(users.manage):全部,可按属主
-    (id 或用户名/昵称模糊,2026-11-05
-    评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
-    personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
+    """令牌列表。``kind=personal``:本人;``all=1``(users.manage):
+    全部,可按属主(id 或用户名/昵称模糊,2026-11-05 评审 P2-6:管理员
+    通常不知道数字 id)与状态过滤。authz C1:kind=platform 面退役。
+    不返回明文与密钥。"""
     if all_view:
         if not has_capability(user, "users.manage"):
             raise _bad("capability_forbidden", "查看全部令牌需能力 users.manage", 403)
         q = select(AccessToken)
-        if kind in ("personal", "platform"):
+        if kind == at.PERSONAL_KIND:
             q = q.where(AccessToken.kind == kind)
         if owner is not None:
             q = q.where(AccessToken.user_id == owner)
@@ -236,15 +225,11 @@ async def list_tokens(
         else:
             rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()
     else:
-        if kind == at.PLATFORM_KIND:
-            if user.role not in ("admin", "super_admin"):
-                raise _bad("capability_forbidden", "平台令牌面需能力 ops.write", 403)
-            q = select(AccessToken).where(AccessToken.kind == kind)
-        elif kind == at.PERSONAL_KIND:
+        if kind == at.PERSONAL_KIND:
             q = select(AccessToken).where(
                 AccessToken.kind == kind, AccessToken.user_id == user.id)
         else:
-            raise _bad("kind_invalid", "kind ∈ personal | platform")
+            raise _bad("kind_invalid", "kind ∈ personal")
         rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()
     ids = [r.id for r in rows]
     scopes = await _scope_counts(db, ids)
@@ -253,19 +238,12 @@ async def list_tokens(
     labels: dict[int, str] = {}
     if include_owner:
         labels = await _owner_labels(db, {r.user_id for r in rows})
-    # 平台令牌补「签发人」(created_by;个人令牌签发人 = 属主,不重复给)
-    issuer_ids = {r.created_by for r in rows
-                  if r.created_by is not None and r.kind == at.PLATFORM_KIND}
-    issuer_labels = await _owner_labels(db, issuer_ids)
     items = [
         _token_out(r,
                    scope=scopes.get(r.id, {"aliases": 0, "auths": 0}),
                    tasks=tasks.get(r.id, {"total": 0, "unsatisfied": 0}),
                    owner_label=labels.get(r.user_id),
-                   include_owner=include_owner,
-                   issuer_label=(
-                       issuer_labels.get(r.created_by or -1)
-                       if r.kind == at.PLATFORM_KIND else None))
+                   include_owner=include_owner)
         for r in rows
     ]
     # 额度提示(不含已吊销,D3)
@@ -280,16 +258,10 @@ async def scope_candidates(
     user: CurrentUser, db: DbSession,
     kind: Annotated[str, Query(max_length=16)] = "personal",
 ) -> dict:
-    """范围候选(§5.1):全部服务别名 + 本人凭证池(平台令牌 = 平台
-    凭证池,只列别名)。"""
-    if kind == at.PLATFORM_KIND:
-        # authz W5:平台入口关闭(M1 410,C1 删端点;存量平台令牌的
-        # scope 编辑走 PUT,不经此候选端点)
-        raise _bad(
-            "platform_mode_closed",
-            "平台令牌入口已关闭:入站调用请使用个人令牌", 410)
+    """范围候选(§5.1):全部服务别名 + 本人凭证池。authz C1:平台
+    候选面(平台凭证池)随平台模式退役。"""
     if kind != at.PERSONAL_KIND:
-        raise _bad("kind_invalid", "kind ∈ personal | platform")
+        raise _bad("kind_invalid", "kind ∈ personal")
     holder = user.id
     aliases = (await db.execute(
         select(ServiceAlias.alias_name).order_by(ServiceAlias.alias_name))
@@ -327,13 +299,8 @@ async def create_token(
 ) -> dict:
     """签发(§5.1):额度事务内计数;回调主机白名单;一次性返回
     ``{token, callbackSecret?}`` —— 明文只此一次(D10)。"""
-    if body.kind not in (at.PERSONAL_KIND, at.PLATFORM_KIND):
-        raise _bad("kind_invalid", "kind ∈ personal | platform")
-    if body.kind == at.PLATFORM_KIND:
-        # authz W5:平台入口关闭 —— 新签发一律 410(M1 关闭、C1 删)
-        raise _bad(
-            "platform_mode_closed",
-            "平台令牌已停止签发:入站调用请使用个人令牌", 410)
+    if body.kind != at.PERSONAL_KIND:
+        raise _bad("kind_invalid", "kind ∈ personal")
     owner_id = user.id
 
     callback_secret_plain: "str | None" = None

@@ -11,7 +11,7 @@ from app.models.user import User
 from app.services import access_token as at_svc
 
 from .helpers import make_draft as _draft
-from .inbound_fixtures import mk_token, seed_platform_user
+from .inbound_fixtures import mk_token
 from .test_access_tokens import (
     GET_STEP, _gtk, _register, _register_role, _user_id,
 )
@@ -19,7 +19,6 @@ from .test_access_tokens import (
 
 class TestChangePassword:
     async def test_defaults_invalidate_tokens_and_logout_others(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "cp_m", "admin")
         # 两套登录(JWT)+ 一张令牌
         other = await client.post("/api/auth/login", json={
@@ -47,7 +46,6 @@ class TestChangePassword:
         assert r5.json()["detail"]["code"] == "token_invalidated"
 
     async def test_opt_out_keeps_tokens_and_sessions(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "cp2_m", "admin")
         other = await client.post("/api/auth/login", json={
             "username": "cp2_m", "password": "pw123456"})
@@ -63,21 +61,9 @@ class TestChangePassword:
         r3 = await client.post("/api/auth/refresh", json={
             "refresh_token": other.json()["refresh_token"]})
         assert r3.status_code == 200
-
-    async def test_platform_tokens_unaffected(self, client):
-        await seed_platform_user()
-        h = await _register_role(client, "cp3_m", "admin")
-        _, plain = await mk_token(kind="platform", name="pt")
-        r = await client.post("/api/auth/change-password", headers=h, json={
-            "old_password": "pw123456", "new_password": "newpw12345"})
-        assert r.status_code == 200
-        r2 = await client.get("/api/executions", headers=_gtk(plain))
-        assert r2.status_code == 200
-
     async def test_invalidated_token_tasks_pause_and_revive(self, client):
         """改密失效 → 注册方实例 token_invalidated 暂停;重新生成自动恢复。"""
         from .inbound_fixtures import mk_task_pair
-        await seed_platform_user()
         h = await _register_role(client, "cp4_m", "admin")
         uid = await _user_id("cp4_m")
         tid, _ = await mk_token(user_id=uid)
@@ -103,7 +89,6 @@ class TestDeactivation:
     async def test_deactivate_invalidates_tokens(self, client):
         """停用 → 个人令牌落库失效(deactivated);重新启用不恢复。"""
         from .test_access_tokens import _admin_headers
-        await seed_platform_user()
         await _register(client, "first_admin")  # 首注 admin
         h = await _register_role(client, "da_m", "admin")
         uid = await _user_id("da_m")
@@ -129,7 +114,9 @@ class TestDeactivation:
 
     async def test_system_user_patch_delete_409(self, client):
         from .test_access_tokens import _admin_headers
-        await seed_platform_user()
+        from .inbound_fixtures import seed_platform_user
+
+        await seed_platform_user()   # D32 靶子:系统用户保护(保留)
         h_admin = await _admin_headers(client)
         async with db_module.SessionLocal() as s:
             pid = (await s.execute(sa.select(User.id).where(
@@ -165,7 +152,6 @@ class TestDeleteUserDisposal:
         return uid, tid, tpl_id, inst_id
 
     async def test_transfer_personal_task(self, client):
-        await seed_platform_user()
         await _register(client, "df_a0")           # 首注(无关)
         h_admin = await self._admin(client)
         await _register_role(client, "df_transferee", "admin")
@@ -197,44 +183,10 @@ class TestDeleteUserDisposal:
                 IntegrationTask).where(
                     IntegrationTask.template_id == tpl_id))).scalar_one()
             assert n == 0
-
-    async def test_publicize_platform_task_paused_manual(self, client):
-        await seed_platform_user()
-        await _register(client, "df_a1")
-        h_admin = await self._admin(client)
-        uid, tid, tpl_id, inst_id = await self._seed_owner_with_task(
-            "df_owner2", identity_mode="platform")
-        from app.models.composer_scenario import ComposerScenario
-        from app.models.user import User as _U
-        async with db_module.SessionLocal() as s:
-            pid = (await s.execute(sa.select(User.id).where(
-                User.is_system == True))).scalar()  # noqa: E712
-            s.add(ComposerScenario(
-                scenario_id=f"sc2-{uid}", owner_id=uid, visibility="private",
-                payload={"definition": {"steps": [], "config": {},
-                                        "meta": {"name": "x"}}}))
-            await s.commit()
-        async with db_module.SessionLocal() as s:
-            tpl = await s.get(IntegrationTask, tpl_id)
-            tpl.scenario_id = f"sc2-{uid}"
-            await s.commit()
-        r = await client.request(
-            "DELETE", f"/api/users/{uid}", headers=h_admin,
-            json={"disposal": "publicize"})
-        assert r.status_code == 204, r.text
-        async with db_module.SessionLocal() as s:
-            tpl = await s.get(IntegrationTask, tpl_id)
-            assert tpl.owner_id == pid      # __platform__
-            assert tpl.token_id is None
-            inst = await s.get(IntegrationTask, inst_id)
-            assert inst.state == "paused"
-            assert inst.paused_reason == "manual"
-
     async def test_publicize_personal_task_template_deleted(self, client):
         """publicize 个人模式模板:模板连同全部实例删除(方案 §3.6;
         评审 2026-11-05 P1:此前漏删模板行,统一 owner_id 更新把它挂到
         __platform__ 名下,留下个人模式僵尸模板)。"""
-        await seed_platform_user()
         await _register(client, "df_a4")
         h_admin = await self._admin(client)
         uid, tid, tpl_id, inst_id = await self._seed_owner_with_task(
@@ -262,7 +214,6 @@ class TestDeleteUserDisposal:
             assert n == 0
 
     async def test_purge_deletes_tasks(self, client):
-        await seed_platform_user()
         await _register(client, "df_a2")
         h_admin = await self._admin(client)
         uid, tid, tpl_id, inst_id = await self._seed_owner_with_task(
@@ -288,7 +239,6 @@ class TestDeleteUserDisposal:
     async def test_pending_deliveries_failed_on_delete(self, client):
         """删除用户:令牌删除前 pending 投递显式置 failed(token_deleted)。"""
         from .inbound_fixtures import mk_pending
-        await seed_platform_user()
         await _register(client, "df_a3")
         h_admin = await self._admin(client)
         uid, tid, _, _ = await self._seed_owner_with_task("df_owner4")

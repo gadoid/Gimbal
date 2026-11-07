@@ -72,7 +72,7 @@
           </td>
           <td class="ig-ops">
             <button
-              v-if="t.canManage || t.identityMode === 'platform' || t.subscribed"
+              v-if="t.canManage || t.subscribed"
               type="button" class="ig-act"
               :data-testid="`ig-run-${t.id}`"
               :disabled="runningId === t.id"
@@ -131,9 +131,6 @@
         <div class="ig-field-row">
           <label class="ig-field">执行身份
             <select v-model="form.identityMode" data-testid="ig-form-mode">
-              <!-- authz W5:平台模式入口 M1 隐藏(后端创建已 410
-                   platform_mode_closed;C1 删) -->
-              <option v-if="PLATFORM_MODE_OPEN" value="platform">平台模式(平台凭证 · 只读 · 仅公共场景)</option>
               <option value="personal">个人模式(我的凭证 · 读写)</option>
             </select>
           </label>
@@ -179,18 +176,10 @@
         <p v-if="preview?.workingPreview" class="ig-warn" data-testid="ig-form-working-warn">
           场景声明 working(预览执行)—— 集成任务会拒绝触发,请在编排器钉定修订后再创建。
         </p>
-        <p v-if="form.identityMode === 'platform'" class="ig-hint">
-          平台模式以平台系统用户执行,仅公共场景且只读(全部步骤 GET/HEAD/OPTIONS);
-          结果进工作台卡片(添加卡片 → 功能)。
+        <p class="ig-hint">
+          个人模式以<b>我的凭证</b>执行,读写皆可,边界 = 我在第三方系统的权限;
+          结果进我的工作台卡片。
         </p>
-        <p v-if="form.identityMode === 'platform'" class="ig-hint" data-testid="ig-form-platform-vis-hint">
-          平台任务对成员(member)及以上始终可见、可管理;可见性只决定普通用户能否看到。
-        </p>
-        <template v-else>
-          <p class="ig-hint">
-            个人模式以<b>我的凭证</b>执行,读写皆可,边界 = 我在第三方系统的权限;
-            结果进我的工作台卡片。
-          </p>
           <p v-if="preview && preview.authAliases.length"
              class="ig-hint" data-testid="ig-form-cred-hint">
             所需凭证别名:{{ preview.authAliases.join('、') }}
@@ -203,7 +192,6 @@
             公共个人模板:订阅者将以其本人凭证执行;你后续对场景/方案/数据集/周期/服务地址的修改,
             需订阅者重新确认后才继续执行。
           </p>
-        </template>
         <div class="ig-dialog-acts">
           <button type="button" class="ig-ghost" @click="createOpen = false">取消</button>
           <button
@@ -220,91 +208,6 @@
     <SubscriptionDialog :open="!!subTask" :task-id="subTask?.id || 0"
                         @close="subTask = null" @done="load" />
 
-    <!-- 平台令牌(webhook v4 §8;authz W5:M1 隐藏,C1 删) -->
-    <section v-if="PLATFORM_MODE_OPEN" class="ig-tokens">
-      <h3>平台令牌
-        <span class="ig-hint-inline">代表平台系统用户(__platform__)执行;只读 + 仅公共场景;member+ 可管理</span>
-      </h3>
-      <TokensSection variant="platform" />
-    </section>
-
-    <!-- 平台凭证(D34 原地更新;authz W5:M1 隐藏,C1 删) -->
-    <section v-if="PLATFORM_MODE_OPEN" class="ig-creds" data-testid="ig-creds">
-      <h3>平台凭证 <span class="ig-hint-inline">平台模式执行时使用;仅 admin 可管理</span></h3>
-      <table class="slib-table">
-        <thead><tr><th>别名</th><th>登录地址</th><th>用户名</th><th>被引用</th><th></th></tr></thead>
-        <tbody>
-          <tr v-for="c in creds" :key="c.id">
-            <td class="mono">{{ c.alias }}</td>
-            <td>{{ c.url || '—' }}</td>
-            <td>{{ c.username }}</td>
-            <td class="text-secondary">{{ c.refTokens ? `${c.refTokens} 张平台令牌 · ${c.refTasks ?? 0} 个任务` : '未被引用' }}</td>
-            <td class="ig-ops">
-              <button type="button" class="ig-act" data-testid="ig-cred-edit" @click="editCred(c)">编辑</button>
-              <button type="button" class="ig-act danger" @click="removeCred(c)">删除</button>
-            </td>
-          </tr>
-          <tr v-if="!creds.length"><td colspan="5" class="ig-empty-cell">暂无平台凭证(无认证的探活不需要)</td></tr>
-        </tbody>
-      </table>
-      <form class="ig-cred-form" @submit.prevent="addCred">
-        <input v-model="cred.alias" placeholder="别名(如 gitlab-bot)" required />
-        <input v-model="cred.url" placeholder="登录地址(可空)" />
-        <input v-model="cred.username" placeholder="用户名" required />
-        <input v-model="cred.password" type="password" placeholder="密码 / Token" required />
-        <button type="submit" class="ig-act" data-testid="ig-cred-add">+ 添加凭证</button>
-      </form>
-      <p class="ig-hint">轮换密码请用「编辑」:凭证 id 不变,平台令牌的授权范围与任务都不受影响。删除即收回授权。</p>
-    </section>
-
-    <!-- 编辑平台凭证(D34:id 不变) -->
-    <Dialog :open="!!editingCred" @update:open="(v) => !v && (editingCred = null)">
-      <DialogContent class="max-w-md" data-testid="ig-cred-edit-dialog">
-        <DialogHeader>
-          <DialogTitle>编辑 · {{ editingCred?.alias }}</DialogTitle>
-          <DialogDescription>保存后凭证 id 不变;引用它的平台令牌范围保持不变,因认证失败暂停的平台任务会自动恢复</DialogDescription>
-        </DialogHeader>
-        <form class="flex flex-col gap-2.5" @submit.prevent="saveCredEdit">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-caption font-medium text-secondary">认证地址</span>
-            <Input v-model="credEdit.url" placeholder="https://…" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-caption font-medium text-secondary">用户名</span>
-            <Input v-model="credEdit.username" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-caption font-medium text-secondary">新密码(留空不改)</span>
-            <Input v-model="credEdit.password" type="password" placeholder="••••••••" />
-          </label>
-          <div class="flex items-start gap-2 rounded-md bg-[#E4F5EA] px-2.5 py-2 text-[12px] text-[#14532D]">
-            保存后凭证 id 不变:引用它的平台令牌范围保持不变;因认证失败暂停的平台任务会自动恢复。
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" @click="editingCred = null">取消</Button>
-            <Button type="submit" :disabled="credEditBusy">保存</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-
-    <!-- 删除平台凭证确认(D14:列出受影响的平台令牌与任务) -->
-    <Dialog :open="!!deletingCred" @update:open="(v) => !v && (deletingCred = null)">
-      <DialogContent class="max-w-md" data-testid="ig-cred-del-dialog">
-        <DialogHeader>
-          <DialogTitle>删除平台凭证 {{ deletingCred?.alias }}?</DialogTitle>
-          <DialogDescription>只是换密码请用「编辑」</DialogDescription>
-        </DialogHeader>
-        <p class="m-0 text-[12px] font-semibold text-red-800">
-          将从 {{ deletingImpact?.affectedTokens ?? 0 }} 张平台令牌的范围中移除,{{ deletingImpact?.affectedTasks ?? 0 }} 个任务会在下次运行前暂停
-        </p>
-        <p class="m-0 text-caption text-secondary">同名重建不会自动回到令牌范围,需要重新加入。</p>
-        <DialogFooter>
-          <Button variant="outline" @click="deletingCred = null">取消</Button>
-          <Button variant="destructive" :disabled="credDelBusy" @click="confirmDeleteCred">删除</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   </section>
 </template>
 
@@ -315,27 +218,17 @@ import PageHead from '@/components/scenario-lib/PageHead.vue'
 import UnbindTokenDialog from '@/components/integration/UnbindTokenDialog.vue'
 import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
-  runIntegrationTask, listPlatformCredentials,
-  createPlatformCredential, patchPlatformCredential, deletePlatformCredential, integrationErr, fetchScenarioPreview,
+  runIntegrationTask, integrationErr, fetchScenarioPreview,
   unsubscribeIntegrationTask, pauseMySubscription, resumeMySubscription,
   RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf,
-  type IntegrationTaskItem, type PlatformCredential, type ScenarioPreview,
+  type IntegrationTaskItem, type ScenarioPreview,
 } from '@/api/integration'
 import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
-import TokensSection from '@/components/profile/TokensSection.vue'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { listScenarioOptions, listRunSchemes } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
 
-/** authz W5:平台模式入口 M1 隐藏(创建/令牌/凭证三面;C1 连代码删) */
-const PLATFORM_MODE_OPEN = false
-const route = useRoute()
+/** authz W5:平台模式入口 M1 隐藏(创建/令牌/凭证三面;C1 连代码删) */const route = useRoute()
 const router = useRouter()
 
 const loading = ref(true)
@@ -467,7 +360,7 @@ function pausedAction(t: IntegrationTaskItem): { label: string; to?: string } {
   // 令牌处置入口按类型分流(与详情页 tokenManageTo 同规则):平台令牌
   // 在集成页,个人令牌在个人设置 —— 目前 to 仅备用(label 作 title),
   // 接线导航时别再写死 /profile/tokens。
-  const tokenPage = t.tokenKind === 'platform' ? '/integrations' : '/profile/tokens'
+  const tokenPage = '/profile/tokens'
   if (r === 'token_revoked') return { label: '解绑令牌后接管' }
   if (r === 'token_expired' || r === 'token_invalidated')
     return { label: '去续期/重新生成', to: tokenPage }
@@ -522,18 +415,17 @@ function resumablePause(t: IntegrationTaskItem): boolean {
   return r === 'manual' || r === 'fail_streak' || r === 'scope_denied'
 }
 
-/** W4:暂停/恢复按钮的行可见性 —— 个人模式自己有实例(owner 播种或
- * 订阅,subscribed 均为 true),或平台模式 owner/admin 管平台实例 */
+/** W4:暂停/恢复按钮的行可见性 —— 自己有实例(owner 播种或订阅,
+ * subscribed 均为 true)。authz C1:平台行分支随平台模式退役。 */
 function canPauseRow(t: IntegrationTaskItem): boolean {
-  return (t.identityMode === 'personal' && t.subscribed)
-    || (t.identityMode === 'platform' && t.canManage)
+  return t.subscribed === true
 }
 
-/** 非本人模板的可见性标签:平台 private 对 member+ 可见(_visible 放宽,
+/** 非本人模板的可见性标签(authz C1:平台放宽口径已退役,
  * 2026-11-06),不能再一律标「公共」;admin 看他人私有个人模板标「私有」。 */
 function visibilityChip(t: IntegrationTaskItem): string {
   if (t.visibility === 'public') return '公共'
-  return t.identityMode === 'platform' ? '仅成员' : '私有'
+  return '私有'
 }
 
 // ── 新建 ───────────────────────────────────────────────────────
@@ -547,9 +439,8 @@ const form = reactive({
   identityMode: 'personal',
   triggerCron: '*/5 * * * *', resultPolicy: 'latest', visibility: 'private',
 })
-const visibilityLabels = computed(() => form.identityMode === 'platform'
-  ? { private: '仅成员可见(member 及以上)', public: '全员可见(含普通用户)' }
-  : { private: '私有(只有我)', public: '公共(可被订阅)' })
+const visibilityLabels = computed(() =>
+  ({ private: '私有(只有我)', public: '公共(可被订阅)' }))
 /** W1:创建前置预览(凭证别名/缺失/working 预警;场景或方案变化时刷新) */
 const preview = ref<ScenarioPreview | null>(null)
 const previewLoading = ref(false)
@@ -625,87 +516,7 @@ async function save(): Promise<void> {
   }
 }
 
-// ── 平台凭证(admin)────────────────────────────────────────────
-const creds = ref<PlatformCredential[]>([])
-const cred = reactive({ alias: '', url: '', username: '', password: '' })
-
-async function loadCreds(): Promise<void> {
-  if (!PLATFORM_MODE_OPEN) return
-  try {
-    creds.value = await listPlatformCredentials()
-  } catch {
-    creds.value = []
-  }
-}
-
-async function addCred(): Promise<void> {
-  try {
-    await createPlatformCredential({ ...cred })
-    toast.success('平台凭证已添加')
-    cred.alias = ''; cred.url = ''; cred.username = ''; cred.password = ''
-    await loadCreds()
-  } catch (e) {
-    toast.error(integrationErr(e))
-  }
-}
-
-// ── 平台凭证编辑(D34:id 不变)与删除影响面(§11-14)──────────
-const editingCred = ref<PlatformCredential | null>(null)
 const unbindTask = ref<IntegrationTaskItem | null>(null)
-const credEdit = reactive({ url: '', username: '', password: '' })
-const credEditBusy = ref(false)
-const deletingCred = ref<PlatformCredential | null>(null)
-const deletingImpact = ref<{ affectedTokens: number; affectedTasks: number } | null>(null)
-const credDelBusy = ref(false)
-function editCred(c: PlatformCredential): void {
-  editingCred.value = c
-  credEdit.url = c.url || ''
-  credEdit.username = c.username || ''
-  credEdit.password = ''
-}
-
-async function saveCredEdit(): Promise<void> {
-  if (!editingCred.value || credEditBusy.value) return
-  credEditBusy.value = true
-  try {
-    await patchPlatformCredential(editingCred.value.id, {
-      url: credEdit.url.trim() || null,
-      username: credEdit.username.trim() || null,
-      password: credEdit.password || null,
-    })
-    toast.success('凭证已更新(id 不变;相关任务范围不受影响)')
-    editingCred.value = null
-    await loadCreds()
-  } catch (e) {
-    toast.error(integrationErr(e))
-  } finally {
-    credEditBusy.value = false
-  }
-}
-
-async function removeCred(c: PlatformCredential): Promise<void> {
-  deletingCred.value = c
-  // 影响面:列表随行直出的精确计数(P2-3;与删除接口同一段后端口径)
-  deletingImpact.value = {
-    affectedTokens: c.refTokens ?? 0,
-    affectedTasks: c.refTasks ?? 0,
-  }
-}
-
-async function confirmDeleteCred(): Promise<void> {
-  if (!deletingCred.value || credDelBusy.value) return
-  credDelBusy.value = true
-  try {
-    const out = await deletePlatformCredential(deletingCred.value.id)
-    toast.success(`已删除(影响 ${out.affectedTokens} 张平台令牌、${out.affectedTasks} 个任务)`)
-    deletingCred.value = null
-    await loadCreds()
-  } catch (e) {
-    toast.error(integrationErr(e))
-  } finally {
-    credDelBusy.value = false
-  }
-}
 
 onMounted(() => {
   // ?task= 旧深链(令牌详情「打开」等历史入口)→ 集成详情页
@@ -715,7 +526,6 @@ onMounted(() => {
     return
   }
   void load()
-  void loadCreds()
 })
 </script>
 

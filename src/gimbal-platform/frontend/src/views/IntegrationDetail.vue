@@ -15,8 +15,7 @@
         </span>
         <div class="flex flex-wrap items-center gap-2.5">
           <h1 class="m-0 text-[22px] leading-[30px] font-semibold">{{ task?.name }}</h1>
-          <span class="idtl-pill" :class="task?.identityMode === 'platform' ? 'ip-mode-plat' : 'ip-mode-pers'">
-            {{ task?.identityMode === 'platform' ? '平台模式' : '个人模式' }}
+          <span class="idtl-pill ip-mode-pers">个人模式
           </span>
           <span v-if="statePill" class="idtl-pill" :class="statePill.cls">{{ statePill.text }}</span>
         </div>
@@ -194,9 +193,7 @@ const statePill = computed<{ text: string; cls: string } | null>(() => {
 const identityText = computed(() => {
   const t = task.value
   if (!t) return '—'
-  return t.identityMode === 'platform'
-    ? '平台身份（只读 · 仅公共场景）'
-    : `${t.mine ? '我（场景属主）' : `属主 #${t.ownerId}`}（个人凭证 · 读写）`
+  return `${t.mine ? '我（场景属主）' : `属主 #${t.ownerId}`}（个人凭证 · 读写）`
 })
 
 const tokenText = computed(() =>
@@ -215,10 +212,8 @@ const tokenStatus = computed(() => {
   return st ? TOKEN_ST[st] ?? null : null
 })
 
-/** 令牌管理入口按类型分流(§5.1 三入口):平台令牌在集成页,个人令牌
- *  在个人设置 —— 两页互看不到对方类型,跳错页等于没有入口。 */
-const tokenManageTo = computed(() =>
-  task.value?.tokenKind === 'platform' ? '/integrations' : '/profile/tokens')
+/** 令牌管理入口(authz C1:平台令牌面退役,恒个人设置)。 */
+const tokenManageTo = computed(() => '/profile/tokens')
 
 // ── 暂停横幅(§3.3 分型;文案/动作逐变体对齐原型)────────────────
 interface BannerAction {
@@ -357,12 +352,11 @@ function missingHint(m: { kind: string; deleted: boolean }): string {
 const isPaused = computed(() => task.value?.instance?.state === 'paused')
 const canRun = computed(() => {
   const t = task.value
-  return !!t && (t.canManage || t.identityMode === 'platform' || t.subscribed)
+  return !!t && (t.canManage || t.subscribed)
 })
 const canTogglePause = computed(() => {
   const t = task.value
-  return !!t && ((t.identityMode === 'personal' && t.subscribed)
-    || (t.identityMode === 'platform' && t.canManage))
+  return !!t && t.subscribed === true
 })
 
 async function runNow(): Promise<void> {

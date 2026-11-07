@@ -18,7 +18,7 @@ from app.services import access_token as at_svc
 from app.services import integration_runner as ir
 
 from .helpers import wait_until as _wait
-from .inbound_fixtures import mk_task_pair, mk_token, seed_platform_user
+from .inbound_fixtures import mk_task_pair, mk_token
 
 
 async def _pause_reason(inst_id: int) -> str:
@@ -43,12 +43,13 @@ class TestPreRunChecks:
                 if inst.running_since else None
         return await ir.run_instance(inst_id, lease=lease)
 
-    async def _scenario(self, scenario_id="sc-w", visibility="public"):
+    async def _scenario(self, scenario_id="sc-w", visibility="public",
+                        owner_id=1):
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
             row = ComposerScenario(
                 scenario_id=scenario_id,
-                owner_id=1, visibility=visibility,
+                owner_id=owner_id, visibility=visibility,
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": scenario_id}}})
             s.add(row)
@@ -56,9 +57,8 @@ class TestPreRunChecks:
             return row.scenario_id
 
     async def test_token_revoked_pauses(self, client):
-        await seed_platform_user()
-        await self._scenario()
         uid_owner = await _uid("tr_owner")
+        await self._scenario(owner_id=uid_owner)
         tid, _ = await mk_token(user_id=uid_owner)
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid,
                                                 owner_id=uid_owner)
@@ -70,9 +70,8 @@ class TestPreRunChecks:
         assert await _pause_reason(inst_id) == "token_revoked"
 
     async def test_token_invalidated_pauses(self, client):
-        await seed_platform_user()
-        await self._scenario()
         uid = await _uid("ti_owner")
+        await self._scenario(owner_id=uid)
         tid, _ = await mk_token(user_id=uid)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
         async with db_module.SessionLocal() as s:
@@ -84,9 +83,8 @@ class TestPreRunChecks:
         assert await _pause_reason(inst_id) == "token_invalidated"
 
     async def test_token_expired_pauses(self, client):
-        await seed_platform_user()
-        await self._scenario()
         uid = await _uid("te_owner")
+        await self._scenario(owner_id=uid)
         tid, _ = await mk_token(user_id=uid, days=-1)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
         await self._run(inst_id)
@@ -96,9 +94,8 @@ class TestPreRunChecks:
         """authz W5:「属主角色低于 admin」暂停原因不再产生 —— user 角色
         属主的个人令牌任务照常进入执行链(不再 auth 暂停;0036 已把
         存量该原因实例恢复)。"""
-        await seed_platform_user()
-        await self._scenario()
         uid = await _uid("to_owner", role="admin")
+        await self._scenario(owner_id=uid)
         tid, _ = await mk_token(user_id=uid)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
         async with db_module.SessionLocal() as s:
@@ -109,9 +106,8 @@ class TestPreRunChecks:
         assert await _pause_reason(inst_id) != "token_owner_ineligible"
 
     async def test_owner_deactivated_pauses(self, client):
-        await seed_platform_user()
-        await self._scenario()
         uid = await _uid("td_owner")
+        await self._scenario(owner_id=uid)
         tid, _ = await mk_token(user_id=uid)
         _, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
         async with db_module.SessionLocal() as s:
@@ -120,31 +116,8 @@ class TestPreRunChecks:
             await s.commit()
         await self._run(inst_id)
         assert await _pause_reason(inst_id) == "token_invalidated"
-
-    async def test_platform_private_scenario_pauses_scope_denied(self, client):
-        """#5 作用于全部平台模式任务(JWT 创建亦然)。"""
-        await seed_platform_user()
-        await self._scenario("sc-priv", visibility="private")
-        async with db_module.SessionLocal() as s:
-            pid = (await s.execute(sa.select(User.id).where(
-                User.is_system == True))).scalar()  # noqa: E712
-        tpl = IntegrationTask(name="jp", owner_id=pid,
-                              identity_mode="platform",
-                              scenario_id="sc-priv")
-        async with db_module.SessionLocal() as s:
-            s.add(tpl)
-            await s.flush()
-            inst = IntegrationTask(name="jp", owner_id=pid,
-                                   template_id=tpl.id, holder_id=pid)
-            s.add(inst)
-            await s.commit()
-            iid = inst.id
-        await self._run(iid)
-        assert await _pause_reason(iid) == "scope_denied"
-
     async def test_scope_exceeded_pauses_resource_not_allowed(self, client):
         """#6:超范围暂停;订阅者实例不受注册令牌影响(D19)。"""
-        await seed_platform_user()
         from .test_access_tokens import GET_STEP
         scen_payload = {"definition": {
             "meta": {"name": "sc-sx"},
@@ -153,14 +126,14 @@ class TestPreRunChecks:
                                                service="sx-alias"))]}}
         from app.models.composer_scenario import ComposerScenario
         from app.models.service_alias import ServiceAlias
+        uid = await _uid("sx_owner")
         async with db_module.SessionLocal() as s:
             s.add(ServiceAlias(alias_name="sx-alias", base_service="pay",
                                kind="external", base_url="https://sx.local"))
             s.add(ComposerScenario(scenario_id="sc-sx",
-                                   owner_id=1, visibility="public",
+                                   owner_id=uid, visibility="public",
                                    payload=scen_payload))
             await s.commit()
-        uid = await _uid("sx_owner")
         tid, _ = await mk_token(user_id=uid)      # 空范围
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid,
                                                 name="sx")
@@ -187,7 +160,6 @@ class TestResumeAndRevive:
         409 提示续期或重新生成;resource_not_allowed / owner_ineligible
         / scope_denied 放行。"""
         from .test_access_tokens import _register_role
-        await seed_platform_user()
         h = await _register_role(client, "rv_m", "admin")
         uid = await _uid("rv_owner")
         tid, _ = await mk_token(user_id=uid)
@@ -221,7 +193,6 @@ class TestResumeAndRevive:
     async def test_regenerate_auto_revives(self, client):
         """重新生成 → token_invalidated/token_expired 暂停自动恢复。"""
         from .test_access_tokens import _api_token, _register_role
-        await seed_platform_user()
         h = await _register_role(client, "gr_m", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "gr", "ttlDays": 30,
@@ -246,7 +217,6 @@ class TestResumeAndRevive:
     async def test_renew_revives_expired_instance(self, client):
         """续期 → token_expired 暂停自动恢复(§3.4)。"""
         from .test_access_tokens import _api_token, _register_role
-        await seed_platform_user()
         h = await _register_role(client, "rn_m", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "rn", "ttlDays": 1,
@@ -275,7 +245,6 @@ class TestUnbind:
         解绑只处理未暂停实例,token_* 原样保留,恢复接口 409 提示
         「先解绑」,解绑后仍 409,死循环。"""
         from .test_access_tokens import _register_role
-        await seed_platform_user()
         await _register_role(client, "ub2_m", "admin")
         uid = await _uid("ub2_owner")
         tid, _ = await mk_token(user_id=uid)
@@ -316,7 +285,6 @@ class TestUnbind:
     async def test_scope_denied_pause_survives_unbind(self, client):
         """§3.6:其余暂停原因(scope_denied)解绑后原样保留,不被
         manual 覆盖掉真实成因。"""
-        await seed_platform_user()
         uid = await _uid("ub3_owner")
         tid, _ = await mk_token(user_id=uid)
         tpl_id, inst_id, _ = await mk_task_pair(token_id=tid, owner_id=uid)
@@ -339,7 +307,6 @@ class TestUnbind:
         """JWT 管理者 PATCH {tokenId: null}:token_id 置空、manual 暂停、
         停回调;令牌路径不能解绑。"""
         from .test_access_tokens import _register_role
-        await seed_platform_user()
         h = await _register_role(client, "ub_m", "admin")
         uid = await _uid("ub_owner")
         tid, plain = await mk_token(user_id=uid)
@@ -377,7 +344,6 @@ class TestUnbind:
         """解绑目标实例显式定位(评审 2026-11-05 P2):个人模板存在
         id 更小的订阅者实例时,解绑暂停必须仍落属主(注册方)实例 ——
         旧实现取「该模板 id 最小的实例」,正确只是靠创建顺序。"""
-        await seed_platform_user()
         uid = await _uid("ub5_owner")
         sub_id = await _uid("ub5_sub", role="user")
         tid, _ = await mk_token(user_id=uid)

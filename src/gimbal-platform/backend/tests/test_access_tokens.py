@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-from datetime import timedelta
 
 import sqlalchemy as sa
 from httpx import AsyncClient
@@ -19,7 +18,7 @@ from app.services import access_token as at_svc
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
-    mk_token, seed_alias, seed_platform_user,
+    mk_token, seed_alias
 )
 
 # ── 共享助手(供 test_adhoc_run / test_token_scope 复用)─────────
@@ -130,7 +129,6 @@ class TestAuthFork:
             assert rows and rows[-1].resource_id is None
 
     async def test_revoked_same_as_missing(self, client):
-        await seed_platform_user()
         uid = await _user_id((await _register(client, "rv_u")) and "rv_u")
         tid, plain = await mk_token(user_id=uid, revoked=True)
         r = await client.get("/api/executions", headers=_gtk(plain))
@@ -142,8 +140,7 @@ class TestAuthFork:
         assert rows[0].resource_id == str(tid)
 
     async def test_expired_401(self, client):
-        await seed_platform_user()
-        h = await _register(client, "exp_u")
+        await _register(client, "exp_u")
         uid = await _user_id("exp_u")
         _, plain = await mk_token(user_id=uid, days=-1)
         r = await client.get("/api/executions", headers=_gtk(plain))
@@ -151,7 +148,6 @@ class TestAuthFork:
         assert r.json()["detail"]["code"] == "token_expired"
 
     async def test_invalidated_401(self, client):
-        await seed_platform_user()
         await _register(client, "inv_u")
         uid = await _user_id("inv_u")
         _, plain = await mk_token(user_id=uid, invalidated=True)
@@ -163,7 +159,6 @@ class TestAuthFork:
         """authz W5:「属主角色不低于 admin」使用门删除 —— user 角色的
         个人令牌照常调用(token_owner_ineligible 不再产生,存量由
         0036 恢复)。"""
-        await seed_platform_user()
         await _register(client, "role_first")   # 占首注(admin)
         from .inbound_fixtures import mk_user
         uid = await mk_user("role_u", role="user")
@@ -172,7 +167,6 @@ class TestAuthFork:
         assert r.status_code == 200, r.text
 
     async def test_owner_deactivated_401(self, client):
-        await seed_platform_user()
         await _register(client, "deact_u")
         uid = await _user_id("deact_u")
         _, plain = await mk_token(user_id=uid)
@@ -184,13 +178,6 @@ class TestAuthFork:
         assert r.status_code == 401
         assert r.json()["detail"]["code"] == "token_invalidated"
 
-    async def test_platform_token_role_user_ok(self, client):
-        """平台令牌不因 __platform__ role='user' 被拒(§3.1)。"""
-        await seed_platform_user()
-        _, plain = await mk_token(kind="platform", name="pt")
-        r = await client.get("/api/executions", headers=_gtk(plain))
-        assert r.status_code == 200
-
     async def test_legacy_prefixes_401_with_message(self, client):
         for legacy in ("gic_abc", "ggt_abc"):
             r = await client.get("/api/executions", headers=_gtk(legacy))
@@ -200,7 +187,6 @@ class TestAuthFork:
 
     async def test_token_cannot_call_management(self, client):
         """令牌不能管理令牌(§2.2:D8)——管理端点只认 JWT → 401。"""
-        await seed_platform_user()
         await _register(client, "mgmt_u")
         uid = await _user_id("mgmt_u")
         tid, plain = await mk_token(user_id=uid)
@@ -213,7 +199,6 @@ class TestAuthFork:
 
 class TestTokenApi:
     async def test_create_one_time_plaintext(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "mk_member", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "agent", "ttlDays": 30,
@@ -227,10 +212,7 @@ class TestTokenApi:
         assert item["status"] == "active"
 
     async def test_create_with_callback_returns_secret_once(self, client):
-        from app.core.config import settings
-        await seed_platform_user()
         h = await _register_role(client, "cb_member", "admin")
-        from app.core import db as dbm
         import app.services.access_token as at
         orig = at.callback_allowlist
         at.callback_allowlist = lambda: ["cb.example.local"]
@@ -248,7 +230,6 @@ class TestTokenApi:
             at.callback_allowlist = orig
 
     async def test_callback_host_not_allowed_422(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "cb2_member", "admin")
         r = await client.post("/api/access-tokens", headers=h, json={
             "kind": "personal", "name": "bad", "ttlDays": 30,
@@ -258,7 +239,6 @@ class TestTokenApi:
         assert r.json()["detail"]["code"] == "callback_host_not_allowed"
 
     async def test_personal_quota_5(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "q_member", "admin")
         for i in range(5):
             await _api_token(client, h, {
@@ -278,21 +258,9 @@ class TestTokenApi:
             "scope": {"aliases": [], "authIds": []}})
         assert r.status_code == 201
 
-    async def test_platform_issuance_closed_410(self, client):
-        """authz W5:平台令牌签发入口关闭 —— 任何角色(含 super_admin)
-        一律 410 platform_mode_closed(M1 关闭、C1 删;存量照跑)。"""
-        await seed_platform_user()
-        h_admin = await _admin_headers(client)
-        r = await client.post("/api/access-tokens", headers=h_admin, json={
-            "kind": "platform", "name": "pt", "ttlDays": 30,
-            "scope": {"aliases": [], "authIds": []}})
-        assert r.status_code == 410
-        assert r.json()["detail"]["code"] == "platform_mode_closed"
-
     async def test_user_role_can_issue_and_revoke(self, client):
         """authz W5:user 角色可签发、查看与吊销(乃至管理)自己的
         个人令牌(签发门删除)。"""
-        await seed_platform_user()
         await _register(client, "plain_u")
         login = await client.post("/api/auth/login", json={
             "username": "plain_u", "password": "pw123456"})
@@ -322,7 +290,6 @@ class TestTokenApi:
 
 class TestLifecycle:
     async def _mk(self, client, username):
-        await seed_platform_user()
         h = await _register_role(client, username, "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "lc", "ttlDays": 30,
@@ -379,25 +346,6 @@ class TestLifecycle:
             f"/api/access-tokens/{tid}/renew", headers=h_u,
             json={"ttlDays": 90})
         assert r.status_code == 200, r.text
-
-    async def test_platform_list_face_retained_until_c1(self, client):
-        """authz W5:存量平台令牌的列表面维持 ops.write —— admin 200
-        (带数据),user 403(C1 退役平台时本用例随端点一并删除)。"""
-        await seed_platform_user()
-        await mk_token(kind="platform", name="pl-face")
-        h_admin = await _register_role(client, "plf_a", "admin")
-        r = await client.get("/api/access-tokens?kind=platform",
-                             headers=h_admin)
-        assert r.status_code == 200, r.text
-        assert any(t["name"] == "pl-face" for t in r.json()["items"])
-        from .inbound_fixtures import mk_user
-        await mk_user("plf_u", role="user")
-        login = await client.post("/api/auth/login", json={
-            "username": "plf_u", "password": "x"})
-        h_u = {"Authorization": f"Bearer {login.json()['access_token']}"}
-        r = await client.get("/api/access-tokens?kind=platform", headers=h_u)
-        assert r.status_code == 403, r.text
-        assert r.json()["detail"]["code"] == "capability_forbidden"
 
     async def test_renew_invalidated_409(self, client):
         h, tid, _ = await self._mk(client, "lc2")
@@ -456,7 +404,6 @@ class TestLifecycle:
         assert r.status_code == 401
 
     async def test_admin_force_invalidate_with_note(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "fi_member", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "fi", "ttlDays": 30,
@@ -483,14 +430,13 @@ class TestLifecycle:
         assert note is not None and "CI 日志" in (note.body or "")
 
     async def test_admin_all_view_and_filters(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "av1", "admin")
         h2 = await _register_role(client, "av2", "admin")
         await _api_token(client, h, {
             "kind": "personal", "name": "mine", "ttlDays": 30,
             "scope": {"aliases": [], "authIds": []}})
-        # 平台令牌签发已 410(authz W5),存量面用直插造数
-        await mk_token(kind="platform", name="pt")
+        # 第二人一张个人令牌(all 视图按属主过滤的靶子)
+        await mk_token(user_id=await _user_id("av2"), name="pt")
         h_admin = await _admin_headers(client)
         r = await client.get("/api/access-tokens?all=1", headers=h_admin)
         assert r.status_code == 200
@@ -549,43 +495,6 @@ class TestLifecycle:
         assert await names("_") == ["tok-b"]            # 字面 _
         assert await names("nobody") == []
 
-    async def test_platform_credentials_ref_counts(self, client):
-        """2026-11-05 修复轮评审 P3-4:平台凭证列表「被引用」列(P2-3
-        _cred_usage)—— refTokens = 范围含该凭证的令牌数;refTasks = 这些
-        令牌直连的非模板、未删除任务数。同凭证多令牌按令牌累加。"""
-        from .inbound_fixtures import mk_task_pair
-        from app.models.integration_task import IntegrationTask
-        from datetime import datetime, timezone
-
-        await seed_platform_user()
-        cred_a = await _add_credential("__platform__", "cred-a")
-        cred_b = await _add_credential("__platform__", "cred-b")
-        cred_c = await _add_credential("__platform__", "cred-c")   # 无引用
-        h = await _register_role(client, "refcnt", "admin")
-        # 平台令牌签发已 410(authz W5),直插造数(带凭证范围行)
-        t1, _plain1 = await mk_token(
-            kind="platform", name="t1", scope_auths=[cred_a])
-        t2, _plain2 = await mk_token(
-            kind="platform", name="t2", scope_auths=[cred_a, cred_b])
-        await mk_task_pair(name="live-1", token_id=t1, identity_mode="platform")
-        gone, _, _ = await mk_task_pair(
-            name="gone-1", token_id=t1, identity_mode="platform")
-        await mk_task_pair(name="live-2", token_id=t2, identity_mode="platform")
-        async with db_module.SessionLocal() as s:
-            await s.execute(sa.update(IntegrationTask).where(
-                IntegrationTask.id == gone).values(
-                removed_at=datetime.now(timezone.utc)))
-            await s.commit()
-
-        r = await client.get("/api/integration/platform-credentials",
-                             headers=await _admin_headers(client))
-        assert r.status_code == 200, r.text
-        refs = {i["id"]: (i["refTokens"], i["refTasks"]) for i in r.json()["items"]}
-        assert refs[cred_a] == (2, 2)   # t1(1 活 + 1 软删不计)+ t2(1)
-        assert refs[cred_b] == (1, 1)
-        assert refs[cred_c] == (0, 0)
-
-
 async def _admin_headers(client: AsyncClient) -> dict:
     """直插 admin(mk_user 口令 = x;首注 admin 规则不可依赖 —— 各测试
     注册顺序不同)。"""
@@ -602,7 +511,6 @@ async def _admin_headers(client: AsyncClient) -> dict:
 
 class TestScopeApi:
     async def test_scope_put_and_dry_run(self, client):
-        await seed_platform_user()
         await seed_alias("fin-test")
         await seed_alias("logi-test")
         h = await _register_role(client, "sc1", "admin")
@@ -631,7 +539,6 @@ class TestScopeApi:
         assert item["scopeCounts"] == {"aliases": 0, "auths": 0}
 
     async def test_scope_unknown_objects_422(self, client):
-        await seed_platform_user()
         h = await _register_role(client, "sc2", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "sc2", "ttlDays": 30,
@@ -642,31 +549,10 @@ class TestScopeApi:
                              json={"aliases": ["no-such"], "authIds": []})
         assert r.status_code == 422
 
-    async def test_platform_scope_candidates_closed_410(self, client):
-        """authz W5:平台令牌的范围候选随签发入口一并 410(个人令牌
-        候选 = 全部服务别名 + 本人凭证池,不再限角色)。"""
-        await seed_platform_user()
-        h = await _register_role(client, "sc3", "admin")
-        r = await client.get(
-            "/api/access-tokens/scope-candidates?kind=platform", headers=h)
-        assert r.status_code == 410
-        assert r.json()["detail"]["code"] == "platform_mode_closed"
-        # personal 候选对 user 角色开放(签发门删除的另一半)
-        from .inbound_fixtures import mk_user
-        await mk_user("sc3_u", role="user")
-        login = await client.post("/api/auth/login", json={
-            "username": "sc3_u", "password": "x"})
-        hu = {"Authorization": f"Bearer {login.json()['access_token']}"}
-        r2 = await client.get(
-            "/api/access-tokens/scope-candidates?kind=personal", headers=hu)
-        assert r2.status_code == 200, r2.text
-
-
 class TestRunScope:
     """POST /api/runs 的令牌范围闸(§3.1 ⑤,缺项分类)。"""
 
     async def test_scope_denied_403_with_classification(self, client):
-        await seed_platform_user()
         await seed_alias("fin-test", base_url="https://fin.local")
         await seed_alias("wms-test", base_url="https://wms.local")
         h = await _register_role(client, "rs1", "admin")
@@ -697,7 +583,6 @@ class TestRunScope:
                             "deleted": False}]   # 对象存在 = 未授权
 
     async def test_scope_deleted_object_classification(self, client):
-        await seed_platform_user()
         await seed_alias("gone-test", base_url="https://gone.local")
         h = await _register_role(client, "rs2", "admin")
         draft = _draft("sc-rs3", steps=[dict(GET_STEP, call=dict(
@@ -717,7 +602,6 @@ class TestRunScope:
             {"kind": "alias", "name": "gone-test", "deleted": True}]
 
     async def test_scope_ok_passes_and_audited(self, client, monkeypatch):
-        await seed_platform_user()
         await seed_alias("ok-test", base_url="https://ok.local")
         h = await _register_role(client, "rs3", "admin")
         draft = _draft("sc-rs4", steps=[dict(GET_STEP, call=dict(
@@ -754,7 +638,6 @@ class TestRunScope:
     async def test_out_of_scope_direct_recorded_not_blocked(self, client,
                                                             monkeypatch):
         """D15:直连地址(①②层)只记录不拦截 —— outOfScope 标记。"""
-        await seed_platform_user()
         h = await _register_role(client, "rs4", "admin")
         draft = _draft("sc-rs5", steps=[GET_STEP])
         draft["definition"]["config"]["services"] = {"svc": "https://direct.local"}
@@ -781,7 +664,6 @@ class TestRunScope:
     async def test_setup_teardown_auth_refs_in_scope(self, client,
                                                      monkeypatch):
         """§3.2:config.setup/teardown 条目的 ${auth.*} 计入凭证集。"""
-        await seed_platform_user()
         h = await _register_role(client, "rs5", "admin")
         cred_id = await _add_credential("rs5", alias="setup-cred")
         draft = _draft("sc-rs6", steps=[dict(GET_STEP, call=dict(
@@ -817,7 +699,6 @@ class TestRunScope:
 
 class TestPrecheck:
     async def test_precheck_token_scope(self, client):
-        await seed_platform_user()
         await seed_alias("pc-test", base_url="https://pc.local")
         h = await _register_role(client, "pc1", "admin")
         draft = _draft("sc-pc1", steps=[dict(GET_STEP, call=dict(
@@ -844,56 +725,9 @@ class TestPrecheck:
         assert r.json()[0]["scopeMissing"]
 
 
-# ── 场景前提:平台只认公共场景(§3.1 ④/D9,取消 v3 别名属主豁免)──
-
-
-class TestPlatformPremise:
-    async def test_platform_private_scenario_403(self, client):
-        await seed_platform_user()
-        h = await _register_role(client, "pp1", "admin")
-        await client.post("/api/scenarios", headers=h,
-                          json=_draft("sc-pp1", steps=[GET_STEP]))
-        _, plain = await mk_token(kind="platform", name="ppt")
-        r = await client.post("/api/runs", headers=_gtk(plain), json={
-            "scenarioId": "sc-pp1"})
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "platform_scope_denied"
-
-    async def test_platform_public_scenario_readonly_gate(self, client):
-        await seed_platform_user()
-        h = await _register_role(client, "pp2", "admin")
-        await client.post("/api/scenarios", headers=h,
-                          json=_draft("sc-pp2", steps=[POST_STEP]))
-        from .inbound_fixtures import publish_scenario
-        await publish_scenario("sc-pp2")
-        _, plain = await mk_token(kind="platform", name="ppt2")
-        r = await client.post("/api/runs", headers=_gtk(plain), json={
-            "scenarioId": "sc-pp2"})
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "not_read_only"
-
-    async def test_platform_task_creation_closed_410(self, client):
-        """authz W5:平台模式任务新建一律 410(角色无关 —— 原 user 403 /
-        admin 私有场景 422 的分支都被入口关闭取代;M1 关闭、C1 删)。"""
-        await seed_platform_user()
-        h_user = await _register_role(client, "pp_user", "user")
-        await client.post("/api/scenarios", headers=h_user,
-                          json=_draft("sc-pp3", steps=[GET_STEP]))
-        for h in (h_user, await _admin_headers(client)):
-            r = await client.post("/api/integration/tasks", headers=h, json={
-                "name": "t", "scenarioId": "sc-pp3", "identityMode": "platform",
-                "triggerCron": "0 2 * * *"})
-            assert r.status_code == 410, r.text
-            assert r.json()["detail"]["code"] == "platform_mode_closed"
-
-
-# ── 接口面收口(§2.2:graph / cancel 隔离 / 平台执行可见性 / 最近调用)──
-
-
 class TestInterfaceFace:
     async def test_token_with_graph_422(self, client):
         """D20:令牌请求带 graph 一律 422(graph 为 JWT 专属)。"""
-        await seed_platform_user()
         h = await _register_role(client, "if1", "admin")
         _, plain = await mk_token(user_id=await _user_id("if1"))
         r = await client.post("/api/runs", headers=_gtk(plain), json={
@@ -907,7 +741,6 @@ class TestInterfaceFace:
     async def test_cancel_isolated_by_token(self, client):
         """D25:令牌只能取消本令牌发起的执行;他人令牌 cancel 404。"""
         from .inbound_fixtures import mk_execution
-        await seed_platform_user()
         h = await _register_role(client, "if2", "admin")
         tid_a, plain_a = await mk_token(user_id=await _user_id("if2"))
         _, plain_b = await mk_token(user_id=await _user_id("if2"),
@@ -922,29 +755,10 @@ class TestInterfaceFace:
                               headers=_gtk(plain_a))
         assert r.status_code == 200, r.text
 
-    async def test_platform_execution_visibility_member_plus(self, client):
-        """§5.2(authz W4 后):平台令牌发起的执行只有**本令牌**可见;
-        JWT 一律 404(admin+ 的平台身份执行旁路已删,D7 随平台模式
-        退役前先行收口;平台面 C1 处置)。"""
-        from .inbound_fixtures import mk_execution
-        await seed_platform_user()
-        ptid, plain = await mk_token(kind="platform", name="pv")
-        ex_id = await mk_execution(token_id=ptid, status="running")
-        h_token = _gtk(plain)
-        r = await client.get(f"/api/executions/{ex_id}", headers=h_token)
-        assert r.status_code == 200, r.text
-        h_member = await _register_role(client, "if3", "admin")
-        r = await client.get(f"/api/executions/{ex_id}", headers=h_member)
-        assert r.status_code == 404
-        h_user = await _register_role(client, "if4", "user")
-        r = await client.get(f"/api/executions/{ex_id}", headers=h_user)
-        assert r.status_code == 404
-
     async def test_recent_calls_success_denied_and_revoked(self, client,
                                                            monkeypatch):
         """§7.2 最近调用:成功与被拒同列;吊销后的被拒归到该令牌;
         hash 未命中不出现在任何令牌下。"""
-        await seed_platform_user()
         await seed_alias("rc-test", base_url="https://rc.local")
         h = await _register_role(client, "if5", "admin")
         draft = _draft("sc-rc1", steps=[dict(GET_STEP, call=dict(
@@ -1008,7 +822,6 @@ class TestInterfaceFace:
 class TestScopeObjects:
     async def test_alias_rename_cascades_scope(self, client):
         """§4.1:别名改名级联到范围行(ON UPDATE CASCADE),授权随名走。"""
-        await seed_platform_user()
         await seed_alias("ren-a", base_url="https://ren.local")
         h = await _register_role(client, "so1", "admin")
         tid, _ = await mk_token(user_id=await _user_id("so1"),
@@ -1024,7 +837,6 @@ class TestScopeObjects:
 
     async def test_plaintext_and_hint_shape(self, client):
         """§4.1:明文 = gtk_ + 43 字符 urlsafe;hint = 随机部分前4…后4。"""
-        await seed_platform_user()
         h = await _register_role(client, "so2", "admin")
         out = await _api_token(client, h, {
             "kind": "personal", "name": "shape", "ttlDays": 30,
@@ -1044,7 +856,6 @@ class TestScopeObjects:
 class TestRegisterScopeGate:
     async def test_create_out_of_scope_422_then_in_scope_201(self, client):
         """令牌注册超范围场景 → 422 resource_not_allowed;范围补齐 → 201。"""
-        await seed_platform_user()
         await seed_alias("rg-out", base_url="https://out.local")
         h = await _register_role(client, "rg1", "admin")
         draft = _draft("sc-rg1", steps=[dict(GET_STEP, call=dict(
@@ -1077,7 +888,6 @@ class TestRegisterScopeGate:
 
     async def test_patch_scheme_out_of_scope_422(self, client):
         """令牌 PATCH 换超范围方案 → 422(按将生效配方核对,§5.4 保存面)。"""
-        await seed_platform_user()
         await seed_alias("rg-in", base_url="https://in.local")
         h = await _register_role(client, "rg2", "admin")
         await _add_credential("rg2", alias="auth-in")

@@ -111,7 +111,8 @@ class IntegrationTask(Base):
     # 暂停原因全集:manual / fail_streak / made_private / template_changed
     # / auth_failed / missing_credential / scope_denied(平台场景非公共)
     # / token_revoked / token_invalidated / token_expired
-    # / token_owner_ineligible / resource_not_allowed(webhook v4 §3.3)
+    # / resource_not_allowed(webhook v4 §3.3;token_owner_ineligible
+    # 已随 authz W5/C1 退役)
     paused_reason: Mapped[str] = mapped_column(String(32), default="")
     running_since: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

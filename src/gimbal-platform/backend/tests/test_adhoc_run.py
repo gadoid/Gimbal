@@ -42,13 +42,12 @@ from app.models.permission import AuditLog
 from app.models.service_alias import ServiceAlias
 from app.services import run_dispatcher as rd
 from app.services.gimbal_launcher import LaunchResult
-from app.services.integration_runner import is_scenario_read_only
 from app.services.run_dispatcher import STATUS_DONE, RunTarget
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
     body_of, deliveries, mk_token,
-    seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
+    seed_alias as _seed_alias,
 )
 from .test_access_tokens import (
     GET_STEP, _gtk, _register, _user_id,
@@ -211,7 +210,6 @@ async def _post(client, headers: dict, body: dict):
 async def ready(client, plate_mock: PlateMock) -> dict:
     """个人令牌 + 被调别名(含环境/凭证)+ plate 桩,返回请求头。
     令牌范围覆盖 SVC 别名与属主凭证 qa-cred(§3.2 临时调用集合)。"""
-    await _seed_platform_user()
     await _seed_target()
     from .inbound_fixtures import mk_user
     await mk_user("ad_user")          # 属主先建,凭证随后入池
@@ -229,14 +227,6 @@ class TestIdentityAndTarget:
     async def test_jwt_403_personal_token_only(self, client, plate_mock):
         h = await _register(client, "ad_jwt")
         r = await _post(client, h, _body())
-        assert r.status_code == 403, r.text
-        assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
-        assert await _executions() == []
-
-    async def test_platform_token_403_personal_only(self, client, plate_mock):
-        await _seed_platform_user()
-        _, plain = await mk_token(kind="platform", name="pt")
-        r = await _post(client, _gtk(plain), _body())
         assert r.status_code == 403, r.text
         assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
         assert await _executions() == []
@@ -322,7 +312,6 @@ class TestAliasAndVersion:
         被调别名与凭证并把它们纳入令牌范围;否则空范围 —— 别名/凭证由
         各用例按需种(v4:范围校验在 adhoc 结构校验之后,未种别名的
         用例仍先吃到 adhoc_* 的 422)。"""
-        await _seed_platform_user()
         if with_target:
             await _seed_target()
             return await _personal(client, username,
@@ -656,26 +645,3 @@ class TestDispatchSplitEquivalence:
 
 
 # ── 只读闸策略白名单(§九)─────────────────────────────────────
-
-
-class TestReadOnlyStrategyGuard:
-    @staticmethod
-    def _payload(strategy: list[dict]) -> dict:
-        step = {"kind": "step", "call": {"protocol": "http", "service": "svc",
-                                         "method": "GET", "path": "/x"},
-                "request": {"kind": "request", "body": {}}, "strategy": strategy}
-        return {"definition": {"meta": {"name": "ro", "plate": {}},
-                               "steps": [step]}}
-
-    async def test_unknown_strategy_fails_closed(self):
-        ok, offenders = await is_scenario_read_only(self._payload(
-            [{"kind": "extract", "expression": "$.a", "target": "a"},
-             {"kind": "nuke", "target": "db"}]))
-        assert ok is False
-        assert offenders == ["步骤 0(策略 nuke 未知)"]
-        ok, offenders = await is_scenario_read_only(self._payload(
-            [{"kind": "extract", "expression": "$.a", "target": "a"},
-             {"kind": "assign", "source": 1, "target": "b"},
-             {"kind": "assertion", "operator": "eq", "target": "$.c"},
-             {"kind": "sleep", "seconds": 1}]))
-        assert ok is True and offenders == []

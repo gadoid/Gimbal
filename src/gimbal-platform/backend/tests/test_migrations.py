@@ -151,7 +151,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0037_report_def_maintainer"
+            assert _revision(sync_url) == "0038_platform_retire"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -328,5 +328,100 @@ def test_0037_report_def_visibility_backfill():
             cols = {c["name"] for c in inspect(eng).get_columns(
                 "report_definitions")}
             assert "visibility" not in cols
+        finally:
+            eng.dispose()
+
+
+# ── 0038_platform_retire(authz C1)─────────────────────────────────
+def test_0038_platform_retire():
+    """四步各断言:① __platform__ 自持实例删;② 模板 personal ∧ public;
+    ③ 系统用户会话与平台令牌删;④ 约束生效(写 platform 即拒)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.integration_task import IntegrationTask
+    from app.models.user import User
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            with Session(eng) as s:
+                plat = User(username="__platform__", display_name="",
+                            password_hash="x", role="user", is_system=True)
+                root = User(username="root", display_name="",
+                            password_hash="x", role="admin")
+                sub = User(username="sub", display_name="",
+                           password_hash="x", role="user")
+                s.add_all([plat, root, sub])
+                s.flush()
+                # 平台模板(私有)+ 平台唯一实例 + 订阅者实例
+                tpl = IntegrationTask(
+                    name="plat-tpl", owner_id=root.id, visibility="private",
+                    identity_mode="platform", target_type="scenario",
+                    scenario_id="sc-1", target_system="fin",
+                    trigger_cron="*/5 * * * *", result_policy="latest",
+                    card_template="status", state="idle")
+                s.add(tpl)
+                s.flush()
+                inst = IntegrationTask(
+                    name="plat-tpl", owner_id=root.id,
+                    template_id=tpl.id, holder_id=plat.id, state="idle")
+                sub_inst = IntegrationTask(
+                    name="plat-tpl", owner_id=root.id,
+                    template_id=tpl.id, holder_id=sub.id, state="idle")
+                s.add_all([inst, sub_inst])
+                # 平台凭证池(系统用户会话)与平台令牌
+                from app.models.auth_session import AuthSession
+                from app.models.access_token import AccessToken
+                s.add(AuthSession(owner_id=plat.id, alias="gitlab",
+                                  url="https://git", username_enc="u",
+                                  password_enc="p"))
+                from datetime import datetime, timedelta, timezone as _tz
+                s.add(AccessToken(kind="platform", name="pt",
+                                  token_hash="x" * 64, token_hint="gtk-pt",
+                                  user_id=plat.id, created_by=root.id,
+                                  expires_at=datetime.now(_tz.utc)
+                                  + timedelta(days=1)))
+                s.commit()
+                plat_id, sub_id = plat.id, sub.id
+            command.stamp(_cfg(sync_url), "0037_report_def_maintainer")
+            command.upgrade(_cfg(sync_url), "0038_platform_retire")
+
+            with eng.connect() as c:
+                # ① 平台实例删;订阅者实例保留
+                holders = [r for r in c.execute(text(
+                    "SELECT holder_id FROM integration_tasks "
+                    "WHERE template_id IS NOT NULL"))]
+                assert holders == [(sub_id,)], holders
+                # ② 模板 personal ∧ public
+                row = c.execute(text(
+                    "SELECT identity_mode, visibility FROM integration_tasks "
+                    "WHERE template_id IS NULL")).one()
+                assert row == ("personal", "public")
+                # ③ 会话/令牌删空
+                assert c.execute(text(
+                    "SELECT count(*) FROM auth_sessions")).scalar() == 0
+                assert c.execute(text(
+                    "SELECT count(*) FROM access_tokens")).scalar() == 0
+            # ④ 约束:写 platform 即拒(独立连接,失败即回滚)
+            import pytest
+            import sqlalchemy as sa_exc
+            with pytest.raises(sa_exc.exc.IntegrityError):
+                with eng.connect() as c2:
+                    with c2.begin():
+                        c2.execute(text(
+                            "UPDATE integration_tasks "
+                            "SET identity_mode='platform' "
+                            "WHERE template_id IS NULL"))
+            command.downgrade(_cfg(sync_url), "0037_report_def_maintainer")
+            with eng.connect() as c:
+                assert c.execute(text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conname = "
+                    "'ck_integration_identity_personal'")).scalar() == 0
         finally:
             eng.dispose()

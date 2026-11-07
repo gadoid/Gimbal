@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import re
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -31,7 +30,6 @@ from loguru import logger
 from sqlalchemy import select, text, update
 
 from ..core import db as db_module
-from ..core.config import settings
 from ..models.composer_scenario import ComposerScenario
 from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.integration_task import IntegrationTask
@@ -39,7 +37,7 @@ from ..routers._ownership import roles_with as _authz_roles
 from ..models.user import User
 from .cron_expr import next_fire
 from .run_materialize import materialize_run_copy, referenced_services
-from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
+from .run_semantics import PIN, ref_category
 from .scenario_store import definition_from_payload, steps_from_payload
 
 # 与 gimbal/protocols/result.py 同口径(评审 E1:state_vars 不收敏感键)
@@ -148,67 +146,6 @@ async def _anchored_call_shape(
             binding.get("path"), bool(meta.get("query_safe")))
 
 
-async def is_scenario_read_only(payload: dict | None) -> tuple[bool, list[str]]:
-    """平台模式只读护栏 —— I4(集成线 v2 §3.1)补全 query_safe 口径,
-    与取数视图消费**同一个真源**(plate 契约元数据):
-
-    一个步骤满足任一即视为只读:
-    * 方法 ∈ GET / HEAD / OPTIONS;
-    * plate 锚点:端点 ``metadata.query_safe = true``(钉修订场景按
-      meta.plate 修订取,与 method 同路径;R-E 已核实 /full 投影带
-      metadata);
-    * 无锚点手写原始调用:只认 method,fail-closed(存量 ``ext:`` 步骤
-      必带内联 method,同此口径 —— 手写即自担)。
-
-    契约不可得即按不安全处理(fail-closed:只读闸不得因取不到契约而
-    放行)。不满足时列出判定依据「步骤 i(POST,未标 query_safe)」。
-
-    纵深防御(P3 设计 2026-11-02 §九):步骤上出现 **不在**
-    :data:`_SAFE_STRATEGY_KINDS` 之内的策略类型 → 判为不只读(策略可由
-    插件注册,将来的新策略可能有对外副作用;现有 extract / assign /
-    assertion / sleep 都没有),``offenders`` 写「步骤 i(策略 X 未知)」。
-    新增策略若确无副作用,显式加入该集合。
-
-    D30(评审 2026-11-05 P1):``config.setup/teardown`` 条目同受该
-    白名单约束 —— 检查并入本函数本体,注册保存 / 即时执行 / 定时
-    运行各只读闸入口自动一致,不再有只查 steps 的入口(此前任务创建
-    后场景加白名单外 setup 条目,定时与即时执行闸均放行)。
-    """
-    definition = definition_from_payload(payload) or {}
-    meta_plate = ((definition.get("meta") or {}).get("plate") or {})
-    offenders: list[str] = []
-    for i, step in enumerate(steps_from_payload(payload)):
-        method, _, query_safe = await _anchored_call_shape(step, meta_plate)
-        endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
-        if method and method not in _SAFE_METHODS and not query_safe:
-            # 判定依据(§3.2)只给锚点步骤(可去标 query_safe);
-            # 手写原始调用无锚点可标、契约不可得同理,只报方法
-            offenders.append(
-                f"步骤 {i}({method},未标 query_safe)"
-                if endpoint and "未知" not in method
-                else f"步骤 {i}({method})")
-        strategies = step.get("strategy") if isinstance(step, dict) else None
-        for entry in (strategies if isinstance(strategies, list) else []):
-            kind = str(entry.get("kind") or "") if isinstance(entry, dict) else ""
-            if kind not in _SAFE_STRATEGY_KINDS:
-                offenders.append(f"步骤 {i}(策略 {kind or '?'} 未知)")
-    from .service_aliases import setup_teardown_nodes
-    for i, entry in enumerate(setup_teardown_nodes(definition)):
-        kind = str(entry.get("kind") or "")
-        if kind not in _SAFE_STRATEGY_KINDS:
-            offenders.append(
-                f"setup/teardown 条目 {i}(策略 {kind or '?'} 白名单外)")
-    return (not offenders, offenders)
-
-
-async def get_platform_user_id() -> int | None:
-    """平台系统用户 id(迁移 0015 种子)。每次一查:单行等值查询,
-    不做跨测试会话的模块级缓存(测试库逐测试重建,缓存会串 id)。"""
-    async with db_module.SessionLocal() as db:
-        row = (await db.execute(
-            select(User.id).where(User.is_system == True)  # noqa: E712
-        )).scalar()
-    return row
 
 
 # ── 集成线 v2(I2):运行状态 × 检查结论 分立(方案 §2.2/§2.3)─────
@@ -682,11 +619,11 @@ async def _record_activity(db, inst: IntegrationTask, tpl: IntegrationTask,
     """时间线:集成边沿事件(subscribed/unsubscribed/paused/resumed/
     check_flipped/run_flipped)。
 
-    只落**个人实例** —— 平台实例的 holder 是系统用户,没有可归属的
-    时间线;平台面的感知由通知(admin/member)与审计覆盖。调用点
-    全部在业务 commit 之后;best-effort(activity.record 自兜底)。"""
+    只落订阅实例(holder 是真实用户)。调用点全部在业务 commit 之后;
+    best-effort(activity.record 自兜底)。authz C1:平台实例随平台
+    模式退役,个人判定分支删除。"""
     from . import activity
-    if tpl.identity_mode != "personal" or not inst.holder_id:
+    if not inst.holder_id:
         return
     await activity.record(
         db, actor_id=inst.holder_id, kind=kind,
@@ -877,22 +814,6 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             scheme, scheme_payload, bindings, row_dict, _ds_name = \
                 await _load_exec_shape(db, tpl.scheme_id, scen)
 
-            # 平台模式只读闸(方案 §3:执行前二次检查,保存是第一闸);
-            # §3.3:撤销标记后的闸失败 → run=channel,lastError 固定前缀。
-            # plate 不可达同样闸失败而非裸抛 —— 裸抛会被 _spawn 吞成
-            # warning,实例卡 running 到租约回收,用户看不到任何原因。
-            if tpl.identity_mode == "platform":
-                try:
-                    ok, offenders = await is_scenario_read_only(scen.payload)
-                except plate_client.PlateUnavailableError:
-                    return await _finish(
-                        db, inst, tpl, "channel",
-                        "只读检查未通过: plate 不可达", lease=lease)
-                if not ok:
-                    return await _finish(
-                        db, inst, tpl, "channel",
-                        f"只读检查未通过: {'、'.join(offenders)}", lease=lease)
-
             # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
             # 不计入入库标准的预览执行不进集成链。external 不受影响
             # (working_preview 只看锚点系统的钉定状态)。调度路径与手动
@@ -906,28 +827,18 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     lease=lease)
 
             # ── webhook v4 §3.3:定时任务运行前复核 #1–#6 ──────────
-            # #1–#4/#6 只作用于令牌注册方自己的实例(个人模式 holder =
-            # 模板属主;平台模式 = 平台唯一实例);订阅者实例按自身 JWT
-            # 身份与凭证池运行(D19),不受注册令牌影响。
+            # #1–#4/#6 只作用于令牌注册方自己的实例(holder = 模板属主);
+            # 订阅者实例按自身 JWT 身份与凭证池运行(D19),不受注册令牌
+            # 影响。
             from . import access_token as at_svc
             from ..core.timeutil import ensure_aware as _ea
             from ..models.access_token import AccessToken
             _token: AccessToken | None = (
                 await db.get(AccessToken, tpl.token_id)
                 if tpl.token_id is not None else None)
-            # #5 平台模式任务(令牌注册与 JWT 创建一视同仁):场景非公共
-            # → scope_denied。场景公开后由管理者在集成详情「启动」恢复。
-            if tpl.identity_mode == "platform" \
-                    and (getattr(scen, "visibility", None) or "private") \
-                    != "public":
-                return await _finish(
-                    db, inst, tpl, "auth",
-                    "平台模式只能使用公共场景,该场景已不在允许范围;"
-                    "请将场景公开后,再在集成详情「启动」恢复",
-                    pause_reason=at_svc.PAUSE_SCOPE_DENIED, lease=lease)
-            if _token is not None and (
-                    inst.holder_id == tpl.owner_id          # 个人:注册方实例
-                    or _token.kind == at_svc.PLATFORM_KIND):  # 平台:唯一实例
+            # authz C1:平台模式复核 #5(场景范围闸)随平台身份退役删除;
+            # #1–#4/#6 只作用于令牌注册方自己的实例(holder = 模板属主)。
+            if _token is not None and inst.holder_id == tpl.owner_id:
                 # #1 令牌已吊销
                 if _token.revoked_at is not None:
                     return await _finish(
@@ -1019,8 +930,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                                 "地址),请重新确认订阅后恢复执行",
                         lease=lease)
 
-            holder = (await get_platform_user_id()) \
-                if tpl.identity_mode == "platform" else inst.holder_id
+            holder = inst.holder_id
             # N1 归一(评审 §3.1A):装载准备统一走 run_prepare.prepare_exec
             # —— 凭证清单(exec_auth_aliases:模板扫描 ∪ 绑定 ∪ 别名默认,
             # 此前 _auth_aliases_of 仅导清单,解析/严格检查是手写的同逻辑
@@ -1037,7 +947,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     ui_field_states=_ui_fs,
                     auth_policy="strict", resolve_mode="none",
                     # authz W6 主规则:订阅执行(holder ≠ 场景属主)不带
-                    # 作者内置凭证;平台身份执行同理(executor=__platform__)
+                    # 作者内置凭证
                     scenario_owner_id=scen.owner_id)
             except MissingAuthAliases as e:
                 # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
@@ -1327,9 +1237,9 @@ async def _finish(
                         and inst.holder_id:
                     uids = [inst.holder_id]   # 凭证是持有人自己的
                 elif auto_paused:
-                    # W4:自动暂停 —— 个人=持有人(启动入口在订阅面/
-                    # 功能卡);平台=全体 super_admin/admin
-                    if tpl.identity_mode == "personal" and inst.holder_id:
+                    # W4:自动暂停 —— 收件人 = 持有人(启动入口在订阅面/
+                    # 功能卡;authz C1 平台分支退役)
+                    if inst.holder_id:
                         uids = [inst.holder_id]
                     else:
                         uids = (await ndb.execute(
@@ -1338,10 +1248,8 @@ async def _finish(
                                 User.is_system == False)  # noqa: E712
                         )).scalars().all()
                 elif notify_check is not None:
-                    # D3:结论通知 —— 个人=持有人;平台=模板 owner
-                    # (平台实例的 holder 是系统用户,不是收件人)
-                    uids = [inst.holder_id if tpl.identity_mode == "personal"
-                            else tpl.owner_id]
+                    # D3:结论通知 —— 收件人 = 持有人
+                    uids = [inst.holder_id or tpl.owner_id]
                 else:
                     uids = (await ndb.execute(
                         select(User.id).where(User.role.in_(_authz_roles("platform.alerts")),
@@ -1349,8 +1257,8 @@ async def _finish(
                     )).scalars().all()
                 if auth_notify and pause_reason in (
                         "token_revoked", "token_invalidated",
-                        "token_expired", "token_owner_ineligible",
-                        "resource_not_allowed", "scope_denied"):
+                        "token_expired", "resource_not_allowed",
+                        "scope_denied"):
                     # webhook v4 §3.3:令牌/范围类暂停与凭证无关,更新凭证
                     # 不会复活它们 —— 文案按 pause_reason 分立,各指向自己
                     # 的恢复路径。
@@ -1365,9 +1273,6 @@ async def _finish(
                     elif pause_reason == "token_expired":
                         body = ("访问令牌已到期 —— 在个人设置续期或重新"
                                 "生成后,任务自动恢复")
-                    elif pause_reason == "token_owner_ineligible":
-                        body = ("访问令牌属主角色已低于成员(member)—— "
-                                "恢复角色后在集成详情「启动」")
                     elif pause_reason == "resource_not_allowed":
                         body = ("超出令牌授权范围 —— 处置说明见任务详情;"
                                 "范围恢复后可在集成详情「启动」")
@@ -1573,20 +1478,15 @@ async def scheduler_tick() -> dict:
 async def ensure_instance(
     tpl: IntegrationTask, *, holder_id: int | None = None,
 ) -> IntegrationTask | None:
-    """模板的实例(幂等;Y3 起支持个人模式)。
+    """模板的实例(幂等;订阅即创建,方案 §4)。
 
-    platform = 平台系统用户的唯一实例(创建模板时同步建,P1 行为);
-    personal = ``holder_id`` 的订阅实例(不存在则建 —— 订阅即创建,
-    方案 §4;缺 holder 返回 None)。名从模板(NOT NULL;列表只取模板行)。
+    authz C1:平台模式退役,模板恒 personal —— ``holder_id`` 的订阅
+    实例(不存在则建);缺 holder 返回 None。名从模板(NOT NULL;列表
+    只取模板行)。
     """
-    if tpl.identity_mode == "personal":
-        if holder_id is None:
-            return None
-        holder = holder_id
-    else:
-        holder = await get_platform_user_id()
-        if holder is None:
-            return None
+    if holder_id is None:
+        return None
+    holder = holder_id
     async with db_module.SessionLocal() as db:
         row = (await db.execute(select(IntegrationTask).where(
             IntegrationTask.template_id == tpl.id,
@@ -1676,12 +1576,9 @@ async def revive_paused_instances(
                                        {"via": via})
             try:
                 from .notifications import create_notification
-                personal = [(i, t) for i, t in revived_pairs
-                            if t.identity_mode == "personal" and i.holder_id]
-                platform_names = [t.name for _, t in revived_pairs
-                                  if t.identity_mode != "personal"]
+                notified = [(i, t) for i, t in revived_pairs if i.holder_id]
                 async with db_module.SessionLocal() as ndb:
-                    for inst, tpl in personal:
+                    for inst, tpl in notified:
                         await create_notification(
                             ndb, user_id=inst.holder_id, type_="integration",
                             title=f"集成任务「{tpl.name}」已自动恢复",
@@ -1691,21 +1588,6 @@ async def revive_paused_instances(
                                   "凭证已更新,此前因凭证问题暂停的任务"
                                   "已恢复调度"),
                             link="/integrations")
-                    if platform_names:
-                        # 平台模式:与暂停通知同受众(super_admin/admin),
-                        # 多实例聚合一条,防批量复活刷屏
-                        uids = (await ndb.execute(select(User.id).where(
-                            User.role.in_(_authz_roles("platform.alerts")),
-                            User.is_system == False  # noqa: E712
-                        ))).scalars().all()
-                        names = "、".join(f"「{n}」" for n in platform_names)
-                        for uid in uids:
-                            await create_notification(
-                                ndb, user_id=uid, type_="integration",
-                                title=(f"平台集成任务已自动恢复"
-                                       f"({len(platform_names)} 个)"),
-                                body=f"以下任务已恢复调度:{names}",
-                                link="/integrations")
             except Exception:  # noqa: BLE001 — 通知是增强
                 logger.warning("integration: revive notify failed")
     return revived

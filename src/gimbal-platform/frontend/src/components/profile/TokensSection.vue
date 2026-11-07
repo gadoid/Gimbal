@@ -1,6 +1,6 @@
 <!-- TokensSection.vue — 访问令牌区块(webhook v4;原型 Tokens)。
-     三处复用:个人设置(kind=personal)、集成页平台令牌(kind=platform,
-     member+)、用户管理页 admin 视图(mode=admin,?all=1 + 强制失效)。
+     两处复用:个人设置(kind=personal)、用户管理页 admin 视图
+     (mode=admin,?all=1 + 强制失效)。authz C1:平台令牌变体退役。
      列表/创建(范围 chip 全选)/展开详情(范围·任务预检·最近调用)/
      续期·重新生成·吊销(确认对话框列受影响任务)/admin 强制失效(带
      处置说明,r10.4)。 -->
@@ -28,7 +28,6 @@
         <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="personal">个人令牌</SelectItem>
-          <SelectItem value="platform">平台令牌</SelectItem>
           <SelectItem value="all">全部</SelectItem>
         </SelectContent>
       </Select>
@@ -106,7 +105,7 @@
         </div>
         <span v-if="emptyDimensionHint" class="text-caption text-signal-ink/60">
           某一维度未选：调用方将不能使用该类资源（这是合法状态，之后可编辑范围加入）。
-          候选 = 全部服务别名、{{ kind === 'platform' ? '平台凭证池（只列别名）' : '你的凭证池' }}。
+          候选 = 全部服务别名、你的凭证池。
           别名或凭证被删除后，授权随之移除。
         </span>
       </fieldset>
@@ -133,7 +132,6 @@
         <thead>
           <tr class="bg-signal-soft text-left text-caption text-signal-ink/60">
             <th class="px-4 py-2.5 font-medium">名称</th>
-            <th v-if="kind === 'platform'" class="px-3 py-2.5 font-medium">签发人</th>
             <th v-if="mode === 'admin'" class="px-3 py-2.5 font-medium">属主</th>
             <th class="px-3 py-2.5 font-medium">状态</th>
             <th class="px-3 py-2.5 font-medium">授权范围</th>
@@ -157,7 +155,6 @@
                   <span v-if="hintOf(t)" class="text-caption" :class="hintClass(t)">{{ hintOf(t) }}</span>
                 </div>
               </td>
-              <td v-if="kind === 'platform'" class="whitespace-nowrap px-3 py-3 text-signal-ink/60">{{ t.issuerName ?? '—' }}</td>
               <td v-if="mode === 'admin'" class="px-3 py-3 text-signal-ink/60">{{ t.ownerName ?? t.ownerId }}</td>
               <td class="px-3 py-3">
                 <span class="status-pill" :class="`st-${statusLabel(t).key}`">
@@ -416,8 +413,8 @@ import TokenSecretDialog from '@/components/profile/TokenSecretDialog.vue'
 import ScopeEditDialog from '@/components/profile/ScopeEditDialog.vue'
 
 const props = withDefaults(defineProps<{
-  /** personal = 个人设置;platform = 集成页平台令牌;admin = 用户管理页 */
-  variant?: 'personal' | 'platform' | 'admin'
+  /** personal = 个人设置;admin = 用户管理页(authz C1:platform 变体退役) */
+  variant?: 'personal' | 'admin'
 }>(), { variant: 'personal' })
 
 const mode = computed(() => props.variant)
@@ -430,8 +427,7 @@ const kind = computed<TokenKind>(() =>
 const listKind = computed<TokenKind | 'all'>(() =>
   props.variant === 'admin' ? adminKind.value : props.variant)
 
-// authz W5:个人令牌签发开放至全体用户 —— 非 admin 视图均可创建
-// (平台签发口已 410,platform 变体随入口隐藏)。
+// authz W5:个人令牌签发开放至全体用户 —— 非 admin 视图均可创建。
 const canCreate = computed(() => props.variant !== 'admin')
 
 const loading = ref(false)
@@ -441,13 +437,11 @@ const quota = ref({ used: 0, limit: 5 })
 const details = ref<Map<number, AccessTokenDetail>>(new Map())
 const expanded = ref<number | null>(null)
 
-/** 区块说明(问号悬浮,按 kind):个人 = 授权面;平台 = 平台身份约束 */
-const sectionTip = computed(() => kind.value === 'platform'
-  ? '平台令牌代表平台系统用户（__platform__）执行：只能使用公共场景与只读步骤；全平台共享额度，member+ 可管理。'
-  : '令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码。')
+/** 区块说明(问号悬浮):个人 = 授权面 */
+const sectionTip = computed(() =>
+  '令牌让第三方以你的身份调用 Gimbal，只能使用令牌范围内的服务别名与凭证；等同账号密码。')
 
-const kindLabel = computed(() =>
-  kind.value === 'platform' ? '平台令牌' : '访问令牌')  // 「全部」时按访问令牌称呼
+const kindLabel = computed(() => '访问令牌')
 
 // ── admin 筛选(2026-11-05 评审 P2-6)──────────────────────────
 // kind/status 补「全部」(此前选了就退不回去);属主筛选支持用户名/昵称
@@ -520,7 +514,7 @@ async function submitCreate() {
     })
     secretOut.value = {
       title: `访问令牌已创建 · ${form.value.name.trim()}`,
-      subtitle: `${form.value.ttl} 天有效 · 代表${kind.value === 'platform' ? '平台系统用户' : '你本人'}执行 · `
+      subtitle: `${form.value.ttl} 天有效 · 代表你本人执行 · `
         + `${form.value.aliases.size} 个服务别名、${form.value.authIds.size} 个凭证`,
       token: out.token,
       callbackSecret: out.callbackSecret ?? null,

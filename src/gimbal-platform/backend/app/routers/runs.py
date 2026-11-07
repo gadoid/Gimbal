@@ -6,7 +6,7 @@ fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
 子进程执行).
 
 认证(webhook v4 §3.1):``principal_or_user`` 分流 —— JWT 行为不变;
-``Bearer gtk_…`` 访问令牌进个人(personal)/平台(platform)模式。
+``Bearer gtk_…`` 个人访问令牌进站(平台令牌随 authz C1 退役)。
 判定链:① 认证(deps)→ ② M1 不带配方 → ③ 方案物化 → ④ 场景前提
 (个人 = can_run_scenario;平台 = 公共 + 只读闸 + 非临时调用)→
 ⑤ 令牌范围(别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证,缺项分类)→
@@ -154,11 +154,10 @@ async def _record_inbound_activity(
     db: AsyncSession, principal: Principal, resp: RunResponse,
     *, body: RunRequest, scen=None,
 ) -> None:
-    """令牌触发写一条时间线事件(§7.3):actor = 令牌属主(个人令牌);
-    平台令牌**不上个人轴**(D23 —— 平台身份的感知走审计面板与平台
-    令牌详情「最近调用」)。JWT 调用 no-op(与 audit.record_inbound
-    同口径)。best-effort,失败不阻断业务。"""
-    if not principal.is_token or principal.token.kind == at.PLATFORM_KIND:
+    """令牌触发写一条时间线事件(§7.3):actor = 令牌属主。JWT 调用
+    no-op(与 audit.record_inbound 同口径)。best-effort,失败不阻断
+    业务。authz C1:平台令牌分支随平台模式退役删除。"""
+    if not principal.is_token:
         return
     from ..services import activity as activity_svc
     detail: dict = {
@@ -348,86 +347,52 @@ async def post_run(
         if principal.is_token:
             # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
             await _apply_scheme_recipe(db, scen, body)
-        if principal.is_token and principal.token.kind == at.PLATFORM_KIND:
-            # ④ 平台模式场景前提(D9):只认公共场景(令牌与 JWT 同一
-            # 判定,v3 的「别名属主自己的场景」豁免随承载别名一起退役);
-            # 执行区间只读(is_scenario_read_only);临时调用非个人令牌
-            # 已在上方 403。graph 已被 M1 的 422 先拒。
-            if (getattr(scen, "visibility", None) or "private") != "public":
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "platform_scope_denied",
-                        "message": "平台模式只能执行公共场景;该场景不在允许范围",
-                    })
-            from ..services import plate_client
-            from ..services.integration_runner import is_scenario_read_only
-            try:
-                ok, offenders = await is_scenario_read_only(scen.payload)
-            except plate_client.PlateUnavailableError:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={
-                        "code": "plate_unavailable",
-                        "message": "只读检查未通过: plate 不可达(平台模式"
-                                   "执行需要 plate 契约元数据)",
-                    }) from None
-            if not ok:
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "not_read_only",
-                        "message": ("平台模式要求全部步骤为只读"
-                                    f"(GET/HEAD/OPTIONS 或已标 query_safe): "
-                                    f"{'、'.join(offenders)}"),
-                    })
-        else:
-            # ④ 个人模式(JWT 或个人令牌):ensure_owner → can_run_scenario
-            # (属主 ∨ admin ∨ 引用,§7.6;public 不开执行 —— 公共资源跑需
-            # 先 fork,不变量 7)。
-            from ._ownership import can_run_scenario
-            if not await can_run_scenario(
-                    db, user, scenario_id=scen.scenario_id,
-                    owner_id=scen.owner_id):
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "not_owner",
-                        "message": ("only the scenario's owner (or admin, or a "
-                                    "share reference) can run this scenario"),
-                    })
-            if body.graph is not None:
-                # graph 链 unit 授权(§8.2):请求侧逐个过属主闸。rerun
-                # 不重放 graph,此处即唯一入口(令牌路径已被 M1 拒)。
-                seen_unit_ids: set[str] = set()
-                for unit in [
-                    *body.graph.units,
-                    *body.graph.before,
-                    *body.graph.after,
-                ]:
-                    if unit.scenario_id in seen_unit_ids:
-                        continue
-                    seen_unit_ids.add(unit.scenario_id)
-                    unit_scen = await scenario_store.get_row(
-                        db, unit.scenario_id)
-                    if unit_scen is None:
-                        raise run_dispatcher.NotFound(
-                            "scenario_not_found",
-                            f"scenario not found: {unit.scenario_id}",
-                        )
-                    if not await can_run_scenario(
-                            db, user, scenario_id=unit_scen.scenario_id,
-                            owner_id=unit_scen.owner_id):
-                        raise HTTPException(
-                            status_code=403,
-                            detail={
-                                "code": "not_owner",
-                                "message": (
-                                    "only the scenario's owner (or admin, or a "
-                                    "share reference) can run graph unit: "
-                                    f"{unit.scenario_id}"
-                                ),
-                            })
+        # ④ 个人模式(JWT 或个人令牌):ensure_owner → can_run_scenario
+        # (属主 ∨ admin ∨ 引用,§7.6;public 不开执行 —— 公共资源跑需
+        # 先 fork,不变量 7)。
+        from ._ownership import can_run_scenario
+        if not await can_run_scenario(
+                db, user, scenario_id=scen.scenario_id,
+                owner_id=scen.owner_id):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "not_owner",
+                    "message": ("only the scenario's owner (or admin, or a "
+                                "share reference) can run this scenario"),
+                })
+        if body.graph is not None:
+            # graph 链 unit 授权(§8.2):请求侧逐个过属主闸。rerun
+            # 不重放 graph,此处即唯一入口(令牌路径已被 M1 拒)。
+            seen_unit_ids: set[str] = set()
+            for unit in [
+                *body.graph.units,
+                *body.graph.before,
+                *body.graph.after,
+            ]:
+                if unit.scenario_id in seen_unit_ids:
+                    continue
+                seen_unit_ids.add(unit.scenario_id)
+                unit_scen = await scenario_store.get_row(
+                    db, unit.scenario_id)
+                if unit_scen is None:
+                    raise run_dispatcher.NotFound(
+                        "scenario_not_found",
+                        f"scenario not found: {unit.scenario_id}",
+                    )
+                if not await can_run_scenario(
+                        db, user, scenario_id=unit_scen.scenario_id,
+                        owner_id=unit_scen.owner_id):
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "not_owner",
+                            "message": (
+                                "only the scenario's owner (or admin, or a "
+                                "share reference) can run graph unit: "
+                                f"{unit.scenario_id}"
+                            ),
+                        })
         if principal.is_token:
             # ⑤ 令牌范围:别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证
             # (场景执行面:方案绑定 + 场景定义;§3.2)
