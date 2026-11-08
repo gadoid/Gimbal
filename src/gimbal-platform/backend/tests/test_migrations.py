@@ -1135,3 +1135,158 @@ def test_0044_deployments_env_chain(envs, aliases, want_default,
                         1 for a in aliases if a[3])
         finally:
             eng.dispose()
+
+
+# ── 0045_auth_slot_bindings(authz M2a S3.0)──────────────────────────
+def _to_0044_shape(eng) -> None:
+    """create_all 是当前模型(槽位列与四元组键已存在);撤回到 0044
+    形态:删 auth_sessions 五列 + 换回旧唯一键;删别名 slot 列。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX IF EXISTS uq_auth_slot_default")
+        conn.exec_driver_sql(
+            "ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS "
+            "uq_auth_owner_system_env_slot")
+        for col in ("is_default", "account_fields", "slot", "env_id",
+                    "system"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE auth_sessions DROP COLUMN {col}")
+        conn.exec_driver_sql(
+            "ALTER TABLE auth_sessions ADD CONSTRAINT "
+            "uq_auth_owner_alias UNIQUE (owner_id, alias)")
+        conn.exec_driver_sql(
+            "ALTER TABLE service_aliases DROP COLUMN slot")
+
+
+_SLOT_FORMS = [
+    # 可推断:唯一引用别名 → system = base_service;无引用 → 未归类
+    pytest.param(
+        [("cred-a", "svc-a", "cred-a"),          # 引用 cred-a → svc-a
+         ("cred-x", None, None)],                # 无引用 → ''
+        {"cred-a": "svc-a", "cred-x": ""},
+        id="inferable"),
+    # 引用冲突:两个别名不同 base_service 引用同名凭证 → 未归类
+    pytest.param(
+        [("c1", "svc-a", "dup"), ("c2", "svc-b", "dup"),
+         ("solo", "svc-a", "solo")],
+        {"dup": "", "solo": "svc-a"},
+        id="conflict_unassigned"),
+]
+
+
+@pytest.mark.parametrize("aliases,want_systems", _SLOT_FORMS)
+def test_0045_auth_slot_bindings(aliases, want_systems):
+    """① 五列 + 四元组键(NULLS NOT DISTINCT)+ 默认槽部分唯一索引
+    ② slot=alias、system 推断、is_default=true ③ 别名 slot=credential_
+    alias ④ 令牌范围行存活(id 稳定,F7)⑤ downgrade 往返。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            _to_0044_shape(eng)
+            with eng.begin() as conn:
+                # 两个 owner(u1/u2)各有 want_systems 里的凭证
+                uids = {}
+                for i, u in enumerate(("u1", "u2")):
+                    conn.execute(text(
+                        "INSERT INTO users (username, display_name, "
+                        "password_hash, role, is_active, is_system, created_at, "
+                        "updated_at) VALUES (:u, :u, 'x', 'user', true, "
+                        "false, now(), now())"), {"u": u})
+                    uids[u] = i + 1
+                for alias in want_systems:
+                    conn.execute(text(
+                        "INSERT INTO auth_sessions "
+                        "(owner_id, alias, url, username_enc, password_enc, "
+                        " token_type, expires_in, created_at, updated_at) "
+                        "VALUES (:o, :a, 'http://x', 'enc', 'enc', "
+                        "'Bearer', 7200, now(), now())"),
+                        {"o": uids["u1"], "a": alias})
+                for alias_name, base, cred in aliases:
+                    conn.execute(text(
+                        "INSERT INTO service_aliases "
+                        "(alias_name, base_service, credential_alias, kind, "
+                        " created_at, updated_at) "
+                        "VALUES (:a, :b, :c, 'plate', now(), now())"),
+                        {"a": alias_name, "b": base or "svc-any",
+                         "c": cred})
+                # 令牌 + 范围行(auth_id → 某 auth_session id)
+                conn.execute(text(
+                    "INSERT INTO access_tokens (user_id, kind, name, "
+                    "token_hash, token_hint, expires_at, created_at) "
+                    "VALUES (:u, 'personal', 'tk', 'h1', 'h…', "
+                    "now() + interval '7 days', now())"),
+                    {"u": uids["u1"]})
+                conn.execute(text(
+                    "INSERT INTO access_token_scopes "
+                    "(token_id, auth_id) "
+                    "SELECT t.id, a.id FROM access_tokens t, auth_sessions a "
+                    "WHERE a.alias = :alias"),
+                    {"alias": next(iter(want_systems))})
+
+            command.stamp(_cfg(sync_url), "0044_deployments_env_chain")
+            command.upgrade(_cfg(sync_url), "0045_auth_slot_bindings")
+
+            with eng.connect() as c:
+                rows = {r[0]: r for r in c.execute(text(
+                    "SELECT alias, system, env_id, slot, is_default "
+                    "FROM auth_sessions ORDER BY id"))}
+                for alias, want_sys in want_systems.items():
+                    _, sys_, env, slot, dflt = rows[alias]
+                    assert (sys_, env, slot, dflt) == (
+                        want_sys, None, alias, True)
+                # 四元组键:同 owner 同键重复被拒(NULL env 参与判重)
+                import pytest as _pytest
+                with _pytest.raises(Exception):
+                    with c.begin():
+                        c.execute(text(
+                            "INSERT INTO auth_sessions "
+                            "(owner_id, alias, url, username_enc, "
+                            "password_enc, system, env_id, slot, "
+                            "is_default, created_at, updated_at) "
+                            "SELECT owner_id, alias, url, username_enc, "
+                            "password_enc, system, env_id, slot, false, "
+                            "now(), now() FROM auth_sessions LIMIT 1"))
+                # 默认槽唯一:同 owner 同 slot 二次置默认被拒
+                with _pytest.raises(Exception):
+                    with c.begin():
+                        c.execute(text(
+                            "INSERT INTO auth_sessions "
+                            "(owner_id, alias, url, username_enc, "
+                            "password_enc, system, slot, is_default, "
+                            "created_at, updated_at) VALUES "
+                            "(1, 'other', 'http://x', 'e', 'e', '', "
+                            "'dup', true, now(), now())"))
+                # 别名 slot 回填
+                got = {r[0]: r[1] for r in c.execute(text(
+                    "SELECT alias_name, slot FROM service_aliases"))}
+                assert got == {a: (cred if cred else None)
+                               for a, _, cred in aliases}
+                # 令牌范围行存活(id 未变,F7)
+                assert c.execute(text(
+                    "SELECT count(*) FROM access_token_scopes "
+                    "WHERE auth_id IS NOT NULL")).scalar() == 1
+
+            command.downgrade(_cfg(sync_url), "0044_deployments_env_chain")
+            with eng.connect() as c:
+                cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'auth_sessions' "
+                    "AND table_schema = current_schema()"))}
+                assert not ({"system", "env_id", "slot", "account_fields",
+                             "is_default"} & cols)
+                assert c.execute(text(
+                    "SELECT count(*) FROM access_token_scopes "
+                    "WHERE auth_id IS NOT NULL")).scalar() == 1
+                assert c.execute(text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_name = 'service_aliases' "
+                    "AND column_name = 'slot' "
+                    "AND table_schema = current_schema()")).scalar() == 0
+        finally:
+            eng.dispose()

@@ -76,7 +76,8 @@ async def _add_credential(username: str, alias: str = "qa-cred") -> int:
             User.username == username))).scalar_one()
         row = AuthSession(owner_id=uid, alias=alias, url="https://a.local",
                           username_enc=fernet_encrypt("u"),
-                          password_enc=fernet_encrypt("p"))
+                          password_enc=fernet_encrypt("p"),
+                          slot=alias, is_default=True)   # S3 槽位绑定
         s.add(row)
         await s.commit()
         return row.id

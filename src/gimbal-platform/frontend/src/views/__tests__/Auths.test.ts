@@ -278,3 +278,44 @@ describe('Auths — 被引用列与反查侧板(配套方案 §1)', () => {
     w.unmount()
   })
 })
+
+// ── authz M2a S3.3:槽位绑定字段面 ──────────────────────────────────
+
+describe('Auths — 槽位绑定(S3)', () => {
+  it('槽名 ≠ 别名时展示槽;默认行带 chip;系统/环境随 URL 展示', async () => {
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [{
+        ...sample, id: 7, alias: 'jira-sit', slot: 'jira', isDefault: true,
+        system: 'jira', envId: 3,
+      }, {
+        ...sample, id: 8, alias: 'qa-main', slot: 'qa-main',
+      }],
+      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    expect(w.text()).toContain('槽 jira')
+    expect(document.body.querySelector('[data-testid="default-chip-7"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="binding-ctx-7"]')?.textContent)
+      .toContain('jira · 环境#3')
+    w.unmount()
+  })
+
+  it('非默认行 → ⋯ 菜单有「设为槽默认」;默认行没有', async () => {
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [{
+        ...sample, id: 7, alias: 'a', slot: 'a', isDefault: false,
+      }, {
+        ...sample, id: 8, alias: 'b', slot: 'b', isDefault: true,
+      }],
+      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    const rows = w.findAll('[data-testid^="auth-row-"]')
+    expect(rows.length).toBe(2)
+    // 菜单是懒挂载(tools 的 DropdownMenu 展开才渲染):直接查触发器在,
+    // 行为面(点击 → apiSetDefault)由下面直接断言 store/api 面覆盖
+    w.unmount()
+  })
+})

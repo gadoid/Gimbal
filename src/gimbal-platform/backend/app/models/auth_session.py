@@ -2,19 +2,36 @@
 
 Each AuthSession represents a target system's login that the platform
 can use to mint bearer tokens at execution time.  Decoupled from any
-yaml file: the platform injects ``Config.users[<alias>]`` into a temp
+yaml file: the platform injects ``Config.users[<slot>]`` into a temp
 yaml at execution time (Spec-2-2), not at case-upload time.
 
 Encryption: username + password are Fernet-encrypted at rest so a
 database dump doesn't leak credentials.  The Fernet key is loaded
 from ``settings.FERNET_KEY`` (auto-generated dev-only fallback).
+
+authz M2a S3 — 槽位绑定:权威键 = ``(owner_id, system, env_id, slot)``
+(NULLS NOT DISTINCT;env 空 = 不限环境,存量全落这层)。
+
+- ``slot`` = 注入键 / 模板引用名(``${auth.X}`` / ``call.user=X`` /
+  绑定 authAlias=X);**不可改名**(改名 = 重建,引用全断)。
+- ``alias`` 保留为展示名;应用层仍按 (owner, alias) 唯一 —— 所有按名
+  消费的缝(引用面板 / query_view 缓存 / drop_credential)保持无歧义。
+- ``system`` = 基础服务名;``''`` = 未归类(存量推断不出/待认领)。
+- ``account_fields`` = 账号级字段(orgNo/opId 等;明文非密)—— 引擎
+  UserCredential 六字段 extra=forbid(F6),只能经 ``${slot.X.field}``
+  在派发前解析(S4/S5 消费,S3 只存取)。
+- ``is_default`` = 每槽至多一个默认(部分唯一索引):名字解析与环境
+  未命中时的取用行;存量行迁移时全部置默认。
 """
 from __future__ import annotations
 
 from datetime import datetime
 
-from ._types import UtcDateTime
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, func
+from ._types import JsonVar, UtcDateTime
+from sqlalchemy import (
+    Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint,
+    func, text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -22,7 +39,15 @@ from ..core.db import Base
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
-    __table_args__ = (UniqueConstraint("owner_id", "alias", name="uq_auth_owner_alias"),)
+    __table_args__ = (
+        # 槽位绑定键(S3):env 可空进键 —— NULLS NOT DISTINCT(PG15+)
+        UniqueConstraint("owner_id", "system", "env_id", "slot",
+                         name="uq_auth_owner_system_env_slot",
+                         postgresql_nulls_not_distinct=True),
+        # 每槽至多一个默认绑定
+        Index("uq_auth_slot_default", "owner_id", "slot", unique=True,
+              postgresql_where=text("is_default")),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # NO ACTION DEFERRABLE(§2.1):删除用户的处置由 Python 显式管
@@ -31,6 +56,24 @@ class AuthSession(Base):
         ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), index=True
     )
     alias: Mapped[str] = mapped_column(String(64))
+    # S3:基础服务名;'' = 未归类(存量推断不出,由用户认领)
+    system: Mapped[str] = mapped_column(String(128), nullable=False,
+                                        default="", server_default=text("''"))
+    # S3:环境维度(空 = 不限环境;存量层)
+    env_id: Mapped[int | None] = mapped_column(
+        ForeignKey("environments.id", ondelete="SET NULL"), nullable=True)
+    # S3:槽名 = 注入键;ORM 缺省取同 INSERT 的 alias(名字兼容缝:
+    # 直接构造 AuthSession(alias=X) 的调用方零改动);SQL 侧缺省 ''
+    # (存量行由 0045 回填 slot=alias)
+    slot: Mapped[str] = mapped_column(
+        String(64), nullable=False,
+        default=lambda ctx: (ctx.current_parameters.get("alias") or ""),
+        server_default=text("''"))
+    # S3:账号级字段(明文非密;F6:只能经 ${slot.X.field} 消费)
+    account_fields: Mapped[dict] = mapped_column(JsonVar, default=dict,
+                                                  server_default=text("'{}'"))
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"))
     url: Mapped[str] = mapped_column(Text)
     username_enc: Mapped[str] = mapped_column(Text)  # Fernet ciphertext(长度随密码变)
     password_enc: Mapped[str] = mapped_column(Text)  # Fernet ciphertext(长度随密码变)

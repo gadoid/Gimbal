@@ -46,6 +46,9 @@ class ServiceAlias(Base):
         Integer, ForeignKey("environments.id"), nullable=True)
     # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证
     credential_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # authz M2a S3:别名声明槽位(凭证解析的新口径;写面与
+    # credential_alias 保持同步,后者是 S6 别名瘦身的删除项)
+    slot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 三态接入(P1.0/缺口收口计划 §0 裁定 4):plate = 落在 plate 系统
     # services 声明内(受管,可版本化);external = 第三方服务,无版本
     # 管理 —— 不触发预览、不阻塞集成,单独统计不入基线。存量行随

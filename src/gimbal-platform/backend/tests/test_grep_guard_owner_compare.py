@@ -41,6 +41,8 @@ _ALLOWLIST: dict[str, int] = {
     "routers/access_tokens.py:AuthSession.owner_id == tok.user_id,": 1,
     "routers/activity.py:.where(Execution.owner_id == user.id)": 1,
     "routers/auth_sessions.py:.where(AuthSession.owner_id == user.id)": 1,
+    # S3.1 写面槽位过滤(owner 池内查重/同槽清默认,四元组键的 owner 面)
+    "routers/auth_sessions.py:AuthSession.owner_id == user.id,": 4,
     "routers/auth_sessions.py:base = select(AuthSession).where(AuthSession.owner_id == user.id)": 1,
     "routers/auth_sessions.py:if a is None or a.owner_id != owner_id:": 1,
     "routers/constants.py:base = select(ConstantEntry).where(ConstantEntry.owner_id == user.id)": 1,

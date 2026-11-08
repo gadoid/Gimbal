@@ -113,11 +113,31 @@ class MissingAuthAliases(RuntimeError):
         self.missing = list(missing)
 
 
+def _slot_tier(row: DBAuthSession, env_id: int | None) -> tuple:
+    """槽位绑定取用分层(S3):环境命中 > env 空且默认 > env 空 >
+    默认 > 首行(id 序)。存量行(每槽恰一行、env 空、默认)恒取
+    tier 1 —— 与旧按名解析逐行相同。"""
+    if env_id is not None and row.env_id == env_id:
+        tier = 0
+    elif row.env_id is None:
+        tier = 1 if row.is_default else 2
+    elif row.is_default:
+        tier = 3
+    else:
+        tier = 4
+    return (tier, row.id)
+
+
 async def resolve_exec_auths(
-    db_factory: Any, owner_id: int, aliases: list[str]
+    db_factory: Any, owner_id: int, aliases: list[str],
+    *, env_id: int | None = None,
 ) -> list[ResolvedAuth]:
-    """Owner 级 alias → ResolvedAuth(解密后的轻量值对象)。owner 过滤
-    防跨 owner 同名 alias 解错凭证。
+    """Owner 级槽名 → ResolvedAuth(解密后的轻量值对象)。owner 过滤
+    防跨 owner 同名 slot 解错凭证。
+
+    S3 槽位绑定:按 ``slot`` 解析(注入键/模板名);同槽多绑定时按
+    :func:`_slot_tier` 分层取一行(``env_id`` = 本次执行环境,S2.1)。
+    存量行 slot=alias 恒一对一 → 行为与旧链逐行相同。
 
     * 解密失败 → 抛 :class:`AuthResolveError`(V1 严格语义:
       凭证路径 fail-fast,不静默降级)。
@@ -148,13 +168,20 @@ async def resolve_exec_auths(
                 await session.execute(
                     select(DBAuthSession).where(
                         DBAuthSession.owner_id == owner_id,
-                        DBAuthSession.alias.in_(aliases),
+                        DBAuthSession.slot.in_(aliases),
                     )
                 )
             )
             .scalars()
             .all()
         )
+    # 同槽多绑定:分层取一行(名字缝 = 每名恰一行)
+    picked: dict[str, DBAuthSession] = {}
+    for a in rows:
+        cur = picked.get(a.slot)
+        if cur is None or _slot_tier(a, env_id) < _slot_tier(cur, env_id):
+            picked[a.slot] = a
+    rows = sorted(picked.values(), key=lambda r: r.slot)
     for a in rows:
         try:
             runtime = RuntimeAuthSession(
@@ -164,10 +191,10 @@ async def resolve_exec_auths(
                 token_type=a.token_type,
                 expires_in=a.expires_in,
             )
-            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.alias))
+            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.slot))
         except ValueError as e:
             raise AuthResolveError(
-                f"auth alias '{a.alias}' decrypt failed: {e}"
+                f"auth slot '{a.slot}' decrypt failed: {e}"
             ) from e
     missing = set(aliases) - {a.alias for a in resolved}
     if missing:
@@ -362,7 +389,8 @@ async def prepare_exec(
             prep.aliases = await service_aliases.exec_auth_aliases_of_definition(
                 s, definition, bindings)
         prep.resolved_auths = await resolve_exec_auths(
-            db_factory, owner_id, prep.aliases)
+            db_factory, owner_id, prep.aliases,
+            env_id=getattr(environment, "env_id", None))
         got = {a.alias for a in prep.resolved_auths}
         prep.missing_aliases = sorted(set(prep.aliases) - got)
         if prep.missing_aliases and auth_policy == "strict":

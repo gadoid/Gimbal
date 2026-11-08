@@ -1907,7 +1907,9 @@ async def _fanout(
         # 注入清单为空(无 ${auth.*} 扫描引用、无绑定 authAlias)时
         # 直接跳过解析。
         exec_auths = (
-            await resolve_exec_auths(db_factory, owner_id, auth_aliases)
+            await resolve_exec_auths(
+                db_factory, owner_id, auth_aliases,
+                env_id=(env_snapshot or {}).get("environmentId"))
             if auth_aliases
             else []
         )

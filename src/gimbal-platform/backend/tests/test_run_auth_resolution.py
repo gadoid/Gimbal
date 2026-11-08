@@ -79,6 +79,7 @@ async def test_resolve_exec_auths_decrypt_failure_fails_fast(fresh_db) -> None:
             url="https://x",
             username_enc="gitleaks:not-a-fernet-token",
             password_enc=fernet_encrypt("p"),
+            slot="rotten", is_default=True,   # S3 槽位绑定
         ))
         await db.commit()
 

@@ -297,12 +297,20 @@ async def check_scope(
         # used.auths 存凭证别名;范围存凭证 id —— 按属主池把两侧都归到
         # id 面比对(同名不同 id 的重建不继承授权,§4.1)
         from ..models.auth_session import AuthSession
+        # S3 槽位绑定:名字 = 槽名(存量 slot=alias,行为不变);
+        # 同槽多绑定取默认行(与环境无关的保守面)
+        from sqlalchemy import func as _f
         used_rows = (await db.execute(
-            select(AuthSession.id, AuthSession.alias).where(
+            select(AuthSession.id, AuthSession.slot).where(
                 AuthSession.owner_id == owner_id,
-                AuthSession.alias.in_(set(used.auths)))
+                AuthSession.slot.in_(set(used.auths)))
+            .order_by(AuthSession.is_default.desc(),
+                      AuthSession.env_id.is_(None).desc(),
+                      AuthSession.id)
         )).all()
-        by_name = {alias: rid for rid, alias in used_rows}
+        by_name = {}
+        for rid, slot in used_rows:
+            by_name.setdefault(slot, rid)
         for alias in sorted(set(used.auths)):
             rid = by_name.get(alias)
             if rid is not None and rid in scope_auths:

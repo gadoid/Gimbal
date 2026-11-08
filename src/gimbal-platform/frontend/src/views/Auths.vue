@@ -37,7 +37,7 @@
       <table class="slib-table">
         <thead>
           <tr>
-            <th>alias</th>
+            <th>alias / 槽位</th>
             <th>URL</th>
             <th>username</th>
             <th style="width:110px">token_type</th>
@@ -48,8 +48,28 @@
         </thead>
         <tbody>
           <tr v-for="row in visibleAuths" :key="row.id" :data-testid="`auth-row-${row.id}`">
-            <td><span class="mono svc-key">{{ row.alias }}</span></td>
-            <td class="mono muted">{{ row.url }}</td>
+            <td>
+              <div class="flex flex-col">
+                <span class="mono svc-key">{{ row.alias }}</span>
+                <!-- authz M2a S3 槽位绑定:槽名 ≠ 别名时展示槽;环境/系统/
+                     默认以 chip 呈现('' = 未归类省略) -->
+                <span v-if="row.slot && row.slot !== row.alias"
+                      class="mono muted" style="font-size:11px">
+                  槽 {{ row.slot }}</span>
+                <span
+                  v-if="row.isDefault" class="svc-chip"
+                  style="font-size:11px" :data-testid="`default-chip-${row.id}`"
+                  title="名字解析与环境未命中时的取用行">默认</span>
+              </div>
+            </td>
+            <td class="mono muted">
+              {{ row.url }}
+              <div
+                v-if="row.system || row.envId" class="muted"
+                style="font-size:11px" :data-testid="`binding-ctx-${row.id}`">
+                {{ row.system || '未归类' }}<template v-if="row.envId"> · 环境#{{ row.envId }}</template>
+              </div>
+            </td>
             <td class="mono">{{ row.username }}</td>
             <td>
               <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
@@ -89,6 +109,11 @@
                   :data-testid="`auth-more-${row.id}`"
                 >⋯</DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="sl-menu">
+                  <DropdownMenuItem
+                    v-if="!row.isDefault"
+                    class="sl-menu-item" data-testid="auth-set-default"
+                    @click="makeDefault(row)"
+                  >设为槽默认</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item" data-testid="auth-test" @click="runTest(row)">测试连通</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
                   <DropdownMenuItem
@@ -342,7 +367,7 @@ import { useServerList } from '@/composables/useServerList'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
 import {
-  getReferences, list as apiList,
+  getReferences, list as apiList, setDefault as apiSetDefault,
   type AuthReferences, type AuthSession, type TestResult,
 } from '@/api/auth_sessions'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
@@ -460,6 +485,17 @@ function openCreate() {
     values: { alias: '', url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200 },
   })
   createOpen.value = true
+}
+
+/** authz M2a S3:置为该槽默认(同槽旧默认由后端原子清除)。 */
+async function makeDefault(row: AuthSession) {
+  try {
+    await apiSetDefault(row.id)
+    toast.success(`已将 ${row.alias} 设为槽「${row.slot || row.alias}」的默认绑定`)
+    await reloadList()
+  } catch (e) {
+    showError('设为默认', undefined, (e as Error).message)
+  }
 }
 
 function openEdit(row: AuthSession) {

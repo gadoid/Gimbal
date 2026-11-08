@@ -146,7 +146,8 @@ async def create_alias_in_transaction(
     row = ServiceAlias(
         alias_name=alias_name, base_service=base,
         environment_id=environment_id,
-        credential_alias=credential_alias, owner_user_id=owner_user_id,
+        credential_alias=credential_alias, slot=credential_alias,
+        owner_user_id=owner_user_id,
         base_url=base_url, kind=kind,
     )
     db.add(row)
@@ -264,6 +265,7 @@ async def patch_alias(
         row.environment_id = environment_id
     if credential_alias is not ...:
         row.credential_alias = credential_alias
+        row.slot = credential_alias
     if base_url is not ...:
         row.base_url = base_url
     await db.commit()
@@ -365,11 +367,17 @@ async def credential_aliases_for(
     只做精确命中(方案 §4.1 三层的中间层);场景显式绑定的优先级
     裁决在调用方(run_dispatcher):同键已显式绑 authAlias 的不吃
     别名表默认。凭证按执行者本人池子解析(_resolve_exec_auths)。
+
+    authz M2a S3:别名声明槽位 —— 取 ``slot``(与 credential_alias
+    由写面保持同步;后者是 S6 删除项),旧库两列相等,行为不变。
     """
     if not raw_names:
         return {}
+    from sqlalchemy import func as _f
     rows = (await db.execute(
-        select(ServiceAlias.alias_name, ServiceAlias.credential_alias).where(
+        select(ServiceAlias.alias_name,
+               _f.coalesce(ServiceAlias.slot,
+                           ServiceAlias.credential_alias)).where(
             ServiceAlias.alias_name.in_(raw_names),
             ServiceAlias.credential_alias.is_not(None),
         )
