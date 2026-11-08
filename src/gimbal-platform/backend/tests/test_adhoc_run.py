@@ -39,6 +39,7 @@ from app.models.auth_session import AuthSession
 from app.models.environment import Environment
 from app.models.execution import ExecutionSnapshot
 from app.models.permission import AuditLog
+from app.models.deployment import Deployment
 from app.models.service_alias import ServiceAlias
 from app.services import run_dispatcher as rd
 from app.services.gimbal_launcher import LaunchResult
@@ -122,20 +123,22 @@ async def _personal(client, username: str, *,
 async def _seed_target(*, base_url: str | None = BASE_URL, kind: str = "plate",
                        base_service: str = SERVICE, credential: str | None = CRED,
                        env_lines: dict | None = None) -> None:
-    """被调服务别名(默认 base_service = 端点声明的服务,挂一个声明
-    settle@2.1 的环境)。"""
+    """被调服务别名(默认 base_service = 端点声明的服务)+ 默认环境(声明
+    settle@2.1)+ 该环境的部署地址。authz M2a S6:别名不再挂环境、不带
+    地址 —— adhoc 的环境走环境链(偏好 > 默认环境),版本线取该环境
+    ``lines``,地址取该环境部署表。"""
     lines = {SYSTEM: "2.1"} if env_lines is None else env_lines
     async with db_module.SessionLocal() as s:
-        env_id = None
-        if lines:
-            env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", lines=lines)
-            s.add(env)
-            await s.flush()
-            env_id = env.id
+        env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", lines=lines,
+                          is_default=True)
+        s.add(env)
+        await s.flush()
         s.add(ServiceAlias(
             alias_name=SVC, base_service=base_service, kind=kind,
-            base_url=base_url, credential_alias=credential,
-            environment_id=env_id))
+            slot=credential))
+        if base_url:
+            s.add(Deployment(base_service=base_service, env_id=env.id,
+                             base_url=base_url))
         await s.commit()
 
 
@@ -294,9 +297,10 @@ class TestStructure:
             "path_params": {"orderNo": "PO1", "page": 2}}
 
     async def test_inbound_recipe_rejected_by_m1_first(self, ready, client):
-        """入站 M1 闸先于临时调用分支:serviceBindings 仍是 inbound_field_not_allowed。"""
+        """入站 M1 闸先于临时调用分支:serviceBindings 仍是 inbound_field_not_allowed
+        (S6 合法形态 {alias} 也拒 —— 入站整字段拒收)。"""
         r = await _post(client, ready, _body(
-            serviceBindings={SVC: {"url": "https://evil.example"}}))
+            serviceBindings={SVC: {"alias": SVC}}))
         assert r.status_code == 422, r.text
         assert r.json()["detail"]["code"] == "inbound_field_not_allowed"
 

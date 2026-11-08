@@ -89,6 +89,20 @@ def _add_legacy_visibility(eng) -> None:
                 "VARCHAR(16) NOT NULL DEFAULT 'private'")
 
 
+def _add_legacy_alias_columns(eng) -> None:
+    """S6(0047 删列后)迁移链兼容:补回 service_aliases 的四个旧列,
+    供 0044–0046 的存量回填用例按旧形态造数。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "ALTER TABLE service_aliases "
+            "ADD COLUMN IF NOT EXISTS base_url VARCHAR(512), "
+            "ADD COLUMN IF NOT EXISTS environment_id INTEGER "
+            "REFERENCES environments(id), "
+            "ADD COLUMN IF NOT EXISTS credential_alias VARCHAR(64), "
+            "ADD COLUMN IF NOT EXISTS owner_user_id INTEGER "
+            "REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED")
+
+
 def test_full_chain_from_empty():
     """空 schema → ``upgrade head``:全链从零可跑(空库门的产品面等价物,
     新迁移加入后自动纳入覆盖)。"""
@@ -1011,6 +1025,7 @@ def test_0042_suite_member_zone():
 def _to_0043_shape(eng) -> None:
     """create_all 是当前模型(deployments 表 / is_default / 项目默认环境 /
     无 visibility);撤回到 0043 形态。"""
+    _add_legacy_alias_columns(eng)
     with eng.begin() as conn:
         conn.exec_driver_sql("DROP TABLE deployments")
         conn.exec_driver_sql("DROP INDEX IF EXISTS uq_environments_default")
@@ -1146,6 +1161,7 @@ def test_0044_deployments_env_chain(envs, aliases, want_default,
 def _to_0044_shape(eng) -> None:
     """create_all 是当前模型(槽位列与四元组键已存在);撤回到 0044
     形态:删 auth_sessions 五列 + 换回旧唯一键;删别名 slot 列。"""
+    _add_legacy_alias_columns(eng)
     with eng.begin() as conn:
         conn.exec_driver_sql("DROP INDEX IF EXISTS uq_auth_slot_default")
         conn.exec_driver_sql(
@@ -1301,6 +1317,7 @@ def test_0045_auth_slot_bindings(aliases, want_systems):
 def _to_0045_shape(eng) -> None:
     """create_all 是当前模型(scope 列与四元组键已存在);撤回到 0045
     形态:删两表 scope/scope_id 列,还原旧二元/一元唯一键。"""
+    _add_legacy_alias_columns(eng)
     with eng.begin() as conn:
         conn.exec_driver_sql(
             "ALTER TABLE carry_service_bindings DROP CONSTRAINT IF EXISTS "
@@ -1420,5 +1437,158 @@ def test_0046_carry_scope():
                     "SELECT service_name, field_path FROM "
                     "carry_service_bindings ORDER BY 1, 2"))] == [
                     ("fin", "$.a"), ("fin", "$.c"), ("qa-alias", "$.b")]
+        finally:
+            eng.dispose()
+
+
+# ── 0047_alias_slimming(authz M2a S6)──────────────────────────────────
+def test_0047_alias_slimming():
+    """① slot 兜底回填 ② 无默认环境 + 无环境别名地址 → 建默认环境
+    ③ 地址回落部署表(无环境:别名胜;挂环境:部署表已有不覆盖;冲突不落)
+    ④ 方案 payload 剥 url/authAlias ⑤ 审计报告 + 属主/Admin 通知
+    ⑥ 删四列 ⑦ downgrade 回加列(credential_alias = slot,base_url 取默认
+    环境部署地址)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.user import User
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            _add_legacy_alias_columns(eng)
+            with Session(eng) as s:
+                u1 = User(username="u1", display_name="u1",
+                          password_hash="x", role="user")
+                adm = User(username="adm", display_name="adm",
+                           password_hash="x", role="admin")
+                plat = User(username="__platform__", display_name="",
+                            password_hash="x", role="admin", is_system=True)
+                s.add_all([u1, adm, plat])
+                s.flush()
+                s.add(ComposerScenario(scenario_id="sc-a", owner_id=u1.id,
+                                       payload={}))
+                s.flush()
+                s.add_all([
+                    ComposerRunScheme(
+                        scheme_id="rs-dirty", scenario_id="sc-a",
+                        name="脏方案", payload={"serviceBindings": {
+                            "fin": {"url": "http://x", "authAlias": "qa1"},
+                            "crm": {"alias": "crm", "url": "http://y"},
+                            "probe": {"url": "http://probe"}}}),
+                    ComposerRunScheme(
+                        scheme_id="rs-clean", scenario_id="sc-a",
+                        name="干净", payload={"serviceBindings": {
+                            "crm": {"alias": "crm"}}}),
+                ])
+                s.commit()
+                u1_id, adm_id = u1.id, adm.id
+            with eng.begin() as conn:
+                # 两个环境、无默认 → 迁移建默认环境
+                for name in ("dev", "sit"):
+                    conn.execute(text(
+                        "INSERT INTO environments (name, description, "
+                        "lines, created_at, updated_at) "
+                        "VALUES (:n, '', '{}', now(), now())"), {"n": name})
+                dev = conn.execute(text(
+                    "SELECT id FROM environments WHERE name='dev'")).scalar()
+                conn.execute(text(
+                    "INSERT INTO deployments (base_service, env_id, "
+                    "base_url, created_at, updated_at) VALUES "
+                    "('pay', :d, 'http://pay-dep', now(), now())"),
+                    {"d": dev})
+                for alias, base, env, url, cred, owner in (
+                        ("fin-a", "fin", None, "http://fin", None, None),
+                        ("fin-b", "fin", None, "http://fin", "qa1", None),
+                        ("hr-1", "hr", None, "http://hr-1", None, None),
+                        ("hr-2", "hr", None, "http://hr-2", None, None),
+                        ("fin-dev", "fin", dev, "http://fin-dev", None, None),
+                        ("pay-dev", "pay", dev, "http://pay-alias", None,
+                         None),
+                        ("mine", "fin", None, None, None, u1_id)):
+                    conn.execute(text(
+                        "INSERT INTO service_aliases (alias_name, "
+                        "base_service, base_url, environment_id, "
+                        "credential_alias, owner_user_id, kind, "
+                        "created_at, updated_at) VALUES (:a, :b, :u, :e, "
+                        ":c, :o, 'plate', now(), now())"),
+                        {"a": alias, "b": base, "u": url, "e": env,
+                         "c": cred, "o": owner})
+
+            command.stamp(_cfg(sync_url), "0046_carry_scope")
+            command.upgrade(_cfg(sync_url), "0047_alias_slimming")
+
+            with eng.connect() as c:
+                cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'service_aliases' "
+                    "AND table_schema = current_schema()"))}
+                assert not ({"base_url", "environment_id", "owner_user_id",
+                             "credential_alias"} & cols)
+                # ① slot 兜底
+                assert c.execute(text(
+                    "SELECT slot FROM service_aliases "
+                    "WHERE alias_name='fin-b'")).scalar() == "qa1"
+                # ② 默认环境新建
+                default = c.execute(text(
+                    "SELECT name FROM environments WHERE is_default")).all()
+                assert [r[0] for r in default] == ["默认环境"]
+                # ③ 部署表
+                got = {(r[0], r[1]): r[2] for r in c.execute(text(
+                    "SELECT d.base_service, e.name, d.base_url "
+                    "FROM deployments d JOIN environments e "
+                    "ON e.id = d.env_id"))}
+                assert got == {
+                    ("fin", "默认环境"): "http://fin",
+                    ("fin", "dev"): "http://fin-dev",
+                    ("pay", "dev"): "http://pay-dep",   # 部署表已有不覆盖
+                    # ④b 方案绑定 url 补缺落默认环境(fin 已有行 → 不落)
+                    ("crm", "默认环境"): "http://y",
+                    ("probe", "默认环境"): "http://probe",
+                }                                       # hr 冲突不落
+                # ④ 方案清洗
+                pl = {r[0]: r[1] for r in c.execute(text(
+                    "SELECT scheme_id, payload FROM composer_run_schemes"))}
+                assert pl["rs-dirty"]["serviceBindings"] == {
+                    "crm": {"alias": "crm"}}
+                assert pl["rs-clean"]["serviceBindings"] == {
+                    "crm": {"alias": "crm"}}
+                # ⑤ 报告 + 通知
+                detail = c.execute(text(
+                    "SELECT detail FROM audit_logs "
+                    "WHERE action = 'migration.alias_slimming'")).scalar()
+                assert [g["baseService"] for g in detail["conflicts"]] == [
+                    "hr"]
+                assert {x["alias"] for x in detail["superseded"]} >= {
+                    "pay-dev", "hr-1", "hr-2"}
+                assert {x["alias"] for x in detail["envSelectors"]} == {
+                    "fin-dev", "pay-dev"}
+                assert {x["baseService"] for x in
+                        detail["schemeUrlsLanded"]} == {"crm", "probe"}
+                assert [x["baseService"] for x in
+                        detail["schemeUrlsSkipped"]] == ["fin"]
+                assert detail["personalAliasesShared"] == [
+                    {"alias": "mine", "ownerId": u1_id}]
+                assert [x["schemeId"] for x in detail["schemesCleansed"]] \
+                    == ["rs-dirty"]
+                notes = {(r[0], r[1]) for r in c.execute(text(
+                    "SELECT user_id, link FROM notifications"))}
+                assert (u1_id, "/auths") in notes          # 方案属主
+                assert (adm_id, "/admin/deployments") in notes   # Admin+
+                assert all(uid in (u1_id, adm_id) for uid, _ in notes)
+
+            command.downgrade(_cfg(sync_url), "0046_carry_scope")
+            with eng.connect() as c:
+                rows = {r[0]: (r[1], r[2]) for r in c.execute(text(
+                    "SELECT alias_name, credential_alias, base_url "
+                    "FROM service_aliases"))}
+                assert rows["fin-b"] == ("qa1", "http://fin")
+                assert rows["pay-dev"][1] is None    # 非默认环境不回填
         finally:
             eng.dispose()

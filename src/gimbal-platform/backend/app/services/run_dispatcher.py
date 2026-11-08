@@ -63,7 +63,8 @@ from ..models.execution import (
 )
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
-from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
+from ..schemas.scenario_composer import (RunRequest, RunResponse, ServiceBinding,
+                                        scrub_retired_bindings)
 from . import gimbal_launcher, plate_client
 from .auth_ref_scan import scan_auth_aliases
 from .endpoint_declarations import declared_paths_of
@@ -788,60 +789,35 @@ def fanout_total(fanout_datasets: list[dict], injections: list) -> int:
 
 # ─── main entry point ─────────────────────────────────────────────
 async def _check_env_consistency(
-    db: AsyncSession, scenario_payload: dict,
-    service_bindings: dict[str, ServiceBinding],
+    db: AsyncSession, scenario_payload: dict, env_id: int | None,
 ) -> list[str]:
-    """环境告警（Release v4.4 §6.3 / V5-B）：混合环境 + 版本线不一致。
+    """环境告警（Release v4.4 §6.3）：本次环境声明的版本线 ≠ 场景钉定
+    的版本线 → 告警。返回告警文本列表（调用方写 config_json 的
+    environmentWarnings 键）。
 
-    混合环境：服务别名指向多个环境 → 告警（哪条版本线生效不明确）。
-    版本线不一致：环境声明的版本线 ≠ 场景 meta.plate 的版本线 → 告警。
-    返回告警文本列表（调用方写 config_json 的 environmentWarnings 键）。
+    authz M2a S6:环境由环境链唯一给出(S2),不再经绑定 authAlias →
+    别名 ``environment_id`` 反推 ——「混合环境」告警随之退役(一次执行
+    只有一个环境)。
     """
     from ..models.environment import Environment
-    from ..models.service_alias import ServiceAlias
 
-    if not service_bindings:
+    if env_id is None:
         return []
-
-    # 1. 别名 → 环境（经 service_aliases.environment_id）
-    alias_names = sorted({
-        b.auth_alias for b in service_bindings.values() if b.auth_alias})
-    if not alias_names:
+    env = await db.get(Environment, env_id)
+    if env is None:
         return []
-    aliases = (await db.execute(
-        select(ServiceAlias).where(
-            ServiceAlias.alias_name.in_(alias_names))
-    )).scalars().all()
-    env_ids = sorted({a.environment_id for a in aliases if a.environment_id})
-    if not env_ids:
-        return []
-    envs = (await db.execute(
-        select(Environment).where(Environment.id.in_(env_ids))
-    )).scalars().all()
-    if not envs:
-        return []
-
     warnings: list[str] = []
-
-    # 2. 混合环境告警
-    if len(envs) > 1:
-        warnings.append(
-            f"混合环境:服务绑定指向 {len(envs)} 个环境"
-            f"（{'、'.join(e.name for e in envs)}）——版本线生效优先级不明确")
-
-    # 3. 版本线不一致告警（每个环境 vs 场景 meta.plate）
     definition = definition_from_payload(scenario_payload)
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
-    for env in envs:
-        for system, line in (env.lines or {}).items():
-            declared = meta_plate.get(system)
-            if ref_category(declared) == PIN:  # b2-3:线一致告警仅对钉定
-                declared_line = declared.split("#")[0]
-                if declared_line != line:
-                    warnings.append(
-                        f"环境不一致:环境「{env.name}」声明 {system}@{line},"
-                        f"场景声明 {system}@{declared_line}——执行将使用场景"
-                        "的版本线,建议适配或调整环境")
+    for system, line in (env.lines or {}).items():
+        declared = meta_plate.get(system)
+        if ref_category(declared) == PIN:  # b2-3:线一致告警仅对钉定
+            declared_line = declared.split("#")[0]
+            if declared_line != line:
+                warnings.append(
+                    f"环境不一致:环境「{env.name}」声明 {system}@{line},"
+                    f"场景声明 {system}@{declared_line}——执行将使用场景"
+                    "的版本线,建议适配或调整环境")
     return warnings
 
 
@@ -1002,12 +978,23 @@ async def dispatch_target(
     except EnvironmentNotFound as e:
         raise NotFound("environment_not_found", str(e)) from None
 
-    # V5-B 环境告警（§6.3）:混合环境 + 版本线不一致 → 写 config_json
+    # 环境告警（§6.3）:本次环境的版本线 vs 场景钉定 → 写 config_json
     try:
         env_warnings = await _check_env_consistency(
-            db, scenario_payload, req.service_bindings or {})
+            db, scenario_payload, env_choice.env_id)
     except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
         env_warnings = []
+
+    # authz M2a S6:绑定 = 服务键 → 别名;选的别名须存在且同基础服务
+    _bindings = {k: b.model_dump(by_alias=True)
+                 for k, b in (req.service_bindings or {}).items()}
+    from .service_aliases import (BindingAliasInvalid,
+                                  validate_binding_aliases)
+    try:
+        await validate_binding_aliases(db, _bindings)
+    except BindingAliasInvalid as e:
+        raise Conflict(e.code, e.message,
+                       extra={"service": e.service, "alias": e.alias}) from None
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
@@ -1050,20 +1037,13 @@ async def dispatch_target(
             f"total runs {total_runs} exceed platform cap "
             f"{settings.MAX_RUNS_PER_EXECUTION} (rows x injections)",
         )
-    # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
-    # steps + config.setup/teardown 条目(webhook v4 §3.2 —— setup 引用
-    # 的凭证此前在 runs 链不注入;与 run_prepare/integration_runner 同
-    # 口径);绑定的 authAlias 并入(即使 steps 未引用该 alias)。去重保序。
-    # 注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
-    # 模板扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认,显式绑定优先)。
-    # 存档口径(§4.1 拍板):config_json.serviceBindings 只记场景原始
-    # 绑定,别名默认只体现于 injectedAuths 清单与实际注入的 users。
+    # 注入清单 —— 唯一实现(service_aliases.exec_auth_aliases:模板扫描
+    # (steps + config.setup/teardown,webhook v4 §3.2)∪ 生效别名声明
+    # 槽位(S6:绑定选别名即换槽))。存档口径(§4.1 拍板):
+    # config_json.serviceBindings 只记原始绑定,别名默认只体现于
+    # injectedAuths 清单与实际注入的 users。
     auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
-        db,
-        definition_from_payload(scenario_payload),
-        {k: {"authAlias": b.auth_alias}
-         for k, b in (req.service_bindings or {}).items()},
-    )
+        db, definition_from_payload(scenario_payload), _bindings)
     # S5 失败即中止:注入清单在执行人池解不到槽位 → 整单拒发(此前
     # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
     # 注入/预览同一份(pick_bindings)。
@@ -1138,11 +1118,8 @@ async def dispatch_target(
             # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
             # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
             "injectedAuths": auth_aliases,
-            # service → {authAlias?, url?}(驼峰 dump,None 键不落)。
-            "serviceBindings": {
-                k: b.model_dump(by_alias=True, exclude_none=True)
-                for k, b in req.service_bindings.items()
-            },
+            # 服务键 → {alias}(S6;重跑按此回放)
+            "serviceBindings": _bindings,
             # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
             # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
             # 不再写;读侧(rerun/列表投影)带旧行回退映射。
@@ -1227,10 +1204,7 @@ async def dispatch_target(
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,
                 "parallel": req.parallel,
-                "service_bindings": {
-                    k: b.model_dump(by_alias=True)
-                    for k, b in (req.service_bindings or {}).items()
-                },
+                "service_bindings": _bindings,
             },
         }
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
@@ -1261,9 +1235,10 @@ async def run_job_from_payload(job: dict) -> None:
         await _fanout_graph(db_factory=_session_factory,
                             chain=p.get("chain") or "legacy", **args)
         return
-    bindings = args.get("service_bindings") or {}
+    # S6:升级前入队的配方可能带 url/authAlias —— 剥离退役字段再重建
     args["service_bindings"] = {
-        k: ServiceBinding(**v) for k, v in bindings.items()
+        k: ServiceBinding(**v) for k, v in
+        scrub_retired_bindings(args.get("service_bindings")).items()
     }
     await _fanout(
         db_factory=_session_factory,
@@ -1923,7 +1898,7 @@ async def _fanout(
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
     # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
     try:
-        # 注入清单为空(无 ${auth.*} 扫描引用、无绑定 authAlias)时
+        # 注入清单为空(无 ${auth.*} 扫描引用、无别名声明槽位)时
         # 直接跳过解析。
         exec_auths = (
             await resolve_exec_auths(
@@ -1977,7 +1952,10 @@ async def _fanout(
         ui_field_states=_ui_fs, resolve_mode="single", with_auth=False,
         scenario_owner_id=scenario_owner_id,
         environment=EnvChoice.from_snapshot(env_snapshot),
-        project_id=scenario_project_id)
+        project_id=scenario_project_id,
+        # S6:绑定选别名 → carry 别名键随之切换
+        bindings={k: b.model_dump(by_alias=True)
+                  for k, b in (service_bindings or {}).items()})
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。
@@ -2030,9 +2008,6 @@ async def _fanout(
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
     # (N1:基座取值移入 run_prepare,此处消费 prep 产物)
     built_in_users = prep.built_in_users
-    # serviceBindings 原样传给 materialize_run_copy(url 物化只对 steps
-    # 实际引用的 service 键生效,见 run_materialize._apply_services)。
-    service_bindings = service_bindings or {}
 
     # carry 预解析(spec §4.1):dispatch 阶段一次,run 内快照一致 —
     # 绑定/契约编辑的生效边界是下次执行。构建在 run_prepare 内完成
@@ -2155,18 +2130,14 @@ async def _fanout(
                                 "m2_hash 回填失败 (execution={})", execution_id)
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
                     # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
-                    # services 物化(绑定 url > authored;env.baseUrl 补缺层
-                    # 已随 D2 执行环境退役)。
+                    # services 物化(authored > ③ 环境部署地址)。
                     composed_exec = materialize_run_copy(
                         converted,
-                        service_bindings={
-                            k: b.model_dump(by_alias=True)
-                            for k, b in service_bindings.items()
-                        },
                         resolved_auths=exec_auths,
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
                         alias_base_urls=prep.alias_base_urls,
+                        direct_addresses=prep.direct_addresses,
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)

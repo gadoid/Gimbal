@@ -129,7 +129,9 @@ class TestPreRunChecks:
         uid = await _uid("sx_owner")
         async with db_module.SessionLocal() as s:
             s.add(ServiceAlias(alias_name="sx-alias", base_service="pay",
-                               kind="external", base_url="https://sx.local"))
+                               kind="external"))
+            from .helpers import seed_deployment
+            await seed_deployment(s, "pay", "https://sx.local")
             s.add(ComposerScenario(scenario_id="sc-sx",
                                    owner_id=uid,
                                    payload=scen_payload))

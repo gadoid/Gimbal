@@ -51,9 +51,11 @@ async def test_environment_crud_roundtrip(client, fresh_db):
     assert r.status_code == 404
 
 
-async def test_environment_delete_blocked_by_alias_reference(
+async def test_environment_delete_cascades_deployments(
     client, fresh_db, plate
 ):
+    """authz M2a S6:别名不再挂环境(删列),删环境不再被别名引用拦截;
+    该环境的部署地址随之级联删除(FK CASCADE)。"""
     plate.services = [{"name": "fin-service"}]
     await register_and_login(client, "envboss2", "pw123456")
     admin = await register_and_login(client, "envboss2", "pw123456")
@@ -61,19 +63,12 @@ async def test_environment_delete_blocked_by_alias_reference(
     r = await client.post("/api/environments", headers=admin,
                           json={"name": "UAT", "lines": {}})
     env_id = r.json()["id"]
-
-    r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local",
-        "environmentId": env_id})
+    r = await client.post("/api/deployments", headers=admin, json={
+        "baseService": "fin-service", "envId": env_id,
+        "baseUrl": "https://uat.fin.local"})
     assert r.status_code == 201, r.text
-
-    # 被引用 → 409；解除引用后方可删
-    r = await client.delete(f"/api/environments/{env_id}", headers=admin)
-    assert r.status_code == 409
-
-    r = await client.patch("/api/service-aliases/fin-service-uat",
-                           headers=admin, json={"environmentId": None})
-    assert r.status_code == 200 and r.json()["environmentId"] is None
 
     r = await client.delete(f"/api/environments/{env_id}", headers=admin)
     assert r.status_code == 204
+    r = await client.get("/api/deployments", headers=admin)
+    assert all(d["envId"] != env_id for d in r.json())

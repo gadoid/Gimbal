@@ -72,16 +72,19 @@ def upgrade() -> None:
     bind.execute(sa.text(
         "UPDATE auth_sessions SET slot = alias WHERE slot = ''"))
     # system 推断:引用该凭证的别名的基础服务唯一 → 该服务;
-    # 零个或冲突 → 保持 ''(未归类,由用户认领)
-    bind.execute(sa.text("""
-        UPDATE auth_sessions a SET system = sub.bs
-        FROM (SELECT credential_alias AS ca, min(base_service) AS bs,
-                     count(DISTINCT base_service) AS n
-              FROM service_aliases
-              WHERE credential_alias IS NOT NULL
-              GROUP BY credential_alias) AS sub
-        WHERE sub.ca = a.alias AND sub.n = 1
-    """))
+    # 零个或冲突 → 保持 ''(未归类,由用户认领)。fresh 链守卫:0047 删
+    # credential_alias 后 baseline 无此列(无存量可推断)
+    _has_cred = _has_column(bind, "service_aliases", "credential_alias")
+    if _has_cred:
+        bind.execute(sa.text("""
+            UPDATE auth_sessions a SET system = sub.bs
+            FROM (SELECT credential_alias AS ca, min(base_service) AS bs,
+                         count(DISTINCT base_service) AS n
+                  FROM service_aliases
+                  WHERE credential_alias IS NOT NULL
+                  GROUP BY credential_alias) AS sub
+            WHERE sub.ca = a.alias AND sub.n = 1
+        """))
     # 存量行 = 各槽唯一绑定 → 全部置默认(名字解析的取用行)
     bind.execute(sa.text(
         "UPDATE auth_sessions SET is_default = true"))
@@ -107,9 +110,10 @@ def upgrade() -> None:
     if not _has_column(bind, "service_aliases", "slot"):
         op.add_column("service_aliases", sa.Column(
             "slot", sa.String(64), nullable=True))
-    bind.execute(sa.text(
-        "UPDATE service_aliases SET slot = credential_alias "
-        "WHERE credential_alias IS NOT NULL AND slot IS NULL"))
+    if _has_cred:
+        bind.execute(sa.text(
+            "UPDATE service_aliases SET slot = credential_alias "
+            "WHERE credential_alias IS NOT NULL AND slot IS NULL"))
 
 
 def downgrade() -> None:

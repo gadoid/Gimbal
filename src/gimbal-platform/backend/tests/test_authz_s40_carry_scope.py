@@ -147,9 +147,15 @@ async def test_slot_ref_substitution(client, plate_mock, monkeypatch):
             "op": "${slot.qa9.opId}", "no": "${slot.ghost.f}"}}}])
     r = await client.post("/api/scenarios", headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
+    # S6:绑定选别名 → 该别名声明槽位 qa9 进注入清单
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name="fin-service-q9",
+                           base_service="fin-service", kind="external",
+                           slot="qa9"))
+        await s.commit()
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s40-slot", dataSetIds=[],
-        serviceBindings={"fin-service": {"authAlias": "qa9"}}))
+        serviceBindings={"fin-service": {"alias": "fin-service-q9"}}))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
     assert "qa9" in cases[0]["config"]["users"]   # 槽位凭证照常注入

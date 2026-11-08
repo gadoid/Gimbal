@@ -38,7 +38,6 @@ from ..models.user import User
 from ..services import access_token as at_svc
 from ..models.auth_session import AuthSession
 from ..models.constant_entry import ConstantEntry
-from ..models.service_alias import ServiceAlias
 from ..schemas.user import (
     UserCreateIn,
     UserDeleteIn,
@@ -906,19 +905,11 @@ async def delete_user(
         if run_id:
             purge_case_dir(str(run_id))
 
-    # ── P1a 最小显式级联(NO ACTION 三表;transfer 时个人别名转共享)──
+    # ── P1a 最小显式级联(NO ACTION 两表;个人别名随 S6 退役)──
     await db.execute(
         sa_delete(AuthSession).where(AuthSession.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
-    if disposal == "transfer":
-        await db.execute(
-            sa_update(ServiceAlias)
-            .where(ServiceAlias.owner_user_id == user_id)
-            .values(owner_user_id=None))
-    else:
-        await db.execute(
-            sa_delete(ServiceAlias).where(ServiceAlias.owner_user_id == user_id))
 
     await db.delete(target)
     await db.commit()

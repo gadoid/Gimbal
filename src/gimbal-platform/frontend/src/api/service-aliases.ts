@@ -2,26 +2,23 @@
  * api/service-aliases.ts — 服务别名注册表 API client(服务画像方案 §4.1 基础层)。
  *
  * 读全员 / 写 admin;注册校验强约束(裸声明不猜,plate 宕机期间不能
- * 登记 —— 后端 409)。credentialAlias 引用**执行者本人**的凭证池
- * (auth_sessions.alias,owner 隔离),不是全局凭证名。
+ * 登记 —— 后端 409)。
  *
- * V5(B):groupTag 已退役,归属环境经 environmentId 外键指向
- * environments 表(展示名 environmentName 由列表接口 join 带出)。
+ * authz M2a S6「别名瘦身」:baseUrl/environmentId/environmentName/
+ * credentialAlias/ownerUserId 已退役 —— 地址归部署表(部署地址页),
+ * 凭证归槽位(slot,执行时按执行者本人认证池的槽位取),个人别名退役
+ * (全部团队共享)。AliasOut = {aliasName, baseService, slot, kind,
+ * createdAt, updatedAt};q 检索覆盖 alias/base/slot。
  */
 import http from '@/api/http'
 
 export interface ServiceAliasRow {
   aliasName: string
   baseService: string
-  /** F4 方案 B:环境级端点默认层(NULL = 不提供;唯一权威,改一处全局生效) */
-  baseUrl: string | null
-  /** V5(B):归属环境(id → environments;NULL = 未归属) */
-  environmentId: number | null
-  environmentName: string | null
-  credentialAlias: string | null
-  ownerUserId: number | null
+  /** M2a S6:声明槽位 —— 执行注入取哪个凭证槽(null = 未声明) */
+  slot: string | null
   /** 三态接入(P1.0):plate 受管(目录派生强约束)| external 第三方
-   * (无版本管理,别名即服务本体;不触发预览/不阻塞集成,单独统计) */
+   *  (无版本管理,别名即服务本体;不触发预览/不阻塞集成,单独统计) */
   kind: 'plate' | 'external'
   /** 入站与回调(webhook 设计 v3 P1):secret 只回「是否已设」,密文不外露 */
   createdAt: string | null
@@ -51,13 +48,11 @@ export function listAllAliases(base?: string): Promise<ServiceAliasRow[]> {
 
 export function createAlias(input: {
   aliasName: string
-  /** 必填(2026-09-23):别名 = 环境端点登记,后端缺省 422 */
-  baseUrl: string
-  environmentId?: number | null
-  credentialAlias?: string | null
   /** 三态接入(P1.0):缺省 plate(目录派生强约束);external 跳过
-   * 目录校验(第三方服务,别名即服务本体) */
+   *  目录校验(第三方服务,别名即服务本体) */
   kind?: 'plate' | 'external'
+  /** M2a S6:声明槽位(缺省 = 别名同名槽) */
+  slot?: string | null
   /** b2.5:external 须显式 base_service(plate kind=integration 的服务) */
   baseService?: string | null
 }): Promise<ServiceAliasRow> {
@@ -67,8 +62,7 @@ export function createAlias(input: {
 
 export function patchAlias(
   aliasName: string,
-  input: { baseUrl?: string | null; environmentId?: number | null;
-         credentialAlias?: string | null; baseService?: string | null;
+  input: { slot?: string | null; baseService?: string | null;
          kind?: 'plate' | 'external' | null },
 ): Promise<ServiceAliasRow> {
   return http

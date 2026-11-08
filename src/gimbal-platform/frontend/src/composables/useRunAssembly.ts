@@ -4,7 +4,7 @@
  * CaseComposer / SchemeWorkbench / 执行器(/run)此前各持一份装配副本:
  * RunPanelHost(已无消费方,死代码)、CaseComposer 内联装配、
  * SchemeWorkbench 的派生镜像。本组合式收编公共部分 —— 4 路并行取数、
- * serviceRows / authOptions / stepNames 派生、dispatch 段、另存后重取;
+ * serviceRows / stepNames 派生、dispatch 段、另存后重取;
  * 失效判定**只消费** useInjectableSurface(掩空决策没有第二个落点,
  * 本文件不复算)。
  *
@@ -14,11 +14,14 @@
  * - CaseComposer 专属四段(saveDraft 先落盘、800ms 导航延时、未保存新用例
  *   守卫、initialSchemeId 深链)留作调用方逻辑,不收编。
  *
+ * authz M2a S6 后绑定语义 = 「服务键 → 别名」,凭证池(authOptions)派生
+ * 随 URL/credential 绑定退役一并删除 — 别名候选/降级由 RunConfigPanel /
+ * SchemeRunConfigSection 自取注册表判定,装配体不再取凭证池。
+ *
  * 时序坑(从 RunPanelHost 搬进来的唯一一条):load() 里 dataSets / draft /
  * schemes 的赋值必须在**同一个同步 tick** 内落完,中间插一个 await 会让
  * 消费方在一个不完整的判定面上先求值一次,活着的方案闪现「已失效」。
- * authAliases 那一路是**故意**放在这个块之外的(晚到只影响下拉选项,
- * 不参与失效判定)。另存后整表替换会重置默认态绑定 = 已知 deferred 行为,
+ * 另存后整表替换会重置默认态绑定 = 已知 deferred 行为,
  * 不登记在 DEFERRED.md,别去那份清单找依据。
  */
 import { computed, ref, type Ref } from 'vue'
@@ -33,7 +36,6 @@ import type { DataSetSummary, Scenario, ScenarioDraft } from '@/types/scenario-c
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
-import { listAll as listAuthSessions } from '@/api/auth_sessions'
 import { stepService } from '@/types/plate'
 
 /** confirm 上送形状(RunDialog 面板 emit 的 opts,与 RunRequest 对齐) */
@@ -57,8 +59,6 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
   const draft = ref<ScenarioDraft | null>(null)
   const dataSets = ref<DataSetSummary[]>([])
   const schemes = ref<SchemeV2[]>([])
-  /** owner 凭证池别名:判定块之外取(晚到只影响下拉,不参与失效判定) */
-  const authAliases = ref<string[]>([])
   const registry = ref<AssertionRegistry>({ entries: [] })
   const loading = ref(false)
   const loaded = ref(false)
@@ -89,13 +89,9 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
     return [...rows].map(([service, declaredUrl]) => ({ service, declaredUrl }))
   })
 
-  /** 绑定下拉选项:owner 凭证池别名 ∪ 场景内置 users 键 */
-  const authOptions = computed(() => {
-    const users = Object.keys(
-      ((draft.value?.definition?.config as { users?: Record<string, unknown> } | undefined)
-        ?.users) ?? {})
-    return [...new Set([...authAliases.value, ...users])]
-  })
+  /** 绑定下拉选项(owner 凭证池 ∪ 场景内置 users)已随 authz M2a S6 绑定
+   *  瘦身退役 — 绑定选注册表别名,不再选凭证;别名候选/降级判定见
+   *  utils/run-bindings.aliasCandidates / degradedAlias(面板自取注册表)。 */
 
   /** stepTo 下拉展示名:平台编排态 orchestration.steps[].name(plate 无 name) */
   const stepNames = computed<string[]>(() =>
@@ -131,15 +127,6 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
       return false
     } finally {
       loading.value = false
-    }
-    // 凭证池不可达不阻塞装配(下拉少几项,方案判定不依赖它)。
-    // 同步抛与异步拒都要兜 — list() 里 http.get 在无适配器环境会同步炸。
-    if (authAliases.value.length === 0) {
-      try {
-        listAuthSessions()
-          .then((sessions) => { authAliases.value = sessions.map((s) => s.alias) })
-          .catch(() => { /* 凭证池不可达不阻塞运行 */ })
-      } catch { /* 同上:不阻塞 */ }
     }
     return true
   }
@@ -196,10 +183,10 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
 
   return {
     // 状态
-    scenario, draft, dataSets, schemes, registry, authAliases,
+    scenario, draft, dataSets, schemes, registry,
     loading, loaded, loadError,
     // 派生
-    serviceRows, authOptions, stepNames, stepCount, steps,
+    serviceRows, stepNames, stepCount, steps,
     surface,
     // 动作
     load, refreshSchemes, saveAsScheme, dispatch,

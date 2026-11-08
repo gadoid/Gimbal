@@ -343,9 +343,10 @@
             >另有 {{ refsData.scenario_refs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
 
             <!-- 原型 H-auths-v2 抽屉底部淡红预警:与 DELETE 409 同口径
-                 (本人场景的模板/方案绑定才拦截)提前告知,避免撞 409 -->
+                 (本人场景的模板引用才拦截;M2a S6 后方案绑定不再点名凭证)
+                 提前告知,避免撞 409 -->
             <div v-if="drawerBlocking.length" class="drawer-warn" data-testid="refs-block-warn">
-              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板 / 方案绑定)</p>
+              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板)</p>
               <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
             </div>
           </template>
@@ -382,10 +383,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const store = useAuthSessionsStore()
 
-/** 引用类型 → 徽标配色档:模板引用绿、方案绑定琥珀、快照(不拦截)灰 */
+/** 引用类型 → 徽标配色档:模板引用绿、快照(不拦截)灰。
+ *  scheme(方案绑定)已随 authz M2a S6 退役 — serviceBindings 选注册表
+ *  别名,不再点名凭证,反查不会再报该种类。 */
 const KIND_TONE: Record<string, string> = {
   template: 'green',
-  scheme: 'amber',
   snapshot: 'ink',
 }
 /** token_type → 徽标配色档(与 .svc-flag 同族) */
@@ -599,12 +601,13 @@ const refsLoading = ref(false)
 const refsData = ref<AuthReferences | null>(null)
 
 /** 删除拦截预告(与后端 DELETE 409 同口径):可见引用里
- *  「本人场景 × template/scheme」的条数 — 抽屉底部淡红警示。 */
+ *  「本人场景 × template」的条数(M2a S6 后 scheme 种类已退役)—
+ *  抽屉底部淡红警示。 */
 const drawerBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!refsData.value || me == null) return []
   return refsData.value.scenario_refs.visible.filter(
-    (v) => v.owner_id === me && v.kinds.some((k) => k === 'template' || k === 'scheme'),
+    (v) => v.owner_id === me && v.kinds.includes('template'),
   )
 })
 
@@ -629,11 +632,10 @@ async function loadRefs() {
 }
 
 const KIND_LABELS: Record<string, string> = {
-  template: '模板', scheme: '方案', snapshot: '快照',
+  template: '模板', snapshot: '快照',
 }
 const KIND_TITLES: Record<string, string> = {
   template: 'steps 里的 ${auth.<alias>.*} 模板 — 下次运行会用到',
-  scheme: '运行方案的 serviceBindings 绑定 — 方案启动的 run 会注入',
   snapshot: 'config.users 的同名快照副本 — 自足,不随凭证池轮换',
 }
 

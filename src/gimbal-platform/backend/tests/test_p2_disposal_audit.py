@@ -68,16 +68,13 @@ async def test_disposal_transfer(client):
     await _mk_scenario(client, admin, "sc-p2-t")
     from app.core import db as db_module
     from app.models.composer_scenario import ComposerScenario
-    from app.models.service_alias import ServiceAlias
 
     async with db_module.SessionLocal() as s:
         from sqlalchemy import update
         await s.execute(update(ComposerScenario)
                         .where(ComposerScenario.scenario_id == "sc-p2-t")
                         .values(owner_id=victim["id"], owner_name="p2_t_victim"))
-        # victim 的个人别名
-        s.add(ServiceAlias(alias_name="p2-t-alias", base_service="b",
-                           owner_user_id=victim["id"]))
+        # (个人别名随 authz M2a S6 退役,处置面不再涉及别名)
         await s.commit()
 
     r = await client.request(
@@ -91,10 +88,6 @@ async def test_disposal_transfer(client):
                                 .where(ComposerScenario.scenario_id == "sc-p2-t"))
                 ).scalar_one()
         assert scen.owner_id == keeper["id"]          # 归属改写
-        alias = (await s.execute(select(ServiceAlias)
-                                 .where(ServiceAlias.alias_name == "p2-t-alias"))
-                 ).scalar_one()
-        assert alias.owner_user_id is None            # 个人别名转共享
 
     # 受让人收 resource_transferred 通知
     keeper_h = await register_and_login(client, "p2_t_keeper", "Test2026!")

@@ -40,11 +40,11 @@ class CarryContext:
 def materialize_run_copy(
     converted: dict[str, Any],
     *,
-    service_bindings: dict[str, dict[str, Any]] | None = None,
     resolved_auths: list[Any] | None = None,
     built_in_users: dict[str, Any] | None = None,
     carry_context: "CarryContext | None" = None,
     alias_base_urls: dict[str, str] | None = None,
+    direct_addresses: bool = True,
 ) -> dict[str, Any]:
     """返回物化后的深拷贝;入参不可变(纯函数)。
 
@@ -53,24 +53,27 @@ def materialize_run_copy(
       users``(plate convert 原样带回的作者内置凭证)一律丢弃 —— 此前以它
       为合并基座,非属主时 built_in_users 虽空,作者明文仍从 converted 进
       最终产物(导出 / suite 编排 / 订阅执行全部泄漏)
-    * services:显式绑定 url > 场景 authored > **别名 base_url**(F4 方案
-      B,2026-09-23 批次;仅对 steps 实际引用的 service 键生效,未引用键
-      原样保留;D2 env 补缺层已退役)。``alias_base_urls`` 由调用方经
+    * services:场景 authored > **③ 环境部署地址**(仅对 steps 实际引用
+      的 service 键生效,未引用键原样保留;绑定 url 一层随 authz M2a S6
+      退役)。``alias_base_urls`` 由调用方经
       ``service_aliases.base_urls_for`` 预解析传入(与 resolved_auths /
       CarryContext 同款「dispatch 预解析、纯函数物化」模式),本函数
       不查库 —— 优先级链的唯一组装点在此,两调用方(执行/导出)自动同源。
     * carry:预解析上下文注入(填缺失语义;spec §4)
+    * ``direct_addresses=False``(原 5,项目 / 公共区):场景自带的
+      ``config.services`` 整表不生效,地址只来自 ③(调用方取
+      ``ExecPrep.direct_addresses``)
     """
     out = copy.deepcopy(converted)
     cfg = out.setdefault("config", {})
     if not isinstance(cfg, dict):        # 防御:converted.config 非 dict(与
         cfg = {}                          # _inject_* 现防御一致)
         out["config"] = cfg
-    cfg["services"] = dict(cfg.get("services") or {})
+    cfg["services"] = (dict(cfg.get("services") or {})
+                       if direct_addresses else {})
     cfg["users"] = dict(cfg.get("users") or {})
 
     _apply_services(cfg, steps=out.get("steps") or [],
-                    bindings=service_bindings or {},
                     alias_base_urls=alias_base_urls or {})
     _apply_users(cfg, resolved_auths or [], built_in_users=built_in_users or {})
     if carry_context is not None:
@@ -153,22 +156,18 @@ def _usable_declared_url(value) -> bool:
 
 
 def service_url_resolved(
-    svc: str, *, declared: dict | None, bindings: dict | None,
+    svc: str, *, declared: dict | None,
     alias_base_urls: dict[str, str] | None = None,
 ) -> bool:
-    """服务地址三层链判定(① 显式绑定 url > ② 场景 authored 声明
-    (值须为非空字符串,去空白)> ③ 别名 base_url)—— 物化(:func:
+    """服务地址链判定(② 场景 authored 声明(值须为非空字符串,去空白)
+    > ③ 环境部署地址;① 绑定 url 随 authz M2a S6 退役)—— 物化(:func:
     `_apply_services`)与预检(run_precheck.unbound_services)共用
     同一优先级链,规则不得第二份重写(N1-7 评审附注)。
 
-    ``declared`` 即物化侧的 ``config.services``(authored 层)。空/全
-    空白声明(键在值空)不算落点 —— 继续走 ③ 别名补齐(空值不是
-    authored 钉的地址,挡住 ③ 只会把缺口推迟到引擎报错);三层皆缺
-    返回 False,留缺口给引擎显式报错(RunDialog 并集行提前发现)。
+    ``declared`` 即物化侧的 ``config.services``(authored 层;项目 / 公共
+    区由调用方传空,原 5)。空/全空白声明不算落点 —— 继续走 ③ 补齐;
+    两层皆缺返回 False,留缺口给引擎显式报错。
     """
-    bound = (bindings or {}).get(svc)
-    if isinstance(bound, dict) and bound.get("url"):
-        return True
     if _usable_declared_url((declared or {}).get(svc)):
         return True
     return bool((alias_base_urls or {}).get(svc))
@@ -176,33 +175,26 @@ def service_url_resolved(
 
 def resolve_service_sources(
     steps: list, *, declared: dict | None = None,
-    bindings: dict[str, dict] | None = None,
     alias_base_urls: dict[str, str] | None = None,
 ) -> dict[str, dict]:
     """每个被引用服务的解析结果(webhook v4 §3.2/§7.1,**只读**):
 
-    ``{svc: {url, source: binding_url | authored | alias, alias?}}`` ——
-    优先级链与 :func:`_apply_services` / :func:`service_url_resolved`
-    同一实现,不另写裁决。层数含义:
+    ``{svc: {url, source: authored | alias, alias?}}`` —— 优先级链与
+    :func:`_apply_services` / :func:`service_url_resolved` 同一实现,
+    不另写裁决。层数含义:
 
-    * ``binding_url`` — 方案/请求显式绑定 url(①层,直连,范围外标记);
-    * ``authored`` — 场景声明 url(②层,直连,范围外标记);
-    * ``alias`` — 别名表 base_url(③层,服务键即别名,进令牌范围判定)。
+    * ``authored`` — 场景声明 url(②层,直连,范围外标记;私有区才有);
+    * ``alias`` — ③ 层地址(服务键即别名,进令牌范围判定)。
 
-    三层皆缺的键不返回(留缺口给引擎显式报错 —— 与物化同口径)。
+    两层皆缺的键不返回(留缺口给引擎显式报错 —— 与物化同口径)。
     ``resolvedServices`` 追溯(§7.1)与令牌范围的别名集计算共用本函数。
     """
     declared = declared or {}
-    bindings = bindings or {}
     alias_base_urls = alias_base_urls or {}
     out: dict[str, dict] = {}
     for svc in referenced_services(steps):
-        bound = bindings.get(svc)
-        bound_url = bound.get("url") if isinstance(bound, dict) else None
         alias_url = alias_base_urls.get(svc)
-        if bound_url:
-            out[svc] = {"url": bound_url, "source": "binding_url"}
-        elif _usable_declared_url(declared.get(svc)):
+        if _usable_declared_url(declared.get(svc)):
             out[svc] = {"url": declared[svc], "source": "authored"}
         elif alias_url:
             out[svc] = {"url": alias_url, "source": "alias", "alias": svc}
@@ -210,31 +202,23 @@ def resolve_service_sources(
 
 
 def _apply_services(cfg: dict, *, steps: list,
-                    bindings: dict[str, dict],
                     alias_base_urls: dict[str, str] | None = None) -> None:
-    """services 物化优先级链的唯一组装点(F4 方案 B 定稿):
+    """services 物化优先级链的唯一组装点:
 
-    ① 显式绑定 url(RunDialog 现场填)> ② 场景 authored 声明(非空
-    字符串值,:func:`_usable_declared_url`)> ③ service_aliases.base_url
-    > ④ 缺口留给引擎显式报错(RunDialog 并集行提前发现)。③ 层只填
-    「无可用声明值且未绑定 url」的引用键(空/全空白声明视同缺 ——
-    可被 ③ 补上,非空 authored 不被覆盖;与预检 strip 口径同一判断,
-    不漂移),与凭证默认「场景显式 > 注册表默认」同款裁决,不发明
-    新语义。三层落点判定共用 :func:`service_url_resolved`(与预检
-    同源)。
+    ② 场景 authored 声明(非空字符串值,:func:`_usable_declared_url`;
+    项目 / 公共区调用方已清空,原 5)> ③ 环境部署地址 > ④ 缺口留给
+    引擎显式报错。③ 层只填「无可用声明值」的引用键(空/全空白声明
+    视同缺,与预检 strip 口径同一判断)。落点判定共用
+    :func:`service_url_resolved`(与预检同源)。① 绑定 url 随 authz
+    M2a S6 退役。
     """
     services: dict[str, Any] = cfg["services"]
     for svc in referenced_services(steps):
         if not service_url_resolved(
-                svc, declared=services, bindings=bindings,
-                alias_base_urls=alias_base_urls):
+                svc, declared=services, alias_base_urls=alias_base_urls):
             continue                                  # ④ 缺口,引擎报错
-        bound = bindings.get(svc)
-        bound_url = bound.get("url") if isinstance(bound, dict) else None
-        if bound_url:
-            services[svc] = bound_url                    # ① 显式绑定最优先
-        elif not _usable_declared_url(services.get(svc)):
-            services[svc] = alias_base_urls[svc]         # ③ 别名默认(仅补缺,空/全空白声明视同缺)
+        if not _usable_declared_url(services.get(svc)):
+            services[svc] = alias_base_urls[svc]      # ③ 仅补缺
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:

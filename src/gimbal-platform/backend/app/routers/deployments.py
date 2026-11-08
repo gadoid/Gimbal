@@ -2,11 +2,9 @@
 
 读 = 登录用户(地址不是秘密,编排/运行面要展示将生效的地址);写 =
 Admin+(ops.write,与环境组写面同级的团队共享配置)。同键重复 409;
-审计 ``deployment.write``。
-
-``GET /deployments/conflicts``:S2.0 回填时同键地址不一致而**没有落行**
-的 (基础服务, 环境) —— 这些键运行时各别名回退自带地址,等 Admin 在
-部署表页显式裁定(建一行即生效)。
+审计 ``deployment.write``。S6 起部署表是地址的唯一来源(别名自带地址
+随 0047 退役;S2 的「冲突裁定」读面一并退役,0047 的未落行冲突进迁移
+报告与 Admin 通知)。
 """
 from __future__ import annotations
 
@@ -22,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser, MemberUser
 from ..models import Deployment, Environment
-from ..models.service_alias import ServiceAlias
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
 
@@ -69,14 +66,6 @@ class DeploymentOut(BaseModel):
     base_url: str = Field(alias="baseUrl")
 
 
-class ConflictOut(BaseModel):
-    model_config = _CAMEL
-    base_service: str = Field(alias="baseService")
-    env_id: int = Field(alias="envId")
-    # 别名名 → 自带地址(裁定参考)
-    aliases: dict[str, str]
-
-
 def _out(d: Deployment) -> DeploymentOut:
     return DeploymentOut(id=d.id, baseService=d.base_service,
                          envId=d.env_id, baseUrl=d.base_url)
@@ -105,30 +94,6 @@ async def list_deployments(
     if env_id is not None:
         stmt = stmt.where(Deployment.env_id == env_id)
     return [_out(d) for d in (await db.execute(stmt)).scalars().all()]
-
-
-@router.get("/conflicts", response_model=list[ConflictOut],
-            response_model_by_alias=True)
-async def list_conflicts(user: MemberUser, db: DbSession) -> Any:
-    """同键地址不一致且尚无部署行的键(挂环境的按其环境、没挂的按默认
-    环境归组 —— 与 0044 回填同口径)。"""
-    default = (await db.execute(select(Environment.id).where(
-        Environment.is_default.is_(True)))).scalar()
-    rows = (await db.execute(select(
-        ServiceAlias.alias_name, ServiceAlias.base_service,
-        ServiceAlias.base_url, ServiceAlias.environment_id).where(
-            ServiceAlias.base_url.is_not(None)))).all()
-    groups: dict[tuple[str, int], dict[str, str]] = {}
-    for alias, base, url, env in rows:
-        eid = env if env is not None else default
-        if eid is None or not url:
-            continue
-        groups.setdefault((base, eid), {})[alias] = url
-    existing = set((await db.execute(select(
-        Deployment.base_service, Deployment.env_id))).all())
-    return [ConflictOut(baseService=b, envId=e, aliases=dict(sorted(m.items())))
-            for (b, e), m in sorted(groups.items())
-            if len(set(m.values())) > 1 and (b, e) not in existing]
 
 
 @router.post("", response_model=DeploymentOut, status_code=201,

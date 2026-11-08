@@ -175,7 +175,6 @@
           :data-sets="assembly.dataSets.value"
           :schemes="assembly.schemes.value"
           :service-rows="assembly.serviceRows.value"
-          :auth-options="assembly.authOptions.value"
           :step-orchestration-names="assembly.stepNames.value"
           :assertion-entries="assembly.registry.value.entries"
           :dead-entry-ids="assembly.surface.deadIds.value"

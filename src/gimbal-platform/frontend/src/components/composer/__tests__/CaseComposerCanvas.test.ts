@@ -923,13 +923,12 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
-  it('F4 注入(2026-09-23 调整):选中带凭证的已登记别名 → headers 直接写入 ${auth.*} 行,既有 Authorization(含大小写变体)先清', async () => {
+  it('F4 注入(M2a S6 槽位口径):选中声明了槽位的已登记别名 → headers 直接写入 ${auth.*} 行,既有 Authorization(含大小写变体)先清', async () => {
     const { listAllAliases } = await import('@/api/service-aliases')
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        baseUrl: 'https://uat.fin.local', environmentId: null, environmentName: null,
-        credentialAlias: 'uat-cred', ownerUserId: null,
+        slot: 'uat-cred', kind: 'plate' as const,
         createdAt: '', updatedAt: '',
       },
     ] as never)
@@ -952,20 +951,18 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
-  it('F4 注入:headers 原本为空 → 注入 Authorization 行;无凭证绑定的已登记别名不注入', async () => {
+  it('F4 注入:headers 原本为空 → 注入 Authorization 行;未声明槽位的已登记别名不注入', async () => {
     const { listAllAliases } = await import('@/api/service-aliases')
     const s0 = stepOf('fin-service')
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        baseUrl: 'https://uat.fin.local', environmentId: null, environmentName: null,
-        credentialAlias: 'uat-cred', ownerUserId: null,
+        slot: 'uat-cred', kind: 'plate' as const,
         createdAt: '', updatedAt: '',
       },
       {
         aliasName: 'fin-service-bare', baseService: 'fin-service',
-        baseUrl: 'https://bare.fin.local', environmentId: null, environmentName: null,
-        credentialAlias: null, ownerUserId: null,
+        slot: null, kind: 'plate' as const,
         createdAt: '', updatedAt: '',
       },
     ] as never)
@@ -998,8 +995,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-bare', baseService: 'fin-service',
-        baseUrl: 'https://bare.fin.local', environmentId: null, environmentName: null,
-        credentialAlias: null, ownerUserId: null,
+        slot: null, kind: 'plate' as const,
         createdAt: '', updatedAt: '',
       },
     ] as never)

@@ -65,11 +65,11 @@ async def test_update_default_locks_name_and_clears_injection(client):
         got = await scheme_store.update_scheme(db, sid, d["schemeId"],
             name="改名应被忽略",
             payload={"dataSetSelection": [{"datasetId": "ds-001", "rowIndexes": [0]}],
-                     "injectionEntryIds": ["inj-1"], "serviceBindings": {"svc": {}},
+                     "injectionEntryIds": ["inj-1"], "serviceBindings": {"svc": {"alias": "svc-a"}},
                      "options": {"step_from": None, "step_to": 2, "n_runs": 3, "parallel": 2, "subscribe": None}})
         assert got["name"] == scheme_store.DEFAULT_SCHEME_NAME
         assert got["dataSetSelection"] == [] and got["injectionEntryIds"] == []
-        assert got["serviceBindings"] == {"svc": {}} and ((got.get("options") or {}).get("n_runs")) == 3
+        assert got["serviceBindings"] == {"svc": {"alias": "svc-a"}} and ((got.get("options") or {}).get("n_runs")) == 3
 
 
 async def test_delete_default_protected(client):

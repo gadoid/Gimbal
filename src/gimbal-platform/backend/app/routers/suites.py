@@ -31,7 +31,7 @@ from ..core.deps import CurrentUser
 from ..models.execution import Execution
 from ..models.suite import Suite, SuiteMember
 from ._error_mapping import not_found_404
-from ..schemas.scenario_composer import RunRequest
+from ..schemas.scenario_composer import RunRequest, scrub_retired_bindings
 from ..schemas.suite import (
     SuiteCompositionIn, SuiteCreateIn, SuiteDetailOut, SuiteLookupItem,
     SuiteMembersAddIn, SuiteMembersOrderIn, SuiteMemberOut, SuitePageOut,
@@ -898,7 +898,8 @@ def _req_from_scheme(
         dataSetIds=scheme.get("dataSetIds") or [],
         dataSetSelection=scheme.get("dataSetSelection") or [],
         injectionEntryIds=scheme.get("injectionEntryIds") or [],
-        serviceBindings=scheme.get("serviceBindings") or {},
+        serviceBindings=scrub_retired_bindings(
+            scheme.get("serviceBindings")),
         runOptions=scheme.get("options") or None,
         schemeId=scheme.get("schemeId"),
         schemeName=scheme.get("name"),

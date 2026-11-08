@@ -55,15 +55,17 @@ def upgrade() -> None:
             FROM (SELECT id FROM projects WHERE kind = 'public') AS p
             WHERE scope = 'project' AND scope_id = 0
         """))
-    # ② 个人别名键下的行 → 属主个人层
-    bind.execute(sa.text("""
-        UPDATE carry_service_bindings b SET scope = 'user',
-               scope_id = a.owner_user_id
-        FROM service_aliases a
-        WHERE a.alias_name = b.service_name
-          AND a.owner_user_id IS NOT NULL
-          AND b.scope = 'project'
-    """))
+    # ② 个人别名键下的行 → 属主个人层(fresh 链守卫:0047 删
+    # owner_user_id 后 baseline 无此列,也就无个人别名)
+    if _has_column(bind, "service_aliases", "owner_user_id"):
+        bind.execute(sa.text("""
+            UPDATE carry_service_bindings b SET scope = 'user',
+                   scope_id = a.owner_user_id
+            FROM service_aliases a
+            WHERE a.alias_name = b.service_name
+              AND a.owner_user_id IS NOT NULL
+              AND b.scope = 'project'
+        """))
 
     # ③ 换唯一键(scope 前缀;约束名沿用旧名 —— 与模型 create_all 同形)。
     # 同键冲突只可能来自防御分支的 scope_id=0 行:保留已挂靠行、删 0 行

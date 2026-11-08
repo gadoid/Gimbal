@@ -2,10 +2,10 @@
  * useRunAssembly — 执行装配公共体(执行设计 §1.5 收编后的唯一实现)。
  *
  * 原三处副本(RunPanelHost 死代码 / CaseComposer 内联 / SchemeWorkbench 镜像)
- * 中唯一从未被测试钉住的就是 authOptions 派生(§1.5 复核结论)— 本文件补上,
- * 顺带钉住:
+ * 收编后钉住:
  * - UA-1 4 路并行取数 + dataSets/registry/schemes 同 tick 落(活方案不闪「已失效」)
- * - UA-2 authOptions = owner 凭证池 ∪ 场景内置 users 键(去重;凭证池失败不阻塞)
+ * - UA-2 凭证池/authOptions 派生已随 authz M2a S6 绑定瘦身退役(绑定选注册表
+ *   别名,不再选凭证;装配体不取凭证池)— 这里钉住退役面不再暴露
  * - UA-3 serviceRows = 声明 ∪ 引用并集(D3;声明源 = draft definition.config.services)
  * - UA-4 dispatch 段:RunRequest 配方键(dataSetIds 派生 + 权威键 + 溯源恒带,
  *   退役键不出现);batchId 由调用方经 runScenario 层传,不在这里
@@ -18,14 +18,6 @@ import * as api from '@/api/scenario-composer'
 import type { SchemeV2 } from '@/api/scenario-composer'
 import { useRunAssembly } from '@/composables/useRunAssembly'
 import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
-
-vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve({
-    items: [{ alias: 'pool-1' }, { alias: 'shared' }],
-    total: 2, page: 1, pageSize: 200,
-  })),
-  listAll: vi.fn(() => Promise.resolve([{ alias: 'pool-1' }, { alias: 'shared' }])),
-}))
 
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-dft', name: '默认方案', isDefault: true,
@@ -64,19 +56,14 @@ async function mountedAssembly() {
 }
 
 describe('useRunAssembly — 取数与派生(执行设计 §1.5)', () => {
-  it('UA-2 authOptions = owner 凭证池 ∪ 场景内置 users 键,去重(三处副本里唯一没被钉住的一处)', async () => {
+  it('UA-2 凭证池/authOptions 派生已随 M2a S6 绑定瘦身退役:装配体不再暴露', async () => {
     const { asm } = await mountedAssembly()
-    // 场景内置 users.shared 与凭证池 pool-1/shared 有交集 → 并集去重
-    expect(asm.authOptions.value).toEqual(['pool-1', 'shared', 'builtin'])
-    w_unmount_safe()
-  })
-
-  it('UA-2b 凭证池不可达不阻塞装配:authOptions 仍有内置 users', async () => {
-    const { listAll } = await import('@/api/auth_sessions')
-    vi.mocked(listAll).mockImplementation(() => Promise.reject(new Error('down')))
-    const { asm } = await mountedAssembly()
+    // M2a S6 前这里派生「owner 凭证池 ∪ 场景内置 users」供绑定下拉;现在
+    // 绑定选注册表别名(RunConfigPanel/SchemeRunConfigSection 自取注册表),
+    // 装配体不再取凭证池、不再暴露 authOptions/authAliases
+    expect('authOptions' in asm).toBe(false)
+    expect('authAliases' in asm).toBe(false)
     expect(asm.loaded.value).toBe(true)
-    expect(asm.authOptions.value).toEqual(['shared', 'builtin'])
     w_unmount_safe()
   })
 

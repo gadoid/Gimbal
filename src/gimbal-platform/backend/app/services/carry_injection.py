@@ -18,6 +18,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import carry_store, service_names
+from .service_aliases import effective_alias
 from .endpoint_declarations import declarations_of
 from .field_state_resolution import carry_face
 from .run_materialize import CarryContext
@@ -67,6 +68,7 @@ async def build_carry_context(
     *,
     project_id: int | None = None,
     user_id: int | None = None,
+    bindings: dict | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
@@ -148,11 +150,15 @@ async def build_carry_context(
             # S4:逐 tier 合并(后者覆盖前者);层内沿用别名键稀疏覆盖
             # (服务画像方案 §4.1:精确别名键 > base 服务键 > 层默认 —
             # 字段级 merge,别名行只覆盖它填的那几个字段)
+            # S6:别名键 = 服务键的生效别名(方案选 fin → fin-maker 即吃
+            # fin-maker 的别名键覆盖;同基础服务已由绑定校验保证)
+            alias_key = effective_alias(raw, bindings)
             rows: dict[str, str | None] = {}
             for t in tiers:
                 rows_t = await carry_store.get_bindings(db, base, t)
-                if base != raw:
-                    override = await carry_store.get_bindings(db, raw, t)
+                if base != alias_key:
+                    override = await carry_store.get_bindings(
+                        db, alias_key, t)
                     if override:
                         rows_t = {**rows_t, **override}
                 rows = {**rows, **rows_t}

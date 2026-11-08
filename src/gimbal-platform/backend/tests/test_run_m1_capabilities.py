@@ -175,8 +175,10 @@ async def test_parallel_limits_concurrency(
 
 # ── serviceBindings 绑定注入 ─────────────────────────────────────
 async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
-    """建一个 config.users 里带内置认证 qa1 的场景 + case/ds。"""
-    draft = _draft(steps=[{"id": "s1"}])
+    """建一个 config.users 里带内置认证 qa1 的场景 + case/ds。步骤引用
+    服务 svc(S6:绑定只对 steps 实际引用的服务键选别名)。"""
+    draft = _draft(steps=[{"id": "s1", "kind": "step",
+                           "call": {"service": "svc", "path": "/x"}}])
     draft["definition"]["config"]["users"] = {
         "qa1": {"url": "http://builtin", "username": "u0", "password": "p0"}
     }
@@ -208,7 +210,8 @@ async def test_service_binding_auth_merge_keeps_built_in(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """绑定 authAlias 注入 users,场景内置 users 保留(固定 merge)。"""
+    """绑定选别名(S6:svc → svc-qa9,声明槽位 qa9)注入 users,场景
+    内置 users 保留(固定 merge)。"""
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
     # S5 失败即中止:绑定 qa9 须在执行人池(dispatch 取用检查不走
@@ -223,6 +226,9 @@ async def test_service_binding_auth_merge_keeps_built_in(
         _s.add(_AS(owner_id=_uid, alias="qa9", url="http://auth9",
                    username_enc=_fe("exec-user"), password_enc=_fe("p"),
                    slot="qa9", is_default=True))
+        from app.models.service_alias import ServiceAlias as _SA
+        _s.add(_SA(alias_name="svc-qa9", base_service="svc",
+                   kind="external", slot="qa9"))
         await _s.commit()
 
     from app.services import run_dispatcher as rd
@@ -237,7 +243,7 @@ async def test_service_binding_auth_merge_keeps_built_in(
     monkeypatch.setattr(rd, "resolve_exec_auths", _fake_resolve)
 
     r = await _post_run(
-        client, bob, serviceBindings={"svc": {"authAlias": "qa9"}}
+        client, bob, serviceBindings={"svc": {"alias": "svc-qa9"}}
     )
     assert r.status_code == 201, r.text
     await _wait(lambda: len(payloads) >= 1)

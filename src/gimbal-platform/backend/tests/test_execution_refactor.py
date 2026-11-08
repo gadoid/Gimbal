@@ -348,13 +348,25 @@ async def _make_scheme(client: AsyncClient, headers: dict, name: str, **over) ->
 async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     client: AsyncClient, plate_mock: PlateMock
 ) -> None:
+    from app.core import db as db_module
+    from app.models import Deployment, Environment
+
     auth = await _member(client, "alice")
     await _setup_scenario(client, auth)          # steps 引用 fin.order,声明 services 缺
     await _seed_empty_ds(client, auth)
+    # S6:方案选环境 → 该环境部署表给 fin.order 地址(绑定 url 退役)
+    async with db_module.SessionLocal() as db:
+        env = Environment(name="er-dev", lines={})
+        db.add(env)
+        await db.flush()
+        db.add(Deployment(base_service="fin.order", env_id=env.id,
+                          base_url="http://fin"))
+        await db.commit()
+        env_id = env.id
 
     good = await _make_scheme(client, auth, "好方案",
                               injectionEntryIds=["inj-live"],
-                              serviceBindings={"fin.order": {"url": "http://fin"}})
+                              environmentId=env_id)
     bad = await _make_scheme(client, auth, "坏方案",
                              dataSetSelection=[{"datasetId": "ds-gone", "rowIndexes": []}],
                              injectionEntryIds=["inj-live", "inj-dead"])
@@ -366,7 +378,7 @@ async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     assert r.status_code == 200, r.text
     res = {x["schemeId"]: x for x in r.json()}
     good_res, bad_res = res[good], res[bad]
-    # 好方案:数据集在、条目活、绑定给了 URL → 可跑
+    # 好方案:数据集在、条目活、方案环境有部署地址 → 可跑
     assert good_res["schemeValid"] is True
     assert good_res["deadDatasetIds"] == [] and good_res["danglingEntryIds"] == []
     assert good_res["unboundServices"] == []
@@ -374,7 +386,7 @@ async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     assert bad_res["schemeValid"] is False
     assert bad_res["deadDatasetIds"] == ["ds-gone"]
     assert bad_res["danglingEntryIds"] == ["inj-dead"]
-    # fin.order 无声明 URL、坏方案未绑 → 未落点(好方案绑了 URL 所以干净)
+    # fin.order 无声明 URL、坏方案无环境(无默认环境)→ 未落点
     assert bad_res["unboundServices"] == ["fin.order"]
 
 
@@ -437,20 +449,20 @@ async def test_precheck_alias_base_url_not_unbound(
 ) -> None:
     """N1-7:别名表 base_url(③层)不算未落点 —— 与执行期三层链同口径。
 
-    执行物化 _apply_services 是 ①绑定>②声明>③别名 base_url;预检此前
-    只判 ①②,fin.order 无声明无绑定时被误报 unbound —— 但执行期③层
-    能补上(预检拦了、执行能跑)。
+    执行物化 _apply_services 是 ②声明>③部署地址;预检此前只判声明层,
+    fin.order 无声明时被误报 unbound —— 但执行期③层能补上(预检拦了、
+    执行能跑)。S6:③ = 默认环境部署表。
     """
     from app.core import db as db_module
-    from app.models.service_alias import ServiceAlias
+
+    from .helpers import seed_deployment
 
     auth = await _member(client, "alice")
     await _setup_scenario(client, auth)      # steps 引用 fin.order,声明 services 缺
     scheme = await _make_scheme(client, auth, "无绑定方案")
 
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin.order", base_service="fin.order",
-                            base_url="http://fin-alias"))
+        await seed_deployment(db, "fin.order", "http://fin-alias")
         await db.commit()
 
     r = await client.post("/api/run/precheck", headers=auth, json=[
@@ -469,7 +481,8 @@ async def test_precheck_empty_declaration_not_resolved(
     存在即算,预检与执行一起漏报,空值被带进 case 到引擎才炸);
     有③层时算可解析(执行期用别名地址盖掉空值)。"""
     from app.core import db as db_module
-    from app.models.service_alias import ServiceAlias
+
+    from .helpers import seed_deployment
 
     auth = await _member(client, "alice")
     await _setup_scenario(client, auth, services={"fin.order": ""})
@@ -483,8 +496,7 @@ async def test_precheck_empty_declaration_not_resolved(
     assert res["unboundServices"] == ["fin.order"]     # 空声明 ≠ 落点
 
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin.order", base_service="fin.order",
-                            base_url="http://fin-alias"))
+        await seed_deployment(db, "fin.order", "http://fin-alias")
         await db.commit()
 
     r = await client.post("/api/run/precheck", headers=auth, json=[

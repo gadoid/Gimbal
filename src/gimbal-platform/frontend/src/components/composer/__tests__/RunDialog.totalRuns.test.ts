@@ -52,7 +52,7 @@ function mountDialog(schemes: SchemeV2[]) {
     props: {
       scenario, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes, serviceRows: [], authOptions: [],
+      schemes, serviceRows: [],
     },
     global: { plugins: [], stubs: { teleport: true } },
   })

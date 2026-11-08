@@ -394,7 +394,8 @@ async def _require_token_scope(
     scheme_payload = await _scheme_payload_for(db, scen, scheme_id)
     bindings = dict((scheme_payload or {}).get("serviceBindings") or {})
     used = await at_svc.used_sets_for_definition(
-        db, definition_from_payload(scen.payload), bindings)
+        db, definition_from_payload(scen.payload), bindings,
+        project_id=scen.project_id)
     missing = await at_svc.check_scope(
         db, principal.token, principal.user.id, used)
     if missing:

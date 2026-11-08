@@ -6,16 +6,8 @@ id + 来源),派发时落 ``config_json``(重跑按快照回放)。
 
 **地址 ③**(数据源;优先级裁决仍在 ``run_materialize._apply_services``):
 服务键先映射到基础服务(别名行的 ``base_service``,非别名即自身,
-D11),再查部署表 ``deployments[(base_service, env)]``。与别名自带
-``base_url``(旧 ③)的合并按来源分流 —— 影子期规则:
-
-* 环境来自**显式选择**(explicit/scheme/project/preference)→ 部署表
-  优先,未命中回退别名地址;
-* 环境只来自**默认环境兜底** → 别名自带地址优先,部署表只补别名没有
-  地址的键。存量「别名名即环境选择器」(``fin-dev`` / ``fin-sit``)
-  在没人显式选环境时行为与旧链逐字节相同(D2)。
-
-S6 删别名 ``base_url`` 时两支合一,本模块的回退分支随之退役。
+D11),再查部署表 ``deployments[(base_service, env)]``。S6 起部署表是
+唯一来源(别名自带 ``base_url`` 与影子期合并分支已随 0047 退役)。
 """
 from __future__ import annotations
 
@@ -34,10 +26,6 @@ from ..models.service_alias import ServiceAlias
 # 个人偏好键(user_preferences 白名单同名;值 = 环境 id)
 PREF_KEY = "run.environment"
 
-# 显式选择的来源:部署表接管别名自带地址(见模块注释)
-_EXPLICIT_SOURCES = frozenset({"explicit", "scheme", "project", "preference"})
-
-
 class EnvironmentNotFound(LookupError):
     """本次显式指定的环境不存在(调用方映射 422)。"""
 
@@ -52,14 +40,9 @@ class EnvChoice:
     env_id: int | None = None
     source: str | None = None
 
-    @property
-    def overrides_alias(self) -> bool:
-        """部署表是否接管别名自带地址(显式选择才接管)。"""
-        return self.env_id is not None and self.source in _EXPLICIT_SOURCES
-
     @classmethod
     def from_snapshot(cls, snap: dict | None) -> "EnvChoice | None":
-        """配方/快照 → 选择(缺键 / 空 = None,即旧 ③ 行为)。"""
+        """配方/快照 → 选择(缺键 / 空 = None,即无 ③)。"""
         if not snap or snap.get("environmentId") is None:
             return None
         return cls(int(snap["environmentId"]), snap.get("environmentSource"))
@@ -167,13 +150,3 @@ async def deployment_urls(
             Deployment.env_id == env_id,
             Deployment.base_service.in_(set(base_of.values()))))).all())
     return {n: rows[b] for n, b in base_of.items() if rows.get(b)}
-
-
-def merge_addresses(
-    alias_urls: dict[str, str], deploy_urls: dict[str, str],
-    env: EnvChoice,
-) -> dict[str, str]:
-    """别名自带地址与部署地址按来源合并(规则见模块注释)。"""
-    if env.overrides_alias:
-        return {**alias_urls, **deploy_urls}
-    return {**deploy_urls, **alias_urls}

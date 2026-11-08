@@ -52,7 +52,7 @@ class AuthListOut(PageOut[AuthSessionOut]):
 
 
 class AliasRefItem(BaseModel):
-    """反查面板 · 别名绑定行(service_aliases.credential_alias 命中)。"""
+    """反查面板 · 别名绑定行(service_aliases.slot 命中)。"""
 
     alias_name: str
     base_service: str

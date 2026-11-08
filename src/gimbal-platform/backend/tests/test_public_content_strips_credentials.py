@@ -40,19 +40,20 @@ def _draft_with_vars(sid: str) -> dict:
 
 
 # ── ① 主规则:谓词矩阵(built_in_users / prepare_exec 两层)────────
-@pytest.mark.parametrize("executor,owner,expect_kept", [
-    (1, 1, True),       # 执行人 = 属主 → 生效
-    (2, 1, False),      # 引用执行 / 订阅执行 / 非属主导出 → 当空
-    (None, 1, False),   # fail-closed:执行人未知 → 当空(此前放行)
-    (1, None, False),   # fail-closed:孤儿场景(属主已删)→ 当空(此前放行)
-    (None, None, False),
+@pytest.mark.parametrize("executor,owner,project,expect_kept", [
+    (1, 1, None, True),     # 私有区 + 执行人 = 属主 → 生效
+    (2, 1, None, False),    # 引用执行 / 订阅执行 / 非属主导出 → 当空
+    (None, 1, None, False),  # fail-closed:执行人未知 → 当空(此前放行)
+    (1, None, None, False),  # fail-closed:孤儿场景(属主已删)→ 当空
+    (None, None, None, False),
+    (1, 1, 7, False),       # 原 5(S6):项目/公共区 → 属主本人也当空
 ])
-def test_built_in_users_main_rule(executor, owner, expect_kept):
+def test_built_in_users_main_rule(executor, owner, project, expect_kept):
     from app.services.run_prepare import built_in_users
 
     payload = {"definition": {"config": {"users": dict(_USERS)}}}
     out = built_in_users(payload, executor_id=executor,
-                         scenario_owner_id=owner)
+                         scenario_owner_id=owner, project_id=project)
     assert bool(out) is expect_kept
     if expect_kept:
         assert out == _USERS

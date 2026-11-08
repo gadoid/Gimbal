@@ -17,7 +17,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (BaseModel, ConfigDict, Field, field_validator,
+                      model_validator)
 
 from ._m2 import CheckDecl, DebugSpec, GateDecl, RunOptions
 
@@ -216,15 +217,47 @@ class DataSetDraft(BaseModel):
 
 
 # ─── runs ───────────────────────────────────────────────────────────
-class ServiceBinding(BaseModel):
-    """service → {authAlias?, url?} 绑定(spec §3.1/§5)。
-    查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
-    与运行方案无关;侧车残留键被 extra=ignore 静默丢弃
-    (退场记录见 docs/adr/0003)。"""
-    model_config = _CAMEL
+# authz M2a S6:绑定里退役的两个字段(地址 = 环境 → 部署表;凭证 =
+# 槽位绑定)。带它们的请求 422,不静默丢弃 —— 调用方以为生效了更糟。
+RETIRED_BINDING_FIELDS = ("url", "authAlias", "auth_alias")
 
-    auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
-    url: str | None = Field(default=None, alias="url", max_length=512)
+
+class ServiceBinding(BaseModel):
+    """服务键 → 别名(authz M2a S6,consolidated §4.1「方案只做选择,
+    不存值」):``{"alias": "fin-maker"}`` = 服务键 ``fin`` 用别名
+    ``fin-maker`` —— 槽位默认与 carry 别名键随之切换;地址只由环境
+    决定(同基础服务校验在 ``service_aliases.validate_binding_aliases``)。
+
+    ``url`` / ``authAlias`` 已退役 → 422 ``binding_field_retired``;
+    其它未知键 422(extra=forbid)。"""
+    model_config = ConfigDict(populate_by_name=True,
+                              str_strip_whitespace=True, extra="forbid")
+
+    alias: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            hit = [k for k in RETIRED_BINDING_FIELDS if k in data]
+            if hit:
+                raise ValueError(
+                    f"binding_field_retired: serviceBindings 不再接受 "
+                    f"{', '.join(hit)}(地址由环境的部署地址给出,凭证由"
+                    "槽位绑定给出;绑定只能选择别名 alias)")
+        return data
+
+
+def scrub_retired_bindings(raw: Any) -> dict[str, dict]:
+    """历史形态(归档 config_json / 升级前入队的配方)→ 现行形态:剥离
+    退役字段(url/authAlias),无 alias 的条目丢弃。只用于**回放历史
+    数据**;新请求带退役字段一律 422(:class:`ServiceBinding`)。"""
+    out: dict[str, dict] = {}
+    for k, v in (raw.items() if isinstance(raw, dict) else ()):
+        alias = v.get("alias") if isinstance(v, dict) else None
+        if isinstance(alias, str) and alias.strip():
+            out[str(k)] = {"alias": alias.strip()}
+    return out
 
 
 class DataSetSelection(BaseModel):
@@ -398,11 +431,9 @@ class RunRequest(BaseModel):
     data_set_selection: list[DataSetSelection] = Field(
         default_factory=list, alias="dataSetSelection"
     )
-    # service → {authAlias?, url?} 绑定(spec §3.1/§5):注入清单 =
-    # 模板扫描(steps 里的 ${auth.*} 引用)∪ 绑定 authAlias;绑定 url
-    # 物化进 services(显式绑定最优先)。旧凭证策略四字段(auths /
-    # inject_credentials / prefix / merge 策略)已退役(spec §6)—
-    # 旧客户端多发的键被 pydantic 静默忽略,仅失效、不 422。
+    # 服务键 → 别名(authz M2a S6;url/authAlias 退役 → 422)。旧凭证
+    # 策略四字段(auths / inject_credentials / prefix / merge 策略)已
+    # 退役(spec §6)— 旧客户端多发的顶层键被静默忽略,仅失效、不 422。
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )

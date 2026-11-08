@@ -240,12 +240,22 @@ def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
     return sorted(str(k) for k in (users or {}))
 
 
+def zone_allows_direct(project_id: int | None) -> bool:
+    """原 5(authz M2a S6):场景内的直连地址(``config.services``)与内置
+    凭证(``config.users``)只在**私有区**生效;项目区 / 公共区(场景
+    ``project_id`` 非空)一律不生效 —— 地址只来自环境部署表,凭证只来自
+    执行人的槽位绑定。执行 / 导出 / 预检 / 生效预览 / 令牌范围同口径。"""
+    return project_id is None
+
+
 def built_in_users(
     scenario_payload: dict | None, *,
     executor_id: int | None,
     scenario_owner_id: int | None,
+    project_id: int | None,
 ) -> dict[str, Any]:
-    """场景 definition.config.users —— 仅当执行人 == 场景属主时返回。
+    """场景 definition.config.users —— 仅当执行人 == 场景属主、且场景在
+    私有区时返回。
 
     authz W6 主规则(评审 R3):其余(share_ref 引用执行 / 订阅执行 /
     非属主导出 / suite 跑他人成员)一律当空。**fail-closed**:两参必填,
@@ -253,7 +263,12 @@ def built_in_users(
     = 不判直接放行。作者即席提供 payload 的路径(草稿预览、临时调用)
     由调用方显式传 ``scenario_owner_id = executor_id``。只要名字的展示面
     用 :func:`built_in_user_aliases`。
+
+    ``project_id``(必填,原 5):项目 / 公共区场景当空(属主本人执行
+    同样当空 —— 区规则不看人)。
     """
+    if not zone_allows_direct(project_id):
+        return {}
     if executor_id is None or executor_id != scenario_owner_id:
         return {}
     def_cfg = definition_from_payload(scenario_payload).get("config") or {}
@@ -354,6 +369,8 @@ class ExecPrep:
     alias_base_urls: dict[str, str] = field(default_factory=dict)   # 地址③层数据源
     carry_ctx: Any = None                                    # CarryContext | None
     built_in_users: dict[str, Any] = field(default_factory=dict)
+    # 原 5:场景直连地址(authored)是否生效 —— 私有区 True,项目/公共区 False
+    direct_addresses: bool = True
     meta_plate: dict[str, str] = field(default_factory=dict)  # 生效修订(已写回 definition)
     plate_pins: dict[str, str] = field(default_factory=dict)
     # 台账输入(resolve_mode="single" 时随修订解析一并产出,供执行侧
@@ -377,7 +394,7 @@ async def prepare_exec(
     compose → convert → materialize_run_copy 不变)。
 
     * 凭证清单:``service_aliases.exec_auth_aliases``(模板扫描 ∪
-      绑定 authAlias ∪ 别名表凭证默认)—— 算法单源,调用方不可自选;
+      生效别名声明槽位)—— 算法单源,调用方不可自选;
     * 凭证解析:``resolve_exec_auths``(owner 级);``strict`` 下缺别名
       抛 :class:`MissingAuthAliases`(集成链捕获 → 暂停实例),
       ``lenient`` 仅记录(执行期步骤级报错);``with_auth=False``
@@ -407,9 +424,11 @@ async def prepare_exec(
     steps = definition.get("steps") or []
     # authz W6 主规则:executor(owner_id = 凭证池归属,即执行人)≠
     # 场景属主 ⇒ 内置 users 基座当空(R3)
-    prep = ExecPrep(built_in_users=built_in_users(
-        scenario_payload, executor_id=owner_id,
-        scenario_owner_id=scenario_owner_id))
+    prep = ExecPrep(
+        built_in_users=built_in_users(
+            scenario_payload, executor_id=owner_id,
+            scenario_owner_id=scenario_owner_id, project_id=project_id),
+        direct_addresses=zone_allows_direct(project_id))
 
     # ①② 凭证清单 + 解析(owner 级短会话);清单扫描源含 config.setup/
     # teardown(webhook v4 §3.2 —— setup 引用的凭证同时进清单与注入)
@@ -481,7 +500,8 @@ async def prepare_exec(
             prep.carry_ctx = await build_carry_context(
                 s, definition, ui_field_states=ui_field_states,
                 project_id=project_id,
-                user_id=(owner_id if project_id is None else None))
+                user_id=(owner_id if project_id is None else None),
+                bindings=bindings)
     except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
         logger.opt(exception=True).warning(
             "run_prepare: carry context build failed; skipped")
@@ -521,22 +541,20 @@ async def resolve_effective_config(
     steps = definition.get("steps") or []
     declared = (definition.get("config") or {}).get("services")
     declared = declared if isinstance(declared, dict) else {}
+    if not zone_allows_direct(project_id):
+        declared = {}        # 原 5:项目/公共区不吃直连地址
     env = environment if isinstance(environment, EnvChoice) else None
 
-    # 地址:③ 层合并结果 + 来源拆分(deployment vs alias)
+    # 地址:② authored(私有区)> ③ 环境部署表(S6 起唯一 ③ 来源)
     svcs = referenced_services(steps)
     full = await service_aliases.base_urls_for(db, svcs, env=env)
-    alias_only = await service_aliases.base_urls_for(db, svcs)
     sources = resolve_service_sources(
-        steps, declared=declared, bindings=bindings or {},
-        alias_base_urls=full)
+        steps, declared=declared, alias_base_urls=full)
     services_out: dict[str, dict] = {}
     for svc, info in sources.items():
         out = dict(info)
         if info.get("source") == "alias":
-            hit = full.get(svc)
-            if hit is not None and hit != alias_only.get(svc):
-                out["source"] = "deployment"   # 环境部署表接管(S2.1)
+            out["source"] = "deployment"
         services_out[svc] = out
 
     # 槽位绑定:注入清单 + 取用(单源 pick_bindings)
@@ -574,11 +592,12 @@ async def resolve_effective_config(
         base = await resolve_base_with_aliases(db, raw)
         if base is None:
             continue
+        alias_key = service_aliases.effective_alias(raw, bindings)
         merged: dict[str, dict] = {}
         for t in tiers:
             t_base = await carry_store.get_bindings(db, base, t)
-            t_alias = (await carry_store.get_bindings(db, raw, t)
-                       if base != raw else {})
+            t_alias = (await carry_store.get_bindings(db, alias_key, t)
+                       if base != alias_key else {})
             for path in set(t_base) | set(t_alias):
                 if path in t_alias:
                     merged[path] = {"value": t_alias[path],
@@ -604,8 +623,8 @@ async def graph_auth_aliases(
     db_factory: Any, units: list[tuple[dict, dict]],
 ) -> list[str]:
     """Suite 编排的凭证清单:**逐单元**走 ``exec_auth_aliases``(模板
-    扫描 ∪ 绑定 authAlias ∪ 别名表凭证默认 —— 每单元用它自己合并后的
-    绑定),再对结果取并集(去重保序)。
+    扫描 ∪ 生效别名声明槽位 —— 每单元用它自己合并后的绑定),再对
+    结果取并集(去重保序)。
 
     N1-2 整改:此前 materialize_graph 只收 graph_req 单元级显式
     ``serviceBindings.authAlias``(方案级绑定不进清单、无模板扫描、
@@ -654,7 +673,8 @@ async def unit_carry_contexts(
                 return await build_carry_context(
                     s, d, ui_field_states=None,
                     project_id=meta.get("project_id"),
-                    user_id=meta.get("user_id"))
+                    user_id=meta.get("user_id"),
+                    bindings=meta.get("bindings"))
         except Exception:  # noqa: BLE001 — 单单元降级,不阻塞全图
             logger.opt(exception=True).warning(
                 "run_prepare: unit carry build failed; unit skips carry")
@@ -690,7 +710,7 @@ def build_adhoc_payload(
       (Release 6.2 存储形态:call 只存 service / user / path_params);
     * ``config`` 留空:服务地址由装载链第③层别名 base_url 补、凭证由
       注入清单(别名默认层)落 ``config.users`` —— 请求体钉不了任何 URL;
-    * ``call.user`` = 别名表 ``credential_alias``(执行器编译期:
+    * ``call.user`` = 别名声明槽位 ``slot``(执行器编译期:
       ``call.auth≠none`` 的步骤必须带 call.user,且标签须在 config.users
       —— 别名默认层正好注入该标签);别名未配凭证则省略,接口若需认证由
       执行器步骤级报错(方案 §五);

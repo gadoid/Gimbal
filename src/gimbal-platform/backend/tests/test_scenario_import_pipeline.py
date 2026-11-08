@@ -162,13 +162,15 @@ async def test_land_create_branch(client, plate_mock: PlateMock):
     assert r.json() == {"scenarioId": _SCENARIO_ID, "idMode": "keep"}
 
     async with db_module.SessionLocal() as db:
-        alias = (await db.execute(select(ServiceAlias).where(
+        (await db.execute(select(ServiceAlias).where(
             ServiceAlias.alias_name == "fin-service-qa"))).scalar_one()
-        assert alias.owner_user_id is not None      # 个人默认登记
-        # carry 只写非敏感路径的文件值(api_token 不落库,P7-②)
-        # S4:导入写的 carry 行落导入人个人层(F3 语义)
+        # S6:别名团队共享(个人别名退役);carry 只写非敏感路径的文件值
+        # (api_token 不落库,P7-②);S4:导入写的 carry 行落导入人个人层
+        from app.models.user import User
+        importer = (await db.execute(select(User.id).where(
+            User.username == "admin0"))).scalar_one()
         binds = await carry_store.get_bindings(
-            db, "fin-service-qa", scope=("user", alias.owner_user_id))
+            db, "fin-service-qa", scope=("user", importer))
         assert binds == {"$.remark": "压测-李四"}
         audits = (await db.execute(select(AuditLog).where(
             AuditLog.resource_id == "fin-service-qa"))).scalars().all()
@@ -180,7 +182,7 @@ async def test_land_create_branch(client, plate_mock: PlateMock):
     assert step2["request"]["body"] == {"api_token": "sk-qa"}
     # step1 未映射 → 原样(含字面值)
     assert defn["steps"][0]["request"]["body"]["remark"] == "压测-张三"
-    # P2:config.users 清空;别名无 base_url → 源 URL 保留(不变量)
+    # P2:config.users 清空;本机部署表无地址 → 源 URL 保留(不变量)
     assert "users" not in (defn.get("config") or {})
     assert defn["config"]["services"]["fin-service"] == "https://src"
     assert defn["config"]["services"]["fin-service-qa"] == "https://src-qa"
@@ -213,10 +215,12 @@ async def test_land_map_branch_never_deletes_uncovered(
 
 async def test_land_url_cleared_only_with_base_url(
         client, plate_mock: PlateMock):
+    """S6:本机部署表登记了该服务(其基础服务)的地址才清源 URL。"""
+    from .helpers import seed_deployment
     _mock_faces(plate_mock)
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
-                            base_url="https://local", owner_user_id=None))
+        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service"))
+        await seed_deployment(db, "fin-service", "https://local")
         await db.commit()
     bob = await register_and_login(client, "admin0", "admin0pass123")
     r = await client.post("/api/scenarios/import", headers=bob, json={
@@ -224,7 +228,7 @@ async def test_land_url_cleared_only_with_base_url(
     assert r.status_code == 201, r.text
     defn = await _stored_definition(_SCENARIO_ID)
     services = defn["config"]["services"]
-    # 别名有 base_url → 清;fin-service-qa 无别名 → 保留源 URL
+    # 部署表有地址 → 清;fin-service-qa 无部署地址 → 保留源 URL
     assert "fin-service" not in services
     assert services["fin-service-qa"] == "https://src-qa"
 

@@ -214,9 +214,13 @@ async def test_contract_http_single_scenario_pass(
         requirementRef=[],
     ))
 
+    from app.core import db as db_module
+    async with db_module.SessionLocal() as _s:   # S6:地址走部署表
+        from .helpers import seed_deployment
+        await seed_deployment(_s, "fin-service", stub_sut)
+        await _s.commit()
     ex = await _run_and_wait(client, bob, {
         "scenarioId": "sc-test", "dataSetIds": [],
-        "serviceBindings": {"fin-service": {"url": stub_sut}},
     }, data_root=isolated_data)
     assert ex["status"] == "done", ex
     assert ex["passed"] == 1 and ex["failed"] == 0
@@ -247,9 +251,13 @@ async def test_contract_assertion_failure_visible(
         requirementRef=[],
     ))
 
+    from app.core import db as db_module
+    async with db_module.SessionLocal() as _s:   # S6:地址走部署表
+        from .helpers import seed_deployment
+        await seed_deployment(_s, "fin-service", stub_sut)
+        await _s.commit()
     ex = await _run_and_wait(client, bob, {
         "scenarioId": "sc-test", "dataSetIds": [],
-        "serviceBindings": {"fin-service": {"url": stub_sut}},
     }, data_root=isolated_data)
     # 行级断言失败 → execution 终态 failed(有失败行的既有口径)
     assert ex["status"] == "failed", ex
@@ -283,10 +291,14 @@ async def test_contract_assign_injection_on_the_wire(
         "value": 261, "asserts": []}]}
     await _post_scenario(client, bob, draft)
 
+    from app.core import db as db_module
+    async with db_module.SessionLocal() as _s:   # S6:地址走部署表
+        from .helpers import seed_deployment
+        await seed_deployment(_s, "fin-service", stub_sut)
+        await _s.commit()
     ex = await _run_and_wait(client, bob, {
         "scenarioId": "sc-test", "dataSetIds": [],
         "injectionEntryIds": ["inj-remark"],
-        "serviceBindings": {"fin-service": {"url": stub_sut}},
     }, data_root=isolated_data)
     assert ex["status"] == "done", ex
     rows = await _rows(client, bob, ex["id"])
@@ -329,10 +341,14 @@ async def test_contract_carry_injection_overrides_carried_value(
             updated_by_id=None, updated_by_name="bob")
         await db.commit()
 
+    from app.core import db as db_module
+    async with db_module.SessionLocal() as _s:   # S6:地址走部署表
+        from .helpers import seed_deployment
+        await seed_deployment(_s, "fin-service", stub_sut)
+        await _s.commit()
     ex = await _run_and_wait(client, bob, {
         "scenarioId": "sc-test", "dataSetIds": [],
         "injectionEntryIds": ["inj-remark"],
-        "serviceBindings": {"fin-service": {"url": stub_sut}},
     }, data_root=isolated_data)
     assert ex["status"] == "done", ex
 

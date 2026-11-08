@@ -124,10 +124,10 @@ async def _apply_scheme_recipe(
         scheme = await scheme_store.resolve_for_run(
             db, scen.scenario_id, None)
     payload = (scheme.payload if scheme is not None else {}) or {}
+    from ..schemas.scenario_composer import scrub_retired_bindings
     body.service_bindings = {
-        k: ServiceBinding(**v)
-        for k, v in (payload.get("serviceBindings") or {}).items()
-        if isinstance(v, dict)
+        k: ServiceBinding(**v) for k, v in
+        scrub_retired_bindings(payload.get("serviceBindings")).items()
     }
     body.data_set_ids = [str(x) for x in (payload.get("dataSetIds") or [])]
     body.data_set_selection = [
@@ -266,9 +266,12 @@ async def _post_adhoc_run(
     target = run_dispatcher.RunTarget(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
-    # §7.1 追溯:临时调用地址全部经别名(③层);无内置认证、无范围外目标
-    from ..services import service_aliases as sa_svc
-    alias_urls = await sa_svc.base_urls_for(db, used.aliases)
+    # §7.1 追溯:临时调用地址全部经 ③(环境部署地址;环境链 = 偏好 >
+    # 默认环境);无内置认证、无范围外目标
+    from ..services import env_chain as _ec, service_aliases as sa_svc
+    alias_urls = await sa_svc.base_urls_for(
+        db, used.aliases,
+        env=await _ec.resolve_environment(db, user_id=principal.user.id))
     trace = {
         "resolvedServices": {
             svc: {"url": alias_urls.get(svc), "source": "alias", "alias": svc}
@@ -313,9 +316,15 @@ async def preview_effective_config(
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
     body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?}
-    —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。"""
-    from ..schemas.scenario_composer import ServiceBinding
+    —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。绑定形态
+    同执行请求(服务键 → {alias};url/authAlias 422)。"""
+    from pydantic import ValidationError
+
+    from ..schemas.scenario_composer import (ServiceBinding,
+                                             scrub_retired_bindings)
     from ..services import env_chain, run_prepare, scenario_store, scheme_store
+    from ..services.service_aliases import (BindingAliasInvalid,
+                                            validate_binding_aliases)
     from ..services.scenario_store import definition_from_payload
 
     sid = body.get("scenarioId")
@@ -332,19 +341,34 @@ async def preview_effective_config(
         raise HTTPException(404, detail={"code": "scenario_not_found",
                                          "message": f"scenario not found: {sid}"})
     scheme_env = None
-    bindings_raw = body.get("serviceBindings") or {}
+    try:
+        bindings_raw = {
+            str(k): ServiceBinding.model_validate(v).model_dump()
+            for k, v in (body.get("serviceBindings") or {}).items()}
+    except ValidationError as e:
+        raise HTTPException(422, detail={
+            "code": "binding_invalid",
+            "message": e.errors()[0].get("msg", str(e))}) from None
     scheme_id = body.get("schemeId")
     if scheme_id:
         try:
             sch = await scheme_store.get_row(db, sid, scheme_id)
             scheme_env = (sch.payload or {}).get("environmentId")
-            scheme_bindings = (sch.payload or {}).get("serviceBindings") or {}
-            bindings_raw = {**scheme_bindings, **bindings_raw}
+            bindings_raw = {
+                **scrub_retired_bindings(
+                    (sch.payload or {}).get("serviceBindings")),
+                **bindings_raw}
         except KeyError:
             raise HTTPException(404, detail={
                 "code": "run_scheme_not_found",
                 "message": f"run scheme {scheme_id} not found"}) from None
-    bindings = {k: v for k, v in bindings_raw.items() if isinstance(v, dict)}
+    bindings = bindings_raw
+    try:
+        await validate_binding_aliases(db, bindings)
+    except BindingAliasInvalid as e:
+        raise HTTPException(422, detail={
+            "code": e.code, "message": e.message,
+            "service": e.service, "alias": e.alias}) from None
     try:
         env = await env_chain.resolve_for_scenario(
             db, sid, user_id=user.id,
@@ -465,8 +489,9 @@ async def post_run(
             definition = definition_from_payload(scen.payload)
             used = await at.used_sets_for_definition(
                 db, definition,
-                {k: {"authAlias": b.auth_alias, "url": b.url}
+                {k: b.model_dump()
                  for k, b in (body.service_bindings or {}).items()},
+                project_id=scen.project_id,
                 extra_scan_nodes=extra_nodes)
             missing = await at.check_scope(
                 db, principal.token, user.id, used)
@@ -526,10 +551,11 @@ def _injection_nodes(scen, body: RunRequest) -> "list | None":
             if isinstance(e, dict) and e.get("id") in ids]
 
 
-async def _resolved_services(db, scen, body: RunRequest) -> dict:
+async def _resolved_services(db, scen, body: RunRequest,
+                             user_id: int | None) -> dict:
     """§7.1 ``resolvedServices``:每个被引用服务的 {url, source, alias?}
-    (三层解析只读版,与物化同一裁决)。"""
-    from ..services import service_aliases as sa_svc
+    (地址链解析只读版,与物化同一裁决;③ 按执行同链的环境)。"""
+    from ..services import env_chain as _ec, service_aliases as sa_svc
     from ..services.run_materialize import (
         referenced_services, resolve_service_sources,
     )
@@ -537,13 +563,20 @@ async def _resolved_services(db, scen, body: RunRequest) -> dict:
 
     definition = definition_from_payload(scen.payload) if scen else {}
     steps = definition.get("steps") or []
+    try:
+        _env = await _ec.resolve_for_scenario(
+            db, scen.scenario_id if scen is not None else None,
+            user_id=user_id, explicit=body.environment_id)
+    except _ec.EnvironmentNotFound:
+        _env = None          # 派发侧会 404;追溯面不抢先报错
     base_urls = await sa_svc.base_urls_for(
-        db, referenced_services(steps))
+        db, referenced_services(steps), env=_env)
+    from ..services.run_prepare import zone_allows_direct
+    declared = (definition.get("config") or {}).get("services")
+    if scen is not None and not zone_allows_direct(scen.project_id):
+        declared = None      # 原 5:项目/公共区直连地址不生效
     return resolve_service_sources(
-        steps, declared=(definition.get("config") or {}).get("services"),
-        bindings={k: {"url": b.url}
-                  for k, b in (body.service_bindings or {}).items()},
-        alias_base_urls=base_urls)
+        steps, declared=declared, alias_base_urls=base_urls)
 
 
 async def _build_trace(
@@ -552,7 +585,8 @@ async def _build_trace(
 ) -> dict:
     """§7.1 执行 config_json 追溯块;dispatch 原样并入 config_json。"""
     trace: dict = {
-        "resolvedServices": await _resolved_services(db, scen, body),
+        "resolvedServices": await _resolved_services(
+            db, scen, body, principal.user.id),
         "builtinAuths": _builtin_auths(scen) if scen is not None else [],
     }
     if principal.is_token:

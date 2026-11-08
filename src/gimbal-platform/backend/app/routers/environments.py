@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser, MemberUser
 from ..models import Environment
-from ..models.service_alias import ServiceAlias
 
 router = APIRouter(prefix="/environments", tags=["environments"])
 
@@ -215,13 +214,7 @@ async def delete_environment(
     if not env:
         raise HTTPException(404, "environment not found")
     _require_env_write(env, user)
-    # 引用检查：仍有服务别名指向该环境时拒绝删除（悬空外键防患）
-    ref = (await db.execute(select(ServiceAlias.alias_name).where(
-        ServiceAlias.environment_id == env_id).limit(1)
-    )).scalar_one_or_none()
-    if ref:
-        raise HTTPException(
-            409, f"environment is referenced by alias '{ref}'")
+    # S6:别名不再挂环境(0047 删列);部署行随环境级联删除(FK CASCADE)
     name = env.name
     await db.delete(env)
     await db.commit()

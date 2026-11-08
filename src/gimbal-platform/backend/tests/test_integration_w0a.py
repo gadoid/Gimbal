@@ -158,26 +158,27 @@ async def test_subscribe_flow_and_gate(client):
 
 
 async def test_base_url_change_triggers_template_changed(client):
-    """G-F:别名 base_url 变更 → 指纹翻转 → 订阅者实例待确认。"""
+    """G-F:部署地址变更 → 指纹翻转 → 订阅者实例待确认(authz M2a S6:
+    地址只来自部署表,别名 base_url 已删)。"""
     u1 = await register_and_login(client, "w0a_c", "pw123456")
     u2 = await register_and_login(client, "w0a_d", "pw123456")
     await _mk_scenario(client, u1, "sc-w0b")
     tid = await _mk_task(client, u1, "sc-w0b")
     uid2 = await _user_id("w0a_d")
 
+    from .helpers import seed_deployment
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="svc", base_service="svc",
-                            base_url="http://host-a"))
+        db.add(ServiceAlias(alias_name="svc", base_service="svc"))
+        await seed_deployment(db, "svc", "http://host-a")
         await db.commit()
 
     r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     fp0 = (await _inst(tid, uid2)).consent_fingerprint
 
-    # 别名指向别的主机(G-F 向量)→ 下次执行前被闸
+    # 部署地址指向别的主机(G-F 向量)→ 下次执行前被闸
     async with db_module.SessionLocal() as db:
-        row = await db.get(ServiceAlias, "svc")
-        row.base_url = "http://evil-host"
+        await seed_deployment(db, "svc", "http://evil-host")
         await db.commit()
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
     assert r.status_code == 200, r.text

@@ -28,15 +28,14 @@ async def test_super_admin_cannot_adapt_others_private_scenario(
     assert "not_scenario_owner" in r.text
 
 
-async def test_personal_alias_requires_users_manage(client: AsyncClient):
+async def test_personal_alias_retired(client: AsyncClient):
+    """authz M2a S6:个人别名退役 —— ownerUserId(及 baseUrl)不再是
+    别名写面字段,带上即 422(此前个人别名需 users.manage)。"""
     h_adm = await role_headers(client, "wu_adm", role="admin")
     r = await client.post("/api/service-aliases", headers=h_adm, json={
         "aliasName": "wu-personal", "baseUrl": "https://p.local",
         "ownerUserId": 1})
-    assert r.status_code == 403, r.text
-    detail = r.json()["detail"]
-    assert detail["code"] == "capability_forbidden"
-    assert detail["capability"] == "users.manage"
+    assert r.status_code == 422, r.text
 
 
 async def test_admin_cannot_patch_other_users(client: AsyncClient):

@@ -325,7 +325,8 @@ async def check_scope(
 async def used_sets_for_definition(
     db: AsyncSession, definition: dict,
     bindings: dict[str, dict] | None = None,
-    *, extra_scan_nodes: list | None = None,
+    *, project_id: int | None,
+    extra_scan_nodes: list | None = None,
 ) -> ScopeSets:
     """场景执行/任务注册的资源集合(§3.2 表第一列)。
 
@@ -342,22 +343,25 @@ async def used_sets_for_definition(
     from .auth_ref_scan import scan_auth_aliases
     from .run_materialize import referenced_services, resolve_service_sources
 
+    from .run_prepare import zone_allows_direct
+
     defn = definition or {}
     steps = defn.get("steps") or []
     cfg = defn.get("config") or {}
     bindings = bindings or {}
     referenced = referenced_services(steps)
-    alias_base_urls = await service_aliases.base_urls_for(db, referenced)
+    # 原 5(``project_id`` 必填):项目/公共区 authored 不生效 —— 执行实际
+    # 走 ③,范围判定必须同口径,否则 authored 键被当「直连范围外」放过。
+    # ③ 地址不影响集合归属(按环境的部署地址只决定 URL,不决定「是否
+    # 别名形态引用」),故不查部署表
     resolved = resolve_service_sources(
-        steps, declared=cfg.get("services"), bindings=bindings,
-        alias_base_urls=alias_base_urls)
-    # 别名集 = ③ 层解析的服务键 ∪ **任何一层都没解析到的引用键** ——
-    # 后者按「别名形态引用」对待:别名被删除后 ③ 层消失,与「从未登记
-    # 的服务名」不可区分,统一进范围判定,缺项分类(§3.3「对象已不
-    # 存在」)由此可达;①② 层直连的服务不进范围(范围外标记,D15)。
-    alias_set = {svc for svc, info in resolved.items()
-                 if info.get("source") == "alias"}
-    alias_set.update(svc for svc in referenced if svc not in resolved)
+        steps, declared=(cfg.get("services")
+                         if zone_allows_direct(project_id) else None))
+    # 别名集 = 未被 ② 直连接管的全部引用键(按「别名形态引用」对待:
+    # 别名被删除后与「从未登记的服务名」不可区分,统一进范围判定,缺项
+    # 分类(§3.3「对象已不存在」)由此可达);② 直连的服务不进范围
+    # (范围外标记,D15)。
+    alias_set = {svc for svc in referenced if svc not in resolved}
     aliases = sorted(alias_set)
     out_targets = [
         {"service": svc, "url": info.get("url"), "source": info["source"]}

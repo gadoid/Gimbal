@@ -64,8 +64,9 @@ beforeEach(() => {
   vi.spyOn(api, 'patch').mockResolvedValue(sample)
   vi.spyOn(api, 'remove').mockResolvedValue(undefined)
   vi.spyOn(api, 'getReferences').mockResolvedValue({
+    // M2a S6:alias_refs 不再带 environment_id;scheme 引用种类已退役
     alias_refs: [
-      { alias_name: 'fin-service-uat', base_service: 'fin-service', environment_id: 1 },
+      { alias_name: 'fin-service-uat', base_service: 'fin-service' },
     ],
     scenario_refs: {
       visible: [

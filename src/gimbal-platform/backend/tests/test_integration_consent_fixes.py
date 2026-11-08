@@ -262,9 +262,9 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
 
 
 async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch):
-    """两链统一:别名表 credential_alias 默认并入集成注入清单
-    (exec_auth_aliases 唯一实现);显式绑定优先;缺默认凭证按 S0②
-    暂停并列出;有凭证则注入物化(resolved_auths 非空)。"""
+    """两链统一:别名声明槽位并入集成注入清单(exec_auth_aliases 唯一
+    实现);方案绑定选别名 → 换成该别名的槽位(authz M2a S6);缺默认
+    凭证按 S0② 暂停并列出;有凭证则注入物化(resolved_auths 非空)。"""
     from sqlalchemy import select as _sel
     from app.core import db as dbm
     from app.core.security import fernet_encrypt
@@ -291,7 +291,9 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
 
     async with dbm.SessionLocal() as db:
         db.add(ServiceAlias(alias_name="svc2", base_service="svc2",
-                            credential_alias="codfish"))
+                            slot="codfish"))
+        db.add(ServiceAlias(alias_name="svc2-other", base_service="svc2",
+                            slot="other"))
         await db.commit()
 
     # 摘要面:别名默认并入注入清单
@@ -300,11 +302,11 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
         headers=u1)).json()
     assert "codfish" in sm["authAliases"]
 
-    # 显式绑定优先:绑定 authAlias=other 的服务键不吃默认
+    # 方案选别名:svc2 → svc2-other(声明槽位 other)替换默认槽
     async with dbm.SessionLocal() as db:
         db.add(ComposerRunScheme(
             scheme_id="rs-cfa", scenario_id="sc-cfa-public", name="s",
-            payload={"serviceBindings": {"svc2": {"authAlias": "other"}}}))
+            payload={"serviceBindings": {"svc2": {"alias": "svc2-other"}}}))
         await db.commit()
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
                            json={"schemeId": "rs-cfa"})

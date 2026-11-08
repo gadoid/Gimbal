@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from loguru import logger
 
-from ..models.environment import Environment
 from ..models.service_alias import ServiceAlias
 from . import service_names
 
@@ -32,18 +31,12 @@ class UnknownBaseService(Exception):
     """别名无法派生回 Plate 目录(裸声明 / plate 不可达)。"""
 
 
-def alias_out(
-    row: ServiceAlias, *, environment_name: str | None = None,
-) -> dict:
+def alias_out(row: ServiceAlias) -> dict:
+    # authz M2a S6:地址/环境/属主字段随别名瘦身移除(地址见部署表)
     return {
         "aliasName": row.alias_name,
         "baseService": row.base_service,
-        "baseUrl": row.base_url,
-        # V5(B):group_tag 已退役,归属环境经外键指向 environments
-        "environmentId": row.environment_id,
-        "environmentName": environment_name,
-        "credentialAlias": row.credential_alias,
-        "ownerUserId": row.owner_user_id,
+        "slot": row.slot,
         # 三态接入(P1.0):plate | external(第三方,无版本管理)
         "kind": row.kind or "plate",
         "createdAt": row.created_at.isoformat() if row.created_at else None,
@@ -55,18 +48,16 @@ async def list_aliases(
     db: AsyncSession, *, base: str | None = None, q: str | None = None,
     page: int = 1, page_size: int = 100,
 ) -> tuple[list[dict], int]:
-    """M4(§6.3):q(alias/base 子串)+ base 精确 + Page 信封。
+    """M4(§6.3):q(alias/base/slot 子串)+ base 精确 + Page 信封。
     返回 (当前页 dicts, 全量 total)。"""
-    # V5(B):LEFT JOIN environments 带出环境名(展示/筛选用,id 不友好)
-    stmt = select(ServiceAlias, Environment.name).outerjoin(
-        Environment, ServiceAlias.environment_id == Environment.id)
+    stmt = select(ServiceAlias)
     if base is not None:
         stmt = stmt.where(ServiceAlias.base_service == base)
     if q:
         stmt = stmt.where(or_(
             ServiceAlias.alias_name.ilike(f"%{q}%"),
             ServiceAlias.base_service.ilike(f"%{q}%"),
-            ServiceAlias.credential_alias.ilike(f"%{q}%"),
+            ServiceAlias.slot.ilike(f"%{q}%"),
         ))
     total = (await db.execute(
         select(func.count()).select_from(stmt.subquery())
@@ -74,21 +65,20 @@ async def list_aliases(
     rows = (await db.execute(
         stmt.order_by(ServiceAlias.alias_name)
         .offset((page - 1) * page_size).limit(page_size)
-    )).all()
-    return ([alias_out(r, environment_name=n) for r, n in rows], int(total))
+    )).scalars().all()
+    return ([alias_out(r) for r in rows], int(total))
 
 
 async def create_alias_in_transaction(
-    db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
-    credential_alias: str | None = None, owner_user_id: int | None = None,
-    base_url: str | None = None, kind: str = "plate",
+    db: AsyncSession, *, alias_name: str, slot: str | None = None,
+    kind: str = "plate",
     base_service: str | None = None,
     catalog_names: "set[str] | None" = None,
 ) -> ServiceAlias:
     """Insert a new alias **without committing**(导入 W2/T2:建别名+写
     carry+建场景单事务落库,场景导入 v2.3 方案 §6)。
 
-    校验行为与 :func:`create_alias` 一致(kind/derive_base/environment);
+    校验行为与 :func:`create_alias` 一致(kind/derive_base);
     **提交与错误映射是调用方的责任**——alias_name 是主键,撞车的
     IntegrityError 在事务边界由调用方统一映射(如 ``alias_name_taken``)
     并回滚。返回**未 refresh** 的 row。
@@ -138,41 +128,25 @@ async def create_alias_in_transaction(
                 "第三方服务请用 kind=external 登记)")
     else:
         raise ValueError(f"invalid_kind: {kind!r} (plate | external)")
-    if environment_id is not None:
-        env = await db.get(Environment, environment_id)
-        if env is None:
-            raise KeyError(
-                f"environment_not_found: {environment_id}")
     row = ServiceAlias(
-        alias_name=alias_name, base_service=base,
-        environment_id=environment_id,
-        credential_alias=credential_alias, slot=credential_alias,
-        owner_user_id=owner_user_id,
-        base_url=base_url, kind=kind,
-    )
+        alias_name=alias_name, base_service=base, slot=slot, kind=kind)
     db.add(row)
     return row
 
 
 async def create_alias(
-    db: AsyncSession, *, alias_name: str, environment_id: int | None = None,
-    credential_alias: str | None = None, owner_user_id: int | None = None,
-    base_url: str | None = None, kind: str = "plate",
+    db: AsyncSession, *, alias_name: str, slot: str | None = None,
+    kind: str = "plate",
     base_service: str | None = None,
 ) -> dict:
-    """提交包装器(W2/T2):既有调用方(别名路由/迁移脚本)行为零变化;
-    导入流水线走 :func:`create_alias_in_transaction` 自管事务。"""
+    """提交包装器(W2/T2):别名路由用;导入流水线走
+    :func:`create_alias_in_transaction` 自管事务。"""
     row = await create_alias_in_transaction(
-        db, alias_name=alias_name, environment_id=environment_id,
-        credential_alias=credential_alias, owner_user_id=owner_user_id,
-        base_url=base_url, kind=kind, base_service=base_service)
+        db, alias_name=alias_name, slot=slot, kind=kind,
+        base_service=base_service)
     await db.commit()
     await db.refresh(row)  # server_default 时间列:刷新防异步懒加载
-    env_name = None
-    if row.environment_id is not None:
-        env = await db.get(Environment, row.environment_id)
-        env_name = env.name if env else None
-    return alias_out(row, environment_name=env_name)
+    return alias_out(row)
 
 
 async def classify_services(
@@ -217,8 +191,7 @@ async def classify_services(
 
 
 async def patch_alias(
-    db: AsyncSession, alias_name: str, *, environment_id: int | None = ...,
-    credential_alias: str | None = ..., base_url: str | None = ...,
+    db: AsyncSession, alias_name: str, *, slot: str | None = ...,
     base_service: str | None = ..., kind: str | None = None,
 ) -> dict:
     """b2-8(归一 v1.0 §1.6):``base_service`` 仅 external 可改(重指向
@@ -256,25 +229,11 @@ async def patch_alias(
                 "kind_transition_precondition: base_service 所指系统须已"
                 "转为 sut(integration 原地升级,归一 v1.0 §1.8)")
         row.kind = "plate"
-    if environment_id is not ...:
-        if environment_id is not None:
-            env = await db.get(Environment, environment_id)
-            if env is None:
-                raise KeyError(
-                    f"environment_not_found: {environment_id}")
-        row.environment_id = environment_id
-    if credential_alias is not ...:
-        row.credential_alias = credential_alias
-        row.slot = credential_alias
-    if base_url is not ...:
-        row.base_url = base_url
+    if slot is not ...:
+        row.slot = slot
     await db.commit()
     await db.refresh(row)
-    env_name = None
-    if row.environment_id is not None:
-        env = await db.get(Environment, row.environment_id)
-        env_name = env.name if env else None
-    return alias_out(row, environment_name=env_name)
+    return alias_out(row)
 
 
 async def delete_alias(db: AsyncSession, alias_name: str) -> None:
@@ -283,26 +242,73 @@ async def delete_alias(db: AsyncSession, alias_name: str) -> None:
     await db.commit()
 
 
+def effective_alias(svc: str, bindings: dict | None) -> str:
+    """服务键的生效别名(authz M2a S6:``serviceBindings`` = 服务键 →
+    别名):绑定选了别名取之,否则服务键自身 —— 槽位默认与 carry 别名键
+    的**唯一**换名口径(地址不经此:同基础服务校验保证部署地址一致)。"""
+    b = (bindings or {}).get(svc)
+    alias = b.get("alias") if isinstance(b, dict) else None
+    return alias if isinstance(alias, str) and alias else svc
+
+
+class BindingAliasInvalid(ValueError):
+    """绑定选择的别名不存在 / 与服务键不同基础服务(调用方映射 422)。"""
+
+    def __init__(self, code: str, message: str, *, service: str,
+                 alias: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
+        self.service = service
+        self.alias = alias
+
+
+async def validate_binding_aliases(
+    db: AsyncSession, bindings: dict | None,
+) -> None:
+    """绑定选择的别名须存在,且与服务键同基础服务(服务键的基础服务 =
+    其别名行 ``base_service``,非别名即自身)—— 选别名只换槽位 / carry
+    别名键,不许借道改地址(地址只由环境决定)。"""
+    pairs = {svc: effective_alias(svc, bindings)
+             for svc in (bindings or {})}
+    pairs = {s: a for s, a in pairs.items() if a != s}
+    if not pairs:
+        return
+    names = set(pairs) | set(pairs.values())
+    base_of = dict((await db.execute(
+        select(ServiceAlias.alias_name, ServiceAlias.base_service).where(
+            ServiceAlias.alias_name.in_(names)))).all())
+    for svc, alias in pairs.items():
+        if alias not in base_of:
+            raise BindingAliasInvalid(
+                "binding_alias_unknown", f"别名 {alias!r} 不存在",
+                service=svc, alias=alias)
+        if base_of[alias] != base_of.get(svc, svc):
+            raise BindingAliasInvalid(
+                "binding_alias_mismatch",
+                f"别名 {alias!r} 不属于服务 {svc!r} 的基础服务"
+                f"({base_of[alias]} ≠ {base_of.get(svc, svc)})",
+                service=svc, alias=alias)
+
+
 async def credential_alias_hits(
     db: AsyncSession, steps: list,
     bindings: dict[str, dict] | None = None,
 ) -> dict[str, str]:
-    """别名表凭证默认命中(raw 服务键 → credential_alias;已显式绑
-    authAlias 的服务键**排除**,显式绑定优先)。查表失败降级 {}(别名
-    默认是增强,不是前置条件)。订阅内容指纹同消费本函数 —— 别名
-    默认属 member+ 可改的全局层,与 base_url 同纳入指纹感知。"""
+    """别名表凭证默认命中(raw 服务键 → 槽位;authz M2a S6:按服务键的
+    **生效别名**取槽位 —— 方案选了 ``fin → fin-maker`` 就吃 ``fin-maker``
+    声明的槽)。查表失败降级 {}(别名默认是增强,不是前置条件)。订阅
+    内容指纹同消费本函数。"""
     from .run_materialize import referenced_services
-    b = bindings or {}
-    bound_keys = {k for k, v in b.items()
-                  if isinstance(v, dict) and v.get("authAlias")}
+    eff = {svc: effective_alias(svc, bindings)
+           for svc in referenced_services(steps or [])}
     try:
-        hits = await credential_aliases_for(
-            db, referenced_services(steps or []))
+        hits = await credential_aliases_for(db, sorted(set(eff.values())))
     except Exception:  # noqa: BLE001
         logger.warning("service_aliases: credential default lookup failed; skipped")
         return {}
-    return {raw: cred for raw, cred in (hits or {}).items()
-            if raw not in bound_keys}
+    hits = hits or {}
+    return {svc: hits[a] for svc, a in eff.items() if a in hits}
 
 
 async def exec_auth_aliases(
@@ -319,21 +325,15 @@ async def exec_auth_aliases(
     ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps
     **+ config.setup/teardown 条目**,webhook v4 §3.2 —— setup 引用的
     凭证此前既不进清单也不注入,令牌范围与运行时注入同时生效)
-    ∪ 方案绑定 authAlias ∪ 别名表凭证默认(``credential_alias_hits``,
-    显式绑定优先)。去重保序。
+    ∪ 别名声明槽位(``credential_alias_hits``,按绑定选中的生效别名)。
+    去重保序。方案绑定 authAlias 一源随 S6 退役。
     """
     from .auth_ref_scan import scan_auth_aliases
-    b = bindings or {}
     nodes = list(steps or [])
     if extra_scan_nodes:
         nodes.extend(extra_scan_nodes)
-    aliases: list[str] = [
-        *scan_auth_aliases(nodes),
-        *(str(v.get("authAlias")) for v in b.values()
-          if isinstance(v, dict) and v.get("authAlias")),
-    ]
-    hits = await credential_alias_hits(db, nodes, b)
-    return list(dict.fromkeys([*aliases, *hits.values()]))
+    hits = await credential_alias_hits(db, nodes, bindings)
+    return list(dict.fromkeys([*scan_auth_aliases(nodes), *hits.values()]))
 
 
 def setup_teardown_nodes(definition: dict) -> list:
@@ -362,57 +362,38 @@ async def exec_auth_aliases_of_definition(
 async def credential_aliases_for(
     db: AsyncSession, raw_names: list[str],
 ) -> dict[str, str]:
-    """执行期读:raw 服务键 → 别名表精确命中的 credential_alias。
+    """执行期读:别名名 → 别名表精确命中的声明槽位。
 
-    只做精确命中(方案 §4.1 三层的中间层);场景显式绑定的优先级
-    裁决在调用方(run_dispatcher):同键已显式绑 authAlias 的不吃
-    别名表默认。凭证按执行者本人池子解析(_resolve_exec_auths)。
+    只做精确命中;绑定选别名的换名在调用方(``credential_alias_hits``
+    按生效别名查)。凭证按执行者本人池子解析(resolve_exec_auths)。
 
-    authz M2a S3:别名声明槽位 —— 取 ``slot``(与 credential_alias
-    由写面保持同步;后者是 S6 删除项),旧库两列相等,行为不变。
     """
     if not raw_names:
         return {}
-    from sqlalchemy import func as _f
     rows = (await db.execute(
-        select(ServiceAlias.alias_name,
-               _f.coalesce(ServiceAlias.slot,
-                           ServiceAlias.credential_alias)).where(
+        select(ServiceAlias.alias_name, ServiceAlias.slot).where(
             ServiceAlias.alias_name.in_(raw_names),
-            ServiceAlias.credential_alias.is_not(None),
+            ServiceAlias.slot.is_not(None),
         )
     )).all()
-    return {name: cred for name, cred in rows}
+    return {name: slot for name, slot in rows if slot}
 
 
 async def base_urls_for(
     db: AsyncSession, raw_names: list[str],
     *, env: "EnvChoice | None" = None,
 ) -> dict[str, str]:
-    """执行期读(F4 方案 B,2026-09-23 批次):raw 服务键 → 地址 ——
-    services 物化优先级链的第三层「显式绑定 > 场景声明 > **③** >
-    缺口引擎报错」的数据源。
+    """执行期读:raw 服务键 → 地址 —— services 物化优先级链「场景
+    声明 > **③** > 缺口引擎报错」的数据源。
 
-    ``env``(authz M2a S2.1):缺省 / 无环境 = 旧行为(别名表精确命中的
-    ``base_url``);给了环境则并入部署表地址,合并规则见
-    ``env_chain`` 模块注释(显式选环境部署表优先,默认环境兜底时别名
-    自带地址优先)。
+    authz M2a S6:**部署表单源** —— 服务键 → 基础服务 → 本次环境的部署
+    地址(``env_chain.deployment_urls``);无环境(环境链全空)= 无 ③。
+    别名自带 ``base_url`` 与影子期合并规则随别名瘦身退役(0047)。
 
-    与 credential_aliases_for 同款形态(照抄结构,别处不得另开第二份
-    查询实现);优先级裁决在唯一组装点
-    ``materialize_run_copy._apply_services``,本函数只提供数据。
+    优先级裁决在唯一组装点 ``materialize_run_copy._apply_services``,
+    本函数只提供数据。
     """
-    if not raw_names:
+    if not raw_names or env is None or env.env_id is None:
         return {}
-    rows = (await db.execute(
-        select(ServiceAlias.alias_name, ServiceAlias.base_url).where(
-            ServiceAlias.alias_name.in_(raw_names),
-            ServiceAlias.base_url.is_not(None),
-        )
-    )).all()
-    alias_urls = {name: url for name, url in rows if url}
-    if env is None or env.env_id is None:
-        return alias_urls
-    from .env_chain import deployment_urls, merge_addresses
-    return merge_addresses(
-        alias_urls, await deployment_urls(db, raw_names, env.env_id), env)
+    from .env_chain import deployment_urls
+    return await deployment_urls(db, raw_names, env.env_id)

@@ -33,15 +33,20 @@ async def seed_platform_user() -> int:
     return uid
 
 
-async def seed_alias(name: str = "agent-sys", **over) -> None:
-    """别名本体(base_url + 可选凭证默认);入站/回调列已随 v4 退役。"""
-    row = ServiceAlias(
-        alias_name=name, base_service="pay-service", kind="external",
-        base_url="https://cb.example.local")
+async def seed_alias(name: str = "agent-sys", *,
+                     base_url: str | None = "https://cb.example.local",
+                     **over) -> None:
+    """别名本体 + 地址(authz M2a S6:地址落部署表默认环境,基础服务 =
+    别名自身 —— 各别名地址互不覆盖)。``slot`` 等其余列经 ``over``。"""
+    from .helpers import seed_deployment
+
+    row = ServiceAlias(alias_name=name, base_service=name, kind="external")
     for k, v in over.items():
         setattr(row, k, v)
     async with db_module.SessionLocal() as s:
         s.add(row)
+        if base_url:
+            await seed_deployment(s, row.base_service, base_url)
         await s.commit()
 
 

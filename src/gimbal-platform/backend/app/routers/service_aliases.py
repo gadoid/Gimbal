@@ -1,8 +1,8 @@
 """服务别名路由(服务画像方案 §4.1;基础层)— 读全员 / 写 admin。
 
 配置池语义同 carry(读开放、写收口):别名影响的是所有引用该服务的
-场景的执行解析,写面收在 admin;``owner_user_id`` 字段承载个人默认 /
-团队共享的语义区分,不等于编辑权限。
+场景的执行解析,写面收在 admin。authz M2a S6:别名只登记「名字 → 基础
+服务 + 声明槽位」;地址在部署表(``/deployments``),个人别名退役。
 
 webhook v4:入站身份(访问令牌)不再挂别名 —— 见
 ``routers/access_tokens.py``;回调地址与签名密钥在令牌上。
@@ -15,13 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..schemas.page import PageOut
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser, MemberUser, capability_error
-from ._ownership import has_capability
-from ..models.service_alias import ServiceAlias
+from ..core.deps import CurrentUser, MemberUser
 from ..services import service_aliases
 from ..services.service_aliases import UnknownBaseService
 
@@ -37,13 +34,8 @@ class AliasOut(BaseModel):
 
     alias_name: str = Field(alias="aliasName")
     base_service: str = Field(alias="baseService")
-    # F4 方案 B:环境级端点默认层(物化优先级链第三档;NULL = 不提供)
-    base_url: str | None = Field(default=None, alias="baseUrl")
-    # V5(B):归属环境(group_tag 已退役,外键 → environments)
-    environment_id: int | None = Field(default=None, alias="environmentId")
-    environment_name: str | None = Field(default=None, alias="environmentName")
-    credential_alias: str | None = Field(default=None, alias="credentialAlias")
-    owner_user_id: int | None = Field(default=None, alias="ownerUserId")
+    # authz M2a S3/S6:别名声明槽位(唯一凭证口径)
+    slot: str | None = Field(default=None, alias="slot")
     # 三态接入(P1.0):plate(受管) | external(第三方,无版本管理)
     kind: str = Field(default="plate", alias="kind")
     created_at: str | None = Field(default=None, alias="createdAt")
@@ -57,14 +49,10 @@ class AliasListOut(PageOut[AliasOut]):
 class AliasCreate(BaseModel):
     model_config = _CAMEL
 
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
     alias_name: str = Field(min_length=1, max_length=128, alias="aliasName")
-    # 2026-09-23 调整:别名 = 环境端点的登记,URL 必填(缺省/空串 422);
-    # patch 保持可空兼容(存量行可在触达时补齐)。
-    base_url: str = Field(min_length=1, max_length=512, alias="baseUrl")
-    environment_id: int | None = Field(default=None, alias="environmentId")
-    credential_alias: str | None = Field(
-        default=None, max_length=64, alias="credentialAlias")
-    owner_user_id: int | None = Field(default=None, alias="ownerUserId")
+    slot: str | None = Field(default=None, max_length=64, alias="slot")
     # 三态接入(P1.0):plate 走目录派生强约束。b2-8/b2-10d(归一 v1.0
     # §1.6):external 不派生 —— 必填显式 base_service(指向 plate 目录
     # kind=integration 的服务;校验在 service 层)。
@@ -74,13 +62,11 @@ class AliasCreate(BaseModel):
 
 
 class AliasPatch(BaseModel):
-    model_config = _CAMEL
+    # S6:退役字段(baseUrl/environmentId/credentialAlias/ownerUserId)422,
+    # 不静默丢弃 —— 旧客户端以为改了地址更糟
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    base_url: str | None = Field(
-        default=None, max_length=512, alias="baseUrl")
-    environment_id: int | None = Field(default=None, alias="environmentId")
-    credential_alias: str | None = Field(
-        default=None, max_length=64, alias="credentialAlias")
+    slot: str | None = Field(default=None, max_length=64, alias="slot")
     # b2-8:base_service 仅 external 可改(重指向 integration 系统)
     base_service: str | None = Field(
         default=None, max_length=128, alias="baseService")
@@ -96,7 +82,7 @@ async def list_aliases(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=200),
 ) -> AliasListOut:
-    """M4(§6.3):Page 信封 + ``q``(alias/base/credential 子串)下推。"""
+    """M4(§6.3):Page 信封 + ``q``(alias/base/slot 子串)下推。"""
     items, total = await service_aliases.list_aliases(
         db, base=base, q=q, page=page, page_size=page_size)
     return AliasListOut(
@@ -134,19 +120,11 @@ async def classify(
 async def create_alias(
     user: MemberUser, body: AliasCreate, db: DbSession,
 ) -> AliasOut:
-    """登记别名(M2.5,权限方案 §1.2 两类归属拆行):
-    团队共享(owner_user_id 空)= member+;个人默认(owner_user_id
-    非空,即「归属字段」)= admin —— 人事/内容权不落进技术运营角色。"""
-    if body.owner_user_id is not None and not has_capability(
-            user, "users.manage"):
-        raise capability_error("users.manage")
+    """登记别名(Admin+;S6 起别名全部团队共享,个人别名退役)。"""
     try:
         created = await service_aliases.create_alias(
-            db, alias_name=body.alias_name, environment_id=body.environment_id,
-            credential_alias=body.credential_alias,
-            owner_user_id=body.owner_user_id,
-            base_url=body.base_url, kind=body.kind,
-            base_service=body.base_service)
+            db, alias_name=body.alias_name, slot=body.slot,
+            kind=body.kind, base_service=body.base_service)
     except UnknownBaseService as e:
         # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
         # (kind=external 不受此约束 —— 第三方无目录概念)
@@ -171,25 +149,11 @@ async def create_alias(
 async def patch_alias(
     alias_name: str, user: MemberUser, body: AliasPatch, db: DbSession,
 ) -> AliasOut:
-    """改别名:共享行 member+;个人行 admin(归属域的写权只属 admin)。"""
-    row = (await db.execute(
-        select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
-    )).scalar_one_or_none()
-    if (row is not None and row.owner_user_id is not None
-            and not has_capability(user, "users.manage")):
-        raise capability_error("users.manage")
+    """改别名(Admin+)。``slot`` 显式给 null = 清除声明。"""
     try:
-        explicit_env = ("environment_id" in body.model_fields_set
-                        or "environmentId" in body.model_fields_set)
-        explicit_cred = ("credential_alias" in body.model_fields_set
-                         or "credentialAlias" in body.model_fields_set)
-        explicit_url = ("base_url" in body.model_fields_set
-                        or "baseUrl" in body.model_fields_set)
         patched = await service_aliases.patch_alias(
             db, alias_name,
-            environment_id=body.environment_id if explicit_env else ...,
-            credential_alias=body.credential_alias if explicit_cred else ...,
-            base_url=body.base_url if explicit_url else ...,
+            slot=body.slot if "slot" in body.model_fields_set else ...,
             base_service=(body.base_service if body.base_service is not None else ...),
             kind=body.kind)
     except KeyError as e:
@@ -209,12 +173,6 @@ async def patch_alias(
 async def delete_alias(
     alias_name: str, user: MemberUser, db: DbSession
 ) -> None:
-    row = (await db.execute(
-        select(ServiceAlias).where(ServiceAlias.alias_name == alias_name)
-    )).scalar_one_or_none()
-    if (row is not None and row.owner_user_id is not None
-            and not has_capability(user, "users.manage")):
-        raise capability_error("users.manage")
     await service_aliases.delete_alias(db, alias_name)
     from ..services import audit as audit_svc
 

@@ -1,84 +1,124 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+/**
+ * SchemeRunConfigSection — 运行配置区(authz M2a S6「别名瘦身」后口径)
+ *
+ * 绑定语义 = 「服务键 → 用哪个别名」({svc:{alias}}),URL/凭证字段退役:
+ * - 别名 select 只列与服务键同基的注册表别名(槽位带在选项文案里)
+ * - 选中 → update:serviceBindings 只落显式条目;清空 → 键移除
+ * - binding-url 输入已退役,不再渲染
+ * - 存量别名已删 → 行标红(binding-degraded-warn)+ disabled option 保值
+ * - 运行参数钳位/总量预览/stepTo 原生 select 行为保持
+ */
+import { describe, it, expect, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import SchemeRunConfigSection from '../SchemeRunConfigSection.vue'
+import type { ServiceAliasRow } from '@/api/service-aliases'
+
+const listAllAliasesMock = vi.hoisted(() => vi.fn())
+vi.mock('@/api/service-aliases', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/api/service-aliases')>()
+  return { ...real, listAllAliases: listAllAliasesMock }
+})
+
+const aliasRow = (aliasName: string, baseService: string, slot: string | null = null): ServiceAliasRow =>
+  ({ aliasName, baseService, slot, kind: 'plate', createdAt: '', updatedAt: '' })
 
 const BASE = {
   serviceBindings: {}, serviceRows: [
     { service: 'svc-a', declaredUrl: 'http://a' },
     { service: 'svc-b', declaredUrl: null },
+    { service: 'svc-bare', declaredUrl: null },
   ],
-  authOptions: ['alias-1', 'alias-2'], stepTo: null, nRuns: 1, parallel: 1,
+  stepTo: null as number | null, nRuns: 1, parallel: 1,
   stepCount: 3,
 }
 
+function mountSection(
+  props: Partial<typeof BASE> & { stepNames?: string[] } = {},
+) {
+  const w = mount(SchemeRunConfigSection, {
+    props: { ...BASE, ...props }, global: { plugins: [] },
+  })
+  return w
+}
+
 describe('SchemeRunConfigSection', () => {
-  it('选凭证别名 → update:serviceBindings(仅显式绑定入对象)', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
-    const sel = w.findAll('select')[0]  // svc-a 行的别名下拉(原生 select 简化实现)
-    await sel.setValue('alias-1')
+  it('选别名 → update:serviceBindings(仅显式绑定入对象)', async () => {
+    listAllAliasesMock.mockResolvedValue([
+      aliasRow('svc-a', 'svc-a'),
+      aliasRow('svc-a-uat', 'svc-a'),
+      aliasRow('svc-b', 'svc-b'),
+      aliasRow('svc-b-ro', 'svc-b', 'ro'),
+    ])
+    const w = mountSection()
+    await flushPromises()
+    const sel = w.findAll('[data-testid="binding-alias"]')[0]   // svc-a 行
+    await sel.setValue('svc-a-uat')
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
-      'svc-a': { authAlias: 'alias-1' },
-    })
-  })
-
-  it('运行参数钳位:nRuns/parallel 上限 64(Q4 对齐),总量预览 = nRuns×parallel 可见', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE, nRuns: 5, parallel: 4 }, global: { plugins: [] } })
-    expect(w.find('[data-testid="total-preview"]').text()).toContain('20')
-  })
-
-  // ── 显式绑定口径(镜像 RunDialog.explicitBindingOf,D3)──────────────
-  it('URL 覆盖:与声明相同不算显式(键移除);不同才带入 url', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
-    const url = w.findAll('[data-testid="binding-url"]')[0]  // svc-a 行(声明 http://a)
-    await url.setValue('http://a')          // = 声明 → 非显式,不下发
-    expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({})
-    await url.setValue('http://override')   // ≠ 声明 → 显式覆盖
-    expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
-      'svc-a': { url: 'http://override' },
+      'svc-a': { alias: 'svc-a-uat' },
     })
   })
 
   it('清空别名 → 移除该服务键', async () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [] },
-    })
-    await w.findAll('select')[0].setValue('')  // 「— 不绑定 —」
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a', 'svc-a'), aliasRow('svc-a-uat', 'svc-a')])
+    const w = mountSection({ serviceBindings: { 'svc-a': { alias: 'svc-a-uat' } } })
+    await flushPromises()
+    await w.findAll('[data-testid="binding-alias"]')[0].setValue('')   // 「— 用服务键本身 —」
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({})
   })
 
-  it('别名 + URL 覆盖并存 → 两个显式字段一起下发', async () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [] },
-    })
-    await w.findAll('[data-testid="binding-url"]')[0].setValue('http://x')
-    expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
-      'svc-a': { authAlias: 'alias-1', url: 'http://x' },
-    })
+  it('binding-url 输入已退役(M2a S6);无同基候选行显示静默说明代替下拉', async () => {
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
+    const w = mountSection()
+    await flushPromises()
+    expect(w.find('[data-testid="binding-url"]').exists()).toBe(false)
+    expect(w.findAll('input.bind-url').length).toBe(0)
+    // svc-a 有候选 → select;svc-b / svc-bare 无候选 → 静默说明
+    expect(w.findAll('[data-testid="binding-alias"]')).toHaveLength(1)
+    expect(w.text()).toContain('该服务暂无同基别名')
   })
 
-  it('总量超 200 → 红字提示超出上限(64 上限内即可触发:64×4=256)', () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, nRuns: 64, parallel: 4 },
-      global: { plugins: [] },
-    })
+  it('候选按同基过滤;槽位在选项文案带出', async () => {
+    listAllAliasesMock.mockResolvedValue([
+      aliasRow('svc-a', 'svc-a'),
+      aliasRow('svc-a-uat', 'svc-a'),
+      aliasRow('svc-a-maker', 'svc-a', 'maker'),
+      aliasRow('other', 'other-sys'),
+    ])
+    const w = mountSection()
+    await flushPromises()
+    const sel = w.findAll('[data-testid="binding-alias"]')[0]
+    const opts = sel.findAll('option').map((o) => o.text())
+    expect(opts[0]).toContain('用服务键本身')
+    expect(opts.some((t) => t === 'svc-a-uat')).toBe(true)
+    expect(opts.some((t) => t.includes('svc-a-maker(槽位 maker)'))).toBe(true)
+    expect(opts.some((t) => t.includes('other'))).toBe(false)   // 跨基不列
+  })
+
+  it('运行参数钳位:nRuns/parallel 上限 64(Q4 对齐),总量预览 = nRuns×parallel 可见', async () => {
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection({ nRuns: 5, parallel: 4 })
+    await flushPromises()
+    expect(w.find('[data-testid="total-preview"]').text()).toContain('20')
+  })
+
+  it('总量超 200 → 红字提示超出上限(64 上限内即可触发:64×4=256)', async () => {
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection({ nRuns: 64, parallel: 4 })
+    await flushPromises()
     expect(w.find('[data-testid="total-preview"]').text()).toContain('256')
     expect(w.text()).toContain('超出单次执行总量上限 200')
   })
 
-  // ── I-2:凭证别名被删 → 绑定行警示(spec §9)───────────────────────
-  it('存量别名已删:行标红警示 + select 以 disabled option 显示原别名', () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: {
-        ...BASE,
-        serviceBindings: { 'svc-a': { authAlias: 'ghost' } },  // ghost 不在 authOptions
-      },
-      global: { plugins: [] },
+  // ── I-2:选中的别名被删 → 绑定行警示(spec §9;M2a S6 注册表口径)─────
+  it('存量别名已删:行标红警示 + select 以 disabled option 显示原别名', async () => {
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a', 'svc-a')])
+    const w = mountSection({
+      serviceBindings: { 'svc-a': { alias: 'ghost' } },       // ghost 不在注册表
     })
+    await flushPromises()
     const row = w.findAll('.bind-row')[0]                       // svc-a 行
     expect(row.classes()).toContain('is-degraded')
-    expect(w.text()).toContain('凭证已删,请重选')
+    expect(w.find('[data-testid="binding-degraded-warn"]').text()).toContain('别名已删')
     // select 值保住:已删 alias 有对应 option(disabled,防重选但可见可存)
     const sel = w.findAll('[data-testid="binding-alias"]')[0]
     const opt = sel.findAll('option').find((o) => o.attributes('value') === 'ghost')
@@ -87,19 +127,20 @@ describe('SchemeRunConfigSection', () => {
     expect(opt!.text()).toContain('ghost')
   })
 
-  it('存量别名仍活:不标降级行(对照组)', () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [] },
-    })
+  it('存量别名仍活:不标降级行(对照组)', async () => {
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a', 'svc-a'), aliasRow('svc-a-uat', 'svc-a')])
+    const w = mountSection({ serviceBindings: { 'svc-a': { alias: 'svc-a-uat' } } })
+    await flushPromises()
     expect(w.findAll('.bind-row')[0].classes()).not.toContain('is-degraded')
-    expect(w.text()).not.toContain('凭证已删')
+    expect(w.text()).not.toContain('别名已删')
   })
 
   // ── stepTo 原生 select(替换 el-input-number:spinner 对空值发射 min(0)
   //    会把「全量」静默写成「第1步后停止」;下拉里 0 只能显式选)──────────
   it('stepTo=null → 选中「运行全部步骤」;选停步索引 → 发射数字', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection()
+    await flushPromises()
     const sel = w.find('[data-testid="param-stepto"]')
     expect((sel.element as HTMLSelectElement).value).toBe('')   // null → 空串哨兵
     await sel.setValue('2')
@@ -111,10 +152,9 @@ describe('SchemeRunConfigSection', () => {
   })
 
   it('stepTo 存量 0 → select 回显第1步后停止;选项带编排步骤名', async () => {
-    const w = mount(SchemeRunConfigSection, {
-      props: { ...BASE, stepTo: 0, stepNames: ['下单', '支付', '发货'] },
-      global: { plugins: [] },
-    })
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection({ stepTo: 0, stepNames: ['下单', '支付', '发货'] })
+    await flushPromises()
     const sel = w.find('[data-testid="param-stepto"]')
     expect((sel.element as HTMLSelectElement).value).toBe('0')
     const opts = sel.findAll('option')

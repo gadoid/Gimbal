@@ -1,5 +1,7 @@
-/** M2a S2.3:部署地址管理页 — 环境切换 / 行内编辑 / 默认环境切换 /
- * 冲突裁定(API 全走 mock;路径与载荷钉住)。 */
+/** M2a S2.3:部署地址管理页 — 环境切换 / 行内编辑 / 默认环境切换
+ *  (API 全走 mock;路径与载荷钉住)。authz M2a S6:部署表成为地址唯一
+ *  来源,/deployments/conflicts 端点与「待裁定」区已移除 — 这里钉住
+ *  冲突区不再渲染。 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -17,7 +19,6 @@ vi.mock('@/api/deployments', () => ({
   createDeployment: vi.fn(),
   updateDeployment: vi.fn(),
   deleteDeployment: vi.fn(),
-  listDeploymentConflicts: vi.fn(),
 }))
 
 const envs = vi.mocked(envApi)
@@ -32,10 +33,6 @@ function setup() {
   ])
   deps.listDeployments.mockResolvedValue([
     { id: 11, baseService: 'fin-service', envId: 1, baseUrl: 'http://fin-dev' },
-  ])
-  deps.listDeploymentConflicts.mockResolvedValue([
-    { baseService: 'jira', envId: 1,
-      aliases: { 'jira-a': 'http://a', 'jira-b': 'http://b' } },
   ])
 }
 
@@ -52,13 +49,14 @@ describe('DeploymentsAdmin', () => {
     setup()
   })
 
-  it('默认进默认环境:chip 激活 + 部署行 + 冲突区', async () => {
+  it('默认进默认环境:chip 激活 + 部署行;冲突区已随 M2a S6 移除', async () => {
     const w = await mountPage()
     expect(deps.listDeployments).toHaveBeenCalledWith(1)
     expect(w.get('[data-testid="dep-env-1"]').classes()).toContain('active')
     expect(w.get('[data-testid="dep-row-11"]').text()).toContain('fin-service')
-    expect(w.get('[data-testid="dep-conflict-jira-1"]').text())
-      .toContain('jira')
+    // M2a S6:别名地址退役,conflicts 端点下线 — 待裁定区不再渲染
+    expect(w.find('[data-testid="dep-conflicts"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('待裁定')
     // 默认环境:按钮是「取消默认」
     expect(w.find('[data-testid="dep-set-default"]').exists()).toBe(false)
     expect(w.find('[data-testid="dep-unset-default"]').exists()).toBe(true)
@@ -100,17 +98,6 @@ describe('DeploymentsAdmin', () => {
     await w.get('[data-testid="dep-del-11"]').trigger('click')
     await flushPromises()
     expect(deps.deleteDeployment).toHaveBeenCalledWith(11)
-  })
-
-  it('冲突裁定:选别名地址 → 建部署行并刷新', async () => {
-    deps.createDeployment.mockResolvedValue(
-      { id: 13, baseService: 'jira', envId: 1, baseUrl: 'http://a' })
-    const w = await mountPage()
-    await w.get('[data-testid="dep-resolve-jira-jira-a"]').trigger('click')
-    await flushPromises()
-    expect(deps.createDeployment).toHaveBeenCalledWith(
-      { baseService: 'jira', envId: 1, baseUrl: 'http://a' })
-    expect(deps.listDeploymentConflicts).toHaveBeenCalledTimes(2)
   })
 
   it('置默认/取消默认 → 环境列表刷新', async () => {

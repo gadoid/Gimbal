@@ -23,14 +23,15 @@ export interface AuthSession {
   accountFields?: Record<string, unknown>
 }
 
-/** 反查面板(配套方案 §1.3):四类引用,读时实时扫。 */
+/** 反查面板(配套方案 §1.3):引用面,读时实时扫。authz M2a S6 起
+ *  alias_refs 不再带 environment_id(别名不再归属环境);scheme 引用
+ *  种类已退役 —— serviceBindings 选的是注册表别名,不再点名凭证。 */
 export interface AliasRefItem {
   alias_name: string
   base_service: string
-  environment_id: number | null
 }
 
-/** kinds ⊆ {template, scheme, snapshot}(snake 契约对齐后端 auth schema)。 */
+/** kinds ⊆ {template, snapshot}(snake 契约对齐后端 auth schema)。 */
 export interface ScenarioRefItem {
   scenario_id: string
   name: string

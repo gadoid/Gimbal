@@ -171,11 +171,9 @@ async def test_credential_hits_use_declared_slot(client, fresh_db):
               "call": {"service": "legacy-svc", "method": "GET",
                        "path": "/x"}}]
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="qa-svc", base_service="qa",
-                           credential_alias="qa", slot="qa"))
+        s.add(ServiceAlias(alias_name="qa-svc", base_service="qa", slot="qa"))
         # 声明槽位与旧列分叉时(直插形态),命中取 slot
-        s.add(ServiceAlias(alias_name="legacy-svc", base_service="legacy",
-                           credential_alias="old-name", slot="new-name"))
+        s.add(ServiceAlias(alias_name="legacy-svc", base_service="legacy", slot="new-name"))
         await s.commit()
         hits = await service_aliases.credential_aliases_for(
             s, referenced_services(steps))

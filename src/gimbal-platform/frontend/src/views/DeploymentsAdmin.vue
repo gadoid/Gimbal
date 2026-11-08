@@ -3,8 +3,8 @@
     <header class="head">
       <h1>部署地址</h1>
       <p class="sub">
-        每个环境里各基础服务的地址。执行时显式选了环境(本次 / 方案 / 项目 /
-        个人偏好)按这里取址;只落到默认环境时别名自带地址优先,这里补缺。
+        每个环境里各基础服务的地址 —— 地址的唯一来源(authz M2a S6 起别名
+        不再自带地址,运行按执行环境链到这里取址)。
       </p>
     </header>
 
@@ -61,28 +61,14 @@
       </table>
       <p v-if="error" class="err" data-testid="dep-err">{{ error }}</p>
     </template>
-
-    <div v-if="conflicts.length" class="card" data-testid="dep-conflicts">
-      <h2>待裁定</h2>
-      <p class="sub">
-        这些服务在同一环境里有多个别名、地址不一致,迁移时没有落部署行(运行时各别名
-        仍用自带地址)。选定一个地址即建立部署行。
-      </p>
-      <div v-for="c in conflicts" :key="`${c.baseService}@${c.envId}`" class="conflict"
-           :data-testid="`dep-conflict-${c.baseService}-${c.envId}`">
-        <strong>{{ c.baseService }}</strong> @ {{ envName(c.envId) }}
-        <button v-for="(url, alias) in c.aliases" :key="alias" type="button" class="btn sm"
-                :data-testid="`dep-resolve-${c.baseService}-${alias}`"
-                @click="resolve(c, url)">{{ alias }}:{{ url }}</button>
-      </div>
-    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 /** DeploymentsAdmin.vue — authz M2a S2.3:部署表维护页(Admin+)。
- * 环境 chip 切换 → 该环境的 (基础服务 → 地址) 行内编辑;默认环境切换;
- * 迁移遗留冲突一键裁定(选一个别名地址建部署行)。错误内联展示。 */
+ * 环境 chip 切换 → 该环境的 (基础服务 → 地址) 行内编辑;默认环境切换。
+ * M2a S6 起部署表是地址唯一来源(别名地址退役),旧「迁移遗留冲突裁定」
+ * 区随 /deployments/conflicts 端点一并移除。错误内联展示。 */
 import { computed, onMounted, ref } from 'vue'
 import {
   listEnvironments, setDefaultEnvironment, unsetDefaultEnvironment,
@@ -90,20 +76,18 @@ import {
 } from '@/api/environments'
 import {
   listDeployments, createDeployment, updateDeployment, deleteDeployment,
-  listDeploymentConflicts, type Deployment, type DeploymentConflict,
+  type Deployment,
 } from '@/api/deployments'
 
 const envs = ref<EnvironmentRow[]>([])
 const envId = ref<number | null>(null)
 const rows = ref<Deployment[]>([])
-const conflicts = ref<DeploymentConflict[]>([])
 const form = ref({ baseService: '', baseUrl: '' })
 const editing = ref<number | null>(null)
 const editUrl = ref('')
 const error = ref('')
 
 const current = computed(() => envs.value.find((e) => e.id === envId.value) ?? null)
-const envName = (id: number) => envs.value.find((e) => e.id === id)?.name ?? `#${id}`
 
 function msg(e: unknown): string {
   const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
@@ -114,9 +98,6 @@ function msg(e: unknown): string {
 
 async function loadRows(): Promise<void> {
   rows.value = envId.value ? await listDeployments(envId.value) : []
-}
-async function loadConflicts(): Promise<void> {
-  try { conflicts.value = await listDeploymentConflicts() } catch { conflicts.value = [] }
 }
 async function pickEnv(id: number): Promise<void> {
   envId.value = id
@@ -131,7 +112,7 @@ async function add(): Promise<void> {
     await createDeployment({ baseService: form.value.baseService.trim(),
                              envId: envId.value, baseUrl: form.value.baseUrl.trim() })
     form.value = { baseService: '', baseUrl: '' }
-    await Promise.all([loadRows(), loadConflicts()])
+    await loadRows()
   } catch (e) { error.value = msg(e) }
 }
 function startEdit(d: Deployment): void {
@@ -148,7 +129,7 @@ async function saveEdit(d: Deployment): Promise<void> {
 }
 async function del(d: Deployment): Promise<void> {
   error.value = ''
-  try { await deleteDeployment(d.id); await Promise.all([loadRows(), loadConflicts()]) }
+  try { await deleteDeployment(d.id); await loadRows() }
   catch (e) { error.value = msg(e) }
 }
 async function makeDefault(): Promise<void> {
@@ -161,19 +142,11 @@ async function clearDefault(): Promise<void> {
   await unsetDefaultEnvironment(envId.value)
   envs.value = await listEnvironments()
 }
-async function resolve(c: DeploymentConflict, url: string): Promise<void> {
-  error.value = ''
-  try {
-    await createDeployment({ baseService: c.baseService, envId: c.envId, baseUrl: url })
-    await Promise.all([loadConflicts(), loadRows()])
-  } catch (e) { error.value = msg(e) }
-}
 
 onMounted(async () => {
   envs.value = await listEnvironments()
   const first = envs.value.find((e) => e.is_default) ?? envs.value[0]
   if (first) await pickEnv(first.id)
-  await loadConflicts()
 })
 </script>
 
@@ -185,8 +158,6 @@ onMounted(async () => {
 .env-chip { border: 1px solid #cbd5e1; border-radius: 999px; padding: 0.2rem 0.8rem; background: #fff; cursor: pointer; font-size: 0.85rem; }
 .env-chip.active { border-color: #2563eb; color: #2563eb; }
 .tag { margin-left: 0.35rem; font-size: 0.7rem; color: #16a34a; }
-.card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.conflict { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tbl th, .tbl td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eef2f7; }

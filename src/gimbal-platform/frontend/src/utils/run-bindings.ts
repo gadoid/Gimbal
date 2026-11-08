@@ -7,10 +7,16 @@
  * 不再有第三份。装配逻辑(取数/派生/dispatch)在 useRunAssembly,不在这里
  * —— 别让本文件变成既装配又判定的混合体。
  *
+ * authz M2a S6「别名瘦身」:绑定语义收敛为「服务键 → 用哪个别名」
+ * ({svc:{alias}}),URL/凭证字段退役 —— 地址由执行环境的部署表给出,
+ * 凭证槽位随所选别名声明。显式绑定 = 非空 alias;降级 = 选中别名已
+ * 从注册表删除。
+ *
  * 失效判定的**死集**输入来自 useInjectableSurface.deadIds(唯一派生,
  * 视图不得复刻);本文件只做"方案 × 死集 × 数据集清单"的纯组装。
  */
 import type { ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
+import type { ServiceAliasRow } from '@/api/service-aliases'
 import type { DataSetSummary } from '@/types/scenario-composer'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
@@ -24,45 +30,49 @@ export interface ServiceRow { service: string; declaredUrl: string | null }
  * 这里的常量只是它的前端镜像,用于提前拦 + 预览告警。 */
 export const MAX_TOTAL_RUNS = 200
 
-/** 行级显式绑定(D3,confirm 下发与另存快照同口径):预填未改动的
- * 声明 URL 不算显式绑定(否则 confirm 重送成覆盖、快照钉死旧声明
- * URL);未声明行任何非空 URL 都是救燃绑定。非显式行返回 undefined。 */
+/** 行级显式绑定(D3,confirm 下发与另存快照同口径,M2a S6 后):
+ * 非空 alias 才算显式绑定;空 = 用服务键本身,不落键。非显式行返回
+ * undefined(键整个移除)。 */
 export function explicitBindingOf(
   b: ServiceBinding | undefined,
-  declared: string | null,
 ): ServiceBinding | undefined {
-  const url = b?.url?.trim()
-  const effectiveUrl = url && url !== declared ? url : undefined
-  const authAlias = b?.authAlias || undefined
-  if (!authAlias && !effectiveUrl) return undefined
-  return {
-    ...(authAlias ? { authAlias } : {}),
-    ...(effectiveUrl ? { url: effectiveUrl } : {}),
-  }
+  const alias = b?.alias?.trim()
+  return alias ? { alias } : undefined
 }
 
 /** 装配显式绑定记录:空绑定条目不落(confirm 下发与另存快照共用;
- * 后端注入清单 = 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定 authAlias)。 */
+ * 后端注入清单 = 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定别名的槽位)。 */
 export function assembleExplicitBindings(
   bindings: Record<string, ServiceBinding>,
   serviceRows: ServiceRow[],
 ): Record<string, ServiceBinding> {
   const out: Record<string, ServiceBinding> = {}
   for (const row of serviceRows) {
-    const eb = explicitBindingOf(bindings[row.service], row.declaredUrl)
+    const eb = explicitBindingOf(bindings[row.service])
     if (eb) out[row.service] = eb
   }
   return out
 }
 
-/** 降级口径(spec §9):alias 非空且已不在凭证选项(凭证被删)。
+/** 降级口径(spec §9,M2a S6 后):选中的别名已不在注册表(被删)。
  * 两态共用 — 编辑中的 bindings 与方案存量 serviceBindings 都传 alias 进来;
  * 标红警示,不阻塞运行。 */
 export function degradedAlias(
   alias: string | undefined,
-  authOptions: readonly string[],
+  aliasNames: readonly string[],
 ): boolean {
-  return !!alias && !authOptions.includes(alias)
+  return !!alias && !aliasNames.includes(alias)
+}
+
+/** 服务键的绑定候选(M2a S6):与该服务同基(baseService 相同)的其它
+ * 别名。svc 本身若是已登记别名名,基 = 该别名行的 baseService(别名可
+ * 再指向别名);否则基 = svc(裸服务键)。候选排除 svc 自己。 */
+export function aliasCandidates(
+  svc: string,
+  aliases: readonly ServiceAliasRow[],
+): ServiceAliasRow[] {
+  const base = aliases.find((a) => a.aliasName === svc)?.baseService ?? svc
+  return aliases.filter((a) => a.baseService === base && a.aliasName !== svc)
 }
 
 /** 概要行数:段带 rowIndexes 按段计,缺省段 = 整库(空库按 1 隐式行) */

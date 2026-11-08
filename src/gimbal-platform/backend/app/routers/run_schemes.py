@@ -48,7 +48,17 @@ def _to_payload(s: RunScheme) -> dict:
 
 
 async def _require_env(db, body: RunScheme) -> None:
-    """S2.2:方案环境写时必须存在(运行期对被删环境才按未设置容忍)。"""
+    """写时校验:S2.2 方案环境必须存在(运行期对被删环境才按未设置
+    容忍);S6 绑定选的别名须存在且与服务键同基础服务。"""
+    from ..services.service_aliases import (BindingAliasInvalid,
+                                            validate_binding_aliases)
+    try:
+        await validate_binding_aliases(db, {
+            k: b.model_dump() for k, b in body.service_bindings.items()})
+    except BindingAliasInvalid as e:
+        raise HTTPException(status_code=422, detail={
+            "code": e.code, "message": e.message,
+            "service": e.service, "alias": e.alias}) from None
     if body.environment_id is None:
         return
     from ..models.environment import Environment

@@ -181,11 +181,18 @@ async def _materialized_executable(
     # overlay 下产物 ≡ 基线单行 case.json,逐字段相等。
     if overlay is not None:
         # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
-        # exec_auth_aliases 唯一实现(模板扫描 ∪ 绑定 authAlias ∪
-        # **别名表凭证默认**)在 prepare_exec 内消费完整绑定(dict 值
-        # 读 authAlias,与 url 物化互不干扰)。
+        # exec_auth_aliases 唯一实现(模板扫描 ∪ 生效别名声明槽位)在
+        # prepare_exec 内消费绑定(S6:绑定 = 服务键 → 别名)。
         service_bindings = {k: b.model_dump(by_alias=True)
                             for k, b in overlay.service_bindings.items()}
+        from ..services.service_aliases import (BindingAliasInvalid,
+                                                validate_binding_aliases)
+        try:
+            await validate_binding_aliases(db, service_bindings)
+        except BindingAliasInvalid as e:
+            raise HTTPException(status_code=422, detail={
+                "code": e.code, "message": e.message,
+                "service": e.service, "alias": e.alias})
     else:
         # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
         # 的唯一开关(with_auth=False 跳过清单+解析);carry 见下方
@@ -219,13 +226,13 @@ async def _materialized_executable(
         )
     return materialize_run_copy(
         converted,
-        service_bindings=service_bindings,
         resolved_auths=prep.resolved_auths,
         # users 唯一来源 = 属主规则裁定后的内置凭证(属主导出照旧带
         # 明文 —— 10-14 口径;非属主为空)+ overlay 解析的凭证
         built_in_users=prep.built_in_users,
         carry_context=prep.carry_ctx,
         alias_base_urls=prep.alias_base_urls,
+        direct_addresses=prep.direct_addresses,
     )
 
 

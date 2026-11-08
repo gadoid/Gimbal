@@ -63,7 +63,7 @@ async def test_preview_shape_and_equality_with_dispatch(
         await s.flush()
         env_id = env.id
         s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-svc",
-                           kind="external", base_url="http://alias-url"))
+                           kind="external"))
         binding = AuthSession(
             owner_id=uid, alias="qa1", url="http://auth",
             username_enc=fernet_encrypt("u"), password_enc=fernet_encrypt("p"),
@@ -91,11 +91,10 @@ async def test_preview_shape_and_equality_with_dispatch(
     assert out["carry"]["fin-alias"]["$.fee"] == {
         "value": "0.5", "source": f"project:1:alias"}
 
-    # 无环境:别名地址(source=alias)
+    # 无环境(无默认环境):S6 起无 ③(别名自带地址已退役)→ 不出现
     r = await client.post("/api/runs/preview", headers=h, json={
         "scenarioId": "sc-s50"})
-    svc = r.json()["services"]["fin-alias"]
-    assert svc["url"] == "http://alias-url" and svc["source"] == "alias"
+    assert "fin-alias" not in r.json()["services"]
 
     # ② 执行物化:与预览同值(地址/注入键/${slot} 替换)
     cases: list[dict] = []
@@ -133,8 +132,8 @@ async def test_dispatch_missing_slot_refused_and_preview_reports(
 
 
 async def test_adhoc_addresses_env_aware(client, plate_mock: PlateMock):
-    """S5:adhoc 地址走统一 ③ 层链 —— 别名无 base_url 但默认环境部署表
-    有 → 放行;两处都缺 → 422(错误码不变)。"""
+    """S5:adhoc 地址走统一 ③ 层链 —— 默认环境部署表有 → 放行;缺 →
+    422(错误码不变;S6 起部署表是唯一来源)。"""
     plate_mock.behaviour = "echo"
     h = await register_and_login(client, "s50c", "pw123456")
     async with db_module.SessionLocal() as s:
@@ -143,7 +142,7 @@ async def test_adhoc_addresses_env_aware(client, plate_mock: PlateMock):
         s.add(env)
         await s.flush()
         s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-svc",
-                           kind="external", base_url=None))
+                           kind="external"))
         s.add(Deployment(base_service="fin-svc", env_id=env.id,
                          base_url="http://deploy"))
         await s.commit()

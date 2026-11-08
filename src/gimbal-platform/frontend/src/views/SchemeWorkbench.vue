@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 方案工作台壳:左右分栏、取数编排、选中态;编辑区 = 数据区(Task 5)+ 后续任务区。
- *  装配取数与派生(serviceRows / authOptions / stepNames)收编在
+ *  装配取数与派生(serviceRows / stepNames)收编在
  *  useRunAssembly(执行设计 §1.5)— 本页不再持有派生副本。 */
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -37,7 +37,6 @@ const {
   dataSets,
   schemes,
   serviceRows,
-  authOptions,
   stepNames,
   stepCount,
   surface,
@@ -371,7 +370,6 @@ async function onDeleteDataSet(datasetId: string) {
             v-model:n-runs="draftNRuns"
             v-model:parallel="draftParallel"
             :service-rows="serviceRows"
-            :auth-options="authOptions"
             :step-count="stepCount"
             :step-names="stepNames"
           />

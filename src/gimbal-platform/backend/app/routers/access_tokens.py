@@ -131,7 +131,8 @@ async def _task_missing(
         return None      # 场景缺失走 run 面报错,不是范围缺项
     bindings = await _task_bindings(db, tpl, scen)
     used = await at.used_sets_for_definition(
-        db, definition_from_payload(scen.payload), bindings)
+        db, definition_from_payload(scen.payload), bindings,
+        project_id=scen.project_id)
     return await at.check_scope(db, tok, tok.user_id, used,
                                 scope=(scope_aliases, scope_auths))
 

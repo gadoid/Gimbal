@@ -1,10 +1,9 @@
 """authz M2a S2.1:环境选择链 + 地址 ③ 层切部署表。
 
 链路:本次显式(RunRequest/图级)> 方案 > 项目默认 > 个人偏好 > 默认
-环境;地址合并规则(影子期,见 env_chain 模块注释):显式选环境部署表
-优先、别名自带地址兜底;默认环境兜底时别名地址优先、部署表只补缺 ——
-没人显式选环境时与旧链逐字节相同(D2)。集成模板的环境不吃个人偏好
-(同一模板全订阅者同一指纹)。
+环境;S6 起地址只来自部署表(别名自带地址与影子期合并规则随 0047
+退役;无环境 = 无 ③)。集成模板的环境不吃个人偏好(同一模板全订阅者
+同一指纹)。
 """
 from __future__ import annotations
 
@@ -21,8 +20,7 @@ from app.models.service_alias import ServiceAlias
 from app.services import env_chain, integration_runner, scheme_store
 from app.services import service_aliases
 from app.services.env_chain import (
-    NO_ENV, EnvChoice, EnvironmentNotFound, merge_addresses,
-    resolve_environment,
+    NO_ENV, EnvChoice, EnvironmentNotFound, resolve_environment,
 )
 
 from .helpers import make_draft as _draft, wait_until as _wait
@@ -51,13 +49,12 @@ async def _seed_scenario(client, h, sid: str) -> None:
     assert r.status_code in (200, 201), r.text
 
 
-async def _seed_addresses(env_name: str, *, alias_url: str | None,
+async def _seed_addresses(env_name: str, *,
                           deploy_url: str | None) -> int:
-    """建环境 + 别名(可带自带地址)+ 该环境的部署行;返回环境 id。"""
+    """建环境 + 别名 + 该环境的部署行;返回环境 id。"""
     async with db_module.SessionLocal() as s:
         env_id = await _env(s, env_name)
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE,
-                           base_url=alias_url))
+        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE))
         if deploy_url:
             s.add(Deployment(base_service=_BASE, env_id=env_id,
                              base_url=deploy_url))
@@ -120,34 +117,18 @@ async def test_chain_none_when_nothing_set(fresh_db):
         assert await resolve_environment(s) is NO_ENV
 
 
-# ── ② 合并规则 ─────────────────────────────────────────────────────
-
-def test_merge_rules():
-    alias = {"a": "http://alias-a", "b": "http://alias-b"}
-    deploy = {"a": "http://dep-a", "c": "http://dep-c"}
-    # 显式选择:部署表优先,别名兜底
-    assert merge_addresses(alias, deploy, EnvChoice(1, "explicit")) == {
-        "a": "http://dep-a", "b": "http://alias-b", "c": "http://dep-c"}
-    # 默认环境兜底:别名地址优先,部署表只补别名没有的键
-    assert merge_addresses(alias, deploy, EnvChoice(1, "default")) == {
-        "a": "http://alias-a", "b": "http://alias-b", "c": "http://dep-c"}
-
+# ── ② 地址 ③:部署表单源(S6)───────────────────────────────────────
 
 async def test_base_urls_for_env_aware(fresh_db):
-    dev = await _seed_addresses("s21-dev", alias_url="http://alias-dev",
-                                deploy_url="http://dep-dev")
+    dev = await _seed_addresses("s21-dev", deploy_url="http://dep-dev")
     async with db_module.SessionLocal() as s:
-        # 无环境:旧链
-        assert await service_aliases.base_urls_for(s, [_ALIAS]) == \
-            {_ALIAS: "http://alias-dev"}
-        # 显式:部署表接管(别名 → 基础服务 → 部署行)
-        assert await service_aliases.base_urls_for(
-            s, [_ALIAS], env=EnvChoice(dev, "explicit")) == \
-            {_ALIAS: "http://dep-dev"}
-        # 默认兜底:别名自带地址优先
-        assert await service_aliases.base_urls_for(
-            s, [_ALIAS], env=EnvChoice(dev, "default")) == \
-            {_ALIAS: "http://alias-dev"}
+        # 无环境:无 ③(别名自带地址已退役)
+        assert await service_aliases.base_urls_for(s, [_ALIAS]) == {}
+        # 显式 / 默认兜底同口径:别名 → 基础服务 → 部署行
+        for src in ("explicit", "default"):
+            assert await service_aliases.base_urls_for(
+                s, [_ALIAS], env=EnvChoice(dev, src)) == \
+                {_ALIAS: "http://dep-dev"}
         # 非别名键 = 基础服务本身
         assert await service_aliases.base_urls_for(
             s, [_BASE], env=EnvChoice(dev, "explicit")) == \
@@ -161,8 +142,7 @@ async def test_dispatch_explicit_env_snapshot_and_address(
     plate_mock.behaviour = "echo"
     h = await _member(client, "s21run")
     await _seed_scenario(client, h, "sc-s21-run")
-    dev = await _seed_addresses("s21-run-dev", alias_url="http://alias-dev",
-                                deploy_url="http://dep-dev")
+    dev = await _seed_addresses("s21-run-dev", deploy_url="http://dep-dev")
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -175,12 +155,12 @@ async def test_dispatch_explicit_env_snapshot_and_address(
     assert cfg["environmentId"] == dev
     assert cfg["environmentSource"] == "explicit"
 
-    # 不带环境(无默认环境):与旧链相同(别名地址),快照键缺席
+    # 不带环境(无默认环境):无 ③,地址留缺口(引擎显式报错),快照键缺席
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s21-run", dataSetIds=[]))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 2)
-    assert cases[1]["config"]["services"][_ALIAS] == "http://alias-dev"
+    assert _ALIAS not in cases[1]["config"]["services"]
     cfg, _ = await _last_config_json()
     assert "environmentId" not in cfg
 
@@ -197,8 +177,7 @@ async def test_dispatch_scheme_env_resolved_server_side(
     plate_mock.behaviour = "echo"
     h = await _member(client, "s21sch")
     await _seed_scenario(client, h, "sc-s21-sch")
-    dev = await _seed_addresses("s21-sch-dev", alias_url=None,
-                                deploy_url="http://dep-sch")
+    dev = await _seed_addresses("s21-sch-dev", deploy_url="http://dep-sch")
     async with db_module.SessionLocal() as s:
         sch = await scheme_store.create_scheme(
             s, "sc-s21-sch", name="带环境", payload={"environmentId": dev})
@@ -229,8 +208,7 @@ async def test_dispatch_unknown_environment_404(client, plate_mock: PlateMock):
 async def test_precheck_env_aware(client, fresh_db):
     h = await _member(client, "s21pre")
     await _seed_scenario(client, h, "sc-s21-pre")
-    dev = await _seed_addresses("s21-pre-dev", alias_url=None,
-                                deploy_url="http://dep-pre")
+    dev = await _seed_addresses("s21-pre-dev", deploy_url="http://dep-pre")
     async with db_module.SessionLocal() as s:
         plain = await scheme_store.create_scheme(
             s, "sc-s21-pre", name="无环境", payload={})
@@ -252,20 +230,18 @@ async def test_export_overlay_env_materializes_deployment(
         client, plate_mock: PlateMock):
     plate_mock.behaviour = "echo"
     h = await _member(client, "s21exp")
-    dev = await _seed_addresses("s21-exp-dev", alias_url="http://alias-exp",
-                                deploy_url="http://dep-exp")
+    dev = await _seed_addresses("s21-exp-dev", deploy_url="http://dep-exp")
     body = _draft("sc-s21-exp", steps=[_STEP])
     r = await client.post("/api/scenarios/preview-plate", headers=h,
                           json={**body, "overlay": {"environmentId": dev}})
     assert r.status_code == 200, r.text
     assert r.json()["converted"]["config"]["services"][_ALIAS] == \
         "http://dep-exp"
-    # 不带环境:旧链(别名地址)
+    # 不带环境(无默认环境):无 ③
     r = await client.post("/api/scenarios/preview-plate", headers=h,
                           json={**body, "overlay": {}})
     assert r.status_code == 200, r.text
-    assert r.json()["converted"]["config"]["services"][_ALIAS] == \
-        "http://alias-exp"
+    assert _ALIAS not in r.json()["converted"]["config"]["services"]
 
 
 # ── ⑥ 集成模板:环境不吃个人偏好;指纹随部署地址变化 ──────────────

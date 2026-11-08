@@ -207,12 +207,13 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 }
 
 // ── run ────────────────────────────────────────────────────────
-/** service → {authAlias?, url?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形。
- *  查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
- *  与运行方案无关(退场记录见 docs/adr/0003)。 */
+/** service → {alias} 绑定(authz M2a S6「别名瘦身」):语义 = 「服务键 →
+ *  用哪个别名」(如 fin → fin-maker)。旧 url/authAlias 字段已退役
+ *  (后端 422 binding_field_retired);选中的别名须已登记且 baseService
+ *  与服务键同基(422/409 binding_alias_unknown / binding_alias_mismatch)。
+ *  地址不再按运行选择 — 由执行环境的部署表给出。 */
 export interface ServiceBinding {
-  authAlias?: string
-  url?: string
+  alias?: string
 }
 
 /** 行级数据集选择(spec v3 §4):datasetId + rowIndexes(0-based,与编辑器
@@ -249,9 +250,10 @@ export interface RunRequest {
   /** 断言注入条目(spec v2 §5):异常组 — 跑在基线上,与数据集行并列生成
    *  case;缺省 = 不注入。引擎侧展开由后续任务接入。 */
   injectionEntryIds?: string[]
-  /** service → {authAlias?, url?} 绑定:注入清单 = 模板扫描(steps 里的
-   * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
-   * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
+  /** service → {alias} 绑定(authz M2a S6):注入清单 = 模板扫描(steps 里
+   *  的 ${auth.*} 引用)∪ 绑定 alias 声明的槽位;地址由执行环境的部署表
+   *  给出。旧 auths/injectCredentials/prefix/mergePolicy 与绑定
+   *  authAlias/url 已退役(spec §6 / M2a S6) */
   serviceBindings?: Record<string, ServiceBinding>
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */

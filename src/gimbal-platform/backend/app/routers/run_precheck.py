@@ -196,17 +196,19 @@ async def _precheck_one(
     steps = definition_from_payload(raw_payload).get("steps") or []
     declared = (definition_from_payload(raw_payload).get("config") or {}).get("services")
     declared = declared if isinstance(declared, dict) else {}
-    # N1-7:与执行期地址三层链同口径 —— ①绑定 url > ②authored 声明 >
-    # ③ service_aliases.base_url > ④缺口引擎报错。预检此前只判 ①②,
-    # 会被③层补上的服务误报 unbound(预检拦了、执行能跑 —— 口径漂移)。
-    # 落点判定共用 run_materialize.service_url_resolved(物化 _apply_
-    # services 同一实现,规则不第二份重写);③层命中按需查询(只查
-    # ①② 后仍有缺口的候选,不整表拉)。
+    from ..services.run_prepare import zone_allows_direct
+    if not zone_allows_direct(scen.project_id):
+        declared = {}        # 原 5:项目/公共区直连地址不生效
+    # N1-7:与执行期地址链同口径 —— ②authored 声明 > ③ 环境部署地址 >
+    # ④缺口引擎报错(① 绑定 url 随 S6 退役)。落点判定共用
+    # run_materialize.service_url_resolved(物化 _apply_services 同一
+    # 实现,规则不第二份重写);③层命中按需查询(只查 ② 后仍有缺口
+    # 的候选,不整表拉)。
     from ..services.run_materialize import service_url_resolved
     candidates = [
         svc for svc in referenced_services(steps)
         if not service_url_resolved(svc, declared=declared,
-                                    bindings=bindings, alias_base_urls={})
+                                    alias_base_urls={})
     ]
     if candidates:
         try:
@@ -219,17 +221,18 @@ async def _precheck_one(
                 project_id=scen.project_id, user_id=user_id)
             alias_urls = await service_aliases.base_urls_for(
                 db, candidates, env=_env)
-        except Exception:  # noqa: BLE001 — 查表失败退回①②口径(不误放行)
+        except Exception:  # noqa: BLE001 — 查表失败退回 ② 口径(不误放行)
             alias_urls = {}
         candidates = [s for s in candidates if not service_url_resolved(
-            s, declared=declared, bindings=bindings, alias_base_urls=alias_urls)]
+            s, declared=declared, alias_base_urls=alias_urls)]
     result.unbound_services = candidates
 
     # ── webhook v4 §5.3:令牌范围预检(缺项分类 + 范围外目标)─────
     if token is not None:
         from ..services import access_token as at_svc
         used = await at_svc.used_sets_for_definition(
-            db, definition_from_payload(raw_payload), bindings)
+            db, definition_from_payload(raw_payload), bindings,
+            project_id=scen.project_id)
         missing = await at_svc.check_scope(db, token, token.user_id, used)
         if missing:
             result.scope_missing = [

@@ -5,6 +5,10 @@ import type { ServiceBinding } from './scenario-composer'
 
 export type ExecutionStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled'
 
+/** 台账 config.serviceBindings 的读侧宽容形状:新执行 = {alias}(M2a S6),
+ *  历史执行可能仍是 legacy {authAlias,url} — 展示层只读不回写。 */
+export type ExecutionServiceBinding = ServiceBinding & { authAlias?: string; url?: string }
+
 export interface Execution {
   id: number
   scenario_id: string
@@ -38,10 +42,11 @@ export interface Execution {
     scenarioId?: string
     dataSetIds?: string[]
     envId?: string
-    /** 实际注入清单(模板扫描 ∪ 绑定 authAlias)— 读侧据此展示认证列 */
+    /** 实际注入清单(模板扫描 ∪ 绑定别名声明的槽位)— 读侧据此展示认证列 */
     injectedAuths?: string[]
-    /** service → {authAlias?, url?}(驼峰 dump,None 键不落) */
-    serviceBindings?: Record<string, ServiceBinding>
+    /** service → 绑定(authz M2a S6 起新执行 = {svc:{alias}};旧执行存量
+     *  可能仍是 legacy {authAlias,url} — 展示按 JSON 原样渲染,两形状都容忍) */
+    serviceBindings?: Record<string, ExecutionServiceBinding>
     /** 0-based inclusive halt index(W19 前的旧平铺键;新行读 runOptions) */
     stepTo?: number | null
     nRuns?: number

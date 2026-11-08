@@ -5,7 +5,8 @@
  * environments 声明「每个系统部署的是哪条版本线」（lines =
  * {系统名: 版本线}）;``is_default`` = Admin 指定的默认环境(环境链末位
  * 兜底,D2)。visibility 随 0044 删除。字段为后端原样蛇形(EnvironmentView
- * 无驼峰别名)。服务别名经 environmentId 挂靠环境。
+ * 无驼峰别名)。服务别名不再挂靠环境(authz M2a S6)— 环境只经部署表
+ * 给地址、经环境链选执行环境。
  */
 import http from '@/api/http'
 

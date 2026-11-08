@@ -82,7 +82,10 @@ def upgrade() -> None:
     #   落其环境;没挂环境的别名落默认环境(无默认则不落)。**同键地址
     #   不一致(冲突)的键不落行**:该基础服务在该环境下各别名运行时各自
     #   回退自带地址(逐字节不变,D2),由 Admin 在部署表页显式裁定
-    if _has_column(bind, "service_aliases", "base_url"):
+    # fresh 链守卫:0006 会补回 base_url,但 environment_id 只在存量库有
+    # (0047 删列后 baseline 无此列)—— 两列齐全才是存量形态
+    if (_has_column(bind, "service_aliases", "base_url")
+            and _has_column(bind, "service_aliases", "environment_id")):
         bind.execute(sa.text("""
             INSERT INTO deployments
                 (base_service, env_id, base_url, created_at, updated_at)

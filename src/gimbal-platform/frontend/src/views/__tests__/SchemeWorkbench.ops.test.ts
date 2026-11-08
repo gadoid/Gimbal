@@ -21,8 +21,16 @@ vi.mock('@/utils/confirmAction', () => ({
   promptAction: vi.fn(async () => null),
 }))
 
-// 运行配置区别名下拉:owner 凭证池(RunPanelHost 同款取数口)
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 200 })), listAll: vi.fn(async () => [{ alias: 'alias-1' }]) }))
+// 运行配置区别名下拉(M2a S6):SchemeRunConfigSection 自取注册表 —
+// svc-decl/svc-ref 各一个同基候选,服务键本身在册但不出现在自己的下拉里
+vi.mock('@/api/service-aliases', () => ({
+  listAllAliases: vi.fn(async () => [
+    { aliasName: 'svc-decl', baseService: 'svc-decl', slot: null, kind: 'plate' as const, createdAt: '', updatedAt: '' },
+    { aliasName: 'alias-1', baseService: 'svc-decl', slot: null, kind: 'plate' as const, createdAt: '', updatedAt: '' },
+    { aliasName: 'svc-ref', baseService: 'svc-ref', slot: null, kind: 'plate' as const, createdAt: '', updatedAt: '' },
+    { aliasName: 'bob', baseService: 'svc-ref', slot: null, kind: 'plate' as const, createdAt: '', updatedAt: '' },
+  ]),
+}))
 
 const SCHEME_DEFAULT = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
@@ -74,9 +82,9 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     expect(w.text()).toContain('svc-decl')
     expect(w.text()).toContain('http://decl')
     expect(w.text()).toContain('svc-ref')
-    // 别名下拉选项 = owner 凭证池 ∪ 场景内置 users
+    // 别名下拉选项 = 与该服务同基的注册表别名(M2a S6;服务键本身不列)
     const opts = rows[0].findAll('option').map((o) => (o.element as HTMLOptionElement).value)
-    expect(opts).toEqual(['', 'alias-1', 'bob'])
+    expect(opts).toEqual(['', 'alias-1'])
     expect(w.find('[data-testid="total-preview"]').exists()).toBe(true)
   })
 
@@ -90,7 +98,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     await w.find('[data-testid="save-scheme"]').trigger('click')
     await flushPromises()
     expect(api.updateRunScheme).toHaveBeenCalledWith('sc-wb', 'rs-001',
-      expect.objectContaining({ serviceBindings: { 'svc-decl': { authAlias: 'alias-1' } } }))
+      expect.objectContaining({ serviceBindings: { 'svc-decl': { alias: 'alias-1' } } }))
   })
 
   // ── 头部「▶ 运行此方案」(阶段③:深链预选)──────────────────────────

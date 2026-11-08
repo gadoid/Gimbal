@@ -378,14 +378,21 @@ async def test_preview_plate_connect_error_returns_502(
 
 # ── run dispatcher ────────────────────────────────────────────────
 async def _seed_scenario_case_and_dataset(
-    client: AsyncClient, headers: dict, *, rows: list[dict]
+    client: AsyncClient, headers: dict, *, rows: list[dict],
+    service: str | None = None,
 ) -> None:
-    """Create scenario + 1 dataset with the given rows (Case layer dissolved)."""
+    """Create scenario + 1 dataset with the given rows (Case layer dissolved).
+
+    ``service``:给场景一步引用该服务键(authz M2a S6:绑定只对 steps
+    实际引用的服务键选别名 —— 凭证注入用例须有被引用的服务)。"""
     # C1:数据集行键须 ⊆ 场景标量声明变量 — 把行键声明为标量 vars。
+    steps = ([{"kind": "step", "call": {"service": service, "path": "/x"}}]
+             if service else None)
     await client.post(
         "/api/scenarios",
         headers=headers,
-        json=_draft(vars_map={k: 0 for row in rows for k in row}),
+        json=_draft(vars_map={k: 0 for row in rows for k in row},
+                    steps=steps),
     )
     r = await client.post(
         "/api/scenarios/sc-test/data-sets",
@@ -635,7 +642,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
     """
     headers = await _register_and_login(client)
     await _seed_scenario_case_and_dataset(
-        client, headers, rows=[{"qty": 1}, {"qty": 2}]
+        client, headers, rows=[{"qty": 1}, {"qty": 2}], service="fin"
     )
 
     r = await client.post(
@@ -676,6 +683,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
         raise AssertionError("解密失败后不得分发执行")
 
     monkeypatch.setattr(gl, "launch", _must_not_run)
+    await _alias_with_slot("fin-c1", "fin", "corrupt1")
 
     r = await client.post(
         "/api/runs",
@@ -683,7 +691,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "serviceBindings": {"fin": {"authAlias": "corrupt1"}},
+            "serviceBindings": {"fin": {"alias": "fin-c1"}},
         },
     )
     assert r.status_code == 201
@@ -694,6 +702,16 @@ async def test_run_auth_decrypt_failure_fails_execution(
     assert ex.passed == 0
     # 一行都没到 plate / gimbal
     assert len(plate_mock.convert_calls) == 0
+
+
+async def _alias_with_slot(alias_name: str, base: str, slot: str) -> None:
+    """authz M2a S6:绑定只选别名 —— 种一个声明槽位的同基础服务别名。"""
+    from app.core import db as db_module
+    from app.models.service_alias import ServiceAlias
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name=alias_name, base_service=base,
+                           kind="external", slot=slot))
+        await s.commit()
 
 
 async def test_run_dispatch_records_failure_when_plate_down(
@@ -721,7 +739,7 @@ async def test_run_dispatch_records_failure_when_plate_down(
 async def test_run_injects_exec_auths_into_run_copy_only(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """执行用认证注入(serviceBindings.authAlias):解密注入只进 run 副本,
+    """执行用认证注入(S6:绑定选别名 → 该别名声明槽位):解密注入只进 run 副本,
     convert 永不带明文。
 
     锁三条边界(#1 改造的安全契约 + V3.2 run 链路接线):
@@ -735,7 +753,8 @@ async def test_run_injects_exec_auths_into_run_copy_only(
          注入清单 = 扫描 ∪ 绑定),不再是旧的 "auth"/"exec_auth_alias"。
     """
     headers = await _register_and_login(client)
-    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
+    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}],
+                                          service="fin-service")
 
     # 建一个执行用认证(fernet 加密存储,与 /api/auths 生产路径一致)
     r = await client.post(
@@ -766,6 +785,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
                                total=1, passed=1)
 
     monkeypatch.setattr(gl, "launch", _capture_run)
+    await _alias_with_slot("fin-service-q1", "fin-service", "qa1")
 
     r = await client.post(
         "/api/runs",
@@ -773,7 +793,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
+            "serviceBindings": {"fin-service": {"alias": "fin-service-q1"}},
         },
     )
     assert r.status_code == 201
@@ -814,7 +834,8 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         )
         assert ex is not None
         assert ex.config_json["injectedAuths"] == ["qa1"]
-        assert ex.config_json["serviceBindings"]["fin-service"]["authAlias"] == "qa1"
+        assert ex.config_json["serviceBindings"]["fin-service"] == {
+            "alias": "fin-service-q1"}
         assert "auth" not in ex.config_json
         assert "exec_auth_alias" not in ex.config_json
 
@@ -831,7 +852,8 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     alice 的 username(且只有一行注入)。
     """
     headers = await _register_and_login(client)  # alice
-    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
+    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}],
+                                          service="fin-service")
 
     async def _create_auth(h: dict, username: str) -> None:
         r = await client.post(
@@ -867,14 +889,15 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
 
     monkeypatch.setattr(gl, "launch", _capture_run)
 
-    # alice 发起运行,选撞名 alias
+    # alice 发起运行,选声明撞名槽位 qa1 的别名
+    await _alias_with_slot("fin-service-q1", "fin-service", "qa1")
     r = await client.post(
         "/api/runs",
         headers=headers,
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
+            "serviceBindings": {"fin-service": {"alias": "fin-service-q1"}},
         },
     )
     assert r.status_code == 201

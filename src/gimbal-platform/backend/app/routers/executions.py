@@ -48,7 +48,8 @@ from ..schemas.execution import (
     ExecutionRowsOut,
     ExecutionSummaryOut,
 )
-from ..schemas.scenario_composer import RunRequest, RunResponse
+from ..schemas.scenario_composer import (RunRequest, RunResponse,
+                                        scrub_retired_bindings)
 from ..services import execution_store, run_dispatcher, scenario_store
 from ..services.access_token import Principal
 from ..services.run_dispatcher import Conflict, NotFound
@@ -883,7 +884,10 @@ async def rerun_execution(
             "scenarioId": ex.scenario_id,
             "dataSetIds": cfg.get("dataSetIds") or [],
             "dataSetSelection": cfg.get("dataSetSelection") or [],
-            "serviceBindings": cfg.get("serviceBindings") or {},
+            # S6:归档形态可能带退役的 url/authAlias —— 回放剥离(历史
+            # 数据不 422;地址/凭证改由环境快照与槽位绑定给出)
+            "serviceBindings": scrub_retired_bindings(
+                cfg.get("serviceBindings")),
             "injectionEntryIds": cfg.get("injectionEntryIds") or [],
             "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),

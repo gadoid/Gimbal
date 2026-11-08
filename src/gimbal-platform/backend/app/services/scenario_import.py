@@ -598,13 +598,16 @@ async def land(
             call = step.get("call") if isinstance(step, dict) else None
             if isinstance(call, dict) and call.get("service") == key:
                 call["service"] = new_name
-    # URL 清除同一不变量:本机别名有 base_url 才清,否则保留源 URL
-    # (扫全部被引用服务键,不限映射集 —— 本机别名接管 URL 与 carry 析出
-    # 的映射决策是两件事)
-    base_urls = {row[0]: row[1] for row in (await db.execute(
-        select(ServiceAlias.alias_name, ServiceAlias.base_url))).all()}
+    # URL 清除同一不变量:本机部署表已给该服务(其基础服务)登记地址
+    # 才清,否则保留源 URL(扫全部被引用服务键,不限映射集 —— 本机接管
+    # URL 与 carry 析出的映射决策是两件事)。S6:地址源 = 部署表
+    from ..models.deployment import Deployment
+    base_of = dict((await db.execute(select(
+        ServiceAlias.alias_name, ServiceAlias.base_service))).all())
+    deployed = set((await db.execute(
+        select(Deployment.base_service).distinct())).scalars().all())
     for key in referenced_services(steps):
-        if base_urls.get(key):
+        if base_of.get(key, key) in deployed:
             services_cfg.pop(key, None)
     config["services"] = services_cfg
     defn["config"] = config
@@ -637,9 +640,11 @@ async def land(
             if m["decision"] != "create":
                 continue
             name = eff_key[key]
+            # S6:别名团队共享(个人别名退役);声明槽位沿用映射里的
+            # 凭证别名(旧键 credentialAlias 兼容)
             await alias_svc.create_alias_in_transaction(
-                db, alias_name=name, owner_user_id=user.id,
-                credential_alias=m.get("credentialAlias"),
+                db, alias_name=name,
+                slot=m.get("slot") or m.get("credentialAlias"),
                 catalog_names=catalog)
             alias_names.add(name)
             created_aliases.append(name)

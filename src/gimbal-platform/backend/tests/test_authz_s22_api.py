@@ -7,7 +7,6 @@ import sqlalchemy as sa
 from app.core import db as db_module
 from app.models import Environment
 from app.models.permission import AuditLog
-from app.models.service_alias import ServiceAlias
 from app.services.env_chain import EnvChoice, resolve_environment
 
 from .helpers import make_draft as _draft, role_headers
@@ -66,34 +65,6 @@ async def test_deployment_crud_gates_and_audit(client):
     assert await _audit_ops("deployment.write") == [
         "create", "update", "delete"]
 
-
-async def test_conflicts_list_unresolved_keys(client):
-    adm = await role_headers(client, "s22_cf", role="admin")
-    env = await _env_id(client, adm, "s22-cf")
-    async with db_module.SessionLocal() as s:
-        s.add_all([
-            ServiceAlias(alias_name="fin-a", base_service="fin",
-                         base_url="http://a", environment_id=env),
-            ServiceAlias(alias_name="fin-b", base_service="fin",
-                         base_url="http://b", environment_id=env),
-            ServiceAlias(alias_name="crm-a", base_service="crm",
-                         base_url="http://c", environment_id=env),
-        ])
-        await s.commit()
-    r = await client.get("/api/deployments/conflicts", headers=adm)
-    assert r.status_code == 200, r.text
-    assert r.json() == [{"baseService": "fin", "envId": env,
-                         "aliases": {"fin-a": "http://a",
-                                     "fin-b": "http://b"}}]
-    # Admin 裁定(建部署行)后冲突消失
-    r = await client.post("/api/deployments", headers=adm, json={
-        "baseService": "fin", "envId": env, "baseUrl": "http://a"})
-    assert r.status_code == 201
-    r = await client.get("/api/deployments/conflicts", headers=adm)
-    assert r.json() == []
-
-
-# ── 默认环境:原子切换 + 权限 ────────────────────────────────────────
 
 async def test_default_environment_switch(client):
     adm = await role_headers(client, "s22_def", role="admin")

@@ -37,7 +37,7 @@ vi.mock('@/composables/useRunAssembly', async () => {
       load: vi.fn().mockResolvedValue(undefined),
       loading: ref(false), loadError: ref(''),
       scenario: ref(null), schemes: ref([]), dataSets: ref([]),
-      authOptions: ref([]), registry: ref({ entries: [] }), serviceRows: ref([]),
+      registry: ref({ entries: [] }), serviceRows: ref([]),
       stepNames: ref([]), surface: { deadIds: ref([]) },
     }),
   }

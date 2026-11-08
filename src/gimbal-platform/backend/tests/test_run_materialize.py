@@ -1,6 +1,6 @@
 """materialize_run_copy — POST-convert 物化纯函数(执行/导出同源)。
 
-绑定优先级(spec §5 / D2):显式绑定 url > 场景 authored(env 补缺层已退役)。
+地址链:场景 authored > ③ 部署地址(绑定 url 层随 authz M2a S6 退役)。
 users 合并固定 merge 语义(spec §10:merge_policy 退役)。
 """
 import inspect
@@ -32,10 +32,10 @@ def _auth(alias: str, url="https://auth-url") -> SimpleNamespace:
                            token_type="Authorization", expires_in=7200)
 
 
-def test_binding_url_overrides_authored() -> None:
-    out = materialize_run_copy(_converted(),
-                               service_bindings={"fin-service": {"url": "https://bound"}})
-    assert out["config"]["services"]["fin-service"] == "https://bound"
+def test_binding_url_layer_retired() -> None:
+    """S6:物化签名不再收绑定(绑定只选别名,不带地址)。"""
+    assert "service_bindings" not in inspect.signature(
+        materialize_run_copy).parameters
 
 
 def test_authored_kept_when_no_binding() -> None:
@@ -79,8 +79,8 @@ def test_converted_users_are_discarded() -> None:
 def test_config_created_when_missing() -> None:
     """PlateMock ok 桩的 converted 无 config/steps — 物化不炸且注入可落。"""
     out = materialize_run_copy({"kind": "platform_scenario"},
-                               service_bindings={"any": {"url": "https://x"}})
-    assert out["config"]["services"] == {}   # 无 steps → 无 referenced → 绑定不落
+                               alias_base_urls={"any": "https://x"})
+    assert out["config"]["services"] == {}   # 无 steps → 无 referenced → ③ 不落
     assert out["config"]["users"] == {}
 
 
@@ -97,7 +97,7 @@ def test_pure_function_input_not_mutated() -> None:
     src = _converted()
     snapshot = {"services": dict(src["config"]["services"]), "users": dict(src["config"]["users"])}
     materialize_run_copy(src,
-                         service_bindings={"fin-service": {"url": "https://bound"}},
+                         alias_base_urls={"svc-orphan": "https://alias"},
                          resolved_auths=[_auth("qa1")])
     assert src["config"]["services"] == snapshot["services"]
     assert src["config"]["users"] == snapshot["users"]
@@ -110,23 +110,16 @@ def test_unreferenced_service_keys_preserved() -> None:
     assert out["config"]["services"]["legacy-svc"] == "https://legacy"
 
 
-def test_no_env_layer_binding_and_authored_only() -> None:
-    """D2:env 补缺层删除后,URL 链只剩 显式绑定 > authored。"""
+def test_no_env_layer_authored_only() -> None:
+    """D2:env 补缺层删除;S6 绑定 url 层删除 —— 无 ③ 时只剩 authored。"""
     # env 层不存在:签名已无 env_base_url 参数
     assert "env_base_url" not in inspect.signature(materialize_run_copy).parameters
 
-    # 已有声明(authored)+ 无绑定 → 原样保留
+    # 已有声明(authored)→ 原样保留
     out = materialize_run_copy(_converted())
     assert out["config"]["services"]["fin-service"] == "https://authored"
 
-    # 显式绑定覆盖 authored(语义不变)
-    out = materialize_run_copy(
-        _converted(),
-        service_bindings={"fin-service": {"url": "https://bound"}},
-    )
-    assert out["config"]["services"]["fin-service"] == "https://bound"
-
-    # 未声明且未绑定 → 留空(引擎显式报错语义,RunDialog 并集行提前发现)
+    # 未声明 → 留空(引擎显式报错语义,RunDialog 并集行提前发现)
     out = materialize_run_copy(_converted())
     assert "svc-orphan" not in out["config"]["services"] or \
         not out["config"]["services"].get("svc-orphan")
@@ -140,15 +133,8 @@ def test_alias_base_url_fills_undeclared_gap() -> None:
     assert out["config"]["services"]["svc-orphan"] == "https://alias"
 
 
-def test_alias_base_url_never_overrides_binding_nor_authored() -> None:
-    """优先级链 ① 绑定 > ② authored > ③ base_url(方案 §4.3 定稿)。"""
-    out = materialize_run_copy(
-        _converted(),
-        service_bindings={"fin-service": {"url": "https://bound"}},
-        alias_base_urls={"fin-service": "https://alias",
-                         "svc-orphan": "https://alias"},
-    )
-    assert out["config"]["services"]["fin-service"] == "https://bound"  # ① 赢
+def test_alias_base_url_never_overrides_authored() -> None:
+    """优先级链 ② authored > ③(① 绑定 url 随 S6 退役)。"""
     out = materialize_run_copy(
         _converted(), alias_base_urls={"fin-service": "https://alias"})
     assert out["config"]["services"]["fin-service"] == "https://authored"  # ② 赢
@@ -172,13 +158,13 @@ def test_empty_declaration_falls_through_to_alias() -> None:
 
     # 判定面:空/空白/None 声明 = 未落点;有③层命中即算可解析
     assert not service_url_resolved(
-        "s", declared={"s": ""}, bindings={})
+        "s", declared={"s": ""})
     assert not service_url_resolved(
-        "s", declared={"s": "  "}, bindings={})
+        "s", declared={"s": "  "})
     assert not service_url_resolved(
-        "s", declared={"s": None}, bindings={})
+        "s", declared={"s": None})
     assert service_url_resolved(
-        "s", declared={"s": ""}, bindings={}, alias_base_urls={"s": "https://a"})
+        "s", declared={"s": ""}, alias_base_urls={"s": "https://a"})
 
     # 物化面:空与全空白声明都被③层盖掉(与预检 strip 口径一致);
     # 无③层保持原值留缺口(引擎显式报错)

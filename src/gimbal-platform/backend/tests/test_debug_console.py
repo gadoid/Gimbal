@@ -227,14 +227,16 @@ async def test_server_chain_end_to_end(client, monkeypatch, stub_sut):
         requirementRef=[],
     ))
 
-    from app.schemas.scenario_composer import RunRequest, ServiceBinding
+    from app.schemas.scenario_composer import RunRequest
     from sqlalchemy import select
     from app.models.execution import Execution, ExecutionEvent
 
-    req = RunRequest(
-        scenarioId="sc-dbg",
-        serviceBindings={"svc": ServiceBinding(url=stub_sut)},
-    )
+    # authz M2a S6:地址只来自部署表(绑定 url 退役)—— 默认环境登记 SUT
+    async with db_module.SessionLocal() as _s:
+        from .helpers import seed_deployment
+        await seed_deployment(_s, 'svc', stub_sut)
+        await _s.commit()
+    req = RunRequest(scenarioId="sc-dbg")
     async with db_module.SessionLocal() as db:
         user_row = (await db.execute(
             __import__("sqlalchemy").select(

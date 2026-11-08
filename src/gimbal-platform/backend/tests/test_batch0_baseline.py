@@ -146,25 +146,19 @@ def _steps(svc: str) -> list:
 
 
 def test_b8_priority_chain():
-    # ① 显式绑定 > ② authored > ③ 别名 base_url > ④ 缺口
+    # ② authored > ③ 环境部署地址 > ④ 缺口(① 绑定 url 随 authz M2a S6 退役)
+    cfg = {"services": {"svc": "http://authored"}}
+    _apply_services(cfg, steps=_steps("svc"),
+                    alias_base_urls={"svc": "http://alias"})
+    assert cfg["services"]["svc"] == "http://authored", "authored 不被 ③ 覆盖"
+
     cfg = {"services": {}}
     _apply_services(cfg, steps=_steps("svc"),
-                    bindings={"svc": {"url": "http://bound"}},
                     alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://bound"
-
-    cfg = {"services": {"svc": "http://authored"}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={},
-                    alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://authored", "authored 不被别名覆盖"
+    assert cfg["services"]["svc"] == "http://alias", "③ 仅补缺"
 
     cfg = {"services": {}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={},
-                    alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://alias", "别名仅补缺"
-
-    cfg = {"services": {}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={}, alias_base_urls={})
+    _apply_services(cfg, steps=_steps("svc"), alias_base_urls={})
     assert "svc" not in cfg["services"], "缺口留给引擎显式报错"
 
 

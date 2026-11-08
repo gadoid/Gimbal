@@ -889,23 +889,26 @@ class TestRegisterScopeGate:
 
     async def test_patch_scheme_out_of_scope_422(self, client):
         """令牌 PATCH 换超范围方案 → 422(按将生效配方核对,§5.4 保存面)。"""
-        await seed_alias("rg-in", base_url="https://in.local")
+        # S6:凭证由别名声明槽位给出 —— rg-in 声明 auth-in;同基础服务的
+        # rg-in-wide 声明 auth-out(方案选它即换成范围外凭证)
+        await seed_alias("rg-in", base_url="https://in.local", slot="auth-in")
+        await seed_alias("rg-in-wide", base_url=None, base_service="rg-in",
+                         slot="auth-out")
         h = await _register_role(client, "rg2", "admin")
         await _add_credential("rg2", alias="auth-in")
         await _add_credential("rg2", alias="auth-out")
         draft = _draft("sc-rg2", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="rg-in"))])
         await client.post("/api/scenarios", headers=h, json=draft)
-        # 方案 A:绑定范围内凭证;方案 B:绑定范围外凭证
-        # (body 是 RunScheme 平铺形状,serviceBindings 在顶层)
+        # 方案 A:用服务键自身(槽位 auth-in);方案 B:选别名 rg-in-wide
+        # (槽位 auth-out)(body 是 RunScheme 平铺形状,serviceBindings 在顶层)
         r = await client.post("/api/scenarios/sc-rg2/run-schemes", headers=h,
-                              json={"name": "ok", "serviceBindings": {
-                                  "rg-in": {"authAlias": "auth-in"}}})
+                              json={"name": "ok", "serviceBindings": {}})
         assert r.status_code == 201, r.text
         scheme_ok = r.json().get("schemeId") or r.json().get("id")
         r = await client.post("/api/scenarios/sc-rg2/run-schemes", headers=h,
                               json={"name": "wide", "serviceBindings": {
-                                  "rg-in": {"authAlias": "auth-out"}}})
+                                  "rg-in": {"alias": "rg-in-wide"}}})
         assert r.status_code == 201, r.text
         scheme_wide = r.json().get("schemeId") or r.json().get("id")
         # 令牌范围:别名 rg-in + 凭证 auth-in(不含 auth-out)
