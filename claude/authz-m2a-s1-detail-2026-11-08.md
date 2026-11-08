@@ -259,6 +259,15 @@
 
 ---
 
+## 九·补、S1.7 实现记录（2026-11-08）
+
+- **判定收编**:`_can_manage` 改 `is_platform_template` 显式标记(D10)—— 属主 ∨ 平台模板 × ops.write(= 公共项目的项目管理员);不再比对 `__platform__` 属主,软删挂靠形态不再误判。`_platform_uid` 助手与 users.py 的 `platform_user_id` 死变量删除;平台模板恒公共闸(`platform_template_public` 409)同步改标记判定。
+- **platformize 入口(D9)**:`POST /api/integration/tasks/{id}/platformize` —— Admin+;模板须在公共项目(422 `scenario_not_public`);置标记、幂等;令牌绑定不剥离(注册方回调照旧,Admin+ 维护)。
+- **删用户(D10)**:软删模板**直接删除**(连带其实例行 —— template FK 无级联,先删实例再删模板行),不再兜底挂 `__platform__`;剩余活模板的 owner 跟随仅 transfer 路径(publicize/purge 活模板已在处置循环删净)。
+- **purge 拦截闸(D8)**:purge 删除场景前,被平台模板引用 → 409 `platform_template_references` 列出模板(id/name/scenarioId;回滚前物化,防 ORM 过期懒加载);先转移或删除模板再 purge。
+- 顺带修:users.py 闸内 `IntegrationTask` 作用域(局部导入)。
+- 测试 `test_authz_s17_platform.py` 5 用例:platformize 门(普通 403/Admin 200/幂等/私有模板 422)、Admin+ 经标记维护 + 普通用户 403 + 恒公共 409 + **挂靠形态误判回归**(owner=__platform__ 但无标记 → 403)、软删模板随删用户直接删、purge 拦截闸列表。c2 夹具改新形态(标记 + 公共项目挂靠);守卫重生成。
+
 ## 十、S1.8 前端
 
 ### 实现项

@@ -99,9 +99,15 @@ async def _mk_platform_template(client: AsyncClient, plate_mock: PlateMock,
 
     plat_uid = await seed_platform_user()
     async with db_module.SessionLocal() as s:
+        from app.services.zone import public_project_id
+
+        # S1.7 形态:平台模板判定走 is_platform_template 显式标记
+        #(D10;0038 属主形态由 0040 迁移补标)+ 公共项目挂靠
         tpl = IntegrationTask(
             name="c2-platform-tpl", owner_id=plat_uid,
-            visibility="public", scenario_id=sid, target_system="jira",
+            visibility="public", project_id=await public_project_id(s),
+            is_platform_template=True,
+            scenario_id=sid, target_system="jira",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status")
         s.add(tpl)

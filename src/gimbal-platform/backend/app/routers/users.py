@@ -668,6 +668,30 @@ async def delete_user(
         select(ComposerScenario.scenario_id)
         .where(ComposerScenario.owner_id == user_id)
     )).scalars())
+
+    # S1.7 purge 拦截闸(D8):被**平台模板**引用的场景不能随 purge 删除
+    # —— 列出受影响模板,先转移/下架模板再删。S1.3 起平台模板只引用
+    # 公共项目场景,此闸主要拦迁移前遗留与平台模板引用公共副本的形态。
+    if disposal == "purge" and scenario_ids:
+        from ..models.integration_task import IntegrationTask as _IT
+
+        _refs = (await db.execute(select(_IT).where(
+            _IT.template_id.is_(None),
+            _IT.removed_at.is_(None),
+            _IT.is_platform_template.is_(True),
+            _IT.scenario_id.in_(scenario_ids)))
+        ).scalars().all()
+        if _refs:
+            # rollback 会过期 ORM 实例(属性访问触发懒加载)→ 先物化
+            refs_payload = [{"id": t.id, "name": t.name,
+                             "scenarioId": t.scenario_id} for t in _refs]
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "platform_template_references",
+                        "message": "部分场景被平台模板引用,"
+                                   "先转移或删除这些模板再 purge",
+                        "templates": refs_payload})
     if disposal == "publicize":
         if scenario_ids:
             # owner_id 显式置空(SET NULL 语义;SQLite 方言 FK 不强制的
@@ -745,9 +769,6 @@ async def delete_user(
         IntegrationTask.template_id.is_(None),
         IntegrationTask.removed_at.is_(None),
         IntegrationTask.owner_id == user_id))).scalars().all()
-    platform_user_id = (await db.execute(
-        select(User.id).where(User.is_system == True)  # noqa: E712
-    )).scalar()
     disposed_tasks: list[tuple[IntegrationTask, str]] = []
 
     from ..services import maintenance_transfer as _mt
@@ -799,14 +820,20 @@ async def delete_user(
             await db.delete(tpl)
             disposed_tasks.append((tpl, "purge"))
 
-    # 剩余行(保留的模板及其实例)的 owner_id 跟随新属主(transfer →
-    # 受让人;publicize/purge 之外的软删模板 → __platform__ 兜底),
-    # 否则删除用户行违反 integration_tasks.owner_id 外键(实例行同样
-    # 带 owner_id 列)。
-    # 无条件执行:被删用户可能只剩已软删(removed_at 非空)的模板,
-    # disposed_tasks 为空但这些行仍在,外键照样违反(评审 P2)。
-    new_owner_id = (transferee.id if disposal == "transfer"
-                    else platform_user_id)
+    # S1.7(D10):软删模板**直接删除** —— 不再兜底挂到 __platform__
+    #(挂靠行会污染平台模板的属主判定;平台模板改 is_platform_template
+    # 显式标记,0040 已迁移存量)。连带其实例行(卡片本就「已移除」)。
+    await db.execute(sa_delete(IntegrationTask).where(
+        IntegrationTask.template_id.in_(select(IntegrationTask.id).where(
+            IntegrationTask.owner_id == user_id,
+            IntegrationTask.removed_at.is_not(None)))))
+    await db.execute(sa_delete(IntegrationTask).where(
+        IntegrationTask.owner_id == user_id,
+        IntegrationTask.removed_at.is_not(None)))
+    # 剩余**活**模板及其实例的 owner_id 跟随新属主(transfer → 受让人
+    # /公共分流入循环内;publicize/purge 的活模板已在处置循环删净,
+    # 此处仅为外键兜底),否则删除用户行违反 owner_id 外键。
+    new_owner_id = (transferee.id if disposal == "transfer" else None)
     if new_owner_id is not None:
         await db.execute(sa_update(IntegrationTask).where(
             IntegrationTask.owner_id == user_id,

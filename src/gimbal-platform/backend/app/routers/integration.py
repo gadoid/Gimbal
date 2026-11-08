@@ -51,23 +51,15 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z"
 
 
-async def _platform_uid(db: AsyncSession) -> int | None:
-    """``__platform__`` 系统用户 id(平台模板的持有者;无则 None)。"""
-    return (await db.execute(
-        select(User.id).where(User.is_system == True)  # noqa: E712
-        .order_by(User.id).limit(1))).scalar()
-
-
-def _can_manage(user, tpl: IntegrationTask,
-                platform_uid: int | None) -> bool:
-    """模板改动权(§5.2 改写):属主 ∨ 平台模板 × ops.write。
-
-    平台模板 = 属主为 ``__platform__`` 的公共模板(方案:「由
-    __platform__ 持有、Admin+ 维护」,不因创建人离开失去维护者;
-    0038 把原平台模板归到 __platform__ 名下)。"""
+def _can_manage(user, tpl: IntegrationTask) -> bool:
+    """模板改动权(S1.7 收编 D10 显式标记):属主 ∨ 平台模板 ×
+    ops.write —— 平台模板的写权 = 公共项目的项目管理员(Admin+)。
+    判定不再比对 ``__platform__`` 属主:删用户软删模板挂靠到
+    ``__platform__`` 的行(D10 起直接删除)与真正的平台模板靠
+    ``is_platform_template`` 区分,软删挂靠行不再被误判为可管理。"""
     if user.id == tpl.owner_id:
         return True
-    return (platform_uid is not None and tpl.owner_id == platform_uid
+    return (bool(tpl.is_platform_template)
             and has_capability(user, "ops.write"))
 
 
@@ -190,7 +182,7 @@ async def _tpl_out_full(
     token = await db.get(AccessToken, tpl.token_id) if tpl.token_id else None
     out = _tpl_out(tpl, inst, user, token=token,
                    auth_aliases=aliases, subscribed=subscribed)
-    out["canManage"] = _can_manage(user, tpl, await _platform_uid(db))
+    out["canManage"] = _can_manage(user, tpl)
     if inst is not None:
         out["instance"] = _inst_out(inst, missing=missing)
     return out
@@ -450,12 +442,11 @@ async def patch_task(
                 "令牌路径不能解绑任务;解绑请由 JWT 管理者在集成详情操作",
                 403)
     else:
-        plat_uid = await _platform_uid(db)
-        if not _can_manage(user, tpl, plat_uid):
+        if not _can_manage(user, tpl):
             raise _bad("forbidden", "只有模板属主(平台模板:Admin+)"
                          "能修改", 403)
-        if (body.visibility == "private" and plat_uid is not None
-                and tpl.owner_id == plat_uid):
+        if (body.visibility == "private"
+                and tpl.is_platform_template):
             raise _bad("platform_template_public",
                        "平台模板恒为公共,不能转私有(不再需要可删除)",
                        409)
@@ -590,7 +581,7 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
     if principal.is_token:
         if not _token_owns(principal, tpl):
             raise _bad("not_found", "功能不存在", 404)
-    elif not _can_manage(user, tpl, await _platform_uid(db)):
+    elif not _can_manage(user, tpl):
         raise _bad("forbidden", "只有模板管理者能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
@@ -608,6 +599,32 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
 
 class TransferIn(BaseModel):
     toUserId: int
+
+
+@router.post("/tasks/{task_id}/platformize")
+async def platformize_task(
+    task_id: int, principal: PrincipalIn, db: DbSession,
+) -> dict:
+    """D9「转为平台模板」:Admin+(ops.write);模板须在公共项目
+    (S1.3 起 platformize 的前置由公开闸保证,非公共 422)。置
+    ``is_platform_template`` 显式标记(D10);幂等(已平台 → 200 原样)。
+    令牌绑定不剥离:平台模板由 Admin+ 维护,注册方回调照旧。"""
+    user = principal.user
+    tpl = await db.get(IntegrationTask, task_id)
+    if (tpl is None or tpl.template_id is not None
+            or tpl.removed_at is not None):
+        raise _bad("not_found", "功能不存在", 404)
+    if not has_capability(user, "ops.write"):
+        raise _bad("forbidden", "只有 Admin+ 能创建平台模板", 403)
+    from ..services.zone import public_project_id
+
+    if tpl.project_id != await public_project_id(db):
+        raise _bad("scenario_not_public",
+                   "模板未公开到公共项目,先公开模板再转为平台模板", 422)
+    if not tpl.is_platform_template:
+        tpl.is_platform_template = True
+        await db.commit()
+    return {"taskId": task_id, "platformTemplate": True}
 
 
 @router.post("/tasks/{task_id}/transfer")
@@ -1000,7 +1017,6 @@ class CardsIn(BaseModel):
 async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
     """工作台把布局里的 fn:<id> 一次发出;只回状态/时间/摘要,不回整行。"""
     out: list[dict] = []
-    plat_uid = await _platform_uid(db)
     for raw in body.ids:
         if not raw.startswith("fn:"):
             continue
@@ -1046,7 +1062,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
             "lastRunAt": io["lastRunAt"], "lastError": io["lastError"],
             "cronText": describe_cron(tpl.trigger_cron),
             "stale": stale,
-            "canManage": _can_manage(user, tpl, plat_uid),
+            "canManage": _can_manage(user, tpl),
             "authAliases": card_aliases,
             "missingCredentials": card_missing,
             "outputs": card_outputs,
