@@ -211,6 +211,19 @@ async def test_service_binding_auth_merge_keeps_built_in(
     """绑定 authAlias 注入 users,场景内置 users 保留(固定 merge)。"""
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
+    # S5 失败即中止:绑定 qa9 须在执行人池(dispatch 取用检查不走
+    # 下面的 fake resolve)
+    from app.core import db as _dbm
+    from app.core.security import fernet_encrypt as _fe
+    from app.models.auth_session import AuthSession as _AS
+    from sqlalchemy import text as _txt
+    async with _dbm.SessionLocal() as _s:
+        _uid = (await _s.execute(_txt(
+            "SELECT id FROM users WHERE username = 'bob'"))).scalar()
+        _s.add(_AS(owner_id=_uid, alias="qa9", url="http://auth9",
+                   username_enc=_fe("exec-user"), password_enc=_fe("p"),
+                   slot="qa9", is_default=True))
+        await _s.commit()
 
     from app.services import run_dispatcher as rd
 

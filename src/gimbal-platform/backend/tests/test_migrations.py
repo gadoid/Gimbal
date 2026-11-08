@@ -966,9 +966,14 @@ def test_0042_suite_member_zone():
                 assert {"fk_suite_members_suite_id",
                         "fk_suite_members_scenario_id"} <= fks
                 # 触发器在;存量成员行不变(同属主对 → 同区合法)
+                # pg_trigger 不按 schema 过滤 —— 同库其它 schema 的同名
+                # 触发器会被数进来(调试/残留 schema),join 到当前 schema
                 assert c.execute(text(
-                    "SELECT count(*) FROM pg_trigger WHERE tgname = "
-                    "'trg_suite_member_same_zone'")).scalar() == 1
+                    "SELECT count(*) FROM pg_trigger t "
+                    "JOIN pg_class cl ON cl.oid = t.tgrelid "
+                    "JOIN pg_namespace n ON n.oid = cl.relnamespace "
+                    "WHERE t.tgname = 'trg_suite_member_same_zone' "
+                    "AND n.nspname = current_schema()")).scalar() == 1
                 assert c.execute(text(
                     "SELECT suite_id, scenario_id, sort FROM suite_members "
                     "ORDER BY sort")).all() == [(1, "sc-a", 0)]

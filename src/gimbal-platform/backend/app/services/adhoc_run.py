@@ -234,16 +234,23 @@ async def lookup_endpoint_services(steps: list[dict]) -> dict[str, str]:
     return out
 
 
-def check_addresses(services: list[str], rows: dict[str, ServiceAlias]) -> None:
-    """§四.4:地址落点按三层链唯一实现判定(临时调用无显式绑定、无
-    authored 声明,只剩第③层别名 base_url)→ 缺 422 ``adhoc_service_unresolved``。"""
-    alias_base_urls = {n: r.base_url for n, r in rows.items() if r.base_url}
+async def check_addresses(db, services: list[str], user_id: int) -> None:
+    """§四.4(authz M2a S5 起统一):地址落点走执行同一条 ③ 层链
+    (``base_urls_for`` —— 环境感知:个人偏好/默认环境下的部署表优先、
+    别名自带地址兜底;此前 adhoc 只读别名 base_url 的旧 ③ 退役)→
+    缺 422 ``adhoc_service_unresolved``。"""
+    from . import env_chain, service_aliases as _sa
+    from .run_materialize import service_url_resolved
+
+    _env = await env_chain.resolve_environment(db, user_id=user_id)
+    alias_base_urls = await _sa.base_urls_for(db, list(services), env=_env)
     missing = [s for s in services if not service_url_resolved(
         s, declared={}, bindings={}, alias_base_urls=alias_base_urls)]
     if missing:
         raise AdhocRejected(
             "adhoc_service_unresolved",
-            "以下别名未配置 base_url,执行器无从落地址: " + "、".join(missing),
+            "以下服务未配置地址(别名 base_url / 所选环境部署表均缺),"
+            "执行器无从落地址: " + "、".join(missing),
             extra={"services": missing})
 
 
@@ -355,7 +362,8 @@ def display_name(steps: list[dict]) -> str:
     return name
 
 
-async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str) -> dict:
+async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str,
+                        user_id: int) -> dict:
     """§四 2–6 + §五:返回构造好、已干跑 convert 通过的容器 payload。
 
     不建行、不改库;任何一步不通过抛 :class:`AdhocRejected`(422)或
@@ -371,7 +379,7 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str) -> dict:
     endpoint_services = await lookup_endpoint_services(steps)
     rows = await load_alias_rows(db, services)
     check_services(steps, rows, endpoint_services)
-    check_addresses(services, rows)
+    await check_addresses(db, services, user_id)
     meta_plate = await resolve_versions(db, steps, rows, req.release)
     payload = build_adhoc_payload(
         steps, run_id=run_id, meta_plate=meta_plate,

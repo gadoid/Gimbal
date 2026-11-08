@@ -40,6 +40,7 @@ run_dispatcher → ModuleNotFoundError)—— 分层错位已造成真实 bug,
 from __future__ import annotations
 
 import copy
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -86,6 +87,8 @@ class ResolvedAuth:
     expires_in: int
     # S4:槽位账号级字段(${slot.X.field} 派发前替换的数据源)
     account_fields: dict = field(default_factory=dict)
+    # S5:取用绑定元数据(指纹/预览的绑定标识;不改注入行为)
+    binding_id: int | None = None
 
     @classmethod
     def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str,
@@ -132,6 +135,39 @@ def _slot_tier(row: DBAuthSession, env_id: int | None) -> tuple:
     return (tier, row.id)
 
 
+async def pick_bindings(
+    db: Any, owner_id: int, slots: list[str],
+    *, env_id: int | None = None,
+) -> list["DBAuthSession"]:
+    """S5 槽位取用单源(不解密):同槽多绑定按 :func:`_slot_tier` 分层
+    取一行。``resolve_exec_auths``(注入)与指纹/预览的绑定标识消费同一
+    份裁决 —— 取用口径结构上不可能漂移。"""
+    if not slots:
+        return []
+    rows = (await db.execute(
+        select(DBAuthSession).where(
+            DBAuthSession.owner_id == owner_id,
+            DBAuthSession.slot.in_(slots)))).scalars().all()
+    picked: dict[str, DBAuthSession] = {}
+    for a in rows:
+        cur = picked.get(a.slot)
+        if cur is None or _slot_tier(a, env_id) < _slot_tier(cur, env_id):
+            picked[a.slot] = a
+    return sorted(picked.values(), key=lambda r: r.slot)
+
+
+async def binding_ids_for(
+    db_factory: Any, owner_id: int, slots: list[str],
+    *, env_id: int | None = None,
+) -> dict[str, int]:
+    """槽名 → 取用绑定 id(轻量,不解密;指纹/预览消费)。"""
+    if not slots:
+        return {}
+    async with db_factory() as s:
+        rows = await pick_bindings(s, owner_id, slots, env_id=env_id)
+    return {r.slot: r.id for r in rows}
+
+
 async def resolve_exec_auths(
     db_factory: Any, owner_id: int, aliases: list[str],
     *, env_id: int | None = None,
@@ -167,25 +203,9 @@ async def resolve_exec_auths(
 
     resolved: list[ResolvedAuth] = []
     async with db_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(DBAuthSession).where(
-                        DBAuthSession.owner_id == owner_id,
-                        DBAuthSession.slot.in_(aliases),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-    # 同槽多绑定:分层取一行(名字缝 = 每名恰一行)
-    picked: dict[str, DBAuthSession] = {}
-    for a in rows:
-        cur = picked.get(a.slot)
-        if cur is None or _slot_tier(a, env_id) < _slot_tier(cur, env_id):
-            picked[a.slot] = a
-    rows = sorted(picked.values(), key=lambda r: r.slot)
+        # S5:取用裁决单源(pick_bindings;同槽多绑定分层取一行)
+        rows = await pick_bindings(session, owner_id, aliases,
+                                   env_id=env_id)
     for a in rows:
         try:
             runtime = RuntimeAuthSession(
@@ -195,8 +215,11 @@ async def resolve_exec_auths(
                 token_type=a.token_type,
                 expires_in=a.expires_in,
             )
-            resolved.append(ResolvedAuth.from_runtime(
-                runtime, alias=a.slot, account_fields=a.account_fields))
+            # frozen dataclass:用 replace 补绑定标识(S5)
+            resolved.append(dataclasses.replace(
+                ResolvedAuth.from_runtime(
+                    runtime, alias=a.slot, account_fields=a.account_fields),
+                binding_id=a.id))
         except ValueError as e:
             raise AuthResolveError(
                 f"auth slot '{a.slot}' decrypt failed: {e}"
@@ -464,6 +487,117 @@ async def prepare_exec(
             "run_prepare: carry context build failed; skipped")
         prep.carry_ctx = None
     return prep
+
+
+# ── S5:统一解析入口(只读,生效预览面)──────────────────────────────
+@dataclass(frozen=True)
+class EffectiveConfig:
+    """一次执行的**将生效**配置(逐值带来源;不含任何明文凭证)。
+
+    与执行链复用同一份子构建器(注入清单/取用绑定/地址③/carry tier)
+    —— 预览与执行结构上不可能漂移。"""
+    env: dict | None                       # {environmentId, environmentSource}
+    services: dict[str, dict]              # svc → {url, source, alias?}
+    auths: dict[str, dict]                 # 槽名 → {bindingId, system, envId, isDefault}
+    missing_auths: list[str]
+    carry: dict[str, dict[str, dict]]      # raw svc → path → {value, source}
+    carry_defaults: dict[str, dict]        # path → {value, source}
+
+
+async def resolve_effective_config(
+    db: Any, definition: dict, *,
+    bindings: dict[str, dict] | None = None,
+    user_id: int | None = None,
+    project_id: int | None = None,
+    environment: Any = None,
+) -> EffectiveConfig:
+    """组合环境/地址/槽位绑定/carry(预览与执行同源;见类注释)。"""
+    from . import carry_store, service_aliases
+    from .carry_injection import _step_service
+    from .env_chain import EnvChoice
+    from .run_materialize import (referenced_services,
+                                  resolve_service_sources)
+
+    steps = definition.get("steps") or []
+    declared = (definition.get("config") or {}).get("services")
+    declared = declared if isinstance(declared, dict) else {}
+    env = environment if isinstance(environment, EnvChoice) else None
+
+    # 地址:③ 层合并结果 + 来源拆分(deployment vs alias)
+    svcs = referenced_services(steps)
+    full = await service_aliases.base_urls_for(db, svcs, env=env)
+    alias_only = await service_aliases.base_urls_for(db, svcs)
+    sources = resolve_service_sources(
+        steps, declared=declared, bindings=bindings or {},
+        alias_base_urls=full)
+    services_out: dict[str, dict] = {}
+    for svc, info in sources.items():
+        out = dict(info)
+        if info.get("source") == "alias":
+            hit = full.get(svc)
+            if hit is not None and hit != alias_only.get(svc):
+                out["source"] = "deployment"   # 环境部署表接管(S2.1)
+        services_out[svc] = out
+
+    # 槽位绑定:注入清单 + 取用(单源 pick_bindings)
+    injection = await service_aliases.exec_auth_aliases_of_definition(
+        db, definition, bindings or {})
+    auths_out: dict[str, dict] = {}
+    missing: list[str] = []
+    if injection and user_id is not None:
+        rows = await pick_bindings(
+            db, user_id, injection,
+            env_id=getattr(env, "env_id", None))
+        got = {r.slot for r in rows}
+        for r in rows:
+            auths_out[r.slot] = {
+                "bindingId": r.id, "system": r.system,
+                "envId": r.env_id, "isDefault": r.is_default}
+        missing = sorted(set(injection) - got)
+    elif injection:
+        missing = sorted(injection)
+
+    # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级)
+    from .service_names import resolve_base_with_aliases
+    tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
+    if project_id is not None:
+        tiers.append(("project", project_id))
+    elif user_id is not None:
+        tiers.append(("user", user_id))
+    raw_svcs: list[str] = []
+    for st in steps:
+        svc = _step_service(st) if isinstance(st, dict) else None
+        if isinstance(svc, str) and svc:
+            raw_svcs.append(svc)
+    carry_out: dict[str, dict[str, dict]] = {}
+    for raw in dict.fromkeys(raw_svcs):
+        base = await resolve_base_with_aliases(db, raw)
+        if base is None:
+            continue
+        merged: dict[str, dict] = {}
+        for t in tiers:
+            t_base = await carry_store.get_bindings(db, base, t)
+            t_alias = (await carry_store.get_bindings(db, raw, t)
+                       if base != raw else {})
+            for path in set(t_base) | set(t_alias):
+                if path in t_alias:
+                    merged[path] = {"value": t_alias[path],
+                                    "source": f"{t[0]}:{t[1]}:alias"}
+                else:
+                    merged[path] = {"value": t_base[path],
+                                    "source": f"{t[0]}:{t[1]}:base"}
+        carry_out[raw] = merged
+    defaults_out: dict[str, dict] = {}
+    for t in tiers:
+        t_rows = await carry_store.get_defaults(db, t)
+        for path, value in t_rows.items():
+            defaults_out[path] = {"value": value,
+                                  "source": f"{t[0]}:{t[1]}"}
+
+    return EffectiveConfig(
+        env=(env.snapshot() if env and env.env_id is not None else None),
+        services=services_out, auths=auths_out, missing_auths=missing,
+        carry=carry_out, carry_defaults=defaults_out)
 
 
 async def graph_auth_aliases(

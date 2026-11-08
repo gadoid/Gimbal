@@ -145,12 +145,19 @@ async def _seed_bob_with_uat_cred(client) -> dict:
     """bob + 他本人池子里的 uat-cred 凭证(明文经 Fernet 加密落库)。"""
     headers = await _member(client, "bob")
     async with db_module.SessionLocal() as s:
+        # qa1 = _seed_scenario 的 ${auth.qa1} 扫描引用(S5 失败即中止:
+        # 注入槽必须在执行人池)
         s.add(AuthSession(
             owner_id=await _bob_id(), alias="uat-cred",
             url="https://uat.internal",
             username_enc=fernet_encrypt("bob-uat"),
             password_enc=fernet_encrypt("pw"),
-        ))
+            slot="uat-cred", is_default=True))
+        s.add(AuthSession(
+            owner_id=await _bob_id(), alias="qa1", url="https://qa1",
+            username_enc=fernet_encrypt("qa1-u"),
+            password_enc=fernet_encrypt("pw"),
+            slot="qa1", is_default=True))
         await s.commit()
     return headers
 

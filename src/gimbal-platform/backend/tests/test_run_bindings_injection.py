@@ -23,6 +23,24 @@ _AUTH_STEP = {
 }
 
 
+async def _seed_pool_auth(username: str, alias: str = "qa1") -> None:
+    """S5 失败即中止:注入清单的槽位须在执行人池 —— 测试种一行。"""
+    from app.core import db as db_module
+    from app.core.security import fernet_encrypt
+    from app.models.auth_session import AuthSession as _AS
+    from sqlalchemy import select as _sel, text as _txt
+
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(_txt(
+            "SELECT id FROM users WHERE username = :u"),
+            {"u": username})).scalar()
+        s.add(_AS(owner_id=uid, alias=alias, url="http://auth",
+                  username_enc=fernet_encrypt("u"),
+                  password_enc=fernet_encrypt("p"),
+                  slot=alias, is_default=True))
+        await s.commit()
+
+
 async def _seed_scenario(client, headers) -> None:
     r = await client.post("/api/scenarios", headers=headers,
                           json=_draft(steps=[_AUTH_STEP]))
@@ -43,6 +61,7 @@ async def test_binding_url_and_auth_materialized(client, plate_mock: PlateMock,
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob", "qa1")
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -55,8 +74,8 @@ async def test_binding_url_and_auth_materialized(client, plate_mock: PlateMock,
 
     cfg = cases[0]["config"]
     assert cfg["services"]["fin-service"] == "https://bound"
-    # qa1 不在 bob 凭证池 → _resolve_exec_auths 告警继续,users 不含 qa1 明文
-    assert "qa1" not in (cfg.get("users") or {})
+    # S5 起注入槽必须在执行人池(缺 = 整单拒发);在池 → users 注入 qa1
+    assert "qa1" in (cfg.get("users") or {})
 
     config_json = await _last_config_json()
     assert config_json["serviceBindings"]["fin-service"]["authAlias"] == "qa1"
@@ -73,6 +92,7 @@ async def test_template_scan_without_binding_injects(client, plate_mock: PlateMo
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob", "qa1")
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -89,6 +109,7 @@ async def test_legacy_payload_fields_silently_ignored(client, plate_mock: PlateM
     """旧客户端发 auths/prefix/mergePolicy → 不 422,仅失效(spec §6)。"""
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob", "qa1")
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -100,3 +121,17 @@ async def test_legacy_payload_fields_silently_ignored(client, plate_mock: PlateM
     await _wait(lambda: len(cases) >= 1)
     cfg = cases[0]["config"]
     assert (cfg.get("vars") or {}).get("order_no_prefix") is None   # prefix 失效
+
+
+async def test_missing_auth_slot_refuses_dispatch(client, plate_mock: PlateMock):
+    """S5 失败即中止:注入清单的槽位不在执行人池 → 整单 409
+    auth_aliases_missing(此前告警继续、执行期步骤级报错)。"""
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "missauth")
+    await _seed_scenario(client, bob)
+    r = await client.post("/api/runs", headers=bob, json=_run_payload(
+        dataSetIds=[],
+        serviceBindings={"fin-service": {"authAlias": "qa-none"}}))
+    assert r.status_code == 409, r.text
+    assert "auth_aliases_missing" in r.text
+    assert "qa-none" in r.text

@@ -1064,6 +1064,21 @@ async def dispatch_target(
         {k: {"authAlias": b.auth_alias}
          for k, b in (req.service_bindings or {}).items()},
     )
+    # S5 失败即中止:注入清单在执行人池解不到槽位 → 整单拒发(此前
+    # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
+    # 注入/预览同一份(pick_bindings)。
+    if auth_aliases:
+        from .run_prepare import pick_bindings
+        _picked = await pick_bindings(
+            db, user_id, auth_aliases, env_id=env_choice.env_id)
+        _missing = sorted(set(auth_aliases) - {r.slot for r in _picked})
+        if _missing:
+            raise Conflict(
+                "auth_aliases_missing",
+                "以下凭证槽位在你名下未绑定,请先在认证管理登记或改绑:"
+                + "、".join(_missing),
+                extra={"aliases": _missing},
+            )
 
     from . import execution_queue as _eq
     chain = chain_override or str(

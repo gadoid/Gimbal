@@ -1899,8 +1899,14 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
   // base=null(未知服务)→ 运行时整步跳过注入(carry_injection derive_base
   // 失败短路),徽标不显示 — 与运行时行为对齐,不过度承诺
   if (!base) return new Map()
+  const raw = stepService(step)
   const bound = carryValues.value.bindings[base] ?? {}
-  return carryHint(face, bound, carryValues.value.defaults)
+  // F5:别名键稀疏覆盖层(运行时 carry_injection 同款:别名行只覆盖
+  // 它填的字段,其余继承 base 服务键)
+  const aliasBound = raw !== base
+    ? (carryValues.value.bindings[raw] ?? undefined)
+    : undefined
+  return carryHint(face, bound, carryValues.value.defaults, aliasBound)
 }
 
 /**

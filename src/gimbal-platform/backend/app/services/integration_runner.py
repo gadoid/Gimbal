@@ -408,6 +408,7 @@ def _canonical_json(x) -> str:
 def consent_fingerprint_of(
     scen_payload: dict, scheme_payload: dict, row_dict: dict,
     cron: str, alias_urls: dict, *, alias_creds: dict | None = None,
+    slot_bindings: dict | None = None,
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
@@ -447,6 +448,9 @@ def consent_fingerprint_of(
         "base_urls": dict(alias_urls or {}),
         # 别名表凭证默认命中(member+ 可改全局层,与 base_url 同入指纹)
         "alias_creds": dict(alias_creds or {}),
+        # S5(D4):默认命中集合的取用槽位绑定 id(换绑不同账号 = 订阅
+        # 者应知情;模板属主池口径,同模板同指纹不变量保持)
+        "slot_bindings": dict(slot_bindings or {}),
     }
     return hashlib.sha256(
         _canonical_json(projection).encode("utf-8")).hexdigest()
@@ -504,6 +508,25 @@ async def _template_env(db, scen: ComposerScenario,
         project_id=scen.project_id, user_id=None)
 
 
+async def _slot_bindings_of(db, tpl: IntegrationTask,
+                            scen: ComposerScenario,
+                            scheme_payload: dict) -> dict[str, int]:
+    """S5:别名默认命中集合的取用绑定 id(模板属主池 + 模板环境;
+    绑定 authAlias 已由方案投影覆盖,不重算)。"""
+    from .run_prepare import binding_ids_for
+    from .service_aliases import credential_alias_hits
+
+    hits = await credential_alias_hits(
+        db, definition_from_payload(scen.payload).get("steps") or [],
+        scheme_payload.get("serviceBindings") or {})
+    if not hits:
+        return {}
+    env = await _template_env(db, scen, scheme_payload)
+    return await binding_ids_for(
+        db_module.SessionLocal, tpl.owner_id, sorted(set(hits.values())),
+        env_id=env.env_id)
+
+
 async def _alias_urls_of(db, scen_payload: dict,
                         env=None) -> dict[str, str]:
     """场景引用服务的 base_url 集合(执行期活解析;指纹与物化共用)。
@@ -535,9 +558,10 @@ async def consent_fingerprint_now(
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
         bindings)
+    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
 
 
 async def refresh_consent(
@@ -564,9 +588,10 @@ async def consent_fingerprint_now_shape(
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
         bindings)
+    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
 
 
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
@@ -975,7 +1000,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     bindings)
                 fp = consent_fingerprint_of(
                     scen.payload, scheme_payload, row_dict,
-                    tpl.trigger_cron, alias_urls, alias_creds=hits)
+                    tpl.trigger_cron, alias_urls, alias_creds=hits,
+                    slot_bindings=await _slot_bindings_of(
+                        db, tpl, scen, scheme_payload))
                 if (inst.consent_fingerprint or "") != fp:
                     return await _pause_consent_changed(
                         db, inst, tpl,

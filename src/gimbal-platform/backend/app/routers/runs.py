@@ -239,7 +239,8 @@ async def _post_adhoc_run(
             })
     run_id = run_dispatcher.new_run_id()   # 占位 id 先于派发用到
     try:
-        payload = await adhoc_run.prepare_adhoc(db, body, run_id=run_id)
+        payload = await adhoc_run.prepare_adhoc(db, body, run_id=run_id,
+                                         user_id=principal.user.id)
     except adhoc_run.AdhocRejected as e:
         raise HTTPException(
             status_code=e.status,
@@ -302,6 +303,68 @@ async def _post_adhoc_run(
         "resolvedServices": trace["resolvedServices"]})
     await _record_inbound_activity(db, principal, resp, body=body)
     return resp
+
+
+@router.post("/preview")
+async def preview_effective_config(
+    principal: PrincipalIn, db: DbSession, body: dict,
+) -> dict:
+    """S5 生效预览:本次执行将生效的 地址/槽位绑定/carry(逐值带来源,
+    不含明文凭证)。读闸同预检(can_read_scenario_row)。
+
+    body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?}
+    —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。"""
+    from ..schemas.scenario_composer import ServiceBinding
+    from ..services import env_chain, run_prepare, scenario_store, scheme_store
+    from ..services.scenario_store import definition_from_payload
+
+    sid = body.get("scenarioId")
+    if not sid:
+        raise HTTPException(422, detail={"code": "scenario_id_required",
+                                         "message": "scenarioId 必填"})
+    scen = await scenario_store.get_row(db, sid)
+    if scen is None:
+        raise HTTPException(404, detail={"code": "scenario_not_found",
+                                         "message": f"scenario not found: {sid}"})
+    from ._ownership import can_read_scenario_row
+    user = principal.user
+    if not await can_read_scenario_row(db, user, scen):
+        raise HTTPException(404, detail={"code": "scenario_not_found",
+                                         "message": f"scenario not found: {sid}"})
+    scheme_env = None
+    bindings_raw = body.get("serviceBindings") or {}
+    scheme_id = body.get("schemeId")
+    if scheme_id:
+        try:
+            sch = await scheme_store.get_row(db, sid, scheme_id)
+            scheme_env = (sch.payload or {}).get("environmentId")
+            scheme_bindings = (sch.payload or {}).get("serviceBindings") or {}
+            bindings_raw = {**scheme_bindings, **bindings_raw}
+        except KeyError:
+            raise HTTPException(404, detail={
+                "code": "run_scheme_not_found",
+                "message": f"run scheme {scheme_id} not found"}) from None
+    bindings = {k: v for k, v in bindings_raw.items() if isinstance(v, dict)}
+    try:
+        env = await env_chain.resolve_for_scenario(
+            db, sid, user_id=user.id,
+            explicit=body.get("environmentId"), scheme_env=scheme_env)
+    except env_chain.EnvironmentNotFound as e:
+        raise HTTPException(404, detail={
+            "code": "environment_not_found",
+            "message": str(e)}) from None
+    cfg = await run_prepare.resolve_effective_config(
+        db, definition_from_payload(scen.payload or {}),
+        bindings=bindings, user_id=user.id,
+        project_id=scen.project_id, environment=env)
+    return {
+        "env": cfg.env,
+        "services": cfg.services,
+        "auths": cfg.auths,
+        "missingAuths": cfg.missing_auths,
+        "carry": cfg.carry,
+        "carryDefaults": cfg.carry_defaults,
+    }
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
