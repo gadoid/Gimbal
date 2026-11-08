@@ -34,9 +34,8 @@ class ReportDefinitionRow(Base):
     # 维护者(新建恒非空;遗留无主公共行保持 NULL)
     owner_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True, index=True)
-    # 公共态标记(W9-2 起;private | public)
-    visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # 项目区(M2a S1.0):空 = 私有区;公共项目 = 公开定义
+    # visibility 列随 0043 删除(W9-2 公共态 = 公共项目挂靠)。
+    # 项目区:空 = 私有区;公共项目 = 公开定义
     project_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("projects.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(

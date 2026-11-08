@@ -109,7 +109,7 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
                     ref = ScenarioRef(
                         scenario_id=row.scenario_id,
                         owner_id=row.owner_id,
-                        visibility=row.visibility or "private",
+                        visibility=("public" if row.project_id is not None else "private"),
                         project_id=row.project_id,
                         name=name,
                     )

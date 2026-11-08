@@ -39,7 +39,7 @@ async def _stat_private_scenarios(db, user) -> int:
     return int((await db.execute(select(func.count()).select_from(
         ComposerScenario).where(
             ComposerScenario.owner_id == user.id,
-            ComposerScenario.visibility != "public"))).scalar_one())
+            ComposerScenario.project_id.is_(None)))).scalar_one())
 
 
 async def _stat_follows(db, user) -> int:

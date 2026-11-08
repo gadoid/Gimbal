@@ -43,7 +43,7 @@ class TestPreRunChecks:
                 if inst.running_since else None
         return await ir.run_instance(inst_id, lease=lease)
 
-    async def _scenario(self, scenario_id="sc-w", visibility="public",
+    async def _scenario(self, scenario_id="sc-w",
                         owner_id=1):
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
@@ -131,7 +131,7 @@ class TestPreRunChecks:
             s.add(ServiceAlias(alias_name="sx-alias", base_service="pay",
                                kind="external", base_url="https://sx.local"))
             s.add(ComposerScenario(scenario_id="sc-sx",
-                                   owner_id=uid, visibility="public",
+                                   owner_id=uid,
                                    payload=scen_payload))
             await s.commit()
         tid, _ = await mk_token(user_id=uid)      # 空范围

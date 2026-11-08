@@ -111,7 +111,6 @@ async def create_in_transaction(
     *,
     owner: str = "",
     owner_id: int | None = None,
-    visibility: str = "private",
     project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
@@ -159,7 +158,6 @@ async def create_in_transaction(
         scenario_id=server_owned.scenario_id,
         owner_name=server_owned.owner,
         owner_id=owner_id,
-        visibility=visibility,
         project_id=project_id,
         payload=payload,
         forked_from_id=forked_from_id,
@@ -179,7 +177,6 @@ async def create(
     *,
     owner: str = "",
     owner_id: int | None = None,
-    visibility: str = "private",
     project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
@@ -206,7 +203,7 @@ async def create(
     try:
         row = await create_in_transaction(
             db, draft, owner=owner, owner_id=owner_id,
-            visibility=visibility, project_id=project_id,
+            project_id=project_id,
             forked_from_id=forked_from_id,
             forked_from_owner_name=forked_from_owner_name,
             forked_from_at=forked_from_at)
@@ -503,7 +500,7 @@ async def copy_scenario(
     from datetime import datetime as _dt, timezone as _tz
     await create(
         db, draft, owner=new_owner, owner_id=new_owner_id,
-        visibility=visibility, project_id=project_id,
+        project_id=project_id,
         forked_from_id=origin_id or scenario_id,
         forked_from_owner_name=origin_owner_name
         or (src.owner_name or ""),

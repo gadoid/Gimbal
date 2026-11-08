@@ -39,9 +39,8 @@ class Suite(Base):
     # 不加 ON DELETE:未处置的用户删不掉(处置流程负责删 suite,§7.10)
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), index=True)
-    # 与场景同口径;P1 恒 private(发布入口随 P2)
-    visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # 项目区(M2a S1.0):空 = 私有区;同区约束(S1.5/0041)按本列判
+    # visibility 列随 0043 删除(同场景口径)。
+    # 项目区:空 = 私有区;同区约束(S1.5/0041)按本列判
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, index=True)
     # aggregate(默认)/chain/fanout/compose(重构方案四模式)

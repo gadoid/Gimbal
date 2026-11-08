@@ -324,7 +324,7 @@ async def scenario_signals(
 
     # 场景可见性 + public 判定(follows 页的数据源,但口径仍守读侧纪律)
     scen_rows = (await db.execute(
-        select(ComposerScenario.scenario_id, ComposerScenario.visibility,
+        select(ComposerScenario.scenario_id, ComposerScenario.project_id,
                ComposerScenario.owner_id)
         .where(ComposerScenario.scenario_id.in_(sid_list))
     )).all()
@@ -368,7 +368,7 @@ async def scenario_signals(
         if row is None:
             out[sid] = {"trend": [], "lastRun": None}
             continue
-        is_public = (row.visibility or "private") == "public"
+        is_public = row.project_id is not None
         execs = by_sid_execs.get(sid, [])
         if not is_public:
             lock = default_scheme.get(sid)

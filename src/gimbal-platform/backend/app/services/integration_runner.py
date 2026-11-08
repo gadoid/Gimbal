@@ -724,10 +724,12 @@ async def retire_templates_for_public_target(
 
     from ..models.integration_task import IntegrationTask
 
+    from ..services.zone import public_project_id as _ppid_retire
+
     conds = [
         IntegrationTask.template_id.is_(None),
         IntegrationTask.removed_at.is_(None),
-        IntegrationTask.visibility == "public",
+        IntegrationTask.project_id == await _ppid_retire(db),
     ]
     if scenario_id is not None:
         conds.append(IntegrationTask.scenario_id == scenario_id)
@@ -925,7 +927,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # _claim_due 再认领、missing_credential/auth_failed 暂停的实例
             # 会被凭证复活钩子拉回调度;两条漏网路径都在这道闸兜死
             # (联动暂停降级为「提前通知」)。
-            if consent_gate and tpl.visibility != "public":
+            from ..services.zone import public_project_id as _ppid_cg
+
+            if consent_gate and tpl.project_id != await _ppid_cg(db):
                 return await _pause_consent_changed(
                     db, inst, tpl,
                     paused_reason="made_private",

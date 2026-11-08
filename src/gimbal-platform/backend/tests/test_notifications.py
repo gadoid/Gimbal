@@ -215,7 +215,6 @@ async def test_notify_finished_name_and_id(client: AsyncClient):
         # payload.definition.meta.name,payload 造最小形即可)
         s.add(ComposerScenario(
             scenario_id="sc-notify-alive", owner_id=1, owner_name="垫底",
-            visibility="private",
             payload={"definition": {"meta": {"name": "活行场景名"}}}))
         # 三条单发执行:有快照名 / 空快照+场景存活 / 空快照+场景已删
         for sid, snap in (

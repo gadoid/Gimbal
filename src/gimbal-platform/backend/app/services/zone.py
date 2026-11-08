@@ -125,12 +125,20 @@ def ensure_member_same_zone(
 
 
 def apply_public(row: Any, public_pid: int | None) -> None:
-    """影子写:置公共态(visibility=public ∧ project_id=公共项目)。"""
-    row.visibility = "public"
+    """置公共态(project_id=公共项目)。S1.9/0043 删 visibility 列后
+    只写 project_id —— 列的读写全切项目谓词,本函数是唯一写点之一。"""
     row.project_id = public_pid
 
 
 def apply_private(row: Any) -> None:
-    """影子写:置私有态(visibility=private ∧ project_id=NULL)。"""
-    row.visibility = "private"
+    """置私有态(project_id=NULL = 私有区)。"""
     row.project_id = None
+
+
+async def derive_visibility(db, project_id: int | None) -> str:
+    """响应派生(S1.9):visibility 字段的替代口径 —— project_id 为空 =
+    'private';公共项目 = 'public';普通项目 = 'private'(前端只把
+    'public' 当公共徽章,普通项目内容不出公共页)。pid 走会话缓存。"""
+    if project_id is None:
+        return "private"
+    return "public" if project_id == await public_project_id(db) else "private"

@@ -65,8 +65,9 @@ class IntegrationTask(Base):
     name: Mapped[str] = mapped_column(String(128))
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False)
-    visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # 项目区(M2a S1.0):仅模板行使用 —— 公共项目 = 公开模板(可订阅),
+    # visibility 列随 0043 删除;API 的 visibility 入参语义不变
+    #(公开 ⇔ project_id=公共项目,创建/更新走 zone.apply_*)。
+    # 项目区:仅模板行使用 —— 公共项目 = 公开模板(可订阅),
     # 实例行恒空(实例归持有人,个人对象)。S1.7 起 _can_manage 判定
     # 平台模板改用下方 is_platform_template,不再比对属主。
     project_id: Mapped[int | None] = mapped_column(

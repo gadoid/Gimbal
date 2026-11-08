@@ -37,7 +37,7 @@ async def test_signals_bulk_trend_and_last_run(client):
             s, ScenarioDraft.model_validate(make_draft("sc-m5-a")), owner="u")
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-m5-pub")),
-            owner="u", visibility="public")
+            owner="u",)
         # 默认方案 = 场景创建时自动物化;取其 schemeId
         schemes = await scheme_store.list_schemes(s, "sc-m5-a")
         default_sid = next(x["schemeId"] for x in schemes if x["isDefault"])
@@ -88,7 +88,7 @@ async def test_signals_owner_isolation(client):
     async with db_module.SessionLocal() as s:
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-m5-iso")),
-            owner="alice", owner_id=1, visibility="public")
+            owner="alice", owner_id=1,)
         await _mk_execution(s, sid="sc-m5-iso", owner_id=2,
                             scheme_id=None, status_="done")
         await s.commit()

@@ -41,7 +41,6 @@ async def _mk_suite_with_units(client: AsyncClient, owner_h: dict, *,
         # name 是生成列(payload 派生),不直插
         s.add(ComposerScenario(
             scenario_id="sc-w9-vd", owner_id=owner_id,
-            visibility="private",
             payload={"definition": {
                 "meta": {"scenarioId": "sc-w9-vd", "name": "VD",
                          "plate": {"fin": "1.0#1"}},

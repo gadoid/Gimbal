@@ -247,7 +247,7 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
 
     await publish_scenario("sc-cfp")
     r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
-        "sc-cfp", identityMode="personal", visibility="public"))
+        "sc-cfp", identityMode="personal",))
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
 

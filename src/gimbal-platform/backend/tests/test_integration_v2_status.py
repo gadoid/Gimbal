@@ -136,7 +136,7 @@ async def _seed_pair(*, holder=1, owner=1,
     async with db_module.SessionLocal() as s:
         await ensure_fk_users(s, owner, holder)
         s.add(IntegrationTask(
-            name="v2用例", owner_id=owner, visibility="public",
+            name="v2用例", owner_id=owner,
             scenario_id="sc-v2", target_system="fin",
             trigger_cron=cron, result_policy="latest"))
         await s.flush()
@@ -392,7 +392,7 @@ class TestLegacyMapSql:
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2, 3, 4, 5)
             s.add(IntegrationTask(
-                name="tpl", owner_id=1, visibility="public",
+                name="tpl", owner_id=1,
                 scenario_id="sc-v2-mig",
                 trigger_cron="*/5 * * * *"))
             await s.flush()

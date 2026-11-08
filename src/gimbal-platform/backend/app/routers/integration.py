@@ -67,7 +67,7 @@ def _visible(user, tpl: IntegrationTask) -> bool:
     """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用):
     属主 ∨ public(authz C1:平台的 admin+ 恒可见分支随平台模式退役)。"""
     return tpl.removed_at is None and (
-        tpl.owner_id == user.id or tpl.visibility == "public")
+        tpl.owner_id == user.id or tpl.project_id is not None)
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -125,7 +125,7 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "ownerId": db_tpl.owner_id,
         "mine": db_tpl.owner_id == current.id,
         "canManage": db_tpl.owner_id == current.id,
-        "visibility": db_tpl.visibility,
+        "visibility": ("public" if db_tpl.project_id is not None else "private"),
         "targetType": db_tpl.target_type,
         "scenarioId": db_tpl.scenario_id,
         "suiteId": db_tpl.suite_id,

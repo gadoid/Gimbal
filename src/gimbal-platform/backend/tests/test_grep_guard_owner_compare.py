@@ -56,7 +56,7 @@ _ALLOWLIST: dict[str, int] = {
     "routers/integration.py:if has_capability(current, \"ops.write\") or db_tpl.owner_id == current.id:": 1,
     "routers/integration.py:if tpl.owner_id != user.id:": 1,
     "routers/integration.py:subscribed = (inst is not None and inst.holder_id == user.id)": 1,
-    "routers/integration.py:tpl.owner_id == user.id or tpl.visibility == \"public\")": 1,
+    "routers/integration.py:tpl.owner_id == user.id or tpl.project_id is not None)": 1,
     "routers/me.py:AuthSession).where(AuthSession.owner_id == user.id))).scalar_one())": 1,
     "routers/me.py:ComposerScenario.owner_id == user.id,": 1,
     "routers/me.py:Execution.owner_id == user.id,": 2,

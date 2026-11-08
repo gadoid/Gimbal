@@ -161,7 +161,7 @@ class TestDeleteUserDisposal:
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
             s.add(ComposerScenario(
-                scenario_id=f"sc-{uid}", owner_id=uid, visibility="private",
+                scenario_id=f"sc-{uid}", owner_id=uid,
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()
@@ -193,7 +193,7 @@ class TestDeleteUserDisposal:
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
             s.add(ComposerScenario(
-                scenario_id=f"sc5-{uid}", owner_id=uid, visibility="private",
+                scenario_id=f"sc5-{uid}", owner_id=uid,
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()
@@ -220,7 +220,7 @@ class TestDeleteUserDisposal:
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
             s.add(ComposerScenario(
-                scenario_id=f"sc3-{uid}", owner_id=uid, visibility="private",
+                scenario_id=f"sc3-{uid}", owner_id=uid,
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()

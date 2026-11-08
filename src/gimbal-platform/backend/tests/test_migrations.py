@@ -242,7 +242,7 @@ def test_0036_revives_token_owner_ineligible():
 
     def _tpl(name: str, owner: int) -> IntegrationTask:
         return IntegrationTask(
-            name=name, owner_id=owner, visibility="private",
+            name=name, owner_id=owner,
             target_type="scenario",
             scenario_id="sc-1", target_system="fin",
             trigger_cron="*/5 * * * *", result_policy="latest",
@@ -377,7 +377,7 @@ def test_0038_platform_retire():
                 s.flush()
                 # 平台模板(私有)+ 平台唯一实例 + 订阅者实例
                 tpl = IntegrationTask(
-                    name="plat-tpl", owner_id=root.id, visibility="private",
+                    name="plat-tpl", owner_id=root.id,
                     target_type="scenario",
                     scenario_id="sc-1", target_system="fin",
                     trigger_cron="*/5 * * * *", result_policy="latest",
@@ -393,7 +393,7 @@ def test_0038_platform_retire():
                 s.add_all([inst, sub_inst])
                 # 对照:root 的个人公共模板 —— 属主不随平台模板改
                 own = IntegrationTask(
-                    name="own-tpl", owner_id=root.id, visibility="public",
+                    name="own-tpl", owner_id=root.id,
                     target_type="scenario",
                     scenario_id="sc-2", target_system="fin",
                     trigger_cron="*/5 * * * *", result_policy="latest",
@@ -576,7 +576,7 @@ def test_0040_project_zone():
                     ReportDefinitionRow(name="rd-priv", owner_id=author.id),
                 ])
                 tpl_pub = IntegrationTask(  # 个人公共模板(维护者=创建人)
-                    name="个人公共", owner_id=author.id, visibility="public",
+                    name="个人公共", owner_id=author.id,
                     target_type="scenario", scenario_id="sc-pub",
                     target_system="fin", trigger_cron="*/5 * * * *",
                     result_policy="latest", card_template="status",
@@ -588,13 +588,13 @@ def test_0040_project_zone():
                     result_policy="latest", card_template="status",
                     state="idle")
                 tpl_platform = IntegrationTask(  # 平台模板(0038 归属形态)
-                    name="平台模板", owner_id=plat.id, visibility="public",
+                    name="平台模板", owner_id=plat.id,
                     target_type="scenario", scenario_id="sc-pub",
                     target_system="fin", trigger_cron="*/5 * * * *",
                     result_policy="latest", card_template="status",
                     state="idle")
                 tpl_refugee = IntegrationTask(  # 删用户软删后挂靠的模板
-                    name="挂靠", owner_id=plat.id, visibility="public",
+                    name="挂靠", owner_id=plat.id,
                     target_type="scenario", scenario_id="sc-pub",
                     target_system="fin", trigger_cron="*/5 * * * *",
                     result_policy="latest", card_template="status",
@@ -768,7 +768,6 @@ def test_0041_public_shadow_backfill():
                     ComposerScenario(scenario_id="sc-keep", owner_id=author.id,
                                      payload={}),
                     IntegrationTask(name="tpl-win", owner_id=author.id,
-                                    visibility="public",
                                     target_type="scenario",
                                     scenario_id="sc-win",
                                     target_system="fin",

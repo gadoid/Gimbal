@@ -111,7 +111,6 @@ def _filter_clauses(
     tags: list[str],
     authors: list[str],
     cutoff: datetime | None,
-    visibility: str | None,
     starred_ids: list[str] | None,
 ) -> list:
     clauses = []
@@ -141,8 +140,7 @@ def _filter_clauses(
         clauses.append(ComposerScenario.author.in_(authors))
     if cutoff is not None:
         clauses.append(ComposerScenario.updated_at >= cutoff)
-    if visibility:
-        clauses.append(ComposerScenario.visibility == visibility)
+
     if starred_ids is not None:
         # 空收藏集 = 恒假(starred 过滤下推,不能命中任何行)
         clauses.append(
@@ -183,8 +181,13 @@ async def list_page(
     clauses = _filter_clauses(
         q=q, systems=systems or [], modules=modules or [],
         priorities=priorities or [], tags=tags or [], authors=authors or [],
-        cutoff=cutoff, visibility=visibility, starred_ids=starred_ids,
+        cutoff=cutoff, starred_ids=starred_ids,
     )
+    if visibility == "public":
+        from .zone import public_project_id as _ppid
+
+        clauses.append(ComposerScenario.project_id
+            == await _ppid(db))
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
@@ -229,8 +232,13 @@ async def facets(
     qc = _q_clause(q)
     if qc is not None:
         clauses.append(qc)
-    if visibility:
-        clauses.append(ComposerScenario.visibility == visibility)
+    # S1.9:visibility=public 入参 → 公共项目谓词(列删,0043)
+    if visibility == "public":
+        from .zone import public_project_id as _ppid
+
+        clauses.append(
+            ComposerScenario.project_id == await _ppid(db))
+
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)

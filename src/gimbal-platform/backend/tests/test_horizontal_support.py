@@ -308,7 +308,7 @@ class TestIntegrationTimeline:
                 name="iv-task", owner_id=holder_id,
                 target_type="scenario",
                 scenario_id="sc-iv-1", trigger_cron="*/5 * * * *",
-                result_policy="latest", visibility="public",
+                result_policy="latest",
                 card_template="status")
             db.add(tpl)
             await db.flush()
@@ -346,8 +346,7 @@ class TestIntegrationTimeline:
 
         await publish_scenario("sc-il-1")   # S1.3:公共模板引用副本
         r = await client.post("/api/integration/tasks", headers=h_owner,
-                              json=_task_body("sc-il-1", name="il-fn",
-                                              visibility="public"))
+                              json=_task_body("sc-il-1", name="il-fn",))
         assert r.status_code in (200, 201), r.text
         tid = r.json()["id"]
         r = await _subscribe(client, h_sub, tid)

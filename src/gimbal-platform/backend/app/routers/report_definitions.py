@@ -77,8 +77,8 @@ def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
     return ReportDefinitionOut(
         id=row.id, name=row.name, description=row.description,
         definition=row.definition, owner_id=row.owner_id,
-        visibility=row.visibility,
-        isPublic=(row.visibility or "private") == "public",
+        visibility=("public" if row.project_id is not None else "private"),
+        isPublic=row.project_id is not None,
         createdAt=str(row.created_at) if row.created_at else None,
     )
 

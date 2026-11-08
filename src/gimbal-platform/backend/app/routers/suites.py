@@ -57,7 +57,7 @@ def _require_read(user: CurrentUser, suite: Suite) -> None:
     """读闸(同步快路径,表 B suite.read 的纯判):private → 属主,
     否则 404(不泄露)。P2 引用/公共读由 ``_require_read_async`` 承担
     (§7.6)。W3 起 admin 无旁路。"""
-    if user.id != suite.owner_id             and (suite.visibility or "private") != "public":
+    if user.id != suite.owner_id and suite.project_id is None:
         raise not_found_404("suite", str(suite.id))
 
 
@@ -113,7 +113,8 @@ def _summary(suite: Suite, member_count: int,
              owner_name: str | None = None) -> SuiteSummaryOut:
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
+        visibility=("public" if suite.project_id is not None else "private"),
+        mode=suite.mode,
         memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
         latestRun=latest_run, ownerName=owner_name,
@@ -168,7 +169,7 @@ async def _access_and_caps(
     public_admin 判定,不进此投影)。"""
     if user.id == suite.owner_id:
         access = "owner"
-    elif suite.visibility == "public":
+    elif suite.project_id is not None:
         access = "public"
     else:
         from ._ownership import has_suite_ref
@@ -193,7 +194,8 @@ async def _detail_out(
         members = await _ordered_members(db, suite.id)
     out = SuiteDetailOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
+        visibility=("public" if suite.project_id is not None else "private"),
+        mode=suite.mode,
         memberCount=len(members), rev=suite.rev, isDraft=_is_draft(suite),
         modeConfig=suite.mode_config or {},
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
@@ -227,7 +229,7 @@ async def _members_out(
             scenarioId=m.scenario_id,
             name=(meta.name if meta and meta.name else m.scenario_id),
             module=(meta.module or "") if meta else "",
-            visibility=(scen.visibility or "private") if scen else "private",
+            visibility=("public" if scen and scen.project_id is not None else "private"),
             role=m.role or "main",
             sort=m.sort, addedAt=_iso(m.added_at),
         ))
@@ -459,14 +461,16 @@ async def fork_public_suite(
     suite = await _load_suite(db, suite_id)
     await _require_read_async(db, user, suite)
     is_owner = user.id == suite.owner_id
-    if suite.visibility != "public" and not is_owner:
+    from ..services.zone import public_project_id as _ppid_fork
+
+    if suite.project_id != await _ppid_fork(db) and not is_owner:
         raise not_found_404("suite", str(suite_id))
     out = await deep_copy_suite(
         db, suite, user, await suite_owner_display(db, suite))
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
-        action=(is_owner and suite.visibility != "public"
+        action=(is_owner and suite.project_id != await _ppid_fork(db)
                 and "suite.owner_fork" or "suite.public_fork"),
         resource_type="suite", resource_id=str(suite.id),
         resource_name=suite.name,
@@ -1632,7 +1636,7 @@ async def publish_suite(
         n += 1
     copy = Suite(
         name=name, description=suite.description,
-        owner_id=suite.owner_id, visibility="public", project_id=pid,
+        owner_id=suite.owner_id, project_id=pid,
         mode=suite.mode,
         mode_config=_remap_config(dict(suite.mode_config or {}), sid_map),
         rev=0,

@@ -701,7 +701,7 @@ async def delete_user(
                 sa_update(ComposerScenario)
                 .where(ComposerScenario.owner_id == user_id)
                 # 影子写:公共态同步 project_id(S1.1)
-                .values(visibility="public", owner_id=None,
+                .values(owner_id=None,
                         project_id=await public_project_id(db)))
     elif disposal == "transfer":
         if scenario_ids:

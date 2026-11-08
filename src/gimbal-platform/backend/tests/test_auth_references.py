@@ -60,7 +60,6 @@ async def _seed(owner_ids: dict[str, int]) -> None:
                 from sqlalchemy import update as _upd
                 await s.execute(_upd(_CS).where(
                     _CS.scenario_id == sid).values(
-                    visibility="public",
                     project_id=await public_project_id(s)))
 
         await _create("sc-own-tpl", "own_user", "private",

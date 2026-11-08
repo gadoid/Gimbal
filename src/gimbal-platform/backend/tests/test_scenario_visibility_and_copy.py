@@ -313,7 +313,6 @@ async def test_resolve_name_conflict_truncates_to_64(
         long_name = "x" * 64
         s.add(ComposerScenario(
             scenario_id="sc-long-name", owner_id=1, owner_name="垫底",
-            visibility="private",
             payload={"definition": {"meta": {"name": long_name}}}))
 
         # 生成列 name 由 payload 派生;flush 后才可查询
