@@ -72,6 +72,16 @@ def _revision(sync_url: str) -> str | None:
         eng.dispose()
 
 
+def _add_legacy_visibility(eng) -> None:
+    """S1.9(0043 删列后)迁移链兼容:补加 visibility 列(默认 private)。"""
+    with eng.begin() as conn:
+        for t in ("composer_scenarios", "suites",
+                  "report_definitions", "integration_tasks"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS visibility "
+                "VARCHAR(16) NOT NULL DEFAULT 'private'")
+
+
 def test_full_chain_from_empty():
     """空 schema → ``upgrade head``:全链从零可跑(空库门的产品面等价物,
     新迁移加入后自动纳入覆盖)。"""
@@ -80,6 +90,15 @@ def test_full_chain_from_empty():
     from sqlalchemy import create_engine, inspect, text
 
     with temp_schema() as (_schema, sync_url):
+        # S1.9:baseline 无 visibility 列,旧迁移引用 → stamp + 补列 + 升链
+        # 先跑到 baseline(建表),补 visibility 列,再升到 head
+        command.upgrade(_cfg(sync_url), "0001_baseline")
+        from sqlalchemy import create_engine as _ce
+        _eng = _ce(sync_url)
+        try:
+            _add_legacy_visibility(_eng)
+        finally:
+            _eng.dispose()
         command.upgrade(_cfg(sync_url), "head")
 
         head = ScriptDirectory(str(_BACKEND / "alembic")).get_current_head()
@@ -131,6 +150,7 @@ def _add_legacy_identity_mode(eng) -> None:
 
 def _to_0035_shape(eng) -> None:
     """create_all 是当前模型(已含新列);撤掉新列模拟 0035 存量库。"""
+    _add_legacy_visibility(eng)
     with eng.begin() as conn:
         conn.exec_driver_sql(
             "ALTER TABLE users DROP COLUMN must_change_password")
@@ -167,7 +187,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0042_suite_member_zone"
+            assert _revision(sync_url) == "0043_drop_visibility"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -317,18 +337,15 @@ def test_0037_report_def_visibility_backfill():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
-            # 存量库形状:create_all 已带新列 → 手动 drop 还原 0036 侧
+            # S1.9:create_all 已无 visibility 列(0043 删列后模型),
+            # 天然即 0036 形态(无 visibility 列的 report_definitions)
             with eng.begin() as c:
-                c.execute(text(
-                    "ALTER TABLE report_definitions DROP COLUMN visibility"))
                 # 造数据:无主 = 旧公共态;有主 = 私有
                 c.execute(text(
                     "INSERT INTO report_definitions "
                     "(name, description, definition, owner_id) VALUES "
                     "('legacy-pub', '', '{}', NULL), "
                     "('owned', '', '{}', 7)"))
-            with Session(eng) as s2:
-                pass
             command.stamp(_cfg(sync_url), "0036_role_rename")
             command.upgrade(_cfg(sync_url), "0037_report_def_maintainer")
 
@@ -419,6 +436,12 @@ def test_0038_platform_retire():
                 conn.exec_driver_sql(
                     "UPDATE integration_tasks SET identity_mode='platform' "
                     "WHERE name = 'plat-tpl' AND template_id IS NULL")
+            _add_legacy_visibility(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "UPDATE integration_tasks SET visibility='public' "
+                    "WHERE template_id IS NULL AND name='plat-tpl'")
+
             command.stamp(_cfg(sync_url), "0037_report_def_maintainer")
             command.upgrade(_cfg(sync_url), "0038_platform_retire")
 
@@ -515,6 +538,7 @@ def _to_0039_shape(eng) -> None:
     """create_all 是当前模型(已含 project_id / is_platform_template 与
     projects 两表);撤掉这些模拟 0039 存量库(PG 删列连带删索引与 FK,
     成员表先于项目表删)。"""
+    _add_legacy_visibility(eng)
     with eng.begin() as conn:
         for t in ("composer_scenarios", "suites", "integration_tasks",
                   "report_definitions", "executions"):
@@ -561,18 +585,14 @@ def test_0040_project_zone():
                 s.flush()
                 s.add_all([
                     ComposerScenario(scenario_id="sc-pub",
-                                     owner_id=author.id,
-                                     visibility="public", payload={}),
+                                     owner_id=author.id, payload={}),
                     ComposerScenario(scenario_id="sc-priv",
                                      owner_id=author.id, payload={}),
-                    Suite(name="套件-公开", owner_id=author.id,
-                          visibility="public"),
+                    Suite(name="套件-公开", owner_id=author.id),
                     Suite(name="套件-私有", owner_id=author.id),
                     # 0037 遗留:无主公共报告定义(编辑面冻结)
-                    ReportDefinitionRow(name="rd-orphan", owner_id=None,
-                                        visibility="public"),
-                    ReportDefinitionRow(name="rd-pub", owner_id=author.id,
-                                        visibility="public"),
+                    ReportDefinitionRow(name="rd-orphan", owner_id=None),
+                    ReportDefinitionRow(name="rd-pub", owner_id=author.id),
                     ReportDefinitionRow(name="rd-priv", owner_id=author.id),
                 ])
                 tpl_pub = IntegrationTask(  # 个人公共模板(维护者=创建人)
@@ -619,6 +639,21 @@ def test_0040_project_zone():
                 s.commit()
                 plat_id, author_id = plat.id, author.id
             _to_0039_shape(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "UPDATE composer_scenarios SET visibility='public' "
+                    "WHERE scenario_id='sc-pub'")
+                conn.exec_driver_sql(
+                    "UPDATE integration_tasks SET visibility='public' "
+                    "WHERE template_id IS NULL AND removed_at IS NULL "
+                    "AND name IN ('个人公共', '平台模板')")
+                conn.exec_driver_sql(
+                    "UPDATE suites SET visibility='public' "
+                    "WHERE name = '套件-公开'")
+                conn.exec_driver_sql(
+                    "UPDATE report_definitions SET visibility='public' "
+                    "WHERE name IN ('rd-pub', 'rd-orphan')")
+
             command.stamp(_cfg(sync_url), "0039_drop_identity_mode")
             command.upgrade(_cfg(sync_url), "0040_project_zone")
 
@@ -763,8 +798,7 @@ def test_0041_public_shadow_backfill():
                 # 窗口期发布形态:visibility=public ∧ project_id NULL
                 # (0040 已跑完,不会被步③迁走)
                 s.add_all([
-                    ComposerScenario(scenario_id="sc-win", owner_id=author.id,
-                                     visibility="public", payload={}),
+                    ComposerScenario(scenario_id="sc-win", owner_id=author.id, payload={}),
                     ComposerScenario(scenario_id="sc-keep", owner_id=author.id,
                                      payload={}),
                     IntegrationTask(name="tpl-win", owner_id=author.id,
@@ -776,6 +810,14 @@ def test_0041_public_shadow_backfill():
                                     card_template="status", state="idle"),
                 ])
                 s.commit()
+            # S1.9:ORM 构造不再传 visibility → SQL 设窗口期公共形态
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "UPDATE composer_scenarios SET visibility='public' "
+                    "WHERE scenario_id='sc-win'")
+                conn.exec_driver_sql(
+                    "UPDATE integration_tasks SET visibility='public' "
+                    "WHERE template_id IS NULL AND name='tpl-win'")
             with eng.connect() as c:
                 # 回填前:漏网行 project_id 为空
                 assert c.execute(text(
@@ -783,7 +825,7 @@ def test_0041_public_shadow_backfill():
                     "WHERE visibility='public' "
                     "AND project_id IS NULL")).scalar() == 1
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0042_suite_member_zone"
+            assert _revision(sync_url) == "0043_drop_visibility"
 
             with eng.connect() as c:
                 pid = c.execute(text(
@@ -799,7 +841,17 @@ def test_0041_public_shadow_backfill():
                     "SELECT project_id FROM integration_tasks "
                     "WHERE name='tpl-win' "
                     "AND template_id IS NULL")).scalar() == pid
-            # 幂等:重复跑 0041 不重复改(种子仍恰一行)
+            # 幂等:重复跑 0041 不重复改(种子仍恰一行);0043 列已删
+            # → 先补列再设值(重复跑 0041 的 UPDATE 需要它)
+            _add_legacy_visibility(eng)
+            with eng.begin() as conn:
+                conn.exec_driver_sql(
+                    "UPDATE composer_scenarios SET visibility='public' "
+                    "WHERE scenario_id='sc-win'")
+                conn.exec_driver_sql(
+                    "UPDATE integration_tasks SET visibility='public' "
+                    "WHERE template_id IS NULL AND name='tpl-win'")
+
             command.stamp(_cfg(sync_url), "0040_project_zone")
             command.upgrade(_cfg(sync_url), "head")
             with eng.connect() as c:
@@ -890,7 +942,7 @@ def test_0042_suite_member_zone():
                     "WHERE cs.scenario_id = 'sc-a'")
             command.stamp(_cfg(sync_url), "0041_public_shadow_backfill")
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0042_suite_member_zone"
+            assert _revision(sync_url) == "0043_drop_visibility"
 
             with eng.connect() as c:
                 cols = {r[0] for r in c.execute(text(

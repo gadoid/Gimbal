@@ -26,17 +26,16 @@ def _has_column(bind, table: str, column: str) -> bool:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # 0005 的轻档视图依赖 visibility 列 —— 先删(列删后无人消费;
+    # 如需保留可在 0044 重建为项目谓词版)
+    bind.execute(sa.text("DROP VIEW IF EXISTS v_scenarios_readable"))
+    # 索引守卫删(PG:一旦语句失败事务即中止,不能用 try/except 兜)
+    bind.execute(sa.text(
+        "DROP INDEX IF EXISTS ix_composer_vis_updated"))
+    bind.execute(sa.text("DROP INDEX IF EXISTS ix_suites_vis"))
     for table in _TABLES:
         if _has_column(bind, table, "visibility"):
-            if table == "composer_scenarios":
-                op.drop_index("ix_composer_vis_updated",
-                              table_name=table)
             op.drop_column(table, "visibility")
-    # suites 也有同名索引(部分链)—— 守卫性删
-    try:
-        op.drop_index("ix_suites_vis", table_name="suites")
-    except Exception:  # noqa: BLE001 — 不存在即过
-        pass
 
 
 def downgrade() -> None:
