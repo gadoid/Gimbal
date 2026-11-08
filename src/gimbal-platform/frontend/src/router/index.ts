@@ -29,9 +29,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // S7.1 IA 修正:公共场景并入公共项目(项目页场景页签);旧深链
+    // 重定向(公共项目 id 运行时解析,见 PublicProjectRedirect)
     path: '/scenarios/public',
-    component: () => import('@/views/ScenariosPublic.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('@/views/PublicProjectRedirect.vue'),
+    meta: { requiresAuth: true, tab: 'scenarios' },
   },
   {
     path: '/scenarios/follows',
@@ -91,10 +93,10 @@ const routes = [
     meta: { requiresAuth: true, requiresCap: 'users.manage' },
   },
   {
+    // S7.1 IA 修正:项目管理页退役 —— Admin+ 建项目/管成员收编进
+    // /projects(列表新建 + 详情成员页签)
     path: '/admin/projects',
-    component: () => import('@/views/ProjectsAdmin.vue'),
-    // M2a S1.4:项目管理 = ops.write(Admin+;S1.8 管理页)
-    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+    redirect: '/projects',
   },
   {
     path: '/admin/deployments',
@@ -203,6 +205,18 @@ const routes = [
     component: () => import('@/views/DebugConsole.vue'),
     meta: { requiresAuth: true },
   },
+  // ── 项目(M2a S7.1 IA 修正:一级入口;公共项目 = 置顶默认项目) ──
+  {
+    path: '/projects',
+    component: () => import('@/views/ProjectsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 详情页签 ?tab=scenarios|suites|tasks|members(成员 = canManage)
+    path: '/projects/:id(\\d+)',
+    component: () => import('@/views/ProjectDetailView.vue'),
+    meta: { requiresAuth: true },
+  },
   {
     // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 我的用例集
     // (02,2026-10-10 IA 调整:侧栏「场景集」组);/suites/:id = 管理页
@@ -212,11 +226,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 公共用例集(2026-10-10 IA 调整:独立成页,推翻 D-3「与公共场景
-    // 同页」的分区形态;:id 路由带 \d+ 约束,静态段不冲突)。
+    // 公共用例集 → S7.1 IA 修正:并入公共项目(项目页用例集页签);
+    // 旧深链重定向;:id 路由带 \d+ 约束,静态段不冲突。
     path: '/suites/public',
-    component: () => import('@/views/SuitesPublic.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('@/views/PublicProjectRedirect.vue'),
+    meta: { requiresAuth: true, tab: 'suites' },
   },
   {
     // 画布(重构方案 10–13):新建(/suites/new,不落库,首次拖入建草稿)

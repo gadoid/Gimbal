@@ -50,6 +50,10 @@ export type SwitchableType =
   | 'share_ref_revoked'
   | 'share_ref_resource_deleted'
   | 'share_ref_owner_changed'
+  // M2a S7.2:提升流程(加入申请审批)
+  | 'project_promotion.pending'
+  | 'project_promotion.approved'
+  | 'project_promotion.rejected'
 
 export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   execution_finished: '执行完成',
@@ -65,6 +69,9 @@ export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   share_ref_revoked: '引用分享撤销',
   share_ref_resource_deleted: '引用资源删除',
   share_ref_owner_changed: '引用属主变更',
+  'project_promotion.pending': '加入申请待审批',
+  'project_promotion.approved': '加入申请已批准',
+  'project_promotion.rejected': '加入申请被驳回',
 }
 
 export function list(params?: {

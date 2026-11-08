@@ -107,24 +107,6 @@
       <UserBadge :compact="collapsed" layout="footer" />
     </div>
 
-    <!-- M2a S1.8:项目切换器(私有区/公共区/我所在的项目;默认私有区)
-         —— 场景库与套件库按当前区过滤。折叠态隐藏(title 提示去展开)。 -->
-    <div v-if="!collapsed" class="zone-switcher border-t border-white/10 px-3 py-2">
-      <label class="block pb-1 text-caption text-slate-500" for="zone-select">当前区</label>
-      <select
-        id="zone-select"
-        data-testid="zone-select"
-        class="w-full rounded-md border border-white/10 bg-white/5 px-1.5 py-1 text-body text-slate-200"
-        :value="String(zone.zone)"
-        @change="onZoneChange"
-      >
-        <option value="private">私有区</option>
-        <option value="public">公共区</option>
-        <option v-for="prj in auth.projects" :key="prj.id" :value="String(prj.id)">
-          {{ prj.name }}({{ prj.role === 'admin' ? '管理' : '成员' }})
-        </option>
-      </select>
-    </div>
   </aside>
 </template>
 
@@ -135,11 +117,11 @@ import { useRoute } from 'vue-router'
 import {
   ArchiveIcon,
   BellIcon,
+  BoxIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CounterClockwiseClockIcon,
   GearIcon,
-  GlobeIcon,
   GridIcon,
   HomeIcon,
   LayersIcon,
@@ -154,17 +136,10 @@ import {
 } from '@radix-icons/vue'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useZoneStore } from '@/stores/zone'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 import UserBadge from '@/components/chrome/UserBadge.vue'
 
 const auth = useAuthStore()
-// M2a S1.8:项目切换器(zone store;场景/套件库消费 listParams)
-const zone = useZoneStore()
-function onZoneChange(ev: Event): void {
-  const raw = (ev.target as HTMLSelectElement).value
-  zone.set(raw === 'private' || raw === 'public' ? raw : Number(raw))
-}
 const route = useRoute()
 
 const { collapsed, toggle } = useSidebarCollapse()
@@ -211,19 +186,25 @@ const groups: SidebarGroup[] = [
   {
     label: '场景',
     entries: [
+      // S7.1 IA 修正:「公共场景」入口并入公共项目(项目组)
       { path: '/scenarios/mine', label: '我的场景', icon: ArchiveIcon },
-      { path: '/scenarios/public', label: '公共场景', icon: GlobeIcon },
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
     ],
   },
-  // 用例集组(2026-10-10 IA 调整):Suite 从「执行」组迁出独立成组,
-  // 「我的用例集」= 原 /suites(02 列表),「公共用例集」= 独立新页
-  // (推翻 D-3「与公共场景同页」的分区形态)。
+  // 用例集组(2026-10-10 IA 调整):Suite 独立成组;S7.1 IA 修正:
+  // 「公共用例集」并入公共项目,「我的用例集」只列私有(未进项目)。
   {
     label: '用例集',
     entries: [
       { path: '/suites', label: '我的用例集', icon: StackIcon },
-      { path: '/suites/public', label: '公共用例集', icon: GlobeIcon },
+    ],
+  },
+  // 项目组(M2a S7.1 IA 修正):项目成为一级入口 —— 公共项目置顶,
+  // 没加入任何项目的内容就是「私有」;「区」的概念不再出现在界面。
+  {
+    label: '项目',
+    entries: [
+      { path: '/projects', label: '项目', icon: BoxIcon },
     ],
   },
   {
@@ -255,8 +236,8 @@ const groups: SidebarGroup[] = [
   ] },
   { label: '平台', entries: [
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
-    // M2a S1.8:项目区管理(Admin+ 建项目/管成员)
-    { path: '/admin/projects', label: '项目管理', icon: GearIcon, cap: 'ops.write' },
+    // M2a S7.1:项目管理收编进「项目」组(/projects,Admin+ 有新建);
+    // 部署表维护仍在平台组
     // M2a S2.3:部署表((基础服务, 环境) → 地址)与默认环境
     { path: '/admin/deployments', label: '部署地址', icon: GearIcon, cap: 'ops.write' },
   ] },

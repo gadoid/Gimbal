@@ -51,6 +51,36 @@ async def my_project_roles(db: AsyncSession, user_id: int) -> dict[int, str]:
     return roles
 
 
+class ProjectCreateDenied(Exception):
+    """项目内新建被拒(调用方映射 HTTP:404 / 403 / 422)。"""
+
+    def __init__(self, status: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
+        self.message = message
+
+
+async def ensure_can_create_in_project(
+    db: AsyncSession, user_id: int, project_id: int,
+) -> None:
+    """项目内新建门(authz M2a S7.0,D6「项目内可直接新建」):项目须存在
+    (否则 404)、不是公共项目(422 —— 内容进公共项目只有「发布」一条路,
+    S1.3)、主体是项目成员(非成员 404 不泄露存在性;D1:项目对象权限只看
+    项目角色,Admin+ 不旁路)。"""
+    proj = await db.get(Project, project_id)
+    if proj is None:
+        raise ProjectCreateDenied(404, "not_found",
+                                  f"project not found: {project_id}")
+    if proj.kind == "public":
+        raise ProjectCreateDenied(
+            422, "public_project_create_forbidden",
+            "公共项目不能直接新建 —— 请在私有区创建后发布")
+    if project_id not in await my_project_roles(db, user_id):
+        raise ProjectCreateDenied(404, "not_found",
+                                  f"project not found: {project_id}")
+
+
 def zone_read_clause(model, viewer_id: int):
     """三区读谓词(带 owner_id + project_id 的任意模型):私有区属主 ∨
     我所在的普通项目 ∨ 公共项目 —— 场景 / suite / 报告定义列表共用

@@ -25,6 +25,8 @@ export interface IntegrationTaskItem {
   mine: boolean
   canManage: boolean
   visibility: string
+  /** S7.0:所属项目 id(public = 公共项目 / 普通项目;null = 私有) */
+  projectId?: number | null
   targetType: string
   scenarioId: string | null
   suiteId: number | null
@@ -104,9 +106,12 @@ export function runAbnormalOf(runStatus?: string | null): boolean {
   return !!runStatus && runStatus !== 'ok'
 }
 
-export async function listIntegrationTasks(): Promise<IntegrationTaskItem[]> {
+/** S7.0:?projectId = 项目详情「集成任务」页签(可见性按成员收口)。 */
+export async function listIntegrationTasks(
+  projectId?: number,
+): Promise<IntegrationTaskItem[]> {
   const { data } = await http.get<{ items: IntegrationTaskItem[] }>(
-    '/integration/tasks')
+    '/integration/tasks', { params: projectId != null ? { projectId } : undefined })
   return data.items
 }
 

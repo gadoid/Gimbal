@@ -8,6 +8,14 @@ export interface ProjectOut {
   description: string
   memberCount: number
   myRole: string | null
+  /** S7.0:请求者能否管理(项目管理员 ∨ Admin+;公共项目 = Admin+) */
+  canManage?: boolean
+  defaultEnvironmentId?: number | null
+  /** 详情读面(S7.0):默认环境名 + 内容计数(列表端点不填) */
+  defaultEnvironmentName?: string | null
+  scenarioCount?: number
+  suiteCount?: number
+  taskCount?: number
 }
 
 export interface ProjectMember {
@@ -20,6 +28,11 @@ export interface ProjectMember {
 
 export function listProjects(): Promise<ProjectOut[]> {
   return http.get<ProjectOut[]>('/projects').then((r) => r.data)
+}
+
+/** 项目详情(S7.0):公共项目全员可读;普通项目非成员 404 */
+export function getProject(id: number): Promise<ProjectOut> {
+  return http.get<ProjectOut>(`/projects/${id}`).then((r) => r.data)
 }
 
 export function createProject(body: {

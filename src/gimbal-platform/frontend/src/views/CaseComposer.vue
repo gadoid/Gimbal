@@ -458,6 +458,14 @@ let registryHydrated = true
 const isNewScenario = computed(() => !scenarioId.value || scenarioId.value === 'new')
 useSystemPrefill(definition, isNewScenario)
 
+// S7.1 在项目内新建:?projectId= 深链(项目详情「场景」页签发起),
+// 首次保存时透传给 POST /scenarios —— 门 = 项目成员,公共项目 422。
+const createProjectId = computed(() => {
+  if (!isNewScenario.value) return undefined
+  const n = Number(route.query.projectId)
+  return Number.isInteger(n) && n > 0 ? n : undefined
+})
+
 // 便利 getter (模板顶部 crumb / 标题 / canRun 用)
 const meta = computed(() => definition.value.meta)
 const steps = computed(() => definition.value.steps)
@@ -1111,7 +1119,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       // create:撞 id 时后端返 409 (scenario_id_exists),重生成 id 重试(最多 2 次)。
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          saved = await store.saveScenario(null, draft)
+          saved = await store.saveScenario(null, draft, createProjectId.value)
           break
         } catch (e: any) {
           if (attempt < 2 && /scenario_id_exists|409/.test(String(e?.message || e))) {

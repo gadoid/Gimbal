@@ -240,9 +240,10 @@ async def _members_out(
 @router.get("", response_model=SuitePageOut)
 async def list_suites(
     user: CurrentUser, db: DbSession,
-    scope: Literal["mine", "all"] = "all",
+    scope: Literal["mine", "all", "private"] = "all",
     visibility: str | None = None,
-    project_id: Annotated[int | None, Query(ge=1)] = None,
+    # S7.0 修正:补 alias(同 scenarios 列表 —— projectId 缺 alias 被忽略)
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
     q: str = Query(default="", max_length=128),
     mode: str = Query(default=""),
     page: Annotated[int, Query(ge=1)] = 1,
@@ -264,6 +265,9 @@ async def list_suites(
             _select(Project.id).where(Project.kind == "public"))]
     elif scope == "mine":
         clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)
+    elif scope == "private":
+        # S7.0:「我的用例集」= 我名下且未加入任何项目
+        clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]
     else:
         # S1.2 三区(表 B suite.read = zone_read_clause)∨ 引用
         clauses = [or_(
@@ -323,6 +327,14 @@ async def list_suites(
 async def create_suite(
     user: CurrentUser, db: DbSession, body: SuiteCreateIn,
 ) -> SuiteSummaryOut:
+    if body.projectId is not None:
+        from ..services.zone import (ProjectCreateDenied,
+                                     ensure_can_create_in_project)
+        try:
+            await ensure_can_create_in_project(db, user.id, body.projectId)
+        except ProjectCreateDenied as e:
+            raise HTTPException(status_code=e.status, detail={
+                "code": e.code, "message": e.message}) from None
     # 草稿口径(重构方案):name 缺省 = 画布首次拖入创建草稿,服务端
     # 生成不重名草稿名;草稿不计入 SUITE_CAP、单独 SUITE_DRAFT_CAP
     #(团队规模有界,JSON 的 draft 标记在 Python 侧过滤,不进 SQL)
@@ -355,7 +367,7 @@ async def create_suite(
             "code": "suite_name_conflict",
             "message": "同名 suite 已存在(属主内唯一)"})
     suite = Suite(name=name, description=body.description,
-                  owner_id=user.id,
+                  owner_id=user.id, project_id=body.projectId,
                   mode_config=({"draft": True} if is_draft else {}))
     db.add(suite)
     await db.commit()

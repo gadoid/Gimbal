@@ -33,6 +33,7 @@ from .access_token import AccessToken, AccessTokenScope
 from .webhook_delivery import WebhookDelivery
 # 项目区(M2a S1.0:只建表不上码;授权面随 S1.1+)
 from .project import Project, ProjectMember
+from .project_promotion import ProjectPromotion
 
 __all__ = [
     "User",

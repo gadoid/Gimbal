@@ -58,7 +58,6 @@ _ALLOWLIST: dict[str, int] = {
     "routers/integration.py:if has_capability(current, \"ops.write\") or db_tpl.owner_id == current.id:": 1,
     "routers/integration.py:if tpl.owner_id != user.id:": 1,
     "routers/integration.py:subscribed = (inst is not None and inst.holder_id == user.id)": 1,
-    "routers/integration.py:tpl.owner_id == user.id or tpl.project_id is not None)": 1,
     "routers/me.py:AuthSession).where(AuthSession.owner_id == user.id))).scalar_one())": 1,
     "routers/me.py:ComposerScenario.owner_id == user.id,": 1,
     "routers/me.py:Execution.owner_id == user.id,": 2,
@@ -78,6 +77,7 @@ _ALLOWLIST: dict[str, int] = {
     "routers/shares.py:owned = s is not None and s.owner_id == user.id": 1,
     "routers/suites.py:Execution.owner_id == runner_id,": 1,
     "routers/suites.py:Execution.owner_id == user.id,": 2,
+    "routers/suites.py:clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]": 1,
     "routers/suites.py:clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)": 1,
     "routers/suites.py:if copy.owner_id != user.id:": 1,
     "routers/suites.py:if ex.owner_id != user.id:": 1,
@@ -120,6 +120,16 @@ _ALLOWLIST: dict[str, int] = {
     "services/run_prepare.py:DBAuthSession.owner_id == owner_id,": 1,
     "services/scenario_import.py:select(AuthSession.alias).where(AuthSession.owner_id == owner_id)": 1,
     "services/scenario_query.py:return ComposerScenario.owner_id == user.id": 1,
+    # S7.0:scope=private = 我名下且未进项目(「我的」页口径;镜头谓词
+    # 属查询投影不是权限门 —— 权限边界仍走 zone_read_clause)
+    "services/scenario_query.py:return (ComposerScenario.owner_id == user.id) & \\": 1,
+    "routers/scenarios.py:if r.owner_id == user.id and r.project_id is None]": 1,
+    # S7.0:_visible 三区收口改写(私有模板 = 属主)
+    "routers/integration.py:return tpl.owner_id == user.id": 1,
+    # S7.2:提升门 = 申请人本人的私有原件(与发布闸同款属主单判)
+    "services/project_promotion.py:if row.owner_id != applicant_id:": 2,
+    "services/project_promotion.py:elif scen.owner_id == src.owner_id:": 1,
+    "services/project_promotion.py:select(Suite.name).where(Suite.owner_id == suite.owner_id))).all()}": 1,
     "services/scenario_store.py:ComposerScenario.owner_id == owner_id))": 1,
     "services/scenario_store.py:ComposerScenario.owner_id == user.id": 1,
     "services/scenario_store.py:cross_owner = src.owner_id != new_owner_id": 1,

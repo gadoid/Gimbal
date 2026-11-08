@@ -244,12 +244,16 @@ class TestMeProjects:
         r = await client.get("/api/auth/me", headers=h)
         assert r.status_code == 200, r.text
         projects = r.json()["projects"]
-        assert projects == [{"id": pid, "name": "s11-me-proj",
-                             "kind": "normal", "role": "admin"}]
+        # S7.0:与 GET /projects 同口径 —— 公共项目置顶(role=None)
+        assert projects[0]["kind"] == "public"
+        assert projects[0]["role"] is None
+        assert projects[1:] == [{"id": pid, "name": "s11-me-proj",
+                                 "kind": "normal", "role": "admin"}]
 
         h2 = await role_headers(client, "s11_nobody", role="user")
-        assert (await client.get("/api/auth/me", headers=h2)
-                ).json()["projects"] == []
+        assert [p_ for p_ in (
+            await client.get("/api/auth/me", headers=h2)
+        ).json()["projects"] if p_["kind"] != "public"] == []
 
 
 class TestShadowWrite:

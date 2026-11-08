@@ -568,6 +568,10 @@ def _to_0039_shape(eng) -> None:
             "ALTER TABLE integration_tasks "
             "DROP COLUMN is_platform_template")
         conn.exec_driver_sql("DROP TABLE project_members")
+        # S7.2:project_promotions FK 挡 DROP projects —— 先卸(重塑
+        # 0039 形态,该表本不存在)
+        conn.exec_driver_sql(
+            "DROP TABLE IF EXISTS project_promotions")
         conn.exec_driver_sql("DROP TABLE projects")
 
 

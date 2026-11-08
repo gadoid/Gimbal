@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,11 +63,18 @@ def _can_manage(user, tpl: IntegrationTask) -> bool:
             and has_capability(user, "ops.write"))
 
 
-def _visible(user, tpl: IntegrationTask) -> bool:
-    """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用):
-    属主 ∨ public(authz C1:平台的 admin+ 恒可见分支随平台模式退役)。"""
-    return tpl.removed_at is None and (
-        tpl.owner_id == user.id or tpl.project_id is not None)
+async def _visible(db, user, tpl: IntegrationTask) -> bool:
+    """模板可见判定(列表/详情/立即执行/关注卡/订阅前置共用):私有模板
+    = 属主;公共项目模板 = 全员;普通项目模板 = 项目成员(authz M2a
+    S7.0 —— 此前「project_id 非空即可见」把普通项目模板泄露给非成员)。"""
+    if tpl.removed_at is not None:
+        return False
+    if tpl.project_id is None:
+        return tpl.owner_id == user.id
+    from ..services.zone import my_project_roles, public_project_id
+    if tpl.project_id == await public_project_id(db):
+        return True
+    return tpl.project_id in await my_project_roles(db, user.id)
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -126,6 +133,9 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
         "mine": db_tpl.owner_id == current.id,
         "canManage": db_tpl.owner_id == current.id,
         "visibility": ("public" if db_tpl.project_id is not None else "private"),
+        # S7.0 三区:普通项目模板与公共模板在 visibility 里同为 "public",
+        # projectId 让前端区分所属项目(项目页签徽标)
+        "projectId": db_tpl.project_id,
         "targetType": db_tpl.target_type,
         "scenarioId": db_tpl.scenario_id,
         "suiteId": db_tpl.suite_id,
@@ -226,6 +236,9 @@ class TaskIn(BaseModel):
     resultPolicy: str = "latest"
     cardTemplate: str = "status"
     visibility: str = "private"
+    # authz M2a S7.0:在该项目内新建(引用的场景须在同一项目;门 = 项目
+    # 成员;与 visibility=public 互斥 —— 公共模板只走公共项目)
+    projectId: int | None = Field(default=None, ge=1)
     targetSystem: str = ""
     # 令牌注册面(§2.2);JWT 调用可带但无回调语义
     clientRef: str | None = Field(default=None, max_length=128)
@@ -247,9 +260,13 @@ class TaskPatch(BaseModel):
 
 
 @router.get("/tasks")
-async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
-    """可见模板:我的 + 公共(admin 全见);软删的不出。令牌
-    (§2.2):只回本令牌注册的模板。
+async def list_tasks(
+    principal: PrincipalIn, db: DbSession,
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+) -> dict:
+    """可见模板:我的私有 + 公共项目(全员)+ 我所在项目(S7.0 三区,
+    ``_visible`` 同口径;Admin+ 管理视图全见);软删的不出;``?projectId=``
+    = 项目详情「集成任务」页签。令牌(§2.2):只回本令牌注册的模板。
 
     P3.2(已知欠账,暂记不修):每行算 authAliases / missingCredentials
     要单独装载场景 + 方案并查凭证池(N+1);当前数据量小可接受,
@@ -261,10 +278,13 @@ async def list_tasks(principal: PrincipalIn, db: DbSession) -> dict:
     )
     if principal.is_token:
         q = q.where(IntegrationTask.token_id == principal.token_id)
+    if project_id is not None:
+        # S7.0 项目详情「集成任务」页签
+        q = q.where(IntegrationTask.project_id == project_id)
     rows = (await db.execute(q.order_by(IntegrationTask.id.desc()))).scalars().all()
     out = []
     for t in rows:
-        if not principal.is_token and not _visible(user, t):
+        if not principal.is_token and not await _visible(db, user, t):
             continue
         inst = await _my_instance(db, t, user)   # W0a①:列表只读不播种
         out.append(await _tpl_out_full(db, t, inst, user))
@@ -288,10 +308,23 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         raise _bad("result_policy_invalid", "resultPolicy ∈ latest | on_change")
     if body.visibility not in ("private", "public"):
         raise _bad("visibility_invalid", "visibility ∈ private | public")
+    if body.projectId is not None and body.visibility == "public":
+        raise _bad("project_visibility_conflict",
+                   "projectId 与 visibility=public 互斥(公共模板只走公共项目)")
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
+    if body.projectId is not None:
+        from ..services.zone import (ProjectCreateDenied,
+                                     ensure_can_create_in_project)
+        try:
+            await ensure_can_create_in_project(db, user.id, body.projectId)
+        except ProjectCreateDenied as e:
+            raise _bad(e.code, e.message, e.status) from None
+        if scen.project_id != body.projectId:
+            raise _bad("scenario_not_in_project",
+                       "项目内的集成模板只能引用本项目的场景", 422)
     # S1.3 引用闸按模板可见性分流:私有/个人模板 = 可执行判(自己的 ∨
     # 项目内可跑的);公共模板 = 引用公共副本 ∧ 维护者(表 B write 投影
     # —— 公共副本对谁都不可直接执行,公共内容走订阅而非直跑)
@@ -341,6 +374,8 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
     if body.visibility == "public":
         from ..services.zone import apply_public, public_project_id
         apply_public(tpl, await public_project_id(db))
+    elif body.projectId is not None:
+        tpl.project_id = body.projectId
     db.add(tpl)
     await db.commit()
     await db.refresh(tpl)
@@ -413,7 +448,7 @@ async def get_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not (
             _token_owns(principal, tpl) if principal.is_token
-            else _visible(user, tpl)):
+            else await _visible(db, user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
     inst = await _my_instance(db, tpl, user)   # W0a①:详情只读不播种
     return await _tpl_out_full(db, tpl, inst, user)
@@ -673,7 +708,7 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None or tpl.template_id is not None or not (
             _token_owns(principal, tpl) if principal.is_token
-            else _visible(user, tpl)):
+            else await _visible(db, user, tpl)):
         raise _bad("not_found", "功能不存在", 404)
     if principal.is_token:
         if tpl.owner_id != user.id:
@@ -735,9 +770,9 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
 
 # ── W0a(个人侧方案 §2):订阅知情同意 ────────────────────────────
 
-def _subscribable(tpl: IntegrationTask, user) -> None:
+async def _subscribable(db: AsyncSession, tpl: IntegrationTask, user) -> None:
     """订阅面前置:模板行/可见/未删。"""
-    if tpl.template_id is not None or not _visible(user, tpl):
+    if tpl.template_id is not None or not await _visible(db, user, tpl):
         raise _bad("not_found", "功能不存在", 404)
 
 
@@ -790,7 +825,7 @@ async def subscription_summary(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
+    await _subscribable(db, tpl, user)
     from ..services.plate_client import PlateUnavailableError
     try:
         return await integration_runner.subscription_view(db, tpl)
@@ -822,7 +857,7 @@ async def subscribe_task(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
+    await _subscribable(db, tpl, user)
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
         if tpl.scenario_id else None
@@ -882,7 +917,7 @@ async def unsubscribe_task(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
+    await _subscribable(db, tpl, user)
     row = (await db.execute(select(IntegrationTask).where(
         IntegrationTask.template_id == tpl.id,
         IntegrationTask.holder_id == user.id))).scalar()
@@ -945,7 +980,7 @@ async def pause_my_subscription(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
+    await _subscribable(db, tpl, user)
     inst = await _my_subscription(db, tpl, user)
     if inst.state != "paused" or inst.paused_reason != "manual":
         inst.state = "paused"
@@ -982,7 +1017,7 @@ async def resume_my_subscription(
     tpl = await db.get(IntegrationTask, task_id)
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
-    _subscribable(tpl, user)
+    await _subscribable(db, tpl, user)
     inst = await _my_subscription(db, tpl, user)
     reason = inst.paused_reason or ""
     if inst.state == "paused" and reason not in _RESUMABLE:
@@ -1029,7 +1064,7 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
         if tpl is None or tpl.template_id is not None:
             out.append({"id": raw, "state": "removed"})
             continue
-        if not _visible(user, tpl):
+        if not await _visible(db, user, tpl):
             out.append({"id": raw, "state": "removed"})
             continue
         inst = await _my_instance(db, tpl, user)   # W0a①:只读不播种

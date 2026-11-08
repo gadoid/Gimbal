@@ -64,6 +64,10 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     """
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
+    if scope == "private" and user is not None:
+        # S7.0:「我的场景」= 我名下且未加入任何项目(私有)
+        return (ComposerScenario.owner_id == user.id) & \
+            ComposerScenario.project_id.is_(None)
     # S1.2:三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
     # 列表同款);ref 分支仅限私有区对象(S7 退役),谓词单点 =
     # _ownership.ref_exists_clauses(禁自写)。

@@ -849,6 +849,7 @@ async def to_read_shape(
         tags=list(meta.tags or []),
         starred=starred,
         visibility=("public" if row.project_id is not None else "private"),
+        projectId=row.project_id,
     )
 
 
@@ -883,6 +884,7 @@ def to_list_item_shape(
         tags=list(meta.tags or []),
         starred=starred,
         visibility=("public" if row.project_id is not None else "private"),
+        projectId=row.project_id,
     )
 
 

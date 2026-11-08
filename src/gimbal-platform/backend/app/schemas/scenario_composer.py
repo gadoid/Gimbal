@@ -584,6 +584,8 @@ class Scenario(BaseModel):
     starred: bool = False
     # private(默认,仅 owner/admin 可读)| public(所有登录用户可读)
     visibility: str = Field(default="private")
+    # S7.1:所属项目 id(项目徽标;None = 私有)
+    projectId: int | None = None
 
 
 # ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)────────────────────────
@@ -606,6 +608,8 @@ class ScenarioListItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     starred: bool = False
     visibility: str = Field(default="private")
+    # S7.1:所属项目 id(项目徽标;null = 私有)
+    projectId: int | None = None
 
 
 class ScenarioOptionsItem(BaseModel):

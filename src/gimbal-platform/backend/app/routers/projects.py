@@ -65,6 +65,15 @@ class ProjectOut(BaseModel):
     myRole: str | None = None
     # S2.2:项目默认环境(环境链第三位;None = 未设置)
     defaultEnvironmentId: int | None = None
+    # S7.0:请求者能否管理(项目管理员 ∨ Admin+;公共项目 = Admin+)——
+    # 前端据此显隐成员管理 / 配置编辑,不再自己拼角色判定
+    canManage: bool = False
+    # S7.0 详情读面:默认环境名 + 各类内容计数(页签徽标数据源;
+    # 列表端点不填,保持 0)
+    defaultEnvironmentName: str | None = None
+    scenarioCount: int = 0
+    suiteCount: int = 0
+    taskCount: int = 0
 
 
 class MemberOut(BaseModel):
@@ -164,17 +173,102 @@ async def create_project(
                       defaultEnvironmentId=proj.default_environment_id)
 
 
+def _can_manage(user, proj: Project, my_role: str | None) -> bool:
+    """管理权(与 ``_require_manage`` 同口径):Admin+ ∨ 项目管理员;
+    公共项目无成员行 → 只有 Admin+。"""
+    return has_capability(user, "ops.write") or (
+        proj.kind != "public" and my_role == "admin")
+
+
+async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
+    """S7.0 详情读面:默认环境名 + 场景 / 用例集 / 集成模板计数
+    (集成只数模板行,软删不计)。"""
+    from ..models.composer_scenario import ComposerScenario
+    from ..models.environment import Environment
+    from ..models.integration_task import IntegrationTask
+    from ..models.suite import Suite
+
+    async def _count(stmt) -> int:
+        return (await db.execute(
+            stmt.with_only_columns(func.count()).order_by(None))).scalar()
+
+    env_name = None
+    if proj.default_environment_id is not None:
+        env_row = await db.get(Environment, proj.default_environment_id)
+        env_name = env_row.name if env_row is not None else None
+    return {
+        "defaultEnvironmentName": env_name,
+        "scenarioCount": await _count(select(ComposerScenario).where(
+            ComposerScenario.project_id == proj.id)),
+        "suiteCount": await _count(select(Suite).where(
+            Suite.project_id == proj.id)),
+        "taskCount": await _count(select(IntegrationTask).where(
+            IntegrationTask.project_id == proj.id,
+            IntegrationTask.template_id.is_(None),
+            IntegrationTask.removed_at.is_(None))),
+    }
+
+
+@router.get("/{project_id}/slot-status")
+async def project_slot_status(
+    user: CurrentUser, db: DbSession, project_id: int,
+) -> dict:
+    """槽位状态 = 成员凭证清单(S7.3 项目配置页签,只读不落库):
+    项目场景引用的槽位 × 成员是否已绑定(任意绑定即算;不给任何账号
+    信息)。门 = 项目成员(仅普通项目 —— 公共项目内容走订阅,凭证是
+    订阅者自己的事,本端点 422)。"""
+    from ..models.auth_session import AuthSession
+    from ..models.composer_scenario import ComposerScenario
+    from ..models.user import User
+    from ..services.project_promotion import require_member
+
+    await require_member(db, project_id, user.id)
+    scen_rows = (await db.execute(select(ComposerScenario.scenario_id,
+                                         ComposerScenario.payload).where(
+        ComposerScenario.project_id == project_id))).all()
+    from ..services.project_promotion import _referenced_slots
+
+    slot_scenarios: dict[str, list[str]] = {}
+    for sid, payload in scen_rows:
+        for slot in await _referenced_slots(db, payload):
+            slot_scenarios.setdefault(slot, []).append(sid)
+    members = (await db.execute(
+        select(ProjectMember.user_id, User.username, User.display_name)
+        .join(User, User.id == ProjectMember.user_id)
+        .where(ProjectMember.project_id == project_id)
+        .order_by(ProjectMember.user_id))).all()
+    slots = sorted(slot_scenarios)
+    bound: set[tuple[int, str]] = set()
+    if slots and members:
+        rows = (await db.execute(
+            select(AuthSession.owner_id, AuthSession.slot).where(
+                AuthSession.owner_id.in_([m[0] for m in members]),
+                AuthSession.slot.in_(slots)))).all()
+        bound = set(rows)
+    return {"slots": [{
+        "slot": slot,
+        "scenarios": sorted(slot_scenarios[slot]),
+        "members": [{"userId": uid, "username": uname,
+                     "displayName": disp or uname,
+                     "bound": (uid, slot) in bound}
+                    for uid, uname, disp in members],
+    } for slot in slots]}
+
+
 @router.get("", response_model=list[ProjectOut])
 async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
-    """项目列表:Admin+ 管理视图全量;普通用户 = 我所在的项目
-    (切换器数据源与 /auth/me.projects 同口径)。"""
+    """项目列表(S7.0 项目页数据源):公共项目(全员,置顶)+ 我所在的
+    项目;Admin+ 管理视图全量。"""
     roles = {pid: role for pid, role in (await db.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
             ProjectMember.user_id == user.id))).all()}
+    from sqlalchemy import or_ as _or
     stmt = select(Project) if has_capability(user, "ops.write") else (
-        select(Project).where(Project.id.in_(roles) if roles else False))
-    projs = (await db.execute(
-        stmt.order_by(Project.id))).scalars().all()
+        select(Project).where(_or(
+            Project.kind == "public",
+            Project.id.in_(roles) if roles else False)))
+    projs = (await db.execute(stmt.order_by(
+        (Project.kind != "public"), Project.id))).scalars().all()
     counts = {pid: n for pid, n in (await db.execute(
         select(ProjectMember.project_id, func.count()).group_by(
             ProjectMember.project_id))).all()}
@@ -182,7 +276,8 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
         id=p.id, name=p.name, kind=p.kind, description=p.description,
         memberCount=counts.get(p.id, 0),
         myRole=roles.get(p.id),
-        defaultEnvironmentId=p.default_environment_id) for p in projs]
+        defaultEnvironmentId=p.default_environment_id,
+        canManage=_can_manage(user, p, roles.get(p.id))) for p in projs]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -191,7 +286,9 @@ async def get_project(
 ) -> ProjectOut:
     proj = await _load_project(db, project_id)
     my_role = await _my_role(db, user, project_id)
-    if my_role is None and not has_capability(user, "ops.write"):
+    # 公共项目全员可读(S7.0 项目页);普通项目非成员 404(Admin+ 管理视图)
+    if (my_role is None and proj.kind != "public"
+            and not has_capability(user, "ops.write")):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found",
@@ -200,7 +297,9 @@ async def get_project(
                       description=proj.description,
                       memberCount=await _member_count(db, project_id),
                       myRole=my_role,
-                      defaultEnvironmentId=proj.default_environment_id)
+                      defaultEnvironmentId=proj.default_environment_id,
+                      canManage=_can_manage(user, proj, my_role),
+                      **await _detail_counts(db, proj))
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)

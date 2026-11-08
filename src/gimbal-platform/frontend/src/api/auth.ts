@@ -23,12 +23,13 @@ export interface TokenOut {
   user: UserPublic
 }
 
-/** M2a S1.4:我所在的普通项目(/auth/me.projects;公共项目不落成员行) */
+/** M2a S7.0:与 GET /projects 同口径 —— 公共项目置顶(role = null,
+ * 公共项目不落成员行)+ 我所在的普通项目 */
 export interface ProjectRef {
   id: number
   name: string
   kind: 'normal' | 'public'
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | null
 }
 
 export interface MeOut {
@@ -37,7 +38,7 @@ export interface MeOut {
   capabilities?: string[]
   /** 管理员重置密码后的强制改密位(authz W6;路由守卫跳 /change-password) */
   must_change_password?: boolean
-  /** M2a S1.1:我所在的普通项目(项目切换器数据源) */
+  /** M2a S7.0:公共项目置顶 + 我所在的项目(项目页数据源) */
   projects?: ProjectRef[]
 }
 

@@ -60,15 +60,16 @@ class TestProjectCrud:
         pa_uid = await _uid(client, h_admin, "s14_lpa")
         out = await _create_project(client, h_admin, "s14-lproj", pa_uid)
 
-        # Admin+ 管理视图全量(含公共项目行);普通用户只见我所在的
+        # Admin+ 管理视图全量(含公共项目行);普通用户 = 公共项目置顶
+        # + 我所在的(S7.0);路人只见公共项目
         r = await client.get("/api/projects", headers=h_admin)
         names = {p["name"] for p in r.json()}
         assert "s14-lproj" in names and "公共" in names
         r = await client.get("/api/projects", headers=h_pa)
-        assert [p["name"] for p in r.json()] == ["s14-lproj"]
-        assert r.json()[0]["myRole"] == "admin"
+        assert [p["name"] for p in r.json()] == ["公共", "s14-lproj"]
+        assert r.json()[1]["myRole"] == "admin"
         r = await client.get("/api/projects", headers=h_out)
-        assert r.json() == []
+        assert [p["name"] for p in r.json()] == ["公共"]
 
         # 详情:成员 200(myRole);路人 404
         r = await client.get(f"/api/projects/{out['id']}", headers=h_pa)
@@ -194,8 +195,10 @@ class TestMemberManagement:
 
         # /auth/me.projects 联动
         r = await client.get("/api/auth/me", headers=h_mb)
-        assert r.json()["projects"] == [{"id": pid, "name": "s14m1-proj",
-                                         "kind": "normal", "role": "member"}]
+        # S7.0:公共项目置顶(role=None)+ 我所在项目
+        assert r.json()["projects"][1:] == [
+            {"id": pid, "name": "s14m1-proj",
+             "kind": "normal", "role": "member"}]
 
         # 普通成员(非 padmin)不能管理:403
         r = await client.post(f"/api/projects/{pid}/members", headers=h_mb,
@@ -215,9 +218,10 @@ class TestMemberManagement:
         r = await client.delete(
             f"/api/projects/{pid}/members/{mb_uid}", headers=h_pa)
         assert r.status_code == 204, r.text
-        # 移除后 me.projects 清空
-        assert (await client.get(
-            "/api/auth/me", headers=h_mb)).json()["projects"] == []
+        # 移除后 me.projects 只剩公共项目(S7.0 同口径)
+        assert [p_ for p_ in (await client.get(
+            "/api/auth/me", headers=h_mb)).json()["projects"]
+            if p_["kind"] != "public"] == []
 
     async def test_last_project_admin_protection(self, client):
         h_admin, h_pa, h_mb, h_out, pid = await self._mk(client, "s14m2")

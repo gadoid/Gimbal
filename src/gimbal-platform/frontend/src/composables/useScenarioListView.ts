@@ -19,7 +19,6 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import { useZoneStore } from '@/stores/zone'
 import { useAuthStore } from '@/stores/auth'
 import { useServerList } from '@/composables/useServerList'
 import { emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
@@ -36,11 +35,10 @@ export type ScenarioListRow = ScenarioListItem
  *  更大档位在卡内滑轨滚动;用户手选的行数走 pager.sizes 偏好)。 */
 export const LIST_PAGE_SIZE = 10
 
-/** 分桶:mine = 「我的场景」页(浏览镜头,scope=mine——自己创建的全部
- *  含已发布;admin 默认同样只见自己的,「全员视角」是显式开关),public
- *  = 公共页(visibility=public,口径不变)。
- *  此前 mine 桶下推 visibility=private——admin 查 private = 全员私有,
- *  是「admin 场景库被淹没」的根源;且自己的已发布场景从「我的」页消失。 */
+/** 分桶:mine = 「我的场景」页(S7.0 口径:scope=private——我名下且
+ *  未加入任何项目;进项目的场景从项目页进。admin 的「全员视角」仍是
+ *  scope=all 显式开关),public = 公共页(visibility=public,兼容别名
+ *  = 公共项目)。 */
 type Bucket = 'mine' | 'public'
 
 /** 浏览镜头的本地偏好键(仅 admin 的全员视角开关用;镜头不进权限)。 */
@@ -63,11 +61,11 @@ export function useScenarioListView(bucket: Bucket) {
 
   function toggleLens(): void {
     lensAll.value = !lensAll.value
-    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'mine')
+    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'private')
   }
 
-  function lensScope(): 'mine' | 'all' {
-    return lensAll.value ? 'all' : 'mine'
+  function lensScope(): 'private' | 'all' {
+    return lensAll.value ? 'all' : 'private'
   }
 
   // 初始 q 从地址栏读回(在 useServerList 创建前赋值,不触发首拉)。
@@ -87,8 +85,6 @@ export function useScenarioListView(bucket: Bucket) {
     return ((g ? g.name : q.value) || '').trim()
   }
 
-  const zoneStore = useZoneStore()
-
   const params = () => ({
     q: effQ() || undefined,
     // 分桶下推:mine 桶走 scope(镜头),public 桶维持 visibility=public。
@@ -102,8 +98,6 @@ export function useScenarioListView(bucket: Bucket) {
     priority: filters.value.priorities.join(',') || undefined,
     updatedWithin:
       filters.value.updatedWithin !== 'all' ? filters.value.updatedWithin : undefined,
-    // S1.8 项目镜头:当前区(公共 → visibility=public;项目 → projectId)
-    ...zoneStore.listParams,
   })
 
   const initialPage = (() => {

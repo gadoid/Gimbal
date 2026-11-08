@@ -262,21 +262,26 @@ async def refresh(
 async def me(user: CurrentUser,
              db: Annotated[AsyncSession, Depends(get_db)]) -> MeOut:
     # authz W2:capabilities 按表 A 求值(前端 can() 的依据);
-    # S1.1:projects = 我所在的普通项目(切换器数据源;公共项目不落
-    # 成员行,不在此列 —— 全员可读是表 B 派生,不需要成员关系)
-    from sqlalchemy import select
+    # S7.0:projects 与 GET /projects 同口径 —— 公共项目置顶(role=None:
+    # 公共项目无成员行,全员可读是表 B 派生)+ 我所在的普通项目;
+    # Admin+ 全量。
+    from sqlalchemy import or_, select
 
-    from ._ownership import capabilities_of
+    from ._ownership import capabilities_of, has_capability
     from ..models.project import Project, ProjectMember
 
-    rows = (await db.execute(
-        select(Project.id, Project.name, Project.kind, ProjectMember.role)
-        .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == user.id)
-        .order_by(Project.id))).all()
+    roles = {pid: role for pid, role in (await db.execute(
+        select(ProjectMember.project_id, ProjectMember.role).where(
+            ProjectMember.user_id == user.id))).all()}
+    stmt = (select(Project) if has_capability(user, "ops.write")
+            else select(Project).where(or_(
+                Project.kind == "public",
+                Project.id.in_(roles))))
+    projs = (await db.execute(stmt.order_by(
+        (Project.kind != "public"), Project.id))).scalars().all()
     return MeOut(user=_user_public(user),
                  capabilities=capabilities_of(user.role),
                  must_change_password=bool(user.must_change_password),
-                 projects=[{"id": pid, "name": name, "kind": kind,
-                            "role": role}
-                           for pid, name, kind, role in rows])
+                 projects=[{"id": p.id, "name": p.name, "kind": p.kind,
+                            "role": roles.get(p.id)}
+                           for p in projs])

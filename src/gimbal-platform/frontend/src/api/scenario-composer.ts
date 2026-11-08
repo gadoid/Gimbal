@@ -27,11 +27,10 @@ export interface ScenarioListParams {
   tag?: string
   author?: string
   visibility?: 'public' | 'private'
-  /** 浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1):
-   *  mine = 自己创建的全部(含已发布,admin 同样生效);默认 all =
-   *  现行可见性上限。visibility=public 时后端不叠加 scope。 */
-  scope?: 'mine' | 'all'
-  /** S1.8 项目镜头:按区过滤(公共区传公共项目 id;与 visibility 二选一) */
+  /** 浏览镜头(§5.1;S7.0 口径):private = 我名下且未加入任何项目
+   *  (「我的场景」);all = 现行可见性上限(admin 全员视角)。 */
+  scope?: 'private' | 'mine' | 'all'
+  /** S7.0 项目页签:按项目过滤(与 visibility/scope 可叠加) */
   projectId?: number
   updatedWithin?: '24h' | '7d' | '30d'
   /** 关注页/关注卡数据源(store 退位后 ?starred=true 服务端过滤)。 */
@@ -81,8 +80,8 @@ export async function fetchScenarioSignals(ids: string[]): Promise<
 export async function fetchScenarioFacets(params: {
   q?: string
   visibility?: 'public' | 'private'
-  /** 与列表同口径的浏览镜头(§5.1)。 */
-  scope?: 'mine' | 'all'
+  /** 与列表同口径的浏览镜头(§5.1;S7.0:private = 我的私有)。 */
+  scope?: 'private' | 'mine' | 'all'
 }): Promise<ScenarioFacets> {
   const { data } = await http.get<ScenarioFacets>('/scenarios/facets', { params })
   return data
@@ -121,8 +120,13 @@ export async function getScenarioDraft(scenarioId: string): Promise<ScenarioDraf
   return data
 }
 
-export async function createScenario(draft: ScenarioDraft): Promise<Scenario> {
-  const { data } = await http.post<Scenario>('/scenarios', draft)
+/** projectId(S7.0 D6):在项目内新建 —— 门 = 项目成员,公共项目 422。 */
+export async function createScenario(
+  draft: ScenarioDraft, projectId?: number,
+): Promise<Scenario> {
+  const { data } = await http.post<Scenario>('/scenarios', draft, {
+    params: projectId != null ? { projectId } : undefined,
+  })
   return data
 }
 

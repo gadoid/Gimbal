@@ -291,12 +291,23 @@ async def preview_plate(
 # ── 2) POST / (create) ─────────────────────────────────────────────
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)
 async def create_scenario(
-    user: CurrentUser, db: DbSession, body: ScenarioDraft
+    user: CurrentUser, db: DbSession, body: ScenarioDraft,
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> Scenario:
+    """新建场景;``?projectId=`` = 在该项目内新建(S7.0,门 = 项目成员,
+    公共项目 422 —— 见 ``zone.ensure_can_create_in_project``)。"""
     owner = user.display_name or user.username
+    if project_id is not None:
+        from ..services.zone import (ProjectCreateDenied,
+                                     ensure_can_create_in_project)
+        try:
+            await ensure_can_create_in_project(db, user.id, project_id)
+        except ProjectCreateDenied as e:
+            raise HTTPException(status_code=e.status, detail={
+                "code": e.code, "message": e.message}) from None
     try:
         out = await scenario_store.create(
-            db, body, owner=owner, owner_id=user.id
+            db, body, owner=owner, owner_id=user.id, project_id=project_id,
         )
     except ValueError as e:
         # Pydantic validation errors already translated to 422 by FastAPI.
@@ -461,8 +472,10 @@ async def list_scenarios(
     tag: str | None = None,
     author: str | None = None,
     visibility: str | None = None,
-    scope: Literal["mine", "all"] = "all",
-    project_id: Annotated[int | None, Query(ge=1)] = None,
+    scope: Literal["mine", "all", "private"] = "all",
+    # S7.0 修正:补 alias —— 前端/项目页签发的是 projectId,缺 alias
+    # 时该过滤被静默忽略(S1.8 区切换器起就漏了)
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
     updated_within: Literal["24h", "7d", "30d"] | None = None,
     starred: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -477,6 +490,9 @@ async def list_scenarios(
 
     属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
     一趟全表投影,单请求双全表扫描)。
+
+    ``scope=private``(authz M2a S7.0)= 我名下且未加入任何项目(「我的
+    场景」口径);项目内容走 ``project_id``(公共项目同样按 id)。
 
     浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1):
     ``scope=mine`` = 只看自己创建的(含已发布),对 admin 同样生效——
@@ -574,6 +590,11 @@ async def list_scenarios(
         readable = _pure_readable
     if scope == "mine":
         readable = [r for r in readable if r.owner_id == user.id]
+    elif scope == "private":
+        readable = [r for r in readable
+                    if r.owner_id == user.id and r.project_id is None]
+    if project_id is not None:
+        readable = [r for r in readable if r.project_id == project_id]
     if visibility:
         readable = [r for r in readable
                     if ("public" if r.project_id is not None
