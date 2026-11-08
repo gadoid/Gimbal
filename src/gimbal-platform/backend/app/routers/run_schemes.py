@@ -47,6 +47,17 @@ def _to_payload(s: RunScheme) -> dict:
     return s.model_dump(by_alias=True, mode="json")
 
 
+async def _require_env(db, body: RunScheme) -> None:
+    """S2.2:方案环境写时必须存在(运行期对被删环境才按未设置容忍)。"""
+    if body.environment_id is None:
+        return
+    from ..models.environment import Environment
+    if await db.get(Environment, body.environment_id) is None:
+        raise HTTPException(status_code=422, detail={
+            "code": "environment_not_found",
+            "message": f"environment not found: {body.environment_id}"})
+
+
 @router.get("/{scenario_id}/run-schemes")
 async def list_run_schemes(
     user: CurrentUser, db: DbSession, scenario_id: str,
@@ -67,6 +78,7 @@ async def create_run_scheme(
 ) -> dict:
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row)
+    await _require_env(db, body)
     try:
         return await scheme_store.create_scheme(db, scenario_id,
             name=body.name, payload=_to_payload(body))
@@ -85,6 +97,7 @@ async def update_run_scheme(
 ) -> dict:
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row)
+    await _require_env(db, body)
     try:
         return await scheme_store.update_scheme(db, scenario_id, scheme_id,
             name=body.name, payload=_to_payload(body))

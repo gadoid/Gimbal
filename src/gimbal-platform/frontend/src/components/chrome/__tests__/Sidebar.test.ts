@@ -72,7 +72,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     // 独立「用例集」组(我的/公共两页)+「集成」组:17 条。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
     // 说明页,置灰可点(§4.4)
-    expect(links.length).toBe(18)
+    expect(links.length).toBe(19)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications',
@@ -86,8 +86,9 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       '/run', '/executions', '/analytics',
       '/integrations',
       '/admin/users',
-      // M2a S1.8:项目区管理(Admin+)
+      // M2a S1.8:项目区管理(Admin+);S2.3:部署地址(Admin+)
       '/admin/projects',
+      '/admin/deployments',
     ])
     w.unmount()
   })
@@ -214,7 +215,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
     // 19 = 18 可点(含置灰可点的数据分析;2026-10-10 IA:+公共用例集
     //    + S1.8 项目管理)+ 1 置灰 span(字段来源分析,§4.4)
-    expect(w.findAll('.nav-text').length).toBe(19)
+    expect(w.findAll('.nav-text').length).toBe(20)
     w.unmount()
   })
 
@@ -230,7 +231,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(19)   // 18 可点 + 1 置灰 span
+    expect(rows.length).toBe(20)   // 19 可点 + 1 置灰 span
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -255,7 +256,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(18)
+    expect(links.length).toBe(19)
     // 用例集组插在场景组后(F5 通知占 0/1 位):suites=5 / services=7
     expect(links[5].attributes('href')).toBe('/suites')
     expect(links[7].attributes('href')).toBe('/services')

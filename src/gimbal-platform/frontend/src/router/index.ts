@@ -97,6 +97,12 @@ const routes = [
     meta: { requiresAuth: true, requiresCap: 'ops.write' },
   },
   {
+    path: '/admin/deployments',
+    component: () => import('@/views/DeploymentsAdmin.vue'),
+    // M2a S2.3:部署表维护 = ops.write(Admin+;写面同后端闸)
+    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+  },
+  {
     // authz W6 强制改密页:管理员重置密码后(me.must_change_password)
     // 路由守卫把一切页面重定向到这里,改密成功回原目标(见 beforeEach)。
     path: '/change-password',

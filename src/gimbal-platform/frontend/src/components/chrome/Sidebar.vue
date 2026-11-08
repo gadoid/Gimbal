@@ -257,6 +257,8 @@ const groups: SidebarGroup[] = [
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
     // M2a S1.8:项目区管理(Admin+ 建项目/管成员)
     { path: '/admin/projects', label: '项目管理', icon: GearIcon, cap: 'ops.write' },
+    // M2a S2.3:部署表((基础服务, 环境) → 地址)与默认环境
+    { path: '/admin/deployments', label: '部署地址', icon: GearIcon, cap: 'ops.write' },
   ] },
 ]
 

@@ -25,6 +25,10 @@ const props = defineProps<{
   stepCount: number
   /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
+  /** authz M2a S2:方案环境(环境链第二位);null = 不设置(按链路) */
+  environmentId?: number | null
+  /** 环境候选(壳装载;下拉只读展示) */
+  environments?: { id: number; name: string; is_default: boolean }[]
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +36,8 @@ const emit = defineEmits<{
   'update:stepTo': [v: number | null]
   'update:nRuns': [v: number]
   'update:parallel': [v: number]
+  /** authz M2a S2:方案环境(null = 清空) */
+  'update:environmentId': [v: number | null]
 }>()
 
 // ── ① 服务绑定 ─────────────────────────────────────────────────────
@@ -179,6 +185,20 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
+      <div class="param-row">
+        <label>执行环境</label>
+        <select class="bind-alias" data-testid="param-env"
+                :value="environmentId === null || environmentId === undefined ? '' : String(environmentId)"
+                @change="emit('update:environmentId',
+                  ($event.target as HTMLSelectElement).value === ''
+                    ? null : Number(($event.target as HTMLSelectElement).value))">
+          <option value="">按链路解析(方案无环境)</option>
+          <option v-for="e in environments" :key="e.id" :value="String(e.id)">
+            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
+          </option>
+        </select>
+        <span class="param-hint">执行时 > 方案此处的选择 > 项目默认 > 我的偏好 > 默认环境</span>
+      </div>
     </section>
 
   </div>

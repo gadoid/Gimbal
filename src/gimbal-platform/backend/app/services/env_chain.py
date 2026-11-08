@@ -121,6 +121,8 @@ async def resolve_environment(
         raw = (await db.execute(select(UserPref.value).where(
             UserPref.user_id == user_id,
             UserPref.key == PREF_KEY))).scalar()
+        if isinstance(raw, dict):   # 偏好白名单形状 {environmentId}
+            raw = raw.get("environmentId")
         uid_env = _as_env_id(raw)
         if uid_env is not None and await _exists(db, uid_env):
             return EnvChoice(uid_env, "preference")

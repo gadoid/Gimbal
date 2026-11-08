@@ -37,8 +37,8 @@ beforeEach(() => {
     { alias: 'uat-cred' } as never,
   ])
   vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([
-    { id: 1, name: '测试', description: '', visibility: 'public', lines: {}, ownerId: null },
-    { id: 2, name: '预发', description: '', visibility: 'public', lines: {}, ownerId: null },
+    { id: 1, name: '测试', description: '', lines: {}, owner_id: null, is_default: true },
+    { id: 2, name: '预发', description: '', lines: {}, owner_id: null, is_default: false },
   ])
   vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
     { service: 'fin-service', system: 'fin' },

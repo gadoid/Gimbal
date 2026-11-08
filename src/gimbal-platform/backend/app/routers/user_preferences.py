@@ -122,6 +122,13 @@ class NotesPref(BaseModel):
     items: list[NoteItem] = Field(default_factory=list, max_length=20)
 
 
+class RunEnvironmentPref(BaseModel):
+    """S2.2 环境链第四位(个人偏好):``environmentId`` 空 = 不设置。"""
+    model_config = ConfigDict(extra="forbid")
+
+    environmentId: int | None = Field(default=None, ge=1)
+
+
 #: 白名单 = 键 → 校验模型。不在表里的键一律拒读拒写,免得这张表变成
 #: 谁都能塞的杂物间(体积/形态都没人管)。
 _MODELS: dict[str, type[BaseModel]] = {
@@ -131,6 +138,7 @@ _MODELS: dict[str, type[BaseModel]] = {
     "pager.sizes": PagerSizes,
     "identity.card": IdentityCardPref,
     "notes": NotesPref,
+    "run.environment": RunEnvironmentPref,
 }
 
 
@@ -182,6 +190,14 @@ async def put_preference(
             detail={"code": "bad_pref_value",
                     "message": f"{'.'.join(str(x) for x in first.get('loc', []))}: "
                                f"{first.get('msg', '形态不符')}"}) from e
+    if isinstance(clean, RunEnvironmentPref) and clean.environmentId:
+        from ..models.environment import Environment
+        if await db.get(Environment, clean.environmentId) is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "environment_not_found",
+                        "message": f"environment not found: "
+                                   f"{clean.environmentId}"})
     # by_alias:NoteItem 等以驼峰出入(与前端 TS 类型同名);无别名的
     # 模型 by_alias 为恒等,统一走这一条出口。
     payload = clean.model_dump(by_alias=True)

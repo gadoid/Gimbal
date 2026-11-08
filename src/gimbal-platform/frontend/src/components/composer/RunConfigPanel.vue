@@ -60,6 +60,18 @@
         <p v-if="!serviceRows.length" class="rd-empty">场景未声明且未引用任何 service</p>
       </section>
 
+      <!-- 执行环境(authz M2a S2:本次显式位;自建方案态不显示 —— 方案
+           环境在工作台配置,运行时按 D3 不篡改) -->
+      <section class="run-section">
+        <label class="run-label">执行环境 <span class="muted small">(本次 > 方案 > 项目默认 > 我的偏好 > 默认环境)</span></label>
+        <select v-model.number="envOverride" class="env-select" data-testid="env-override">
+          <option :value="null">按链路解析</option>
+          <option v-for="e in envOptions" :key="e.id" :value="e.id">
+            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
+          </option>
+        </select>
+      </section>
+
       <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
       <section class="run-section">
         <label class="run-label">基础设置 <span class="muted small">(步进调试 / 批量执行)</span></label>
@@ -295,7 +307,15 @@ const props = withDefaults(defineProps<{
  *  仅展示层吸收误报;执行/导出的物化走 _apply_services 同一优先级链
  *  (绑定 > 声明 > 别名默认 > 缺口),这里不另立解析规则。 */
 const aliasUrls = ref<Record<string, string>>({})
+/** authz M2a S2:环境候选(地址链选择维度);列表不可达 → 只留「按链路」 */
+const envOptions = ref<{ id: number; name: string; is_default: boolean }[]>([])
+const envOverride = ref<number | null>(null)
 onMounted(() => {
+  import('@/api/environments').then(({ listEnvironments }) =>
+    listEnvironments()).then((rows) => {
+    envOptions.value = rows.map((e) => ({
+      id: e.id, name: e.name, is_default: e.is_default }))
+  }).catch(() => { /* 环境不可达 → 不给显式选择 */ })
   listAllAliases()
     .then((rows) => {
       const m: Record<string, string> = {}
@@ -490,6 +510,7 @@ function onConfirm() {
       ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
       ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
       ...(debugSpec ? { debug: debugSpec } : {}),
+      ...(envOverride.value !== null ? { environmentId: envOverride.value } : {}),
     })
     return
   }
@@ -703,4 +724,6 @@ function onConfirm() {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .small { font-size: 11px; }
+.env-select { border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 0.3rem 0.5rem; background: #fff; max-width: 16rem; }
 </style>

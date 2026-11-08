@@ -41,6 +41,8 @@ class ProjectCreateIn(BaseModel):
 class ProjectPatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    # S2.2 环境链第三位;显式传 null = 清空(未传 = 不动)
+    defaultEnvironmentId: int | None = Field(default=None, ge=1)
 
 
 class MemberIn(BaseModel):
@@ -61,6 +63,8 @@ class ProjectOut(BaseModel):
     # 请求者在本项目的角色(admin = 项目管理员;None = 非成员 ——
     # Admin+ 的管理视图可见非成员项目)
     myRole: str | None = None
+    # S2.2:项目默认环境(环境链第三位;None = 未设置)
+    defaultEnvironmentId: int | None = None
 
 
 class MemberOut(BaseModel):
@@ -156,7 +160,8 @@ async def create_project(
                  {"name": proj.name, "firstAdminId": admin.id})
     return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
                       description=proj.description, memberCount=1,
-                      myRole=(await _my_role(db, user, proj.id)))
+                      myRole=(await _my_role(db, user, proj.id)),
+                      defaultEnvironmentId=proj.default_environment_id)
 
 
 @router.get("", response_model=list[ProjectOut])
@@ -176,7 +181,8 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
     return [ProjectOut(
         id=p.id, name=p.name, kind=p.kind, description=p.description,
         memberCount=counts.get(p.id, 0),
-        myRole=roles.get(p.id)) for p in projs]
+        myRole=roles.get(p.id),
+        defaultEnvironmentId=p.default_environment_id) for p in projs]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -193,7 +199,8 @@ async def get_project(
     return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
                       description=proj.description,
                       memberCount=await _member_count(db, project_id),
-                      myRole=my_role)
+                      myRole=my_role,
+                      defaultEnvironmentId=proj.default_environment_id)
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -219,13 +226,26 @@ async def patch_project(
                         "message": f"项目名已被使用:{body.name}"}) from e
     if body.description is not None:
         proj.description = body.description
+    if "defaultEnvironmentId" in body.model_fields_set:
+        env_id = body.defaultEnvironmentId
+        if env_id is not None:
+            from ..models.environment import Environment
+            if await db.get(Environment, env_id) is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"code": "environment_not_found",
+                            "message": f"environment not found: {env_id}"})
+        proj.default_environment_id = env_id
     await db.commit()
     await db.refresh(proj)
-    await _audit(db, user, "project.patched", proj, {})
+    await _audit(db, user, "project.patched", proj,
+                 {"defaultEnvironmentId": proj.default_environment_id}
+                 if "defaultEnvironmentId" in body.model_fields_set else {})
     return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
                       description=proj.description,
                       memberCount=await _member_count(db, project_id),
-                      myRole=await _my_role(db, user, project_id))
+                      myRole=await _my_role(db, user, project_id),
+                      defaultEnvironmentId=proj.default_environment_id)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

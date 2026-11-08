@@ -149,6 +149,63 @@ async def update_environment(
     return env
 
 
+@router.post("/{env_id}/default", response_model=EnvironmentView)
+async def set_default_environment(
+    env_id: int, user: MemberUser, db: DbSession,
+) -> Any:
+    """置为默认环境(D2:环境链末位兜底,Admin+ 指定)。原子切换:同一
+    事务里先清旧默认再置新默认;部分唯一索引兜并发(撞索引 → 409)。"""
+    from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
+
+    env = await db.get(Environment, env_id)
+    if not env:
+        raise HTTPException(404, "environment not found")
+    await db.execute(update(Environment).where(
+        Environment.is_default.is_(True), Environment.id != env_id
+    ).values(is_default=False))
+    env.is_default = True
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "default environment changed concurrently; "
+                                 "retry") from None
+    await db.refresh(env)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "set_default"})
+    return env
+
+
+@router.delete("/{env_id}/default", response_model=EnvironmentView)
+async def unset_default_environment(
+    env_id: int, user: MemberUser, db: DbSession,
+) -> Any:
+    """取消默认(之后无默认环境:没显式选环境的执行按旧 ③ 走别名地址)。"""
+    env = await db.get(Environment, env_id)
+    if not env:
+        raise HTTPException(404, "environment not found")
+    if env.is_default:
+        env.is_default = False
+        await db.commit()
+        await db.refresh(env)
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="environment.write", resource_type="environment",
+            resource_id=str(env.id), resource_name=env.name,
+            detail={"op": "unset_default"})
+    return env
+
+
 @router.delete("/{env_id}", status_code=204)
 async def delete_environment(
     env_id: int,

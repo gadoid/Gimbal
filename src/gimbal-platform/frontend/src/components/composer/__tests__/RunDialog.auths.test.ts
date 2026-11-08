@@ -41,23 +41,26 @@ function mountDlg(props: Partial<typeof BASE_PROPS> = {}) {
   })
 }
 
-describe('执行环境退役(D2)', () => {
-  it('模板无环境区/无环境文案;confirm 无 envId', async () => {
+describe('执行环境(M2a S2 环境链;旧 D2「整键退役」口径已被取代)', () => {
+  it('默认方案态有环境选择(缺省 = 按链路);未选时 confirm 无 environmentId', async () => {
     const w = mountDlg()
-    expect(w.find('.env-grid').exists()).toBe(false)
-    expect(w.text()).not.toContain('执行环境')
+    expect(w.find('[data-testid="env-override"]').exists()).toBe(true)
+    expect(w.get('[data-testid="env-override"]').text()).toContain('按链路解析')
+    expect(w.find('.env-grid').exists()).toBe(false)   // 旧 D2 网格不复活
     await w.find('[data-testid="run-confirm"]').trigger('click')
     const evt = w.emitted('confirm')![0] as unknown[]
-    expect(evt).toHaveLength(2)                       // (dataSetSelection, opts)
+    expect(evt).toHaveLength(2)                        // (dataSetSelection, opts)
+    const opts = evt[1] as Record<string, unknown>
+    expect('environmentId' in opts).toBe(false)        // 未选 = 不带键
   })
 
-  it('另存为方案快照无 envId', async () => {
+  it('另存为方案快照无 envId(方案环境在工作台配置)', async () => {
     const w = mountDlg()
     await w.find('[data-testid="scheme-name-input"]').setValue('冒烟-新方案')
     await w.find('[data-testid="save-as-scheme"]').trigger('click')
     const s = w.emitted('saveAsScheme')![0][0] as Record<string, unknown>
     expect('envId' in s).toBe(false)
-    expect(s.dataSetSelection).toEqual([])            // 基线空选择
+    expect(s.dataSetSelection).toEqual([])             // 基线空选择
   })
 })
 

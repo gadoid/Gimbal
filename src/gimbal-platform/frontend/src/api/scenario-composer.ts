@@ -256,6 +256,9 @@ export interface RunRequest {
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
+  /** authz M2a S2:本次执行环境(环境链首位,> 方案 > 项目默认 > 个人
+   *  偏好 > 默认环境);缺省 = 按链路解析。环境不存在 → 404 */
+  environmentId?: number
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
   graph?: GraphSpec
@@ -335,6 +338,8 @@ export interface SchemeV2 {
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
   options: RunOptions
+  /** authz M2a S2:方案环境(环境链第二位);未设置时后端不落键 */
+  environmentId?: number | null
 }
 
 /** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
