@@ -29,8 +29,7 @@ async def _mk_user_id(name: str) -> int:
 
 
 # ── ① 版本分布读闸 ────────────────────────────────────────────────
-async def _mk_suite_with_units(client: AsyncClient, owner_h: dict, *,
-                               visibility: str = "private") -> int:
+async def _mk_suite_with_units(client: AsyncClient, owner_h: dict) -> int:
     """直插 suite(mode_config.units 引用带 pin 版本线的场景)+ 场景。"""
     from app.core import db as db_module
     from app.models.composer_scenario import ComposerScenario
@@ -47,7 +46,6 @@ async def _mk_suite_with_units(client: AsyncClient, owner_h: dict, *,
                 "steps": [], "config": {}}}))
         await s.flush()
         row = Suite(name="w9-vd", description="", owner_id=owner_id,
-                    visibility=visibility,
                     mode_config={"units": {"sc-w9-vd": {"ref": "a"}}})
         s.add(row)
         await s.commit()

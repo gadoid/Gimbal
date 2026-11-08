@@ -503,7 +503,8 @@ async def list_scenarios(
                 ScenarioOptionsItem(
                     scenarioId=r.scenario_id,
                     name=scenario_store._meta_from_row(r).name,
-                    visibility=r.visibility or "private",
+                    visibility=("public" if r.project_id is not None
+                                else "private"),
                     owner=r.owner_name or "",
                 )
                 for r in page_rows
@@ -552,7 +553,9 @@ async def list_scenarios(
     if scope == "mine":
         readable = [r for r in readable if r.owner_id == user.id]
     if visibility:
-        readable = [r for r in readable if (r.visibility or "private") == visibility]
+        readable = [r for r in readable
+                    if ("public" if r.project_id is not None
+                        else "private") == visibility]
     # 关注页/关注卡的服务端数据源(store 退位后前端不再持有全量可过滤,
     # PG迁移方案 §7 M5 的 ?starred=true 端点提前随 M1 到位)。
     if starred is not None:
@@ -570,7 +573,8 @@ async def list_scenarios(
             ScenarioOptionsItem(
                 scenarioId=r.scenario_id,
                 name=scenario_store._meta_from_row(r).name,
-                visibility=r.visibility or "private",
+                visibility=("public" if r.project_id is not None
+                            else "private"),
                 owner=r.owner_name or "",
             )
             for r in page_rows

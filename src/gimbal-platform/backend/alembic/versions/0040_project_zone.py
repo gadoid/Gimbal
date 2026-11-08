@@ -109,14 +109,22 @@ def upgrade() -> None:
 
     # ③ 存量公开内容迁入公共项目(owner_id 不动 = 维护者;实例行
     #    template_id 非空不参与 —— 集成模板只迁模板行)
+    # fresh 链守卫:S1.9(0043)起当前模型无 visibility 列 —— 无列即
+    # 无存量公开内容可迁,逐表跳过
+    def _has_vis(table: str) -> bool:
+        return "visibility" in {
+            c["name"] for c in sa.inspect(bind).get_columns(table)}
+
     for table in ("composer_scenarios", "suites", "report_definitions"):
+        if _has_vis(table):
+            bind.execute(sa.text(
+                f"UPDATE {table} SET project_id = {_PID} "
+                "WHERE visibility = 'public' AND project_id IS NULL"))
+    if _has_vis("integration_tasks"):
         bind.execute(sa.text(
-            f"UPDATE {table} SET project_id = {_PID} "
-            "WHERE visibility = 'public' AND project_id IS NULL"))
-    bind.execute(sa.text(
-        "UPDATE integration_tasks SET project_id = " + _PID +
-        " WHERE template_id IS NULL AND visibility = 'public' "
-        "AND project_id IS NULL"))
+            "UPDATE integration_tasks SET project_id = " + _PID +
+            " WHERE template_id IS NULL AND visibility = 'public' "
+            "AND project_id IS NULL"))
 
     # ④ 平台模板标记(removed_at IS NULL 排除软删挂靠行)
     bind.execute(sa.text(

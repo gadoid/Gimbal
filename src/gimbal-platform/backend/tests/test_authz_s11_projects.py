@@ -273,12 +273,12 @@ class TestShadowWrite:
             pid = await public_project_id(db)
         copy = await _scenario_row("sc-s11-sh-public")
         assert copy is not None
-        assert copy.visibility == "public" and copy.project_id == pid
+        assert copy.project_id == pid
         assert copy.forked_from_id == "sc-s11-sh"
         assert not ((copy.payload["definition"].get("config") or {})
                     .get("users")), "公共副本落库即无凭证"
         orig = await _scenario_row("sc-s11-sh")
-        assert orig.visibility == "private" and orig.project_id is None
+        assert orig.project_id is None
         assert (orig.payload["definition"]["config"]["users"]
                 == {"acct": {"url": "u"}}), "原件不动"
 

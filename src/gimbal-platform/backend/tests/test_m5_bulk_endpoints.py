@@ -35,9 +35,11 @@ async def test_signals_bulk_trend_and_last_run(client):
         # 私有场景(带默认方案)+ 公共场景
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-m5-a")), owner="u")
+        from app.services.zone import public_project_id
+
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-m5-pub")),
-            owner="u",)
+            owner="u", project_id=await public_project_id(s))
         # 默认方案 = 场景创建时自动物化;取其 schemeId
         schemes = await scheme_store.list_schemes(s, "sc-m5-a")
         default_sid = next(x["schemeId"] for x in schemes if x["isDefault"])

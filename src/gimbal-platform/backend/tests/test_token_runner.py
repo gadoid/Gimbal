@@ -49,7 +49,7 @@ class TestPreRunChecks:
         async with db_module.SessionLocal() as s:
             row = ComposerScenario(
                 scenario_id=scenario_id,
-                owner_id=owner_id, visibility=visibility,
+                owner_id=owner_id,
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": scenario_id}}})
             s.add(row)

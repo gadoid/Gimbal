@@ -849,7 +849,7 @@ async def to_read_shape(
         stepCount=len(steps),
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=row.visibility or "private",
+        visibility=("public" if row.project_id is not None else "private"),
     )
 
 
@@ -883,7 +883,7 @@ def to_list_item_shape(
         varCount=len(vars_) if isinstance(vars_, dict) else 0,
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=row.visibility or "private",
+        visibility=("public" if row.project_id is not None else "private"),
     )
 
 

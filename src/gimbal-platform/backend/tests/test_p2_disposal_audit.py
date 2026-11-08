@@ -50,7 +50,8 @@ async def test_disposal_publicize(client):
         scen = (await s.execute(select(ComposerScenario)
                                 .where(ComposerScenario.scenario_id == "sc-p2-pub"))
                 ).scalar_one()
-        assert scen.visibility == "public"          # 转公共库
+        from app.services.zone import public_project_id
+        assert scen.project_id == await public_project_id(s)  # 转公共库
         assert scen.owner_id is None                 # 台账式归属快照
         assert scen.owner_name == "p2_pub_victim"    # 署名保留
         ex = (await s.execute(select(Execution)

@@ -15,10 +15,13 @@ from pathlib import Path
 
 _APP = Path(__file__).resolve().parents[1] / "app"
 
-# 只匹配**属性/列比较**,不匹配 body.visibility(API 入参分支)
+# 只匹配**属性/列比较**,不匹配 body.visibility(API 入参分支)。
+# 第三条:属性对任意右值(变量也算)——S1.9 曾有 (r.visibility or
+# "private") == visibility 形态逃过字面量两条,补齐
 _SHAPES = (
     re.compile(r'\.\s*visibility\s*[=!]=\s*["\'](?:public|private)["\']'),
     re.compile(r'["\'](?:public|private)["\']\s*[=!]=\s*\w+\.visibility'),
+    re.compile(r'\w+\.visibility\s*(?:or\s*[^=\n]+?)?[=!]='),
 )
 
 _EXEMPT_FILES = {"_ownership.py", "zone.py", "environment.py"}

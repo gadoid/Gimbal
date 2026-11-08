@@ -396,8 +396,7 @@ class TestReportDefinitionMaintain:
                 name="mb-pub-def", description="",
                 definition={"selection": {}, "projection": []},
                 owner_id=owner_id,
-                # 影子不变式(S1.1):public ⇔ project_id=公共项目
-                visibility="public" if public else "private",
+                # S1.9:公共 = 挂公共项目(visibility 列已删)
                 project_id=await public_project_id(db) if public else None)
             db.add(row)
             await db.commit()
@@ -411,6 +410,7 @@ class TestReportDefinitionMaintain:
 
         from app.core import db as db_module
         from app.models.report_definition import ReportDefinitionRow
+        from app.services.zone import public_project_id
         from tests.helpers import role_headers
 
         h = await role_headers(client, "mb_rdown")
@@ -425,7 +425,7 @@ class TestReportDefinitionMaintain:
             row = (await db.execute(sa_select(ReportDefinitionRow).where(
                 ReportDefinitionRow.id == did))).scalar_one()
             assert row.owner_id is not None      # 公共定义必有维护者
-            assert row.visibility == "public"
+            assert row.project_id == await public_project_id(db)
 
     async def test_only_maintainer_edits_public_definition(
             self, client: AsyncClient):

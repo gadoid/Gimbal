@@ -165,7 +165,7 @@ class TestIntegrationRouter:
                                   publish=True)
         # identityMode 是兼容字段(列已删,0039):显式传 personal 照常建
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body(_sid,
+                              json=_task_body(_sid, visibility="public",
                                               identityMode="personal"))
         assert r.status_code == 201, r.text
         out = r.json()
@@ -178,7 +178,7 @@ class TestIntegrationRouter:
         _sid = await _mk_scenario(client, h, "sc-ig-del", STEPS_GET,
                                   publish=True)
         r = await client.post("/api/integration/tasks", headers=h,
-                              json=_task_body(_sid,
+                              json=_task_body(_sid, visibility="public",
                                               identityMode="personal"))
         tid = r.json()["id"]
         # 其他人可见公共模板
@@ -392,7 +392,7 @@ async def test_personal_mode_lifecycle(client):
     # S1.3:公共模板须引用公共副本 —— 先发布(= 复制)再建任务
     await client.post("/api/scenarios/sc-p1/publish", headers=u1)
     r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
-        "sc-p1-public", identityMode="personal",))
+        "sc-p1-public", identityMode="personal", visibility="public"))
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
 

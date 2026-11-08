@@ -325,7 +325,7 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         # → 运行期同源回落默认/首个)
         await _require_token_scope(db, principal, scen, body.schemeId)
     tpl = IntegrationTask(
-        name=body.name, owner_id=user.id, visibility=body.visibility,
+        name=body.name, owner_id=user.id,
         target_type="scenario",
         scenario_id=body.scenarioId, scheme_id=body.schemeId,
         target_system=body.targetSystem or "", trigger_cron=body.triggerCron,

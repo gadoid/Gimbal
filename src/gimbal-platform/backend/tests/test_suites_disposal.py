@@ -79,7 +79,9 @@ async def test_disposal_publicize_deletes_suites_first(client):
             ).scalars().all() == []
         scen = (await s.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-sp-pub"))).scalar_one()
-        assert scen.visibility == "public" and scen.owner_id is None
+        from app.services.zone import public_project_id
+        assert scen.project_id == await public_project_id(s)
+        assert scen.owner_id is None
 
 
 async def test_disposal_transfer_moves_suite_wholesale(client):

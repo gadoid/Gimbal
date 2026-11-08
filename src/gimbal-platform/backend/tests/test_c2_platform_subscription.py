@@ -222,8 +222,12 @@ class TestPlatformTemplateMaintenance:
                               json=make_draft("sc-c2p"))
         assert r.status_code in (200, 201), r.text
         async with db_module.SessionLocal() as s:
+            from app.services.zone import public_project_id
+
             tpl = IntegrationTask(
-                name="c2-personal-tpl", owner_id=await _uid("c2_po"), scenario_id="sc-c2p", trigger_cron="*/5 * * * *",
+                name="c2-personal-tpl", owner_id=await _uid("c2_po"),
+                project_id=await public_project_id(s),
+                scenario_id="sc-c2p", trigger_cron="*/5 * * * *",
                 result_policy="latest", card_template="status")
             s.add(tpl)
             await s.commit()
@@ -264,8 +268,12 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
 
     await publish_scenario("sc-c2ds")
     async with db_module.SessionLocal() as s:
+        from app.services.zone import public_project_id
+
         tpl = IntegrationTask(
-            name="c2-ds-tpl", owner_id=await _uid("c2_dso"), scenario_id="sc-c2ds", target_system="jira",
+            name="c2-ds-tpl", owner_id=await _uid("c2_dso"),
+            project_id=await public_project_id(s),
+            scenario_id="sc-c2ds", target_system="jira",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status")
         s.add(tpl)
@@ -315,8 +323,12 @@ async def test_subscriber_run_product_has_no_author_credentials(
 
     await publish_scenario("sc-c2fp")
     async with db_module.SessionLocal() as s:
+        from app.services.zone import public_project_id
+
         tpl = IntegrationTask(
-            name="c2-fp-tpl", owner_id=await _uid("c2_fpo"), scenario_id="sc-c2fp", target_system="jira",
+            name="c2-fp-tpl", owner_id=await _uid("c2_fpo"),
+            project_id=await public_project_id(s),
+            scenario_id="sc-c2fp", target_system="jira",
             trigger_cron="*/5 * * * *", result_policy="latest",
             card_template="status")
         s.add(tpl)
