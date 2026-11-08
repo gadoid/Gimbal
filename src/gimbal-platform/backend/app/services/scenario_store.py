@@ -190,8 +190,8 @@ async def create(
     the request body.  ``owner_id`` 同理由路由层传入(int user.id,
     P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
     映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
-    普通创建恒为 private;``visibility`` 参数仅供 P2 迁移复用(公共
-    目录导入 → public)。
+    区归属由 ``project_id`` 决定(缺省 None = 私有区;S1.9 起
+    visibility 列已删,响应由 project 派生)。
 
     提交包装器(W2/T1):常规创建/copy/fork/迁移脚本等既有调用方行为
     零变化;导入流水线走 :func:`create_in_transaction` 自管事务
@@ -449,18 +449,17 @@ async def copy_scenario(
     activity_detail: dict | None = None,
     origin_id: str | None = None,
     origin_owner_name: str | None = None,
-    # S1.3 发布新语义:确定性副本 id(公共副本 = <原 id>@public)、
-    # 落库可见性/项目、剥离口径(cross_owner = 跨属主才剥,默认;
+    # S1.3 发布新语义:确定性副本 id(公共副本 = <原 id>-public)、
+    # 落库项目、剥离口径(cross_owner = 跨属主才剥,默认;
     # always = 发布复制恒剥,同属主也剥 —— 公共副本不落明文)
     new_sid: str | None = None,
-    visibility: str = "private",
     project_id: int | None = None,
     strip: str = "cross_owner",
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
-    新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;visibility 恒为
-    private(复制来的公共场景也要先归自己再自行发布)。
+    新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;缺省落私有区
+    (复制来的公共场景也要先归自己再自行发布;发布复制传 project_id)。
     ``new_name``(2026-09-23 批次 F2):另存为/分发自定义副本名;缺省
     保留 ``(副本)`` 后缀行为(向后兼容)。重名判定不在本函数内 ——
     调用方先走 :func:`resolve_name_conflict`(软校验,见其注释)。
@@ -752,7 +751,7 @@ async def publish_copy(
         db, scenario_id,
         new_owner=src.owner_name or "", new_owner_id=src.owner_id,
         new_name=str(meta.get("name") or scenario_id),  # 公共列表显示原名
-        new_sid=copy_sid, visibility="public", project_id=pid,
+        new_sid=copy_sid, project_id=pid,
         strip="always", activity_kind="scenario.published",
         activity_detail={"via": "publish_copy",
                          "sourceScenarioId": scenario_id})
