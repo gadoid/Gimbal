@@ -169,6 +169,7 @@ async def list_page(
     cutoff: datetime | None = None,
     visibility: str | None = None,
     scope: str = "all",
+    project_id: int | None = None,
     starred_ids: list[str] | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -187,6 +188,9 @@ async def list_page(
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
+    if project_id is not None:
+        # S1.8 项目镜头:按区过滤(公共区由调用方传公共项目 id)
+        clauses.append(ComposerScenario.project_id == project_id)
 
     base = select(ComposerScenario)
     if clauses:

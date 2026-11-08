@@ -19,6 +19,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { useZoneStore } from '@/stores/zone'
 import { useAuthStore } from '@/stores/auth'
 import { useServerList } from '@/composables/useServerList'
 import { emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
@@ -86,6 +87,8 @@ export function useScenarioListView(bucket: Bucket) {
     return ((g ? g.name : q.value) || '').trim()
   }
 
+  const zoneStore = useZoneStore()
+
   const params = () => ({
     q: effQ() || undefined,
     // 分桶下推:mine 桶走 scope(镜头),public 桶维持 visibility=public。
@@ -99,6 +102,8 @@ export function useScenarioListView(bucket: Bucket) {
     priority: filters.value.priorities.join(',') || undefined,
     updatedWithin:
       filters.value.updatedWithin !== 'all' ? filters.value.updatedWithin : undefined,
+    // S1.8 项目镜头:当前区(公共 → visibility=public;项目 → projectId)
+    ...zoneStore.listParams,
   })
 
   const initialPage = (() => {

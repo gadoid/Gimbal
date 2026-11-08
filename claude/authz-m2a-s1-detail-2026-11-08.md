@@ -284,6 +284,18 @@
 
 ---
 
+## 十·补、S1.8 实现记录（2026-11-08）
+
+- **后端小补**:场景列表与套件列表加 `projectId` 区过滤参数（`list_page`/`list_suites` 各一条子句;公共区由前端传 `visibility=public` 旧口径,不新增参数）。
+- **前端**:
+  - `stores/zone.ts`（新）:当前区（private/public/项目 id),localStorage 持久化 + `listParams` 投影（公共→visibility,项目→projectId,私有→不加）;`api/auth.ts` MeOut 增 `projects`,auth store 增 `projects` 状态（运行时真值,不进快照）。
+  - `api/projects.ts`（新）:项目/成员 CRUD + `transferMaintenance`（S1-e 三资源）+ `platformizeTask`（D9）;`api/scenario-composer.ts` 增 `projectId` 参数与 `transferScenario`。
+  - 侧边栏:展开态底部「当前区」切换器（数据源 me.projects,项目名带角色标注）;平台组增「项目管理」入口（ops.write 门）。
+  - 列表区过滤:`useScenarioListView` 与 `SuiteLibrary.load` 合并 `zoneStore.listParams`。
+  - `ProjectsAdmin.vue`（新,`/admin/projects`）:建项目（名/描述/首管下拉）/列表/删除 + 成员面板（添加/改角色/移除;末位 padmin 409 内联提示）。
+- 测试:api/projects(路径与载荷含 transfer/platformize) + zone store(默认/投影/持久化/非法回落) ;侧边栏条目计数断言更新（18 a + 19 nav-text）;四门全绿（vitest 1308 / vue-tsc / eslint / build）。
+- D6「编排页项目上下文服务/别名候选」依赖 S4 的项目层 carry/别名数据源,随 S4 落（本切片不做空壳）。
+
 ## 十一、S1.9 收口（迁移 0042）
 
 - 删 `visibility` 列（场景 / suite / 报告定义 / 集成模板）；`obj_is_public` 等改为判公共项目；前端 `visibility` 字段改由区派生。

@@ -31,6 +31,8 @@ export interface ScenarioListParams {
    *  mine = 自己创建的全部(含已发布,admin 同样生效);默认 all =
    *  现行可见性上限。visibility=public 时后端不叠加 scope。 */
   scope?: 'mine' | 'all'
+  /** S1.8 项目镜头:按区过滤(公共区传公共项目 id;与 visibility 二选一) */
+  projectId?: number
   updatedWithin?: '24h' | '7d' | '30d'
   /** 关注页/关注卡数据源(store 退位后 ?starred=true 服务端过滤)。 */
   starred?: boolean
@@ -144,6 +146,15 @@ export async function starScenario(
 // ── 发布 / 下架 / 复制(P1:取代 V1 公共库能力)─────────────────
 export async function publishScenario(scenarioId: string): Promise<Scenario> {
   const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/publish`)
+  return data
+}
+
+/** S1-e:转移公共副本维护者(维护者本人 ∨ Admin+) */
+export async function transferScenario(
+  scenarioId: string, toUserId: number,
+): Promise<{ transferredTo: number }> {
+  const { data } = await http.post<{ transferredTo: number }>(
+    `/scenarios/${enc(scenarioId)}/transfer`, { toUserId })
   return data
 }
 

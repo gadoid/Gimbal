@@ -23,12 +23,22 @@ export interface TokenOut {
   user: UserPublic
 }
 
+/** M2a S1.4:我所在的普通项目(/auth/me.projects;公共项目不落成员行) */
+export interface ProjectRef {
+  id: number
+  name: string
+  kind: 'normal' | 'public'
+  role: 'admin' | 'member'
+}
+
 export interface MeOut {
   user: UserPublic
   /** 表 A 求出的能力列表(authz W2;前端 can() 的唯一依据,W8) */
   capabilities?: string[]
   /** 管理员重置密码后的强制改密位(authz W6;路由守卫跳 /change-password) */
   must_change_password?: boolean
+  /** M2a S1.1:我所在的普通项目(项目切换器数据源) */
+  projects?: ProjectRef[]
 }
 
 export function register(payload: {

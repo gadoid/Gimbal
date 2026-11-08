@@ -106,6 +106,25 @@
     >
       <UserBadge :compact="collapsed" layout="footer" />
     </div>
+
+    <!-- M2a S1.8:项目切换器(私有区/公共区/我所在的项目;默认私有区)
+         —— 场景库与套件库按当前区过滤。折叠态隐藏(title 提示去展开)。 -->
+    <div v-if="!collapsed" class="zone-switcher border-t border-white/10 px-3 py-2">
+      <label class="block pb-1 text-caption text-slate-500" for="zone-select">当前区</label>
+      <select
+        id="zone-select"
+        data-testid="zone-select"
+        class="w-full rounded-md border border-white/10 bg-white/5 px-1.5 py-1 text-body text-slate-200"
+        :value="String(zone.zone)"
+        @change="onZoneChange"
+      >
+        <option value="private">私有区</option>
+        <option value="public">公共区</option>
+        <option v-for="prj in auth.projects" :key="prj.id" :value="String(prj.id)">
+          {{ prj.name }}({{ prj.role === 'admin' ? '管理' : '成员' }})
+        </option>
+      </select>
+    </div>
   </aside>
 </template>
 
@@ -135,10 +154,17 @@ import {
 } from '@radix-icons/vue'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useZoneStore } from '@/stores/zone'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 import UserBadge from '@/components/chrome/UserBadge.vue'
 
 const auth = useAuthStore()
+// M2a S1.8:项目切换器(zone store;场景/套件库消费 listParams)
+const zone = useZoneStore()
+function onZoneChange(ev: Event): void {
+  const raw = (ev.target as HTMLSelectElement).value
+  zone.set(raw === 'private' || raw === 'public' ? raw : Number(raw))
+}
 const route = useRoute()
 
 const { collapsed, toggle } = useSidebarCollapse()
@@ -227,7 +253,11 @@ const groups: SidebarGroup[] = [
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
     { path: '/integrations', label: '集成', icon: Share2Icon },
   ] },
-  { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' }] },
+  { label: '平台', entries: [
+    { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
+    // M2a S1.8:项目区管理(Admin+ 建项目/管成员)
+    { path: '/admin/projects', label: '项目管理', icon: GearIcon, cap: 'ops.write' },
+  ] },
 ]
 
 interface FlatEntry extends SidebarEntry {

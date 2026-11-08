@@ -240,6 +240,7 @@ async def list_suites(
     user: CurrentUser, db: DbSession,
     scope: Literal["mine", "all"] = "all",
     visibility: str | None = None,
+    project_id: Annotated[int | None, Query(ge=1)] = None,
     q: str = Query(default="", max_length=128),
     mode: str = Query(default=""),
     page: Annotated[int, Query(ge=1)] = 1,
@@ -269,6 +270,9 @@ async def list_suites(
                 ShareRef.grantee_user_id == user.id,
                 ShareRef.suite_id == Suite.id)).correlate(Suite),
         )]
+    if project_id is not None:
+        # S1.8 项目镜头:按区过滤(公共区传公共项目 id)
+        clauses.append(Suite.project_id == project_id)
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()

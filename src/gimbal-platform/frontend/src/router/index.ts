@@ -91,6 +91,12 @@ const routes = [
     meta: { requiresAuth: true, requiresCap: 'users.manage' },
   },
   {
+    path: '/admin/projects',
+    component: () => import('@/views/ProjectsAdmin.vue'),
+    // M2a S1.4:项目管理 = ops.write(Admin+;S1.8 管理页)
+    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+  },
+  {
     // authz W6 强制改密页:管理员重置密码后(me.must_change_password)
     // 路由守卫把一切页面重定向到这里,改密成功回原目标(见 beforeEach)。
     path: '/change-password',

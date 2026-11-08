@@ -285,6 +285,10 @@ watch(pageSize, () => {
   else void load()
 })
 
+import { useZoneStore } from '@/stores/zone'
+
+const zoneStore = useZoneStore()
+
 async function load(): Promise<void> {
   status.value = 'loading'
   try {
@@ -293,6 +297,7 @@ async function load(): Promise<void> {
       q: q.value.trim() || undefined,
       mode: modeFilter.value || undefined,
       page: page.value, page_size: pageSize.value,
+      ...zoneStore.listParams,
     })
     items.value = env.items
     total.value = env.total

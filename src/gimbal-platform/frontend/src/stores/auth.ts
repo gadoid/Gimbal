@@ -87,6 +87,9 @@ export const useAuthStore = defineStore('auth', () => {
   // authz W8:能力是权限判定的唯一依据(/auth/me 下发的表 A 求值)。
   // can() 不再看角色 —— 后端表 A 变更时这里零改动。
   const capabilities = ref<string[]>(persisted?.capabilities ?? [])
+  /** M2a S1.8:我所在的普通项目(项目切换器数据源;不做 localStorage
+   * 快照 —— 刷新首帧空列表只会少显示,方向安全) */
+  const projects = ref<authApi.ProjectRef[]>([])
   const mustChangePassword = ref<boolean>(persisted?.mustChangePassword ?? false)
   const can = (cap: string) => capabilities.value.includes(cap)
 
@@ -128,11 +131,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /** /auth/me 全量落库:身份 + 能力 + 强制改密位(W8)。 */
-  function setMe(out: { user: UserPublic; capabilities?: string[]; must_change_password?: boolean }) {
+  function setMe(out: {
+    user: UserPublic; capabilities?: string[];
+    must_change_password?: boolean; projects?: authApi.ProjectRef[];
+  }) {
     setUser(out.user)
     capabilities.value = Array.isArray(out.capabilities)
       ? out.capabilities.filter((c): c is string => typeof c === 'string')
       : []
+    projects.value = Array.isArray(out.projects) ? out.projects : []
     mustChangePassword.value = out.must_change_password === true
   }
 
@@ -248,6 +255,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     /** authz W8:表 A 能力(/auth/me 下发)—— 权限判定唯一依据 */
     capabilities,
+    /** M2a S1.8:我所在的普通项目(切换器数据源) */
+    projects,
     mustChangePassword,
     can,
     role,

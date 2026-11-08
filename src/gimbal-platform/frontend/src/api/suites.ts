@@ -181,6 +181,8 @@ export interface SuiteLookupItem {
 export async function listSuites(params?: {
   scope?: 'mine' | 'all'
   visibility?: 'public'
+  /** S1.8 项目镜头:按区过滤 */
+  projectId?: number
   /** 服务端搜索(name/description 子串,大小写不敏感) */
   q?: string
   /** 运行模式过滤(aggregate/chain/fanout/compose) */

@@ -440,6 +440,7 @@ async def list_scenarios(
     author: str | None = None,
     visibility: str | None = None,
     scope: Literal["mine", "all"] = "all",
+    project_id: Annotated[int | None, Query(ge=1)] = None,
     updated_within: Literal["24h", "7d", "30d"] | None = None,
     starred: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -493,7 +494,8 @@ async def list_scenarios(
             tags=scenario_query.split_csv(tag),
             authors=scenario_query.split_csv(author),
             cutoff=scenario_query.updated_cutoff(updated_within),
-            visibility=visibility, scope=scope, starred_ids=starred_ids,
+            visibility=visibility, scope=scope,
+            project_id=project_id, starred_ids=starred_ids,
             page=page, page_size=page_size,
         )
         if fields == "options":
