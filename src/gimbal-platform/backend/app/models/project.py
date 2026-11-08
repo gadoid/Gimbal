@@ -47,6 +47,10 @@ class Project(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())
+    # S2 环境链第三位(本次显式 > 方案 > 项目默认 > 个人偏好 > 默认
+    # 环境);删环境时置空,链路自然落到下一位
+    default_environment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("environments.id", ondelete="SET NULL"), nullable=True)
 
 
 class ProjectMember(Base):

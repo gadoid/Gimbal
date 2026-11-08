@@ -5,8 +5,8 @@ visibility 列随 0043 删除;公共判定 = 公共项目谓词(project_id ==
 zone.public_project_id)或近似(project_id is not None)。新增列比较
 即红 —— 旧存量已在 S1.9 清零,本守卫进入终态(白名单恒空)。
 
-豁免:``_ownership.py``/``zone.py``(谓词单点)、``environment.py``
-(环境的 visibility 列属 S2 退役范围,不在本切片)。
+豁免:``_ownership.py``/``zone.py``(谓词单点)。环境的 visibility 列
+随 S2(0044)删除,原 ``environment.py`` 豁免一并退役。
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _SHAPES = (
     re.compile(r'\w+\.visibility\s*(?:or\s*[^=\n]+?)?[=!]='),
 )
 
-_EXEMPT_FILES = {"_ownership.py", "zone.py", "environment.py"}
+_EXEMPT_FILES = {"_ownership.py", "zone.py"}
 _EXEMPT_LINE = re.compile(r'body\.visibility|TaskIn|body\.|\.model_fields')
 
 

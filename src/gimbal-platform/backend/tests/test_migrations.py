@@ -72,6 +72,13 @@ def _revision(sync_url: str) -> str | None:
         eng.dispose()
 
 
+def _head() -> str:
+    """链头 revision(计算值:新迁移加入后旧用例的「升到头」断言不过期)。"""
+    from alembic.script import ScriptDirectory
+
+    return ScriptDirectory(str(_BACKEND / "alembic")).get_current_head()
+
+
 def _add_legacy_visibility(eng) -> None:
     """S1.9(0043 删列后)迁移链兼容:补加 visibility 列(默认 private)。"""
     with eng.begin() as conn:
@@ -187,7 +194,7 @@ def test_0036_role_rename(seed):
 
             # ── ① 角色更名 ──
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0043_drop_visibility"
+            assert _revision(sync_url) == _head()
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -825,7 +832,7 @@ def test_0041_public_shadow_backfill():
                     "WHERE visibility='public' "
                     "AND project_id IS NULL")).scalar() == 1
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0043_drop_visibility"
+            assert _revision(sync_url) == _head()
 
             with eng.connect() as c:
                 pid = c.execute(text(
@@ -942,7 +949,7 @@ def test_0042_suite_member_zone():
                     "WHERE cs.scenario_id = 'sc-a'")
             command.stamp(_cfg(sync_url), "0041_public_shadow_backfill")
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0043_drop_visibility"
+            assert _revision(sync_url) == _head()
 
             with eng.connect() as c:
                 cols = {r[0] for r in c.execute(text(
@@ -991,5 +998,140 @@ def test_0042_suite_member_zone():
                     c.execute(text(
                         "SELECT owner_id FROM composer_scenarios "
                         "WHERE scenario_id = 'sc-a'")).scalar())
+        finally:
+            eng.dispose()
+
+
+# ── 0044_deployments_env_chain(authz M2a S2.0)──────────────────────
+def _to_0043_shape(eng) -> None:
+    """create_all 是当前模型(deployments 表 / is_default / 项目默认环境 /
+    无 visibility);撤回到 0043 形态。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE deployments")
+        conn.exec_driver_sql("DROP INDEX IF EXISTS uq_environments_default")
+        conn.exec_driver_sql("ALTER TABLE environments DROP COLUMN is_default")
+        conn.exec_driver_sql(
+            "ALTER TABLE projects DROP COLUMN default_environment_id")
+        conn.exec_driver_sql(
+            "ALTER TABLE environments ADD COLUMN visibility "
+            "VARCHAR(16) DEFAULT 'private'")
+
+
+_DEPLOY_FORMS = [
+    # 恰 1 个环境:置默认;挂环境的别名按 (基础服务, 环境) 落行;没挂
+    # 环境的别名落默认环境,与挂环境的同键同址 → 聚合成一行;无地址的
+    # 别名不落;同键地址不一致(hr)→ 不落行(冲突留 Admin 裁定)
+    pytest.param(
+        ["dev"],
+        [("a1", "fin", "dev", "http://fin-dev"),
+         ("a4", "fin", None, "http://fin-dev"),
+         ("a2", "crm", None, "http://crm"),
+         ("a3", "pay", "dev", None),
+         ("h1", "hr", "dev", "http://hr-1"),
+         ("h2", "hr", None, "http://hr-2")],
+        "dev",
+        {("fin", "dev"): "http://fin-dev", ("crm", "dev"): "http://crm"},
+        id="single_env"),
+    # 多环境无默认:同键冲突(fin@dev)不落行;没挂环境的别名跳过
+    #(运行时各别名回退自带地址,S2.1)
+    pytest.param(
+        ["dev", "sit"],
+        [("b2", "fin", "dev", "http://fin-dev-b2"),
+         ("b1", "fin", "dev", "http://fin-dev-b1"),
+         ("c1", "fin", "sit", "http://fin-sit"),
+         ("d1", "crm", None, "http://crm")],
+        None,
+        {("fin", "sit"): "http://fin-sit"},
+        id="multi_env_no_default"),
+    # 无环境:无默认、无部署行(别名地址全靠运行时回退)
+    pytest.param(
+        [],
+        [("e1", "fin", None, "http://fin")],
+        None,
+        {},
+        id="no_env"),
+]
+
+
+@pytest.mark.parametrize("envs,aliases,want_default,want_deploy",
+                         _DEPLOY_FORMS)
+def test_0044_deployments_env_chain(envs, aliases, want_default,
+                                    want_deploy):
+    """① 建表/加列/删 visibility ② 单环境置默认 ③ 别名地址聚合回填
+    部署行(一致落一行、冲突不落、无环境落默认、无默认跳过)
+    ④ downgrade 往返。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            _to_0043_shape(eng)
+            with eng.begin() as conn:
+                for name in envs:
+                    conn.execute(text(
+                        "INSERT INTO environments (name, description, "
+                        "lines, created_at, updated_at) "
+                        "VALUES (:n, '', '{}', now(), now())"), {"n": name})
+                for alias, base, env, url in aliases:
+                    conn.execute(text(
+                        "INSERT INTO service_aliases (alias_name, "
+                        "base_service, base_url, environment_id, kind, "
+                        "created_at, updated_at) VALUES (:a, :b, :u, "
+                        "(SELECT id FROM environments WHERE name = :e), "
+                        "'plate', now(), now())"),
+                        {"a": alias, "b": base, "u": url, "e": env})
+            command.stamp(_cfg(sync_url), "0043_drop_visibility")
+            command.upgrade(_cfg(sync_url), "0044_deployments_env_chain")
+
+            with eng.connect() as c:
+                env_cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'environments' "
+                    "AND table_schema = current_schema()"))}
+                assert "visibility" not in env_cols
+                assert "is_default" in env_cols
+                defaults = [r[0] for r in c.execute(text(
+                    "SELECT name FROM environments WHERE is_default"))]
+                assert defaults == ([want_default] if want_default else [])
+                got = {(r[0], r[1]): r[2] for r in c.execute(text(
+                    "SELECT d.base_service, e.name, d.base_url "
+                    "FROM deployments d "
+                    "JOIN environments e ON e.id = d.env_id"))}
+                assert got == want_deploy
+                assert c.execute(text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_name = 'projects' "
+                    "AND column_name = 'default_environment_id' "
+                    "AND table_schema = current_schema()")).scalar() == 1
+            # 默认环境至多一行(部分唯一索引)
+            if len(envs) >= 2:
+                import pytest as _pytest
+                with _pytest.raises(Exception):
+                    with eng.begin() as conn:
+                        conn.exec_driver_sql(
+                            "UPDATE environments SET is_default = true")
+
+            command.downgrade(_cfg(sync_url), "0043_drop_visibility")
+            with eng.connect() as c:
+                tables = {r[0] for r in c.execute(text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = current_schema()"))}
+                assert "deployments" not in tables
+                env_cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'environments' "
+                    "AND table_schema = current_schema()"))}
+                assert "visibility" in env_cols
+                assert "is_default" not in env_cols
+                # 别名地址原样(回填只读别名表)
+                assert c.execute(text(
+                    "SELECT count(*) FROM service_aliases "
+                    "WHERE base_url IS NOT NULL")).scalar() == sum(
+                        1 for a in aliases if a[3])
         finally:
             eng.dispose()

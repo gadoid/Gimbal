@@ -40,9 +40,10 @@ class EnvironmentView(BaseModel):
     id: int
     name: str
     description: str
-    visibility: str
     lines: dict[str, str]
     owner_id: int | None = None
+    # S2:默认环境(环境链末位兜底,D2);visibility 随 0044 删除
+    is_default: bool = False
 
     class Config:
         from_attributes = True
