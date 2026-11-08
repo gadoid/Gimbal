@@ -490,8 +490,25 @@ async def _load_exec_shape(
     return scheme, scheme_payload, bindings, row_dict, dataset_name
 
 
-async def _alias_urls_of(db, scen_payload: dict) -> dict[str, str]:
+async def _template_env(db, scen: ComposerScenario,
+                        scheme_payload: dict | None):
+    """模板执行环境(S2.1):方案 > 场景项目默认 > 默认环境。
+
+    **不吃个人偏好**:订阅实例的知情同意按模板内容算,「同一模板全
+    订阅者同一指纹」(不变量)—— 地址若随持有人偏好变,同一模板会
+    出现多份指纹;环境由模板(方案 / 项目)决定。
+    """
+    from .env_chain import resolve_environment
+    return await resolve_environment(
+        db, scheme_env=(scheme_payload or {}).get("environmentId"),
+        project_id=scen.project_id, user_id=None)
+
+
+async def _alias_urls_of(db, scen_payload: dict,
+                        env=None) -> dict[str, str]:
     """场景引用服务的 base_url 集合(执行期活解析;指纹与物化共用)。
+
+    ``env``(S2.1):模板环境(:func:`_template_env`),并入部署表地址。
 
     查询异常**向上抛** —— consent 闸调用方按失败口径收口(本轮不执行
     run=channel):不得以空集算指纹(误判 template_changed)、不得跳过
@@ -501,7 +518,8 @@ async def _alias_urls_of(db, scen_payload: dict) -> dict[str, str]:
     from . import service_aliases
     return await service_aliases.base_urls_for(
         db, sorted(referenced_services(
-            definition_from_payload(scen_payload).get("steps") or [])))
+            definition_from_payload(scen_payload).get("steps") or [])),
+        env=env)
 
 
 async def consent_fingerprint_now(
@@ -511,7 +529,8 @@ async def consent_fingerprint_now(
     必须是看到的那份」比对共用(P2.2)。别名查询失败向上抛(503 口径)。"""
     _, scheme_payload, bindings, row_dict, _ = await _load_exec_shape(
         db, tpl.scheme_id, scen)
-    alias_urls = await _alias_urls_of(db, scen.payload)
+    alias_urls = await _alias_urls_of(
+        db, scen.payload, await _template_env(db, scen, scheme_payload))
     from .service_aliases import credential_alias_hits
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
@@ -539,7 +558,8 @@ async def consent_fingerprint_now_shape(
 ) -> str:
     """consent_fingerprint_now 的 shape 直传变体(subscription_view
     已装载过执行形态,不重复查;口径与 now 完全一致)。"""
-    alias_urls = await _alias_urls_of(db, scen.payload)
+    alias_urls = await _alias_urls_of(
+        db, scen.payload, await _template_env(db, scen, scheme_payload))
     from .service_aliases import credential_alias_hits
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
@@ -569,7 +589,8 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
     _, scheme_payload, bindings, row_dict, dataset_name = \
         await _load_exec_shape(db, tpl.scheme_id, scen)
     aliases = await _auth_aliases_of(db, scen.payload, bindings)
-    alias_urls = await _alias_urls_of(db, scen.payload)
+    alias_urls = await _alias_urls_of(
+        db, scen.payload, await _template_env(db, scen, scheme_payload))
     fp = await consent_fingerprint_now_shape(
         db, tpl, scen, scheme_payload, row_dict, bindings)
     meta_plate = (((definition_from_payload(scen.payload) or {}).get("meta") or {})
@@ -935,9 +956,15 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     paused_reason="made_private",
                     message="模板已转为私有,执行已暂停;模板重新公开后请"
                             "重新确认订阅", lease=lease)
+            # S2.1:模板环境(指纹与执行同一份,不吃持有人偏好)
+            try:
+                tpl_env = await _template_env(db, scen, scheme_payload)
+            except Exception:  # noqa: BLE001 — 环境查询失败按旧 ③ 行为
+                tpl_env = None
             if consent_gate:
                 try:
-                    alias_urls = await _alias_urls_of(db, scen.payload)
+                    alias_urls = await _alias_urls_of(
+                        db, scen.payload, tpl_env)
                 except Exception as e:  # noqa: BLE001
                     return await _finish(
                         db, inst, tpl, "channel",
@@ -975,7 +1002,8 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     auth_policy="strict", resolve_mode="none",
                     # authz W6 主规则:订阅执行(holder ≠ 场景属主)不带
                     # 作者内置凭证
-                    scenario_owner_id=scen.owner_id)
+                    scenario_owner_id=scen.owner_id,
+                    environment=tpl_env)
             except MissingAuthAliases as e:
                 # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
                 # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error

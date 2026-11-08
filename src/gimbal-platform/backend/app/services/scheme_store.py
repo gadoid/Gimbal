@@ -42,6 +42,10 @@ def normalized(payload: dict | None) -> dict:
             {"datasetId": d, "rowIndexes": []} for d in p["dataSetIds"]
         ]
     out.update({k: v for k, v in p.items() if k in out})
+    # authz M2a S2.1:方案环境(环境链第二位)—— 设置了才落键,未设置
+    # 的方案 wire 形状不变(不补 null 键)
+    if p.get("environmentId") is not None:
+        out["environmentId"] = p["environmentId"]
     return out
 
 

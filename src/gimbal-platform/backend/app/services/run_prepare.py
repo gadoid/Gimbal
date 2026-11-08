@@ -315,6 +315,7 @@ async def prepare_exec(
     resolve_mode: str = "single",
     with_auth: bool = True,
     scenario_owner_id: int | None = None,
+    environment: Any = None,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
@@ -327,6 +328,8 @@ async def prepare_exec(
       供调用方在更早处已用同一函数做过 fail-fast 解析(单场景链的
       认证先行序),跳过重复解密;
     * 别名地址:``base_urls_for``(③层数据源;查表失败降级空表);
+      ``environment``(S2.1,``env_chain.EnvChoice``)= 派发时已解析的
+      环境选择,并入部署表地址(缺省 = 旧 ③ 行为);
     * carry:``build_carry_context``(独立短会话;任何故障降级 None,
       carry 是增强不是前置条件);
     * 修订解析 ``resolve_mode``:
@@ -369,7 +372,7 @@ async def prepare_exec(
     try:
         async with db_factory() as s:
             prep.alias_base_urls = await service_aliases.base_urls_for(
-                s, referenced_services(steps))
+                s, referenced_services(steps), env=environment)
     except Exception:  # noqa: BLE001
         logger.opt(exception=True).warning(
             "run_prepare: alias base_url lookup failed; skipped")

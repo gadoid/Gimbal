@@ -888,6 +888,8 @@ async def rerun_execution(
             "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),
             "schemeName": cfg.get("schemeName"),
+            # S2.1:按快照回放环境(作为本次显式位;旧行缺键 = 重新解析)
+            "environmentId": cfg.get("environmentId"),
         }
     )
     scen = await scenario_store.get_row(session, ex.scenario_id)

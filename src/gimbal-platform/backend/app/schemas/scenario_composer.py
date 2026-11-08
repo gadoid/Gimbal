@@ -258,6 +258,10 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    # authz M2a S2.1:环境链第二位(本次显式 > **方案** > 项目默认 > 个人
+    # 偏好 > 默认环境);缺省 = 不指定。悬空(环境被删)按未设置落下一位
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # M10 RunOptions 形状(迁移完成,不再收旧平铺键)
     options: dict[str, Any] = Field(default_factory=lambda: {
         "step_from": None, "step_to": None,
@@ -268,11 +272,14 @@ class RunScheme(BaseModel):
 
 class ExportOverlay(BaseModel):
     """导出/预览的运行方案覆盖层(spec §8)。dataSetIds 有意不收 —
-    导出是场景级产物,行级展开是非目标。执行环境键已随 D2 退役。"""
+    导出是场景级产物,行级展开是非目标。``environmentId``(S2.1)=
+    环境链的本次显式位(物化地址按该环境的部署表)。"""
     model_config = _CAMEL
 
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
 
 
 class ScenarioCopyIn(BaseModel):
@@ -347,6 +354,11 @@ class GraphSpec(BaseModel):
     # GraphUnitSpec.service_bindings:字符串别名在 wire 面 422,不静默跳过)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    # authz M2a S2.1:图级环境(本次显式位;RunRequest 顶层
+    # environmentId 优先)。未给时逐单元按 方案 > 项目默认 > 个人偏好 >
+    # 默认环境 解析(环境是单元属性,不整图拉平)
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
     control: GraphControlSpec | None = None
 
@@ -356,7 +368,8 @@ class RunRequest(BaseModel):
 
     Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
     旧 ``env`` 字段已随 D2 退役 — 旧客户端多发的 env 键被 pydantic
-    静默忽略,仅失效、不 422。
+    静默忽略,仅失效、不 422。``environmentId``(authz M2a S2.1)是新
+    环境链的本次显式位,与旧 env 无关。
     """
 
     model_config = _CAMEL
@@ -393,6 +406,10 @@ class RunRequest(BaseModel):
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
+    # authz M2a S2.1:环境链本次显式位(> 方案 > 项目默认 > 个人偏好 >
+    # 默认环境);指定的环境不存在 → 404 environment_not_found
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # 断言注入条目(spec v2 §5/§8):选中条目在 dispatch 时物化为注入族
     # (payload.assertion_registry → 基线 vars 覆写 + asserts patch),
     # 与数据集行并列生成 case;空 = 不注入。

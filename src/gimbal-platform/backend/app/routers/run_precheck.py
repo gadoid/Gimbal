@@ -122,7 +122,9 @@ async def precheck_run(
                 scheme_found=False, scheme_valid=False,
             ))
             continue
-        one = await _precheck_one(db, scen_row, item, token=token)
+        one = await _precheck_one(
+            db, scen_row, item, token=token,
+            user_id=user.id if user is not None else None)
         one.builtin_auth_shadowed = await builtin_auth_shadowed(
             user.id if user is not None else None, scen_row)
         out.append(one)
@@ -155,7 +157,7 @@ async def builtin_auth_shadowed(executor_id: int | None,
 
 async def _precheck_one(
     db: AsyncSession, scen: ComposerScenario, item: PrecheckItem,
-    *, token: "Any | None" = None,
+    *, token: "Any | None" = None, user_id: int | None = None,
 ) -> PrecheckResult:
     result = PrecheckResult(scenario_id=item.scenario_id, scheme_id=item.scheme_id)
     raw_payload = scen.payload or {}
@@ -209,7 +211,14 @@ async def _precheck_one(
     if candidates:
         try:
             from ..services import service_aliases
-            alias_urls = await service_aliases.base_urls_for(db, candidates)
+            from ..services.env_chain import resolve_environment
+            # S2.1:③ 层按执行同链的环境(方案 > 项目默认 > 个人偏好 >
+            # 默认环境;预检看方案,无本次显式位)
+            _env = await resolve_environment(
+                db, scheme_env=payload.get("environmentId"),
+                project_id=scen.project_id, user_id=user_id)
+            alias_urls = await service_aliases.base_urls_for(
+                db, candidates, env=_env)
         except Exception:  # noqa: BLE001 — 查表失败退回①②口径(不误放行)
             alias_urls = {}
         candidates = [s for s in candidates if not service_url_resolved(

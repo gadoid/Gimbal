@@ -12,6 +12,8 @@ unverified 标记」的松绑 —— 空枪别名会静默漏 carry/凭证注入
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import delete as sa_delete, func, or_
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +23,9 @@ from loguru import logger
 from ..models.environment import Environment
 from ..models.service_alias import ServiceAlias
 from . import service_names
+
+if TYPE_CHECKING:
+    from .env_chain import EnvChoice
 
 
 class UnknownBaseService(Exception):
@@ -374,10 +379,16 @@ async def credential_aliases_for(
 
 async def base_urls_for(
     db: AsyncSession, raw_names: list[str],
+    *, env: "EnvChoice | None" = None,
 ) -> dict[str, str]:
-    """执行期读(F4 方案 B,2026-09-23 批次):raw 服务键 → 别名表
-    精确命中的 base_url —— services 物化优先级链的第三层
-    「显式绑定 > 场景声明 > **base_url** > 缺口引擎报错」的数据源。
+    """执行期读(F4 方案 B,2026-09-23 批次):raw 服务键 → 地址 ——
+    services 物化优先级链的第三层「显式绑定 > 场景声明 > **③** >
+    缺口引擎报错」的数据源。
+
+    ``env``(authz M2a S2.1):缺省 / 无环境 = 旧行为(别名表精确命中的
+    ``base_url``);给了环境则并入部署表地址,合并规则见
+    ``env_chain`` 模块注释(显式选环境部署表优先,默认环境兜底时别名
+    自带地址优先)。
 
     与 credential_aliases_for 同款形态(照抄结构,别处不得另开第二份
     查询实现);优先级裁决在唯一组装点
@@ -391,4 +402,9 @@ async def base_urls_for(
             ServiceAlias.base_url.is_not(None),
         )
     )).all()
-    return {name: url for name, url in rows if url}
+    alias_urls = {name: url for name, url in rows if url}
+    if env is None or env.env_id is None:
+        return alias_urls
+    from .env_chain import deployment_urls, merge_addresses
+    return merge_addresses(
+        alias_urls, await deployment_urls(db, raw_names, env.env_id), env)

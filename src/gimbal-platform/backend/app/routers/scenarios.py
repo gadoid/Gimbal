@@ -149,8 +149,12 @@ async def _materialized_executable(
     owner_id: int,
     overlay: ExportOverlay | None = None,
     scenario_owner_id: int | None = None,
+    scenario_id: str | None = None,
 ) -> dict:
     """plate /convert + 执行同源物化 —— preview-plate 与 /export 共用(W1)。
+
+    S2.1:地址 ③ 层按环境链(overlay.environmentId 为本次显式位 >
+    场景项目默认 > 导出人偏好 > 默认环境;草稿无 ``scenario_id``)。
 
     输入任意来源的 definition(草稿或落库行;平台 meta 剥离幂等),输出
     gimbal 可执行形态:overlay=None(默认导出)时凭证/服务绑定零注入,
@@ -187,6 +191,15 @@ async def _materialized_executable(
         # 的唯一开关(with_auth=False 跳过清单+解析);carry 见下方
         # (prepare_exec 内无条件构建)。
         service_bindings = {}
+    from ..services.env_chain import EnvironmentNotFound, resolve_for_scenario
+    try:
+        _env = await resolve_for_scenario(
+            db, scenario_id, user_id=owner_id,
+            explicit=overlay.environment_id if overlay is not None else None)
+    except EnvironmentNotFound as e:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "environment_not_found", "message": str(e)})
     try:
         prep = await run_prepare.prepare_exec(
             run_dispatcher.session_factory, {"definition": clean},
@@ -196,7 +209,7 @@ async def _materialized_executable(
             # authz W6 主规则:落库行的导出走 owner_id(执行人)≠ 属主
             # ⇒ 内置 users 当空(fail-closed:None 同样当空);preview-plate
             # 的草稿由本人即席提供,调用方显式传 scenario_owner_id=本人
-            scenario_owner_id=scenario_owner_id)
+            scenario_owner_id=scenario_owner_id, environment=_env)
     except run_prepare.AuthResolveError as e:
         # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
         # 副作用,直接拒答 422 而非 500)。
@@ -237,7 +250,9 @@ async def preview_plate(
         converted = await _materialized_executable(
             db, definition=scenario_dict, ui=body.ui,
             owner_id=user.id, overlay=body.overlay,
-            scenario_owner_id=user.id)   # 草稿:执行人即作者
+            scenario_owner_id=user.id,   # 草稿:执行人即作者
+            # S2.1:草稿若对应已存场景,项目默认环境按该行取
+            scenario_id=(scenario_dict.get("meta") or {}).get("scenarioId"))
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(
             status_code=502,
@@ -1057,6 +1072,7 @@ async def export_scenario(
             ui=payload.get("ui") or {},
             owner_id=user.id,
             scenario_owner_id=row.owner_id,
+            scenario_id=row.scenario_id,
         )
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(

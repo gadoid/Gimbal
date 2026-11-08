@@ -979,6 +979,29 @@ async def dispatch_target(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
+    # S2.1 环境链:本次显式(RunRequest 顶层 > 图级)> 方案 > 项目默认 >
+    # 个人偏好 > 默认环境。方案字段由客户端摊平;请求没带环境但带了
+    # schemeId 时回查方案兜底。解析结果进 config_json(重跑按快照回放)
+    # 与任务配方(worker 不回查请求上下文)。
+    from .env_chain import EnvironmentNotFound, resolve_for_scenario
+    _explicit_env = req.environment_id
+    if _explicit_env is None and getattr(req, "graph", None) is not None:
+        _explicit_env = req.graph.environment_id
+    _scheme_env = None
+    if _explicit_env is None and req.scheme_id and target.kind == "scenario":
+        from . import scheme_store as _sst
+        try:
+            _sch = await _sst.get_row(db, target.scenario_id, req.scheme_id)
+            _scheme_env = (_sch.payload or {}).get("environmentId")
+        except Exception:  # noqa: BLE001 — 悬空方案不阻塞(溯源字段)
+            _scheme_env = None
+    try:
+        env_choice = await resolve_for_scenario(
+            db, target.scenario_id if target.kind == "scenario" else None,
+            user_id=user_id, explicit=_explicit_env, scheme_env=_scheme_env)
+    except EnvironmentNotFound as e:
+        raise NotFound("environment_not_found", str(e)) from None
+
     # V5-B 环境告警（§6.3）:混合环境 + 版本线不一致 → 写 config_json
     try:
         env_warnings = await _check_env_consistency(
@@ -1115,6 +1138,9 @@ async def dispatch_target(
             "injectionEntryIds": req.injection_entry_ids,
             # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
             "schemeId": req.scheme_id,
+            # S2.1 环境选择快照(environmentId/environmentSource;无环境
+            # 时键缺席)—— 重跑按此回放
+            **env_choice.snapshot(),
             "schemeName": req.scheme_name,
             # 批次键(执行设计 §1.2):与列同值;rerun 按 config_json 重建
             # 配方时不带旧批(重跑是新的一次独立发起)。
@@ -1154,6 +1180,8 @@ async def dispatch_target(
                 "execution_id": execution.id, "run_id": run_id,
                 "owner_id": user_id,
                 "graph_spec": req.graph.model_dump(by_alias=True),
+                # S2.1:显式位才整图生效;否则逐单元解析(见 graph_dispatch)
+                "env_snapshot": env_choice.snapshot(),
                 "n_runs": req.n_runs, "halt_at": req.step_to,
                 "scenario_payload": dict(scenario_payload),
             },
@@ -1175,6 +1203,8 @@ async def dispatch_target(
                 # adhoc(临时调用)= 执行人本人(上方 _scen_owner_id;
                 # built_in_users fail-closed,None 一律当空)
                 "scenario_owner_id": _scen_owner_id,
+                # S2.1:环境随配方下发(地址 ③ 层并入部署表)
+                "env_snapshot": env_choice.snapshot(),
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,
@@ -1336,6 +1366,7 @@ async def _fanout_graph(
     halt_at: int | None = None,
     scenario_payload: dict | None = None,
     chain: str = "legacy",
+    env_snapshot: dict | None = None,
 ) -> None:
     """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
     事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
@@ -1517,8 +1548,10 @@ async def _fanout_graph(
     graph_sem: dict = {}
     try:
         async with db_factory() as session:
+            from .env_chain import EnvChoice
             graph_bundle = await graph_dispatch.materialize_graph(
-                session, owner_id, graph_spec, full=True)
+                session, owner_id, graph_spec, full=True,
+                env=EnvChoice.from_snapshot(env_snapshot))
         graph = graph_bundle["graph"]
         graph_sem = graph_bundle
         if cancel_local["set"] or execution_id in _eq._cancel_hint:
@@ -1780,8 +1813,12 @@ async def _fanout(
     chain: str = "legacy",
     debug: "dict | None" = None,
     scenario_owner_id: int | None = None,
+    env_snapshot: dict | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
+
+    ``env_snapshot``(S2.1):dispatch 落档的环境选择(与 config_json 同
+    一份快照;旧配方缺键 = 无环境 = 旧 ③ 行为)。
 
     ``halt_at``(V1 step_to 移植):0-based 含端点,透传 CLI
     ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
@@ -1913,10 +1950,12 @@ async def _fanout(
     # 上方先行 fail-fast 解析(with_auth=False 跳过重复解密);deepcopy
     # 先行 —— 修订回写落在副本上,不写穿存储 payload。
     _ui_fs = ((scenario_payload or {}).get("ui") or {}).get("fieldStates") or {}
+    from .env_chain import EnvChoice
     prep = await prepare_exec(
         db_factory, scenario_payload, owner_id=owner_id,
         ui_field_states=_ui_fs, resolve_mode="single", with_auth=False,
-        scenario_owner_id=scenario_owner_id)
+        scenario_owner_id=scenario_owner_id,
+        environment=EnvChoice.from_snapshot(env_snapshot))
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。

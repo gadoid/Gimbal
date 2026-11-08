@@ -116,6 +116,8 @@ async def resolve_graph_units(
             "unit": unit,
             "scenario_row": scen,
             "composed": composed,
+            # S2.1:单元方案的环境(环境链第二位)
+            "scheme_env": (scheme or {}).get("environmentId"),
         })
     return resolved
 
@@ -139,6 +141,7 @@ async def materialize_graph(
     graph_req: dict,
     *,
     full: bool = False,
+    env: "Any" = None,
 ) -> dict:
     """GraphRunRequest dict → gimbal SuiteGraph dict(不执行)。
 
@@ -206,12 +209,30 @@ async def materialize_graph(
     exec_auths = (await run_prepare.resolve_exec_auths(
         db_module.SessionLocal, owner_id, auth_aliases)
         if auth_aliases else [])
-    alias_urls: dict = {}
-    try:
-        alias_urls = await service_aliases.base_urls_for(
-            db, _all_referenced_services(resolved))
-    except Exception:  # noqa: BLE001
-        alias_urls = {}
+    # S2.1 环境链逐单元:显式位(配方快照 explicit,或图级
+    # environmentId)整图生效;否则按单元 方案 > 单元场景项目默认 >
+    # 个人偏好 > 默认环境 解析 —— 地址 ③ 层逐单元查(查表失败降级空表)
+    from .env_chain import (
+        EnvChoice, EnvironmentNotFound, resolve_environment)
+    explicit = env if (env is not None and env.source == "explicit") \
+        else None
+    if explicit is None and graph_req.get("environmentId"):
+        try:
+            explicit = await resolve_environment(
+                db, explicit=int(graph_req["environmentId"]))
+        except EnvironmentNotFound as e:
+            raise GraphDispatchError(str(e)) from None
+    unit_urls: dict[str, dict] = {}
+    for r in resolved:
+        ref = r["unit"]["ref"]
+        try:
+            ue: EnvChoice = explicit or await resolve_environment(
+                db, scheme_env=r.get("scheme_env"),
+                project_id=r["scenario_row"].project_id, user_id=owner_id)
+            unit_urls[ref] = await service_aliases.base_urls_for(
+                db, _all_referenced_services([r]), env=ue)
+        except Exception:  # noqa: BLE001
+            unit_urls[ref] = {}
 
     # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
     # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
@@ -244,7 +265,7 @@ async def materialize_graph(
                 r["scenario_row"].payload, executor_id=owner_id,
                 scenario_owner_id=r["scenario_row"].owner_id),
             carry_context=carry_ctxs[i],
-            alias_base_urls=alias_urls,
+            alias_base_urls=unit_urls.get(r["unit"]["ref"], {}),
         )
         unit_payloads[r["unit"]["ref"]] = materialized
 
