@@ -1290,3 +1290,130 @@ def test_0045_auth_slot_bindings(aliases, want_systems):
                     "AND table_schema = current_schema()")).scalar() == 0
         finally:
             eng.dispose()
+
+
+# ── 0046_carry_scope(authz M2a S4.0)──────────────────────────────────
+def _to_0045_shape(eng) -> None:
+    """create_all 是当前模型(scope 列与四元组键已存在);撤回到 0045
+    形态:删两表 scope/scope_id 列,还原旧二元/一元唯一键。"""
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "ALTER TABLE carry_service_bindings DROP CONSTRAINT IF EXISTS "
+            "uq_carry_svc_path")
+        conn.exec_driver_sql(
+            "ALTER TABLE carry_service_bindings ADD CONSTRAINT "
+            "uq_carry_svc_path UNIQUE (service_name, field_path)")
+        conn.exec_driver_sql(
+            "ALTER TABLE carry_global_defaults DROP CONSTRAINT IF EXISTS "
+            "uq_carry_default_path")
+        conn.exec_driver_sql(
+            "ALTER TABLE carry_global_defaults ADD CONSTRAINT "
+            "uq_carry_default_path UNIQUE (field_path)")
+        for t in ("carry_service_bindings", "carry_global_defaults"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {t} DROP COLUMN IF EXISTS scope_id")
+            conn.exec_driver_sql(
+                f"ALTER TABLE {t} DROP COLUMN IF EXISTS scope")
+
+
+def test_0046_carry_scope():
+    """① 两表加 scope/scope_id + 换键 ② 存量 → 公共项目层;个人别名键
+    下的行 → 属主个人层 ③ 新键冲突被拒 ④ downgrade 公共层优先去重。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    import app.models  # noqa: F401
+    from app.core.db import Base
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            Base.metadata.create_all(eng)
+            _to_0045_shape(eng)
+            with eng.begin() as conn:
+                # 公共项目 id=1(conftest 同款种子口径:手工插)
+                conn.execute(text(
+                    "INSERT INTO projects (name, kind, description, "
+                    "created_at) VALUES ('__public__', 'public', '', "
+                    "now())"))
+                for u in ("u1", "u2"):
+                    conn.execute(text(
+                        "INSERT INTO users (username, display_name, "
+                        "password_hash, role, is_active, is_system, "
+                        "created_at, updated_at) VALUES (:u, :u, 'x', "
+                        "'user', true, false, now(), now())"), {"u": u})
+                # 别名:fin(共享)、qa-alias(个人 = u2)
+                conn.execute(text(
+                    "INSERT INTO service_aliases (alias_name, "
+                    "base_service, owner_user_id, kind, created_at, "
+                    "updated_at) VALUES ('fin', 'fin', NULL, 'plate', "
+                    "now(), now())"))
+                conn.execute(text(
+                    "INSERT INTO service_aliases (alias_name, "
+                    "base_service, owner_user_id, kind, created_at, "
+                    "updated_at) VALUES ('qa-alias', 'fin', 2, 'plate', "
+                    "now(), now())"))
+                # carry 行:共享键 / 个人别名键 / 全局默认
+                for svc, path in (("fin", "$.a"), ("qa-alias", "$.b"),
+                                  ("fin", "$.c")):
+                    conn.execute(text(
+                        "INSERT INTO carry_service_bindings (service_name, "
+                        "field_path, value, updated_by_name, updated_at) "
+                        "VALUES (:s, :p, 'v', 'seed', now())"),
+                        {"s": svc, "p": path})
+                conn.execute(text(
+                    "INSERT INTO carry_global_defaults (field_path, value, "
+                    "updated_by_name, updated_at) "
+                    "VALUES ('$.d', 'v', 'seed', now())"))
+
+            command.stamp(_cfg(sync_url), "0045_auth_slot_bindings")
+            command.upgrade(_cfg(sync_url), "0046_carry_scope")
+
+            with eng.connect() as c:
+                got = {tuple(r) for r in c.execute(text(
+                    "SELECT scope, scope_id, service_name, field_path "
+                    "FROM carry_service_bindings"))}
+                assert got == {
+                    ("project", 1, "fin", "$.a"),
+                    ("project", 1, "fin", "$.c"),
+                    # 个人别名键 → 属主(u2)个人层
+                    ("user", 2, "qa-alias", "$.b"),
+                }
+                assert [tuple(r) for r in c.execute(text(
+                    "SELECT scope, scope_id, field_path "
+                    "FROM carry_global_defaults"))] == [("project", 1,
+                                                         "$.d")]
+                # 新键:同 scope 同键重复被拒;不同 scope 同键可并存
+                import pytest as _pytest
+                with _pytest.raises(Exception):
+                    with eng.connect() as c2:
+                        with c2.begin():
+                            c2.execute(text(
+                                "INSERT INTO carry_service_bindings "
+                                "(scope, scope_id, service_name, "
+                                "field_path, value, updated_by_name, "
+                                "updated_at) VALUES ('project', 1, 'fin', "
+                                "'$.a', 'x', 't', now())"))
+                with eng.connect() as c2:
+                    with c2.begin():
+                        c2.execute(text(
+                            "INSERT INTO carry_service_bindings "
+                            "(scope, scope_id, service_name, field_path, "
+                            "value, updated_by_name, updated_at) VALUES "
+                            "('user', 1, 'fin', '$.a', 'mine', 't', "
+                            "now())"))
+
+            command.downgrade(_cfg(sync_url), "0045_auth_slot_bindings")
+            with eng.connect() as c:
+                cols = {r[0] for r in c.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'carry_service_bindings' "
+                    "AND table_schema = current_schema()"))}
+                assert not ({"scope", "scope_id"} & cols)
+                # 公共层优先:个人层/他层同键行被丢弃
+                assert [tuple(r) for r in c.execute(text(
+                    "SELECT service_name, field_path FROM "
+                    "carry_service_bindings ORDER BY 1, 2"))] == [
+                    ("fin", "$.a"), ("fin", "$.c"), ("qa-alias", "$.b")]
+        finally:
+            eng.dispose()

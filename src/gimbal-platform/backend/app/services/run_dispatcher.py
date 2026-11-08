@@ -1021,11 +1021,12 @@ async def dispatch_target(
     # 规则在 prepare_exec 本就当空,两者同口径)。adhoc 无存储属主不判。
     # 临时调用(adhoc):payload 由调用者即席提供,执行人即作者 —— 显式
     # 记为本人(built_in_users fail-closed,None 会把作者自己的也当空)
-    _scen_owner_id = (
-        (_sr.owner_id if (_sr := await get_row(
-            db, target.scenario_id)) is not None else None)
-        if getattr(target, "kind", "scenario") == "scenario"
-        and target.scenario_id else user_id)
+    _scen = (await get_row(db, target.scenario_id)
+             if getattr(target, "kind", "scenario") == "scenario"
+             and target.scenario_id else None)
+    _scen_owner_id = _scen.owner_id if _scen is not None else user_id
+    # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
+    _scen_project_id = _scen.project_id if _scen is not None else None
     if _scen_owner_id is not None and user_id != _scen_owner_id:
         from .scenario_store import (
             strip_builtin_credentials, strip_sensitive_columns)
@@ -1205,6 +1206,8 @@ async def dispatch_target(
                 "scenario_owner_id": _scen_owner_id,
                 # S2.1:环境随配方下发(地址 ③ 层并入部署表)
                 "env_snapshot": env_choice.snapshot(),
+                # S4:carry 作用域第二层(项目层;None = 私有区 → 个人层)
+                "scenario_project_id": _scen_project_id,
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,
@@ -1814,6 +1817,7 @@ async def _fanout(
     debug: "dict | None" = None,
     scenario_owner_id: int | None = None,
     env_snapshot: dict | None = None,
+    scenario_project_id: int | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
@@ -1957,7 +1961,8 @@ async def _fanout(
         db_factory, scenario_payload, owner_id=owner_id,
         ui_field_states=_ui_fs, resolve_mode="single", with_auth=False,
         scenario_owner_id=scenario_owner_id,
-        environment=EnvChoice.from_snapshot(env_snapshot))
+        environment=EnvChoice.from_snapshot(env_snapshot),
+        project_id=scenario_project_id)
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。

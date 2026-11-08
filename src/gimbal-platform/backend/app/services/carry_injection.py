@@ -64,8 +64,16 @@ def _step_service(step: dict) -> Any:
 async def build_carry_context(
     db: AsyncSession, definition: dict,
     ui_field_states: dict | None = None,
+    *,
+    project_id: int | None = None,
+    user_id: int | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
+
+    authz M2a S4 作用域分层(D3 + 区模型收敛):tier 序 = 公共项目层 <
+    (项目层 ∨ 执行人个人层;普通项目区不吃个人层),层内沿用键层级
+    (别名键 > 基础服务键 > 层默认)。旧库行全在公共层 → 不带上下文时
+    行为与旧链逐行相同。
 
     面解析走 ``field_state_resolution.carry_face``(§3.2 单一实现):
     ``state(path) = ui.fieldStates[stepIndex][path] ?? entry.state ?? 'form'``
@@ -110,7 +118,16 @@ async def build_carry_context(
 
     # ② 服务引用 → derive_base 解析 → 绑定值(None = 解析失败,整步跳过)
     catalog = await service_names.catalog_service_names()
-    defaults = await carry_store.get_defaults(db)
+    # S4:tier 序(公共项目层恒在;项目区不吃个人层)
+    tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
+    if project_id is not None:
+        tiers.append(("project", project_id))
+    elif user_id is not None:
+        tiers.append(("user", user_id))
+    defaults: dict[str, str | None] = {}
+    for t in tiers:
+        defaults = {**defaults,
+                    **await carry_store.get_defaults(db, t)}
     raw_services: dict[str, None] = {}
     for step in raw_steps:
         if not isinstance(step, dict):
@@ -128,14 +145,17 @@ async def build_carry_context(
                 "跳过 carry 填充", raw)
             service_bindings[raw] = None
         else:
-            rows = await carry_store.get_bindings(db, base)
-            if base != raw:
-                # 别名键稀疏覆盖(服务画像方案 §4.1 三层解析的 P1 落地):
-                # 精确别名键 > base 服务键 > 全局默认 —— 字段级 merge,
-                # 别名行只覆盖它填的那几个字段,其余继承 base。
-                override = await carry_store.get_bindings(db, raw)
-                if override:
-                    rows = {**rows, **override}
+            # S4:逐 tier 合并(后者覆盖前者);层内沿用别名键稀疏覆盖
+            # (服务画像方案 §4.1:精确别名键 > base 服务键 > 层默认 —
+            # 字段级 merge,别名行只覆盖它填的那几个字段)
+            rows: dict[str, str | None] = {}
+            for t in tiers:
+                rows_t = await carry_store.get_bindings(db, base, t)
+                if base != raw:
+                    override = await carry_store.get_bindings(db, raw, t)
+                    if override:
+                        rows_t = {**rows_t, **override}
+                rows = {**rows, **rows_t}
             service_bindings[raw] = rows
 
     return CarryContext(step_fields=step_fields,

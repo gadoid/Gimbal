@@ -237,8 +237,13 @@ async def materialize_graph(
     # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
     # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
     # 炸 _apply_carry 的权宜 —— Suite 无 carry 的功能缺口由归一补齐。
+    # S4:逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
     carry_ctxs = await run_prepare.unit_carry_contexts(
-        db_module.SessionLocal, [r["composed"] for r in resolved])
+        db_module.SessionLocal, [r["composed"] for r in resolved],
+        [{"project_id": r["scenario_row"].project_id,
+          "user_id": (owner_id if r["scenario_row"].project_id is None
+                      else None)}
+         for r in resolved])
 
     unit_payloads: dict[str, dict] = {}
     m2_info: dict | None = None

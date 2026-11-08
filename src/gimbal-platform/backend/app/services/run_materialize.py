@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import re
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -74,7 +75,49 @@ def materialize_run_copy(
     _apply_users(cfg, resolved_auths or [], built_in_users=built_in_users or {})
     if carry_context is not None:
         _apply_carry(out, carry_context)
+    _substitute_slot_refs(out, resolved_auths or [])
     return out
+
+
+# ── S4:${slot.X.field} 派发前替换(F6)────────────────────────────
+_SLOT_REF = re.compile(
+    r"\$\{slot\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\}")
+
+
+def _substitute_slot_refs(node: Any, resolved_auths: list) -> None:
+    """run 副本里的 ``${slot.<槽名>.<字段>}`` → 执行人槽绑定的
+    account_fields 字段值(原地替换,含 carry 注入值与模板字面值)。
+
+    账号级字段不能进 users 条目(引擎 UserCredential 六字段
+    extra='forbid'),唯一通道就是这里(F6)。未命中(槽不在本次注入
+    清单 / 字段不存在)原样保留 —— 引擎对未知名字空间报错,fail-
+    visible 不静默吞。
+    """
+    fields_by_slot: dict[str, dict] = {}
+    for r in resolved_auths:
+        af = getattr(r, "account_fields", None) or {}
+        if af:
+            fields_by_slot[r.alias] = af if isinstance(af, dict) else {}
+
+    def _walk(v) -> Any:
+        if isinstance(v, str) and "${slot." in v and fields_by_slot:
+            def _repl(m: "re.Match[str]") -> str:
+                slot, field = m.group(1), m.group(2)
+                hit = fields_by_slot.get(slot)
+                if hit and field in hit:
+                    return str(hit[field])
+                return m.group(0)   # 未命中原样保留(fail-visible)
+
+            return _SLOT_REF.sub(_repl, v)
+        if isinstance(v, dict):
+            for k in list(v):
+                v[k] = _walk(v[k])
+        elif isinstance(v, list):
+            for i in range(len(v)):
+                v[i] = _walk(v[i])
+        return v
+
+    _walk(node)
 
 
 def _step_service(step: dict) -> str | None:

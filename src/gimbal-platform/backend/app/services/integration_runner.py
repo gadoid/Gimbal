@@ -1003,7 +1003,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     # authz W6 主规则:订阅执行(holder ≠ 场景属主)不带
                     # 作者内置凭证
                     scenario_owner_id=scen.owner_id,
-                    environment=tpl_env)
+                    environment=tpl_env,
+                    # S4:carry 作用域(模板场景项目;私有区 → 持有人个人层)
+                    project_id=scen.project_id)
             except MissingAuthAliases as e:
                 # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
                 # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error

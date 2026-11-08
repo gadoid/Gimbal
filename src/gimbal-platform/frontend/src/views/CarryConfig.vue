@@ -12,6 +12,17 @@
       subtitle="服务 / 别名级都未命中时最后生效;删行 = 不注入,null = 显式注入 JSON null"
     />
 
+    <!-- authz M2a S4:层切换 —— 全局(公共项目层,Admin+)/我的(个人层,
+         本人);项目层编辑面归 S7 项目管理页 -->
+    <div class="slib-toolbar" style="display:flex;gap:.5rem;margin-bottom:.5rem">
+      <button type="button" class="svc-chip" :class="{ active: layer === 'global' }"
+              data-testid="carry-layer-global" @click="switchLayer('global')">
+        全局默认</button>
+      <button type="button" class="svc-chip" :class="{ active: layer === 'user' }"
+              data-testid="carry-layer-user" @click="switchLayer('user')">
+        我的默认</button>
+    </div>
+
     <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else class="svc-panel">
@@ -148,9 +159,18 @@ import { useClientPager } from '@/composables/useClientPager'
 
 const loading = ref(true)
 const defaultRows = ref<DefaultCarryRow[]>([])
+/** authz M2a S4:当前编辑层(global = 公共项目层;user = 个人层) */
+const layer = ref<'global' | 'user'>('global')
+
+async function switchLayer(l: 'global' | 'user') {
+  if (layer.value === l) return
+  layer.value = l
+  loading.value = true
+  try { await loadDefaults() } finally { loading.value = false }
+}
 
 async function loadDefaults() {
-  const d = await getDefaults()
+  const d = await getDefaults(layer.value)
   defaultRows.value = Object.entries(d).map(([path, value]) => ({
     path,
     value: value ?? '',
@@ -235,7 +255,7 @@ async function saveDefaults() {
     entries[r.path] = r.isNull ? null : r.value
   }
   try {
-    await putDefaults(entries)
+    await putDefaults(entries, layer.value)
     toast.success('已保存')
     // 回读:让 isNull/value 与后端规范化结果一致
     await loadDefaults()

@@ -346,12 +346,13 @@ async def precheck(db, *, definition: dict, user) -> dict:
         out["idConflict"] = True
         out["suggestedId"] = await _free_scenario_id(db)
 
-    out["services"] = await analyze_services(db, definition)
+    out["services"] = await analyze_services(db, definition, user.id)
     out["authRefs"] = await auth_refs(db, definition, user.id)
     return out
 
 
-async def analyze_services(db, definition: dict) -> list[dict]:
+async def analyze_services(db, definition: dict,
+                          user_id: int | None = None) -> list[dict]:
     """按服务键析出分析(方案 §3.1 组装表;plate 依赖在事务外取完)。
 
     计数与落库共用 :func:`_service_plan`(§1 修复:预检看到的 = 落库
@@ -366,7 +367,9 @@ async def analyze_services(db, definition: dict) -> list[dict]:
     raw_steps = list(definition.get("steps") or [])
     if not raw_steps:
         return []
-    ctx = await build_carry_context(db, definition, ui_field_states={})
+    # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
+    ctx = await build_carry_context(db, definition, ui_field_states={},
+                                    user_id=user_id)
     catalog = await service_names.catalog_service_names()
     alias_names = set((await db.execute(
         select(ServiceAlias.alias_name))).scalars().all())
@@ -499,7 +502,9 @@ async def land(
 
     steps = [s for s in (definition.get("steps") or []) if isinstance(s, dict)]
     raw_steps = list(definition.get("steps") or [])
-    ctx = await build_carry_context(db, definition, ui_field_states={})
+    # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
+    ctx = await build_carry_context(db, definition, ui_field_states={},
+                                    user_id=user.id)
     catalog = await service_names.catalog_service_names()
 
     # ── 本地重算(不信任预检快照;方案 §3.3)───────────────────────
@@ -683,10 +688,13 @@ async def land(
 
 async def carry_store_put(db, service_name: str, entries: dict, user) -> None:
     from . import carry_store
+    # S4:导入写的 carry 行落导入人个人层(F3 语义:个人别名名下的
+    # 行迁为属主个人层;与 0046 迁移同口径)
     await carry_store.put_bindings(
         db, service_name, entries,
         updated_by_id=user.id,
-        updated_by_name=user.display_name or user.username)
+        updated_by_name=user.display_name or user.username,
+        scope=("user", user.id))
 
 
 async def _write_audit(db, *, user, created_aliases: list[str],

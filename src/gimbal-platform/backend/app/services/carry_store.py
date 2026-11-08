@@ -1,6 +1,11 @@
 """carry 值层读写(spec §3.2 API 的 store 面)。
 
 PUT 语义 = 整体替换(行集 diff:删缺键、upsert 在键);调用方负责 commit。
+
+authz M2a S4 作用域分层:读写都带 ``scope``(('project', 项目id) |
+('user', 用户id);公共项目行 = 旧全局层);``scope=None``(缺省)= 公共
+项目层 —— 与旧「全局表」语义同型,存量调用方零改动。tier 合并在
+``carry_injection.build_carry_context``(公共层 < 项目/个人层)。
 """
 from __future__ import annotations
 
@@ -9,11 +14,43 @@ from sqlalchemy import delete, select
 from ..models.carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .field_state_resolution import carry_face
 
+Scope = "tuple[str, int]"
 
-async def get_bindings(db, service_name: str) -> dict[str, str | None]:
+
+async def public_scope(db) -> "tuple[str, int]":
+    """公共项目层(旧全局层的 S4 形态)。"""
+    from ..models.project import Project
+
+    pid = (await db.execute(select(Project.id).where(
+        Project.kind == "public"))).scalar()
+    return ("project", pid if pid is not None else 0)
+
+
+async def _scoped(db, scope: "tuple[str, int] | None") -> "tuple[str, int]":
+    return scope if scope is not None else await public_scope(db)
+
+
+async def visible_scopes(db, user) -> "list[tuple[str, int]]":
+    """读面可见作用域(10.5):公共项目 + 我所在项目 + 我的个人层。"""
+    from ..models.project import ProjectMember
+
+    scopes = [await public_scope(db)]
+    pids = (await db.execute(select(ProjectMember.project_id).where(
+        ProjectMember.user_id == user.id))).scalars().all()
+    scopes += [("project", p) for p in pids if ("project", p) not in scopes]
+    scopes.append(("user", user.id))
+    return scopes
+
+
+async def get_bindings(db, service_name: str,
+                       scope: "tuple[str, int] | None" = None,
+                       ) -> dict[str, str | None]:
+    scope = await _scoped(db, scope)
     rows = (await db.execute(
         select(CarryServiceBinding).where(
-            CarryServiceBinding.service_name == service_name)
+            CarryServiceBinding.service_name == service_name,
+            CarryServiceBinding.scope == scope[0],
+            CarryServiceBinding.scope_id == scope[1])
     )).scalars().all()
     return {r.field_path: r.value for r in rows}
 
@@ -25,19 +62,28 @@ async def put_bindings(
     *,
     updated_by_id: int | None,
     updated_by_name: str,
+    scope: "tuple[str, int] | None" = None,
 ) -> None:
+    scope = await _scoped(db, scope)
     await db.execute(delete(CarryServiceBinding).where(
-        CarryServiceBinding.service_name == service_name))
+        CarryServiceBinding.service_name == service_name,
+        CarryServiceBinding.scope == scope[0],
+        CarryServiceBinding.scope_id == scope[1]))
     for path, value in sorted(entries.items()):
         db.add(CarryServiceBinding(
             service_name=service_name,
+            scope=scope[0], scope_id=scope[1],
             field_path=path, value=value,
             updated_by_id=updated_by_id, updated_by_name=updated_by_name,
         ))
 
 
-async def get_defaults(db) -> dict[str, str | None]:
-    rows = (await db.execute(select(CarryGlobalDefault))).scalars().all()
+async def get_defaults(db, scope: "tuple[str, int] | None" = None,
+                       ) -> dict[str, str | None]:
+    scope = await _scoped(db, scope)
+    rows = (await db.execute(select(CarryGlobalDefault).where(
+        CarryGlobalDefault.scope == scope[0],
+        CarryGlobalDefault.scope_id == scope[1]))).scalars().all()
     return {r.field_path: r.value for r in rows}
 
 
@@ -47,16 +93,21 @@ async def put_defaults(
     *,
     updated_by_id: int | None,
     updated_by_name: str,
+    scope: "tuple[str, int] | None" = None,
 ) -> None:
-    await db.execute(delete(CarryGlobalDefault))
+    scope = await _scoped(db, scope)
+    await db.execute(delete(CarryGlobalDefault).where(
+        CarryGlobalDefault.scope == scope[0],
+        CarryGlobalDefault.scope_id == scope[1]))
     for path, value in sorted(entries.items()):
         db.add(CarryGlobalDefault(
             field_path=path, value=value,
+            scope=scope[0], scope_id=scope[1],
             updated_by_id=updated_by_id, updated_by_name=updated_by_name,
         ))
 
 
-async def carry_drift(db) -> dict:
+async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
     """plate carry 面 vs 绑定表 paths 三类 diff(spec §7;结构 diff,非 semver)。
 
     renamed 启发式:单 orphaned × 单 uncovered(同 type 不可知 —— 绑定行
@@ -81,7 +132,12 @@ async def carry_drift(db) -> dict:
     from . import service_names
     from .plate_client import PlateUnavailableError
 
-    rows = (await db.execute(select(CarryServiceBinding))).scalars().all()
+    stmt = select(CarryServiceBinding)
+    if scope is not None:
+        # S4:漂移面按层(默认公共项目层;无公共项目防御分支 0 也归入)
+        stmt = stmt.where(CarryServiceBinding.scope == scope[0],
+                          CarryServiceBinding.scope_id == scope[1])
+    rows = (await db.execute(stmt)).scalars().all()
     bound_by_service: dict[str, set[str]] = {}
     for r in rows:
         bound_by_service.setdefault(r.service_name, set()).add(r.field_path)

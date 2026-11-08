@@ -84,9 +84,12 @@ class ResolvedAuth:
     password: str
     token_type: str
     expires_in: int
+    # S4:槽位账号级字段(${slot.X.field} 派发前替换的数据源)
+    account_fields: dict = field(default_factory=dict)
 
     @classmethod
-    def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str) -> "ResolvedAuth":
+    def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str,
+                     account_fields: dict | None = None) -> "ResolvedAuth":
         """从标准 RuntimeAuthSession 构造,供 resolve_exec_auths 内部使用。"""
         return cls(
             alias=alias,
@@ -95,6 +98,7 @@ class ResolvedAuth:
             password=runtime.password,
             token_type=runtime.token_type,
             expires_in=runtime.expires_in or 0,
+            account_fields=account_fields or {},
         )
 
 
@@ -191,7 +195,8 @@ async def resolve_exec_auths(
                 token_type=a.token_type,
                 expires_in=a.expires_in,
             )
-            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.slot))
+            resolved.append(ResolvedAuth.from_runtime(
+                runtime, alias=a.slot, account_fields=a.account_fields))
         except ValueError as e:
             raise AuthResolveError(
                 f"auth slot '{a.slot}' decrypt failed: {e}"
@@ -343,6 +348,7 @@ async def prepare_exec(
     with_auth: bool = True,
     scenario_owner_id: int | None = None,
     environment: Any = None,
+    project_id: int | None = None,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
@@ -447,8 +453,12 @@ async def prepare_exec(
     # ⑤ carry(独立短会话;故障降级 None)
     try:
         async with db_factory() as s:
+            # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
+            # 项目区不吃个人层 —— 区模型收敛裁定)
             prep.carry_ctx = await build_carry_context(
-                s, definition, ui_field_states=ui_field_states)
+                s, definition, ui_field_states=ui_field_states,
+                project_id=project_id,
+                user_id=(owner_id if project_id is None else None))
     except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
         logger.opt(exception=True).warning(
             "run_prepare: carry context build failed; skipped")
@@ -489,28 +499,36 @@ async def graph_auth_aliases(
 
 async def unit_carry_contexts(
     db_factory: Any, composed_units: list[dict],
+    unit_metas: "list[dict] | None" = None,
 ) -> list[Any]:
     """Suite 编排的 carry:**按单元**构建(carry 上下文按步骤下标
     索引,不能跨单元共用 —— 全图共用一份会把单元 A 的步骤面错配到
     单元 B)。单单元失败降 None,不阻塞其它单元(N1-2)。
 
+    ``unit_metas``(S4):与 composed_units 同序的作用域上下文
+    ({project_id, user_id};;缺省 = 无第二层,只吃公共项目层)。
     Suite 单元规格今日无 fieldStates 面(ui.fieldStates 是单场景
     执行链的 payload 面);后续编排单元带面时在此透传。
     """
     from .carry_injection import build_carry_context
 
-    async def _one(d: dict) -> Any:
+    metas = unit_metas or [{} for _ in composed_units]
+
+    async def _one(d: dict, meta: dict) -> Any:
         try:
             async with db_factory() as s:
                 return await build_carry_context(
-                    s, d, ui_field_states=None)
+                    s, d, ui_field_states=None,
+                    project_id=meta.get("project_id"),
+                    user_id=meta.get("user_id"))
         except Exception:  # noqa: BLE001 — 单单元降级,不阻塞全图
             logger.opt(exception=True).warning(
                 "run_prepare: unit carry build failed; unit skips carry")
             return None
 
     import asyncio as _aio
-    return list(await _aio.gather(*[_one(d) for d in composed_units]))
+    return list(await _aio.gather(
+        *[_one(d, m) for d, m in zip(composed_units, metas)]))
 
 
 # ─── P3 临时调用:请求 steps → 标准场景 payload(纯函数)───────────

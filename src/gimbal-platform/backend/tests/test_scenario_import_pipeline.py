@@ -14,6 +14,7 @@ from app.core import db as db_module
 from app.models.composer_scenario import ComposerScenario
 from app.models.permission import AuditLog
 from app.models.service_alias import ServiceAlias
+from app.models.user import User
 from app.services import carry_store, scenario_import
 from app.services.scenario_store import definition_from_payload
 
@@ -165,7 +166,9 @@ async def test_land_create_branch(client, plate_mock: PlateMock):
             ServiceAlias.alias_name == "fin-service-qa"))).scalar_one()
         assert alias.owner_user_id is not None      # 个人默认登记
         # carry 只写非敏感路径的文件值(api_token 不落库,P7-②)
-        binds = await carry_store.get_bindings(db, "fin-service-qa")
+        # S4:导入写的 carry 行落导入人个人层(F3 语义)
+        binds = await carry_store.get_bindings(
+            db, "fin-service-qa", scope=("user", alias.owner_user_id))
         assert binds == {"$.remark": "压测-李四"}
         audits = (await db.execute(select(AuditLog).where(
             AuditLog.resource_id == "fin-service-qa"))).scalars().all()
@@ -428,7 +431,11 @@ async def test_inconsistent_values_never_taken_over__create(
     assert await _remarks("sc-imp-multi") == ["A", "B", "ep2-business",
                                               "raw-step"]
     async with db_module.SessionLocal() as db:
-        binds = await carry_store.get_bindings(db, "fin-service-qa")
+        # S4:导入写的 carry 行落导入人个人层(一致值不存在 → 空层)
+        uid = (await db.execute(select(User.id).where(
+            User.username == "admin0"))).scalar()
+        binds = await carry_store.get_bindings(
+            db, "fin-service-qa", scope=("user", uid))
         assert binds == {}
 
 
@@ -494,7 +501,11 @@ async def test_consistent_values_cleared_only_from_own_carry_face(
     defn = await _stored_definition("sc-imp-multi")
     assert defn["steps"][0]["request"]["body"] == {"other": "keep"}
     async with db_module.SessionLocal() as db:
-        binds = await carry_store.get_bindings(db, "fin-service-qa")
+        # S4:导入写的 carry 行落导入人个人层
+        uid = (await db.execute(select(User.id).where(
+            User.username == "admin0"))).scalar()
+        binds = await carry_store.get_bindings(
+            db, "fin-service-qa", scope=("user", uid))
         assert binds == {"$.remark": "A"}
 
 

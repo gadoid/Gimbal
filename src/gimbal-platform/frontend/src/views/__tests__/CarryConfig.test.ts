@@ -72,7 +72,7 @@ describe('CarryConfig — 默认值(兜底层)', () => {
       '$.headers.X-Trace-Id': 'default-trace',
       '$.fee': '0.5',
       '$.headers.X-New': 'v1',
-    })
+    }, 'global')   // S4:默认层 = global(公共项目层)
     w.unmount()
   })
 
@@ -88,7 +88,7 @@ describe('CarryConfig — 默认值(兜底层)', () => {
     expect(carryApi.putDefaults).toHaveBeenCalledWith({
       '$.headers.X-Trace-Id': null,
       '$.fee': '0.5',
-    })
+    }, 'global')
     w.unmount()
   })
 
@@ -96,8 +96,9 @@ describe('CarryConfig — 默认值(兜底层)', () => {
     const { w } = await mountPage()
     expect(w.find('[data-testid="svc-input"]').exists()).toBe(false)
     expect(w.find('[data-testid="save-service"]').exists()).toBe(false)
-    // 面板头「全局默认」与页题重复已撤;留下的身份标识是 warn 横幅
-    expect(w.text()).not.toContain('全局默认')
+    // S4 起页头有层切换页签(全局默认 = 公共项目层 / 我的默认 =
+    // 个人层);「不再有全局默认字样」的旧断言随之过期
+    expect(w.find('[data-testid="carry-layer-user"]').exists()).toBe(true)
     expect(w.text()).toContain('按纯 path 跨服务生效')
     w.unmount()
   })

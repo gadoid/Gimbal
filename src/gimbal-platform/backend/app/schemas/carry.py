@@ -15,14 +15,29 @@ class DefaultsIn(BaseModel):
 
 class DefaultsOut(BaseModel):
     defaults: dict[str, str | None] = Field(default_factory=dict)
+    # authz M2a S4:响应层标签(global 请求时 = 公共项目层)
+    scope: str | None = None
+    scopeId: int | None = None
+
+
+class BindingRowOut(BaseModel):
+    """S4 列表行级层标签(flat bindings 之外的可见层明细)。"""
+    scope: str
+    scopeId: int
+    serviceName: str
+    fieldPath: str
+    value: str | None = None
 
 
 class BindingsOut(BaseModel):
     bindings: dict[str, dict[str, str | None]] = Field(default_factory=dict)
+    rows: list[BindingRowOut] = Field(default_factory=list)
 
 
 class ServiceBindingsOut(BaseModel):
     bindings: dict[str, str | None] = Field(default_factory=dict)
+    scope: str | None = None
+    scopeId: int | None = None
 
 
 class CarryEndpointMini(BaseModel):
