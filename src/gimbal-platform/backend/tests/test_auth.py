@@ -10,8 +10,9 @@ from __future__ import annotations
 from httpx import AsyncClient
 
 
-async def test_first_register_becomes_admin(client: AsyncClient) -> None:
-    """The very first registered user is promoted to admin."""
+async def test_first_register_becomes_super_admin(client: AsyncClient) -> None:
+    """The very first registered user is promoted to super_admin
+    (authz W1 更名后首注册者角色;is_admin 派生位已停发,只有 role)。"""
     resp = await client.post(
         "/api/auth/register",
         json={
@@ -23,14 +24,15 @@ async def test_first_register_becomes_admin(client: AsyncClient) -> None:
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["user"]["username"] == "alice"
-    assert body["user"]["is_admin"] is True
+    assert body["user"]["role"] == "super_admin"
+    assert "is_admin" not in body["user"]   # 派生位已停发(authz 收尾)
     assert body["user"]["is_active"] is True
     assert body["token_type"] == "bearer"
     assert body["access_token"] and body["refresh_token"]
 
 
-async def test_second_register_is_member(client: AsyncClient) -> None:
-    """A second registration yields a non-admin member."""
+async def test_second_register_is_user(client: AsyncClient) -> None:
+    """A second registration yields a plain user (non-admin)."""
     r1 = await client.post(
         "/api/auth/register",
         json={"username": "alice", "password": "secret123"},
@@ -41,7 +43,7 @@ async def test_second_register_is_member(client: AsyncClient) -> None:
         json={"username": "bob", "password": "secret123"},
     )
     assert r2.status_code == 201, r2.text
-    assert r2.json()["user"]["is_admin"] is False
+    assert r2.json()["user"]["role"] == "user"
 
 
 async def test_login_wrong_password_401(client: AsyncClient) -> None:

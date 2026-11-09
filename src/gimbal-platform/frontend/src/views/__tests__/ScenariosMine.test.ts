@@ -211,7 +211,9 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
 
   it('admin 默认「我的」镜头(视角说明不自称"你的"),显式开关切「全员视角」', async () => {
     const { useAuthStore } = await import('@/stores/auth')
-    useAuthStore().currentUser = { id: 1, username: 'root', display_name: 'root', is_admin: true } as never
+    const auth = useAuthStore()
+    auth.currentUser = { id: 1, username: 'root', display_name: 'root', role: 'super_admin' } as never
+    auth.capabilities = ['users.manage', 'ops.write', 'alias.write']
     const w = mountPage([scen('sc-a', 'private', 1)])
     await flushPromises()
     // 默认镜头 = 我的;全员视角是显式动作(§5.1),不再是默认全知。

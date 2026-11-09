@@ -80,7 +80,10 @@ describe('工作台卡头图标 = 功能页那颗', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
-    useAuthStore().currentUser = { id: 1, username: 'admin', display_name: 'A', is_admin: true } as never
+    // authz W8:17 张卡含三张能力门卡 —— 注入表 A 全能力(super_admin)
+    const auth = useAuthStore()
+    auth.currentUser = { id: 1, username: 'admin', display_name: 'A', role: 'super_admin' } as never
+    auth.capabilities = ['users.manage', 'ops.write', 'alias.write']
   })
 
   it('注册表每张卡都在映射里(新增卡必须同时交代图标来源)', () => {

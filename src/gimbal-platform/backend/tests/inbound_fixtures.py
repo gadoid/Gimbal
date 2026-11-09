@@ -33,29 +33,35 @@ async def seed_platform_user() -> int:
     return uid
 
 
-async def seed_alias(name: str = "agent-sys", **over) -> None:
-    """别名本体(base_url + 可选凭证默认);入站/回调列已随 v4 退役。"""
-    row = ServiceAlias(
-        alias_name=name, base_service="pay-service", kind="external",
-        base_url="https://cb.example.local")
+async def seed_alias(name: str = "agent-sys", *,
+                     base_url: str | None = "https://cb.example.local",
+                     **over) -> None:
+    """别名本体 + 地址(authz M2a S6:地址落部署表默认环境,基础服务 =
+    别名自身 —— 各别名地址互不覆盖)。``slot`` 等其余列经 ``over``。"""
+    from .helpers import seed_deployment
+
+    row = ServiceAlias(alias_name=name, base_service=name, kind="external")
     for k, v in over.items():
         setattr(row, k, v)
     async with db_module.SessionLocal() as s:
         s.add(row)
+        if base_url:
+            await seed_deployment(s, row.base_service, base_url)
         await s.commit()
 
 
-async def publish_scenario(scenario_id: str) -> None:
-    """场景可见性是列(发布走独立端点),测试里直改。"""
-    from app.models.composer_scenario import ComposerScenario
+async def publish_scenario(scenario_id: str) -> str:
+    """S1.3 发布 = 复制到公共项目(store 单点,不走 HTTP):原件恒私有
+    (可跑/私有读面),公共副本 id = <原 id>-public(恒剥离)。返回
+    副本 id —— 需要「公共可读形态」的断言用它;需要原件的(执行/
+    集成任务)继续用原 id。"""
+    from app.services import scenario_store
     async with db_module.SessionLocal() as s:
-        row = (await s.execute(sa.select(ComposerScenario).where(
-            ComposerScenario.scenario_id == scenario_id))).scalar_one()
-        row.visibility = "public"
-        await s.commit()
+        out, _ = await scenario_store.publish_copy(s, scenario_id)
+        return out.meta.scenario_id
 
 
-async def mk_user(username: str, *, role: str = "member") -> int:
+async def mk_user(username: str, *, role: str = "admin") -> int:
     """直插一个活跃真人用户(幂等;不经注册接口,免 admin 提权副作用)。"""
     async with db_module.SessionLocal() as s:
         uid = (await s.execute(sa.select(User.id).where(
@@ -78,10 +84,8 @@ async def mk_token(
     """直插一张令牌 + 范围行,返回 (id, 明文)。"""
     plaintext = at_svc.generate_plaintext()
     now = datetime.now(timezone.utc)
-    if kind == "platform":
-        user_id = await seed_platform_user()
-    elif user_id is None:
-        raise ValueError("personal token needs user_id")
+    if user_id is None:
+        raise ValueError("token needs user_id (authz C1:platform 夹具退役)")
     async with db_module.SessionLocal() as s:
         tok = AccessToken(
             user_id=user_id, kind=kind, name=name,
@@ -120,8 +124,7 @@ async def mk_execution(*, token_id=None, status="running", total=1,
 
 
 async def mk_task_pair(*, name="w-task", token_id=None,
-                       identity_mode="personal",
-                       owner_id=None) -> "tuple[int, int, int]":
+                       owner_id=None, scenario_id="sc-w") -> "tuple[int, int, int]":
     """(tpl_id, inst_id, owner_id);holder = 模板 owner(注册方自己的实例)。"""
     async with db_module.SessionLocal() as s:
         if owner_id is None:
@@ -129,17 +132,14 @@ async def mk_task_pair(*, name="w-task", token_id=None,
                 User.is_system == False))).scalar()  # noqa: E712
             if owner is None:
                 u = User(username="w_owner", display_name="o",
-                         password_hash=hash_password("x"), role="member")
+                         password_hash=hash_password("x"), role="admin")
                 s.add(u)
                 await s.commit()
                 owner = u.id
             owner_id = owner
-        holder = owner_id if identity_mode == "personal" else \
-            (await s.execute(sa.select(User.id).where(
-                User.is_system == True))).scalar()  # noqa: E712
+        holder = owner_id
         tpl = IntegrationTask(name=name, owner_id=owner_id,
-                              identity_mode=identity_mode,
-                              scenario_id="sc-w", token_id=token_id)
+                              scenario_id=scenario_id, token_id=token_id)
         s.add(tpl)
         await s.flush()
         inst = IntegrationTask(

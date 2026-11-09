@@ -33,11 +33,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import AdminUser, CurrentUser, MemberUser
 from ..core.security import hash_password
+from ._ownership import has_capability, roles_with
 from ..models.user import User
+from ..services import access_token as at_svc
 from ..models.auth_session import AuthSession
 from ..models.constant_entry import ConstantEntry
-from ..models.service_alias import ServiceAlias
-from ..schemas.page import PageOut
 from ..schemas.user import (
     UserCreateIn,
     UserDeleteIn,
@@ -73,9 +73,11 @@ def _gen_random_password(length: int = 12) -> str:
 
 
 async def _count_admins(db: AsyncSession) -> int:
-    """How many users currently hold the ``admin`` role(role 权威)。"""
+    """末位管理员保护计数:按 ``super_admin`` 计(authz W1 更名后原
+    admin 级 = super_admin;若仍按 admin 计,迁移后计数为 0、保护失效)。"""
     return (
-        await db.execute(select(func.count()).select_from(User).where(User.role == "admin"))
+        await db.execute(select(func.count()).select_from(User).where(
+            User.role.in_(roles_with("users.manage"))))
     ).scalar_one()
 
 
@@ -227,7 +229,7 @@ async def patch_user(
     prev_role, prev_active = target.role, target.is_active
 
     # ── authorization (privilege-escalation fix) ──
-    if caller.role != "admin":
+    if not has_capability(caller, "users.manage"):
         if target.id != caller.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -239,10 +241,12 @@ async def patch_user(
                 detail=code_detail(MEMBER_PATCH_FORBIDDEN, "只有管理员可以变更角色"),
             )
 
+    # 末位保护按表 A 判「是否用户管理者」(更名只动表,不动这里)
+    managers = roles_with("users.manage")
     demoting_admin = (
         "role" in data
-        and data["role"] != "admin"
-        and target.role == "admin"
+        and data["role"] not in managers
+        and target.role in managers
     )
     if demoting_admin:
         admin_total = await _count_admins(db)
@@ -288,8 +292,7 @@ async def patch_user(
             from sqlalchemy import update as _sa_update
 
             from ..models.access_token import AccessToken
-            from ..services import access_token as at_svc
-
+        
             # RETURNING 只取本次 UPDATE 命中的行(评审 2026-11-05 P2:
             # 按 invalidated_reason==deactivated 重取会把上一轮停用
             # 失效、尚未重新生成的历史令牌再通知一遍)
@@ -366,7 +369,7 @@ async def reset_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
-    if caller.role != "admin" and caller.id != target.id:
+    if not has_capability(caller, "users.manage") and caller.id != target.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(RESET_OTHER_PASSWORD, "只有管理员或本人可以重置该密码"),
@@ -374,6 +377,30 @@ async def reset_password(
 
     new_pw = _gen_random_password(12)
     target.password_hash = hash_password(new_pw)
+    # authz W6(方案 10.1):重置不再是接管通道 —— 三件套:
+    # ① must_change_password(只能改密门,deps.CurrentUser 403
+    #    password_change_required,白名单 /auth/me//auth/refresh/
+    #    /auth/change-password);
+    # ② 本人全部个人令牌落库失效(REASON_PASSWORD,与自服务改密同款);
+    # ③ token_version + 1(旧 JWT access/refresh 整体失效)。
+    # 临时密码仍返回给管理员一次(R8 定死:当前没有其他通道交给用户,
+    # 方案接受「能接管、做不到悄悄接管」——审计 + 通知 + 强制改密在)。
+    from datetime import datetime, timezone as _tz
+
+    from sqlalchemy import update as _sa_update
+
+    from ..models.access_token import AccessToken
+
+    target.must_change_password = True
+    target.token_version = int(target.token_version or 0) + 1
+    res = await db.execute(_sa_update(AccessToken).where(
+        AccessToken.user_id == target.id,
+        AccessToken.kind == at_svc.PERSONAL_KIND,
+        AccessToken.revoked_at.is_(None),
+        AccessToken.invalidated_at.is_(None),
+    ).values(invalidated_at=datetime.now(_tz.utc),
+             invalidated_reason=at_svc.REASON_PASSWORD))
+    invalidated = int(res.rowcount or 0)
     await db.commit()
     from ..services import audit as audit_svc
 
@@ -385,6 +412,31 @@ async def reset_password(
         resource_name=target.display_name or target.username,
         detail={"username": target.username, "self": caller.id == target.id},
     )
+    # 通知本人(强制改密 + 令牌失效两件事都说清)
+    try:
+        from ..services.notifications import create_notification
+
+        await create_notification(
+            db, user_id=target.id, type_="account",
+            title="密码已被管理员重置",
+            body=("管理员重置了你的密码,请使用临时密码登录后立即修改;"
+                  f"你的 {invalidated} 张个人令牌已同步失效(经它们注册的"
+                  "任务已暂停,改密后到「个人设置 → 访问令牌」重新生成)"),
+            link="/profile#security")
+    except Exception:  # noqa: BLE001 — 通知是增强,不阻断
+        pass
+    # 逐令牌暂停注册方实例(与自服务改密同款,§3.4)
+    toks = (await db.execute(select(AccessToken).where(
+        AccessToken.user_id == target.id,
+        AccessToken.kind == at_svc.PERSONAL_KIND,
+        AccessToken.invalidated_reason == at_svc.REASON_PASSWORD,
+        AccessToken.invalidated_at.is_not(None),
+    ))).scalars().all()
+    for tok in toks:
+        await at_svc.pause_token_instances(
+            db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
+            "令牌因密码重置失效;重新生成后任务自动恢复")
+    await db.commit()
     return {
         "user_id": target.id,
         "username": target.username,
@@ -444,13 +496,13 @@ async def delete_user(
                     "message": "系统用户(__platform__)受保护,不能删除"},
         )
 
-    if caller.role != "admin":
+    if not has_capability(caller, "users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=code_detail(ADMIN_REQUIRED, "需要管理员权限"),
         )
 
-    if target.role == "admin":
+    if target.role in roles_with("users.manage"):
         admin_total = await _count_admins(db)
         if admin_total <= 1:
             raise HTTPException(
@@ -473,6 +525,23 @@ async def delete_user(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="transfer_to 用户不存在(或与被删用户相同)",
+            )
+        # S1-e:公共项目内容默认受让人 = 执行删除的 Admin(可改选);
+        # 校验同款(在场、非目标本人)
+        public_transferee = None
+        pub_tid = (getattr(body, "public_transfer_to", None)
+                   or caller.id)
+        if pub_tid == caller.id:
+            public_transferee = caller
+        else:
+            public_transferee = (await db.execute(
+                select(User).where(User.id == pub_tid)
+            )).scalar_one_or_none()
+        if (public_transferee is None
+                or public_transferee.id == target.id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="public_transfer_to 用户不存在(或与被删用户相同)",
             )
 
     from sqlalchemy import update as sa_update
@@ -568,20 +637,23 @@ async def delete_user(
         # suite 引用已随下方 suite 删除级联(PG)/兜底删除(SQLite)。
         await db.execute(sa_delete(_ShareRef).where(
             _ShareRef.scenario_id.in_(_own_scen_q)))
-        await db.execute(
-            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
+        # S1.5 起成员行无 owner_id 冗余列:套件删除经 FK CASCADE 收
+        # 成员行,不再按属主单独清扫
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
     elif disposal == "transfer":
+        # S1-e:公共项目套件默认转给执行 Admin;其余走 transfer_to
+        from ..services.zone import public_project_id as _ppid
+
+        await db.execute(
+            sa_update(Suite).where(
+                Suite.owner_id == user_id,
+                Suite.project_id == await _ppid(db))
+            .values(owner_id=public_transferee.id))
         await db.execute(
             sa_update(Suite).where(Suite.owner_id == user_id)
             .values(owner_id=transferee.id))
-        await db.execute(
-            sa_update(SuiteMember).where(SuiteMember.owner_id == user_id)
-            .values(owner_id=transferee.id))
     else:  # purge
-        await db.execute(
-            sa_delete(SuiteMember).where(SuiteMember.owner_id == user_id))
         await db.execute(
             sa_delete(Suite).where(Suite.owner_id == user_id))
         # SQLite 兜底:FK 不强制的方言显式清引用(PG 已级联)
@@ -595,16 +667,56 @@ async def delete_user(
         select(ComposerScenario.scenario_id)
         .where(ComposerScenario.owner_id == user_id)
     )).scalars())
+
+    # S1.7 purge 拦截闸(D8):被**平台模板**引用的场景不能随 purge 删除
+    # —— 列出受影响模板,先转移/下架模板再删。S1.3 起平台模板只引用
+    # 公共项目场景,此闸主要拦迁移前遗留与平台模板引用公共副本的形态。
+    if disposal == "purge" and scenario_ids:
+        from ..models.integration_task import IntegrationTask as _IT
+
+        _refs = (await db.execute(select(_IT).where(
+            _IT.template_id.is_(None),
+            _IT.removed_at.is_(None),
+            _IT.is_platform_template.is_(True),
+            _IT.scenario_id.in_(scenario_ids)))
+        ).scalars().all()
+        if _refs:
+            # rollback 会过期 ORM 实例(属性访问触发懒加载)→ 先物化
+            refs_payload = [{"id": t.id, "name": t.name,
+                             "scenarioId": t.scenario_id} for t in _refs]
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "platform_template_references",
+                        "message": "部分场景被平台模板引用,"
+                                   "先转移或删除这些模板再 purge",
+                        "templates": refs_payload})
     if disposal == "publicize":
         if scenario_ids:
             # owner_id 显式置空(SET NULL 语义;SQLite 方言 FK 不强制的
             # 双方言兜底),owner_name 快照保留原作者署名
+            from ..services.zone import public_project_id
             await db.execute(
                 sa_update(ComposerScenario)
                 .where(ComposerScenario.owner_id == user_id)
-                .values(visibility="public", owner_id=None))
+                # 影子写:公共态同步 project_id(S1.1)
+                .values(owner_id=None,
+                        project_id=await public_project_id(db)))
     elif disposal == "transfer":
         if scenario_ids:
+            # S1-e:公共项目内容(维护者位)默认转给执行删除的 Admin
+            # (public_transfer_to 可改选);私有区内容走 transfer_to
+            from ..services.zone import public_project_id
+
+            pub_label = (public_transferee.display_name
+                         or public_transferee.username)
+            await db.execute(
+                sa_update(ComposerScenario)
+                .where(ComposerScenario.owner_id == user_id,
+                       ComposerScenario.project_id
+                       == await public_project_id(db))
+                .values(owner_id=public_transferee.id,
+                        owner_name=pub_label))
             transferee_label = transferee.display_name or transferee.username
             await db.execute(
                 sa_update(ComposerScenario)
@@ -614,13 +726,33 @@ async def delete_user(
         for sid in scenario_ids:
             await scenario_store.delete(db, sid)
 
+    # ── 报告定义处置(S1.6 补:此前删用户零处理,owner 悬空)─────
+    if disposal == "transfer":
+        from ..models.report_definition import ReportDefinitionRow
+        from ..services.zone import public_project_id as _ppid3
+
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id,
+                ReportDefinitionRow.project_id == await _ppid3(db))
+            .values(owner_id=public_transferee.id))
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id)
+            .values(owner_id=transferee.id))
+    else:
+        from ..models.report_definition import ReportDefinitionRow
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id)
+            .values(owner_id=None))
+
     # ── 访问令牌 + 集成任务处置(webhook v4 §3.6)──────────────────
     # 修现存外键缺陷:此前 delete_user 对 integration_tasks 零处理,
     # owner_id/holder_id 外键无 ON DELETE —— 删除任何拥有模板或实例的
     # 用户都会违反外键而失败。处置沿用三选一,受让人沿用同一 transferee。
     from ..models.access_token import AccessToken
     from ..models.integration_task import IntegrationTask
-    from ..services import access_token as at_svc
     from ..services.webhook_outbox import fail_pending_of_token
 
     # 个人令牌:删除前其 pending 投递显式置 failed(token_deleted),再随
@@ -636,60 +768,48 @@ async def delete_user(
         IntegrationTask.template_id.is_(None),
         IntegrationTask.removed_at.is_(None),
         IntegrationTask.owner_id == user_id))).scalars().all()
-    platform_user_id = (await db.execute(
-        select(User.id).where(User.is_system == True)  # noqa: E712
-    )).scalar()
     disposed_tasks: list[tuple[IntegrationTask, str]] = []
 
+    from ..services import maintenance_transfer as _mt
+    from ..services.zone import public_project_id as _ppid2
+
+    _pub_pid = await _ppid2(db)
     for tpl in own_tpls:
         if disposal == "transfer":
-            tpl.owner_id = transferee.id
+            # S1-e:公共项目模板默认转给执行 Admin(维护者位),连带
+            # 走共用服务(令牌解绑 + 原属主自有实例删除);私有模板
+            # 转给 transfer_to(同款连带,处置口径不变)
+            _to = (public_transferee if tpl.project_id == _pub_pid
+                   else transferee)
+            tpl.owner_id = _to.id
             tpl.token_id = None
-            if tpl.identity_mode == "personal":
-                # 原属主注册方实例删除;受让人启动时以属主身份自建实例
-                await db.execute(sa_delete(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id,
-                    IntegrationTask.holder_id == user_id))
-            else:
-                inst = (await db.execute(select(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))).scalars().first()
-                if inst is not None:
-                    at_svc.remap_detach_pause(
-                        inst, "任务属主账号已删除,处置后待启动")
+            await db.execute(sa_delete(IntegrationTask).where(
+                IntegrationTask.template_id == tpl.id,
+                IntegrationTask.holder_id == user_id))
             disposed_tasks.append((tpl, "transfer"))
         elif disposal == "publicize":
-            if tpl.identity_mode == "personal":
-                # 模板连同全部实例删除;通知受影响订阅者
-                holders = (await db.execute(select(IntegrationTask.holder_id).where(
-                    IntegrationTask.template_id == tpl.id,
-                    IntegrationTask.holder_id.is_not(None),
-                    IntegrationTask.holder_id != user_id))).scalars().all()
-                for uid in holders:
-                    try:
-                        await create_notification(
-                            db, user_id=uid, type_="integration",
-                            title=f"集成任务「{tpl.name}」已删除",
-                            body="任务属主账号已注销,模板随之删除;"
-                                 "卡片会显示「已移除」,可自行删卡")
-                    except Exception:  # noqa: BLE001
-                        await db.rollback()
-                await db.execute(sa_delete(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))
-                # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
-                # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
-                # 属主为系统用户的个人模式僵尸模板)
-                await db.delete(tpl)
-            else:
-                # owner → __platform__、token 置空;平台实例暂停待 member+
-                # 确认后启动(publicize 会把该用户的私有场景转公共,
-                # scope_denied 的成因随之消除)
-                tpl.owner_id = platform_user_id or tpl.owner_id
-                tpl.token_id = None
-                inst = (await db.execute(select(IntegrationTask).where(
-                    IntegrationTask.template_id == tpl.id))).scalars().first()
-                if inst is not None:
-                    at_svc.remap_detach_pause(
-                        inst, "任务属主账号已删除,处置后待启动")
+            # 模板连同全部实例删除;通知受影响订阅者(authz C1:平台
+            # 模板转挂 __platform__ 的分支随平台模式退役;平台模板本就
+            # 归 __platform__ 持有,不经过个人账号处置)
+            holders = (await db.execute(select(IntegrationTask.holder_id).where(
+                IntegrationTask.template_id == tpl.id,
+                IntegrationTask.holder_id.is_not(None),
+                IntegrationTask.holder_id != user_id))).scalars().all()
+            for uid in holders:
+                try:
+                    await create_notification(
+                        db, user_id=uid, type_="integration",
+                        title=f"集成任务「{tpl.name}」已删除",
+                        body="任务属主账号已注销,模板随之删除;"
+                             "卡片会显示「已移除」,可自行删卡")
+                except Exception:  # noqa: BLE001
+                    await db.rollback()
+            await db.execute(sa_delete(IntegrationTask).where(
+                IntegrationTask.template_id == tpl.id))
+            # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
+            # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
+            # 属主为系统用户的僵尸模板)
+            await db.delete(tpl)
             disposed_tasks.append((tpl, "publicize"))
         else:  # purge
             # 模板连同实例删除(purge 删除场景;scenario_id 无外键,
@@ -699,13 +819,20 @@ async def delete_user(
             await db.delete(tpl)
             disposed_tasks.append((tpl, "purge"))
 
-    # 剩余行(保留的模板及其实例)的 owner_id 跟随新属主(transfer →
-    # 受让人;publicize 平台模板 → __platform__),否则删除用户行违反
-    # integration_tasks.owner_id 外键(实例行同样带 owner_id 列)。
-    # 无条件执行:被删用户可能只剩已软删(removed_at 非空)的模板,
-    # disposed_tasks 为空但这些行仍在,外键照样违反(评审 P2)。
-    new_owner_id = (transferee.id if disposal == "transfer"
-                    else platform_user_id)
+    # S1.7(D10):软删模板**直接删除** —— 不再兜底挂到 __platform__
+    #(挂靠行会污染平台模板的属主判定;平台模板改 is_platform_template
+    # 显式标记,0040 已迁移存量)。连带其实例行(卡片本就「已移除」)。
+    await db.execute(sa_delete(IntegrationTask).where(
+        IntegrationTask.template_id.in_(select(IntegrationTask.id).where(
+            IntegrationTask.owner_id == user_id,
+            IntegrationTask.removed_at.is_not(None)))))
+    await db.execute(sa_delete(IntegrationTask).where(
+        IntegrationTask.owner_id == user_id,
+        IntegrationTask.removed_at.is_not(None)))
+    # 剩余**活**模板及其实例的 owner_id 跟随新属主(transfer → 受让人
+    # /公共分流入循环内;publicize/purge 的活模板已在处置循环删净,
+    # 此处仅为外键兜底),否则删除用户行违反 owner_id 外键。
+    new_owner_id = (transferee.id if disposal == "transfer" else None)
     if new_owner_id is not None:
         await db.execute(sa_update(IntegrationTask).where(
             IntegrationTask.owner_id == user_id,
@@ -723,11 +850,10 @@ async def delete_user(
         removed_scen = set(scenario_ids) if disposal == "purge" else set()
         removed_suites = own_suite_ids
         cond = None
+        from sqlalchemy import or_ as _or
         if removed_scen:
-            from sqlalchemy import or_ as _or
             cond = IntegrationTask.scenario_id.in_(removed_scen)
         if removed_suites:
-            from sqlalchemy import or_ as _or
             suite_cond = IntegrationTask.suite_id.in_(removed_suites)
             cond = _or(cond, suite_cond) if cond is not None else suite_cond
         if cond is not None:
@@ -750,22 +876,14 @@ async def delete_user(
             detail={"disposal": how,
                     "new_owner": (transferee.id if how == "transfer"
                                   and disposal == "transfer" else None),
-                    "identity_mode": tpl.identity_mode})
+                    })
 
     # 受让人通知(§3.6):并入 resource_transferred —— 场景或集成任务
     # 任一非空即发;正文逐个列出任务及当前状态
     transfer_tasks = [(t, h) for t, h in disposed_tasks if h == "transfer"]
     transfer_notify_detail: list[str] = []
     for tpl, _ in transfer_tasks:
-        if tpl.identity_mode == "personal":
-            transfer_notify_detail.append(f"「{tpl.name}」需启动以建立实例")
-        else:
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id))).scalars().first()
-            note = "已暂停待启动"
-            if inst is not None and inst.paused_reason == "scope_denied":
-                note += "(场景当前为私有,需先公开再启动)"
-            transfer_notify_detail.append(f"「{tpl.name}」{note}")
+        transfer_notify_detail.append(f"「{tpl.name}」需启动以建立实例")
 
     # ── 台账/线索板 SET NULL(显式:SQLite 方言 FK 不强制)─────────
     user_execs = list((await db.execute(
@@ -787,19 +905,11 @@ async def delete_user(
         if run_id:
             purge_case_dir(str(run_id))
 
-    # ── P1a 最小显式级联(NO ACTION 三表;transfer 时个人别名转共享)──
+    # ── P1a 最小显式级联(NO ACTION 两表;个人别名随 S6 退役)──
     await db.execute(
         sa_delete(AuthSession).where(AuthSession.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
-    if disposal == "transfer":
-        await db.execute(
-            sa_update(ServiceAlias)
-            .where(ServiceAlias.owner_user_id == user_id)
-            .values(owner_user_id=None))
-    else:
-        await db.execute(
-            sa_delete(ServiceAlias).where(ServiceAlias.owner_user_id == user_id))
 
     await db.delete(target)
     await db.commit()

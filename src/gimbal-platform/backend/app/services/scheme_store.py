@@ -42,6 +42,14 @@ def normalized(payload: dict | None) -> dict:
             {"datasetId": d, "rowIndexes": []} for d in p["dataSetIds"]
         ]
     out.update({k: v for k, v in p.items() if k in out})
+    # authz M2a S6:绑定 = 服务键 → {alias};存量形态的 url/authAlias
+    # 读面剥离(0047 已清洗落库值,此处兜底防旧行漏网)
+    from ..schemas.scenario_composer import scrub_retired_bindings
+    out["serviceBindings"] = scrub_retired_bindings(out["serviceBindings"])
+    # authz M2a S2.1:方案环境(环境链第二位)—— 设置了才落键,未设置
+    # 的方案 wire 形状不变(不补 null 键)
+    if p.get("environmentId") is not None:
+        out["environmentId"] = p["environmentId"]
     return out
 
 

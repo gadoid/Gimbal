@@ -6,7 +6,7 @@ fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
 子进程执行).
 
 认证(webhook v4 §3.1):``principal_or_user`` 分流 —— JWT 行为不变;
-``Bearer gtk_…`` 访问令牌进个人(personal)/平台(platform)模式。
+``Bearer gtk_…`` 个人访问令牌进站(平台令牌随 authz C1 退役)。
 判定链:① 认证(deps)→ ② M1 不带配方 → ③ 方案物化 → ④ 场景前提
 (个人 = can_run_scenario;平台 = 公共 + 只读闸 + 非临时调用)→
 ⑤ 令牌范围(别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证,缺项分类)→
@@ -124,10 +124,10 @@ async def _apply_scheme_recipe(
         scheme = await scheme_store.resolve_for_run(
             db, scen.scenario_id, None)
     payload = (scheme.payload if scheme is not None else {}) or {}
+    from ..schemas.scenario_composer import scrub_retired_bindings
     body.service_bindings = {
-        k: ServiceBinding(**v)
-        for k, v in (payload.get("serviceBindings") or {}).items()
-        if isinstance(v, dict)
+        k: ServiceBinding(**v) for k, v in
+        scrub_retired_bindings(payload.get("serviceBindings")).items()
     }
     body.data_set_ids = [str(x) for x in (payload.get("dataSetIds") or [])]
     body.data_set_selection = [
@@ -154,11 +154,10 @@ async def _record_inbound_activity(
     db: AsyncSession, principal: Principal, resp: RunResponse,
     *, body: RunRequest, scen=None,
 ) -> None:
-    """令牌触发写一条时间线事件(§7.3):actor = 令牌属主(个人令牌);
-    平台令牌**不上个人轴**(D23 —— 平台身份的感知走审计面板与平台
-    令牌详情「最近调用」)。JWT 调用 no-op(与 audit.record_inbound
-    同口径)。best-effort,失败不阻断业务。"""
-    if not principal.is_token or principal.token.kind == at.PLATFORM_KIND:
+    """令牌触发写一条时间线事件(§7.3):actor = 令牌属主。JWT 调用
+    no-op(与 audit.record_inbound 同口径)。best-effort,失败不阻断
+    业务。authz C1:平台令牌分支随平台模式退役删除。"""
+    if not principal.is_token:
         return
     from ..services import activity as activity_svc
     detail: dict = {
@@ -207,8 +206,8 @@ def _scope_missing_detail(missing: "list[at.ScopeMissing]",
 
 def _builtin_auths(scen) -> list[str]:
     """场景内置认证的用户名列表(§7.1:不含密码)。"""
-    from ..services.run_prepare import built_in_users
-    return sorted(str(k) for k in built_in_users(scen.payload))
+    from ..services.run_prepare import built_in_user_aliases
+    return built_in_user_aliases(scen.payload)
 
 
 async def _post_adhoc_run(
@@ -240,7 +239,8 @@ async def _post_adhoc_run(
             })
     run_id = run_dispatcher.new_run_id()   # 占位 id 先于派发用到
     try:
-        payload = await adhoc_run.prepare_adhoc(db, body, run_id=run_id)
+        payload = await adhoc_run.prepare_adhoc(db, body, run_id=run_id,
+                                         user_id=principal.user.id)
     except adhoc_run.AdhocRejected as e:
         raise HTTPException(
             status_code=e.status,
@@ -266,9 +266,12 @@ async def _post_adhoc_run(
     target = run_dispatcher.RunTarget(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
-    # §7.1 追溯:临时调用地址全部经别名(③层);无内置认证、无范围外目标
-    from ..services import service_aliases as sa_svc
-    alias_urls = await sa_svc.base_urls_for(db, used.aliases)
+    # §7.1 追溯:临时调用地址全部经 ③(环境部署地址;环境链 = 偏好 >
+    # 默认环境);无内置认证、无范围外目标
+    from ..services import env_chain as _ec, service_aliases as sa_svc
+    alias_urls = await sa_svc.base_urls_for(
+        db, used.aliases,
+        env=await _ec.resolve_environment(db, user_id=principal.user.id))
     trace = {
         "resolvedServices": {
             svc: {"url": alias_urls.get(svc), "source": "alias", "alias": svc}
@@ -303,6 +306,89 @@ async def _post_adhoc_run(
         "resolvedServices": trace["resolvedServices"]})
     await _record_inbound_activity(db, principal, resp, body=body)
     return resp
+
+
+@router.post("/preview")
+async def preview_effective_config(
+    principal: PrincipalIn, db: DbSession, body: dict,
+) -> dict:
+    """S5 生效预览:本次执行将生效的 地址/槽位绑定/carry(逐值带来源,
+    不含明文凭证)。读闸同预检(can_read_scenario_row)。
+
+    body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?}
+    —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。绑定形态
+    同执行请求(服务键 → {alias};url/authAlias 422)。"""
+    from pydantic import ValidationError
+
+    from ..schemas.scenario_composer import (ServiceBinding,
+                                             scrub_retired_bindings)
+    from ..services import env_chain, run_prepare, scenario_store, scheme_store
+    from ..services.service_aliases import (BindingAliasInvalid,
+                                            validate_binding_aliases)
+    from ..services.scenario_store import definition_from_payload
+
+    sid = body.get("scenarioId")
+    if not sid:
+        raise HTTPException(422, detail={"code": "scenario_id_required",
+                                         "message": "scenarioId 必填"})
+    scen = await scenario_store.get_row(db, sid)
+    if scen is None:
+        raise HTTPException(404, detail={"code": "scenario_not_found",
+                                         "message": f"scenario not found: {sid}"})
+    from ._ownership import can_read_scenario_row
+    user = principal.user
+    if not await can_read_scenario_row(db, user, scen):
+        raise HTTPException(404, detail={"code": "scenario_not_found",
+                                         "message": f"scenario not found: {sid}"})
+    scheme_env = None
+    try:
+        bindings_raw = {
+            str(k): ServiceBinding.model_validate(v).model_dump()
+            for k, v in (body.get("serviceBindings") or {}).items()}
+    except ValidationError as e:
+        raise HTTPException(422, detail={
+            "code": "binding_invalid",
+            "message": e.errors()[0].get("msg", str(e))}) from None
+    scheme_id = body.get("schemeId")
+    if scheme_id:
+        try:
+            sch = await scheme_store.get_row(db, sid, scheme_id)
+            scheme_env = (sch.payload or {}).get("environmentId")
+            bindings_raw = {
+                **scrub_retired_bindings(
+                    (sch.payload or {}).get("serviceBindings")),
+                **bindings_raw}
+        except KeyError:
+            raise HTTPException(404, detail={
+                "code": "run_scheme_not_found",
+                "message": f"run scheme {scheme_id} not found"}) from None
+    bindings = bindings_raw
+    try:
+        await validate_binding_aliases(db, bindings)
+    except BindingAliasInvalid as e:
+        raise HTTPException(422, detail={
+            "code": e.code, "message": e.message,
+            "service": e.service, "alias": e.alias}) from None
+    try:
+        env = await env_chain.resolve_for_scenario(
+            db, sid, user_id=user.id,
+            explicit=body.get("environmentId"), scheme_env=scheme_env)
+    except env_chain.EnvironmentNotFound as e:
+        raise HTTPException(404, detail={
+            "code": "environment_not_found",
+            "message": str(e)}) from None
+    cfg = await run_prepare.resolve_effective_config(
+        db, definition_from_payload(scen.payload or {}),
+        bindings=bindings, user_id=user.id,
+        project_id=scen.project_id, environment=env)
+    return {
+        "env": cfg.env,
+        "services": cfg.services,
+        "auths": cfg.auths,
+        "missingAuths": cfg.missing_auths,
+        "carry": cfg.carry,
+        "carryDefaults": cfg.carry_defaults,
+    }
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -348,86 +434,53 @@ async def post_run(
         if principal.is_token:
             # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
             await _apply_scheme_recipe(db, scen, body)
-        if principal.is_token and principal.token.kind == at.PLATFORM_KIND:
-            # ④ 平台模式场景前提(D9):只认公共场景(令牌与 JWT 同一
-            # 判定,v3 的「别名属主自己的场景」豁免随承载别名一起退役);
-            # 执行区间只读(is_scenario_read_only);临时调用非个人令牌
-            # 已在上方 403。graph 已被 M1 的 422 先拒。
-            if (getattr(scen, "visibility", None) or "private") != "public":
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "platform_scope_denied",
-                        "message": "平台模式只能执行公共场景;该场景不在允许范围",
-                    })
-            from ..services import plate_client
-            from ..services.integration_runner import is_scenario_read_only
-            try:
-                ok, offenders = await is_scenario_read_only(scen.payload)
-            except plate_client.PlateUnavailableError:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={
-                        "code": "plate_unavailable",
-                        "message": "只读检查未通过: plate 不可达(平台模式"
-                                   "执行需要 plate 契约元数据)",
-                    }) from None
-            if not ok:
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "not_read_only",
-                        "message": ("平台模式要求全部步骤为只读"
-                                    f"(GET/HEAD/OPTIONS 或已标 query_safe): "
-                                    f"{'、'.join(offenders)}"),
-                    })
-        else:
-            # ④ 个人模式(JWT 或个人令牌):ensure_owner → can_run_scenario
-            # (属主 ∨ admin ∨ 引用,§7.6;public 不开执行 —— 公共资源跑需
-            # 先 fork,不变量 7)。
-            from ._ownership import can_run_scenario
-            if not await can_run_scenario(
-                    db, user, scenario_id=scen.scenario_id,
-                    owner_id=scen.owner_id):
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "code": "not_owner",
-                        "message": ("only the scenario's owner (or admin, or a "
-                                    "share reference) can run this scenario"),
-                    })
-            if body.graph is not None:
-                # graph 链 unit 授权(§8.2):请求侧逐个过属主闸。rerun
-                # 不重放 graph,此处即唯一入口(令牌路径已被 M1 拒)。
-                seen_unit_ids: set[str] = set()
-                for unit in [
-                    *body.graph.units,
-                    *body.graph.before,
-                    *body.graph.after,
-                ]:
-                    if unit.scenario_id in seen_unit_ids:
-                        continue
-                    seen_unit_ids.add(unit.scenario_id)
-                    unit_scen = await scenario_store.get_row(
-                        db, unit.scenario_id)
-                    if unit_scen is None:
-                        raise run_dispatcher.NotFound(
-                            "scenario_not_found",
-                            f"scenario not found: {unit.scenario_id}",
-                        )
-                    if not await can_run_scenario(
-                            db, user, scenario_id=unit_scen.scenario_id,
-                            owner_id=unit_scen.owner_id):
-                        raise HTTPException(
-                            status_code=403,
-                            detail={
-                                "code": "not_owner",
-                                "message": (
-                                    "only the scenario's owner (or admin, or a "
-                                    "share reference) can run graph unit: "
-                                    f"{unit.scenario_id}"
-                                ),
-                            })
+        # ④ 个人模式(JWT 或个人令牌):ensure_owner → can_run_scenario
+        # (属主 ∨ admin ∨ 引用,§7.6;public 不开执行 —— 公共资源跑需
+        # 先 fork,不变量 7)。
+        from ._ownership import can_run_scenario
+        if not await can_run_scenario(
+                db, user, scenario_id=scen.scenario_id,
+                owner_id=scen.owner_id, project_id=scen.project_id):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "not_owner",
+                    "message": ("only the scenario's owner (or admin, or a "
+                                "share reference) can run this scenario"),
+                })
+        if body.graph is not None:
+            # graph 链 unit 授权(§8.2):请求侧逐个过属主闸。rerun
+            # 不重放 graph,此处即唯一入口(令牌路径已被 M1 拒)。
+            seen_unit_ids: set[str] = set()
+            for unit in [
+                *body.graph.units,
+                *body.graph.before,
+                *body.graph.after,
+            ]:
+                if unit.scenario_id in seen_unit_ids:
+                    continue
+                seen_unit_ids.add(unit.scenario_id)
+                unit_scen = await scenario_store.get_row(
+                    db, unit.scenario_id)
+                if unit_scen is None:
+                    raise run_dispatcher.NotFound(
+                        "scenario_not_found",
+                        f"scenario not found: {unit.scenario_id}",
+                    )
+                if not await can_run_scenario(
+                        db, user, scenario_id=unit_scen.scenario_id,
+                        owner_id=unit_scen.owner_id,
+                        project_id=unit_scen.project_id):
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "not_owner",
+                            "message": (
+                                "only the scenario's owner (or admin, or a "
+                                "share reference) can run graph unit: "
+                                f"{unit.scenario_id}"
+                            ),
+                        })
         if principal.is_token:
             # ⑤ 令牌范围:别名集 ⊆ 范围别名 ∧ 凭证集 ⊆ 范围凭证
             # (场景执行面:方案绑定 + 场景定义;§3.2)
@@ -436,8 +489,9 @@ async def post_run(
             definition = definition_from_payload(scen.payload)
             used = await at.used_sets_for_definition(
                 db, definition,
-                {k: {"authAlias": b.auth_alias, "url": b.url}
+                {k: b.model_dump()
                  for k, b in (body.service_bindings or {}).items()},
+                project_id=scen.project_id,
                 extra_scan_nodes=extra_nodes)
             missing = await at.check_scope(
                 db, principal.token, user.id, used)
@@ -497,10 +551,11 @@ def _injection_nodes(scen, body: RunRequest) -> "list | None":
             if isinstance(e, dict) and e.get("id") in ids]
 
 
-async def _resolved_services(db, scen, body: RunRequest) -> dict:
+async def _resolved_services(db, scen, body: RunRequest,
+                             user_id: int | None) -> dict:
     """§7.1 ``resolvedServices``:每个被引用服务的 {url, source, alias?}
-    (三层解析只读版,与物化同一裁决)。"""
-    from ..services import service_aliases as sa_svc
+    (地址链解析只读版,与物化同一裁决;③ 按执行同链的环境)。"""
+    from ..services import env_chain as _ec, service_aliases as sa_svc
     from ..services.run_materialize import (
         referenced_services, resolve_service_sources,
     )
@@ -508,13 +563,20 @@ async def _resolved_services(db, scen, body: RunRequest) -> dict:
 
     definition = definition_from_payload(scen.payload) if scen else {}
     steps = definition.get("steps") or []
+    try:
+        _env = await _ec.resolve_for_scenario(
+            db, scen.scenario_id if scen is not None else None,
+            user_id=user_id, explicit=body.environment_id)
+    except _ec.EnvironmentNotFound:
+        _env = None          # 派发侧会 404;追溯面不抢先报错
     base_urls = await sa_svc.base_urls_for(
-        db, referenced_services(steps))
+        db, referenced_services(steps), env=_env)
+    from ..services.run_prepare import zone_allows_direct
+    declared = (definition.get("config") or {}).get("services")
+    if scen is not None and not zone_allows_direct(scen.project_id):
+        declared = None      # 原 5:项目/公共区直连地址不生效
     return resolve_service_sources(
-        steps, declared=(definition.get("config") or {}).get("services"),
-        bindings={k: {"url": b.url}
-                  for k, b in (body.service_bindings or {}).items()},
-        alias_base_urls=base_urls)
+        steps, declared=declared, alias_base_urls=base_urls)
 
 
 async def _build_trace(
@@ -523,7 +585,8 @@ async def _build_trace(
 ) -> dict:
     """§7.1 执行 config_json 追溯块;dispatch 原样并入 config_json。"""
     trace: dict = {
-        "resolvedServices": await _resolved_services(db, scen, body),
+        "resolvedServices": await _resolved_services(
+            db, scen, body, principal.user.id),
         "builtinAuths": _builtin_auths(scen) if scen is not None else [],
     }
     if principal.is_token:

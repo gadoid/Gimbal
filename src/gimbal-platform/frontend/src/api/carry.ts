@@ -19,14 +19,25 @@ import type { CarryValues } from '@/utils/carry-hint'
 
 export type { CarryValues }
 
-export async function getDefaults(): Promise<CarryValues> {
-  const { data } = await http.get<{ defaults: CarryValues }>('/carry/defaults')
+/** authz M2a S4 作用域:'global'(默认,公共项目层,Admin+)/'user'(个人层,
+ * 本人)。项目层编辑面归 S7 项目管理页,api 已带参。 */
+export type CarryScope = 'global' | 'user'
+
+function scopeParams(scope: CarryScope) {
+  return scope === 'global' ? {} : { params: { scope } }
+}
+
+export async function getDefaults(scope: CarryScope = 'global'): Promise<CarryValues> {
+  const { data } = await http.get<{ defaults: CarryValues }>(
+    '/carry/defaults', scopeParams(scope))
   return data.defaults
 }
 
-export async function putDefaults(defaults: CarryValues): Promise<CarryValues> {
+export async function putDefaults(
+  defaults: CarryValues, scope: CarryScope = 'global',
+): Promise<CarryValues> {
   const { data } = await http.put<{ defaults: CarryValues }>(
-    '/carry/defaults', { defaults })
+    '/carry/defaults', { defaults }, scopeParams(scope))
   return data.defaults
 }
 

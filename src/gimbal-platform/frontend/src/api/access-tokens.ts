@@ -7,7 +7,7 @@
  */
 import http from '@/api/http'
 
-export type TokenKind = 'personal' | 'platform'
+export type TokenKind = 'personal'
 export type TokenStatus = 'active' | 'expired' | 'invalidated' | 'revoked'
 
 export interface AccessTokenListItem {

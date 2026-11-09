@@ -21,11 +21,17 @@ describe('auth — 身份快照入档', () => {
     localStorage.clear()
   })
 
-  it('存档带 user → 新 store 实例首帧即有身份(不必等 fetchMe)', () => {
-    put({ accessToken: 'a', refreshToken: 'r', user: { id: 3, username: 'alice', display_name: 'Alice', is_admin: true, is_active: true, created_at: 'x' } })
+  it('存档带 user + capabilities → 新 store 实例首帧即有身份与能力(不必等 fetchMe,authz W8/R11)', () => {
+    put({
+      accessToken: 'a', refreshToken: 'r',
+      user: { id: 3, username: 'alice', display_name: 'Alice', role: 'super_admin', is_active: true, created_at: 'x' },
+      capabilities: ['users.manage'],
+      mustChangePassword: false,
+    })
     const auth = useAuthStore()
     expect(auth.currentUser?.username).toBe('alice')
-    expect(auth.isAdmin).toBe(true)
+    expect(auth.can('users.manage')).toBe(true)  // 首帧按快照渲染导航
+    expect(auth.can('ops.write')).toBe(false)
     expect(auth.status).toBe('unknown')          // 有身份 ≠ 令牌已认证
   })
 
@@ -33,7 +39,7 @@ describe('auth — 身份快照入档', () => {
     const auth = useAuthStore()
     auth.accessToken = 'a'
     auth.refreshToken = 'r'
-    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_admin: false, is_active: true, created_at: 'x' } as never
+    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_active: true, created_at: 'x' } as never
     await nextTick()
     expect(get()).toMatchObject({ accessToken: 'a', user: { username: 'bob' } })
   })
@@ -42,7 +48,7 @@ describe('auth — 身份快照入档', () => {
     const auth = useAuthStore()
     auth.accessToken = 'a'
     auth.refreshToken = 'r'
-    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'bob', display_name: 'Bob' } as never
     await nextTick()
     expect(get()?.user?.username).toBe('bob')
     auth.clear()

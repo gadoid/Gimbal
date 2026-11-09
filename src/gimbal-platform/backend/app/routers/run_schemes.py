@@ -15,7 +15,6 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..models.composer_scenario import ComposerScenario
 from ._error_mapping import not_found_404
-from ._ownership import ensure_owner
 from ..schemas.scenario_composer import RunScheme
 from ..services import scheme_store, scenario_store
 
@@ -30,15 +29,43 @@ async def _load_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
     return row
 
 
-def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
-    ensure_owner(
-        user, row.owner_id,
-        "not_owner: only the scenario's owner (or admin) can manage run schemes",
-    )
+async def _require_owner(db, user: CurrentUser, row: ComposerScenario) -> None:
+    """写闸(表 B scenario.write,S1.2 区感知):运行方案随父场景,
+    写权 = 父场景 can(write)(owner ∨ 项目成员 ∨ 公共维护者)。"""
+    from ._ownership import can, can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, row):
+        raise not_found_404("scenario", row.scenario_id)
+    if not await can(db, user, "scenario", "write", row):
+        raise HTTPException(
+            403,
+            detail="not_owner: only the scenario's owner (or a project "
+                   "member / maintainer) can manage run schemes")
 
 
 def _to_payload(s: RunScheme) -> dict:
     return s.model_dump(by_alias=True, mode="json")
+
+
+async def _require_env(db, body: RunScheme) -> None:
+    """写时校验:S2.2 方案环境必须存在(运行期对被删环境才按未设置
+    容忍);S6 绑定选的别名须存在且与服务键同基础服务。"""
+    from ..services.service_aliases import (BindingAliasInvalid,
+                                            validate_binding_aliases)
+    try:
+        await validate_binding_aliases(db, {
+            k: b.model_dump() for k, b in body.service_bindings.items()})
+    except BindingAliasInvalid as e:
+        raise HTTPException(status_code=422, detail={
+            "code": e.code, "message": e.message,
+            "service": e.service, "alias": e.alias}) from None
+    if body.environment_id is None:
+        return
+    from ..models.environment import Environment
+    if await db.get(Environment, body.environment_id) is None:
+        raise HTTPException(status_code=422, detail={
+            "code": "environment_not_found",
+            "message": f"environment not found: {body.environment_id}"})
 
 
 @router.get("/{scenario_id}/run-schemes")
@@ -60,7 +87,8 @@ async def create_run_scheme(
     user: CurrentUser, db: DbSession, scenario_id: str, body: RunScheme,
 ) -> dict:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
+    await _require_env(db, body)
     try:
         return await scheme_store.create_scheme(db, scenario_id,
             name=body.name, payload=_to_payload(body))
@@ -78,7 +106,8 @@ async def update_run_scheme(
     body: RunScheme,
 ) -> dict:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
+    await _require_env(db, body)
     try:
         return await scheme_store.update_scheme(db, scenario_id, scheme_id,
             name=body.name, payload=_to_payload(body))
@@ -99,7 +128,7 @@ async def delete_run_scheme(
     user: CurrentUser, db: DbSession, scenario_id: str, scheme_id: str,
 ) -> Response:
     row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
+    await _require_owner(db, user, row)
     try:
         await scheme_store.delete_scheme(db, scenario_id, scheme_id)
     except KeyError:

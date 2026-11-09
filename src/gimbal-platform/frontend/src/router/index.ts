@@ -29,9 +29,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // S7.1 IA 修正:公共场景并入公共项目(项目页场景页签);旧深链
+    // 重定向(公共项目 id 运行时解析,见 PublicProjectRedirect)
     path: '/scenarios/public',
-    component: () => import('@/views/ScenariosPublic.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('@/views/PublicProjectRedirect.vue'),
+    meta: { requiresAuth: true, tab: 'scenarios' },
   },
   {
     path: '/scenarios/follows',
@@ -87,7 +89,27 @@ const routes = [
   {
     path: '/admin/users',
     component: () => import('@/views/UsersAdmin.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    // authz W8:用户管理 = users.manage(表 A:super_admin)
+    meta: { requiresAuth: true, requiresCap: 'users.manage' },
+  },
+  {
+    // S7.1 IA 修正:项目管理页退役 —— Admin+ 建项目/管成员收编进
+    // /projects(列表新建 + 详情成员页签)
+    path: '/admin/projects',
+    redirect: '/projects',
+  },
+  {
+    path: '/admin/deployments',
+    component: () => import('@/views/DeploymentsAdmin.vue'),
+    // M2a S2.3:部署表维护 = ops.write(Admin+;写面同后端闸)
+    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+  },
+  {
+    // authz W6 强制改密页:管理员重置密码后(me.must_change_password)
+    // 路由守卫把一切页面重定向到这里,改密成功回原目标(见 beforeEach)。
+    path: '/change-password',
+    component: () => import('@/views/ChangePassword.vue'),
+    meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
     // 通知页(F5,2026-09-23;侧边栏入口名「通知」):全员;审计 tab 仅
@@ -183,6 +205,18 @@ const routes = [
     component: () => import('@/views/DebugConsole.vue'),
     meta: { requiresAuth: true },
   },
+  // ── 项目(M2a S7.1 IA 修正:一级入口;公共项目 = 置顶默认项目) ──
+  {
+    path: '/projects',
+    component: () => import('@/views/ProjectsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 详情页签 ?tab=scenarios|suites|tasks|members(成员 = canManage)
+    path: '/projects/:id(\\d+)',
+    component: () => import('@/views/ProjectDetailView.vue'),
+    meta: { requiresAuth: true },
+  },
   {
     // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 我的用例集
     // (02,2026-10-10 IA 调整:侧栏「场景集」组);/suites/:id = 管理页
@@ -192,11 +226,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 公共用例集(2026-10-10 IA 调整:独立成页,推翻 D-3「与公共场景
-    // 同页」的分区形态;:id 路由带 \d+ 约束,静态段不冲突)。
+    // 公共用例集 → S7.1 IA 修正:并入公共项目(项目页用例集页签);
+    // 旧深链重定向;:id 路由带 \d+ 约束,静态段不冲突。
     path: '/suites/public',
-    component: () => import('@/views/SuitesPublic.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('@/views/PublicProjectRedirect.vue'),
+    meta: { requiresAuth: true, tab: 'suites' },
   },
   {
     // 画布(重构方案 10–13):新建(/suites/new,不落库,首次拖入建草稿)
@@ -260,20 +294,20 @@ const routes = [
     // 服务信息管理(方案 §4;P1 唯一净新增页面)— 配置池,admin 写面
     path: '/service-admin',
     component: () => import('@/views/ServiceAdmin.vue'),
-    // 权限方案 §1.2:服务信息管理 = member+(共享别名行);旧 requiresAdmin 误标修正
-    meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
+    // authz W8:服务信息管理 = ops.write(表 A:admin+;原 member+ 更名)
+    meta: { requiresAuth: true, requiresCap: 'ops.write' },
   },
   {
     // 键详情(配套方案 §2.2):别名全名或 base 服务名同一详情页,
     // 字段默认值 tab 在此编辑;?tab=credential 供认证管理反查深链
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
-    // member+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
+    // ops.write+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
     // 入站调用方(个人 gtk_ 令牌)也走这里的绑定面 —— 旧 requiresAdmin 把
     // 属主与调用方一并挡在门外(全量评估 2026-11-02 #3)。令牌的签发/管理
     // 面在 /profile/tokens(webhook v4)。写面权限仍由后端与子面板的
     // canManage 把关,放开路由不扩大写权限。
-    meta: { requiresAuth: true, requiresRoles: ['member', 'admin'] },
+    meta: { requiresAuth: true, requiresCap: 'ops.write' },
   },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
 
@@ -294,13 +328,21 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.accessToken) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  // M2.5:requiresAdmin 泛化为 requiresRoles(旧 meta 继续有效 = ['admin'])
-  const needRoles: string[] = to.meta.requiresRoles
-    ?? (to.meta.requiresAdmin ? ['admin'] : [])
-  if (needRoles.length && !auth.hasRole(...(needRoles as never[]))) {
-    // Backend enforces admin-only on these endpoints too; this is the
-    // UX-side guard so members never land on a page that 403s.
+  // authz W8:能力门(meta.requiresCap,表 A 能力名;取代 requiresRoles/
+  // requiresAdmin)。后端同门 403 —— 这里只是 UX:无能力者不落到必 403
+  // 的页面。capabilities 来自 /auth/me(登录/刷新/首挂载都已就位)。
+  const needCap = to.meta.requiresCap as string | undefined
+  if (needCap && !auth.can(needCap)) {
     return { path: '/home' }
+  }
+  // authz W6 只能改密门:must_change_password 为真 → 一切页面重定向到
+  // /change-password(改密成功回 redirect 目标)。登录/注册/改密页
+  // 本身放行;令牌路径后端已天然覆盖(重置即失效)。
+  if (
+    auth.mustChangePassword &&
+    !['/change-password', '/login', '/register'].includes(to.path)
+  ) {
+    return { path: '/change-password', query: { redirect: to.fullPath } }
   }
   if ((to.path === '/login' || to.path === '/register') && auth.accessToken) {
     return { path: '/home' }

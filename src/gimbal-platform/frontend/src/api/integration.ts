@@ -25,7 +25,8 @@ export interface IntegrationTaskItem {
   mine: boolean
   canManage: boolean
   visibility: string
-  identityMode: string
+  /** S7.0:所属项目 id(public = 公共项目 / 普通项目;null = 私有) */
+  projectId?: number | null
   targetType: string
   scenarioId: string | null
   suiteId: number | null
@@ -55,7 +56,6 @@ export interface FunctionCardData {
   lastRunAt?: string | null
   lastError?: string
   cronText?: string
-  identityMode?: string
   stale?: boolean
   /** Y4:卡片输出投影(output_mapping 投影/空 mapping = 全量;已脱敏) */
   outputs?: Record<string, unknown>
@@ -106,9 +106,12 @@ export function runAbnormalOf(runStatus?: string | null): boolean {
   return !!runStatus && runStatus !== 'ok'
 }
 
-export async function listIntegrationTasks(): Promise<IntegrationTaskItem[]> {
+/** S7.0:?projectId = 项目详情「集成任务」页签(可见性按成员收口)。 */
+export async function listIntegrationTasks(
+  projectId?: number,
+): Promise<IntegrationTaskItem[]> {
   const { data } = await http.get<{ items: IntegrationTaskItem[] }>(
-    '/integration/tasks')
+    '/integration/tasks', { params: projectId != null ? { projectId } : undefined })
   return data.items
 }
 
@@ -126,7 +129,6 @@ export async function createIntegrationTask(body: {
   name: string
   scenarioId: string
   schemeId?: string | null
-  identityMode?: string
   triggerCron?: string
   resultPolicy?: string
   visibility?: string
@@ -167,7 +169,7 @@ export async function fetchFunctionCards(
 
 // ── W1(个人侧方案 §2):创建前置预览 ────────────────────────────
 export interface ScenarioPreview {
-  /** 场景+方案所需凭证别名(方案 authAlias ∪ ${auth.*}) */
+  /** 场景+方案所需凭证槽位(${auth.*} 扫描 ∪ 生效别名声明槽位;S6) */
   authAliases: string[]
   /** 当前用户「我的凭证」中缺失的别名(任一缺失即列) */
   missingCredentials: string[]
@@ -185,56 +187,6 @@ export async function fetchScenarioPreview(
 }
 
 // ── 平台凭证(admin)────────────────────────────────────────────
-export interface PlatformCredential {
-  id: number
-  alias: string
-  url: string
-  username: string
-  tokenType: string
-  expiresIn: number
-  /** 被引用直出(评审 P2-3):引用此凭证的平台令牌数 / 波及任务数 */
-  refTokens?: number
-  refTasks?: number
-}
-
-export async function listPlatformCredentials(): Promise<PlatformCredential[]> {
-  const { data } = await http.get<{ items: PlatformCredential[] }>(
-    '/integration/platform-credentials')
-  return data.items
-}
-
-export async function createPlatformCredential(body: {
-  alias: string; url?: string; username: string; password: string
-  tokenType?: string; expiresIn?: number
-}): Promise<{ id: number; alias: string }> {
-  const { data } = await http.post(
-    '/integration/platform-credentials', body)
-  return data
-}
-
-/** D34 平台凭证原地更新:id 不变(平台令牌范围不级联);字段均可选。 */
-export async function patchPlatformCredential(
-  id: number, input: { url?: string | null; username?: string | null;
-                       password?: string | null },
-): Promise<{ id: number; alias: string }> {
-  const { data } = await http.patch(
-    `/integration/platform-credentials/${id}`, input)
-  return data
-}
-
-export interface DeleteCredImpact {
-  removed: boolean
-  affectedTokens: number
-  affectedTasks: number
-}
-
-export async function deletePlatformCredential(
-  id: number,
-): Promise<DeleteCredImpact> {
-  const { data } = await http.delete(
-    `/integration/platform-credentials/${id}`)
-  return data
-}
 
 // ── W2(个人侧方案 §2):订阅 / 自管 ─────────────────────────────
 

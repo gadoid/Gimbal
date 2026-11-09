@@ -22,21 +22,20 @@ AUDIT_ACTIONS = (
     "adaptation.op.apply",
     "adaptation.batch.rollback",
     "alias.write",        # 别名登记/改/删
+    "environment.write",  # 环境建/改/删(authz W9-3)
     # I4(集成线 v2 §3.2):外部目录只读标记 admin 写(误标 = 平台账号
     # 可能执行写操作,须留痕)
     "external_endpoint.query_safe",
-    "share.admin_revoke",  # admin 撤销引用(特权收缩,权限域二期 P2)
-    "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10)
+    # (authz W3 死键退役,同 A3 先例:share.admin_revoke /
+    # scenario.admin_delete / scenario.admin_publish / suite.admin_delete /
+    # suite.admin_publish 随越属主旁路消亡,不再可写;历史行照常展示)
+    "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10;表 B steward)
     # ── 横向件补全轮(2026-10-20)──────────────────────────────
     # admin-only 特权写:平台凭证直接决定全体平台模式集成任务的认证面
     "integration.credential.write",  # 平台凭证登记/删除(admin)
-    # admin 越属主(ensure_owner 语义)的删除/可见性变更 —— 属主自操作
-    # 不记(与 suite.admin_unpublish 同口径:只记越属主那一半)
-    "scenario.admin_delete",
-    "scenario.admin_publish",
+    # admin 越属主的可见性变更(表 B steward:下架公共对象)—— 属主
+    # 自操作不记(只记越属主那一半)
     "scenario.admin_unpublish",
-    "suite.admin_delete",
-    "suite.admin_publish",
     # ── 访问令牌(webhook v4 §7.2)──────────────────────────────
     "token.create",               # 签发(令牌 id、名称、kind、操作人)
     "token.renew",                # 续期
@@ -93,7 +92,7 @@ async def record(
 async def record_inbound(db: AsyncSession, principal, action: str, *,
                          detail: dict | None = None) -> None:
     """令牌发起的操作统一落审计(webhook v4 §7.2):JWT 调用方 no-op;
-    actor 取 Principal.user(令牌属主或 ``__platform__``),资源列 =
+    actor 取 Principal.user(令牌属主),资源列 =
     ``access_token`` / 令牌 id —— 令牌「最近调用」即按资源列取
     ``inbound.run`` ∪ ``inbound.denied``。detail 恒带令牌快照。"""
     if not getattr(principal, "is_token", False):

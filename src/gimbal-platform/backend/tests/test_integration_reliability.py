@@ -15,9 +15,10 @@ from app.models.webhook_delivery import WebhookDelivery
 from app.services import integration_runner as ir
 from app.services import webhook_outbox as wo
 
+from .helpers import register_and_login
 from .inbound_fixtures import (
     allow_delivery_hosts, mk_pending, mk_task_pair as _mk_pair, mk_token,
-    seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
+    seed_alias as _seed_alias,
 )
 
 
@@ -26,7 +27,6 @@ class TestS3RecoverStuck:
             self, client, monkeypatch):
         """同批两行:第一行收口中途抛异常(模拟 rollback)→ 第二行照常
         回收。旧实现共用会话时第一行的异常/回滚会波及第二行。"""
-        await _seed_platform_user()
         await _seed_alias()
         old = datetime.now(timezone.utc) - timedelta(
             seconds=ir.RUN_LEASE_SECONDS + 60)
@@ -59,7 +59,6 @@ class TestS3RecoverStuck:
             assert second.run_status == "timeout"
 
     async def test_template_removed_row_commits_independently(self, client):
-        await _seed_platform_user()
         old = datetime.now(timezone.utc) - timedelta(
             seconds=ir.RUN_LEASE_SECONDS + 60)
         tpl_id, inst_id, _owner = await _mk_pair(name="s3-c")
@@ -113,10 +112,16 @@ class TestS2DeliveryLoop:
             self, client, monkeypatch):
         """令牌 A 的接收端挂起 2s,令牌 B 的投递不受阻(并发)。"""
         allow_delivery_hosts(monkeypatch)
-        slow_tid, _ = await mk_token(kind="platform", name="slow",
+        await register_and_login(client, "rl_slow", "pw123456")
+        await register_and_login(client, "rl_fast", "pw123456")
+        from tests.test_integration import _uid_of
+
+        slow_tid, _ = await mk_token(name="slow",
+                                      user_id=await _uid_of("rl_slow"),
                                       callback_url="https://slow.example/cb",
                                       callback_secret="s")
-        fast_tid, _ = await mk_token(kind="platform", name="fast",
+        fast_tid, _ = await mk_token(name="fast",
+                                      user_id=await _uid_of("rl_fast"),
                                       callback_url="https://fast.example/cb",
                                       callback_secret="s")
         await mk_pending(token_id=slow_tid,
@@ -134,7 +139,11 @@ class TestS2DeliveryLoop:
     async def test_same_alias_serial_by_id(self, client, monkeypatch):
         """同一令牌的两行按 id 顺序发送。"""
         allow_delivery_hosts(monkeypatch)
-        tid, _ = await mk_token(kind="platform", name="serial",
+        await register_and_login(client, "rl_serial", "pw123456")
+        from tests.test_integration import _uid_of
+
+        tid, _ = await mk_token(name="serial",
+                                user_id=await _uid_of("rl_serial"),
                                 callback_url="https://cb.example.local/1",
                                 callback_secret="s")
         first = await mk_pending(token_id=tid,
@@ -152,7 +161,11 @@ class TestS2DeliveryLoop:
     async def test_delivery_lease_reclaim_after_crash(
             self, client, monkeypatch):
         """发送中进程退出(不回写)→ 投递租约到期后被重新领取。"""
-        tok_tid, _ = await mk_token(kind="platform", name="lease")
+        await register_and_login(client, "rl_lease", "pw123456")
+        from tests.test_integration import _uid_of
+
+        tok_tid, _ = await mk_token(name="lease",
+                                     user_id=await _uid_of("rl_lease"))
         row_id = await mk_pending(token_id=tok_tid)
         # 只领取、发送阶段整体失败(模拟崩溃:进程在 writeback 前退出)
         jobs = await wo._claim(db_module.SessionLocal)
@@ -175,8 +188,12 @@ class TestS2DeliveryLoop:
 
     async def test_concurrent_claim_sends_once(self, client, monkeypatch):
         allow_delivery_hosts(monkeypatch)
-        once_tid, _ = await mk_token(kind="platform", name="once",
-                                      callback_secret="s")
+        await register_and_login(client, "rl_once", "pw123456")
+        from tests.test_integration import _uid_of
+
+        once_tid, _ = await mk_token(name="once",
+                                     user_id=await _uid_of("rl_once"),
+                                     callback_secret="s")
         await mk_pending(token_id=once_tid)
         calls = {"n": 0}
 

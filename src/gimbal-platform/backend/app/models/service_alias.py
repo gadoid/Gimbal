@@ -7,9 +7,12 @@
 
 * ``alias_name`` PK;``base_service`` 由 ``derive_base`` 派生,冗余存
   一份便于按服务聚合查询(目录改名会漂移,读侧以派生为准);
-* ``credential_alias`` 引用**执行者本人** auth_sessions.alias(owner
+* ``slot`` = 别名声明的凭证槽位,按**执行者本人**的槽位绑定解析(owner
   隔离池,方案 §4.1 拍板)—— 同一别名行被不同人执行时各拿各的凭证;
-* ``owner_user_id`` 非空 = 个人默认,空 = 团队共享;
+* authz M2a S6 别名瘦身:``base_url`` / ``environment_id`` /
+  ``owner_user_id`` / ``credential_alias`` 已删(0047)—— 地址 = 环境 →
+  部署表(``deployments``),环境 = 执行时环境链,别名全部团队共享,
+  槽位唯一口径 = ``slot``;
 * ``carry_profile_ref``(取值集引用)按挂起清单 §5.6 不建列 —— 别名级
   carry 差异用 ``carry_bindings`` 别名键直接落(CarryServiceBinding 的
   service_name 本就是自由字符串,稀疏覆盖语义在 carry_injection 合并)。
@@ -19,8 +22,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ._types import UtcDateTime
-from sqlalchemy import ( ForeignKey, Integer, Index, String, func,
-)
+from sqlalchemy import Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -35,17 +37,9 @@ class ServiceAlias(Base):
 
     alias_name: Mapped[str] = mapped_column(String(128), primary_key=True)
     base_service: Mapped[str] = mapped_column(String(128))
-    # 环境级端点默认层(2026-09-23 批次 F4 方案 B):物化优先级链
-    # 「显式绑定 > 场景声明 > 本列 > 缺口引擎报错」的第三层。NULL =
-    # 该别名不提供 URL 默认,行为与加列前完全一致。别名表是 base_url
-    # 的唯一权威(服务器迁移一处改),不在前端/场景 payload 冗余存。
-    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    # 横向分组标签(环境只是常见用法之一);可空 = 未分组
-    # V5 已定按 B（Release v4.4 §11）：group_tag 升级为 environment_id 外键
-    environment_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("environments.id"), nullable=True)
-    # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证
-    credential_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # authz M2a S3:别名声明槽位(可空 = 不声明;执行时按执行人本人的
+    # 槽位绑定解析 —— S6 起唯一凭证口径)
+    slot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 三态接入(P1.0/缺口收口计划 §0 裁定 4):plate = 落在 plate 系统
     # services 声明内(受管,可版本化);external = 第三方服务,无版本
     # 管理 —— 不触发预览、不阻塞集成,单独统计不入基线。存量行随
@@ -53,14 +47,6 @@ class ServiceAlias(Base):
     # 目录内);审计/纠偏走 scripts/p1_backfill_service_kinds.py。
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="plate")
-    # 非空 = 个人默认,空 = 团队共享;用户注销时置空(共享化)
-    # NO ACTION DEFERRABLE —— 显式推翻模型旧注释「注销时置空(共享化)」
-    # (PG迁移方案第八轮第 3 条):FK 从未生效、该意图从未执行过,且
-    # 「注销即共享化」该由人显式决定;不处置就删号当场报错(处置见
-    # 权限方案 §4.3,P1a 保守默认=删除)。
-    owner_user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), nullable=True, index=True
-    )
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )

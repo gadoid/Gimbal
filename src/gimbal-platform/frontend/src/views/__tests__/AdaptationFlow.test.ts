@@ -61,6 +61,15 @@ describe('AdaptationFlow', () => {
     expect(w.find('.af-step.active').text()).toContain('选择')
   })
 
+  it('authz D5:?scenario= 预选场景(批次对私有场景的「待适配」通知落点)', async () => {
+    await router.push('/adaptations/new?scenario=sc-from-notice')
+    await router.isReady()
+    const w = mountPage()
+    const input = w.find('[data-testid="adapt-scenario-id"] input, input[data-testid="adapt-scenario-id"]')
+    expect((input.element as HTMLInputElement).value).toBe('sc-from-notice')
+    await router.push('/adaptations/new')
+  })
+
   it('step 1 has scenario ID and target revision inputs', () => {
     const w = mountPage()
     expect(w.find('[data-testid="adapt-scenario-id"]').exists()).toBe(true)

@@ -1,7 +1,7 @@
 """访问令牌服务(webhook v4 §2–§6)— 认证、状态机、范围、回调白名单。
 
 单一令牌 ``gtk_``:``Authorization: Bearer gtk_…`` 绑定一个用户(个人
-令牌)或平台系统用户 ``__platform__``(平台令牌)。本模块承载:
+令牌)。authz C1:平台令牌随平台模式退役,本模块只承载个人令牌。本模块承载:
 
 * :func:`authenticate` — §3.1 ①:hash 命中 → 状态机判定 → 个人令牌按
   属主当前角色与启用状态派生判定(不落库);
@@ -51,7 +51,6 @@ LAST_USED_THROTTLE = 60.0
 ERR_TOKEN_INVALID = "token_invalid"                # 401
 ERR_TOKEN_EXPIRED = "token_expired"                # 401
 ERR_TOKEN_INVALIDATED = "token_invalidated"        # 401
-ERR_TOKEN_OWNER_INELIGIBLE = "token_owner_ineligible"  # 403
 ERR_RESOURCE_NOT_ALLOWED = "resource_not_allowed"  # 403 / 422
 ERR_ADHOC_PERSONAL_ONLY = "adhoc_personal_token_only"  # 403
 ERR_REGENERATE_REQUIRED = "regenerate_required"    # 409
@@ -63,7 +62,6 @@ ERR_CALLBACK_HOST_NOT_ALLOWED = "callback_host_not_allowed"  # 422
 PAUSE_TOKEN_REVOKED = "token_revoked"
 PAUSE_TOKEN_INVALIDATED = "token_invalidated"
 PAUSE_TOKEN_EXPIRED = "token_expired"
-PAUSE_TOKEN_OWNER_INELIGIBLE = "token_owner_ineligible"
 PAUSE_SCOPE_DENIED = "scope_denied"
 PAUSE_RESOURCE_NOT_ALLOWED = "resource_not_allowed"
 
@@ -72,7 +70,6 @@ REASON_PASSWORD = "password"
 REASON_DEACTIVATED = "deactivated"
 REASON_ADMIN = "admin"
 
-PLATFORM_KIND = "platform"
 PERSONAL_KIND = "personal"
 
 LEGACY_TOKEN_MESSAGE = (
@@ -105,12 +102,12 @@ class Principal:
     """分流后的统一调用方身份(webhook v4 §2.1)。
 
     JWT:``token=None``、identity_mode=personal(前端发起,不回调);
-    个人令牌:personal(属主 = 执行 owner,凭证取属主池);
-    平台令牌:platform(``__platform__`` 系统用户 = 执行 owner)。
+    个人令牌:personal(属主 = 执行 owner,凭证取属主池)。
+    (authz C1:platform 取值随平台令牌退役;字段保留兼容入站协议。)
     """
 
     user: User
-    identity_mode: str                 # personal | platform
+    identity_mode: str                 # personal(C1 后恒一值)
     token: AccessToken | None = None
 
     @property
@@ -158,20 +155,13 @@ def valid_callback_path(path: str) -> bool:
 # ── 认证(§3.1 ①)───────────────────────────────────────────────
 
 
-async def _platform_user(db: AsyncSession) -> User | None:
-    return (await db.execute(
-        select(User).where(User.is_system == True)  # noqa: E712
-    )).scalar_one_or_none()
-
-
 async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
     """``gtk_…`` → :class:`Principal`;失败抛 :class:`TokenAuthError`。
 
     校验链:hash 命中 → 未吊销(吊销与不存在同为 401 ``token_invalid``,
-    防探测)→ 未失效 → 未到期 → 个人令牌按属主**当前**角色与启用状态
-    派生判定(角色 < member → 403;未启用 → 401;平台令牌跳过 ——
-    ``__platform__`` 种子 role='user',按角色判会全拒,§3.1)。
-    成功即回写 ``last_used_at``(60s 节流;单次轻提交)。
+    防探测)→ 未失效 → 未到期 → 按属主**当前**启用状态派生判定
+    (未启用 → 401)。成功即回写 ``last_used_at``(60s 节流;单次轻提交)。
+    authz C1:平台令牌的 ``__platform__`` 用户映射分支随平台模式退役。
     """
     now = now_utc()
     tok = (await db.execute(select(AccessToken).where(
@@ -189,26 +179,18 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
         raise TokenAuthError(401, ERR_TOKEN_EXPIRED, "访问令牌已到期",
                              token=tok)
 
-    if tok.kind == PLATFORM_KIND:
-        user = await _platform_user(db)
-        if user is None or user.id != tok.user_id:
-            # 平台系统用户缺失/漂移:迁移 0015 种子未跑或令牌行指向他人
-            raise TokenAuthError(
-                503, "platform_user_missing",
-                "平台系统用户缺失(迁移 0015 种子未执行?)", token=tok)
-    else:
-        user = await db.get(User, tok.user_id)
-        if user is None:
-            raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
-                                 "令牌属主已被删除", token=tok)
-        if not user.is_active:
-            # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
-            raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
-                                 "令牌属主已停用", token=tok)
-        if user.role not in ("member", "admin"):
-            raise TokenAuthError(
-                403, ERR_TOKEN_OWNER_INELIGIBLE,
-                "个人令牌要求属主角色不低于成员(member)", token=tok)
+    if tok.kind != PERSONAL_KIND:
+        # authz C1:kind 只剩 personal(0038 删尽平台令牌;防御性拒绝)
+        raise TokenAuthError(401, ERR_TOKEN_INVALID,
+                             "令牌类型已退役", token=tok)
+    user = await db.get(User, tok.user_id)
+    if user is None:
+        raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
+                             "令牌属主已被删除", token=tok)
+    if not user.is_active:
+        # 派生拒绝(不落库):停用时令牌本已落库失效,这里是第二道防线
+        raise TokenAuthError(401, ERR_TOKEN_INVALIDATED,
+                             "令牌属主已停用", token=tok)
 
     # last_used_at 节流回写:轻提交,失败不影响判定
     if (tok.last_used_at is None or (
@@ -292,9 +274,8 @@ async def check_scope(
 ) -> "list[ScopeMissing] | None":
     """子集判定:全在范围内返回 None;否则返回缺项(按 §3.3 分类)。
 
-    ``owner_id`` = 执行属主(平台令牌 = ``__platform__`` id),凭证存在性
-    按其凭证池判。范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个
-    查对象表分类。
+    ``owner_id`` = 执行属主(= 令牌属主),凭证存在性按其凭证池判。
+    范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个查对象表分类。
 
     ``scope`` 可传入预载的 (别名集, 凭证 id 集) 免重查(§3.2 单一实现:
     详情页/PUT 试算的逐任务预检与运行前复核同走本函数,不另起一份)。
@@ -316,12 +297,20 @@ async def check_scope(
         # used.auths 存凭证别名;范围存凭证 id —— 按属主池把两侧都归到
         # id 面比对(同名不同 id 的重建不继承授权,§4.1)
         from ..models.auth_session import AuthSession
+        # S3 槽位绑定:名字 = 槽名(存量 slot=alias,行为不变);
+        # 同槽多绑定取默认行(与环境无关的保守面)
+        from sqlalchemy import func as _f
         used_rows = (await db.execute(
-            select(AuthSession.id, AuthSession.alias).where(
+            select(AuthSession.id, AuthSession.slot).where(
                 AuthSession.owner_id == owner_id,
-                AuthSession.alias.in_(set(used.auths)))
+                AuthSession.slot.in_(set(used.auths)))
+            .order_by(AuthSession.is_default.desc(),
+                      AuthSession.env_id.is_(None).desc(),
+                      AuthSession.id)
         )).all()
-        by_name = {alias: rid for rid, alias in used_rows}
+        by_name = {}
+        for rid, slot in used_rows:
+            by_name.setdefault(slot, rid)
         for alias in sorted(set(used.auths)):
             rid = by_name.get(alias)
             if rid is not None and rid in scope_auths:
@@ -336,7 +325,8 @@ async def check_scope(
 async def used_sets_for_definition(
     db: AsyncSession, definition: dict,
     bindings: dict[str, dict] | None = None,
-    *, extra_scan_nodes: list | None = None,
+    *, project_id: int | None,
+    extra_scan_nodes: list | None = None,
 ) -> ScopeSets:
     """场景执行/任务注册的资源集合(§3.2 表第一列)。
 
@@ -353,22 +343,25 @@ async def used_sets_for_definition(
     from .auth_ref_scan import scan_auth_aliases
     from .run_materialize import referenced_services, resolve_service_sources
 
+    from .run_prepare import zone_allows_direct
+
     defn = definition or {}
     steps = defn.get("steps") or []
     cfg = defn.get("config") or {}
     bindings = bindings or {}
     referenced = referenced_services(steps)
-    alias_base_urls = await service_aliases.base_urls_for(db, referenced)
+    # 原 5(``project_id`` 必填):项目/公共区 authored 不生效 —— 执行实际
+    # 走 ③,范围判定必须同口径,否则 authored 键被当「直连范围外」放过。
+    # ③ 地址不影响集合归属(按环境的部署地址只决定 URL,不决定「是否
+    # 别名形态引用」),故不查部署表
     resolved = resolve_service_sources(
-        steps, declared=cfg.get("services"), bindings=bindings,
-        alias_base_urls=alias_base_urls)
-    # 别名集 = ③ 层解析的服务键 ∪ **任何一层都没解析到的引用键** ——
-    # 后者按「别名形态引用」对待:别名被删除后 ③ 层消失,与「从未登记
-    # 的服务名」不可区分,统一进范围判定,缺项分类(§3.3「对象已不
-    # 存在」)由此可达;①② 层直连的服务不进范围(范围外标记,D15)。
-    alias_set = {svc for svc, info in resolved.items()
-                 if info.get("source") == "alias"}
-    alias_set.update(svc for svc in referenced if svc not in resolved)
+        steps, declared=(cfg.get("services")
+                         if zone_allows_direct(project_id) else None))
+    # 别名集 = 未被 ② 直连接管的全部引用键(按「别名形态引用」对待:
+    # 别名被删除后与「从未登记的服务名」不可区分,统一进范围判定,缺项
+    # 分类(§3.3「对象已不存在」)由此可达);② 直连的服务不进范围
+    # (范围外标记,D15)。
+    alias_set = {svc for svc in referenced if svc not in resolved}
     aliases = sorted(alias_set)
     out_targets = [
         {"service": svc, "url": info.get("url"), "source": info["source"]}
@@ -424,22 +417,19 @@ async def used_sets_for_adhoc(db: AsyncSession, steps: list) -> ScopeSets:
 
 
 def can_manage(user: User, token: AccessToken) -> bool:
-    """写面管理权:个人令牌 = 属主且 member+;平台令牌 = member+。
-
-    user 角色只能查看与吊销自己的令牌(由路由各端点单独放行只读面);
-    admin 的越属主操作(查看全部、强制失效)在路由层显式判定。
+    """写面管理权(authz W5,与路由 ``_require_manage`` 同口径):
+    属主(任意角色)∨ users.manage(管理面)。消费面:run_precheck 的
+    tokenId 预检(user 属主自己的令牌可按其范围预检)。authz C1:
+    平台令牌分支随平台模式退役。
     """
-    if token.kind == PLATFORM_KIND:
-        return user.role in ("member", "admin")
-    return user.id == token.user_id and user.role in ("member", "admin")
+    from ..routers._ownership import has_capability
+
+    return user.id == token.user_id or has_capability(user, "users.manage")
 
 
 def can_view(user: User, token: AccessToken) -> bool:
-    """读面:自己的令牌(user 角色含);平台令牌 member+;admin 全部。"""
-    if user.role == "admin":
-        return True
-    if token.kind == PLATFORM_KIND:
-        return user.role == "member"
+    """读面:自己的令牌。authz W4:super_admin 越属主旁路删除 ——
+    他人个人令牌对 admin/super_admin 同样不可见,排查走审计。"""
     return token.user_id == user.id
 
 
@@ -536,10 +526,8 @@ def remap_detach_pause(inst, message: str) -> None:
 async def token_task_instances(
     db: AsyncSession, tok: AccessToken,
 ) -> "list[tuple[object, object]]":
-    """该令牌注册方自己的实例(#1–#4/#6 作用域,§3.3):
-
-    个人模式 = holder=模板属主(= 令牌属主)的实例;平台模式 = 平台唯一
-    实例(holder = ``__platform__`` = 令牌属主)。订阅者实例不在列。
+    """该令牌注册方自己的实例(#1–#4/#6 作用域,§3.3):holder = 模板
+    属主(= 令牌属主)的实例。订阅者实例不在列。
     """
     from ..models.integration_task import IntegrationTask
 
@@ -549,44 +537,19 @@ async def token_task_instances(
         IntegrationTask.token_id == tok.id))).scalars().all()
     out: list[tuple[object, object]] = []
     for tpl in tpls:
-        if tpl.identity_mode == "personal":
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id,
-                IntegrationTask.holder_id == tpl.owner_id))).scalar()
-        else:
-            inst = (await db.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tpl.id,
-                IntegrationTask.holder_id == tok.user_id))).scalar()
+        inst = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id,
+            IntegrationTask.holder_id == tpl.owner_id))).scalar()
         if inst is not None:
             out.append((tpl, inst))
     return out
-
-
-async def fanout_members(db: AsyncSession, title: str, body: str,
-                         link: str = "/integrations") -> None:
-    """平台身份事件扇出给 member+(§3.3 通知;修复 v3 扇出仍选
-    operator 的缺陷 —— 09-29 更名后平台任务通知只到 admin)。"""
-    from ..services.notifications import create_notification
-
-    uids = (await db.execute(
-        select(User.id).where(
-            User.role.in_(("admin", "member")),
-            User.is_system == False)  # noqa: E712
-    )).scalars().all()
-    for uid in uids:
-        try:
-            await create_notification(
-                db, user_id=uid, type_="integration",
-                title=title, body=body, link=link)
-        except Exception:  # noqa: BLE001 — 通知是增强
-            pass
 
 
 async def pause_token_instances(
     db: AsyncSession, tok: AccessToken, paused_reason: str, message: str,
 ) -> list[dict]:
     """令牌失效/吊销/停用 → 暂停注册方实例 + ``integration.paused``
-    回调 + 通知(个人点对点发属主;平台扇出 member+)。
+    回调 + 通知(点对点发令牌属主)。
 
     已暂停的实例不动(不覆盖真实成因)。调用方负责 commit。
     """
@@ -618,16 +581,13 @@ async def pause_token_instances(
              ("已吊销" if paused_reason == PAUSE_TOKEN_REVOKED else "已失效")
              + (f",{len(names)} 个任务暂停" if names else ""))
     body = message + (f";任务:{label}" if names else "")
-    if tok.kind == PERSONAL_KIND:
-        from ..services.notifications import create_notification
-        try:
-            await create_notification(
-                db, user_id=tok.user_id, type_="integration",
-                title=title, body=body, link="/profile#tokens")
-        except Exception:  # noqa: BLE001
-            pass
-    else:
-        await fanout_members(db, title, body)
+    from ..services.notifications import create_notification
+    try:
+        await create_notification(
+            db, user_id=tok.user_id, type_="integration",
+            title=title, body=body, link="/profile#tokens")
+    except Exception:  # noqa: BLE001
+        pass
     return names
 
 

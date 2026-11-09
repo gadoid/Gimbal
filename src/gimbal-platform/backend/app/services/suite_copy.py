@@ -146,7 +146,7 @@ async def deep_copy_suite(
             origin_id=src.scenario_id,
             origin_owner_name=src.owner_name or "")
         db.add(SuiteMember(
-            suite_id=new_suite.id, owner_id=target.id,
+            suite_id=new_suite.id,
             scenario_id=out.meta.scenario_id,
             role=m.role or "main",    # 前置/后置角色随副本(约束 8)
             sort=sort))

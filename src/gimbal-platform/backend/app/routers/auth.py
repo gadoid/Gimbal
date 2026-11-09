@@ -17,6 +17,7 @@ from ..core.security import (
     verify_password,
 )
 from ..models.user import User
+from ._ownership import roles_with as _roles_with
 from ..schemas.auth import (
     ChangePasswordIn,
     LoginIn,
@@ -93,17 +94,18 @@ async def register(
         username=payload.username,
         display_name=payload.display_name,
         password_hash=hash_password(payload.password),
-        role="admin" if first else "user",
+        role="super_admin" if first else "user",
     )
     db.add(user)
     await db.flush()
     if first:
         # 并发双管理员窗口自愈(仓内审计 P9):count-then-insert 竞态会让
-        # 两个并发首注册都拿到 admin —— 插入后复检,若已有更早的 admin
-        # 在场,本单降级回 user。
+        # 两个并发首注册都拿到 super_admin —— 插入后复检,若已有更早的
+        # super_admin 在场,本单降级回 user。
         earlier = (await db.execute(
             select(func.count()).select_from(User).where(
-                User.role == "admin", User.id < user.id,
+                User.role.in_(_roles_with("users.manage")),
+                User.id < user.id,
                 User.is_system == False)  # noqa: E712
         )).scalar_one()
         if earlier:
@@ -166,6 +168,7 @@ async def change_password(
             detail={"code": "bad_old_password", "msg": "旧密码不正确"},
         )
     row.password_hash = hash_password(payload.new_password)
+    row.must_change_password = False
     invalidated = 0
     if payload.invalidate_tokens:
         # 个人令牌全部落库失效(§3.6):停用/改密是仅有的两个失效入口;
@@ -256,5 +259,29 @@ async def refresh(
 
 # ── GET /me ──────────────────────────────────────────────────────
 @router.get("/me", response_model=MeOut)
-async def me(user: CurrentUser) -> MeOut:
-    return MeOut(user=_user_public(user))
+async def me(user: CurrentUser,
+             db: Annotated[AsyncSession, Depends(get_db)]) -> MeOut:
+    # authz W2:capabilities 按表 A 求值(前端 can() 的依据);
+    # S7.0:projects 与 GET /projects 同口径 —— 公共项目置顶(role=None:
+    # 公共项目无成员行,全员可读是表 B 派生)+ 我所在的普通项目;
+    # Admin+ 全量。
+    from sqlalchemy import or_, select
+
+    from ._ownership import capabilities_of, has_capability
+    from ..models.project import Project, ProjectMember
+
+    roles = {pid: role for pid, role in (await db.execute(
+        select(ProjectMember.project_id, ProjectMember.role).where(
+            ProjectMember.user_id == user.id))).all()}
+    stmt = (select(Project) if has_capability(user, "ops.write")
+            else select(Project).where(or_(
+                Project.kind == "public",
+                Project.id.in_(roles))))
+    projs = (await db.execute(stmt.order_by(
+        (Project.kind != "public"), Project.id))).scalars().all()
+    return MeOut(user=_user_public(user),
+                 capabilities=capabilities_of(user.role),
+                 must_change_password=bool(user.must_change_password),
+                 projects=[{"id": p.id, "name": p.name, "kind": p.kind,
+                            "role": roles.get(p.id)}
+                           for p in projs])

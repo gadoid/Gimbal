@@ -57,8 +57,8 @@ describe('auditActionLabel', () => {
     expect(describeAuditDetail(row({
       action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
       detail: { fn: 'scenario', token_name: 'agent-sys',
-        scenario_id: 'sc-1', execution: 42, identity_mode: 'platform' },
-    }))).toBe('经令牌「agent-sys」发起场景「sc-1」 → 执行 #42（平台模式）')
+        scenario_id: 'sc-1', execution: 42, identity_mode: 'personal' },
+    }))).toBe('经令牌「agent-sys」发起场景「sc-1」 → 执行 #42（个人模式）')
     expect(describeAuditDetail(row({
       action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
       detail: { fn: 'adhoc', token_name: 'agent-sys',
@@ -67,8 +67,8 @@ describe('auditActionLabel', () => {
     expect(describeAuditDetail(row({
       action: 'inbound.run', resourceType: 'access_token', resourceId: '7',
       detail: { fn: 'cancel', token_name: 'agent-sys',
-        execution: 44, identity_mode: 'platform' },
-    }))).toBe('经令牌「agent-sys」取消执行 #44（平台模式）')
+        execution: 44, identity_mode: 'personal' },
+    }))).toBe('经令牌「agent-sys」取消执行 #44（个人模式）')
     expect(describeAuditDetail(row({
       action: 'inbound.task.write', resourceType: 'access_token',
       resourceId: '7',

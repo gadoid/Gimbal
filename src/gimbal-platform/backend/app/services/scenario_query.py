@@ -54,7 +54,9 @@ def updated_cutoff(updated_within: str | None) -> datetime | None:
 
 
 def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all"):
-    """可见性谓词:admin 全量;member = public + 自己的(None = 全量)。
+    """可见性谓词(authz W3 后):所有角色同口径 = public + 自己的 +
+    被引用的(None = 全量,匿名统计面用)。admin 全量分支已随私有区
+    收窄删除 —— 表 B scenario.read,越属主旁路不复存在。
 
     scope=mine(浏览镜头,《Suite成员层、引用分享与浏览镜头》§5.1):
     只看自己创建的(含已发布),对 admin 同样生效——镜头是查询偏好,
@@ -62,17 +64,24 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     """
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
-    is_admin = getattr(user, "role", None) == "admin"
-    if user is not None and is_admin:
-        return None
-    owner = ComposerScenario.owner_id
-    # P2 引用分支(§7.6):非 admin 的可见性上限 + 引用(直接 ∨ 经
-    # suite 成员)。谓词单点 = _ownership.ref_exists_clauses(禁自写)。
+    if scope == "private" and user is not None:
+        # S7.0:「我的场景」= 我名下且未加入任何项目(私有)
+        return (ComposerScenario.owner_id == user.id) & \
+            ComposerScenario.project_id.is_(None)
+    # S1.2:三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
+    # 列表同款);ref 分支仅限私有区对象(S7 退役),谓词单点 =
+    # _ownership.ref_exists_clauses(禁自写)。
+    from sqlalchemy import and_
+
     from ..routers._ownership import ref_exists_clauses
+    from .zone import zone_read_clause
     viewer = user.id if user is not None else viewer_id
     direct, via_suite = ref_exists_clauses(viewer)
-    return or_(ComposerScenario.visibility == "public", owner == viewer,
-               direct, via_suite)
+    return or_(
+        zone_read_clause(ComposerScenario, viewer),
+        and_(ComposerScenario.project_id.is_(None), direct),
+        and_(ComposerScenario.project_id.is_(None), via_suite),
+    )
 
 
 def _q_clause(q: str | None):
@@ -106,7 +115,6 @@ def _filter_clauses(
     tags: list[str],
     authors: list[str],
     cutoff: datetime | None,
-    visibility: str | None,
     starred_ids: list[str] | None,
 ) -> list:
     clauses = []
@@ -136,8 +144,7 @@ def _filter_clauses(
         clauses.append(ComposerScenario.author.in_(authors))
     if cutoff is not None:
         clauses.append(ComposerScenario.updated_at >= cutoff)
-    if visibility:
-        clauses.append(ComposerScenario.visibility == visibility)
+
     if starred_ids is not None:
         # 空收藏集 = 恒假(starred 过滤下推,不能命中任何行)
         clauses.append(
@@ -164,6 +171,7 @@ async def list_page(
     cutoff: datetime | None = None,
     visibility: str | None = None,
     scope: str = "all",
+    project_id: int | None = None,
     starred_ids: list[str] | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -177,11 +185,19 @@ async def list_page(
     clauses = _filter_clauses(
         q=q, systems=systems or [], modules=modules or [],
         priorities=priorities or [], tags=tags or [], authors=authors or [],
-        cutoff=cutoff, visibility=visibility, starred_ids=starred_ids,
+        cutoff=cutoff, starred_ids=starred_ids,
     )
+    if visibility == "public":
+        from .zone import public_project_id as _ppid
+
+        clauses.append(ComposerScenario.project_id
+            == await _ppid(db))
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
+    if project_id is not None:
+        # S1.8 项目镜头:按区过滤(公共区由调用方传公共项目 id)
+        clauses.append(ComposerScenario.project_id == project_id)
 
     base = select(ComposerScenario)
     if clauses:
@@ -220,8 +236,13 @@ async def facets(
     qc = _q_clause(q)
     if qc is not None:
         clauses.append(qc)
-    if visibility:
-        clauses.append(ComposerScenario.visibility == visibility)
+    # S1.9:visibility=public 入参 → 公共项目谓词(列删,0043)
+    if visibility == "public":
+        from .zone import public_project_id as _ppid
+
+        clauses.append(
+            ComposerScenario.project_id == await _ppid(db))
+
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)

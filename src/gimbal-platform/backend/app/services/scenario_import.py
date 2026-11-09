@@ -38,18 +38,26 @@ from .run_materialize import referenced_services
 MAX_BODY_BYTES = 5 * 1024 * 1024
 _SCENARIO_ID_RE = re.compile(r"^sc-[a-z0-9-]+$")
 # 敏感路径命名启发(方案 §4:面无 ui_kind 类型信息时的退化判定,
-# 漏检残余已拍板接受 —— 内网 + 当前面基本无密码类字段)
-_SENSITIVE_RE = re.compile(r"(password|secret|token|key)", re.IGNORECASE)
+# 漏检残余已拍板接受 —— 内网 + 当前面基本无密码类字段)。
+# authz W6 单源化:与数据集敏感列共用 scenario_store.SENSITIVE_COLUMN_RE
+# (同一启发,密改一处两处同步;W6 提交曾声称同源但未落地,review 补)
+_SENSITIVE_RE = scenario_store.SENSITIVE_COLUMN_RE
 
 _MISSING = object()
 
 
 class ImportRejected(Exception):
-    """可映射的导入错误(code + http + message),路由层统一转 HTTPException。"""
+    """可映射的导入错误(code + http + message),路由层统一转 HTTPException。
 
-    def __init__(self, code: str, http: int, message: str):
+    ``capability``(可选):能力门错误(9.7 统一契约)附带的能力名,
+    路由层并入 detail(authz W7:alias.write)。
+    """
+
+    def __init__(self, code: str, http: int, message: str,
+                 capability: str | None = None):
         super().__init__(message)
         self.code, self.http, self.message = code, http, message
+        self.capability = capability
 
 
 # ── 体积门 + 解析(方案 §1/§3.2-1:原始 Request,解析前拒绝)────────
@@ -338,12 +346,13 @@ async def precheck(db, *, definition: dict, user) -> dict:
         out["idConflict"] = True
         out["suggestedId"] = await _free_scenario_id(db)
 
-    out["services"] = await analyze_services(db, definition)
+    out["services"] = await analyze_services(db, definition, user.id)
     out["authRefs"] = await auth_refs(db, definition, user.id)
     return out
 
 
-async def analyze_services(db, definition: dict) -> list[dict]:
+async def analyze_services(db, definition: dict,
+                          user_id: int | None = None) -> list[dict]:
     """按服务键析出分析(方案 §3.1 组装表;plate 依赖在事务外取完)。
 
     计数与落库共用 :func:`_service_plan`(§1 修复:预检看到的 = 落库
@@ -358,7 +367,9 @@ async def analyze_services(db, definition: dict) -> list[dict]:
     raw_steps = list(definition.get("steps") or [])
     if not raw_steps:
         return []
-    ctx = await build_carry_context(db, definition, ui_field_states={})
+    # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
+    ctx = await build_carry_context(db, definition, ui_field_states={},
+                                    user_id=user_id)
     catalog = await service_names.catalog_service_names()
     alias_names = set((await db.execute(
         select(ServiceAlias.alias_name))).scalars().all())
@@ -444,6 +455,19 @@ async def land(
             raise ImportRejected("invalid_file", 422, f"非法映射项: {m!r}")
         by_key[m["serviceKey"]] = m
 
+    # authz W7:decision=create(在别名注册表新建条目)需 alias.write
+    # 能力(方案 §2.1「Admin 维护服务别名注册表」;导入门已放开给
+    # 全体用户,建名仍是 Admin 面)。任一映射要求 create 而无能力 →
+    # 整体 403 不落库(单事务语义;此时还没做任何 plate/本地写)。
+    from ..routers._ownership import has_capability
+
+    if any(m["decision"] == "create" for m in by_key.values()) and not (
+            has_capability(user, "alias.write")):
+        raise ImportRejected(
+            "capability_forbidden", 403,
+            "新建别名需要 alias.write 能力;请改用「映射到已有别名」",
+            capability="alias.write")
+
     # ── 事务外:plate 调用(P7-④)──────────────────────────────────
     try:
         await plate_client.convert(definition)
@@ -478,7 +502,9 @@ async def land(
 
     steps = [s for s in (definition.get("steps") or []) if isinstance(s, dict)]
     raw_steps = list(definition.get("steps") or [])
-    ctx = await build_carry_context(db, definition, ui_field_states={})
+    # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
+    ctx = await build_carry_context(db, definition, ui_field_states={},
+                                    user_id=user.id)
     catalog = await service_names.catalog_service_names()
 
     # ── 本地重算(不信任预检快照;方案 §3.3)───────────────────────
@@ -572,13 +598,16 @@ async def land(
             call = step.get("call") if isinstance(step, dict) else None
             if isinstance(call, dict) and call.get("service") == key:
                 call["service"] = new_name
-    # URL 清除同一不变量:本机别名有 base_url 才清,否则保留源 URL
-    # (扫全部被引用服务键,不限映射集 —— 本机别名接管 URL 与 carry 析出
-    # 的映射决策是两件事)
-    base_urls = {row[0]: row[1] for row in (await db.execute(
-        select(ServiceAlias.alias_name, ServiceAlias.base_url))).all()}
+    # URL 清除同一不变量:本机部署表已给该服务(其基础服务)登记地址
+    # 才清,否则保留源 URL(扫全部被引用服务键,不限映射集 —— 本机接管
+    # URL 与 carry 析出的映射决策是两件事)。S6:地址源 = 部署表
+    from ..models.deployment import Deployment
+    base_of = dict((await db.execute(select(
+        ServiceAlias.alias_name, ServiceAlias.base_service))).all())
+    deployed = set((await db.execute(
+        select(Deployment.base_service).distinct())).scalars().all())
     for key in referenced_services(steps):
-        if base_urls.get(key):
+        if base_of.get(key, key) in deployed:
             services_cfg.pop(key, None)
     config["services"] = services_cfg
     defn["config"] = config
@@ -611,9 +640,11 @@ async def land(
             if m["decision"] != "create":
                 continue
             name = eff_key[key]
+            # S6:别名团队共享(个人别名退役);声明槽位沿用映射里的
+            # 凭证别名(旧键 credentialAlias 兼容)
             await alias_svc.create_alias_in_transaction(
-                db, alias_name=name, owner_user_id=user.id,
-                credential_alias=m.get("credentialAlias"),
+                db, alias_name=name,
+                slot=m.get("slot") or m.get("credentialAlias"),
                 catalog_names=catalog)
             alias_names.add(name)
             created_aliases.append(name)
@@ -662,10 +693,13 @@ async def land(
 
 async def carry_store_put(db, service_name: str, entries: dict, user) -> None:
     from . import carry_store
+    # S4:导入写的 carry 行落导入人个人层(F3 语义:个人别名名下的
+    # 行迁为属主个人层;与 0046 迁移同口径)
     await carry_store.put_bindings(
         db, service_name, entries,
         updated_by_id=user.id,
-        updated_by_name=user.display_name or user.username)
+        updated_by_name=user.display_name or user.username,
+        scope=("user", user.id))
 
 
 async def _write_audit(db, *, user, created_aliases: list[str],

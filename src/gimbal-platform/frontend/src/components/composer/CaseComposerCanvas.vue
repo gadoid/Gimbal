@@ -522,13 +522,14 @@
     </div>
 
     <!-- 认证选择器(headers value 注入 ${auth.<alias>.<field>})。
-         步骤服务绑了凭证时预填(配套方案 §1.1,从服务信息管理带出) -->
+         步骤服务的别名声明了槽位时预填该槽凭证(配套方案 §1.1;M2a S6
+         起别名携带的是声明槽位 slot,凭证在认证管理按槽归位) -->
     <AuthSelectorModal
       v-if="authPickerOpen"
       v-model="authPickerOpen"
       :auths="auths"
-      :preselect-alias="authPickerBound?.credentialAlias ?? null"
-      :origin-note="authPickerBound ? `${authPickerBound.aliasName} 的绑定凭证(可改选)` : null"
+      :preselect-alias="authPickerPreselect"
+      :origin-note="authPickerBound ? `${authPickerBound.aliasName} 的声明槽位 ${authPickerBound.slot}(可改选)` : null"
       @select="onAuthPicked"
     />
     <!-- 变量选择器(headers value 注入 ${var.<name>},#3) -->
@@ -889,6 +890,16 @@ const authPickerVal = ref<string | null>(null)
 const authPickerStep = ref<StepView | null>(null)
 /** 打开选择器时定格的步骤服务绑定(配套方案 §1.1 预填源)。 */
 const authPickerBound = ref<BoundCredential | null>(null)
+
+/** 预填凭证(M2a S6):槽位 → 池内凭证 — 声明该 slot 的凭证优先,
+ *  否则槽名恰与凭证别名同名(槽缺省 = 别名本身的约定)。找不到 → null,
+ *  选择器无预填,不阻塞手工选。 */
+const authPickerPreselect = computed(() => {
+  const b = authPickerBound.value
+  if (!b) return null
+  return auths.value.find((a) => a.slot === b.slot)?.alias
+    ?? (auths.value.some((a) => a.alias === b.slot) ? b.slot : null)
+})
 
 function addHeader(step: StepView) {
   const h = (stepCall(step) as any).headers = stepHeaders(step)
@@ -1832,13 +1843,14 @@ onMounted(() => {
     .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
 })
 
-// ── 别名绑定凭证(配套方案 §1.1 C3a)────────────────────────────
-// 步骤服务命中已绑凭证的别名/服务级默认行时,认证选择器预填该凭证
-// (模板引用仍写凭证名,执行时按执行者本人池解析)。拉取失败静默 —
+// ── 别名声明槽位(配套方案 §1.1 C3a;authz M2a S6 改 slot 口径)────
+// 步骤服务命中已声明槽位的别名/服务级默认行时,认证选择器预填该槽的凭证
+// (模板引用写槽位键,执行时按执行者本人池的同名槽解析)。拉取失败静默 —
 // 预填只是辅助,不绑也能手工选。
-const aliasCredMap = ref<Record<string, string>>({})
-/** F4(2026-09-23):注册表全量行 —— 下拉「已登记」来源 / base_url 默认
- *  展示 / headers 模板注入共用同一次拉取(前端只展示,不做任何派生)。 */
+const aliasSlotMap = ref<Record<string, string>>({})
+/** F4(2026-09-23):注册表全量行 —— 下拉「已登记」来源 / headers 模板
+ *  注入共用同一次拉取(前端只展示,不做任何派生;M2a S6 起别名不再带
+ *  base_url,地址由执行环境的部署地址给出)。 */
 const registeredAliases = ref<ServiceAliasRow[]>([])
 const registeredByName = computed(
   () => new Map(registeredAliases.value.map((a) => [a.aliasName, a])))
@@ -1847,22 +1859,22 @@ onMounted(() => {
     .then((rows) => {
       registeredAliases.value = rows
       const m: Record<string, string> = {}
-      for (const r of rows) if (r.credentialAlias) m[r.aliasName] = r.credentialAlias
-      aliasCredMap.value = m
+      for (const r of rows) if (r.slot) m[r.aliasName] = r.slot
+      aliasSlotMap.value = m
     })
     .catch(() => { /* 别名表不可达 → 无预填/无已登记来源,手工选择不受影响 */ })
 })
 
-interface BoundCredential { aliasName: string; credentialAlias: string }
+interface BoundCredential { aliasName: string; slot: string }
 
-/** step 服务 → 绑定凭证:精确别名键 → derive_base 到 base(服务级默认行)。
- *  与运行时凭证链同构(显式绑定 > 别名表 > 无)。 */
+/** step 服务 → 声明槽位:精确别名键 → derive_base 到 base(服务级默认行)。
+ *  与运行时注入链同构(显式绑定 > 别名表 > 无)。 */
 function boundCredentialFor(step: StepView | null): BoundCredential | null {
   const raw = stepService(step)
   if (!raw) return null
   const hit = (k: string): BoundCredential | null => {
-    const c = aliasCredMap.value[k]
-    return c ? { aliasName: k, credentialAlias: c } : null
+    const c = aliasSlotMap.value[k]
+    return c ? { aliasName: k, slot: c } : null
   }
   const base = deriveBase(raw, catalogNames.value)
   return hit(raw) ?? (base ? hit(base) : null)
@@ -1899,8 +1911,14 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
   // base=null(未知服务)→ 运行时整步跳过注入(carry_injection derive_base
   // 失败短路),徽标不显示 — 与运行时行为对齐,不过度承诺
   if (!base) return new Map()
+  const raw = stepService(step)
   const bound = carryValues.value.bindings[base] ?? {}
-  return carryHint(face, bound, carryValues.value.defaults)
+  // F5:别名键稀疏覆盖层(运行时 carry_injection 同款:别名行只覆盖
+  // 它填的字段,其余继承 base 服务键)
+  const aliasBound = raw !== base
+    ? (carryValues.value.bindings[raw] ?? undefined)
+    : undefined
+  return carryHint(face, bound, carryValues.value.defaults, aliasBound)
 }
 
 /**
@@ -1951,15 +1969,16 @@ const svcSource = computed<
   if (!cur) return null
   const isDeclared = cur in (props.services ?? {})
   const isRegistered = registeredByName.value.has(cur)
-  if (isDeclared && isRegistered) return { text: '配置 · 覆盖别名默认', tone: 'override' }
+  if (isDeclared && isRegistered) return { text: '配置 · 已登记别名', tone: 'override' }
   if (isDeclared) return { text: '配置', tone: 'cfg' }
   if (isRegistered) return { text: '已登记', tone: 'reg' }
   if (catalogNames.value.has(cur)) return { text: '系统', tone: 'sys' }
   return null
 })
 
-/** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄 / 未声明红。
- *  F4:未声明但注册表 base_url 兜住的键不再报红(默认层生效)。 */
+/** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄。
+ *  M2a S6:地址不再挂别名/声明兜底(部署表按环境给),「未声明」红警
+ *  随 URL 绑定退役一并移除。 */
 const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(() => {
   const cur = stepService(currentStep.value)
   if (!cur) return null
@@ -1968,25 +1987,19 @@ const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(()
     return { text: '未挂目录服务(裸声明)', level: 'warn' }
   if (cur !== anchor && deriveBase(cur, catalogNames.value) !== anchor)
     return { text: '跨服务引用', level: 'warn' }
-  if (!(cur in (props.services ?? {}))) {
-    if (registeredByName.value.get(cur)?.baseUrl) return null
-    return { text: '未声明 — Config 或运行弹框补 URL 后可跑', level: 'error' }
-  }
   return null
 })
 
 /** 当前引用键的已声明 URL(未声明 → 空,模板给占位提示) */
 const declaredUrlOf = (svc: string) => (props.services ?? {})[svc] || ''
 
-/** F4:URL 提示行 —— 声明值 > 注册表 base_url(标注「别名默认」)> 缺口。
- *  只展示,不写 payload(写了就成快照,默认层的动态性失效)。 */
+/** 地址提示行(M2a S6):声明值 > 「由执行环境的部署地址给出」。
+ *  只展示,不写 payload(写了就成快照,部署表的动态性失效)。 */
 const svcUrlHint = computed(() => {
   const cur = stepService(currentStep.value)
   const declared = (props.services ?? {})[cur]
   if (declared) return declared
-  const baseUrl = registeredByName.value.get(cur)?.baseUrl
-  if (baseUrl) return `${baseUrl}(别名默认)`
-  return '(未声明 — Config 补 URL,或在服务信息管理登记别名默认)'
+  return '(地址由执行环境的部署地址给出)'
 })
 
 function onServiceRefChange(step: StepView, value: string) {
@@ -1994,22 +2007,22 @@ function onServiceRefChange(step: StepView, value: string) {
   creatingAlias.value = false
   const call = stepCall(step)!       // call 唯一形态;local 直改经既有 watch 传播
   call.service = value
-  // F4 方案 B:选中已登记别名且带凭证绑定 → headers 直接注入 ${auth.*}
-  // 模板这一行(2026-09-23 调整:不做「已有 Authorization 则跳过」的补缺
-  // 守卫 —— 选中即写入,换选别名即刷新;既有大小写 Authorization 键先
-  // 清掉,保证注入后只有一行)。切到**无凭证**别名时,上一轮注入的模板
-  // 行必须一并清掉 —— 留着会让请求带别的服务的 token 发出去;手写的
-  // 字面 Authorization 不是注入痕迹,保留。不写 services 声明 —— URL 走
-  // 注册表默认层(执行期物化第三档),写了就成快照。
+  // F4 方案 B(M2a S6 槽位口径):选中已登记别名且声明了槽位 → headers
+  // 直接注入 ${auth.<slot>.*} 模板这一行(2026-09-23 调整:不做「已有
+  // Authorization 则跳过」的补缺守卫 —— 选中即写入,换选别名即刷新;既有
+  // 大小写 Authorization 键先清掉,保证注入后只有一行)。切到**无槽位**
+  // 别名时,上一轮注入的模板行必须一并清掉 —— 留着会让请求带别的服务的
+  // token 发出去;手写的字面 Authorization 不是注入痕迹,保留。不写
+  // services 声明 —— 地址走部署表(按执行环境解析),写了就成快照。
   const reg = registeredByName.value.get(value)
   const headers = (call.headers ||= {})
   for (const k of Object.keys(headers)) {
     if (k.toLowerCase() !== 'authorization') continue
-    if (reg?.credentialAlias || String((headers as Record<string, unknown>)[k]).startsWith('${auth.'))
+    if (reg?.slot || String((headers as Record<string, unknown>)[k]).startsWith('${auth.'))
       delete (headers as Record<string, unknown>)[k]
   }
-  if (reg?.credentialAlias) {
-    ;(headers as Record<string, unknown>).Authorization = `$\{auth.${reg.credentialAlias}.token}`
+  if (reg?.slot) {
+    ;(headers as Record<string, unknown>).Authorization = `$\{auth.${reg.slot}.token}`
   }
 }
 

@@ -82,6 +82,13 @@
                 <span class="nm">{{ s.name }}</span>
                 <span v-if="s.isDraft" class="draft-chip" title="草稿:不出现在发布 / 分享;空草稿 30 天自动清理">草稿</span>
                 <span v-if="s.visibility === 'public'" class="pub-chip" title="已发布到公共库">公共</span>
+                <!-- S7.1:所属项目徽标(私有页签恒不出现,全员视角可见) -->
+                <router-link
+                  v-if="s.projectId != null"
+                  :to="`/projects/${s.projectId}`"
+                  class="proj-chip"
+                  :title="`所属项目:${projectNames.nameOf(s.projectId)}`"
+                >{{ projectNames.nameOf(s.projectId) }}</router-link>
                 <span
                   v-if="sharedOutSuites.has(s.suiteId)"
                   class="ref-badge"
@@ -145,6 +152,13 @@
                     :data-testid="`suite-row-unpublish-${s.suiteId}`"
                     @click="unpublishSuite(s)"
                   >下架为私有</DropdownMenuItem>
+                  <!-- S7.2:加入普通项目(私有套件;公共走「发布」) -->
+                  <DropdownMenuItem
+                    v-if="s.projectId == null"
+                    class="sl-menu-item"
+                    :data-testid="`suite-row-promote-${s.suiteId}`"
+                    @click="promoTarget = s"
+                  >加入项目…</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item danger" @click="removeSuite(s)">删除</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -203,7 +217,17 @@
       } : null"
       @changed="void loadShareBadges"
     />
-  </section>
+  
+  <!-- S7.2:加入项目对话框 -->
+  <PromotionDialog
+    :open="!!promoTarget"
+    kind="suite"
+    :source-id="promoTarget ? String(promoTarget.suiteId) : ''"
+    :source-name="promoTarget?.name ?? ''"
+    @close="promoTarget = null"
+    @done="load"
+  />
+</section>
 </template>
 
 <script setup lang="ts">
@@ -223,6 +247,8 @@ import {
 } from '@/api/suites'
 import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectNames } from '@/composables/useProjectNames'
+import PromotionDialog from '@/components/project/PromotionDialog.vue'
 import { usePagerSize } from '@/composables/usePagerSize'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
@@ -232,6 +258,11 @@ import { MODE_LABEL, runStatusTone } from '@/utils/suiteStructure'
 
 const router = useRouter()
 const auth = useAuthStore()
+// S7.1:项目徽标名映射
+const projectNames = useProjectNames()
+
+// S7.2:加入项目(析出分析 → 直通复制 / 冲突转审批)
+const promoTarget = ref<SuiteSummary | null>(null)
 
 const q = ref('')
 const status = ref<'loading' | 'ready' | 'error'>('loading')
@@ -244,7 +275,7 @@ const { pageSize } = usePagerSize('suite-library', 10)
 
 // 浏览镜头(§5.1):默认我的;admin 可切全员视角(记本地)
 const lensAll = ref(false)
-const lensAvailable = computed(() => !!auth.isAdmin)
+const lensAvailable = computed(() => auth.can('users.manage'))
 function toggleLens(): void {
   lensAll.value = !lensAll.value
   page.value = 1
@@ -289,7 +320,8 @@ async function load(): Promise<void> {
   status.value = 'loading'
   try {
     const env = await listSuites({
-      scope: lensAll.value ? 'all' : 'mine',
+      // S7.0 口径:「我的用例集」= 我名下且未加入任何项目
+      scope: lensAll.value ? 'all' : 'private',
       q: q.value.trim() || undefined,
       mode: modeFilter.value || undefined,
       page: page.value, page_size: pageSize.value,
@@ -543,6 +575,12 @@ onMounted(() => void loadShareBadges())
   color: #b45309; background: rgb(245 158 11 / 10%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
+.proj-chip {
+  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  color: #2563eb; background: rgb(37 99 235 / 8%);
+  border: 1px solid rgb(37 99 235 / 30%); text-decoration: none;
+}
+.proj-chip:hover { background: rgb(37 99 235 / 15%); }
 .pub-chip {
   flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
   color: #15803d; background: rgb(34 197 94 / 10%);

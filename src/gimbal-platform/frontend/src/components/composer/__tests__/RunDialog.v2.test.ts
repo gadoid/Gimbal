@@ -13,10 +13,18 @@
  * - 失效自建方案:禁跑 + 去工作台修复
  * - 总量预览:自建 Σrows × max(K,1) × nRuns(对齐 200 上限闸)
  */
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import RunDialog from '../RunDialog.vue'
 import type { SchemeV2 } from '@/api/scenario-composer'
+
+/** 注册表 mock(authz M2a S6:面板自取候选/降级判定面;默认不解析 → 空
+ *  注册表,降级路径由用例显式播种)。 */
+const listAllAliasesMock = vi.hoisted(() => vi.fn())
+vi.mock('@/api/service-aliases', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/api/service-aliases')>()
+  return { ...real, listAllAliases: listAllAliasesMock }
+})
 
 const DEFAULT_SCHEME: SchemeV2 = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
@@ -26,7 +34,7 @@ const DEFAULT_SCHEME: SchemeV2 = {
 const SCHEME_A: SchemeV2 = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-001', rowIndexes: [0, 1] }],
-  injectionEntryIds: ['inj-1'], serviceBindings: { 'svc-a': { authAlias: 'alias-1' } },
+  injectionEntryIds: ['inj-1'], serviceBindings: { 'svc-a': { alias: 'alias-1' } },
   options: { step_from: null, step_to: 2, n_runs: 3, parallel: 2, subscribe: null },
 }
 
@@ -35,7 +43,6 @@ const BASE_PROPS = {
   schemes: [DEFAULT_SCHEME, SCHEME_A],
   dataSets: [{ datasetId: 'ds-001', scenarioId: 'sc-a', name: 'DS-001', rowCount: 2, preview: [] }],
   serviceRows: [{ service: 'svc-a', declaredUrl: 'http://a' }],
-  authOptions: ['alias-1'],
   assertionEntries: [{
     id: 'inj-1', name: '注入-1',
     path: { stepIndex: 0, source: 'body' as const, jsonpath: '$.x' },
@@ -52,6 +59,14 @@ function mountDialog(props: Record<string, unknown> = {}) {
 }
 
 describe('RunDialog v2 — 两路径', () => {
+  // 注册表默认播种:alias-1 在册(svc-a 的绑定不降级;降级用例显式清空)
+  listAllAliasesMock.mockResolvedValue([
+    { aliasName: 'svc-a', baseService: 'svc-a', slot: null, kind: 'plate' as const,
+      createdAt: '', updatedAt: '' },
+    { aliasName: 'alias-1', baseService: 'svc-a', slot: null, kind: 'plate' as const,
+      createdAt: '', updatedAt: '' },
+  ])
+
   it('默认方案态:基线提示 + 可配绑定/参数 + 另存为方案', () => {
     const w = mountDialog()
     // chip testid 生成规则:scheme-chip-${schemeId}(default 方案也有真实 schemeId)
@@ -84,10 +99,11 @@ describe('RunDialog v2 — 两路径', () => {
 
   it('自建方案态:只读概要(数据/注入/绑定/参数)+ confirm 原样展平', async () => {
     const w = mountDialog()
+    await flushPromises()
     await w.find('[data-testid="scheme-chip-rs-002"]').trigger('click')
     expect(w.text()).toContain('冒烟')
     expect(w.text()).toContain('DS-001')                        // 概要含数据集(名;id 兜底)
-    expect(w.text()).toContain('alias-1')                       // 概要含绑定
+    expect(w.text()).toContain('alias-1')                       // 概要含绑定(svc-a → alias-1)
     expect(w.findAll('.rd-bind-row select').length).toBe(0)     // 绑定只读(无编辑控件)
     await w.find('[data-testid="run-confirm"]').trigger('click')
     const [sel, opts] = w.emitted('confirm')!.at(-1)!
@@ -142,13 +158,15 @@ describe('RunDialog v2 — 两路径', () => {
 
   // ── I-3:自建方案概要绑定 chip 降级标注(spec §9,口径同默认态 degraded)──
   it('自建方案绑定已删别名 → 概要绑定 chip 标红提示,原别名可见且不禁跑', async () => {
-    // SCHEME_A 绑定 svc-a → alias-1;凭证池清空 → alias-1 视为已删
-    const w = mountDialog({ authOptions: [] })
+    // SCHEME_A 绑定 svc-a → alias-1;注册表清空 → alias-1 视为已删(M2a S6)
+    listAllAliasesMock.mockResolvedValueOnce([])
+    const w = mountDialog()
+    await flushPromises()
     await w.find('[data-testid="scheme-chip-rs-002"]').trigger('click')
     const chip = w.find('.rd-sum-bind.is-degraded')
     expect(chip.exists()).toBe(true)
     expect(chip.text()).toContain('alias-1')                       // 原别名仍可见
-    expect(w.text()).toContain('凭证已删,去工作台重选')
+    expect(w.text()).toContain('别名已删,去工作台重选')
     // 不禁跑:alias 降级是警示不是失效(dispatch 侧 fail-fast 兜底语义不变)
     expect(w.find('[data-testid="run-confirm"]').attributes('disabled')).toBeUndefined()
   })

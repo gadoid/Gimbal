@@ -104,11 +104,9 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 
-/** 角色过滤(M2.5):adminOnly 的泛化形态;三条判定同源侧栏。 */
+/** authz W8:能力过滤(表 A 能力名,与侧栏/画廊同源)。 */
 const visibleRegistry = computed(() =>
-  workbenchRegistry.filter((d) => !d.adminOnly && !d.roles
-    || (d.adminOnly && auth.isAdmin)
-    || (d.roles && auth.hasRole(...d.roles))),
+  workbenchRegistry.filter((d) => !d.cap || auth.can(d.cap)),
 )
 
 /** 动态功能卡(外部系统集成 §7):可见模板 → fn:<id> 卡;布局里存过
@@ -118,9 +116,7 @@ void listIntegrationTasks().then((tasks) => {
   fnDefs.value = tasks.map((t) => ({
     id: `fn:${t.id}`,
     title: t.name,
-    description: t.identityMode === 'personal'
-      ? `个人功能卡 · ${t.cronText} · 订阅后按我的凭证执行`
-      : `功能卡 · ${t.cronText}`,
+    description: `功能卡 · ${t.cronText} · 订阅后按我的凭证执行`,
     accent: 'gold',
     component: () => import('@/components/workbench/FunctionCard.vue'),
     defaultSize: 'M' as const,
@@ -140,7 +136,7 @@ const placeholderFnDefs = computed<WorkbenchCardDef[]>(() =>
       component: () => import('@/components/workbench/FunctionCard.vue'),
     })))
 
-/** 默认板只铺可见集内的卡 —— adminOnly 卡不该出现在 member 的默认布局。
+/** 默认板只铺可见集内的卡 —— 能力门卡不该出现在无能力者的默认布局。
  *  布局存档(服务端 + 本地镜像)由 useUserPreference 统一盯 auth 身份,
  *  不再需要调用方传用户名。 */
 const eligibleIds = computed(() => visibleRegistry.value.map((d) => d.id))
@@ -159,8 +155,8 @@ function defOf(id: string): WorkbenchCardDef | undefined {
     return fnDefs.value.find((d) => d.id === id)
       ?? placeholderFnDefs.value.find((d) => d.id === id)
   }
-  // 优先可见集;回退全量 registry — 防 admin 降级后布局残留的
-  // adminOnly 卡成"幽灵卡"(渲染不出、市场也看不到)
+  // 优先可见集;回退全量 registry — 防能力被收回后布局残留的
+  // 能力门卡成"幽灵卡"(渲染不出、市场也看不到)
   return visibleRegistry.value.find((d) => d.id === id)
     ?? workbenchRegistry.find((d) => d.id === id)
 }

@@ -40,7 +40,7 @@ function readV2(): { order: string[]; sizes: Record<string, string> } {
 
 function asUser(username: string): void {
   useAuthStore().currentUser = {
-    id: 1, username, display_name: username, is_admin: false, role: 'user',
+    id: 1, username, display_name: username, role: 'user',
   } as never
 }
 
@@ -88,11 +88,11 @@ describe('useWorkbenchLayout — order(存档 = 镜像 + 服务端)', () => {
     // 用户管理只出两个计数,列表不是 glance 信息 —— 唯一刻意 S 起步的卡
   })
 
-  it('给 eligibleIds → 默认板只含可见集(adminOnly 卡不塞给 member)', () => {
-    const allow = ref(workbenchRegistry.filter((d) => !d.adminOnly).map((d) => d.id))
+  it('给 eligibleIds → 默认板只含可见集(能力门卡不塞给无能力者)', () => {
+    const allow = ref(workbenchRegistry.filter((d) => !d.cap).map((d) => d.id))
     const { orderedIds } = useWorkbenchLayout(allow)
     expect(orderedIds.value).toEqual(allow.value)
-    // 注册表里确有 adminOnly 卡,否则这条断言是空的
+    // 注册表里确有能力门卡,否则这条断言是空的
     expect(allow.value.length).toBeLessThan(ids().length)
   })
 

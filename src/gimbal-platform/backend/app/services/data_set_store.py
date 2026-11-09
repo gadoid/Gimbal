@@ -113,10 +113,11 @@ async def update(
 
 
 async def get(
-    db: AsyncSession, dataset_id: str
+    db: AsyncSession, dataset_id: str, *, redact: bool = False,
 ) -> DataSet:
+    """``redact``:读者非场景属主 → 剥敏感列(authz W6,原件不动)。"""
     row = await _get_row(db, dataset_id)
-    return _to_full_shape(row)
+    return _to_full_shape(row, redact=redact)
 
 
 async def delete(db: AsyncSession, dataset_id: str) -> None:
@@ -131,11 +132,13 @@ async def list_summaries(
     *,
     scenario_id: str | None = None,
     scenario_ids: list[str] | set[str] | None = None,
+    owned_ids: set[str] | None = None,
 ) -> list[DataSetSummary]:
     """Return DataSetSummary (preview[3]) for list views.
 
     ``scenario_ids`` pushes the caller's ownership filter down as a SQL
     ``IN``(non-admin data-sets list);空集合直接短路为 []。
+    ``owned_ids`` 给定时,不在其中的场景(引用闭包读者)预览剥敏感列。
     """
     stmt = select(ComposerDataSet).order_by(ComposerDataSet.updated_at.desc())
     if scenario_id:
@@ -145,7 +148,9 @@ async def list_summaries(
             return []
         stmt = stmt.where(ComposerDataSet.scenario_id.in_(scenario_ids))
     rows = (await db.execute(stmt)).scalars().all()
-    return [_to_summary_shape(r) for r in rows]
+    return [_to_summary_shape(
+        r, redact=owned_ids is not None and r.scenario_id not in owned_ids)
+        for r in rows]
 
 
 async def list_for_scenario(
@@ -183,20 +188,29 @@ async def _get_row(db: AsyncSession, dataset_id: str) -> ComposerDataSet:
     return row
 
 
-def _to_full_shape(row: ComposerDataSet) -> DataSet:
+def _rows_for(rows: list | None, redact: bool) -> list:
+    if not redact:
+        return list(rows or [])
+    from .scenario_store import strip_sensitive_columns
+
+    return strip_sensitive_columns(rows or [])
+
+
+def _to_full_shape(row: ComposerDataSet, *, redact: bool = False) -> DataSet:
     return DataSet(
         datasetId=row.dataset_id,
         scenarioId=row.scenario_id,
         name=row.name,
         description=row.description,
         rowCount=row.row_count,
-        rows=list(row.rows or []),
+        rows=_rows_for(row.rows, redact),
         varUnlocks=list(row.var_unlocks or []),
     )
 
 
-def _to_summary_shape(row: ComposerDataSet) -> DataSetSummary:
-    preview = list(row.rows or [])[:3]
+def _to_summary_shape(row: ComposerDataSet, *,
+                      redact: bool = False) -> DataSetSummary:
+    preview = _rows_for(list(row.rows or [])[:3], redact)
     return DataSetSummary(
         datasetId=row.dataset_id,
         scenarioId=row.scenario_id,

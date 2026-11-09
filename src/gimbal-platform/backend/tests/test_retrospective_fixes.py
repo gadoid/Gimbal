@@ -36,7 +36,7 @@ async def test_public_search_matches_system(client):
                              params={"visibility": "public", "q": q})
         assert r.status_code == 200
         ids = [i["meta"]["scenarioId"] for i in r.json()["items"]]
-        assert "sc-retro-a" in ids, (q, ids)
+        assert "sc-retro-a-public" in ids, (q, ids)  # S1.3:公共面 = 副本
 
 
 async def test_notifications_page_size_param_honored(client):

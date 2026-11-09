@@ -24,6 +24,8 @@ export interface PrefValues {
   'pager.sizes': { sizes: Record<string, number> }
   /** 便签卡(webhook v4 §4.3/D18) */
   notes: { items: NoteItemDTO[] }
+  /** 个人默认执行环境(authz M2a S2:环境链第四位;null = 不设置) */
+  'run.environment': { environmentId: number | null }
 }
 
 export type PrefKey = keyof PrefValues

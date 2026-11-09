@@ -30,7 +30,7 @@ vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), inf
 function mkTask(over: Partial<api.IntegrationTaskItem> = {}): api.IntegrationTaskItem {
   return {
     id: 20, name: '物流轨迹同步', ownerId: 5, mine: false, canManage: true,
-    visibility: 'public', identityMode: 'personal', targetType: 'scenario',
+    visibility: 'public', targetType: 'scenario',
     scenarioId: 'sc-w', suiteId: null, schemeId: null, targetSystem: '',
     triggerCron: '0 * * * *', cronText: '每小时', resultPolicy: 'latest',
     cardTemplate: 'status', removed: false,
@@ -161,18 +161,16 @@ describe('IntegrationDetail — 集成详情(原型对齐)', () => {
     w2.unmount()
   })
 
-  it('令牌处置入口按 tokenKind 分流:platform→集成页,personal→个人设置', async () => {
-    // 平台令牌 + token_expired:去续期与查看令牌都指向 /integrations
+  it('令牌处置入口恒指个人设置(authz C1:平台令牌面退役)', async () => {
+    // 个人令牌 + token_expired:去续期指向 /profile/tokens
     vi.mocked(api.getIntegrationTask).mockResolvedValueOnce(mkTask({
-      tokenKind: 'platform',
+      tokenKind: 'personal',
       instance: { ...mkTask().instance!, pausedReason: 'token_expired' },
     }))
     const w1 = await mountPage()
     expect(w1.text()).toContain('已暂停 · 所属令牌已到期')
     const renew1 = w1.findAll('a').find((a) => a.text() === '去续期')
-    expect(renew1?.attributes('href')).toBe('/integrations')
-    const view1 = w1.findAll('a').find((a) => a.text() === '查看令牌')
-    expect(view1?.attributes('href')).toBe('/integrations')
+    expect(renew1?.attributes('href')).toBe('/profile/tokens')
     w1.unmount()
 
     // 个人令牌 + token_invalidated:去重新生成仍指 /profile/tokens

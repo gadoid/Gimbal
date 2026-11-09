@@ -44,3 +44,22 @@ describe('carryHint — face ∩ (bound ∪ defaults) → Map<path, 来源>', ()
     expect(out.size).toBe(1)
   })
 })
+
+// ── authz M2a S5/F5:别名键覆盖层 ────────────────────────────────────
+describe('carryHint — 别名键覆盖层(F5 修复)', () => {
+  it('别名绑定 > 服务绑定 > 全局默认;别名层只覆盖它有的键', () => {
+    const face = ['$.a', '$.b', '$.c']
+    const bound = { '$.a': 'base-a', '$.b': 'base-b' }
+    const defaults = { '$.c': 'd-c' }
+    const aliasBound = { '$.a': 'alias-a' }
+    const m = carryHint(face, bound, defaults, aliasBound)
+    expect(m.get('$.a')).toBe('别名绑定')
+    expect(m.get('$.b')).toBe('服务绑定')
+    expect(m.get('$.c')).toBe('全局默认')
+  })
+
+  it('无别名层(= base 服务本身)行为与旧两层一致', () => {
+    const m = carryHint(['$.a'], { '$.a': 'x' }, {}, undefined)
+    expect(m.get('$.a')).toBe('服务绑定')
+  })
+})

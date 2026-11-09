@@ -7,8 +7,8 @@ publish/分享端点随 P2)。
 (绕过应用层直写也被约束拒绝),**admin 无豁免**(admin 经组把 A 的
 内容洗给 B 的通道不存在,§7.7)。
 
-P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ admin,
-非属主 GET 详情 404;写 = 属主 ∨ admin(治理)。
+P1 可见性:suite 恒 private(P2 才有发布入口)。读 = 属主 ∨ public ∨ 引用,
+非属主 GET 详情 404;写 = 属主单判(authz W3)。
 """
 from __future__ import annotations
 
@@ -31,8 +31,7 @@ from ..core.deps import CurrentUser
 from ..models.execution import Execution
 from ..models.suite import Suite, SuiteMember
 from ._error_mapping import not_found_404
-from ._ownership import ensure_owner
-from ..schemas.scenario_composer import RunRequest
+from ..schemas.scenario_composer import RunRequest, scrub_retired_bindings
 from ..schemas.suite import (
     SuiteCompositionIn, SuiteCreateIn, SuiteDetailOut, SuiteLookupItem,
     SuiteMembersAddIn, SuiteMembersOrderIn, SuiteMemberOut, SuitePageOut,
@@ -55,37 +54,44 @@ async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
 
 
 def _require_read(user: CurrentUser, suite: Suite) -> None:
-    """读闸(同步快路径):private → 属主 ∨ admin,否则 404(不泄露)。
-    P2 引用/公共读由 ``_require_read_async`` 承担(§7.6)。"""
-    if user.role != "admin" and user.id != suite.owner_id             and suite.visibility != "public":
+    """读闸(同步快路径,表 B suite.read 的纯判):private → 属主,
+    否则 404(不泄露)。P2 引用/公共读由 ``_require_read_async`` 承担
+    (§7.6)。W3 起 admin 无旁路。"""
+    if user.id != suite.owner_id and suite.project_id is None:
         raise not_found_404("suite", str(suite.id))
 
 
 async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
-    """读闸(完整判定,§7.6):public ∨ 属主 ∨ admin ∨ suite 引用。"""
-    if user.role == "admin" or user.id == suite.owner_id             or suite.visibility == "public":
-        return
-    from ._ownership import has_suite_ref
-    if not await has_suite_ref(db, user.id, suite.id):
+    """读闸(完整判定,表 B suite.read):public ∨ 属主 ∨ suite 引用。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "read", suite):
         raise not_found_404("suite", str(suite.id))
 
 
 async def _require_run_async(db, user: CurrentUser, suite: Suite) -> None:
-    """运行闸(§7.6 can_run_suite):属主 ∨ admin ∨ suite 引用。
-    写闸(_require_write)不变 —— 成员管理仍是属主 ∨ admin。"""
-    if user.role == "admin" or user.id == suite.owner_id:
-        return
-    from ._ownership import has_suite_ref
-    if not await has_suite_ref(db, user.id, suite.id):
+    """运行闸(表 B suite.run):属主 ∨ suite 引用(W3 起 admin 无旁路)。
+    写闸(_require_write)= 属主单判 —— 成员管理归属主。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "run", suite):
         raise not_found_404("suite", str(suite.id))
 
 
-def _require_write(user: CurrentUser, suite: Suite) -> None:
-    ensure_owner(
-        user, suite.owner_id,
-        {"code": "not_owner",
-         "message": "only the suite's owner (or admin) can manage it"},
-    )
+async def _require_write(db, user: CurrentUser, suite: Suite, *,
+                    verb: str = "write") -> None:
+    """写闸(表 B suite.{write,delete,publish},S1.2 区感知):读判
+    先行(不可见 → 404);可读但无权 → 403。表 B = owner ∨ member ∨
+    maintainer(publish = owner ∨ padmin ∨ maintainer)。"""
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "read", suite):
+        raise not_found_404("suite", str(suite.id))
+    if not await can(db, user, "suite", verb, suite):
+        raise HTTPException(status_code=403, detail={
+            "code": "not_owner",
+            "message": "only the suite's owner (or a project member / "
+                       "maintainer) can manage it"})
 
 
 def _iso(v) -> str | None:
@@ -107,7 +113,8 @@ def _summary(suite: Suite, member_count: int,
              owner_name: str | None = None) -> SuiteSummaryOut:
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
+        visibility=("public" if suite.project_id is not None else "private"),
+        mode=suite.mode,
         memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
         latestRun=latest_run, ownerName=owner_name,
@@ -157,12 +164,12 @@ async def _access_and_caps(
     db: AsyncSession, user: CurrentUser, suite: Suite,
 ) -> dict:
     """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
-    须已过;access 为 None 仅发生在公共读者,能力位全 False。"""
+    须已过;access 为 None 仅发生在公共读者,能力位全 False。
+    W3 起 admin 与公共读者同权(Admin+ 仅剩下架公共对象,服务端
+    public_admin 判定,不进此投影)。"""
     if user.id == suite.owner_id:
         access = "owner"
-    elif user.role == "admin":
-        access = "admin"
-    elif suite.visibility == "public":
+    elif suite.project_id is not None:
         access = "public"
     else:
         from ._ownership import has_suite_ref
@@ -172,10 +179,9 @@ async def _access_and_caps(
         return {}
     return {
         "access": access,
-        # 写 = 属主 ∨ admin(治理);public 先复制再跑(不变量 7);
-        # admin 不可代发分享(§8.1)
-        "canEdit": access in ("owner", "admin"),
-        "canRun": access in ("owner", "admin", "ref"),
+        # 写 = 属主(表 B suite.write);public 先复制再跑(不变量 7)
+        "canEdit": access == "owner",
+        "canRun": access in ("owner", "ref"),
         "canShare": access == "owner",
     }
 
@@ -188,7 +194,8 @@ async def _detail_out(
         members = await _ordered_members(db, suite.id)
     out = SuiteDetailOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=suite.visibility, mode=suite.mode,
+        visibility=("public" if suite.project_id is not None else "private"),
+        mode=suite.mode,
         memberCount=len(members), rev=suite.rev, isDraft=_is_draft(suite),
         modeConfig=suite.mode_config or {},
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
@@ -222,7 +229,7 @@ async def _members_out(
             scenarioId=m.scenario_id,
             name=(meta.name if meta and meta.name else m.scenario_id),
             module=(meta.module or "") if meta else "",
-            visibility=(scen.visibility or "private") if scen else "private",
+            visibility=("public" if scen and scen.project_id is not None else "private"),
             role=m.role or "main",
             sort=m.sort, addedAt=_iso(m.added_at),
         ))
@@ -233,8 +240,10 @@ async def _members_out(
 @router.get("", response_model=SuitePageOut)
 async def list_suites(
     user: CurrentUser, db: DbSession,
-    scope: Literal["mine", "all"] = "all",
+    scope: Literal["mine", "all", "private"] = "all",
     visibility: str | None = None,
+    # S7.0 修正:补 alias(同 scenarios 列表 —— projectId 缺 alias 被忽略)
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
     q: str = Query(default="", max_length=128),
     mode: str = Query(default=""),
     page: Annotated[int, Query(ge=1)] = 1,
@@ -247,21 +256,29 @@ async def list_suites(
     # visibility=public(§5.1,场景列表同款):显式传时 scope 不叠加,
     # 只出公共 Suite —— 公共库页口径(重构方案 D-3 公共 Suite 分区)。
     from sqlalchemy import exists, select as _select
+    from ..models.project import Project
     from ..models.share_ref import ShareRef
+    from ..services.zone import zone_read_clause
     if visibility == "public":
-        clauses = [Suite.visibility == "public"]
+        # S1.2:公共页口径换轴 —— 公共项目(影子期与 visibility 等价)
+        clauses = [Suite.project_id.in_(
+            _select(Project.id).where(Project.kind == "public"))]
     elif scope == "mine":
-        clauses = [Suite.owner_id == user.id]
-    elif user.role == "admin":
-        clauses = []
+        clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)
+    elif scope == "private":
+        # S7.0:「我的用例集」= 我名下且未加入任何项目
+        clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]
     else:
+        # S1.2 三区(表 B suite.read = zone_read_clause)∨ 引用
         clauses = [or_(
-            Suite.owner_id == user.id,
-            Suite.visibility == "public",
+            zone_read_clause(Suite, user.id),
             exists(_select(ShareRef.id).where(
                 ShareRef.grantee_user_id == user.id,
                 ShareRef.suite_id == Suite.id)).correlate(Suite),
         )]
+    if project_id is not None:
+        # S1.8 项目镜头:按区过滤(公共区传公共项目 id)
+        clauses.append(Suite.project_id == project_id)
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()
@@ -310,6 +327,14 @@ async def list_suites(
 async def create_suite(
     user: CurrentUser, db: DbSession, body: SuiteCreateIn,
 ) -> SuiteSummaryOut:
+    if body.projectId is not None:
+        from ..services.zone import (ProjectCreateDenied,
+                                     ensure_can_create_in_project)
+        try:
+            await ensure_can_create_in_project(db, user.id, body.projectId)
+        except ProjectCreateDenied as e:
+            raise HTTPException(status_code=e.status, detail={
+                "code": e.code, "message": e.message}) from None
     # 草稿口径(重构方案):name 缺省 = 画布首次拖入创建草稿,服务端
     # 生成不重名草稿名;草稿不计入 SUITE_CAP、单独 SUITE_DRAFT_CAP
     #(团队规模有界,JSON 的 draft 标记在 Python 侧过滤,不进 SQL)
@@ -342,7 +367,7 @@ async def create_suite(
             "code": "suite_name_conflict",
             "message": "同名 suite 已存在(属主内唯一)"})
     suite = Suite(name=name, description=body.description,
-                  owner_id=user.id,
+                  owner_id=user.id, project_id=body.projectId,
                   mode_config=({"draft": True} if is_draft else {}))
     db.add(suite)
     await db.commit()
@@ -369,7 +394,7 @@ async def patch_suite(
     user: CurrentUser, db: DbSession, suite_id: int, body: SuitePatchIn,
 ) -> SuiteSummaryOut:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     if body.name is not None and body.name != suite.name:
         dup = (await db.execute(
             select(func.count()).where(Suite.owner_id == suite.owner_id,
@@ -399,7 +424,7 @@ async def delete_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> Response:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite, verb="delete")
     suite_name, suite_owner = suite.name, suite.owner_id
     # 重构方案:有引用者时,删除后通知引用者(与处置路径
     # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
@@ -430,15 +455,7 @@ async def delete_suite(
         db, actor_id=actor_id, kind="suite.deleted",
         resource_type="suite", resource_id=str(suite_id),
         detail={"name": suite_name, **extra})
-    if user.role == "admin" and user.id != suite_owner:
-        from ..services import audit as audit_svc
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="suite.admin_delete",
-            resource_type="suite", resource_id=str(suite_id),
-            resource_name=suite_name,
-            detail={"ownerId": suite_owner, "name": suite_name})
+    # (W3 删除收敛为属主单判:suite.admin_delete 审计随越属主旁路消亡)
     return Response(status_code=204)
 
 
@@ -456,14 +473,16 @@ async def fork_public_suite(
     suite = await _load_suite(db, suite_id)
     await _require_read_async(db, user, suite)
     is_owner = user.id == suite.owner_id
-    if suite.visibility != "public" and not is_owner:
+    from ..services.zone import public_project_id as _ppid_fork
+
+    if suite.project_id != await _ppid_fork(db) and not is_owner:
         raise not_found_404("suite", str(suite_id))
     out = await deep_copy_suite(
         db, suite, user, await suite_owner_display(db, suite))
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
-        action=(is_owner and suite.visibility != "public"
+        action=(is_owner and suite.project_id != await _ppid_fork(db)
                 and "suite.owner_fork" or "suite.public_fork"),
         resource_type="suite", resource_id=str(suite.id),
         resource_name=suite.name,
@@ -481,7 +500,7 @@ async def add_members(
     场景 —— 他人场景(含不存在的)一律 404,不泄露存在性;admin 也
     无豁免。库层组合外键兜底直写。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
 
     existing = {m.scenario_id for m in await _ordered_members(db, suite.id)}
     next_sort = (
@@ -495,8 +514,7 @@ async def add_members(
         if sid in existing:
             continue
         scen = await scenario_store.get_row(db, sid)
-        # 一刀切(§6.3):scenario 属主 ≠ suite 属主 → 404。
-        if scen is None or scen.owner_id != suite.owner_id:
+        if scen is None:
             await db.rollback()
             raise not_found_404("scenario", sid)
         if len(existing) + added + 1 > settings.SUITE_MEMBER_CAP:
@@ -505,24 +523,26 @@ async def add_members(
                 "code": "suite_member_cap_exceeded",
                 "message": (f"suite member cap is "
                             f"{settings.SUITE_MEMBER_CAP}")})
-        # P2 §7.9(不变量第二入口):公共 suite 加未发布成员不直接拒绝,
-        # 走发布确认 —— 无 publishUnpublished 标志 → 409 列出待发布成员
-        #(前端弹确认框「这些成员及其数据集将一并公开」);有标志 →
-        # 成员发布 + 入组同事务完成(数据集随场景可见性公开)。
-        if (suite.visibility == "public"
-                and (scen.visibility or "private") != "public"):
-            if not body.publishUnpublished:
-                await db.rollback()
-                raise HTTPException(status_code=409, detail={
-                    "code": "suite_member_publish_required",
-                    "message": ("suite is public: unpublished members must "
-                                "be published to join (confirm to publish "
-                                "them and their datasets)"),
-                    "pendingPublish": [sid]})
-            scen.visibility = "public"
+        # S1.5 同区约束(单点 zone.ensure_member_same_zone):成员与套件
+        # 同 project_id;私有区同空时同属主 —— 项目套件可容纳其他成员
+        # 的场景,跨区/私有他人 → 422(旧「同属主一刀切 404」退役;
+        # 公共套件是副本,加成员走原件 + 重发布,S1.3 前置 422 兜住)
+        from ..services.zone import ensure_member_same_zone
+
+        try:
+            ensure_member_same_zone(
+                suite_project_id=suite.project_id,
+                suite_owner_id=suite.owner_id,
+                scen_project_id=scen.project_id,
+                scen_owner_id=scen.owner_id, scenario_id=sid)
+        except ValueError as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "suite_member_cross_zone",
+                        "message": str(e).split(": ", 1)[1]}) from None
         db.add(SuiteMember(
-            suite_id=suite.id, scenario_id=sid, owner_id=suite.owner_id,
-            sort=next_sort,
+            suite_id=suite.id, scenario_id=sid, sort=next_sort,
         ))
         next_sort += 1
         added += 1
@@ -541,7 +561,7 @@ async def reorder_members(
 ) -> SuiteDetailOut:
     """整表排序:列表顺序即 sort(0..n-1);清单必须恰为当前成员全集。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     members = {m.scenario_id: m for m in await _ordered_members(db, suite.id)}
     incoming = list(dict.fromkeys(body.scenarioIds))
     if set(incoming) != set(members) or len(incoming) != len(members):
@@ -561,7 +581,7 @@ async def remove_member(
     user: CurrentUser, db: DbSession, suite_id: int, scenario_id: str,
 ) -> Response:
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     m = await db.get(SuiteMember, (suite_id, scenario_id))
     if m is not None:
         await db.delete(m)
@@ -663,7 +683,7 @@ async def put_composition(
     替代 members/order)。rev 乐观锁 —— 冲突 409 附最新内容;任何改
     成员或编排的路径(本端点、加/移成员、场景删除清理)都推进 rev。"""
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite)
     if body.rev != suite.rev:
         # 先物化再 rollback:rollback 会过期 suite 实例,事后访问属性
         # 触发异步懒加载(MissingGreenlet,本仓已文档化的陷阱)
@@ -681,27 +701,26 @@ async def put_composition(
             "code": "suite_member_cap_exceeded",
             "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
 
-    # 成员属主校验(§6.3 一刀切)+ 公共不变量(§7.9 第二入口,与
-    # add_members 同一套:无标志 → 409 列出待发布,有标志 → 同事务公开)
-    scen_rows: dict[str, object] = {}
-    pending_publish: list[str] = []
+    # S1.5 同区校验(与 add_members 同一单点);不存在 → 404
+    from ..services.zone import ensure_member_same_zone
+
     for m in body.members:
         scen = await scenario_store.get_row(db, m.scenarioId)
-        if scen is None or scen.owner_id != suite.owner_id:
+        if scen is None:
             await db.rollback()
             raise not_found_404("scenario", m.scenarioId)
-        scen_rows[m.scenarioId] = scen
-        if (suite.visibility == "public"
-                and (scen.visibility or "private") != "public"):
-            pending_publish.append(m.scenarioId)
-    if pending_publish and not body.publishUnpublished:
-        await db.rollback()
-        raise HTTPException(status_code=409, detail={
-            "code": "suite_member_publish_required",
-            "message": ("suite is public: unpublished members must be "
-                        "published to join (confirm to publish them and "
-                        "their datasets)"),
-            "pendingPublish": pending_publish})
+        try:
+            ensure_member_same_zone(
+                suite_project_id=suite.project_id,
+                suite_owner_id=suite.owner_id,
+                scen_project_id=scen.project_id,
+                scen_owner_id=scen.owner_id, scenario_id=m.scenarioId)
+        except ValueError as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "suite_member_cross_zone",
+                        "message": str(e).split(": ", 1)[1]}) from None
 
     # 差量重写成员表(保留 added_at;删行交给组合外键语义外的显式删除)
     incoming_ids = {m.scenarioId for m in body.members}
@@ -715,12 +734,10 @@ async def put_composition(
         if row is None:
             db.add(SuiteMember(
                 suite_id=suite.id, scenario_id=m.scenarioId,
-                owner_id=suite.owner_id, role=m.role, sort=idx))
+                role=m.role, sort=idx))
         else:
             row.role = m.role
             row.sort = idx
-    for sid in pending_publish:  # 确认发布:成员随组公开(数据集随场景)
-        scen_rows[sid].visibility = "public"
 
     suite.mode = body.mode
     cfg = dict(body.modeConfig or {})
@@ -732,15 +749,6 @@ async def put_composition(
     await db.refresh(suite)
     # 时间线:整体保存确认发布的成员场景(级联路径之二,与 publish
     # 端点同款 scenario.published/via 标注)
-    if pending_publish:
-        from ..services import activity as activity_svc
-        for sid in pending_publish:
-            await activity_svc.record(
-                db, actor_id=suite.owner_id, kind="scenario.published",
-                resource_type="scenario", resource_id=sid,
-                detail={"name": getattr(scen_rows[sid], "name", sid),
-                        "via": "suite_composition",
-                        "suiteId": suite.id, "suiteName": suite.name})
     return await _detail_out(db, user, suite)
 
 
@@ -828,7 +836,8 @@ async def _run_orchestration(
         scen = await scenario_store.get_row(db, m.scenario_id)
         if scen is None or not await _can_run(
                 db, user, scenario_id=m.scenario_id,
-                owner_id=scen.owner_id if scen else None):
+                owner_id=scen.owner_id if scen else None,
+                project_id=scen.project_id if scen else None):
             not_runnable.append(m.scenario_id)
     if not_runnable:
         raise HTTPException(status_code=403, detail={
@@ -901,7 +910,8 @@ def _req_from_scheme(
         dataSetIds=scheme.get("dataSetIds") or [],
         dataSetSelection=scheme.get("dataSetSelection") or [],
         injectionEntryIds=scheme.get("injectionEntryIds") or [],
-        serviceBindings=scheme.get("serviceBindings") or {},
+        serviceBindings=scrub_retired_bindings(
+            scheme.get("serviceBindings")),
         runOptions=scheme.get("options") or None,
         schemeId=scheme.get("schemeId"),
         schemeName=scheme.get("name"),
@@ -1036,11 +1046,12 @@ async def run_suite(
         if entry["req"] is None:
             skipped.append({"scenarioId": sid, "reason": entry["skip_reason"]})
             continue
-        # §8.2:逐成员 can_run_scenario(属主 ∨ admin ∨ 引用;引用者
+        # §8.2:逐成员 can_run_scenario(属主 ∨ 引用;引用者
         # 经 suite 引用覆盖全部成员 —— 正常态全过,守边界)。
         _scen = scen_rows.get(sid)
         if _scen is not None and not await _can_run(
-                db, user, scenario_id=sid, owner_id=_scen.owner_id):
+                db, user, scenario_id=sid, owner_id=_scen.owner_id,
+                project_id=_scen.project_id):
             skipped.append({"scenarioId": sid, "reason": "not_runnable"})
             continue
         try:
@@ -1147,6 +1158,22 @@ def _executor_compile(graph: dict) -> list[dict]:
     return errs
 
 
+async def _shadowed_item(user_id: int, scen, name: str) -> dict | None:
+    """authz W6 内置凭证告警(与单场景预检同一实现 builtin_auth_shadowed):
+    成员依赖属主内置凭证、发起人名下又没有同名别名 → 执行必在认证段
+    失败,提前说清(否则被分享人只看到 401)。"""
+    from .run_precheck import builtin_auth_shadowed
+
+    aliases = await builtin_auth_shadowed(user_id, scen)
+    if not aliases:
+        return None
+    return _vitem(
+        "warn", "builtin_auth_shadowed",
+        f"「{name}」依赖属主的内置凭证 {aliases},你的凭证里没有同名别名 ——"
+        f"执行会在认证阶段失败;请在「我的凭证」补齐同名别名",
+        units=[scen.scenario_id])
+
+
 @router.post("/{suite_id}/validate")
 async def validate_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
@@ -1201,13 +1228,17 @@ async def validate_suite(
                                     units=[m.scenario_id]))
                 continue
             if not await _can_run(db, user, scenario_id=m.scenario_id,
-                                  owner_id=scen.owner_id):
+                                  owner_id=scen.owner_id,
+                                  project_id=scen.project_id):
                 items.append(_vitem("warn", "not_runnable",
                                     f"成员「{_name_of(m.scenario_id, scen)}」不可运行,发起时跳过",
                                     units=[m.scenario_id]))
                 continue
             scheme = await _default_scheme_of(db, m.scenario_id)
             if scheme is None:
+                if (sh := await _shadowed_item(
+                        user.id, scen, _name_of(m.scenario_id, scen))):
+                    items.append(sh)
                 items.append(_vitem("warn", "no_scheme",
                                     f"「{_name_of(m.scenario_id, scen)}」没有运行方案,将以裸基线发起",
                                     units=[m.scenario_id]))
@@ -1215,6 +1246,9 @@ async def validate_suite(
                 continue
             pc = await _precheck_one(db, scen, PrecheckItem(
                 scenarioId=m.scenario_id, schemeId=scheme["schemeId"]))
+            if (sh := await _shadowed_item(
+                    user.id, scen, _name_of(m.scenario_id, scen))):
+                items.append(sh)
             if not pc.scheme_valid:
                 detail = []
                 if pc.dead_dataset_ids:
@@ -1255,12 +1289,17 @@ async def validate_suite(
                                     else m.scenario_id)
 
         not_runnable: list[str] = []
+        shadowed: list[dict] = []
         for m in members:
             scen = await scenario_store.get_row(db, m.scenario_id)
             if scen is None or not await _can_run(
                     db, user, scenario_id=m.scenario_id,
-                    owner_id=scen.owner_id if scen else None):
+                    owner_id=scen.owner_id if scen else None,
+                    project_id=scen.project_id if scen else None):
                 not_runnable.append(names[m.scenario_id])
+            elif (sh := await _shadowed_item(
+                    user.id, scen, names[m.scenario_id])):
+                shadowed.append(sh)
         if not_runnable:
             # 图不能跳过单元 —— 整体禁跑并列出(重构方案已定)
             items.append(_vitem("error", "units_not_runnable",
@@ -1271,6 +1310,7 @@ async def validate_suite(
                     "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
                     "degraded": False, "inFlight": None, "items": items}
 
+        items.extend(shadowed)
         est = sum(int((units_cfg.get(m.scenario_id) or {}).get("repeat") or 1)
                   * int((units_cfg.get(m.scenario_id) or {}).get("nRuns") or 1)
                   for m in members)
@@ -1524,83 +1564,204 @@ async def rerun_failed_units(
 
 
 # ── P2 §7.9/§9:suite 发布 / 下架 ────────────────────────────────
+def _remap_config(cfg, sid_map: dict[str, str]):
+    """mode_config 的成员 id 重铸(发布深拷贝:成员引用指向公共副本)。"""
+    if isinstance(cfg, dict):
+        return {
+            (sid_map.get(k, k) if isinstance(k, str) else k):
+                _remap_config(v, sid_map)
+            for k, v in cfg.items()}
+    if isinstance(cfg, list):
+        return [_remap_config(v, sid_map) for v in cfg]
+    return sid_map.get(cfg, cfg) if isinstance(cfg, str) else cfg
+
+
+async def _find_public_suite_copy(db, suite_id: int):
+    """套件的公共副本(forked_from_id = 套件 id ∧ 公共项目)。"""
+    from ..services.zone import public_project_id
+
+    pid = await public_project_id(db)
+    if pid is None:
+        return None
+    return (await db.execute(
+        select(Suite).where(
+            Suite.forked_from_id == suite_id,
+            Suite.project_id == pid))).scalar_one_or_none()
+
+
 @router.post("/{suite_id}/publish", response_model=SuiteSummaryOut)
 async def publish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
-    """发布:级联发布未发布成员(确认框由前端承载;数据集随场景
-    可见性公开,《权限一期》口径)。属主 ∨ admin(§8.1 写 = 治理)。"""
-    from ..models.composer_scenario import ComposerScenario
+    """发布 = 深拷贝到公共项目(S1.3,s1-detail §五):
+
+    * 成员场景必须**已发布**(公共副本存在;深拷贝的成员行指向各成员
+      的公共副本,副本链与套件副本同区);有未发布成员 → 422
+      ``suite_member_not_public``(不再级联代发布 —— 成员先各自走
+      场景发布)。
+    * 套件副本:forked_from_id = 原套件 id,owner 不动(= 维护者),
+      mode_config 成员 id 重铸到公共副本 id;重发布 = 删旧副本重建。
+    * 表 B suite.publish = owner ∨ padmin ∨ maintainer(R6)。
+    """
+    from datetime import datetime, timezone
+
+    from ..services.zone import public_project_id
+
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
+    await _require_write(db, user, suite, verb="publish")
     if _is_draft(suite):
         raise HTTPException(status_code=409, detail={
             "code": "suite_is_draft",
             "message": "草稿不可发布(完成编排后可发布)"})
     members = await _ordered_members(db, suite.id)
-    unpublished: list[str] = []
+    pending: list[str] = []
+    sid_map: dict[str, str] = {}
     for m in members:
-        scen = await scenario_store.get_row(db, m.scenario_id)
-        if scen is not None and (scen.visibility or "private") != "public":
-            unpublished.append(m.scenario_id)
-            scen.visibility = "public"
-    suite.visibility = "public"
+        copy = await scenario_store.find_public_copy(db, m.scenario_id)
+        if copy is None:
+            pending.append(m.scenario_id)
+        else:
+            sid_map[m.scenario_id] = copy.scenario_id
+    if pending:
+        raise HTTPException(status_code=422, detail={
+            "code": "suite_member_not_public",
+            "message": "套件成员场景尚未发布到公共项目,请先发布成员场景",
+            "pendingMembers": pending})
+
+    pid = await public_project_id(db)
+    if pid is None:
+        raise HTTPException(status_code=409, detail={
+            "code": "public_project_missing",
+            "message": "公共项目未初始化"})
+    # 重发布:删旧副本(成员随 FK CASCADE)再重建
+    existing = await _find_public_suite_copy(db, suite.id)
+    if existing is not None:
+        await db.delete(existing)
+        await db.flush()
+    # 副本名:同属主下不与原件/其他套件撞名(uq_suites_owner_name)
+    base = f"{suite.name}(公共)"
+    taken = set((await db.execute(
+        select(Suite.name).where(Suite.owner_id == suite.owner_id)))
+        .scalars().all())
+    name, n = base, 2
+    while name in taken:
+        name = f"{base}({n})"
+        n += 1
+    copy = Suite(
+        name=name, description=suite.description,
+        owner_id=suite.owner_id, project_id=pid,
+        mode=suite.mode,
+        mode_config=_remap_config(dict(suite.mode_config or {}), sid_map),
+        rev=0,
+        forked_from_id=suite.id,
+        forked_from_owner_name=suite.forked_from_owner_name,
+        forked_from_at=datetime.now(timezone.utc).replace(tzinfo=None))
+    db.add(copy)
+    await db.flush()
+    for m in members:
+        db.add(SuiteMember(
+            suite_id=copy.id, scenario_id=sid_map[m.scenario_id],
+            role=m.role, sort=m.sort))
     await db.commit()
-    await db.refresh(suite)
-    out = _summary(suite, len(members))
-    out.publishedMembers = unpublished  # 级联清单:确认框的事实面回执
-    # 时间线:suite 发布 + 被级联公开的成员场景(级联绕过
-    # set_visibility,须在此单独落 —— 此前成员被连带公开完全无痕)
+    await db.refresh(copy)
+    # 时间线:记在原套件轴(副本创建即发布动作)
     from ..services import activity as activity_svc
+
     actor_id = user.id if user.id == suite.owner_id else suite.owner_id
     extra = {} if user.id == suite.owner_id else {
         "by": user.display_name or user.username}
     await activity_svc.record(
         db, actor_id=actor_id, kind="suite.published",
         resource_type="suite", resource_id=str(suite.id),
-        detail={"name": suite.name, "cascaded": len(unpublished), **extra})
-    for sid in unpublished:
-        await activity_svc.record(
-            db, actor_id=suite.owner_id, kind="scenario.published",
-            resource_type="scenario", resource_id=sid,
-            detail={"name": sid, "via": "suite_publish",
-                    "suiteId": suite.id, "suiteName": suite.name})
-    # 审计:admin 越属主发布(可见性扩张;属主自发布不记)
-    if user.role == "admin" and user.id != suite.owner_id:
-        from ..services import audit as audit_svc
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="suite.admin_publish",
-            resource_type="suite", resource_id=str(suite.id),
-            resource_name=suite.name,
-            detail={"ownerId": suite.owner_id, "name": suite.name,
-                    "cascaded": len(unpublished)})
-    return out
+        detail={"name": suite.name, "publicCopyId": copy.id,
+                "cascaded": 0, **extra})
+    return _summary(copy, len(members))
 
 
 @router.delete("/{suite_id}/publish", response_model=SuiteSummaryOut)
 async def unpublish_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
 ) -> SuiteSummaryOut:
-    """下架 suite 本体(成员各自的 public 状态独立保留,§9)。admin
-    下架他人 suite → 通知属主 + 入审计(§10;属主自下架不通知不入)。"""
+    """下架 = 删除套件公共副本(S1.3)。三条路径与场景下架同构:
+
+    * 私有原件上调用:找到其公共副本删除(属主动作;成员场景的公共
+      副本不受影响 —— 各自独立);
+    * 公共副本上调用:maintainer ∨ public_admin 直接删;
+    * 存量迁入的无原件公共行 409(先复制到私有区留底)。
+
+    连带:引用该套件副本的公共模板软删(「已移除」+ 通知持有人)。
+    回包 = 原套件 summary(下架后回到私有态)。
+    """
     from ..services import audit as audit_svc
+    from ..services import integration_runner as _ir
     from ..services import notifications as notify_svc
+    from ._ownership import can
+    from ..services.zone import public_project_id
+
     suite = await _load_suite(db, suite_id)
-    _require_write(user, suite)
-    suite.visibility = "private"
+    pid = await public_project_id(db)
+
+    if suite.project_id is None:
+        copy = await _find_public_suite_copy(db, suite.id)
+        if copy is None:
+            if not await can(db, user, "suite", "read", suite):
+                raise not_found_404("suite", str(suite_id))
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "该套件没有公共副本(未发布)"})
+        if not await can(db, user, "suite", "write", suite):
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "only the suite's owner can unpublish it"})
+        copy_id = copy.id
+    elif pid is not None and suite.project_id == pid:
+        if not await can(db, user, "suite", "read", suite):
+            raise not_found_404("suite", str(suite_id))
+        if not await can(db, user, "suite", "unpublish", suite):
+            raise HTTPException(status_code=403, detail={
+                "code": "not_owner",
+                "message": "only the owner (or an operator, for "
+                           "already-public suites) can unpublish"})
+        if suite.forked_from_id is None:
+            raise HTTPException(status_code=409, detail={
+                "code": "public_copy_is_original",
+                "message": "这份公共套件没有私有副本(存量迁入),"
+                           "先复制到私有区留底再下架"})
+        copy = suite
+        suite = await _load_suite(db, copy.forked_from_id)
+        copy_id = copy.id
+    else:
+        # 普通项目套件:无下架语义 → 403
+        if not await can(db, user, "suite", "read", suite):
+            raise not_found_404("suite", str(suite_id))
+        raise HTTPException(status_code=403, detail={
+            "code": "not_owner",
+            "message": "项目套件不在公共项目,无下架语义"})
+
+    # 连带:引用该套件副本的公共模板软删,再删副本(成员随 CASCADE)
+    tpls = await _ir.retire_templates_for_public_target(
+        db, suite_id=copy_id)
+    await db.delete(copy)
     await db.commit()
-    await db.refresh(suite)
-    if user.role == "admin" and suite.owner_id != user.id:
+    for tpl in tpls:
+        try:
+            await _ir.notify_subscribers(
+                tpl,
+                title=f"集成任务「{tpl.name}」已移除",
+                message="引用的公共套件已下架,订阅随之失效;"
+                        "卡片会显示「已移除」,可自行删卡")
+        except Exception:  # noqa: BLE001
+            pass
+    # 越属主下架(Admin+ 治理):通知 + 审计
+    if copy.owner_id != user.id:
         try:
             await notify_svc.create_notification(
-                db, user_id=suite.owner_id,
+                db, user_id=copy.owner_id,
                 type_="scenario_unpublished",
                 title=f"你的公共 Suite 已被下架:{suite.name}",
-                body=(f"管理员 {user.display_name or user.username} 将 Suite "
-                      f"「{suite.name}」从公共库下架(现为私有;成员场景的"
-                      f"公共状态不受影响)。"),
+                body=(f"管理员 {user.display_name or user.username} 下架了 "
+                      f"Suite「{suite.name}」的公共副本(原件仍在你的"
+                      f"私有区;成员场景的公共状态不受影响)。"),
                 link=f"/suites/{suite.id}")
         except Exception:  # noqa: BLE001
             pass
@@ -1610,8 +1771,52 @@ async def unpublish_suite(
             action="suite.admin_unpublish",
             resource_type="suite", resource_id=str(suite.id),
             resource_name=suite.name,
-            detail={"name": suite.name})
+            detail={"name": suite.name, "publicCopyId": copy_id})
+    from ..services import activity as activity_svc
+
+    actor_id = user.id if user.id == suite.owner_id else suite.owner_id
+    extra = {} if user.id == suite.owner_id else {
+        "by": user.display_name or user.username}
+    await activity_svc.record(
+        db, actor_id=actor_id, kind="suite.unpublished",
+        resource_type="suite", resource_id=str(suite.id),
+        detail={"name": suite.name, "publicCopyId": copy_id, **extra})
     return _summary(suite, await _member_count(db, suite.id))
+
+
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/{suite_id}/transfer")
+async def transfer_suite(
+    user: CurrentUser, db: DbSession, suite_id: int, body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者(表 B suite.transfer = maintainer ∨
+    public_admin;仅公共项目副本,私有/项目套件不适用)。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    suite = await _load_suite(db, suite_id)
+    if suite.project_id != await public_project_id(db):
+        raise not_found_404("suite", str(suite_id))
+    if not await can(db, user, "suite", "transfer", suite):
+        raise HTTPException(status_code=403, detail={
+            "code": "not_maintainer",
+            "message": "只有维护者(或 Admin+)能转移公共内容的维护者"})
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == suite.owner_id):
+        raise HTTPException(status_code=422, detail={
+            "code": "transferee_invalid",
+            "message": "受让人须为在职、非系统用户(且非当前维护者)"})
+    await mt.transfer_maintenance(
+        db, obj=suite, obj_type="suite", to_user=to_user, actor=user,
+        obj_name=suite.name)
+    return {"transferredTo": to_user.id, "suiteId": suite_id}
 
 
 # ── 反查:场景在哪些 suite ─────────────────────────────────────────
@@ -1620,22 +1825,21 @@ async def suites_of_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str,
 ) -> list[SuiteLookupItem]:
     """场景详情「所属 suite」反查:自己的 suite(成员 ⊆ 自己的场景,
-    场景属主视角天然成立);admin 另见全量(治理)。"""
+    场景属主视角天然成立)。W3:admin 全量治理分支删除,一律本人镜头。"""
     scen = await scenario_store.get_row(db, scenario_id)
     if scen is None:
         raise not_found_404("scenario", scenario_id)
-    ensure_owner(
-        user, scen.owner_id,
-        {"code": "not_owner",
-         "message": "only the scenario's owner (or admin) can view "
-                    "its suites"},
-    )
+    # S1.2:反查闸 = 场景读判(成员可见项目场景的所属 suite);
+    # 子句 = 套件三区(与列表同口径)
+    from ._ownership import can_read_scenario_row
+
+    if not await can_read_scenario_row(db, user, scen):
+        raise not_found_404("scenario", scenario_id)
+    from ..services.zone import zone_read_clause
     clauses = [Suite.id.in_(
         select(SuiteMember.suite_id)
         .where(SuiteMember.scenario_id == scenario_id)
-    )]
-    if user.role != "admin":
-        clauses.append(Suite.owner_id == user.id)
+    ), zone_read_clause(Suite, user.id)]
     rows = (await db.execute(
         select(Suite).where(*clauses).order_by(Suite.updated_at.desc())
     )).scalars().all()
@@ -1657,6 +1861,9 @@ async def get_version_distribution(
     suite = await db.get(Suite, suite_id)
     if suite is None:
         raise HTTPException(404, "suite not found")
+    # authz W9-1:补读闸(与 suite 读面同口径 —— 不可读 = 404 不泄露;
+    # 此前任何登录用户可读他人私有 suite 的成员清单与版本线)
+    await _require_read_async(db, user, suite)
     units = (suite.mode_config or {}).get("units") or {}
     items: list[dict] = []
     distribution: dict[str, dict[str, int]] = {}

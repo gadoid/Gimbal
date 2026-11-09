@@ -55,8 +55,6 @@ const props = withDefaults(defineProps<{
   initialSchemeId?: string | null
   /** 绑定行 = 声明 ∪ 引用并集(D3);declaredUrl null = 未声明引用行 */
   serviceRows: { service: string; declaredUrl: string | null }[]
-  /** 绑定下拉选项:owner 凭证池 ∪ 场景内置 users 别名(宿主供给) */
-  authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序) */
   stepOrchestrationNames?: string[]
   /** 断言注册表条目(spec v3 §2/§4):自建方案注入条目失效判定面 */

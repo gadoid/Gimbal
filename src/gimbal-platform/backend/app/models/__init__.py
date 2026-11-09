@@ -17,6 +17,8 @@ from .adaptation_op import AdaptationOp
 from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .board_card import BoardCard
 from .environment import Environment
+# 部署表(M2a S2:地址第 ③ 层按 (基础服务, 环境) 取址)
+from .deployment import Deployment
 from .service_alias import ServiceAlias
 # ⑤(2026-10-13)补注册:此前未进 __init__ —— 空库 baseline 的
 # create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落下
@@ -29,6 +31,9 @@ from .activity_event import ActivityEvent
 # 访问令牌(webhook v4)+ 回调投递行
 from .access_token import AccessToken, AccessTokenScope
 from .webhook_delivery import WebhookDelivery
+# 项目区(M2a S1.0:只建表不上码;授权面随 S1.1+)
+from .project import Project, ProjectMember
+from .project_promotion import ProjectPromotion
 
 __all__ = [
     "User",
@@ -60,6 +65,9 @@ __all__ = [
     "AccessToken",
     "AccessTokenScope",
     "WebhookDelivery",
+    "Project",
+    "ProjectMember",
+    "Deployment",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

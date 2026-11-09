@@ -1,0 +1,78 @@
+# authz 人工审定快照(R7,dev-plan T0.2)—— 表 A 的期望值。
+#
+# 矩阵测试从表 A 生成只能证明「代码与表一致」(自证循环);本快照
+# 是人工审定的期望,证明「表本身是对的」。表 A(_ownership.CAPABILITIES)
+# 任何变更必须同步改这里 —— 快照即评审门,两边对拍不一致即红。
+#
+# 能力语义(v1,W2 收编的门面;W3-W9 只增不改语义):
+#   users.manage     用户管理(开号/角色/停用/删除/重置密码)——原 admin 级
+#   ops.write        技术运营(适配/别名 CRUD/环境/公告面)——原 member+ 级
+#                     (W5 令牌签发、W7 导入开放至全体用户,不再覆盖)
+#   alias.write      别名注册表新建条目(导入 decision=create 建名)——
+#                     Admin 职责(§2.1);W7 起导入门放开后建名仍是 Admin 面
+table_a:
+  user: []                       # user 级:自有内容读写不走表 A(对象级规则在表 B,W3 起)
+  admin: [ops.write, alias.write]
+  super_admin: [users.manage, ops.write, alias.write]
+
+# 具名门 → 能力映射(deps.py;名字保留是 W8 前的兼容期)
+gates:
+  AdminUser: users.manage
+  MemberUser: ops.write
+
+# roles_with 的顺序契约(权威顺序低→高;SQL in_ 与展示共用)
+roles_with:
+  users.manage: [super_admin]
+  ops.write: [admin, super_admin]
+  alias.write: [admin, super_admin]
+
+# 表 B(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 → 谓词集。
+# 谓词缩写与语义(区互斥:私有区 = project_id 空 / 普通项目 / 公共项目):
+#   o    owner        私有区属主(D1:project_id 非空时属主身份不给权限)
+#   ref  ref          引用分享被授予人(仅私有区对象,S7 退役)
+#   mem  member       对象所属普通项目的成员(公共项目不落成员行)
+#   pad  padmin       对象所属普通项目的项目管理员
+#   mnt  maintainer   公共项目对象的 owner_id(S1-b:公共项目写权跟维护者)
+#   pr   public_reader 对象在公共项目(全员可读)
+#   pa   public_admin  对象在公共项目 ∧ ops.write(取代 W3 steward)
+# 人工审定期望:
+#   * admin/super_admin 对他人**私有**对象没有任何动词(全 404/403)
+#   * 唯一的越属主能力 = public_admin 下架公共项目对象(scenario/suite.
+#     unpublish、report_definition.delete)
+#   * publish 一律属主/项目管理员/维护者(R6:admin 对他人对象无发布权);
+#     run 公共项目不开(公共资源执行需先复制,不变量 7)
+#   * 移出项目的创建人(D1 关键回归):对原普通项目对象任何谓词不命中
+table_b:
+  scenario:
+    read:      [o, ref, mem, pr]
+    copy:      [o, ref, mem, pr]
+    run:       [o, ref, mem]
+    write:     [o, mem, mnt]
+    delete:    [o, mem, mnt, pa]
+    publish:   [o, pad, mnt]
+    unpublish: [mnt, pa]
+    transfer:  [mnt, pa]
+  suite:
+    read:      [o, ref, mem, pr]
+    run:       [o, ref, mem]
+    write:     [o, mem, mnt]
+    delete:    [o, mem, mnt, pa]
+    publish:   [o, pad, mnt]
+    unpublish: [mnt, pa]
+    transfer:  [mnt, pa]
+  # 数据集/运行方案:读写随父场景(行上无 project_id,实际判定 =
+  # 父场景 can();S1.2 写闸已切换,登记与父场景动词同形)
+  data_set:
+    read:      [o, ref, mem, pr]
+    write:     [o, mem, mnt]
+  run_scheme:
+    read:      [o, ref, mem, pr]
+    write:     [o, mem, mnt]
+  report_definition:
+    read:      [o, pr]
+    write:     [o, mnt]       # W9-2 语义换轴:私有区属主 ∨ 公共项目维护者
+    delete:    [o, mnt, pa]   # 维护者撤下 ∨ Admin+ 下架(同场景/suite)
+    transfer:  [mnt, pa]
+  # S1.6 登记(S1.7 全面收编读写面);私有模板无维护者语义不适用
+  integration_template:
+    transfer:  [mnt, pa]

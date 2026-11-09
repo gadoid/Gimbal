@@ -39,16 +39,16 @@ from app.models.auth_session import AuthSession
 from app.models.environment import Environment
 from app.models.execution import ExecutionSnapshot
 from app.models.permission import AuditLog
+from app.models.deployment import Deployment
 from app.models.service_alias import ServiceAlias
 from app.services import run_dispatcher as rd
 from app.services.gimbal_launcher import LaunchResult
-from app.services.integration_runner import is_scenario_read_only
 from app.services.run_dispatcher import STATUS_DONE, RunTarget
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
     body_of, deliveries, mk_token,
-    seed_alias as _seed_alias, seed_platform_user as _seed_platform_user,
+    seed_alias as _seed_alias,
 )
 from .test_access_tokens import (
     GET_STEP, _gtk, _register, _user_id,
@@ -103,7 +103,7 @@ async def _personal(client, username: str, *,
     """直插 member + 个人令牌(范围 = 被调别名 ∪ 属主凭证)→ 请求头。
     范围对象须先种好(FK);别名/凭证按各用例的种子取。"""
     from .inbound_fixtures import mk_user
-    await mk_user(username, role="member")
+    await mk_user(username, role="admin")
     uid = await _user_id(username)
     auth_ids: list[int] = []
     if cred_aliases:
@@ -123,20 +123,22 @@ async def _personal(client, username: str, *,
 async def _seed_target(*, base_url: str | None = BASE_URL, kind: str = "plate",
                        base_service: str = SERVICE, credential: str | None = CRED,
                        env_lines: dict | None = None) -> None:
-    """被调服务别名(默认 base_service = 端点声明的服务,挂一个声明
-    settle@2.1 的环境)。"""
+    """被调服务别名(默认 base_service = 端点声明的服务)+ 默认环境(声明
+    settle@2.1)+ 该环境的部署地址。authz M2a S6:别名不再挂环境、不带
+    地址 —— adhoc 的环境走环境链(偏好 > 默认环境),版本线取该环境
+    ``lines``,地址取该环境部署表。"""
     lines = {SYSTEM: "2.1"} if env_lines is None else env_lines
     async with db_module.SessionLocal() as s:
-        env_id = None
-        if lines:
-            env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", lines=lines)
-            s.add(env)
-            await s.flush()
-            env_id = env.id
+        env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", lines=lines,
+                          is_default=True)
+        s.add(env)
+        await s.flush()
         s.add(ServiceAlias(
             alias_name=SVC, base_service=base_service, kind=kind,
-            base_url=base_url, credential_alias=credential,
-            environment_id=env_id))
+            slot=credential))
+        if base_url:
+            s.add(Deployment(base_service=base_service, env_id=env.id,
+                             base_url=base_url))
         await s.commit()
 
 
@@ -211,7 +213,6 @@ async def _post(client, headers: dict, body: dict):
 async def ready(client, plate_mock: PlateMock) -> dict:
     """个人令牌 + 被调别名(含环境/凭证)+ plate 桩,返回请求头。
     令牌范围覆盖 SVC 别名与属主凭证 qa-cred(§3.2 临时调用集合)。"""
-    await _seed_platform_user()
     await _seed_target()
     from .inbound_fixtures import mk_user
     await mk_user("ad_user")          # 属主先建,凭证随后入池
@@ -229,14 +230,6 @@ class TestIdentityAndTarget:
     async def test_jwt_403_personal_token_only(self, client, plate_mock):
         h = await _register(client, "ad_jwt")
         r = await _post(client, h, _body())
-        assert r.status_code == 403, r.text
-        assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
-        assert await _executions() == []
-
-    async def test_platform_token_403_personal_only(self, client, plate_mock):
-        await _seed_platform_user()
-        _, plain = await mk_token(kind="platform", name="pt")
-        r = await _post(client, _gtk(plain), _body())
         assert r.status_code == 403, r.text
         assert r.json()["detail"]["code"] == "adhoc_personal_token_only"
         assert await _executions() == []
@@ -304,9 +297,10 @@ class TestStructure:
             "path_params": {"orderNo": "PO1", "page": 2}}
 
     async def test_inbound_recipe_rejected_by_m1_first(self, ready, client):
-        """入站 M1 闸先于临时调用分支:serviceBindings 仍是 inbound_field_not_allowed。"""
+        """入站 M1 闸先于临时调用分支:serviceBindings 仍是 inbound_field_not_allowed
+        (S6 合法形态 {alias} 也拒 —— 入站整字段拒收)。"""
         r = await _post(client, ready, _body(
-            serviceBindings={SVC: {"url": "https://evil.example"}}))
+            serviceBindings={SVC: {"alias": SVC}}))
         assert r.status_code == 422, r.text
         assert r.json()["detail"]["code"] == "inbound_field_not_allowed"
 
@@ -322,7 +316,6 @@ class TestAliasAndVersion:
         被调别名与凭证并把它们纳入令牌范围;否则空范围 —— 别名/凭证由
         各用例按需种(v4:范围校验在 adhoc 结构校验之后,未种别名的
         用例仍先吃到 adhoc_* 的 422)。"""
-        await _seed_platform_user()
         if with_target:
             await _seed_target()
             return await _personal(client, username,
@@ -656,26 +649,3 @@ class TestDispatchSplitEquivalence:
 
 
 # ── 只读闸策略白名单(§九)─────────────────────────────────────
-
-
-class TestReadOnlyStrategyGuard:
-    @staticmethod
-    def _payload(strategy: list[dict]) -> dict:
-        step = {"kind": "step", "call": {"protocol": "http", "service": "svc",
-                                         "method": "GET", "path": "/x"},
-                "request": {"kind": "request", "body": {}}, "strategy": strategy}
-        return {"definition": {"meta": {"name": "ro", "plate": {}},
-                               "steps": [step]}}
-
-    async def test_unknown_strategy_fails_closed(self):
-        ok, offenders = await is_scenario_read_only(self._payload(
-            [{"kind": "extract", "expression": "$.a", "target": "a"},
-             {"kind": "nuke", "target": "db"}]))
-        assert ok is False
-        assert offenders == ["步骤 0(策略 nuke 未知)"]
-        ok, offenders = await is_scenario_read_only(self._payload(
-            [{"kind": "extract", "expression": "$.a", "target": "a"},
-             {"kind": "assign", "source": 1, "target": "b"},
-             {"kind": "assertion", "operator": "eq", "target": "$.c"},
-             {"kind": "sleep", "seconds": 1}]))
-        assert ok is True and offenders == []

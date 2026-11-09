@@ -27,10 +27,11 @@ export interface ScenarioListParams {
   tag?: string
   author?: string
   visibility?: 'public' | 'private'
-  /** 浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1):
-   *  mine = 自己创建的全部(含已发布,admin 同样生效);默认 all =
-   *  现行可见性上限。visibility=public 时后端不叠加 scope。 */
-  scope?: 'mine' | 'all'
+  /** 浏览镜头(§5.1;S7.0 口径):private = 我名下且未加入任何项目
+   *  (「我的场景」);all = 现行可见性上限(admin 全员视角)。 */
+  scope?: 'private' | 'mine' | 'all'
+  /** S7.0 项目页签:按项目过滤(与 visibility/scope 可叠加) */
+  projectId?: number
   updatedWithin?: '24h' | '7d' | '30d'
   /** 关注页/关注卡数据源(store 退位后 ?starred=true 服务端过滤)。 */
   starred?: boolean
@@ -79,8 +80,8 @@ export async function fetchScenarioSignals(ids: string[]): Promise<
 export async function fetchScenarioFacets(params: {
   q?: string
   visibility?: 'public' | 'private'
-  /** 与列表同口径的浏览镜头(§5.1)。 */
-  scope?: 'mine' | 'all'
+  /** 与列表同口径的浏览镜头(§5.1;S7.0:private = 我的私有)。 */
+  scope?: 'private' | 'mine' | 'all'
 }): Promise<ScenarioFacets> {
   const { data } = await http.get<ScenarioFacets>('/scenarios/facets', { params })
   return data
@@ -119,8 +120,13 @@ export async function getScenarioDraft(scenarioId: string): Promise<ScenarioDraf
   return data
 }
 
-export async function createScenario(draft: ScenarioDraft): Promise<Scenario> {
-  const { data } = await http.post<Scenario>('/scenarios', draft)
+/** projectId(S7.0 D6):在项目内新建 —— 门 = 项目成员,公共项目 422。 */
+export async function createScenario(
+  draft: ScenarioDraft, projectId?: number,
+): Promise<Scenario> {
+  const { data } = await http.post<Scenario>('/scenarios', draft, {
+    params: projectId != null ? { projectId } : undefined,
+  })
   return data
 }
 
@@ -144,6 +150,15 @@ export async function starScenario(
 // ── 发布 / 下架 / 复制(P1:取代 V1 公共库能力)─────────────────
 export async function publishScenario(scenarioId: string): Promise<Scenario> {
   const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/publish`)
+  return data
+}
+
+/** S1-e:转移公共副本维护者(维护者本人 ∨ Admin+) */
+export async function transferScenario(
+  scenarioId: string, toUserId: number,
+): Promise<{ transferredTo: number }> {
+  const { data } = await http.post<{ transferredTo: number }>(
+    `/scenarios/${enc(scenarioId)}/transfer`, { toUserId })
   return data
 }
 
@@ -196,12 +211,13 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 }
 
 // ── run ────────────────────────────────────────────────────────
-/** service → {authAlias?, url?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形。
- *  查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
- *  与运行方案无关(退场记录见 docs/adr/0003)。 */
+/** service → {alias} 绑定(authz M2a S6「别名瘦身」):语义 = 「服务键 →
+ *  用哪个别名」(如 fin → fin-maker)。旧 url/authAlias 字段已退役
+ *  (后端 422 binding_field_retired);选中的别名须已登记且 baseService
+ *  与服务键同基(422/409 binding_alias_unknown / binding_alias_mismatch)。
+ *  地址不再按运行选择 — 由执行环境的部署表给出。 */
 export interface ServiceBinding {
-  authAlias?: string
-  url?: string
+  alias?: string
 }
 
 /** 行级数据集选择(spec v3 §4):datasetId + rowIndexes(0-based,与编辑器
@@ -238,13 +254,17 @@ export interface RunRequest {
   /** 断言注入条目(spec v2 §5):异常组 — 跑在基线上,与数据集行并列生成
    *  case;缺省 = 不注入。引擎侧展开由后续任务接入。 */
   injectionEntryIds?: string[]
-  /** service → {authAlias?, url?} 绑定:注入清单 = 模板扫描(steps 里的
-   * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
-   * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
+  /** service → {alias} 绑定(authz M2a S6):注入清单 = 模板扫描(steps 里
+   *  的 ${auth.*} 引用)∪ 绑定 alias 声明的槽位;地址由执行环境的部署表
+   *  给出。旧 auths/injectCredentials/prefix/mergePolicy 与绑定
+   *  authAlias/url 已退役(spec §6 / M2a S6) */
   serviceBindings?: Record<string, ServiceBinding>
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
+  /** authz M2a S2:本次执行环境(环境链首位,> 方案 > 项目默认 > 个人
+   *  偏好 > 默认环境);缺省 = 按链路解析。环境不存在 → 404 */
+  environmentId?: number
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
   graph?: GraphSpec
@@ -324,6 +344,8 @@ export interface SchemeV2 {
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
   options: RunOptions
+  /** authz M2a S2:方案环境(环境链第二位);未设置时后端不落键 */
+  environmentId?: number | null
 }
 
 /** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
@@ -475,6 +497,9 @@ export interface PrecheckResult {
   danglingEntryIds: string[]
   /** steps 引用了、但声明 URL 与绑定 URL 双缺的 service */
   unboundServices: string[]
+  /** authz W6:场景依赖属主内置凭证、而我名下没有同名别名的清单
+   * (执行人 ≠ 属主时内置凭证当空 → 跑起来必在认证段失败);空 = 无告警 */
+  builtinAuthShadowed?: string[]
 }
 
 /** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */

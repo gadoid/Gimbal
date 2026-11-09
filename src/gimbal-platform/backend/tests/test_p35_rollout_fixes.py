@@ -77,7 +77,7 @@ async def _dispatch_chain(client, username: str, *, dataset_rows: list[dict],
 
     scenarioId 全局唯一 —— 同测试多链各用各的场景(按用户名派生)。
     """
-    from app.schemas.scenario_composer import RunRequest, ServiceBinding
+    from app.schemas.scenario_composer import RunRequest
 
     sc_id = f"sc-p35-{username}"
     h = await register_and_login(client, username, "pw123456")
@@ -96,11 +96,15 @@ async def _dispatch_chain(client, username: str, *, dataset_rows: list[dict],
     else:
         ds_id = None
 
+    # authz M2a S6:地址只来自部署表(绑定 url 退役)—— 默认环境登记 SUT
+    async with db_module.SessionLocal() as _s:
+        from .helpers import seed_deployment
+        await seed_deployment(_s, 'svc', sut_url)
+        await _s.commit()
     req = RunRequest(
         scenarioId=sc_id,
         dataSetIds=[ds_id] if ds_id else [],
         parallel=parallel,
-        serviceBindings={"svc": ServiceBinding(url=sut_url)},
     )
     async with db_module.SessionLocal() as db:
         from app.models.user import User
@@ -319,7 +323,7 @@ async def test_reconcile_multistep_extract_shape(client, monkeypatch, stub_sut2)
 async def test_reconcile_graph_shape(client, monkeypatch, stub_sut2):
     """graph 形态:两单元 chain 图,双链图行/计数一致。"""
     from app.schemas.scenario_composer import (
-        GraphSpec, GraphUnitSpec, RunRequest, ServiceBinding,
+        GraphSpec, GraphUnitSpec, RunRequest,
     )
     from app.services import plate_client as pc
 
@@ -337,13 +341,17 @@ async def test_reconcile_graph_shape(client, monkeypatch, stub_sut2):
                 description="p35", author="t", owner=username, tags=[],
                 version="1", createTime="2026-09-24T00:00:00Z", expire=False,
                 requirementRef=[]))
+        async with db_module.SessionLocal() as _s:   # S6:地址走部署表
+            from .helpers import seed_deployment
+            await seed_deployment(_s, "svc", stub_sut2)
+            await _s.commit()
         req = RunRequest(
             scenarioId=f"sc-p35-{username}-u1",   # 锚场景(graph 挂载点)
             graph=GraphSpec(mode="chain", units=[
                 GraphUnitSpec(ref="u1", scenario_id=f"sc-p35-{username}-u1"),
                 GraphUnitSpec(ref="u2",
                               scenario_id=f"sc-p35-{username}-u2"),
-            ], service_bindings={"svc": {"url": stub_sut2}}),
+            ]),
         )
         async with db_module.SessionLocal() as db:
             from app.models.user import User

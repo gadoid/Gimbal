@@ -65,7 +65,7 @@ describe('auth store — fetchMe', () => {
   it('success resolves the user and keeps tokens', async () => {
     const store = useAuthStore()
     seedToken(store)
-    const user = { id: 1, username: 'alice', is_admin: false }
+    const user = { id: 1, username: 'alice'}
     vi.spyOn(authApi, 'me').mockResolvedValue({ user } as never)
 
     const out = await store.fetchMe()

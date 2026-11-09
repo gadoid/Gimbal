@@ -86,9 +86,13 @@
                   <td>
                     <template v-if="exists(row)">
                       <label class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="reuse" :checked="decision(row) !== 'create'" @change="setDecision(row, 'map')" />映射到已有</label>
-                      <label class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="create" :checked="decision(row) === 'create'" @change="setDecision(row, 'create')" />新建</label>
+                      <!-- authz W7/W8:新建别名需 alias.write(Admin 职责),
+                           无能力者不见此选项,后端同门 403 兜底 -->
+                      <label v-if="canCreateAlias" class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="create" :checked="decision(row) === 'create'" @change="setDecision(row, 'create')" />新建</label>
                     </template>
-                    <span v-else class="text-caption text-slate-500">新建</span>
+                    <span v-else class="text-caption text-slate-500">
+                      新建{{ canCreateAlias ? '' : '(需别名管理权 alias.write — 联系管理员登记后再导入)' }}
+                    </span>
                   </td>
                 </tr>
                 <tr v-for="row in createRows" :key="`${row.serviceKey}-cfg`" class="imp-create-cfg">
@@ -154,9 +158,14 @@ import {
   type ImportAnchorEntry,
 } from '@/api/scenario-import'
 import { listAll } from '@/api/auth_sessions'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ open: boolean; bundle: Record<string, unknown> | null }>()
 const emit = defineEmits<{ close: []; imported: [scenarioId: string] }>()
+
+const auth = useAuthStore()
+/** authz W7:新建别名需 alias.write(表 A:admin+);User 只能映射到已有 */
+const canCreateAlias = computed(() => auth.can('alias.write'))
 
 const precheck = ref<ImportPrecheck | null>(null)
 const loading = ref(false)

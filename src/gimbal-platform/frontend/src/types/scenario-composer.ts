@@ -98,6 +98,8 @@ export interface ScenarioListItem {
   tags: string[]
   starred: boolean
   visibility: 'private' | 'public'
+  /** S7.1:所属项目 id(项目徽标;null = 私有) */
+  projectId?: number | null
 }
 
 /** Page 信封(§4.1 统一列表契约):全部列表端点的统一返回形状。 */

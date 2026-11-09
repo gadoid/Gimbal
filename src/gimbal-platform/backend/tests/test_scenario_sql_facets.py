@@ -90,7 +90,7 @@ async def test_member_visibility_in_list(client, owner):
     assert (await client.post(
         "/api/scenarios/sc-m3-a/publish", headers=owner)).status_code == 200
     ids, total = await _ids(client, member, page_size=10)
-    assert total == 1 and ids == {"sc-m3-a"}
+    assert total == 1 and ids == {"sc-m3-a-public"}  # S1.3:公共面 = 副本
 
 
 async def test_facets_endpoint(client, owner):
@@ -102,11 +102,12 @@ async def test_facets_endpoint(client, owner):
     def vals(dim: str) -> dict:
         return {x["value"]: x["count"] for x in f[dim]}
 
-    assert vals("modules") == {"trade": 2, "asset": 1}
-    assert vals("systems") == {"order-svc": 2, "acct-svc": 1}
-    assert vals("tags") == {"smoke": 2, "regression": 1}
-    assert vals("authors") == {"alice": 2, "bob": 1}
-    assert vals("priorities") == {2: 1, 1: 1, 0: 1}
+    # S1.3:发布 = 复制 —— owner 的 all 镜头含 m3-b 的公共副本
+    assert vals("modules") == {"trade": 3, "asset": 1}
+    assert vals("systems") == {"order-svc": 2, "acct-svc": 2}
+    assert vals("tags") == {"smoke": 2, "regression": 2}
+    assert vals("authors") == {"alice": 2, "bob": 2}
+    assert vals("priorities") == {2: 1, 1: 2, 0: 1}
 
     # facets 尊重可见性:member 只看 public 集
     member = await register_and_login(client, "m3facetsmember", "m3-pass-123")

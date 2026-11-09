@@ -34,10 +34,29 @@ async def login_user(
 ) -> dict[str, str]:
     """Login only (no register) → Bearer headers."""
     r = await client.post(
-        "/api/auth/login", json={"username": username, "password": password}
+        "/api/auth/login", json={"username": username, "password": password},
     )
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+async def role_headers(
+    client: AsyncClient,
+    username: str,
+    *,
+    role: str = "user",
+    password: str = "x",
+) -> dict[str, str]:
+    """直插指定角色用户并登录 → Bearer 头(authz T0.1 公共入口)。
+
+    取代散在各测试文件的私有提权 helper(``_register_role`` /
+    ``_admin_headers``):直插不经注册面,免「首注自动管理员」的注册
+    顺序依赖。直插原语仍是 ``inbound_fixtures.mk_user``(幂等)。
+    """
+    from .inbound_fixtures import mk_user
+
+    await mk_user(username, role=role)
+    return await login_user(client, username, password)
 
 
 def make_draft(
@@ -172,7 +191,7 @@ async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> 
         db.add(User(
             id=uid, username=f"fkuser{uid}", display_name="",
             password_hash=(hash_password(FK_ADMIN_PASSWORD) if admin else "x"),
-            role="admin" if admin else "user",
+            role="super_admin" if admin else "user",
             is_active=True,
         ))
     await db.commit()
@@ -182,3 +201,32 @@ async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> 
             " GREATEST((SELECT COALESCE(MAX(id), 1) FROM users), 1))"
         ))
         await db.commit()
+
+
+async def seed_deployment(db: Any, base_service: str, url: str,
+                          *, env_id: int | None = None) -> int:
+    """authz M2a S6:地址只来自部署表 —— 在 ``env_id``(缺省 = 默认环境,
+    不存在则建一个)下登记 ``base_service → url``。返回环境 id。调用方
+    负责 commit。"""
+    from sqlalchemy import select
+
+    from app.models import Deployment, Environment
+
+    if env_id is None:
+        env_id = (await db.execute(select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar()
+        if env_id is None:
+            env = Environment(name="test-default", lines={}, is_default=True)
+            db.add(env)
+            await db.flush()
+            env_id = env.id
+    hit = (await db.execute(select(Deployment).where(
+        Deployment.base_service == base_service,
+        Deployment.env_id == env_id))).scalar_one_or_none()
+    if hit is None:
+        db.add(Deployment(base_service=base_service, env_id=env_id,
+                          base_url=url))
+    else:
+        hit.base_url = url
+    await db.flush()
+    return env_id

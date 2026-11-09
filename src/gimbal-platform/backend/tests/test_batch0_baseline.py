@@ -8,66 +8,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from app.services import run_semantics
-from app.services.integration_runner import is_scenario_read_only
 from app.services.run_materialize import _apply_services
 from app.services.scenario_store import _strip_platform_meta
-
-# ── B1|只读闸 ext: 分支现状(预期变更点 b2-11:删 ext: DB 分支) ────────
-
-
-def _gate_scenario(endpoint: str | None, method: str | None) -> dict:
-    call: dict = {"protocol": "http", "service": "svc", "headers": {}}
-    if method:
-        call["method"] = method
-    step = {"kind": "step", "call": call,
-            "request": {"kind": "request", "body": {}}, "strategy": []}
-    if endpoint:
-        step["endpoint"] = endpoint
-    return {"definition": {"meta": {"name": "n"}, "steps": [step]}}
-
-
-async def test_b1_ext_inline_get_passes():
-    """ext: 步骤带内联 GET → 放行(现状)。"""
-    ok, offenders = await is_scenario_read_only(
-        _gate_scenario("ext:jira-x.search", "GET"))
-    assert ok and offenders == []
-
-
-async def test_b1_ext_inline_post_rejected_even_when_directory_marked_safe():
-    """反转依据①的实证钉(b3-5 收窄:目录表已退役):带内联 POST 的
-    ext: 步骤必拒 —— 目录 query_safe 从未/不再救它;GET 放行。"""
-    ok, offenders = await is_scenario_read_only(
-        _gate_scenario("ext:jira-x.search", "POST"))
-    assert not ok and offenders
-    ok, _ = await is_scenario_read_only(
-        _gate_scenario("ext:jira-x.search", "GET"))
-    assert ok
-
-
-async def test_b1_ext_without_inline_method_fails_closed(client):
-    """基线翻转(新增,b2-11 过渡期行为 §3.5):无内联 method 的 ext: 步骤
-    落入 plate 分支取不到定义 → fail-closed(未知方法)。"""
-    ok, offenders = await is_scenario_read_only(
-        _gate_scenario("ext:jira-x.search", None))
-    assert not ok and offenders
-
-
-async def test_b1_plate_unreachable_propagates(monkeypatch):
-    """plate 不可达:闸函数本身不吞,fail-closed 收口在 run_instance(现状)。"""
-    from app.services import plate_client
-
-    async def boom(eid: str, **kw):
-        raise plate_client.PlateUnavailableError("plate_unavailable: test")
-
-    monkeypatch.setattr(plate_client, "get_endpoint_full", boom)
-    with pytest.raises(plate_client.PlateUnavailableError):
-        await is_scenario_read_only(_gate_scenario("fin.a.a", None))
-
 
 # ── B2/B6|ref 语义现状:working_preview / anchored_systems(不预期变更) ──
 
@@ -201,25 +146,19 @@ def _steps(svc: str) -> list:
 
 
 def test_b8_priority_chain():
-    # ① 显式绑定 > ② authored > ③ 别名 base_url > ④ 缺口
+    # ② authored > ③ 环境部署地址 > ④ 缺口(① 绑定 url 随 authz M2a S6 退役)
+    cfg = {"services": {"svc": "http://authored"}}
+    _apply_services(cfg, steps=_steps("svc"),
+                    alias_base_urls={"svc": "http://alias"})
+    assert cfg["services"]["svc"] == "http://authored", "authored 不被 ③ 覆盖"
+
     cfg = {"services": {}}
     _apply_services(cfg, steps=_steps("svc"),
-                    bindings={"svc": {"url": "http://bound"}},
                     alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://bound"
-
-    cfg = {"services": {"svc": "http://authored"}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={},
-                    alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://authored", "authored 不被别名覆盖"
+    assert cfg["services"]["svc"] == "http://alias", "③ 仅补缺"
 
     cfg = {"services": {}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={},
-                    alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://alias", "别名仅补缺"
-
-    cfg = {"services": {}}
-    _apply_services(cfg, steps=_steps("svc"), bindings={}, alias_base_urls={})
+    _apply_services(cfg, steps=_steps("svc"), alias_base_urls={})
     assert "svc" not in cfg["services"], "缺口留给引擎显式报错"
 
 

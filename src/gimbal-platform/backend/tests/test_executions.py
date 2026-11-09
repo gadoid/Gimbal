@@ -148,3 +148,80 @@ async def test_list_limit_bounds(client: AsyncClient) -> None:
         await client.get("/api/executions?limit=501", headers=auth)
     ).status_code == 422
 
+
+
+# ── authz W4:执行可见收敛(方案 §9.3)──────────────────────────────
+class TestExecutionVisibilityOwnerOnly:
+    """执行及其一切子资源只有属主可见;admin/super_admin 同样 404
+    (排查走审计)。属主面不受影响。"""
+
+    async def test_admin_sees_nothing_of_others_execution(self, client):
+        from tests.helpers import role_headers
+
+        alice = await _login_alice(client)
+        eid = await _insert_execution(status="done")
+        for role in ("admin", "super_admin"):
+            h = await role_headers(client, f"ev_{role}", role=role)
+            assert (await client.get(
+                f"/api/executions/{eid}", headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/rows", headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/events", headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/events/counts",
+                headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/report", headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/scenario-snapshot",
+                headers=h)).status_code == 404, role
+            assert (await client.post(
+                f"/api/executions/{eid}/cancel",
+                headers=h)).status_code == 404, role
+            assert (await client.get(
+                f"/api/executions/{eid}/debug", headers=h)).status_code == 404, role
+
+        # 属主本人照常
+        assert (await client.get(
+            f"/api/executions/{eid}", headers=alice)).status_code == 200
+
+    async def test_admin_batch_summary_of_others_is_404(self, client):
+        from tests.helpers import role_headers
+
+        from app.core.db import SessionLocal
+
+        await _login_alice(client)  # _insert_execution 依赖 alice 在场
+        await _insert_execution(status="done")
+        async with SessionLocal() as s:  # 挂上 batch_id(alice 的批次)
+            from app.models import Execution
+            from sqlalchemy import update
+            await s.execute(update(Execution).where(
+                Execution.batch_id.is_(None)).values(batch_id="b-w4"))
+            await s.commit()
+        h = await role_headers(client, "ev_bsup", role="super_admin")
+        r = await client.get("/api/executions/batch-summary",
+                             params={"batchId": "b-w4"}, headers=h)
+        assert r.status_code == 404, r.text
+
+    async def test_admin_cannot_query_others_by_token_id(self, client):
+        """executions 列表的 tokenId 例外删除:admin 只能按**本人**令牌过滤。"""
+        from tests.helpers import role_headers
+
+        await _login_alice(client)  # 占掉首注
+        from sqlalchemy import select as _sel
+
+        from app.models import User
+        from .inbound_fixtures import mk_token
+
+        # alice 的个人令牌(属主本人可按它过滤;admin 不行)
+        from app.core.db import SessionLocal
+
+        async with SessionLocal() as s:
+            alice_id = (await s.execute(_sel(User.id).where(
+                User.username == "alice"))).scalar_one()
+        tid, _plain = await mk_token(user_id=alice_id)
+        h_admin = await role_headers(client, "ev_tsadm", role="super_admin")
+        r = await client.get("/api/executions",
+                             params={"tokenId": tid}, headers=h_admin)
+        assert r.status_code == 404, r.text

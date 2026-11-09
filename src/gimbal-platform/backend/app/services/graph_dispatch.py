@@ -31,7 +31,6 @@ from . import service_aliases
 from . import carry_store
 from .gimbal_launcher import launch
 from .run_materialize import materialize_run_copy, referenced_services
-from .scenario_store import steps_from_payload
 
 
 async def resolve_graph_units(
@@ -89,6 +88,11 @@ async def resolve_graph_units(
                     f"unit {u['ref']!r}: rowIndex {ri} out of range for "
                     f"{ds_id} (0..{len(rows) - 1})")
             row_dict = rows[ri] or {}
+        if row_dict and scenario_store.is_foreign_viewer(
+                owner_id, scen.owner_id):
+            # authz W6:跑他人场景(引用/suite 成员)—— 数据集敏感列剥
+            # (原件不动;内置凭证由 materialize 处属主规则当空)
+            row_dict = scenario_store.strip_sensitive_columns([row_dict])[0]
         composed = compose_scenario(payload, row_dict)
 
         entries = u.get("injectionEntryIds") or []
@@ -103,14 +107,17 @@ async def resolve_graph_units(
                     composed = compose_injection_scenario(composed, entry)
         unit = u
         if scheme and scheme.get("serviceBindings"):
-            # 方案的服务绑定随行合入(单元级覆盖同名)
+            # 方案的服务绑定随行合入(单元级覆盖同名;存量形态剥离退役字段)
+            from ..schemas.scenario_composer import scrub_retired_bindings
             unit = {**u, "serviceBindings": {
-                **(scheme.get("serviceBindings") or {}),
+                **scrub_retired_bindings(scheme.get("serviceBindings")),
                 **(u.get("serviceBindings") or {})}}
         resolved.append({
             "unit": unit,
             "scenario_row": scen,
             "composed": composed,
+            # S2.1:单元方案的环境(环境链第二位)
+            "scheme_env": (scheme or {}).get("environmentId"),
         })
     return resolved
 
@@ -134,6 +141,7 @@ async def materialize_graph(
     graph_req: dict,
     *,
     full: bool = False,
+    env: "Any" = None,
 ) -> dict:
     """GraphRunRequest dict → gimbal SuiteGraph dict(不执行)。
 
@@ -185,15 +193,19 @@ async def materialize_graph(
                 if sys_ in meta_plate:
                     meta_plate[sys_] = eff
 
-    # 认证与绑定物化(graph 级一次;单元绑定合并到全域)。N1-2:凭证
-    # 清单与单场景链/预检同源 —— run_prepare.graph_auth_aliases **逐
-    # 单元**走 exec_auth_aliases(模板扫描 ${auth.*} ∪ 绑定 authAlias
-    # (图级+单元+方案合并后)∪ 别名表凭证默认)再并集。此前只收
-    # graph_req 单元级显式 authAlias:方案级绑定不进清单、无模板扫描、
-    # 无别名默认 —— 与执行期真实注入面漂移(预检看得到方案级而执行
-    # 收不到)。逐单元而非按服务压平 {服务: 别名}:同服务多别名
-    # (qa1/qa2)会被后写覆盖先写丢凭证,别名默认的显式绑定排除也被
-    # 压平键全局放大(评审 2026-11-01 §2 回归)。
+    # 认证与绑定物化(graph 级一次)。N1-2:凭证清单与单场景链/预检
+    # 同源 —— run_prepare.graph_auth_aliases **逐单元**走
+    # exec_auth_aliases(模板扫描 ${auth.*} ∪ 生效别名声明槽位(S6:图级
+    # +单元+方案合并后的绑定选别名即换槽))再并集。逐单元而非按服务
+    # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写(评审
+    # 2026-11-01 §2 回归)。选的别名须存在且同基础服务(S6)。
+    for r in resolved:
+        try:
+            await service_aliases.validate_binding_aliases(
+                db, unit_merged_bindings(graph_req, r["unit"]))
+        except service_aliases.BindingAliasInvalid as e:
+            raise GraphDispatchError(
+                f"{e.code}: 单元 {r['unit'].get('ref')}: {e.message}") from None
     auth_aliases = await run_prepare.graph_auth_aliases(
         db_module.SessionLocal,
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
@@ -201,18 +213,43 @@ async def materialize_graph(
     exec_auths = (await run_prepare.resolve_exec_auths(
         db_module.SessionLocal, owner_id, auth_aliases)
         if auth_aliases else [])
-    alias_urls: dict = {}
-    try:
-        alias_urls = await service_aliases.base_urls_for(
-            db, _all_referenced_services(resolved))
-    except Exception:  # noqa: BLE001
-        alias_urls = {}
+    # S2.1 环境链逐单元:显式位(配方快照 explicit,或图级
+    # environmentId)整图生效;否则按单元 方案 > 单元场景项目默认 >
+    # 个人偏好 > 默认环境 解析 —— 地址 ③ 层逐单元查(查表失败降级空表)
+    from .env_chain import (
+        EnvChoice, EnvironmentNotFound, resolve_environment)
+    explicit = env if (env is not None and env.source == "explicit") \
+        else None
+    if explicit is None and graph_req.get("environmentId"):
+        try:
+            explicit = await resolve_environment(
+                db, explicit=int(graph_req["environmentId"]))
+        except EnvironmentNotFound as e:
+            raise GraphDispatchError(str(e)) from None
+    unit_urls: dict[str, dict] = {}
+    for r in resolved:
+        ref = r["unit"]["ref"]
+        try:
+            ue: EnvChoice = explicit or await resolve_environment(
+                db, scheme_env=r.get("scheme_env"),
+                project_id=r["scenario_row"].project_id, user_id=owner_id)
+            unit_urls[ref] = await service_aliases.base_urls_for(
+                db, _all_referenced_services([r]), env=ue)
+        except Exception:  # noqa: BLE001
+            unit_urls[ref] = {}
 
     # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
     # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
     # 炸 _apply_carry 的权宜 —— Suite 无 carry 的功能缺口由归一补齐。
+    # S4:逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
     carry_ctxs = await run_prepare.unit_carry_contexts(
-        db_module.SessionLocal, [r["composed"] for r in resolved])
+        db_module.SessionLocal, [r["composed"] for r in resolved],
+        [{"project_id": r["scenario_row"].project_id,
+          "user_id": (owner_id if r["scenario_row"].project_id is None
+                      else None),
+          # S6:绑定选别名 → carry 别名键随之切换
+          "bindings": unit_merged_bindings(graph_req, r["unit"])}
+         for r in resolved])
 
     unit_payloads: dict[str, dict] = {}
     m2_info: dict | None = None
@@ -228,11 +265,21 @@ async def materialize_graph(
         merged_bindings = unit_merged_bindings(graph_req, r["unit"])
         materialized = materialize_run_copy(
             converted,
-            service_bindings=merged_bindings,
             resolved_auths=exec_auths,
-            built_in_users=run_prepare.built_in_users(composed),
+            # authz W6 主规则:executor(dispatch 的 owner_id)≠ 单元
+            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证,R3)。
+            # 源取落库容器 payload(与其余执行链同源)—— composed 是
+            # 合成后的场景形状,definition_from_payload 解不出 users,
+            # 此前属主凭证全靠 converted 漏过来
+            built_in_users=run_prepare.built_in_users(
+                r["scenario_row"].payload, executor_id=owner_id,
+                scenario_owner_id=r["scenario_row"].owner_id,
+                project_id=r["scenario_row"].project_id),
             carry_context=carry_ctxs[i],
-            alias_base_urls=alias_urls,
+            alias_base_urls=unit_urls.get(r["unit"]["ref"], {}),
+            # 原 5:单元场景在项目/公共区 → 直连地址不生效
+            direct_addresses=run_prepare.zone_allows_direct(
+                r["scenario_row"].project_id),
         )
         unit_payloads[r["unit"]["ref"]] = materialized
 
@@ -333,9 +380,13 @@ async def materialize_graph(
 
 
 def _all_referenced_services(resolved: list[dict]) -> list[str]:
+    # r["composed"] 是 compose_scenario 产物 = 已解包的 definition 本体
+    # (B-1 勘误);此前按容器调 steps_from_payload 恒得 [] —— 单元 ③ 层
+    # 地址从未生效,被绑定 url 层掩盖(authz M2a S6 退役绑定 url 后暴露)
     out: set[str] = set()
     for r in resolved:
-        for st in steps_from_payload(r["composed"]):
+        steps = (r["composed"] or {}).get("steps") or []
+        for st in (x for x in steps if isinstance(x, dict)):
             svc = (st.get("call") or {}).get("service")
             if svc:
                 out.add(svc)

@@ -19,8 +19,8 @@
         <SelectTrigger data-testid="role-filter"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">全部角色</SelectItem>
+          <SelectItem value="super_admin">超级管理员</SelectItem>
           <SelectItem value="admin">管理员</SelectItem>
-          <SelectItem value="member">成员</SelectItem>
           <SelectItem value="user">用户</SelectItem>
         </SelectContent>
       </Select>
@@ -205,10 +205,10 @@
                     <RadioGroupItem value="user" /> 用户
                   </label>
                   <label class="flex cursor-pointer items-center gap-1.5 text-body">
-                    <RadioGroupItem value="member" /> 成员
+                    <RadioGroupItem value="admin" /> 管理员
                   </label>
                   <label class="flex cursor-pointer items-center gap-1.5 text-body">
-                    <RadioGroupItem value="admin" /> 管理员
+                    <RadioGroupItem value="super_admin" /> 超级管理员
                   </label>
                 </RadioGroup>
               </FormControl>
@@ -405,7 +405,7 @@ const authStore = useAuthStore()
 // ── filters & visible rows(M4:q/角色下推服务端,Page 信封)──────
 // useServerList 观察 params 签名:搜索词/角色任一变化 → 防抖重拉 + 回页 1。
 const searchQuery = ref('')
-const roleFilter = ref<'all' | 'admin' | 'member' | 'user'>('all')
+const roleFilter = ref<'all' | 'super_admin' | 'admin' | 'user'>('all')
 
 const list = useServerList<UserOut, Record<string, string | number | boolean | undefined>>({
   fetch: (params) => usersApi.list(params),
@@ -425,11 +425,11 @@ async function reloadList(): Promise<void> {
   await list.reload()
 }
 
-const adminCount = computed(() => list.items.value.filter((u) => roleOf(u) === 'admin').length)
+const adminCount = computed(() => list.items.value.filter((u) => roleOf(u) === 'super_admin').length)
 const activeCount = computed(() => list.items.value.filter((u) => u.is_active).length)
 
 const metaText = computed(() => {
-  return `${usersTotal.value} 个用户 · ${activeCount.value} 启用 · ${adminCount.value} admin`
+  return `${usersTotal.value} 个用户 · ${activeCount.value} 启用 · ${adminCount.value} 超级管理员`
 })
 
 // ── row helpers ─────────────────────────────────────────
@@ -437,25 +437,25 @@ function isSelf(row: UserOut): boolean {
   return row.id === authStore.currentUser?.id
 }
 
-type Role = 'user' | 'member' | 'admin'
-const ROLE_LABELS: Record<Role, string> = { user: '用户', member: '成员', admin: '管理员' }
-const OTHER_ROLES: Role[] = ['user', 'member', 'admin']
-/** 行角色:role 缺省(旧缓存)回落 is_admin;更名前的 operator 就地归并为 member。 */
+/** authz W1 三级角色(user | admin | super_admin)。列表行来自后端实时
+ * 响应,role 一定是新值(is_admin 派生位已停发)。 */
+type Role = 'user' | 'admin' | 'super_admin'
+const ROLE_LABELS: Record<Role, string> = { user: '用户', admin: '管理员', super_admin: '超级管理员' }
+const OTHER_ROLES: Role[] = ['user', 'admin', 'super_admin']
 function roleOf(u: UserOut): Role {
   const r = (u as { role?: Role }).role
-  if (r === 'user' || r === 'member' || r === 'admin') return r
-  if (r === 'operator') return 'member'
-  return u.is_admin ? 'admin' : 'user'
+  if (r === 'user' || r === 'admin' || r === 'super_admin') return r
+  return 'user'
 }
 function roleLabel(r: Role): string { return ROLE_LABELS[r] }
 function roleChipClass(r: Role): string {
-  return r === 'admin' ? 'bg-signal-failed/10 text-signal-failed'
-    : r === 'member' ? 'bg-blue-500/10 text-blue-600'
+  return r === 'super_admin' ? 'bg-signal-failed/10 text-signal-failed'
+    : r === 'admin' ? 'bg-blue-500/10 text-blue-600'
     : 'bg-signal-soft text-signal'
 }
 function canSetRole(row: UserOut, target: Role): boolean {
   if (roleOf(row) === target) return false
-  if (roleOf(row) === 'admin' && target !== 'admin' && adminCount.value <= 1) return false
+  if (roleOf(row) === 'super_admin' && target !== 'super_admin' && adminCount.value <= 1) return false
   return true
 }
 
@@ -562,7 +562,7 @@ const createSchema = toTypedSchema(z.object({
   password: z.string()
     .min(1, '请输入初始密码')
     .refine((v) => v.length >= 8 && /[A-Za-z]/.test(v) && /\d/.test(v), '至少 8 位含字母 + 数字'),
-  role: z.enum(['user', 'member', 'admin']),
+  role: z.enum(['user', 'admin', 'super_admin']),
 }))
 
 const { handleSubmit, resetForm, setFieldValue } = useForm({
@@ -594,7 +594,7 @@ const onCreateSubmit = handleSubmit(async (values) => {
       username: values.username,
       display_name: values.display_name || undefined,
       password: values.password,
-      is_admin: values.role === 'admin',
+      role: values.role,
     })
     toast.success(`已创建用户 ${values.username}`)
     createOpen.value = false

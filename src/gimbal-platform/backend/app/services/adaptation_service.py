@@ -262,6 +262,11 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
 
     payload = {**(op.payload or {})}
     try:
+        if op.op_type not in CARRY_OPS and op.scenario_id:
+            # 存量 op(D5 前补的)应用时同闸:私有场景标 conflict 不落
+            await _ensure_batch_scope(db, op.scenario_id,
+                                      batch_id=op.batch_id,
+                                      op_type=op.op_type, notify=False)
         if op.op_type in CARRY_OPS:
             await _apply_carry_op(db, op, payload)
         elif op.op_type in DATASET_OPS:
@@ -318,7 +323,8 @@ async def _notify_adaptation_applied(
             title=f"适配批次已应用:{batch.endpoint_id}",
             body=f"你的场景 {scen_id}({entity})已被适配批次 {batch.batch_id} 触碰,"
                  f"请留意字段变更(批次由 {batch.operator_name or 'operator'} 处理)。",
-            link=f"/adaptations/batches/{batch.batch_id}",
+            # 属主不一定有批次详情的 ops.write —— 指向自己的场景
+            link=f"/scenarios/{scen_id}/detail",
             commit=False,
         )
         await db.commit()
@@ -895,6 +901,10 @@ async def create_op(
         raise ValueError(f"op_needs_dataset: {op_type} requires datasetId")
     elif not scenario_id:
         raise ValueError(f"op_needs_scenario: {op_type} requires scenarioId")
+    if op_type not in CARRY_OPS:
+        # authz D5:批次只改公共场景;私有场景通知属主自行适配
+        await _ensure_batch_scope(db, scenario_id, batch_id=batch_id,
+                                  op_type=op_type, notify=True)
     batch = await _get_batch(db, batch_id)
     if batch.status != "open":
         raise ValueError(
@@ -975,13 +985,46 @@ async def _ensure_dataset_snapshot(
     ))
 
 
+async def _ensure_batch_scope(db, scenario_id: str, *, batch_id: str,
+                              op_type: str, notify: bool) -> None:
+    """authz D5:批次的场景 / 数据集 op 只作用于公共场景(S1 后含项目
+    场景)。私有场景 → ValueError ``private_scenario_owner_only``;
+    ``notify`` 时给属主发「待适配」通知,链接到属主自己的单场景适配
+    入口(对比 → 保存检查 → 提交,属主闸在 submit 内)。"""
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise KeyError(f"scenario_not_found: {scenario_id}")
+    # S1.1 闸升级:批次可代改 = 公共 + 项目场景(project_id 非空;
+    # 影子写保证与 visibility 判定等价,普通项目 S1.3/S1.4 起才有内容)
+    if row.project_id is not None:
+        return
+    if notify and row.owner_id is not None:
+        from . import notifications as notify_svc
+        try:
+            await notify_svc.create_notification(
+                db, user_id=row.owner_id, type_="adaptation_pending",
+                title=f"场景「{row.name or scenario_id}」需要适配",
+                body=(f"适配批次 {batch_id} 要对你的场景做 {op_type} 变更;"
+                      "私有场景不由批次代改,请在适配页对比后自行提交"),
+                link=f"/adaptations?scenario={scenario_id}",
+                commit=False)
+            await db.commit()
+        except Exception:  # noqa: BLE001 — 通知是增强
+            logger.opt(exception=True).warning(
+                "adaptation: notify pending failed ({})", scenario_id)
+    raise ValueError(
+        f"private_scenario_owner_only: 场景 {scenario_id} 是私有场景,"
+        "批次不代改;已通知属主自行适配")
+
+
 async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
-    """R22：适配权限跟随场景编辑权——admin 或场景 owner。"""
+    """R22：适配权限跟随场景编辑权——表 B scenario.write = 属主单判。
+
+    authz 收尾：原 super_admin 旁路删除（私有区对任何平台角色不可见，
+    方案 1.3；Admin+ 对他人对象唯一的动词是下架公共对象）。"""
     from fastapi import HTTPException
     from app.services.scenario_store import owned_scenario_ids
 
-    if getattr(user, 'role', '') == 'admin':
-        return
     owned = await owned_scenario_ids(db, user)
     for sid in scenario_ids:
         if str(sid) not in owned:
@@ -1788,7 +1831,7 @@ async def notify_cross_owner(
                 type_="scenario.version_change",
                 title=msg,
                 body=f"Suite「{suite.name}」引用了该场景（批次 {batch_id}）",
-                link=f"/adaptations/batches/{batch_id}")
+                link=f"/scenarios/{scenario_id}/detail")
             notified.add(owner)
             sent += 1
 
@@ -1800,7 +1843,7 @@ async def notify_cross_owner(
                 type_="scenario.version_change",
                 title=msg,
                 body=f"集成任务「{task.name}」引用了该场景（批次 {batch_id}）",
-                link=f"/adaptations/batches/{batch_id}")
+                link=f"/scenarios/{scenario_id}/detail")
             notified.add(owner)
             sent += 1
 

@@ -41,6 +41,7 @@ from sqlalchemy import (
     BigInteger, Boolean, ForeignKey, Index, Integer, String, Text,
 )
 from sqlalchemy import func
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -64,9 +65,19 @@ class IntegrationTask(Base):
     name: Mapped[str] = mapped_column(String(128))
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False)
-    visibility: Mapped[str] = mapped_column(String(16), default="private")
-    # P1 只有 platform;personal 随 P2(订阅生成实例/缺凭证态)开放
-    identity_mode: Mapped[str] = mapped_column(String(16), default="platform")
+    # visibility 列随 0043 删除;API 的 visibility 入参语义不变
+    #(公开 ⇔ project_id=公共项目,创建/更新走 zone.apply_*)。
+    # 项目区:仅模板行使用 —— 公共项目 = 公开模板(可订阅),
+    # 实例行恒空(实例归持有人,个人对象)。S1.7 起 _can_manage 判定
+    # 平台模板改用下方 is_platform_template,不再比对属主。
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True)
+    # D10 显式标记:「平台维护的保活模板」与「个人发布的公共模板」的
+    # 区分依据(0038 起靠属主 == __platform__ 判定,软删挂靠行会误伤)
+    is_platform_template: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false())
+    # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
+    # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
     # 评审 E6:scenario 先行,suite 随后(target_type + 两个可空引用)
     target_type: Mapped[str] = mapped_column(String(16), default="scenario")
     scenario_id: Mapped[str] = mapped_column(String(128), nullable=True)
@@ -110,7 +121,8 @@ class IntegrationTask(Base):
     # 暂停原因全集:manual / fail_streak / made_private / template_changed
     # / auth_failed / missing_credential / scope_denied(平台场景非公共)
     # / token_revoked / token_invalidated / token_expired
-    # / token_owner_ineligible / resource_not_allowed(webhook v4 §3.3)
+    # / resource_not_allowed(webhook v4 §3.3;token_owner_ineligible
+    # 已随 authz W5/C1 退役)
     paused_reason: Mapped[str] = mapped_column(String(32), default="")
     running_since: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

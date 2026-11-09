@@ -155,7 +155,7 @@ function goTokens() {
 const pendingTokens = ref(0)
 
 onMounted(async () => {
-  if (!['member', 'admin'].includes(auth.role)) return
+  // authz W5:个人令牌开放至全体用户 —— 角色门删除,人人可有待处理角标
   try {
     const env = await listAccessTokens('personal')
     pendingTokens.value = env.items.filter((t) =>

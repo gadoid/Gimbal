@@ -35,11 +35,10 @@ export type ScenarioListRow = ScenarioListItem
  *  更大档位在卡内滑轨滚动;用户手选的行数走 pager.sizes 偏好)。 */
 export const LIST_PAGE_SIZE = 10
 
-/** 分桶:mine = 「我的场景」页(浏览镜头,scope=mine——自己创建的全部
- *  含已发布;admin 默认同样只见自己的,「全员视角」是显式开关),public
- *  = 公共页(visibility=public,口径不变)。
- *  此前 mine 桶下推 visibility=private——admin 查 private = 全员私有,
- *  是「admin 场景库被淹没」的根源;且自己的已发布场景从「我的」页消失。 */
+/** 分桶:mine = 「我的场景」页(S7.0 口径:scope=private——我名下且
+ *  未加入任何项目;进项目的场景从项目页进。admin 的「全员视角」仍是
+ *  scope=all 显式开关),public = 公共页(visibility=public,兼容别名
+ *  = 公共项目)。 */
 type Bucket = 'mine' | 'public'
 
 /** 浏览镜头的本地偏好键(仅 admin 的全员视角开关用;镜头不进权限)。 */
@@ -56,17 +55,17 @@ export function useScenarioListView(bucket: Bucket) {
   // 拿到的集合与可见性上限严格一致。
   const lensAll = ref(
     bucket === 'mine'
-      && auth.isAdmin
+      && auth.can('users.manage')
       && window.localStorage.getItem(LENS_KEY) === 'all',
   )
 
   function toggleLens(): void {
     lensAll.value = !lensAll.value
-    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'mine')
+    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'private')
   }
 
-  function lensScope(): 'mine' | 'all' {
-    return lensAll.value ? 'all' : 'mine'
+  function lensScope(): 'private' | 'all' {
+    return lensAll.value ? 'all' : 'private'
   }
 
   // 初始 q 从地址栏读回(在 useServerList 创建前赋值,不触发首拉)。
@@ -268,7 +267,7 @@ export function useScenarioListView(bucket: Bucket) {
     store,
     q, filters,
     // 浏览镜头(mine 桶):admin 显式「全员视角」开关。
-    lensAll, lensAvailable: bucket === 'mine' && auth.isAdmin, toggleLens,
+    lensAll, lensAvailable: bucket === 'mine' && auth.can('users.manage'), toggleLens,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

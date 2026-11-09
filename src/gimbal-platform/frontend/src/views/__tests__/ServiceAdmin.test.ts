@@ -1,9 +1,13 @@
 /**
  * ServiceAdmin.vue — 服务信息管理(P1 唯一净新增页面):
  *   - 左栏系统→服务两层树(只到服务级),右侧数字 = 已登记别名数;
- *   - 顶部分组 chip 筛选(不选服务跨服务筛,选了服务在服务内筛);
  *   - 「服务级默认」行 = aliasName === baseService 的真实行打 tag;
  *   - 登记/编辑/删除走 api;admin 写面。
+ *
+ * authz M2a S6「别名瘦身」:baseUrl/环境归属/凭证别名/个人归属退役 —
+ * 表列只剩 别名/所属服务/声明槽位/操作,登记不再需要 URL;分组(环境)
+ * chips 已移除。这里同步改写:URL 必填断言改为「无 URL 即可登记」,
+ * 槽位(slot)编辑钉住。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -11,35 +15,26 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import ServiceAdmin from '@/views/ServiceAdmin.vue'
 import * as api from '@/api/service-aliases'
-import * as authApi from '@/api/auth_sessions'
 import * as catalog from '@/utils/catalog-services'
 import * as confirmModule from '@/utils/confirmAction'
-import * as envApi from '@/api/environments'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
 const aliases: api.ServiceAliasRow[] = [
-  { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate', baseUrl: null, environmentId: null, environmentName: null,
-    credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate', baseUrl: 'https://uat.fin.local', environmentId: 1, environmentName: '测试',
-    credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'wms-service-pre', baseService: 'wms-service', kind: 'plate', baseUrl: null, environmentId: 1, environmentName: '预发',
-    credentialAlias: null, ownerUserId: 7, createdAt: '', updatedAt: '' },
+  { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate', slot: null,
+    createdAt: '', updatedAt: '' },
+  { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate', slot: 'uat-slot',
+    createdAt: '', updatedAt: '' },
+  { aliasName: 'wms-service-pre', baseService: 'wms-service', kind: 'plate', slot: null,
+    createdAt: '', updatedAt: '' },
 ]
 
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
   vi.spyOn(api, 'listAllAliases').mockResolvedValue(aliases)
-  vi.spyOn(authApi, 'listAll').mockResolvedValue([
-    { alias: 'uat-cred' } as never,
-  ])
-  vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([
-    { id: 1, name: '测试', description: '', visibility: 'public', lines: {}, ownerId: null },
-    { id: 2, name: '预发', description: '', visibility: 'public', lines: {}, ownerId: null },
-  ])
   vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
     { service: 'fin-service', system: 'fin' },
     { service: 'fin-report-service', system: 'fin' },
@@ -88,38 +83,41 @@ it('左栏系统→服务两层;右侧数字 = 已登记别名数', async () => 
   expect(w.findAll('[data-testid^="alias-row-"]')).toHaveLength(3)
 })
 
-it('服务级默认行打 tag;归属列区分团队/个人', async () => {
+it('服务级默认行打 tag;槽位列展示声明值(M2a S6:URL/归属/环境列退役)', async () => {
   const w = await mountPage()
   const finRow = w.find('[data-testid="alias-row-fin-service"]').text()
   expect(finRow).toContain('服务级默认')
   expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).not.toContain('服务级默认')
-  expect(w.find('[data-testid="alias-row-wms-service-pre"]').text()).toContain('个人(#7)')
-  expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).toContain('团队共享')
+  // 槽位列:声明值显示,未声明显示占位
+  expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).toContain('uat-slot')
+  expect(w.find('[data-testid="alias-row-fin-service"]').text()).toContain('未声明')
+  // M2a S6 退役列不再渲染
+  expect(w.text()).not.toContain('团队共享')
+  expect(w.text()).not.toContain('未归属环境')
+  expect(w.text()).not.toContain('凭证别名')
 })
 
-it('点树选服务 → 只看该服务;分组 chip 叠加筛选', async () => {
+it('点树选服务 → 只看该服务(M2a S6:分组 chips 已随环境归属退役)', async () => {
   const w = await mountPage()
   await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
   expect(w.findAll('[data-testid^="alias-row-"]')).toHaveLength(2)
-  // 服务内分组:只有「测试」一个 chip
-  await w.find('[data-testid="alias-chip-测试"]').trigger('click')
-  expect(w.findAll('[data-testid^="alias-row-"]')).toHaveLength(1)
-  expect(w.find('[data-testid="alias-row-fin-service-uat"]').exists()).toBe(true)
+  // 分组(环境)chips 不再渲染
+  expect(w.find('[data-testid="alias-chip-测试"]').exists()).toBe(false)
+  expect(w.text()).not.toContain('未分组')
 })
 
-it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);编辑回填且别名不可改', async () => {
+it('登记调用 createAlias 并重载(M2a S6:不需要 URL;不带退役字段)', async () => {
   const create = vi.spyOn(api, 'createAlias').mockResolvedValue(aliases[1])
   const w = await mountPage()
   await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
   await w.find('[data-testid="alias-name-input"]').setValue('prod2')
-  // V5(B):分组输入已退役(归属环境经下拉选择);未选择 → null
-  // URL 必填(2026-09-23):没填时登记钮禁用,不发起请求
-  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
-  await w.find('[data-testid="alias-url-input"]').setValue('https://prod.mall.local')
+  // M2a S6:创建别名不再要求 URL —— 没填 URL 登记钮也可点
+  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(false)
+  await w.find('[data-testid="alias-slot-input"]').setValue('maker')
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', environmentId: null, credentialAlias: null, kind: 'plate', baseService: null,
+    aliasName: 'fin-service-prod2', slot: 'maker', kind: 'plate', baseService: null,
   })
   expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
@@ -127,12 +125,30 @@ it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);�
   const nameInput = w.find('[data-testid="alias-name-input"]')
   expect((nameInput.element as HTMLInputElement).value).toBe('uat')
   expect((nameInput.element as HTMLInputElement).disabled).toBe(true)
+  // 槽位回填
+  expect((w.find('[data-testid="alias-slot-input"]').element as HTMLInputElement).value)
+    .toBe('uat-slot')
+})
+
+it('编辑别名:patch 只送 slot(清空 = null);退役字段不出现', async () => {
+  const patch = vi.spyOn(api, 'patchAlias').mockResolvedValue(aliases[0])
+  const w = await mountPage()
+  await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
+  await w.find('[data-testid="alias-slot-input"]').setValue('maker2')
+  await w.find('[data-testid="alias-save"]').trigger('click')
+  await flushPromises()
+  expect(patch).toHaveBeenCalledWith('fin-service-uat', { slot: 'maker2' })
+  // 清空槽位 → slot null(声明撤销)
+  await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
+  await w.find('[data-testid="alias-slot-input"]').setValue('')
+  await w.find('[data-testid="alias-save"]').trigger('click')
+  await flushPromises()
+  expect(patch).toHaveBeenLastCalledWith('fin-service-uat', { slot: null })
 })
 
 it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀随身;取消选中剥前缀;编辑态槽显所属服务', async () => {
   const create = vi.spyOn(api, 'createAlias').mockResolvedValue(aliases[1])
   const w = await mountPage()
-  await w.find('[data-testid="alias-url-input"]').setValue('https://x.fin.local')
   // 未选服务:槽占位「服务」,无基不可提交(槽恒在,输入框位置不跳)
   expect(w.find('[data-testid="alias-prefix"]').text()).toBe('服务名')
   expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
@@ -151,12 +167,12 @@ it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀�
   expect(w.find('[data-testid="alias-prefix"]').text()).toBe('服务名')
   expect((nameInput.element as HTMLInputElement).value).toBe('uat2')
   expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
-  // 选回并保存:提交完整全串
+  // 选回并保存:提交完整全串(无 URL 要求,不填槽位 → null)
   await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', environmentId: null, credentialAlias: null, kind: 'plate', baseService: null,
+    aliasName: 'fin-service-uat2', slot: null, kind: 'plate', baseService: null,
   })
   // 编辑态:槽显该别名所属服务,输入框只读展示后缀
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
@@ -186,8 +202,6 @@ describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
     vi.spyOn(api, 'listAllAliases').mockResolvedValue(aliases)
-    vi.spyOn(authApi, 'listAll').mockResolvedValue([])
-    vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([])
     vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
       { service: 'fin-service', system: 'fin', kind: 'sut' },
       { service: 'fin-report-service', system: 'fin', kind: 'sut' },
@@ -208,13 +222,13 @@ describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
   })
 
   it('external 别名:显式 base_service 下拉(只列 integration 服务),登记透传', async () => {
-    const create = vi.spyOn(api, 'createAlias').mockResolvedValue({} as never)
+    const create = vi.spyOn(api, 'createAlias').mockResolvedValue({ } as never)
     const w = await mountPage()
     await flushPromises()
     expect(w.find('[data-testid="alias-baseservice-trigger"]').exists())
       .toBe(false)  // plate 态不出现
     const vm = w.vm as unknown as {
-      draft: { kind: string; baseService: string; aliasName: string; baseUrl: string }
+      draft: { kind: string; baseService: string; aliasName: string }
     }
     vm.draft.kind = 'external'
     await nextTick()
@@ -226,7 +240,6 @@ describe('ServiceAdmin — b2.5 kind 分区与 external base_service', () => {
     expect(admin.integrationServices).toEqual(['jira'])
     vm.draft.baseService = 'jira'
     vm.draft.aliasName = 'jira-x'
-    vm.draft.baseUrl = 'https://jira.example'
     await nextTick()
     await w.find('[data-testid="alias-save"]').trigger('click')
     await flushPromises()

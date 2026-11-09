@@ -265,7 +265,6 @@
       :schemes="runSchemes"
       :initial-scheme-id="initialSchemeId"
       :service-rows="runServiceRows"
-      :auth-options="runAuthOptions"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
       @close="closeRunDialog"
@@ -459,6 +458,14 @@ let registryHydrated = true
 const isNewScenario = computed(() => !scenarioId.value || scenarioId.value === 'new')
 useSystemPrefill(definition, isNewScenario)
 
+// S7.1 在项目内新建:?projectId= 深链(项目详情「场景」页签发起),
+// 首次保存时透传给 POST /scenarios —— 门 = 项目成员,公共项目 422。
+const createProjectId = computed(() => {
+  if (!isNewScenario.value) return undefined
+  const n = Number(route.query.projectId)
+  return Number.isInteger(n) && n > 0 ? n : undefined
+})
+
 // 便利 getter (模板顶部 crumb / 标题 / canRun 用)
 const meta = computed(() => definition.value.meta)
 const steps = computed(() => definition.value.steps)
@@ -481,14 +488,13 @@ const canRun = computed(() => !!scenario.value && steps.value.length > 0)
 /** stepTo 下拉的展示名:平台编排态 orchestration.steps[].name(plate Step 无 name) */
 const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
 
-/** 执行装配公共体(执行设计 §1.5):schemes / serviceRows / authOptions 派生
+/** 执行装配公共体(执行设计 §1.5):schemes / serviceRows 派生
  *  与 dispatch/另存动作的唯一来源 — 本页不再持有副本。取数在开窗时统一
  *  触发(load 内部含契约面 ensure 的消费面);页面级 dataSets/scenario 仍是
  *  编排编辑态,弹层展示与判定用装配体自己拉的服务端快照。 */
 const {
   schemes: runSchemes,
   serviceRows: runServiceRows,
-  authOptions: runAuthOptions,
   load: loadRunAssembly,
   dispatch: dispatchRunAssembly,
   saveAsScheme: saveAsSchemeViaAssembly,
@@ -549,7 +555,7 @@ watch(
 
 // ── RunDialog props 装配(执行设计 §1.5:公共体收编,本页无副本)──────
 // 开窗统一触发装配取数(手动「运行」/深链/配置签入口共用一个落点);
-// 派生(serviceRows / authOptions)与方案表都来自 useRunAssembly。
+// 派生(serviceRows)与方案表都来自 useRunAssembly。
 watch(runDialogOpen, (open) => { if (open) void loadRunAssembly() })
 
 /** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 死因分组 / 契约在途
@@ -1113,7 +1119,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       // create:撞 id 时后端返 409 (scenario_id_exists),重生成 id 重试(最多 2 次)。
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          saved = await store.saveScenario(null, draft)
+          saved = await store.saveScenario(null, draft, createProjectId.value)
           break
         } catch (e: any) {
           if (attempt < 2 && /scenario_id_exists|409/.test(String(e?.message || e))) {

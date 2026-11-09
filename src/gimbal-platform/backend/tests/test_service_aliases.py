@@ -27,7 +27,7 @@ from .test_scenario_visibility_and_copy import _member
 async def _seed_alias(**over) -> None:
     row = ServiceAlias(
         alias_name="fin-service-uat", base_service="fin-service",
-        credential_alias="uat-cred",
+        slot="uat-cred",
     )
     for k, v in over.items():
         setattr(row, k, v)
@@ -41,46 +41,24 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     plate.services = [{"name": "fin-service"}]
     admin = await _admin(client)
 
-    # 强约束:目录内服务可登记;裸声明(base 不在目录)→ 409
-    # V5(B):先建环境,别名挂 environmentId
-    from app.models import Environment
-    async with db_module.SessionLocal() as s:
-        s.add(Environment(name="测试", lines={}))
-        await s.commit()
-        env_id = (await s.execute(
-            __import__("sqlalchemy").select(Environment.id)
-        )).scalar_one()
-
+    # 强约束:目录内服务可登记;裸声明(base 不在目录)→ 409。authz M2a
+    # S6:别名只登记「名字 → 基础服务 + 声明槽位」(地址在部署表)
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local",
-        "environmentId": env_id, "credentialAlias": "uat-cred",
+        "aliasName": "fin-service-uat", "slot": "uat-cred",
     })
     assert r.status_code == 201, r.text
     assert r.json()["baseService"] == "fin-service"  # 派生落库
-    assert r.json()["environmentName"] == "测试"
-    # 不存在的环境 → 404
-    r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "fin-service-qa",
-                                "baseUrl": "https://qa.fin.local",
-                                "environmentId": env_id + 999})
-    assert r.status_code == 404
-
-    # URL 必填(2026-09-23):缺省在 body 校验层拦 422
-    r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "fin-service-qa"})
-    assert r.status_code == 422
+    assert r.json()["slot"] == "uat-cred"
 
     r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "nope-bare",
-                                "baseUrl": "https://nowhere.local"})
+                          json={"aliasName": "nope-bare"})
     assert r.status_code == 409
     assert "unknown_base_service" in r.text
 
     # plate 宕机(空目录)→ 不能登记(2026-09-20 拍板:不做 unverified 松绑)
     plate.down = True
     r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "fin-service-sit",
-                                "baseUrl": "https://sit.fin.local"})
+                          json={"aliasName": "fin-service-sit"})
     assert r.status_code == 409
     plate.down = False
 
@@ -89,15 +67,16 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     r = await client.get("/api/service-aliases", headers=member)
     assert r.status_code == 200 and len(r.json()["items"]) == 1
     r = await client.post("/api/service-aliases", headers=member,
-                          json={"aliasName": "fin-service-x",
-                                "baseUrl": "https://x.fin.local"})
+                          json={"aliasName": "fin-service-x"})
     assert r.status_code == 403
 
     # patch:显式 null = 清空;缺省 = 不动
     r = await client.patch("/api/service-aliases/fin-service-uat",
-                           headers=admin, json={"credentialAlias": None})
-    assert r.status_code == 200 and r.json()["credentialAlias"] is None
-    assert r.json()["environmentId"] == env_id  # 未显式 patch 的字段不动
+                           headers=admin, json={})
+    assert r.status_code == 200 and r.json()["slot"] == "uat-cred"
+    r = await client.patch("/api/service-aliases/fin-service-uat",
+                           headers=admin, json={"slot": None})
+    assert r.status_code == 200 and r.json()["slot"] is None
     r = await client.delete("/api/service-aliases/fin-service-uat",
                             headers=admin)
     assert r.status_code == 204
@@ -145,12 +124,19 @@ async def _seed_bob_with_uat_cred(client) -> dict:
     """bob + 他本人池子里的 uat-cred 凭证(明文经 Fernet 加密落库)。"""
     headers = await _member(client, "bob")
     async with db_module.SessionLocal() as s:
+        # qa1 = _seed_scenario 的 ${auth.qa1} 扫描引用(S5 失败即中止:
+        # 注入槽必须在执行人池)
         s.add(AuthSession(
             owner_id=await _bob_id(), alias="uat-cred",
             url="https://uat.internal",
             username_enc=fernet_encrypt("bob-uat"),
             password_enc=fernet_encrypt("pw"),
-        ))
+            slot="uat-cred", is_default=True))
+        s.add(AuthSession(
+            owner_id=await _bob_id(), alias="qa1", url="https://qa1",
+            username_enc=fernet_encrypt("qa1-u"),
+            password_enc=fernet_encrypt("pw"),
+            slot="qa1", is_default=True))
         await s.commit()
     return headers
 
@@ -186,14 +172,14 @@ async def test_alias_credential_injected_from_executor_pool(
 
 async def test_alias_credential_chain_end_to_end(
         client, fresh_db, plate_mock: PlateMock, monkeypatch):
-    """step 引用别名服务 fin-service-uat → 别名表命中 uat-cred →
-    bob 池子解析 → users 明文注入;显式绑定优先;存档记原始。"""
+    """step 引用别名服务 fin-service-uat → 别名声明槽位 uat-cred →
+    bob 池子解析 → users 明文注入;方案选别名换槽(S6);存档记原始。"""
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     await _seed_alias()
     bob = await _seed_bob_with_uat_cred(client)
 
-    # 步骤不带 ${auth.*} 模板:注入完全由「别名表默认 / 显式绑定」驱动,
+    # 步骤不带 ${auth.*} 模板:注入完全由「别名声明槽位 / 选别名」驱动,
     # 模板扫描不参与(它恒注入,是另一条既有语义)
     alias_step = {
         "kind": "step",
@@ -216,18 +202,22 @@ async def test_alias_credential_chain_end_to_end(
     assert config_json["serviceBindings"] == {}               # 存档记原始(拍板②)
     assert config_json["injectedAuths"] == ["uat-cred"]
 
-    # ② 显式绑定优先:同键绑 qa1 → 不吃别名表默认
+    # ② 选别名换槽(S6):同基础服务的 fin-service-qa1(声明 qa1)
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceAlias(alias_name="fin-service-qa1",
+                           base_service="fin-service", slot="qa1"))
+        await s.commit()
     cases.clear()
     r = await client.post("/api/runs", headers=bob, json=_run_payload(
         scenarioId="sc-alias-cred", dataSetIds=[],
-        serviceBindings={"fin-service-uat": {"authAlias": "qa1"}},
+        serviceBindings={"fin-service-uat": {"alias": "fin-service-qa1"}},
     ))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
     config_json = await _last_config_json()
     assert config_json["injectedAuths"] == ["qa1"]
     assert config_json["serviceBindings"] == {
-        "fin-service-uat": {"authAlias": "qa1"},
+        "fin-service-uat": {"alias": "fin-service-qa1"},
     }
 
 
@@ -243,18 +233,18 @@ async def test_kind_default_plate_and_external_requires_base_service(
 
     # 缺省 kind='plate':目录内派生照旧 + 出参带 kind
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local"})
+        "aliasName": "fin-service-uat"})
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "plate"
     assert r.json()["baseService"] == "fin-service"
 
     # external:不派生 —— 缺 base_service 422;显式指向 integration 服务 201
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "pay-gw", "baseUrl": "https://pay.third.local",
+        "aliasName": "pay-gw",
         "kind": "external"})
     assert r.status_code == 422, r.text
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "pay-gw", "baseUrl": "https://pay.third.local",
+        "aliasName": "pay-gw",
         "kind": "external", "baseService": "pay-service"})
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "external"
@@ -262,7 +252,7 @@ async def test_kind_default_plate_and_external_requires_base_service(
 
     # 非法 kind → 422
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "x-svc", "baseUrl": "https://x.local", "kind": "weird"})
+        "aliasName": "x-svc", "kind": "weird"})
     assert r.status_code == 422
 
     # 列表出参带 kind

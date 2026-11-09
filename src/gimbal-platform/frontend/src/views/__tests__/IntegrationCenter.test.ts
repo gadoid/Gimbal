@@ -48,7 +48,7 @@ vi.mock('@/utils/toast', () => ({
 function mkTask(over: Partial<api.IntegrationTaskItem> = {}): api.IntegrationTaskItem {
   return {
     id: 3, name: '下单服务保活', ownerId: 1, mine: true, canManage: true,
-    visibility: 'public', identityMode: 'platform', targetType: 'scenario',
+    visibility: 'public', targetType: 'scenario',
     scenarioId: 'sc-probe', suiteId: null, schemeId: null, targetSystem: '',
     triggerCron: '*/5 * * * *', cronText: '每 5 分钟', resultPolicy: 'on_change',
     cardTemplate: 'status', removed: false,
@@ -178,17 +178,18 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('平台凭证区仅 admin 渲染;普通用户无', async () => {
+  it('平台入口 M1 隐藏(authz W5):凭证区/平台令牌区对任何角色都不渲染', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
     const user = await mountPage(false)
     expect(user.find('[data-testid="ig-creds"]').exists()).toBe(false)
     user.unmount()
     const admin = await mountPage(true)
-    expect(admin.find('[data-testid="ig-creds"]').exists()).toBe(true)
+    expect(admin.find('[data-testid="ig-creds"]').exists()).toBe(false)
+    expect(admin.find('.ig-tokens').exists()).toBe(false)   // 平台令牌区块同闸
     admin.unmount()
   })
 
-  it('W1 新建·个人模式:执行身份/凭证前置提示/订阅者提示;保存带 identityMode', async () => {
+  it('W1 新建:凭证前置提示/订阅者提示;保存不再带 identityMode', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
     vi.mocked(api.fetchScenarioPreview).mockResolvedValue({
       authAliases: ['gitlab'], missingCredentials: ['gitlab'],
@@ -198,7 +199,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     const w = await mountPage()
     await w.find('[data-testid="ig-create"]').trigger('click')
     await flushPromises()
-    // 平台模式缺省:只读提示在场、凭证提示不在
+    // 未选场景:凭证提示不在
     expect(w.find('[data-testid="ig-form-cred-hint"]').exists()).toBe(false)
 
     // 选场景 → 前置预览被调
@@ -206,8 +207,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     await flushPromises()
     expect(api.fetchScenarioPreview).toHaveBeenCalledWith('sc-probe', null)
 
-    // 切个人模式 + 公共:凭证缺失提示与订阅者提示在场
-    await w.find('[data-testid="ig-form-mode"]').setValue('personal')
+    // 公共:凭证缺失提示与订阅者提示在场
     await w.find('[data-testid="ig-form-visibility"]').setValue('public')
     await flushPromises()
     const credHint = w.find('[data-testid="ig-form-cred-hint"]')
@@ -216,49 +216,36 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     expect(credHint.text()).toContain('未配置')
     expect(w.find('[data-testid="ig-form-subscriber-hint"]').exists()).toBe(true)
 
-    // 保存携带执行身份
+    // 保存:请求体不带 identityMode(列已删,0039)
     await w.find('[data-testid="ig-form-name"]').setValue('我的待办')
     await w.find('[data-testid="ig-form-save"]').trigger('click')
     await flushPromises()
+    const sent = vi.mocked(api.createIntegrationTask).mock.calls.at(-1)?.[0]
+    if (sent) expect(sent).not.toHaveProperty('identityMode')
     w.unmount()
   })
 
-  it('可见性文案按执行身份区分:平台 = 仅成员/全员,个人 = 只有我/可被订阅', async () => {
-    // 2026-11-06:平台模板对 member+ 恒可见,「私有(只有我)」对平台模式不成立
+  it('平台模式退役:新建表单不再有执行身份下拉(admin / user 同口径)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([])
-    const w = await mountPage(true)   // admin ⊇ member:缺省平台模式
-    await w.find('[data-testid="ig-create"]').trigger('click')
-    await flushPromises()
-    const opts = () => w.findAll('[data-testid="ig-form-visibility"] option').map((o) => o.text())
-    expect((w.find('[data-testid="ig-form-mode"]').element as HTMLSelectElement).value).toBe('platform')
-    expect(opts()).toEqual(['仅成员可见(member 及以上)', '全员可见(含普通用户)'])
-    expect(opts().join()).not.toContain('只有我')
-    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(true)
-    await w.find('[data-testid="ig-form-mode"]').setValue('personal')
-    await flushPromises()
-    expect(opts()).toEqual(['私有(只有我)', '公共(可被订阅)'])
-    expect(w.find('[data-testid="ig-form-platform-vis-hint"]').exists()).toBe(false)
-    w.unmount()
-
-    // hasRole 精确匹配:此前只写 'member',admin 没有平台模式选项、缺省落个人
-    const wu = await mountPage(false)   // user 角色:无平台模式
-    await wu.find('[data-testid="ig-create"]').trigger('click')
-    await flushPromises()
-    const modes = wu.findAll('[data-testid="ig-form-mode"] option').map((o) => o.attributes('value'))
-    expect(modes).toEqual(['personal'])
-    wu.unmount()
+    for (const admin of [true, false]) {
+      const w = await mountPage(admin)
+      await w.find('[data-testid="ig-create"]').trigger('click')
+      await flushPromises()
+      expect(w.find('[data-testid="ig-form-mode"]').exists()).toBe(false)
+      const opts = w.findAll('[data-testid="ig-form-visibility"] option').map((o) => o.text())
+      expect(opts).toEqual(['私有(只有我)', '公共(可被订阅)'])
+      w.unmount()
+    }
   })
 
-  it('他人模板标签按可见性:公共 / 平台私有 = 仅成员 / 个人私有 = 私有', async () => {
+  it('他人模板标签按可见性:公共 / 私有(authz C1:平台行口径退役)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
       mkTask({ id: 11, mine: false, visibility: 'public' }),
-      mkTask({ id: 12, mine: false, visibility: 'private', identityMode: 'platform' }),
-      mkTask({ id: 13, mine: false, visibility: 'private', identityMode: 'personal' }),
+      mkTask({ id: 13, mine: false, visibility: 'private' }),
       mkTask({ id: 14, mine: true, visibility: 'private' }),
     ])
     const w = await mountPage(true)
     expect(w.find('[data-testid="ig-vis-11"]').text()).toBe('公共')
-    expect(w.find('[data-testid="ig-vis-12"]').text()).toBe('仅成员')
     expect(w.find('[data-testid="ig-vis-13"]').text()).toBe('私有')
     expect(w.find('[data-testid="ig-vis-14"]').exists()).toBe(false)
     expect(w.find('[data-testid="ig-row-14"]').text()).toContain('我的')
@@ -281,7 +268,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
 
   it('W2 订阅面:未订阅出订阅入口 → 弹窗摘要(步骤/读写/别名/地址)→ 确认调 subscribe', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+      mkTask({ mine: false, canManage: false,
                visibility: 'public', subscribed: false, instance: null }),
     ])
     vi.mocked(api.fetchSubscriptionSummary).mockResolvedValue({
@@ -311,7 +298,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
 
   it('W2 订阅 409 consent_stale:自动重拉摘要提示重新核对,二次确认才通过', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+      mkTask({ mine: false, canManage: false,
                visibility: 'public', subscribed: false, instance: null }),
     ])
     vi.mocked(api.fetchSubscriptionSummary).mockResolvedValue({
@@ -342,32 +329,31 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('W4 owner 行与平台模式同样出暂停/恢复(owner 不出退订)', async () => {
-    // 平台模式 owner/admin 行 → 暂停按钮 + 调用
-    vi.mocked(api.listIntegrationTasks).mockResolvedValue([mkTask()])
+  it('W4 owner 行出暂停/恢复(owner 不出退订;authz C1:平台行分支退役)', async () => {
+    // 个人模式 owner 行(canManage + 自有实例)→ 暂停出、退订不出
+    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
+      mkTask({ mine: true, canManage: true,
+               subscribed: true }),
+    ])
     vi.mocked(api.pauseMySubscription).mockResolvedValue(mkTask())
-    let w = await mountPage()
+    const w = await mountPage()
     expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
     await w.find('[data-testid="ig-pause-3"]').trigger('click')
     await flushPromises()
     expect(api.pauseMySubscription).toHaveBeenCalledWith(3)
     w.unmount()
 
-    // 个人模式 owner 行(canManage + 自有实例)→ 暂停出、退订不出
-    vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ identityMode: 'personal', mine: true, canManage: true,
-               subscribed: true }),
-    ])
-    w = await mountPage()
-    expect(w.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
-    expect(w.find('[data-testid="ig-unsub-3"]').exists()).toBe(false)
-    w.unmount()
+    // 退订不出(owner 自有实例)
+    const w2 = await mountPage()
+    expect(w2.find('[data-testid="ig-pause-3"]').exists()).toBe(true)
+    expect(w2.find('[data-testid="ig-unsub-3"]').exists()).toBe(false)
+    w2.unmount()
   })
 
   it('W2 已订阅:自暂停显示恢复;退订确认后调用;待确认显示重新确认与文案', async () => {
     // manual 暂停 →「已暂停(本人)」+ 恢复按钮
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+      mkTask({ mine: false, canManage: false,
                subscribed: true,
                instance: { ...mkTask().instance!, state: 'paused',
                            pausedReason: 'manual' } }),
@@ -382,7 +368,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
 
     // W4 连续失败自动暂停 →「连续失败暂停(N 次)」+ 恢复按钮同样可解
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+      mkTask({ mine: false, canManage: false,
                subscribed: true,
                instance: { ...mkTask().instance!, state: 'paused',
                            pausedReason: 'fail_streak', failStreak: 5 } }),
@@ -408,7 +394,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
 
     // 待确认(template_changed)→ 状态文案 + 重新确认按钮
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ mine: false, canManage: false, identityMode: 'personal',
+      mkTask({ mine: false, canManage: false,
                subscribed: true,
                instance: { ...mkTask().instance!, state: 'paused',
                            pausedReason: 'template_changed' } }),
@@ -421,8 +407,7 @@ describe('IntegrationCenter — 集成页(P1)', () => {
 
   it('D26 解绑:管理者行出「解绑」→ 4 条说明确认框 → 确认 PATCH tokenId:null(评审 2026-11-05 P2)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ tokenId: 9, tokenName: 'agent-nightly',
-               identityMode: 'personal' }),
+      mkTask({ tokenId: 9, tokenName: 'agent-nightly' }),
       mkTask({ id: 4 }),   // 未绑令牌 → 不出解绑钮
     ])
     vi.mocked(api.patchIntegrationTask).mockResolvedValue(mkTask())
@@ -448,18 +433,16 @@ describe('IntegrationCenter — 集成页(P1)', () => {
     w.unmount()
   })
 
-  it('D26 解绑确认框第 3 条按身份模式区分:平台任务仍以平台身份运行(评审 2026-11-05 P2)', async () => {
+  it('D26 解绑确认框:解绑后以你的身份、你的凭证池运行(authz C1 单口径)', async () => {
     vi.mocked(api.listIntegrationTasks).mockResolvedValue([
-      mkTask({ id: 7, tokenId: 11, tokenName: 'plat-token',
-               identityMode: 'platform', canManage: true }),
+      mkTask({ id: 7, tokenId: 11, tokenName: 'reg-token', canManage: true }),
     ])
     vi.mocked(api.patchIntegrationTask).mockResolvedValue(mkTask())
     const w = await mountPage(true)
     await w.find('[data-testid="ig-unbind-7"]').trigger('click')
     await flushPromises()
     const txt = document.body.textContent || ''
-    expect(txt).toContain('平台任务解绑后仍以平台身份、平台凭证池运行')
-    expect(txt).not.toContain('以你的身份、你的凭证池运行')
+    expect(txt).toContain('任务解绑后以你的身份、你的凭证池运行')
     w.unmount()
   })
 })

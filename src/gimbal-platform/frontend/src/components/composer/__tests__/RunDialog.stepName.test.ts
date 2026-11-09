@@ -37,7 +37,7 @@ function mountDialog(scenario: Scenario, orchestrationNames: string[]) {
     props: {
       scenario, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes: [DEFAULT_SCHEME], serviceRows: [], authOptions: [],
+      schemes: [DEFAULT_SCHEME], serviceRows: [],
       stepOrchestrationNames: orchestrationNames,
     },
     global: { plugins: [], stubs: { teleport: true } },

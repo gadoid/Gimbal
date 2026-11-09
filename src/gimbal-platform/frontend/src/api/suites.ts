@@ -49,6 +49,8 @@ export interface SuiteSummary {
   name: string
   description: string
   visibility: string
+  /** S7.1:所属项目 id(项目徽标;null/缺省 = 私有) */
+  projectId?: number | null
   mode: string
   memberCount: number
   rev: number
@@ -177,10 +179,12 @@ export interface SuiteLookupItem {
   ownerName: string
 }
 
-/** 浏览镜头口径与场景库一致(§5.1):前端默认传 mine。 */
+/** 浏览镜头(§5.1;S7.0 口径):private = 我名下且未加入任何项目。 */
 export async function listSuites(params?: {
-  scope?: 'mine' | 'all'
+  scope?: 'private' | 'mine' | 'all'
   visibility?: 'public'
+  /** S1.8 项目镜头:按区过滤 */
+  projectId?: number
   /** 服务端搜索(name/description 子串,大小写不敏感) */
   q?: string
   /** 运行模式过滤(aggregate/chain/fanout/compose) */
@@ -192,10 +196,12 @@ export async function listSuites(params?: {
   return data
 }
 
-/** name 省略 = 创建草稿(服务端生成不重名草稿名,画布首次拖入口径)。 */
+/** name 省略 = 创建草稿(服务端生成不重名草稿名,画布首次拖入口径)。
+ *  projectId(S7.0 D6)= 在项目内新建 —— 门 = 项目成员,公共项目 422。 */
 export async function createSuite(body: {
   name?: string
   description?: string
+  projectId?: number
 }): Promise<SuiteSummary> {
   const { data } = await http.post<SuiteSummary>('/suites', body)
   return data

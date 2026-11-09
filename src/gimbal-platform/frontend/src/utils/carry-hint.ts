@@ -18,17 +18,21 @@
 export type CarryValues = Record<string, string | null>
 
 /** 来源标签:绑定层(服务绑定)覆盖默认层(全局默认)。 */
-export type CarrySource = '服务绑定' | '全局默认'
+export type CarrySource = '别名绑定' | '服务绑定' | '全局默认'
 
-/** face ∩ (bound ∪ defaults) → Map<path, 来源>;同键命中两层时绑定优先。 */
+/** face ∩ (bound ∪ defaults) → Map<path, 来源>;同键命中多层时
+ * 别名绑定 > 服务绑定 > 默认(与运行时注入同序;authz M2a S5/F5 修复:
+ * 此前提示只看 base 服务键,别名键覆盖层被忽略 —— 提示与实际注入漂移)。 */
 export function carryHint(
   face: readonly string[],
   bound: CarryValues,
   defaults: CarryValues,
+  aliasBound?: CarryValues,
 ): Map<string, CarrySource> {
   const out = new Map<string, CarrySource>()
   for (const p of face) {
-    if (p in bound) out.set(p, '服务绑定')
+    if (aliasBound && p in aliasBound) out.set(p, '别名绑定')
+    else if (p in bound) out.set(p, '服务绑定')
     else if (p in defaults) out.set(p, '全局默认')
   }
   return out

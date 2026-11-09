@@ -45,11 +45,12 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
     assert r.json()["memberCount"] == 2
     assert [m["scenarioId"] for m in r.json()["members"]] == ["sc-su-a", "sc-su-b"]
 
-    # 详情:属主可读;非属主 404(不泄露);admin 可读(治理)
+    # 详情:属主可读;非属主 404(不泄露);admin 同样 404
+    # (authz W3:私有区收窄,admin 越属主旁路删除)
     r = await client.get(f"/api/suites/{sid}", headers=bob)
     assert r.status_code == 200 and r.json()["name"] == "回归集"
     r = await client.get(f"/api/suites/{sid}", headers=admin)
-    assert r.status_code == 200
+    assert r.status_code == 404
     carol = await register_and_login(client, "su_carol", "su_carol_pass123")
     assert (await client.get(f"/api/suites/{sid}", headers=carol)
             ).status_code == 404
@@ -69,7 +70,8 @@ async def test_suite_crud_lifecycle(client: AsyncClient) -> None:
     r = await client.get("/api/suites", headers=carol)
     assert r.json()["total"] == 0
     r = await client.get("/api/suites", headers=admin)
-    assert r.json()["total"] == 2  # admin all = 全量
+    # authz W3:admin 与普通用户同镜头 —— 他人私有不进列表(全量分支已删)
+    assert r.json()["total"] == 0
 
     # 排序:整表重排
     r = await client.patch(f"/api/suites/{sid}/members/order", headers=bob,
@@ -103,6 +105,8 @@ async def test_list_visibility_public(client: AsyncClient) -> None:
     r = await client.post(f"/api/suites/{pub}/members", headers=owner,
                           json={"scenarioIds": ["sc-vp-1"]})
     assert r.status_code == 200, r.text
+    assert (await client.post(
+        "/api/scenarios/sc-vp-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{pub}/publish", headers=owner)
     assert r.status_code == 200, r.text
 
@@ -111,16 +115,16 @@ async def test_list_visibility_public(client: AsyncClient) -> None:
 
     r = await client.get("/api/suites?visibility=public", headers=bob)
     assert r.status_code == 200
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # scope 不叠加:同传 mine 仍只出公共(§5.1 显式 visibility 优先)
     r = await client.get("/api/suites?visibility=public&scope=mine",
                          headers=bob)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # admin 同口径
     r = await client.get("/api/suites?visibility=public", headers=admin)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
 
 async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
@@ -136,6 +140,8 @@ async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
     r = await client.post(f"/api/suites/{pub}/members", headers=owner,
                           json={"scenarioIds": ["sc-qp-1"]})
     assert r.status_code == 200, r.text
+    assert (await client.post(
+        "/api/scenarios/sc-qp-1/publish", headers=owner)).status_code == 200
     assert (await client.post(f"/api/suites/{pub}/publish", headers=owner)
             ).status_code == 200
 
@@ -159,7 +165,7 @@ async def test_list_q_mode_and_pagination(client: AsyncClient) -> None:
     # q 按发布者名命中公共页口径(owner 的 display_name/username)
     r = await client.get(
         "/api/suites?visibility=public&q=qp_owner", headers=bob)
-    assert {s["name"] for s in r.json()["items"]} == {"公共回归集"}
+    assert {s["name"] for s in r.json()["items"]} == {"公共回归集(公共)"}
 
     # mode 过滤:bob 名下(镜头 mine)都是默认 aggregate;chain 命中 0
     r = await client.get("/api/suites?scope=mine&mode=chain", headers=bob)
@@ -216,34 +222,41 @@ async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
     # (mb_admin 是首位注册 = admin)
     admin = await register_and_login(client, "mb_admin", "mb_admin_pass123")
     sid = await _mk_suite(client, admin, "洗白组")
+    # S1.5:他人场景 → 422 suite_member_cross_zone(旧同属主 404 退役)
     r = await client.post(f"/api/suites/{sid}/members", headers=admin,
                           json={"scenarioIds": ["sc-mb-bob"]})
-    assert r.status_code == 404, r.text
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "suite_member_cross_zone"
 
     # 幽灵场景 → 404
     r = await client.post(f"/api/suites/{sid}/members", headers=admin,
                           json={"scenarioIds": ["sc-mb-ghost"]})
     assert r.status_code == 404
 
-    # bob 往 admin 的组里加(非属主写)→ 403
+    # bob 往 admin 的组里加(非属主写)→ 404(authz W3:他人私有先
+    # 404 不泄露 —— bob 本就读不到这个私有 suite)
     r = await client.post(f"/api/suites/{sid}/members", headers=bob,
                           json={"scenarioIds": ["sc-mb-bob"]})
-    assert r.status_code == 403
+    assert r.status_code == 404
 
-    # 库层兜底:绕过应用层直写他人场景 → 约束拒绝。仅 PG 断言
-    #(SQLite 测试库不强制 FK —— 仓内既有口径,与 user_stars 的
-    # Python 兜底同理由;dev/生产 PG 上组合外键真实生效)。
+    # 库层兜底(S1.5):绕过应用层直写他人场景 → 同区触发器拒绝
+    #(conftest 建库即挂与 0042 同源的触发器,PG 面真实生效)。
     if db_module.engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+
         async with db_module.SessionLocal() as s:
-            s.add(SuiteMember(suite_id=sid, scenario_id="sc-mb-bob",
-                              owner_id=1, sort=0))
             try:
+                await s.execute(text(
+                    "INSERT INTO suite_members "
+                    "(suite_id, scenario_id, role, sort, added_at) "
+                    "VALUES (:sid, 'sc-mb-bob', 'main', 0, now())"),
+                    {"sid": sid})
                 await s.commit()
                 raised = False
             except Exception:
                 raised = True
                 await s.rollback()
-            assert raised, "组合外键必须拒绝跨属主成员行"
+            assert raised, "同区触发器必须拒绝跨属主成员行"
 
 
 async def test_scenario_delete_cascades_membership(client: AsyncClient) -> None:
@@ -279,9 +292,10 @@ async def test_scenario_lookup_suites(client: AsyncClient) -> None:
     assert r.status_code == 200
     assert {x["name"] for x in r.json()} == {"回归", "冒烟"}
 
-    # 非场景属主反查 → 403;幽灵场景 → 404
+    # 非场景属主反查 → 404(S1.2 起读判先行,不可见与不存在同为
+    # 404 不泄露存在性;旧 403 口径随 ensure_owner 收编退役)
     carol = await register_and_login(client, "lk_carol", "lk_carol_pass123")
     assert (await client.get("/api/scenarios/sc-lk-1/suites",
-                             headers=carol)).status_code == 403
+                             headers=carol)).status_code == 404
     assert (await client.get("/api/scenarios/sc-lk-ghost/suites",
                              headers=bob)).status_code == 404

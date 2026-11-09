@@ -1,5 +1,5 @@
 <!-- AddCardGallery.vue — 卡片市场(添加卡片面板,Jira "Add gadget" 同款)。
-     候选 = registry 全集(adminOnly/roles 门控卡按角色展示);已启用的卡
+     候选 = registry 全集(能力门控卡按 can() 展示,authz W8);已启用的卡
      置灰显示"已添加"(不隐藏 — 类型清单一目了然),未启用的带「+
      添加」。添加后不关面板,可连续添加,手动关闭。 -->
 <template>
@@ -66,11 +66,9 @@ const emit = defineEmits<{ 'update:open': [v: boolean]; add: [id: string] }>()
 
 const auth = useAuthStore()
 
-/** 全类型清单(adminOnly 门控);已启用置灰 — 不再隐藏 */
+/** 全类型清单(能力门控,authz W8);已启用置灰 — 不再隐藏 */
 const allTypes = computed(() =>
-  props.registry.filter((d) => !d.adminOnly && !d.roles
-      || (d.adminOnly && auth.isAdmin)
-      || (d.roles && auth.hasRole(...d.roles))),
+  props.registry.filter((d) => !d.cap || auth.can(d.cap)),
 )
 </script>
 

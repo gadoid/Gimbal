@@ -28,13 +28,15 @@ class ReportDefinitionOut(BaseModel):
     description: str
     definition: dict
     ownerId: int | None
+    # authz W9-2:公共态看 visibility(公共定义有维护者 ownerId ≠ None)
     isPublic: bool
     createdAt: str | None = None
 
     model_config = {"from_attributes": True}
     # alias 映射
     def __init__(self, **kw):
-        kw.setdefault("isPublic", kw.pop("owner_id", None) is None)
+        kw.setdefault("isPublic",
+                      kw.pop("visibility", "private") == "public")
         kw.setdefault("ownerId", kw.pop("owner_id", None))
         kw.setdefault("createdAt", str(kw.pop("created_at", "") or ""))
         super().__init__(**kw)
@@ -75,7 +77,8 @@ def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
     return ReportDefinitionOut(
         id=row.id, name=row.name, description=row.description,
         definition=row.definition, owner_id=row.owner_id,
-        isPublic=row.owner_id is None,
+        visibility=("public" if row.project_id is not None else "private"),
+        isPublic=row.project_id is not None,
         createdAt=str(row.created_at) if row.created_at else None,
     )
 
@@ -84,10 +87,12 @@ def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
 async def list_definitions(
     user: CurrentUser, db: DbSession,
 ) -> dict:
+    # S1.2:列表三区(私有区属主 ∨ 我所在项目 ∨ 公共项目;无引用分支)
+    from ..services.zone import zone_read_clause
+
     rows = (await db.execute(
         select(ReportDefinitionRow)
-        .where((ReportDefinitionRow.owner_id == user.id)
-               | (ReportDefinitionRow.owner_id.is_(None)))
+        .where(zone_read_clause(ReportDefinitionRow, user.id))
         .order_by(ReportDefinitionRow.id.desc())
     )).scalars().all()
     return {"items": [_to_out(r).model_dump() for r in rows]}
@@ -117,29 +122,36 @@ def _validated_definition(body) -> dict:
 async def create_definition(
     user: CurrentUser, db: DbSession, body: ReportDefinitionCreate,
 ) -> dict:
+    # authz W9-2:公共定义建维护者(owner 不置 None)—— 编辑权 =
+    # 维护者;公共态由 visibility 独立表达
     row = ReportDefinitionRow(
         name=body.name, description=body.description,
         definition=_validated_definition(body),
-        owner_id=None if body.public else user.id,
+        owner_id=user.id,
     )
+    # S1.1 影子写:公共态 = visibility + project_id 同步(services.zone)
+    from ..services.zone import apply_private, apply_public, public_project_id
+    if body.public:
+        apply_public(row, await public_project_id(db))
+    else:
+        apply_private(row)
     db.add(row)
     await db.commit()
     await db.refresh(row)
     return _to_out(row).model_dump()
 
 
-async def _get_owned(db: AsyncSession, user, did: int,
-                     *, allow_public_read=True) -> ReportDefinitionRow:
+async def _get_owned(db: AsyncSession, user, did: int) -> ReportDefinitionRow:
+    # 表 B report_definition.read:owner ∨ public_reader(S1.1 项目维度
+    # 谓词,async can;修改 = 维护者 / 删除的 public_admin 面在写端点另判)。
+    from ._ownership import can
+
     row = await db.get(ReportDefinitionRow, did)
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": f"definition not found: {did}"})
-    if row.owner_id == user.id:
+    if await can(db, user, "report_definition", "read", row):
         return row
-    if row.owner_id is None and allow_public_read and user.role == "admin":
-        return row   # 公共区 admin 可改
-    if row.owner_id is None and allow_public_read:
-        return row   # 公共区全员可读(修改/删除限 admin/owner)
     raise HTTPException(404, detail={"code": "not_found",
                                      "message": f"definition not found: {did}"})
 
@@ -161,10 +173,11 @@ async def update_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    # 私有 = 仅 owner;公共 = admin 也可改
-    is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "admin"
-    if not (is_owner or is_public_admin):
+    # 表 B report_definition.write(S1.1):私有区属主 ∨ 公共项目维护者
+    # (admin 不再可编辑他人维护的公共定义,公共 ≠ 无主)。
+    from ._ownership import can
+
+    if not await can(db, user, "report_definition", "write", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     if body.name is not None:
@@ -173,11 +186,54 @@ async def update_definition(
         row.description = body.description
     if body.definition is not None:
         row.definition = body.definition
+    # 公共/私有切换不动 owner(维护者恒定;编辑权随 owner);影子写
+    # visibility ⇔ project_id 同步翻转(S1.1)
     if body.public is not None:
-        row.owner_id = None if body.public else user.id
+        from ..services.zone import apply_private, apply_public, \
+            public_project_id
+        if body.public:
+            apply_public(row, await public_project_id(db))
+        else:
+            apply_private(row)
     await db.commit()
     await db.refresh(row)
     return _to_out(row).model_dump()
+
+
+class TransferIn(BaseModel):
+    toUserId: int
+
+
+@router.post("/{definition_id}/transfer")
+async def transfer_definition(
+    user: CurrentUser, db: DbSession, definition_id: int,
+    body: TransferIn,
+) -> dict:
+    """S1-e 转移维护者(表 B report_definition.transfer = maintainer ∨
+    public_admin;仅公共项目定义,私有定义不适用)。"""
+    from ._ownership import can
+
+    from ..models.user import User
+    from ..services import maintenance_transfer as mt
+    from ..services.zone import public_project_id
+
+    row = await db.get(ReportDefinitionRow, definition_id)
+    if row is None or row.project_id != await public_project_id(db):
+        raise HTTPException(404, detail={"code": "not_found",
+                                         "message": f"definition not found: {definition_id}"})
+    if not await can(db, user, "report_definition", "transfer", row):
+        raise HTTPException(404, detail={"code": "not_found",
+                                         "message": "not found"})
+    to_user = await db.get(User, body.toUserId)
+    if (to_user is None or not to_user.is_active or to_user.is_system
+            or to_user.id == row.owner_id):
+        raise HTTPException(422, detail={
+            "code": "transferee_invalid",
+            "message": "受让人须为在职、非系统用户(且非当前维护者)"})
+    await mt.transfer_maintenance(
+        db, obj=row, obj_type="report_definition", to_user=to_user,
+        actor=user, obj_name=row.name)
+    return {"transferredTo": to_user.id, "definitionId": definition_id}
 
 
 @router.delete("/{definition_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -188,9 +244,11 @@ async def delete_definition(
     if row is None:
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
-    is_owner = row.owner_id == user.id
-    is_public_admin = row.owner_id is None and user.role == "admin"
-    if not (is_owner or is_public_admin):
+    # 表 B report_definition.delete(S1.1):owner ∨ maintainer ∨
+    # public_admin(Admin+ 下架公共定义,与场景/suite 下架同口径)
+    from ._ownership import can
+
+    if not await can(db, user, "report_definition", "delete", row):
         raise HTTPException(404, detail={"code": "not_found",
                                          "message": "not found"})
     await db.delete(row)

@@ -96,10 +96,12 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       this.windowLoaded = false
     },
 
-    async saveScenario(scenarioId: string | null, draft: ScenarioDraft) {
+    async saveScenario(
+      scenarioId: string | null, draft: ScenarioDraft, projectId?: number,
+    ) {
       const saved = scenarioId
         ? await api.updateScenario(scenarioId, draft)
-        : await api.createScenario(draft)
+        : await api.createScenario(draft, projectId)
       this.invalidate()
       return saved
     },

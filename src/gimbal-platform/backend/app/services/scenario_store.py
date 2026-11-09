@@ -111,7 +111,7 @@ async def create_in_transaction(
     *,
     owner: str = "",
     owner_id: int | None = None,
-    visibility: str = "private",
+    project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
     forked_from_at: "datetime | None" = None,
@@ -158,7 +158,7 @@ async def create_in_transaction(
         scenario_id=server_owned.scenario_id,
         owner_name=server_owned.owner,
         owner_id=owner_id,
-        visibility=visibility,
+        project_id=project_id,
         payload=payload,
         forked_from_id=forked_from_id,
         forked_from_owner_name=forked_from_owner_name,
@@ -177,7 +177,7 @@ async def create(
     *,
     owner: str = "",
     owner_id: int | None = None,
-    visibility: str = "private",
+    project_id: int | None = None,
     forked_from_id: str | None = None,
     forked_from_owner_name: str | None = None,
     forked_from_at: "datetime | None" = None,
@@ -190,8 +190,8 @@ async def create(
     the request body.  ``owner_id`` 同理由路由层传入(int user.id,
     P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
     映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
-    普通创建恒为 private;``visibility`` 参数仅供 P2 迁移复用(公共
-    目录导入 → public)。
+    区归属由 ``project_id`` 决定(缺省 None = 私有区;S1.9 起
+    visibility 列已删,响应由 project 派生)。
 
     提交包装器(W2/T1):常规创建/copy/fork/迁移脚本等既有调用方行为
     零变化;导入流水线走 :func:`create_in_transaction` 自管事务
@@ -203,7 +203,8 @@ async def create(
     try:
         row = await create_in_transaction(
             db, draft, owner=owner, owner_id=owner_id,
-            visibility=visibility, forked_from_id=forked_from_id,
+            project_id=project_id,
+            forked_from_id=forked_from_id,
             forked_from_owner_name=forked_from_owner_name,
             forked_from_at=forked_from_at)
         await db.commit()
@@ -351,17 +352,59 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     await db.commit()
 
 
-async def set_visibility(
-    db: AsyncSession, scenario_id: str, visibility: str
-) -> Scenario:
-    """发布/下架:翻转 visibility(public ↔ private)。KeyError on miss."""
-    if visibility not in ("public", "private"):
-        raise ValueError(f"bad_visibility: {visibility}")
-    row = await _get_row(db, scenario_id)
-    row.visibility = visibility
-    await db.commit()
-    await db.refresh(row)
-    return await to_read_shape(db, row)
+
+# ── authz W6:明文凭证不随公开/拷贝扩散(方案 9.1 附加清理 / 10.6)────
+# 原件不动(作者自己照常用内置凭证与敏感列,下架无损);凡交到**非属主**
+# 手里的形态一律脱敏:读(详情/draft/数据集)、跨属主拷贝、执行(属主
+# 规则 run_prepare.built_in_users + 非属主数据集剥敏感列)。
+# 列名敏感启发与 scenario_import._SENSITIVE_RE 同源(密改一处两处同步:
+# 导入模块 import 本常量,避免两张正则漂移)
+import re as _re
+
+SENSITIVE_COLUMN_RE = _re.compile(
+    r"(password|secret|token|key)", _re.IGNORECASE)
+
+
+def strip_builtin_credentials(payload: dict) -> dict:
+    """删除 ``definition.config.users``(内置凭证基座),原地返回。
+
+    调用面:跨属主拷贝(copy_scenario 单点)、导入、非属主读形态
+    (:func:`payload_for_viewer`)、非属主执行的快照/任务参数。原件
+    永不经过这里(发布不再剥离 —— 订阅执行由属主规则兜底)。
+    """
+    definition = payload.get("definition")
+    if isinstance(definition, dict):
+        cfg = definition.get("config")
+        if isinstance(cfg, dict) and cfg.get("users"):
+            cfg["users"] = {}
+    return payload
+
+
+def strip_sensitive_columns(rows: list) -> list:
+    """数据集行敏感列剥离(10.6):键名命中 SENSITIVE_COLUMN_RE 的列
+    删除,非敏感列保留;返回新列表(不改入参)。"""
+    return [
+        {k: v for k, v in (row or {}).items()
+         if not SENSITIVE_COLUMN_RE.search(str(k))}
+        for row in (rows or [])
+    ]
+
+
+def is_foreign_viewer(viewer_id: int | None, owner_id: int | None) -> bool:
+    """读/执行主体不是场景属主 → 需要脱敏。``viewer_id`` 为 None =
+    内部/属主上下文(不判)。"""
+    return viewer_id is not None and viewer_id != owner_id
+
+
+def payload_for_viewer(payload: dict | None, *, viewer_id: int | None,
+                       owner_id: int | None) -> dict:
+    """场景 payload 的读者形态:非属主拿到剥掉 config.users 的深拷贝,
+    属主原样(浅拷贝)。"""
+    import copy as _copy
+
+    if not is_foreign_viewer(viewer_id, owner_id):
+        return dict(payload or {})
+    return strip_builtin_credentials(_copy.deepcopy(payload or {}))
 
 
 async def resolve_name_conflict(
@@ -406,11 +449,17 @@ async def copy_scenario(
     activity_detail: dict | None = None,
     origin_id: str | None = None,
     origin_owner_name: str | None = None,
+    # S1.3 发布新语义:确定性副本 id(公共副本 = <原 id>-public)、
+    # 落库项目、剥离口径(cross_owner = 跨属主才剥,默认;
+    # always = 发布复制恒剥,同属主也剥 —— 公共副本不落明文)
+    new_sid: str | None = None,
+    project_id: int | None = None,
+    strip: str = "cross_owner",
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
-    新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;visibility 恒为
-    private(复制来的公共场景也要先归自己再自行发布)。
+    新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;缺省落私有区
+    (复制来的公共场景也要先归自己再自行发布;发布复制传 project_id)。
     ``new_name``(2026-09-23 批次 F2):另存为/分发自定义副本名;缺省
     保留 ``(副本)`` 后缀行为(向后兼容)。重名判定不在本函数内 ——
     调用方先走 :func:`resolve_name_conflict`(软校验,见其注释)。
@@ -424,9 +473,18 @@ async def copy_scenario(
 
     src = await _get_row(db, scenario_id)
     suffix = _uuid4().hex[:6]
-    new_sid = f"{scenario_id}-copy-{suffix}"[:128]
+    new_sid = (new_sid if new_sid is not None
+               else f"{scenario_id}-copy-{suffix}")[:128]
 
     payload = _copy.deepcopy(src.payload or {})
+    # authz W6:跨属主拷贝剥离内置凭证与数据集敏感列(单点:复制到我的 /
+    # 分享拷贝 / 引用转副本 / suite fork / 变更适配副本全走这里;E1 ——
+    # 订阅不复制,无此路径)。同属主(作者另存为、给自己做适配副本)
+    # 凭证本就是自己的,原样保留。S1.3 发布复制走 strip="always":
+    # 公共副本不落明文,属主也一样(原件仍在属主手里)。
+    cross_owner = src.owner_id != new_owner_id
+    if cross_owner or strip == "always":
+        strip_builtin_credentials(payload)
     copied_name = new_name or ""
     definition = payload.get("definition")
     if isinstance(definition, dict):
@@ -441,6 +499,7 @@ async def copy_scenario(
     from datetime import datetime as _dt, timezone as _tz
     await create(
         db, draft, owner=new_owner, owner_id=new_owner_id,
+        project_id=project_id,
         forked_from_id=origin_id or scenario_id,
         forked_from_owner_name=origin_owner_name
         or (src.owner_name or ""),
@@ -462,7 +521,9 @@ async def copy_scenario(
             scenario_id=new_sid,
             name=ds.name,
             description=ds.description,
-            rows=_copy.deepcopy(ds.rows or []),
+            rows=(strip_sensitive_columns(ds.rows or [])
+                  if (cross_owner or strip == "always")
+                  else _copy.deepcopy(ds.rows or [])),
             # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉
             # 场景的解锁语义静默丢失
             var_unlocks=list(ds.var_unlocks or []),
@@ -637,6 +698,71 @@ async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
 
 
 # ─── helpers ──────────────────────────────────────────────────────
+# ── 发布新语义(S1.3):发布 = 复制到公共项目 ────────────────────────
+
+def public_copy_id(scenario_id: str) -> str:
+    """公共副本的确定性 id:<原 id>-public(≤128 截断;scenarioId 模式
+    只允许小写字母数字连字符,不能用 @)。重发布/下架按它定位,
+    不需要查 forked_from 索引。"""
+    return f"{scenario_id}-public"[:128]
+
+
+async def find_public_copy(
+    db: AsyncSession, scenario_id: str
+) -> "ComposerScenario | None":
+    """原件的公共副本(forked_from_id = 原 id ∧ 公共项目);无 → None。"""
+    from .zone import public_project_id
+
+    pid = await public_project_id(db)
+    if pid is None:
+        return None
+    return (await db.execute(
+        select(ComposerScenario).where(
+            ComposerScenario.forked_from_id == scenario_id,
+            ComposerScenario.project_id == pid))).scalar_one_or_none()
+
+
+async def publish_copy(
+    db: AsyncSession, scenario_id: str,
+) -> "tuple[Scenario, bool]":
+    """发布 = 复制到公共项目(S1.3,s1-detail §五):
+
+    * 副本 id = :func:`public_copy_id`(确定性);**恒剥离**内置凭证与
+      数据集敏感列(strip="always",同属主也剥 —— 公共副本不落明文,
+      原件仍在属主手里);``forked_from_id`` = 原件 id;owner_id 不动
+      (= 维护者);原件不动(private、可继续执行/维护)。
+    * 重发布 = 删旧副本再复制(全级联:数据集/方案/suite 引用清洗),
+      同 id 覆盖内容 —— 订阅者经指纹闸在下次执行暂停待确认。
+    Returns ``(公共副本读形态, 是否新建)``。
+    """
+    from .zone import public_project_id
+
+    src = await _get_row(db, scenario_id)
+    pid = await public_project_id(db)
+    if pid is None:
+        raise ValueError("public_project_missing: 公共项目未种子")
+    copy_sid = public_copy_id(scenario_id)
+    existing = await get_row(db, copy_sid)
+    created = existing is None
+    if existing is not None:
+        await delete(db, copy_sid)
+    meta = ((src.payload or {}).get("definition") or {}).get("meta") or {}
+    out = await copy_scenario(
+        db, scenario_id,
+        new_owner=src.owner_name or "", new_owner_id=src.owner_id,
+        new_name=str(meta.get("name") or scenario_id),  # 公共列表显示原名
+        new_sid=copy_sid, project_id=pid,
+        strip="always", activity_kind="scenario.published",
+        activity_detail={"via": "publish_copy",
+                         "sourceScenarioId": scenario_id})
+    return out, created
+
+
+async def unpublish_public_copy(db: AsyncSession, copy_sid: str) -> None:
+    """下架 = 删除公共副本(:func:`delete` 全级联)。KeyError on miss."""
+    await delete(db, copy_sid)
+
+
 async def get_row(
     db: AsyncSession, scenario_id: str
 ) -> ComposerScenario | None:
@@ -699,6 +825,9 @@ async def to_read_shape(
     # 方案不经 payload(阶段④:runSchemes sidecar 读侧回填下线)—
     # 方案列表唯一读面是 /run-schemes CRUD。
     config, resource, orchestration = _extras_from_payload(row.payload)
+    if config and config.get("users") and is_foreign_viewer(
+            user_id, row.owner_id):
+        config = {**config, "users": {}}   # authz W6:非属主读不带内置凭证
     # M6-2:收藏读时投影改 UserStar(marks_store 退役);单行详情一次
     # 预取,列表路径由调用方走 to_list_item_shape(集合注入)。
     from .user_stars import star_ids as _star_ids
@@ -719,7 +848,8 @@ async def to_read_shape(
         stepCount=len(steps),
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=row.visibility or "private",
+        visibility=("public" if row.project_id is not None else "private"),
+        projectId=row.project_id,
     )
 
 
@@ -753,7 +883,8 @@ def to_list_item_shape(
         varCount=len(vars_) if isinstance(vars_, dict) else 0,
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=row.visibility or "private",
+        visibility=("public" if row.project_id is not None else "private"),
+        projectId=row.project_id,
     )
 
 

@@ -12,9 +12,6 @@ from app.models.auth_session import AuthSession
 from app.models.integration_task import IntegrationTask
 from app.models.user import User
 from tests.helpers import make_draft, register_and_login
-from tests.test_scenario_composer_plate_integration import (  # noqa: F401
-    plate_mock,
-)
 
 async def _subscribe(client, h, tid: int):
     """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
@@ -50,14 +47,15 @@ async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
 
 
 async def _mk_task(client, h, sid: str, **over) -> int:
-    from .inbound_fixtures import publish_scenario
-
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=AUTH_STEPS))
     assert r.status_code in (200, 201), r.text
-    if over.get("identityMode") == "platform":
-        await publish_scenario(sid)  # v4:平台模式只认公共场景
-    body = {"name": "W0b", "scenarioId": sid, "identityMode": "personal",
+    # S1.3:公共模板引用公共副本 —— 建场景即发布(= 复制)
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario(sid)
+    body = {"name": "W0b", "scenarioId": f"{sid}-public",
+            "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}
     body.update(over)
@@ -100,17 +98,6 @@ async def test_consumer_fields_lifecycle(client):
     r = await client.get(f"/api/integration/tasks/{tid}", headers=u2)
     assert r.status_code == 200, r.text
     assert r.json()["instance"]["missingCredentials"] == []
-
-
-async def test_platform_task_fields(client):
-    """④:平台模式任务 authAliases 照出、subscribed 恒 False。"""
-    u1 = await register_and_login(client, "w0b_c", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b2",
-                         identityMode="platform", visibility="private")
-    item = await _item(client, u1, tid)
-    assert item["authAliases"] == ["gitlab"]
-    assert item["subscribed"] is False
-
 
 async def test_cards_carry_consumer_fields(client):
     """④:卡片出参带 authAliases / missingCredentials(W3 凭证引导)。"""
@@ -244,51 +231,43 @@ async def test_fail_streak_auto_pause_and_resume(client):
     assert inst.fail_streak == 0 and inst.next_run_at is not None
 
 
-async def test_pause_resume_platform_and_owner_rows(client):
-    """W4:平台模式暂停/恢复对 owner/admin 开放(操作平台唯一实例,
-    其余用户 403);个人模式 owner 自有实例同走订阅面端点 —— 集成页
-    owner 行的暂停/恢复按钮即此口径。"""
-    from tests.test_integration import _seed_platform_user
-
-    await _seed_platform_user()
+async def test_fail_streak_notifies_holder_only(client):
+    """连续失败通知(第 FAIL_STREAK_NOTIFY 次)只发持有人 —— 任务名与
+    错误信息属私有区,Admin+ 不再收到(平台时期的群发兜底已退役)。"""
+    from app.models.permission import Notification
     from app.services import integration_runner as ir
+    from tests.helpers import role_headers
 
-    u1 = await register_and_login(client, "w0b_k", "pw123456")
-    u2 = await register_and_login(client, "w0b_l", "pw123456")
-    tid_p = await _mk_task(client, u1, "sc-w0b6",
-                           identityMode="platform", visibility="public")
+    u1 = await register_and_login(client, "w0b_sn1", "pw123456")
+    u2 = await register_and_login(client, "w0b_sn2", "pw123456")
+    await role_headers(client, "w0b_snadm", role="admin")
+    tid = await _mk_task(client, u1, "sc-w0bsn")
+    uid1, uid2 = await _user_id("w0b_sn1"), await _user_id("w0b_sn2")
+    uid_adm = await _user_id("w0b_snadm")
+    await _subscribe(client, u2, tid)
+    inst_id = (await _inst(tid, uid2)).id
+
     async with db_module.SessionLocal() as s:
-        await ir.ensure_instance(await s.get(IntegrationTask, tid_p))
+        row = await s.get(IntegrationTask, inst_id)
+        row.fail_streak = ir.FAIL_STREAK_NOTIFY - 1
+        await s.commit()
+    async with db_module.SessionLocal() as s:
+        await ir._finish(s, await s.get(IntegrationTask, inst_id),
+                         await s.get(IntegrationTask, tid),
+                         "transport", "secret-host 连不通")
 
-    async def _pinst() -> IntegrationTask | None:
-        async with db_module.SessionLocal() as s:
-            return (await s.execute(select(IntegrationTask).where(
-                IntegrationTask.template_id == tid_p,
-                IntegrationTask.holder_id.is_not(None),
-            ).order_by(IntegrationTask.id))).scalars().first()
+    async with db_module.SessionLocal() as s:
+        rows = (await s.execute(select(Notification).where(
+            Notification.title.contains("连续失败")))).scalars().all()
+    got = {n.user_id for n in rows}
+    assert got == {uid2}, [(n.user_id, n.title) for n in rows]
+    assert uid1 not in got and uid_adm not in got
 
-    # 普通用户(可见但非 owner/admin)→ 403;暂停/恢复同口径
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/pause", headers=u2)
-    assert r.status_code == 403, r.text
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/resume", headers=u2)
-    assert r.status_code == 403, r.text
 
-    # owner 暂停/恢复平台唯一实例
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/pause", headers=u1)
-    assert r.status_code == 200, r.text
-    inst = await _pinst()
-    assert inst is not None
-    assert inst.state == "paused" and inst.paused_reason == "manual"
-    r = await client.post(
-        f"/api/integration/tasks/{tid_p}/subscription/resume", headers=u1)
-    assert r.status_code == 200, r.text
-    inst = await _pinst()
-    assert inst.state == "idle" and inst.paused_reason in ("", None)
-
-    # 个人模式 owner 行:创建即播种自有实例,暂停/恢复直达
+async def test_pause_resume_owner_rows(client):
+    """W4:个人模式 owner 自有实例走订阅面端点暂停/恢复 —— 集成页
+    owner 行的暂停/恢复按钮即此口径(authz C1:平台行分支退役)。"""
+    u1 = await register_and_login(client, "w0b_k", "pw123456")
     tid_o = await _mk_task(client, u1, "sc-w0b7")
     uid1 = await _user_id("w0b_k")
     r = await client.post(

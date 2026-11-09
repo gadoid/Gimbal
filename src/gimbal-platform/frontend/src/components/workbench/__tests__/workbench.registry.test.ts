@@ -58,7 +58,7 @@ function mountPage() {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  useAuthStore().currentUser = { id: 1, username: 'qa', is_admin: false } as never
+  useAuthStore().currentUser = { id: 1, username: 'qa' } as never
   vi.mocked(constantsApi.listAll).mockResolvedValue(ENTRIES as never)
 })
 

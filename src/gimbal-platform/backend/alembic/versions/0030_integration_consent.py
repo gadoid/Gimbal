@@ -36,6 +36,10 @@ def upgrade() -> None:
     for col in _COLUMNS:
         if not _has_column("integration_tasks", col.name):
             op.add_column("integration_tasks", col)
+    # identity_mode 列已随 0039 删除:fresh 链(baseline 按当前模型建表)
+    # 无该列也无存量行,清理语句不适用 —— 跳过
+    if not _has_column("integration_tasks", "identity_mode"):
+        return
     op.execute("""
         DELETE FROM integration_tasks AS i
         USING integration_tasks AS t

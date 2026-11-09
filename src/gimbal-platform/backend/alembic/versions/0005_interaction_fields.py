@@ -111,7 +111,12 @@ def upgrade() -> None:
                " ON executions (owner_id, id)")
 
     # ── 3) G5 轻档视图(PG-only)─────────────────────────────────
-    if is_pg:
+    # fresh 链守卫:S1.9(0043)起当前模型无 visibility 列,视图无从
+    # 定义(0043 删视图本身,fresh 链不建即可)
+    import sqlalchemy as sa
+    has_vis = "visibility" in {
+        c["name"] for c in sa.inspect(bind).get_columns("composer_scenarios")}
+    if is_pg and has_vis:
         op.execute(
             "CREATE OR REPLACE VIEW v_scenarios_readable WITH "
             "(security_invoker = true) AS "

@@ -17,6 +17,8 @@ class SuiteCreateIn(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str = Field(default="", max_length=512)
+    # authz M2a S7.0:在该项目内新建(门 = 项目成员;公共项目 422)
+    projectId: int | None = Field(default=None, ge=1)
 
 
 class SuitePatchIn(BaseModel):

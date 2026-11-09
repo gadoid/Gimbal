@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser, MemberUser
 from ..models import Environment
-from ..models.service_alias import ServiceAlias
 
 router = APIRouter(prefix="/environments", tags=["environments"])
 
@@ -40,16 +39,20 @@ class EnvironmentView(BaseModel):
     id: int
     name: str
     description: str
-    visibility: str
     lines: dict[str, str]
     owner_id: int | None = None
+    # S2:默认环境(环境链末位兜底,D2);visibility 随 0044 删除
+    is_default: bool = False
 
     class Config:
         from_attributes = True
 
 
 def _require_env_write(env: Environment, user: Any) -> None:
-    if user.role != "admin" and env.owner_id != user.id:
+    # authz W9-3:super_admin 判定收编表 A(users.manage;守卫白名单销项)
+    from ._ownership import has_capability
+
+    if env.owner_id != user.id and not has_capability(user, "users.manage"):
         raise HTTPException(403, "environment writes are owner/admin only")
 
 
@@ -79,6 +82,15 @@ async def create_environment(
     db.add(env)
     await db.commit()
     await db.refresh(env)
+    # authz W9-3:环境写操作补审计(对比 users.py 写法;配置面变更留痕)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "create", "lines": body.lines})
     return env
 
 
@@ -124,6 +136,72 @@ async def update_environment(
         env.lines = body.lines
     await db.commit()
     await db.refresh(env)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "update",
+                "description": body.description, "lines": body.lines})
+    return env
+
+
+@router.post("/{env_id}/default", response_model=EnvironmentView)
+async def set_default_environment(
+    env_id: int, user: MemberUser, db: DbSession,
+) -> Any:
+    """置为默认环境(D2:环境链末位兜底,Admin+ 指定)。原子切换:同一
+    事务里先清旧默认再置新默认;部分唯一索引兜并发(撞索引 → 409)。"""
+    from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
+
+    env = await db.get(Environment, env_id)
+    if not env:
+        raise HTTPException(404, "environment not found")
+    await db.execute(update(Environment).where(
+        Environment.is_default.is_(True), Environment.id != env_id
+    ).values(is_default=False))
+    env.is_default = True
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "default environment changed concurrently; "
+                                 "retry") from None
+    await db.refresh(env)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env.id), resource_name=env.name,
+        detail={"op": "set_default"})
+    return env
+
+
+@router.delete("/{env_id}/default", response_model=EnvironmentView)
+async def unset_default_environment(
+    env_id: int, user: MemberUser, db: DbSession,
+) -> Any:
+    """取消默认(之后无默认环境:没显式选环境的执行按旧 ③ 走别名地址)。"""
+    env = await db.get(Environment, env_id)
+    if not env:
+        raise HTTPException(404, "environment not found")
+    if env.is_default:
+        env.is_default = False
+        await db.commit()
+        await db.refresh(env)
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="environment.write", resource_type="environment",
+            resource_id=str(env.id), resource_name=env.name,
+            detail={"op": "unset_default"})
     return env
 
 
@@ -136,12 +214,15 @@ async def delete_environment(
     if not env:
         raise HTTPException(404, "environment not found")
     _require_env_write(env, user)
-    # 引用检查：仍有服务别名指向该环境时拒绝删除（悬空外键防患）
-    ref = (await db.execute(select(ServiceAlias.alias_name).where(
-        ServiceAlias.environment_id == env_id).limit(1)
-    )).scalar_one_or_none()
-    if ref:
-        raise HTTPException(
-            409, f"environment is referenced by alias '{ref}'")
+    # S6:别名不再挂环境(0047 删列);部署行随环境级联删除(FK CASCADE)
+    name = env.name
     await db.delete(env)
     await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="environment.write", resource_type="environment",
+        resource_id=str(env_id), resource_name=name,
+        detail={"op": "delete"})

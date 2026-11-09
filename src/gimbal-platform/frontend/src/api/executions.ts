@@ -5,6 +5,10 @@ import type { ServiceBinding } from './scenario-composer'
 
 export type ExecutionStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled'
 
+/** 台账 config.serviceBindings 的读侧宽容形状:新执行 = {alias}(M2a S6),
+ *  历史执行可能仍是 legacy {authAlias,url} — 展示层只读不回写。 */
+export type ExecutionServiceBinding = ServiceBinding & { authAlias?: string; url?: string }
+
 export interface Execution {
   id: number
   scenario_id: string
@@ -38,10 +42,11 @@ export interface Execution {
     scenarioId?: string
     dataSetIds?: string[]
     envId?: string
-    /** 实际注入清单(模板扫描 ∪ 绑定 authAlias)— 读侧据此展示认证列 */
+    /** 实际注入清单(模板扫描 ∪ 绑定别名声明的槽位)— 读侧据此展示认证列 */
     injectedAuths?: string[]
-    /** service → {authAlias?, url?}(驼峰 dump,None 键不落) */
-    serviceBindings?: Record<string, ServiceBinding>
+    /** service → 绑定(authz M2a S6 起新执行 = {svc:{alias}};旧执行存量
+     *  可能仍是 legacy {authAlias,url} — 展示按 JSON 原样渲染,两形状都容忍) */
+    serviceBindings?: Record<string, ExecutionServiceBinding>
     /** 0-based inclusive halt index(W19 前的旧平铺键;新行读 runOptions) */
     stepTo?: number | null
     nRuns?: number
@@ -89,10 +94,10 @@ export interface Execution {
    *  (config.cancelIgnored)的原因。 */
   cancel_note?: string | null
   /** 令牌只读投影(webhook v4 §7.1):经哪张令牌(id/名称快照)、以谁
-   *  身份(personal=属主,platform=平台系统用户)/ 调用方对账键。
+   *  身份(authz C1 后恒 personal=属主)/ 调用方对账键。
    *  JWT 发起的执行三者皆 null。 */
   token_id?: number | null
-  identity_mode?: 'personal' | 'platform' | null
+  identity_mode?: 'personal' | null
   token_name?: string | null
   client_ref?: string | null
 
@@ -274,8 +279,8 @@ export function listExecutions(params?: {
   /** 发起时间范围 ISO(锚 created_at;queued 单 started_at 可空不作锚) */
   createdFrom?: string
   createdTo?: string
-  /** 按访问令牌列经它发起的执行(webhook v4):令牌属主或 admin;
-   *  平台令牌执行 owner 是系统用户,不进「我的执行」,令牌详情排查用。 */
+  /** 按访问令牌列经它发起的执行(webhook v4)。authz W4:执行可见收敛为
+   *  属主∨本令牌(admin 旁路已删)—— 后端只回调用方自己可见的行。 */
   tokenId?: number
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。

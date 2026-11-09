@@ -252,8 +252,9 @@ async def test_scenario_referrers_includes_indirect(
                          headers=owner)
     assert r.json()["items"] == []
 
-    # 治理面闸:非属主 403;未知场景 404;admin 可查
-    # (rf_admin 是 fresh_db 首个注册者 = 真 admin,M2.5 口径)
+    # 治理面闸:非属主 403;未知场景 404;admin 同样 403
+    # (rf_admin 是 fresh_db 首个注册者 = 真 admin;authz W3:引用者
+    # 名单是属主治理面,admin 越属主旁路删除)
     assert (await client.get(
         "/api/shares/referrers?scenarioId=sc-rf-1",
         headers=carol)).status_code == 403
@@ -262,11 +263,12 @@ async def test_scenario_referrers_includes_indirect(
         headers=owner)).status_code == 404
     assert (await client.get(
         "/api/shares/referrers?scenarioId=sc-rf-1",
-        headers=admin)).status_code == 200
+        headers=admin)).status_code == 403
 
 
 async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
-    """撤销:属主可撤(通知被分享人);admin 可撤(入审计);退订免通知。"""
+    """撤销:属主可撤(通知被分享人);退订免通知。authz W3:admin 越属主
+    撤销旁路删除 —— 撤销权 = 属主 ∨ 被分享人,admin 对他人分享 404。"""
     # fresh_db 下首个注册者 = 真 admin(M2.5 口径);rv_admin 即 admin
     admin = await register_and_login(client, "rv_admin", "rv_admin_pass123")
     owner = await register_and_login(client, "rv_owner", "rv_owner_pass123")
@@ -276,7 +278,7 @@ async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     roster = (await client.get(
         "/api/users/roster", headers=owner)).json()["items"]
     bob_id = next(u["id"] for u in roster if u["username"] == "rv_bob")
-    # 属主撤
+    # 属主撤(通知被分享人)
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "scenario", "resourceId": "sc-rv-1",
         "granteeUserId": bob_id, "mode": "ref"})
@@ -285,17 +287,17 @@ async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
     assert r.status_code == 204
     assert (await client.get("/api/scenarios/sc-rv-1/draft",
                              headers=bob)).status_code == 404
+    notes = (await client.get("/api/notifications", headers=bob)).json()
+    items = notes.get("items") or notes.get("data", {}).get("items") or []
+    assert any("撤销" in (n.get("title") or "") for n in items)
 
-    # admin 撤(入审计)——rv_admin 是本测试首个注册者 = 真 admin
+    # admin 撤他人分享 → 404(撤销权收归属主/被分享人;不泄露存在性)
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "scenario", "resourceId": "sc-rv-1",
         "granteeUserId": bob_id, "mode": "ref"})
     rid2 = r.json()["id"]
     r = await client.delete(f"/api/shares/{rid2}", headers=admin)
-    assert r.status_code == 204
-    notes = (await client.get("/api/notifications", headers=bob)).json()
-    items = notes.get("items") or notes.get("data", {}).get("items") or []
-    assert any("撤销" in (n.get("title") or "") for n in items)
+    assert r.status_code == 404
 
 
 async def test_publish_linkage(client: AsyncClient) -> None:
@@ -307,34 +309,41 @@ async def test_publish_linkage(client: AsyncClient) -> None:
     await _mk(client, owner, "sc-pb-2")
     suite_id = await _mk_suite(client, owner, "发布集", "sc-pb-1")
 
-    # suite 先发布:级联发布未发布成员(sc-pb-1 一并 public)
+    # S1.3:成员先发布,套件发布 = 深拷贝(不再级联代发布)
+    assert (await client.post(
+        "/api/scenarios/sc-pb-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
     assert r.status_code == 200
+    copy_id = r.json()["suiteId"]
     assert r.json()["visibility"] == "public"
-    assert r.json()["publishedMembers"] == ["sc-pb-1"]  # 级联回执(§7.9)
 
-    # 公共 suite 加第二个私有成员 → 409 列出;确认后发布+入组同事务
+    # 原件套件加第二个未发布成员 → 正常(原件是私有工作区);
+    # 重发布 → 422 suite_member_not_public 列出;发布后重发布成功
     r = await client.post(f"/api/suites/{suite_id}/members", headers=owner,
                           json={"scenarioIds": ["sc-pb-2"]})
-    assert r.status_code == 409
-    assert r.json()["detail"]["code"] == "suite_member_publish_required"
-    r = await client.post(f"/api/suites/{suite_id}/members", headers=owner,
-                          json={"scenarioIds": ["sc-pb-2"],
-                                "publishUnpublished": True})
     assert r.status_code == 200, r.text
+    r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "suite_member_not_public"
+    assert (await client.post(
+        "/api/scenarios/sc-pb-2/publish", headers=owner)).status_code == 200
+    assert (await client.post(
+        f"/api/suites/{suite_id}/publish", headers=owner)).status_code == 200
 
-    # 成员下架 ⇒ 公共 suite 连带下架
+    # 成员下架(原件上)⇒ 其副本删除 ⇒ 公共套件副本连带下架
     r = await client.post("/api/scenarios/sc-pb-1/unpublish", headers=owner)
     assert r.status_code == 200
-    detail = (await client.get(f"/api/suites/{suite_id}",
+    detail = (await client.get(f"/api/suites/{copy_id}",
                                headers=owner)).json()
-    assert detail["visibility"] == "private"
+    r = await client.get(f"/api/suites/{copy_id}", headers=owner)
+    assert r.status_code == 404 and "suite_not_found" in r.text
 
-    # suite unpublish:成员 public 状态独立保留
+    # suite unpublish(原件上):成员场景的公共副本独立保留
     await client.post("/api/scenarios/sc-pb-1/publish", headers=owner)
     await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
     r = await client.delete(f"/api/suites/{suite_id}/publish",
                             headers=owner)
     assert r.status_code == 200
-    pub = (await client.get("/api/scenarios/sc-pb-1", headers=owner)).json()
+    pub = (await client.get("/api/scenarios/sc-pb-1-public",
+                            headers=owner)).json()
     assert pub["visibility"] == "public"

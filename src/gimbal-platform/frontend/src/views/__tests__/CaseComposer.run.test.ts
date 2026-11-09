@@ -53,6 +53,16 @@ vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
   listAll: vi.fn(() => Promise.resolve([{ alias: 'qa1' }])),
 }))
+/** M2a S6:RunConfigPanel 自取别名注册表(绑定候选面);qa1 = fin-service
+ *  的同基别名,绑定下拉的选项来源。 */
+vi.mock('@/api/service-aliases', () => ({
+  listAllAliases: vi.fn(() => Promise.resolve([
+    { aliasName: 'fin-service', baseService: 'fin-service', slot: null,
+      kind: 'plate' as const, createdAt: '', updatedAt: '' },
+    { aliasName: 'qa1', baseService: 'fin-service', slot: null,
+      kind: 'plate' as const, createdAt: '', updatedAt: '' },
+  ])),
+}))
 
 /** V2 fixture:listRunSchemes 保证 default 置顶 */
 const DEFAULT_SCHEME: SchemeV2 = {
@@ -63,7 +73,7 @@ const DEFAULT_SCHEME: SchemeV2 = {
 const SCHEME_B: SchemeV2 = {
   schemeId: 'rs-002', name: '冒烟', isDefault: false,
   dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [0] }],
-  injectionEntryIds: [], serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
+  injectionEntryIds: [], serviceBindings: { 'fin-service': { alias: 'qa1' } },
   options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 
@@ -179,7 +189,7 @@ describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {
     expect(body.schemeId).toBe('rs-dft')                  // 溯源:默认方案两态都带
     expect(body.schemeName).toBe('默认方案')
     expect('env' in body).toBe(false)
-    expect(body.serviceBindings).toEqual({ 'fin-service': { authAlias: 'qa1' } })
+    expect(body.serviceBindings).toEqual({ 'fin-service': { alias: 'qa1' } })
     expect('prefix' in body || 'mergePolicy' in body || 'auths' in body
       || 'injectCredentials' in body).toBe(false)
     w.unmount()

@@ -17,12 +17,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ._ownership import ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
@@ -47,17 +46,24 @@ async def _require_scenario_owner(
 ) -> ComposerScenario:
     """Load the scenario, verify ownership, and return the row.
 
-    Returns 404 on miss (no existence leak).  403 when the caller is
-    neither owner nor admin.
+    Returns 404 on miss (no existence leak) and when the caller can't
+    read the scenario either (authz W3:读判含 ref —— 完全不可见才 404,
+    引用者/公共读者可读 ⇒ 403,不与可读性自相矛盾)。
     """
+    from ._ownership import can, can_read_scenario_row
+
     scen = await _load_scenario(db, scenario_id)
     if scen is None:
         raise not_found_404("scenario", scenario_id)
-    ensure_owner(
-        user,
-        scen.owner_id,
-        "not_owner: only the scenario's owner (or admin) can manage its data sets",
-    )
+    if not await can_read_scenario_row(db, user, scen):
+        raise not_found_404("scenario", scenario_id)
+    # S1.2:数据集随父场景 —— 写权 = 父场景 can(write)(owner ∨ 项目
+    # 成员 ∨ 公共维护者),不再属主单判
+    if not await can(db, user, "scenario", "write", scen):
+        raise HTTPException(
+            403,
+            detail="not_owner: only the scenario's owner (or a project "
+                   "member / maintainer) can manage its data sets")
     return scen
 
 
@@ -86,19 +92,22 @@ async def list_data_sets(
     """List summaries scoped to the caller.
 
     Data-set rows are business parameter matrices — listing every user's
-    data (the previous behaviour) is a cross-user disclosure, so non-admin
-    callers only see data-sets whose parent scenario they own.
+    data would be a cross-user disclosure, so callers only see data-sets
+    whose parent scenario they own or hold a share-ref into
+    (P2 §7.4 引用闭包). authz W3: super_admin 全量分支删除 ——
+    admin 与普通用户同镜头,排查走审计。
     """
-    if user.role == "admin":
-        return await data_set_store.list_summaries(db, scenario_id=scenarioId)
     # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
     from ._ownership import referenced_scenario_ids
-    own_ids = (await scenario_store.owned_scenario_ids(db, user)) |         await referenced_scenario_ids(db, user.id)
+    owned = await scenario_store.owned_scenario_ids(db, user)
+    own_ids = owned | await referenced_scenario_ids(db, user.id)
     if scenarioId is not None:
         # Scope to the requested scenario (still visibility-filtered).
         own_ids = own_ids & {scenarioId}
     # Ownership filter pushed down as a SQL IN (was: full list + Python filter).
-    return await data_set_store.list_summaries(db, scenario_ids=own_ids)
+    # authz W6:引用闭包读者(非属主)的预览剥敏感列
+    return await data_set_store.list_summaries(
+        db, scenario_ids=own_ids, owned_ids=set(owned))
 
 
 @router.get("/{dataset_id}", response_model=DataSet)
@@ -115,7 +124,10 @@ async def get_data_set(
     if scen is None or not await can_read_scenario_row(db, user, scen):
         raise not_found_404("data_set", dataset_id)
     try:
-        return await data_set_store.get(db, dataset_id)
+        # authz W6:非属主读剥敏感列(原件不动)
+        return await data_set_store.get(
+            db, dataset_id, redact=scenario_store.is_foreign_viewer(
+                user.id, scen.owner_id))
     except KeyError as e:
         raise key_error_404(e)
 

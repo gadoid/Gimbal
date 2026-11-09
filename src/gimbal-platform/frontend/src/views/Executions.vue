@@ -429,7 +429,9 @@ const ledgerRows = computed(() => {
 // 均不进 dl。已知键给中文标签,未知键原样。
 // T3→T13 配方键迁移(spec §6):新键 serviceBindings/injectedAuths
 // 取代 auths/prefix/mergePolicy/injectCredentials/exec_auth_alias;
-// 旧键标签保留 — 历史记录的 config_json 仍含旧键,按键驱动渲染保持可读。
+// 旧键标签保留 — 历史记录的 config_json 仍含旧键,按键驱动渲染保持可读
+// (M2a S6 起新 serviceBindings = {svc:{alias}},旧行可能仍是
+// {authAlias,url} — formatRecipeValue 按 JSON 原样渲染,两形状都容忍)。
 const RECIPE_LABELS: Record<string, string> = {
   runId: '运行ID',
   scenarioId: '场景',

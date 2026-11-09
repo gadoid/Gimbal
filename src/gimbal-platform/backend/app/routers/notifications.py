@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser, CurrentUser
+from ..core.deps import CurrentUser, MemberUser
 from ..models import UserPref
 from ..services import notifications as svc
 
@@ -212,7 +212,9 @@ class AnnouncementIn(BaseModel):
 
 @router.post("/announcements", status_code=201)
 async def post_announcement(
-    admin: AdminUser, db: DbSession, body: AnnouncementIn
+    # authz W9-4(待定项 7):公告归 Admin+(ops.write,运维面)——
+    # 原本 users.manage(super_admin 专属)收窄过度
+    admin: MemberUser, db: DbSession, body: AnnouncementIn
 ) -> dict:
     n = await svc.fan_out_announcement(
         db, title=body.title, body=body.body, hours=body.hours, actor=admin)

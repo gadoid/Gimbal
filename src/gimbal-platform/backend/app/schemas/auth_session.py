@@ -24,9 +24,20 @@ class AuthSessionOut(BaseModel):
     username: str  # decrypted server-side
     token_type: str
     expires_in: int
+    # S3 槽位绑定:system ''=未归类;env None=不限;slot=注入键;
+    # is_default=名字解析取用行;account_fields=账号级字段(明文非密,
+    # F6:只能经 ${slot.X.field} 消费)
+    system: str = ""
+    env_id: int | None = Field(default=None, alias="envId")
+    slot: str = ""
+    is_default: bool = Field(default=False, alias="isDefault")
+    account_fields: dict = Field(default_factory=dict,
+                                 alias="accountFields")
     created_at: datetime
     updated_at: datetime
     password_masked: str = Field(default="<REDACTED>")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     # 反查双计数(配套方案 §1.2):N 别名 / N 场景(模板∪方案绑定,
     # 快照不进计数)。默认 0 — 非列表调用方(detail/test)不填。
     alias_ref_count: int = Field(default=0)
@@ -41,7 +52,7 @@ class AuthListOut(PageOut[AuthSessionOut]):
 
 
 class AliasRefItem(BaseModel):
-    """反查面板 · 别名绑定行(service_aliases.credential_alias 命中)。"""
+    """反查面板 · 别名绑定行(service_aliases.slot 命中)。"""
 
     alias_name: str
     base_service: str
@@ -75,7 +86,16 @@ class AuthReferencesOut(BaseModel):
 
 class AuthSessionCreateIn(BaseModel):
     alias: str = Field(min_length=1, max_length=64)
-    url: str = Field(min_length=1, max_length=512)
+    # S3 槽位绑定:槽名缺省 = 别名;system/env/account_fields 可后补
+    slot: str | None = Field(default=None, min_length=1, max_length=64)
+    system: str = Field(default="", max_length=128)
+    env_id: int | None = Field(default=None, ge=1, alias="envId")
+    account_fields: dict = Field(default_factory=dict,
+                                 alias="accountFields")
+    # authz C2:静态令牌认证方式(自举系统 platform 等)—— 免登录 URL,
+    # password 存令牌本体,执行期按 token_type 直接施加,不走登录。
+    # url 留空 = 静态方式;登录式(url 非空)与既有行为逐字段一致。
+    url: str = Field(default="", max_length=512)
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
     token_type: str = Field(default="Bearer")
@@ -83,7 +103,12 @@ class AuthSessionCreateIn(BaseModel):
 
 
 class AuthSessionPatchIn(BaseModel):
-    url: str | None = Field(default=None, min_length=1, max_length=512)
+    system: str | None = Field(default=None, max_length=128)
+    env_id: int | None = Field(default=None, ge=1, alias="envId")
+    account_fields: dict | None = Field(default=None,
+                                        alias="accountFields")
+    is_default: bool | None = Field(default=None, alias="isDefault")
+    url: str | None = Field(default=None, max_length=512)
     username: str | None = Field(default=None, min_length=1)
     password: str | None = Field(default=None, min_length=1)
     token_type: str | None = None

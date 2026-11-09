@@ -12,10 +12,7 @@
       <ul class="m-0 flex flex-col gap-1.5 pl-5 text-caption text-signal-ink/70">
         <li>任务与令牌 {{ task?.tokenName ?? `#${task?.tokenId}` }} 解除绑定，此后不再受这张令牌的状态与范围约束。</li>
         <li>不再向令牌的回调地址推送事件；需要结果请在 Gimbal 内查看或订阅通知。</li>
-        <!-- 第 3 条按身份模式区分(评审 2026-11-05 P2):平台任务解绑后
-             仍以平台身份运行,固定写「以你的身份」会误导 member -->
-        <li v-if="task?.identityMode === 'platform'">平台任务解绑后仍以平台身份、平台凭证池运行；仅公共场景与只读约束不变。</li>
-        <li v-else>个人任务解绑后以你的身份、你的凭证池运行。</li>
+        <li>任务解绑后以你的身份、你的凭证池运行。</li>
         <li>解绑后任务处于暂停，确认无误后点「启动」。</li>
       </ul>
       <DialogFooter>

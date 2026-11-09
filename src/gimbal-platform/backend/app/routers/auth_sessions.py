@@ -20,7 +20,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Query, status
 from loguru import logger
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +69,11 @@ def _to_out(a: AuthSession) -> AuthSessionOut:
         username=_safe_decrypt(a.username_enc),
         token_type=a.token_type,
         expires_in=a.expires_in,
+        system=a.system,
+        envId=a.env_id,
+        slot=a.slot,
+        isDefault=a.is_default,
+        accountFields=a.account_fields or {},
         created_at=a.created_at,
         updated_at=a.updated_at,
     )
@@ -157,6 +162,29 @@ async def create_auth(
     user: CurrentUser,
     session: DbSession,
 ) -> AuthSessionOut:
+    slot = payload.slot or payload.alias
+    # 应用层 (owner, alias) 名字唯一:引用面板/query_view 缓存/
+    # drop_credential 都按名工作,名字必须无歧义(DB 权威键是四元组)
+    dup = (await session.execute(select(AuthSession.id).where(
+        AuthSession.owner_id == user.id,
+        AuthSession.alias == payload.alias))).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"alias '{payload.alias}' already exists for this user")
+    if payload.env_id is not None:
+        from ..models.environment import Environment
+        if await session.get(Environment, payload.env_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "environment_not_found",
+                        "message": f"environment not found: "
+                                   f"{payload.env_id}"})
+    # 首个绑定即该槽默认(部分唯一索引钉死每槽至多一个默认)
+    has_default = (await session.execute(select(AuthSession.id).where(
+        AuthSession.owner_id == user.id,
+        AuthSession.slot == slot,
+        AuthSession.is_default.is_(True)))).scalar_one_or_none()
     a = AuthSession(
         owner_id=user.id,
         alias=payload.alias,
@@ -165,6 +193,12 @@ async def create_auth(
         password_enc=fernet_encrypt(payload.password),
         token_type=payload.token_type,
         expires_in=payload.expires_in,
+        # S3 槽位绑定:槽名缺省 = 别名;env 不限;system 未认领 = ''
+        system=payload.system,
+        env_id=payload.env_id,
+        slot=slot,
+        account_fields=payload.account_fields,
+        is_default=has_default is None,
     )
     session.add(a)
     try:
@@ -173,7 +207,7 @@ async def create_auth(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"alias '{payload.alias}' already exists for this user",
+            detail=f"slot '{slot}' already bound for this system/env",
         )
     await session.refresh(a)
     # G7/Y2:新建凭证 = 补齐信号 → auth_failed/缺失凭证暂停的集成实例
@@ -183,6 +217,28 @@ async def create_auth(
         await _ir.revive_paused_instances(user.id)
     except Exception:  # noqa: BLE001
         pass
+    return _to_out(a)
+
+
+@router.post("/{auth_id}/default", response_model=AuthSessionOut)
+async def set_default_binding(
+    auth_id: Annotated[int, PathParam(ge=1)],
+    user: CurrentUser,
+    session: DbSession,
+) -> AuthSessionOut:
+    """置为该槽的默认绑定(S3):名字解析与环境未命中时的取用行;
+    同槽旧默认原子清除。"""
+    a = await _get_owned(session, auth_id, user.id)
+    await session.execute(
+        update(AuthSession).where(
+            AuthSession.owner_id == user.id,
+            AuthSession.slot == a.slot,
+            AuthSession.id != a.id,
+            AuthSession.is_default.is_(True),
+        ).values(is_default=False))
+    a.is_default = True
+    await session.commit()
+    await session.refresh(a)
     return _to_out(a)
 
 
@@ -230,6 +286,32 @@ async def patch_auth(
     session: DbSession,
 ) -> AuthSessionOut:
     a = await _get_owned(session, auth_id, user.id)
+    # S3 槽位绑定:system/env/account_fields(env 显式 null = 清空,
+    # 与项目默认环境同款 fields_set 口径);is_default=true = 换默认
+    if "system" in payload.model_fields_set:
+        a.system = payload.system or ""
+    if "env_id" in payload.model_fields_set:
+        if payload.env_id is not None:
+            from ..models.environment import Environment
+            if await session.get(Environment, payload.env_id) is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "environment_not_found",
+                            "message": f"environment not found: "
+                                       f"{payload.env_id}"})
+        a.env_id = payload.env_id
+    if payload.account_fields is not None:
+        a.account_fields = payload.account_fields
+    if payload.is_default:
+        # 置默认:同槽清旧默认(原子切换;部分唯一索引兜并发)
+        await session.execute(
+            update(AuthSession).where(
+                AuthSession.owner_id == user.id,
+                AuthSession.slot == a.slot,
+                AuthSession.id != a.id,
+                AuthSession.is_default.is_(True),
+            ).values(is_default=False))
+        a.is_default = True
     if payload.url is not None:
         a.url = payload.url
     if payload.username is not None:
@@ -271,7 +353,7 @@ async def get_references(
 ) -> AuthReferencesOut:
     """反查面板:谁在用这个凭证名(配套方案 §1.3)。四类引用,读时实时
     扫(单一事实源,不建反向索引);计数照给、场景名按 can_read_scenario
-    过滤(admin 全量 / public / owner),剩余 = hidden_count(§1.4)。
+    过滤(public / owner / 引用;authz W3 起 admin 无旁路),剩余 = hidden_count(§1.4)。
     名字命中 ≠ 对象引用 — 引用解析按执行者本人池,文案须如实。"""
     return AuthReferencesOut.model_validate(
         await auth_references.references(session, user=user, alias=alias))
@@ -315,6 +397,9 @@ async def test_auth(
 ) -> TestResult:
     """Dial the stored credential against ``url`` (probe service)."""
     a = await _get_owned(session, auth_id, user.id)
+    if not a.url:
+        # authz C2:静态令牌方式无登录端点,不探测(令牌直接施加)
+        return TestResult(ok=True, message="静态令牌认证:无登录流程,不做拨测")
     try:
         username = fernet_decrypt(a.username_enc)
         password = fernet_decrypt(a.password_enc)

@@ -172,7 +172,7 @@ async def _enqueue_execution_finished(
         # P3:非场景形态(adhoc)的 scenario_id 是占位 id,不对外暴露
         "scenarioId": ex.scenario_id if is_scenario_backed(ex.kind) else None,
         "release": release,
-        # 身份:kind=personal → 属主本人;platform → 平台身份
+        # 身份:authz C1 后恒 personal(字段保留兼容既有回调消费方)
         "identityMode": token.kind,
         "caller": _caller_payload(token),
         "status": ex.status,
@@ -211,8 +211,7 @@ async def _enqueue_integration_event(
 ) -> "int | None":
     if tpl.token_id is None:
         return None
-    if tpl.identity_mode == "personal" \
-            and inst.holder_id != tpl.owner_id:
+    if inst.holder_id != tpl.owner_id:
         return None
     token = await _load_token(db, tpl.token_id)
     target = await _callback_target(db, token, tpl.callback_path_override)
@@ -223,7 +222,9 @@ async def _enqueue_integration_event(
         "taskName": tpl.name,
         "instanceId": inst.id,
         "clientRef": tpl.client_ref,
-        "identityMode": tpl.identity_mode,
+        # 回调载荷契约字段:平台模式退役后恒 personal(外部注册方
+        # 可能已解析该键,保留常量不删)
+        "identityMode": "personal",
         "caller": _caller_payload(token),
         **fields,
     }

@@ -132,9 +132,11 @@ async def test_composition_validation(client: AsyncClient) -> None:
                         config={"units": {"sc-cv-a": {"map": {"x": 1}}}}))
     assert r.status_code == 422
 
-    # 他人场景 → 404(§6.3 一刀切,composition 同口径)
+    # 他人场景 → 422 suite_member_cross_zone(S1.5 同区约束取代
+    # 同属主一刀切;不存在的场景仍是 404)
     r = await put(_comp(0, [{"scenarioId": "sc-cv-x"}]))
-    assert r.status_code == 404
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "suite_member_cross_zone"
 
     # 校验失败不落库:rev 仍是 0,合法保存仍可用 rev 0
     r = await put(_comp(0, [{"scenarioId": "sc-cv-a"}], mode="aggregate"))
@@ -213,9 +215,11 @@ async def test_draft_lifecycle_and_caps(
     assert r.status_code == 200 and not r.json()["isDraft"]
     detail = (await client.get(f"/api/suites/{draft_id}", headers=owner)).json()
     assert detail["rev"] == 1
-    # 清草稿后可发布
+    # 清草稿后可发布(S1.3:成员先发布,套件发布 = 深拷贝)
     await client.post(f"/api/suites/{draft_id}/members", headers=owner,
                       json={"scenarioIds": ["sc-df-1"]})
+    assert (await client.post(
+        "/api/scenarios/sc-df-1/publish", headers=owner)).status_code == 200
     r = await client.post(f"/api/suites/{draft_id}/publish", headers=owner)
     assert r.status_code == 200, r.text
 
@@ -243,14 +247,19 @@ async def test_access_and_capabilities(client: AsyncClient) -> None:
     assert d["access"] == "ref" and d["canEdit"] is False
     assert d["canRun"] is True and d["canShare"] is False
 
-    d = (await client.get(f"/api/suites/{sid}", headers=admin)).json()
-    assert d["access"] == "admin" and d["canEdit"] is True
-    assert d["canShare"] is False  # admin 不可代发(§8.1)
+    # authz W3:admin 对他人私有 suite 一律 404(access 投影的 admin
+    # 分支随越属主旁路消亡;公共对象上 admin = public 读者)
+    assert (await client.get(f"/api/suites/{sid}",
+                             headers=admin)).status_code == 404
 
-    # carol(无引用)私有套件 → 404;发布后 → public 读者,可读不可跑
+    # carol(无引用)私有套件 → 404;S1.3 发布 = 深拷贝(成员先发布),
+    # 公共副本对 carol = public 读者,可读不可跑
     assert (await client.get(f"/api/suites/{sid}",
                              headers=carol)).status_code == 404
-    await client.post(f"/api/suites/{sid}/publish", headers=owner)
-    d = (await client.get(f"/api/suites/{sid}", headers=carol)).json()
+    await client.post("/api/scenarios/sc-ac-1/publish", headers=owner)
+    r = await client.post(f"/api/suites/{sid}/publish", headers=owner)
+    assert r.status_code == 200, r.text
+    copy_id = r.json()["suiteId"]
+    d = (await client.get(f"/api/suites/{copy_id}", headers=carol)).json()
     assert d["access"] == "public" and d["canRun"] is False
     assert d["canEdit"] is False and d["canShare"] is False

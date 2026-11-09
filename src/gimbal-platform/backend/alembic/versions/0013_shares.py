@@ -76,8 +76,9 @@ def upgrade() -> None:
             batch.add_column(sa.Column("forked_from_at",
                                        sa.DateTime(timezone=True), nullable=True))
 
-    # G5 轻档视图补引用分支(§7.6 第三处;security_invoker 直连消费)
-    if _is_pg():
+    # G5 轻档视图补引用分支(§7.6 第三处;security_invoker 直连消费)。
+    # fresh 链守卫同 0005:无 visibility 列(S1.9 当前模型)不建视图
+    if _is_pg() and _has_column("composer_scenarios", "visibility"):
         op.execute(
             "CREATE OR REPLACE VIEW v_scenarios_readable WITH "
             "(security_invoker = true) AS "

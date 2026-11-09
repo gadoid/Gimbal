@@ -1,13 +1,18 @@
 <script setup lang="ts">
 /** 方案工作台 · 运行配置区(spec §6):① 服务绑定(声明∪引用行 × 显式
  *  绑定口径)② 运行参数(钳位 + 总量预览)。纯展示组件:数据进 props、
- *  变更出事件;serviceRows/authOptions 派生与持久化归壳。绑定口径镜像
- *  RunDialog.explicitBindingOf(D3)。
+ *  变更出事件;serviceRows 派生与持久化归壳。绑定口径 = utils/run-bindings
+ *  的 explicitBindingOf / degradedAlias / aliasCandidates(单源,M2a S6
+ *  后绑定语义 = 「服务键 → 别名」;地址由执行环境的部署地址给出)。
  *  ③ 预埋区(plugins/logSub 自由文本)已随 M10/Q15 下线 —— wire 不再
  *  收这两个键(plugins 删除、logSub→subscribe 结构化),自由文本 UI 写
  *  的是死键,整区移除。 */
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { ServiceBinding } from '@/api/scenario-composer'
+import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import {
+  aliasCandidates, degradedAlias, explicitBindingOf,
+} from '@/utils/run-bindings'
 
 import { Input } from '@/components/ui/input'
 
@@ -15,8 +20,6 @@ const props = defineProps<{
   serviceBindings: Record<string, ServiceBinding>
   /** 声明 ∪ 引用并集行(spec D3,RunDialog ServiceRow 同款);壳从 draft 派生 */
   serviceRows: { service: string; declaredUrl: string | null }[]
-  /** owner 凭证池 ∪ 场景内置 users 别名(壳调 listAuthSessions 映射) */
-  authOptions: string[]
   /** 0-based 含端点;null = 全量 */
   stepTo: number | null
   nRuns: number
@@ -25,6 +28,10 @@ const props = defineProps<{
   stepCount: number
   /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
+  /** authz M2a S2:方案环境(环境链第二位);null = 不设置(按链路) */
+  environmentId?: number | null
+  /** 环境候选(壳装载;下拉只读展示) */
+  environments?: { id: number; name: string; is_default: boolean }[]
 }>()
 
 const emit = defineEmits<{
@@ -32,49 +39,48 @@ const emit = defineEmits<{
   'update:stepTo': [v: number | null]
   'update:nRuns': [v: number]
   'update:parallel': [v: number]
+  /** authz M2a S2:方案环境(null = 清空) */
+  'update:environmentId': [v: number | null]
 }>()
 
 // ── ① 服务绑定 ─────────────────────────────────────────────────────
-function declaredUrlOf(svc: string): string | null {
-  return props.serviceRows.find((r) => r.service === svc)?.declaredUrl ?? null
+/** authz M2a S6:别名注册表自取(候选/降级判定面);不可达 → 候选空,
+ *  降级不误报(注册表读全员)。 */
+const aliasRows = ref<ServiceAliasRow[]>([])
+const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
+onMounted(() => {
+  // 同步抛兜底:http 层在无适配器/被 mock 环境可能同步炸(拿不到 Promise,
+  // .catch 挂不上)— 包 try 后注册表不可达只是候选为空,不阻塞编辑。
+  try {
+    listAllAliases()
+      .then((rows) => { aliasRows.value = rows })
+      .catch(() => { /* 注册表不可达 → 候选空,不阻塞编辑 */ })
+  } catch { /* 同上:同步抛同样静默 */ }
+})
+
+function candidatesOf(svc: string): ServiceAliasRow[] {
+  return aliasCandidates(svc, aliasRows.value)
 }
 
-/** 行级显式绑定(D3,镜像 RunDialog.explicitBindingOf):与声明相同的 URL
- *  不算显式绑定(否则方案快照会钉死旧声明地址);未声明行任何非空 URL
- *  都是救燃绑定。非显式行返回 undefined(键整个移除)。 */
-function explicitBindingOf(
-  b: ServiceBinding | undefined,
-  declared: string | null,
-): ServiceBinding | undefined {
-  const url = b?.url?.trim()
-  const effectiveUrl = url && url !== declared ? url : undefined
-  const authAlias = b?.authAlias || undefined
-  if (!authAlias && !effectiveUrl) return undefined
-  return {
-    ...(authAlias ? { authAlias } : {}),
-    ...(effectiveUrl ? { url: effectiveUrl } : {}),
-  }
-}
-
-/** 行内变更 → 重装配整个绑定对象(受控口径:只显式条目落键,清空即移除)。 */
+/** 行内变更 → 重装配整个绑定对象(受控口径:只显式条目落键,清空即移除;
+ *  显式判定 = utils/run-bindings.explicitBindingOf 单源)。 */
 function setRowBinding(svc: string, patch: ServiceBinding) {
   const next: Record<string, ServiceBinding> = { ...props.serviceBindings }
-  const eb = explicitBindingOf({ ...props.serviceBindings[svc], ...patch }, declaredUrlOf(svc))
+  const eb = explicitBindingOf({ ...props.serviceBindings[svc], ...patch })
   if (eb) next[svc] = eb
   else delete next[svc]
   emit('update:serviceBindings', next)
 }
 
-/** 降级(spec §9,口径镜像 RunDialog.degraded):存量 authAlias 非空且
- *  不在 authOptions(凭证被删)→ 行标红警示;select 为该 alias 渲染
+/** 降级(spec §9,口径 = utils/run-bindings.degradedAlias):存量 alias
+ *  非空且已不在注册表(别名被删)→ 行标红警示;select 为该 alias 渲染
  *  disabled option,保住值可见可存,用户重选即恢复。 */
 function degraded(svc: string): boolean {
-  const a = props.serviceBindings[svc]?.authAlias
-  return !!a && !props.authOptions.includes(a)
+  return degradedAlias(props.serviceBindings[svc]?.alias, aliasNames.value)
 }
 
 // ── ② 运行参数(钳位与后端 schema 上限一致,防 422)─────────────────
-/** 总量闸口径同 RunDialog.MAX_TOTAL_RUNS(后端 app/core/config.py
+/** 总量闸口径同 utils/run-bindings.MAX_TOTAL_RUNS(后端 app/core/config.py
  *  MAX_RUNS_PER_EXECUTION);此处是预览告警,真正拦截在发起运行侧。 */
 const MAX_TOTAL_RUNS = 200
 
@@ -109,12 +115,12 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 
 <template>
   <div class="run-config">
-    <!-- ① 用户与服务 -->
+    <!-- ① 用户与服务(authz M2a S6:一行一个别名选择;地址由执行环境的部署地址给出) -->
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">用户与服务</span>
         <span class="zone-spacer"></span>
-        <span class="zone-hint">仅显式绑定入库;与声明相同的 URL 不记录</span>
+        <span class="zone-hint">地址由执行环境的部署地址给出;此处只选每个服务用哪个别名</span>
       </header>
       <div v-if="serviceRows.length" class="bind-list">
         <div v-for="r in serviceRows" :key="r.service" class="bind-row"
@@ -122,24 +128,23 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
           <div class="bind-svc">
             <span class="svc-name">{{ r.service }}</span>
             <span v-if="r.declaredUrl" class="svc-declared" :title="r.declaredUrl">{{ r.declaredUrl }}</span>
-            <span v-else class="svc-nodeclared">未声明引用</span>
-            <span v-if="degraded(r.service)" class="svc-degraded" data-testid="binding-degraded-warn">凭证已删,请重选</span>
+            <span v-if="degraded(r.service)" class="svc-degraded" data-testid="binding-degraded-warn">别名已删,请重选</span>
           </div>
-          <!-- 原生 select/input(与数据区/注入区原生控件约定一致,测试直驱) -->
-          <select class="bind-alias" data-testid="binding-alias"
-            :value="serviceBindings[r.service]?.authAlias ?? ''"
-            @change="setRowBinding(r.service, { authAlias: ($event.target as HTMLSelectElement).value })">
-            <option value="">— 不绑定 —</option>
-            <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
+          <!-- 原生 select(与数据区/注入区原生控件约定一致,测试直驱) -->
+          <select v-if="candidatesOf(r.service).length || degraded(r.service)"
+            class="bind-alias" data-testid="binding-alias"
+            :value="serviceBindings[r.service]?.alias ?? ''"
+            @change="setRowBinding(r.service, { alias: ($event.target as HTMLSelectElement).value })">
+            <option value="">— 用服务键本身 —</option>
+            <option v-for="c in candidatesOf(r.service)" :key="c.aliasName" :value="c.aliasName">
+              {{ c.slot ? `${c.aliasName}(槽位 ${c.slot})` : c.aliasName }}
+            </option>
             <!-- 已删别名:disabled option 显示原别名 — 值不丢(可见可存),不可再选 -->
-            <option v-if="degraded(r.service)" :value="serviceBindings[r.service]!.authAlias" disabled>
-              {{ serviceBindings[r.service]!.authAlias }}(已删)
+            <option v-if="degraded(r.service)" :value="serviceBindings[r.service]!.alias" disabled>
+              {{ serviceBindings[r.service]!.alias }}(已删)
             </option>
           </select>
-          <input class="bind-url" type="text" data-testid="binding-url"
-            :value="serviceBindings[r.service]?.url ?? ''"
-            :placeholder="r.declaredUrl ? `覆盖 URL(留空用声明)` : '覆盖 URL(救燃未声明引用)'"
-            @input="setRowBinding(r.service, { url: ($event.target as HTMLInputElement).value })" />
+          <span v-else class="svc-noalias">该服务暂无同基别名 — 用服务键本身</span>
         </div>
       </div>
       <p v-else class="hint">场景内暂无声明/引用的服务。</p>
@@ -179,6 +184,20 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
+      <div class="param-row">
+        <label>执行环境</label>
+        <select class="bind-alias" data-testid="param-env"
+                :value="environmentId === null || environmentId === undefined ? '' : String(environmentId)"
+                @change="emit('update:environmentId',
+                  ($event.target as HTMLSelectElement).value === ''
+                    ? null : Number(($event.target as HTMLSelectElement).value))">
+          <option value="">按链路解析(方案无环境)</option>
+          <option v-for="e in environments" :key="e.id" :value="String(e.id)">
+            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
+          </option>
+        </select>
+        <span class="param-hint">执行时 > 方案此处的选择 > 项目默认 > 我的偏好 > 默认环境</span>
+      </div>
     </section>
 
   </div>
@@ -201,10 +220,11 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 .zone-hint { font-size: 11px; color: var(--color-text-secondary); }
 .run-config { display: flex; flex-direction: column; gap: 16px; }
 
-/* ① 绑定行:列表行语言(分隔线 + 行距,atbl td 同款) */
+/* ① 绑定行:列表行语言(分隔线 + 行距,atbl td 同款);
+   M2a S6 后两列(服务 + 别名选择),URL 列已退役 */
 .bind-list { display: flex; flex-direction: column; }
 .bind-row {
-  display: grid; grid-template-columns: minmax(120px, 1fr) 150px minmax(160px, 1.2fr);
+  display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 220px);
   gap: 8px; align-items: center; padding: 8px 0;
   border-bottom: 1px solid #f1f5f9;
 }
@@ -218,17 +238,18 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
   font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.svc-nodeclared { font-size: 11px; color: #b45309; }
-/* 降级行(spec §9):凭证已删 — 底色微红 + 警示文案(与 RunDialog .is-degraded 同口径) */
+.svc-degraded { font-size: 11px; color: #b91c1c; }
+/* 无同基候选 → 静默说明代替下拉(用服务键本身) */
+.svc-noalias { font-size: 11px; color: var(--color-text-secondary); }
+/* 降级行(spec §9,M2a S6):别名已删 — 底色微红 + 警示文案(与 RunConfigPanel .is-degraded 同口径) */
 .bind-row.is-degraded { background: #fef2f2; }
 .bind-row.is-degraded .bind-alias { border-color: #fca5a5; }
-.svc-degraded { font-size: 11px; color: #b91c1c; }
-.bind-alias, .bind-url {
+.bind-alias {
   border: 1px solid var(--color-border-secondary); border-radius: 4px;
   padding: 4px 8px; font-size: 13px; min-width: 0;
   background: #fff; color: var(--color-text-primary);
 }
-.bind-alias:focus, .bind-url:focus {
+.bind-alias:focus {
   border-color: var(--accent); outline: none;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }

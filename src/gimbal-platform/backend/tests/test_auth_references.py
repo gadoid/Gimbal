@@ -1,12 +1,13 @@
 """auth_references 凭证反查(配套方案 §1,2026-09-20)。
 
-四类引用 + 可见性 + 删除拦截窄口径:
-* template(steps ${auth.*})/scheme(run 方案绑定)= 真依赖,计数与 409;
+三类引用 + 可见性 + 删除拦截窄口径(方案 authAlias 引用随 authz M2a
+S6 退役 —— 方案只选别名,扫描面不再读方案):
+* template(steps ${auth.*})= 真依赖,计数与 409;
 * snapshot(config.users 同名键)= 卫生信号,面板展示不计数不阻断;
-* alias(service_aliases.credential_alias)= 查表,面板展示;
+* alias(service_aliases.slot)= 查表,面板展示;
 * 场景名按 can_read_scenario 过滤(admin 全量 / public / owner),
   剩余 = hidden_count(只给数不泄露标题);
-* DELETE 409 仅本人场景的 template/scheme;他人场景(即使 public
+* DELETE 409 仅本人场景的 template;他人场景(即使 public
   我能跑)与快照/别名绑定不阻断 — 名字引用按执行者池解析。
 """
 from __future__ import annotations
@@ -41,7 +42,7 @@ def _tpl_step(endpoint: str, header_value: str) -> dict:
 async def _seed(owner_ids: dict[str, int]) -> None:
     """六场景 × 引用形状:
     sc-own-tpl   本人私有,模板引用 → 阻断 + member 可见
-    sc-own-sch   本人私有,方案绑定引用(无模板)→ 阻断
+    sc-own-sch   本人私有,存量方案带 authAlias(无模板)→ S6 起不算引用
     sc-own-snap  本人私有,仅 config.users 快照 → 不阻断,kind=snapshot
     sc-other-pub 他人 public,模板 → member 可见,不阻断(能跑但名字引用)
     sc-other-prv 他人 private,模板 → member 不可见(hidden),admin 可见
@@ -54,7 +55,13 @@ async def _seed(owner_ids: dict[str, int]) -> None:
                     sid, steps=steps, **{"name": sid})),
                 owner=owner, owner_id=owner_ids[owner])
             if visibility != "private":
-                await scenario_store.set_visibility(s, sid, visibility)
+                # S1.3 起 set_visibility 退役:公共行(迁移形态)直改
+                from app.services.zone import apply_public, public_project_id
+                from app.models.composer_scenario import ComposerScenario as _CS
+                from sqlalchemy import update as _upd
+                await s.execute(_upd(_CS).where(
+                    _CS.scenario_id == sid).values(
+                    project_id=await public_project_id(s)))
 
         await _create("sc-own-tpl", "own_user", "private",
                       [_tpl_step("fin.order.add", "${auth.qa1.token}")])
@@ -83,7 +90,7 @@ async def _seed(owner_ids: dict[str, int]) -> None:
         payload["definition"] = defn
         row.payload = payload
 
-        # sc-own-sch 的方案绑定(authAlias,无模板)
+        # sc-own-sch 的存量方案绑定(authAlias,无模板;S6 起不扫)
         # is_default=False:create 已自动建默认方案(partial unique
         # 每场景一个 default)— 扫描面读全部方案的绑定,与 default 无关
         s.add(ComposerRunScheme(
@@ -94,7 +101,7 @@ async def _seed(owner_ids: dict[str, int]) -> None:
 
         # 别名表绑定(共享配置,不阻断)
         s.add(ServiceAlias(alias_name="fin-service-uat", base_service="fin-service",
-                           environment_id=None, credential_alias=ALIAS))
+                           slot=ALIAS))
         await s.commit()
 
 
@@ -109,7 +116,7 @@ async def _setup(client):
     return own, admin
 
 
-async def test_references_four_kinds_and_visibility(client):
+async def test_references_kinds_and_visibility(client):
     own, admin = await _setup(client)
 
     r = await client.get(f"/api/auths/{ALIAS}/references", headers=own)
@@ -120,10 +127,10 @@ async def test_references_four_kinds_and_visibility(client):
         {"alias_name": "fin-service-uat", "base_service": "fin-service",
          "environment_id": None}]
     visible = {v["scenario_id"]: v["kinds"] for v in body["scenario_refs"]["visible"]}
-    # member:本人 3 + 他人 public 1 可见;他人 private → hidden
+    # member:本人 2 + 他人 public 1 可见;他人 private → hidden;
+    # sc-own-sch 的方案 authAlias 不再算引用(S6)
     assert visible == {
         "sc-own-tpl": ["template"],
-        "sc-own-sch": ["scheme"],
         "sc-own-snap": ["snapshot"],
         "sc-other-pub": ["template"],
     }
@@ -134,11 +141,14 @@ async def test_references_four_kinds_and_visibility(client):
     assert by_sid["sc-own-tpl"] == own_id
     assert by_sid["sc-other-pub"] != own_id
 
-    # admin:全可见(私有也见名,can_read_scenario 口径)
+    # admin:与普通用户同镜头(authz W3 收窄)—— 他人 private 同样
+    # hidden(can_read_scenario 无旁路);公共照见
     r = await client.get(f"/api/auths/{ALIAS}/references", headers=admin)
     vis = {v["scenario_id"] for v in r.json()["scenario_refs"]["visible"]}
-    assert "sc-other-prv" in vis
-    assert r.json()["scenario_refs"]["hidden_count"] == 0
+    assert "sc-other-pub" in vis
+    assert "sc-other-prv" not in vis
+    # own_user 的 2 个私有 + other 的 1 个私有 = 3 条对 admin 隐藏
+    assert r.json()["scenario_refs"]["hidden_count"] == 3
 
 
 async def test_list_carries_counts_snapshot_not_counted(client):
@@ -149,29 +159,28 @@ async def test_list_carries_counts_snapshot_not_counted(client):
         "password": "p", "token_type": "Bearer"})
     r = await client.get("/api/auths", headers=own)
     row = next(a for a in r.json()["items"] if a["alias"] == ALIAS)
-    # N 别名 = 1(service_aliases);N 场景 = 模板∪方案绑定去重
-    # = sc-own-tpl + sc-own-sch + sc-other-pub + sc-other-prv = 4(快照不计)
+    # N 别名 = 1(service_aliases);N 场景 = 模板引用去重
+    # = sc-own-tpl + sc-other-pub + sc-other-prv = 3(快照/方案不计)
     assert row["alias_ref_count"] == 1
-    assert row["scenario_ref_count"] == 4
+    assert row["scenario_ref_count"] == 3
 
 
-async def test_delete_blocked_only_by_own_template_or_scheme(client):
+async def test_delete_blocked_only_by_own_template(client):
     own, _ = await _setup(client)
     r = await client.post("/api/auths", headers=own, json={
         "alias": ALIAS, "url": "https://auth", "username": "u",
         "password": "p", "token_type": "Bearer"})
     auth_id = r.json()["id"]
 
-    # 本人模板 + 方案绑定引用 → 409 + 摘要(sc-other-* 不在阻断集)
+    # 本人模板引用 → 409 + 摘要(sc-other-* 与存量方案 authAlias 不在阻断集)
     r = await client.delete(f"/api/auths/{auth_id}", headers=own)
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
-    assert detail["ownScenarioIds"] == ["sc-own-sch", "sc-own-tpl"]
+    assert detail["ownScenarioIds"] == ["sc-own-tpl"]
 
-    # 清掉本人两类引用(场景删除)后 → 快照/他人引用不再阻断,可删
+    # 清掉本人模板引用(场景删除)后 → 快照/他人引用不再阻断,可删
     async with db_module.SessionLocal() as s:
         await scenario_store.delete(s, "sc-own-tpl")
-        await scenario_store.delete(s, "sc-own-sch")
         await s.commit()
     r = await client.delete(f"/api/auths/{auth_id}", headers=own)
     assert r.status_code == 204, r.text

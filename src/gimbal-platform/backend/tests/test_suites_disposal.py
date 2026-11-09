@@ -79,7 +79,9 @@ async def test_disposal_publicize_deletes_suites_first(client):
             ).scalars().all() == []
         scen = (await s.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-sp-pub"))).scalar_one()
-        assert scen.visibility == "public" and scen.owner_id is None
+        from app.services.zone import public_project_id
+        assert scen.project_id == await public_project_id(s)
+        assert scen.owner_id is None
 
 
 async def test_disposal_transfer_moves_suite_wholesale(client):
@@ -105,9 +107,9 @@ async def test_disposal_transfer_moves_suite_wholesale(client):
         ).scalar_one()
         scen = (await s.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-sp-xfer"))).scalar_one()
-        # 三处 owner 同一事务整体改写(不可拆分)
+        # S1.5:成员行不再携带 owner_id 冗余列 —— 转让改写 suite 与
+        # 场景两处,成员行随组合关系保持不变
         assert suite.owner_id == keeper["id"]
-        assert member.owner_id == keeper["id"]
         assert scen.owner_id == keeper["id"]
 
 

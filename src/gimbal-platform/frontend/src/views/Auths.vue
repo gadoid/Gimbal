@@ -37,7 +37,7 @@
       <table class="slib-table">
         <thead>
           <tr>
-            <th>alias</th>
+            <th>alias / 槽位</th>
             <th>URL</th>
             <th>username</th>
             <th style="width:110px">token_type</th>
@@ -48,8 +48,28 @@
         </thead>
         <tbody>
           <tr v-for="row in visibleAuths" :key="row.id" :data-testid="`auth-row-${row.id}`">
-            <td><span class="mono svc-key">{{ row.alias }}</span></td>
-            <td class="mono muted">{{ row.url }}</td>
+            <td>
+              <div class="flex flex-col">
+                <span class="mono svc-key">{{ row.alias }}</span>
+                <!-- authz M2a S3 槽位绑定:槽名 ≠ 别名时展示槽;环境/系统/
+                     默认以 chip 呈现('' = 未归类省略) -->
+                <span v-if="row.slot && row.slot !== row.alias"
+                      class="mono muted" style="font-size:11px">
+                  槽 {{ row.slot }}</span>
+                <span
+                  v-if="row.isDefault" class="svc-chip"
+                  style="font-size:11px" :data-testid="`default-chip-${row.id}`"
+                  title="名字解析与环境未命中时的取用行">默认</span>
+              </div>
+            </td>
+            <td class="mono muted">
+              {{ row.url }}
+              <div
+                v-if="row.system || row.envId" class="muted"
+                style="font-size:11px" :data-testid="`binding-ctx-${row.id}`">
+                {{ row.system || '未归类' }}<template v-if="row.envId"> · 环境#{{ row.envId }}</template>
+              </div>
+            </td>
             <td class="mono">{{ row.username }}</td>
             <td>
               <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
@@ -89,6 +109,11 @@
                   :data-testid="`auth-more-${row.id}`"
                 >⋯</DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="sl-menu">
+                  <DropdownMenuItem
+                    v-if="!row.isDefault"
+                    class="sl-menu-item" data-testid="auth-set-default"
+                    @click="makeDefault(row)"
+                  >设为槽默认</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item" data-testid="auth-test" @click="runTest(row)">测试连通</DropdownMenuItem>
                   <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
                   <DropdownMenuItem
@@ -318,9 +343,10 @@
             >另有 {{ refsData.scenario_refs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
 
             <!-- 原型 H-auths-v2 抽屉底部淡红预警:与 DELETE 409 同口径
-                 (本人场景的模板/方案绑定才拦截)提前告知,避免撞 409 -->
+                 (本人场景的模板引用才拦截;M2a S6 后方案绑定不再点名凭证)
+                 提前告知,避免撞 409 -->
             <div v-if="drawerBlocking.length" class="drawer-warn" data-testid="refs-block-warn">
-              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板 / 方案绑定)</p>
+              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板)</p>
               <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
             </div>
           </template>
@@ -342,7 +368,7 @@ import { useServerList } from '@/composables/useServerList'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
 import {
-  getReferences, list as apiList,
+  getReferences, list as apiList, setDefault as apiSetDefault,
   type AuthReferences, type AuthSession, type TestResult,
 } from '@/api/auth_sessions'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
@@ -357,10 +383,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const store = useAuthSessionsStore()
 
-/** 引用类型 → 徽标配色档:模板引用绿、方案绑定琥珀、快照(不拦截)灰 */
+/** 引用类型 → 徽标配色档:模板引用绿、快照(不拦截)灰。
+ *  scheme(方案绑定)已随 authz M2a S6 退役 — serviceBindings 选注册表
+ *  别名,不再点名凭证,反查不会再报该种类。 */
 const KIND_TONE: Record<string, string> = {
   template: 'green',
-  scheme: 'amber',
   snapshot: 'ink',
 }
 /** token_type → 徽标配色档(与 .svc-flag 同族) */
@@ -437,7 +464,8 @@ const schema = toTypedSchema(z.object({
   alias: z.string()
     .min(1, '请输入 alias')
     .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
-  url: z.string().min(1, '请输入登录 URL').url('URL 格式不正确'),
+  // authz C2:静态令牌认证(自举系统 platform 等)—— 登录 URL 可空
+  url: z.string().url('URL 格式不正确').or(z.literal('')),
   username: z.string().min(1, '请输入 username'),
   // 编辑态可留空(= 不修改) — 创建态必填由 onSubmitForm 补判
   password: z.string(),
@@ -459,6 +487,17 @@ function openCreate() {
     values: { alias: '', url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200 },
   })
   createOpen.value = true
+}
+
+/** authz M2a S3:置为该槽默认(同槽旧默认由后端原子清除)。 */
+async function makeDefault(row: AuthSession) {
+  try {
+    await apiSetDefault(row.id)
+    toast.success(`已将 ${row.alias} 设为槽「${row.slot || row.alias}」的默认绑定`)
+    await reloadList()
+  } catch (e) {
+    showError('设为默认', undefined, (e as Error).message)
+  }
 }
 
 function openEdit(row: AuthSession) {
@@ -562,12 +601,13 @@ const refsLoading = ref(false)
 const refsData = ref<AuthReferences | null>(null)
 
 /** 删除拦截预告(与后端 DELETE 409 同口径):可见引用里
- *  「本人场景 × template/scheme」的条数 — 抽屉底部淡红警示。 */
+ *  「本人场景 × template」的条数(M2a S6 后 scheme 种类已退役)—
+ *  抽屉底部淡红警示。 */
 const drawerBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!refsData.value || me == null) return []
   return refsData.value.scenario_refs.visible.filter(
-    (v) => v.owner_id === me && v.kinds.some((k) => k === 'template' || k === 'scheme'),
+    (v) => v.owner_id === me && v.kinds.includes('template'),
   )
 })
 
@@ -592,11 +632,10 @@ async function loadRefs() {
 }
 
 const KIND_LABELS: Record<string, string> = {
-  template: '模板', scheme: '方案', snapshot: '快照',
+  template: '模板', snapshot: '快照',
 }
 const KIND_TITLES: Record<string, string> = {
   template: 'steps 里的 ${auth.<alias>.*} 模板 — 下次运行会用到',
-  scheme: '运行方案的 serviceBindings 绑定 — 方案启动的 run 会注入',
   snapshot: 'config.users 的同名快照副本 — 自足,不随凭证池轮换',
 }
 

@@ -14,16 +14,24 @@ export interface AuthSession {
   /** 反查双计数(配套方案 §1.2):N 别名 / N 场景(模板∪方案绑定,快照不计)。 */
   alias_ref_count?: number
   scenario_ref_count?: number
+  /** authz M2a S3 槽位绑定:system ''=未归类;env null=不限;slot=注入键;
+   * isDefault=名字解析取用行;accountFields=账号级字段(${slot.X.field} 消费) */
+  system?: string
+  envId?: number | null
+  slot?: string
+  isDefault?: boolean
+  accountFields?: Record<string, unknown>
 }
 
-/** 反查面板(配套方案 §1.3):四类引用,读时实时扫。 */
+/** 反查面板(配套方案 §1.3):引用面,读时实时扫。authz M2a S6 起
+ *  alias_refs 不再带 environment_id(别名不再归属环境);scheme 引用
+ *  种类已退役 —— serviceBindings 选的是注册表别名,不再点名凭证。 */
 export interface AliasRefItem {
   alias_name: string
   base_service: string
-  environment_id: number | null
 }
 
-/** kinds ⊆ {template, scheme, snapshot}(snake 契约对齐后端 auth schema)。 */
+/** kinds ⊆ {template, snapshot}(snake 契约对齐后端 auth schema)。 */
 export interface ScenarioRefItem {
   scenario_id: string
   name: string
@@ -44,6 +52,11 @@ export interface AuthSessionCreateIn {
   password: string
   token_type?: string
   expires_in?: number
+  /** authz M2a S3:槽位绑定(槽名缺省 = alias) */
+  slot?: string
+  system?: string
+  envId?: number | null
+  accountFields?: Record<string, unknown>
 }
 
 export interface AuthSessionPatchIn {
@@ -52,6 +65,11 @@ export interface AuthSessionPatchIn {
   password?: string
   token_type?: string
   expires_in?: number
+  /** authz M2a S3:槽位字段(envId 显式 null = 清空;isDefault=true 换默认) */
+  system?: string
+  envId?: number | null
+  accountFields?: Record<string, unknown>
+  isDefault?: boolean
 }
 
 export interface TestResult {
@@ -95,6 +113,11 @@ export function patch(id: number, payload: AuthSessionPatchIn) {
 
 export function remove(id: number) {
   return http.delete(`/auths/${id}`).then(() => undefined)
+}
+
+/** authz M2a S3:置为该槽的默认绑定(同槽旧默认原子清除)。 */
+export function setDefault(id: number) {
+  return http.post<AuthSession>(`/auths/${id}/default`).then((r) => r.data)
 }
 
 /** 反查面板数据:谁在用这个凭证名(别名绑定 + 场景引用,可见性过滤在后端)。 */

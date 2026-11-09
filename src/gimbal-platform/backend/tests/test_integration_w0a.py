@@ -44,7 +44,9 @@ STEPS = [{
 
 
 def _task_body(sid: str, **over) -> dict:
-    body = {"name": "W0a", "scenarioId": sid, "identityMode": "personal",
+    # S1.3:公共模板引用公共副本(<原 id>-public;夹具建场景即发布)
+    body = {"name": "W0a", "scenarioId": f"{sid}-public",
+            "identityMode": "personal",
             "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
             "visibility": "public"}
     body.update(over)
@@ -55,6 +57,9 @@ async def _mk_scenario(client, h, sid: str) -> None:
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=STEPS))
     assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+
+    await publish_scenario(sid)
 
 
 async def _mk_task(client, h, sid: str) -> int:
@@ -153,26 +158,27 @@ async def test_subscribe_flow_and_gate(client):
 
 
 async def test_base_url_change_triggers_template_changed(client):
-    """G-F:别名 base_url 变更 → 指纹翻转 → 订阅者实例待确认。"""
+    """G-F:部署地址变更 → 指纹翻转 → 订阅者实例待确认(authz M2a S6:
+    地址只来自部署表,别名 base_url 已删)。"""
     u1 = await register_and_login(client, "w0a_c", "pw123456")
     u2 = await register_and_login(client, "w0a_d", "pw123456")
     await _mk_scenario(client, u1, "sc-w0b")
     tid = await _mk_task(client, u1, "sc-w0b")
     uid2 = await _user_id("w0a_d")
 
+    from .helpers import seed_deployment
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="svc", base_service="svc",
-                            base_url="http://host-a"))
+        db.add(ServiceAlias(alias_name="svc", base_service="svc"))
+        await seed_deployment(db, "svc", "http://host-a")
         await db.commit()
 
     r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     fp0 = (await _inst(tid, uid2)).consent_fingerprint
 
-    # 别名指向别的主机(G-F 向量)→ 下次执行前被闸
+    # 部署地址指向别的主机(G-F 向量)→ 下次执行前被闸
     async with db_module.SessionLocal() as db:
-        row = await db.get(ServiceAlias, "svc")
-        row.base_url = "http://evil-host"
+        await seed_deployment(db, "svc", "http://evil-host")
         await db.commit()
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
     assert r.status_code == 200, r.text
@@ -258,22 +264,3 @@ async def test_unstamped_instance_treated_as_unconfirmed(client):
     inst = await _inst(tid, uid2)
     assert inst.state == "paused" and inst.paused_reason == "template_changed"
 
-
-async def test_platform_task_not_subscribable(client):
-    """平台模式任务无订阅概念:subscribe/摘要 → 422 not_subscribable。"""
-    from .inbound_fixtures import publish_scenario
-
-    u1 = await register_and_login(client, "w0a_k", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0f")
-    await publish_scenario("sc-w0f")  # v4:平台模式只认公共场景
-    r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
-        "sc-w0f", identityMode="platform", visibility="private"))
-    assert r.status_code == 201, r.text
-    tid = r.json()["id"]
-    # 平台任务:前置摘要即 422(助手不适用),直连断言订阅闸
-    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
-                          headers=u1, json={"fingerprint": "x"})
-    assert r.status_code == 422 and "not_subscribable" in r.text, r.text
-    r = await client.get(f"/api/integration/tasks/{tid}/subscription-summary",
-                         headers=u1)
-    assert r.status_code == 422, r.text

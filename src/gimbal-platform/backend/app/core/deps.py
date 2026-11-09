@@ -40,8 +40,26 @@ async def _load_jwt_user(db: AsyncSession, token: str) -> User:
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> User:
-    return await _load_jwt_user(db, token)
+    user = await _load_jwt_user(db, token)
+    # authz W6 只能改密门:must_change_password 为真 → 一律 403
+    # password_change_required,白名单三口(评审 R4:前端登录态靠
+    # /auth/me 证明 —— 拦了 me,改密页永远到不了):
+    #   /api/auth/me(响应带 must_change_password,路由守卫跳转依据)
+    #   /api/auth/refresh(会话续期)
+    #   /api/auth/change-password(唯一的出口)
+    # 令牌路径不进此门(重置已把个人令牌整体失效,天然覆盖)。
+    if user.must_change_password and request.url.path not in (
+            "/api/auth/me", "/api/auth/refresh", "/api/auth/change-password"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "password_change_required",
+                "message": "密码已被重置,请先修改密码后再使用其他功能",
+            },
+        )
+    return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -57,7 +75,7 @@ async def principal_or_user(
 
     * 令牌::func:`app.services.access_token.authenticate` —— hash 命中
       → 状态机(吊销/失效/到期)→ 个人令牌按属主当前角色与启用状态派生
-      判定(平台令牌跳过,``__platform__`` 种子 role='user')。失败
+      判定。失败
       401/403 写审计 ``inbound.denied``(hash 命中的令牌行归到该令牌
       名下,§7.2;未命中则资源列为空)。
     * 旧前缀 ``gic_`` / ``ggt_``:401 ``token_invalid``,message 注明
@@ -106,41 +124,63 @@ async def principal_or_user(
     return Principal(user=user, identity_mode="personal")
 
 
-# ── 三级单角色(M2.5,权限方案 §1)─────────────────────────────────
+# ── 能力门(authz W2,表 A 驱动)───────────────────────────────────
 # role 不进 JWT:每请求查库,升降级即时生效(§1.3)。前端守卫只是 UX,
-# 这些依赖才是边界(§0.4)。
-def require_role(*roles: str):
-    """角色门工厂:允许的角色集合;不满足 → 403。"""
-    allowed = frozenset(roles)
+# 这些依赖才是边界(§0.4)。表 A(_ownership.CAPABILITIES)是唯一规则
+# 来源,错误契约统一 {code: capability_forbidden, capability}
+# (取代旧的 role_forbidden / admin_only 两种形状,方案 9.7)。
+
+
+def capability_error(capability: str) -> HTTPException:
+    """403 ``capability_forbidden``(统一错误契约)—— 能力门之外的行内
+    判定(如「个人别名仅 users.manage」)同款形状,不再各写一份。"""
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "capability_forbidden",
+            "capability": capability,
+            "message": f"requires capability: {capability}",
+        },
+    )
+
+
+def require_capability(capability: str):
+    """能力门工厂:表 A 判定;不满足 → 403 capability_forbidden。"""
+    # 延迟 import:routers 包 __init__ 会拉起各 router → 回引本模块,
+    # 顶部 import 会成环(_ownership 自身只依赖 models,无环)。
+    from ..routers._ownership import roles_with
+
+    allowed = roles_with(capability)
 
     async def _dep(user: CurrentUser) -> User:
         if user.role not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "code": "role_forbidden",
-                    "message": f"requires role in {sorted(allowed)}",
-                },
-            )
+            raise capability_error(capability)
         return user
 
     return _dep
 
 
 async def require_admin(user: CurrentUser) -> User:
-    """Admin 门(require_role("admin") 的具名形态;既有 AdminUser 消费面不变)。"""
-    if user.role != "admin":
+    """users.manage 能力门的具名形态(表 A:super_admin —— 原 admin 级,
+    W1 更名后)。既有 AdminUser 消费面不变。"""
+    from ..routers._ownership import roles_with
+
+    if user.role not in roles_with("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: this route requires an administrator",
+            detail={
+                "code": "capability_forbidden",
+                "capability": "users.manage",
+                "message": "requires capability: users.manage",
+            },
         )
     return user
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
-# member = 技术运营权(适配/别名/默认值/信号);admin 天然包含(§1.1)。
-# (2026-09-29 三级更名:原 operator 级现叫 member,原 member 级现叫 user。)
-MemberUser = Annotated[User, Depends(require_role("member", "admin"))]
+# 技术运营面(原 member+,W1 更名后 = admin+)。名字保留:9 个 router 的
+# import 面不动,判定已由表 A 驱动;W8 后端清理时可整体更名。
+MemberUser = Annotated[User, Depends(require_capability("ops.write"))]
 
 
 async def get_owned_execution(
@@ -171,22 +211,22 @@ async def get_owned_execution(
 async def can_view_execution(principal, ex, session: AsyncSession) -> bool:
     """执行可读判定(单一实现;get_visible_execution 与报告 / 批次汇总共用)。
 
+    执行及其子资源的可见面(authz W4 + M2a S1.1):
     * 令牌:``execution.token_id == 当前令牌``(D8);
-    * JWT:owner 本人;admin;或执行 owner 为系统用户(平台模式)且
-      当前用户 member+ —— 平台身份的执行与投递对 member+ 可见(D7)。
-    """
-    from ..models.user import User as _U
+    * JWT:发起人本人 ∨ **我所在普通项目的执行**(executions.project_id
+      派发快照;公共项目无执行,project_members 无公共项目行,天然排除)。
 
+    admin/super_admin 的越属主旁路与「平台身份执行对 admin+ 可见」的
+    平台分支均已删(W4)——admin 排查走审计日志。
+    """
     if getattr(principal, "is_token", False):
         return ex.token_id == principal.token_id
-    user = principal.user
-    if ex.owner_id == user.id or user.role == "admin":
+    if ex.owner_id == principal.user.id:
         return True
-    if ex.owner_id is not None:
-        owner = await session.get(_U, ex.owner_id)
-        if owner is not None and owner.is_system \
-                and user.role in ("member", "admin"):
-            return True
+    if ex.project_id is not None:
+        from ..services.zone import my_project_roles
+        return ex.project_id in await my_project_roles(
+            session, principal.user.id)
     return False
 
 
@@ -219,27 +259,20 @@ async def get_controllable_execution(
 
     * 令牌:``execution.token_id == 当前令牌``(D25 —— 只能取消本令牌
       发起的执行);
-    * JWT:owner 本人;平台身份的执行(owner 为系统用户)member+ 可取消;
-      其余不扩。
+    * JWT:owner 本人。
 
+    平台分支已删(authz W4):admin+ 不再可取消平台身份的他人执行。
     不满足一律 404(不泄露存在性)。
     """
     from ..models.execution import Execution
-    from ..models.user import User as _U
 
     ex = await session.get(Execution, execution_id)
     if ex is not None:
         if getattr(principal, "is_token", False):
             if ex.token_id == principal.token_id:
                 return ex
-        else:
-            user = principal.user
-            if ex.owner_id == user.id:
-                return ex
-            if ex.owner_id is not None and user.role in ("member", "admin"):
-                owner = await session.get(_U, ex.owner_id)
-                if owner is not None and owner.is_system:
-                    return ex
+        elif ex.owner_id == principal.user.id:
+            return ex
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"execution not found: {execution_id}",

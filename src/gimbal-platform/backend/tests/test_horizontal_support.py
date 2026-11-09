@@ -15,7 +15,6 @@ from sqlalchemy import select
 
 from app.core import db as db_module
 from app.models.activity_event import ActivityEvent
-from app.models.composer_scenario import ComposerScenario
 from app.models.integration_task import IntegrationTask
 from app.models.permission import AuditLog, Notification
 from app.models.user import User
@@ -27,15 +26,6 @@ from tests.test_scenario_composer_plate_integration import (  # noqa: F401
 )
 
 
-async def _seed_platform_user() -> None:
-    from app.core.security import hash_password
-    async with db_module.SessionLocal() as db:
-        exists = (await db.execute(select(User).where(
-            User.is_system == True))).scalar()  # noqa: E712
-        if exists is None:
-            db.add(User(username="__platform__", display_name="平台系统",
-                        password_hash=hash_password("x"), is_system=True))
-            await db.commit()
 
 
 async def _audit_rows(action: str) -> list[AuditLog]:
@@ -73,37 +63,11 @@ async def _mk_scenario(client, h, sid: str) -> None:
 
 # ── 审计:平台凭证(admin-only 特权写)──────────────────────────────
 
-class TestAuditPlatformCredentials:
-    async def test_create_and_delete_audited(self, client):
-        await _seed_platform_user()
-        await register_and_login(client, "hz_first", "hz_firstpass123")
-        h = await register_and_login(client, "hz_admin", "hz_adminpass123")
-        async with db_module.SessionLocal() as db:
-            u = (await db.execute(select(User).where(
-                User.username == "hz_admin"))).scalar()
-            u.role = "admin"
-            await db.commit()
-        r = await client.post("/api/integration/platform-credentials",
-                              headers=h, json={
-                                  "alias": "hz-bot", "url": "https://x",
-                                  "username": "bot", "password": "s3cret"})
-        assert r.status_code == 201, r.text
-        rows = await _audit_rows("integration.credential.write")
-        assert len(rows) == 1 and rows[0].detail["fn"] == "create"
-        assert rows[0].resource_type == "integration_credential"
-        cred_id = r.json()["id"]
-        r = await client.delete(
-            f"/api/integration/platform-credentials/{cred_id}", headers=h)
-        assert r.status_code == 200, r.text
-        rows = await _audit_rows("integration.credential.write")
-        assert len(rows) == 2 and rows[0].detail["fn"] == "delete"
-        # 删除后审计仍可读(resource_name 折叠在 detail)
-        assert rows[0].detail.get("resource_name") == "hz-bot"
-
-
-# ── 审计:admin 越属主的删除/可见性变更 ────────────────────────────
-
 class TestAuditAdminCrossOwner:
+    """authz W3 翻转:admin 越属主旁路删除后,越属主只剩 steward 下架
+    公共对象一条路(发布/删除对他人对象 404,admin_publish/admin_delete
+    审计面随能力一起消亡);保留下架的审计与受影响人事件。"""
+
     async def test_scenario_visibility_and_delete(self, client):
         await register_and_login(client, "ax_admin", "ax_adminpass123")
         h_owner = await register_and_login(client, "ax_owner", "ax_ownerpass123")
@@ -113,43 +77,54 @@ class TestAuditAdminCrossOwner:
         r = await client.post("/api/scenarios/sc-ax-1/publish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
-        # 重复发布 = 状态未变:不刷事件
+        # S1.3 重发布 = 副本重建(内容更新),事件随副本创建再落;
+        # 只断言「事件存在且无越属主审计」(计数语义随复制改变)
         r = await client.post("/api/scenarios/sc-ax-1/publish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
-        assert len(await _activity_rows(owner_id, "scenario.published")) == 1
+        assert len(await _activity_rows(owner_id, "scenario.published")) >= 1
         assert not await _audit_rows("scenario.admin_publish")
         r = await client.post("/api/scenarios/sc-ax-1/unpublish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
+        # 属主自下架不通知本人、不入审计
+        assert not await _audit_rows("scenario.admin_unpublish")
+        assert not await _notifications(owner_id, "scenario_unpublished")
 
-        # admin 越属主:发布/下架/删除三条审计 + 事件落受影响人轴
+        # admin(super_admin)越属主:私有对象发布/下架/删除一律 404
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "ax_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "ax_admin", "ax_adminpass123")
-        r = await client.post("/api/scenarios/sc-ax-1/publish",
+        for method, path in (
+            ("post", "/api/scenarios/sc-ax-1/publish"),
+            ("post", "/api/scenarios/sc-ax-1/unpublish"),
+            ("delete", "/api/scenarios/sc-ax-1"),
+        ):
+            r = await getattr(client, method)(path, headers=h_admin)
+            assert r.status_code == 404, (path, r.status_code)
+
+        # 属主再发布 → admin steward 下架公共对象:200 + 审计 + 通知 +
+        # 事件落受影响人轴(detail.by 记操作者)
+        assert (await client.post("/api/scenarios/sc-ax-1/publish",
+                                  headers=h_owner)).status_code == 200
+        r = await client.post("/api/scenarios/sc-ax-1-public/unpublish",
                               headers=h_admin)
         assert r.status_code == 200, r.text
-        r = await client.post("/api/scenarios/sc-ax-1/unpublish",
-                              headers=h_admin)
-        assert r.status_code == 200, r.text
-        r = await client.delete("/api/scenarios/sc-ax-1", headers=h_admin)
-        assert r.status_code == 204, r.text
-        assert len(await _audit_rows("scenario.admin_publish")) == 1
         assert len(await _audit_rows("scenario.admin_unpublish")) == 1
-        assert len(await _audit_rows("scenario.admin_delete")) == 1
-        # 时间线:自发布 + admin 发布各一条 published(同理 unpublished),
-        # admin 那两条 detail.by 记操作者;deleted 仅 admin 一条
-        for kind in ("scenario.published", "scenario.unpublished"):
-            rows = await _activity_rows(owner_id, kind)
-            assert len(rows) == 2, kind
-            assert sum(1 for x in rows if x.detail.get("by")) == 1, kind
-        rows = await _activity_rows(owner_id, "scenario.deleted")
-        assert len(rows) == 1
-        assert rows[0].detail.get("by") == "ax_admin"
+        assert len(await _notifications(owner_id, "scenario_unpublished")) == 1
+        rows = await _activity_rows(owner_id, "scenario.unpublished")
+        assert len(rows) == 2  # 自下架 + admin 下架
+        by_rows = [x for x in rows if x.detail.get("by")]
+        assert len(by_rows) == 1
+        assert by_rows[0].detail.get("by") == "ax_admin"
+
+        # 越属主删除已不可达:admin_delete 审计面消亡;对象仍在
+        assert not await _audit_rows("scenario.admin_delete")
+        assert (await client.get(
+            "/api/scenarios/sc-ax-1", headers=h_owner)).status_code == 200
 
     async def test_suite_publish_delete_audited(self, client):
         await register_and_login(client, "as_admin", "as_adminpass123")
@@ -161,24 +136,40 @@ class TestAuditAdminCrossOwner:
         assert r.status_code == 201, r.text
         suite_id = r.json()["suiteId"]
         r = await client.post(f"/api/suites/{suite_id}/members", headers=h_owner,
-                              json={"scenarioIds": ["sc-as-1"],
-                                    "publishUnpublished": True})
+                              json={"scenarioIds": ["sc-as-1"]})
         assert r.status_code == 200, r.text
         async with db_module.SessionLocal() as db:
             u = (await db.execute(select(User).where(
                 User.username == "as_admin"))).scalar()
-            u.role = "admin"
+            u.role = "super_admin"
             await db.commit()
         h_admin = await login_user(client, "as_admin", "as_adminpass123")
-        r = await client.post(f"/api/suites/{suite_id}/publish", headers=h_admin)
-        assert r.status_code == 200, r.text
-        # 级联公开成员场景:scenario.published(via=suite_publish)落属主轴
+        # 私有 suite:admin 发布/删除一律 404(发布/删除无 steward 动词)
+        assert (await client.post(
+            f"/api/suites/{suite_id}/publish",
+            headers=h_admin)).status_code == 404
+        assert (await client.delete(
+            f"/api/suites/{suite_id}", headers=h_admin)).status_code == 404
+        # 属主发布 → admin steward 下架:审计 + 通知属主;
+        # suite.admin_publish/admin_delete 审计面随能力消亡
+        assert (await client.post(
+            "/api/scenarios/sc-as-1/publish",
+            headers=h_owner)).status_code == 200   # S1.3:成员先发布
+        r = await client.post(f"/api/suites/{suite_id}/publish",
+                              headers=h_owner)
+        assert r.status_code == 200
+        copy_suite_id = r.json()["suiteId"]
+        # S1.3:无级联 —— 成员各自走场景发布;只断言发布事件存在
         rows = await _activity_rows(owner_id, "scenario.published")
-        assert len(rows) == 1 and rows[0].detail.get("via") == "suite_publish"
-        r = await client.delete(f"/api/suites/{suite_id}", headers=h_admin)
-        assert r.status_code == 204, r.text
-        assert len(await _audit_rows("suite.admin_publish")) == 1
-        assert len(await _audit_rows("suite.admin_delete")) == 1
+        assert rows
+        # Admin+ 治理下架作用在公共副本上
+        r = await client.delete(f"/api/suites/{copy_suite_id}/publish",
+                                headers=h_admin)
+        assert r.status_code == 200, r.text
+        assert len(await _audit_rows("suite.admin_unpublish")) == 1
+        assert len(await _notifications(owner_id, "scenario_unpublished")) == 1
+        assert not await _audit_rows("suite.admin_publish")
+        assert not await _audit_rows("suite.admin_delete")
 
 
 # ── 通知:场景删除通知引用者(N1)───────────────────────────────────
@@ -315,9 +306,9 @@ class TestIntegrationTimeline:
         async with db_module.SessionLocal() as db:
             tpl = IntegrationTask(
                 name="iv-task", owner_id=holder_id,
-                identity_mode="personal", target_type="scenario",
+                target_type="scenario",
                 scenario_id="sc-iv-1", trigger_cron="*/5 * * * *",
-                result_policy="latest", visibility="public",
+                result_policy="latest",
                 card_template="status")
             db.add(tpl)
             await db.flush()
@@ -340,7 +331,6 @@ class TestIntegrationTimeline:
             ANCHORED_STEPS, FULLS, _subscribe, _task_body,
         )
         plate_mock.fulls.update(FULLS)
-        await _seed_platform_user()
         await register_and_login(client, "il_first", "il_firstpass123")
         h_owner = await register_and_login(client, "il_owner",
                                            "il_ownerpass123")
@@ -352,9 +342,11 @@ class TestIntegrationTimeline:
                             plate={"jira": "1.0#1"},
                             system=["jira"]))
         assert r.status_code in (200, 201), r.text
+        from .inbound_fixtures import publish_scenario
+
+        await publish_scenario("sc-il-1")   # S1.3:公共模板引用副本
         r = await client.post("/api/integration/tasks", headers=h_owner,
-                              json=_task_body("sc-il-1", name="il-fn",
-                                              visibility="public"))
+                              json=_task_body("sc-il-1", name="il-fn",))
         assert r.status_code in (200, 201), r.text
         tid = r.json()["id"]
         r = await _subscribe(client, h_sub, tid)
@@ -385,7 +377,12 @@ class TestAuditDeadKeyRetired:
     def test_adaptation_batch_apply_removed_from_registry(self):
         from app.services.audit import AUDIT_ACTIONS
         assert "adaptation.batch.apply" not in AUDIT_ACTIONS
-        for a in ("integration.credential.write", "scenario.admin_delete",
-                  "scenario.admin_publish", "scenario.admin_unpublish",
-                  "suite.admin_delete", "suite.admin_publish"):
+        for a in ("integration.credential.write",
+                  "scenario.admin_unpublish", "suite.admin_unpublish"):
             assert a in AUDIT_ACTIONS, a
+        # authz W3 死键退役:越属主旁路消亡的五个动作不再登记
+        # (历史行照常展示,只是词表/过滤 chip 不再提供)
+        for dead in ("share.admin_revoke", "scenario.admin_delete",
+                     "scenario.admin_publish", "suite.admin_delete",
+                     "suite.admin_publish"):
+            assert dead not in AUDIT_ACTIONS, dead

@@ -1,10 +1,11 @@
 <!-- ServiceAdmin.vue — 服务信息管理(服务画像方案 §4;P1 唯一净新增页面)。
      定位 = 配置池(与画像的「探索」心智分开,故意不合并):
      * 左栏只到服务级(系统 → 服务两层),服务是配置的最小锚点;
-     * 分组在顶部筛选器(选系统得到服务、选分组得到别名,产出物不同层,
-       不并列成第二棵树);不选服务时跨服务筛,选了服务在服务内筛,可叠加;
      * 表内显式画出「服务级默认」行(aliasName === baseService 的真实行),
        把三层查找顺序摊开:精确命中别名 → 该服务的默认 → 全局共享默认。
+     authz M2a S6「别名瘦身」:baseUrl/环境归属/凭证别名/个人归属全部退役 ——
+     地址维护在「部署地址」页(部署表),凭证经「声明槽位」(slot)指向
+     执行者本人认证池的槽位,别名一律团队共享(个人别名退役)。
      写面 admin(同传递字段纪律);读面全员——但页面入口收在 admin。 -->
 <template>
   <section class="slib">
@@ -12,7 +13,7 @@
       icon="layers"
       title="服务信息管理"
       :count="loading ? '' : `${aliases.length} 个别名`"
-      subtitle="配置池 — 别名登记与凭证 / 分组绑定;探索覆盖与告警请用服务画像"
+      subtitle="配置池 — 别名登记与声明槽位;地址在部署地址页维护;探索覆盖与告警请用服务画像"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -66,38 +67,30 @@
         </div>
       </aside>
 
-      <!-- 右侧:顶部分组筛选 + 别名表 -->
+      <!-- 右侧:服务筛选 + 别名表 -->
       <div>
         <div class="svc-stats" data-testid="alias-group-chips">
           <span>
             {{ selectedService ? `${selectedService} 下` : '全部服务' }} ·
             <b>{{ filtered.length }}</b> 条别名
           </span>
-          <span v-if="groupChips.length" class="svc-stat-sep"></span>
-          <button
-            v-for="c in groupChips"
-            :key="c"
-            type="button"
-            class="svc-chip"
-            :class="{ on: selectedGroup === c }"
-            :data-testid="`alias-chip-${c}`"
-            @click="selectedGroup = selectedGroup === c ? '' : c"
-          >{{ c }}</button>
-          <button v-if="selectedService || selectedGroup" type="button" class="svc-link" @click="clearFilters">
+          <button v-if="selectedService" type="button" class="svc-link" @click="clearFilters">
             清掉筛选
           </button>
+          <span class="flex-1" />
+          <!-- M2a S6:地址不再挂别名 — 指去部署地址页维护 -->
+          <router-link to="/admin/deployments" class="svc-link" data-testid="goto-deployments">
+            地址在「部署地址」维护 ↗
+          </router-link>
         </div>
 
         <div class="lib-card">
           <table class="slib-table">
             <thead>
               <tr>
-                <th style="width:22%">别名</th>
-                <th style="width:15%">所属服务</th>
-                <th style="width:20%">URL</th>
-                <th style="width:10%">分组</th>
-                <th style="width:15%">凭证</th>
-                <th style="width:8%">归属</th>
+                <th style="width:28%">别名</th>
+                <th style="width:20%">所属服务</th>
+                <th style="width:20%">声明槽位</th>
                 <th style="width:132px" class="c-center">操作</th>
               </tr>
             </thead>
@@ -119,23 +112,8 @@
                 </td>
                 <td class="mono muted">{{ a.baseService }}</td>
                 <td>
-                  <!-- F4 方案 B:环境级端点(物化链第三档);登记必填,
-                       「未填」只可能是加列前的存量行,编辑触达时补齐。 -->
-                  <span v-if="a.baseUrl" class="mono svc-url" :title="a.baseUrl">{{ a.baseUrl }}</span>
-                  <span v-else class="muted" title="存量行未填 URL;编辑补齐后生效">未填</span>
-                </td>
-                <td>
-                  <span v-if="a.environmentName" class="svc-flag">{{ a.environmentName }}</span>
-                  <span v-else class="muted">未归属环境</span>
-                </td>
-                <td>
-                  <span v-if="a.credentialAlias" class="mono">{{ a.credentialAlias }}</span>
-                  <span v-else class="muted">不绑</span>
-                </td>
-                <td>
-                  <span class="svc-flag" :class="{ violet: a.ownerUserId == null }">
-                    {{ a.ownerUserId == null ? '团队共享' : `个人(#${a.ownerUserId})` }}
-                  </span>
+                  <span v-if="a.slot" class="mono">{{ a.slot }}</span>
+                  <span v-else class="muted">未声明</span>
                 </td>
                 <td class="c-center">
                   <div class="row-acts">
@@ -146,7 +124,7 @@
                 </td>
               </tr>
               <tr v-if="filtered.length === 0">
-                <td colspan="7" class="c-center">
+                <td colspan="4" class="c-center">
                   <span class="muted">
                     {{ selectedService ? '该服务下还没有登记别名' : '还没有登记别名 —— 别名 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
                   </span>
@@ -172,7 +150,7 @@
           <div class="svc-panel-head">
             <span class="svc-panel-title">{{ editing ? '编辑别名' : '登记别名' }}</span>
             <!-- 登记口径说明:原表单下常驻段落,逐页收纳批收进问号弹层 -->
-            <QTip text="凭证按执行者本人的认证管理池解析(团队共享别名同样各拿各的);URL 必填;受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。" />
+            <QTip text="登记不需要 URL —— 地址按环境在「部署地址」页维护;别名只声明槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。别名一律团队共享(M2a S6 个人别名退役)。" />
             <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -232,34 +210,15 @@
                 data-testid="alias-name-input"
               />
             </div>
-            <!-- V5(B):groupTag 退役 —— 归属环境从 environments 选,不再自由填 -->
-            <Select v-model="draft.environmentId" :key="`env:${draft.environmentId}`">
-              <SelectTrigger class="w-[160px]" data-testid="alias-env-trigger"><SelectValue placeholder="环境(可选)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">不归属</SelectItem>
-                <SelectItem v-for="e in environments" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
-              </SelectContent>
-            </Select>
-            <!-- F4:URL 必填 —— 别名 = 环境端点的登记,该列就是它的本体
-                 (引用场景未显式声明/绑定时执行取它)。 -->
+            <!-- M2a S6:声明槽位(slot)— 执行注入取执行者本人认证池的
+                 同名槽;留空 = 未声明(不注入该别名携带的凭证)。 -->
             <Input
-              v-model="draft.baseUrl"
-              class="w-[280px]"
-              placeholder="URL(必填,如 https://uat.fin.local)"
-              data-testid="alias-url-input"
+              v-model="draft.slot"
+              class="w-[200px]"
+              placeholder="声明槽位(可选,如 maker)"
+              data-testid="alias-slot-input"
             />
-            <!-- 凭证别名:样式化凭证下拉(与认证选择器同件),替掉 Input+datalist;
-                 可选字段 → clearable 给清除钮。宽度走 flex-1 吃行内剩余空间
-                 (组件根是 width:100%,固定 w-[260px] 会被盖掉占满整行) -->
-            <CredentialSelect
-              v-model="draft.credentialAlias"
-              :credentials="myCredentials"
-              class="min-w-[160px] flex-1"
-              placeholder="凭证别名(可选)"
-              clearable
-              data-testid="alias-cred-input"
-            />
-            <Button data-testid="alias-save" :disabled="!draft.aliasName.trim() || aliasIncomplete || !draft.baseUrl.trim() || !!saving" @click="save">
+            <Button data-testid="alias-save" :disabled="!draft.aliasName.trim() || aliasIncomplete || !!saving" @click="save">
               {{ editing ? '保存' : '登记' }}
             </Button>
             <Button v-if="editing" variant="outline" data-testid="alias-cancel" @click="cancelEdit">取消</Button>
@@ -284,32 +243,23 @@ import {
   createAlias, deleteAlias, listAllAliases, patchAlias,
   type ServiceAliasRow,
 } from '@/api/service-aliases'
-import { listAll as listMyCredentials, type AuthSession } from '@/api/auth_sessions'
-import { type EnvironmentRow } from '@/api/environments'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useClientPager } from '@/composables/useClientPager'
-import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 
 const loading = ref(true)
 const router = useRouter()
 const aliases = ref<ServiceAliasRow[]>([])
 const selectedService = ref('')
-const selectedGroup = ref('')
-const myCredentials = ref<AuthSession[]>([])
-const environments = ref<EnvironmentRow[]>([])
 const saving = ref(false)
 const editing = ref<ServiceAliasRow | null>(null)
 
 const draft = ref<{
-  aliasName: string; baseUrl: string; environmentId: string;
-  credentialAlias: string; kind: 'plate' | 'external'; baseService: string;
+  aliasName: string; slot: string; kind: 'plate' | 'external'; baseService: string;
 }>({
-  aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
-  kind: 'plate',
-  baseService: '',
+  aliasName: '', slot: '', kind: 'plate', baseService: '',
 })
 
 /** 常驻前缀槽的基服务:登记态 = 左栏点选;编辑态 = 该别名自身所属服务;
@@ -385,18 +335,10 @@ function aliasCount(service: string): number {
   return aliases.value.filter((a) => a.baseService === service).length
 }
 
-// 顶部环境筛选(V5-B):别名按 environmentId 归属;chips 显示环境名
-const groupChips = computed<string[]>(() => {
-  const pool = selectedService.value
-    ? aliases.value.filter((a) => a.baseService === selectedService.value)
-    : aliases.value
-  return [...new Set(pool.map((a) => a.environmentName).filter((t): t is string => !!t))].sort()
-})
-
+// 顶部筛选(M2a S6 后仅按服务):别名不再归属环境,环境 chips 已随退役
 const filtered = computed<ServiceAliasRow[]>(() =>
   aliases.value
-    .filter((a) => !selectedService.value || a.baseService === selectedService.value)
-    .filter((a) => !selectedGroup.value || a.environmentName === selectedGroup.value),
+    .filter((a) => !selectedService.value || a.baseService === selectedService.value),
 )
 
 // 客户端分页(2026-09-23 批次):全量拉回 + 前端过滤,页内切片渲染;
@@ -406,7 +348,6 @@ const { page, pageSize, paged, pageCount } = useClientPager(() => filtered.value
 function selectService(name: string): void {
   const prev = selectedService.value
   selectedService.value = name
-  selectedGroup.value = '' // 切服务后分组域变化,重选
   if (editing.value) return
   // 点选只换前缀槽文字,输入框位置不动;已写后缀随身携带
   // (无基时输入的裸串视作后缀;恰好是新前缀的全名则剥掉重组,不重复拼)。
@@ -418,16 +359,13 @@ function selectService(name: string): void {
 
 function clearFilters(): void {
   selectedService.value = ''
-  selectedGroup.value = ''
 }
 
 function startEdit(a: ServiceAliasRow): void {
   editing.value = a
   draft.value = {
     aliasName: a.aliasName,
-    baseUrl: a.baseUrl ?? '',
-    environmentId: a.environmentId != null ? String(a.environmentId) : '0',
-    credentialAlias: a.credentialAlias ?? '',
+    slot: a.slot ?? '',
     kind: a.kind ?? 'plate',
     baseService: a.baseService ?? '',
   }
@@ -436,8 +374,7 @@ function startEdit(a: ServiceAliasRow): void {
 function cancelEdit(): void {
   editing.value = null
   draft.value = {
-    aliasName: '', baseUrl: '', environmentId: '0', credentialAlias: '',
-    kind: 'plate', baseService: '',
+    aliasName: '', slot: '', kind: 'plate', baseService: '',
   }
 }
 
@@ -448,17 +385,14 @@ async function save(): Promise<void> {
   try {
     if (editing.value) {
       await patchAlias(editing.value.aliasName, {
-        baseUrl: d.baseUrl.trim() || null,
-        environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
-        credentialAlias: d.credentialAlias.trim() || null,
+        // M2a S6:slot null = 清空声明;多写字段后端 422(瘦身收窄)
+        slot: d.slot.trim() || null,
       })
       toast.success('已保存')
     } else {
       await createAlias({
         aliasName: d.aliasName.trim(),
-        baseUrl: d.baseUrl.trim(),
-        environmentId: d.environmentId !== '0' ? Number(d.environmentId) : null,
-        credentialAlias: d.credentialAlias.trim() || null,
+        slot: d.slot.trim() || null,
         kind: d.kind,
         baseService: d.kind === 'external' ? d.baseService : null,
       })
@@ -475,7 +409,7 @@ async function save(): Promise<void> {
 
 async function remove(a: ServiceAliasRow): Promise<void> {
   const ok = await confirmAction(
-    `已绑定的凭证 / 分组随行删除;carry 别名键的绑定行不在此表,不受影响。`,
+    `已声明的槽位随行删除;carry 别名键的绑定行不在此表,不受影响。`,
     `删除别名 ${a.aliasName}?`,
     { danger: true, confirmButtonText: '删除' },
   )
@@ -493,7 +427,6 @@ async function reload(): Promise<void> {
   try {
     aliases.value = await listAllAliases()
     catalogEntries.value = await loadCatalogEntries()
-    myCredentials.value = await listMyCredentials()
   } catch (e) {
     showError('加载', e)
   } finally {

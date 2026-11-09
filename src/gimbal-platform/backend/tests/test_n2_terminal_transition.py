@@ -151,8 +151,8 @@ class TestIntegrationRecoverStuck:
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2)
             s.add(IntegrationTask(
-                name="n2集成", owner_id=1, visibility="public",
-                identity_mode="personal", scenario_id="sc-n2i",
+                name="n2集成", owner_id=1,
+                scenario_id="sc-n2i",
                 trigger_cron=cron, result_policy="latest"))
             await s.flush()
             tpl_id = (await s.execute(sa.select(IntegrationTask.id).order_by(
@@ -310,8 +310,8 @@ class TestLeaseToken:
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2)
             s.add(IntegrationTask(
-                name="租约", owner_id=1, visibility="public",
-                identity_mode="personal", scenario_id="sc-lease",
+                name="租约", owner_id=1,
+                scenario_id="sc-lease",
                 trigger_cron="*/5 * * * *", result_policy="latest"))
             await s.flush()
             tpl_id = (await s.execute(sa.select(IntegrationTask.id).order_by(

@@ -78,11 +78,10 @@ class UserPublic(BaseModel):
     id: int
     username: str
     display_name: str
-    # M6-3:物理列已删 —— API 字面保留(前端旧缓存 fallback),由 role 派生
-    is_admin: bool = False
-    # 三级角色(M2.5,/auth/me 经 MeOut 包裹 UserPublic 自动下发;
-    # 2026-09-29 更名:user | member | admin,原 member→user、operator→member)
-    role: Literal["user", "member", "admin"] = "user"
+    # 三级角色(authz W1 2026-11-07 更名:user | admin | super_admin,
+    # 原 member→admin、原 admin→super_admin,权限边界不变;更早的
+    # 2026-09-29 更名是原 member→user、operator→member)
+    role: Literal["user", "admin", "super_admin"] = "user"
     is_active: bool
     # D32:系统用户标记(用户管理行防御:停用/删除入口对其隐藏)
     is_system: bool = False
@@ -92,19 +91,17 @@ class UserPublic(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _derive_is_admin(cls, data):
-        if isinstance(data, dict):
-            if "is_admin" not in data and "role" in data:
-                return {**data, "is_admin": data["role"] == "admin"}
+    def _snapshot_orm(cls, data):
+        """ORM 行先取 ``__dict__`` 快照再校验:commit 后已过期的属性
+        (如 ``updated_at``)不在快照里 → 走字段默认,不触发异步会话外的
+        懒加载(MissingGreenlet)。原随 is_admin 派生一并承担,派生位停发
+        后单独保留。"""
+        if isinstance(data, dict) or not hasattr(data, "__dict__"):
             return data
-        role = getattr(data, "role", None)
-        if role is not None and getattr(data, "is_admin", None) is None:
-            from types import SimpleNamespace
+        from types import SimpleNamespace
 
-            merged = dict(getattr(data, "__dict__", {}))
-            merged["is_admin"] = role == "admin"
-            return SimpleNamespace(**merged)
-        return data
+        return SimpleNamespace(**{
+            k: v for k, v in vars(data).items() if not k.startswith("_sa_")})
 
     @field_serializer("created_at")
     def _iso(self, v: datetime | None) -> str | None:
@@ -125,3 +122,12 @@ class MeOut(BaseModel):
     """Response shape for GET /auth/me."""
 
     user: UserPublic
+    # authz W2:按表 A 求出的能力列表(_ownership.capabilities_of)。
+    # 前端 can() 的唯一依据(W8 迁移后取代 role/isAdmin 判断)。
+    capabilities: list[str] = Field(default_factory=list)
+    # authz W6:管理员重置密码后的强制改密位(前端路由守卫的跳转
+    # 依据,比等 403 更早;改密成功即复位)
+    must_change_password: bool = False
+    # M2a S1.1:我所在的普通项目(前端项目切换器数据源;公共项目
+    # 不落成员行,不在此列)。id/name/kind(normal|public)/role(admin|member)
+    projects: list[dict] = Field(default_factory=list)

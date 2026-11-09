@@ -1,8 +1,18 @@
 """carry 配置面路由(spec §3.2):读 CurrentUser(编排器提示要用),
-写 MemberUser(M2.5:默认值属技术运营权,权限方案 §1.2)。字段面聚合走 plate /full。"""
+写面按层分权(authz M2a S4):``?scope=global``(默认,兼容旧客户端)=
+公共项目层,ops.write;``?scope=project&projectId=`` = 项目层,项目管理员;
+``?scope=user`` = 个人层,本人(普通用户可写自己的层)。字段面聚合走
+plate /full。
+
+读面(10.5):列表/单服务读返回**可见层并集**(公共项目 + 我所在项目 +
+我的个人层);响应带逐行 scope 标签,flat `bindings` 仍为合并视图
+(编排器提示的既有消费面零变化)。
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +40,53 @@ router = APIRouter(prefix="/carry", tags=["carry"])
 DbSession = Depends(get_db)
 
 
+async def _resolve_scope(
+    db, user, scope: str, project_id: int | None,
+    *, write: bool,
+) -> "tuple[str, int]":
+    """查询参数 → 作用域元组 + 写面分权。读面不做分权(可见层并集在
+    端点内过滤);写面:global=ops.write(MemberUser 已挡)、project=
+    项目管理员、user=本人。"""
+    if scope == "global":
+        from ._ownership import has_capability
+
+        if write and not has_capability(user, "ops.write"):
+            raise HTTPException(403, detail={
+                "code": "capability_required",
+                "message": "全局(公共项目)层 carry 由 Admin+ 维护"})
+        return await carry_store.public_scope(db)
+    if scope == "project":
+        if project_id is None:
+            raise HTTPException(422, detail={
+                "code": "project_id_required",
+                "message": "scope=project 需要 projectId"})
+        from ..models.project import Project, ProjectMember
+        if await db.get(Project, project_id) is None:
+            raise HTTPException(404, detail={
+                "code": "not_found",
+                "message": f"project not found: {project_id}"})
+        from ._ownership import has_capability
+
+        if write and not has_capability(user, "ops.write"):
+            role = (await db.execute(select(ProjectMember.role).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id))).scalar_one_or_none()
+            if role is None:
+                raise HTTPException(404, detail={
+                    "code": "not_found",
+                    "message": f"project not found: {project_id}"})
+            if role != "admin":
+                raise HTTPException(403, detail={
+                    "code": "not_project_admin",
+                    "message": "项目层 carry 由项目管理员维护"})
+        return ("project", project_id)
+    if scope == "user":
+        return ("user", user.id)
+    raise HTTPException(422, detail={
+        "code": "bad_scope",
+        "message": "scope ∈ global | project | user"})
+
+
 def _svc_map(rows) -> dict[str, dict[str, str | None]]:
     out: dict[str, dict[str, str | None]] = {}
     for r in rows:
@@ -38,16 +95,28 @@ def _svc_map(rows) -> dict[str, dict[str, str | None]]:
 
 
 @router.get("/defaults", response_model=DefaultsOut)
-async def get_defaults(user: CurrentUser, db=DbSession):
-    return DefaultsOut(defaults=await carry_store.get_defaults(db))
+async def get_defaults(
+    user: CurrentUser, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    sc = await _resolve_scope(db, user, scope, project_id, write=False)
+    return DefaultsOut(defaults=await carry_store.get_defaults(db, sc),
+                       scope=sc[0], scopeId=sc[1])
 
 
 @router.put("/defaults", response_model=DefaultsOut)
-async def put_defaults(user: MemberUser, body: DefaultsIn, db=DbSession):
+async def put_defaults(
+    user: CurrentUser, body: DefaultsIn, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    sc = await _resolve_scope(db, user, scope, project_id, write=True)
     await carry_store.put_defaults(
         db, body.defaults,
         updated_by_id=user.id,
         updated_by_name=user.display_name or user.username,
+        scope=sc,
     )
     await db.commit()
     from ..services import audit as audit_svc
@@ -56,30 +125,56 @@ async def put_defaults(user: MemberUser, body: DefaultsIn, db=DbSession):
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="carry.write", resource_type="carry", resource_id="defaults",
-        detail={"keys": sorted((body.defaults or {}).keys())},
+        detail={"keys": sorted((body.defaults or {}).keys()),
+                "scope": sc[0], "scopeId": sc[1]},
     )
-    return DefaultsOut(defaults=await carry_store.get_defaults(db))
+    return DefaultsOut(defaults=await carry_store.get_defaults(db, sc),
+                       scope=sc[0], scopeId=sc[1])
 
 
 @router.get("/bindings", response_model=BindingsOut)
 async def list_bindings(user: CurrentUser, db=DbSession):
-    rows = (await db.execute(select(CarryServiceBinding))).scalars().all()
-    return BindingsOut(bindings=_svc_map(rows))
+    """可见层并集(公共项目 + 我所在项目 + 我的个人层);后层覆盖
+    前层(与运行时 tier 同序),flat bindings = 合并视图,rows 带层。"""
+    scopes = await carry_store.visible_scopes(db, user)
+    rank = {sc: i for i, sc in enumerate(scopes)}
+    rows = sorted(
+        (r for r in (await db.execute(
+            select(CarryServiceBinding))).scalars().all()
+         if (r.scope, r.scope_id) in scopes),
+        key=lambda r: rank[(r.scope, r.scope_id)])
+    merged = _svc_map(rows)   # tier 序在后 → 同键覆盖(tier 靠后者赢)
+    return BindingsOut(
+        bindings=merged,
+        rows=[{"scope": r.scope, "scopeId": r.scope_id,
+               "serviceName": r.service_name, "fieldPath": r.field_path,
+               "value": r.value} for r in rows])
 
 
 @router.get("/bindings/{service}", response_model=ServiceBindingsOut)
-async def get_bindings(service: str, user: CurrentUser, db=DbSession):
+async def get_bindings(
+    service: str, user: CurrentUser, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    sc = await _resolve_scope(db, user, scope, project_id, write=False)
     return ServiceBindingsOut(
-        bindings=await carry_store.get_bindings(db, service))
+        bindings=await carry_store.get_bindings(db, service, sc),
+        scope=sc[0], scopeId=sc[1])
 
 
 @router.put("/bindings/{service}", response_model=ServiceBindingsOut)
-async def put_bindings(service: str, user: MemberUser, body: CarryMapIn,
-                       db=DbSession):
+async def put_bindings(
+    service: str, user: CurrentUser, body: CarryMapIn, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    sc = await _resolve_scope(db, user, scope, project_id, write=True)
     await carry_store.put_bindings(
         db, service, body.bindings,
         updated_by_id=user.id,
         updated_by_name=user.display_name or user.username,
+        scope=sc,
     )
     await db.commit()
     from ..services import audit as audit_svc
@@ -88,15 +183,18 @@ async def put_bindings(service: str, user: MemberUser, body: CarryMapIn,
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="carry.write", resource_type="carry", resource_id=service,
-        detail={"service": service},
+        detail={"service": service, "scope": sc[0], "scopeId": sc[1]},
     )
     return ServiceBindingsOut(
-        bindings=await carry_store.get_bindings(db, service))
+        bindings=await carry_store.get_bindings(db, service, sc),
+        scope=sc[0], scopeId=sc[1])
 
 
 @router.get("/drift", response_model=DriftReport)
 async def drift(user: MemberUser, db=DbSession):
-    raw = await carry_store.carry_drift(db)
+    # S4:漂移面看公共项目层(全局配置卫生;项目/个人层随读面后续接入)
+    raw = await carry_store.carry_drift(
+        db, scope=await carry_store.public_scope(db))
     return DriftReport(
         plateReachable=raw["plateReachable"],
         services=[ServiceDrift(**s) for s in raw["services"]])

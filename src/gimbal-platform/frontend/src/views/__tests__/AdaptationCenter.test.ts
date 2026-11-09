@@ -19,10 +19,10 @@ vi.mock('@/api/carry', () => ({
   getDrift: vi.fn().mockResolvedValue({ plateReachable: true, services: [] }),
 }))
 
+// authz W8:适配中心全量视图 = ops.write 面(后端 adaptations.py 同门)
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    isAdmin: true,
-    hasRole: (...roles: string[]) => roles.includes('admin'),
+    can: (cap: string) => cap === 'ops.write',
   }),
 }))
 

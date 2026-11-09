@@ -246,7 +246,8 @@ async def test_validate_in_flight(client, monkeypatch):
 
 async def test_validate_orchestration_auth_alias_not_degraded(client,
                                                               monkeypatch):
-    """N0 回归:编排成员方案绑 authAlias → 预检不降级、别名解析可达。
+    """N0 回归:编排成员方案选别名(S6:别名声明槽位 qa8)→ 预检不降级、
+    槽位解析可达。
 
     修复前:预检的凭证解析导入路径错误(from .run_dispatcher 在 routers/
     下解析不到 → ModuleNotFoundError)且传活会话(TypeError),两者都被
@@ -267,13 +268,16 @@ async def test_validate_orchestration_auth_alias_not_degraded(client,
         s.add(AuthSession(owner_id=uid, alias="qa8", url="http://auth:8",
                           username_enc=fernet_encrypt("u8"),
                           password_enc=fernet_encrypt("p8")))
+        from app.models.service_alias import ServiceAlias
+        s.add(ServiceAlias(alias_name="fin.order-qa8",
+                           base_service="fin.order", kind="external",
+                           slot="qa8"))
         await s.commit()
-    # 成员方案绑定 authAlias(场景已由 _mk_suite 创建)
+    # 成员方案选别名(场景已由 _mk_suite 创建)
     sid = await _mk_suite(client, h, "凭证集")
     r = await client.post("/api/scenarios/sc-va/run-schemes", headers=h, json={
         "name": "带凭证", "dataSetSelection": [], "injectionEntryIds": [],
-        "serviceBindings": {"fin.order": {"authAlias": "qa8",
-                                          "url": "http://fin:8"}}})
+        "serviceBindings": {"fin.order": {"alias": "fin.order-qa8"}}})
     assert r.status_code == 201, r.text
     scheme_id = r.json()["schemeId"]
     # 组合更新:单元 a 引用该方案

@@ -12,8 +12,9 @@
 + 凭证池)。方案引用的数据集被删的正确说法是「这个方案跑不了,换一个
 方案就能跑」— 判定绑定在「用例 × 方案」上,不是用例状态(§1.4)。
 
-读侧口径:场景按 ``can_read_scenario`` 收紧(不可读 = ``found:false``,
-不泄露存在性);预检不产生任何执行副作用。
+读侧口径:场景按 ``can_read_scenario_row`` 收紧(authz W6 起含引用 ——
+被分享人本就可跑;不可读 = ``found:false``,不泄露存在性);预检不产生
+任何执行副作用。
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import principal_or_user
-from ._ownership import can_read_scenario
+from ._ownership import can_read_scenario_row
 from ..models import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..services import run_dispatcher, scenario_store, scheme_store
@@ -76,6 +77,13 @@ class PrecheckResult(BaseModel):
     # §7.1 范围外目标(直连地址/内置认证/白名单外策略,只记录不拦截)
     out_of_scope_targets: list[dict] = Field(
         default_factory=list, alias="outOfScopeTargets")
+    # authz W6 预检告警(N9/E2):内置凭证主规则生效后,被分享人经
+    # 引用执行不再带走作者凭证 —— 三条件同时满足才列出(钉「不吵」):
+    # ① 执行人 ≠ 场景属主;② 场景 config.users 非空;③ 这些用户
+    # (别名)在执行人自己的认证会话里解析不到。值为解析不到的别名
+    # 清单;空 = 无告警
+    builtin_auth_shadowed: list[str] = Field(
+        default_factory=list, alias="builtinAuthShadowed")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -104,23 +112,52 @@ async def precheck_run(
     out: list[PrecheckResult] = []
     for item in items:
         scen_row = await scenario_store.get_row(db, item.scenario_id)
-        if scen_row is None or not can_read_scenario(
-            user,
-            owner_id=scen_row.owner_id,
-            visibility=scen_row.visibility or "private",
-        ):
+        # authz W6:读闸升为 ref-aware(can_read_scenario_row)—— 引用
+        # 被分享人本就可跑(§7.6),预检的 found 与内置凭证告警都应
+        # 服务到他们;纯判会把 ref 读者当「不存在」。
+        if scen_row is None or not await can_read_scenario_row(
+                db, user, scen_row):
             out.append(PrecheckResult(
                 scenario_id=item.scenario_id, scheme_id=item.scheme_id, found=False,
                 scheme_found=False, scheme_valid=False,
             ))
             continue
-        out.append(await _precheck_one(db, scen_row, item, token=token))
+        one = await _precheck_one(
+            db, scen_row, item, token=token,
+            user_id=user.id if user is not None else None)
+        one.builtin_auth_shadowed = await builtin_auth_shadowed(
+            user.id if user is not None else None, scen_row)
+        out.append(one)
     return out
+
+
+async def builtin_auth_shadowed(executor_id: int | None,
+                                scen_row) -> list[str]:
+    """authz W6 预检告警(N9/E2):三条件同时满足才告警(防噪)。
+
+    ① 执行人 ≠ 场景属主(内置凭证主规则生效面);② 场景 config.users
+    非空;③ 这些用户(别名)在执行人自己的认证会话里解析不到 —— 主规则
+    已把作者凭证当空,执行人自己又没有,跑起来必在认证段失败,提前说
+    清。任一不满足 = 空清单。单场景预检与 suite 预检(validate)共用。
+    """
+    from ..core import db as _dbm
+    from ..services import run_prepare as _rp
+
+    if (executor_id is None or scen_row.owner_id is None
+            or executor_id == scen_row.owner_id):
+        return []                       # ① 不满足(含令牌匿名面兜底)
+    users = _rp.built_in_user_aliases(scen_row.payload)
+    if not users:
+        return []                       # ② 不满足
+    # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混
+    resolved = await _rp.resolve_exec_auths(
+        _dbm.SessionLocal, executor_id, sorted(users))
+    return sorted(set(users) - {a.alias for a in resolved})   # ③
 
 
 async def _precheck_one(
     db: AsyncSession, scen: ComposerScenario, item: PrecheckItem,
-    *, token: "Any | None" = None,
+    *, token: "Any | None" = None, user_id: int | None = None,
 ) -> PrecheckResult:
     result = PrecheckResult(scenario_id=item.scenario_id, scheme_id=item.scheme_id)
     raw_payload = scen.payload or {}
@@ -159,33 +196,43 @@ async def _precheck_one(
     steps = definition_from_payload(raw_payload).get("steps") or []
     declared = (definition_from_payload(raw_payload).get("config") or {}).get("services")
     declared = declared if isinstance(declared, dict) else {}
-    # N1-7:与执行期地址三层链同口径 —— ①绑定 url > ②authored 声明 >
-    # ③ service_aliases.base_url > ④缺口引擎报错。预检此前只判 ①②,
-    # 会被③层补上的服务误报 unbound(预检拦了、执行能跑 —— 口径漂移)。
-    # 落点判定共用 run_materialize.service_url_resolved(物化 _apply_
-    # services 同一实现,规则不第二份重写);③层命中按需查询(只查
-    # ①② 后仍有缺口的候选,不整表拉)。
+    from ..services.run_prepare import zone_allows_direct
+    if not zone_allows_direct(scen.project_id):
+        declared = {}        # 原 5:项目/公共区直连地址不生效
+    # N1-7:与执行期地址链同口径 —— ②authored 声明 > ③ 环境部署地址 >
+    # ④缺口引擎报错(① 绑定 url 随 S6 退役)。落点判定共用
+    # run_materialize.service_url_resolved(物化 _apply_services 同一
+    # 实现,规则不第二份重写);③层命中按需查询(只查 ② 后仍有缺口
+    # 的候选,不整表拉)。
     from ..services.run_materialize import service_url_resolved
     candidates = [
         svc for svc in referenced_services(steps)
         if not service_url_resolved(svc, declared=declared,
-                                    bindings=bindings, alias_base_urls={})
+                                    alias_base_urls={})
     ]
     if candidates:
         try:
             from ..services import service_aliases
-            alias_urls = await service_aliases.base_urls_for(db, candidates)
-        except Exception:  # noqa: BLE001 — 查表失败退回①②口径(不误放行)
+            from ..services.env_chain import resolve_environment
+            # S2.1:③ 层按执行同链的环境(方案 > 项目默认 > 个人偏好 >
+            # 默认环境;预检看方案,无本次显式位)
+            _env = await resolve_environment(
+                db, scheme_env=payload.get("environmentId"),
+                project_id=scen.project_id, user_id=user_id)
+            alias_urls = await service_aliases.base_urls_for(
+                db, candidates, env=_env)
+        except Exception:  # noqa: BLE001 — 查表失败退回 ② 口径(不误放行)
             alias_urls = {}
         candidates = [s for s in candidates if not service_url_resolved(
-            s, declared=declared, bindings=bindings, alias_base_urls=alias_urls)]
+            s, declared=declared, alias_base_urls=alias_urls)]
     result.unbound_services = candidates
 
     # ── webhook v4 §5.3:令牌范围预检(缺项分类 + 范围外目标)─────
     if token is not None:
         from ..services import access_token as at_svc
         used = await at_svc.used_sets_for_definition(
-            db, definition_from_payload(raw_payload), bindings)
+            db, definition_from_payload(raw_payload), bindings,
+            project_id=scen.project_id)
         missing = await at_svc.check_scope(db, token, token.user_id, used)
         if missing:
             result.scope_missing = [

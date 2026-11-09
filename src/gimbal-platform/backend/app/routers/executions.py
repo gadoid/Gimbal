@@ -48,7 +48,8 @@ from ..schemas.execution import (
     ExecutionRowsOut,
     ExecutionSummaryOut,
 )
-from ..schemas.scenario_composer import RunRequest, RunResponse
+from ..schemas.scenario_composer import (RunRequest, RunResponse,
+                                        scrub_retired_bindings)
 from ..services import execution_store, run_dispatcher, scenario_store
 from ..services.access_token import Principal
 from ..services.run_dispatcher import Conflict, NotFound
@@ -228,7 +229,16 @@ async def list_executions(
                         "message": f"token not found: {token_id}"})
         base = select(Execution).where(Execution.token_id == token_id)
     else:
-        base = select(Execution).where(Execution.owner_id == user.id)
+        # S1.1:发起人本人 ∨ 我所在普通项目的执行(与
+        # can_view_execution 同口径;快照列免联表)
+        from sqlalchemy import select as _sel
+
+        from ..models.project import ProjectMember
+        base = select(Execution).where(or_(
+            Execution.owner_id == user.id,
+            Execution.project_id.in_(
+                _sel(ProjectMember.project_id).where(
+                    ProjectMember.user_id == user.id))))
     if q:
         # G1 扩口径:快照名/活名都可命中(改名后旧名仍可搜到历史执行);
         # 活名子查询套可见性谓词(吃 trgm),与展示投影同口径。
@@ -874,11 +884,16 @@ async def rerun_execution(
             "scenarioId": ex.scenario_id,
             "dataSetIds": cfg.get("dataSetIds") or [],
             "dataSetSelection": cfg.get("dataSetSelection") or [],
-            "serviceBindings": cfg.get("serviceBindings") or {},
+            # S6:归档形态可能带退役的 url/authAlias —— 回放剥离(历史
+            # 数据不 422;地址/凭证改由环境快照与槽位绑定给出)
+            "serviceBindings": scrub_retired_bindings(
+                cfg.get("serviceBindings")),
             "injectionEntryIds": cfg.get("injectionEntryIds") or [],
             "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),
             "schemeName": cfg.get("schemeName"),
+            # S2.1:按快照回放环境(作为本次显式位;旧行缺键 = 重新解析)
+            "environmentId": cfg.get("environmentId"),
         }
     )
     scen = await scenario_store.get_row(session, ex.scenario_id)
@@ -895,7 +910,7 @@ async def rerun_execution(
     from ._ownership import can_run_scenario
     if not await can_run_scenario(
             session, user, scenario_id=scen.scenario_id,
-            owner_id=scen.owner_id):
+            owner_id=scen.owner_id, project_id=scen.project_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

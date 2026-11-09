@@ -1,25 +1,24 @@
 """访问令牌路由(webhook v4 §5.1)— 个人与平台令牌一组接口。
 
-权限由 ``can_manage(user, token)`` 统一判定:个人令牌 = 属主且 member+
-(user 角色只能查看与吊销自己的);平台令牌 = member+;admin 另有查看
-全部(``?all=1``)与强制失效。三处前端入口(个人设置、集成页平台令牌、
-用户管理页)复用同一组接口。
+authz W5:所有注册用户可签发 / 使用 / 管理自己的个人令牌(写面 =
+属主 ∨ users.manage 管理);平台令牌**入口已关**(签发/scope 候选 →
+410,C1 退役存量),存量平台令牌的列表与写面暂维持 ops.write。
+super_admin 另有查看全部(``?all=1``)与强制失效(用户管理职责,
+dev-plan W4「勿扩大化」)。
 
 令牌明文与回调签名密钥只展示一次(D10);已吊销令牌只读(§3.4)。
 """
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..core.security import fernet_encrypt
 from ..core.timeutil import iso_utc_z
 from ..models.access_token import AccessToken, AccessTokenScope
 from ..models.auth_session import AuthSession
@@ -28,8 +27,8 @@ from ..models.permission import AuditLog
 from ..models.service_alias import ServiceAlias
 from ..models.user import User
 from ..services import access_token as at
+from ._ownership import has_capability
 from ..services import audit as audit_svc
-from ..services import integration_runner
 from ..services.cron_expr import describe_cron
 
 router = APIRouter(prefix="/access-tokens", tags=["access-tokens"])
@@ -57,22 +56,23 @@ async def _get_token(db: AsyncSession, token_id: int) -> AccessToken:
 
 
 def _require_view(user: User, tok: AccessToken) -> None:
-    if not at.can_view(user, tok):
+    """详情闸 = can_view(本人 ∨ 平台令牌面)∨ users.manage(管理面)。
+
+    authz W4 的执行可见收敛只收紧**运营面**(executions/webhook 投递
+    按 tokenId 查走的 can_view);令牌详情是用户管理职责的一部分
+    (dev-plan W4「勿扩大化」:super_admin 可 all=1 列表 + 强制失效,
+    详情随管理面保留)。"""
+    if not at.can_view(user, tok) and not has_capability(user, "users.manage"):
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
 
-def _require_manage(user: User, tok: AccessToken, *,
-                    allow_owner_user_role: bool = False) -> None:
-    """写面。个人令牌的属主 user 角色只在吊销端点豁免(§2.3:查看与
-    吊销自己的令牌是 user 级能力,其余写面 member+)。"""
-    if user.role == "admin":
+def _require_manage(user: User, tok: AccessToken) -> None:
+    """写面(authz W5,表 A 驱动):属主(任意角色)∨ users.manage
+    (管理面)。旧口径「admin+ 可代管他人个人令牌 / 属主 user 角色仅
+    吊销豁免」随签发开放一并收编 —— 代管是用户管理职责,归
+    users.manage。authz C1:平台令牌分支随平台模式退役。"""
+    if tok.user_id == user.id or has_capability(user, "users.manage"):
         return
-    if tok.kind == at.PLATFORM_KIND:
-        if user.role == "member":
-            return
-    elif tok.user_id == user.id:
-        if user.role == "member" or allow_owner_user_role:
-            return
     raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
 
 
@@ -131,7 +131,8 @@ async def _task_missing(
         return None      # 场景缺失走 run 面报错,不是范围缺项
     bindings = await _task_bindings(db, tpl, scen)
     used = await at.used_sets_for_definition(
-        db, definition_from_payload(scen.payload), bindings)
+        db, definition_from_payload(scen.payload), bindings,
+        project_id=scen.project_id)
     return await at.check_scope(db, tok, tok.user_id, used,
                                 scope=(scope_aliases, scope_auths))
 
@@ -146,7 +147,6 @@ async def _task_bindings(db: AsyncSession, tpl, scen) -> dict:
 def _token_out(
     tok: AccessToken, *, scope: dict, tasks: dict,
     owner_label: "str | None" = None, include_owner: bool = False,
-    issuer_label: "str | None" = None,
 ) -> dict:
     out: dict[str, Any] = {
         "id": tok.id,
@@ -173,10 +173,6 @@ def _token_out(
     if include_owner:
         out["ownerId"] = tok.user_id
         out["ownerName"] = owner_label
-    if issuer_label is not None:
-        # 平台令牌的「签发人」列(原型 Tokens--platform;属主恒
-        # __platform__ 无信息量,签发人 = created_by,方案 §11.3)
-        out["issuerName"] = issuer_label
     return out
 
 
@@ -203,15 +199,15 @@ async def list_tokens(
     status_filter: Annotated[str | None, Query(alias="status",
                                                max_length=16)] = None,
 ) -> dict:
-    """令牌列表。``kind=personal``:本人;``kind=platform``:member+;
-    ``all=1``(admin):全部,可按属主(id 或用户名/昵称模糊,2026-11-05
-    评审 P2-6:管理员通常不知道数字 id)与状态过滤;``kind`` 传
-    personal/platform 之外的值 = 不按类型收窄。不返回明文与密钥。"""
+    """令牌列表。``kind=personal``:本人;``all=1``(users.manage):
+    全部,可按属主(id 或用户名/昵称模糊,2026-11-05 评审 P2-6:管理员
+    通常不知道数字 id)与状态过滤。authz C1:kind=platform 面退役。
+    不返回明文与密钥。"""
     if all_view:
-        if user.role != "admin":
-            raise _bad("role_forbidden", "查看全部令牌仅 admin", 403)
+        if not has_capability(user, "users.manage"):
+            raise _bad("capability_forbidden", "查看全部令牌需能力 users.manage", 403)
         q = select(AccessToken)
-        if kind in ("personal", "platform"):
+        if kind == at.PERSONAL_KIND:
             q = q.where(AccessToken.kind == kind)
         if owner is not None:
             q = q.where(AccessToken.user_id == owner)
@@ -230,15 +226,11 @@ async def list_tokens(
         else:
             rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()
     else:
-        if kind == at.PLATFORM_KIND:
-            if user.role not in ("member", "admin"):
-                raise _bad("role_forbidden", "平台令牌仅 member+ 可见", 403)
-            q = select(AccessToken).where(AccessToken.kind == kind)
-        elif kind == at.PERSONAL_KIND:
+        if kind == at.PERSONAL_KIND:
             q = select(AccessToken).where(
                 AccessToken.kind == kind, AccessToken.user_id == user.id)
         else:
-            raise _bad("kind_invalid", "kind ∈ personal | platform")
+            raise _bad("kind_invalid", "kind ∈ personal")
         rows = (await db.execute(q.order_by(AccessToken.id.desc()))).scalars().all()
     ids = [r.id for r in rows]
     scopes = await _scope_counts(db, ids)
@@ -247,19 +239,12 @@ async def list_tokens(
     labels: dict[int, str] = {}
     if include_owner:
         labels = await _owner_labels(db, {r.user_id for r in rows})
-    # 平台令牌补「签发人」(created_by;个人令牌签发人 = 属主,不重复给)
-    issuer_ids = {r.created_by for r in rows
-                  if r.created_by is not None and r.kind == at.PLATFORM_KIND}
-    issuer_labels = await _owner_labels(db, issuer_ids)
     items = [
         _token_out(r,
                    scope=scopes.get(r.id, {"aliases": 0, "auths": 0}),
                    tasks=tasks.get(r.id, {"total": 0, "unsatisfied": 0}),
                    owner_label=labels.get(r.user_id),
-                   include_owner=include_owner,
-                   issuer_label=(
-                       issuer_labels.get(r.created_by or -1)
-                       if r.kind == at.PLATFORM_KIND else None))
+                   include_owner=include_owner)
         for r in rows
     ]
     # 额度提示(不含已吊销,D3)
@@ -274,18 +259,11 @@ async def scope_candidates(
     user: CurrentUser, db: DbSession,
     kind: Annotated[str, Query(max_length=16)] = "personal",
 ) -> dict:
-    """范围候选(§5.1):全部服务别名 + 本人凭证池(平台令牌 = 平台
-    凭证池,只列别名)。"""
-    if kind == at.PLATFORM_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "平台令牌仅 member+ 可签发", 403)
-        holder = await integration_runner.get_platform_user_id()
-    elif kind == at.PERSONAL_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 member+", 403)
-        holder = user.id
-    else:
-        raise _bad("kind_invalid", "kind ∈ personal | platform")
+    """范围候选(§5.1):全部服务别名 + 本人凭证池。authz C1:平台
+    候选面(平台凭证池)随平台模式退役。"""
+    if kind != at.PERSONAL_KIND:
+        raise _bad("kind_invalid", "kind ∈ personal")
+    holder = user.id
     aliases = (await db.execute(
         select(ServiceAlias.alias_name).order_by(ServiceAlias.alias_name))
     ).scalars().all()
@@ -322,18 +300,9 @@ async def create_token(
 ) -> dict:
     """签发(§5.1):额度事务内计数;回调主机白名单;一次性返回
     ``{token, callbackSecret?}`` —— 明文只此一次(D10)。"""
-    if body.kind not in (at.PERSONAL_KIND, at.PLATFORM_KIND):
-        raise _bad("kind_invalid", "kind ∈ personal | platform")
-    if body.kind == at.PLATFORM_KIND:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发平台令牌需 member+", 403)
-        owner_id = await integration_runner.get_platform_user_id()
-        if owner_id is None:
-            raise _bad("platform_user_missing", "平台系统用户缺失", 500)
-    else:
-        if user.role not in ("member", "admin"):
-            raise _bad("role_forbidden", "签发个人令牌需 member+", 403)
-        owner_id = user.id
+    if body.kind != at.PERSONAL_KIND:
+        raise _bad("kind_invalid", "kind ∈ personal")
+    owner_id = user.id
 
     callback_secret_plain: "str | None" = None
     if body.callbackUrl:
@@ -687,7 +656,7 @@ async def invalidate_token(
     """admin 强制失效(D33):原因 ``admin``,处置说明随通知下发;
     属主重新生成后任务自动恢复。"""
     tok = await _get_token(db, token_id)
-    if user.role != "admin":
+    if not has_capability(user, "users.manage"):
         raise _bad("token_not_found", f"令牌不存在: {tok.id}", 404)
     if tok.revoked_at is not None:
         # 已吊销 = 终态只读,写操作 409(§3.4);改密/停用链的已失效
@@ -720,7 +689,7 @@ async def revoke_token(token_id: int, user: CurrentUser, db: DbSession) -> dict:
     """吊销(软删,终态):响应带 ``pendingTasks``;再吊销幂等 200。
     user 角色可吊销自己的令牌(§2.3)。"""
     tok = await _get_token(db, token_id)
-    _require_manage(user, tok, allow_owner_user_role=True)
+    _require_manage(user, tok)
     if tok.revoked_at is not None:
         return {"id": tok.id, "revoked": True, "pendingTasks": []}
     tok.revoked_at = at.now_utc()

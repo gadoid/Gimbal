@@ -55,8 +55,7 @@ function mountCard(
   size: 'S' | 'M' | 'L' = 'M',
 ) {
   vi.mocked(api.fetchFunctionCards).mockResolvedValue([
-    { id: 'fn:9', name: '我的待办', cronText: '每 5 分钟',
-      identityMode: 'personal', ...data },
+    { id: 'fn:9', name: '我的待办', cronText: '每 5 分钟', ...data },
   ] as never)
   return mount(FunctionCard, {
     global: {
@@ -81,7 +80,7 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
       fingerprint: 'fp', steps: [], authAliases: [], baseUrls: {},
       datasetName: null, cron: '*/5 * * * *',
     })
-    vi.mocked(api.subscribeIntegrationTask).mockResolvedValue({} as never)
+    vi.mocked(api.subscribeIntegrationTask).mockResolvedValue({ } as never)
     const w = mountCard({ state: 'none' }, await mkRouter())
     await flushPromises()
     expect(w.find('[data-testid="fn-card-fn:9-unsub"]').exists()).toBe(true)
@@ -111,7 +110,7 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     const m = mountCard({ state: 'paused', pausedReason: 'manual' }, await mkRouter())
     await flushPromises()
     expect(m.find('[data-testid="fn-card-fn:9-gate"]').text()).toContain('已由你暂停')
-    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({ } as never)
     await m.find('[data-testid="fn-card-fn:9-resume"]').trigger('click')
     await flushPromises()
     expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
@@ -134,7 +133,7 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
   })
 
   it('W4 连续失败自动暂停:启动门面(次数)+ 启动即恢复', async () => {
-    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({ } as never)
     const w = mountCard({
       state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
     }, await mkRouter())
@@ -147,35 +146,10 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     w.unmount()
   })
 
-  it('W4 平台卡 fail_streak 门面:管理者出「启动」,普通用户只读', async () => {
-    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
-    const a = mountCard({
-      state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
-      identityMode: 'platform', canManage: true,
-    }, await mkRouter())
-    await flushPromises()
-    expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
-      .toContain('自动暂停')
-    await a.find('[data-testid="fn-card-fn:9-restart"]').trigger('click')
-    await flushPromises()
-    expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
-    a.unmount()
-
-    const u = mountCard({
-      state: 'paused', pausedReason: 'fail_streak', failStreak: 5,
-      identityMode: 'platform',
-    }, await mkRouter())
-    await flushPromises()
-    expect(u.find('[data-testid="fn-card-fn:9-restart"]').exists())
-      .toBe(false)
-    u.unmount()
-  })
-
   it('复核 §3.1 平台卡 scope_denied 门面:管理者出「启动」;token_revoked 无门面', async () => {
-    vi.mocked(api.resumeMySubscription).mockResolvedValue({} as never)
+    vi.mocked(api.resumeMySubscription).mockResolvedValue({ } as never)
     const a = mountCard({
-      state: 'paused', pausedReason: 'scope_denied',
-      identityMode: 'platform', canManage: true,
+      state: 'paused', pausedReason: 'scope_denied', canManage: true,
     }, await mkRouter())
     await flushPromises()
     expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
@@ -198,8 +172,8 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     g.unmount()
   })
 
-  it('W4 L 档在跑的个人卡:「暂停」入口(平台模式不出)', async () => {
-    vi.mocked(api.pauseMySubscription).mockResolvedValue({} as never)
+  it('W4 L 档在跑的卡:「暂停」入口;已暂停不出', async () => {
+    vi.mocked(api.pauseMySubscription).mockResolvedValue({ } as never)
     const w = mountCard({ state: 'idle' }, await mkRouter(), 'L')
     await flushPromises()
     const btn = w.find('[data-testid="fn-card-fn:9-pause"]')
@@ -210,7 +184,7 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     w.unmount()
 
     const p = mountCard(
-      { state: 'idle', identityMode: 'platform' }, await mkRouter(), 'L')
+      { state: 'paused', pausedReason: 'manual' }, await mkRouter(), 'L')
     await flushPromises()
     expect(p.find('[data-testid="fn-card-fn:9-pause"]').exists()).toBe(false)
     p.unmount()

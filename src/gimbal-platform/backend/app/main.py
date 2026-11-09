@@ -27,6 +27,8 @@ from .routers import (
     data_sets,
     integration,
     notifications,
+    project_promotions,
+    projects,
     endpoint_catalog,
     executions,
     generator_catalog,
@@ -38,6 +40,7 @@ from .routers import (
     scenario_import,
     scenarios,
     environments,
+    deployments,
     service_aliases,
     service_profile,
     shares,
@@ -229,6 +232,9 @@ def create_app() -> FastAPI:
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(constants.router, prefix="/api")
+    app.include_router(projects.router, prefix="/api")
+    # M2a S7.2:提升流程(加入项目 / 加入申请)
+    app.include_router(project_promotions.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
@@ -256,6 +262,8 @@ def create_app() -> FastAPI:
     from .routers import me
     app.include_router(me.router, prefix="/api")
     app.include_router(environments.router, prefix="/api")
+    # authz M2a S2.2:部署表((基础服务, 环境) → 地址)
+    app.include_router(deployments.router, prefix="/api")
     # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
     app.include_router(catalog.router, prefix="/api")
     # 活动时间线服务端合流(M5-3):三源一次请求

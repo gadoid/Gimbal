@@ -39,7 +39,7 @@ function mountAccount() {
   auth.accessToken = 'tok'
   auth.currentUser = {
     id: 7, username: 'alice', display_name: 'Alice', role: 'user',
-    is_active: true, is_admin: false,
+    is_active: true,
   } as never
   const router = createRouter({
     history: createMemoryHistory(),
@@ -144,8 +144,8 @@ describe('Profile 布局与重定向(子页面化)', () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = {
-      id: 7, username: 'alice', display_name: 'Alice', role: 'member',
-      is_active: true, is_admin: false,
+      id: 7, username: 'alice', display_name: 'Alice', role: 'admin',
+      is_active: true,
     } as never
   }
 
@@ -218,13 +218,13 @@ describe('Profile 布局与重定向(子页面化)', () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = {
-      id: 7, username: 'alice', display_name: 'Alice', role: 'member',
-      is_active: true, is_admin: false,
+      id: 7, username: 'alice', display_name: 'Alice', role: 'admin',
+      is_active: true,
     } as never
     const w = mount(Profile, { global: { plugins: [router] } })
     await flushPromises()
     expect(w.text()).toContain('个人设置')
-    expect(w.text()).toContain('alice · 成员')
+    expect(w.text()).toContain('alice · 管理员')
     const nav = w.find('nav[aria-label="个人设置分区"]')
     expect(nav.text()).toContain('账号')
     expect(nav.text()).toContain('访问令牌')

@@ -33,7 +33,7 @@ async def test_first_human_becomes_admin_despite_system_user(client):
     async with db_module.SessionLocal() as db:
         alice = (await db.execute(
             select(User).where(User.username == "alice"))).scalar_one()
-    assert alice.role == "admin"
+    assert alice.role == "super_admin"
 
 
 async def test_registration_closed_after_bootstrap(client, monkeypatch):

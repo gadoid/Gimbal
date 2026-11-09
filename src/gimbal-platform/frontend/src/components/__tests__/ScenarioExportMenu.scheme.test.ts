@@ -46,15 +46,15 @@ vi.mock('@/api/scenario-composer', async (importOriginal) => {
 const schemes = [
   { schemeId: 'rs-001', name: '冒烟-qa1', isDefault: false,
     dataSetSelection: [], injectionEntryIds: [],
-    serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
+    serviceBindings: { 'fin-service': { alias: 'qa1' } },
     stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null },
   { schemeId: 'rs-002', name: '同名方案', isDefault: false,
     dataSetSelection: [], injectionEntryIds: [],
-    serviceBindings: { 'fin-service': { authAlias: 'qa2' } },
+    serviceBindings: { 'fin-service': { alias: 'qa2' } },
     stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null },
   { schemeId: 'rs-003', name: '同名方案', isDefault: false,
     dataSetSelection: [], injectionEntryIds: [],
-    serviceBindings: { 'fin-service': { authAlias: 'qa3' } },
+    serviceBindings: { 'fin-service': { alias: 'qa3' } },
     stepTo: null, nRuns: 2, parallel: 3, plugins: null, logSub: null },
 ]
 
@@ -115,7 +115,7 @@ describe('ScenarioExportMenu — 按方案导出(新 CRUD 取数)', () => {
     await flushPromises()
     expect(mockStore.exportJson).toHaveBeenCalledTimes(1)
     expect(mockStore.exportJson).toHaveBeenCalledWith({
-      serviceBindings: { 'fin-service': { authAlias: 'qa1' } } })
+      serviceBindings: { 'fin-service': { alias: 'qa1' } } })
     w.unmount()
   })
 
@@ -131,7 +131,7 @@ describe('ScenarioExportMenu — 按方案导出(新 CRUD 取数)', () => {
     await flushPromises()
     const overlay = mockStore.exportJson.mock.calls[0][0]
     expect('dataSetIds' in overlay).toBe(false)
-    expect(overlay.serviceBindings).toEqual({ 'fin-service': { authAlias: 'qa3' } })
+    expect(overlay.serviceBindings).toEqual({ 'fin-service': { alias: 'qa3' } })
     w.unmount()
   })
 

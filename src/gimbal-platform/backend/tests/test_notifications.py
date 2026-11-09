@@ -133,7 +133,8 @@ async def test_announcement_fanout_and_expiry(client: AsyncClient):
         assert any(i["type"] == "announcement" and i["title"] == "今晚停服迁移"
                    for i in rr.json()["items"])
 
-    # member 发公告 → 403(admin only)
+    # user 发公告 → 403(authz W9-4:公告归 Admin+ / ops.write;
+    # admin 角色面在 test_w9_small_items)
     rr = await client.post(
         "/api/notifications/announcements", headers=member,
         json={"title": "x"})
@@ -186,12 +187,12 @@ async def test_role_change_notification(client: AsyncClient):
     member = await _mk_user(client, "role_member")  # id=2
 
     r = await client.patch(
-        "/api/users/2", headers=admin, json={"role": "member"})
+        "/api/users/2", headers=admin, json={"role": "admin"})
     assert r.status_code == 200
 
     r = await client.get("/api/notifications", headers=member)
     items = [i for i in r.json()["items"] if i["type"] == "role_changed"]
-    assert items and "member" in items[0]["title"]
+    assert items and "admin" in items[0]["title"]
 
 
 async def test_notify_finished_name_and_id(client: AsyncClient):
@@ -214,7 +215,6 @@ async def test_notify_finished_name_and_id(client: AsyncClient):
         # payload.definition.meta.name,payload 造最小形即可)
         s.add(ComposerScenario(
             scenario_id="sc-notify-alive", owner_id=1, owner_name="垫底",
-            visibility="private",
             payload={"definition": {"meta": {"name": "活行场景名"}}}))
         # 三条单发执行:有快照名 / 空快照+场景存活 / 空快照+场景已删
         for sid, snap in (

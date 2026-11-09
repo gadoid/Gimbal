@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const KEY = (u: string) => `gimbal.workbench.timeline-colors:${u}`
 const as = (username: string) => {
-  useAuthStore().currentUser = { id: 1, username, display_name: username, is_admin: false } as never
+  useAuthStore().currentUser = { id: 1, username, display_name: username } as never
 }
 
 /** 配色是 module 作用域单例:每条用例重取一份模块才互不污染。 */

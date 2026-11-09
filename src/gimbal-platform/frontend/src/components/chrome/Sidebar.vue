@@ -1,7 +1,7 @@
 <!-- Sidebar.vue — 四域侧边栏(重构方案 Phase 1:导航范式更换)+ 整体折叠。
      结构基准 = F-sitemap:工作台入口置顶,场景 / 服务(分组标签,不可点)
      / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
-     "管理"深链承接)。沿用 TopNav 的两条既有语义:adminOnly 过滤
+     "管理"深链承接)。沿用 TopNav 的既有语义:能力门条目过滤
      (用户管理 / 传递字段仅 admin 可见)与变更适配 pendingCount 徽标
      (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
      折叠态(« 钮切换,localStorage 持久化):200px → 56px 图标轨道 —
@@ -106,6 +106,7 @@
     >
       <UserBadge :compact="collapsed" layout="footer" />
     </div>
+
   </aside>
 </template>
 
@@ -116,11 +117,11 @@ import { useRoute } from 'vue-router'
 import {
   ArchiveIcon,
   BellIcon,
+  BoxIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CounterClockwiseClockIcon,
   GearIcon,
-  GlobeIcon,
   GridIcon,
   HomeIcon,
   LayersIcon,
@@ -147,10 +148,8 @@ interface SidebarEntry {
   path: string
   label: string
   icon: Component
-  /** Render only for admins (route guard would bounce members anyway). */
-  adminOnly?: boolean
-    /** M2.5:角色白名单(adminOnly 的泛化;适配/别名/默认值 = operator+) */
-    roles?: string[]
+  /** authz W8:表 A 能力名 —— 只对持有者渲染(路由守卫同门兜底)。 */
+  cap?: string
   /** 未落地入口:置灰且不可点(字段来源分析 — E2 未建,无页面可落)。 */
   disabled?: boolean
   disabledTitle?: string
@@ -187,30 +186,36 @@ const groups: SidebarGroup[] = [
   {
     label: '场景',
     entries: [
+      // S7.1 IA 修正:「公共场景」入口并入公共项目(项目组)
       { path: '/scenarios/mine', label: '我的场景', icon: ArchiveIcon },
-      { path: '/scenarios/public', label: '公共场景', icon: GlobeIcon },
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
     ],
   },
-  // 用例集组(2026-10-10 IA 调整):Suite 从「执行」组迁出独立成组,
-  // 「我的用例集」= 原 /suites(02 列表),「公共用例集」= 独立新页
-  // (推翻 D-3「与公共场景同页」的分区形态)。
+  // 用例集组(2026-10-10 IA 调整):Suite 独立成组;S7.1 IA 修正:
+  // 「公共用例集」并入公共项目,「我的用例集」只列私有(未进项目)。
   {
     label: '用例集',
     entries: [
       { path: '/suites', label: '我的用例集', icon: StackIcon },
-      { path: '/suites/public', label: '公共用例集', icon: GlobeIcon },
+    ],
+  },
+  // 项目组(M2a S7.1 IA 修正):项目成为一级入口 —— 公共项目置顶,
+  // 没加入任何项目的内容就是「私有」;「区」的概念不再出现在界面。
+  {
+    label: '项目',
+    entries: [
+      { path: '/projects', label: '项目', icon: BoxIcon },
     ],
   },
   {
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, roles: ['member', 'admin'] },
+      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
       // 服务信息管理的键详情,本页只剩跨服务兜底层)
-      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['member', 'admin'] },
+      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, cap: 'ops.write' },
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
     ],
   },
@@ -229,7 +234,13 @@ const groups: SidebarGroup[] = [
     // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
     { path: '/integrations', label: '集成', icon: Share2Icon },
   ] },
-  { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
+  { label: '平台', entries: [
+    { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
+    // M2a S7.1:项目管理收编进「项目」组(/projects,Admin+ 有新建);
+    // 部署表维护仍在平台组
+    // M2a S2.3:部署表((基础服务, 环境) → 地址)与默认环境
+    { path: '/admin/deployments', label: '部署地址', icon: GearIcon, cap: 'ops.write' },
+  ] },
 ]
 
 interface FlatEntry extends SidebarEntry {
@@ -237,14 +248,12 @@ interface FlatEntry extends SidebarEntry {
   firstOfGroup: boolean
 }
 
-// Hide admin-only entries from members entirely (previously it rendered
-// for everyone and clicking it bounced off the router guard).
+// authz W8:能力门条目只对持有者渲染(能力来自 /auth/me,表 A 求值;
+// 路由守卫 requiresCap 同门兜底)。
 const flatEntries = computed<FlatEntry[]>(() =>
   groups.flatMap((g) =>
     g.entries
-      .filter((e) => !e.adminOnly && !e.roles
-        || (e.adminOnly && auth.isAdmin)
-        || (e.roles && auth.hasRole(...e.roles)))
+      .filter((e) => !e.cap || auth.can(e.cap))
       .map((e, i) => ({ ...e, group: g.label, firstOfGroup: i === 0 })),
   ),
 )

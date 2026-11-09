@@ -1,7 +1,8 @@
 <!-- ServiceAliasCard.vue — 工作台注册卡:服务信息管理(adminOnly,→ /service-admin)。
-     数据 = listAliases() 全集(与完整页同一端点,不另开口子);未分组判定
-     与完整页同一条谓词(未归属环境)—— §7 第 6 条计数同源。
-     三档密度(§4):S = 别名数 + 未分组数;M/L = 别名行 5/8。 -->
+     数据 = listAliases() 全集(与完整页同一端点,不另开口子);未声明槽位
+     判定与完整页同一条谓词 —— §7 第 6 条计数同源。
+     authz M2a S6:别名瘦身(环境归属/凭证别名退役)后,行 tag = 声明槽位。
+     三档密度(§4):S = 别名数 + 未声明槽数;M/L = 别名行 5/8。 -->
 <template>
   <div data-testid="wb-card-service-aliases" class="wcard">
     <header class="chead">
@@ -14,11 +15,11 @@
       <router-link to="/service-admin" class="manage-link">管理 →</router-link>
     </header>
 
-    <!-- S 档:只出结论(未分组是这页真正要人盯的那件事) -->
+    <!-- S 档:只出结论(未声明槽位是这页真正要人盯的那件事) -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
       <div class="s-stats">
         <p class="s-stat"><b>{{ rows.length }}</b>个别名</p>
-        <p class="s-stat" :class="{ 'st-warn': ungroupedCount > 0 }"><b>{{ ungroupedCount }}</b>未分组</p>
+        <p class="s-stat" :class="{ 'st-warn': noSlotCount > 0 }"><b>{{ noSlotCount }}</b>未声明槽位</p>
       </div>
     </div>
 
@@ -33,8 +34,8 @@
           :data-testid="`wb-sa-row-${a.aliasName}`"
         >
           <span class="wrow-name mono" :title="a.aliasName">{{ a.aliasName }}</span>
-          <span class="wrow-tag" :class="a.environmentName ? '' : 'tag-warn'">
-            {{ a.environmentName || '未分组' }}
+          <span class="wrow-tag" :class="a.slot ? '' : 'tag-warn'">
+            {{ a.slot || '无槽位' }}
           </span>
           <span class="wrow-time mono">{{ a.baseService }}</span>
         </router-link>
@@ -63,8 +64,8 @@ const rows = ref<ServiceAliasRow[]>([])
 const loading = ref(true)
 const error = ref('')
 
-/** 与 ServiceAdmin.vue 左栏同一谓词:未归属环境就是没分组。 */
-const ungroupedCount = computed(() => rows.value.filter((a) => !a.environmentName).length)
+/** 与 ServiceAdmin.vue 表格同一谓词:没声明 slot 就是缺注入槽(M2a S6)。 */
+const noSlotCount = computed(() => rows.value.filter((a) => !a.slot).length)
 
 /** M = 5 行;L = 8 行 */
 const visible = computed(() =>

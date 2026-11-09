@@ -444,7 +444,7 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
         runId: 'run-8',
         scenarioId: 'sc_demo',
         envId: 'env_dev',
-        serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
+        serviceBindings: { 'fin-service': { alias: 'qa1' } },
         injectedAuths: ['qa1'],
         prefix: 'T-1',
       },

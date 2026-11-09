@@ -63,10 +63,10 @@ describe('AuditLogPanel — 审计面板', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     resetUserPreferencesForTest()
-    vi.mocked(prefApi.getPreferences).mockResolvedValue({} as never)
+    vi.mocked(prefApi.getPreferences).mockResolvedValue({ } as never)
     vi.mocked(prefApi.putPreference).mockClear()
     useAuthStore().currentUser = {
-      id: 1, username: 'alice', display_name: 'alice', is_admin: true,
+      id: 1, username: 'alice', display_name: 'alice',
     } as never
     vi.mocked(adminApi.listAuditLogs).mockReset()
   })

@@ -113,8 +113,8 @@ const auth = useAuthStore()
 const ROLE_LABELS: Record<string, string> = { user: '用户', member: '成员', admin: '管理员' }
 const roleLabel = computed(() => ROLE_LABELS[auth.role] ?? auth.role)
 const roleChipClass = computed(() =>
-  auth.role === 'admin' ? 'bg-signal-failed/10 text-signal-failed'
-    : auth.role === 'member' ? 'bg-blue-500/10 text-blue-600'
+  auth.role === 'super_admin' ? 'bg-signal-failed/10 text-signal-failed'
+    : auth.role === 'admin' ? 'bg-blue-500/10 text-blue-600'
       : 'bg-signal-soft text-signal')
 const initialChar = computed(() =>
   (auth.currentUser?.display_name || auth.currentUser?.username || '?').slice(0, 1))
@@ -166,11 +166,10 @@ async function onChangePassword() {
       ? `；${activeTokenCount.value} 张访问令牌已失效` : ''))
     oldPassword.value = ''
     newPassword.value = ''
-    if (['member', 'admin'].includes(auth.role)) {
-      try {
-        activeTokenCount.value = (await listAccessTokens('personal')).quota.used
-      } catch { /* 令牌数是增强展示 */ }
-    }
+    try {
+      // authz W5:个人令牌开放至全体用户 —— 角色门删除
+      activeTokenCount.value = (await listAccessTokens('personal')).quota.used
+    } catch { /* 令牌数是增强展示 */ }
   } catch (e) {
     const msg = (e as Error).message || ''
     pwError.value = msg.includes('旧密码') || msg.includes('bad_old_password')
@@ -216,11 +215,10 @@ watch(() => route.hash, (hash, prev) => {
 
 onMounted(async () => {
   if (route.hash === '#notify') scrollToNotify()
-  if (['member', 'admin'].includes(auth.role)) {
-    try {
-      activeTokenCount.value = (await listAccessTokens('personal')).quota.used
-    } catch { /* 令牌数是增强展示 */ }
-  }
+  try {
+    // authz W5:个人令牌开放至全体用户 —— 角色门删除
+    activeTokenCount.value = (await listAccessTokens('personal')).quota.used
+  } catch { /* 令牌数是增强展示 */ }
   try {
     prefs.value = await getPreferences()
   } catch { /* 偏好不可达 → 全开兜底 */ }

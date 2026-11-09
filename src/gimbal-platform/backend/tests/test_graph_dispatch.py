@@ -253,11 +253,13 @@ class TestGraphUnitAuthz:
         assert r.json()["detail"]["code"] == "scenario_not_found"
 
     async def test_admin_gate_open_for_units(self, client):
+        """authz W3 翻转:admin 对他人 unit 场景不再有越属主授权
+        (表 B scenario.run = owner ∨ ref);admin 自己的 unit 照常过闸。"""
         admin = await register_and_login(client, "gauth4", "gauth4pass123")
         member = await register_and_login(client, "gauth5", "gauth5pass123")
         await _mk_scenario(client, member, "sc-g-mem5")
         await _mk_scenario(client, admin, "sc-g-adm4")
-        # admin 对 unit 场景有矩阵授权(全量可见可管可跑)→ 过闸
+        # 混入他人私有 unit → 403 not_owner
         r = await client.post("/api/runs", headers=admin, json={
             "scenarioId": "sc-g-adm4",
             "graph": {"units": [
@@ -265,7 +267,16 @@ class TestGraphUnitAuthz:
                 {"ref": "b", "scenarioId": "sc-g-mem5"},
             ]},
         })
-        assert r.status_code == 201, r.text
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == "not_owner"
+        # 全自有的 unit → 过闸
+        r2 = await client.post("/api/runs", headers=admin, json={
+            "scenarioId": "sc-g-adm4",
+            "graph": {"units": [
+                {"ref": "a", "scenarioId": "sc-g-adm4"},
+            ]},
+        })
+        assert r2.status_code == 201, r2.text
 
 
 class TestGraphCompositionInline:
@@ -310,14 +321,19 @@ class TestGraphCompositionInline:
                                              {"customer_id": "222"}]})
         assert r.status_code == 201, r.text
         ds_id = r.json()["datasetId"]
+        _scheme = {"name": "带绑定", "dataSetSelection": [],
+                   "injectionEntryIds": [],
+                   "serviceBindings": {"fin.order": {"url": "http://fin:1"}},
+                   "options": {"step_from": None, "step_to": None,
+                               "n_runs": 1, "parallel": 1, "subscribe": None}}
+        # S6:方案绑定带 url → 422(地址由环境部署表给出)
         r = await client.post("/api/scenarios/sc-gi-a/run-schemes", headers=h,
-                              json={"name": "带绑定", "dataSetSelection": [],
-                                    "injectionEntryIds": [],
-                                    "serviceBindings": {
-                                        "fin.order": {"url": "http://fin:1"}},
-                                    "options": {"step_from": None, "step_to": None,
-                                                "n_runs": 1, "parallel": 1,
-                                                "subscribe": None}})
+                              json=_scheme)
+        assert r.status_code == 422, r.text
+        assert "binding_field_retired" in r.text
+        _scheme["serviceBindings"] = {}
+        r = await client.post("/api/scenarios/sc-gi-a/run-schemes", headers=h,
+                              json=_scheme)
         assert r.status_code == 201, r.text
         scheme_id = r.json()["schemeId"]
         await self._fake_convert_patch(monkeypatch)
@@ -340,10 +356,6 @@ class TestGraphCompositionInline:
         unit = graph["units"][0]
         # 单行内联:所选那一行的值合入(默认方案语境)
         assert str(unit["scenario"]["config"]["vars"]["customer_id"]) == "222"
-        # 方案的服务绑定随行合入(step 引用 fin.order → url 生效;
-        # services 物化值 = url 字符串,run_materialize ① 优先级链)
-        assert unit["scenario"]["config"]["services"]["fin.order"] \
-            == "http://fin:1"
         # 无 row = 裸基线(此前的唯一行为,保持兼容)
         async with db_module.SessionLocal() as s:
             graph0 = await graph_dispatch.materialize_graph(s, uid, {
@@ -355,13 +367,12 @@ class TestGraphCompositionInline:
 
     async def test_scheme_auth_alias_binding_materializes(self, client,
                                                           monkeypatch):
-        """N0 回归:单元绑定 authAlias → materialize_graph 正常执行。
+        """N0 回归:单元绑定 → materialize_graph 正常执行(S6:绑定选
+        别名 fin.order → fin.order-qa9,该别名声明槽位 qa9)。
 
         修复前:_resolve_exec_auths 收到活会话(db)→ ``AsyncSession``
-        不可调用,authAliases 非空即 TypeError;修复后走会话工厂,
-        种子凭证 qa9 注入单元 case 的 users。
-        (注意:别名收集只看 graph_req 单元级 serviceBindings ——
-        方案级 authAlias 不进清单是 N1-2 的收口范围,见清单 N1-2。)
+        不可调用,清单非空即 TypeError;修复后走会话工厂,种子凭证 qa9
+        注入单元 case 的 users。
         """
         await register_and_login(client, "gi_b9", "gi_b9pass123")
         h = await register_and_login(client, "gi_o9", "gi_o9pass123")
@@ -378,6 +389,10 @@ class TestGraphCompositionInline:
             s.add(AuthSession(owner_id=uid, alias="qa9", url="http://auth:9",
                               username_enc=fernet_encrypt("u9"),
                               password_enc=fernet_encrypt("p9")))
+            from app.models.service_alias import ServiceAlias
+            s.add(ServiceAlias(alias_name="fin.order-qa9",
+                               base_service="fin.order", kind="external",
+                               slot="qa9"))
             await scheme_store.ensure_default_scheme(s, "sc-gi-9")
             await s.commit()
         async with db_module.SessionLocal() as s:
@@ -385,11 +400,9 @@ class TestGraphCompositionInline:
                 "mode": "chain",
                 "units": [{"ref": "a", "scenarioId": "sc-gi-9",
                            "serviceBindings": {
-                               "fin.order": {"authAlias": "qa9",
-                                             "url": "http://fin:9"}}}],
+                               "fin.order": {"alias": "fin.order-qa9"}}}],
             })
         unit = graph["units"][0]
-        assert unit["scenario"]["config"]["services"]["fin.order"] == "http://fin:9"
         users = unit["scenario"]["config"].get("users") or {}
         assert "qa9" in users        # 修复前到不了这行(先 TypeError)
 
@@ -621,9 +634,7 @@ class TestGraphN1Unification:
         async with db_module.SessionLocal() as s:
             graph = await graph_dispatch.materialize_graph(s, uid, {
                 "mode": "chain",
-                "units": [{"ref": "a", "scenarioId": "sc-gn-8",
-                           "serviceBindings": {
-                               "fin-service": {"url": "http://fin:1"}}}],
+                "units": [{"ref": "a", "scenarioId": "sc-gn-8"}],
             })
         body = graph["units"][0]["scenario"]["steps"][0]["request"]["body"]
         assert body.get("remark") == "编排-李四"   # carry 注入(此前恒缺)
@@ -631,9 +642,9 @@ class TestGraphN1Unification:
     async def test_same_service_different_aliases_per_unit(self, client,
                                                            monkeypatch):
         """评审 2026-11-01 §2 回归:N1 曾把逐单元绑定按服务压平成
-        {服务: 别名} 再算清单 —— 两个单元给同一服务绑 qa1/qa2 时后写
-        覆盖先写,qa1 丢凭证(58baa92 过、336e53c 败)。逐单元算清单
-        后两别名都进清单、都解析,全单元共享的 users 两别名齐备。"""
+        {服务: 别名} 再算清单 —— 两个单元给同一服务选不同别名(S6:
+        各自声明槽位 qa1/qa2)时后写覆盖先写,qa1 丢凭证。逐单元算清单
+        后两槽位都进清单、都解析,全单元共享的 users 两槽位齐备。"""
         await register_and_login(client, "gn_b9", "gn_b9pass123")
         h = await register_and_login(client, "gn_o9", "gn_o9pass123")
         plain = [{"kind": "step",
@@ -653,11 +664,15 @@ class TestGraphN1Unification:
         async with db_module.SessionLocal() as s:
             uid = (await s.execute(sa.select(User.id).where(
                 User.username == "gn_o9"))).scalar_one()
+            from app.models.service_alias import ServiceAlias
             for alias in ("qa1", "qa2"):
                 s.add(AuthSession(
                     owner_id=uid, alias=alias, url=f"http://auth:{alias}",
                     username_enc=fernet_encrypt("u"),
                     password_enc=fernet_encrypt("p")))
+                s.add(ServiceAlias(alias_name=f"fin.order-{alias}",
+                                   base_service="fin.order", kind="external",
+                                   slot=alias))
             await scheme_store.ensure_default_scheme(s, "sc-gn-9")
             await s.commit()
         async with db_module.SessionLocal() as s:
@@ -665,9 +680,9 @@ class TestGraphN1Unification:
                 "mode": "chain",
                 "units": [
                     {"ref": "a", "scenarioId": "sc-gn-9",
-                     "serviceBindings": {"fin.order": {"authAlias": "qa1"}}},
+                     "serviceBindings": {"fin.order": {"alias": "fin.order-qa1"}}},
                     {"ref": "b", "scenarioId": "sc-gn-9",
-                     "serviceBindings": {"fin.order": {"authAlias": "qa2"}}},
+                     "serviceBindings": {"fin.order": {"alias": "fin.order-qa2"}}},
                 ],
             })
         # graph 级解析一次、resolved_auths 全单元共享:两单元 users 都含

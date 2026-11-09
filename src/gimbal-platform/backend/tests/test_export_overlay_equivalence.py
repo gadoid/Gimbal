@@ -6,8 +6,9 @@
 在基线单行下自然退化为零差)。
 
 注入清单钉死并集语义(spec §7.3 矩阵:导出侧 = 执行侧):steps 模板
-同时引用 qa1/qa2,overlay 只绑 fin-service→qa1 — 两路清单同为
-scan(steps)∪ 绑定 = {qa1, qa2},导出产物 users 同时含两个 alias。
+同时引用 qa1/qa2,overlay 只选 fin-service → fin-service-q1(该别名声明
+槽位 qa1;authz M2a S6 绑定 = 服务键 → 别名)— 两路清单同为
+scan(steps)∪ 生效别名槽位 = {qa1, qa2},导出产物 users 同时含两个槽。
 
 断言形状注:preview-plate 现返回 ``PreviewPlateResponse`` 信封
 (``{ok, errors, converted}``),产物断言一律取 ``resp.json()["converted"]``
@@ -28,8 +29,18 @@ from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # n
 from .test_scenario_visibility_and_copy import _member
 
 OVERLAY = {
-    "serviceBindings": {"fin-service": {"authAlias": "qa1", "url": "https://bound"}},
+    "serviceBindings": {"fin-service": {"alias": "fin-service-q1"}},
 }
+
+
+async def _seed_overlay_alias() -> None:
+    """OVERLAY 选中的别名(同基础服务,声明槽位 qa1)。"""
+    from app.models.service_alias import ServiceAlias
+    async with db_module.SessionLocal() as db:
+        db.add(ServiceAlias(alias_name="fin-service-q1",
+                            base_service="fin-service", kind="external",
+                            slot="qa1"))
+        await db.commit()
 # meta 钉死 owner/createTime:两路 fill_plate_defaults 全 setdefault 无增量;
 # vars_map={} 显式带上 config.vars — _compose_scenario 恒定写回 vars(空 dict),
 # 缺省 draft 无 vars 键会让两路差一个键。
@@ -169,12 +180,12 @@ async def test_preview_plate_with_overlay_materializes(client, plate_mock: Plate
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
+    await _seed_overlay_alias()
     resp = await client.post("/api/scenarios/preview-plate", headers=bob,
                              json={**_eq_draft(), "overlay": OVERLAY})
     assert resp.status_code == 200, resp.text
     converted = resp.json()["converted"]
-    assert converted["config"]["services"]["fin-service"] == "https://bound"
-    # qa1/qa2 无凭证池会话 → 告警继续,users 不含两 alias(与 dispatch 同语义)
+    # qa1/qa2 无凭证池会话 → users 不含两槽(导出不拒,预检/派发才拒)
     users = converted["config"].get("users") or {}
     assert "qa1" not in users and "qa2" not in users
 
@@ -185,7 +196,8 @@ async def test_preview_plate_overlay_auth_resolve_failure_returns_422(
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
-    await _seed_owner_auth("qa1", bad=True)  # 绑定 qa1 触发解析
+    await _seed_overlay_alias()
+    await _seed_owner_auth("qa1", bad=True)  # 槽 qa1 触发解析
 
     resp = await client.post("/api/scenarios/preview-plate", headers=bob,
                              json={**_eq_draft(), "overlay": OVERLAY})
@@ -197,13 +209,14 @@ async def test_golden_equivalence_export_equals_baseline_case_json(
         client, plate_mock: PlateMock, monkeypatch):
     """黄金等价:导出产物 ≡ 基线单行 case.json,逐字段相等。
 
-    注入清单并集语义:steps 模板引用 qa1+qa2,overlay 只绑 qa1 —
-    导出产物 users 须同时含 qa1/qa2(扫描 ∪ 绑定);dispatch 侧扫描
-    同源 steps,两路收敛,等价逐字段成立。
+    注入清单并集语义:steps 模板引用 qa1+qa2,overlay 只选声明 qa1 的
+    别名 — 导出产物 users 须同时含 qa1/qa2(扫描 ∪ 生效别名槽位);
+    dispatch 侧扫描同源 steps,两路收敛,等价逐字段成立。
     """
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
+    await _seed_overlay_alias()
     await _seed_owner_auth("qa1")
     await _seed_owner_auth("qa2")
 
@@ -211,7 +224,7 @@ async def test_golden_equivalence_export_equals_baseline_case_json(
         "/api/scenarios/preview-plate", headers=bob,
         json={**_eq_draft(), "overlay": OVERLAY})).json()["converted"]
 
-    # 并集:qa1(绑定 + 模板)与 qa2(仅模板)都注入,凭证来自同一凭证池
+    # 并集:qa1(别名槽 + 模板)与 qa2(仅模板)都注入,凭证来自同一凭证池
     assert set(exported["config"]["users"]) == {"qa1", "qa2"}
     assert exported["config"]["users"]["qa2"]["username"] == "qa2-user"
 
@@ -247,6 +260,7 @@ async def test_golden_equivalence_with_carry(
 
     bob = await _member(client, "bob")
     await _seed(client, bob, draft=_eq_draft_with_carry())
+    await _seed_overlay_alias()
     await _seed_owner_auth("qa1")
     await _seed_owner_auth("qa2")
 
@@ -283,8 +297,7 @@ async def test_overlay_alias_default_credential_injected(
     await _seed(client, bob)
     await _seed_owner_auth("qa9")
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
-                            credential_alias="qa9"))
+        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service", slot="qa9"))
         await db.commit()
 
     exported = (await client.post(

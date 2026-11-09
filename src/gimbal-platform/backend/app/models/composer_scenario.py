@@ -47,11 +47,6 @@ class ComposerScenario(Base):
     __tablename__ = "composer_scenarios"
     __table_args__ = (
         # 列表分页锚(§2.2:排序 updated_at DESC + visibility 桶)
-        Index("ix_composer_vis_updated", "visibility", "updated_at"),
-        # 组合外键目标(权限域二期 P1,suite_members FK 引用
-        # (scenario_id, owner_id)——库层钉死「suite 只放属主自己的
-        # 场景」)。scenario_id 本身已唯一,组合键唯一性恒成立,纯 FK 目的。
-        Index("uq_composer_sid_owner", "scenario_id", "owner_id", unique=True),
         # GIN 仅 PG 生效(JSONB 路径索引);SQLite 侧渲染为普通 btree
         #(本地量小,无害)。M3 检索 SQL 化时按需补 trgm。
         Index(
@@ -82,7 +77,13 @@ class ComposerScenario(Base):
         nullable=True,
         index=True,
     )
-    visibility: Mapped[str] = mapped_column(String(16), default="private")
+    # visibility 列随 0043 删除(读写全切 project 谓词,响应由
+    # zone.derive_visibility 派生)。项目区:空 = 私有区;公共项目 =
+    # 公开内容(S1.9 删
+    # visibility 列前,两者由影子写保持一致)。不加 ON DELETE:项目
+    # 删除前置 409 清空(S1.4),库层 FK 兜底拦住漏网内容。
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True)
     # 副本来源三件套(权限域二期 P2,§7.3/§13.4-债1):场景与 suite 的
     # 副本共用此套字段,「副本 · 来自某人」徽标与将来对比原件的依据。
     forked_from_id: Mapped[str | None] = mapped_column(

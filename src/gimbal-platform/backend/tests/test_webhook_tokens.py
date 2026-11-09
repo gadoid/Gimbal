@@ -17,14 +17,13 @@ import hashlib
 import hmac as hmac_mod
 import json
 
-import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.models.webhook_delivery import WebhookDelivery
 from app.services import webhook_outbox as wo
 
 from .inbound_fixtures import (
-    allow_delivery_hosts, body_of, deliveries, mk_token, seed_platform_user,
+    allow_delivery_hosts, body_of, deliveries, mk_token,
 )
 from .test_access_tokens import _gtk, _register_role, _user_id
 
@@ -59,8 +58,7 @@ class TestMustSign:
         # 沙箱无外网 DNS:解析失败按 fail-closed 拒 —— 对拍用例放行解析
         # 与投递面白名单(D16 复核)
         allow_delivery_hosts(monkeypatch)
-        await seed_platform_user()
-        await _register_role(client, "wd_m", "member")
+        await _register_role(client, "wd_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd_m"),
                                 callback_url=CB_URL,
                                 callback_secret="sec-1")
@@ -99,8 +97,7 @@ class TestMustSign:
     async def test_missing_secret_fails_row(self, client):
         """必带签名(§6):密钥为空 → failed(signing_key_missing),
         绝不无签名发送。"""
-        await seed_platform_user()
-        await _register_role(client, "wd2_m", "member")
+        await _register_role(client, "wd2_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd2_m"),
                                 callback_url=CB_URL,
                                 callback_secret=None)
@@ -118,8 +115,8 @@ class TestMustSign:
         终态失败,不无限重试。"""
         from sqlalchemy import delete as _del
         from app.models.access_token import AccessToken
-        await seed_platform_user()
-        tid, _ = await mk_token(kind="platform", name="gone",
+        await _register_role(client, "wd_pt_gone", "admin")
+        tid, _ = await mk_token(user_id=await _user_id("wd_pt_gone"), name="gone",
                                 callback_url=CB_URL, callback_secret="s")
         did = await _mk_delivery(token_row=await _token_row(tid))
         async with db_module.SessionLocal() as s:
@@ -137,8 +134,7 @@ class TestMustSign:
             assert row.status == "pending"
 
     async def test_undecryptable_secret_fails(self, client):
-        await seed_platform_user()
-        await _register_role(client, "wd3_m", "member")
+        await _register_role(client, "wd3_m", "admin")
         tid, _ = await mk_token(user_id=await _user_id("wd3_m"),
                                 callback_url=CB_URL)
         from app.models.access_token import AccessToken as _AT
@@ -158,8 +154,8 @@ class TestMustSign:
 class TestHostChecks:
     async def test_loopback_host_rejected(self, client, monkeypatch):
         from app.core.config import settings
-        await seed_platform_user()
-        tid, _ = await mk_token(kind="platform", name="lp",
+        await _register_role(client, "wd_pt_lp", "admin")
+        tid, _ = await mk_token(user_id=await _user_id("wd_pt_lp"), name="lp",
                                 callback_url="https://cb.example.local/hook",
                                 callback_secret="s")
         tok = await _token_row(tid)
@@ -179,8 +175,8 @@ class TestHostChecks:
         """D16(评审 2026-11-05 P1):保存后再把主机移出白名单 → 投递
         终态失败(callback_host_not_allowed),不无限重试。"""
         from app.core.config import settings
-        await seed_platform_user()
-        tid, _ = await mk_token(kind="platform", name="wl",
+        await _register_role(client, "wd_pt_wl", "admin")
+        tid, _ = await mk_token(user_id=await _user_id("wd_pt_wl"), name="wl",
                                 callback_url=CB_URL, callback_secret="s")
         tok = await _token_row(tid)
         did = await _mk_delivery(token_row=tok)
@@ -199,8 +195,7 @@ class TestOutboxWrites:
     async def test_execution_finished_payload(self, client, monkeypatch):
         """终态迁移段同款写行:caller = {tokenId, tokenName}。"""
         from app.models.execution import Execution
-        await seed_platform_user()
-        await _register_role(client, "ow_m", "member")
+        await _register_role(client, "ow_m", "admin")
         uid = await _user_id("ow_m")
         tid, _ = await mk_token(user_id=uid, name="nightly",
                                 callback_url=CB_URL, callback_secret="s")
@@ -224,7 +219,6 @@ class TestOutboxWrites:
 
     async def test_jwt_execution_no_delivery(self, client):
         from app.models.execution import Execution
-        await seed_platform_user()
         async with db_module.SessionLocal() as s:
             from .inbound_fixtures import mk_user
             uid = await mk_user("jwt_u")
@@ -243,11 +237,11 @@ class TestOutboxWrites:
 
 class TestListAndRedeliver:
     async def test_token_sees_only_own_deliveries(self, client):
-        await seed_platform_user()
-        await _register_role(client, "dl_m", "member")
+        await _register_role(client, "dl_m", "admin")
         t1, p1 = await mk_token(user_id=await _user_id("dl_m"),
                                 callback_url=CB_URL, callback_secret="s")
-        t2, p2 = await mk_token(kind="platform", name="other",
+        await _register_role(client, "wd_pt_other", "admin")
+        t2, p2 = await mk_token(user_id=await _user_id("wd_pt_other"), name="other",
                                 callback_url=CB_URL, callback_secret="s")
         tok1, tok2 = await _token_row(t1), await _token_row(t2)
         d1 = await _mk_delivery(token_row=tok1)
@@ -263,8 +257,7 @@ class TestListAndRedeliver:
         assert r.status_code == 404
 
     async def test_owner_redeliver_creates_new_row(self, client):
-        await seed_platform_user()
-        h = await _register_role(client, "rd_m", "member")
+        h = await _register_role(client, "rd_m", "admin")
         uid = await _user_id("rd_m")
         t1, _ = await mk_token(user_id=uid, callback_url=CB_URL,
                                callback_secret="s")
@@ -288,6 +281,32 @@ class TestListAndRedeliver:
             (await _row(body["id"])).body)
         assert payload["deliveryId"] == body["id"]
         assert payload["redeliveredFrom"] == old_id
+
+
+    async def test_admin_cannot_see_or_redeliver_others_deliveries(self, client):
+        """authz W4:投递面只认属主 —— admin/super_admin 的越属主查看
+        与补发旁路删除,一律 404(平台令牌面 C1 退役前维持 admin+)。"""
+        await _register_role(client, "wa_m", "admin")
+        uid = await _user_id("wa_m")
+        t1, _ = await mk_token(user_id=uid, callback_url=CB_URL,
+                               callback_secret="s")
+        tok = await _token_row(t1)
+        d1 = await _mk_delivery(token_row=tok, status="failed")
+        for role in ("admin", "super_admin"):
+            h = await _register_role(client, f"wa_{role}", role)
+            # 列表:按他人令牌查 → 404
+            r = await client.get(
+                f"/api/webhook-deliveries?tokenId={t1}", headers=h)
+            assert r.status_code == 404, role
+            # 补发他人投递 → 404
+            r = await client.post(
+                f"/api/webhook-deliveries/{d1}/redeliver", headers=h)
+            assert r.status_code == 404, role
+        # 属主照常
+        h_owner = await _register_role(client, "wa_m", "admin")
+        r = await client.post(
+            f"/api/webhook-deliveries/{d1}/redeliver", headers=h_owner)
+        assert r.status_code == 201, r.text
 
 
 async def _row(did: int) -> WebhookDelivery:

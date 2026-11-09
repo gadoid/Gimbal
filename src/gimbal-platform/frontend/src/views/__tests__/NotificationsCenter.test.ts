@@ -32,7 +32,7 @@ const ITEMS = [
     link: null, batchId: null, createdAt: '2026-09-22T10:00:00', readAt: '2026-09-22T12:00:00' },
 ]
 
-async function mountPage(role: 'user' | 'admin') {
+async function mountPage(role: 'user' | 'super_admin') {
   const { useAuthStore } = await import('@/stores/auth')
   const router = createRouter({
     history: createMemoryHistory(),
@@ -43,9 +43,13 @@ async function mountPage(role: 'user' | 'admin') {
   })
   const pinia = createPinia()
   setActivePinia(pinia)
-  useAuthStore().currentUser = {
-    id: 1, username: 'x', role, is_admin: role === 'admin',
+  const auth = useAuthStore()
+  auth.currentUser = {
+    id: 1, username: 'x', role,
   } as never
+  // authz W8:审计 tab = users.manage 面
+  auth.capabilities = role === 'super_admin'
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
   vi.mocked(api.list).mockResolvedValue(
     { items: ITEMS, unread: 1, total: ITEMS.length, page: 1, pageSize: 20 } as never)
   const w = mount(NotificationsCenter, { global: { plugins: [router, pinia] } })
@@ -72,7 +76,7 @@ describe('NotificationsCenter', () => {
   })
 
   it('admin:双 tab;切到审计渲染复用面板', async () => {
-    const w = await mountPage('admin')
+    const w = await mountPage('super_admin')
     expect(w.find('[data-testid="nt-tab-audit"]').exists()).toBe(true)
     await w.find('[data-testid="nt-tab-audit"]').trigger('click')
     expect(w.find('[data-testid="audit-panel-stub"]').exists()).toBe(true)

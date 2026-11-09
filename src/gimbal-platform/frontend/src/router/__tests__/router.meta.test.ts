@@ -11,12 +11,13 @@ const COLLAPSED_PATHS = [
   '/scenarios/:scenarioId/schemes',
   '/scenarios/:scenarioId/assertions',
   '/constants',
+  '/change-password',   // authz W6 强制改密页(折叠侧栏,唯一出口)
 ]
 
 describe('router — chromeMode 标注', () => {
   const routes = router.getRoutes()
 
-  it('编辑流页 = collapsed,且恰好这四条', () => {
+  it('编辑流页 = collapsed,且恰好这五条(含 W6 强制改密页)', () => {
     const collapsed = routes
       .filter((r) => r.meta.chromeMode === 'collapsed')
       .map((r) => r.path)

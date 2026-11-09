@@ -25,7 +25,7 @@ vi.mock('@/api/preferences', () => ({
 }))
 
 const as = (username: string) => {
-  useAuthStore().currentUser = { id: 1, username, display_name: username, is_admin: false } as never
+  useAuthStore().currentUser = { id: 1, username, display_name: username } as never
 }
 const keyOf = (username: string) => `gimbal.scenario-follows.pinned:${username}`
 

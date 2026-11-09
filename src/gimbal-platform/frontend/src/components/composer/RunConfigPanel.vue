@@ -36,28 +36,43 @@
           @click="goWorkbench()">方案工作台</a>配置。
       </div>
 
-      <!-- 用户与服务绑定(平铺不折叠,spec §6 ③) -->
+      <!-- 用户与服务绑定(平铺不折叠,spec §6 ③;authz M2a S6 后一行一个
+           别名选择:服务键 → 用哪个别名;地址由执行环境的部署地址给出) -->
       <section class="run-section">
-        <label class="run-label">用户与服务 <span class="muted small">(声明 ∪ 引用并集)</span></label>
+        <label class="run-label">用户与服务 <span class="muted small">(声明 ∪ 引用并集;此处只选别名)</span></label>
         <div v-for="row in serviceRows" :key="row.service"
           class="rd-bind-row"
-          :class="{ 'is-degraded': degraded(row.service), 'is-undeclared': row.declaredUrl === null && !aliasDefaultOf(row.service) }">
+          :class="{ 'is-degraded': degraded(row.service) }">
           <span class="rd-bind-svc">{{ row.service }}</span>
-          <select class="rd-bind-user" v-model="bindings[row.service].authAlias">
-            <option :value="undefined">— 未绑定 —</option>
-            <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
+          <select v-if="candidatesOf(row.service).length || degraded(row.service)"
+            class="rd-bind-user" data-testid="binding-alias"
+            v-model="bindings[row.service].alias">
+            <option value="">— 用服务键本身 —</option>
+            <option v-for="c in candidatesOf(row.service)" :key="c.aliasName" :value="c.aliasName">
+              {{ c.slot ? `${c.aliasName}(槽位 ${c.slot})` : c.aliasName }}
+            </option>
+            <!-- 已删别名(M2a S6):disabled option 显示原别名 — 值不丢
+                 (可见可存),不可再选,用户重选即恢复 -->
+            <option v-if="degraded(row.service)" :value="bindings[row.service].alias" disabled>
+              {{ bindings[row.service].alias }}(已删)
+            </option>
           </select>
-          <input class="rd-bind-url" v-model="bindings[row.service].url"
-            :placeholder="row.declaredUrl === null
-              ? (aliasDefaultOf(row.service) ?? '未声明 — 现场填 URL 即可运行')
-              : '覆盖 URL(可选,已预填声明值)'" />
-          <!-- F4:未声明但注册表 base_url 兜住 → 绿 chip,不误报「未声明」 -->
-          <span v-if="row.declaredUrl === null && aliasDefaultOf(row.service)"
-            class="rd-bind-warn alias-default" :title="aliasDefaultOf(row.service) ?? ''">别名默认</span>
-          <span v-else-if="row.declaredUrl === null" class="rd-bind-warn undeclared">未声明</span>
-          <span v-else-if="degraded(row.service)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
+          <span v-else class="rd-bind-none">该服务暂无同基别名 — 用服务键本身</span>
+          <span v-if="degraded(row.service)" class="rd-bind-warn">别名已删,该服务退回服务键本身</span>
         </div>
         <p v-if="!serviceRows.length" class="rd-empty">场景未声明且未引用任何 service</p>
+      </section>
+
+      <!-- 执行环境(authz M2a S2:本次显式位;自建方案态不显示 —— 方案
+           环境在工作台配置,运行时按 D3 不篡改) -->
+      <section class="run-section">
+        <label class="run-label">执行环境 <span class="muted small">(本次 > 方案 > 项目默认 > 我的偏好 > 默认环境)</span></label>
+        <select v-model.number="envOverride" class="env-select" data-testid="env-override">
+          <option :value="null">按链路解析</option>
+          <option v-for="e in envOptions" :key="e.id" :value="e.id">
+            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
+          </option>
+        </select>
       </section>
 
       <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
@@ -149,9 +164,9 @@
           <span class="rd-sum-value">
             <template v-if="Object.keys(selected.serviceBindings).length">
               <span v-for="(b, svc) in selected.serviceBindings" :key="svc" class="rd-sum-bind"
-                :class="{ 'is-degraded': degradedAliasOf(b.authAlias) }">
-                {{ svc }}{{ b.authAlias ? ` → ${b.authAlias}` : '' }}{{ b.url ? `(URL 覆盖)` : '' }}
-                <span v-if="degradedAliasOf(b.authAlias)" class="rd-sum-warn">凭证已删,去工作台重选</span>
+                :class="{ 'is-degraded': degradedAliasOf(b.alias) }">
+                {{ svc }}{{ b.alias ? ` → ${b.alias}` : '' }}
+                <span v-if="degradedAliasOf(b.alias)" class="rd-sum-warn">别名已删,去工作台重选</span>
               </span>
             </template>
             <template v-else>无显式绑定</template>
@@ -243,16 +258,16 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
-import { listAllAliases } from '@/api/service-aliases'
+import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import type { DataSetSelection, ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
 import { EMPTY_RUN_OPTIONS } from '@/api/scenario-composer'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import {
-  MAX_TOTAL_RUNS, assembleExplicitBindings, datasetLabel, degradedAlias,
-  isSchemeInvalid, liveEntryIdSet, schemeInvalidReason, schemeRowsTotal,
-  type ServiceRow,
+  MAX_TOTAL_RUNS, aliasCandidates, assembleExplicitBindings, datasetLabel,
+  degradedAlias, isSchemeInvalid, liveEntryIdSet, schemeInvalidReason,
+  schemeRowsTotal, type ServiceRow,
 } from '@/utils/run-bindings'
 
 const props = withDefaults(defineProps<{
@@ -270,8 +285,6 @@ const props = withDefaults(defineProps<{
   initialSchemeId?: string | null
   /** 绑定行 = 声明 ∪ 引用并集(D3);declaredUrl null = 未声明引用行 */
   serviceRows: ServiceRow[]
-  /** 绑定下拉选项:owner 凭证池 ∪ 场景内置 users 别名(宿主供给) */
-  authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序) */
   stepOrchestrationNames?: string[]
   /** 断言注册表条目:自建方案注入条目失效判定面 */
@@ -291,20 +304,28 @@ const props = withDefaults(defineProps<{
   deadEntryIds: () => [] as string[],
 })
 
-/** F4(2026-09-23):注册表 base_url 默认层 —— 未声明行的「别名默认」判定。
- *  仅展示层吸收误报;执行/导出的物化走 _apply_services 同一优先级链
- *  (绑定 > 声明 > 别名默认 > 缺口),这里不另立解析规则。 */
-const aliasUrls = ref<Record<string, string>>({})
+/** authz M2a S6:别名注册表(候选/降级判定面)。本组件自取 — 绑定语义
+ *  收敛为「服务键 → 别名」后,选项 = 与服务键同基的别名(地址由部署表
+ *  给出,不再需要宿主供 credential 选项);不可达 → 候选空、降级不误报。 */
+const aliasRows = ref<ServiceAliasRow[]>([])
+const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
+/** authz M2a S2:环境候选(地址链选择维度);列表不可达 → 只留「按链路」 */
+const envOptions = ref<{ id: number; name: string; is_default: boolean }[]>([])
+const envOverride = ref<number | null>(null)
 onMounted(() => {
-  listAllAliases()
-    .then((rows) => {
-      const m: Record<string, string> = {}
-      for (const r of rows) if (r.baseUrl) m[r.aliasName] = r.baseUrl
-      aliasUrls.value = m
-    })
-    .catch(() => { /* 别名表不可达 → 维持旧「未声明」判定 */ })
+  import('@/api/environments').then(({ listEnvironments }) =>
+    listEnvironments()).then((rows) => {
+    envOptions.value = rows.map((e) => ({
+      id: e.id, name: e.name, is_default: e.is_default }))
+  }).catch(() => { /* 环境不可达 → 不给显式选择 */ })
+  // 同步抛兜底(http 层在无适配器/被 mock 环境可能同步炸,.catch 挂不上):
+  // 注册表不可达只是候选为空,不阻塞运行。
+  try {
+    listAllAliases()
+      .then((rows) => { aliasRows.value = rows })
+      .catch(() => { /* 别名表不可达 → 候选空,不阻塞运行 */ })
+  } catch { /* 同上:同步抛同样静默 */ }
 })
-const aliasDefaultOf = (svc: string): string | null => aliasUrls.value[svc] ?? null
 
 const emit = defineEmits<{
   /** footer 的取消键(仅弹层壳消费;内嵌态无 footer 不发) */
@@ -321,7 +342,7 @@ const emit = defineEmits<{
       nRuns?: number
       /** fan-out 并发度(1–200) */
       parallel?: number
-      /** service → {authAlias?, url?};空绑定条目不随 confirm 下发 */
+      /** service → {alias}(M2a S6);空绑定条目不随 confirm 下发 */
       serviceBindings?: Record<string, ServiceBinding>
       /** 断言注入条目 id:与数据集行**交叉**成 case;空选不随 confirm 下送 */
       injectionEntryIds?: string[]
@@ -348,13 +369,14 @@ watch(() => props.schemes, (list) => {
   selectedId.value = initial?.schemeId ?? list.find((s) => s.isDefault)?.schemeId ?? null
 }, { immediate: true })
 
-// ── 用户与服务绑定(spec D3:声明 ∪ 引用并集固定行)────────────────
-// 绑定态:service → {authAlias?, url?}。默认方案态的初始预填来自默认方案
-// 存量,声明 URL 兜底;自建方案态绑定只读(概要行展示)。
+// ── 用户与服务绑定(spec D3:声明 ∪ 引用并集固定行;M2a S6 后每行一个
+//    别名选择)──────────────────────────────────────────────────
+// 绑定态:service → {alias?}。默认方案态的初始预填来自默认方案存量;
+// 自建方案态绑定只读(概要行展示)。
 const bindings = ref<Record<string, ServiceBinding>>({})
 
 // serviceRows 变化(异步补齐/场景变更)→ 补行、清孤儿;行内 v-model 直写
-// bindings[svc].authAlias,必须保证每个 svc 有落点对象。声明行预填声明 URL。
+// bindings[svc].alias,必须保证每个 svc 有落点对象。
 // 依赖含 selected:深链自建方案挂载时本 watch guard return 过一次,切回
 // 默认方案必须重算填充 — 否则 bindings 恒空,绑定行 v-model 对 undefined
 // 求值直接渲染崩溃。切换即重置(与参数 watch(selected) 同语义)。
@@ -364,21 +386,23 @@ watch([() => props.schemes, () => props.serviceRows, selected], () => {
   const next: Record<string, ServiceBinding> = {}
   for (const r of props.serviceRows) {
     const b = d?.serviceBindings?.[r.service]
-    next[r.service] = {
-      ...(b?.authAlias ? { authAlias: b.authAlias } : {}),
-      url: b?.url ?? r.declaredUrl ?? undefined,
-    }
+    next[r.service] = { ...(b?.alias ? { alias: b.alias } : {}) }
   }
   bindings.value = next
 }, { immediate: true })
 
-/** 默认方案态绑定行降级(读编辑中的 bindings) */
+/** 绑定候选(M2a S6):与服务键同基的别名(见 utils/run-bindings.aliasCandidates) */
+function candidatesOf(svc: string): ServiceAliasRow[] {
+  return aliasCandidates(svc, aliasRows.value)
+}
+
+/** 默认方案态绑定行降级(读编辑中的 bindings):选中别名已从注册表删除 */
 function degraded(svc: string): boolean {
-  return degradedAlias(bindings.value[svc]?.authAlias, props.authOptions)
+  return degradedAlias(bindings.value[svc]?.alias, aliasNames.value)
 }
 /** 概要态降级(读方案存量绑定) */
 function degradedAliasOf(alias: string | undefined): boolean {
-  return degradedAlias(alias, props.authOptions)
+  return degradedAlias(alias, aliasNames.value)
 }
 
 // ── 自建方案失效判定(活集 = registry 全集 − 宿主门控死集)─────────
@@ -490,6 +514,7 @@ function onConfirm() {
       ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
       ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
       ...(debugSpec ? { debug: debugSpec } : {}),
+      ...(envOverride.value !== null ? { environmentId: envOverride.value } : {}),
     })
     return
   }
@@ -551,20 +576,15 @@ function onConfirm() {
 .rd-link { color: #2F6FED; cursor: pointer; }
 .rd-link:hover { text-decoration: underline; }
 
-/* ── 绑定行(spec D3;蓝紫灰 = 配置面)────────────────────── */
+/* ── 绑定行(spec D3;M2a S6 后一行一个别名选择)────────────── */
 .rd-bind-row {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; margin-bottom: 8px;
   border: 1px solid #E1E5EB; border-radius: 8px;
 }
 .rd-bind-row:last-child { margin-bottom: 0; }
-/* 降级:绑定引用的凭证已删 — 标红不报废,运行时该用户不注入 */
+/* 降级(M2a S6):选中的别名已从注册表删除 — 标红不报废,退回服务键本身 */
 .rd-bind-row.is-degraded { border-color: #fca5a5; background: #fef2f2; }
-/* 未声明引用行(D3):service 名标红 + 「未声明」警示,现场填 URL 即救燃 */
-.rd-bind-row.is-undeclared .rd-bind-svc { color: #dc2626; font-weight: 600; }
-.rd-bind-warn.undeclared { color: #dc2626; }
-/* F4:注册表 base_url 兜住的未声明行 → 绿 chip(title 给完整 URL) */
-.rd-bind-warn.alias-default { color: #15803d; }
 .rd-bind-svc {
   min-width: 120px; font-family: var(--font-mono);
   font-size: 12px; font-weight: 600;
@@ -575,11 +595,8 @@ function onConfirm() {
   font-size: 12px; background: #fff;
 }
 .rd-bind-row.is-degraded .rd-bind-user { border-color: #fca5a5; }
-.rd-bind-url {
-  flex: 1; min-width: 0; padding: 5px 8px;
-  border: 1px solid #E1E5EB; border-radius: 6px;
-  font-size: 12px; background: #fff;
-}
+/* 无同基候选 → 静默说明代替下拉(用服务键本身) */
+.rd-bind-none { font-size: 11px; color: #8B93A1; }
 .rd-bind-warn { font-size: 11px; color: #b91c1c; white-space: nowrap; }
 .rd-empty { margin: 4px 0 0; font-size: 12px; color: #8B93A1; }
 
@@ -703,4 +720,6 @@ function onConfirm() {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .small { font-size: 11px; }
+.env-select { border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 0.3rem 0.5rem; background: #fff; max-width: 16rem; }
 </style>

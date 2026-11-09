@@ -191,11 +191,14 @@ def _upgrade_legacy_sqlite(bind) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_display_name "
         "ON users (display_name) WHERE display_name <> ''"
     )
-    # 8) composer 列表锚索引(既有表上 create_all 不会补索引)
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_composer_vis_updated "
-        "ON composer_scenarios (visibility, updated_at)"
-    )
+    # 8) composer 列表锚索引(既有表上 create_all 不会补索引)。
+    #    fresh 链守卫:S1.9(0043)起当前模型无 visibility 列 —— 只给
+    #    带该列的存量库补(0043 会把它连同列一起删掉)
+    if _has_column(bind, "composer_scenarios", "visibility"):
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_composer_vis_updated "
+            "ON composer_scenarios (visibility, updated_at)"
+        )
     _create_composer_gin_indexes(pg_only=False)
 
 

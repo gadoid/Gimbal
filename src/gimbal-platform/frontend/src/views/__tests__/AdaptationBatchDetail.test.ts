@@ -2,7 +2,8 @@
  * AdaptationBatchDetail —— 批次工作台(§6,admin-only):
  *   - ops 按状态渲染(pending 有操作组,applied/conflict 无);
  *   - 应用 → applyOp + 重载;
- *   - member 直入 → getBatch 403 admin_only → 「仅管理员」占位(§8);
+ *   - 无能力直入 → getBatch 403 capability_forbidden → 「仅管理员」占位
+ *     (§8;authz W8 按 code 分发:其他 403 不误占 —— dev-plan 测试项);
  *   - 合并:selection → 种子 → 构造成功后 skip 两条源 op;取消 → 清种子;
  *   - 回滚:确认 → rollbackBatch → restored/conflicts 面板。
  */
@@ -54,10 +55,16 @@ const detail: api.BatchDetail = {
   ],
 }
 
+/** authz W8:批次详情是 users.manage 面 —— admin=true 注入全能力。 */
 function login(admin: boolean) {
   const auth = useAuthStore()
   auth.accessToken = 'tok'
-  auth.currentUser = { id: admin ? 1 : 2, username: 'u', is_admin: admin } as never
+  auth.currentUser = {
+    id: admin ? 1 : 2, username: 'u',
+    role: admin ? 'super_admin' : 'user',
+  } as never
+  auth.capabilities = admin
+    ? ['users.manage', 'ops.write', 'alias.write'] : []
 }
 
 async function mountPage() {
@@ -114,18 +121,29 @@ describe('AdaptationBatchDetail', () => {
     w.unmount()
   })
 
-  it('member:getBatch 403 admin_only → 「仅管理员」占位(工作台不可达)', async () => {
+  it('无能力:getBatch 403 capability_forbidden → 「仅管理员」占位(工作台不可达)', async () => {
     login(false)
-    // 真实 member 路径:GET /batches/{id} 为 admin-only → 403 admin_only
-    // (后端 detail 为字符串,http.ts 归一为 status=403,code=0)
+    // authz 后端 9.7 统一契约:403 detail={code:'capability_forbidden',
+    // capability:'users.manage'} → http.ts 归一 code='capability_forbidden'
     vi.mocked(api.getBatch).mockRejectedValue(
-      new ApiError(403, 0, 'admin_only: adaptation routes require an administrator'))
+      new ApiError(403, 'capability_forbidden', 'requires capability: users.manage',
+        { code: 'capability_forbidden', capability: 'users.manage' }))
     const w = await mountPage()
 
     expect(w.text()).toContain('仅管理员')
     expect(w.find('.op-row').exists()).toBe(false)     // 工作台不渲染
     expect(w.text()).not.toContain('批次不存在或已清理')  // 非 404 空态
     expect(w.text()).not.toContain('fin.order.add')
+    w.unmount()
+  })
+
+  it('其他 403 不误占「仅管理员」(authz W8 按 code 分发):password_change_required 走通用报错', async () => {
+    login(true)
+    vi.mocked(api.getBatch).mockRejectedValue(
+      new ApiError(403, 'password_change_required', '密码已被重置,请先修改密码',
+        { code: 'password_change_required' }))
+    const w = await mountPage()
+    expect(w.text()).not.toContain('仅管理员')          // 不误占
     w.unmount()
   })
 

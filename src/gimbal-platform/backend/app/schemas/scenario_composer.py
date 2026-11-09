@@ -17,7 +17,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (BaseModel, ConfigDict, Field, field_validator,
+                      model_validator)
 
 from ._m2 import CheckDecl, DebugSpec, GateDecl, RunOptions
 
@@ -216,15 +217,47 @@ class DataSetDraft(BaseModel):
 
 
 # ─── runs ───────────────────────────────────────────────────────────
-class ServiceBinding(BaseModel):
-    """service → {authAlias?, url?} 绑定(spec §3.1/§5)。
-    查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
-    与运行方案无关;侧车残留键被 extra=ignore 静默丢弃
-    (退场记录见 docs/adr/0003)。"""
-    model_config = _CAMEL
+# authz M2a S6:绑定里退役的两个字段(地址 = 环境 → 部署表;凭证 =
+# 槽位绑定)。带它们的请求 422,不静默丢弃 —— 调用方以为生效了更糟。
+RETIRED_BINDING_FIELDS = ("url", "authAlias", "auth_alias")
 
-    auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
-    url: str | None = Field(default=None, alias="url", max_length=512)
+
+class ServiceBinding(BaseModel):
+    """服务键 → 别名(authz M2a S6,consolidated §4.1「方案只做选择,
+    不存值」):``{"alias": "fin-maker"}`` = 服务键 ``fin`` 用别名
+    ``fin-maker`` —— 槽位默认与 carry 别名键随之切换;地址只由环境
+    决定(同基础服务校验在 ``service_aliases.validate_binding_aliases``)。
+
+    ``url`` / ``authAlias`` 已退役 → 422 ``binding_field_retired``;
+    其它未知键 422(extra=forbid)。"""
+    model_config = ConfigDict(populate_by_name=True,
+                              str_strip_whitespace=True, extra="forbid")
+
+    alias: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            hit = [k for k in RETIRED_BINDING_FIELDS if k in data]
+            if hit:
+                raise ValueError(
+                    f"binding_field_retired: serviceBindings 不再接受 "
+                    f"{', '.join(hit)}(地址由环境的部署地址给出,凭证由"
+                    "槽位绑定给出;绑定只能选择别名 alias)")
+        return data
+
+
+def scrub_retired_bindings(raw: Any) -> dict[str, dict]:
+    """历史形态(归档 config_json / 升级前入队的配方)→ 现行形态:剥离
+    退役字段(url/authAlias),无 alias 的条目丢弃。只用于**回放历史
+    数据**;新请求带退役字段一律 422(:class:`ServiceBinding`)。"""
+    out: dict[str, dict] = {}
+    for k, v in (raw.items() if isinstance(raw, dict) else ()):
+        alias = v.get("alias") if isinstance(v, dict) else None
+        if isinstance(alias, str) and alias.strip():
+            out[str(k)] = {"alias": alias.strip()}
+    return out
 
 
 class DataSetSelection(BaseModel):
@@ -258,6 +291,10 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    # authz M2a S2.1:环境链第二位(本次显式 > **方案** > 项目默认 > 个人
+    # 偏好 > 默认环境);缺省 = 不指定。悬空(环境被删)按未设置落下一位
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # M10 RunOptions 形状(迁移完成,不再收旧平铺键)
     options: dict[str, Any] = Field(default_factory=lambda: {
         "step_from": None, "step_to": None,
@@ -268,11 +305,14 @@ class RunScheme(BaseModel):
 
 class ExportOverlay(BaseModel):
     """导出/预览的运行方案覆盖层(spec §8)。dataSetIds 有意不收 —
-    导出是场景级产物,行级展开是非目标。执行环境键已随 D2 退役。"""
+    导出是场景级产物,行级展开是非目标。``environmentId``(S2.1)=
+    环境链的本次显式位(物化地址按该环境的部署表)。"""
     model_config = _CAMEL
 
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
 
 
 class ScenarioCopyIn(BaseModel):
@@ -347,6 +387,11 @@ class GraphSpec(BaseModel):
     # GraphUnitSpec.service_bindings:字符串别名在 wire 面 422,不静默跳过)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    # authz M2a S2.1:图级环境(本次显式位;RunRequest 顶层
+    # environmentId 优先)。未给时逐单元按 方案 > 项目默认 > 个人偏好 >
+    # 默认环境 解析(环境是单元属性,不整图拉平)
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
     control: GraphControlSpec | None = None
 
@@ -356,7 +401,8 @@ class RunRequest(BaseModel):
 
     Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
     旧 ``env`` 字段已随 D2 退役 — 旧客户端多发的 env 键被 pydantic
-    静默忽略,仅失效、不 422。
+    静默忽略,仅失效、不 422。``environmentId``(authz M2a S2.1)是新
+    环境链的本次显式位,与旧 env 无关。
     """
 
     model_config = _CAMEL
@@ -385,14 +431,16 @@ class RunRequest(BaseModel):
     data_set_selection: list[DataSetSelection] = Field(
         default_factory=list, alias="dataSetSelection"
     )
-    # service → {authAlias?, url?} 绑定(spec §3.1/§5):注入清单 =
-    # 模板扫描(steps 里的 ${auth.*} 引用)∪ 绑定 authAlias;绑定 url
-    # 物化进 services(显式绑定最优先)。旧凭证策略四字段(auths /
-    # inject_credentials / prefix / merge 策略)已退役(spec §6)—
-    # 旧客户端多发的键被 pydantic 静默忽略,仅失效、不 422。
+    # 服务键 → 别名(authz M2a S6;url/authAlias 退役 → 422)。旧凭证
+    # 策略四字段(auths / inject_credentials / prefix / merge 策略)已
+    # 退役(spec §6)— 旧客户端多发的顶层键被静默忽略,仅失效、不 422。
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
+    # authz M2a S2.1:环境链本次显式位(> 方案 > 项目默认 > 个人偏好 >
+    # 默认环境);指定的环境不存在 → 404 environment_not_found
+    environment_id: int | None = Field(default=None, ge=1,
+                                       alias="environmentId")
     # 断言注入条目(spec v2 §5/§8):选中条目在 dispatch 时物化为注入族
     # (payload.assertion_registry → 基线 vars 覆写 + asserts patch),
     # 与数据集行并列生成 case;空 = 不注入。
@@ -536,6 +584,8 @@ class Scenario(BaseModel):
     starred: bool = False
     # private(默认,仅 owner/admin 可读)| public(所有登录用户可读)
     visibility: str = Field(default="private")
+    # S7.1:所属项目 id(项目徽标;None = 私有)
+    projectId: int | None = None
 
 
 # ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)────────────────────────
@@ -558,6 +608,8 @@ class ScenarioListItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     starred: bool = False
     visibility: str = Field(default="private")
+    # S7.1:所属项目 id(项目徽标;null = 私有)
+    projectId: int | None = None
 
 
 class ScenarioOptionsItem(BaseModel):

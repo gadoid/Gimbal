@@ -53,7 +53,7 @@
            权威);选 JSON 文件 → 本地解析 → 确认对话框(析出映射/认证
            引用/ID 冲突)。MemberUser 收紧见 routers/scenario_import.py。 -->
       <button
-        v-if="auth.hasRole('member', 'admin')"
+        v-if="auth.can('ops.write')"
         type="button"
         class="slib-import"
         data-testid="mine-import"
@@ -150,8 +150,19 @@
                     v-if="row.visibility === 'public'"
                     class="pub-badge"
                     :data-testid="`pub-badge-${row.meta.scenarioId}`"
-                    title="已发布到公共库"
+                    :title="row.projectId != null
+                      ? `公共项目成员(所属:${projectNames.nameOf(row.projectId)})`
+                      : '已发布到公共库'"
                   >公共</span>
+                  <!-- S7.1:普通项目徽标(在项目里的场景从项目页进;
+                       私有页签恒不出现,全员视角可见) -->
+                  <span
+                    v-if="row.projectId != null"
+                    class="proj-badge"
+                    :data-testid="`proj-badge-${row.meta.scenarioId}`"
+                    :title="`所属项目:${projectNames.nameOf(row.projectId)}`"
+                    @click.stop
+                  ><router-link :to="`/projects/${row.projectId}`" class="proj-link">{{ projectNames.nameOf(row.projectId) }}</router-link></span>
                   <!-- P2 徽标(§7.11)+ D-1 补遗:属主「已引用分享」(布尔,
                        不显人数);名单含经由所属 Suite 的间接引用
                        (数据源 /shares/referrers)。 -->
@@ -238,6 +249,13 @@
                         </template>
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
+                    <!-- S7.2:加入普通项目(D7 复制;公共走「发布」) -->
+                    <DropdownMenuItem
+                      v-if="row.projectId == null"
+                      class="sl-menu-item"
+                      :data-testid="`promote-${row.meta.scenarioId}`"
+                      @click="openPromotion(row)"
+                    >加入项目…</DropdownMenuItem>
                     <DropdownMenuItem v-if="row.visibility !== 'public'" class="sl-menu-item" @click="onCmd('publish', row)">发布到公共库</DropdownMenuItem>
                     <DropdownMenuItem v-else class="sl-menu-item" @click="onCmd('unpublish', row)">下架为私有</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item danger" @click="onCmd('delete', row)">删除</DropdownMenuItem>
@@ -326,7 +344,17 @@
       :scenarios="selectedScenarios"
       @added="onAddedToSuite"
     />
-  </section>
+  
+  <!-- S7.2:加入项目对话框 -->
+  <PromotionDialog
+    :open="!!promoTarget"
+    kind="scenario"
+    :source-id="promoTarget?.id ?? ''"
+    :source-name="promoTarget?.name ?? ''"
+    @close="promoTarget = null"
+    @done="load"
+  />
+</section>
 </template>
 
 <script setup lang="ts">
@@ -334,6 +362,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectNames } from '@/composables/useProjectNames'
+import PromotionDialog from '@/components/project/PromotionDialog.vue'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
   updateScenario,
@@ -373,6 +403,14 @@ const PREVIEW_MAX = 3
 const MAX = 3
 
 const auth = useAuthStore()
+// S7.1:项目徽标名映射
+const projectNames = useProjectNames()
+
+// S7.2:加入项目(析出分析 → 直通复制 / 冲突转审批)
+const promoTarget = ref<{ id: string; name: string } | null>(null)
+function openPromotion(row: ScenarioListItem): void {
+  promoTarget.value = { id: row.meta.scenarioId, name: row.meta.name || row.meta.scenarioId }
+}
 const router = useRouter()
 const runs = useScenarioRuns()
 
@@ -454,7 +492,7 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
  *  逐页收纳批把页脚徽章/默认方案口径段并入同一弹层,页脚不再常驻长说明。 */
 const BADGE_NOTE = '「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。'
 const pageSubtitle = computed(() => {
-  const lens = auth.isAdmin
+  const lens = auth.can('users.manage')
     ? (lensAll.value
       ? '全员视角:非 public 桶装的是全员的私有场景(全量)'
       : '我的:只看你创建的;切「全员视角」可看全部')
@@ -827,6 +865,18 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 }
 
 /* 已发布徽标(§5.2):mine 镜头里自己的公共场景。 */
+.proj-badge {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #2563eb;
+  background: rgb(37 99 235 / 8%);
+  border: 1px solid rgb(37 99 235 / 30%);
+}
+.proj-link { color: inherit; text-decoration: none; }
+.proj-link:hover { text-decoration: underline; }
 .pub-badge {
   flex: none;
   font-size: 11px;

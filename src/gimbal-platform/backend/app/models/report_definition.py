@@ -5,7 +5,7 @@ schema 与执行器侧 ``gimbal.schema.report_definition.ReportDefinition``
 """
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -15,7 +15,12 @@ from sqlalchemy import func
 
 
 class ReportDefinitionRow(Base):
-    """报告定义(私有区 owner_id / 公共区 owner_id=NULL)。"""
+    """报告定义(私有/公共分立 visibility;owner = 维护者,恒非空)。
+
+    authz W9-2:公共定义有维护者(owner_id 不再置 None —— 公共 ≠ 无主);
+    编辑权 = 维护者,Admin+ 仅可下架(delete,steward)。遗留无主公共行
+    (owner_id NULL)由 0037 回填 visibility='public',保持全员可读、
+    编辑面冻结(无人是维护者)。"""
     __tablename__ = "report_definitions"
     __table_args__ = (
         Index("ix_report_definitions_owner", "owner_id"),
@@ -26,8 +31,12 @@ class ReportDefinitionRow(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     # 定义 payload(ReportDefinition.model_dump;camelCase wire 形态)
     definition: Mapped[dict] = mapped_column(JsonVar, default=dict)
-    # 私有 = owner_id 非 NULL;公共 = NULL(全团队可读,仅 admin 可改)
+    # 维护者(新建恒非空;遗留无主公共行保持 NULL)
     owner_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True, index=True)
+    # visibility 列随 0043 删除(W9-2 公共态 = 公共项目挂靠)。
+    # 项目区:空 = 私有区;公共项目 = 公开定义
+    project_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("projects.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

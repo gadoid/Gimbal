@@ -120,11 +120,12 @@ async def test_fields_options_shape_and_visibility(client, bob):
     body = r.json()
     assert {"items", "total", "page", "pageSize"} <= set(body)
     got = {it["scenarioId"]: it for it in body["items"]}
-    assert set(got) == {"sc-m1-pub"}
+    # S1.3:发布 = 复制 —— carol 的 all 镜头含原件(私有)+ 公共副本
+    assert set(got) == {"sc-m1-pub", "sc-m1-pub-public"}
     # 轻量形态四字段,别无他物
     assert set(got["sc-m1-pub"]) == {"scenarioId", "name", "visibility", "owner"}
     assert got["sc-m1-pub"]["name"] == "公共"
-    assert got["sc-m1-pub"]["visibility"] == "public"
+    assert got["sc-m1-pub"]["visibility"] == "private"
 
 
 async def test_multi_value_filters(client, bob):
