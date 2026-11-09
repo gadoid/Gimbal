@@ -1,17 +1,18 @@
-"""权限域二期 P2:引用分享核心链路测试。
+"""S7.4 引用分享退役:副本分享契约 + 转换服务。
 
-《Suite成员层、引用分享与浏览镜头-设计方案》§7/§8.2 验收面:
-- 判定式三处同步(PG 谓词经 can_read/can_run 对象级;SQLite 兜底同口径);
-- 引用者:可读定义/方案/数据集,可执行单场景与 rerun,写 403,再分享被拒;
-- 引用闭包:引用 suite ⇒ 覆盖全部成员;引用单场景不带来 suite 访问;
-- 撤销即时生效;退订不通知;admin 撤销入审计;admin 不能代发分享;
-- 转为副本:原引用保留;副本 forked_from 三件套;
-- suite 深拷贝:成员逐个复制 + 来源字段;发布联动(级联/连带下架/加入确认)。
+- POST /shares 仅剩 copy(mode=ref 422 枚举收窄);属主单判;
+  引用面(列表/撤销/fork/referrers)整体 404/405 退役;
+- 转换服务 share_ref_retire.convert_ref:场景/套件 → grantee 私有副本
+  (forked_from 三件套 + 跨属主剥凭证)、删 ref 行幂等、双方通知、审计;
+- 表 B ref 谓词退役:私有场景对非属主 404(can/can_run 收敛)。
 """
 from __future__ import annotations
 
+import sqlalchemy as sa
 from httpx import AsyncClient
 
+from app.core import db as db_module
+from app.services.share_ref_retire import RefRow, convert_ref, list_refs
 from tests.helpers import make_draft, register_and_login
 
 
@@ -20,330 +21,197 @@ async def _mk(client: AsyncClient, h: dict, sid: str) -> None:
     assert r.status_code in (200, 201), r.text
 
 
-async def _mk_suite(client: AsyncClient, h: dict, name: str,
-                    member: str | None = None) -> int:
-    r = await client.post("/api/suites", headers=h,
-                          json={"name": name, "description": ""})
-    assert r.status_code == 201, r.text
-    sid = r.json()["suiteId"]
-    if member:
-        r = await client.post(f"/api/suites/{sid}/members", headers=h,
-                              json={"scenarioIds": [member]})
-        assert r.status_code == 200, r.text
-    return sid
+async def _uid(client: AsyncClient, admin_h: dict, username: str) -> int:
+    roster = (await client.get("/api/users/roster", headers=admin_h)).json()["items"]
+    return next(u["id"] for u in roster if u["username"] == username)
 
 
-async def test_ref_grants_read_and_run(client: AsyncClient) -> None:
-    """引用者:读定义/方案/数据集 ✓;执行 ✓;写 403;再分享被拒。"""
-    await register_and_login(client, "sh_admin", "sh_admin_pass123")
-    owner = await register_and_login(client, "sh_owner", "sh_owner_pass123")
-    bob = await register_and_login(client, "sh_bob", "sh_bob_pass123")
-    await _mk(client, owner, "sc-sh-1")
+async def test_copy_only_and_ref_retired(client: AsyncClient) -> None:
+    """mode=ref 422(枚举收窄);引用面路由退役;副本照常。"""
+    await register_and_login(client, "s74_adm", "s74_adm_pass123")
+    owner = await register_and_login(client, "s74_own", "s74_own_pass123")
+    bob = await register_and_login(client, "s74_bob", "s74_bob_pass123")
+    await _mk(client, owner, "sc-s74-1")
+    bob_id = await _uid(client,
+                        await register_and_login(client, "s74_adm2", "x1111111"), "s74_bob")
 
-    # 属主发起引用分享(admin 不可代发)
-    admin = await register_and_login(client, "sh_admin2", "sh_admin2_pass123")
-    # 从 /api/users/roster 找 bob id(人员选择器同款,§7.7)
-    roster = (await client.get("/api/users/roster", headers=admin)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "sh_bob")
-    r = await client.post("/api/shares", headers=admin, json={
-        "resourceType": "scenario", "resourceId": "sc-sh-1",
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 403, r.text  # admin 不可代他人分享(§8.1)
-
+    # ref 模式 422(枚举收窄,前端已无入口)
     r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-sh-1",
+        "resourceType": "scenario", "resourceId": "sc-s74-1",
         "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
-    ref_id = r.json()["id"]
+    assert r.status_code == 422, r.text
+    assert "copy" in r.text
 
-    # 引用者:读定义/详情/方案/数据集 ✓(闭包,§7.4)
-    assert (await client.get("/api/scenarios/sc-sh-1/draft",
-                             headers=bob)).status_code == 200
-    assert (await client.get("/api/scenarios/sc-sh-1",
-                             headers=bob)).status_code == 200
-    assert (await client.get(
-        "/api/scenarios/sc-sh-1/run-schemes", headers=bob)).status_code == 200
-    assert (await client.get("/api/data-sets",
-                             headers=bob,
-                             params={"scenarioId": "sc-sh-1"})).status_code == 200
-
-    # 列表可见(all 上限内含被引用)
-    r = await client.get("/api/scenarios?scope=all", headers=bob)
-    assert any(i["meta"]["scenarioId"] == "sc-sh-1" for i in r.json()["items"])
-
-    # 写 403
-    r = await client.put("/api/scenarios/sc-sh-1", headers=bob,
-                         json=make_draft("sc-sh-1"))
-    assert r.status_code == 403
-
-    # 再分享被拒(副本才可,§7.1)
-    r = await client.post("/api/shares", headers=bob, json={
-        "resourceType": "scenario", "resourceId": "sc-sh-1",
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code in (403, 404)
-
-    # 退订(被分享人;不通知属主)
-    r = await client.delete(f"/api/shares/{ref_id}", headers=bob)
-    assert r.status_code == 204
-    # 撤销即时生效(§7.5-3):下一次请求即失效
-    assert (await client.get("/api/scenarios/sc-sh-1/draft",
-                             headers=bob)).status_code == 404
-
-
-async def test_ref_run_and_rerun(client: AsyncClient) -> None:
-    """引用者可执行单场景(POST /runs 不再 not_owner);引用 suite 覆盖成员;
-    引用单场景不带来 suite 访问(§7.4)。"""
-    await register_and_login(client, "rr_admin", "rr_admin_pass123")
-    owner = await register_and_login(client, "rr_owner", "rr_owner_pass123")
-    bob = await register_and_login(client, "rr_bob", "rr_bob_pass123")
-    await _mk(client, owner, "sc-rr-1")
-    await _mk(client, owner, "sc-rr-2")
-    suite_id = await _mk_suite(client, owner, "回归", "sc-rr-1")
-
-    roster = (await client.get(
-        "/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "rr_bob")
-
-    # 引用 suite ⇒ 覆盖全部成员(闭包)
+    # 副本分享照常(mode 缺省 = copy)
     r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(suite_id),
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
-
-    # 成员场景:读 + 执行入口判定过(执行因 plate 不可用以 5xx/4xx
-    # 业务因失败,但**不得**是 403 not_owner —— 权限闸已过)
-    assert (await client.get("/api/scenarios/sc-rr-1/draft",
-                             headers=bob)).status_code == 200
-    r = await client.post("/api/runs", headers=bob, json={
-        "scenarioId": "sc-rr-1"})
-    assert r.status_code != 403 or "not_owner" not in r.text
-
-    # 非 suite 内的场景对 bob 不可读(引用不外溢)
-    assert (await client.get("/api/scenarios/sc-rr-2/draft",
-                             headers=bob)).status_code == 404
-    # suite 详情可读(引用)
-    assert (await client.get(f"/api/suites/{suite_id}",
-                             headers=bob)).status_code == 200
-
-    # 引用单场景不带来所属 suite 访问:换一个方向验证
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-rr-2",
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201
-    r2 = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-rr-2",
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r2.status_code == 201  # 幂等 upsert(§7.7)
-
-
-async def test_fork_and_copy(client: AsyncClient) -> None:
-    """转为副本:原引用保留;副本写 forked_from;suite 深拷贝成员级联。"""
-    await register_and_login(client, "fk_admin", "fk_admin_pass123")
-    owner = await register_and_login(client, "fk_owner", "fk_owner_pass123")
-    bob = await register_and_login(client, "fk_bob", "fk_bob_pass123")
-    await _mk(client, owner, "sc-fk-1")
-    suite_id = await _mk_suite(client, owner, "冒烟", "sc-fk-1")
-
-    roster = (await client.get(
-        "/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "fk_bob")
-
-    # 场景引用 → fork
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-fk-1",
-        "granteeUserId": bob_id, "mode": "ref"})
-    ref_id = r.json()["id"]
-    r = await client.post(f"/api/shares/{ref_id}/fork", headers=bob)
-    assert r.status_code == 201, r.text
-    copy_sid = r.json()["scenarioId"]
-    # 原引用保留(§7.7);副本归 bob 可写
-    assert (await client.get("/api/scenarios/sc-fk-1/draft",
-                             headers=bob)).status_code == 200
-    assert (await client.get(f"/api/scenarios/{copy_sid}",
-                             headers=bob)).status_code == 200
-
-    # suite copy:深拷贝(§7.8)
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(suite_id),
-        "granteeUserId": bob_id, "mode": "copy"})
+        "resourceType": "scenario", "resourceId": "sc-s74-1",
+        "granteeUserId": bob_id})
     assert r.status_code == 201, r.text
     out = r.json()
-    assert out["memberCount"] == 1
-    new_suite = out["suiteId"]
-    detail = (await client.get(f"/api/suites/{new_suite}",
-                               headers=bob)).json()
-    assert detail["memberCount"] == 1
-    assert detail["members"][0]["scenarioId"] != "sc-fk-1"  # 是新副本
-
-    # suite ref → fork:forked_from_owner_name 记**原属主**(评审补记修复,
-    # 此前误写转副本人自己)
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(suite_id),
-        "granteeUserId": bob_id, "mode": "ref"})
-    sref_id = r.json()["id"]
-    r = await client.post(f"/api/shares/{sref_id}/fork", headers=bob)
-    assert r.status_code == 201, r.text
-    forked_id = r.json()["suiteId"]
-    from sqlalchemy import select as _sel
-
-    from app.core import db as db_module
-    from app.models.suite import Suite as SuiteRow
-    async with db_module.SessionLocal() as s:
-        src_name = (await s.execute(
-            _sel(SuiteRow.forked_from_owner_name).where(
-                SuiteRow.id == forked_id))).scalar_one()
-    assert src_name == "fk_owner"  # 原属主,而非转副本人 fk_bob
-
-    # direction=in 出参:scenarioName / memberCount 反查(评审补记补齐;
-    # Suite「共享给我的」行「N 个场景」此前空白)
-    r = await client.get("/api/shares?direction=in", headers=bob)
-    items = {i["resourceType"]: i for i in r.json()}
-    assert items["scenario"]["scenarioName"] == "Test"  # make_draft 缺省名
-    assert items["scenario"]["memberCount"] is None
-    assert items["suite"]["memberCount"] == 1
-    assert items["suite"]["scenarioName"] is None
-
-
-async def test_scenario_referrers_includes_indirect(
-    client: AsyncClient,
-) -> None:
-    """§7.11 防误伤名单:直接引用 + 经由所属 Suite 的间接引用(§7.6),
-    同一引用人合并一行;属主治理面(非属主 403、未知场景 404)。"""
-    admin = await register_and_login(client, "rf_admin", "rf_admin_pass123")
-    owner = await register_and_login(client, "rf_owner", "rf_owner_pass123")
-    bob = await register_and_login(client, "rf_bob", "rf_bob_pass123")
-    carol = await register_and_login(client, "rf_carol", "rf_carol_pass123")
-    await _mk(client, owner, "sc-rf-1")
-    await _mk(client, owner, "sc-rf-2")
-    suite_id = await _mk_suite(client, owner, "套件", "sc-rf-1")
-
-    roster = (await client.get(
-        "/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "rf_bob")
-    carol_id = next(u["id"] for u in roster if u["username"] == "rf_carol")
-
-    # bob:直接引用场景 + 引用所在 Suite(合并一行,direct 且带 viaSuites)
-    for body in (
-        {"resourceType": "scenario", "resourceId": "sc-rf-1",
-         "granteeUserId": bob_id, "mode": "ref"},
-        {"resourceType": "suite", "resourceId": str(suite_id),
-         "granteeUserId": bob_id, "mode": "ref"},
-    ):
-        r = await client.post("/api/shares", headers=owner, json=body)
-        assert r.status_code == 201, r.text
-    # carol:只引用 Suite —— 场景 sc-rf-1 的间接引用人
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(suite_id),
-        "granteeUserId": carol_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
-
-    r = await client.get("/api/shares/referrers?scenarioId=sc-rf-1",
-                         headers=owner)
-    assert r.status_code == 200, r.text
-    items = {i["granteeUserId"]: i for i in r.json()["items"]}
-    assert items[bob_id]["direct"] is True
-    assert items[bob_id]["granteeName"] == "rf_bob"
-    assert [v["suiteName"] for v in items[bob_id]["viaSuites"]] == ["套件"]
-    assert items[carol_id]["direct"] is False
-    assert [v["suiteName"] for v in items[carol_id]["viaSuites"]] == ["套件"]
-
-    # 不在任何被引用 Suite 里的场景:空名单
-    r = await client.get("/api/shares/referrers?scenarioId=sc-rf-2",
-                         headers=owner)
-    assert r.json()["items"] == []
-
-    # 治理面闸:非属主 403;未知场景 404;admin 同样 403
-    # (rf_admin 是 fresh_db 首个注册者 = 真 admin;authz W3:引用者
-    # 名单是属主治理面,admin 越属主旁路删除)
+    assert out["mode"] == "copy" and out["scenarioId"]
+    # 副本归 bob:草稿可读;原件不可读(无引用通道)
     assert (await client.get(
-        "/api/shares/referrers?scenarioId=sc-rf-1",
-        headers=carol)).status_code == 403
-    assert (await client.get(
-        "/api/shares/referrers?scenarioId=sc-none",
-        headers=owner)).status_code == 404
-    assert (await client.get(
-        "/api/shares/referrers?scenarioId=sc-rf-1",
-        headers=admin)).status_code == 403
-
-
-async def test_revoke_by_owner_and_admin(client: AsyncClient) -> None:
-    """撤销:属主可撤(通知被分享人);退订免通知。authz W3:admin 越属主
-    撤销旁路删除 —— 撤销权 = 属主 ∨ 被分享人,admin 对他人分享 404。"""
-    # fresh_db 下首个注册者 = 真 admin(M2.5 口径);rv_admin 即 admin
-    admin = await register_and_login(client, "rv_admin", "rv_admin_pass123")
-    owner = await register_and_login(client, "rv_owner", "rv_owner_pass123")
-    bob = await register_and_login(client, "rv_bob", "rv_bob_pass123")
-    await _mk(client, owner, "sc-rv-1")
-
-    roster = (await client.get(
-        "/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "rv_bob")
-    # 属主撤(通知被分享人)
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-rv-1",
-        "granteeUserId": bob_id, "mode": "ref"})
-    rid = r.json()["id"]
-    r = await client.delete(f"/api/shares/{rid}", headers=owner)
-    assert r.status_code == 204
-    assert (await client.get("/api/scenarios/sc-rv-1/draft",
+        f"/api/scenarios/{out['scenarioId']}/draft", headers=bob)).status_code == 200
+    assert (await client.get("/api/scenarios/sc-s74-1/draft",
                              headers=bob)).status_code == 404
-    notes = (await client.get("/api/notifications", headers=bob)).json()
-    items = notes.get("items") or notes.get("data", {}).get("items") or []
-    assert any("撤销" in (n.get("title") or "") for n in items)
 
-    # admin 撤他人分享 → 404(撤销权收归属主/被分享人;不泄露存在性)
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "scenario", "resourceId": "sc-rv-1",
-        "granteeUserId": bob_id, "mode": "ref"})
-    rid2 = r.json()["id"]
-    r = await client.delete(f"/api/shares/{rid2}", headers=admin)
-    assert r.status_code == 404
+    # 引用面路由退役
+    assert (await client.get("/api/shares", headers=owner)).status_code == 405
+    assert (await client.get("/api/shares/referrers", headers=owner,
+                             params={"scenarioId": "sc-s74-1"})
+            ).status_code == 404
+    assert (await client.post("/api/shares/1/fork", headers=bob)).status_code in (404, 405)
+    assert (await client.delete("/api/shares/1", headers=owner)).status_code in (404, 405)
+
+    # admin 不可代发(§8.1 不变)
+    admin = await register_and_login(client, "s74_adm3", "x1111111")
+    r = await client.post("/api/shares", headers=admin, json={
+        "resourceType": "scenario", "resourceId": "sc-s74-1",
+        "granteeUserId": bob_id, "mode": "copy"})
+    assert r.status_code == 403
 
 
-async def test_publish_linkage(client: AsyncClient) -> None:
-    """发布联动:suite publish 级联成员;公共 suite 加私有成员 409→确认发布;
-    成员下架 ⇒ 公共 suite 连带下架(§7.9)。"""
-    await register_and_login(client, "pb_admin", "pb_admin_pass123")
-    owner = await register_and_login(client, "pb_owner", "pb_owner_pass123")
-    await _mk(client, owner, "sc-pb-1")
-    await _mk(client, owner, "sc-pb-2")
-    suite_id = await _mk_suite(client, owner, "发布集", "sc-pb-1")
+async def _mk_ref(grantee: int, scenario_id: str | None = None,
+                  suite_id: int | None = None) -> RefRow:
+    """直插存量引用行(模拟转换命令的输入;Q2 存量形态)。
 
-    # S1.3:成员先发布,套件发布 = 深拷贝(不再级联代发布)
-    assert (await client.post(
-        "/api/scenarios/sc-pb-1/publish", headers=owner)).status_code == 200
-    r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
-    assert r.status_code == 200
-    copy_id = r.json()["suiteId"]
-    assert r.json()["visibility"] == "public"
+    表随模型退役不再进 create_all —— 按 0013 原始定义现建(生产表由
+    迁移 0049 在转换完成前才删)。"""
+    async with db_module.SessionLocal() as s:
+        await s.execute(sa.text("""
+            CREATE TABLE IF NOT EXISTS share_refs (
+                id SERIAL PRIMARY KEY,
+                grantee_user_id INTEGER NOT NULL
+                    REFERENCES users(id) ON DELETE CASCADE,
+                scenario_id VARCHAR(128),
+                suite_id INTEGER,
+                granted_by_name VARCHAR(128) NOT NULL,
+                granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                CONSTRAINT fk_share_refs_scenario FOREIGN KEY (scenario_id)
+                    REFERENCES composer_scenarios(scenario_id) ON DELETE CASCADE,
+                CONSTRAINT fk_share_refs_suite FOREIGN KEY (suite_id)
+                    REFERENCES suites(id) ON DELETE CASCADE,
+                CONSTRAINT ck_share_refs_exactly_one CHECK (
+                    (scenario_id IS NULL) <> (suite_id IS NULL))
+            )"""))
+        rid = (await s.execute(sa.text(
+            "INSERT INTO share_refs (grantee_user_id, scenario_id,"
+            " suite_id, granted_by_name) VALUES (:g, :sc, :su, :n)"
+            " RETURNING id"),
+            {"g": grantee, "sc": scenario_id, "su": suite_id,
+             "n": "存量属主"})).scalar()
+        await s.commit()
+        return RefRow(id=rid, grantee_user_id=grantee,
+                      scenario_id=scenario_id, suite_id=suite_id)
 
-    # 原件套件加第二个未发布成员 → 正常(原件是私有工作区);
-    # 重发布 → 422 suite_member_not_public 列出;发布后重发布成功
-    r = await client.post(f"/api/suites/{suite_id}/members", headers=owner,
-                          json={"scenarioIds": ["sc-pb-2"]})
+
+async def test_convert_ref_scenario(client: AsyncClient) -> None:
+    """转换:场景 ref → grantee 私有副本(forked_from + 剥凭证),
+    ref 行删除(幂等锚),双方通知 + 审计。"""
+    await register_and_login(client, "cv_adm", "cv_adm_pass123")
+    owner = await register_and_login(client, "cv_own", "cv_own_pass123")
+    bob = await register_and_login(client, "cv_bob", "cv_bob_pass123")
+    # 带内置凭证的场景(跨属主拷贝须剥):config 挂 definition
+    draft = make_draft("sc-cv-1")
+    draft["definition"]["config"]["users"] = {
+        "qa1": {"url": "http://x", "username": "u",
+                "password": "p", "token_type": "Bearer"}}
+    r = await client.post("/api/scenarios", headers=owner, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    async with db_module.SessionLocal() as s:
+        owner_id = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username='cv_own'"))).scalar()
+        bob_id = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username='cv_bob'"))).scalar()
+    ref = await _mk_ref(bob_id, scenario_id="sc-cv-1")
+
+    async with db_module.SessionLocal() as s:
+        out = await convert_ref(s, ref)
+    assert out["kind"] == "scenario" and out["granteeId"] == bob_id
+    copy_id = out["copyId"]
+    # 副本可读、原件不可读(ref 通道已断)
+    assert (await client.get(
+        f"/api/scenarios/{copy_id}/draft", headers=bob)).status_code == 200
+    assert (await client.get("/api/scenarios/sc-cv-1/draft",
+                             headers=bob)).status_code == 404
+    # 副本无内置凭证(跨属主剥离):draft 读面按实际形状取 config
+    d = (await client.get(f"/api/scenarios/{copy_id}/draft",
+                          headers=bob)).json()
+    body = d.get("draft") if isinstance(d, dict) and "draft" in d else d
+    cfg = (body or {}).get("config") if isinstance(body, dict) else None
+    if cfg is None and isinstance(d, dict):
+        cfg = (d.get("definition") or {}).get("config")
+    assert not (cfg or {}).get("users"), d
+
+    # ref 行已删;通知双方(handoff + converted);审计 share_ref.retire
+    async with db_module.SessionLocal() as s:
+        n = (await s.execute(sa.text(
+            "SELECT count(*) FROM share_refs WHERE id = :rid"),
+            {"rid": ref.id})).scalar()
+        assert n == 0
+        notes = (await s.execute(sa.text(
+            "SELECT type, user_id FROM notifications"
+            " WHERE resource_id = :rid"), {"rid": copy_id})).all()
+        types = {(t, uid) for t, uid in notes}
+        assert ("resource_handoff", bob_id) in types
+        assert ("share_ref_converted", owner_id) in types
+        audit = (await s.execute(sa.text(
+            "SELECT action FROM audit_logs"
+            " WHERE resource_id = :rid"), {"rid": copy_id})).scalar()
+        assert audit == "share_ref.retire"
+
+    # 幂等:同 grantee 同源再插 ref(漏跑行)→ 复用既有 fork 不重拷
+    ref2 = await _mk_ref(bob_id, scenario_id="sc-cv-1")
+    async with db_module.SessionLocal() as s:
+        out2 = await convert_ref(s, ref2)
+    assert out2["copyId"] == copy_id
+
+
+async def test_convert_ref_suite(client: AsyncClient) -> None:
+    """转换:套件 ref → deep_copy_suite(成员副本 + forked 三件套)。"""
+    await register_and_login(client, "cs_adm", "cs_adm_pass123")
+    owner = await register_and_login(client, "cs_own", "cs_own_pass123")
+    bob = await register_and_login(client, "cs_bob", "cs_bob_pass123")
+    await _mk(client, owner, "sc-cs-1")
+    r = await client.post("/api/suites", headers=owner,
+                          json={"name": "cs-集", "description": ""})
+    sid = r.json()["suiteId"]
+    r = await client.post(f"/api/suites/{sid}/members", headers=owner,
+                          json={"scenarioIds": ["sc-cs-1"]})
     assert r.status_code == 200, r.text
-    r = await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
-    assert r.status_code == 422
-    assert r.json()["detail"]["code"] == "suite_member_not_public"
-    assert (await client.post(
-        "/api/scenarios/sc-pb-2/publish", headers=owner)).status_code == 200
-    assert (await client.post(
-        f"/api/suites/{suite_id}/publish", headers=owner)).status_code == 200
 
-    # 成员下架(原件上)⇒ 其副本删除 ⇒ 公共套件副本连带下架
-    r = await client.post("/api/scenarios/sc-pb-1/unpublish", headers=owner)
-    assert r.status_code == 200
-    detail = (await client.get(f"/api/suites/{copy_id}",
-                               headers=owner)).json()
-    r = await client.get(f"/api/suites/{copy_id}", headers=owner)
-    assert r.status_code == 404 and "suite_not_found" in r.text
+    async with db_module.SessionLocal() as s:
+        bob_id = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username='cs_bob'"))).scalar()
+    ref = await _mk_ref(bob_id, suite_id=sid)
 
-    # suite unpublish(原件上):成员场景的公共副本独立保留
-    await client.post("/api/scenarios/sc-pb-1/publish", headers=owner)
-    await client.post(f"/api/suites/{suite_id}/publish", headers=owner)
-    r = await client.delete(f"/api/suites/{suite_id}/publish",
-                            headers=owner)
-    assert r.status_code == 200
-    pub = (await client.get("/api/scenarios/sc-pb-1-public",
-                            headers=owner)).json()
-    assert pub["visibility"] == "public"
+    async with db_module.SessionLocal() as s:
+        out = await convert_ref(s, ref)
+    assert out["kind"] == "suite"
+    copy_suite = int(out["copyId"])
+    # 副本套件可访问,成员场景归 bob
+    assert (await client.get(f"/api/suites/{copy_suite}",
+                             headers=bob)).status_code == 200
+    # 原 suite 对 bob 不可见(ref 通道断)
+    assert (await client.get(f"/api/suites/{sid}",
+                             headers=bob)).status_code in (403, 404)
+
+
+async def test_private_non_owner_denied_after_retire(client: AsyncClient) -> None:
+    """表 B ref 谓词退役:私有场景/套件对非属主 404/403(can_run 收敛)。"""
+    await register_and_login(client, "pv_adm", "pv_adm_pass123")
+    owner = await register_and_login(client, "pv_own", "pv_own_pass123")
+    bob = await register_and_login(client, "pv_bob", "pv_bob_pass123")
+    await _mk(client, owner, "sc-pv-1")
+    assert (await client.get("/api/scenarios/sc-pv-1/draft",
+                             headers=bob)).status_code == 404
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-pv-1"})
+    assert r.status_code in (403, 404)
+    # 数据集不再随引用闭包
+    r = await client.get("/api/data-sets", headers=bob,
+                         params={"scenarioId": "sc-pv-1"})
+    body = r.json() if r.status_code == 200 else []
+    items = body.get("items", body) if isinstance(body, dict) else body
+    assert items == []

@@ -163,21 +163,6 @@
                     :title="`所属项目:${projectNames.nameOf(row.projectId)}`"
                     @click.stop
                   ><router-link :to="`/projects/${row.projectId}`" class="proj-link">{{ projectNames.nameOf(row.projectId) }}</router-link></span>
-                  <!-- P2 徽标(§7.11)+ D-1 补遗:属主「已引用分享」(布尔,
-                       不显人数);名单含经由所属 Suite 的间接引用
-                       (数据源 /shares/referrers)。 -->
-                  <span
-                    v-if="sharedOutIds.has(row.meta.scenarioId)"
-                    class="ref-badge"
-                    :data-testid="`ref-out-badge-${row.meta.scenarioId}`"
-                    title="此场景正被引用分享(保存后对方立即生效)"
-                  >已引用分享</span>
-                  <span
-                    v-if="sharedInMeta.get(row.meta.scenarioId)"
-                    class="ref-in-badge"
-                    :data-testid="`ref-in-badge-${row.meta.scenarioId}`"
-                    :title="`引用 · 来自 ${sharedInMeta.get(row.meta.scenarioId)}`"
-                  >引用</span>
                   <button
                     v-if="row.schemeCount"
                     type="button"
@@ -295,34 +280,6 @@
       <button v-if="!filtering" type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <!-- 「共享给我的(引用)」区块(Suite 层重构第 2 步,原 P2 尾巴):
-         与 Suite 列表同款分区与退订口径;引用 ⇒ 可读可运行,行点击进
-         场景详情;拷贝分享得到的是副本、归自己名下,不进该区块。 -->
-    <div v-if="sharedInScenarios.length" class="shared-in" data-testid="shared-in-scenarios">
-      <p class="shared-in-label">共享给我的(引用)</p>
-      <div
-        v-for="r in sharedInScenarios"
-        :key="r.id"
-        class="shared-row"
-        :data-testid="`shared-scenario-${r.scenarioId}`"
-      >
-        <span class="su-name">
-          {{ r.scenarioName || r.scenarioId }}
-          <span class="ref-in-badge">引用 · 来自 {{ r.grantedByName }}</span>
-        </span>
-        <button
-          class="cta"
-          :data-testid="`shared-scenario-open-${r.scenarioId}`"
-          @click="router.push(scenarioDetailUrl(r.scenarioId as string))"
-        >打开</button>
-        <button
-          class="unsub-btn"
-          :data-testid="`shared-scenario-unsub-${r.scenarioId}`"
-          @click="unsubscribeScenario(r)"
-        >退订</button>
-      </div>
-    </div>
-
     <Pagination
       v-model:page="page"
       v-model:page-size="pageSize"
@@ -331,11 +288,10 @@
       show-jump
     />
 
-    <!-- P2:分享弹窗(引用/副本;现有引用可撤销) -->
+    <!-- 分享弹窗(S7.4 后仅副本模式) -->
     <ShareDialog
       v-model:open="shareOpen"
       :resource="shareTarget"
-      @changed="loadShareBadges"
     />
 
     <!-- P1 尾巴①:批量加入 Suite(目标选择弹窗;成功后清勾选) -->
@@ -374,7 +330,6 @@ import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import AddToSuiteDialog from '@/components/suites/AddToSuiteDialog.vue'
 import ShareDialog from '@/components/sharing/ShareDialog.vue'
 import ImportScenarioDialog from '@/components/ImportScenarioDialog.vue'
-import { listShares, deleteShare, listScenarioReferrers } from '@/api/shares'
 import { getHandoffUnread } from '@/api/handoff'
 import { markRead } from '@/api/notifications'
 import { downloadFile } from '@/utils/download'
@@ -504,7 +459,6 @@ const formatTime = shortDateTime
 
 onMounted(load)
 onMounted(loadHandoffBadges)
-onMounted(loadShareBadges)
 
 function openScenario(row: ScenarioListItem) {
   void consumeHandoffBadge(row.meta.scenarioId)
@@ -701,15 +655,11 @@ async function renameScenario(row: ScenarioListItem) {
   }
 }
 
-// ── P2:分享弹窗 + 徽标数据(§7.11)─────────────────────────────
+// ── 分享弹窗(S7.4:引用徽标/共享区块随 share_refs 退役移除)─────
 const shareOpen = ref(false)
 const shareTarget = ref<{
   type: 'scenario' | 'suite'; id: string; name: string
 } | null>(null)
-/** 属主侧:被引用的场景 id 集(「已引用分享」徽标,布尔不显人数)。 */
-const sharedOutIds = ref(new Set<string>())
-/** 被分享人侧:scenarioId → 分享者名(「引用 · 来自 X」徽标)。 */
-const sharedInMeta = ref(new Map<string, string>())
 
 function openShare(row: ScenarioListItem) {
   shareTarget.value = {
@@ -718,46 +668,6 @@ function openShare(row: ScenarioListItem) {
     name: row.meta.name || row.meta.scenarioId,
   }
   shareOpen.value = true
-}
-
-async function loadShareBadges() {
-  // 增强信息:失败静默留白(与 handoff 徽标同口径)
-  try {
-    const inn = await listShares({ direction: 'in', resourceType: 'scenario' })
-      .catch(() => [])
-    sharedInMeta.value = new Map(
-      inn.filter((r) => r.scenarioId)
-        .map((r) => [r.scenarioId as string, r.grantedByName]))
-    sharedInScenarios.value = inn.filter((r) => r.scenarioId)
-    // 「已引用分享」徽标(D-1 补遗):改用 /shares/referrers —— 含经由
-    // 所属 Suite 的间接引用(此前只查直接引用,Suite 场景下徽标落空)。
-    // 只对当前页的行发起(每场景一次轻查询)。
-    const ids = paged.value.map((r) => r.meta.scenarioId)
-    const results = await Promise.all(ids.map((id) =>
-      listScenarioReferrers(id).then(({ items }) => [id, items.length > 0] as const)
-        .catch(() => [id, false] as const)))
-    const next = new Set(sharedOutIds.value)
-    for (const [id, hit] of results) {
-      if (hit) next.add(id)
-    }
-    sharedOutIds.value = next
-  } catch { /* 静默 */ }
-}
-
-/** 被引用场景(id 非空断言由模板过滤保证)。 */
-const sharedInScenarios = ref<Array<{
-  id: number; scenarioId: string | null; scenarioName: string | null
-  grantedByName: string
-}>>([])
-
-async function unsubscribeScenario(r: { id: number; scenarioName?: string | null }): Promise<void> {
-  try {
-    await deleteShare(r.id)
-    sharedInScenarios.value = sharedInScenarios.value.filter((x) => x.id !== r.id)
-    toast.success('已退订该引用')
-  } catch (e) {
-    toast.error(`退订失败:${(e as Error).message}`)
-  }
 }
 
 // ── 「来自 X 的分享」悬浮标签(未读 resource_handoff;销账走通知)──
@@ -909,19 +819,6 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   background: rgb(59 130 246 / 10%);
 }
 
-/* P2 徽标(§7.11) */
-.ref-badge {
-  flex: none; font-size: 11px; line-height: 1; padding: 3px 8px;
-  border-radius: 999px; color: #6d28d9;
-  background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
-  cursor: help;
-}
-.ref-in-badge {
-  flex: none; font-size: 11px; line-height: 1; padding: 3px 8px;
-  border-radius: 999px; color: #15803d;
-  background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
-  cursor: help;
-}
 
 /* P1 尾巴①:批量加入 Suite 入口(与镜头/新建同排)。 */
 .slib-addsuite {
@@ -960,25 +857,4 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 .slib-import:hover { background: rgb(47 111 237 / 16%); }
 .hidden { display: none; }
 
-/* 「共享给我的(引用)」区块(与 Suite 列表同款样式口径) */
-.shared-in { margin-top: 22px; }
-.shared-in-label { font-size: 13px; color: rgb(100 116 139); margin: 8px 0; }
-.shared-row {
-  display: grid; grid-template-columns: minmax(200px, 1fr) auto auto;
-  gap: 12px; align-items: center; padding: 9px 14px;
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  margin-bottom: 6px;
-}
-.su-name { font-weight: 600; font-size: 13px; }
-.ref-in-badge {
-  font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
-  color: #15803d; background: rgb(34 197 94 / 10%);
-  border: 1px solid rgb(34 197 94 / 40%); font-weight: 400;
-}
-.cta { color: #2563eb; background: none; border: none; cursor: pointer; font-size: 13px; }
-.unsub-btn {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #b45309; background: rgb(245 158 11 / 8%);
-  border: 1px solid rgb(245 158 11 / 35%);
-}
 </style>

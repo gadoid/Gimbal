@@ -80,7 +80,7 @@ export interface SuiteMemberItem {
 }
 
 export interface SuiteDetail extends SuiteSummary {
-  access: 'owner' | 'admin' | 'ref' | 'public' | null
+  access: 'owner' | 'admin' | 'public' | null  // S7.4:ref 随引用分享退役
   canEdit: boolean | null
   canRun: boolean | null
   canShare: boolean | null

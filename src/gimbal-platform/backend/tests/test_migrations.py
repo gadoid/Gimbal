@@ -1596,3 +1596,59 @@ def test_0047_alias_slimming():
                 assert rows["pay-dev"][1] is None    # 非默认环境不回填
         finally:
             eng.dispose()
+
+
+def test_0049_drop_share_refs():
+    """S7.4:表非空拒绝(防漏跑转换命令);空表 drop;downgrade 还原
+    schema(数据不随 downgrade 恢复 —— 一次性决策)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            # 从基线建到 0048(share_refs 已在链上)
+            command.upgrade(_cfg(sync_url), "0048_project_promotions")
+            with eng.begin() as c:
+                uid = c.execute(text(
+                    "SELECT id FROM users LIMIT 1")).scalar()
+                if uid is None:      # 链上无人则造一个(grantee FK)
+                    c.execute(text(
+                        "INSERT INTO users (username, password_hash,"
+                        " display_name, is_active) VALUES"
+                        " ('s749', 'x', 'S749', true)"))
+                    uid = c.execute(text(
+                        "SELECT id FROM users LIMIT 1")).scalar()
+                # CHECK 恰好一键:造最小场景行挂 scenario 引用
+                # name 是生成列(payload->>meta.name),不显式给
+                c.execute(text(
+                    "INSERT INTO composer_scenarios (scenario_id,"
+                    " owner_id, owner_name, payload)"
+                    " VALUES ('sc-749', :u, 'S749',"
+                    " '{\"meta\":{\"name\":\"S749\"}}'::jsonb)"),
+                    {"u": uid})
+                c.execute(text(
+                    "INSERT INTO share_refs (grantee_user_id,"
+                    " scenario_id, granted_by_name)"
+                    " VALUES (:u, 'sc-749', 'x')"), {"u": uid})
+
+            # 非空 → RuntimeError 拒绝迁移
+            with __import__("pytest").raises(RuntimeError, match="retire_share_refs"):
+                command.upgrade(_cfg(sync_url), "0049_drop_share_refs")
+
+            # 清空后 → drop 成功
+            with eng.begin() as c:
+                c.execute(text("DELETE FROM share_refs"))
+            command.upgrade(_cfg(sync_url), "0049_drop_share_refs")
+            assert _revision(sync_url) == "0049_drop_share_refs"
+            with eng.connect() as c:
+                assert not c.execute(text(
+                    "SELECT to_regclass('share_refs') IS NOT NULL")).scalar()
+
+            # downgrade:schema 还原(0013 原始定义)
+            command.downgrade(_cfg(sync_url), "0048_project_promotions")
+            with eng.connect() as c:
+                assert c.execute(text(
+                    "SELECT to_regclass('share_refs') IS NOT NULL")).scalar()
+        finally:
+            eng.dispose()

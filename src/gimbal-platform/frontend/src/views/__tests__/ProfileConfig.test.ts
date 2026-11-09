@@ -9,15 +9,23 @@ import { createPinia, setActivePinia } from 'pinia'
 import ProfileConfig from '@/views/ProfileConfig.vue'
 import * as prefApi from '@/api/preferences'
 import * as envApi from '@/api/environments'
+import * as carryApi from '@/api/carry'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 vi.mock('@/utils/errorFallback', () => ({ showError: vi.fn() }))
+vi.mock('@/api/carry', () => ({
+  getDefaults: vi.fn().mockResolvedValue({}),
+  putDefaults: vi.fn().mockResolvedValue({}),
+}))
 
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
+  // restoreAllMocks 会清 factory 里设的实现 —— carry 编辑器读面重钉
+  vi.mocked(carryApi.getDefaults).mockResolvedValue({})
+  vi.mocked(carryApi.putDefaults).mockResolvedValue({})
   vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([
     { id: 7, name: 'dev', description: '', lines: {}, owner_id: null, is_default: false },
     { id: 8, name: 'sit', description: '', lines: {}, owner_id: null, is_default: false },

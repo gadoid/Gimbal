@@ -257,8 +257,8 @@ def built_in_users(
     """场景 definition.config.users —— 仅当执行人 == 场景属主、且场景在
     私有区时返回。
 
-    authz W6 主规则(评审 R3):其余(share_ref 引用执行 / 订阅执行 /
-    非属主导出 / suite 跑他人成员)一律当空。**fail-closed**:两参必填,
+    authz W6 主规则(评审 R3):其余(订阅执行 / 非属主导出 /
+    suite 跑他人成员;引用执行已随 S7.4 share_refs 退役)一律当空。**fail-closed**:两参必填,
     任一为 None(属主已删的孤儿场景、调用方漏传)同样当空 —— 此前 None
     = 不判直接放行。作者即席提供 payload 的路径(草稿预览、临时调用)
     由调用方显式传 ``scenario_owner_id = executor_id``。只要名字的展示面

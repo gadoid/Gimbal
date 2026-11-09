@@ -172,16 +172,15 @@ async def _access_and_caps(
     elif suite.project_id is not None:
         access = "public"
     else:
-        from ._ownership import has_suite_ref
-        access = ("ref" if await has_suite_ref(db, user.id, suite.id)
-                  else None)
+        # S7.4:引用访问已退役;私有非属主无访问(项目成员经表 B member)
+        access = None
     if access is None:
         return {}
     return {
         "access": access,
         # 写 = 属主(表 B suite.write);public 先复制再跑(不变量 7)
         "canEdit": access == "owner",
-        "canRun": access in ("owner", "ref"),
+        "canRun": access == "owner",
         "canShare": access == "owner",
     }
 
@@ -255,9 +254,8 @@ async def list_suites(
     # P2 引用(§7.6):非 admin 的 all = public ∨ 自己的 ∨ 被引用的。
     # visibility=public(§5.1,场景列表同款):显式传时 scope 不叠加,
     # 只出公共 Suite —— 公共库页口径(重构方案 D-3 公共 Suite 分区)。
-    from sqlalchemy import exists, select as _select
+    from sqlalchemy import select as _select
     from ..models.project import Project
-    from ..models.share_ref import ShareRef
     from ..services.zone import zone_read_clause
     if visibility == "public":
         # S1.2:公共页口径换轴 —— 公共项目(影子期与 visibility 等价)
@@ -269,13 +267,8 @@ async def list_suites(
         # S7.0:「我的用例集」= 我名下且未加入任何项目
         clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]
     else:
-        # S1.2 三区(表 B suite.read = zone_read_clause)∨ 引用
-        clauses = [or_(
-            zone_read_clause(Suite, user.id),
-            exists(_select(ShareRef.id).where(
-                ShareRef.grantee_user_id == user.id,
-                ShareRef.suite_id == Suite.id)).correlate(Suite),
-        )]
+        # S1.2 三区(表 B suite.read = zone_read_clause;S7.4 引用支移除)
+        clauses = [zone_read_clause(Suite, user.id)]
     if project_id is not None:
         # S1.8 项目镜头:按区过滤(公共区传公共项目 id)
         clauses.append(Suite.project_id == project_id)
@@ -426,26 +419,9 @@ async def delete_suite(
     suite = await _load_suite(db, suite_id)
     await _require_write(db, user, suite, verb="delete")
     suite_name, suite_owner = suite.name, suite.owner_id
-    # 重构方案:有引用者时,删除后通知引用者(与处置路径
-    # share_ref_resource_deleted 同口径);须在级联删引用行**之前**取名单
-    from ..models.share_ref import ShareRef
-    from ..services import notifications as notify_svc
-    referrers = (await db.execute(
-        select(ShareRef.grantee_user_id).where(
-            ShareRef.suite_id == suite.id))).scalars().all()
+    # S7.4:引用者通知随 share_refs 退役移除(存量已转私有副本)
     await db.delete(suite)  # 成员行随组合外键 CASCADE,场景不受影响
     await db.commit()
-    for uid in referrers:
-        try:
-            await notify_svc.create_notification(
-                db, user_id=uid,
-                type_="share_ref_resource_deleted",
-                title=f"引用失效:suite#{suite_id}",
-                body="该 Suite 已被删除,引用分享随之结束",
-                link=None, resource_type="suite",
-                resource_id=str(suite_id))
-        except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断删除
-            await db.rollback()
     # 时间线 + 审计:admin 越属主删除(属主自删只落时间线不入审计)
     from ..services import activity as activity_svc
     actor_id = user.id if user.id == suite_owner else suite_owner

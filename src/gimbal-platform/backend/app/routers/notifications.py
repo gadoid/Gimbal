@@ -92,15 +92,11 @@ class PrefsOut(BaseModel):
 
 class PrefsIn(BaseModel):
     """off 可选值 = NOTIFICATION_TYPES 全集(词表/开关/前端标签三处
-    同一清单;此前 integration/share_ref_* 在发射却进不了开关)。"""
+    同一清单)。S7.4 起 Literal 放宽为裸 str、由 PUT 按词表过滤 ——
+    存量偏好里的退役类型(share_ref_* 四型)能无损回存(静默滤除),
+    不再被收窄后的枚举 422 拒收。"""
 
-    off: list[Literal[
-        "execution_finished", "adaptation_applied", "announcement",
-        "scenario_unpublished", "role_changed", "resource_transferred",
-        "resource_handoff", "scenario.version_change", "integration",
-        "share_ref_received", "share_ref_revoked",
-        "share_ref_resource_deleted", "share_ref_owner_changed",
-    ]] = Field(default_factory=list)
+    off: list[str] = Field(default_factory=list)
 
 
 @router.get("", response_model=NotificationListOut)
@@ -193,13 +189,17 @@ async def put_prefs(
         select(UserPref).where(
             UserPref.user_id == user.id, UserPref.key == _PREF_KEY)
     )).scalar_one_or_none()
+    # S7.4:存量 off 里的退役类型(share_ref_* 四型)静默滤除 —— Literal
+    # 收窄后旧值回写会被 422 拒,历史偏好应能无损保存
+    from ..services.notifications import NOTIFICATION_TYPES as _TYPES
+    off = [v for v in body.off if v in _TYPES]
     if pref is None:
         db.add(UserPref(
-            user_id=user.id, key=_PREF_KEY, value={"off": body.off}))
+            user_id=user.id, key=_PREF_KEY, value={"off": off}))
     else:
-        pref.value = {"off": body.off}
+        pref.value = {"off": off}
     await db.commit()
-    return PrefsOut(off=body.off)
+    return PrefsOut(off=off)
 
 
 # ── 公告(admin only;写时对全员 fan-out 行)────────────────────────

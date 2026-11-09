@@ -122,6 +122,15 @@
 - 运行面板「生效预览」入口:`RunConfigPanel`(方案 chips 行尾按钮;透传 当前方案(自建方案原样绑定,D3)/显式绑定(assembleExplicitBindings 口径)/envOverride)+ `SchemeRunConfigSection`(运行参数 zone-head;宿主 SchemeWorkbench 透传 scenarioId/schemeId,缺省不显入口)。
 - 测试:新 `ProjectConfigPanel.test.ts`(7 例:环境保存/清空/槽位 chips/预览弹框/公共项目节裁剪)+ `ProfileConfig.test.ts`(2 例);Auths.test.ts 12 例原样全过(分组视图兼容行锚);Sidebar.test.ts 计数随入口退役更新(admin 17→16 等)。
 
+### S7.4 share_ref 退役(已完成)
+
+- **转换服务** `services/share_ref_retire.py`:单条引用 → grantee 私有副本(与 copy 分支同一口径:copy_scenario / deep_copy_suite,跨属主剥内置凭证与敏感列);成功即删行(幂等);crash 窗口由 `forked_from_id` 兜底复用;双方通知(grantee=resource_handoff 带 sender_name,属主=新类型 share_ref_converted)+ 审计新动作 `share_ref.retire`(逐条回执)。模型已删 → 裸 SQL 读写 share_refs(转换先于迁移,表仍在)。
+- **一次性命令** `scripts/retire_share_refs.py`:默认演练;--apply 逐条转换,失败行保留进报告(空套件/上限,可修后重跑)。
+- **迁移 0049**:表非空即 RuntimeError(防漏跑转换);空表 drop;downgrade 还原 schema(数据不随 downgrade 恢复 —— 一次性决策)。test_migrations 新用例(拒绝/drop/还原三段)。
+- **后端退役**:models/share_ref + SHARE_REF_CAP 删;shares 路由仅剩 POST(copy;mode=ref 422 枚举收窄),list/referrers/DELETE/fork 四路由删;_ownership 表 B 去 ref 谓词 + can 与 can_pure 等价 + can_run 私有区仅属主;scenario_query 去 ref EXISTS 两支;data_sets 列表去引用闭包;suites 列表/access/canRun 去 ref;删除场景/套件/用户处置的引用失效通知与 ShareRef 清理;通知词表 4 型退场(历史行照常展示)+ PrefsIn Literal 放宽为 str、PUT 按词表滤未知值(存量偏好无损回存)。
+- **前端退役**:api/shares 仅剩 createShare(copy);ShareDialog 仅剩副本模式;ScenariosMine/SuiteLibrary 徽标与「共享给我的」区块、SuiteManage 引用横幅/退订/转副本、SuiteCompose/CaseComposer 引用名单首改提示全删(CaseComposer 公共横幅保留);通知标签历史 4 型保留展示 + share_ref_converted 新标签。
+- **测试**:test_shares_api 重写 4 例(copy 契约/退役路由 404-405/转换场景含幂等与通知审计/转换套件/私有非属主拒绝);public_content 5 例改项目成员通道(S7.4 后「执行人≠属主」的正规构造);horizontal/suites_copy/composition/orch_run/run 迁移面更新;grep-guard 白名单 -6 行;authz_expected.yaml 去 ref 列。
+
 ## 四、裁定(2026-11-09)
 
 | # | 问题 | 裁定 |

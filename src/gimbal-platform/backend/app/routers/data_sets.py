@@ -97,10 +97,9 @@ async def list_data_sets(
     (P2 §7.4 引用闭包). authz W3: super_admin 全量分支删除 ——
     admin 与普通用户同镜头,排查走审计。
     """
-    # P2 引用闭包(§7.4):自己场景的 + 被引用场景的(直接 ∨ 经 suite)
-    from ._ownership import referenced_scenario_ids
+    # S7.4:引用闭包随 share_refs 退役 —— 数据集只随自己场景
     owned = await scenario_store.owned_scenario_ids(db, user)
-    own_ids = owned | await referenced_scenario_ids(db, user.id)
+    own_ids = set(owned)
     if scenarioId is not None:
         # Scope to the requested scenario (still visibility-filtered).
         own_ids = own_ids & {scenarioId}

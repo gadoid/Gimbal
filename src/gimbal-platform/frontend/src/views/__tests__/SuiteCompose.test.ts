@@ -45,9 +45,6 @@ vi.mock('@/api/scenario-composer', () => ({
   getDataSet: vi.fn().mockResolvedValue(
     { datasetId: 'ds-1', name: 'DS', rows: [] }),
 }))
-vi.mock('@/api/shares', () => ({
-  listShares: vi.fn().mockResolvedValue([]),
-}))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
@@ -282,7 +279,8 @@ describe('SuiteCompose — 完成编排与非属主(13)', () => {
 
   it('非属主访问画布路由 → 重定向到管理页只读态', async () => {
     vi.mocked(suitesApi.getSuite).mockResolvedValue(
-      detailOf({ canEdit: false, access: 'ref' }))
+      // S7.4:ref 只读形态退役,非属主重定向用公共形态钉
+      detailOf({ canEdit: false, access: 'public', visibility: 'public' }))
     const router = routerAt('/suites/5/compose')
     await router.isReady()
     const replace = vi.spyOn(router, 'replace')

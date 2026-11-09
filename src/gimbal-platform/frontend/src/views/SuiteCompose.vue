@@ -248,7 +248,6 @@ import {
   suiteErrDetail, validateSuite,
   type MemberRole, type SuiteModeConfig, type SuiteUnitConfig,
 } from '@/api/suites'
-import { listShares } from '@/api/shares'
 import { executionsBatchUrl } from '@/utils/links'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
@@ -468,13 +467,6 @@ async function loadFirstEditBanner(): Promise<void> {
     firstEditBanner = '此 Suite 已公开,改动立即对所有人可见'
     return
   }
-  try {
-    const out = await listShares({
-      direction: 'out', resourceType: 'suite', resourceId: String(suiteId.value) })
-    if (out.length) {
-      firstEditBanner = `此 Suite 正被 ${out.length} 人引用(${out.map((r) => r.granteeName).join('、')}),改动即时生效`
-    }
-  } catch { /* 横幅是增强,失败静默 */ }
 }
 
 // ── 名称(草稿名可直接改;patch 落库)────────────────────────────

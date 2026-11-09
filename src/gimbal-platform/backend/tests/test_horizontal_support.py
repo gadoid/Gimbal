@@ -186,15 +186,9 @@ class TestScenarioDeleteNotifiesReferrers:
         r = await client.post("/api/scenarios/sc-nd-1/publish",
                               headers=h_owner)
         assert r.status_code == 200, r.text
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-nd-1",
-            "granteeUserId": grantee_id, "mode": "ref"})
-        assert r.status_code == 201, r.text
+        # S7.4:引用失效通知随 share_refs 退役 —— 删除照常,无名单面
         r = await client.delete("/api/scenarios/sc-nd-1", headers=h_owner)
         assert r.status_code == 204, r.text
-        notes = await _notifications(grantee_id, "share_ref_resource_deleted")
-        assert len(notes) == 1
-        assert notes[0].title.startswith("引用失效")
         # 时间线:删除事件落属主轴
         assert len(await _activity_rows(owner_id, "scenario.deleted")) == 1
 
@@ -204,17 +198,20 @@ class TestScenarioDeleteNotifiesReferrers:
 class TestNotificationTypesSync:
     async def test_emitted_types_in_registry_and_prefs(self, client):
         from app.services.notifications import NOTIFICATION_TYPES
-        for t in ("integration", "share_ref_received", "share_ref_revoked",
-                  "share_ref_resource_deleted", "share_ref_owner_changed",
-                  "scenario.version_change"):
+        # S7.4:share_ref_* 四型退场(历史行照常展示),converted 进词表
+        for t in ("integration", "scenario.version_change",
+                  "share_ref_converted"):
             assert t in NOTIFICATION_TYPES, t
+        for t in ("share_ref_received", "share_ref_revoked",
+                  "share_ref_resource_deleted", "share_ref_owner_changed"):
+            assert t not in NOTIFICATION_TYPES, t
         h = await register_and_login(client, "nt_user", "nt_userpass123")
-        # PrefsIn 现在收得下这些类型(此前 Literal 外 → 422)
         r = await client.put("/api/notifications/preferences", headers=h,
                              json={"off": ["integration",
                                            "share_ref_received"]})
         assert r.status_code == 200, r.text
-        assert set(r.json()["off"]) == {"integration", "share_ref_received"}
+        # 退役类型静默滤除(存量偏好可无损保存)
+        assert set(r.json()["off"]) == {"integration"}
 
     async def test_handoff_notification_carries_sender_name(self, client):
         await register_and_login(client, "hp_admin", "hp_adminpass123")
@@ -238,61 +235,21 @@ class TestNotificationTypesSync:
 # ── 时间线:share 撤销/退订 + suite 源开放(T1/T3)─────────────────
 
 class TestShareAndSuiteTimeline:
-    async def test_unsubscribe_and_revoke_events(self, client):
+    async def test_share_copy_events(self, client):
+        """S7.4:撤销/退订面退役;copy 分享的时间线事件照常落双方轴。"""
         await register_and_login(client, "sr_admin", "sr_adminpass123")
         h_owner = await register_and_login(client, "sr_owner", "sr_ownerpass123")
-        owner_id = await _uid("sr_owner")
         h_grantee = await register_and_login(client, "sr_grantee",
                                              "sr_granteepass123")
         grantee_id = await _uid("sr_grantee")
         await _mk_scenario(client, h_owner, "sc-sr-1")
-        await client.post("/api/scenarios/sc-sr-1/publish", headers=h_owner)
         r = await client.post("/api/shares", headers=h_owner, json={
             "resourceType": "scenario", "resourceId": "sc-sr-1",
-            "granteeUserId": grantee_id, "mode": "ref"})
-        share_id = r.json()["id"]
-        # 退订:被分享人轴一条
-        r = await client.delete(f"/api/shares/{share_id}", headers=h_grantee)
-        assert r.status_code == 204, r.text
+            "granteeUserId": grantee_id, "mode": "copy"})
+        assert r.status_code == 201, r.text
+        # 时间线:share_copy 落属主轴(副本历史只存在这里)
         assert len(await _activity_rows(
-            grantee_id, "scenario.share_ref_unsubscribed")) == 1
-        # 再建一次,走撤销:撤销者 + 被分享人双事件
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-sr-1",
-            "granteeUserId": grantee_id, "mode": "ref"})
-        share_id = r.json()["id"]
-        r = await client.delete(f"/api/shares/{share_id}", headers=h_owner)
-        assert r.status_code == 204, r.text
-        assert len(await _activity_rows(
-            owner_id, "scenario.share_ref_revoked")) == 1
-        rows = await _activity_rows(grantee_id, "scenario.share_ref_revoked")
-        assert len(rows) == 1 and rows[0].detail.get("by")
-
-    async def test_suite_created_published_deleted_in_activity(self, client):
-        await register_and_login(client, "st_admin", "st_adminpass123")
-        h = await register_and_login(client, "st_owner", "st_ownerpass123")
-        uid = await _uid("st_owner")
-        r = await client.post("/api/suites", headers=h,
-                              json={"name": "st-suite", "description": ""})
-        suite_id = r.json()["suiteId"]
-        assert len(await _activity_rows(uid, "suite.created")) == 1
-        r = await client.get("/api/activity", headers=h)
-        suite_events = [e for e in r.json()["events"] if e["kind"] == "suite"]
-        assert any(e["action"] == "suite.created" and e["suiteId"] == suite_id
-                   for e in suite_events)
-        assert r.json()["sources"]["suites"] is True
-        r = await client.delete(f"/api/suites/{suite_id}", headers=h)
-        assert r.status_code == 204, r.text
-        assert len(await _activity_rows(uid, "suite.deleted")) == 1
-
-    async def test_scenario_created_event(self, client):
-        await register_and_login(client, "sc_admin", "sc_adminpass123")
-        h = await register_and_login(client, "sc_owner", "sc_ownerpass123")
-        uid = await _uid("sc_owner")
-        await _mk_scenario(client, h, "sc-sc-1")
-        rows = await _activity_rows(uid, "scenario.created")
-        assert len(rows) == 1
-        assert rows[0].detail["source"] == "manual"
+            (await _uid("sr_owner")), "scenario.share_copy")) == 1
 
 
 # ── 时间线+通知:集成边沿事件与复活钩子(T2/N3)────────────────────

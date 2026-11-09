@@ -150,16 +150,20 @@ class TestStripping:
         await client.post(
             "/api/scenarios/sc-w6-lp/data-sets", headers=h_owner,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
+        # S7.4:引用闭包退役 —— copy 副本的数据集敏感列在拷贝时已剥,
+        # 属主读原件仍见明文
         await role_headers(client, "sc_lpr", role="user")
         roster = (await client.get(
             "/api/users/roster", headers=h_owner)).json()["items"]
         rid = next(u["id"] for u in roster if u["username"] == "sc_lpr")
         r = await client.post("/api/shares", headers=h_owner, json={
             "resourceType": "scenario", "resourceId": "sc-w6-lp",
-            "granteeUserId": rid, "mode": "ref"})
+            "granteeUserId": rid, "mode": "copy"})
         assert r.status_code == 201, r.text
+        copy_sid = r.json()["scenarioId"]
         h_r = await role_headers(client, "sc_lpr", role="user")
-        r = await client.get("/api/data-sets?scenarioId=sc-w6-lp", headers=h_r)
+        r = await client.get(f"/api/data-sets?scenarioId={copy_sid}",
+                             headers=h_r)
         assert r.json()[0]["preview"] == [{"amount": 1}]
         r = await client.get("/api/data-sets?scenarioId=sc-w6-lp",
                              headers=h_owner)
@@ -172,18 +176,14 @@ class TestStripping:
         await client.post("/api/scenarios", headers=h_owner,
                           json=_draft_with_users("sc-w6-cp"))
         h_other = await role_headers(client, "sc_cpc", role="user")
-        # 私有场景 + 引用分享 → 被分享人「转为副本」(跨属主拷贝,
-        # 源头凭证在场 —— 拷贝剥离正是为这条路径)
+        # S7.4:副本分享(跨属主拷贝,源头凭证在场 —— 拷贝剥离正是为这条路径)
         roster = (await client.get(
             "/api/users/roster", headers=h_owner)).json()["items"]
         other_id = next(u["id"] for u in roster
                         if u["username"] == "sc_cpc")
         r = await client.post("/api/shares", headers=h_owner, json={
             "resourceType": "scenario", "resourceId": "sc-w6-cp",
-            "granteeUserId": other_id, "mode": "ref"})
-        assert r.status_code == 201, r.text
-        share_id = r.json()["id"]
-        r = await client.post(f"/api/shares/{share_id}/fork", headers=h_other)
+            "granteeUserId": other_id, "mode": "copy"})
         assert r.status_code == 201, r.text
         new_sid = r.json()["scenarioId"]
         from sqlalchemy import select as sa_select
@@ -246,10 +246,7 @@ class TestStripping:
         other_id = next(u["id"] for u in roster if u["username"] == "sc_cdc")
         r = await client.post("/api/shares", headers=h_owner, json={
             "resourceType": "scenario", "resourceId": "sc-w6-cd",
-            "granteeUserId": other_id, "mode": "ref"})
-        share_id = r.json()["id"]
-        h_other = await role_headers(client, "sc_cdc", role="user")
-        r = await client.post(f"/api/shares/{share_id}/fork", headers=h_other)
+            "granteeUserId": other_id, "mode": "copy"})
         assert r.status_code == 201, r.text
         new_sid = r.json()["scenarioId"]
         async with db_module.SessionLocal() as s:
@@ -277,10 +274,7 @@ class TestStripping:
                         if u["username"] == "sc_spc")
         r = await client.post("/api/shares", headers=h_owner, json={
             "resourceType": "suite", "resourceId": str(sid),
-            "granteeUserId": other_id, "mode": "ref"})
-        assert r.status_code == 201, r.text
-        share_id = r.json()["id"]
-        r = await client.post(f"/api/shares/{share_id}/fork", headers=h_other)
+            "granteeUserId": other_id, "mode": "copy"})
         assert r.status_code == 201, r.text
         from sqlalchemy import select as sa_select
 
@@ -319,9 +313,17 @@ class TestStripping:
 
 # ── ⑤ 预检三条件告警(钉「不吵」)──────────────────────────────────
 class TestPrecheckAlarm:
-    async def _mk_private_with_users(self, client, owner_h) -> None:
-        await client.post("/api/scenarios", headers=owner_h,
-                          json=_draft_with_users("sc-w6-al"))
+    async def _mk_private_with_users(self, client, owner_h,
+                                     member_uname: str | None = None,
+                                     owner_uname: str = "al_own") -> None:
+        """S7.4:非属主通道改项目成员(member_uname 给出时建项目场景)。"""
+        if member_uname is None:
+            await client.post("/api/scenarios", headers=owner_h,
+                              json=_draft_with_users("sc-w6-al"))
+            return
+        await _project_scenario(
+            client, owner_h, owner_uname, member_uname,
+            _draft_with_users("sc-w6-al"))
 
     async def _precheck(self, client, h, sid: str) -> dict:
         r = await client.post("/api/run/precheck", headers=h,
@@ -333,16 +335,8 @@ class TestPrecheckAlarm:
         """① 执行人≠属主 + ② 场景有内置凭证 + ③ 执行人自己解析不到
         → builtinAuthShadowed 列出别名。"""
         h_owner = await role_headers(client, "al_own")
-        await self._mk_private_with_users(client, h_owner)
-        # 引用给 bob(bob ≠ 属主,可读)
-        await role_headers(client, "al_bob", role="user")
-        roster = (await client.get(
-            "/api/users/roster", headers=h_owner)).json()["items"]
-        bob_id = next(u["id"] for u in roster if u["username"] == "al_bob")
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-w6-al",
-            "granteeUserId": bob_id, "mode": "ref"})
-        assert r.status_code == 201, r.text
+        await self._mk_private_with_users(client, h_owner, "al_bob")
+        # S7.4:bob 经项目成员通道(执行人 ≠ 属主成立)
         h_bob = await role_headers(client, "al_bob", role="user")
         out = await self._precheck(client, h_bob, "sc-w6-al")
         assert out["builtinAuthShadowed"] == ["gitlab"]
@@ -372,21 +366,14 @@ class TestPrecheckAlarm:
             self, client: AsyncClient):
         """条件③不满足(执行人自己的认证会话里有同名别名)。"""
         h_owner = await role_headers(client, "al_ow4")
-        await self._mk_private_with_users(client, h_owner)
+        await self._mk_private_with_users(client, h_owner, "al_ex4",
+                                          owner_uname="al_ow4")
         h_exec = await role_headers(client, "al_ex4", role="user")
         # 执行人自建同名别名 gitlab
         r = await client.post("/api/auths", headers=h_exec, json={
             "alias": "gitlab", "url": "https://git", "username": "u",
             "password": "p", "token_type": "Bearer"})
         assert r.status_code in (200, 201), r.text
-        roster = (await client.get(
-            "/api/users/roster", headers=h_owner)).json()["items"]
-        exec_id = next(u["id"] for u in roster
-                       if u["username"] == "al_ex4")
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-w6-al",
-            "granteeUserId": exec_id, "mode": "ref"})
-        assert r.status_code == 201, r.text
         out = await self._precheck(client, h_exec, "sc-w6-al")
         assert out["builtinAuthShadowed"] == []
 
@@ -421,11 +408,13 @@ class TestForeignExecutionDesensitized:
             snap = (await s.get(ExecutionSnapshot, eid)).snapshot
         return cap[-1], snap
 
-    async def test_ref_executor_gets_desensitized_shapes(
+    async def test_member_executor_gets_desensitized_shapes(
             self, client: AsyncClient, monkeypatch):
+        """S7.4:非属主执行人经项目成员通道(W6:非属主 = 内置凭证当空)。"""
         h_owner = await role_headers(client, "ex_own")
-        await client.post("/api/scenarios", headers=h_owner,
-                          json=_draft_with_vars("sc-w6-ex"))
+        # 场景建在项目内(凭证源头保留),ex_ref 拉为成员
+        await _project_scenario(client, h_owner, "ex_own", "ex_ref",
+                                _draft_with_vars("sc-w6-ex"))
         r = await client.post(
             "/api/scenarios/sc-w6-ex/data-sets", headers=h_owner,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
@@ -436,15 +425,7 @@ class TestForeignExecutionDesensitized:
         assert snap["definition"]["config"]["users"] == _USERS
         assert kw["datasets"][0]["rows"][0][1] == {"amount": 1, "password": "pw"}
 
-        # 引用执行人:快照/任务参数无 config.users,数据集敏感列剥
-        await role_headers(client, "ex_ref", role="user")
-        roster = (await client.get(
-            "/api/users/roster", headers=h_owner)).json()["items"]
-        rid = next(u["id"] for u in roster if u["username"] == "ex_ref")
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-w6-ex",
-            "granteeUserId": rid, "mode": "ref"})
-        assert r.status_code == 201, r.text
+        # 成员执行人:快照/任务参数无 config.users,数据集敏感列剥
         h_ref = await role_headers(client, "ex_ref", role="user")
         kw, snap = await self._run_capture(client, monkeypatch, h_ref, ds_id)
         assert not snap["definition"]["config"].get("users")
@@ -490,10 +471,24 @@ async def test_graph_units_strip_rows_for_foreign_runner(
 async def test_suite_validate_reports_builtin_auth_shadowed(
         client: AsyncClient):
     h_owner = await role_headers(client, "sv_own")
-    await client.post("/api/scenarios", headers=h_owner,
-                      json=_draft_with_users("sc-w6-sv"))
+    # S7.4:场景/套件建在项目内,sv_bob 拉为成员(非属主执行人)
+    await role_headers(client, "sv_bob", role="user")   # 先注册再查 roster
+    h_admin = await role_headers(client, "sv_padm", role="admin")
+    roster = (await client.get(
+        "/api/users/roster", headers=h_admin)).json()["items"]
+    own_id = next(u["id"] for u in roster if u["username"] == "sv_own")
+    bob_id = next(u["id"] for u in roster if u["username"] == "sv_bob")
+    r = await client.post("/api/projects", headers=h_admin, json={
+        "name": "p-sv", "firstAdminUserId": own_id})
+    pid = r.json()["id"]
+    await client.post(f"/api/projects/{pid}/members", headers=h_owner,
+                      json={"userId": bob_id, "role": "member"})
+    await client.post(
+        f"/api/scenarios?projectId={pid}", headers=h_owner,
+        json=_draft_with_users("sc-w6-sv"))
     r = await client.post("/api/suites", headers=h_owner,
-                          json={"name": "w6-sv", "description": ""})
+                          json={"name": "w6-sv", "description": "",
+                                "projectId": pid})
     sid = r.json()["suiteId"]
     await client.post(f"/api/suites/{sid}/members", headers=h_owner,
                       json={"scenarioIds": ["sc-w6-sv"],
@@ -505,15 +500,7 @@ async def test_suite_validate_reports_builtin_auth_shadowed(
     assert not [i for i in r.json()["items"]
                 if i["code"] == "builtin_auth_shadowed"]
 
-    # 引用给 bob:bob 预检列出缺的别名
-    await role_headers(client, "sv_bob", role="user")
-    roster = (await client.get(
-        "/api/users/roster", headers=h_owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "sv_bob")
-    r = await client.post("/api/shares", headers=h_owner, json={
-        "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
+    # 成员 bob 预检列出缺的别名
     h_bob = await role_headers(client, "sv_bob", role="user")
     r = await client.post(f"/api/suites/{sid}/validate", headers=h_bob)
     assert r.status_code == 200, r.text
@@ -535,6 +522,30 @@ _SECRET_USERS = {"gitlab": {"url": "https://git.example", "username": "author-ac
                             "expires_in": 7200}}
 
 
+async def _project_scenario(client, h_owner, owner_uname: str,
+                            member_uname: str, draft: dict) -> None:
+    """S7.4 后构造「执行人 ≠ 属主」的正规通道:场景建在项目内
+    (凭证源头保留 —— 脱敏/告警用例的前提),member_uname 拉进项目。"""
+    await role_headers(client, member_uname, role="user")  # 先注册再查 roster
+    h_admin = await role_headers(client, f"pa_{member_uname}", role="admin")
+    roster = (await client.get(
+        "/api/users/roster", headers=h_admin)).json()["items"]
+    owner_id = next(u["id"] for u in roster
+                    if u["username"] == owner_uname)
+    member_id = next(u["id"] for u in roster
+                     if u["username"] == member_uname)
+    r = await client.post("/api/projects", headers=h_admin, json={
+        "name": f"p-{member_uname}", "firstAdminUserId": owner_id})
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    r = await client.post(
+        f"/api/scenarios?projectId={pid}", headers=h_owner, json=draft)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post(f"/api/projects/{pid}/members", headers=h_owner,
+                          json={"userId": member_id, "role": "member"})
+    assert r.status_code == 201, r.text
+
+
 def _echo_convert(monkeypatch):
     from app.services import plate_client as pc
 
@@ -543,10 +554,12 @@ def _echo_convert(monkeypatch):
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
 
-async def _mk_secret_scenario(client, h, sid: str, *, public: bool = False):
+async def _mk_secret_scenario(client, h, sid: str, *, public: bool = False,
+                               project_id: int | None = None):
     draft = make_draft(sid, steps=[_GET_STEP])
     draft["definition"]["config"]["users"] = dict(_SECRET_USERS)
-    r = await client.post("/api/scenarios", headers=h, json=draft)
+    url = "/api/scenarios" + (f"?projectId={project_id}" if project_id else "")
+    r = await client.post(url, headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
     if public:
         from tests.inbound_fixtures import publish_scenario
@@ -618,15 +631,20 @@ class TestFinalProductsNoAuthorCredentials:
         monkeypatch.setattr(gl, "launch", _fake_launch)
 
         h_owner = await role_headers(client, "fp_sro")
-        await _mk_secret_scenario(client, h_owner, "sc-fp-sr")
-        await role_headers(client, "fp_srr", role="user")
+        # S7.4:项目成员执行人(场景建在项目内,凭证源头保留)
+        await role_headers(client, "fp_srr", role="user")  # 先注册再查 roster
+        h_admin = await role_headers(client, "fp_padm", role="admin")
         roster = (await client.get(
-            "/api/users/roster", headers=h_owner)).json()["items"]
+            "/api/users/roster", headers=h_admin)).json()["items"]
+        own_id = next(u["id"] for u in roster if u["username"] == "fp_sro")
         rid = next(u["id"] for u in roster if u["username"] == "fp_srr")
-        r = await client.post("/api/shares", headers=h_owner, json={
-            "resourceType": "scenario", "resourceId": "sc-fp-sr",
-            "granteeUserId": rid, "mode": "ref"})
-        assert r.status_code == 201, r.text
+        r = await client.post("/api/projects", headers=h_admin, json={
+            "name": "p-fp", "firstAdminUserId": own_id})
+        pid = r.json()["id"]
+        await client.post(f"/api/projects/{pid}/members", headers=h_owner,
+                          json={"userId": rid, "role": "member"})
+        await _mk_secret_scenario(client, h_owner, "sc-fp-sr",
+                                  project_id=pid)
         h_ref = await role_headers(client, "fp_srr", role="user")
         r = await client.post("/api/runs", headers=h_ref, json={
             "scenarioId": "sc-fp-sr", "dataSetIds": []})

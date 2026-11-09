@@ -255,15 +255,12 @@ async def test_rerun_intercepted_and_runs_visibility(client, monkeypatch):
     assert len(items) == 1 and items[0]["kind"] == "suite_graph"
     assert items[0]["mode"] == "compose" and items[0]["status"] == "done"
 
+    # S7.4:引用面退役 —— 非属主读 runs 404(此前引用者可读空清单)
     roster = (await client.get(
         "/api/users/roster", headers=owner)).json()["items"]
     bob_id = next(u["id"] for u in roster if u["username"] == "rv_bob")
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
     r = await client.get(f"/api/suites/{sid}/runs", headers=bob)
-    assert r.status_code == 200 and r.json()["items"] == []
+    assert r.status_code == 404
     # 真 admin = fresh_db 首个注册者(rv_boot);authz W3:admin 对他人
     # 私有 suite 同样 404(越属主旁路删除,读不到 runs 面)
     admin = await register_and_login(client, "rv_boot", "rv_bootpass123")
@@ -285,16 +282,13 @@ async def test_rerun_failed_units(client, monkeypatch):
     ex = await _wait_final(exec_id)
     assert ex.status == "failed"
 
-    # 非发起人(引用者)重跑失败单元 → 403(不变量 2)
+    # 非发起人重跑失败单元 → 403/404(S7.4 引用通道退役后无访问)
     roster = (await client.get(
         "/api/users/roster", headers=owner)).json()["items"]
     bob_id = next(u["id"] for u in roster if u["username"] == "rf_bob")
-    await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
     r = await client.post(
         f"/api/suites/{sid}/runs/{exec_id}/rerun-failed", headers=bob)
-    assert r.status_code == 403, r.text
+    assert r.status_code in (403, 404)
 
     # 属主:重跑失败单元 → control.only=[order](上游 auth 随闭包重跑)
     launched2 = _patch_pipeline(monkeypatch, _events(("auth", "passed"),

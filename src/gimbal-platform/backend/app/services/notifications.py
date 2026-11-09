@@ -43,11 +43,9 @@ NOTIFICATION_TYPES = (
     #    导致既进不了偏好开关、前端也没有可读标签 —— 三处清单失同步。
     # 集成任务全套(凭证失效/连续失败告警/自动暂停/待确认/恢复)。
     "integration",
-    # 引用分享生命周期(被分享人视角;P2 上线时随端点一起引入)。
-    "share_ref_received",
-    "share_ref_revoked",
-    "share_ref_resource_deleted",
-    "share_ref_owner_changed",
+    # S7.4 引用分享退役:一次性转换命令发属主的转换回执(此后不再产新行;
+    # 历史 share_ref_* 通知行照常展示 —— 类型词表只管创建期)。
+    "share_ref_converted",
 )
 
 

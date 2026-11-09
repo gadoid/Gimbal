@@ -567,27 +567,16 @@ async def list_scenarios(
         db, q=q, system=system, module=module, priority=priority,
         tag=tag, author=author, updated_within=updated_within,
     )
-    # P2 引用分支(§7.6,与 visibility_clause 同口径):纯判先行
-    #(表 B scenario.read + 项目上下文,谓词单点 can_pure),不通过者
-    # 用一次引用集合复核(团队规模有界,取集合可接受)。
-    # 本分支仅 starred=false(排除收藏)走 Python 侧,其余走 SQL 分支。
+    # 可见性纯判(表 B scenario.read + 项目上下文,谓词单点 can_pure;
+    # S7.4 引用复核分支随 share_refs 退役移除)。本分支仅
+    # starred=false(排除收藏)走 Python 侧,其余走 SQL 分支。
     from ._ownership import can_pure
     from ..services.zone import my_project_roles, public_project_id
     _ctx = dict(
         public_project_id=await public_project_id(db),
         project_roles=await my_project_roles(db, user.id))
-    _pure_readable = [
-        r for r in rows
-        if can_pure(user, "scenario", "read", r, **_ctx)
-    ]
-    _maybe = [r for r in rows if r not in _pure_readable]
-    if _maybe:
-        from ._ownership import referenced_scenario_ids
-        _ref_ids = await referenced_scenario_ids(db, user.id)
-        readable = _pure_readable + [r for r in _maybe
-                                     if r.scenario_id in _ref_ids]
-    else:
-        readable = _pure_readable
+    readable = [r for r in rows
+                if can_pure(user, "scenario", "read", r, **_ctx)]
     if scope == "mine":
         readable = [r for r in readable if r.owner_id == user.id]
     elif scope == "private":
@@ -1040,29 +1029,12 @@ async def delete_scenario(
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row, verb="delete")
     owner_id, name = row.owner_id, row.name
-    # 引用者名单必须在删除**之前**取 —— share_refs 行随 FK CASCADE 消失
-    from sqlalchemy import select as _sel
-
-    from ..models.share_ref import ShareRef
-    referrers = (await db.execute(_sel(ShareRef.grantee_user_id).where(
-        ShareRef.scenario_id == scenario_id))).scalars().all()
+    # S7.4:share_refs 已退役(引用失效通知随之移除;引用行曾随
+    # FK CASCADE 消失,现表已删)
     try:
         await scenario_store.delete(db, scenario_id)
     except KeyError as e:
         raise key_error_404(e)
-    # 引用失效通知(与 suite 删除/用户处置同口径 —— 此前场景删除是三处
-    # 里唯一静默的,被分享人「共享给我的」列表无痕缩水)
-    from ..services import notifications as notify_svc
-
-    for uid in referrers:
-        try:
-            await notify_svc.create_notification(
-                db, user_id=uid, type_="share_ref_resource_deleted",
-                title=f"引用失效:{name or scenario_id}",
-                body=f"场景「{name or scenario_id}」已被删除,引用分享随之结束",
-                resource_type="scenario", resource_id=scenario_id)
-        except Exception:  # noqa: BLE001 — 通知 best-effort,不阻断删除
-            await db.rollback()
     # 时间线:删除事件(既有条目从此变孤儿深链,补事件让消失可解释)
     from ..services import activity as activity_svc
 

@@ -89,11 +89,6 @@
                   class="proj-chip"
                   :title="`所属项目:${projectNames.nameOf(s.projectId)}`"
                 >{{ projectNames.nameOf(s.projectId) }}</router-link>
-                <span
-                  v-if="sharedOutSuites.has(s.suiteId)"
-                  class="ref-badge"
-                  title="此 Suite 正被引用分享(改动即时生效)"
-                >已引用分享</span>
               </div>
               <div class="sl-sid">{{ s.description || '—' }}</div>
             </td>
@@ -177,27 +172,6 @@
       show-jump
     />
 
-    <!-- 「共享给我的」独立分区(§7.11:不进镜头) -->
-    <div v-if="sharedInSuites.length" class="shared-in" data-testid="shared-in-suites">
-      <p class="shared-in-label">共享给我的(引用)</p>
-      <div
-        v-for="r in sharedInSuites"
-        :key="r.id"
-        class="shared-row"
-        :data-testid="`shared-suite-${r.suiteId}`"
-      >
-        <span class="su-name">
-          {{ r.suiteName || `#${r.suiteId}` }}
-          <span class="ref-in-badge">引用 · 来自 {{ r.grantedByName }}</span>
-        </span>
-        <span class="su-members">{{ r.memberCount ?? '—' }} 个场景</span>
-        <button class="cta" :data-testid="`shared-suite-open-${r.suiteId}`"
-                @click="$router.push(`/suites/${r.suiteId}`)">打开</button>
-        <button class="unsub-btn" :data-testid="`shared-suite-unsub-${r.suiteId}`"
-                @click="unsubscribe(r)">退订</button>
-      </div>
-    </div>
-
     <!-- 运行预检(30):从列表行发起 -->
     <SuiteRunPreflight
       v-model:open="preflightOpen"
@@ -207,7 +181,7 @@
       @locate="() => preflightOpen = false"
     />
 
-    <!-- 分享弹窗(P2 组件;changed 后刷新「已引用分享」徽标) -->
+    <!-- 分享弹窗(S7.4 后仅副本模式) -->
     <ShareDialog
       v-model:open="shareOpen"
       :resource="shareTarget ? {
@@ -215,7 +189,6 @@
         id: String(shareTarget.suiteId),
         name: shareTarget.name,
       } : null"
-      @changed="void loadShareBadges"
     />
   
   <!-- S7.2:加入项目对话框 -->
@@ -245,7 +218,6 @@ import {
   patchSuite, postSuitePublish, runSuite, suiteErrDetail,
   type SuiteLatestRun, type SuiteSummary,
 } from '@/api/suites'
-import { listShares, deleteShare, type ShareRefItem } from '@/api/shares'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectNames } from '@/composables/useProjectNames'
 import PromotionDialog from '@/components/project/PromotionDialog.vue'
@@ -474,10 +446,6 @@ async function onRun(): Promise<void> {
   }
 }
 
-// ── P2 徽标 + 共享给我的(§7.11)────────────────────────────────
-const sharedOutSuites = ref(new Set<number>())
-const sharedInSuites = ref<ShareRefItem[]>([])
-
 // ── 分享(列表行直达;口径同管理页 ⋯ 菜单:非公共、草稿禁用)─────
 const shareOpen = ref(false)
 const shareTarget = ref<SuiteSummary | null>(null)
@@ -487,31 +455,7 @@ function openShare(s: SuiteSummary): void {
   shareOpen.value = true
 }
 
-async function loadShareBadges() {
-  try {
-    const [out, inn] = await Promise.all([
-      listShares({ direction: 'out' }).catch(() => []),
-      listShares({ direction: 'in', resourceType: 'suite' }).catch(() => []),
-    ])
-    sharedOutSuites.value = new Set(
-      out.filter((r) => r.resourceType === 'suite' && r.suiteId)
-        .map((r) => r.suiteId as number))
-    sharedInSuites.value = inn
-  } catch { /* 静默留白 */ }
-}
-
-async function unsubscribe(r: ShareRefItem) {
-  try {
-    await deleteShare(r.id)
-    sharedInSuites.value = sharedInSuites.value.filter((x) => x.id !== r.id)
-    toast.success('已退订该引用')
-  } catch (e) {
-    toast.error(`退订失败:${(e as Error).message}`)
-  }
-}
-
 onMounted(() => void load())
-onMounted(() => void loadShareBadges())
 </script>
 
 <style scoped>
@@ -586,11 +530,6 @@ onMounted(() => void loadShareBadges())
   color: #15803d; background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%);
 }
-.ref-badge {
-  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
-  color: #6d28d9; background: rgb(139 92 246 / 10%);
-  border: 1px solid rgb(139 92 246 / 40%);
-}
 .mode-chip {
   font-size: 11.5px; padding: 2px 9px; border-radius: 999px;
   white-space: nowrap;
@@ -620,27 +559,12 @@ onMounted(() => void loadShareBadges())
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
   font-size: 12px; padding: 0;
 }
-.shared-in { margin-top: 22px; }
-.shared-in-label { font-size: 13px; color: rgb(100 116 139); margin: 8px 0; }
-.shared-row {
-  display: grid; grid-template-columns: minmax(160px, 1fr) auto auto auto;
-  gap: 12px; align-items: center; padding: 9px 14px;
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  margin-bottom: 6px;
-}
-.su-name { font-weight: 600; font-size: 13px; }
-.su-members { font-size: 12px; color: rgb(100 116 139); white-space: nowrap; }
 .ref-in-badge {
   font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
   color: #15803d; background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%); font-weight: 400;
 }
 .cta { color: #4338ca; background: none; border: none; cursor: pointer; font-size: 13px; }
-.unsub-btn {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #b45309; background: rgb(245 158 11 / 8%);
-  border: 1px solid rgb(245 158 11 / 35%);
-}
 .card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
 .sl-menu-item.danger { color: var(--sl-bad, #dc2626); }
 </style>

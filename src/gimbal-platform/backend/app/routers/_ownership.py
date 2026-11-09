@@ -75,8 +75,6 @@ def has_capability(user: Any, cap: str) -> bool:
 # project_id 空 = 私有区 / 普通项目 / 公共项目),同格内各区谓词互斥:
 #   owner     私有区属主(user.id == obj.owner_id ∧ project_id IS NULL
 #             —— D1:project_id 非空时属主身份不给任何权限)
-#   ref       主体持有该对象的引用分享(§7.6;需查库,只进 async can;
-#             仅私有区对象,S7 退役)
 #   member    对象所属普通项目的成员(任意角色;公共项目不落成员行)
 #   padmin    对象所属普通项目的项目管理员
 #   maintainer 公共项目对象的 owner_id(S1-b 例外:公共项目写权跟
@@ -93,9 +91,9 @@ def has_capability(user: Any, cap: str) -> bool:
 
 TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     "scenario": {
-        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
-        "copy":      frozenset({"owner", "ref", "member", "public_reader"}),
-        "run":       frozenset({"owner", "ref", "member"}),  # 公共不可执行
+        "read":      frozenset({"owner", "member", "public_reader"}),
+        "copy":      frozenset({"owner", "member", "public_reader"}),
+        "run":       frozenset({"owner", "member"}),  # 公共不可执行
         "write":     frozenset({"owner", "member", "maintainer"}),
         "delete":    frozenset({"owner", "member", "maintainer",
                                 "public_admin"}),
@@ -106,8 +104,8 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
         "transfer":  frozenset({"maintainer", "public_admin"}),
     },
     "suite": {
-        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
-        "run":       frozenset({"owner", "ref", "member"}),
+        "read":      frozenset({"owner", "member", "public_reader"}),
+        "run":       frozenset({"owner", "member"}),
         "write":     frozenset({"owner", "member", "maintainer"}),
         "delete":    frozenset({"owner", "member", "maintainer",
                                 "public_admin"}),
@@ -119,11 +117,11 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     # 闭包 —— 实际判定 = 父场景 can(read/write);S1.2 写闸已切换,
     # 这里的登记与父场景动词同形,矩阵只测 write)
     "data_set": {
-        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
+        "read":      frozenset({"owner", "member", "public_reader"}),
         "write":     frozenset({"owner", "member", "maintainer"}),
     },
     "run_scheme": {
-        "read":      frozenset({"owner", "ref", "member", "public_reader"}),
+        "read":      frozenset({"owner", "member", "public_reader"}),
         "write":     frozenset({"owner", "member", "maintainer"}),
     },
     # W9-2 语义换轴:编辑 = 私有区属主 ∨ 公共项目维护者;下架(delete)
@@ -160,8 +158,7 @@ def can_pure(
     ``public_project_id`` / ``project_roles``(主体在普通项目的角色表)
     由调用方注入:不传则 public_reader/maintainer/public_admin/member/
     padmin 谓词按「无上下文」恒 False(影子期这些对象只经 :func:`can`
-    判定)。``ref`` 谓词恒 False —— 需要引用闭包的判定用 async
-    :func:`can`。未登记的 (对象, 动词) 是编码错误,即刻 KeyError
+    判定)。未登记的 (对象, 动词) 是编码错误,即刻 KeyError
     (与 roles_with 同口径,而非静默拒绝)。
     """
     preds = TABLE_B.get(obj_type, {}).get(verb)
@@ -189,30 +186,18 @@ def can_pure(
 
 
 async def can(db, user: Any, obj_type: str, verb: str, obj: Any) -> bool:
-    """表 B 求值(完整版,含 ref 与项目谓词)—— 对象级判定唯一入口。
+    """表 B 求值(完整版)—— 对象级判定唯一入口。
 
-    obj 需带 ``owner_id`` 与 ``project_id``;suite 另带 ``id``、场景系
-    对象另带 ``scenario_id``(ref 谓词按对象类型解析,见 ``_pred_ref``)。
-    公共项目 id 与主体项目角色一次查询、会话内缓存(services.zone)。
+    obj 需带 ``owner_id`` 与 ``project_id``。公共项目 id 与主体项目
+    角色一次查询、会话内缓存(services.zone)。S7.4:ref 谓词已随
+    引用分享退役(存量转私有副本),can 与 can_pure 全集等价 ——
+    签名保留 async 供既有调用方。
     """
     from ..services.zone import my_project_roles, public_project_id
 
-    if can_pure(user, obj_type, verb, obj,
-                public_project_id=await public_project_id(db),
-                project_roles=await my_project_roles(db, user.id)):
-        return True
-    preds = TABLE_B[obj_type][verb]
-    if "ref" in preds and await _pred_ref(db, obj_type, obj, user.id):
-        return True
-    return False
-
-
-async def _pred_ref(db, obj_type: str, obj: Any, user_id: int) -> bool:
-    """ref 谓词:suite 按套件引用,场景系按场景引用(直接 ∨ 经 suite)。"""
-    if obj_type == "suite":
-        return await has_suite_ref(db, user_id, obj.id)
-    scen_id = getattr(obj, "scenario_id", None)
-    return scen_id is not None and await has_scenario_ref(db, user_id, scen_id)
+    return can_pure(user, obj_type, verb, obj,
+                    public_project_id=await public_project_id(db),
+                    project_roles=await my_project_roles(db, user.id))
 
 
 def _user_matches(user: Any, owner_id: int) -> bool:
@@ -233,79 +218,20 @@ def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
         raise HTTPException(status_code=403, detail=detail)
 
 
-# ── 引用分享(权限域二期 P2,§7.6)────────────────────────────────
-# 判定单点收敛:ref 谓词只在本模块;各 router/查询一律引用此处,
-# 禁止自写 EXISTS(§7.6「单点收敛」)。
-
-def ref_exists_clauses(viewer_id: int):
-    """PG 谓词用的两条 EXISTS(scenario_query.visibility_clause 引用;
-    深度固定不递归:直接引用 ∨ 所在 suite 被引用)。"""
-    from sqlalchemy import exists, select
-
-    from ..models.share_ref import ShareRef
-    from ..models.suite import SuiteMember
-
-    direct = exists(select(ShareRef.id).where(
-        ShareRef.scenario_id == ComposerScenario.scenario_id,
-        ShareRef.grantee_user_id == viewer_id)).correlate(ComposerScenario)
-    via_suite = exists(
-        select(ShareRef.id)
-        .join(SuiteMember, SuiteMember.suite_id == ShareRef.suite_id)
-        .where(SuiteMember.scenario_id == ComposerScenario.scenario_id,
-               ShareRef.grantee_user_id == viewer_id)
-    ).correlate(ComposerScenario)
-    return direct, via_suite
-
-
-async def referenced_scenario_ids(db, user_id: int) -> set[str]:
-    """SQLite 兜底/徽标用:user 的引用场景全集(直接 ∨ 经 suite),
-    一次取集合(团队规模有界,§2.3)。"""
-    from sqlalchemy import select
-
-    from ..models.share_ref import ShareRef
-    from ..models.suite import SuiteMember
-
-    direct = (await db.execute(
-        select(ShareRef.scenario_id).where(
-            ShareRef.grantee_user_id == user_id,
-            ShareRef.scenario_id.is_not(None)))).scalars().all()
-    via = (await db.execute(
-        select(SuiteMember.scenario_id)
-        .join(ShareRef, ShareRef.suite_id == SuiteMember.suite_id)
-        .where(ShareRef.grantee_user_id == user_id))).scalars().all()
-    return set(direct) | set(via)
-
-
-async def has_scenario_ref(db, user_id: int, scenario_id: str) -> bool:
-    """can_run_scenario 的引用分支(§7.6):直接引用 ∨ 所在 suite 被引用。"""
-    return scenario_id in await referenced_scenario_ids(db, user_id)
-
-
-async def has_suite_ref(db, user_id: int, suite_id: int) -> bool:
-    from sqlalchemy import select
-
-    from ..models.share_ref import ShareRef
-
-    return (await db.execute(
-        select(ShareRef.id).where(
-            ShareRef.grantee_user_id == user_id,
-            ShareRef.suite_id == suite_id))).scalar_one_or_none() is not None
 
 
 async def can_run_scenario(
     db, user: Any, *, scenario_id: str, owner_id: int | None,
     project_id: int | None = None,
 ) -> bool:
-    """执行判定(表 B scenario.run = owner ∨ ref ∨ member):私有区
-    属主 ∨ 引用;普通项目成员可跑;公共项目不开执行(公共资源跑需
+    """执行判定(表 B scenario.run = owner ∨ member;S7.4 引用退役):
+    私有区仅属主;普通项目成员可跑;公共项目不开执行(公共资源跑需
     先 fork,不变量 7;W3 起 admin 同样无旁路)。owner 谓词带区守卫
     (D1:project_id 非空时属主身份不给权限);owner_id=None(孤儿)
-    时仅引用 / 项目分支可过。S1.3 起发布 = 复制:原件恒私有(属主
-    可跑),公共副本对所有人不可执行 —— 无维护者例外。"""
+    时仅项目分支可过。S1.3 起发布 = 复制:原件恒私有(属主可跑),
+    公共副本对所有人不可执行 —— 无维护者例外。"""
     if project_id is None:
-        if owner_id is not None and _user_matches(user, owner_id):
-            return True
-        return await has_scenario_ref(db, user.id, scenario_id)
+        return owner_id is not None and _user_matches(user, owner_id)
     from ..services.zone import my_project_roles
     return project_id in await my_project_roles(db, user.id)
 

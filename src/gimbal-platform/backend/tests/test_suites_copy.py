@@ -75,11 +75,10 @@ async def test_copy_remaps_orchestration(client: AsyncClient) -> None:
     scrubs = d["modeConfig"]["checks"][0]["on"]["scenarioIds"]
     assert sorted(scrubs) == sorted(new_ids)      # checks 选择器重映射
 
-    # 引用转副本(fork)走同一服务:同样带完整编排
+    # S7.4:ref/fork 退役 —— copy 分享走同一深拷贝服务,同样带完整编排
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
-    r = await client.post(f"/api/shares/{r.json()['id']}/fork", headers=bob)
+        "granteeUserId": bob_id, "mode": "copy"})
     assert r.status_code == 201, r.text
     d2 = (await client.get(
         f"/api/suites/{r.json()['suiteId']}", headers=bob)).json()
@@ -139,31 +138,18 @@ async def test_public_fork_endpoint(client: AsyncClient) -> None:
         f"/api/suites/{sid2}/fork", headers=carol)).status_code == 404
 
 
-async def test_delete_suite_notifies_referrers(
+async def test_delete_suite_after_ref_retired(
     client: AsyncClient,
 ) -> None:
-    """删除 Suite:引用者收到 share_ref_resource_deleted 通知(级联前取名单)。"""
+    """S7.4:删除 Suite 照常(引用者失效通知随 share_refs 退役移除)。"""
     await register_and_login(client, "dn_admin", "dn_admin_pass123")
     owner = await register_and_login(client, "dn_owner", "dn_owner_pass123")
-    bob = await register_and_login(client, "dn_bob", "dn_bob_pass123")
     await _mk(client, owner, "sc-dn-1")
-    sid = await _mk_suite(client, owner, "被引集")
+    sid = await _mk_suite(client, owner, "被删集")
     await client.post(f"/api/suites/{sid}/members", headers=owner,
                       json={"scenarioIds": ["sc-dn-1"]})
-    roster = (await client.get(
-        "/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "dn_bob")
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
-
     r = await client.delete(f"/api/suites/{sid}", headers=owner)
     assert r.status_code == 204
-    notes = (await client.get(
-        "/api/notifications?page_size=50", headers=bob)).json()["items"]
-    hit = [n for n in notes if n["type"] == "share_ref_resource_deleted"]
-    assert hit, "删除后引用者应收到失效通知"
 
 
 async def test_scenario_delete_cleans_suite_config(

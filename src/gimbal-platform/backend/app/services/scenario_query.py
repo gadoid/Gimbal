@@ -69,19 +69,10 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
         return (ComposerScenario.owner_id == user.id) & \
             ComposerScenario.project_id.is_(None)
     # S1.2:三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
-    # 列表同款);ref 分支仅限私有区对象(S7 退役),谓词单点 =
-    # _ownership.ref_exists_clauses(禁自写)。
-    from sqlalchemy import and_
-
-    from ..routers._ownership import ref_exists_clauses
+    # 列表同款)。S7.4:引用分享退役,ref EXISTS 两支随之移除。
     from .zone import zone_read_clause
     viewer = user.id if user is not None else viewer_id
-    direct, via_suite = ref_exists_clauses(viewer)
-    return or_(
-        zone_read_clause(ComposerScenario, viewer),
-        and_(ComposerScenario.project_id.is_(None), direct),
-        and_(ComposerScenario.project_id.is_(None), via_suite),
-    )
+    return zone_read_clause(ComposerScenario, viewer)
 
 
 def _q_clause(q: str | None):

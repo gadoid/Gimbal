@@ -46,16 +46,15 @@ export type SwitchableType =
   // 集成任务的高频告警(连续失败/自动暂停)此前用户无法关闭。
   | 'scenario.version_change'
   | 'integration'
-  | 'share_ref_received'
-  | 'share_ref_revoked'
-  | 'share_ref_resource_deleted'
-  | 'share_ref_owner_changed'
+  // S7.4 引用分享退役:一次性转换回执(历史 share_ref_* 行照常展示,
+  // 标签保留在下方 LABELS)
+  | 'share_ref_converted'
   // M2a S7.2:提升流程(加入申请审批)
   | 'project_promotion.pending'
   | 'project_promotion.approved'
   | 'project_promotion.rejected'
 
-export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
+export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   execution_finished: '执行完成',
   adaptation_applied: '适配应用',
   announcement: '平台公告',
@@ -65,10 +64,11 @@ export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   resource_handoff: '收到分享',
   'scenario.version_change': '场景版本变更',
   integration: '集成任务',
-  share_ref_received: '收到引用分享',
-  share_ref_revoked: '引用分享撤销',
-  share_ref_resource_deleted: '引用资源删除',
-  share_ref_owner_changed: '引用属主变更',
+  'share_ref_received': '收到引用分享',
+  'share_ref_revoked': '引用分享撤销',
+  'share_ref_resource_deleted': '引用资源删除',
+  'share_ref_owner_changed': '引用属主变更',
+  'share_ref_converted': '引用转副本',
   'project_promotion.pending': '加入申请待审批',
   'project_promotion.approved': '加入申请已批准',
   'project_promotion.rejected': '加入申请被驳回',

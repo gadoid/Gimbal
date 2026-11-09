@@ -29,7 +29,6 @@ roles_with:
 # 表 B(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 → 谓词集。
 # 谓词缩写与语义(区互斥:私有区 = project_id 空 / 普通项目 / 公共项目):
 #   o    owner        私有区属主(D1:project_id 非空时属主身份不给权限)
-#   ref  ref          引用分享被授予人(仅私有区对象,S7 退役)
 #   mem  member       对象所属普通项目的成员(公共项目不落成员行)
 #   pad  padmin       对象所属普通项目的项目管理员
 #   mnt  maintainer   公共项目对象的 owner_id(S1-b:公共项目写权跟维护者)
@@ -44,17 +43,17 @@ roles_with:
 #   * 移出项目的创建人(D1 关键回归):对原普通项目对象任何谓词不命中
 table_b:
   scenario:
-    read:      [o, ref, mem, pr]
-    copy:      [o, ref, mem, pr]
-    run:       [o, ref, mem]
+    read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
+    copy:      [o, mem, pr]
+    run:       [o, mem]
     write:     [o, mem, mnt]
     delete:    [o, mem, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
     transfer:  [mnt, pa]
   suite:
-    read:      [o, ref, mem, pr]
-    run:       [o, ref, mem]
+    read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
+    run:       [o, mem]
     write:     [o, mem, mnt]
     delete:    [o, mem, mnt, pa]
     publish:   [o, pad, mnt]
@@ -63,10 +62,10 @@ table_b:
   # 数据集/运行方案:读写随父场景(行上无 project_id,实际判定 =
   # 父场景 can();S1.2 写闸已切换,登记与父场景动词同形)
   data_set:
-    read:      [o, ref, mem, pr]
+    read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
     write:     [o, mem, mnt]
   run_scheme:
-    read:      [o, ref, mem, pr]
+    read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
     write:     [o, mem, mnt]
   report_definition:
     read:      [o, pr]

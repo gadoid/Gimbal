@@ -11,7 +11,6 @@ import SuiteLibrary from '@/views/SuiteLibrary.vue'
 import SuiteManage from '@/views/SuiteManage.vue'
 import SuitesPublic from '@/views/SuitesPublic.vue'
 import * as suitesApi from '@/api/suites'
-import * as sharesApi from '@/api/shares'
 
 vi.mock('@/api/suites', () => ({
   listSuites: vi.fn(),
@@ -38,10 +37,7 @@ vi.mock('@/api/scenario-composer', () => ({
   getDataSet: vi.fn().mockResolvedValue({ datasetId: 'ds-1', name: 'DS', rowCount: 1, rows: [] }),
 }))
 vi.mock('@/api/shares', () => ({
-  listShares: vi.fn().mockResolvedValue([]),
-  deleteShare: vi.fn(),
-  forkShare: vi.fn(),
-  listScenarioReferrers: vi.fn().mockResolvedValue({ items: [] }),
+  createShare: vi.fn(),
 }))
 vi.mock('@/api/handoff', () => ({
   getRoster: vi.fn().mockResolvedValue({ items: [] }),
@@ -223,31 +219,6 @@ describe('SuiteLibrary — 列表(02)', () => {
     expect(q('[data-testid="suite-row-publish-1"]')).not.toBeNull()
     w.unmount()
   })
-
-  it('「共享给我的」分区渲染并退订', async () => {
-    vi.mocked(suitesApi.listSuites).mockResolvedValue({
-      items: [], total: 0, page: 1, pageSize: 100,
-    } as never)
-    vi.mocked(sharesApi.listShares).mockImplementation((() => Promise.resolve([
-      { id: 11, resourceType: 'suite', scenarioId: null, scenarioName: null,
-        suiteId: 5, suiteName: '引用集', memberCount: 4, granteeUserId: 1,
-        granteeName: 'me', grantedByName: 'alice', grantedAt: null },
-    ])) as never)
-    vi.mocked(sharesApi.deleteShare).mockResolvedValue(undefined as never)
-    const router = routerWith()
-    const w = mount(SuiteLibrary, {
-      global: { plugins: [router], stubs: { RouterLink: linkStub } },
-    })
-    await flushPromises()
-
-    expect(w.find('[data-testid="shared-in-suites"]').text()).toContain('引用集')
-    expect(w.find('[data-testid="shared-in-suites"]').text()).toContain('alice')
-    await w.find('[data-testid="shared-suite-unsub-5"]').trigger('click')
-    await flushPromises()
-    expect(sharesApi.deleteShare).toHaveBeenCalledWith(11)
-    expect(w.find('[data-testid="shared-suite-5"]').exists()).toBe(false)
-    w.unmount()
-  })
 })
 
 describe('SuiteManage — 管理页(20/21/30)', () => {
@@ -302,17 +273,17 @@ describe('SuiteManage — 管理页(20/21/30)', () => {
     document.body.innerHTML = ''
   }, 15000)
 
-  it('只读态(ref):隐藏抽屉与模式切换,横幅说明来源,保留运行', async () => {
+  it('只读态(public):隐藏抽屉与模式切换,横幅说明来源(S7.4:ref 形态退役)', async () => {
     const detail = suiteDetail({
-      access: 'ref', canEdit: false, canRun: true, canShare: false,
+      access: 'public', canEdit: false, canRun: false, canShare: false,
+      visibility: 'public',
     })
     const { w } = mountManage(detail)
     await flushPromises()
 
     expect(w.find('[data-testid="suite-scenario-drawer"]').exists()).toBe(false)
     expect(w.find('[data-testid="suite-mode-aggregate"]').attributes('disabled')).toBeDefined()
-    expect(w.find('[data-testid="suite-readonly-banner"]').text()).toContain('引用分享')
-    expect(w.find('[data-testid="suite-manage-run"]').exists()).toBe(true)
+    expect(w.find('[data-testid="suite-readonly-banner"]').text()).toContain('公共 Suite')
     w.unmount()
     document.body.innerHTML = ''
   })

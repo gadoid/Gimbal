@@ -200,10 +200,11 @@ async def test_draft_lifecycle_and_caps(
     assert r.status_code == 409 and r.json()["detail"]["code"] == "suite_is_draft"
     roster = (await client.get("/api/users/roster", headers=owner)).json()["items"]
     bob_id = next(u["id"] for u in roster if u["username"] == "df_admin")
+    # S7.4:mode=ref 枚举已收窄(422);copy 对草稿仍 409
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "suite", "resourceId": str(draft_id),
         "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "suite_is_draft"
+    assert r.status_code == 422
     r = await client.post("/api/shares", headers=owner, json={
         "resourceType": "suite", "resourceId": str(draft_id),
         "granteeUserId": bob_id, "mode": "copy"})
@@ -236,16 +237,9 @@ async def test_access_and_capabilities(client: AsyncClient) -> None:
     await client.post(f"/api/suites/{sid}/members", headers=owner,
                       json={"scenarioIds": ["sc-ac-1"]})
 
-    roster = (await client.get("/api/users/roster", headers=owner)).json()["items"]
-    bob_id = next(u["id"] for u in roster if u["username"] == "ac_bob")
-    r = await client.post("/api/shares", headers=owner, json={
-        "resourceType": "suite", "resourceId": str(sid),
-        "granteeUserId": bob_id, "mode": "ref"})
-    assert r.status_code == 201, r.text
-
-    d = (await client.get(f"/api/suites/{sid}", headers=bob)).json()
-    assert d["access"] == "ref" and d["canEdit"] is False
-    assert d["canRun"] is True and d["canShare"] is False
+    # S7.4:ref 访问形态退役 —— 私有 suite 对非属主 404(能力位无投影)
+    r = await client.get(f"/api/suites/{sid}", headers=bob)
+    assert r.status_code in (403, 404)
 
     # authz W3:admin 对他人私有 suite 一律 404(access 投影的 admin
     # 分支随越属主旁路消亡;公共对象上 admin = public 读者)

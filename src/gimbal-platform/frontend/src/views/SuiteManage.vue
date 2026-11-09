@@ -21,7 +21,6 @@
             {{ detail.name }}
             <span v-if="detail.isDraft" class="sm-draft-chip" title="草稿:不出现在发布/分享,空草稿 30 天自动清理">草稿</span>
             <span v-if="detail.visibility === 'public'" class="sm-pub-chip">公共</span>
-            <span v-if="detail.access === 'ref'" class="sm-ref-chip">引用</span>
           </h1>
           <p class="sm-meta">
             {{ detail.members.length }} 个成员 ·
@@ -62,10 +61,6 @@
     <!-- 只读 / 防误伤横幅 -->
     <div v-if="readonlyBanner" class="sm-banner" :class="readonlyBanner.tone" data-testid="suite-readonly-banner">
       <span>{{ readonlyBanner.text }}</span>
-      <span v-if="detail.access === 'ref'" class="sm-banner-ops">
-        <button type="button" data-testid="suite-ref-fork" @click="forkRef">转为副本</button>
-        <button type="button" data-testid="suite-ref-unsub" @click="unsubRef">退订</button>
-      </span>
     </div>
     <div v-else-if="liveBanner" class="sm-banner warn" data-testid="suite-live-banner">
       {{ liveBanner }}
@@ -176,7 +171,6 @@
     <ShareDialog
       v-model:open="shareOpen"
       :resource="shareResource"
-      @changed="void loadShareMeta"
     />
   </section>
 </template>
@@ -202,7 +196,6 @@ import {
   type MemberRole, type SuiteDetail, type SuiteMode, type SuiteModeConfig,
   type SuiteUnitConfig,
 } from '@/api/suites'
-import { listShares, forkShare, deleteShare } from '@/api/shares'
 import { toast } from '@/utils/toast'
 import { promptAction, confirmAction } from '@/utils/confirmAction'
 import { executionsBatchUrl } from '@/utils/links'
@@ -278,8 +271,7 @@ async function load(): Promise<void> {
     const d = await getSuite(Number(route.params.id))
     applyDetail(d)
     status.value = 'ready'
-    void loadShareMeta()
-  } catch {
+      } catch {
     status.value = 'error'
   }
 }
@@ -488,18 +480,13 @@ function onReran(r: { executionId: number }): void {
   void router.push(`/executions/${r.executionId}`)
 }
 
-// ── 引用 / 公共横幅与首改提示(§7.11 / D-1)────────────────────
-const referrers = ref<{ name: string; shareId: number }[]>([])
-const shareIn = ref<{ id: number; grantedByName: string } | null>(null)
+// ── 公共横幅与首改提示(§7.11;S7.4 引用横幅随 share_refs 退役)──
 let sessionConfirmed = false
 
 const liveBanner = computed<string | null>(() => {
   const d = detail.value
   if (!d || d.access !== 'owner') return null
   if (d.visibility === 'public') return '此 Suite 已公开,改动立即对所有人可见'
-  if (referrers.value.length) {
-    return `此 Suite 正被 ${referrers.value.length} 人引用(${referrers.value.map((r) => r.name).join('、')}),改动即时生效`
-  }
   return null
 })
 
@@ -507,34 +494,11 @@ const readonlyBanner = computed<{ text: string; tone: string } | null>(() => {
   const d = detail.value
   if (!d || d.access === 'owner') return null
   if (d.access === 'admin') return { text: '管理员视角:治理只读(下架 / 删除走 ⋯ 菜单)', tone: 'info' }
-  if (d.access === 'ref') {
-    return {
-      text: `来自 ${shareIn.value?.grantedByName ?? '他人'} 的引用分享 —— 只读,可运行(引用覆盖全部成员)`,
-      tone: 'info',
-    }
-  }
   if (d.access === 'public') {
     return { text: '公共 Suite —— 只读;先「复制到我的」,在副本上运行或编辑', tone: 'info' }
   }
   return null
 })
-
-async function loadShareMeta(): Promise<void> {
-  const d = detail.value
-  if (!d) return
-  try {
-    const [out, inn] = await Promise.all([
-      listShares({ direction: 'out', resourceType: 'suite', resourceId: String(d.suiteId) })
-        .catch(() => []),
-      listShares({ direction: 'in', resourceType: 'suite' }).catch(() => []),
-    ])
-    referrers.value = out.map((r) => ({ name: r.granteeName, shareId: r.id }))
-    shareIn.value = inn.find((r) => r.suiteId === d.suiteId)
-      ? { id: inn.find((r) => r.suiteId === d.suiteId)!.id,
-          grantedByName: inn.find((r) => r.suiteId === d.suiteId)!.grantedByName }
-      : null
-  } catch { /* 横幅是增强,失败静默 */ }
-}
 
 async function confirmFirstEdit(): Promise<boolean> {
   const ok = await confirmAction(
@@ -625,9 +589,8 @@ async function remove(): Promise<void> {
   menuOpen.value = false
   const d = detail.value
   if (!d) return
-  const refN = referrers.value.length
   const ok = await confirmAction(
-    `删除 Suite「${d.name}」?成员场景不受影响${refN ? `;${refN} 位引用者将失去访问(会收到通知)` : ''}。`,
+    `删除 Suite「${d.name}」?成员场景不受影响。`,
     '删除 Suite',
     { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
   if (!ok) return
@@ -649,33 +612,6 @@ async function forkPublic(): Promise<void> {
     void router.push(`/suites/${out.suiteId}`)
   } catch (e) {
     toast.error(`复制失败:${(e as Error).message}`)
-  }
-}
-
-async function forkRef(): Promise<void> {
-  if (!shareIn.value) return
-  try {
-    const out = await forkShare(shareIn.value.id)
-    if (out.suiteId) {
-      toast.success(`已转为我的副本「${out.suiteName}」`)
-      void router.push(`/suites/${out.suiteId}`)
-    }
-  } catch (e) {
-    toast.error(`转为副本失败:${(e as Error).message}`)
-  }
-}
-
-async function unsubRef(): Promise<void> {
-  if (!shareIn.value) return
-  const ok = await confirmAction('退订该引用分享?属主不会收到通知,可再次被分享。', '退订',
-    { type: 'warning', confirmButtonText: '退订', cancelButtonText: '取消' })
-  if (!ok) return
-  try {
-    await deleteShare(shareIn.value.id)
-    toast.success('已退订该引用')
-    void router.push('/suites')
-  } catch (e) {
-    toast.error(`退订失败:${(e as Error).message}`)
   }
 }
 
@@ -712,10 +648,6 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 .sm-pub-chip {
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
   color: #15803d; background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
-}
-.sm-ref-chip {
-  font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
-  color: #6d28d9; background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
 }
 .sm-head-actions { display: flex; align-items: center; gap: 8px; }
 /* 运行主按钮(原型 20):44px 双行 indigo,副行浅 indigo */
@@ -754,7 +686,6 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   color: #475569; background: rgb(100 116 139 / 6%);
   border: 1px solid rgb(100 116 139 / 30%);
 }
-.sm-banner-ops { margin-left: auto; display: flex; gap: 8px; }
 .sm-banner-ops button, .sm-banner.draft button {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
   color: #4338ca; background: var(--accent-soft);

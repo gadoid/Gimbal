@@ -43,12 +43,6 @@ vi.mock('@/api/auth_sessions', () => ({
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
 }))
-// 手动保存的引用者提示走动态 import('@/api/shares') —— 不 mock 的话
-// jsdom XHR 挂起,保存停在 await 上永远到不了 update(autosave 测试走
-// 自动路径绕开了这一段)。
-vi.mock('@/api/shares', () => ({
-  listScenarioReferrers: vi.fn(() => Promise.resolve({ items: [] })),
-}))
 vi.mock('@/utils/confirmAction', () => ({
   confirmAction: vi.fn(async () => true),
   promptAction: vi.fn(async () => null),

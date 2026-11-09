@@ -1,4 +1,4 @@
-"""分享(引用/副本)P2 请求/响应模型 —— 《…设计方案》§9。"""
+"""分享(副本)P2 请求/响应模型 —— S7.4 引用模式退役后仅剩 copy。"""
 from __future__ import annotations
 
 from typing import Literal
@@ -12,23 +12,8 @@ class ShareCreateIn(BaseModel):
     resourceType: Literal["scenario", "suite"]
     resourceId: str = Field(min_length=1, max_length=128)
     granteeUserId: int
-    mode: Literal["ref", "copy"] = "copy"
-
-
-class ShareRefOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int
-    resourceType: str          # scenario | suite(展开可空双键)
-    scenarioId: str | None = None
-    suiteId: int | None = None
-    suiteName: str | None = None   # suite 引用的展示名(反查补)
-    scenarioName: str | None = None  # 场景引用的展示名(反查补,评审补记)
-    memberCount: int | None = None   # suite 引用的成员数(共享行「N 个场景」)
-    granteeUserId: int
-    granteeName: str
-    grantedByName: str
-    grantedAt: str | None = None
+    # S7.4:ref 模式已退役;显式传 "ref" → 422(枚举收窄)
+    mode: Literal["copy"] = "copy"
 
 
 class ShareCopyOut(BaseModel):
@@ -39,31 +24,3 @@ class ShareCopyOut(BaseModel):
     suiteId: int | None = None
     suiteName: str | None = None
     memberCount: int = 0
-
-
-class ReferrerViaSuite(BaseModel):
-    """间接引用的经由 Suite(§7.6 判定式的 suite 分支)。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    suiteId: int
-    suiteName: str
-
-
-class ScenarioReferrerOut(BaseModel):
-    """场景的一名引用人:直接引用与经由 Suite 的间接引用合并成一行。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    granteeUserId: int
-    granteeName: str
-    direct: bool                      # 直接引用该场景
-    viaSuites: list[ReferrerViaSuite] = Field(default_factory=list)
-
-
-class ScenarioReferrersOut(BaseModel):
-    """§7.11 防误伤名单:保存提示与「已引用分享」徽标的数据源。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[ScenarioReferrerOut]

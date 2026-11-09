@@ -97,9 +97,7 @@
       <span><strong>系统不匹配:</strong> {{ systemMismatch }}</span>
     </div>
 
-    <!-- D-1(§7.11):被引用 / 公共场景常驻横幅(防误伤;名单含经由
-         所属 Suite 的间接引用)。引用是 live link,自动保存的改动对
-         引用人立即生效。 -->
+    <!-- 公共场景常驻横幅(S7.4:被引用分支随 share_refs 退役)。 -->
     <div v-if="liveEditBanner" class="live-edit-banner" data-testid="scenario-live-banner">
       {{ liveEditBanner }}
     </div>
@@ -886,7 +884,6 @@ async function loadScenario() {
     dirty.value = false
     editsDuringSave = false
     saveState.value = 'clean'
-    void loadLiveEditMeta()   // D-1:被引用 / 公共横幅 + 首改提示名单
     await nextTick()    // 等 deep watch 冲完加载赋值,再解除抑制
     suppressDirty = false
   } catch (e) {
@@ -895,12 +892,9 @@ async function loadScenario() {
   }
 }
 
-// ── D-1(§7.11):被引用 / 公共场景的常驻横幅 + 首改提示 ──────────
-// 名单取 /shares/referrers(直接 + 经由所属 Suite 的间接,同人合并)。
-// 自动保存防误伤:首次改动落盘前弹一次(sessionSharePrompted 记会话内
-// 不再打断);公共场景写明「改动立即对所有人可见」。
-const referrerItems = ref<{ granteeName: string; direct: boolean;
-  viaSuites?: { suiteName: string }[] }[]>([])
+// ── 公共场景的常驻横幅 + 首改提示(S7.4:被引用名单随 share_refs 退役;
+// 公共提示保留 —— 改动立即对所有人可见的防误伤仍必要)。自动保存
+// 防误伤:首次改动落盘前弹一次(sessionSharePrompted 记会话内不再打断)。
 let sessionSharePrompted = false
 
 const liveEditBanner = computed<string | null>(() => {
@@ -908,24 +902,8 @@ const liveEditBanner = computed<string | null>(() => {
   if (scenario.value.visibility === 'public') {
     return '此场景已公开,改动立即对所有人可见'
   }
-  if (!referrerItems.value.length) return null
-  const names = referrerItems.value
-    .map((r) => `${r.granteeName}${r.direct ? '' : '(经 Suite 引用)'}`)
-    .join('、')
-  return `此场景正被 ${referrerItems.value.length} 人引用(${names}),改动保存后立即生效`
+  return null
 })
-
-async function loadLiveEditMeta(): Promise<void> {
-  const s = scenario.value
-  if (!s) return
-  try {
-    const { listScenarioReferrers } = await import('@/api/shares')
-    const { items } = await listScenarioReferrers(s.meta.scenarioId)
-    referrerItems.value = items
-  } catch {
-    referrerItems.value = []   // 横幅是增强,失败静默
-  }
-}
 
 async function promptFirstLiveEdit(): Promise<boolean> {
   const { confirmAction } = await import('@/utils/confirmAction')
@@ -1079,27 +1057,6 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       if (!silent) showError('加载断言注册表', undefined, (e as Error).message)
       return false
     }
-  }
-  // P2 §7.11 保存提示(必做)+ D-1 增强:引用是 live link,被引用场景
-  // 保存后对方立即生效 —— 名单取 /shares/referrers(含经由所属 Suite
-  // 的间接引用;此前只查直接引用,Suite 场景下防误伤落空)。
-  if (scenario.value && manual && !silent) {
-    const sid = scenario.value.meta.scenarioId
-    try {
-      const { listScenarioReferrers } = await import('@/api/shares')
-      const { confirmAction } = await import('@/utils/confirmAction')
-      const { items } = await listScenarioReferrers(sid)
-      if (items.length) {
-        const names = items.map((r) => r.granteeName
-          + (r.direct ? '' : '(经 Suite 引用)')).join('、')
-        const ok = await confirmAction(
-          `此场景正被 ${items.length} 人引用分享(${names}),保存后对方立即生效。继续保存?`,
-          '保存提示',
-          { type: 'warning', confirmButtonText: '继续保存', cancelButtonText: '取消' },
-        )
-        if (!ok) return false
-      }
-    } catch { /* 查询失败不阻断保存(提示是增强,保存是主链) */ }
   }
   saving.value = true
   saveState.value = 'saving'
