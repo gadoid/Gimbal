@@ -93,6 +93,9 @@ def test_launch_stdin_eof_cancels_at_step_boundary(tmp_path: Path) -> None:
 
     t_eof = time.monotonic()
     proc.stdin.close()                         # 父进程死亡的最小模拟
+    # 置 None:3.12 的 communicate() 对已手动 close 的 stdin 做 flush 会
+    # 抛 ValueError(只接 BrokenPipeError),stdin=None 才跳过该分支
+    proc.stdin = None
     # 在飞请求(≤1s)跑完 + 步骤边界取消 + 收尾 —— 预期 ~2-4s;
     # 守卫失效则是「盲跑僵尸」:剩余 ~11 步 ≥11s(上限放 8s 判定)
     # communicate 而非 wait:wait 不排空 stdout,管道缓冲(Linux 64KB/

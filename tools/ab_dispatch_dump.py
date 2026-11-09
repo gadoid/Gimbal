@@ -161,7 +161,7 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
         )
         materialized = materialize_run_copy(
             json.loads(json.dumps(batch)),  # 深拷贝隔离(纯函数语义同产线)
-            service_bindings={}, resolved_auths=[], built_in_users={},
+            resolved_auths=[], built_in_users={},
             carry_context=ctx,
         )
         out["carry_injected"] = {

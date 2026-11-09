@@ -48,20 +48,23 @@ class TestReferencedServices:
 
 
 class TestApplyServicesCallForm:
-    """_apply_services 消费 referenced_services 的结果——call 形态下绑定链 intact。"""
+    """_apply_services 消费 referenced_services 的结果——call 形态下优先级链
+    ② authored 声明 > ③ 部署地址 > ④ 缺口留给引擎(① 绑定 url 随
+    authz M2a S6 退役)。"""
 
-    def test_call_form_binding_url_materialized(self):
+    def test_call_form_declared_url_wins(self):
         from app.services.run_materialize import _apply_services
-        cfg = {"services": {}}
+        cfg = {"services": {"fin": "https://declared"}}
         steps = [_call_step("fin")]
-        _apply_services(cfg, steps=steps, bindings={"fin": {"url": "https://bound"}})
-        assert cfg["services"]["fin"] == "https://bound"
+        _apply_services(cfg, steps=steps,
+                        alias_base_urls={"fin": "https://alias"})
+        assert cfg["services"]["fin"] == "https://declared"
 
     def test_call_form_alias_fallback(self):
         from app.services.run_materialize import _apply_services
         cfg = {"services": {}}
         steps = [_call_step("fin")]
-        _apply_services(cfg, steps=steps, bindings={},
+        _apply_services(cfg, steps=steps,
                         alias_base_urls={"fin": "https://alias"})
         assert cfg["services"]["fin"] == "https://alias"
 
@@ -70,5 +73,5 @@ class TestApplyServicesCallForm:
         from app.services.run_materialize import _apply_services
         cfg = {"services": {}}
         steps = [_call_step("orphan")]
-        _apply_services(cfg, steps=steps, bindings={}, alias_base_urls={})
+        _apply_services(cfg, steps=steps, alias_base_urls={})
         assert "orphan" not in cfg["services"]
