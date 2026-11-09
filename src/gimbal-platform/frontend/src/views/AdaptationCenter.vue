@@ -52,13 +52,20 @@
           <tbody>
             <tr v-for="b in batchRows" :key="b.batchId" data-testid="batch-row">
               <td class="mono ac-ellipsis" :title="b.batchId">{{ b.batchId.slice(0, 10) }}…</td>
-              <td><span class="ac-chip ac-chip-kind">{{ (b as any).kind || 'carry' }}</span></td>
+              <td>
+                <span class="ac-chip ac-chip-kind">{{ (b as any).kind || 'carry' }}</span>
+                <span
+                  v-if="(b as any).carryScope"
+                  class="ac-chip ac-chip-scope"
+                  :data-testid="`batch-scope-${b.batchId.slice(0, 6)}`"
+                >{{ (b as any).carryScope === 'project' ? '项目层' : '个人层' }}</span>
+              </td>
               <td>
                 <span class="ac-chip" :class="batchStatusClass[b.status] ?? ''">{{ b.status }}</span>
               </td>
               <td class="ac-nowrap">{{ (b as any).operatorName || '—' }}</td>
               <td class="mono ac-nowrap">{{ formatDate(b.createdAt) }}</td>
-              <td v-if="auth.can('ops.write')" class="ac-center">
+              <td v-if="auth.can('ops.write') || ownsScopedBatch(b)" class="ac-center">
                 <router-link :to="`/adaptations/batches/${b.batchId}`" class="ac-link">详情</router-link>
               </td>
             </tr>
@@ -198,6 +205,15 @@ async function loadBatches(scope?: 'mine'): Promise<void> {
 
 function formatDate(iso: string): string {
   try { return new Date(iso).toLocaleDateString() } catch { return iso }
+}
+
+/** S7.6:分层 carry 批属主(个人层 = 本人 / 项目层 = 本人任项目管理员)
+ * 也给「详情」入口(后端 _require_batch_access 同口径)。 */
+function ownsScopedBatch(b: BatchOut): boolean {
+  if (!b.carryScope) return false
+  if (b.carryScope === 'user') return b.carryScopeId === auth.currentUser?.id
+  return auth.projects.some(
+    (p) => p.id === b.carryScopeId && p.role === 'admin')
 }
 
 // ── carry 漂移面板 ──────────────────────────────────────────────
@@ -341,6 +357,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 .ac-chip-kind { background: #f1f5f9; color: #475569; }
+.ac-chip-scope { background: rgb(37 99 235 / 8%); color: #1d4ed8; margin-left: 4px; }
 .ac-chip-done { background: #f0fdf4; color: #16a34a; }
 .ac-chip-active { background: #eff6ff; color: #2563eb; }
 .ac-chip-open { background: #fffbeb; color: #d97706; }

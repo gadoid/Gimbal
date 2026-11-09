@@ -37,6 +37,11 @@ beforeEach(() => {
   vi.spyOn(carryApi, 'getDefaults').mockResolvedValue({ '$.a': 'v' })
   vi.spyOn(carryApi, 'putDefaults').mockResolvedValue({})
   vi.spyOn(carryApi, 'getBindings').mockResolvedValue({ 'fin-service': { '$.a': '1' } })
+  vi.spyOn(carryApi, 'getDrift').mockResolvedValue({
+    services: [{ service: 'fin-service', orphaned: ['$.old'], uncovered: [],
+      renamedSuggestions: [] }],
+    plateReachable: true, scope: 'project', scopeId: 3,
+  })
   vi.spyOn(projectsApi, 'getSlotStatus').mockResolvedValue({
     slots: [{
       slot: 'qa', scenarios: ['sc-1'],
@@ -119,6 +124,38 @@ describe('ProjectConfigPanel — 普通项目', () => {
     expect(document.body.querySelector('[data-testid="preview-dialog"]')).toBeTruthy()
     expect(document.body.textContent).toContain('项目默认')
     expect(document.body.textContent).toContain('部署地址')
+    w.unmount()
+  })
+})
+
+describe('ProjectConfigPanel — carry 漂移(S7.6)', () => {
+  it('普通项目:按项目层拉漂移;勾选生成批带 scope=project', async () => {
+    const adaptApi = await import('@/api/adaptations')
+    const open = vi.spyOn(adaptApi, 'openCarryBatch').mockResolvedValue(
+      { batchId: 'bt-x', ops: [], snapshots: [] } as never)
+    const createOp = vi.spyOn(adaptApi, 'createOp').mockResolvedValue({} as never)
+    const w = mountPanel()
+    await flushPromises()
+    expect(carryApi.getDrift).toHaveBeenCalledWith({ scope: 'project', projectId: 3 })
+    const panel = w.find('[data-testid="carry-drift-prj-cfg"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('孤儿绑定 $.old')
+    await panel.find('input[type="checkbox"]').setValue(true)
+    await panel.find('[data-action="drift-generate"]').trigger('click')
+    await flushPromises()
+    expect(open).toHaveBeenCalledWith('fin-service', { scope: 'project', projectId: 3 })
+    expect(createOp).toHaveBeenCalledWith('bt-x', {
+      opType: 'removeCarryBinding',
+      payload: { service: 'fin-service', path: '$.old' },
+    })
+    w.unmount()
+  })
+
+  it('公共项目不挂漂移节(公共层漂移在变更适配页)', async () => {
+    const w = mountPanel(projPublic)
+    await flushPromises()
+    expect(w.find('[data-testid="carry-drift-prj-cfg"]').exists()).toBe(false)
+    expect(carryApi.getDrift).not.toHaveBeenCalled()
     w.unmount()
   })
 })

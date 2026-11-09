@@ -26,6 +26,13 @@ class AdaptationBatch(Base):
                                                       nullable=True)
     # §5.9:批次作用的场景/Suite id 列表(0018)
     scope: Mapped[list | None] = mapped_column(JsonVar, nullable=True)
+    # authz M2a S7.6:carry 值表批的作用域('project'|'user';NULL = 公共
+    # 项目层,与 carry_store scope=None 缺省语义同型 —— 存量行全是公共层)。
+    # 仅 kind='carry' 有意义;carry_scope_id 多态指向 projects/users。
+    carry_scope: Mapped[str | None] = mapped_column(String(16),
+                                                    nullable=True)
+    carry_scope_id: Mapped[int | None] = mapped_column(Integer,
+                                                       nullable=True)
     save_mode: Mapped[str | None] = mapped_column(String(16),
                                                     nullable=True)
     endpoint_id: Mapped[str] = mapped_column(String(255), nullable=False)

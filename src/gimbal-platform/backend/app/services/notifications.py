@@ -46,6 +46,8 @@ NOTIFICATION_TYPES = (
     # S7.4 引用分享退役:一次性转换命令发属主的转换回执(此后不再产新行;
     # 历史 share_ref_* 通知行照常展示 —— 类型词表只管创建期)。
     "share_ref_converted",
+    # M2a S7.6:公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒。
+    "carry.shadowed",
 )
 
 

@@ -31,6 +31,14 @@
       </p>
       <CarryDefaultsEditor :target="{ scope: 'user' }" :can-write="true" tid="my-carry-defaults" />
     </div>
+
+    <div class="card">
+      <h2>我的 carry 漂移(个人层)</h2>
+      <p class="hint">
+        个人层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于个人层(S7.6 按层)。
+      </p>
+      <CarryDriftPanel title="个人层绑定 vs plate 面" :target="{ scope: 'user' }" tid="my-carry" />
+    </div>
   </section>
 </template>
 
@@ -44,6 +52,7 @@ import { onMounted, ref } from 'vue'
 import { listEnvironments, type EnvironmentRow } from '@/api/environments'
 import { getPreferences, putPreference } from '@/api/preferences'
 import CarryDefaultsEditor from '@/components/carry/CarryDefaultsEditor.vue'
+import CarryDriftPanel from '@/components/carry/CarryDriftPanel.vue'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 

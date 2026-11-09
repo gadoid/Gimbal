@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,19 @@ from ._error_mapping import _plate_502
 router = APIRouter(prefix="/carry", tags=["carry"])
 
 DbSession = Depends(get_db)
+
+
+async def _notify_shadow(db, sc, service: str | None, old: dict,
+                         new: dict, actor_name: str) -> None:
+    """S7.6:公共层写后的项目层遮蔽通知(best-effort,失败仅记日志)。"""
+    from ..services import carry_shadow
+
+    try:
+        await carry_shadow.notify_public_carry_change(
+            db, scope=sc, service=service, old=old, new=new,
+            actor_name=actor_name)
+    except Exception:  # noqa: BLE001 — 通知是增强,不是写面前置
+        logger.opt(exception=True).warning("carry: shadow notify failed")
 
 
 async def _resolve_scope(
@@ -112,6 +126,7 @@ async def put_defaults(
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ):
     sc = await _resolve_scope(db, user, scope, project_id, write=True)
+    old = await carry_store.get_defaults(db, sc)
     await carry_store.put_defaults(
         db, body.defaults,
         updated_by_id=user.id,
@@ -128,6 +143,9 @@ async def put_defaults(
         detail={"keys": sorted((body.defaults or {}).keys()),
                 "scope": sc[0], "scopeId": sc[1]},
     )
+    # S7.6:公共层写 → 项目层同键遮蔽通知(非公共层内部直通)
+    await _notify_shadow(db, sc, None, old, body.defaults or {},
+                         user.display_name or user.username)
     return DefaultsOut(defaults=await carry_store.get_defaults(db, sc),
                        scope=sc[0], scopeId=sc[1])
 
@@ -170,6 +188,7 @@ async def put_bindings(
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ):
     sc = await _resolve_scope(db, user, scope, project_id, write=True)
+    old = await carry_store.get_bindings(db, service, sc)
     await carry_store.put_bindings(
         db, service, body.bindings,
         updated_by_id=user.id,
@@ -185,19 +204,30 @@ async def put_bindings(
         action="carry.write", resource_type="carry", resource_id=service,
         detail={"service": service, "scope": sc[0], "scopeId": sc[1]},
     )
+    # S7.6:公共层写 → 项目层同键遮蔽通知(非公共层内部直通)
+    await _notify_shadow(db, sc, service, old, body.bindings or {},
+                         user.display_name or user.username)
     return ServiceBindingsOut(
         bindings=await carry_store.get_bindings(db, service, sc),
         scope=sc[0], scopeId=sc[1])
 
 
 @router.get("/drift", response_model=DriftReport)
-async def drift(user: MemberUser, db=DbSession):
-    # S4:漂移面看公共项目层(全局配置卫生;项目/个人层随读面后续接入)
-    raw = await carry_store.carry_drift(
-        db, scope=await carry_store.public_scope(db))
+async def drift(
+    user: CurrentUser, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    """S7.6 漂移按层:``global``(默认)= 公共项目层(Admin+);``project``
+    = 项目层(项目管理员 ∨ Admin+);``user`` = 个人层(本人)。分权与
+    写面同口径(``_resolve_scope(write=True)``)—— 漂移是维护视图,
+    看层 = 能写层。"""
+    sc = await _resolve_scope(db, user, scope, project_id, write=True)
+    raw = await carry_store.carry_drift(db, scope=sc)
     return DriftReport(
         plateReachable=raw["plateReachable"],
-        services=[ServiceDrift(**s) for s in raw["services"]])
+        services=[ServiceDrift(**s) for s in raw["services"]],
+        scope=sc[0], scopeId=sc[1])
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)

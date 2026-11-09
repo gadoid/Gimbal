@@ -53,6 +53,8 @@ export type SwitchableType =
   | 'project_promotion.pending'
   | 'project_promotion.approved'
   | 'project_promotion.rejected'
+  // M2a S7.6:公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒
+  | 'carry.shadowed'
 
 export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   execution_finished: '执行完成',
@@ -72,6 +74,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   'project_promotion.pending': '加入申请待审批',
   'project_promotion.approved': '加入申请已批准',
   'project_promotion.rejected': '加入申请被驳回',
+  'carry.shadowed': '公共层 carry 变更',
 }
 
 export function list(params?: {

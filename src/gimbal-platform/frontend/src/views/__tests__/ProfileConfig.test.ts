@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProfileConfig from '@/views/ProfileConfig.vue'
 import * as prefApi from '@/api/preferences'
@@ -18,7 +19,18 @@ vi.mock('@/utils/errorFallback', () => ({ showError: vi.fn() }))
 vi.mock('@/api/carry', () => ({
   getDefaults: vi.fn().mockResolvedValue({}),
   putDefaults: vi.fn().mockResolvedValue({}),
+  // S7.6 我的 carry 漂移面板(CarryDriftPanel)读面
+  getDrift: vi.fn().mockResolvedValue({ services: [], plateReachable: true }),
 }))
+
+/** CarryDriftPanel 用 useRouter(S7.6)→ 挂真 router */
+function mountCfg() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: { template: '<div/>' } }],
+  })
+  return mount(ProfileConfig, { global: { plugins: [router, createPinia()] } })
+}
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -26,6 +38,7 @@ beforeEach(() => {
   // restoreAllMocks 会清 factory 里设的实现 —— carry 编辑器读面重钉
   vi.mocked(carryApi.getDefaults).mockResolvedValue({})
   vi.mocked(carryApi.putDefaults).mockResolvedValue({})
+  vi.mocked(carryApi.getDrift).mockResolvedValue({ services: [], plateReachable: true })
   vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([
     { id: 7, name: 'dev', description: '', lines: {}, owner_id: null, is_default: false },
     { id: 8, name: 'sit', description: '', lines: {}, owner_id: null, is_default: false },
@@ -38,7 +51,7 @@ describe('ProfileConfig — 我的默认环境偏好', () => {
       'run.environment': { environmentId: 7 },
     } as never)
     const put = vi.spyOn(prefApi, 'putPreference').mockResolvedValue(undefined as never)
-    const w = mount(ProfileConfig, { global: { plugins: [createPinia()] } })
+    const w = mountCfg()
     await flushPromises()
 
     const sel = w.find('[data-testid="my-env-select"]')
@@ -55,13 +68,31 @@ describe('ProfileConfig — 我的默认环境偏好', () => {
       'run.environment': { environmentId: 7 },
     } as never)
     const put = vi.spyOn(prefApi, 'putPreference').mockResolvedValue(undefined as never)
-    const w = mount(ProfileConfig, { global: { plugins: [createPinia()] } })
+    const w = mountCfg()
     await flushPromises()
 
     await w.find('[data-testid="my-env-select"]').setValue('')
     await w.find('[data-testid="my-env-save"]').trigger('click')
     await flushPromises()
     expect(put).toHaveBeenCalledWith('run.environment', { environmentId: null })
+    w.unmount()
+  })
+})
+
+describe('ProfileConfig — 我的 carry 漂移(S7.6)', () => {
+  it('按个人层拉漂移并渲染清单', async () => {
+    vi.spyOn(prefApi, 'getPreferences').mockResolvedValue({} as never)
+    vi.mocked(carryApi.getDrift).mockResolvedValue({
+      services: [{ service: 'fin-service', orphaned: ['$.mine'],
+        uncovered: [], renamedSuggestions: [] }],
+      plateReachable: true, scope: 'user',
+    })
+    const w = mountCfg()
+    await flushPromises()
+    expect(carryApi.getDrift).toHaveBeenCalledWith({ scope: 'user' })
+    const panel = w.find('[data-testid="carry-drift-my-carry"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('$.mine')
     w.unmount()
   })
 })

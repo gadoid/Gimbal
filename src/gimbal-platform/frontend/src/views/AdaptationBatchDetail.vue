@@ -1,7 +1,7 @@
-<!-- AdaptationBatchDetail —— 批次工作台(spec §6,admin-only):
+<!-- AdaptationBatchDetail —— 批次工作台(spec §6):
      头部(版本/状态/回滚)→ ops 列表(预览 + 状态驱动操作组 + 合并勾选)
-     → 构造对话框 → 快照折叠。member 直入 → 403「仅管理员」占位(§8);
-     页内能力门只读分支保留作双保险(authz W8:can('users.manage'))。 -->
+     → 构造对话框 → 快照折叠。操作面 = Admin+ ∨ 分层 carry 批属主
+     (S7.6:项目层批 = 项目管理员,个人层批 = 本人);其余 403 占位(§8)。 -->
 <template>
   <HubDetailPage v-if="detail" width="wide" :title="`批次 ${detail.batchId}`" icon="activity">
     <template #meta>
@@ -11,7 +11,7 @@
     <template #actions>
       <PageBack to="/adaptations" label="变更适配" />
       <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
-      <template v-if="auth.can('ops.write')">
+      <template v-if="canOperate">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
           构造 op
         </Button>
@@ -41,15 +41,15 @@
       </p>
     </template>
 
-    <Alert v-if="!auth.can('ops.write')" class="mb-3">
-      <AlertTitle>owner 只读视图:仅查看 op 与快照,操作请联系管理员</AlertTitle>
+    <Alert v-if="!canOperate" class="mb-3">
+      <AlertTitle>只读视图:仅查看 op 与快照,操作请联系批次属层的管理员</AlertTitle>
     </Alert>
 
     <div class="ops">
       <div v-for="op in paged" :key="op.id" class="op-row">
         <div class="op-head">
           <input
-            v-if="auth.can('ops.write') && selectable(op)"
+            v-if="canOperate && selectable(op)"
             type="checkbox"
             class="op-check"
             :data-testid="`op-check-${op.id}`"
@@ -62,7 +62,7 @@
           </span>
           <span v-if="op.appliedAt" class="hint">{{ op.appliedAt }}</span>
           <span v-if="op.note" class="hint note">{{ op.note }}</span>
-          <span v-if="auth.can('ops.write') && op.status === 'pending'" class="op-actions">
+          <span v-if="canOperate && op.status === 'pending'" class="op-actions">
             <Button
               size="sm"
               class="op-action"
@@ -196,6 +196,20 @@ const route = useRoute()
 const detail = ref<api.BatchDetail | null>(null)
 const loaded = ref(false)
 const adminOnly = ref(false)
+
+/** S7.6:分层 carry 批的属主操作面 —— Admin+ ∨(个人层批 = 本人 ∨
+ * 项目层批 = 本人是该项目管理员;后端 _require_batch_access 同口径)。 */
+const canOperate = computed(() => {
+  if (auth.can('ops.write')) return true
+  const d = detail.value
+  if (!d?.carryScope) return false
+  if (d.carryScope === 'user') return d.carryScopeId === auth.currentUser?.id
+  if (d.carryScope === 'project') {
+    return auth.projects.some(
+      (p) => p.id === d.carryScopeId && p.role === 'admin')
+  }
+  return false
+})
 const selectedOps = ref<OpOut[]>([])
 const constructOpen = ref(false)
 const activeSeed = ref<api.MergeSeed | null>(null)

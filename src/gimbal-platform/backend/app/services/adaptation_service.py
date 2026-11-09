@@ -220,6 +220,8 @@ async def _batch_detail(
         "status": batch.status, "operatorId": batch.operator_id,
         "operatorName": batch.operator_name,
         "createdAt": batch.created_at, "closedAt": batch.closed_at,
+        # S7.6:carry 批的作用域标签(NULL = 公共项目层)
+        "carryScope": batch.carry_scope, "carryScopeId": batch.carry_scope_id,
         "opCounts": counts,
         "ops": ops_out,
         "snapshots": [
@@ -261,6 +263,7 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
         raise ValueError(f"batch_not_active: {batch.status}")
 
     payload = {**(op.payload or {})}
+    carry_change: "tuple[str | None, dict, dict] | None" = None
     try:
         if op.op_type not in CARRY_OPS and op.scenario_id:
             # 存量 op(D5 前补的)应用时同闸:私有场景标 conflict 不落
@@ -268,7 +271,8 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
                                       batch_id=op.batch_id,
                                       op_type=op.op_type, notify=False)
         if op.op_type in CARRY_OPS:
-            await _apply_carry_op(db, op, payload)
+            carry_change = await _apply_carry_op(
+                db, op, payload, carry_scope_of(batch))
         elif op.op_type in DATASET_OPS:
             await _apply_dataset_op(db, op, payload)
         else:  # STEP_OPS + renameVar:场景 definition(renameVar 联动数据集)
@@ -291,9 +295,30 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
     await _maybe_complete(db, batch)
     await db.commit()
     # 通知接线(P1b,权限方案 §3.2):仅 scenario/dataset 类实体产生
-    # 通知 —— carry_binding/carry_default 是全局资产无归属,不通知。
+    # 通知 —— carry 类无归属场景,但公共层值变更走 S7.6 遮蔽通知。
     await _notify_adaptation_applied(db, op, batch)
+    if carry_change is not None:
+        await _notify_carry_shadow(db, batch, carry_change)
     return _op_out(op)
+
+
+async def _notify_carry_shadow(
+    db: AsyncSession, batch: AdaptationBatch,
+    change: "tuple[str | None, dict, dict]",
+) -> None:
+    """S7.6:公共层 carry 批的 op 落库后 → 项目层同键遮蔽通知
+    (best-effort,失败只记日志)。"""
+    from . import carry_shadow
+
+    service, old, new = change
+    try:
+        await carry_shadow.notify_public_carry_change(
+            db, scope=carry_scope_of(batch), service=service,
+            old=old, new=new,
+            actor_name=batch.operator_name or "adaptation")
+    except Exception:  # noqa: BLE001 — 通知是增强,不是 op 落地的前置
+        logger.opt(exception=True).warning(
+            "adaptation: carry shadow notify failed (batch {})", batch.batch_id)
 
 
 async def _notify_adaptation_applied(
@@ -429,78 +454,105 @@ async def _apply_dataset_op(db: AsyncSession, op: AdaptationOp, payload: dict) -
 
 
 # ─── carry 值表批(spec §7):开批 / 收敛应用 / before 快照 ─────────
+def carry_scope_of(batch: AdaptationBatch) -> "tuple[str, int] | None":
+    """authz M2a S7.6:批次 carry 作用域(NULL = 公共项目层,与
+    carry_store scope=None 缺省语义同型 —— 存量批次全是公共层)。"""
+    if batch.carry_scope is None:
+        return None
+    return (batch.carry_scope, batch.carry_scope_id or 0)
+
+
 async def _apply_carry_op(db: AsyncSession, op: AdaptationOp,
-                          payload: dict) -> None:
-    """CARRY_OPS 收敛应用到值表(service 缺省 = 全局默认表)。"""
+                          payload: dict,
+                          scope: "tuple[str, int] | None" = None,
+                          ) -> "tuple[str | None, dict, dict] | None":
+    """CARRY_OPS 收敛应用到值表(service 缺省 = 全局默认表)。
+
+    S7.6:按批次作用域落表;返回 ``(service, old, new)`` 供公共层写后
+    的项目层遮蔽通知(非公共层调用方自行忽略)。"""
     service = payload.get("service")
     if op.op_type == "renameCarryPath":
         src, dst = payload["from"], payload["to"]
         if service:
-            entries = await carry_store.get_bindings(db, service)
+            entries = await carry_store.get_bindings(db, service, scope)
         else:
-            entries = await carry_store.get_defaults(db)
+            entries = await carry_store.get_defaults(db, scope)
         if src not in entries:
             raise KeyError(f"carry_path_not_found: {src}")
         if dst in entries:
             raise ValueError(f"carry_path_conflict: {dst} already present")
+        old = dict(entries)
         entries[dst] = entries.pop(src)
         if service:
             await carry_store.put_bindings(
-                db, service, entries,
+                db, service, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
         else:
             await carry_store.put_defaults(
-                db, entries,
+                db, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
     elif op.op_type == "addCarryBinding":
         path, value = payload["path"], payload.get("value")
         if service:
-            entries = await carry_store.get_bindings(db, service)
+            entries = await carry_store.get_bindings(db, service, scope)
+            old = dict(entries)
             entries[path] = value
             await carry_store.put_bindings(
-                db, service, entries,
+                db, service, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
         else:
-            entries = await carry_store.get_defaults(db)
+            entries = await carry_store.get_defaults(db, scope)
+            old = dict(entries)
             entries[path] = value
             await carry_store.put_defaults(
-                db, entries,
+                db, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
     else:  # removeCarryBinding
         path = payload["path"]
         if service:
-            entries = await carry_store.get_bindings(db, service)
+            entries = await carry_store.get_bindings(db, service, scope)
         else:
-            entries = await carry_store.get_defaults(db)
+            entries = await carry_store.get_defaults(db, scope)
+        old = dict(entries)
         entries.pop(path, None)  # 收敛:缺行 = 已达终态
         if service:
             await carry_store.put_bindings(
-                db, service, entries,
+                db, service, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
         else:
             await carry_store.put_defaults(
-                db, entries,
+                db, entries, scope=scope,
                 updated_by_id=None, updated_by_name="adaptation")
+    return (service, old, dict(entries))
 
 
 async def open_carry_batch(db: AsyncSession, *, service: str | None,
-                           operator_id: int) -> dict:
+                           operator_id: int,
+                           scope: "tuple[str, int] | None" = None,
+                           ) -> dict:
     """开 carry 值表批(spec §7):漂移面板勾选生成。无版本语义 ——
-    endpoint_id 用 ``carry:{service|global}`` 展示锚,完成不推戳。"""
+    endpoint_id 用 ``carry:{service|global}`` 展示锚,完成不推戳。
+
+    S7.6:``scope`` = 值表作用域(None = 公共项目层;('project', pid) =
+    项目层;('user', uid) = 个人层)—— 落批次行,apply/rollback 同层。"""
     batch_id = f"bt-{uuid4().hex[:12]}"
     db.add(AdaptationBatch(
         batch_id=batch_id,
         endpoint_id=f"carry:{service or 'global'}",
         from_version="-", to_version="-",
         status="open", operator_id=operator_id,
+        carry_scope=scope[0] if scope else None,
+        carry_scope_id=scope[1] if scope else None,
     ))
-    await _ensure_carry_snapshot(db, batch_id, service)
+    await _ensure_carry_snapshot(db, batch_id, service, scope)
     await db.commit()
     return await _batch_detail(db, batch_id)
 
 
 async def _ensure_carry_snapshot(db: AsyncSession, batch_id: str,
-                                 service: str | None) -> None:
+                                 service: str | None,
+                                 scope: "tuple[str, int] | None" = None,
+                                 ) -> None:
     entity_type = "carry_binding" if service else "carry_default"
     entity_id = service or "__global__"
     existing = (await db.execute(
@@ -512,8 +564,8 @@ async def _ensure_carry_snapshot(db: AsyncSession, batch_id: str,
     )).scalar_one_or_none()
     if existing is not None:
         return
-    rows = (await carry_store.get_bindings(db, service)
-            if service else await carry_store.get_defaults(db))
+    rows = (await carry_store.get_bindings(db, service, scope)
+            if service else await carry_store.get_defaults(db, scope))
     db.add(AdaptationSnapshot(
         batch_id=batch_id, entity_type=entity_type, entity_id=entity_id,
         before_json={"entries": dict(rows)},
@@ -599,6 +651,7 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
 
     restored: list[dict] = []
     conflicts: list[dict] = []
+    carry_changes: "list[tuple[str | None, dict, dict]]" = []
 
     def _snap(kind: str):
         return [s for s in snapshots if s.entity_type == kind]
@@ -643,10 +696,13 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
             })
     for snap in _snap("carry_binding") + _snap("carry_default"):
         try:
-            await _rollback_carry(db, snap, applied_ops)
+            change = await _rollback_carry(
+                db, snap, applied_ops, carry_scope_of(batch))
             restored.append(
                 {"entityType": snap.entity_type, "entityId": snap.entity_id}
             )
+            if change is not None:
+                carry_changes.append(change)
         except _RollbackConflict as e:
             conflicts.append({
                 "entityType": snap.entity_type, "entityId": snap.entity_id,
@@ -667,6 +723,9 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
         batch.status = "rolled_back"
     batch.closed_at = _utcnow()
     await db.commit()
+    # S7.6:公共层值表被回滚恢复 → 同键遮蔽通知(值变更与通知同判)
+    for change in carry_changes:
+        await _notify_carry_shadow(db, batch, change)
     return {
         "batchId": batch_id, "status": "rolled_back",
         "restored": restored, "conflicts": conflicts,
@@ -778,8 +837,13 @@ async def _rollback_dataset(
 
 
 async def _rollback_carry(db: AsyncSession, snap: AdaptationSnapshot,
-                          applied_ops: list[AdaptationOp]) -> None:
-    """值表回滚:期望态 = before + applied carry ops 内存重放,比对后恢复。"""
+                          applied_ops: list[AdaptationOp],
+                          scope: "tuple[str, int] | None" = None,
+                          ) -> "tuple[str | None, dict, dict] | None":
+    """值表回滚:期望态 = before + applied carry ops 内存重放,比对后恢复。
+
+    S7.6:按批次作用域读写;返回 ``(service, old, new)`` 供公共层写后的
+    项目层遮蔽通知(非公共层调用方自行忽略)。"""
     before = dict((snap.before_json or {}).get("entries") or {})
     service = snap.entity_id if snap.entity_type == "carry_binding" else None
     expected = dict(before)
@@ -797,19 +861,22 @@ async def _rollback_carry(db: AsyncSession, snap: AdaptationSnapshot,
             expected[payload["path"]] = payload.get("value")
         else:
             expected.pop(payload.get("path"), None)
-    current = (await carry_store.get_bindings(db, service)
-               if service else await carry_store.get_defaults(db))
+    current = (await carry_store.get_bindings(db, service, scope)
+               if service else await carry_store.get_defaults(db, scope))
     if current != expected:
         raise _RollbackConflict(
             "edited_beyond_batch: current != before+ops replay")
+    if current == before:
+        return None  # 无实际恢复(值未变),不开通知面
     if service:
         await carry_store.put_bindings(
-            db, service, before,
+            db, service, before, scope=scope,
             updated_by_id=None, updated_by_name="rollback")
     else:
         await carry_store.put_defaults(
-            db, before,
+            db, before, scope=scope,
             updated_by_id=None, updated_by_name="rollback")
+    return (service, dict(current), dict(before))
 
 
 # ─── 批次查询与人工 op(spec §5.3/§5.4)──────────────────────────
@@ -842,24 +909,48 @@ async def list_batches_for_owner(
     归属唯一权威是 ``ComposerScenario.owner_id``;``owner`` 字符串列仅展示
     快照,过滤不得使用。涉及场景 = ops.scenario_id ∪ scenario 快照
     entity_id(快照兜底:批次回滚后 ops 仍在,场景删除时仅剩快照记录)。
+
+    S7.6 追加:本人的分层 carry 批(个人层批 = 本人;项目层批 = 本人
+    管理的项目)同入镜头 —— 值表批不寻址场景,原口径会漏。
     """
+    hit: set[str] = set()
     owned_ids = set((await db.execute(
         select(ComposerScenario.scenario_id).where(
             ComposerScenario.owner_id == owner_id
         )
     )).scalars())
-    if not owned_ids:
-        return [], 0
-    hit = set((await db.execute(
-        select(AdaptationOp.batch_id).where(
-            AdaptationOp.scenario_id.in_(owned_ids))
-    )).scalars())
+    if owned_ids:
+        hit |= set((await db.execute(
+            select(AdaptationOp.batch_id).where(
+                AdaptationOp.scenario_id.in_(owned_ids))
+        )).scalars())
+        hit |= set((await db.execute(
+            select(AdaptationSnapshot.batch_id).where(
+                AdaptationSnapshot.entity_type == "scenario",
+                AdaptationSnapshot.entity_id.in_(owned_ids),
+            )
+        )).scalars())
+    # S7.6:个人层 carry 批(本人)+ 项目层 carry 批(本人任项目管理员)
     hit |= set((await db.execute(
-        select(AdaptationSnapshot.batch_id).where(
-            AdaptationSnapshot.entity_type == "scenario",
-            AdaptationSnapshot.entity_id.in_(owned_ids),
-        )
+        select(AdaptationBatch.batch_id).where(
+            AdaptationBatch.kind == "carry",
+            AdaptationBatch.carry_scope == "user",
+            AdaptationBatch.carry_scope_id == owner_id)
     )).scalars())
+    from ..models.project import ProjectMember
+
+    admin_pids = (await db.execute(
+        select(ProjectMember.project_id).where(
+            ProjectMember.user_id == owner_id,
+            ProjectMember.role == ProjectMember.ROLE_ADMIN)
+    )).scalars().all()
+    if admin_pids:
+        hit |= set((await db.execute(
+            select(AdaptationBatch.batch_id).where(
+                AdaptationBatch.kind == "carry",
+                AdaptationBatch.carry_scope == "project",
+                AdaptationBatch.carry_scope_id.in_(admin_pids))
+        )).scalars())
     if not hit:
         return [], 0
     stmt = select(AdaptationBatch).where(AdaptationBatch.batch_id.in_(hit))
@@ -913,7 +1004,9 @@ async def create_op(
     if op_type in CARRY_OPS:
         # 回滚安全网:开批已建本表快照;op 触另一张值表(如服务批里的
         # 全局默认 op)时现场补 before 像 —— 与 _ensure_dataset_snapshot 同款
-        await _ensure_carry_snapshot(db, batch_id, payload.get("service"))
+        # S7.6:快照随批次作用域(项目/个人层批的 before 像取本层)
+        await _ensure_carry_snapshot(db, batch_id, payload.get("service"),
+                                     carry_scope_of(batch))
     elif op_type in DATASET_OPS:
         await _ensure_dataset_snapshot(db, batch_id, dataset_id)
     else:

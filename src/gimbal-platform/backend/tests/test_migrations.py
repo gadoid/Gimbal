@@ -1652,3 +1652,41 @@ def test_0049_drop_share_refs():
                     "SELECT to_regclass('share_refs') IS NOT NULL")).scalar()
         finally:
             eng.dispose()
+
+
+def test_0050_carry_batch_scope():
+    """S7.6:adaptation_batches 加 carry_scope/carry_scope_id(NULL = 公共层,
+    无回填);fresh 链(baseline create_all 已含两列)空转;downgrade 删两列。"""
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            # 建到 0049;baseline 按当前模型建表 → 两列已在,手动摘列
+            # 模拟 0049 时代的存量库
+            command.upgrade(_cfg(sync_url), "0049_drop_share_refs")
+            with eng.begin() as c:
+                c.execute(text(
+                    "ALTER TABLE adaptation_batches"
+                    " DROP COLUMN carry_scope"))
+                c.execute(text(
+                    "ALTER TABLE adaptation_batches"
+                    " DROP COLUMN carry_scope_id"))
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "adaptation_batches")}
+            assert "carry_scope" not in cols
+
+            command.upgrade(_cfg(sync_url), "0050_carry_batch_scope")
+            assert _revision(sync_url) == "0050_carry_batch_scope"
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "adaptation_batches")}
+            assert {"carry_scope", "carry_scope_id"} <= cols
+
+            # downgrade:两列移除(分层批的层标记丢失,批次回落公共层解析)
+            command.downgrade(_cfg(sync_url), "0049_drop_share_refs")
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "adaptation_batches")}
+            assert "carry_scope" not in cols and "carry_scope_id" not in cols
+        finally:
+            eng.dispose()

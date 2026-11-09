@@ -114,13 +114,19 @@ export interface ServiceDrift {
 }
 
 /** 漂移报告:plateReachable=False 时 services 照常返回,但面视为空集 →
- *  全部绑定误报为 orphaned — 先判该信号再渲染/放行批生成。 */
+ *  全部绑定误报为 orphaned — 先判该信号再渲染/放行批生成。
+ *  S7.6:scope/scopeId = 报告层标签(缺省请求 = 公共项目层)。 */
 export interface DriftReport {
   services: ServiceDrift[]
   plateReachable: boolean
+  scope?: string | null
+  scopeId?: number | null
 }
 
-export async function getDrift(): Promise<DriftReport> {
-  const { data } = await http.get<DriftReport>('/carry/drift')
+/** S7.6 按层拉漂移:target 缺省 = 公共项目层(Admin+);project 层 =
+ * 项目管理员;user 层 = 本人(分权与 carry 写面同口径)。 */
+export async function getDrift(target?: ScopeTarget): Promise<DriftReport> {
+  const { data } = await http.get<DriftReport>(
+    '/carry/drift', target ? scopeParams(target) : undefined)
   return data
 }

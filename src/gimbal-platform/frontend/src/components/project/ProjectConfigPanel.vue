@@ -105,6 +105,19 @@
       </div>
     </section>
 
+    <!-- ⑥ carry 漂移(项目层,普通项目):S7.6 按层维护视图 -->
+    <section v-if="!isPublic">
+      <h2>carry 漂移(项目层)</h2>
+      <p class="hint">
+        本项目层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于项目层(公共层/个人层互不影响)。
+      </p>
+      <CarryDriftPanel
+        title="项目层绑定 vs plate 面"
+        :target="projectTarget"
+        tid="prj-cfg"
+      />
+    </section>
+
     <EffectivePreviewDialog
       :open="previewOpen"
       :scenarios="scenOptions"
@@ -135,6 +148,7 @@ import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import CarryDefaultsEditor from '@/components/carry/CarryDefaultsEditor.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
+import CarryDriftPanel from '@/components/carry/CarryDriftPanel.vue'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 
 const props = defineProps<{ project: ProjectOut }>()

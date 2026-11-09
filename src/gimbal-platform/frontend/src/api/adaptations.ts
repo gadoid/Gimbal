@@ -38,6 +38,9 @@ export interface BatchOut {
   createdAt: string
   closedAt: string | null
   opCounts: Record<string, number>
+  /** S7.6:carry 批作用域('project'|'user';null = 公共项目层)。 */
+  carryScope?: 'project' | 'user' | null
+  carryScopeId?: number | null
 }
 
 export interface BatchDetail extends BatchOut {
@@ -109,12 +112,16 @@ export async function getBatch(batchId: string): Promise<BatchDetail> {
   return data
 }
 
-/** 开 carry 值表批(漂移面板入口,spec §7);service=null → 全局默认表面。 */
+/** 开 carry 值表批(漂移面板入口,spec §7);service=null → 全局默认表面。
+ *  S7.6:target 选值表作用域(缺省 = 公共项目层;分权与 carry 写面同口径)。 */
 export async function openCarryBatch(
   service: string | null,
+  target?: { scope: 'global' | 'project' | 'user'; projectId?: number },
 ): Promise<BatchDetail> {
   const { data } = await http.post<BatchDetail>('/adaptations/carry-batches', {
     service,
+    ...(target && target.scope !== 'global' ? { scope: target.scope } : {}),
+    ...(target?.projectId != null ? { projectId: target.projectId } : {}),
   })
   return data
 }

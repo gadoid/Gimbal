@@ -78,3 +78,7 @@ class ServiceDrift(BaseModel):
 class DriftReport(BaseModel):
     services: list[ServiceDrift] = Field(default_factory=list)
     plateReachable: bool = True
+    # authz M2a S7.6:漂移报告的层标签(与 DefaultsOut 同款;global 请求
+    # 时 = 公共项目层)
+    scope: str | None = None
+    scopeId: int | None = None

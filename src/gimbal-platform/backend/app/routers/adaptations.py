@@ -14,10 +14,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import CurrentUser, MemberUser
+from ..core.deps import CurrentUser
+from ..models.adaptation_op import AdaptationOp
 from ..schemas.adaptations import (
     BatchDetail,
     BatchListOut,
@@ -39,6 +41,41 @@ router = APIRouter(prefix="/adaptations", tags=["adaptations"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
+async def _require_batch_access(db, user, batch_id: str | None) -> None:
+    """S7.6:分层 carry 批的批次访问门 —— ops.write(非 carry 批与公共层
+    carry 批)之外,项目层批 = 该项目管理员,个人层批 = 本人。
+
+    其余一律 403 ``capability_forbidden(ops.write)``(W3/D5 既有契约:门在
+    取数之前,普通用户对不存在的 id 也先 403;Admin+ 过门后才是 404)。"""
+    from ..core.deps import capability_error
+    from ..models.adaptation_batch import AdaptationBatch
+    from ..models.project import ProjectMember
+    from ._ownership import has_capability
+
+    if has_capability(user, "ops.write"):
+        return
+    batch = await db.get(AdaptationBatch, batch_id) if batch_id else None
+    if batch is not None and batch.kind == "carry":
+        if batch.carry_scope == "user" and batch.carry_scope_id == user.id:
+            return
+        if batch.carry_scope == "project":
+            role = (await db.execute(select(ProjectMember.role).where(
+                ProjectMember.project_id == batch.carry_scope_id,
+                ProjectMember.user_id == user.id))).scalar_one_or_none()
+            if role == ProjectMember.ROLE_ADMIN:
+                return
+    raise capability_error("ops.write")
+
+
+async def _require_op_access(db, user, op_id: int) -> None:
+    """op 级端点的门:op → 所属批次 → ``_require_batch_access``。op 不存在
+    时非 Admin+ 仍按能力门 403(不泄露存在性),Admin+ 由取数路径 404。"""
+    batch_id = (await db.execute(
+        select(AdaptationOp.batch_id).where(AdaptationOp.id == op_id)
+    )).scalar_one_or_none()
+    await _require_batch_access(db, user, batch_id)
+
+
 @router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
 async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedStepOut]:
     """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。"""
@@ -54,12 +91,20 @@ async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedSte
 
 @router.post("/carry-batches", response_model=BatchDetail, status_code=201)
 async def open_carry_batch(
-    user: MemberUser, body: CarryBatchIn, db: DbSession,
+    user: CurrentUser, body: CarryBatchIn, db: DbSession,
 ) -> BatchDetail:
     """开 carry 值表批(漂移面板入口,spec §7);ops 经既有
-    POST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。"""
+    POST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。
+
+    S7.6 按层:``scope``/``projectId`` 选值表作用域(缺省 = 公共项目层),
+    分权与 carry 写面同口径(``_resolve_scope(write=True)``)—— 公共层
+    = Admin+,项目层 = 项目管理员,个人层 = 本人。"""
+    from .carry import _resolve_scope
+
+    sc = await _resolve_scope(db, user, body.scope or "global",
+                              body.project_id, write=True)
     detail = await adaptation_service.open_carry_batch(
-        db, service=body.service, operator_id=user.id,
+        db, service=body.service, operator_id=user.id, scope=sc,
     )
     return BatchDetail.model_validate(detail)
 
@@ -100,7 +145,8 @@ async def list_batches(
 
 
 @router.get("/batches/{batch_id}", response_model=BatchDetail)
-async def get_batch(batch_id: str, user: MemberUser, db: DbSession) -> BatchDetail:
+async def get_batch(batch_id: str, user: CurrentUser, db: DbSession) -> BatchDetail:
+    await _require_batch_access(db, user, batch_id)
     try:
         detail = await adaptation_service.get_batch_detail(
             db, batch_id, viewer=user)
@@ -111,13 +157,15 @@ async def get_batch(batch_id: str, user: MemberUser, db: DbSession) -> BatchDeta
 
 @router.post("/batches/{batch_id}/ops", response_model=OpOut, status_code=201)
 async def create_op(
-    user: MemberUser, batch_id: str, body: OpCreateIn, db: DbSession,
+    user: CurrentUser, batch_id: str, body: OpCreateIn, db: DbSession,
 ) -> OpOut:
     """人工补 op(renameVar / 数据集 op —— 自动草案之外,§5.4)。
 
-    authz D5:批次是 Admin+ 的运维面(ops.write,方案 2.1);场景 / 数据集
+    authz D5:场景批是 Admin+ 的运维面(ops.write,方案 2.1);场景 / 数据集
     op 只作用于公共场景(S1 后含项目场景),私有场景 409 并通知属主自行
-    适配(私有区对任何平台角色不可写,方案 1.3)。"""
+    适配(私有区对任何平台角色不可写,方案 1.3)。S7.6:分层 carry 批的
+    访问门 = carry 写面同口径(``_require_batch_access``)。"""
+    await _require_batch_access(db, user, batch_id)
     try:
         op = await adaptation_service.create_op(
             db, batch_id,
@@ -135,8 +183,9 @@ async def create_op(
 
 
 @router.post("/ops/{op_id}/apply", response_model=OpOut)
-async def apply_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
+async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
     """逐条应用:幂等重放 / C5 冲突标 conflict / 末条完成推戳。"""
+    await _require_op_access(db, user, op_id)
     try:
         op = await adaptation_service.apply_op(db, op_id)
     except KeyError as e:
@@ -159,8 +208,9 @@ async def apply_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
 
 
 @router.post("/ops/{op_id}/skip", response_model=OpOut)
-async def skip_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
+async def skip_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
     """跳过一条 pending op(末条跳过同样收敛 completed + 推戳)。"""
+    await _require_op_access(db, user, op_id)
     try:
         op = await adaptation_service.skip_op(db, op_id)
     except KeyError as e:
@@ -174,9 +224,10 @@ async def skip_op(user: MemberUser, op_id: int, db: DbSession) -> OpOut:
 
 @router.patch("/ops/{op_id}", response_model=OpOut)
 async def patch_op(
-    user: MemberUser, op_id: int, body: OpPatchIn, db: DbSession,
+    user: CurrentUser, op_id: int, body: OpPatchIn, db: DbSession,
 ) -> OpOut:
     """仅 pending 可整包替换 payload(mapValue 骨架补值 / 参数修正)。"""
+    await _require_op_access(db, user, op_id)
     try:
         op = await adaptation_service.update_op(db, op_id, body.payload)
     except KeyError as e:
@@ -188,7 +239,7 @@ async def patch_op(
 
 @router.post("/batches/{batch_id}/rollback", response_model=RollbackReport)
 async def rollback_batch(
-    user: MemberUser, batch_id: str, db: DbSession,
+    user: CurrentUser, batch_id: str, db: DbSession,
     force: bool = Query(default=False),
 ) -> RollbackReport:
     """整批回滚:before+重放乐观比对,冲突实体跳过不盲写。
@@ -196,6 +247,7 @@ async def rollback_batch(
     force(M4/R27):RS4a 批次提交后场景被编辑过时,编辑者确认放弃
     这些修改后带 force 还原快照。
     """
+    await _require_batch_access(db, user, batch_id)
     try:
         report = await adaptation_service.rollback_batch(
             db, batch_id, force=force)

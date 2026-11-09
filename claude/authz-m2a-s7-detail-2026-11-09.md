@@ -145,6 +145,16 @@
 - **测试**:新 `test_authz_s75_import_slots.py`(6 例:新建缺省声明 + dropped / 显式槽位优先 / 映射改写 + 绑定状态 / 别名无槽位 → 未落地 / 模板引用标签不改写 / 预检栏);pipeline `test_land_create_branch` 回报断言更新;owner-compare 白名单:导入人本人池过滤 alias→slot 换行 +2 条。前端 `ImportScenarioDialog.test.ts` +3 例、新 `Auths.newSlot.test.ts` 2 例。
 - **门禁**:后端全量 1857 passed / 2 skipped;root 1429;前端 vitest 1331 / vue-tsc 0 / eslint 0 / build ✓;bootstrap 96 + 3 skip;ext_gates rc=0。无迁移。
 
+### S7.6 漂移与适配批次按层(已完成)
+
+- **drift 按层**:`GET /carry/drift?scope=global|project|user&projectId=`;分权 = carry 写面同口径(`_resolve_scope(write=True)`,漂移是维护视图,看层 = 能写层):global(默认,兼容旧客户端)= Admin+、project = 项目管理员 ∨ Admin+(非成员 404 / 成员 403)、user = 本人。路由门由 `MemberUser` 放宽为 `CurrentUser` + 行内判。`DriftReport` 增 `scope`/`scopeId` 层标签。
+- **carry 批带作用域**(迁移 **0050**):`adaptation_batches` 加 `carry_scope`('project'|'user')+ `carry_scope_id`;**NULL = 公共项目层**(与 carry_store `scope=None` 缺省同型,存量批全是公共层 → 无回填)。`open_carry_batch(scope=)` 落行;`_ensure_carry_snapshot` / `_apply_carry_op` / `_rollback_carry` / `create_op` 补快照全链经 `carry_scope_of(batch)` 读写同层。`POST /adaptations/carry-batches` 收 `scope`/`projectId`(门同 `_resolve_scope(write=True)`)。批次详情与 op 五端点(ops/apply/skip/patch/rollback)门 = `_require_batch_access`:ops.write ∨ 项目层批的项目管理员 ∨ 个人层批本人;**其余仍 403 `capability_forbidden(ops.write)`、门在取数之前**(wrapup 守卫 ④ 契约原样保持:普通用户对不存在 id 先 403,Admin+ 过门才 404)。`?scope=mine` 镜头并入本人的分层 carry 批(值表批不寻址场景,原口径漏)。`BatchOut` 增 `carryScope`/`carryScopeId`。
+- **遮蔽通知**(`services/carry_shadow.py`,新类型 `carry.shadowed`):语义 = tier 序 公共 < 项目,项目层同键覆盖**遮住**公共层改动(改名/删键则使项目层绑定悬空)。公共层写面(`PUT /carry/defaults|bindings/{svc}` 的 global 层、公共层批 op 应用、公共层批回滚恢复)落库后,按变更键(新旧值不同,含增删改名)查项目层命中行 → 向**该项目管理员**发通知,payload/正文只报**该项目实际覆盖的键**;项目层 / 个人层写不通知(个人层不在计划面)。通知 best-effort(先 commit 值变更,失败只记日志)。
+- **前端**:`getDrift(target?)` / `openCarryBatch(service, target?)` 作用域化;新复用组件 `CarryDriftPanel`(刷新 / plate 不可达禁用 / 勾选生成层批 → 批次详情,复用 `carry-drift` 纯函数);挂载点 = 项目配置页签 ⑥「carry 漂移(项目层)」(普通项目)+ 我的配置「我的 carry 漂移(个人层)」;公共层漂移仍在变更适配页。批次详情页操作面 `canOperate` = Admin+ ∨ 分层批属主(`auth.currentUser` / `auth.projects` role=admin,与后端同口径);变更适配批次表加「项目层 / 个人层」chip + 属主可见「详情」入口。通知词表 + 标签补 `carry.shadowed`。
+- **测试**:新 `test_authz_s76_drift_layers.py`(9 例:global 层门 + 层标签 / user 层本人 / project 层门矩阵;项目层批端到端(apply 落项目层、公共层不动、rollback 还原)/ 个人层批 + mine 镜头 / 开批与 op 门;公共层 PUT 遮蔽通知只报命中键 / 项目层写不通知 / 公共层批 op + 回滚通知);`test_migrations::test_0050_carry_batch_scope`(baseline create_all 已含两列 → 手动摘列模拟存量库 → upgrade 加列 → downgrade 删列)。前端 `ProjectConfigPanel.test` +2(项目层拉取 + 层批生成 / 公共项目不挂)、`ProfileConfig.test` +1(个人层漂移;挂真 router 消 injection 警告)。
+- **门禁**:后端全量 1866 passed / 3 skipped / 2 errors(`test_execution_refactor::test_run_with_batch_id_lands_column_and_config`、`test_suites_run::test_run_suite_infra_exception_classification` —— 全量里前序测试泄漏的后台执行任务打到已删 schema(`relation "executions" does not exist`)的 teardown 干扰,**单跑均过**,本切片不触执行链);wrapup 守卫 ④(批次 op 门在取数前、403 `capability_forbidden(ops.write)`)保持。前端 vitest 1334 / vue-tsc 0 / eslint 0 / build ✓;bootstrap 95 + 5 skip(live 用例随后端未起而跳);ext_gates rc=0。root 套件未跑(本切片未触 `src/gimbal`)。
+- **dev 库**:本机 dev 库(`gimbal-pg-15432`)此前停在 0048(S7.4 收口未在本机做)→ `scripts/retire_share_refs.py --apply`(1 条:自举冒烟 `sc-boot-smoke` 引用 → gimbal_boot2 私有副本)→ `upgrade head` 至 **0050**(0049 删 share_refs + 0050 两列核验在位)。**本次未做迁移前 pg_dump 备份**。dev 后端当时未运行,无需重启。
+
 ## 四、裁定(2026-11-09)
 
 | # | 问题 | 裁定 |

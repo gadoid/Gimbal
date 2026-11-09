@@ -12,11 +12,16 @@ _CAMEL = ConfigDict(populate_by_name=True)
 
 
 class CarryBatchIn(BaseModel):
-    """POST /adaptations/carry-batches 请求体(spec §7):service 缺省 = 全局默认表。"""
+    """POST /adaptations/carry-batches 请求体(spec §7):service 缺省 = 全局默认表。
+
+    S7.6:scope/projectId = 值表作用域(缺省 = 公共项目层;project 层
+    需 projectId;分权与 carry 写面同口径)。"""
 
     model_config = _CAMEL
 
     service: str | None = Field(default=None, min_length=1)
+    scope: str | None = Field(default=None, pattern="^(global|project|user)$")
+    project_id: int | None = Field(default=None, alias="projectId", ge=1)
 
 
 class OpOut(BaseModel):
@@ -61,6 +66,9 @@ class BatchOut(BaseModel):
     endpoint_name: str = Field(default="", alias="endpointName")
     endpoint_method: str = Field(default="", alias="endpointMethod")
     endpoint_path: str = Field(default="", alias="endpointPath")
+    # S7.6:carry 批作用域('project'|'user';NULL = 公共项目层)。
+    carry_scope: str | None = Field(default=None, alias="carryScope")
+    carry_scope_id: int | None = Field(default=None, alias="carryScopeId")
 
 
 
