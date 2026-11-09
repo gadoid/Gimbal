@@ -60,6 +60,11 @@ class ProjectMember(Base):
     # 用户角色字面量在表 A/表 B,成员角色只在模型常量)
     ROLE_ADMIN = "admin"
     ROLE_MEMBER = "member"
+    # M2b Q1 项目用户:只读 + 执行(读 / 复制 / 执行 / 订阅 / 选用项目
+    # 凭证;不能新建 / 修改 / 删除 / 提升)
+    ROLE_USER = "user"
+    # 可写角色(表 B contributor 谓词与项目内新建 / 提升门的单一来源)
+    WRITER_ROLES = frozenset({ROLE_ADMIN, ROLE_MEMBER})
 
     __tablename__ = "project_members"
     __table_args__ = (
@@ -71,7 +76,8 @@ class ProjectMember(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    # admin(项目管理员)| member;S1.1 的 padmin / member 谓词数据源
+    # admin(项目管理员)| member | user(M2b 项目用户,只读 + 执行);
+    # S1.1 的 padmin / member 谓词数据源
     role: Mapped[str] = mapped_column(String(16), default="member")
     added_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

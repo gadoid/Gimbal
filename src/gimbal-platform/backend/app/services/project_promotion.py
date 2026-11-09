@@ -48,9 +48,12 @@ class SimpleUser:
 
 
 async def require_member(
-    db: AsyncSession, project_id: int, user_id: int,
+    db: AsyncSession, project_id: int, user_id: int, *,
+    writable: bool = False,
 ) -> Project:
-    """目标项目门:普通项目 + 主体是其成员(公共项目只有「发布」一条路)。"""
+    """目标项目门:普通项目 + 主体是其成员(公共项目只有「发布」一条路)。
+    ``writable=True``(提升 = 往项目里写内容):项目用户(只读 + 执行,
+    M2b Q1)→ 403 ``project_role_readonly``。"""
     proj = await db.get(Project, project_id)
     if proj is None:
         raise PromotionError(404, "not_found",
@@ -65,6 +68,9 @@ async def require_member(
     if role is None:
         raise PromotionError(404, "not_found",
                              f"project not found: {project_id}")
+    if writable and role not in ProjectMember.WRITER_ROLES:
+        raise PromotionError(403, "project_role_readonly",
+                             "项目用户只能读和执行项目内容,不能加入内容")
     return proj
 
 
@@ -184,7 +190,7 @@ async def analyze_promotion(
     project_id: int, user,
 ) -> dict:
     """析出分析(创建申请前的前置预览,与创建同口径)。"""
-    await require_member(db, project_id, user.id)
+    await require_member(db, project_id, user.id, writable=True)
     src = await _load_source(db, kind, source_id, user.id)
     blockers: list[dict] = []
     if kind == "scenario":

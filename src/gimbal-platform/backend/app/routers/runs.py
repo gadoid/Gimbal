@@ -340,7 +340,8 @@ async def preview_effective_config(
                                          "message": f"scenario not found: {sid}"})
     from ._ownership import can_read_scenario_row
     user = principal.user
-    if not await can_read_scenario_row(db, user, scen):
+    if at.zone_locked_out(principal, scen.project_id) \
+            or not await can_read_scenario_row(db, user, scen):
         raise HTTPException(404, detail={"code": "scenario_not_found",
                                          "message": f"scenario not found: {sid}"})
     scheme_env = None
@@ -382,6 +383,8 @@ async def preview_effective_config(
             "message": str(e)}) from None
     # S8:凭证来源(同执行请求 credentialSource;项目凭证须是项目成员)
     cred_src = body.get("credentialSource")
+    if principal.project_id is not None:
+        cred_src = "project"          # M2b Q2:项目令牌恒用项目凭证
     if cred_src not in (None, "personal", "project"):
         raise HTTPException(422, detail={
             "code": "credential_source_invalid",
@@ -450,6 +453,14 @@ async def post_run(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
         used: "at.ScopeSets | None" = None
+        if at.zone_locked_out(principal, scen.project_id):
+            # M2b Q2 区锁:项目令牌只能跑本项目场景(404 不泄露存在性)
+            raise run_dispatcher.NotFound(
+                "scenario_not_found", f"scenario not found: {body.scenario_id}")
+        if principal.project_id is not None:
+            # 项目令牌恒用项目凭证(M3;请求体 credentialSource 已被 M1
+            # 配方禁令拒绝 → 这里是服务端唯一写点)
+            body.credential_source = "project"
         if principal.is_token:
             # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
             await _apply_scheme_recipe(db, scen, body)
@@ -612,6 +623,8 @@ async def _build_trace(
         trace["token"] = {"id": principal.token.id,
                           "name": principal.token.name,
                           "kind": principal.token.kind}
+        if principal.project_id is not None:
+            trace["token"]["projectId"] = principal.project_id
         trace["outOfScope"] = (used.out_of_scope if used
                                else {"targets": [], "builtinAuths": [],
                                      "strategyEntries": []})

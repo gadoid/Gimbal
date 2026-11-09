@@ -1,6 +1,9 @@
 /** M2a S1.4/S1.8:项目区管理面 API + 转移维护者/platformize。 */
 import http from './http'
 
+/** 项目角色:admin 项目管理员 / member 成员 / user 项目用户(M2b Q1,只读 + 执行) */
+export type ProjectRole = 'admin' | 'member' | 'user'
+
 export interface ProjectOut {
   id: number
   name: string
@@ -10,6 +13,8 @@ export interface ProjectOut {
   myRole: string | null
   /** S7.0:请求者能否管理(项目管理员 ∨ Admin+;公共项目 = Admin+) */
   canManage?: boolean
+  /** M2b Q1:请求者能否在项目内新建 / 修改(项目管理员 ∨ 成员;项目用户只读 + 执行) */
+  canWrite?: boolean
   defaultEnvironmentId?: number | null
   /** 详情读面(S7.0):默认环境名 + 内容计数(列表端点不填) */
   defaultEnvironmentName?: string | null
@@ -83,14 +88,14 @@ export function listMembers(id: number): Promise<ProjectMember[]> {
 }
 
 export function addMember(
-  id: number, body: { userId: number; role?: 'admin' | 'member' },
+  id: number, body: { userId: number; role?: ProjectRole },
 ): Promise<ProjectMember> {
   return http.post<ProjectMember>(`/projects/${id}/members`, body)
     .then((r) => r.data)
 }
 
 export function patchMember(
-  id: number, userId: number, role: 'admin' | 'member',
+  id: number, userId: number, role: ProjectRole,
 ): Promise<ProjectMember> {
   return http.patch<ProjectMember>(
     `/projects/${id}/members/${userId}`, { role }).then((r) => r.data)

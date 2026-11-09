@@ -314,6 +314,15 @@ async def patch_user(
                     await at_svc.pause_token_instances(
                         db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
                         "令牌因属主停用失效;属主重新启用后需重新生成令牌")
+            # M2b Q2:停用者负责的项目令牌 —— 不落库失效(认证派生拒绝),
+            # 提醒各项目其余管理员换绑负责人
+            from .project_tokens import notify_holder_lost
+            pids = (await db.execute(select(AccessToken.project_id).where(
+                AccessToken.kind == at_svc.PROJECT_KIND,
+                AccessToken.holder_id == target.id,
+                AccessToken.revoked_at.is_(None)).distinct())).scalars().all()
+            for _pid in pids:
+                await notify_holder_lost(db, _pid, target.id)
     if "new_password" in data:
         target.password_hash = hash_password(data["new_password"])
 

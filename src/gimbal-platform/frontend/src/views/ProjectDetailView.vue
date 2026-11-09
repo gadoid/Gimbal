@@ -12,8 +12,9 @@
         <div class="row-title">
           <h1 data-testid="prj-detail-name">{{ project.name }}</h1>
           <span v-if="project.kind === 'public'" class="badge pub">公共</span>
-          <span v-else-if="project.myRole === 'admin'" class="badge">项目管理员</span>
-          <span v-else-if="project.myRole" class="badge">成员</span>
+          <span v-else-if="project.myRole" class="badge" data-testid="prj-detail-role">
+            {{ roleLabel(project.myRole) }}
+          </span>
         </div>
         <p class="sub">{{ project.description }}</p>
         <span v-if="project.defaultEnvironmentName" class="meta">
@@ -46,7 +47,7 @@
             data-testid="prj-scen-q"
             @keyup.enter="loadScenarios(1)"
           />
-          <button type="button" class="btn primary" data-testid="prj-scen-new"
+          <button v-if="canWrite" type="button" class="btn primary" data-testid="prj-scen-new"
                   @click="newScenarioInProject">在本项目新建场景</button>
         </div>
         <table class="tbl" v-if="scenarios.length">
@@ -66,7 +67,7 @@
             </tr>
           </tbody>
         </table>
-        <p v-else-if="scenLoaded" class="empty">本项目还没有场景 —— 点右上「在本项目新建场景」开始。</p>
+        <p v-else-if="scenLoaded" class="empty">本项目还没有场景<template v-if="canWrite"> —— 点右上「在本项目新建场景」开始</template>。</p>
         <div class="pager" v-if="scenTotal > scenPageSize">
           <button type="button" class="btn sm" :disabled="scenPage <= 1" @click="loadScenarios(scenPage - 1)">上一页</button>
           <span class="muted">{{ scenPage }} / {{ Math.ceil(scenTotal / scenPageSize) }}</span>
@@ -83,7 +84,7 @@
             data-testid="prj-suite-q"
             @keyup.enter="loadSuites()"
           />
-          <button type="button" class="btn primary" data-testid="prj-suite-new"
+          <button v-if="canWrite" type="button" class="btn primary" data-testid="prj-suite-new"
                   @click="newSuiteInProject">在本项目新建用例集</button>
         </div>
         <table class="tbl" v-if="suites.length">
@@ -130,6 +131,11 @@
         :project="project"
         @changed="refreshDetail"
       />
+      <ProjectTokensPanel
+        v-else-if="tab === 'tokens' && project"
+        :project="project"
+        :can-manage="!!project.canManage"
+      />
       <ProjectConfigPanel
         v-else-if="tab === 'config' && project"
         :project="project"
@@ -143,6 +149,7 @@
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProject, type ProjectOut } from '@/api/projects'
+import { projectRoleLabel } from '@/utils/projectRole'
 import { listScenarios } from '@/api/scenario-composer'
 import type { ScenarioListItem } from '@/types/scenario-composer'
 import { listSuites, createSuite, type SuiteSummary } from '@/api/suites'
@@ -150,6 +157,7 @@ import { listIntegrationTasks, type IntegrationTaskItem } from '@/api/integratio
 import ProjectMembersPanel from '@/components/project/ProjectMembersPanel.vue'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import PromotionsPanel from '@/components/project/PromotionsPanel.vue'
+import ProjectTokensPanel from '@/components/project/ProjectTokensPanel.vue'
 import { shortDateTime } from '@/utils/datetime'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
@@ -174,6 +182,8 @@ const TABS = [
   // S7.3:配置(普通项目 = 默认环境/项目层 carry/槽位状态/生效预览;
   // 公共项目 = 全局默认,原 /carry-config 落位)
   { key: 'config', label: '配置' },
+  // M2b Q2:项目令牌(普通项目 ∧ canManage)
+  { key: 'tokens', label: '项目令牌' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -182,8 +192,15 @@ const tab = computed<TabKey>(() => {
   return (TABS.some((x) => x.key === t) ? t : 'scenarios') as TabKey
 })
 const isPublic = computed(() => project.value?.kind === 'public')
+// M2b Q1:项目用户只读 + 执行 → 隐藏「在本项目新建」入口(后端仍是权威)
+const canWrite = computed(() => project.value?.canWrite !== false)
+const roleLabel = projectRoleLabel
 const visibleTabs = computed(() =>
-  TABS.filter((t) => t.key !== 'members' || project.value?.canManage))
+  TABS.filter((t) => {
+    if (t.key === 'members') return !!project.value?.canManage
+    if (t.key === 'tokens') return !!project.value?.canManage && !isPublic.value
+    return true
+  }))
 
 function switchTab(key: TabKey): void {
   void router.replace({ query: { ...route.query, tab: key } })
@@ -196,7 +213,8 @@ function tabCount(key: TabKey): number | null {
   if (key === 'scenarios') return p.scenarioCount ?? null
   if (key === 'suites') return p.suiteCount ?? null
   if (key === 'tasks') return p.taskCount ?? null
-  return p.memberCount ?? null
+  if (key === 'members') return p.memberCount ?? null
+  return null
 }
 
 async function refreshDetail(): Promise<void> {

@@ -26,7 +26,8 @@ _EXPECTED = yaml.safe_load(
 
 # 谓词缩写(快照)→ 语义(S1.1 项目维度)
 _ABBR = {
-    "o": "owner", "ref": "ref", "mem": "member", "pad": "padmin",
+    "o": "owner", "ref": "ref", "mem": "member", "con": "contributor",
+    "pad": "padmin",
     "mnt": "maintainer", "pr": "public_reader", "pa": "public_admin",
 }
 
@@ -63,6 +64,8 @@ _SUBJECTS = [
     ("super_admin", 2, {}, "super_admin"),
     ("user", 3, {_P: "member"}, "member(项目成员)"),
     ("user", 4, {_P: "admin"}, "padmin(项目管理员)"),
+    # M2b Q1:项目用户 —— 读 / 复制 / 执行(mem),写 / 删不命中(con)
+    ("user", 5, {_P: "user"}, "project-user(项目用户)"),
 ]
 
 
@@ -73,6 +76,9 @@ def _expected_from_snapshot(preds, *, uid, role, memberships, obj):
         if abbr == "o" and zone is None and uid == obj.owner_id:
             return True
         if abbr == "mem" and zone == _P and _P in memberships:
+            return True
+        if abbr == "con" and zone == _P \
+                and memberships.get(_P) in ("admin", "member"):
             return True
         if abbr == "pad" and zone == _P \
                 and memberships.get(_P) == "admin":

@@ -88,6 +88,12 @@ async def resolve_graph_units(
                     f"unit {u['ref']!r}: rowIndex {ri} out of range for "
                     f"{ds_id} (0..{len(rows) - 1})")
             row_dict = rows[ri] or {}
+            from .run_prepare import row_binding_refs
+            if row_binding_refs(row_dict):
+                # M2b Q3:套件编排首版不支持行账号列(凭证全图解析一次)
+                raise GraphDispatchError(
+                    f"unit {u['ref']!r}: dataset_binding_unsupported —— "
+                    "suite 编排暂不支持数据集账号列(@slot.<槽>)")
         if row_dict and scenario_store.is_foreign_viewer(
                 owner_id, scen.owner_id):
             # authz W6:跑他人场景(引用/suite 成员)—— 数据集敏感列剥

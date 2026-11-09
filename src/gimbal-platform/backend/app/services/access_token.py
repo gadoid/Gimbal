@@ -57,6 +57,8 @@ ERR_REGENERATE_REQUIRED = "regenerate_required"    # 409
 ERR_TOKEN_LIMIT_REACHED = "token_limit_reached"    # 409
 ERR_TOKEN_REVOKED = "token_revoked"                # 409
 ERR_CALLBACK_HOST_NOT_ALLOWED = "callback_host_not_allowed"  # 422
+#: M2b Q2:项目令牌负责人失格(空 / 已删 / 停用 / 已非项目管理员)—— 401
+ERR_TOKEN_HOLDER_INVALID = "token_holder_invalid"
 
 # §3.3 暂停原因(integration_tasks.paused_reason 面)—— 与错误码分立
 PAUSE_TOKEN_REVOKED = "token_revoked"
@@ -64,6 +66,8 @@ PAUSE_TOKEN_INVALIDATED = "token_invalidated"
 PAUSE_TOKEN_EXPIRED = "token_expired"
 PAUSE_SCOPE_DENIED = "scope_denied"
 PAUSE_RESOURCE_NOT_ALLOWED = "resource_not_allowed"
+#: M2b Q2:项目令牌负责人失格 → 注册方实例暂停(换绑生效后复活)
+PAUSE_TOKEN_HOLDER_INVALID = "token_holder_invalid"
 
 #: 失效成因(§3.4 invalidate):password | deactivated | admin
 REASON_PASSWORD = "password"
@@ -71,6 +75,8 @@ REASON_DEACTIVATED = "deactivated"
 REASON_ADMIN = "admin"
 
 PERSONAL_KIND = "personal"
+#: M2b Q2 项目令牌:以「项目用户」权限访问单个项目;执行恒用项目凭证
+PROJECT_KIND = "project"
 
 LEGACY_TOKEN_MESSAGE = (
     "v4 仅接受 gtk_ 访问令牌;旧凭证(gic_/ggt_)已随 v3 存储移除,"
@@ -103,11 +109,14 @@ class Principal:
 
     JWT:``token=None``、identity_mode=personal(前端发起,不回调);
     个人令牌:personal(属主 = 执行 owner,凭证取属主池)。
+    项目令牌(M2b Q2):identity_mode=project;``user`` = 负责人(执行
+    记录属主 / 审计 actor),``project_id`` = 区锁(只能引用本项目内容),
+    凭证恒取项目池。
     (authz C1:platform 取值随平台令牌退役;字段保留兼容入站协议。)
     """
 
     user: User
-    identity_mode: str                 # personal(C1 后恒一值)
+    identity_mode: str                 # personal | project
     token: AccessToken | None = None
 
     @property
@@ -117,6 +126,46 @@ class Principal:
     @property
     def token_id(self) -> int | None:
         return self.token.id if self.token is not None else None
+
+    @property
+    def project_id(self) -> int | None:
+        """项目令牌的所属项目(区锁 + 凭证池);个人令牌 / JWT 为 None。"""
+        if self.token is not None and self.token.kind == PROJECT_KIND:
+            return self.token.project_id
+        return None
+
+
+def is_project_token(tok: "AccessToken | None") -> bool:
+    return tok is not None and tok.kind == PROJECT_KIND
+
+
+def zone_locked_out(principal: "Principal", project_id: "int | None") -> bool:
+    """项目令牌区锁(M2b Q2 单点):项目令牌只能引用**本项目**内容 ——
+    私有区(含负责人的私有区)、其他项目、公共项目一律拒(调用方 404,
+    不泄露存在性)。个人令牌 / JWT 恒 False。"""
+    pid = principal.project_id
+    return pid is not None and project_id != pid
+
+
+async def holder_problem(db: AsyncSession, tok: AccessToken) -> "str | None":
+    """项目令牌负责人派生判定(不落库):项目须为普通项目,负责人须存在、
+    启用、仍是该项目的项目管理员。返回失格文案;合格返回 None。"""
+    from ..models.project import Project, ProjectMember
+
+    proj = await db.get(Project, tok.project_id) if tok.project_id else None
+    if proj is None or proj.kind != "normal":
+        return "令牌所属项目不存在"
+    if tok.holder_id is None:
+        return "令牌待指派负责人"
+    holder = await db.get(User, tok.holder_id)
+    if holder is None or not holder.is_active:
+        return "令牌负责人已停用或被删除,待换绑负责人"
+    role = (await db.execute(select(ProjectMember.role).where(
+        ProjectMember.project_id == tok.project_id,
+        ProjectMember.user_id == tok.holder_id))).scalar_one_or_none()
+    if role != ProjectMember.ROLE_ADMIN:
+        return "令牌负责人已不是项目管理员,待换绑负责人"
+    return None
 
 
 # ── 明文 / hash / hint(§4.1)────────────────────────────────────
@@ -179,8 +228,18 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
         raise TokenAuthError(401, ERR_TOKEN_EXPIRED, "访问令牌已到期",
                              token=tok)
 
+    if tok.kind == PROJECT_KIND:
+        # M2b Q2:项目令牌 —— 负责人派生判定(不落库;换绑后自动恢复)
+        problem = await holder_problem(db, tok)
+        if problem is not None:
+            raise TokenAuthError(401, ERR_TOKEN_HOLDER_INVALID, problem,
+                                 token=tok)
+        holder = await db.get(User, tok.holder_id)
+        _touch_last_used(tok, now)
+        await _commit_touch(db)
+        return Principal(user=holder, identity_mode=PROJECT_KIND, token=tok)
     if tok.kind != PERSONAL_KIND:
-        # authz C1:kind 只剩 personal(0038 删尽平台令牌;防御性拒绝)
+        # authz C1:kind 只剩 personal / project(0038 删尽平台令牌)
         raise TokenAuthError(401, ERR_TOKEN_INVALID,
                              "令牌类型已退役", token=tok)
     user = await db.get(User, tok.user_id)
@@ -193,15 +252,25 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
                              "令牌属主已停用", token=tok)
 
     # last_used_at 节流回写:轻提交,失败不影响判定
+    if _touch_last_used(tok, now):
+        await _commit_touch(db)
+    return Principal(user=user, identity_mode=tok.kind, token=tok)
+
+
+def _touch_last_used(tok: AccessToken, now: datetime) -> bool:
     if (tok.last_used_at is None or (
             now - ensure_aware(tok.last_used_at)).total_seconds()
             > LAST_USED_THROTTLE):
         tok.last_used_at = now
-        try:
-            await db.commit()
-        except Exception:  # noqa: BLE001 — 观测面写失败不拦认证
-            await db.rollback()
-    return Principal(user=user, identity_mode=tok.kind, token=tok)
+        return True
+    return False
+
+
+async def _commit_touch(db: AsyncSession) -> None:
+    try:
+        await db.commit()
+    except Exception:  # noqa: BLE001 — 观测面写失败不拦认证
+        await db.rollback()
 
 
 # ── 范围(§3.1 ⑤ / §3.2 / §3.3 缺项分类)────────────────────────
@@ -274,7 +343,8 @@ async def check_scope(
 ) -> "list[ScopeMissing] | None":
     """子集判定:全在范围内返回 None;否则返回缺项(按 §3.3 分类)。
 
-    ``owner_id`` = 执行属主(= 令牌属主),凭证存在性按其凭证池判。
+    ``owner_id`` = 执行属主(= 令牌属主),凭证存在性按其凭证池判;
+    项目令牌(M2b Q2)按**项目凭证池**判(``owner_id`` 不参与)。
     范围行按外键存:范围里没有 ≠ 对象不存在 —— 缺项逐个查对象表分类。
 
     ``scope`` 可传入预载的 (别名集, 凭证 id 集) 免重查(§3.2 单一实现:
@@ -299,10 +369,12 @@ async def check_scope(
         from ..models.auth_session import AuthSession
         # S3 槽位绑定:名字 = 槽名(存量 slot=alias,行为不变);
         # 同槽多绑定取默认行(与环境无关的保守面)
-        from sqlalchemy import func as _f
+        from .run_prepare import _pool_clause
+        pool = _pool_clause(
+            owner_id, token.project_id if is_project_token(token) else None)
         used_rows = (await db.execute(
             select(AuthSession.id, AuthSession.slot).where(
-                AuthSession.owner_id == owner_id,
+                pool,
                 AuthSession.slot.in_(set(used.auths)))
             .order_by(AuthSession.is_default.desc(),
                       AuthSession.env_id.is_(None).desc(),
@@ -424,12 +496,20 @@ def can_manage(user: User, token: AccessToken) -> bool:
     """
     from ..routers._ownership import has_capability
 
+    if is_project_token(token):
+        # 项目令牌的完整管理面在 /projects/{pid}/tokens(项目管理员 ∨
+        # Admin+);同步判定只认负责人 ∨ Admin+
+        return user.id == token.holder_id or has_capability(user, "ops.write")
     return user.id == token.user_id or has_capability(user, "users.manage")
 
 
 def can_view(user: User, token: AccessToken) -> bool:
     """读面:自己的令牌。authz W4:super_admin 越属主旁路删除 ——
-    他人个人令牌对 admin/super_admin 同样不可见,排查走审计。"""
+    他人个人令牌对 admin/super_admin 同样不可见,排查走审计。
+    项目令牌:负责人 ∨ Admin+(同 :func:`can_manage`)。"""
+    if is_project_token(token):
+        from ..routers._ownership import has_capability
+        return user.id == token.holder_id or has_capability(user, "ops.write")
     return token.user_id == user.id
 
 
@@ -583,9 +663,13 @@ async def pause_token_instances(
     body = message + (f";任务:{label}" if names else "")
     from ..services.notifications import create_notification
     try:
-        await create_notification(
-            db, user_id=tok.user_id, type_="integration",
-            title=title, body=body, link="/profile#tokens")
+        recipient = tok.user_id if tok.user_id is not None else tok.holder_id
+        link = ("/profile#tokens" if tok.user_id is not None
+                else f"/projects/{tok.project_id}?tab=tokens")
+        if recipient is not None:
+            await create_notification(
+                db, user_id=recipient, type_="integration",
+                title=title, body=body, link=link)
     except Exception:  # noqa: BLE001
         pass
     return names

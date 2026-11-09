@@ -332,6 +332,18 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         ComposerScenario.scenario_id == body.scenarioId))).scalar()
     if scen is None:
         raise _bad("scenario_not_found", f"场景不存在: {body.scenarioId}", 404)
+    if principal.project_id is not None:
+        # M2b Q2 项目令牌注册(M5):模板只能落本项目、引用本项目场景
+        # (区锁 404 不泄露存在性);公共模板不开放
+        if body.visibility == "public":
+            raise _bad("project_token_public_forbidden",
+                       "项目令牌只能注册本项目的集成模板", 422)
+        if body.projectId is None:
+            body.projectId = principal.project_id
+        if (body.projectId != principal.project_id
+                or at_svc.zone_locked_out(principal, scen.project_id)):
+            raise _bad("scenario_not_found",
+                       f"场景不存在: {body.scenarioId}", 404)
     if body.projectId is not None:
         from ..services.zone import (ProjectCreateDenied,
                                      ensure_can_create_in_project)
@@ -866,6 +878,17 @@ class SubscribeIn(BaseModel):
     credentialSource: Literal["personal", "project"] | None = None
 
 
+async def _registrant_locked(db: AsyncSession, tpl: IntegrationTask,
+                             user) -> bool:
+    """注册方实例来源锁(M2b Q2):模板由项目令牌注册 ∧ 订阅人 = 模板
+    属主(= 令牌当前负责人,§2.7 不变量)。"""
+    if tpl.token_id is None or tpl.owner_id != user.id:
+        return False
+    from ..models.access_token import AccessToken
+    tok = await db.get(AccessToken, tpl.token_id)
+    return at_svc.is_project_token(tok)
+
+
 @router.post("/tasks/{task_id}/subscribe")
 async def subscribe_task(
     task_id: int, user: CurrentUser, db: DbSession,
@@ -902,6 +925,11 @@ async def subscribe_task(
                     db, user.id, tpl.project_id)):
             raise _bad("credential_source_invalid",
                        "项目凭证只能用于你所在普通项目的集成模板", 409)
+    if (body.credentialSource == "personal"
+            and await _registrant_locked(db, tpl, user)):
+        # M2b Q2:项目令牌注册模板的注册方实例恒用项目凭证(M3)
+        raise _bad("credential_source_locked",
+                   "项目令牌注册的任务恒用项目凭证,不能切换为个人凭证", 409)
     inst = await integration_runner.ensure_instance(tpl, holder_id=user.id)
     if inst is None:
         raise _bad("instance_missing", "实例创建失败", 500)

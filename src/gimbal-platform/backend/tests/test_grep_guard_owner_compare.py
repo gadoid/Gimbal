@@ -36,9 +36,7 @@ SHAPES = (
 
 # 存量冻结(2026-11-08,S1.2 收编后 88 条;分类见模块注释)
 _ALLOWLIST: dict[str, int] = {
-    "routers/access_tokens.py:.where(AuthSession.owner_id == owner_id,": 1,
     "routers/access_tokens.py:AuthSession.owner_id == holder)": 1,
-    "routers/access_tokens.py:AuthSession.owner_id == tok.user_id,": 1,
     "routers/activity.py:.where(Execution.owner_id == user.id)": 1,
     "routers/auth_sessions.py:.where(AuthSession.owner_id == user.id)": 1,
     # S3.1 写面槽位过滤(owner 池内查重/同槽清默认,四元组键的 owner 面)
@@ -98,7 +96,6 @@ _ALLOWLIST: dict[str, int] = {
     # S7.4:转换服务的 fork 幂等兜底查询(grantee 名下已有该源副本)
     "services/share_ref_retire.py:ComposerScenario.owner_id == owner_id,": 1,
     "services/share_ref_retire.py:Suite.owner_id == owner_id,": 1,
-    "services/access_token.py:AuthSession.owner_id == owner_id,": 1,
     "services/access_token.py:IntegrationTask.holder_id == tpl.owner_id))).scalar()": 1,
     "services/adaptation_service.py:(refs_own if su.owner_id == owner_id": 1,
     "services/adaptation_service.py:ComposerScenario.owner_id == owner_id": 1,
@@ -110,6 +107,13 @@ _ALLOWLIST: dict[str, int] = {
     "services/integration_runner.py:and inst.holder_id != tpl.owner_id)": 1,
     # S8:复活钩子增项目来源分支,同一比较换行形态(语义不变)
     "services/integration_runner.py:and (inst.holder_id != user_id": 1,
+    # M2b Q2:项目令牌负责人 / 注册方实例的身份比对(不是属主访问判定;
+    # 令牌池收编进 run_prepare._pool_clause 后上面三条个人池比较移除)
+    "routers/integration.py:if tpl.token_id is None or tpl.owner_id != user.id:": 1,
+    "routers/project_tokens.py:AccessToken.holder_id == user_id,": 1,
+    "routers/users.py:AccessToken.holder_id == target.id,": 1,
+    "services/integration_runner.py:mine = next((i for i in insts if i.holder_id == new_holder), None)": 1,
+    "services/integration_runner.py:reg = next((i for i in insts if i.holder_id == old_holder), None)": 1,
     "services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:": 1,
     "services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:": 1,
     "services/maintenance_transfer.py:IntegrationTask.holder_id == old_owner_id))": 1,

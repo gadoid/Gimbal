@@ -47,11 +47,12 @@ class ProjectPatchIn(BaseModel):
 
 class MemberIn(BaseModel):
     userId: int = Field(ge=1)
-    role: Literal["admin", "member"] = "member"
+    # M2b Q1:user = 项目用户(只读 + 执行)
+    role: Literal["admin", "member", "user"] = "member"
 
 
 class MemberPatchIn(BaseModel):
-    role: Literal["admin", "member"]
+    role: Literal["admin", "member", "user"]
 
 
 class ProjectOut(BaseModel):
@@ -68,6 +69,9 @@ class ProjectOut(BaseModel):
     # S7.0:请求者能否管理(项目管理员 ∨ Admin+;公共项目 = Admin+)——
     # 前端据此显隐成员管理 / 配置编辑,不再自己拼角色判定
     canManage: bool = False
+    # M2b Q1:请求者能否在项目内新建 / 修改内容(项目管理员 ∨ 项目成员;
+    # 项目用户只读 + 执行)—— 前端据此显隐写入口,后端仍是权威
+    canWrite: bool = False
     # S7.0 详情读面:默认环境名 + 各类内容计数(页签徽标数据源;
     # 列表端点不填,保持 0)
     defaultEnvironmentName: str | None = None
@@ -180,6 +184,12 @@ def _can_manage(user, proj: Project, my_role: str | None) -> bool:
         proj.kind != "public" and my_role == "admin")
 
 
+def _can_write(proj: Project, my_role: str | None) -> bool:
+    """项目内写权(M2b Q1,与表 B contributor 同口径):普通项目的项目
+    管理员 ∨ 项目成员;公共项目只走「发布」,恒 False。"""
+    return proj.kind != "public" and my_role in ProjectMember.WRITER_ROLES
+
+
 async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
     """S7.0 详情读面:默认环境名 + 场景 / 用例集 / 集成模板计数
     (集成只数模板行,软删不计)。"""
@@ -285,7 +295,8 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
         memberCount=counts.get(p.id, 0),
         myRole=roles.get(p.id),
         defaultEnvironmentId=p.default_environment_id,
-        canManage=_can_manage(user, p, roles.get(p.id))) for p in projs]
+        canManage=_can_manage(user, p, roles.get(p.id)),
+        canWrite=_can_write(p, roles.get(p.id))) for p in projs]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -307,6 +318,7 @@ async def get_project(
                       myRole=my_role,
                       defaultEnvironmentId=proj.default_environment_id,
                       canManage=_can_manage(user, proj, my_role),
+                      canWrite=_can_write(proj, my_role),
                       **await _detail_counts(db, proj))
 
 
@@ -404,6 +416,9 @@ async def delete_project(
     from ..models.auth_session import AuthSession
     await db.execute(_del(AuthSession).where(
         AuthSession.project_id == project_id))
+    # M2b Q2:项目令牌随项目删除吊销(令牌行留档,终态只读)
+    from .project_tokens import revoke_all_for_project
+    await revoke_all_for_project(db, project_id)
     await db.delete(proj)
     await db.commit()
 
@@ -475,8 +490,9 @@ async def patch_member(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found",
                     "message": f"member not found: {member_user_id}"})
+    # 降级(→ 成员 / 项目用户)都要过「最后一个管理员」保护
     if (m.role == ProjectMember.ROLE_ADMIN
-            and body.role == ProjectMember.ROLE_MEMBER):
+            and body.role != ProjectMember.ROLE_ADMIN):
         admins = (await db.execute(select(func.count()).select_from(
             ProjectMember).where(
                 ProjectMember.project_id == project_id,
@@ -488,8 +504,14 @@ async def patch_member(
                 detail={"code": "last_project_admin",
                         "message": "最后一个项目管理员不能降级"
                                    "(项目不能无人可管)"})
+    demoted = (m.role == ProjectMember.ROLE_ADMIN
+               and body.role != ProjectMember.ROLE_ADMIN)
     m.role = body.role
     await db.commit()
+    if demoted:
+        # M2b Q2:降级的管理员若是项目令牌负责人 → 提醒其余管理员换绑
+        from .project_tokens import notify_holder_lost
+        await notify_holder_lost(db, project_id, member_user_id)
     target = await db.get(User, member_user_id)
     await _audit(db, user, "project.member_role_changed", proj,
                  {"userId": member_user_id, "role": body.role})
@@ -531,3 +553,6 @@ async def remove_member(
                  {"userId": member_user_id})
     await db.delete(m)
     await db.commit()
+    # M2b Q2:被移出的成员若是项目令牌负责人 → 提醒其余管理员换绑
+    from .project_tokens import notify_holder_lost
+    await notify_holder_lost(db, project_id, member_user_id)

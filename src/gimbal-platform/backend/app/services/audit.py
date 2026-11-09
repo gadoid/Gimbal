@@ -55,6 +55,7 @@ AUDIT_ACTIONS = (
     "webhook.redeliver",          # 人工补发回调(新建一行 pending)
     # ── authz M2a S8 项目凭证(项目管理员写;资源 = 项目)──────────
     "project.credential.write",   # 项目凭证建/改/换默认/删(detail.op)
+    "project.token.write",        # M2b Q2 项目令牌签发/生命周期/换绑(detail.op)
 )
 
 
@@ -107,6 +108,9 @@ async def record_inbound(db: AsyncSession, principal, action: str, *,
         resource_id=str(tok.id),
         detail={"token_id": tok.id, "token_name": tok.name,
                 "token_kind": tok.kind, "identity_mode": principal.identity_mode,
+                # M2b Q2:项目令牌同时记录项目(actor = 负责人)
+                **({"project_id": tok.project_id}
+                   if getattr(tok, "project_id", None) is not None else {}),
                 **(detail or {})})
 
 

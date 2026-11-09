@@ -48,6 +48,8 @@ NOTIFICATION_TYPES = (
     "share_ref_converted",
     # M2a S7.6:公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒。
     "carry.shadowed",
+    # M2b Q2:项目令牌负责人换绑(待确认 / 已变更 / 被拒)与失格提醒。
+    "project_token",
 )
 
 

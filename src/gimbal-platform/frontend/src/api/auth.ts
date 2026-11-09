@@ -29,7 +29,7 @@ export interface ProjectRef {
   id: number
   name: string
   kind: 'normal' | 'public'
-  role: 'admin' | 'member' | null
+  role: 'admin' | 'member' | 'user' | null
 }
 
 export interface MeOut {

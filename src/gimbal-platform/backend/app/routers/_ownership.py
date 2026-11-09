@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from ..models.composer_scenario import ComposerScenario
+from ..models.project import ProjectMember
 
 
 # ── 表 A(authz W2,方案 §2.3):能力 × 角色 —— 唯一规则来源 ──────────
@@ -75,7 +76,10 @@ def has_capability(user: Any, cap: str) -> bool:
 # project_id 空 = 私有区 / 普通项目 / 公共项目),同格内各区谓词互斥:
 #   owner     私有区属主(user.id == obj.owner_id ∧ project_id IS NULL
 #             —— D1:project_id 非空时属主身份不给任何权限)
-#   member    对象所属普通项目的成员(任意角色;公共项目不落成员行)
+#   member    对象所属普通项目的成员(任意角色,含只读 + 执行的项目
+#             用户;公共项目不落成员行)—— 读 / 复制 / 执行
+#   contributor 对象所属普通项目的可写角色(项目管理员 ∨ 项目成员;
+#             M2b Q1:项目用户只读 + 执行,不命中)—— 写 / 删
 #   padmin    对象所属普通项目的项目管理员
 #   maintainer 公共项目对象的 owner_id(S1-b 例外:公共项目写权跟
 #             维护者走 —— owner_id 在公共项目的语义 = 维护者)
@@ -89,13 +93,16 @@ def has_capability(user: Any, cap: str) -> bool:
 # publish 的 maintainer:影子期已公共对象再「发布」是空操作,放行
 # 维护者避免无谓 403;S1.3 起该格语义 = 重新发布(维护者更新公共副本)。
 
+# contributor 谓词的角色集(M2b Q1;成员角色字面量只在模型常量)
+_CONTRIBUTOR_ROLES = ProjectMember.WRITER_ROLES
+
 TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     "scenario": {
         "read":      frozenset({"owner", "member", "public_reader"}),
         "copy":      frozenset({"owner", "member", "public_reader"}),
         "run":       frozenset({"owner", "member"}),  # 公共不可执行
-        "write":     frozenset({"owner", "member", "maintainer"}),
-        "delete":    frozenset({"owner", "member", "maintainer",
+        "write":     frozenset({"owner", "contributor", "maintainer"}),
+        "delete":    frozenset({"owner", "contributor", "maintainer",
                                 "public_admin"}),
         "publish":   frozenset({"owner", "padmin", "maintainer"}),
         # 下架 = 对公共副本(维护者撤下 / Admin+ 治理);私有区无下架
@@ -106,8 +113,8 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     "suite": {
         "read":      frozenset({"owner", "member", "public_reader"}),
         "run":       frozenset({"owner", "member"}),
-        "write":     frozenset({"owner", "member", "maintainer"}),
-        "delete":    frozenset({"owner", "member", "maintainer",
+        "write":     frozenset({"owner", "contributor", "maintainer"}),
+        "delete":    frozenset({"owner", "contributor", "maintainer",
                                 "public_admin"}),
         "publish":   frozenset({"owner", "padmin", "maintainer"}),
         "unpublish": frozenset({"maintainer", "public_admin"}),
@@ -118,11 +125,11 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
     # 这里的登记与父场景动词同形,矩阵只测 write)
     "data_set": {
         "read":      frozenset({"owner", "member", "public_reader"}),
-        "write":     frozenset({"owner", "member", "maintainer"}),
+        "write":     frozenset({"owner", "contributor", "maintainer"}),
     },
     "run_scheme": {
         "read":      frozenset({"owner", "member", "public_reader"}),
-        "write":     frozenset({"owner", "member", "maintainer"}),
+        "write":     frozenset({"owner", "contributor", "maintainer"}),
     },
     # W9-2 语义换轴:编辑 = 私有区属主 ∨ 公共项目维护者;下架(delete)
     # = 维护者 ∨ Admin+(public_admin)
@@ -179,6 +186,8 @@ def can_pure(
         role_here = project_roles.get(pid)
         if role_here is not None:
             if "member" in preds:
+                return True
+            if "contributor" in preds and role_here in _CONTRIBUTOR_ROLES:
                 return True
             if "padmin" in preds and role_here == "admin":
                 return True

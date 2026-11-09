@@ -28,6 +28,7 @@ from typing import Any
 
 from loguru import logger
 from sqlalchemy import select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import db as db_module
 from ..models.composer_scenario import ComposerScenario
@@ -530,7 +531,8 @@ async def instance_cred_project_id(
 
 async def _slot_bindings_of(db, tpl: IntegrationTask,
                             scen: ComposerScenario,
-                            scheme_payload: dict) -> dict[str, int]:
+                            scheme_payload: dict,
+                            row_dict: dict | None = None) -> dict[str, int]:
     """S5:别名默认命中集合的取用绑定 id(模板属主池 + 模板环境;
     S6 起按方案绑定选中的生效别名命中)。
 
@@ -539,16 +541,28 @@ async def _slot_bindings_of(db, tpl: IntegrationTask,
     from .run_prepare import binding_ids_for
     from .service_aliases import credential_alias_hits
 
+    from .run_prepare import lookup_row_bindings, row_binding_refs
+
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
         scheme_payload.get("serviceBindings") or {})
-    if not hits:
+    refs = row_binding_refs(row_dict)
+    if not hits and not refs:
         return {}
     env = await _template_env(db, scen, scheme_payload)
-    return await binding_ids_for(
+    cred_pid = await normal_project_of(db, tpl)
+    out = await binding_ids_for(
         db_module.SessionLocal, tpl.owner_id, sorted(set(hits.values())),
-        env_id=env.env_id,
-        cred_project_id=await normal_project_of(db, tpl))
+        env_id=env.env_id, cred_project_id=cred_pid) if hits else {}
+    if refs:
+        # M2b Q3:首行账号列覆盖的绑定 id 进指纹(订阅人知情;缺失记 -1)
+        hit, _m, _e = await lookup_row_bindings(
+            db, tpl.owner_id, set(refs.items()), env_id=env.env_id,
+            cred_project_id=cred_pid)
+        for slot, alias in refs.items():
+            b = hit.get((slot, alias))
+            out = {**out, slot: b.id if b is not None else -1}
+    return out
 
 
 async def _alias_urls_of(db, scen_payload: dict,
@@ -582,7 +596,8 @@ async def consent_fingerprint_now(
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
         bindings)
-    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload)
+    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload,
+                                            row_dict)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
         alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
@@ -612,7 +627,8 @@ async def consent_fingerprint_now_shape(
     hits = await credential_alias_hits(
         db, definition_from_payload(scen.payload).get("steps") or [],
         bindings)
-    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload)
+    slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload,
+                                            row_dict)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
         alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
@@ -950,13 +966,26 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         f"({_token.invalidated_reason or 'unknown'}),任务暂停;"
                         "在个人设置重新生成后自动恢复",
                         pause_reason=at_svc.PAUSE_TOKEN_INVALIDATED, lease=lease)
-                _tok_owner = await db.get(User, _token.user_id)
-                if _tok_owner is None or not _tok_owner.is_active:
-                    return await _finish(
-                        db, inst, tpl, "auth",
-                        f"令牌「{_token.name}」属主已停用,任务暂停;"
-                        "重新生成后自动恢复",
-                        pause_reason=at_svc.PAUSE_TOKEN_INVALIDATED, lease=lease)
+                if at_svc.is_project_token(_token):
+                    # M2b Q2:项目令牌 —— 负责人派生判定(空 / 停用 / 已非
+                    # 项目管理员 → 暂停;换绑生效后复活钩子拉起)
+                    _hp = await at_svc.holder_problem(db, _token)
+                    if _hp is not None:
+                        return await _finish(
+                            db, inst, tpl, "auth",
+                            f"项目令牌「{_token.name}」{_hp},任务暂停;"
+                            "项目管理员换绑负责人后自动恢复",
+                            pause_reason=at_svc.PAUSE_TOKEN_HOLDER_INVALID,
+                            lease=lease)
+                else:
+                    _tok_owner = await db.get(User, _token.user_id)
+                    if _tok_owner is None or not _tok_owner.is_active:
+                        return await _finish(
+                            db, inst, tpl, "auth",
+                            f"令牌「{_token.name}」属主已停用,任务暂停;"
+                            "重新生成后自动恢复",
+                            pause_reason=at_svc.PAUSE_TOKEN_INVALIDATED,
+                            lease=lease)
                 # #3 令牌已到期
                 if _ea(_token.expires_at) <= _now():
                     return await _finish(
@@ -974,8 +1003,10 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 _used = await at_svc.used_sets_for_definition(
                     db, _dfp(scen.payload), _bindings,
                     project_id=scen.project_id)
-                if inst.credential_source == "project":
-                    # S8:项目凭证不在令牌范围语义内(范围只覆盖个人池)
+                if (inst.credential_source == "project"
+                        and not at_svc.is_project_token(_token)):
+                    # S8:个人令牌范围只覆盖个人池 —— 项目凭证源实例跳过
+                    # 凭证项(项目令牌的范围就是项目池,M2b Q2 照常核对)
                     _used.auths = []
                 _missing = await at_svc.check_scope(
                     db, _token, _token.user_id, _used)
@@ -1038,7 +1069,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     scen.payload, scheme_payload, row_dict,
                     tpl.trigger_cron, alias_urls, alias_creds=hits,
                     slot_bindings=await _slot_bindings_of(
-                        db, tpl, scen, scheme_payload))
+                        db, tpl, scen, scheme_payload, row_dict))
                 if (inst.consent_fingerprint or "") != fp:
                     return await _pause_consent_changed(
                         db, inst, tpl,
@@ -1084,6 +1115,37 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 return await _finish(
                     db, inst, tpl, "auth", f"凭证解析失败: {e}",
                     pause_reason="missing_credential", lease=lease)
+            # M2b Q3:首行账号列覆盖(与单场景派发同口径:池内同名绑定,
+            # 缺失 / 环境不符 → 暂停 missing_credential,补齐后复活)
+            from .run_prepare import (apply_row_bindings,
+                                      lookup_row_bindings,
+                                      resolve_row_bindings,
+                                      row_binding_refs,
+                                      strip_row_binding_columns)
+            _refs = row_binding_refs(row_dict)
+            if _refs:
+                _cred_pid = await instance_cred_project_id(db, inst, tpl)
+                _env_id = getattr(tpl_env, "env_id", None)
+                _hit, _miss, _envbad = await lookup_row_bindings(
+                    db, holder, set(_refs.items()), env_id=_env_id,
+                    cred_project_id=_cred_pid)
+                if _miss or _envbad:
+                    return await _finish(
+                        db, inst, tpl, "auth",
+                        "数据集账号列缺少绑定: " + ",".join(
+                            f"{sl}={al}" for sl, al in (_miss + _envbad)),
+                        pause_reason="missing_credential", lease=lease)
+                try:
+                    _over = await resolve_row_bindings(
+                        db_module.SessionLocal, holder, set(_refs.items()),
+                        env_id=_env_id, cred_project_id=_cred_pid)
+                except AuthResolveError as e:
+                    return await _finish(
+                        db, inst, tpl, "auth", f"凭证解析失败: {e}",
+                        pause_reason="missing_credential", lease=lease)
+                prep.resolved_auths = apply_row_bindings(
+                    prep.resolved_auths, row_dict, _over)
+            row_dict = strip_row_binding_columns(row_dict)
         except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)
             # 异常可能来自主会话上的 SQL —— PG 已把该事务标记中止,
             # 同一会话再写必然二次失败(实测:手动触发 500、实例照旧
@@ -1577,6 +1639,39 @@ async def scheduler_tick() -> dict:
     return {"claimed": claimed, "reaped": reaped, "stuck": stuck}
 
 
+async def rebind_token_templates(
+    db: AsyncSession, token_id: int, new_holder: int,
+) -> int:
+    """项目令牌换绑生效(M2b Q2 §2.7):把该令牌注册的模板迁到新负责人,
+    保持不变量「模板 owner = 令牌负责人;注册方实例 holder = 模板 owner、
+    项目凭证源」。新负责人已有该模板的订阅实例 → 该实例转为注册方实例,
+    原注册方实例删除(``uq_integration_instance`` 不冲突)。调用方 commit。
+    返回迁移的模板数。"""
+    tpls = (await db.execute(select(IntegrationTask).where(
+        IntegrationTask.template_id.is_(None),
+        IntegrationTask.token_id == token_id))).scalars().all()
+    for tpl in tpls:
+        old_holder = tpl.owner_id
+        if old_holder == new_holder:
+            continue
+        insts = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tpl.id))).scalars().all()
+        reg = next((i for i in insts if i.holder_id == old_holder), None)
+        mine = next((i for i in insts if i.holder_id == new_holder), None)
+        if mine is not None:
+            mine.credential_source = "project"
+            if reg is not None:
+                await db.delete(reg)
+        elif reg is not None:
+            reg.holder_id = new_holder
+        for i in insts:
+            i.owner_id = new_holder
+        tpl.owner_id = new_holder
+        tpl.updated_by = new_holder
+    await db.flush()
+    return len(tpls)
+
+
 async def ensure_instance(
     tpl: IntegrationTask, *, holder_id: int | None = None,
 ) -> IntegrationTask | None:
@@ -1651,7 +1746,9 @@ async def revive_paused_instances(
                         IntegrationTask.template_id.is_(None),
                         IntegrationTask.token_id == token_id)),
                 IntegrationTask.paused_reason.in_(
-                    ("token_expired", "token_invalidated")))
+                    ("token_expired", "token_invalidated",
+                     # M2b Q2:项目令牌负责人失格(换绑生效后恢复)
+                     "token_holder_invalid")))
         else:
             stmt = stmt.where(IntegrationTask.paused_reason.in_(
                 ("auth_failed", "missing_credential")))

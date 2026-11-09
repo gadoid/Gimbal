@@ -87,9 +87,15 @@ async def ensure_can_create_in_project(
         raise ProjectCreateDenied(
             422, "public_project_create_forbidden",
             "公共项目不能直接新建 —— 请在私有区创建后发布")
-    if project_id not in await my_project_roles(db, user_id):
+    role = (await my_project_roles(db, user_id)).get(project_id)
+    if role is None:
         raise ProjectCreateDenied(404, "not_found",
                                   f"project not found: {project_id}")
+    if role not in ProjectMember.WRITER_ROLES:
+        # M2b Q1:项目用户只读 + 执行(项目可见,无写权 → 403)
+        raise ProjectCreateDenied(
+            403, "project_role_readonly",
+            "项目用户只能读和执行项目内容,不能新建")
 
 
 def zone_read_clause(model, viewer_id: int):

@@ -315,3 +315,24 @@ describe('SchemeDataSection — 删除', () => {
     w.unmount()
   })
 })
+
+describe('M2b Q3 账号列', () => {
+  it('预览含 @slot.<槽> 列的数据集显示「账号驱动」徽标', () => {
+    const w = mount(SchemeDataSection, {
+      props: {
+        modelValue: [],
+        dataSets: [
+          { datasetId: 'ds-a', scenarioId: 'sc-x', name: '多账号', rowCount: 2,
+            preview: [{ amount: '1', '@slot.maker': 'acct-a' }] },
+          ...DS,
+        ],
+        scenarioId: 'sc-x',
+      },
+      global: { plugins: [] },
+    })
+    const badge = w.find('[data-testid="ds-acct-ds-a"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.attributes('title')).toContain('maker')
+    expect(w.find('[data-testid="ds-acct-ds-001"]').exists()).toBe(false)
+  })
+})

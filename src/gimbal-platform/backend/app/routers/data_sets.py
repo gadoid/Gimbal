@@ -144,7 +144,8 @@ async def put_data_set(
     except KeyError as e:
         raise key_error_404(e)
     except ValueError as e:
-        raise value_error_http(e, {"undeclared_var": 422})
+        raise value_error_http(e, {"undeclared_var": 422,
+                                   "undeclared_slot": 422})
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -182,5 +183,5 @@ async def create_data_set(
     except ValueError as e:
         raise value_error_http(
             e, {"scenario_not_found": 404, "dataset_id_exists": 409,
-                "undeclared_var": 422}
+                "undeclared_var": 422, "undeclared_slot": 422}
         )

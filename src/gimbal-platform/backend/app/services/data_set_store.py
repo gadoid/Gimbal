@@ -39,15 +39,72 @@ def _scalar_vars(payload: dict | None) -> set[str]:
     }
 
 
-def _validate_rows(scenario_payload: dict | None, rows: list[dict]) -> None:
-    """行键 ⊆ 调色板,否则 ValueError("undeclared_var: …")(路由映射 422)。"""
+def _validate_rows(scenario_payload: dict | None, rows: list[dict],
+                   known_slots: set[str] | None = None) -> None:
+    """行键 ⊆ 调色板,否则 ValueError("undeclared_var: …")(路由映射 422)。
+
+    M2b Q3:账号列 ``@slot.<槽名>``(值 = 本次执行凭证池里的绑定名)豁免
+    调色板;槽名须在场景的注入槽集合里(否则 ``undeclared_slot``),值须
+    为字符串。绑定是否存在不在保存时校验(绑定属执行人 / 项目,保存者
+    未必看得见)—— 派发 fail-fast 兜底。"""
+    from .run_prepare import ROW_BINDING_PREFIX
+
     palette = _scalar_vars(scenario_payload)
-    bad = sorted({k for row in rows for k in row if k not in palette})
+    keys = {k for row in rows for k in row}
+    slot_cols = {k for k in keys if k.startswith(ROW_BINDING_PREFIX)}
+    bad = sorted(keys - slot_cols - palette)
     if bad:
         raise ValueError(
             f"undeclared_var: {', '.join(bad)} — 字段未声明为变量;"
             f"在编排中\"设为变量\"后即可作为数据集列"
         )
+    if slot_cols:
+        known = (known_slots if known_slots is not None
+                 else _injection_slots(scenario_payload))
+        unknown = sorted(k for k in slot_cols
+                         if k[len(ROW_BINDING_PREFIX):] not in known)
+        if unknown:
+            raise ValueError(
+                f"undeclared_slot: {', '.join(unknown)} — 账号列的槽位未被"
+                "场景引用(${auth.<槽>} / 别名声明槽位)")
+        non_str = sorted({k for row in rows for k in slot_cols
+                          if row.get(k) is not None
+                          and not isinstance(row.get(k), str)})
+        if non_str:
+            raise ValueError(
+                f"undeclared_slot: {', '.join(non_str)} — 账号列的值须为"
+                "绑定名(字符串)")
+
+
+def _injection_slots(scenario_payload: dict | None) -> set[str]:
+    """场景引用的注入槽名(静态扫描:``${auth.<槽>}`` / ``${slot.<槽>.…}``
+    + 别名声明槽位)—— 与派发注入清单同源的保存期近似(不查库的部分)。"""
+    from .auth_ref_scan import scan_auth_aliases
+    from .scenario_store import definition_from_payload
+
+    defn = definition_from_payload(scenario_payload or {}) or {}
+    nodes = [defn.get("steps") or [], (defn.get("config") or {})]
+    found = set(scan_auth_aliases(nodes))
+    import re as _re
+    found |= set(_re.findall(r"\$\{slot\.([A-Za-z0-9_-]+)\.",
+                             str(nodes)))
+    return found
+
+
+async def _known_slots(db: AsyncSession, scenario_payload: dict | None,
+                       rows: list[dict]) -> set[str] | None:
+    """账号列校验用的槽集合 = 派发注入清单(模板扫描 ∪ 别名声明槽位,
+    ``exec_auth_aliases_of_definition`` 同源)∪ 静态扫描。行无账号列时
+    不查库(返回 None)。"""
+    from .run_prepare import ROW_BINDING_PREFIX
+    if not any(isinstance(k, str) and k.startswith(ROW_BINDING_PREFIX)
+               for row in rows for k in row):
+        return None
+    from .scenario_store import definition_from_payload
+    from .service_aliases import exec_auth_aliases_of_definition
+    names = await exec_auth_aliases_of_definition(
+        db, definition_from_payload(scenario_payload or {}))
+    return set(names) | _injection_slots(scenario_payload)
 
 
 async def create(
@@ -65,7 +122,9 @@ async def create(
     ).scalar_one_or_none()
     if scenario is None:
         raise ValueError(f"scenario_not_found: {scenario_id}")
-    _validate_rows(scenario.payload, list(draft.rows or []))
+    _validate_rows(scenario.payload, list(draft.rows or []),
+                   await _known_slots(db, scenario.payload,
+                                      list(draft.rows or [])))
 
     dataset_id = await _next_dataset_id(db)
     row = ComposerDataSet(
@@ -102,7 +161,9 @@ async def update(
     scenario = await get_scenario_row(db, row.scenario_id)
     if scenario is None:  # 理论不可达(FK 在);防御孤儿行
         raise KeyError(f"data_set_not_found: {dataset_id}")
-    _validate_rows(scenario.payload, list(draft.rows or []))
+    _validate_rows(scenario.payload, list(draft.rows or []),
+                   await _known_slots(db, scenario.payload,
+                                      list(draft.rows or [])))
     row.name = draft.name
     row.description = draft.description or ""
     row.rows = list(draft.rows or [])

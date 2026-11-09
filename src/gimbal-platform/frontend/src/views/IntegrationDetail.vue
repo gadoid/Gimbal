@@ -158,6 +158,7 @@ import {
   RUN_BADGE_TEXT, type IntegrationTaskItem,
 } from '@/api/integration'
 import { getAccessToken } from '@/api/access-tokens'
+import { getProjectToken } from '@/api/project_tokens'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { shortDateTime } from '@/utils/datetime'
@@ -177,7 +178,12 @@ async function reload(): Promise<void> {
     task.value = await getIntegrationTask(route.params.taskId as string)
     tokenDetail.value = null
     if (task.value.tokenId && task.value.canManage) {
-      try { tokenDetail.value = await getAccessToken(task.value.tokenId) } catch { /* 令牌详情不可达 → 不展示状态/回调 */ }
+      try {
+        // M2b Q2:项目令牌详情走项目管理面(个人令牌面对项目令牌 404)
+        tokenDetail.value = isProjectToken.value && task.value.projectId
+          ? (await getProjectToken(task.value.projectId, task.value.tokenId)) as unknown as typeof tokenDetail.value
+          : await getAccessToken(task.value.tokenId)
+      } catch { /* 令牌详情不可达 → 不展示状态/回调 */ }
     }
   } catch (e) {
     loadErr.value = integrationErr(e)
@@ -206,9 +212,9 @@ const identityText = computed(() => {
 })
 
 const tokenText = computed(() =>
-  tokenDetail.value
+  (isProjectToken.value ? '项目令牌 · ' : '') + (tokenDetail.value
     ? `${tokenDetail.value.name} · gtk_${tokenDetail.value.tokenHint}`
-    : task.value?.tokenName ? `${task.value.tokenName} · #${task.value.tokenId}` : `#${task.value?.tokenId}`)
+    : task.value?.tokenName ? `${task.value.tokenName} · #${task.value.tokenId}` : `#${task.value?.tokenId}`))
 
 const TOKEN_ST: Record<string, { text: string; cls: string }> = {
   active: { text: '有效', cls: 'ip-ok' },
@@ -222,7 +228,11 @@ const tokenStatus = computed(() => {
 })
 
 /** 令牌管理入口(authz C1:平台令牌面退役,恒个人设置)。 */
-const tokenManageTo = computed(() => '/profile/tokens')
+/** M2b Q2:项目令牌(kind=project)注册的模板 —— 管理入口在项目详情页签 */
+const isProjectToken = computed(() => task.value?.tokenKind === 'project')
+const tokenManageTo = computed(() =>
+  isProjectToken.value && task.value?.projectId
+    ? `/projects/${task.value.projectId}?tab=tokens` : '/profile/tokens')
 
 // ── 暂停横幅(§3.3 分型;文案/动作逐变体对齐原型)────────────────
 interface BannerAction {
@@ -252,6 +262,15 @@ const banner = computed<{
         desc: '吊销是终态，这个任务不能直接启动。解绑令牌后由你接管，再启动。',
         actions: [
           { label: '解绑令牌（转为我管理）', primary: true, run: () => { unbindOpen.value = true } },
+          { ...resume, disabled: true },
+        ],
+      }
+    case 'token_holder_invalid':
+      return {
+        tone: 'amber', title: '已暂停 · 项目令牌负责人失格',
+        desc: '负责人已被移出项目、降级或停用。项目管理员在「项目令牌」页签换绑负责人后，任务自动恢复。',
+        actions: [
+          { label: '去换绑负责人', primary: true, to: tokenManageTo.value },
           { ...resume, disabled: true },
         ],
       }

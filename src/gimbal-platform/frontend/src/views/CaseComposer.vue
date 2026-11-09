@@ -48,7 +48,11 @@
 
         <div class="topbar-actions">
           <!-- Status indicator -->
-          <div class="save-state" :class="saveState">
+          <!-- M2b Q1:项目用户只读 + 执行 —— 不自动保存、不显保存入口 -->
+          <span v-if="projectReadOnly" class="ro-pill" data-testid="composer-readonly">
+            项目用户 · 只读(可运行)
+          </span>
+          <div v-else class="save-state" :class="saveState">
             <span class="dot"></span>
             <span class="label">
               <template v-if="saveState === 'saving'">保存中…</template>
@@ -198,7 +202,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             预校验 Plate
           </button>
-          <button class="primary-btn outline" :disabled="saving" @click="saveDraft(false)">
+          <button v-if="!projectReadOnly" class="primary-btn outline" :disabled="saving" @click="saveDraft(false)">
             <svg v-if="!saving" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
             <svg v-else class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             保存草稿
@@ -353,6 +357,7 @@ function scheduleAutoSave(): void {
 
 async function maybeAutoSave(): Promise<void> {
   if (!scenario.value || !meta.value.name || !dirty.value) return
+  if (projectReadOnly.value) return   // M2b Q1:项目用户无写权(后端 403)
   if (saving.value) {
     scheduleAutoSave()   // 手动/步进保存进行中 → 顺延一个窗口再试
     return
@@ -482,6 +487,13 @@ const runProjectId = computed<number | null>(() => {
   if (raw == null) return null
   return authStore.projects.some((p) => p.id === raw && p.kind === 'normal')
     ? raw : null
+})
+/** M2b Q1:已存场景属普通项目且我在该项目是「项目用户」→ 只读 + 执行 */
+const projectReadOnly = computed<boolean>(() => {
+  const pid = (scenario.value as { projectId?: number | null } | null)?.projectId
+  if (pid == null) return false
+  return authStore.projects.some(
+    (p) => p.id === pid && p.kind === 'normal' && p.role === 'user')
 })
 /** 深链预选(方案工作台「▶ 运行此方案」,阶段③):?runScheme=rs-xxx 传入;
  *  关窗即清 — 深链语义是一次性的,再次从「运行」入口打开不复活旧预选。 */
@@ -1334,6 +1346,7 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
+.ro-pill { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; background: rgb(100 116 139 / 10%); color: #475569; }
 .save-state {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 12px;

@@ -169,6 +169,17 @@ function parseInput(text: string): { rows?: DataSetRow[]; error?: string; format
 
 const parsed = computed(() => parseInput(rowsText.value))
 
+/** M2b Q3:行账号列 ``@slot.<槽名>``(值 = 绑定名)→ 槽名清单(首见序) */
+function accountSlotsOf(rows: DataSetRow[] | null | undefined): string[] {
+  const out: string[] = []
+  for (const r of rows ?? []) {
+    for (const k of Object.keys(r ?? {})) {
+      if (k.startsWith('@slot.') && k.length > 6 && !out.includes(k.slice(6))) out.push(k.slice(6))
+    }
+  }
+  return out
+}
+
 /** 简单 CSV 序列化(union 列头,首见序;与粘贴导入互为往返)。 */
 function toCsv(rows: DataSetRow[]): string {
   const cols: string[] = []
@@ -237,6 +248,9 @@ async function submit() {
             @change="toggleDataset(d, ($event.target as HTMLInputElement).checked)" />
           <span class="ds-name">{{ d.name || d.datasetId }}</span>
           <span class="row-count">{{ rowsOf(d).length }} 行</span>
+          <span v-if="accountSlotsOf(d.preview).length" class="acct-badge"
+            :data-testid="`ds-acct-${d.datasetId}`"
+            :title="`账号列:${accountSlotsOf(d.preview).join('、')}(每行可换账号)`">账号驱动</span>
         </label>
         <div v-if="isSelected(d.datasetId)" class="row-picks">
           <!-- rowsOf 已是 0 基索引数组,v-for 取数组值后直接用 r(原稿 i-1 会错位成 -1,0,1) -->
@@ -277,8 +291,15 @@ async function submit() {
             class="w-full rounded-field border border-input bg-transparent p-2 font-mono text-body"
             :placeholder="loadingExisting ? '载入中…' : '粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本'"
           ></textarea>
+          <p class="create-hint" data-testid="create-account-hint">
+            账号列:列名 <code>@slot.&lt;槽名&gt;</code>,值填本次执行凭证池里的绑定名(个人凭证或项目凭证)——
+            每行可换账号;留空沿用默认绑定。
+          </p>
           <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
             {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
+            <template v-if="accountSlotsOf(parsed.rows).length">
+              · 账号列 {{ accountSlotsOf(parsed.rows).join('、') }}
+            </template>
           </p>
           <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
             {{ parsed.error }}
@@ -296,6 +317,7 @@ async function submit() {
 </template>
 
 <style scoped>
+.acct-badge { font-size: 0.7rem; padding: 0 6px; border-radius: 999px; background: rgb(37 99 235 / 8%); color: #1d4ed8; border: 1px solid rgb(37 99 235 / 25%); }
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
   background: #fff; border: 1px solid var(--color-border-tertiary);

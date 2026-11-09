@@ -1111,16 +1111,24 @@ async def _ensure_batch_scope(db, scenario_id: str, *, batch_id: str,
 
 
 async def _ensure_edit_rights(db, user, scenario_ids: list[str]) -> None:
-    """R22：适配权限跟随场景编辑权——表 B scenario.write = 属主单判。
+    """R22：适配权限跟随场景编辑权——表 B scenario.write。
 
     authz 收尾：原 super_admin 旁路删除（私有区对任何平台角色不可见，
     方案 1.3；Admin+ 对他人对象唯一的动词是下架公共对象）。"""
     from fastapi import HTTPException
-    from app.services.scenario_store import owned_scenario_ids
+    from sqlalchemy import select as _select
 
-    owned = await owned_scenario_ids(db, user)
+    from app.models.composer_scenario import ComposerScenario
+    from app.routers._ownership import can
+
+    # M2b Q1:按表 B scenario.write 逐个求值(此前按 owner_id 集合判,
+    # 绕过了 D1「项目对象属主身份不给权限」与项目用户只读口径)
+    rows = {r.scenario_id: r for r in (await db.execute(
+        _select(ComposerScenario).where(ComposerScenario.scenario_id.in_(
+            [str(s) for s in scenario_ids])))).scalars()}
     for sid in scenario_ids:
-        if str(sid) not in owned:
+        row = rows.get(str(sid))
+        if row is None or not await can(db, user, "scenario", "write", row):
             raise HTTPException(
                 status_code=403,
                 detail=f'not_scenario_owner: 场景 {sid} 不由当前用户编辑，无权适配（R22）')

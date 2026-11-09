@@ -46,16 +46,16 @@ table_b:
     read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
     copy:      [o, mem, pr]
     run:       [o, mem]
-    write:     [o, mem, mnt]
-    delete:    [o, mem, mnt, pa]
+    write:     [o, con, mnt]
+    delete:    [o, con, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
     transfer:  [mnt, pa]
   suite:
     read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
     run:       [o, mem]
-    write:     [o, mem, mnt]
-    delete:    [o, mem, mnt, pa]
+    write:     [o, con, mnt]
+    delete:    [o, con, mnt, pa]
     publish:   [o, pad, mnt]
     unpublish: [mnt, pa]
     transfer:  [mnt, pa]
@@ -63,10 +63,10 @@ table_b:
   # 父场景 can();S1.2 写闸已切换,登记与父场景动词同形)
   data_set:
     read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
-    write:     [o, mem, mnt]
+    write:     [o, con, mnt]
   run_scheme:
     read:      [o, mem, pr]      # S7.4:ref 随引用分享退役
-    write:     [o, mem, mnt]
+    write:     [o, con, mnt]
   report_definition:
     read:      [o, pr]
     write:     [o, mnt]       # W9-2 语义换轴:私有区属主 ∨ 公共项目维护者

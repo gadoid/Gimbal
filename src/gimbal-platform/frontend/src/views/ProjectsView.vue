@@ -46,6 +46,7 @@
           <span class="name">{{ p.name }}</span>
           <span v-if="p.kind === 'public'" class="badge pub" data-testid="prj-public-badge">公共</span>
           <span v-else-if="p.myRole === 'admin'" class="badge">管理</span>
+          <span v-else-if="p.myRole === 'user'" class="badge">项目用户</span>
           <span v-else-if="p.myRole" class="badge">成员</span>
         </div>
         <p class="desc">{{ p.description || '—' }}</p>

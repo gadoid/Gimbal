@@ -49,8 +49,10 @@ def _iso(dt) -> "str | None":
 
 
 async def _get_token(db: AsyncSession, token_id: int) -> AccessToken:
+    """个人令牌面装载:项目令牌(M2b Q2)不经本路由 —— 其管理面在
+    ``/projects/{pid}/tokens``(项目管理员 ∨ Admin+),这里一律 404。"""
     tok = await db.get(AccessToken, token_id)
-    if tok is None:
+    if tok is None or at.is_project_token(tok):
         raise _bad("token_not_found", f"令牌不存在: {token_id}", 404)
     return tok
 
@@ -362,10 +364,12 @@ async def create_token(
 
 
 async def _validate_scope_candidates(
-    db: AsyncSession, owner_id: int, scope: ScopeIn,
+    db: AsyncSession, owner_id: "int | None", scope: ScopeIn, *,
+    project_id: "int | None" = None,
 ) -> None:
     """范围对象必须存在且属该池:防把别人的凭证 id 塞进范围(否则
-    子集判定会静默放行越权资源)。"""
+    子集判定会静默放行越权资源)。项目令牌(M2b Q2)的池 = 项目凭证。"""
+    from ..services.run_prepare import _pool_clause
     if scope.aliases:
         rows = (await db.execute(select(ServiceAlias.alias_name).where(
             ServiceAlias.alias_name.in_(set(scope.aliases))))).scalars().all()
@@ -375,7 +379,7 @@ async def _validate_scope_candidates(
                        "服务别名不存在: " + "、".join(unknown))
     if scope.authIds:
         n = (await db.execute(select(func.count()).select_from(AuthSession)
-            .where(AuthSession.owner_id == owner_id,
+            .where(_pool_clause(owner_id, project_id),
                    AuthSession.id.in_(set(scope.authIds))))).scalar_one()
         if n != len(set(scope.authIds)):
             raise _bad("scope_auth_unknown",
@@ -401,12 +405,18 @@ async def get_token(token_id: int, user: CurrentUser, db: DbSession) -> dict:
     最近调用(§7.2,含被拒)。"""
     tok = await _get_token(db, token_id)
     _require_view(user, tok)
+    return await token_detail(db, tok)
+
+
+async def token_detail(db: AsyncSession, tok: AccessToken) -> dict:
+    """详情核心(个人 / 项目令牌共用;门由调用方把)。"""
+    from ..services.run_prepare import _pool_clause
     scope_aliases, scope_auths = await at.load_scope(db, tok.id)
     # 范围明细(名称化:凭证 id → 别名)
     auth_rows: dict[int, str] = {}
     if scope_auths:
         rows = (await db.execute(select(AuthSession.id, AuthSession.alias).where(
-            AuthSession.owner_id == tok.user_id,
+            _pool_clause(tok.user_id, tok.project_id),
             AuthSession.id.in_(scope_auths)))).all()
         auth_rows = {rid: alias for rid, alias in rows}
     # 注册任务逐个预检
@@ -494,6 +504,11 @@ async def renew_token(
     (须重新生成)。到期暂停的注册实例自动恢复。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await renew_core(db, user, tok, body)
+
+
+async def renew_core(db: AsyncSession, user, tok: AccessToken,
+                     body: TokenRenewIn) -> dict:
     try:
         at.ensure_active_for_write(tok)
     except at.TokenAuthError as e:
@@ -520,6 +535,10 @@ async def regenerate_token(
     失效与到期暂停的注册实例自动恢复,运行中的任务不受影响。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await regenerate_core(db, user, tok)
+
+
+async def regenerate_core(db: AsyncSession, user, tok: AccessToken) -> dict:
     try:
         at.ensure_active_for_write(tok)
     except at.TokenAuthError as e:
@@ -549,11 +568,17 @@ async def put_scope(
     确认)。空维度合法(D4:某维度为空即不允许任何该类资源)。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await put_scope_core(db, user, tok, body, dry_run=dry_run)
+
+
+async def put_scope_core(db: AsyncSession, user, tok: AccessToken,
+                         body: ScopeIn, *, dry_run: bool = False) -> dict:
     try:
         at.ensure_active_for_write(tok)
     except at.TokenAuthError as e:
         raise _bad(e.code, e.message, e.status_code)
-    await _validate_scope_candidates(db, tok.user_id, body)
+    await _validate_scope_candidates(db, tok.user_id, body,
+                                     project_id=tok.project_id)
     # 试算:以新范围对全部注册任务预检
     scope_aliases, scope_auths = await at.load_scope(db, tok.id)
     tpls = (await db.execute(select(IntegrationTask).where(
@@ -596,6 +621,11 @@ async def put_callback(
     (在途事件不得被转发到别处)。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await put_callback_core(db, user, tok, body)
+
+
+async def put_callback_core(db: AsyncSession, user, tok: AccessToken,
+                            body: CallbackIn) -> dict:
     try:
         at.ensure_active_for_write(tok)
     except at.TokenAuthError as e:
@@ -631,6 +661,10 @@ async def rotate_callback_secret(
     """轮换签名密钥:新明文一次性返回;在途投递行按新密钥签发。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await rotate_secret_core(db, user, tok)
+
+
+async def rotate_secret_core(db: AsyncSession, user, tok: AccessToken) -> dict:
     try:
         at.ensure_active_for_write(tok)
     except at.TokenAuthError as e:
@@ -690,6 +724,10 @@ async def revoke_token(token_id: int, user: CurrentUser, db: DbSession) -> dict:
     user 角色可吊销自己的令牌(§2.3)。"""
     tok = await _get_token(db, token_id)
     _require_manage(user, tok)
+    return await revoke_core(db, user, tok)
+
+
+async def revoke_core(db: AsyncSession, user, tok: AccessToken) -> dict:
     if tok.revoked_at is not None:
         return {"id": tok.id, "revoked": True, "pendingTasks": []}
     tok.revoked_at = at.now_utc()

@@ -15,8 +15,7 @@
         </option>
       </select>
       <select v-model="addRole" data-testid="prj-add-role">
-        <option value="member">member</option>
-        <option value="admin">admin</option>
+        <option v-for="r in ROLES" :key="r" :value="r">{{ PROJECT_ROLE_LABEL[r] }}</option>
       </select>
       <button type="button" class="btn sm primary" data-testid="prj-add"
               @click="add">添加</button>
@@ -29,8 +28,7 @@
           <td>
             <select :value="m.role" :data-testid="`prj-role-${m.userId}`"
                     @change="changeRole(m, $event)">
-              <option value="member">member</option>
-              <option value="admin">admin</option>
+              <option v-for="r in ROLES" :key="r" :value="r">{{ PROJECT_ROLE_LABEL[r] }}</option>
             </select>
           </td>
           <td>
@@ -48,8 +46,9 @@
 import { onMounted, ref } from 'vue'
 import {
   listMembers, addMember, patchMember, removeMember,
-  type ProjectOut, type ProjectMember,
+  type ProjectOut, type ProjectMember, type ProjectRole,
 } from '@/api/projects'
+import { PROJECT_ROLE_LABEL } from '@/utils/projectRole'
 import { getRoster } from '@/api/handoff'
 
 const props = defineProps<{ project: ProjectOut }>()
@@ -58,7 +57,9 @@ const emit = defineEmits<{ changed: [] }>()
 const members = ref<ProjectMember[]>([])
 const roster = ref<{ id: number; username: string; display_name: string }[]>([])
 const addUserId = ref(0)
-const addRole = ref<'member' | 'admin'>('member')
+// M2b Q1:项目用户 = 只读 + 执行(不能新建 / 修改 / 提升)
+const ROLES: ProjectRole[] = ['member', 'user', 'admin']
+const addRole = ref<ProjectRole>('member')
 const mError = ref('')
 
 async function load(): Promise<void> {
@@ -78,7 +79,7 @@ async function add(): Promise<void> {
 }
 async function changeRole(m: ProjectMember, ev: Event): Promise<void> {
   mError.value = ''
-  const role = (ev.target as HTMLSelectElement).value as 'admin' | 'member'
+  const role = (ev.target as HTMLSelectElement).value as ProjectRole
   try {
     await patchMember(props.project.id, m.userId, role)
     m.role = role

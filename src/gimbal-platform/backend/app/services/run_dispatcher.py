@@ -75,7 +75,7 @@ from .run_injection import (
     injectable_universe,
 )
 from .run_materialize import materialize_run_copy
-from . import service_aliases
+from . import run_prepare, service_aliases
 # N1(2026-11-01):装载准备(凭证清单/解析、compose、内置 users、数据集
 # 查找、prepare_exec 统一入口)迁往 run_prepare —— 本模块只做派发与
 # 执行编排;ResolvedAuth/AuthResolveError 亦由 run_prepare 定义。
@@ -1082,6 +1082,51 @@ async def dispatch_target(
                                             else "personal")},
             )
 
+    # M2b Q3 数据集按账号驱动:行账号列 ``@slot.<槽>`` = 本次凭证池里的
+    # 绑定名。派发前扫全部选中行 fail-fast(缺失 / 环境不符整单拒发);
+    # 令牌调用另核对覆盖绑定 id ⊆ 令牌范围。
+    row_bindings_cfg: dict[str, dict[str, int]] = {}
+    _row_refs = [
+        (fd.get("datasetId"), i, slot, alias)
+        for fd in fanout_datasets for i, r in fd["rows"]
+        for slot, alias in run_prepare.row_binding_refs(r).items()]
+    if _row_refs:
+        if getattr(req, "graph", None) is not None:
+            raise Conflict(
+                "dataset_binding_unsupported",
+                "suite 编排暂不支持数据集账号列(@slot.<槽>)")
+        _hit, _miss, _envbad = await run_prepare.lookup_row_bindings(
+            db, user_id, {(s, a) for _d, _i, s, a in _row_refs},
+            env_id=env_choice.env_id, cred_project_id=cred_project_id)
+        _src = "project" if cred_project_id is not None else "personal"
+        for code, bad, msg in (
+                ("dataset_binding_missing", set(_miss),
+                 ("以下数据集行的账号在项目凭证中未登记:"
+                  if cred_project_id is not None else
+                  "以下数据集行的账号在你名下没有同名绑定:")),
+                ("dataset_binding_env_mismatch", set(_envbad),
+                 "以下数据集行的账号绑定不属于本次执行环境:")):
+            if bad:
+                rows_out = [
+                    {"datasetId": d, "rowIndex": i, "slot": s, "alias": a}
+                    for d, i, s, a in _row_refs if (s, a) in bad][:20]
+                raise Conflict(code, msg + "、".join(
+                    f"{r['slot']}={r['alias']}(行 {r['rowIndex']})"
+                    for r in rows_out),
+                    extra={"rows": rows_out, "credentialSource": _src})
+        if token is not None:
+            from . import access_token as _at
+            _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
+            _out = sorted({a for (s, a), b in _hit.items()
+                           if b.id not in _scope_auths})
+            if _out:
+                raise Conflict(
+                    _at.ERR_RESOURCE_NOT_ALLOWED,
+                    "数据集行的账号绑定不在令牌授权范围:" + "、".join(_out),
+                    extra={"aliases": _out})
+        for d, i, s, a in _row_refs:
+            row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] = _hit[(s, a)].id
+
     from . import execution_queue as _eq
     chain = chain_override or str(
         getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
@@ -1147,6 +1192,8 @@ async def dispatch_target(
             **({"credentialSource": "project",
                 "credentialProjectId": cred_project_id}
                if cred_project_id is not None else {}),
+            # M2b Q3:行级账号覆盖({datasetId:rowIndex: {槽: 绑定 id}})
+            **({"rowBindings": row_bindings_cfg} if row_bindings_cfg else {}),
             # 服务键 → {alias}(S6;重跑按此回放)
             "serviceBindings": _bindings,
             # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
@@ -1940,6 +1987,13 @@ async def _fanout(
             if auth_aliases
             else []
         )
+        # M2b Q3:行账号列覆盖绑定(每个 (槽, 绑定名) 只解密一次)
+        row_auths_map = await run_prepare.resolve_row_bindings(
+            db_factory, owner_id,
+            {(s, a) for ds in datasets for _i, r in ds["rows"]
+             for s, a in run_prepare.row_binding_refs(r).items()},
+            env_id=(env_snapshot or {}).get("environmentId"),
+            cred_project_id=cred_project_id)
     except AuthResolveError as e:
         logger.error(
             "run_dispatcher: auth resolve failed for execution {}: {}",
@@ -2083,7 +2137,10 @@ async def _fanout(
                 return
             # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
             # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
-            row_dict = dict(row or {})
+            row_dict = run_prepare.strip_row_binding_columns(row)
+            # M2b Q3:本行凭证组(账号列覆盖执行级取用)
+            row_exec_auths = run_prepare.apply_row_bindings(
+                exec_auths, row, row_auths_map)
             composed = compose_scenario(scenario_payload, row_dict)
             if injection is not None:
                 composed = compose_injection_scenario(composed, injection)
@@ -2166,7 +2223,7 @@ async def _fanout(
                     # services 物化(authored > ③ 环境部署地址)。
                     composed_exec = materialize_run_copy(
                         converted,
-                        resolved_auths=exec_auths,
+                        resolved_auths=row_exec_auths,
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
                         alias_base_urls=prep.alias_base_urls,

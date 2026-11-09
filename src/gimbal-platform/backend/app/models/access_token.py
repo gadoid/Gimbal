@@ -13,13 +13,21 @@ v4 三段收敛的左侧身份:**单一令牌 ``gtk_``**,绑定一个用户(个�
 * 生命周期(§3.4):有效 →(自然到期)已到期 →(续期/重新生成)有效;
   (改密/停用/admin 强制)已失效 →(重新生成)有效;吊销 = 终态只读。
   派生拒绝(属主角色 < member / 属主未启用)不落库,认证时按当前值判。
+
+authz M2b Q2 —— **项目令牌**(``kind='project'``):以「项目用户」权限访问
+单个项目的外部调用身份;``user_id`` 恒 NULL(个人面 ``user_id == uid`` 的
+查询天然排除项目令牌,签发人被删也不会 CASCADE 掉项目令牌),
+``project_id`` 指向项目(无 FK,项目删除路由显式吊销);``holder_id`` =
+负责人(指定的一位项目管理员;问责 / 通知 / 执行记录属主;失格 = 认证时
+派生拒绝);``holder_pending_id`` = 换绑待新负责人确认。执行恒用项目凭证。
 """
 from __future__ import annotations
 
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, ForeignKey, Index, Integer, String, Text, func,
+    BigInteger, CheckConstraint, ForeignKey, Index, Integer, String, Text,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,13 +40,29 @@ class AccessToken(Base):
     __table_args__ = (
         # 认证按 hash 命中(唯一约束);列表按属主 + 吊销态过滤
         Index("ix_access_tokens_user", "user_id", "revoked_at"),
+        # M2b Q2:个人令牌 = 属主非空 ∧ 无项目;项目令牌 = 属主空 ∧ 有项目
+        CheckConstraint(
+            "(kind = 'personal' AND user_id IS NOT NULL"
+            " AND project_id IS NULL)"
+            " OR (kind = 'project' AND user_id IS NULL"
+            " AND project_id IS NOT NULL)",
+            name="ck_token_kind_shape"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
                                     autoincrement=True)
-    # 令牌属主(随用户整删 CASCADE;C1 后恒本人)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # 令牌属主(随用户整删 CASCADE;C1 后恒本人)—— 项目令牌恒 NULL
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    # M2b Q2 项目令牌:所属项目(无 FK,同 executions.project_id 快照口径)
+    project_id: Mapped[int | None] = mapped_column(
+        Integer, index=True, nullable=True)
+    # 负责人(项目管理员;NULL = 待指派 → 认证派生拒绝)
+    holder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # 换绑待确认的新负责人(确认前令牌按原负责人状态继续可用)
+    holder_pending_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     kind: Mapped[str] = mapped_column(String(16), default="personal")
     name: Mapped[str] = mapped_column(String(64), default="")
     # sha256(完整明文) —— 唯一;明文只在创建/重新生成响应里出现一次

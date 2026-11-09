@@ -55,6 +55,8 @@ export type SwitchableType =
   | 'project_promotion.rejected'
   // M2a S7.6:公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒
   | 'carry.shadowed'
+  // M2b Q2:项目令牌负责人换绑 / 失格提醒
+  | 'project_token'
 
 export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   execution_finished: '执行完成',
@@ -75,6 +77,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   'project_promotion.approved': '加入申请已批准',
   'project_promotion.rejected': '加入申请被驳回',
   'carry.shadowed': '公共层 carry 变更',
+  project_token: '项目令牌',
 }
 
 export function list(params?: {

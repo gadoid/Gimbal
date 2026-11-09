@@ -115,7 +115,11 @@ async def precheck_run(
         # authz W6:读闸升为 ref-aware(can_read_scenario_row)—— 引用
         # 被分享人本就可跑(§7.6),预检的 found 与内置凭证告警都应
         # 服务到他们;纯判会把 ref 读者当「不存在」。
-        if scen_row is None or not await can_read_scenario_row(
+        # M2b Q2:项目令牌区锁(调用面令牌;JWT 按 tokenId 预检不受锁)
+        locked = (principal.is_token
+                  and at_svc.zone_locked_out(principal, getattr(
+                      scen_row, "project_id", None)))
+        if scen_row is None or locked or not await can_read_scenario_row(
                 db, user, scen_row):
             out.append(PrecheckResult(
                 scenario_id=item.scenario_id, scheme_id=item.scheme_id, found=False,

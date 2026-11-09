@@ -167,6 +167,109 @@ async def pick_bindings(
     return sorted(picked.values(), key=lambda r: r.slot)
 
 
+# ── M2b Q3 数据集按账号驱动:行级账号列 ``@slot.<槽名>`` = 绑定名 ─────
+ROW_BINDING_PREFIX = "@slot."
+
+
+def row_binding_refs(row: dict | None) -> dict[str, str]:
+    """行内账号列 → {槽名: 绑定名}(值为空 = 不覆盖,沿用执行级取用)。"""
+    out: dict[str, str] = {}
+    for k, v in (row or {}).items():
+        if (isinstance(k, str) and k.startswith(ROW_BINDING_PREFIX)
+                and len(k) > len(ROW_BINDING_PREFIX)
+                and isinstance(v, str) and v.strip()):
+            out[k[len(ROW_BINDING_PREFIX):]] = v.strip()
+    return out
+
+
+def strip_row_binding_columns(row: dict | None) -> dict:
+    """行值并入 vars 前剔除账号列(账号列不是变量)。"""
+    return {k: v for k, v in (row or {}).items()
+            if not (isinstance(k, str) and k.startswith(ROW_BINDING_PREFIX))}
+
+
+async def lookup_row_bindings(
+    db: Any, owner_id: int | None, pairs: set[tuple[str, str]],
+    *, env_id: int | None = None, cred_project_id: int | None = None,
+) -> tuple[dict[tuple[str, str], "DBAuthSession"], list[tuple[str, str]],
+           list[tuple[str, str]]]:
+    """(槽, 绑定名) → 池内绑定行(不解密)。返回 (命中表, 缺失, 环境不符)。
+
+    绑定名在池内唯一(个人面 (owner, alias) / 项目面 (project, alias));
+    命中行的槽须与列声明的槽一致,否则按缺失算(防把 A 槽的账号塞进
+    B 槽)。绑定有环境且 ≠ 本次环境 → 环境不符。"""
+    if not pairs:
+        return {}, [], []
+    names = {a for _s, a in pairs}
+    rows = (await db.execute(select(DBAuthSession).where(
+        _pool_clause(owner_id, cred_project_id),
+        DBAuthSession.alias.in_(names)))).scalars().all()
+    by_alias = {r.alias: r for r in rows}
+    hit: dict[tuple[str, str], DBAuthSession] = {}
+    missing: list[tuple[str, str]] = []
+    env_bad: list[tuple[str, str]] = []
+    for slot, alias in sorted(pairs):
+        r = by_alias.get(alias)
+        if r is None or r.slot != slot:
+            missing.append((slot, alias))
+        elif r.env_id is not None and env_id is not None \
+                and r.env_id != env_id:
+            env_bad.append((slot, alias))
+        else:
+            hit[(slot, alias)] = r
+    return hit, missing, env_bad
+
+
+async def resolve_row_bindings(
+    db_factory: Any, owner_id: int | None, pairs: set[tuple[str, str]],
+    *, env_id: int | None = None, cred_project_id: int | None = None,
+) -> dict[tuple[str, str], "ResolvedAuth"]:
+    """行级覆盖绑定解密(执行内每个 (槽, 绑定名) 只解密一次)。缺失 /
+    环境不符的已在派发 fail-fast 拦下 —— 这里只解析命中项。"""
+    if not pairs:
+        return {}
+    from ..core.security import fernet_decrypt
+
+    async with db_factory() as session:
+        hit, _m, _e = await lookup_row_bindings(
+            session, owner_id, pairs, env_id=env_id,
+            cred_project_id=cred_project_id)
+    out: dict[tuple[str, str], ResolvedAuth] = {}
+    for key, a in hit.items():
+        try:
+            runtime = RuntimeAuthSession(
+                url=a.url,
+                username=fernet_decrypt(a.username_enc),
+                password=fernet_decrypt(a.password_enc),
+                token_type=a.token_type,
+                expires_in=a.expires_in,
+            )
+        except ValueError as e:
+            raise AuthResolveError(
+                f"auth binding '{a.alias}' decrypt failed: {e}") from e
+        out[key] = dataclasses.replace(
+            ResolvedAuth.from_runtime(runtime, alias=a.slot,
+                                      account_fields=a.account_fields),
+            binding_id=a.id)
+    return out
+
+
+def apply_row_bindings(
+    exec_auths: list["ResolvedAuth"], row: dict | None,
+    resolved: dict[tuple[str, str], "ResolvedAuth"],
+) -> list["ResolvedAuth"]:
+    """按行覆盖执行级凭证组:行账号列命中的槽换成该行的绑定,其余不变。"""
+    refs = row_binding_refs(row)
+    if not refs:
+        return exec_auths
+    out = {a.alias: a for a in exec_auths}
+    for slot, alias in refs.items():
+        r = resolved.get((slot, alias))
+        if r is not None:
+            out[slot] = r
+    return list(out.values())
+
+
 async def binding_ids_for(
     db_factory: Any, owner_id: int | None, slots: list[str],
     *, env_id: int | None = None, cred_project_id: int | None = None,

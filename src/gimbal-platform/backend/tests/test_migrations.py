@@ -404,6 +404,11 @@ def test_0038_platform_retire():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            with eng.begin() as c:
+                # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
+                # 存量库(含平台令牌行)先摘掉
+                c.execute(text("ALTER TABLE access_tokens DROP CONSTRAINT"
+                               " IF EXISTS ck_token_kind_shape"))
             with Session(eng) as s:
                 plat = User(username="__platform__", display_name="",
                             password_hash="x", role="user", is_system=True)
@@ -599,6 +604,11 @@ def test_0040_project_zone():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            with eng.begin() as c:
+                # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
+                # 存量库(含平台令牌行)先摘掉
+                c.execute(text("ALTER TABLE access_tokens DROP CONSTRAINT"
+                               " IF EXISTS ck_token_kind_shape"))
             with Session(eng) as s:
                 plat = User(username="__platform__", display_name="",
                             password_hash="x", role="user", is_system=True)
@@ -1778,5 +1788,69 @@ def test_0051_project_credentials():
                 cks = {x["name"] for x in inspect(eng).get_check_constraints(
                     "auth_sessions")}
                 assert "ck_auth_owner_xor_project" not in cks
+        finally:
+            eng.dispose()
+
+
+def test_0052_project_tokens():
+    """M2b Q2:access_tokens 项目 / 负责人维度 + CHECK;fresh 链空转;
+    downgrade 删项目令牌后还原 user_id NOT NULL(个人令牌行不动)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            command.upgrade(_cfg(sync_url), "0051_project_credentials")
+            with eng.begin() as c:
+                c.execute(text("ALTER TABLE access_tokens DROP CONSTRAINT"
+                               " IF EXISTS ck_token_kind_shape"))
+                for col in ("project_id", "holder_id", "holder_pending_id"):
+                    c.execute(text(
+                        f"ALTER TABLE access_tokens DROP COLUMN {col}"))
+                c.execute(text("ALTER TABLE access_tokens"
+                               " ALTER COLUMN user_id SET NOT NULL"))
+                c.execute(text(
+                    "INSERT INTO users (username, display_name, "
+                    "password_hash, role, is_active, is_system, created_at, "
+                    "updated_at) VALUES ('u52','u52','x','user',true,false,"
+                    "now(),now())"))
+                uid = c.execute(text(
+                    "SELECT id FROM users WHERE username='u52'")).scalar_one()
+                c.execute(text(
+                    "INSERT INTO access_tokens (user_id, kind, name,"
+                    " token_hash, token_hint, expires_at) VALUES"
+                    f" ({uid}, 'personal', 't', 'h52', 'x', now())"))
+
+            command.upgrade(_cfg(sync_url), "0052_project_tokens")
+            assert _revision(sync_url) == "0052_project_tokens"
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "access_tokens")}
+            assert {"project_id", "holder_id", "holder_pending_id"} <= cols
+            import pytest
+            with eng.connect() as c:
+                c.execute(text(
+                    "INSERT INTO access_tokens (user_id, kind, name,"
+                    " token_hash, token_hint, expires_at, project_id,"
+                    f" holder_id) VALUES (NULL, 'project', 'p', 'hp52',"
+                    f" 'x', now(), 7, {uid})"))
+                c.commit()
+                # 错形:项目令牌带属主 → CHECK 拦
+                with pytest.raises(Exception):
+                    c.execute(text(
+                        "INSERT INTO access_tokens (user_id, kind, name,"
+                        " token_hash, token_hint, expires_at, project_id)"
+                        f" VALUES ({uid}, 'project', 'b', 'hb52', 'x',"
+                        " now(), 7)"))
+                    c.commit()
+
+            command.downgrade(_cfg(sync_url), "0051_project_credentials")
+            with eng.connect() as c:
+                kinds = c.execute(text(
+                    "SELECT kind FROM access_tokens")).scalars().all()
+                assert kinds == ["personal"]
+            ucol = [c for c in inspect(eng).get_columns("access_tokens")
+                    if c["name"] == "user_id"][0]
+            assert ucol["nullable"] is False
         finally:
             eng.dispose()
