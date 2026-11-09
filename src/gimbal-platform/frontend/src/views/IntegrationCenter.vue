@@ -198,7 +198,10 @@
     </Transition>
 
     <!-- W2:订阅知情确认弹窗(订阅/重新确认共用) -->
-    <SubscriptionDialog :open="!!subTask" :task-id="subTask?.id || 0"
+    <SubscriptionDialog
+      :open="!!subTask"
+      :task-id="subTask?.id || 0"
+      :project-credentials-available="!!subTask?.projectCredentialsAvailable"
                         @close="subTask = null" @done="load" />
 
   </section>

@@ -135,18 +135,29 @@ def _slot_tier(row: DBAuthSession, env_id: int | None) -> tuple:
     return (tier, row.id)
 
 
+def _pool_clause(owner_id: int | None, cred_project_id: int | None):
+    """S8 凭证池谓词:``cred_project_id`` 非空 = 项目池(项目凭证),
+    否则执行人个人池。两池互斥(CHECK 归属恰一)—— 不混取。"""
+    if cred_project_id is not None:
+        return DBAuthSession.project_id == cred_project_id
+    return DBAuthSession.owner_id == owner_id
+
+
 async def pick_bindings(
-    db: Any, owner_id: int, slots: list[str],
-    *, env_id: int | None = None,
+    db: Any, owner_id: int | None, slots: list[str],
+    *, env_id: int | None = None, cred_project_id: int | None = None,
 ) -> list["DBAuthSession"]:
     """S5 槽位取用单源(不解密):同槽多绑定按 :func:`_slot_tier` 分层
     取一行。``resolve_exec_auths``(注入)与指纹/预览的绑定标识消费同一
-    份裁决 —— 取用口径结构上不可能漂移。"""
+    份裁决 —— 取用口径结构上不可能漂移。
+
+    S8:``cred_project_id`` 非空 → 从项目池取用(项目凭证),分层规则
+    不变;缺省 = ``owner_id`` 个人池(旧行为)。"""
     if not slots:
         return []
     rows = (await db.execute(
         select(DBAuthSession).where(
-            DBAuthSession.owner_id == owner_id,
+            _pool_clause(owner_id, cred_project_id),
             DBAuthSession.slot.in_(slots)))).scalars().all()
     picked: dict[str, DBAuthSession] = {}
     for a in rows:
@@ -157,20 +168,21 @@ async def pick_bindings(
 
 
 async def binding_ids_for(
-    db_factory: Any, owner_id: int, slots: list[str],
-    *, env_id: int | None = None,
+    db_factory: Any, owner_id: int | None, slots: list[str],
+    *, env_id: int | None = None, cred_project_id: int | None = None,
 ) -> dict[str, int]:
     """槽名 → 取用绑定 id(轻量,不解密;指纹/预览消费)。"""
     if not slots:
         return {}
     async with db_factory() as s:
-        rows = await pick_bindings(s, owner_id, slots, env_id=env_id)
+        rows = await pick_bindings(s, owner_id, slots, env_id=env_id,
+                                   cred_project_id=cred_project_id)
     return {r.slot: r.id for r in rows}
 
 
 async def resolve_exec_auths(
-    db_factory: Any, owner_id: int, aliases: list[str],
-    *, env_id: int | None = None,
+    db_factory: Any, owner_id: int | None, aliases: list[str],
+    *, env_id: int | None = None, cred_project_id: int | None = None,
 ) -> list[ResolvedAuth]:
     """Owner 级槽名 → ResolvedAuth(解密后的轻量值对象)。owner 过滤
     防跨 owner 同名 slot 解错凭证。
@@ -192,6 +204,8 @@ async def resolve_exec_auths(
     长事务隔离 —— 传活会话是 N0 修掉的缺陷形态(AsyncSession 不可
     调用,别名非空即 TypeError)。
 
+    S8:``cred_project_id`` 非空 → 解析项目凭证池(见 :func:`pick_bindings`)。
+
     Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
     接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
     这样下游 materialize_run_copy(_apply_users)不动,未来可直接消费
@@ -205,7 +219,8 @@ async def resolve_exec_auths(
     async with db_factory() as session:
         # S5:取用裁决单源(pick_bindings;同槽多绑定分层取一行)
         rows = await pick_bindings(session, owner_id, aliases,
-                                   env_id=env_id)
+                                   env_id=env_id,
+                                   cred_project_id=cred_project_id)
     for a in rows:
         try:
             runtime = RuntimeAuthSession(
@@ -389,13 +404,15 @@ async def prepare_exec(
     scenario_owner_id: int | None = None,
     environment: Any = None,
     project_id: int | None = None,
+    cred_project_id: int | None = None,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
 
     * 凭证清单:``service_aliases.exec_auth_aliases``(模板扫描 ∪
       生效别名声明槽位)—— 算法单源,调用方不可自选;
-    * 凭证解析:``resolve_exec_auths``(owner 级);``strict`` 下缺别名
+    * 凭证解析:``resolve_exec_auths``(owner 级;S8 ``cred_project_id``
+      非空 = 项目凭证池);``strict`` 下缺别名
       抛 :class:`MissingAuthAliases`(集成链捕获 → 暂停实例),
       ``lenient`` 仅记录(执行期步骤级报错);``with_auth=False``
       供调用方在更早处已用同一函数做过 fail-fast 解析(单场景链的
@@ -438,7 +455,8 @@ async def prepare_exec(
                 s, definition, bindings)
         prep.resolved_auths = await resolve_exec_auths(
             db_factory, owner_id, prep.aliases,
-            env_id=getattr(environment, "env_id", None))
+            env_id=getattr(environment, "env_id", None),
+            cred_project_id=cred_project_id)
         got = {a.alias for a in prep.resolved_auths}
         prep.missing_aliases = sorted(set(prep.aliases) - got)
         if prep.missing_aliases and auth_policy == "strict":
@@ -518,7 +536,7 @@ class EffectiveConfig:
     —— 预览与执行结构上不可能漂移。"""
     env: dict | None                       # {environmentId, environmentSource}
     services: dict[str, dict]              # svc → {url, source, alias?}
-    auths: dict[str, dict]                 # 槽名 → {bindingId, system, envId, isDefault}
+    auths: dict[str, dict]                 # 槽名 → {bindingId, system, envId, isDefault, source}
     missing_auths: list[str]
     carry: dict[str, dict[str, dict]]      # raw svc → path → {value, source}
     carry_defaults: dict[str, dict]        # path → {value, source}
@@ -530,8 +548,12 @@ async def resolve_effective_config(
     user_id: int | None = None,
     project_id: int | None = None,
     environment: Any = None,
+    cred_project_id: int | None = None,
 ) -> EffectiveConfig:
-    """组合环境/地址/槽位绑定/carry(预览与执行同源;见类注释)。"""
+    """组合环境/地址/槽位绑定/carry(预览与执行同源;见类注释)。
+
+    S8:``cred_project_id`` 非空 = 本次选用项目凭证 —— 槽位从项目池取用,
+    逐槽来源 ``source='project'``(缺省 ``'personal'``)。"""
     from . import carry_store, service_aliases
     from .carry_injection import _step_service
     from .env_chain import EnvChoice
@@ -562,15 +584,18 @@ async def resolve_effective_config(
         db, definition, bindings or {})
     auths_out: dict[str, dict] = {}
     missing: list[str] = []
-    if injection and user_id is not None:
+    if injection and (user_id is not None or cred_project_id is not None):
         rows = await pick_bindings(
             db, user_id, injection,
-            env_id=getattr(env, "env_id", None))
+            env_id=getattr(env, "env_id", None),
+            cred_project_id=cred_project_id)
         got = {r.slot for r in rows}
+        src = "project" if cred_project_id is not None else "personal"
         for r in rows:
             auths_out[r.slot] = {
                 "bindingId": r.id, "system": r.system,
-                "envId": r.env_id, "isDefault": r.is_default}
+                "envId": r.env_id, "isDefault": r.is_default,
+                "source": src}
         missing = sorted(set(injection) - got)
     elif injection:
         missing = sorted(injection)

@@ -268,6 +268,10 @@ export interface RunRequest {
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
   graph?: GraphSpec
+  /** authz M2a S8:凭证来源 — 'personal'(缺省)= 个人槽位绑定;
+   *  'project' = 场景所属普通项目的项目凭证(须是项目成员;suite
+   *  编排与令牌调用不支持) */
+  credentialSource?: 'personal' | 'project'
 }
 
 // ── C5(P3-05):suite 编排执行规格 ──────────────────────────────

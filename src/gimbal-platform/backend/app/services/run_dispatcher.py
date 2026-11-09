@@ -1014,6 +1014,21 @@ async def dispatch_target(
     _scen_owner_id = _scen.owner_id if _scen is not None else user_id
     # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
     _scen_project_id = _scen.project_id if _scen is not None else None
+    # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
+    # 普通项目的项目凭证池(执行人须是项目成员;suite 编排暂不支持)
+    cred_project_id: int | None = None
+    if getattr(req, "credential_source", None) == "project":
+        if getattr(req, "graph", None) is not None:
+            raise Conflict(
+                "credential_source_unsupported",
+                "suite 编排暂不支持项目凭证,请改用个人凭证")
+        from .zone import can_use_project_credentials
+        if not await can_use_project_credentials(
+                db, user_id, _scen_project_id):
+            raise Conflict(
+                "credential_source_invalid",
+                "项目凭证只能用于你所在普通项目的场景")
+        cred_project_id = _scen_project_id
     if _scen_owner_id is not None and user_id != _scen_owner_id:
         from .scenario_store import (
             strip_builtin_credentials, strip_sensitive_columns)
@@ -1050,14 +1065,21 @@ async def dispatch_target(
     if auth_aliases:
         from .run_prepare import pick_bindings
         _picked = await pick_bindings(
-            db, user_id, auth_aliases, env_id=env_choice.env_id)
+            db, user_id, auth_aliases, env_id=env_choice.env_id,
+            cred_project_id=cred_project_id)
         _missing = sorted(set(auth_aliases) - {r.slot for r in _picked})
         if _missing:
             raise Conflict(
                 "auth_aliases_missing",
-                "以下凭证槽位在你名下未绑定,请先在认证管理登记或改绑:"
+                ("以下凭证槽位项目凭证未登记,请项目管理员在项目配置页"
+                 "登记,或改用个人凭证:"
+                 if cred_project_id is not None else
+                 "以下凭证槽位在你名下未绑定,请先在认证管理登记或改绑:")
                 + "、".join(_missing),
-                extra={"aliases": _missing},
+                extra={"aliases": _missing,
+                       "credentialSource": ("project"
+                                            if cred_project_id is not None
+                                            else "personal")},
             )
 
     from . import execution_queue as _eq
@@ -1081,6 +1103,9 @@ async def dispatch_target(
         # (Case 层解散后执行的挂载点就是场景;临时调用为占位 id)。
         scenario_id=target.scenario_id,
         owner_id=user_id,
+        # S8 审计「项目 + 发起人」:执行所属项目 = 场景项目快照
+        # (S1.1 项目执行对成员可见的数据源)
+        project_id=_scen_project_id,
         total_runs=total_runs,
         # P3:执行形态(scenario | adhoc)—— 非场景形态登记在
         # models.execution.NON_SCENARIO_KINDS,列表/重跑按它判定。
@@ -1118,6 +1143,10 @@ async def dispatch_target(
             # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
             # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
             "injectedAuths": auth_aliases,
+            # S8 凭证来源(重跑按此回放;项目凭证另记所用项目)
+            **({"credentialSource": "project",
+                "credentialProjectId": cred_project_id}
+               if cred_project_id is not None else {}),
             # 服务键 → {alias}(S6;重跑按此回放)
             "serviceBindings": _bindings,
             # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
@@ -1200,6 +1229,8 @@ async def dispatch_target(
                 "env_snapshot": env_choice.snapshot(),
                 # S4:carry 作用域第二层(项目层;None = 私有区 → 个人层)
                 "scenario_project_id": _scen_project_id,
+                # S8:项目凭证池(None = 执行人个人池)
+                "cred_project_id": cred_project_id,
                 "auth_aliases": auth_aliases,
                 "halt_at": req.step_to,
                 "n_runs": req.n_runs,
@@ -1808,6 +1839,7 @@ async def _fanout(
     scenario_owner_id: int | None = None,
     env_snapshot: dict | None = None,
     scenario_project_id: int | None = None,
+    cred_project_id: int | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
@@ -1903,7 +1935,8 @@ async def _fanout(
         exec_auths = (
             await resolve_exec_auths(
                 db_factory, owner_id, auth_aliases,
-                env_id=(env_snapshot or {}).get("environmentId"))
+                env_id=(env_snapshot or {}).get("environmentId"),
+                cred_project_id=cred_project_id)
             if auth_aliases
             else []
         )
@@ -3236,6 +3269,7 @@ async def _create_execution(
     token_id: int | None = None,
     client_ref: str | None = None,
     callback_path_override: str | None = None,
+    project_id: int | None = None,
 ) -> Execution:
     """Insert an Execution row(+ 拆表后的快照行)。
 
@@ -3266,6 +3300,7 @@ async def _create_execution(
         token_id=token_id,
         client_ref=client_ref,
         callback_path_override=callback_path_override,
+        project_id=project_id,
     )
     db.add(ex)
     await db.flush()  # 拿 execution.id,快照行同事务写入

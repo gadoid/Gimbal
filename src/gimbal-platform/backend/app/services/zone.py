@@ -51,6 +51,17 @@ async def my_project_roles(db: AsyncSession, user_id: int) -> dict[int, str]:
     return roles
 
 
+async def can_use_project_credentials(
+    db: AsyncSession, user_id: int | None, project_id: int | None,
+) -> bool:
+    """项目凭证选用门(authz M2a S8):对象属**普通项目**且主体是该项目
+    成员(任一角色)。公共项目不落成员行 → 天然 False(公共项目无项目
+    凭证);Admin+ 不旁路(凭证是项目的,不是平台的)。"""
+    if project_id is None or user_id is None:
+        return False
+    return project_id in await my_project_roles(db, user_id)
+
+
 class ProjectCreateDenied(Exception):
     """项目内新建被拒(调用方映射 HTTP:404 / 403 / 422)。"""
 

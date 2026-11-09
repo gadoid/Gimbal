@@ -16,6 +16,8 @@ export interface IntegrationInstance {
   checkChangedAt: string | null
   /** W0b④:缺失别名全集(与执行期暂停判定同口径 = 任一缺失即列) */
   missingCredentials?: string[]
+  /** authz M2a S8:实例凭证来源('project' = 项目凭证;personal = 持有人) */
+  credentialSource?: string
 }
 
 export interface IntegrationTaskItem {
@@ -46,6 +48,8 @@ export interface IntegrationTaskItem {
   tokenName?: string | null
   tokenKind?: string | null
   clientRef?: string | null
+  /** authz M2a S8:普通项目模板可选凭证来源(项目 / 个人) */
+  projectCredentialsAvailable?: boolean
 }
 
 export interface FunctionCardData {
@@ -219,9 +223,14 @@ export async function subscribeIntegrationTask(
    * 不一致 409 consent_stale(确认的必须是看到的那份内容);
    * 不带指纹的订阅没有「知情」凭据,服务端 422。 */
   fingerprint: string,
+  /** authz M2a S8:凭证来源(仅普通项目模板可选 project —— 项目集成
+   * 默认用项目凭证;personal = 持有人个人凭证;缺省 = 建新实例按模板
+   * 缺省,已有实例不变) */
+  credentialSource?: 'personal' | 'project',
 ): Promise<IntegrationTaskItem> {
   const { data } = await http.post<IntegrationTaskItem>(
-    `/integration/tasks/${id}/subscribe`, { fingerprint })
+    `/integration/tasks/${id}/subscribe`,
+    credentialSource ? { fingerprint, credentialSource } : { fingerprint })
   return data
 }
 

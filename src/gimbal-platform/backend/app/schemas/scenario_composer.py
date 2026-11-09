@@ -441,6 +441,11 @@ class RunRequest(BaseModel):
     # 默认环境);指定的环境不存在 → 404 environment_not_found
     environment_id: int | None = Field(default=None, ge=1,
                                        alias="environmentId")
+    # authz M2a S8:凭证来源 —— 'personal'(缺省 None 同义)= 执行人个人
+    # 槽位绑定;'project' = 场景所属普通项目的项目凭证(须是项目成员;
+    # suite 编排暂不支持 → 409)。令牌调用禁止携带(_INBOUND_FORBIDDEN)。
+    credential_source: Literal["personal", "project"] | None = Field(
+        default=None, alias="credentialSource")
     # 断言注入条目(spec v2 §5/§8):选中条目在 dispatch 时物化为注入族
     # (payload.assertion_registry → 基线 vars 覆写 + asserts patch),
     # 与数据集行并列生成 case;空 = 不注入。

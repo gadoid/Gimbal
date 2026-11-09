@@ -65,6 +65,8 @@ export interface SlotStatusRow {
   slot: string
   scenarios: string[]
   members: SlotStatusMember[]
+  /** authz M2a S8:项目凭证已覆盖该槽(成员可切换为项目凭证执行) */
+  projectBound?: boolean
 }
 
 export function getSlotStatus(id: number): Promise<{ slots: SlotStatusRow[] }> {

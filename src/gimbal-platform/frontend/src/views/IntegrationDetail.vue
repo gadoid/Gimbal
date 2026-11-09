@@ -119,6 +119,15 @@
         <dl class="idtl-dl">
           <dt>上次运行</dt>
           <dd>{{ task?.instance?.lastRunAt ? fmtTime(task.instance.lastRunAt) : '还未运行过' }}</dd>
+          <dt>凭证来源</dt>
+          <!-- authz M2a S8:项目凭证 = 模板所属项目的共享凭证 -->
+          <dd>
+            <span
+              v-if="task?.instance?.credentialSource === 'project'"
+              class="idtl-pill" data-testid="inst-cred-src"
+            >项目凭证</span>
+            <template v-else>个人凭证</template>
+          </dd>
           <dt>运行状态</dt>
           <dd class="flex items-center gap-2">
             <span v-if="lastRunPill" class="idtl-pill" :class="lastRunPill.cls">{{ lastRunPill.text }}</span>
@@ -314,12 +323,20 @@ const banner = computed<{
         desc: '任务所用凭证认证失败。到「认证管理」更新凭证后自动恢复。',
         actions: [{ label: '去认证管理', primary: true, to: '/auths' }],
       }
-    case 'missing_credential':
+    case 'missing_credential': {
+      // S8:项目凭证源 → 指向项目配置页(只有项目管理员能补)
+      const viaProject = i.credentialSource === 'project'
+      const projId = t.projectId
       return {
         tone: 'amber', title: '已暂停 · 缺凭证',
-        desc: `场景需要凭证而持有人凭证池缺失：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。到「认证管理」配置后自动恢复。`,
-        actions: [{ label: '去认证管理', primary: true, to: '/auths' }],
+        desc: viaProject
+          ? `项目凭证缺失槽位：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。由项目管理员在项目配置页登记后自动恢复。`
+          : `场景需要凭证而持有人凭证池缺失：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。到「认证管理」配置后自动恢复。`,
+        actions: [viaProject && projId
+          ? { label: '去项目配置', primary: true, to: `/projects/${projId}?tab=config` }
+          : { label: '去认证管理', primary: true, to: '/auths' }],
       }
+    }
     case 'template_changed':
       return {
         tone: 'amber', title: '内容已变更 · 待确认',

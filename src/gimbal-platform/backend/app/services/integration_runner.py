@@ -508,11 +508,34 @@ async def _template_env(db, scen: ComposerScenario,
         project_id=scen.project_id, user_id=None)
 
 
+async def normal_project_of(db, tpl: IntegrationTask) -> int | None:
+    """模板所属**普通**项目 id(私有 / 公共项目模板 → None)。"""
+    if tpl.project_id is None:
+        return None
+    from .zone import public_project_id
+    if tpl.project_id == await public_project_id(db):
+        return None
+    return tpl.project_id
+
+
+async def instance_cred_project_id(
+    db, inst: IntegrationTask, tpl: IntegrationTask,
+) -> int | None:
+    """S8:实例执行用的项目凭证池 —— ``credential_source='project'`` 且
+    模板属普通项目 → 该项目;否则 None(持有人个人池)。"""
+    if inst.credential_source != "project":
+        return None
+    return await normal_project_of(db, tpl)
+
+
 async def _slot_bindings_of(db, tpl: IntegrationTask,
                             scen: ComposerScenario,
                             scheme_payload: dict) -> dict[str, int]:
     """S5:别名默认命中集合的取用绑定 id(模板属主池 + 模板环境;
-    S6 起按方案绑定选中的生效别名命中)。"""
+    S6 起按方案绑定选中的生效别名命中)。
+
+    S8:普通项目模板取**项目凭证池**(项目集成默认用项目凭证;模板级
+    不变量 —— 同模板同指纹,与实例来源无关)。"""
     from .run_prepare import binding_ids_for
     from .service_aliases import credential_alias_hits
 
@@ -524,7 +547,8 @@ async def _slot_bindings_of(db, tpl: IntegrationTask,
     env = await _template_env(db, scen, scheme_payload)
     return await binding_ids_for(
         db_module.SessionLocal, tpl.owner_id, sorted(set(hits.values())),
-        env_id=env.env_id)
+        env_id=env.env_id,
+        cred_project_id=await normal_project_of(db, tpl))
 
 
 async def _alias_urls_of(db, scen_payload: dict,
@@ -950,6 +974,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 _used = await at_svc.used_sets_for_definition(
                     db, _dfp(scen.payload), _bindings,
                     project_id=scen.project_id)
+                if inst.credential_source == "project":
+                    # S8:项目凭证不在令牌范围语义内(范围只覆盖个人池)
+                    _used.auths = []
                 _missing = await at_svc.check_scope(
                     db, _token, _token.user_id, _used)
                 if _missing:
@@ -976,7 +1003,15 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # (联动暂停降级为「提前通知」)。
             from ..services.zone import public_project_id as _ppid_cg
 
-            if consent_gate and tpl.project_id != await _ppid_cg(db):
+            # S8:普通项目模板对仍是项目成员的持有人放行(「成员也可以
+            # 订阅」);非成员(被移出项目)按转私有同口径暂停
+            _member_ok = False
+            if consent_gate and tpl.project_id is not None:
+                from ..services.zone import can_use_project_credentials
+                _member_ok = await can_use_project_credentials(
+                    db, inst.holder_id, tpl.project_id)
+            if (consent_gate and tpl.project_id != await _ppid_cg(db)
+                    and not _member_ok):
                 return await _pause_consent_changed(
                     db, inst, tpl,
                     paused_reason="made_private",
@@ -1033,7 +1068,10 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     scenario_owner_id=scen.owner_id,
                     environment=tpl_env,
                     # S4:carry 作用域(模板场景项目;私有区 → 持有人个人层)
-                    project_id=scen.project_id)
+                    project_id=scen.project_id,
+                    # S8:实例凭证来源 = 项目 → 模板所属项目的项目凭证池
+                    cred_project_id=await instance_cred_project_id(
+                        db, inst, tpl))
             except MissingAuthAliases as e:
                 # Y3/方案 §8:缺凭证 → paused/missing_credential(卡片提示
                 # 去配置;凭证补齐后复活钩子恢复),不是普通失败;last_error
@@ -1558,11 +1596,14 @@ async def ensure_instance(
         ))).scalar()
         if row is None:
             # 同表两层:实例行 name 落模板名(NOT NULL;列表只取模板行,
-            # 实例名不参与展示)
+            # 实例名不参与展示)。S8:普通项目模板的实例缺省用项目凭证
             inst = IntegrationTask(
                 name=tpl.name, owner_id=tpl.owner_id,
                 template_id=tpl.id, holder_id=holder,
-                state="idle", enabled=True, next_run_at=_now())
+                state="idle", enabled=True, next_run_at=_now(),
+                credential_source=(
+                    "project" if await normal_project_of(db, tpl)
+                    else None))
             db.add(inst)
             try:
                 await db.commit()
@@ -1581,6 +1622,7 @@ async def ensure_instance(
 
 async def revive_paused_instances(
     user_id: int | None = None, *, token_id: int | None = None,
+    project_id: int | None = None,
 ) -> int:
     """恢复钩子(webhook v4 §3.3 自动恢复;凭证复活沿用方案 §8)。
 
@@ -1590,6 +1632,8 @@ async def revive_paused_instances(
       {auth_failed, missing_credential}`` —— user_id 匹配 holder。
     * 令牌续期/重新生成(``token_id``):该令牌注册方实例的
       ``token_expired`` / ``token_invalidated`` 暂停(§3.4 自动恢复)。
+    * 项目凭证更新(S8 ``project_id``):凭证来源 = 项目、模板属该项目
+      的实例;个人凭证更新(``user_id``)不再拉起项目来源实例。
 
     恢复 = state=idle + next_run_at=now(下拍调度即重试);paused_reason
     清空。manual 暂停的实例不受影响。返回恢复条数(审计/日志用)。
@@ -1618,8 +1662,13 @@ async def revive_paused_instances(
             tpl = await db.get(IntegrationTask, inst.template_id)
             if tpl is None:
                 continue
-            if (token_id is None and user_id is not None
-                    and inst.holder_id != user_id):
+            if token_id is None and project_id is not None:
+                if (inst.credential_source != "project"
+                        or tpl.project_id != project_id):
+                    continue      # 只恢复该项目凭证源的实例
+            elif (token_id is None and user_id is not None
+                    and (inst.holder_id != user_id
+                         or inst.credential_source == "project")):
                 continue          # 他人更新凭证 ≠ 我的凭证恢复
             inst.state = "idle"
             inst.paused_reason = ""   # 列 NOT NULL:空串 = 无暂停原因

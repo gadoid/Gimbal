@@ -63,7 +63,7 @@
           <section v-if="Object.keys(cfg.auths).length">
             <h4>槽位绑定</h4>
             <table class="tbl" data-testid="preview-auths">
-              <thead><tr><th>槽位</th><th style="width:80px">绑定 #</th><th>系统</th><th style="width:90px">环境</th><th style="width:70px">默认</th></tr></thead>
+              <thead><tr><th>槽位</th><th style="width:80px">绑定 #</th><th>系统</th><th style="width:90px">环境</th><th style="width:70px">默认</th><th style="width:80px">来源</th></tr></thead>
               <tbody>
                 <tr v-for="(a, slot) in cfg.auths" :key="slot">
                   <td>{{ slot }}</td>
@@ -71,6 +71,7 @@
                   <td>{{ a.system || '—' }}</td>
                   <td>{{ a.envId != null ? envName(a.envId) : '不限' }}</td>
                   <td>{{ a.isDefault ? '是' : '否' }}</td>
+                  <td>{{ a.source === 'project' ? '项目凭证' : '个人' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -143,6 +144,8 @@ const props = defineProps<{
   serviceBindings?: Record<string, { alias: string }>
   /** 环境名映射(父级已拉过环境列表时透传,避免重复请求) */
   envNames?: Record<number, string>
+  /** authz M2a S8:凭证来源('project' = 项目凭证池;缺省个人) */
+  credentialSource?: 'personal' | 'project'
 }>()
 
 defineEmits<{ close: [] }>()
@@ -200,6 +203,7 @@ async function run(): Promise<void> {
       schemeId: props.schemeId,
       environmentId: props.environmentId ?? undefined,
       serviceBindings: props.serviceBindings,
+      credentialSource: props.credentialSource,
     })
   } catch (e) {
     cfg.value = null

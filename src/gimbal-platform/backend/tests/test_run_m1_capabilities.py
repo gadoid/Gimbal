@@ -236,8 +236,10 @@ async def test_service_binding_auth_merge_keeps_built_in(
     payloads: list[dict] = []
     _patch_launch_capture(monkeypatch, payloads)
 
-    async def _fake_resolve(db_factory, owner_id, aliases, *, env_id=None):
-        # S3.1:resolve_exec_auths 增环境参数(fanout 传入配方快照环境)
+    async def _fake_resolve(db_factory, owner_id, aliases, *, env_id=None,
+                            cred_project_id=None):
+        # S3.1:resolve_exec_auths 增环境参数(fanout 传入配方快照环境);
+        # S8:增项目凭证池参数
         return [_FakeAuth(a) for a in aliases]
 
     monkeypatch.setattr(rd, "resolve_exec_auths", _fake_resolve)

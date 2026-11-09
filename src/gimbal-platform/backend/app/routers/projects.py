@@ -215,7 +215,7 @@ async def project_slot_status(
 ) -> dict:
     """槽位状态 = 成员凭证清单(S7.3 项目配置页签,只读不落库):
     项目场景引用的槽位 × 成员是否已绑定(任意绑定即算;不给任何账号
-    信息)。门 = 项目成员(仅普通项目 —— 公共项目内容走订阅,凭证是
+    信息);S8 每槽另给 ``projectBound``(项目凭证已登记)。门 = 项目成员(仅普通项目 —— 公共项目内容走订阅,凭证是
     订阅者自己的事,本端点 422)。"""
     from ..models.auth_session import AuthSession
     from ..models.composer_scenario import ComposerScenario
@@ -245,9 +245,17 @@ async def project_slot_status(
                 AuthSession.owner_id.in_([m[0] for m in members]),
                 AuthSession.slot.in_(slots)))).all()
         bound = set(rows)
+    # S8:项目凭证是否覆盖该槽(成员可切换为项目凭证执行)
+    project_bound: set[str] = set()
+    if slots:
+        project_bound = set((await db.execute(
+            select(AuthSession.slot).where(
+                AuthSession.project_id == project_id,
+                AuthSession.slot.in_(slots)))).scalars().all())
     return {"slots": [{
         "slot": slot,
         "scenarios": sorted(slot_scenarios[slot]),
+        "projectBound": slot in project_bound,
         "members": [{"userId": uid, "username": uname,
                      "displayName": disp or uname,
                      "bound": (uid, slot) in bound}
@@ -389,6 +397,13 @@ async def delete_project(
                     "message": "项目内仍有内容(场景/套件/集成模板/报告"
                                "定义),需先清空或迁走再删除"})
     await _audit(db, user, "project.deleted", proj, {"name": proj.name})
+    # S8:项目凭证随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
+    # 不是内容,不进内容闸)
+    from sqlalchemy import delete as _del
+
+    from ..models.auth_session import AuthSession
+    await db.execute(_del(AuthSession).where(
+        AuthSession.project_id == project_id))
     await db.delete(proj)
     await db.commit()
 

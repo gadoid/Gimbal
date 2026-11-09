@@ -59,6 +59,8 @@ const props = withDefaults(defineProps<{
   stepOrchestrationNames?: string[]
   /** 断言注册表条目(spec v3 §2/§4):自建方案注入条目失效判定面 */
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
+  /** authz M2a S8:场景所属普通项目(面板据此显示凭证来源切换) */
+  projectId?: number | null
   /** 死条目(悬空)id — 宿主预计算(useInjectableSurface 分组),失效判定沿用 */
   deadEntryIds?: string[]
 }>(), {
@@ -87,6 +89,8 @@ const emit = defineEmits<{
       parallel?: number
       serviceBindings?: Record<string, ServiceBinding>
       injectionEntryIds?: string[]
+      /** authz M2a S8:'project' = 用场景所属项目的项目凭证 */
+      credentialSource?: 'personal' | 'project'
     },
   ]
   /** 另存为方案(仅默认方案态):当前绑定与参数存为自建方案 */

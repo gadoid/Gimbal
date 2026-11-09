@@ -47,6 +47,16 @@
           数据集:{{ summary.datasetName ? `${summary.datasetName}(模板主人提供首行值)` : '未选择' }};
           周期:{{ summary.cron }}
         </p>
+        <!-- authz M2a S8:普通项目模板可选凭证来源(项目集成默认项目凭证) -->
+        <div v-if="projectCredentialsAvailable" class="sub-src">
+          <label class="sub-hint">
+            凭证来源:
+            <select v-model="credSource" data-testid="sub-cred-source">
+              <option value="project">项目凭证(项目管理员维护,不可见明文)</option>
+              <option value="personal">个人凭证(我的槽位绑定)</option>
+            </select>
+          </label>
+        </div>
       </template>
       <!-- 独立渲染(不挂 summary 的 else-if 链):409 重拉摘要后摘要与
            「请重新核对」提示需同时可见 -->
@@ -72,10 +82,17 @@ import {
 } from '@/api/integration'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ open: boolean; taskId: number }>()
+const props = defineProps<{
+  open: boolean
+  taskId: number
+  /** authz M2a S8:普通项目模板 = true(可选项目凭证;缺省项目来源) */
+  projectCredentialsAvailable?: boolean
+}>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'done'): void }>()
 
 const summary = ref<SubscriptionSummary | null>(null)
+/** S8:凭证来源(普通项目模板缺省 project;重新订阅可切换) */
+const credSource = ref<'personal' | 'project'>('project')
 const loading = ref(false)
 const confirming = ref(false)
 const errText = ref('')
@@ -103,7 +120,13 @@ async function confirm(): Promise<void> {
   try {
     // P2.2:带上摘要指纹(必填)—— 服务端确认「确认的 = 看到的」;
     // 摘要之后内容变了会 409 consent_stale,重拉摘要重新核对。
-    await subscribeIntegrationTask(props.taskId, summary.value.fingerprint)
+    // S8:只有普通项目模板带凭证来源(其余按模板缺省,不带字段)
+    if (props.projectCredentialsAvailable) {
+      await subscribeIntegrationTask(
+        props.taskId, summary.value.fingerprint, credSource.value)
+    } else {
+      await subscribeIntegrationTask(props.taskId, summary.value.fingerprint)
+    }
     toast.success('已订阅 — 内容已确认,按周期执行')
     emit('done')
     emit('close')
@@ -147,6 +170,11 @@ async function confirm(): Promise<void> {
 }
 .sub-rw.rw { color: #b91c1c; background: rgb(239 68 68 / 10%); border-color: rgb(239 68 68 / 35%); font-weight: 600; }
 .sub-rw.ro { color: rgb(71 85 105); background: rgb(100 116 139 / 8%); border-color: rgb(100 116 139 / 30%); }
+.sub-src { margin: 10px 0 0; }
+.sub-src select {
+  margin-left: 6px; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid rgb(100 116 139 / 30%); font-size: 12px;
+}
 .sub-acts { display: flex; justify-content: flex-end; gap: 8px; }
 .sub-ghost, .sub-primary {
   font-size: 13px; padding: 6px 16px; border-radius: 8px; cursor: pointer;

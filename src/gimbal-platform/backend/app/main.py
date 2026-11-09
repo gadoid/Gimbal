@@ -27,6 +27,7 @@ from .routers import (
     data_sets,
     integration,
     notifications,
+    project_credentials,
     project_promotions,
     projects,
     endpoint_catalog,
@@ -235,6 +236,8 @@ def create_app() -> FastAPI:
     app.include_router(projects.router, prefix="/api")
     # M2a S7.2:提升流程(加入项目 / 加入申请)
     app.include_router(project_promotions.router, prefix="/api")
+    # M2a S8:项目凭证(项目管理员维护,成员选用不见明文)
+    app.include_router(project_credentials.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告

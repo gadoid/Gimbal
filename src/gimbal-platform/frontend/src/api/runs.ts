@@ -14,6 +14,8 @@ export interface PreviewRequest {
   environmentId?: number
   /** 服务键 → {alias}(S6 后唯一形态;url/authAlias 后端 422) */
   serviceBindings?: Record<string, { alias: string }>
+  /** authz M2a S8:凭证来源(同执行请求;'project' = 项目凭证池) */
+  credentialSource?: 'personal' | 'project'
 }
 
 /** 来源标签 → 中文(S7.3 生效预览展示;口径 = run_prepare.resolve_effective_config) */
@@ -52,6 +54,8 @@ export interface PreviewAuth {
   system: string
   envId: number | null
   isDefault: boolean
+  /** authz M2a S8:取用池('personal' | 'project') */
+  source?: string
 }
 
 export interface PreviewCarryValue {

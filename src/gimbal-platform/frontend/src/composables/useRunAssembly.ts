@@ -51,6 +51,8 @@ export interface RunConfirmOpts {
   environmentId?: number
   /** C6:调试执行装载(单 case 且 nRuns=1;发起后进调试台) */
   debug?: Pick<DebugSpec, 'pause' | 'breakpoints'>
+  /** authz M2a S8:'project' = 场景所属普通项目的项目凭证池 */
+  credentialSource?: 'personal' | 'project'
 }
 
 export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
@@ -177,6 +179,8 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
       ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
       ...(opts.environmentId ? { environmentId: opts.environmentId } : {}),
+      ...(opts.credentialSource === 'project'
+        ? { credentialSource: 'project' } : {}),
     }
     return runScenario(body)
   }

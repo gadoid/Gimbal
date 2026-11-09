@@ -72,6 +72,11 @@
           <header>
             <b>{{ s.slot }}</b>
             <span class="muted">{{ s.scenarios.length }} 个场景引用</span>
+            <!-- S8:项目凭证已覆盖该槽 -->
+            <span
+              v-if="s.projectBound" class="chip proj"
+              :data-testid="`prj-slot-${s.slot}-proj`"
+            >项目凭证 · 已登记</span>
           </header>
           <div class="chips">
             <span
@@ -85,6 +90,12 @@
       <p v-else class="hint" data-testid="prj-slots-empty">
         项目场景还没有引用任何槽位(无槽位凭证的场景不在此列)。
       </p>
+    </section>
+
+    <!-- ④·5 项目凭证(S8):项目管理员维护,成员只读不见明文 -->
+    <section v-if="!isPublic">
+      <h2>项目凭证</h2>
+      <ProjectCredentialsPanel :project="project" />
     </section>
 
     <!-- ⑤ 生效预览(普通项目):选场景 → 逐值带来源 -->
@@ -149,6 +160,7 @@ import { showError } from '@/utils/errorFallback'
 import CarryDefaultsEditor from '@/components/carry/CarryDefaultsEditor.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import CarryDriftPanel from '@/components/carry/CarryDriftPanel.vue'
+import ProjectCredentialsPanel from '@/components/project/ProjectCredentialsPanel.vue'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 
 const props = defineProps<{ project: ProjectOut }>()
@@ -270,4 +282,5 @@ select, .svc-input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb
 .chip { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; border: 1px solid #e2e8f0; }
 .chip.ok { background: rgb(34 197 94 / 8%); color: #15803d; border-color: rgb(34 197 94 / 35%); }
 .chip.miss { background: rgb(245 158 11 / 10%); color: #b45309; border-color: rgb(245 158 11 / 40%); }
+.chip.proj { background: rgb(37 99 235 / 8%); color: #1d4ed8; border-color: rgb(37 99 235 / 35%); }
 </style>

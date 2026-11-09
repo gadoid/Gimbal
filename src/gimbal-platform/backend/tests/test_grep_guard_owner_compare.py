@@ -108,11 +108,13 @@ _ALLOWLIST: dict[str, int] = {
     "services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,": 2,
     "services/integration_runner.py:IntegrationTask.holder_id == holder,": 2,
     "services/integration_runner.py:and inst.holder_id != tpl.owner_id)": 1,
-    "services/integration_runner.py:and inst.holder_id != user_id):": 1,
+    # S8:复活钩子增项目来源分支,同一比较换行形态(语义不变)
+    "services/integration_runner.py:and (inst.holder_id != user_id": 1,
     "services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:": 1,
     "services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:": 1,
     "services/maintenance_transfer.py:IntegrationTask.holder_id == old_owner_id))": 1,
-    "services/run_prepare.py:DBAuthSession.owner_id == owner_id,": 1,
+    # S8:取用池谓词抽 _pool_clause(个人池分支;项目池走 project_id)
+    "services/run_prepare.py:return DBAuthSession.owner_id == owner_id": 1,
     # 导入人本人凭证池(池命中/槽位绑定状态 —— 凭证跟人走,属主即本人
     # 的数据归属过滤,不是权限门);S7.5 起按 slot
     "services/scenario_import.py:select(AuthSession.slot).where(AuthSession.owner_id == owner_id)": 1,

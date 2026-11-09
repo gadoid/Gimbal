@@ -265,6 +265,7 @@
       :service-rows="runServiceRows"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
+      :project-id="runProjectId"
       @close="closeRunDialog"
       @confirm="onRunConfirm"
       @save-as-scheme="onSaveAsScheme"
@@ -288,6 +289,7 @@ import { useSystemPrefill } from '@/composables/useSystemPrefill'
 import { seedPoolVarIntoDefinition } from '@/utils/pool-var'
 import { deriveSystem } from '@/utils/service-alias'
 import { loadCatalogServiceNames, loadCatalogSystemByService } from '@/utils/catalog-services'
+import { useAuthStore } from '@/stores/auth'
 import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -470,6 +472,17 @@ const steps = computed(() => definition.value.steps)
 
 // Run dialog
 const runDialogOpen = ref(false)
+/** authz M2a S8:运行面板的项目上下文 —— 已存场景取详情回包的
+ * projectId,新建态取 ?projectId= 深链;只认我所在的**普通**项目
+ * (公共项目无项目凭证,私有区 null → 不显示凭证来源切换)。 */
+const authStore = useAuthStore()
+const runProjectId = computed<number | null>(() => {
+  const raw = (scenario.value as { projectId?: number | null } | null)
+    ?.projectId ?? createProjectId.value ?? null
+  if (raw == null) return null
+  return authStore.projects.some((p) => p.id === raw && p.kind === 'normal')
+    ? raw : null
+})
 /** 深链预选(方案工作台「▶ 运行此方案」,阶段③):?runScheme=rs-xxx 传入;
  *  关窗即清 — 深链语义是一次性的,再次从「运行」入口打开不复活旧预选。 */
 const initialSchemeId = ref<string | null>(null)

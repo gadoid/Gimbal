@@ -48,7 +48,11 @@ const BASE_PROPS = {
   ],
 }
 
-function mountDlg(props: Partial<typeof BASE_PROPS> & { initialSchemeId?: string | null } = {}) {
+function mountDlg(props: Partial<typeof BASE_PROPS> & {
+  initialSchemeId?: string | null
+  /** S8:场景所属普通项目(凭证来源切换) */
+  projectId?: number | null
+} = {}) {
   return mount(RunDialog, {
     props: { visible: true, ...BASE_PROPS, ...props },
     global: { stubs: { teleport: true } },
@@ -182,5 +186,34 @@ describe('默认方案存量绑定预填 + 降级(M2a S6)', () => {
     expect(bind.text()).toContain('fin → fin-maker')
     expect(bind.classes()).toContain('is-degraded')
     expect(w.text()).toContain('别名已删,去工作台重选')
+  })
+})
+
+
+describe('S8 凭证来源切换(项目区)', () => {
+  it('projectId 非空 → 选择器出现;选项目凭证随 confirm 下发;缺省不发字段', async () => {
+    seedAliases([aliasRow('fin', 'fin', 'maker')])
+    const w = mountDlg({ projectId: 3 })
+    await flushPromises()
+    const sel = w.find('[data-testid="credential-source"]')
+    expect(sel.exists()).toBe(true)
+    expect((sel.element as HTMLSelectElement).value).toBe('personal')
+    // 切到项目凭证 → confirm opts 带 credentialSource: 'project'
+    await sel.setValue('project')
+    await w.find('[data-testid="run-confirm"]').trigger('click')
+    await flushPromises()
+    const opts = w.emitted('confirm')?.[0]?.[1] as Record<string, unknown>
+    expect(opts.credentialSource).toBe('project')
+  })
+
+  it('projectId 缺省(私有区)→ 无选择器、confirm 不带字段', async () => {
+    seedAliases([aliasRow('fin', 'fin')])
+    const w = mountDlg()
+    await flushPromises()
+    expect(w.find('[data-testid="credential-source"]').exists()).toBe(false)
+    await w.find('[data-testid="run-confirm"]').trigger('click')
+    await flushPromises()
+    const opts = w.emitted('confirm')?.[0]?.[1] as Record<string, unknown>
+    expect('credentialSource' in opts).toBe(false)
   })
 })

@@ -158,6 +158,12 @@ class IntegrationTask(Base):
     consent_fingerprint: Mapped[str] = mapped_column(String(64), default="")
     consented_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True)
+    # ── authz M2a S8:实例凭证来源 ─────────────────────────────────
+    # 'project' = 用模板所属(普通)项目的项目凭证;NULL = 持有人个人
+    # 凭证。普通项目模板的实例缺省 'project'(项目集成默认用项目凭证),
+    # 订阅时可选 'personal'(存 NULL)。
+    credential_source: Mapped[str | None] = mapped_column(
+        String(16), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

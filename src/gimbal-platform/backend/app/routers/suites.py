@@ -856,6 +856,8 @@ async def _run_orchestration(
                      "runId": run_id, "batchId": batch_id,
                      "graphSpec": graph_spec, "chain": chain},
         kind="suite_graph", suite_id=suite.id,
+        # S8:执行所属项目快照(S1.1 项目执行对成员可见)
+        project_id=suite.project_id,
     )
     await _eq.enqueue(db, execution.id, kind="graph", payload={
         "kind": "graph", "chain": chain,

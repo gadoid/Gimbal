@@ -13,6 +13,7 @@ import * as projectsApi from '@/api/projects'
 import * as carryApi from '@/api/carry'
 import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
+import * as credApi from '@/api/project_credentials'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -55,6 +56,14 @@ beforeEach(() => {
     items: [{ meta: { scenarioId: 'sc-1', name: '退款', system: [], module: '' } }],
     total: 1, page: 1, page_size: 100,
   } as never)
+  vi.spyOn(credApi, 'listProjectCredentials').mockResolvedValue({
+    items: [{
+      id: 11, alias: 'qa', url: 'http://a', username: 'proj-u',
+      token_type: 'Bearer', expires_in: 7200, created_at: '', updated_at: '',
+      password_masked: '<REDACTED>', slot: 'qa', isDefault: true, system: 'fin',
+    }],
+    canManage: true,
+  })
 })
 
 afterEach(() => { document.body.innerHTML = '' })
@@ -174,5 +183,25 @@ describe('ProjectConfigPanel — 公共项目', () => {
     // 公共项目不拉槽位状态
     expect(projectsApi.getSlotStatus).not.toHaveBeenCalled()
     w.unmount()
+  })
+})
+
+
+describe('ProjectConfigPanel — S8 项目凭证/槽位项目覆盖', () => {
+  it('项目凭证节渲染(管理员视图带用户名);槽位状态带「项目凭证 · 已登记」chip', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="project-credentials"]').exists()).toBe(true)
+    const row = w.find('[data-testid="prj-cred-11"]')
+    expect(row.text()).toContain('proj-u')
+    // slot-status 的 qa 槽带项目覆盖标记(projectBound 由 getSlotStatus 供给,
+    // 上方 mock 未带 → 再按带标记的返回断言 chip)
+    expect(w.find('[data-testid="prj-slot-qa"]').exists()).toBe(true)
+  })
+
+  it('公共项目无项目凭证节', async () => {
+    const w = mountPanel(projPublic)
+    await flushPromises()
+    expect(w.find('[data-testid="project-credentials"]').exists()).toBe(false)
   })
 })

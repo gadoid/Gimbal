@@ -53,6 +53,8 @@ AUDIT_ACTIONS = (
     "inbound.task.write",         # 经令牌注册/修改/删除/触发集成任务
     # ── 回调投递的人工干预:admin / 令牌属主点补发
     "webhook.redeliver",          # 人工补发回调(新建一行 pending)
+    # ── authz M2a S8 项目凭证(项目管理员写;资源 = 项目)──────────
+    "project.credential.write",   # 项目凭证建/改/换默认/删(detail.op)
 )
 
 

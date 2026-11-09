@@ -166,10 +166,19 @@ def _tpl_out(db_tpl: IntegrationTask, inst: IntegrationTask | None,
 
 async def _missing_credentials(
     db: AsyncSession, aliases: list[str], holder_id: int | None,
+    *, project_id: int | None = None,
 ) -> list[str]:
     """持有人凭证池中缺失的别名全集(W0b④;S0② 后与执行期暂停判定
-    同口径:任一缺失即列)。"""
-    if not aliases or holder_id is None:
+    同口径:任一缺失即列)。S8:``project_id`` 非空 = 实例用项目凭证 →
+    按槽名查项目池(与执行期 pick_bindings 同口径)。"""
+    if not aliases:
+        return []
+    if project_id is not None:
+        have = set((await db.execute(select(AuthSession.slot).where(
+            AuthSession.project_id == project_id,
+            AuthSession.slot.in_(aliases)))).scalars().all())
+        return [a for a in aliases if a not in have]
+    if holder_id is None:
         return []
     have = set((await db.execute(select(AuthSession.alias).where(
         AuthSession.owner_id == holder_id,
@@ -187,12 +196,18 @@ async def _tpl_out_full(
     from ..models.access_token import AccessToken
     aliases = await integration_runner.auth_aliases_view(db, tpl)
     holder = user.id
-    missing = await _missing_credentials(db, aliases, holder)
+    missing = await _missing_credentials(
+        db, aliases, holder,
+        project_id=(await integration_runner.instance_cred_project_id(
+            db, inst, tpl) if inst is not None else None))
     subscribed = (inst is not None and inst.holder_id == user.id)
     token = await db.get(AccessToken, tpl.token_id) if tpl.token_id else None
     out = _tpl_out(tpl, inst, user, token=token,
                    auth_aliases=aliases, subscribed=subscribed)
     out["canManage"] = _can_manage(user, tpl)
+    # S8:普通项目模板可选凭证来源(项目 / 个人)
+    out["projectCredentialsAvailable"] = (
+        await integration_runner.normal_project_of(db, tpl) is not None)
     if inst is not None:
         out["instance"] = _inst_out(inst, missing=missing)
     return out
@@ -220,6 +235,8 @@ def _inst_out(inst: IntegrationTask | None,
         "failStreak": inst.fail_streak,
         # W0b④:缺失别名全集(与暂停判定同口径 = 任一缺失即列)
         "missingCredentials": missing or [],
+        # S8:实例凭证来源(project = 项目凭证;personal = 持有人个人)
+        "credentialSource": inst.credential_source or "personal",
     }
 
 
@@ -844,6 +861,9 @@ class SubscribeIn(BaseModel):
     的那份内容;与当前计算值不一致 409,前端重拉摘要后再确认。
     **必填**。"""
     fingerprint: str = Field(min_length=1)
+    # authz M2a S8:凭证来源(仅普通项目模板可选 project;缺省 = 新实例
+    # 按模板缺省 —— 普通项目模板 project,其余 personal;已有实例不变)
+    credentialSource: Literal["personal", "project"] | None = None
 
 
 @router.post("/tasks/{task_id}/subscribe")
@@ -874,10 +894,28 @@ async def subscribe_task(
         raise _bad(
             "consent_stale",
             "模板内容已变更,请重新查看执行内容摘要后确认", 409)
+    if body.credentialSource == "project":
+        # S8:项目凭证只给普通项目模板的项目成员
+        from ..services.zone import can_use_project_credentials
+        if (await integration_runner.normal_project_of(db, tpl) is None
+                or not await can_use_project_credentials(
+                    db, user.id, tpl.project_id)):
+            raise _bad("credential_source_invalid",
+                       "项目凭证只能用于你所在普通项目的集成模板", 409)
     inst = await integration_runner.ensure_instance(tpl, holder_id=user.id)
     if inst is None:
         raise _bad("instance_missing", "实例创建失败", 500)
     inst = await db.get(IntegrationTask, inst.id)
+    if body.credentialSource is not None:
+        new_src = "project" if body.credentialSource == "project" else None
+        if new_src != inst.credential_source:
+            inst.credential_source = new_src
+            # 换凭证来源 = 补齐信号:凭证类暂停随之恢复(下拍重试)
+            if inst.state == "paused" and inst.paused_reason in (
+                    "missing_credential", "auth_failed"):
+                inst.state = "idle"
+                inst.paused_reason = ""
+                inst.next_run_at = datetime.now(timezone.utc)
     try:
         await integration_runner.refresh_consent(db, tpl, scen, inst)
     except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503,不留半确认
@@ -1072,7 +1110,9 @@ async def cards(body: CardsIn, user: CurrentUser, db: DbSession) -> dict:
         # W0b④:消费面字段(W3 凭证引导用:角标定位缺失别名)
         card_aliases = await integration_runner.auth_aliases_view(db, tpl)
         card_missing = await _missing_credentials(
-            db, card_aliases, user.id)
+            db, card_aliases, user.id,
+            project_id=(await integration_runner.instance_cred_project_id(
+                db, inst, tpl) if inst is not None else None))
         # Y4/方案 §7:卡片输出投影
         raw_outputs = (getattr(inst, "last_outputs", None) or {}) \
             if inst is not None else {}

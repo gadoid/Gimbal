@@ -1690,3 +1690,93 @@ def test_0050_carry_batch_scope():
             assert "carry_scope" not in cols and "carry_scope_id" not in cols
         finally:
             eng.dispose()
+
+
+def test_0051_project_credentials():
+    """S8:auth_sessions 归属维度(owner 可空 + project_id + CHECK + 键并入)
+    与 integration_tasks.credential_source;fresh 链空转;downgrade 删项目行
+    后还原(令牌范围行存活 —— 个人行 id 不动)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+
+    with temp_schema() as (_schema, sync_url):
+        eng = create_engine(sync_url)
+        try:
+            # 建到 0050;baseline 按当前模型建表 → 新列已在,手动摘列/
+            # 还原旧键模拟 0050 时代的存量库
+            command.upgrade(_cfg(sync_url), "0050_carry_batch_scope")
+            with eng.begin() as c:
+                c.execute(text(
+                    "ALTER TABLE auth_sessions"
+                    " DROP COLUMN project_id"))
+                c.execute(text(
+                    "ALTER TABLE integration_tasks"
+                    " DROP COLUMN credential_source"))
+                c.execute(text(
+                    "ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS"
+                    " uq_auth_owner_system_env_slot"))
+                c.execute(text(
+                    "ALTER TABLE auth_sessions ADD CONSTRAINT"
+                    " uq_auth_owner_system_env_slot"
+                    " UNIQUE NULLS NOT DISTINCT"
+                    " (owner_id, system, env_id, slot)"))
+                c.execute(text(
+                    "DROP INDEX IF EXISTS uq_auth_slot_default"))
+                c.execute(text(
+                    "CREATE UNIQUE INDEX uq_auth_slot_default"
+                    " ON auth_sessions (owner_id, slot) WHERE is_default"))
+            # 存量个人行 + 令牌范围行(范围存活证据)
+            with eng.begin() as c:
+                c.execute(text(
+                    "INSERT INTO users (username, display_name, "
+                    "password_hash, role, is_active, is_system, created_at, "
+                    "updated_at) VALUES ('u51','u51','x','user',true,false,"
+                    "now(),now())"))
+                c.execute(text(
+                    "INSERT INTO auth_sessions (owner_id, alias, url,"
+                    " username_enc, password_enc, token_type, expires_in,"
+                    " system, env_id, slot, is_default)"
+                    " VALUES (1,'a1','http://u','x','y','Bearer',7200,'',"
+                    "NULL,'a1',true)"))
+
+            command.upgrade(_cfg(sync_url), "0051_project_credentials")
+            assert _revision(sync_url) == "0051_project_credentials"
+            cols = {c["name"] for c in inspect(eng).get_columns(
+                "auth_sessions")}
+            assert "project_id" in cols
+            it_cols = {c["name"] for c in inspect(eng).get_columns(
+                "integration_tasks")}
+            assert "credential_source" in it_cols
+            with eng.connect() as c:
+                # 唯一键并入归属维度;插入项目行 OK,CHECK 拦双空行
+                c.execute(text(
+                    "INSERT INTO projects (name, kind, description) VALUES"
+                    " ('p51','normal','')"))
+                c.execute(text(
+                    "INSERT INTO auth_sessions (owner_id, project_id,"
+                    " alias, url, username_enc, password_enc, token_type,"
+                    " expires_in, system, env_id, slot, is_default)"
+                    " VALUES (NULL, 1,'a1','http://p','x','y','Bearer',"
+                    "7200,'',NULL,'a1',true)"))
+                c.commit()
+                import pytest
+                with pytest.raises(Exception):
+                    c.execute(text(
+                        "INSERT INTO auth_sessions (owner_id, project_id,"
+                        " alias, url, username_enc, password_enc,"
+                        " token_type, expires_in, system, env_id, slot,"
+                        " is_default) VALUES (NULL, NULL,'bad','','x','y',"
+                        "'Bearer',0,'',NULL,'bad',false)"))
+                    c.commit()
+
+            # downgrade:项目行先删,键还原;个人行仍在
+            command.downgrade(_cfg(sync_url), "0050_carry_batch_scope")
+            with eng.connect() as c:
+                n = c.execute(text(
+                    "SELECT count(*) FROM auth_sessions")).scalar_one()
+                assert n == 1
+                cks = {x["name"] for x in inspect(eng).get_check_constraints(
+                    "auth_sessions")}
+                assert "ck_auth_owner_xor_project" not in cks
+        finally:
+            eng.dispose()

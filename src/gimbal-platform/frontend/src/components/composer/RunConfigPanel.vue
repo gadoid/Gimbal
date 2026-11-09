@@ -81,6 +81,15 @@
         </select>
       </section>
 
+      <!-- 凭证来源(authz M2a S8:项目区场景可选项目凭证;缺省个人) -->
+      <section v-if="projectId != null" class="run-section">
+        <label class="run-label">凭证来源 <span class="muted small">(手动执行默认个人凭证,可切换项目凭证)</span></label>
+        <select v-model="credentialSource" class="env-select" data-testid="credential-source">
+          <option value="personal">个人凭证(我的槽位绑定)</option>
+          <option value="project">项目凭证(项目管理员维护)</option>
+        </select>
+      </section>
+
       <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
       <section class="run-section">
         <label class="run-label">基础设置 <span class="muted small">(步进调试 / 批量执行)</span></label>
@@ -266,6 +275,7 @@
       :environment-id="envOverride"
       :service-bindings="previewBindings"
       :env-names="previewEnvNames"
+      :credential-source="projectId != null ? credentialSource : undefined"
       @close="previewOpen = false"
     />
   </div>
@@ -309,7 +319,11 @@ const props = withDefaults(defineProps<{
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   /** 死条目(门控后)id — useInjectableSurface.deadIds,宿主传入 */
   deadEntryIds?: string[]
+  /** authz M2a S8:场景所属普通项目(项目区运行入口传入;非空 = 显示
+   *  凭证来源切换,可选项目凭证) */
+  projectId?: number | null
 }>(), {
+  projectId: null,
   footer: true,
   scenario: null,
   dataSets: () => [] as DataSetSummary[],
@@ -330,6 +344,8 @@ const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
 /** authz M2a S2:环境候选(地址链选择维度);列表不可达 → 只留「按链路」 */
 const envOptions = ref<{ id: number; name: string; is_default: boolean }[]>([])
 const envOverride = ref<number | null>(null)
+/** authz M2a S8:凭证来源(项目区场景;缺省个人凭证,可切项目凭证) */
+const credentialSource = ref<'personal' | 'project'>('personal')
 onMounted(() => {
   import('@/api/environments').then(({ listEnvironments }) =>
     listEnvironments()).then((rows) => {
@@ -364,6 +380,8 @@ const emit = defineEmits<{
       serviceBindings?: Record<string, ServiceBinding>
       /** 断言注入条目 id:与数据集行**交叉**成 case;空选不随 confirm 下送 */
       injectionEntryIds?: string[]
+      /** authz M2a S8:'project' = 用场景所属项目的项目凭证 */
+      credentialSource?: 'personal' | 'project'
     },
   ]
   /** 另存为方案(仅默认方案态):当前绑定与参数存为自建方案 */
@@ -533,6 +551,8 @@ function onConfirm() {
       ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
       ...(debugSpec ? { debug: debugSpec } : {}),
       ...(envOverride.value !== null ? { environmentId: envOverride.value } : {}),
+      ...(props.projectId != null && credentialSource.value === 'project'
+        ? { credentialSource: 'project' } : {}),
     })
     return
   }
@@ -544,6 +564,8 @@ function onConfirm() {
     ...(s.options.parallel !== 1 ? { parallel: s.options.parallel } : {}),
     ...(Object.keys(s.serviceBindings).length ? { serviceBindings: { ...s.serviceBindings } } : {}),
     ...(s.injectionEntryIds.length ? { injectionEntryIds: [...s.injectionEntryIds] } : {}),
+    ...(props.projectId != null && credentialSource.value === 'project'
+      ? { credentialSource: 'project' } : {}),
   })
 }
 

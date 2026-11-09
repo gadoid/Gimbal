@@ -57,6 +57,8 @@ _INBOUND_FORBIDDEN_FIELDS = (
     ("data_set_selection", "dataSetSelection"),
     ("injection_entry_ids", "injectionEntryIds"),
     ("graph", "graph"),
+    # S8:项目凭证只对 JWT 手动执行开放(令牌范围只覆盖个人池)
+    ("credential_source", "credentialSource"),
 )
 # runOptions 只开放 stepTo(截断执行,无地址/凭证语义);其余键任何
 # 非缺省值都拒 —— 尤其 nRuns/parallel(资源面)与 debug(强制 server 链)。
@@ -315,7 +317,8 @@ async def preview_effective_config(
     """S5 生效预览:本次执行将生效的 地址/槽位绑定/carry(逐值带来源,
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
-    body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?}
+    body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?/
+    credentialSource?(S8)}
     —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。绑定形态
     同执行请求(服务键 → {alias};url/authAlias 422)。"""
     from pydantic import ValidationError
@@ -377,10 +380,26 @@ async def preview_effective_config(
         raise HTTPException(404, detail={
             "code": "environment_not_found",
             "message": str(e)}) from None
+    # S8:凭证来源(同执行请求 credentialSource;项目凭证须是项目成员)
+    cred_src = body.get("credentialSource")
+    if cred_src not in (None, "personal", "project"):
+        raise HTTPException(422, detail={
+            "code": "credential_source_invalid",
+            "message": "credentialSource 只能是 personal / project"})
+    cred_project_id = None
+    if cred_src == "project":
+        from ..services.zone import can_use_project_credentials
+        if not await can_use_project_credentials(
+                db, user.id, scen.project_id):
+            raise HTTPException(409, detail={
+                "code": "credential_source_invalid",
+                "message": "项目凭证只能用于你所在普通项目的场景"})
+        cred_project_id = scen.project_id
     cfg = await run_prepare.resolve_effective_config(
         db, definition_from_payload(scen.payload or {}),
         bindings=bindings, user_id=user.id,
-        project_id=scen.project_id, environment=env)
+        project_id=scen.project_id, environment=env,
+        cred_project_id=cred_project_id)
     return {
         "env": cfg.env,
         "services": cfg.services,
