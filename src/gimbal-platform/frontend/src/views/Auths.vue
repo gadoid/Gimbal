@@ -42,7 +42,7 @@
           data-testid="auth-view-flat" @click="viewMode = 'flat'"
         >平铺</button>
       </span>
-      <button type="button" class="slib-create" data-testid="open-create" @click="openCreate">+ 新增认证</button>
+      <button type="button" class="slib-create" data-testid="open-create" @click="openCreate()">+ 新增认证</button>
     </div>
 
     <div v-if="currentRows.length" class="lib-card">
@@ -151,7 +151,7 @@
     <div v-else-if="activeLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
     <div v-else class="empty-cta" data-testid="auths-empty">
       <p>暂无认证 — 复制用例中的 alias 在此登记</p>
-      <Button variant="outline" size="sm" @click="openCreate">+ 新增认证</Button>
+      <Button variant="outline" size="sm" @click="openCreate()">+ 新增认证</Button>
     </div>
 
     <Pagination
@@ -657,12 +657,13 @@ function accountFieldsToObject(): Record<string, string> {
   return out
 }
 
-function openCreate() {
+/** ``slot``:预填槽位(S7.5 导入结果「去绑定」深链 ?newSlot=)。 */
+function openCreate(slot = '') {
   editingId.value = null
   accountFields.value = []
   resetForm({
     values: {
-      alias: '', slot: '', system: '', envId: 'none',
+      alias: slot, slot, system: '', envId: 'none',
       url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200,
     },
   })
@@ -869,6 +870,9 @@ async function submitDelete() {
 
 // ── init ───────────────────────────────────────────────────────
 onMounted(async () => {
+  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填槽位
+  const newSlot = route?.query?.newSlot
+  if (typeof newSlot === 'string' && newSlot) openCreate(newSlot)
   // S7.3:分组视图默认 → 首拉全量分组;环境选项给表单下拉
   void loadGrouped().catch(() => { /* 同 useServerList onError 语义 */ })
   listEnvironments()

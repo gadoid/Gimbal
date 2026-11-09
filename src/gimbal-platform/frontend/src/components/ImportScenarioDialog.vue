@@ -9,6 +9,10 @@
   * 服务映射行:复用/映射/新建可切换;新建可换名 + 挂自己的认证配置;
     文案说清全局副作用(base_url/carry 平台全局生效);
   * 认证引用栏(P7-③):${auth.*} × 你本人凭证池,只展示不阻塞;
+  * 内置凭证栏(authz M2a S7.5):文件 config.users 的键明文不落库,转为
+    槽位声明(新建别名缺省声明 / 映射到别的槽位时改写 call.user);
+  * 导入结果(S7.5):落库回报「需要绑定的槽位 × 我的绑定状态」+ 改写 /
+    未落地 / 丢弃清单,未绑槽位一键去「槽位绑定」新建;无可报即直接进场景;
   * 步骤锚定(#323):可执行形态反查 —— 已回填计数 + 未锚黄条(原因与
     carry 降级后果),只警示不阻塞(手写裸调用是合法形态);
   * 409 自愈:scenario_id_exists/alias_name_taken/mapping_stale → 自动
@@ -25,8 +29,45 @@
       </div>
 
       <div class="imp-body">
+        <!-- S7.5 导入结果:需要绑定的槽位 × 我的绑定状态 -->
+        <div v-if="result" data-testid="import-result">
+          <p class="imp-ok">已导入 <code class="imp-id">{{ result.scenarioId }}</code> —— 内置凭证明文未落库,已转为槽位声明;执行时用你自己的槽位绑定。</p>
+          <div v-if="resultSlots.length" class="imp-section">
+            <p class="imp-sec-title">需要绑定的槽位</p>
+            <table class="imp-table">
+              <thead><tr><th>槽位</th><th>来源</th><th>我的绑定</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="s in resultSlots" :key="s.slot" :data-testid="`import-slot-${s.slot}`">
+                  <td class="mono">{{ s.slot }}</td>
+                  <td>{{ s.fromBuiltin ? '内置凭证转来' : '场景引用' }}</td>
+                  <td>
+                    <span class="imp-chip" :class="{ 'imp-chip-miss': !s.bound }">{{ s.bound ? '已绑定' : '未绑定' }}</span>
+                  </td>
+                  <td>
+                    <button type="button" class="imp-link" :data-testid="`import-slot-go-${s.slot}`" @click="goBind(s.slot, s.bound)">{{ s.bound ? '查看' : '去绑定' }}</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="result.slotRenames?.length" class="imp-warn" data-testid="import-slot-renames">
+            步骤认证已改为本机槽位:<template v-for="r in result.slotRenames" :key="r.service">{{ r.service }}:{{ r.from }} → {{ r.to }};</template>
+          </p>
+          <div v-if="result.undeclaredUsers?.length" class="imp-warn" data-testid="import-undeclared">
+            <p v-for="u in result.undeclaredUsers" :key="u.tag" class="imp-warn-line">
+              ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为槽位:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
+            </p>
+          </div>
+          <p v-if="result.droppedUsers?.length" class="text-caption text-slate-500" data-testid="import-dropped">
+            未被任何步骤使用的内置凭证已丢弃:{{ result.droppedUsers.join('、') }}
+          </p>
+          <p class="text-caption text-slate-500">
+            <button type="button" class="imp-link" data-testid="import-my-bindings" @click="goBind()">管理我的槽位绑定</button>
+          </p>
+        </div>
+
         <!-- fatal 区 -->
-        <div v-if="fatal" class="imp-fatal" data-testid="import-fatal">
+        <div v-else-if="fatal" class="imp-fatal" data-testid="import-fatal">
           <p class="imp-fatal-title">无法导入</p>
           <p v-for="e in precheck?.convert.errors || []" :key="e" class="imp-fatal-line">{{ e }}</p>
           <p v-if="revisionsHint" class="imp-fatal-line">{{ revisionsHint }}</p>
@@ -129,10 +170,27 @@
             </div>
             <p class="text-caption text-slate-500">「没有」的引用执行时该步会报错——到认证管理补配你自己的凭证。</p>
           </div>
+
+          <!-- 内置凭证 → 槽位声明(S7.5) -->
+          <div v-if="builtinUsers.length" class="imp-section" data-testid="import-builtin-users">
+            <p class="imp-sec-title">内置凭证 → 槽位声明</p>
+            <div class="imp-chips">
+              <span v-for="u in builtinUsers" :key="u.tag" class="imp-chip" :class="{ 'imp-chip-miss': !u.bound }">
+                {{ u.tag }}<template v-if="u.services.length">({{ u.services.join('、') }})</template>:{{ u.bound ? '你已绑定该槽位' : '你未绑定该槽位' }}
+              </span>
+            </div>
+            <p class="text-caption text-slate-500">
+              文件里的凭证明文不会导入;这些键转为槽位声明,执行时用你自己的槽位绑定。新建别名未选认证配置时自动声明该服务使用的槽位;映射到已声明别的槽位的别名时,步骤改用本机槽位。导入后列出最终需要绑定的槽位。
+            </p>
+          </div>
         </template>
       </div>
 
-      <div class="imp-foot">
+      <div v-if="result" class="imp-foot">
+        <span class="flex-1"></span>
+        <button type="button" class="imp-btn imp-btn-primary" data-testid="import-open-scenario" @click="openScenario">进入场景</button>
+      </div>
+      <div v-else class="imp-foot">
         <span v-if="reprechecking" class="text-caption text-slate-500">已重新预检(配置有变化)…</span>
         <span class="flex-1"></span>
         <button type="button" class="imp-btn" @click="onClose">{{ fatal ? '知道了' : '取消' }}</button>
@@ -151,11 +209,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import {
   importPrecheck, importScenario,
   type ImportPrecheck, type ImportServiceRow, type ImportMapping,
-  type ImportAnchorEntry,
+  type ImportAnchorEntry, type ImportResult,
 } from '@/api/scenario-import'
 import { listAll } from '@/api/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
@@ -164,6 +223,7 @@ const props = defineProps<{ open: boolean; bundle: Record<string, unknown> | nul
 const emit = defineEmits<{ close: []; imported: [scenarioId: string] }>()
 
 const auth = useAuthStore()
+const router = useRouter()
 /** authz W7:新建别名需 alias.write(表 A:admin+);User 只能映射到已有 */
 const canCreateAlias = computed(() => auth.can('alias.write'))
 
@@ -176,11 +236,17 @@ const createNames = ref<Record<string, string>>({})
 const credentialAliases = ref<Record<string, string>>({})
 const authOptions = ref<string[]>([])
 const assignNewId = ref(true)
+/** S7.5:落库回报(非空 = 结果视图) */
+const result = ref<ImportResult | null>(null)
 
 const fatal = computed(() => !!precheck.value?.blocking)
 const rows = computed(() => precheck.value?.services || [])
 const createRows = computed(() => rows.value.filter((r) => decision(r) === 'create'))
 const workingDeclarations = computed(() => precheck.value?.workingDeclarations || [])
+const builtinUsers = computed(() => precheck.value?.builtinUsers || [])
+// 未绑在前(结果页的行动项优先)
+const resultSlots = computed(() =>
+  [...(result.value?.slots || [])].sort((a, b) => Number(a.bound) - Number(b.bound)))
 // 锚定判定只看 reason(#323 口径):not_in_revision 条目的 endpoint 是被拒
 // 候选的排查信息,不代表已锚;缺省键(旧负载/阻断路径)按空处理
 const anchorUnresolved = computed(
@@ -220,6 +286,24 @@ function createNameOk(row: ImportServiceRow): boolean {
 function suggestionLabel(s: string): string {
   return s === 'reuse' ? '复用(值一致)' : s === 'map' ? '映射(本机为准)' : '新建'
 }
+function undeclaredReasonLabel(r: string): string {
+  return r === 'alias_no_slot'
+    ? '所用服务的别名没有声明槽位(请管理员在服务管理里声明)'
+    : '所用服务的别名声明了别的槽位,且该服务用到多个账号,无法自动改写'
+}
+/** 结果视图有可报内容才停留;否则保持「导入即进场景」旧流程 */
+function hasReport(r: ImportResult): boolean {
+  return !!(r.slots?.length || r.slotRenames?.length
+    || r.undeclaredUsers?.length || r.droppedUsers?.length)
+}
+function goBind(slot?: string, bound?: boolean): void {
+  const query = !slot ? {} : bound ? { q: slot } : { newSlot: slot }
+  emit('close')
+  void router?.push({ path: '/auths', query })
+}
+function openScenario(): void {
+  if (result.value) emit('imported', result.value.scenarioId)
+}
 function anchorReasonLabel(r: ImportAnchorEntry['reason']): string {
   switch (r) {
     case 'not_in_catalog': return '声明修订的端点清单中无匹配(method+path 未命中)'
@@ -243,6 +327,7 @@ async function runPrecheck(): Promise<void> {
   loading.value = true
   try {
     precheck.value = await importPrecheck(props.bundle)
+    result.value = null
     decisions.value = {}
     createNames.value = {}
     credentialAliases.value = {}
@@ -272,15 +357,19 @@ async function onConfirm(): Promise<void> {
       }
       return m
     })
-    const result = await importScenario({
+    const res = await importScenario({
       bundle: props.bundle,
       mappings,
       ...(effectiveNewId.value
         ? { idMode: 'new' as const, newId: effectiveNewId.value }
         : {}),
     })
-    toast.success(`已导入 ${result.scenarioId} —— 建议先跑一次执行预检`)
-    emit('imported', result.scenarioId)
+    if (hasReport(res)) {
+      result.value = res
+      return
+    }
+    toast.success(`已导入 ${res.scenarioId} —— 建议先跑一次执行预检`)
+    emit('imported', res.scenarioId)
   } catch (e) {
     const code = (e as { response?: { data?: { detail?: { code?: string } } } })
       ?.response?.data?.detail?.code
@@ -302,6 +391,11 @@ async function onConfirm(): Promise<void> {
 }
 
 function onClose(): void {
+  // 结果视图下场景已落库:关闭 = 进场景(与旧「导入即进场景」一致)
+  if (result.value) {
+    openScenario()
+    return
+  }
   emit('close')
 }
 
@@ -386,4 +480,9 @@ watch(() => props.open, (v) => {
 .imp-btn-primary { background: #2f6fed; border-color: #2f6fed; color: #fff; }
 .imp-btn-primary:disabled { opacity: 0.6; cursor: default; }
 .mono { font-family: ui-monospace, monospace; }
+.imp-ok { font-size: 12.5px; color: #166534; margin-bottom: 10px; }
+.imp-link {
+  border: none; background: transparent; padding: 0; cursor: pointer;
+  color: #2f6fed; font-size: 12px; text-decoration: underline;
+}
 </style>

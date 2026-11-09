@@ -131,6 +131,20 @@
 - **前端退役**:api/shares 仅剩 createShare(copy);ShareDialog 仅剩副本模式;ScenariosMine/SuiteLibrary 徽标与「共享给我的」区块、SuiteManage 引用横幅/退订/转副本、SuiteCompose/CaseComposer 引用名单首改提示全删(CaseComposer 公共横幅保留);通知标签历史 4 型保留展示 + share_ref_converted 新标签。
 - **测试**:test_shares_api 重写 4 例(copy 契约/退役路由 404-405/转换场景含幂等与通知审计/转换套件/私有非属主拒绝);public_content 5 例改项目成员通道(S7.4 后「执行人≠属主」的正规构造);horizontal/suites_copy/composition/orch_run/run 迁移面更新;grep-guard 白名单 -6 行;authz_expected.yaml 去 ref 列。
 
+### S7.5 导入转槽位声明(已完成)
+
+- **问题实况**:导入 `config.pop("users")` 后步骤里的 `call.user: K` 原样留着,而运行期注入清单只来自 `${auth.K}` 模板扫描 ∪ 生效别名声明槽位(`exec_auth_aliases` 单源)—— `call.user` 标签本身不进清单。凡靠内置凭证认证、别名又没声明同名槽位的步骤,导入后必在引擎编译期报「标签不在 config.users」,导入人毫无提示。
+- **口径**:「槽位声明」沿用系统既有概念 = **别名声明槽位**;**不改运行期单源算法**(把 call.user 并入清单会改变私有区属主执行的凭证取用、集成 strict 暂停与令牌范围,面太宽),转换只在导入侧收口(`scenario_import._slot_conversion`,纯计划,与清除计划同在事务外):
+  - decision=create:映射项显式槽位(`slot`/`credentialAlias`)优先;否则该服务恰用一个内置标签 → 新别名**缺省声明该标签**;
+  - map/reuse 到已有别名、其声明槽位 S ≠ 标签 K、该服务只用一个标签、K 不被模板引用 → 步骤 `call.user` **改写为 S**(被模板引用的 K 本就进清单,改写反而换凭证;同服务多标签 = 多账号角色,不合并);
+  - 其余如实回报。明文仍不落库(P2 不变)。
+- **落库回报**(`_slot_report`,按**落库形态**重算注入清单,不信计划):`slots`(注入清单 × 导入人槽位绑定状态,任意绑定即算,`fromBuiltin` 标内置转来)/ `slotRenames` / `undeclaredUsers`(call.user 标签不在清单 → 该步必报错;reason `alias_no_slot`/`alias_slot_differs`)/ `droppedUsers`(无步骤使用的内置键,仅丢明文)。
+- **预检**:新增 `builtinUsers`(键 × 使用服务 × 是否模板引用 × 我是否已绑该槽位);顺手修 `authRefs.inMyPool` 按 `slot` 判(S3 起注入按槽位解析,原按 alias 判会把「别名≠槽名」的绑定误报为没有)。
+- **前端**:`ImportScenarioDialog` 确认单加「内置凭证 → 槽位声明」栏;落库回报非空即停在**结果视图**(需要绑定的槽位表,未绑在前;改写 / 未落地 / 丢弃清单;「去绑定」→ `/auths?newSlot=X` 直接开新建表单预填 alias/slot,已绑 →`?q=X`;「进入场景」/关闭 = 原「导入即进场景」);无可报内容维持旧流程。`Auths.vue` 支持 `?newSlot=` 深链(`openCreate(slot)`;按钮改显式调用防 MouseEvent 入参)。
+- **导出口径不变**(Q3):属主按方案导出仍带本人槽位明文,非属主为空,项目 / 公共区不带内置凭证(原 5)—— 本切片未触碰导出链。
+- **测试**:新 `test_authz_s75_import_slots.py`(6 例:新建缺省声明 + dropped / 显式槽位优先 / 映射改写 + 绑定状态 / 别名无槽位 → 未落地 / 模板引用标签不改写 / 预检栏);pipeline `test_land_create_branch` 回报断言更新;owner-compare 白名单:导入人本人池过滤 alias→slot 换行 +2 条。前端 `ImportScenarioDialog.test.ts` +3 例、新 `Auths.newSlot.test.ts` 2 例。
+- **门禁**:后端全量 1857 passed / 2 skipped;root 1429;前端 vitest 1331 / vue-tsc 0 / eslint 0 / build ✓;bootstrap 96 + 3 skip;ext_gates rc=0。无迁移。
+
 ## 四、裁定(2026-11-09)
 
 | # | 问题 | 裁定 |

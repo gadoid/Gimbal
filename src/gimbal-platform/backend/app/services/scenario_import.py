@@ -13,7 +13,9 @@ precheck = 纯读析出分析(阻塞项/映射建议/认证引用);land = 一次
 * P7-④ plate 调用(面/目录/convert)全部在事务外完成;
 * P7-⑤ 复用判定路径级:文件面字面值路径集 vs 三层链解析值逐条比,
   本机缺值路径判"映射"并保留字面值;
-* P2 config.users 清空(明文凭证不落库)。
+* P2 config.users 清空(明文凭证不落库);authz M2a S7.5:清空前把
+  键**转为槽位声明**(不再静默丢弃)—— 见 :func:`_slot_conversion`,
+  落库结果回报「需要绑定的槽位 × 导入人绑定状态」。
 """
 from __future__ import annotations
 from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, record_category, ref_category
@@ -30,6 +32,7 @@ from ..models.composer_scenario import ComposerScenario
 from ..models.service_alias import ServiceAlias
 from ..schemas.scenario_composer import ScenarioDraft
 from . import endpoint_anchoring, plate_client, scenario_store
+from .scenario_store import definition_from_payload
 from . import service_aliases as alias_svc
 from . import service_names
 from .carry_injection import build_carry_context
@@ -143,6 +146,130 @@ def _rev_id(item: Any) -> str | None:
 def _step_body(step: dict) -> Any:
     req = step.get("request")
     return req.get("body") if isinstance(req, dict) else None
+
+
+# ── S7.5:内置凭证 → 槽位声明 ───────────────────────────────────────
+# 运行期注入清单 = ``${auth.K}`` 模板扫描 ∪ 生效别名声明槽位
+# (``exec_auth_aliases`` 单源,本模块不改它);``call.user: K`` 只是
+# 「取 config.users[K]」的标签 —— 落库剥掉 config.users 后,K 必须由上
+# 面两源之一注入,否则该步在引擎编译期报「标签不在 config.users」。
+# 转换只在导入侧收口:新建别名缺省声明该服务唯一的内置标签;映射到
+# 已有别名而其声明槽位不同(且该服务只用一个标签、标签不被模板引用)
+# → 步骤 call.user 改写为本机槽位;其余如实回报为「未落地」。
+
+
+def _builtin_user_tags(definition: dict) -> list[str]:
+    users = (definition.get("config") or {}).get("users")
+    return [str(k) for k in users] if isinstance(users, dict) else []
+
+
+def _call_user_usage(steps: list) -> dict[str, set[str]]:
+    """原服务键 → 该服务各步骤 ``call.user`` 标签集。"""
+    out: dict[str, set[str]] = {}
+    for step in steps:
+        call = step.get("call") if isinstance(step, dict) else None
+        if not isinstance(call, dict):
+            continue
+        svc, tag = call.get("service"), call.get("user")
+        if isinstance(svc, str) and svc and isinstance(tag, str) and tag:
+            out.setdefault(svc, set()).add(tag)
+    return out
+
+
+def _template_tags(definition: dict) -> set[str]:
+    from .auth_ref_scan import scan_auth_aliases
+    from .service_aliases import setup_teardown_nodes
+    return set(scan_auth_aliases(
+        [*(definition.get("steps") or []),
+         *setup_teardown_nodes(definition)]))
+
+
+def _slot_conversion(
+    definition: dict, *, eff_key: dict[str, str],
+    alias_slot: dict[str, str | None], create_keys: set[str],
+    explicit_create_slot: dict[str, str | None],
+) -> tuple[dict[str, str | None], dict[str, tuple[str, str]]]:
+    """返回 ``(create_slot, renames)``:
+
+    * ``create_slot``:decision=create 的服务 → 新别名声明槽位(映射项显式
+      给出优先;否则该服务恰用一个内置标签 → 缺省声明它);
+    * ``renames``:原服务键 → (原标签, 本机槽位) —— 映射/复用到已声明
+      不同槽位的别名,且该服务只用一个标签、该标签不被模板引用(被模板
+      引用的标签本就进注入清单,改写反而换了凭证)。
+    """
+    builtin = set(_builtin_user_tags(definition))
+    usage = _call_user_usage(definition.get("steps") or [])
+    templated = _template_tags(definition)
+    create_slot: dict[str, str | None] = {}
+    for key in create_keys:
+        slot = explicit_create_slot.get(key)
+        tags = usage.get(key) or set()
+        if not slot and len(tags) == 1 and tags <= builtin:
+            slot = next(iter(tags))
+        create_slot[key] = slot
+    renames: dict[str, tuple[str, str]] = {}
+    for svc, tags in usage.items():
+        if svc in create_keys or len(tags) != 1:
+            continue
+        tag = next(iter(tags))
+        declared = alias_slot.get(eff_key.get(svc, svc))
+        if declared and declared != tag and tag not in templated:
+            renames[svc] = (tag, declared)
+    return create_slot, renames
+
+
+async def _slot_report(
+    db, definition: dict, *, user_id: int, builtin: list[str],
+    renames: dict[str, tuple[str, str]],
+) -> dict:
+    """落库后的槽位回报(结果页数据源;按**落库形态**重算,不信计划)。
+
+    * ``slots``:注入清单(运行期真会向执行人要的槽位)× 导入人是否已绑定
+      (任意绑定即算,同项目槽位状态口径);``fromBuiltin`` = 源文件内置
+      凭证转来的(含改写目标);
+    * ``undeclaredUsers``:``call.user`` 标签不在注入清单 —— 该步执行时
+      必报错,``reason`` = ``alias_no_slot``(别名未声明槽位)/
+      ``alias_slot_differs``(别名声明了别的槽位,未能自动改写);
+    * ``droppedUsers``:内置凭证里没有任何步骤用到的键(仅丢明文)。
+    """
+    from ..models.auth_session import AuthSession
+    from .service_aliases import exec_auth_aliases_of_definition
+
+    needed = await exec_auth_aliases_of_definition(db, definition)
+    bound: set[str] = set()
+    if needed:
+        bound = set((await db.execute(select(AuthSession.slot).where(
+            AuthSession.owner_id == user_id,
+            AuthSession.slot.in_(needed)))).scalars().all())
+    builtin_set = set(builtin)
+    rename_targets = {to for _f, to in renames.values()}
+    usage = _call_user_usage(definition.get("steps") or [])
+    alias_slot = dict((await db.execute(select(
+        ServiceAlias.alias_name, ServiceAlias.slot).where(
+        ServiceAlias.alias_name.in_(sorted(usage))))).all()) if usage else {}
+    undeclared: dict[str, set[str]] = {}
+    reasons: dict[str, str] = {}
+    for svc, tags in usage.items():
+        for tag in tags:
+            if tag in needed:
+                continue
+            undeclared.setdefault(tag, set()).add(svc)
+            if alias_slot.get(svc):
+                reasons[tag] = "alias_slot_differs"
+            else:
+                reasons.setdefault(tag, "alias_no_slot")
+    used = set(needed) | set(undeclared) | {f for f, _t in renames.values()}
+    return {
+        "slots": [{"slot": s, "bound": s in bound,
+                   "fromBuiltin": s in builtin_set or s in rename_targets}
+                  for s in needed],
+        "slotRenames": [{"service": svc, "from": f, "to": to}
+                        for svc, (f, to) in sorted(renames.items())],
+        "undeclaredUsers": [{"tag": tag, "services": sorted(svcs),
+                             "reason": reasons[tag]}
+                            for tag, svcs in sorted(undeclared.items())],
+        "droppedUsers": sorted(builtin_set - used),
+    }
 
 
 class _Mark:
@@ -287,7 +414,8 @@ async def precheck(db, *, definition: dict, user) -> dict:
         "convert": {"ok": True, "errors": []},
         "metaPlate": {}, "availableRevisions": {},
         "idConflict": False, "suggestedId": None,
-        "services": [], "authRefs": [], "workingDeclarations": [],
+        "services": [], "authRefs": [], "builtinUsers": [],
+        "workingDeclarations": [],
         "anchoring": {"anchored": [], "unresolved": []},
     }
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
@@ -348,6 +476,7 @@ async def precheck(db, *, definition: dict, user) -> dict:
 
     out["services"] = await analyze_services(db, definition, user.id)
     out["authRefs"] = await auth_refs(db, definition, user.id)
+    out["builtinUsers"] = await builtin_users_preview(db, definition, user.id)
     return out
 
 
@@ -428,10 +557,33 @@ async def auth_refs(db, definition: dict, owner_id: int) -> list[dict]:
     tags = scan_auth_aliases(definition.get("steps") or [])
     if not tags:
         return []
+    # S3 起注入按槽位解析(resolve_exec_auths 按 slot)—— 池命中同口径
     pool = set((await db.execute(
-        select(AuthSession.alias).where(AuthSession.owner_id == owner_id)
+        select(AuthSession.slot).where(AuthSession.owner_id == owner_id)
     )).scalars().all())
     return [{"tag": t, "inMyPool": t in pool} for t in tags]
+
+
+async def builtin_users_preview(db, definition: dict,
+                                owner_id: int) -> list[dict]:
+    """S7.5 预检栏:文件内置凭证(``config.users``)的键 —— 明文不落库,
+    转为槽位声明。逐键给出使用它的服务(``call.user``)、是否被模板
+    引用、导入人是否已有同名槽位绑定。最终落地(新建别名声明 / 改写为
+    本机槽位 / 未落地)取决于映射决策,以落库结果为准。"""
+    from ..models import AuthSession
+
+    tags = _builtin_user_tags(definition)
+    if not tags:
+        return []
+    usage = _call_user_usage(definition.get("steps") or [])
+    templated = _template_tags(definition)
+    bound = set((await db.execute(select(AuthSession.slot).where(
+        AuthSession.owner_id == owner_id,
+        AuthSession.slot.in_(tags)))).scalars().all())
+    return [{"tag": t,
+             "services": sorted(s for s, ts in usage.items() if t in ts),
+             "templated": t in templated,
+             "bound": t in bound} for t in tags]
 
 
 # ── land(单事务落库,方案 §3.3)────────────────────────────────────
@@ -542,6 +694,20 @@ async def land(
                     "mapping_stale", 409, f"服务 {key} 本机已不存在(重预检)")
             eff_key[key] = key
 
+    # ── S7.5:内置凭证 → 槽位声明(纯计划;改写在 definition 改写段)──
+    builtin = _builtin_user_tags(definition)
+    alias_slot = dict((await db.execute(select(
+        ServiceAlias.alias_name, ServiceAlias.slot).where(
+        ServiceAlias.alias_name.in_(sorted(set(eff_key.values()) | set(
+            _call_user_usage(raw_steps))))))).all())
+    create_keys = {k for k, m in by_key.items() if m["decision"] == "create"}
+    create_slot, renames = _slot_conversion(
+        definition, eff_key=eff_key, alias_slot=alias_slot,
+        create_keys=create_keys,
+        explicit_create_slot={
+            k: by_key[k].get("slot") or by_key[k].get("credentialAlias")
+            for k in create_keys})
+
     # ── 清除计划(P5:有接管者才清除;§1 修复:一致性先行 + 按步骤)──
     # 接管集与预检计数共用 _service_plan(唯一真源)。粒度 =
     # (step_index, path):只清该步骤**自己 carry 面**上、且在接管集内
@@ -573,7 +739,8 @@ async def land(
     meta["scenarioId"] = sid
     defn["meta"] = meta
     config = dict(defn.get("config") or {})
-    # config.users 清空(P2:明文凭证不落库)
+    # config.users 清空(P2:明文凭证不落库);键已在上方转为槽位声明
+    # (S7.5),call.user 改写在步骤循环里与服务换名同轮完成
     config.pop("users", None)
     services_cfg = dict(config.get("services") or {})
     # body 字面值清除(P5:仅清除集内路径)—— 按 (step_index, path) 计
@@ -588,6 +755,15 @@ async def land(
             continue
         for path in hit:
             _delete_path(body, _path_segs(path))
+    # S7.5 改写:映射到声明了别的槽位的别名 → 步骤 call.user 换为本机
+    # 槽位(按原服务键匹配,先于服务换名)
+    for step in defn.get("steps") or []:
+        call = step.get("call") if isinstance(step, dict) else None
+        if not isinstance(call, dict):
+            continue
+        hit = renames.get(call.get("service"))
+        if hit and call.get("user") == hit[0]:
+            call["user"] = hit[1]
     for key, new_name in eff_key.items():
         if new_name == key:
             continue
@@ -642,9 +818,9 @@ async def land(
             name = eff_key[key]
             # S6:别名团队共享(个人别名退役);声明槽位沿用映射里的
             # 凭证别名(旧键 credentialAlias 兼容)
+            # S7.5:未显式给槽位时缺省声明该服务唯一的内置标签
             await alias_svc.create_alias_in_transaction(
-                db, alias_name=name,
-                slot=m.get("slot") or m.get("credentialAlias"),
+                db, alias_name=name, slot=create_slot.get(key),
                 catalog_names=catalog)
             alias_names.add(name)
             created_aliases.append(name)
@@ -688,7 +864,10 @@ async def land(
         resource_type="scenario", resource_id=sid,
         detail={"name": row.name, "source": "import"})
     await db.refresh(row)
-    return {"scenarioId": row.scenario_id, "idMode": id_mode}
+    report = await _slot_report(
+        db, definition_from_payload(row.payload or {}), user_id=user.id,
+        builtin=builtin, renames=renames)
+    return {"scenarioId": row.scenario_id, "idMode": id_mode, **report}
 
 
 async def carry_store_put(db, service_name: str, entries: dict, user) -> None:

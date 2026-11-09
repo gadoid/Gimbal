@@ -113,7 +113,11 @@ _ALLOWLIST: dict[str, int] = {
     "services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:": 1,
     "services/maintenance_transfer.py:IntegrationTask.holder_id == old_owner_id))": 1,
     "services/run_prepare.py:DBAuthSession.owner_id == owner_id,": 1,
-    "services/scenario_import.py:select(AuthSession.alias).where(AuthSession.owner_id == owner_id)": 1,
+    # 导入人本人凭证池(池命中/槽位绑定状态 —— 凭证跟人走,属主即本人
+    # 的数据归属过滤,不是权限门);S7.5 起按 slot
+    "services/scenario_import.py:select(AuthSession.slot).where(AuthSession.owner_id == owner_id)": 1,
+    "services/scenario_import.py:AuthSession.owner_id == owner_id,": 1,
+    "services/scenario_import.py:AuthSession.owner_id == user_id,": 1,
     "services/scenario_query.py:return ComposerScenario.owner_id == user.id": 1,
     # S7.0:scope=private = 我名下且未进项目(「我的」页口径;镜头谓词
     # 属查询投影不是权限门 —— 权限边界仍走 zone_read_clause)

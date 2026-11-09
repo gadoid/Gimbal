@@ -27,6 +27,41 @@ export interface ImportAuthRef {
   inMyPool: boolean
 }
 
+/** S7.5 预检栏:文件内置凭证键(明文不落库,转为槽位声明)。 */
+export interface ImportBuiltinUser {
+  tag: string
+  /** 经 call.user 使用该键的服务键 */
+  services: string[]
+  /** 被 ${auth.<tag>.*} 模板引用(本就进注入清单) */
+  templated: boolean
+  /** 导入人已有同名槽位绑定 */
+  bound: boolean
+}
+
+/** S7.5 落库回报:需要绑定的槽位 × 导入人绑定状态(按落库形态重算)。 */
+export interface ImportSlotRow {
+  slot: string
+  bound: boolean
+  /** 源文件内置凭证转来(含改写目标) */
+  fromBuiltin: boolean
+}
+
+export interface ImportResult {
+  scenarioId: string
+  idMode: string
+  slots?: ImportSlotRow[]
+  /** 映射到声明了别的槽位的别名:步骤 call.user 已改写为本机槽位 */
+  slotRenames?: { service: string; from: string; to: string }[]
+  /** call.user 标签不在注入清单 —— 该步执行会报错 */
+  undeclaredUsers?: {
+    tag: string
+    services: string[]
+    reason: 'alias_no_slot' | 'alias_slot_differs'
+  }[]
+  /** 没有任何步骤用到的内置凭证键(仅丢明文) */
+  droppedUsers?: string[]
+}
+
 /** 重锚定报告条目(#323):reason 为 null 才是已锚。not_in_revision 等
  *  未锚原因时 endpoint 携带被拒的命中候选,仅供排查,不代表已锚。 */
 export interface ImportAnchorEntry {
@@ -49,6 +84,8 @@ export interface ImportPrecheck {
   suggestedId: string | null
   services: ImportServiceRow[]
   authRefs: ImportAuthRef[]
+  /** S7.5;旧负载/阻断路径可能缺省 */
+  builtinUsers?: ImportBuiltinUser[]
   workingDeclarations: string[]
   /** 步骤锚定(可执行形态反查);旧负载/阻断路径可能缺省。 */
   anchoring?: { anchored: ImportAnchorEntry[]; unresolved: ImportAnchorEntry[] }
@@ -73,7 +110,7 @@ export function importScenario(payload: {
   mappings?: ImportMapping[]
   idMode?: 'keep' | 'new'
   newId?: string
-}): Promise<{ scenarioId: string; idMode: string }> {
+}): Promise<ImportResult> {
   return http
     .post('/scenarios/import', payload)
     .then((r) => r.data)

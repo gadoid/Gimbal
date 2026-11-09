@@ -159,7 +159,12 @@ async def test_land_create_branch(client, plate_mock: PlateMock):
                       "decision": "create"}],
     })
     assert r.status_code == 201, r.text
-    assert r.json() == {"scenarioId": _SCENARIO_ID, "idMode": "keep"}
+    body = r.json()
+    assert (body["scenarioId"], body["idMode"]) == (_SCENARIO_ID, "keep")
+    # S7.5:内置 qa1 经 ${auth.qa1.token} 模板进注入清单 → 需绑定槽位
+    assert body["slots"] == [
+        {"slot": "qa1", "bound": False, "fromBuiltin": True}]
+    assert body["undeclaredUsers"] == [] and body["droppedUsers"] == []
 
     async with db_module.SessionLocal() as db:
         (await db.execute(select(ServiceAlias).where(

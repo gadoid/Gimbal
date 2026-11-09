@@ -16,6 +16,11 @@ vi.mock('@/api/scenario-import', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   listAll: vi.fn().mockResolvedValue([{ alias: 'qa1' }]),
 }))
+const routerPush = vi.fn()
+vi.mock('vue-router', async (orig) => ({
+  ...(await orig<typeof import('vue-router')>()),
+  useRouter: () => ({ push: routerPush }),
+}))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))
@@ -230,6 +235,86 @@ describe('ImportScenarioDialog 状态机', () => {
     const w = mountDialog('alias.write')
     await flushPromises()
     expect(w.find('[data-testid="import-anchoring"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+describe('ImportScenarioDialog S7.5 内置凭证 → 槽位声明', () => {
+  it('确认单列出内置凭证键(服务 + 我的绑定状态)', async () => {
+    importPrecheck.mockResolvedValue(pre({
+      builtinUsers: [
+        { tag: 'maker', services: ['qa-svc'], templated: false, bound: false },
+        { tag: 'qa1', services: [], templated: true, bound: true },
+      ],
+    }))
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    const sec = w.find('[data-testid="import-builtin-users"]')
+    expect(sec.exists()).toBe(true)
+    expect(sec.text()).toContain('maker(qa-svc):你未绑定该槽位')
+    expect(sec.text()).toContain('qa1:你已绑定该槽位')
+    expect(sec.text()).toContain('明文不会导入')
+    w.unmount()
+  })
+
+  it('落库回报有槽位 → 停在结果视图;未绑在前,去绑定跳 /auths?newSlot=', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    importScenario.mockResolvedValue({
+      scenarioId: 'sc-import-abc', idMode: 'new',
+      slots: [
+        { slot: 'qa1', bound: true, fromBuiltin: true },
+        { slot: 'fin-acct', bound: false, fromBuiltin: true },
+      ],
+      slotRenames: [{ service: 'fin-service', from: 'maker', to: 'fin-acct' }],
+      undeclaredUsers: [{ tag: 'chk', services: ['qa-svc'], reason: 'alias_no_slot' }],
+      droppedUsers: ['unused'],
+    })
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    await w.find('[data-testid="import-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(w.emitted('imported')).toBeUndefined()        // 结果页停留
+    const res = w.find('[data-testid="import-result"]')
+    expect(res.exists()).toBe(true)
+    const rows = res.findAll('tbody tr')
+    expect(rows[0].text()).toContain('fin-acct')          // 未绑在前
+    expect(rows[0].text()).toContain('未绑定')
+    expect(rows[1].text()).toContain('已绑定')
+    expect(w.find('[data-testid="import-slot-renames"]').text())
+      .toContain('fin-service:maker → fin-acct')
+    expect(w.find('[data-testid="import-undeclared"]').text())
+      .toContain('没有声明槽位')
+    expect(w.find('[data-testid="import-dropped"]').text()).toContain('unused')
+    expect(w.find('[data-testid="import-confirm"]').exists()).toBe(false)
+
+    await w.find('[data-testid="import-slot-go-fin-acct"]').trigger('click')
+    expect(routerPush).toHaveBeenCalledWith(
+      { path: '/auths', query: { newSlot: 'fin-acct' } })
+    expect(w.emitted('close')).toBeTruthy()
+
+    await w.find('[data-testid="import-slot-go-qa1"]').trigger('click')
+    expect(routerPush).toHaveBeenLastCalledWith(
+      { path: '/auths', query: { q: 'qa1' } })
+
+    await w.find('[data-testid="import-open-scenario"]').trigger('click')
+    expect(w.emitted('imported')?.[0]).toEqual(['sc-import-abc'])
+    w.unmount()
+  })
+
+  it('结果视图下关闭 = 进场景(场景已落库)', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    importScenario.mockResolvedValue({
+      scenarioId: 'sc-import-abc', idMode: 'new',
+      slots: [{ slot: 'qa1', bound: false, fromBuiltin: true }],
+    })
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    await w.find('[data-testid="import-confirm"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="import-close"]').trigger('click')
+    expect(w.emitted('imported')?.[0]).toEqual(['sc-import-abc'])
+    expect(w.emitted('close')).toBeUndefined()
     w.unmount()
   })
 })
