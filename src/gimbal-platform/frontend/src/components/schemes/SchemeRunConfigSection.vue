@@ -15,6 +15,7 @@ import {
 } from '@/utils/run-bindings'
 
 import { Input } from '@/components/ui/input'
+import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 
 const props = defineProps<{
   serviceBindings: Record<string, ServiceBinding>
@@ -32,6 +33,9 @@ const props = defineProps<{
   environmentId?: number | null
   /** 环境候选(壳装载;下拉只读展示) */
   environments?: { id: number; name: string; is_default: boolean }[]
+  /** S7.3 生效预览:宿主透传场景/方案 id(缺省 = 宿主无预览上下文,不显入口) */
+  scenarioId?: string
+  schemeId?: string
 }>()
 
 const emit = defineEmits<{
@@ -111,6 +115,18 @@ const totalRuns = computed(() =>
   clampInt(props.nRuns, 1, 64) * clampInt(props.parallel, 1, 64))
 const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 
+// ── S7.3 生效预览:方案的绑定 + 环境逐值解析(alias 空条目不送)─────
+const previewOpen = ref(false)
+const previewBindings = computed<Record<string, { alias: string }>>(() => {
+  const out: Record<string, { alias: string }> = {}
+  for (const [svc, b] of Object.entries(props.serviceBindings)) {
+    if (b?.alias) out[svc] = { alias: b.alias }
+  }
+  return out
+})
+const previewEnvNames = computed<Record<number, string>>(() =>
+  Object.fromEntries((props.environments ?? []).map((e) => [e.id, e.name])))
+
 </script>
 
 <template>
@@ -157,6 +173,10 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
         <span class="zone-spacer"></span>
         <span class="zone-hint">总量预览:<span data-testid="total-preview" class="total-chip"
           :class="{ 'total-over': overLimit }">{{ nRuns }} × {{ parallel }} = {{ totalRuns }}</span></span>
+        <button
+          v-if="scenarioId" type="button" class="preview-btn"
+          data-testid="scheme-preview-open" @click="previewOpen = true"
+        >生效预览</button>
       </header>
       <div class="param-row">
         <label>截断步骤(stepTo)</label>
@@ -200,6 +220,16 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
       </div>
     </section>
 
+    <!-- S7.3 生效预览(宿主透传 scenarioId/schemeId 才有入口) -->
+    <EffectivePreviewDialog
+      :open="previewOpen"
+      :scenario-id="scenarioId"
+      :scheme-id="schemeId"
+      :environment-id="environmentId ?? undefined"
+      :service-bindings="previewBindings"
+      :env-names="previewEnvNames"
+      @close="previewOpen = false"
+    />
   </div>
 </template>
 
@@ -212,6 +242,12 @@ const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 }
 /* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 弹性空位 + note */
 .zone-head { display: flex; align-items: center; gap: 10px; }
+/* S7.3 生效预览入口(zone-head 行尾小按钮) */
+.preview-btn {
+  border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;
+  padding: 2px 12px; font-size: 12px; cursor: pointer; color: #334155;
+}
+.preview-btn:hover { border-color: #2563eb; color: #2563eb; }
 .zone-name {
   font-size: 14px; font-weight: 700; color: var(--color-text-primary);
   padding-left: 10px; border-left: 3px solid var(--accent);

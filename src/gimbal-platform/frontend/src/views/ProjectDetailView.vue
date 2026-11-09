@@ -130,6 +130,11 @@
         :project="project"
         @changed="refreshDetail"
       />
+      <ProjectConfigPanel
+        v-else-if="tab === 'config' && project"
+        :project="project"
+        @changed="refreshDetail"
+      />
     </template>
   </section>
 </template>
@@ -143,6 +148,7 @@ import type { ScenarioListItem } from '@/types/scenario-composer'
 import { listSuites, createSuite, type SuiteSummary } from '@/api/suites'
 import { listIntegrationTasks, type IntegrationTaskItem } from '@/api/integration'
 import ProjectMembersPanel from '@/components/project/ProjectMembersPanel.vue'
+import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import PromotionsPanel from '@/components/project/PromotionsPanel.vue'
 import { shortDateTime } from '@/utils/datetime'
 import { toast } from '@/utils/toast'
@@ -165,6 +171,9 @@ const TABS = [
   // S7.2:加入申请(管理员裁决;成员看自己的 —— 后端按角色过滤)
   { key: 'promotions', label: '加入申请' },
   { key: 'members', label: '成员' },
+  // S7.3:配置(普通项目 = 默认环境/项目层 carry/槽位状态/生效预览;
+  // 公共项目 = 全局默认,原 /carry-config 落位)
+  { key: 'config', label: '配置' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 

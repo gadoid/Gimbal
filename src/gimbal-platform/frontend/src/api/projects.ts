@@ -46,8 +46,30 @@ export function createProject(body: {
 export function patchProject(id: number, body: {
   name?: string
   description?: string
+  /** S7.3:默认环境(显式 null = 清空;后端按 model_fields_set 区分) */
+  defaultEnvironmentId?: number | null
 }): Promise<ProjectOut> {
   return http.patch<ProjectOut>(`/projects/${id}`, body).then((r) => r.data)
+}
+
+/** S7.3 槽位状态 = 成员凭证清单(只读不落库):项目场景引用的槽位 ×
+ * 成员已绑/未绑(门 = 项目成员;公共项目 422)。 */
+export interface SlotStatusMember {
+  userId: number
+  username: string
+  displayName: string
+  bound: boolean
+}
+
+export interface SlotStatusRow {
+  slot: string
+  scenarios: string[]
+  members: SlotStatusMember[]
+}
+
+export function getSlotStatus(id: number): Promise<{ slots: SlotStatusRow[] }> {
+  return http.get<{ slots: SlotStatusRow[] }>(`/projects/${id}/slot-status`)
+    .then((r) => r.data)
 }
 
 export function deleteProject(id: number): Promise<void> {

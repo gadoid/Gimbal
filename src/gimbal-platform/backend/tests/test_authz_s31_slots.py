@@ -121,6 +121,36 @@ async def test_create_slot_defaults_and_second_binding(client):
     assert r.status_code == 201 and r.json()["url"] == ""
 
 
+async def test_list_returns_slot_fields(client):
+    """S7.3 认证页按槽位分组:列表项带回 slot/system/envId/isDefault/
+    accountFields(此前仅 detail 回,分组数据源缺失)。"""
+    h = await register_and_login(client, "s31c", "pw123456")
+    r = await client.post("/api/environments", headers=h, json={
+        "name": "s31-list", "lines": {}})
+    env_id = r.json()["id"]
+    r = await client.post("/api/auths", headers=h, json={
+        "alias": "qa", "system": "fin-service",
+        "accountFields": {"orgNo": "1001"},
+        "username": "u", "password": "p"})
+    assert r.status_code == 201
+    r = await client.post("/api/auths", headers=h, json={
+        "alias": "qa-sit", "slot": "qa", "envId": env_id,
+        "username": "u", "password": "p"})
+    assert r.status_code == 201
+
+    r = await client.get("/api/auths", headers=h)
+    assert r.status_code == 200, r.text
+    items = {it["alias"]: it for it in r.json()["items"]}
+    assert items["qa"]["slot"] == "qa"
+    assert items["qa"]["system"] == "fin-service"
+    assert items["qa"]["isDefault"] is True
+    assert items["qa"]["accountFields"] == {"orgNo": "1001"}
+    assert items["qa"]["envId"] is None
+    assert items["qa-sit"]["slot"] == "qa"
+    assert items["qa-sit"]["envId"] == env_id
+    assert items["qa-sit"]["isDefault"] is False
+
+
 async def test_patch_slot_fields_and_default_switch(client):
     h = await register_and_login(client, "s31b", "pw123456")
     r = await client.post("/api/auths", headers=h, json={

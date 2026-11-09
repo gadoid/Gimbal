@@ -72,7 +72,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     // 公共项目,「项目管理」收编进「项目」一级入口(−3 +1 = 17 条)。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
     // 说明页,置灰可点(§4.4)
-    expect(links.length).toBe(17)
+    expect(links.length).toBe(16)  // S7.3:−默认值
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications',
@@ -81,8 +81,8 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       '/suites',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
       '/projects',
-      // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
-      '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
+      // 服务组(S7.3:默认值页退役 → 全局默认在公共项目「配置」页签)
+      '/services', '/service-admin', '/auths', '/adaptations',
       // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页);
       // 集成组:集成(从执行组迁出)
       '/run', '/executions', '/analytics',
@@ -143,10 +143,10 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
-    expect(hrefs).not.toContain('/carry-config')
+    expect(hrefs).not.toContain('/carry-config')  // S7.3:默认值页退役
     expect(hrefs).not.toContain('/service-admin')
     expect(hrefs).toContain('/projects')  // S7.1:项目入口全员可见
-    expect(hrefs.length).toBe(13)  // S7.1 IA:−公共×2 −项目管理 +项目
+    expect(hrefs.length).toBe(13)  // S7.3:默认值本就 cap-gated 不在,计数不变  // S7.3:−默认值(全局默认迁公共项目配置)
     w.unmount()
   })
 })
@@ -217,7 +217,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
     // 17 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4)
-    expect(w.findAll('.nav-text').length).toBe(18)
+    expect(w.findAll('.nav-text').length).toBe(17)  // S7.3:−默认值
     w.unmount()
   })
 
@@ -233,7 +233,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(18)   // 17 可点 + 1 置灰 span
+    expect(rows.length).toBe(17)   // 16 可点 + 1 置灰 span(S7.3 −默认值)
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -258,7 +258,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(17)
+    expect(links.length).toBe(16)  // S7.3:−默认值
     // 用例集组插在场景组后(F5 通知占 0/1 位):suites=4 / 项目=5 / services=6
     expect(links[4].attributes('href')).toBe('/suites')
     expect(links[5].attributes('href')).toBe('/projects')

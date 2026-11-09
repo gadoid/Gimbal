@@ -27,6 +27,12 @@
         {{ s.name }}
         <span v-if="!s.isDefault && schemeInvalid(s)" class="rd-chip-warn">· 失效</span>
       </button>
+      <!-- S7.3 生效预览入口(弹层/右栏两宿主共见):按当前方案+绑定+环境
+           解析逐值带来源(不含明文) -->
+      <button
+        v-if="previewScenarioId" type="button" class="ghost-btn rd-preview-btn"
+        data-testid="run-preview-open" @click="previewOpen = true"
+      >生效预览</button>
     </div>
 
     <!-- ═══ 路径②:默认方案 — 可配区(仅绑定 + 参数),数据/注入锁基线 ═══ -->
@@ -251,6 +257,17 @@
         </button>
       </div>
     </footer>
+
+    <!-- S7.3 生效预览(弹层/右栏共见;固定场景 = 当前场景) -->
+    <EffectivePreviewDialog
+      :open="previewOpen"
+      :scenario-id="previewScenarioId || undefined"
+      :scheme-id="selected && !selected.isDefault ? selected.schemeId : undefined"
+      :environment-id="envOverride"
+      :service-bindings="previewBindings"
+      :env-names="previewEnvNames"
+      @close="previewOpen = false"
+    />
   </div>
 </template>
 
@@ -258,6 +275,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
+import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import type { DataSetSelection, ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
 import { EMPTY_RUN_OPTIONS } from '@/api/scenario-composer'
@@ -528,6 +546,24 @@ function onConfirm() {
     ...(s.injectionEntryIds.length ? { injectionEntryIds: [...s.injectionEntryIds] } : {}),
   })
 }
+
+// ── S7.3 生效预览:当前方案 + 绑定 + 环境的逐值解析(同 preview 接口)──
+const previewOpen = ref(false)
+const previewScenarioId = computed(() => props.scenario?.meta?.scenarioId ?? '')
+/** 预览透传的绑定:显式条目(同 confirm 口径 assembleExplicitBindings;
+ *  自建方案按 D3 原样透传方案绑定),alias 空条目不送 */
+const previewBindings = computed<Record<string, { alias: string }>>(() => {
+  const src = (selected.value && !selected.value.isDefault)
+    ? selected.value.serviceBindings
+    : assembleExplicitBindings(bindings.value, props.serviceRows)
+  const out: Record<string, { alias: string }> = {}
+  for (const [svc, b] of Object.entries(src)) {
+    if (b?.alias) out[svc] = { alias: b.alias }
+  }
+  return out
+})
+const previewEnvNames = computed<Record<number, string>>(() =>
+  Object.fromEntries(envOptions.value.map((e) => [e.id, e.name])))
 </script>
 
 <style scoped>
@@ -546,6 +582,8 @@ function onConfirm() {
   display: flex; flex-wrap: wrap; gap: 8px;
   margin-bottom: 20px;
 }
+/* S7.3 生效预览入口:顶到行尾,不与方案 chip 抢位 */
+.rd-preview-btn { margin-left: auto; font-size: 12px; padding: 4px 12px; }
 .rd-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 14px;

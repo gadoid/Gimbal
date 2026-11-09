@@ -30,10 +30,22 @@
           @click="tokenTypeFilter = t"
         >{{ t === 'all' ? '全部类型' : t }}</button>
       </span>
+      <!-- S7.3:视图切换 —— 按槽位分组(默认,一槽多绑定/标默认)/ 平铺
+           (服务端分页,M4 语义) -->
+      <span class="svc-stats tight" data-testid="auth-view-group-toggle">
+        <button
+          type="button" class="svc-chip" :class="{ on: viewMode === 'group' }"
+          data-testid="auth-view-group" @click="viewMode = 'group'"
+        >按槽位分组</button>
+        <button
+          type="button" class="svc-chip" :class="{ on: viewMode === 'flat' }"
+          data-testid="auth-view-flat" @click="viewMode = 'flat'"
+        >平铺</button>
+      </span>
       <button type="button" class="slib-create" data-testid="open-create" @click="openCreate">+ 新增认证</button>
     </div>
 
-    <div v-if="visibleAuths.length" class="lib-card">
+    <div v-if="currentRows.length" class="lib-card">
       <table class="slib-table">
         <thead>
           <tr>
@@ -47,96 +59,103 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in visibleAuths" :key="row.id" :data-testid="`auth-row-${row.id}`">
-            <td>
-              <div class="flex flex-col">
-                <span class="mono svc-key">{{ row.alias }}</span>
-                <!-- authz M2a S3 槽位绑定:槽名 ≠ 别名时展示槽;环境/系统/
-                     默认以 chip 呈现('' = 未归类省略) -->
-                <span v-if="row.slot && row.slot !== row.alias"
-                      class="mono muted" style="font-size:11px">
-                  槽 {{ row.slot }}</span>
-                <span
-                  v-if="row.isDefault" class="svc-chip"
-                  style="font-size:11px" :data-testid="`default-chip-${row.id}`"
-                  title="名字解析与环境未命中时的取用行">默认</span>
-              </div>
-            </td>
-            <td class="mono muted">
-              {{ row.url }}
-              <div
-                v-if="row.system || row.envId" class="muted"
-                style="font-size:11px" :data-testid="`binding-ctx-${row.id}`">
-                {{ row.system || '未归类' }}<template v-if="row.envId"> · 环境#{{ row.envId }}</template>
-              </div>
-            </td>
-            <td class="mono">{{ row.username }}</td>
-            <td>
-              <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
-            </td>
-            <td class="muted">{{ formatExpires(row.expires_in) }}</td>
-            <td>
-              <!-- 被引用(配套方案 §1.2):计数来自列表接口一次扫描;
-                   点开侧板看明细(名字引用语义在侧板说明) -->
-              <div class="flex flex-wrap items-center gap-1">
-                <button
-                  v-if="row.alias_ref_count"
-                  type="button"
-                  class="svc-chip"
-                  :data-testid="`refs-open-${row.alias}`"
-                  @click="openRefs(row)"
-                >{{ row.alias_ref_count }} 别名</button>
-                <button
-                  v-if="row.scenario_ref_count"
-                  type="button"
-                  class="svc-chip"
-                  :data-testid="`refs-open-scenario-${row.alias}`"
-                  @click="openRefs(row)"
-                >{{ row.scenario_ref_count }} 场景</button>
-                <span
-                  v-if="!row.alias_ref_count && !row.scenario_ref_count"
-                  class="muted"
-                  title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
-                >未被引用 · 可安全删除</span>
-              </div>
-            </td>
-            <td class="c-center">
-              <!-- 原型 H-auths-v2:行操作收进 ⋯ 下拉(轮换无后端,不列) -->
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  class="more-btn"
-                  aria-label="更多操作"
-                  :data-testid="`auth-more-${row.id}`"
-                >⋯</DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="sl-menu">
-                  <DropdownMenuItem
-                    v-if="!row.isDefault"
-                    class="sl-menu-item" data-testid="auth-set-default"
-                    @click="makeDefault(row)"
-                  >设为槽默认</DropdownMenuItem>
-                  <DropdownMenuItem class="sl-menu-item" data-testid="auth-test" @click="runTest(row)">测试连通</DropdownMenuItem>
-                  <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
-                  <DropdownMenuItem
-                    class="sl-menu-item danger"
-                    data-testid="auth-del"
-                    @click="openDelete(row)"
-                  >删除</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </td>
-          </tr>
+          <!-- S7.3 分组视图:槽位段头行 + 该槽绑定行(默认在前);
+               平铺 = 服务端 alias 序,无段头 -->
+          <template v-for="r in renderRows" :key="r.kind === 'group' ? `g-${r.slot}` : r.row.id">
+            <tr v-if="r.kind === 'group'" class="slot-head" :data-testid="`slot-group-${r.slot}`">
+              <td colspan="7">
+                槽 <b class="mono">{{ r.slot }}</b>
+                <span class="muted" style="margin-left:8px">{{ r.count }} 条绑定</span>
+                <span v-if="!r.hasDefault" class="svc-chip warn" style="margin-left:8px">无默认</span>
+              </td>
+            </tr>
+            <tr v-else :data-testid="`auth-row-${r.row.id}`">
+              <td>
+                <div class="flex flex-col">
+                  <span class="mono svc-key">{{ r.row.alias }}</span>
+                  <span
+                    v-if="r.row.slot && r.row.slot !== r.row.alias"
+                    class="mono muted" style="font-size:11px"
+                  >槽 {{ r.row.slot }}</span>
+                  <span
+                    v-if="r.row.isDefault" class="svc-chip"
+                    style="font-size:11px" :data-testid="`default-chip-${r.row.id}`"
+                    title="名字解析与环境未命中时的取用行">默认</span>
+                </div>
+              </td>
+              <td class="mono muted">
+                {{ r.row.url }}
+                <div
+                  v-if="r.row.system || r.row.envId" class="muted"
+                  style="font-size:11px" :data-testid="`binding-ctx-${r.row.id}`">
+                  {{ r.row.system || '未归类' }}<template v-if="r.row.envId"> · 环境#{{ r.row.envId }}</template>
+                </div>
+              </td>
+              <td class="mono">{{ r.row.username }}</td>
+              <td>
+                <span class="svc-flag" :class="ttClass[r.row.token_type] ?? 'ink'">{{ r.row.token_type }}</span>
+              </td>
+              <td class="muted">{{ formatExpires(r.row.expires_in) }}</td>
+              <td>
+                <div class="flex flex-wrap items-center gap-1">
+                  <button
+                    v-if="r.row.alias_ref_count"
+                    type="button"
+                    class="svc-chip"
+                    :data-testid="`refs-open-${r.row.alias}`"
+                    @click="openRefs(r.row)"
+                  >{{ r.row.alias_ref_count }} 别名</button>
+                  <button
+                    v-if="r.row.scenario_ref_count"
+                    type="button"
+                    class="svc-chip"
+                    :data-testid="`refs-open-scenario-${r.row.alias}`"
+                    @click="openRefs(r.row)"
+                  >{{ r.row.scenario_ref_count }} 场景</button>
+                  <span
+                    v-if="!r.row.alias_ref_count && !r.row.scenario_ref_count"
+                    class="muted"
+                    title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
+                  >未被引用 · 可安全删除</span>
+                </div>
+              </td>
+              <td class="c-center">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    class="more-btn"
+                    aria-label="更多操作"
+                    :data-testid="`auth-more-${r.row.id}`"
+                  >⋯</DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" class="sl-menu">
+                    <DropdownMenuItem
+                      v-if="!r.row.isDefault"
+                      class="sl-menu-item" data-testid="auth-set-default"
+                      @click="makeDefault(r.row)"
+                    >设为槽默认</DropdownMenuItem>
+                    <DropdownMenuItem class="sl-menu-item" data-testid="auth-test" @click="runTest(r.row)">测试连通</DropdownMenuItem>
+                    <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(r.row)">编辑</DropdownMenuItem>
+                    <DropdownMenuItem
+                      class="sl-menu-item danger"
+                      data-testid="auth-del"
+                      @click="openDelete(r.row)"
+                    >删除</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
 
-    <div v-else-if="listLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
+    <div v-else-if="activeLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
     <div v-else class="empty-cta" data-testid="auths-empty">
       <p>暂无认证 — 复制用例中的 alias 在此登记</p>
       <Button variant="outline" size="sm" @click="openCreate">+ 新增认证</Button>
     </div>
 
     <Pagination
-      v-if="listPageCount > 1 || listTotal > 0"
+      v-if="viewMode === 'flat' && (listPageCount > 1 || listTotal > 0)"
       v-model:page="listPage"
       :page-size="listPageSize"
       :total="listTotal"
@@ -163,6 +182,66 @@
               <FormMessage />
             </FormItem>
           </FormField>
+
+          <!-- S7.3:槽位/系统/环境/账号字段 —— 创建时可指定槽(缺省=alias,
+               同槽多绑定按环境/默认分层取用);编辑态槽位不可改(改名=重建) -->
+          <FormField v-slot="{ componentField }" name="slot">
+            <FormItem>
+              <FormLabel>槽位 slot</FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" :disabled="!!editingId"
+                  placeholder="缺省 = alias;场景经 ${slot.X} 引用" data-testid="f-slot" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <div class="grid grid-cols-2 gap-3">
+            <FormField v-slot="{ componentField }" name="system">
+              <FormItem>
+                <FormLabel>系统</FormLabel>
+                <FormControl>
+                  <Input v-bind="componentField" placeholder="例 fin-service(空=未归类)" data-testid="f-system" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+            <FormField v-slot="{ componentField }" name="envId">
+              <FormItem>
+                <FormLabel>环境</FormLabel>
+                <FormControl>
+                  <Select v-bind="componentField">
+                    <SelectTrigger data-testid="f-env"><SelectValue placeholder="不限" /></SelectTrigger>
+                    <SelectContent>
+                      <!-- Radix Select 禁空串 value → 'none' 哨兵 = 不限 -->
+                      <SelectItem value="none">不限</SelectItem>
+                      <SelectItem v-for="e in envs" :key="e.id" :value="String(e.id)">
+                        {{ e.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+          </div>
+
+          <!-- FormField 外置 KV 行(vee-validate 不管控,提交时聚合) -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-label font-medium text-signal-ink">账号字段(供 ${slot.X.field} 注入,如 orgNo)</label>
+            <div class="flex flex-col gap-2">
+              <div v-for="(af, i) in accountFields" :key="i" class="flex items-center gap-2">
+                <Input v-model="af.key" placeholder="字段名,例 orgNo" class="flex-1"
+                  :data-testid="`f-af-key-${i}`" />
+                <Input v-model="af.value" placeholder="值" class="flex-1"
+                  :data-testid="`f-af-value-${i}`" />
+                <Button type="button" variant="ghost" size="sm" :data-testid="`f-af-del-${i}`"
+                  @click="accountFields.splice(i, 1)">✕</Button>
+              </div>
+              <Button type="button" variant="outline" size="sm" data-testid="f-af-add"
+                @click="accountFields.push({ key: '', value: '' })">+ 加字段</Button>
+            </div>
+          </div>
 
           <FormField v-slot="{ componentField }" name="url">
             <FormItem>
@@ -358,7 +437,7 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toTypedSchema } from '@/utils/zod-typed-schema'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
@@ -371,6 +450,7 @@ import {
   getReferences, list as apiList, setDefault as apiSetDefault,
   type AuthReferences, type AuthSession, type TestResult,
 } from '@/api/auth_sessions'
+import { listEnvironments } from '@/api/environments'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import { Pagination } from '@/components/ui/pagination'
 import { Button } from '@/components/ui/button'
@@ -431,14 +511,84 @@ const listPageCount = computed(() => list.pageCount.value)
 const listPageSize = computed(() => list.pageSize.value)
 const listPage = list.page
 
+// ── S7.3 视图模式:按槽位分组(默认)/ 平铺(M4 服务端分页)───────
+// 分组 = 单页 200 取回全量客户端分组(个人凭证池量级远小于上限,
+// listAll 同口径);筛选参数与平铺同源下推。两模式都走 api.list。
+const viewMode = ref<'group' | 'flat'>('group')
+const grouped = ref<AuthSession[]>([])
+const groupedTotal = ref(0)
+const groupedLoading = ref(false)
+
+async function loadGrouped(): Promise<void> {
+  groupedLoading.value = true
+  try {
+    const env = await apiList({
+      q: searchQuery.value.trim() || undefined,
+      token_type: tokenTypeFilter.value === 'all' ? undefined : tokenTypeFilter.value,
+      page: 1, page_size: 200,
+    })
+    tokenTypeCounts.value = env.tokenTypeCounts ?? {}
+    grouped.value = env.items
+    groupedTotal.value = env.total
+  } finally {
+    groupedLoading.value = false
+  }
+}
+
+type RenderRow =
+  | { kind: 'group'; slot: string; count: number; hasDefault: boolean }
+  | { kind: 'row'; row: AuthSession }
+
+/** 分组渲染序:槽位名排序;槽内默认绑定在前、alias 字典序。 */
+const renderRows = computed<RenderRow[]>(() => {
+  if (viewMode.value !== 'group') {
+    return visibleAuths.value.map((row) => ({ kind: 'row', row }))
+  }
+  const bySlot = new Map<string, AuthSession[]>()
+  for (const a of grouped.value) {
+    const k = a.slot || a.alias
+    const arr = bySlot.get(k)
+    if (arr) arr.push(a)
+    else bySlot.set(k, [a])
+  }
+  const out: RenderRow[] = []
+  for (const slot of [...bySlot.keys()].sort()) {
+    const rows = bySlot.get(slot)!.sort((x, y) =>
+      Number(y.isDefault) - Number(x.isDefault) || x.alias.localeCompare(y.alias))
+    out.push({
+      kind: 'group', slot,
+      count: rows.length, hasDefault: rows.some((r) => r.isDefault),
+    })
+    for (const row of rows) out.push({ kind: 'row', row })
+  }
+  return out
+})
+
+const currentRows = computed(() =>
+  viewMode.value === 'group' ? grouped.value : visibleAuths.value)
+const currentTotal = computed(() =>
+  viewMode.value === 'group' ? groupedTotal.value : listTotal.value)
+const activeLoading = computed(() =>
+  viewMode.value === 'group' ? groupedLoading.value : listLoading.value)
+
+// 筛选变化:平铺由 useServerList 自身防抖重拉;分组视图手动跟拉
+let groupedDebounce: ReturnType<typeof setTimeout> | undefined
+watch([searchQuery, tokenTypeFilter], () => {
+  if (viewMode.value !== 'group') return
+  clearTimeout(groupedDebounce)
+  groupedDebounce = setTimeout(() => { void loadGrouped() }, 300)
+})
+watch(viewMode, (m) => { if (m === 'group') void loadGrouped() })
+
 async function reloadList(): Promise<void> {
-  await list.reload()
+  if (viewMode.value === 'group') await Promise.all([loadGrouped(), list.reload()])
+  else await list.reload()
 }
 
 const metaText = computed(() => {
-  const total = listTotal.value
+  const total = currentTotal.value
   if (total === 0) return '用户级独立凭证池 · 与 yaml 文件 Config.users 解耦'
-  const unref = visibleAuths.value.filter(
+  const unref = currentRows.value.filter(
     (a) => !a.alias_ref_count && !a.scenario_ref_count,
   ).length
   // 原型 H-auths-v2 统计行:「N 条凭证 · …未被任何引用」(已过期无数据源,不列)。
@@ -464,6 +614,12 @@ const schema = toTypedSchema(z.object({
   alias: z.string()
     .min(1, '请输入 alias')
     .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
+  // S7.3 槽位(缺省 = alias;编辑态禁改,改名=重建)
+  slot: z.string()
+    .regex(/^[A-Za-z0-9_-]{0,64}$/, '0-64 位字母数字下划线连字符'),
+  system: z.string(),
+  // 环境选值是字符串 id('none' 哨兵 = 不限),提交时转 number
+  envId: z.string(),
   // authz C2:静态令牌认证(自举系统 platform 等)—— 登录 URL 可空
   url: z.string().url('URL 格式不正确').or(z.literal('')),
   username: z.string().min(1, '请输入 username'),
@@ -476,15 +632,39 @@ const schema = toTypedSchema(z.object({
 const { handleSubmit, resetForm, setFieldError } = useForm({
   validationSchema: schema,
   initialValues: {
-    alias: '', url: '', username: '', password: '',
+    alias: '', slot: '', system: '', envId: 'none',
+    url: '', username: '', password: '',
     token_type: 'Bearer' as const, expires_in: 7200,
   },
 })
 
+// ── S7.3 表单辅面:环境选项 + 账号字段 KV 行(vee-validate 外置)──
+const envs = ref<Array<{ id: number; name: string }>>([])
+const accountFields = ref<Array<{ key: string; value: string }>>([])
+
+function accountFieldsFromRow(row: AuthSession): Array<{ key: string; value: string }> {
+  const src = (row as AuthSession & { accountFields?: Record<string, unknown> }).accountFields
+  if (!src || typeof src !== 'object') return []
+  return Object.entries(src).map(([k, v]) => ({ key: k, value: v == null ? '' : String(v) }))
+}
+
+function accountFieldsToObject(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const af of accountFields.value) {
+    const k = af.key.trim()
+    if (k) out[k] = af.value
+  }
+  return out
+}
+
 function openCreate() {
   editingId.value = null
+  accountFields.value = []
   resetForm({
-    values: { alias: '', url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200 },
+    values: {
+      alias: '', slot: '', system: '', envId: 'none',
+      url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200,
+    },
   })
   createOpen.value = true
 }
@@ -502,9 +682,13 @@ async function makeDefault(row: AuthSession) {
 
 function openEdit(row: AuthSession) {
   editingId.value = row.id
+  accountFields.value = accountFieldsFromRow(row)
   resetForm({
     values: {
       alias: row.alias,
+      slot: row.slot || row.alias,
+      system: row.system || '',
+      envId: row.envId != null ? String(row.envId) : 'none',
       url: row.url,
       username: row.username,
       password: '',
@@ -531,6 +715,10 @@ const onSubmitForm = handleSubmit(async (values) => {
         username: values.username,
         token_type: values.token_type,
         expires_in: values.expires_in,
+        // S7.3 槽位辅面(槽不可改;env none=清空,显式 null 语义由值本身表达)
+        system: values.system,
+        envId: values.envId === 'none' ? null : Number(values.envId),
+        accountFields: accountFieldsToObject(),
       }
       if (values.password) patch.password = values.password
       await store.patchAuth(editingId.value, patch)
@@ -538,6 +726,11 @@ const onSubmitForm = handleSubmit(async (values) => {
     } else {
       await store.createAuth({
         alias: values.alias,
+        // 槽位:显式且 ≠ alias 才送(缺省 = alias 是后端口径)
+        ...(values.slot && values.slot !== values.alias ? { slot: values.slot } : {}),
+        system: values.system,
+        ...(values.envId !== 'none' ? { envId: Number(values.envId) } : {}),
+        accountFields: accountFieldsToObject(),
         url: values.url,
         username: values.username,
         password: values.password,
@@ -676,6 +869,11 @@ async function submitDelete() {
 
 // ── init ───────────────────────────────────────────────────────
 onMounted(async () => {
+  // S7.3:分组视图默认 → 首拉全量分组;环境选项给表单下拉
+  void loadGrouped().catch(() => { /* 同 useServerList onError 语义 */ })
+  listEnvironments()
+    .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
+    .catch(() => { /* 表单环境下拉退化为「不限」单项 */ })
   try {
     await reloadList()
   } catch {

@@ -4,7 +4,7 @@ Endpoints:
 - GET    /api/auths                 list owner's credentials
 - POST   /api/auths                 create
 - GET    /api/auths/{id}            detail
-- PATCH  /api/auths/{id}            update (url/username/password/token_type/expires_in)
+- PATCH  /api/auths/{id}            update (url/username/password/token_type/expires_in/system/env/accountFields/isDefault)
 - DELETE /api/auths/{id}            delete
 - POST   /api/auths/{id}/test       hit alias.url with username+password; parse token
 
@@ -135,18 +135,10 @@ async def list_auths(
     )
     counts = await auth_references.counts(session)
     items = [
-        AuthSessionOut(
-            id=a.id,
-            alias=a.alias,
-            url=a.url,
-            username=_safe_decrypt(a.username_enc),
-            token_type=a.token_type,
-            expires_in=a.expires_in,
-            created_at=a.created_at,
-            updated_at=a.updated_at,
-            alias_ref_count=counts.get(a.alias, {}).get("alias_count", 0),
-            scenario_ref_count=counts.get(a.alias, {}).get("scenario_count", 0),
-        )
+        _to_out(a).model_copy(update={
+            "alias_ref_count": counts.get(a.alias, {}).get("alias_count", 0),
+            "scenario_ref_count": counts.get(a.alias, {}).get("scenario_count", 0),
+        })
         for a in rows
     ]
     return AuthListOut(

@@ -175,7 +175,7 @@ import {
 } from '@/utils/carry-csv'
 import {
   getDefaults, getBindingsFor, putBindings, getServiceFields,
-  type CarryEndpointMini, type CarryFieldFace, type CarryValues,
+  type CarryEndpointMini, type CarryFieldFace, type CarryValues, type ScopeTarget,
 } from '@/api/carry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -187,6 +187,9 @@ const props = defineProps<{
   serviceKey: string
   /** 归一后的 base 目录服务;= serviceKey 时无「服务级」继承层。 */
   baseService?: string | null
+  /** S7.3:编辑层(缺省 = 全局/公共项目层,键详情页形态);项目配置
+   *  页签传 {scope:'project', projectId} —— 读写都落本层。 */
+  target?: ScopeTarget
 }>()
 
 /** 行三态:hasRow=false 无行;isNull=true 显式 null;否则空串/字串值。
@@ -258,8 +261,8 @@ async function reload(): Promise<void> {
   try {
     const tasks: [Promise<{ fields: CarryFieldFace[]; degraded: boolean }>, Promise<CarryValues>, Promise<CarryValues>] = [
       getServiceFields(props.serviceKey),
-      getBindingsFor(props.serviceKey),
-      isAlias.value ? getBindingsFor(props.baseService!) : Promise.resolve({}),
+      getBindingsFor(props.serviceKey, props.target),
+      isAlias.value ? getBindingsFor(props.baseService!, props.target) : Promise.resolve({}),
     ]
     const [faceRes, bound, base] = await Promise.all(tasks)
     degraded.value = faceRes.degraded
@@ -363,7 +366,7 @@ async function save() {
   // 输入框可编辑(透继承层 placeholder),用户填了值必须建行
   const entries = buildServiceEntries(rows.value)
   try {
-    await putBindings(props.serviceKey, entries)
+    await putBindings(props.serviceKey, entries, props.target)
     toast.success('已保存')
     void reload()
   } catch (e) {
@@ -371,7 +374,7 @@ async function save() {
   }
 }
 
-watch(() => [props.serviceKey, props.baseService], () => { void reload() })
+watch(() => [props.serviceKey, props.baseService, props.target], () => { void reload() })
 onMounted(async () => {
   defaultsMap.value = await getDefaults().catch((): CarryValues => ({}))
   await reload()

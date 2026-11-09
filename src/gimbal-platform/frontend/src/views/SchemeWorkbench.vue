@@ -372,6 +372,8 @@ async function onDeleteDataSet(datasetId: string) {
             :service-rows="serviceRows"
             :step-count="stepCount"
             :step-names="stepNames"
+            :scenario-id="scenarioId"
+            :scheme-id="draft.isDefault ? undefined : draft.schemeId"
           />
         </template>
         <div v-else class="wb-empty">

@@ -128,7 +128,6 @@ import {
   PieChartIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
-  MixerHorizontalIcon,
   PlayIcon,
   Share2Icon,
   StackIcon,
@@ -213,9 +212,8 @@ const groups: SidebarGroup[] = [
       { path: '/services', label: '服务画像', icon: GridIcon },
       { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
-      // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
-      // 服务信息管理的键详情,本页只剩跨服务兜底层)
-      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, cap: 'ops.write' },
+      // S7.3:「默认值」页退役 —— 全局默认迁公共项目「配置」页签
+      // (工作台注册卡「默认值」仍为入口),个人层在个人设置「我的配置」
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
     ],
   },

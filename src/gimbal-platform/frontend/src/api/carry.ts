@@ -20,24 +20,32 @@ import type { CarryValues } from '@/utils/carry-hint'
 export type { CarryValues }
 
 /** authz M2a S4 作用域:'global'(默认,公共项目层,Admin+)/'user'(个人层,
- * 本人)。项目层编辑面归 S7 项目管理页,api 已带参。 */
-export type CarryScope = 'global' | 'user'
+ * 本人)/'project'(项目层,项目管理员 —— S7.3 项目配置页签)。 */
+export type CarryScope = 'global' | 'user' | 'project'
 
-function scopeParams(scope: CarryScope) {
-  return scope === 'global' ? {} : { params: { scope } }
+/** scope 附加参:project 层必须带 projectId(后端 _resolve_scope)。 */
+export type ScopeTarget = { scope: CarryScope; projectId?: number }
+
+function scopeParams(target: ScopeTarget) {
+  if (target.scope === 'global') return {}
+  return { params: target.projectId != null
+    ? { scope: target.scope, projectId: target.projectId }
+    : { scope: target.scope } }
 }
 
-export async function getDefaults(scope: CarryScope = 'global'): Promise<CarryValues> {
+export async function getDefaults(
+  target: ScopeTarget = { scope: 'global' },
+): Promise<CarryValues> {
   const { data } = await http.get<{ defaults: CarryValues }>(
-    '/carry/defaults', scopeParams(scope))
+    '/carry/defaults', scopeParams(target))
   return data.defaults
 }
 
 export async function putDefaults(
-  defaults: CarryValues, scope: CarryScope = 'global',
+  defaults: CarryValues, target: ScopeTarget = { scope: 'global' },
 ): Promise<CarryValues> {
   const { data } = await http.put<{ defaults: CarryValues }>(
-    '/carry/defaults', { defaults }, scopeParams(scope))
+    '/carry/defaults', { defaults }, scopeParams(target))
   return data.defaults
 }
 
@@ -47,17 +55,22 @@ export async function getBindings(): Promise<Record<string, CarryValues>> {
   return data.bindings
 }
 
-export async function getBindingsFor(service: string): Promise<CarryValues> {
+/** 单层读(scope 参数形态,项目/个人配置页用;不带 scope 的并集读走 getBindings)。 */
+export async function getBindingsFor(
+  service: string, target?: ScopeTarget,
+): Promise<CarryValues> {
   const { data } = await http.get<{ bindings: CarryValues }>(
-    `/carry/bindings/${encodeURIComponent(service)}`)
+    `/carry/bindings/${encodeURIComponent(service)}`,
+    target ? scopeParams(target) : undefined)
   return data.bindings
 }
 
 export async function putBindings(
-  service: string, bindings: CarryValues,
+  service: string, bindings: CarryValues, target?: ScopeTarget,
 ): Promise<CarryValues> {
   const { data } = await http.put<{ bindings: CarryValues }>(
-    `/carry/bindings/${encodeURIComponent(service)}`, { bindings })
+    `/carry/bindings/${encodeURIComponent(service)}`,
+    { bindings }, target ? scopeParams(target) : undefined)
   return data.bindings
 }
 

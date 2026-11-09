@@ -80,11 +80,11 @@ const routes = [
     meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
-    // carry 值表配置页(T15)— admin 维护入口(TopNav adminOnly);
-    // 路由本身只 requiresAuth:member 直接访问时 GET 可读、PUT 由后端 403(spec §6)
+    // S7.3:/carry-config 退役 —— 全局默认落公共项目「配置」页签
+    // (?path= 深链透传;「我的默认」层迁个人设置 /profile/config)
     path: '/carry-config',
-    component: () => import('@/views/CarryConfig.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('@/views/PublicProjectRedirect.vue'),
+    meta: { requiresAuth: true, tab: 'config' },
   },
   {
     path: '/admin/users',
@@ -144,6 +144,8 @@ const routes = [
       { path: 'tokens', component: () => import('@/views/ProfileTokens.vue') },
       // CardSettings.html:工作台身份卡
       { path: 'card', component: () => import('@/views/ProfileCard.vue') },
+      // S7.3:我的配置(默认环境偏好 + 个人层 carry 默认)
+      { path: 'config', component: () => import('@/views/ProfileConfig.vue') },
     ],
   },
   {

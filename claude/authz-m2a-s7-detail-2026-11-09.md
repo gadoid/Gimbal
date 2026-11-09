@@ -110,6 +110,18 @@
 - dev 库:备份 `gimbal_before_0048.dump`(容器内 /var/lib/postgresql/data/)→ `upgrade head` 至 0048;后端重启健康(200),`/api/projects/{id}/promotions*` 与 `/api/projects/{id}/slot-status` 已上线路径核验。
 - 附带(为 S7.3 备料):`GET /projects/{id}/slot-status`(成员凭证清单,只读不落库;门 = 项目成员,公共项目 422)+ s70 测试类 TestSlotStatus。
 
+### S7.3 配置页(已完成)
+
+- 后端唯一缺口:`GET /auths` 列表项补 slot/system/envId/isDefault/accountFields(此前仅 detail 回;S7.3 认证页按槽位分组的数据源)—— 列表项改经 `_to_out` + model_copy 挂双计数;测试 `test_authz_s31_slots.py::test_list_returns_slot_fields`。
+- 前端 API 层:`api/carry.ts` scope 泛化(`ScopeTarget{scope, projectId?}`,project 层读写面后端已有);`api/projects.ts` 补 `getSlotStatus` + `patchProject.defaultEnvironmentId`;新 `api/runs.ts` 封装 `POST /runs/preview`(逐值来源标签 `PREVIEW_SOURCE_LABELS` + carry 来源拆层 `carrySourceLabel`)。
+- 可复用组件:`CarryDefaultsEditor`(从 /carry-config 抽取的可编辑草稿表:三态/CSV/分页/去重/`?path=` 深链高亮,target 作用域化);`EffectivePreviewDialog`(S5 preview 展示面:环境链来源/服务地址/槽位绑定/缺槽警示/carry 逐值来源;固定场景(运行面板)与选场景(项目配置页)双形态)。
+- 项目详情「配置」页签(`ProjectConfigPanel`):① 默认环境(普通项目,canManage 编辑,PATCH 显式 null=清空)② carry 默认值(普通=项目层;**公共项目=全局默认,原 /carry-config 落位**,Admin+ 可写)③ 项目层按服务编辑(`ServiceBindingEditor` 加 `target` 透传,键集 = 可见绑定并集 + 自由输入)④ 槽位状态(成员已绑/未绑 chips)⑤ 生效预览(选场景 → 弹框)。公共项目无 ①③④⑤(PATCH 409/slot-status 422 同口径)。
+- `/carry-config` 退役:路由改挂 `PublicProjectRedirect`(meta.tab='config',`?path=` 深链透传);删 `CarryConfig.vue` + 其测试;Sidebar「默认值」入口移除(工作台注册卡仍为入口);工作台卡与键详情来源 chip 的链接经重定向无缝落位。
+- 个人设置「我的配置」(`/profile/config`,ProfileSideNav 增项):我的默认环境(`run.environment` 偏好读写,值未变禁存)+ 我的 carry 默认(个人层,`CarryDefaultsEditor scope=user`)。
+- 认证管理页整页改造(`Auths.vue`):视图切换「按槽位分组(默认)/平铺」—— 分组 = 单页 200 全量客户端分组(槽位段头行 + 默认在前,行 testid 原样保测试面);平铺 = M4 服务端分页原样。表单补 槽位 slot(创建态;编辑禁改,改名=重建)/系统/环境(Select,'none' 哨兵=不限 —— Radix 禁空串 value)/账号字段 KV 行(提交聚合 accountFields;编辑态 system/env/accountFields 随 PATCH 全量回写,envId null=清空)。
+- 运行面板「生效预览」入口:`RunConfigPanel`(方案 chips 行尾按钮;透传 当前方案(自建方案原样绑定,D3)/显式绑定(assembleExplicitBindings 口径)/envOverride)+ `SchemeRunConfigSection`(运行参数 zone-head;宿主 SchemeWorkbench 透传 scenarioId/schemeId,缺省不显入口)。
+- 测试:新 `ProjectConfigPanel.test.ts`(7 例:环境保存/清空/槽位 chips/预览弹框/公共项目节裁剪)+ `ProfileConfig.test.ts`(2 例);Auths.test.ts 12 例原样全过(分组视图兼容行锚);Sidebar.test.ts 计数随入口退役更新(admin 17→16 等)。
+
 ## 四、裁定(2026-11-09)
 
 | # | 问题 | 裁定 |
