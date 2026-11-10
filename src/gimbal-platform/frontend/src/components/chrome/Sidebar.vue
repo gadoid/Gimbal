@@ -188,8 +188,8 @@ const groups: SidebarGroup[] = [
     // 「公共场景 / 公共用例集」仍并入公共项目(S7.1 不变)。
     label: '我的',
     entries: [
-      { path: '/scenarios/mine', label: '场景', icon: ArchiveIcon },
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
+      { path: '/scenarios/mine', label: '场景', icon: ArchiveIcon },
       { path: '/suites', label: '场景集', icon: StackIcon },
     ],
   },

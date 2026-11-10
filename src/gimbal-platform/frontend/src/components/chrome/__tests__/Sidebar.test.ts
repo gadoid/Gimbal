@@ -76,7 +76,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications',
-      '/scenarios/mine', '/scenarios/follows',
+      '/scenarios/follows', '/scenarios/mine',
       // 2026-11-10 IA:场景集并入「我的」组(原「用例集」组退役)
       '/suites',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
