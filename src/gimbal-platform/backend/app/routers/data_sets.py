@@ -93,20 +93,23 @@ async def list_data_sets(
 
     Data-set rows are business parameter matrices — listing every user's
     data would be a cross-user disclosure, so callers only see data-sets
-    whose parent scenario they own or hold a share-ref into
-    (P2 §7.4 引用闭包). authz W3: super_admin 全量分支删除 ——
+    whose parent scenario they own, or that live in a project they are
+    a member of (r3二.1:项目区数据集 = 项目共享业务数据,同事的预览
+    剥敏感列,与单读同口径). authz W3: super_admin 全量分支删除 ——
     admin 与普通用户同镜头,排查走审计。
     """
-    # S7.4:引用闭包随 share_refs 退役 —— 数据集只随自己场景
+    # S7.4:引用闭包随 share_refs 退役 —— 数据集只随自己场景;r3二.1
+    # 起并上项目区:成员可列同事的数据集(预览剥敏感列)
     owned = await scenario_store.owned_scenario_ids(db, user)
-    own_ids = set(owned)
+    visible = owned | await scenario_store.project_member_scenario_ids(
+        db, user)
     if scenarioId is not None:
         # Scope to the requested scenario (still visibility-filtered).
-        own_ids = own_ids & {scenarioId}
+        visible = visible & {scenarioId}
     # Ownership filter pushed down as a SQL IN (was: full list + Python filter).
-    # authz W6:引用闭包读者(非属主)的预览剥敏感列
+    # authz W6:非属主(项目同事)的预览剥敏感列
     return await data_set_store.list_summaries(
-        db, scenario_ids=own_ids, owned_ids=set(owned))
+        db, scenario_ids=visible, owned_ids=set(owned))
 
 
 @router.get("/{dataset_id}", response_model=DataSet)
@@ -140,7 +143,10 @@ async def put_data_set(
 ) -> DataSet:
     await _require_dataset_owner(db, user, dataset_id)
     try:
-        return await data_set_store.update(db, dataset_id, body)
+        # r3二.1:非属主(项目同事/公共维护者)的提交是脱敏视图 ——
+        # update 按行位并回存量敏感列,整表保存不再覆盖丢列
+        return await data_set_store.update(db, dataset_id, body,
+                                           viewer_id=user.id)
     except KeyError as e:
         raise key_error_404(e)
     except ValueError as e:

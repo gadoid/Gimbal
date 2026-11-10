@@ -150,11 +150,15 @@ async def _materialized_executable(
     overlay: ExportOverlay | None = None,
     scenario_owner_id: int | None = None,
     scenario_id: str | None = None,
+    project_id: int | None = None,
 ) -> dict:
     """plate /convert + 执行同源物化 —— preview-plate 与 /export 共用(W1)。
 
     S2.1:地址 ③ 层按环境链(overlay.environmentId 为本次显式位 >
     场景项目默认 > 导出人偏好 > 默认环境;草稿无 ``scenario_id``)。
+    r3二.3:``project_id`` 非空 = 项目/公共区场景 —— 原 5 区规则与
+    执行链同口径(内置凭证当空、``config.services`` 直连地址不生效,
+    属主本人也一样;私有区属主导出仍带本人明文,Q3 口径)。
 
     输入任意来源的 definition(草稿或落库行;平台 meta 剥离幂等),输出
     gimbal 可执行形态:overlay=None(默认导出)时凭证/服务绑定零注入,
@@ -216,7 +220,9 @@ async def _materialized_executable(
             # authz W6 主规则:落库行的导出走 owner_id(执行人)≠ 属主
             # ⇒ 内置 users 当空(fail-closed:None 同样当空);preview-plate
             # 的草稿由本人即席提供,调用方显式传 scenario_owner_id=本人
-            scenario_owner_id=scenario_owner_id, environment=_env)
+            scenario_owner_id=scenario_owner_id, environment=_env,
+            # r3二.3:区规则(原 5)—— 与执行链同口径
+            project_id=project_id)
     except run_prepare.AuthResolveError as e:
         # 凭证路径 fail-fast(dispatch 整单失败同语义;导出无执行
         # 副作用,直接拒答 422 而非 500)。
@@ -1056,7 +1062,9 @@ async def export_scenario(
     """导出**可执行形态**(W1,场景导入 v2.3 方案):plate 转换 + carry/
     别名 URL 无条件物化,与 preview-plate 默认导出同源(overlay 黄金
     等价)——Gimbal CLI 可直接执行,亦是导入流水线的唯一文件格式。
-    带方案导出(凭证注入)走 preview-plate 的 overlay。"""
+    带方案导出(凭证注入)走 preview-plate 的 overlay。r3二.3:区规则
+    (原 5)—— 项目/公共区场景导出不带内置凭证明文与直连地址(属主
+    同样;私有区属主导出仍带本人明文,Q3 口径)。"""
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise HTTPException(404, f"scenario_not_found: {scenario_id}")
@@ -1073,6 +1081,7 @@ async def export_scenario(
             owner_id=user.id,
             scenario_owner_id=row.owner_id,
             scenario_id=row.scenario_id,
+            project_id=row.project_id,
         )
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(

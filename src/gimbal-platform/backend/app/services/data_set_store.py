@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import DataSet, DataSetDraft, DataSetSummary
-from .scenario_store import get_row as get_scenario_row
+from .scenario_store import (
+    get_row as get_scenario_row,
+    is_foreign_viewer,
+    merge_sensitive_columns,
+)
 
 
 def _scalar_vars(payload: dict | None) -> set[str]:
@@ -156,17 +160,24 @@ async def update(
     db: AsyncSession,
     dataset_id: str,
     draft: DataSetDraft,
+    *,
+    viewer_id: int | None = None,
 ) -> DataSet:
+    """``viewer_id``(r3二.1):非属主(项目同事 / 公共维护者)的提交
+    是脱敏视图 —— 按行位把存量敏感列值并回再落库,整表替换不再丢
+    列;属主 / 内部调用(缺省 None)原样保存。"""
     row = await _get_row(db, dataset_id)
     scenario = await get_scenario_row(db, row.scenario_id)
     if scenario is None:  # 理论不可达(FK 在);防御孤儿行
         raise KeyError(f"data_set_not_found: {dataset_id}")
-    _validate_rows(scenario.payload, list(draft.rows or []),
-                   await _known_slots(db, scenario.payload,
-                                      list(draft.rows or [])))
+    rows = list(draft.rows or [])
+    if is_foreign_viewer(viewer_id, scenario.owner_id):
+        rows = merge_sensitive_columns(row.rows or [], rows)
+    _validate_rows(scenario.payload, rows,
+                   await _known_slots(db, scenario.payload, rows))
     row.name = draft.name
     row.description = draft.description or ""
-    row.rows = list(draft.rows or [])
+    row.rows = rows
     row.var_unlocks = list(draft.var_unlocks or [])
     await db.commit()
     await db.refresh(row)

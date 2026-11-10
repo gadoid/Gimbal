@@ -141,7 +141,10 @@
 - **落库回报**(`_slot_report`,按**落库形态**重算注入清单,不信计划):`slots`(注入清单 × 导入人槽位绑定状态,任意绑定即算,`fromBuiltin` 标内置转来)/ `slotRenames` / `undeclaredUsers`(call.user 标签不在清单 → 该步必报错;reason `alias_no_slot`/`alias_slot_differs`)/ `droppedUsers`(无步骤使用的内置键,仅丢明文)。
 - **预检**:新增 `builtinUsers`(键 × 使用服务 × 是否模板引用 × 我是否已绑该槽位);顺手修 `authRefs.inMyPool` 按 `slot` 判(S3 起注入按槽位解析,原按 alias 判会把「别名≠槽名」的绑定误报为没有)。
 - **前端**:`ImportScenarioDialog` 确认单加「内置凭证 → 槽位声明」栏;落库回报非空即停在**结果视图**(需要绑定的槽位表,未绑在前;改写 / 未落地 / 丢弃清单;「去绑定」→ `/auths?newSlot=X` 直接开新建表单预填 alias/slot,已绑 →`?q=X`;「进入场景」/关闭 = 原「导入即进场景」);无可报内容维持旧流程。`Auths.vue` 支持 `?newSlot=` 深链(`openCreate(slot)`;按钮改显式调用防 MouseEvent 入参)。
-- **导出口径不变**(Q3):属主按方案导出仍带本人槽位明文,非属主为空,项目 / 公共区不带内置凭证(原 5)—— 本切片未触碰导出链。
+- **导出口径不变**(Q3):属主按方案导出仍带本人槽位明文,非属主为空 —— 本切片未触碰导出链。
+  (2026-11-10 更正:本行原写「项目 / 公共区不带内置凭证(原 5)」,当时不实 —— 导出链漏传
+  ``project_id``,项目/公共区场景属主导出仍带内置凭证明文;r5 评审必修项已修,
+  见 `authz-r5-fixes-2026-11-10.md`。)
 - **测试**:新 `test_authz_s75_import_slots.py`(6 例:新建缺省声明 + dropped / 显式槽位优先 / 映射改写 + 绑定状态 / 别名无槽位 → 未落地 / 模板引用标签不改写 / 预检栏);pipeline `test_land_create_branch` 回报断言更新;owner-compare 白名单:导入人本人池过滤 alias→slot 换行 +2 条。前端 `ImportScenarioDialog.test.ts` +3 例、新 `Auths.newSlot.test.ts` 2 例。
 - **门禁**:后端全量 1857 passed / 2 skipped;root 1429;前端 vitest 1331 / vue-tsc 0 / eslint 0 / build ✓;bootstrap 96 + 3 skip;ext_gates rc=0。无迁移。
 

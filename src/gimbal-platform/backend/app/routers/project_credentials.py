@@ -6,16 +6,21 @@ NULL)。修订总原则 1:唯一的共享凭证;只有项目管理员能录入 /
 
 Endpoints(前缀 ``/projects/{project_id}/credentials``):
 
-- GET                 列表 —— 项目成员 ∨ Admin+(非成员 404);成员视图
-                      不含用户名(``username=''``),密码恒掩码
-- POST                新建 —— 项目管理员 ∨ Admin+(``_require_manage``)
-- PATCH  /{cid}       修改 —— 同上
+- GET                 列表 —— 项目成员(非成员 404,Admin+ 不旁路);
+                      成员视图不含用户名(``username=''``),密码恒掩码
+- POST                新建 —— 项目管理员(``_manage_gate``;r5-2.2 起
+                      Admin+ 不旁路,与选用门同口径:凭证是项目的,
+                      不是平台的)
+- PATCH  /{cid}       修改 —— 同上;改 ``url`` 须同时重录 ``password``
+                      (r5-2.2:拨测把解密凭据发往该地址,单改地址 =
+                      把存量密码重定向到任意收集端)
 - POST   /{cid}/default  同槽原子换默认 —— 同上
 - DELETE /{cid}       删除 —— 同上(依赖它的项目源实例下次执行暂停)
 - POST   /{cid}/test  拨测 —— 同上
 
 公共项目:409 ``public_project_no_credentials``(无成员,项目凭证无意义)。
-无 ``include_secrets`` —— 项目凭证没有任何明文出口。写面审计
+无 ``include_secrets``;明文唯一出口 = 拨测(发往凭证自身登录地址,
+而改地址须重录密码)。写面审计
 ``project.credential.write``(资源 = 项目;detail 记 op / 凭证 id / 槽名);
 写后复活该项目凭证源暂停的集成实例。
 """
@@ -43,9 +48,8 @@ from ..schemas.auth_session import (
     TestResult,
 )
 from ..services import auth_probe
-from ._ownership import has_capability
 from .auth_sessions import _to_out
-from .projects import _audit, _my_role, _require_manage
+from .projects import _audit, _my_role
 
 router = APIRouter(prefix="/projects/{project_id}/credentials",
                    tags=["project-credentials"])
@@ -81,10 +85,19 @@ async def _load_normal_project(db: AsyncSession, project_id: int) -> Project:
 
 async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
     # 存在性先于公共项目判定:非成员对公共项目同样拿 409 无泄露(公共
-    # 项目全员可见);普通项目非成员由 _require_manage 给 404
+    # 项目全员可见)。r5-2.2:管理门 = 项目管理员,Admin+ 不旁路 ——
+    # 与选用门(can_use_project_credentials)同口径,收掉「Admin+ 不能
+    # 用却能改址拨测导出」的自相矛盾;非成员 404,成员非管理员 403
     proj = await _load_normal_project(db, project_id)
-    await _require_manage(db, user, proj)
-    return proj
+    my_role = await _my_role(db, user, proj.id)
+    if my_role == "admin":
+        return proj
+    if my_role is None:
+        raise _not_found(project_id)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": "not_project_admin",
+                "message": "只有项目管理员能维护项目凭证"})
 
 
 async def _get_cred(db: AsyncSession, project_id: int, cid: int) -> AuthSession:
@@ -124,10 +137,11 @@ async def list_project_credentials(
 ) -> ProjectCredentialListOut:
     proj = await _load_normal_project(db, project_id)
     role = await _my_role(db, user, proj.id)
-    is_admin_plus = has_capability(user, "ops.write")
-    if role is None and not is_admin_plus:
+    if role is None:
+        # r5-2.2:Admin+ 非成员同 404 —— 凭证是项目的,读面不因平台
+        # 角色放宽(管理面已同口径收口)
         raise _not_found(project_id)
-    can_manage = is_admin_plus or role == "admin"
+    can_manage = role == "admin"
     rows = (await db.execute(select(AuthSession).where(
         AuthSession.project_id == proj.id).order_by(
             AuthSession.slot, AuthSession.id))).scalars().all()
@@ -227,6 +241,15 @@ async def patch_project_credential(
 ) -> AuthSessionOut:
     proj = await _manage_gate(db, user, project_id)
     a = await _get_cred(db, proj.id, cid)
+    if payload.url is not None and payload.url != a.url and \
+            payload.password is None:
+        # r5-2.2:改登录地址必须同时重录密码 —— 拨测/执行会把解密
+        # 凭据发往 a.url,单改地址即把存量密码重定向到任意端点
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "url_change_requires_password",
+                    "message": "修改登录地址须重新录入密码"
+                               "(凭据会发往该地址,改址即改去向)"})
     if "system" in payload.model_fields_set:
         a.system = payload.system or ""
     if "env_id" in payload.model_fields_set:

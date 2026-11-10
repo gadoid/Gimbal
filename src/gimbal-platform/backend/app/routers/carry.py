@@ -58,9 +58,11 @@ async def _resolve_scope(
     db, user, scope: str, project_id: int | None,
     *, write: bool,
 ) -> "tuple[str, int]":
-    """查询参数 → 作用域元组 + 写面分权。读面不做分权(可见层并集在
-    端点内过滤);写面:global=ops.write(MemberUser 已挡)、project=
-    项目管理员、user=本人。"""
+    """查询参数 → 作用域元组 + 分权。读面:global/user 不设门(可见层
+    并集在端点内过滤);project = 项目成员(r3二.2:项目层 carry 是
+    项目内共享值,非成员 404 —— 此前读面完全不设门)。写面:global=
+    ops.write(MemberUser 已挡)、project=项目管理员 ∨ Admin+、user=
+    本人。"""
     if scope == "global":
         from ._ownership import has_capability
 
@@ -81,18 +83,19 @@ async def _resolve_scope(
                 "message": f"project not found: {project_id}"})
         from ._ownership import has_capability
 
-        if write and not has_capability(user, "ops.write"):
-            role = (await db.execute(select(ProjectMember.role).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user.id))).scalar_one_or_none()
-            if role is None:
-                raise HTTPException(404, detail={
-                    "code": "not_found",
-                    "message": f"project not found: {project_id}"})
-            if role != "admin":
-                raise HTTPException(403, detail={
-                    "code": "not_project_admin",
-                    "message": "项目层 carry 由项目管理员维护"})
+        if write and has_capability(user, "ops.write"):
+            return ("project", project_id)   # Admin+ 写旁路照旧(漂移同门)
+        role = (await db.execute(select(ProjectMember.role).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user.id))).scalar_one_or_none()
+        if role is None:
+            raise HTTPException(404, detail={
+                "code": "not_found",
+                "message": f"project not found: {project_id}"})
+        if write and role != "admin":
+            raise HTTPException(403, detail={
+                "code": "not_project_admin",
+                "message": "项目层 carry 由项目管理员维护"})
         return ("project", project_id)
     if scope == "user":
         return ("user", user.id)

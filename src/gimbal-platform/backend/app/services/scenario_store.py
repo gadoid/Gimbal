@@ -390,6 +390,25 @@ def strip_sensitive_columns(rows: list) -> list:
     ]
 
 
+def merge_sensitive_columns(stored: list, submitted: list) -> list:
+    """非属主保存数据集(r3二.1):提交行是脱敏视图(敏感列看不到),
+    按行位把存量敏感列值并回 —— 成员整表保存不再覆盖丢列。存量值
+    权威:提交里的同键值(读者本看不到真值)不覆盖存量;新增行
+    (超出存量行数)没有可并的敏感值,保持提交形态。"""
+    out = []
+    for i, sub in enumerate(submitted):
+        if i < len(stored):
+            keep = {k: v for k, v in (stored[i] or {}).items()
+                    if SENSITIVE_COLUMN_RE.search(str(k))}
+            if keep:
+                merged = dict(sub or {})
+                merged.update(keep)
+                out.append(merged)
+                continue
+        out.append(sub)
+    return out
+
+
 def is_foreign_viewer(viewer_id: int | None, owner_id: int | None) -> bool:
     """读/执行主体不是场景属主 → 需要脱敏。``viewer_id`` 为 None =
     内部/属主上下文(不判)。"""
@@ -695,6 +714,21 @@ async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
         .scalars()
         .all()
     )
+
+
+async def project_member_scenario_ids(db: AsyncSession, user) -> set[str]:
+    """我所在项目的项目区场景 id 集(r3二.1:项目区场景的数据集 =
+    项目共享业务数据,成员可列同事的数据集;预览剥敏感列由列表层
+    处理)。公共项目无成员行,天然不在其中。"""
+    from ..models.project import ProjectMember
+
+    pids = (await db.execute(select(ProjectMember.project_id).where(
+        ProjectMember.user_id == user.id))).scalars().all()
+    if not pids:
+        return set()
+    return set(
+        (await db.execute(select(ComposerScenario.scenario_id).where(
+            ComposerScenario.project_id.in_(pids)))).scalars().all())
 
 
 # ─── helpers ──────────────────────────────────────────────────────

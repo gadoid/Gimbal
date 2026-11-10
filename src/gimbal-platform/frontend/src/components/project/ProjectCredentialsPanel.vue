@@ -1,6 +1,7 @@
 <!-- ProjectCredentialsPanel.vue — M2a S8 项目凭证(项目配置页签)。
-     项目凭证 = 归属项目的槽位绑定:项目管理员(∨ Admin+)维护,成员
-     只读且无用户名(密码恒掩码,无明文出口)。执行时成员可选用。 -->
+     项目凭证 = 归属项目的槽位绑定:项目管理员维护(r5-2.2 起 Admin+
+     不旁路),成员只读且无用户名(密码恒掩码;明文唯一出口 = 拨测,
+     改登录地址须重录密码)。执行时成员可选用。 -->
 <template>
   <div class="pcp" data-testid="project-credentials">
     <div class="head">
@@ -49,6 +50,9 @@
           <label>槽位(注入键,不可改名)<input v-model="form.alias" data-testid="prj-cred-alias" :disabled="!!editing" /></label>
           <label>系统<input v-model="form.system" data-testid="prj-cred-system" placeholder="基础服务名(可空 = 未归类)" /></label>
           <label>登录地址<input v-model="form.url" data-testid="prj-cred-url" placeholder="留空 = 静态令牌" /></label>
+          <p v-if="urlChanged" class="hint" data-testid="prj-cred-url-hint">
+            改登录地址须重新录入密码(拨测 / 执行会把凭据发往该地址)
+          </p>
           <label>账号<input v-model="form.username" data-testid="prj-cred-username" /></label>
           <label>密码 / 令牌<input v-model="form.password" type="password" data-testid="prj-cred-password" /></label>
         </div>
@@ -68,7 +72,8 @@
 /**
  * ProjectCredentialsPanel —— S8 项目凭证面板。
  * api/project_credentials:列表(成员视图 username='')、建/改/换默认/
- * 删/拨测(后端 _require_manage 分权;审计 project.credential.write)。
+ * 删/拨测(后端 _manage_gate 分权:项目管理员,r5-2.2 起 Admin+ 不旁路;
+ * 改登录地址须同时重录密码;审计 project.credential.write)。
  */
 import { computed, onMounted, ref } from 'vue'
 import {
@@ -95,6 +100,10 @@ const formError = ref('')
 const form = ref({ alias: '', system: '', url: '', username: '', password: '' })
 
 const envName = computed(() => (id: number) => envNames.value[id] ?? `环境 #${id}`)
+
+/** r5-2.2:编辑态改了登录地址 → 必须重录密码(与后端 422 同口径的前置提示) */
+const urlChanged = computed(() =>
+  editing.value != null && form.value.url.trim() !== editing.value.url.trim())
 
 async function load(): Promise<void> {
   loading.value = true
@@ -129,6 +138,10 @@ function openEdit(c: AuthSession): void {
 
 async function save(): Promise<void> {
   formError.value = ''
+  if (urlChanged.value && !form.value.password) {
+    formError.value = '修改登录地址须重新录入密码(凭据会发往该地址)'
+    return
+  }
   saving.value = true
   try {
     if (editing.value) {

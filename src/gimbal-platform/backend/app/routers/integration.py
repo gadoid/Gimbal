@@ -673,7 +673,13 @@ async def platformize_task(
     """D9「转为平台模板」:Admin+(ops.write);模板须在公共项目
     (S1.3 起 platformize 的前置由公开闸保证,非公共 422)。置
     ``is_platform_template`` 显式标记(D10);幂等(已平台 → 200 原样)。
-    令牌绑定不剥离:平台模板由 Admin+ 维护,注册方回调照旧。"""
+    令牌绑定不剥离:平台模板由 Admin+ 维护,注册方回调照旧。
+
+    r5-2.1:人工治理动作不开放给任何令牌 —— 个人 / 项目令牌一律 404
+    (项目令牌映射到负责人的完整用户权限,不收口 = 机器身份越区操作
+    他人维护的公共模板)。"""
+    if principal.is_token:
+        raise _bad("not_found", "功能不存在", 404)
     user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
     if (tpl is None or tpl.template_id is not None
@@ -699,7 +705,12 @@ async def transfer_task(
 ) -> dict:
     """S1-e 转移维护者(表 B integration_template.transfer = maintainer
     ∨ public_admin;仅公共项目模板)。连带:解绑注册令牌(回调停发)、
-    删除原维护者自有实例;订阅实例不动(指纹不含属主)。"""
+    删除原维护者自有实例;订阅实例不动(指纹不含属主)。
+
+    r5-2.1:同 platformize —— 人工治理动作,令牌路径一律 404(转移的
+    是维护者本人的公共维护权,更不能由机器身份代持)。"""
+    if principal.is_token:
+        raise _bad("not_found", "功能不存在", 404)
     from ._ownership import can
 
     from ..models.user import User
