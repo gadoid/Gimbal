@@ -1,6 +1,6 @@
 <!-- Sidebar.vue — 四域侧边栏(重构方案 Phase 1:导航范式更换)+ 整体折叠。
-     结构基准 = F-sitemap:工作台入口置顶,场景 / 服务(分组标签,不可点)
-     / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
+     结构基准 = F-sitemap:工作台入口置顶,我的 / 项目 / 服务(分组标签,
+     不可点)/ 执行 / 集成 / 平台分组;常量池不再占侧边栏坑位(工作台卡片 +
      "管理"深链承接)。沿用 TopNav 的既有语义:能力门条目过滤
      (用户管理 / 传递字段仅 admin 可见)与变更适配 pendingCount 徽标
      (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
@@ -183,19 +183,14 @@ const groups: SidebarGroup[] = [
     ],
   },
   {
-    label: '场景',
+    // 2026-11-10 IA:组更名「我的」—— 我的名下内容一组收口:场景 /
+    // 关注(原「场景」组)+ 场景集(原「用例集」组并入,页面同名)。
+    // 「公共场景 / 公共用例集」仍并入公共项目(S7.1 不变)。
+    label: '我的',
     entries: [
-      // S7.1 IA 修正:「公共场景」入口并入公共项目(项目组)
-      { path: '/scenarios/mine', label: '我的场景', icon: ArchiveIcon },
+      { path: '/scenarios/mine', label: '场景', icon: ArchiveIcon },
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
-    ],
-  },
-  // 用例集组(2026-10-10 IA 调整):Suite 独立成组;S7.1 IA 修正:
-  // 「公共用例集」并入公共项目,「我的用例集」只列私有(未进项目)。
-  {
-    label: '用例集',
-    entries: [
-      { path: '/suites', label: '我的用例集', icon: StackIcon },
+      { path: '/suites', label: '场景集', icon: StackIcon },
     ],
   },
   // 项目组(M2a S7.1 IA 修正):项目成为一级入口 —— 公共项目置顶,
@@ -260,7 +255,7 @@ function isActive(path: string): boolean {
   if (route.path === path) return true
   if (!route.path.startsWith(path + '/')) return false
   // 前缀让位:存在更长前缀的入口时让给它(如 /suites 在 /suites/public
-  // 页不激活「我的用例集」,2026-10-10 IA 调整引入的前缀包含关系)。
+  // 页不激活「场景集」,2026-10-10 IA 调整引入的前缀包含关系)。
   return !flatEntries.value.some(
     (e) => e.path !== path && e.path.startsWith(path + '/'))
 }

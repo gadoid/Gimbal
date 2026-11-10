@@ -1,5 +1,5 @@
-<!-- SuiteLibrary.vue — 我的用例集(原型 02,Suite 层重构第 2 步;
-     2026-10-10 IA 调整:侧栏「用例集」组,页面更名)。
+<!-- SuiteLibrary.vue — 场景集(原型 02,Suite 层重构第 2 步;2026-10-10
+     IA:独立成组;2026-11-10 IA:并入侧栏「我的」组,页面更名场景集)。
      页头 + 浏览镜头(admin 全员视角)/ 搜索 / 模式筛选 + 表格
      (Suite · 模式 · 成员 · 最近运行 · 操作)。草稿带「草稿」标记;
      「共享给我的」独立分区(§7.11);「公共用例集」链接到独立公共页。
@@ -7,7 +7,7 @@
      开 30 预检;⋯ 重命名 / 复制 / 分享 / 发布(下架)/ 删除。 -->
 <template>
   <section class="slib">
-    <PageHead icon="stack" title="我的用例集" :count="`共 ${total} 个`" :subtitle="subtitle" />
+    <PageHead icon="stack" title="场景集" :count="`共 ${total} 个`" :subtitle="subtitle" />
 
     <div class="slib-toolbar">
       <input

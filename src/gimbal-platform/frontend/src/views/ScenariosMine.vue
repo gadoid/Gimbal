@@ -1,11 +1,12 @@
-<!-- ScenariosMine.vue — 场景库 / 我的场景(编排工作台)。
+<!-- ScenariosMine.vue — 场景库 / 我的场景(编排工作台;2026-11-10 IA:
+     侧栏「我的 → 场景」,页头同名)。
      原 Scenarios.vue「我的编排」tab 拆出独立页:表格只负责列表浏览、
      方案快速预览、次数/并发轻量即时调整;深度编辑跳方案管理。 -->
 <template>
   <section class="slib">
     <PageHead
       icon="folder"
-      title="我的场景"
+      title="场景"
       :count="`共 ${total} 个`"
       :subtitle="pageSubtitle"
     />

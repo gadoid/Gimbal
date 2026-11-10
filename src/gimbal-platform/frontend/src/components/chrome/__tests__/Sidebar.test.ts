@@ -77,7 +77,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     expect(hrefs).toEqual([
       '/home', '/notifications',
       '/scenarios/mine', '/scenarios/follows',
-      // 用例集组(S7.1:只列私有;公共并入项目)
+      // 2026-11-10 IA:场景集并入「我的」组(原「用例集」组退役)
       '/suites',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
       '/projects',
@@ -107,10 +107,10 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     w.unmount()
   })
 
-  it('组标签为纯文本:场景/用例集/项目/服务/执行/集成/平台,不是可点页(S7.1 IA:项目一级入口)', async () => {
+  it('组标签为纯文本:我的/项目/服务/执行/集成/平台,不是可点页(S7.1 IA:项目一级入口;2026-11-10:「用例集」并入「我的」)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '用例集', '项目', '服务', '执行', '集成', '平台'])
+    expect(labels).toEqual(['我的', '项目', '服务', '执行', '集成', '平台'])
     // 组标签不得是链接
     for (const label of w.findAll('.group-label')) {
       expect(label.element.tagName).toBe('SPAN')
@@ -173,7 +173,7 @@ describe('Sidebar — active 高亮', () => {
     w.unmount()
   })
 
-  it('前缀让位不影响父路径自身:/suites 页仍高亮「我的用例集」', async () => {
+  it('前缀让位不影响父路径自身:/suites 页仍高亮「场景集」', async () => {
     const w = await mountSidebar({ isAdmin: true, path: '/suites' })
     const active = w.findAll('a.nav-item.active')
     expect(active.length).toBe(1)
@@ -246,11 +246,11 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     w.unmount()
   })
 
-  it('折叠仍保留一级层次组标签(场景/用例集/项目/服务/执行/集成/平台)', async () => {
+  it('折叠仍保留一级层次组标签(我的/项目/服务/执行/集成/平台)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '用例集', '项目', '服务', '执行', '集成', '平台'])
+    expect(labels).toEqual(['我的', '项目', '服务', '执行', '集成', '平台'])
     w.unmount()
   })
 
@@ -259,7 +259,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
     expect(links.length).toBe(16)  // S7.3:−默认值
-    // 用例集组插在场景组后(F5 通知占 0/1 位):suites=4 / 项目=5 / services=6
+    // 场景集随「我的」组第三位(F5 通知占 0/1 位):suites=4 / 项目=5 / services=6
     expect(links[4].attributes('href')).toBe('/suites')
     expect(links[5].attributes('href')).toBe('/projects')
     expect(links[6].attributes('href')).toBe('/services')

@@ -21,7 +21,8 @@ const routes = [
   { path: '/register', component: () => import('@/views/Register.vue') },
   // protected
   // ── 场景编排 V3 ────────────────────────────────────────────
-  // 场景库拆三页(我的场景 / 公共场景 / 关注);/scenarios 旧入口重定向到我的场景。
+  // 场景库拆三页(我的场景 / 公共场景 / 关注);/scenarios 旧入口重定向到
+  // 我的场景页(2026-11-10 IA:侧栏「我的 → 场景」)。
   { path: '/scenarios', redirect: '/scenarios/mine' },
   {
     path: '/scenarios/mine',
@@ -220,8 +221,9 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 我的用例集
-    // (02,2026-10-10 IA 调整:侧栏「场景集」组);/suites/:id = 管理页
+    // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 场景集
+    // (02 独立成组;2026-11-10 IA:并入侧栏「我的」组,页面更名场景集);
+    // /suites/:id = 管理页
     // (20 编排 / 21 运行记录,含只读态)。旧 /suites/composer 已随重构删除。
     path: '/suites',
     component: () => import('@/views/SuiteLibrary.vue'),
