@@ -20,6 +20,16 @@
           执行器编译链路不可用,已降级为本地结构检查 —— 未校验变量
         </p>
 
+        <!-- S8 收口:凭证来源(场景在普通项目时可选项目凭证) -->
+        <div v-if="projectId != null" class="pf-cred" data-testid="pf-cred">
+          <span class="pf-cred-label">凭证来源</span>
+          <select v-model="credentialSource" data-testid="pf-cred-source">
+            <option value="personal">个人凭证</option>
+            <option value="project">项目凭证</option>
+          </select>
+          <QTip text="缺省用你自己的凭证;项目凭证 = suite 所属项目登记的共享凭证(项目管理员维护)。" />
+        </div>
+
         <ul class="pf-list">
           <li
             v-for="(it, i) in out.items"
@@ -57,7 +67,7 @@
           type="button" class="btn-primary"
           data-testid="suite-preflight-run"
           :disabled="!canRun || running"
-          @click="$emit('run')"
+          @click="emit('run', credentialSource)"
         >{{ running ? '发起中…' : '开始运行' }}</button>
       </DialogFooter>
     </DialogContent>
@@ -70,20 +80,27 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { validateSuite, type ValidateOut } from '@/api/suites'
+import QTip from '@/components/scenario-lib/QTip.vue'
 
 const props = defineProps<{
   open: boolean
   suiteId: number
   running?: boolean
+  /** S8 收口:suite 所属的普通项目(我为其成员时才传;null = 只显个人) */
+  projectId?: number | null
   /** 外层已有最新 detail 时传入(仅用于打开时跳过重复拉取,不必须)。 */
   detail0?: unknown
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'update:open', v: boolean): void
-  (e: 'run'): void
+  (e: 'run', credentialSource: 'personal' | 'project'): void
   (e: 'locate', scenarioId: string): void
 }>()
+
+/** 凭证来源(S8 收口):预检与运行同池;换来源即按新池重新预检 */
+const credentialSource = ref<'personal' | 'project'>('personal')
+watch(credentialSource, () => { if (props.open) void check() })
 
 const loading = ref(false)
 const failed = ref(false)
@@ -99,7 +116,10 @@ async function check(): Promise<void> {
   failed.value = false
   out.value = null
   try {
-    out.value = await validateSuite(props.suiteId)
+    // 只在明确选了项目凭证时才带参(默认 = 个人,与后端缺省同义)
+    out.value = props.projectId != null && credentialSource.value === 'project'
+      ? await validateSuite(props.suiteId, 'project')
+      : await validateSuite(props.suiteId)
   } catch {
     failed.value = true
   } finally {
@@ -118,6 +138,9 @@ watch(() => props.open, (v) => { if (v) void check() })
 <style scoped>
 .pf-dialog { display: flex; flex-direction: column; gap: 12px; max-width: 540px; }
 .pf-loading { padding: 18px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
+.pf-cred { display: flex; align-items: center; gap: 8px; margin: 0; }
+.pf-cred select { border: 1px solid var(--border, #cbd5e1); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.pf-cred-label { font-size: 12px; color: #475569; }
 .pf-summary { margin: 0; font-size: 13px; }
 .pf-degraded {
   margin: 0; font-size: 12px; color: #b45309;

@@ -801,6 +801,7 @@ def _in_flight_409(batch_id: str) -> HTTPException:
 async def _run_orchestration(
     db: AsyncSession, user: CurrentUser, suite: Suite,
     members: list[SuiteMember], *, control: dict | None = None,
+    credential_source: str | None = None,
 ) -> dict:
     """编排模式运行(重构方案):逐单元 can_run_scenario(任一不过整体
     403 —— 图不能像聚合那样跳过单元),入队时把成员 / 编排配置 / 各
@@ -824,6 +825,31 @@ async def _run_orchestration(
     graph_spec = _build_graph_spec(suite, members)
     if control:
         graph_spec["control"] = control
+    # S8 收口:项目凭证 —— suite 同区约束保证成员场景同项目,凭证池唯一;
+    # 全图缺槽 fail-fast(与物化同源,不等到执行期步骤级报错)
+    cred_project_id: int | None = None
+    if credential_source == "project":
+        from ..services.zone import can_use_project_credentials
+        if not await can_use_project_credentials(
+                db, user.id, suite.project_id):
+            raise HTTPException(status_code=409, detail={
+                "code": "credential_source_invalid",
+                "message": "项目凭证只能用于你所在普通项目的 suite"})
+        cred_project_id = suite.project_id
+        from ..services import graph_dispatch as _gd
+        try:
+            _missing = await _gd.missing_auth_aliases(
+                db, graph_spec, user.id, cred_project_id=cred_project_id)
+        except _gd.GraphDispatchError as e:
+            raise HTTPException(status_code=409, detail={
+                "code": "graph_invalid", "message": str(e)}) from None
+        if _missing:
+            raise HTTPException(status_code=409, detail={
+                "code": "auth_aliases_missing",
+                "message": ("以下凭证槽位项目凭证未登记,请项目管理员在"
+                            "项目配置页登记,或改用个人凭证:"
+                            + "、".join(_missing)),
+                "aliases": _missing, "credentialSource": "project"})
     est = sum(int(u.get("repeat") or 1) * int(u.get("nRuns") or 1)
               for u in [*graph_spec.get("before", []),
                         *graph_spec["units"],
@@ -854,7 +880,11 @@ async def _run_orchestration(
         config_json={"kind": "graph", "suiteId": suite.id,
                      "rev": suite.rev, "mode": suite.mode,
                      "runId": run_id, "batchId": batch_id,
-                     "graphSpec": graph_spec, "chain": chain},
+                     "graphSpec": graph_spec, "chain": chain,
+                     # S8:凭证来源留档(编排执行详情 / 重跑口径)
+                     **({"credentialSource": "project",
+                         "credentialProjectId": cred_project_id}
+                        if cred_project_id is not None else {})},
         kind="suite_graph", suite_id=suite.id,
         # S8:执行所属项目快照(S1.1 项目执行对成员可见)
         project_id=suite.project_id,
@@ -863,7 +893,8 @@ async def _run_orchestration(
         "kind": "graph", "chain": chain,
         "args": {"execution_id": execution.id, "run_id": run_id,
                  "owner_id": user.id, "graph_spec": graph_spec,
-                 "n_runs": 1, "halt_at": None, "scenario_payload": {}},
+                 "n_runs": 1, "halt_at": None, "scenario_payload": {},
+                 "cred_project_id": cred_project_id},
     })
     _eq.ensure_workers()
     n_units = (len(graph_spec["units"]) + len(graph_spec.get("before", []))
@@ -874,6 +905,7 @@ async def _run_orchestration(
 
 def _req_from_scheme(
     scenario_id: str, scheme: dict, batch_id: str,
+    *, credential_source: str | None = None,
 ) -> RunRequest:
     """默认方案参数 → RunRequest(与前端「直接执行」同口径:读默认
     方案后内联发送,§13.3-2);batchId 必带 —— 执行行据此挂批次键
@@ -893,6 +925,7 @@ def _req_from_scheme(
         runOptions=scheme.get("options") or None,
         schemeId=scheme.get("schemeId"),
         schemeName=scheme.get("name"),
+        credentialSource=credential_source,
     )
 
 
@@ -905,6 +938,9 @@ class _SuiteRunIn(BaseModel):
 
     only: list[str] = Field(default_factory=list, max_length=100)
     toNode: str | None = Field(default=None, min_length=1, max_length=255)
+    # S8 收口:凭证来源(缺省 / personal = 发起人个人池;project = suite
+    # 所属普通项目的项目凭证池,发起人须是项目成员)
+    credentialSource: Literal["personal", "project"] | None = None
 
 
 @router.post("/{suite_id}/run", status_code=201)
@@ -958,8 +994,10 @@ async def run_suite(
             if body.toNode:
                 control["toNode"] = body.toNode
         return await _run_orchestration(
-            db, user, suite, members, control=control)
+            db, user, suite, members, control=control,
+            credential_source=body.credentialSource if body else None)
 
+    _cred_src = body.credentialSource if body else None
     scen_rows: dict[str, object] = {}
     default_schemes: dict[str, dict | None] = {}
     stale_ids: list[str] = []
@@ -988,7 +1026,8 @@ async def run_suite(
     ] + [
         {
             "scenarioId": sid,
-            "req": (_req_from_scheme(sid, default_schemes[sid], batch_id)
+            "req": (_req_from_scheme(sid, default_schemes[sid], batch_id,
+                                     credential_source=_cred_src)
                     if default_schemes[sid] is not None
                     else RunRequest(scenarioId=sid, batchId=batch_id)),
         }
@@ -1155,6 +1194,8 @@ async def _shadowed_item(user_id: int, scen, name: str) -> dict | None:
 @router.post("/{suite_id}/validate")
 async def validate_suite(
     user: CurrentUser, db: DbSession, suite_id: int,
+    credential_source: Annotated[str | None, Query(
+        alias="credentialSource", pattern="^(personal|project)$")] = None,
 ) -> dict:
     """不入队的预检(重构方案第 3 步):闸与运行相同(_require_run_async)。
 
@@ -1168,6 +1209,13 @@ async def validate_suite(
     suite = await _load_suite(db, suite_id)
     await _require_run_async(db, user, suite)
     from ._ownership import can_run_scenario as _can_run
+
+    # S8 收口:预检与运行同池 —— 项目凭证要求同一名目(普通项目 + 成员)
+    cred_project_id: int | None = None
+    if credential_source == "project":
+        from ..services.zone import can_use_project_credentials
+        if await can_use_project_credentials(db, user.id, suite.project_id):
+            cred_project_id = suite.project_id
 
     members = await _ordered_members(db, suite_id)
     cfg = suite.mode_config or {}
@@ -1341,14 +1389,17 @@ async def validate_suite(
                       for r in resolved])
             if aliases:
                 got = await run_prepare.resolve_exec_auths(
-                    _sf, user.id, aliases)
+                    _sf, user.id, aliases, cred_project_id=cred_project_id)
                 missing = set(aliases) - {a.alias for a in got}
                 if missing:
+                    _via = ("项目凭证未登记,请项目管理员在项目配置页登记"
+                            if cred_project_id is not None else
+                            "认证别名在你名下解不到(执行期以明确原因失败)")
                     items.append(_vitem(
                         "warn", "auth_alias_unresolved",
-                        f"认证别名在你名下解不到(执行期以明确原因失败):"
-                        f"{sorted(missing)}"))
-            graph = await gd.materialize_graph(db, user.id, graph_spec)
+                        f"{_via}:{sorted(missing)}"))
+            graph = await gd.materialize_graph(
+                db, user.id, graph_spec, cred_project_id=cred_project_id)
             for e in _executor_compile(graph):
                 items.append(_vitem("error", e["code"], e["message"],
                                     refs=[e["unit"]] if e.get("unit") else None,

@@ -137,6 +137,28 @@ def unit_merged_bindings(graph_req: dict, unit: dict) -> dict[str, dict]:
             **(unit.get("serviceBindings") or {})}
 
 
+async def missing_auth_aliases(
+    db: AsyncSession, graph_req: dict, owner_id: int, *,
+    cred_project_id: int | None = None,
+) -> list[str]:
+    """编排的缺槽清单(派发 fail-fast 用):凭证清单与 materialize_graph
+    同源(``resolve_graph_units`` → ``graph_auth_aliases`` 逐单元并集),
+    再对取用池(``cred_project_id`` 非空 = 项目池,否则发起人个人池)求
+    差集。空清单 = 全部可取用。"""
+    all_units = [*graph_req.get("before", []), *graph_req["units"],
+                 *graph_req.get("after", [])]
+    resolved = await resolve_graph_units(db, all_units, owner_id)
+    aliases = await run_prepare.graph_auth_aliases(
+        db_module.SessionLocal,
+        [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
+         for r in resolved])
+    if not aliases:
+        return []
+    picked = await run_prepare.pick_bindings(
+        db, owner_id, aliases, cred_project_id=cred_project_id)
+    return sorted(set(aliases) - {r.slot for r in picked})
+
+
 class GraphDispatchError(Exception):
     """编排物化失败(场景缺失/convert 拒绝);路由层 → 4xx。"""
 
@@ -148,8 +170,12 @@ async def materialize_graph(
     *,
     full: bool = False,
     env: "Any" = None,
+    cred_project_id: int | None = None,
 ) -> dict:
     """GraphRunRequest dict → gimbal SuiteGraph dict(不执行)。
+
+    ``cred_project_id``(S8 收口):非空 = 本次编排选用项目凭证 —— 全图
+    凭证从该项目的项目凭证池取用(缺省 = 发起人个人池)。
 
     graph_req:{mode, units:[{ref,scenarioId,...}], before?, after?,
     parallel?, gates?, checks?, nRuns?}。
@@ -217,7 +243,8 @@ async def materialize_graph(
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
          for r in resolved])
     exec_auths = (await run_prepare.resolve_exec_auths(
-        db_module.SessionLocal, owner_id, auth_aliases)
+        db_module.SessionLocal, owner_id, auth_aliases,
+        cred_project_id=cred_project_id)
         if auth_aliases else [])
     # S2.1 环境链逐单元:显式位(配方快照 explicit,或图级
     # environmentId)整图生效;否则按单元 方案 > 单元场景项目默认 >

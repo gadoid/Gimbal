@@ -193,7 +193,7 @@
 
     <!-- 试跑/完成后的预检(原型 30,复用) -->
     <SuiteRunPreflight
-      :open="preflightOpen" :suite-id="suiteId ?? 0"
+      :open="preflightOpen" :suite-id="suiteId ?? 0" :project-id="runProjectId"
       @update:open="preflightOpen = $event"
       @close="preflightOpen = false"
       @run="onPreflightRun"
@@ -243,6 +243,7 @@ import { Handle, Position, VueFlow } from '@vue-flow/core'
 import type { Connection, Edge, Node, NodeDragEvent } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
+import { useAuthStore } from '@/stores/auth'
 import {
   createSuite, getSuite, patchSuite, putSuiteComposition, runSuite,
   suiteErrDetail, validateSuite,
@@ -293,6 +294,16 @@ const selection = ref<{ kind: 'unit' | 'edge'; id: string } | null>(null)
 const cycleMsg = ref('')
 const guideOpen = ref(false)
 const preflightOpen = ref(false)
+/** S8 收口:suite 所属普通项目(运行面板的凭证来源上下文) */
+const suiteProjectId = ref<number | null>(null)
+const authStore = useAuthStore()
+/** 我是其成员的普通项目才显「项目凭证」选项(与编排器运行面板同口径) */
+const runProjectId = computed<number | null>(() => {
+  const pid = suiteProjectId.value
+  if (pid == null) return null
+  return authStore.projects.some((p) => p.id === pid && p.kind === 'normal')
+    ? pid : null
+})
 const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
 let saveTimer: number | null = null
 let suppressSave = false
@@ -436,11 +447,13 @@ onMounted(async () => {
 function applyDetail(d: {
   suiteId: number; name: string; description: string; visibility: string
   isDraft?: boolean; rev: number; mode: string
+  projectId?: number | null
   members: { scenarioId: string; name: string; role: MemberRole }[]
   modeConfig: SuiteModeConfig | null
 }): void {
   suppressSave = true
   suiteId.value = d.suiteId
+  suiteProjectId.value = d.projectId ?? null
   rev.value = d.rev
   isDraft.value = d.isDraft !== false
   name.value = d.name
@@ -944,11 +957,13 @@ async function saveFinish(): Promise<void> {
 }
 
 // ── 预检 → 运行(复用 30;结果同管理页导航)─────────────────────
-async function onPreflightRun(): Promise<void> {
+async function onPreflightRun(
+    credentialSource: 'personal' | 'project' = 'personal',
+): Promise<void> {
   const id = suiteId.value
   if (!id) return
   try {
-    const r = await runSuite(id)
+    const r = await runSuite(id, { credentialSource })
     preflightOpen.value = false
     if ('executionId' in r) {
       toast.success(`编排执行已发起(#${r.executionId},${r.units} 个单元)`)

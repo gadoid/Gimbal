@@ -310,6 +310,27 @@
     @close="promoTarget = null"
     @done="load"
   />
+
+    <!-- S8 收口:项目场景快速运行 — 凭证来源选择(缺省个人) -->
+    <div v-if="quickRun" class="qr-mask" data-testid="quickrun-cred">
+      <div class="qr-card">
+        <h3>运行 {{ quickRun.row.meta.name || quickRun.row.meta.scenarioId }}</h3>
+        <p class="qr-sub">方案:{{ quickRun.scheme.name }}</p>
+        <label class="qr-row">
+          凭证来源
+          <select v-model="quickRunSource" data-testid="quickrun-cred-source">
+            <option value="personal">个人凭证</option>
+            <option value="project">项目凭证</option>
+          </select>
+        </label>
+        <div class="qr-actions">
+          <button type="button" class="btn-ghost" data-testid="quickrun-cancel"
+            @click="quickRun = null">取消</button>
+          <button type="button" class="btn-primary" data-testid="quickrun-run"
+            @click="onQuickRun">运行</button>
+        </div>
+      </div>
+    </div>
 </section>
 </template>
 
@@ -561,10 +582,44 @@ async function updateScheme(row: ScenarioListItem, scheme: SchemeV2, patch: { nR
   }
 }
 
-async function runScheme(row: ScenarioListItem, scheme: SchemeV2) {
+/** S8 收口:场景在我所在的普通项目 → 运行前可切项目凭证 */
+const quickRun = ref<{ row: ScenarioListItem; scheme: SchemeV2 } | null>(null)
+const quickRunSource = ref<'personal' | 'project'>('personal')
+
+function quickRunProjectId(row: ScenarioListItem | null): number | null {
+  const pid = row?.projectId ?? null
+  if (pid == null) return null
+  return auth.projects.some((p) => p.id === pid && p.kind === 'normal')
+    ? pid : null
+}
+
+function runScheme(row: ScenarioListItem, scheme: SchemeV2) {
+  if (quickRunProjectId(row) != null) {
+    quickRunSource.value = 'personal'
+    quickRun.value = { row, scheme }
+    return
+  }
+  void doRunScheme(row, scheme)
+}
+
+function onQuickRun(): void {
+  const q = quickRun.value
+  if (!q) return
+  quickRun.value = null
+  void doRunScheme(q.row, q.scheme, quickRunSource.value)
+}
+
+async function doRunScheme(
+  row: ScenarioListItem, scheme: SchemeV2,
+  credentialSource?: 'personal' | 'project',
+) {
   const id = row.meta.scenarioId
   try {
-    const res = await runScenario(schemeToRunRequest(scheme, id))
+    const res = await runScenario({
+      ...schemeToRunRequest(scheme, id),
+      ...(credentialSource === 'project'
+        ? { credentialSource: 'project' } : {}),
+    })
     toast.success(`已发起执行 ${res.runId}`)
     runs.invalidate(id)
     await runs.load(id, true)
@@ -757,6 +812,17 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 </script>
 
 <style scoped>
+.qr-mask { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
+.qr-card { background: #fff; border-radius: 12px; padding: 1.1rem 1.3rem; width: min(380px, 92vw); display: flex; flex-direction: column; gap: 0.7rem; }
+.qr-card h3 { margin: 0; font-size: 0.95rem; }
+.qr-sub { margin: 0; color: #64748b; font-size: 0.8rem; }
+.qr-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #334155; }
+.qr-row select { border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }
+.qr-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.qr-actions button { border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; border: 1px solid #cbd5e1; }
+.qr-actions .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.qr-actions .btn-ghost { background: none; }
+
 /* 场景表行含描述行(~78px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
 .slib { --lib-card-max: 850px; }
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }

@@ -111,3 +111,29 @@ describe('Runner 预检行 · 内置凭证告警', () => {
     expect(w2.find('[data-testid="precheck-shadowed-0"]').exists()).toBe(false)
   })
 })
+
+describe('Runner 预检行 · 凭证缺槽(S8 收口)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(precheckRun).mockReset()
+  })
+
+  it('missingAuths 非空 → 告警;项目池齐备 → 提示可切项目凭证', async () => {
+    vi.mocked(precheckRun).mockResolvedValue([pc({
+      missingAuths: ['qa1'], projectMissingAuths: [],
+    })])
+    const w = await mountAndQueue()
+    const line = w.get('[data-testid="runner-missing-auths"]')
+    expect(line.text()).toContain('qa1')
+    expect(line.text()).toContain('项目凭证')
+  })
+
+  it('个人池齐备 → 不出缺槽行(旧后端无字段同理)', async () => {
+    vi.mocked(precheckRun).mockResolvedValue([pc({ missingAuths: [] })])
+    const w = await mountAndQueue()
+    expect(w.find('[data-testid="runner-missing-auths"]').exists()).toBe(false)
+    vi.mocked(precheckRun).mockResolvedValue([pc({ missingAuths: undefined })])
+    const w2 = await mountAndQueue()
+    expect(w2.find('[data-testid="runner-missing-auths"]').exists()).toBe(false)
+  })
+})

@@ -117,3 +117,17 @@ fresh 链守卫：introspect 后按缺什么补什么；downgrade 先删项目�
 - suite 编排用项目凭证(当前 409 `credential_source_unsupported`);令牌调用用项目凭证(M2b 项目令牌);
 - 执行器队列页(Runner.vue)/ 场景列表直接运行入口未接凭证来源切换(只有编排器运行面板接了);
 - 预检(`/run/precheck`)缺槽检查仍只在派发 fail-fast。
+
+---
+
+## 五、遗留收口（2026-11-10）
+
+§四「已知留到后续」四项中三项落地(「令牌调用用项目凭证」已随 M2b 项目令牌落地,见 m2b-detail):
+
+| 项 | 落点 | 门禁 |
+|---|---|---|
+| L1 suite 编排用项目凭证 | 关键发现:suite 运行走 `POST /suites/{id}/run` 自拼图入队,**不经** `/runs` 的 dispatch_target —— 原 409 只拦得住直接带 graph 调 `/runs` 的调用方。①`_SuiteRunIn.credentialSource`;编排模式 `_run_orchestration` 闸(普通项目 + 成员)+ 全图缺槽 fail-fast(`graph_dispatch.missing_auth_aliases`,与物化同源)+ `config_json`/入队 args 留档;聚合模式随成员 `RunRequest.credentialSource` 透传,单场景闸逐成员兜底;②`materialize_graph(cred_project_id=)` 全图取项目池;③`POST /runs` graph 分支同口径(全部单元同属一个普通项目,否则 409 `credential_source_invalid`;缺槽按全图清单 409);④suite 预检 `validate?credentialSource=` 同池(缺槽文案指向项目凭证);⑤前端 `SuiteRunPreflight` 凭证来源选择(换来源重新预检;`runSuite` 带来源) | `test_authz_s8_leftovers.py` 6 条 |
+| L2 运行入口接凭证来源 | `Runner.vue`:右栏 RunConfigPanel 接 `:project-id`(选中条属我所在普通项目时),发起带 `credentialSource`;`ScenariosMine` 方案快速运行:项目场景先弹来源选择(缺省个人),私有场景照旧直跑 | vitest |
+| L3 预检缺槽 | `_precheck_one` 增 `missingAuths`(执行人个人池差集,`pick_bindings` 与派发 fail-fast 同源)+ `projectMissingAuths`(项目池差集;null = 不适用);Runner 预检行展示(项目池齐备时提示「切项目凭证即可」);suite 预检(聚合逐成员)自动携带 | 同上 |
+
+取舍:编排「试跑选中段」(tryRunSelected)仍走个人凭证缺省(一次性动作不弹窗);`POST /runs` graph + personal 的缺槽仍按锚点场景清单判(既有行为,未动)。

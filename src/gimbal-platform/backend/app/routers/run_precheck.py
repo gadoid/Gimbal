@@ -74,6 +74,13 @@ class PrecheckResult(BaseModel):
     # webhook v4 §5.3:令牌范围缺项(按 §3.3 分类:未授权 / 已删除);
     # 令牌路径自动以当前令牌预检,JWT 可传 tokenId 预检自己可管理的令牌
     scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
+    # S8 收口:凭证槽位在执行人**个人池**未绑定(与派发 fail-fast 同源
+    # pick_bindings 取用差集;空 = 全部可取用)
+    missing_auths: list[str] = Field(default_factory=list, alias="missingAuths")
+    # 项目凭证池的缺槽清单(None = 不适用:场景不属普通项目 / 执行人非
+    # 成员;非空时前端提示可切「项目凭证」或去补登记)
+    project_missing_auths: "list[str] | None" = Field(
+        default=None, alias="projectMissingAuths")
     # §7.1 范围外目标(直连地址/内置认证/白名单外策略,只记录不拦截)
     out_of_scope_targets: list[dict] = Field(
         default_factory=list, alias="outOfScopeTargets")
@@ -230,6 +237,34 @@ async def _precheck_one(
         candidates = [s for s in candidates if not service_url_resolved(
             s, declared=declared, alias_base_urls=alias_urls)]
     result.unbound_services = candidates
+
+    # ── S8 收口:凭证缺槽(个人池差集 + 项目池差集)────────────────
+    # 与派发 fail-fast 同源:exec_auth_aliases_of_definition 清单 ∪
+    # pick_bindings 取用;环境按方案链(与 ③ 层地址同一次解析)。
+    from ..services import service_aliases as _sa
+    _auth_aliases = await _sa.exec_auth_aliases_of_definition(
+        db, definition_from_payload(raw_payload), bindings)
+    if _auth_aliases:
+        from ..services.run_prepare import pick_bindings
+        try:
+            from ..services.env_chain import resolve_environment as _re
+            _env_id = (await _re(
+                db, scheme_env=payload.get("environmentId"),
+                project_id=scen.project_id, user_id=user_id)).env_id
+        except Exception:  # noqa: BLE001 — 环境解析失败按无环境口径
+            _env_id = None
+        _picked = await pick_bindings(
+            db, user_id, _auth_aliases, env_id=_env_id)
+        result.missing_auths = sorted(
+            set(_auth_aliases) - {r.slot for r in _picked})
+        from ..services.zone import can_use_project_credentials
+        if user_id is not None and await can_use_project_credentials(
+                db, user_id, scen.project_id):
+            _pp = await pick_bindings(
+                db, None, _auth_aliases, env_id=_env_id,
+                cred_project_id=scen.project_id)
+            result.project_missing_auths = sorted(
+                set(_auth_aliases) - {r.slot for r in _pp})
 
     # ── webhook v4 §5.3:令牌范围预检(缺项分类 + 范围外目标)─────
     if token is not None:

@@ -244,7 +244,9 @@ export async function addSuiteMembers(
 /** 运行(模式分流):聚合 → SuiteRunResult(批次);编排 → SuiteOrchRunResult。
  *  control:only = 试跑选中段(单元 ref);toNode = 串联只跑到某一步。 */
 export async function runSuite(
-  suiteId: number, control?: { only?: string[]; toNode?: string },
+  suiteId: number, control?: {
+    only?: string[]; toNode?: string; credentialSource?: 'personal' | 'project'
+  },
 ): Promise<SuiteRunResult | SuiteOrchRunResult> {
   const { data } = await http.post<SuiteRunResult | SuiteOrchRunResult>(
     `/suites/${suiteId}/run`, control ?? {})
@@ -269,8 +271,12 @@ export async function rerunFailedUnits(
 
 /** 不入队的预检(第 3 步):服务端权威结论(执行器编译 + 逐成员
  * _precheck_one + 认证别名 + 在途)。 */
-export async function validateSuite(suiteId: number): Promise<ValidateOut> {
-  const { data } = await http.post<ValidateOut>(`/suites/${suiteId}/validate`)
+export async function validateSuite(
+  suiteId: number, credentialSource?: 'personal' | 'project',
+): Promise<ValidateOut> {
+  const { data } = await http.post<ValidateOut>(
+    `/suites/${suiteId}/validate`, null,
+    { params: credentialSource ? { credentialSource } : {} })
   return data
 }
 

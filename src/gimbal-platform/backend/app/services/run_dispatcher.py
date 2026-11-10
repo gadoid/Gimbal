@@ -1015,20 +1015,31 @@ async def dispatch_target(
     # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
     _scen_project_id = _scen.project_id if _scen is not None else None
     # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
-    # 普通项目的项目凭证池(执行人须是项目成员;suite 编排暂不支持)
+    # 普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
+    # 须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
     cred_project_id: int | None = None
+    _graph = getattr(req, "graph", None)
     if getattr(req, "credential_source", None) == "project":
-        if getattr(req, "graph", None) is not None:
-            raise Conflict(
-                "credential_source_unsupported",
-                "suite 编排暂不支持项目凭证,请改用个人凭证")
         from .zone import can_use_project_credentials
-        if not await can_use_project_credentials(
-                db, user_id, _scen_project_id):
+        _cred_pid = _scen_project_id
+        if _graph is not None:
+            _unit_ids = list(dict.fromkeys(
+                u.scenario_id for u in
+                [*_graph.before, *_graph.units, *_graph.after]))
+            _unit_pids = set((await db.execute(
+                select(ComposerScenario.project_id).where(
+                    ComposerScenario.scenario_id.in_(_unit_ids))
+            )).scalars().all())
+            if len(_unit_pids) != 1 or None in _unit_pids:
+                raise Conflict(
+                    "credential_source_invalid",
+                    "项目凭证要求编排的全部单元同属一个普通项目")
+            _cred_pid = next(iter(_unit_pids))
+        if not await can_use_project_credentials(db, user_id, _cred_pid):
             raise Conflict(
                 "credential_source_invalid",
                 "项目凭证只能用于你所在普通项目的场景")
-        cred_project_id = _scen_project_id
+        cred_project_id = _cred_pid
     if _scen_owner_id is not None and user_id != _scen_owner_id:
         from .scenario_store import (
             strip_builtin_credentials, strip_sensitive_columns)
@@ -1059,6 +1070,24 @@ async def dispatch_target(
     # injectedAuths 清单与实际注入的 users。
     auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
         db, definition_from_payload(scenario_payload), _bindings)
+    if _graph is not None and cred_project_id is not None:
+        # 编排 + 项目凭证:缺槽按**全图**凭证清单判(与物化同源),不是
+        # 锚点场景的清单 —— 否则单元缺槽要到执行期才步骤级报错
+        from . import graph_dispatch as _gd
+        try:
+            _g_missing = await _gd.missing_auth_aliases(
+                db, _graph.model_dump(by_alias=True), user_id,
+                cred_project_id=cred_project_id)
+        except _gd.GraphDispatchError as e:
+            raise Conflict("graph_invalid", str(e)) from None
+        if _g_missing:
+            raise Conflict(
+                "auth_aliases_missing",
+                "以下凭证槽位项目凭证未登记,请项目管理员在项目配置页"
+                "登记,或改用个人凭证:" + "、".join(_g_missing),
+                extra={"aliases": _g_missing,
+                       "credentialSource": "project"})
+        auth_aliases = []      # 已按全图核对;锚点清单不再重复判
     # S5 失败即中止:注入清单在执行人池解不到槽位 → 整单拒发(此前
     # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
     # 注入/预览同一份(pick_bindings)。
@@ -1253,6 +1282,8 @@ async def dispatch_target(
                 "env_snapshot": env_choice.snapshot(),
                 "n_runs": req.n_runs, "halt_at": req.step_to,
                 "scenario_payload": dict(scenario_payload),
+                # S8 收口:项目凭证池(None = 发起人个人池)
+                "cred_project_id": cred_project_id,
             },
         }
     else:
@@ -1438,6 +1469,7 @@ async def _fanout_graph(
     scenario_payload: dict | None = None,
     chain: str = "legacy",
     env_snapshot: dict | None = None,
+    cred_project_id: int | None = None,
 ) -> None:
     """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
     事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
@@ -1622,7 +1654,9 @@ async def _fanout_graph(
             from .env_chain import EnvChoice
             graph_bundle = await graph_dispatch.materialize_graph(
                 session, owner_id, graph_spec, full=True,
-                env=EnvChoice.from_snapshot(env_snapshot))
+                env=EnvChoice.from_snapshot(env_snapshot),
+                # S8 收口:项目凭证池(None = 发起人个人池)
+                cred_project_id=cred_project_id)
         graph = graph_bundle["graph"]
         graph_sem = graph_bundle
         if cancel_local["set"] or execution_id in _eq._cancel_hint:

@@ -504,6 +504,10 @@ export interface PrecheckResult {
   /** authz W6:场景依赖属主内置凭证、而我名下没有同名别名的清单
    * (执行人 ≠ 属主时内置凭证当空 → 跑起来必在认证段失败);空 = 无告警 */
   builtinAuthShadowed?: string[]
+  /** S8 收口:凭证槽位在我个人池未绑定(派发 fail-fast 同源);空 = 齐备 */
+  missingAuths?: string[]
+  /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */
+  projectMissingAuths?: string[] | null
 }
 
 /** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */

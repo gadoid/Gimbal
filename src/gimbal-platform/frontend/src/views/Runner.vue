@@ -127,6 +127,12 @@
                     此场景依赖属主的内置凭证({{ item.precheck.builtinAuthShadowed.join('、') }}),你的凭证里没有同名别名 — 执行会在认证阶段失败;
                     <a class="pc-fix" @click.stop href="/auths">去「我的凭证」补齐 ↗</a>
                   </span>
+                  <span
+                    v-if="item.precheck.missingAuths?.length"
+                    class="pc-warn"
+                    data-testid="runner-missing-auths"
+                  >凭证槽位未绑定:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template>;
+                  </span>
                 </template>
                 <template v-else>
                   <span class="pc-fatal">这个方案跑不了,换一个方案就能跑。</span>
@@ -171,6 +177,7 @@
         <RunConfigPanel
           v-else
           :footer="false"
+          :project-id="runProjectId"
           :scenario="assembly.scenario.value"
           :data-sets="assembly.dataSets.value"
           :schemes="assembly.schemes.value"
@@ -210,6 +217,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
 import QTip from '@/components/scenario-lib/QTip.vue'
@@ -391,6 +399,15 @@ function schemeMeta(item: QueueItem): string {
 
 // ── 右栏装配(选中条一个装配体,选中变化即 load)───────────────────
 const assembly = useRunAssembly(computed(() => selectedItem.value?.scenarioId ?? null))
+/** S8 收口:选中条属我所在的普通项目 → 运行面板可切项目凭证 */
+const authStore = useAuthStore()
+const runProjectId = computed<number | null>(() => {
+  const pid = (assembly.scenario.value as { projectId?: number | null } | null)
+    ?.projectId ?? null
+  if (pid == null) return null
+  return authStore.projects.some((p) => p.id === pid && p.kind === 'normal')
+    ? pid : null
+})
 const loadedFor = ref<string | null>(null)
 watch(() => [selectedItem.value?.scenarioId, selectedItem.value?.schemeId] as const,
   async ([sid]) => {
@@ -475,6 +492,8 @@ async function launchQueue() {
         ...(opts.serviceBindings && Object.keys(opts.serviceBindings).length
           ? { serviceBindings: opts.serviceBindings } : {}),
         ...(opts.injectionEntryIds?.length ? { injectionEntryIds: opts.injectionEntryIds } : {}),
+        // S8 收口:面板确认的凭证来源随发起下发(缺省 = 个人)
+        ...(opts.credentialSource ? { credentialSource: opts.credentialSource } : {}),
         batchId,
       })
     } catch (e) {
