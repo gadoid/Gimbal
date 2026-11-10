@@ -1,4 +1,4 @@
-# restart-services.ps1 — 三服务脱离会话外壳启动(2026-09-28)
+﻿# restart-services.ps1 — 三服务脱离会话外壳启动(2026-09-28)
 # 背景:run_in_background 的 bash 外壳被回收时会带走整个进程树(启动
 # 正常、探针绿、随后无痕消失,外壳报 exit 127)。Start-Process 让进程
 # 挂在自己的树里,与会话 shell 解耦;输出重定向到各目录日志文件。
@@ -11,6 +11,10 @@ $py = 'D:\Gimbal\Scripts\python.exe'
 # plate 构件根(版本模型 3.6/B2 唯一来源):plate/artifacts 分支的检出,
 # 发版/按修订读取/冷化都从这里取;子进程继承本变量(2026-10-12 W14)。
 $env:PLATE_ARTIFACTS_PATH = 'D:\Gimbal\plate-artifacts'
+
+# plate 端口(2026-11-10):8765 落进 Hyper-V 动态排除段 8690-8789(bind
+# 10013),钉 8890(排除段外);后端 .env 的 PLATE_BASE_URL 同步指这里。
+$env:PLATE_PORT = '8890'
 
 Start-Process -FilePath $py -ArgumentList 'run_plate.py' `
   -WorkingDirectory 'D:\Gimbal\Gimbal\src\gimbal-plate' -WindowStyle Hidden `
