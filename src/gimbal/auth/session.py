@@ -154,6 +154,11 @@ class AuthSession(BaseModel):
                 f"(token_len={len(token)})"
             )
         self.token = token
+        # r5 4.3:运行期令牌入按值掩码册(证据出口按值掩,防「提取到
+        # 普通键名字段」绕过键名脱敏)
+        from gimbal.protocols.secrets import register_secret
+
+        register_secret(token)
         if expires_in is None:
             # 保持 self.expires_in，重新锚定 expires_at 到 now+self.expires_in
             # （这是修复 Case 3 行为：原代码用 truthy 检查,0/falsy 会被吞掉）

@@ -69,6 +69,10 @@ class AuthRegistry:
     # ── 写入 ──
     def set(self, tag: str, session: "AuthSession") -> None:
         """注册或覆盖一个 AuthSession。tag 重复时直接覆盖，不做唯一性校验。"""
+        # r5 4.3:秘密字段入按值掩码册(apply_token 再补运行期令牌)
+        from gimbal.protocols.secrets import register_auth_values
+
+        register_auth_values(session)
         with self._lock:
             self._sessions[tag] = session
 

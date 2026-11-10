@@ -134,14 +134,19 @@ class CallResult(BaseModel):
         return self.response.get("body")
 
     def to_evidence(self, *, max_chars: int = EVIDENCE_BODY_MAX_CHARS) -> dict:
-        """产出可入证据流（事件/归档/报告）的 dict：脱敏复核 + body 截断。"""
+        """产出可入证据流（事件/归档/报告）的 dict：脱敏复核 + body 截断。
+
+        r5 4.3:键名脱敏之后再按值掩(``secrets.scrub``)—— 秘密值可能
+        躺在键名普通的字段里;先掩后截,截断不会把值切成可见两半。"""
+        from gimbal.protocols.secrets import scrub
+
         return {
             "protocol": self.protocol,
-            "request": redact_mapping(self.request),
+            "request": scrub(redact_mapping(self.request)),
             "response": {
                 "status": self.status,
-                "meta": redact_mapping(self.meta),
-                "body": truncate_oversize(self.body, max_chars),
+                "meta": scrub(redact_mapping(self.meta)),
+                "body": truncate_oversize(scrub(self.body), max_chars),
             },
             "elapsed_ms": self.elapsed_ms,
             "auth_expired": self.auth_expired,

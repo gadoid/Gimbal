@@ -124,22 +124,24 @@ def project_step_completed(ctx: "StepContext", run_id: str,
     (evidence_from_call_dict 产物,已脱敏 + 响应体截断)。
     """
     from gimbal.protocols.result import is_sensitive_path, redact_value
+    from gimbal.protocols.secrets import scrub   # r5 4.3:值掩(普通键名也逃不掉)
     passed = sum(1 for a in ctx.outcome.assertions if a.passed)
     assertions = [
         {
             "name": a.name,
             "target": a.target,
             "operator": a.operator,
-            "expected": _compact(a.expected),
-            "actual": _compact(a.actual),
+            "expected": scrub(_compact(a.expected)),
+            "actual": scrub(_compact(a.actual)),
             "passed": a.passed,
-            "message": a.message,
+            "message": scrub(a.message),
         }
         for a in ctx.outcome.assertions
     ]
     extracts = [
         {"target": k,
-         "value": redact_value(v) if is_sensitive_path(k) else _compact(v)}
+         "value": scrub(redact_value(v) if is_sensitive_path(k)
+                        else _compact(v))}
         for k, v in ctx.outcome.extracted.items()
     ]
     status = ctx.outcome.status.value
@@ -154,7 +156,8 @@ def project_step_completed(ctx: "StepContext", run_id: str,
         assertion_passed=passed,
         promotion_count=len(ctx.outcome.promotions_made),
         retry_count=ctx.outcome.retry_count,
-        error_brief=ctx.outcome.error_info.message if ctx.outcome.error_info else None,
+        error_brief=scrub(ctx.outcome.error_info.message
+                         if ctx.outcome.error_info else None),
         step_name=ctx.inputs.step_name,
         description=ctx.inputs.description,
         call_summary=_endpoint_of(call_evidence),

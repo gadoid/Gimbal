@@ -624,8 +624,11 @@ class Engine:
 
         G2/G7(集成 P2/Y2):每步加 ``error_kind``;顶层加 ``outputs``
         (场景作用域提升变量快照,脱敏后 —— 集成任务据此展示/续游标)。
+        r5 4.3:整行出册前按值掩(error 串 / outputs 都可能带秘密值)。
         """
-        return {
+        from gimbal.protocols.secrets import scrub
+
+        return scrub({
             "scenario_id": result.scenario_id,
             "status":      result.status,
             "duration_ms": result.duration_ms,
@@ -644,7 +647,7 @@ class Engine:
                 }
                 for s in result.step_results
             ],
-        }
+        })
 
     @staticmethod
     def _execution_count(result: Any) -> int:
