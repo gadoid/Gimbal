@@ -75,7 +75,7 @@ class TestProjectCredentialUrlPasswordAndGate:
         base = f"/api/projects/{pid}/credentials"
         r = await client.post(base, headers=h_a, json={
             "alias": "qa1", "url": "http://real-auth", "username": "u1",
-            "password": "p1", "system": "fin"})
+            "password": "p1x2y3z", "system": "fin"})
         assert r.status_code == 201, r.text
         cid = r.json()["id"]
         # 单改 url → 422(拨测/执行会把存量密码发往新地址)
@@ -92,7 +92,7 @@ class TestProjectCredentialUrlPasswordAndGate:
         # url + password 一起 → 200
         r = await client.patch(f"{base}/{cid}", headers=h_a,
                                json={"url": "http://new-auth",
-                                     "password": "p2"})
+                                     "password": "p2x3y4z"})
         assert r.status_code == 200 and r.json()["url"] == "http://new-auth"
 
     async def test_admin_plus_no_bypass(self, client):
@@ -104,14 +104,14 @@ class TestProjectCredentialUrlPasswordAndGate:
         base = f"/api/projects/{pid}/credentials"
         r = await client.post(base, headers=h_a, json={
             "alias": "qa1", "url": "http://a", "username": "u1",
-            "password": "p1", "system": "fin"})
+            "password": "p1x2y3z", "system": "fin"})
         cid = r.json()["id"]
         # Admin+ 非成员:读面 404、写面 404、拨测 404(修前:可维护可
         # 导出 —— 与选用门「Admin+ 不旁路」自相矛盾)
         assert (await client.get(base, headers=h_ops)).status_code == 404
         assert (await client.post(base, headers=h_ops, json={
             "alias": "x", "url": "http://b", "username": "u",
-            "password": "p"})).status_code == 404
+            "password": "p12345"})).status_code == 404
         assert (await client.patch(f"{base}/{cid}", headers=h_ops,
                                    json={"url": "http://evil"}
                                    )).status_code == 404
@@ -158,12 +158,14 @@ class TestDataSetMemberListingAndSensitiveKeep:
         # 非成员仍不可见(列表空)
         assert (await client.get("/api/data-sets?scenarioId=sc-r5-ds",
                                  headers=h_x)).json() == []
-        # 成员读 → 脱敏;整表保存(脱敏视图)→ 属主敏感列不丢
+        # 成员读 → 脱敏 + __rowKey(r6 二.1:写面按它并回正确的行)
         r = await client.get(f"/api/data-sets/{ds['datasetId']}",
                              headers=h_b)
         assert r.status_code == 200
         assert all("password" not in row for row in r.json()["rows"])
+        assert all("__rowKey" in row for row in r.json()["rows"])
         rows = [{"user": row["user"], "remark": row["remark"] + "!",
+                 "__rowKey": row["__rowKey"],
                  "password": "GUESSED"}     # 读者看不到真值 → 存量权威
                 for row in r.json()["rows"]]
         r = await client.put(f"/api/data-sets/{ds['datasetId']}", headers=h_b,
@@ -172,10 +174,12 @@ class TestDataSetMemberListingAndSensitiveKeep:
         r = await client.get(f"/api/data-sets/{ds['datasetId']}",
                              headers=h_a)
         got = r.json()["rows"]
-        # 敏感列按行位并回存量值(成员提交的猜测值不生效),普通列更新
+        # 敏感列按行键并回存量值(成员提交的猜测值不生效),普通列更新;
+        # __rowKey 不落库
         assert got[0]["password"] == "secret1" \
             and got[1]["password"] == "secret2", got
         assert got[0]["remark"] == "a!" and got[1]["remark"] == "b!"
+        assert all("__rowKey" not in row for row in got)
         # 属主保存原样(不并回逻辑,明文自见)
         r = await client.put(f"/api/data-sets/{ds['datasetId']}", headers=h_a,
                              json={"name": "参数表", "rows": [
@@ -183,6 +187,77 @@ class TestDataSetMemberListingAndSensitiveKeep:
                                   "remark": "z"}]})
         assert r.status_code == 200
         assert r.json()["rows"][0]["password"] == "new"
+
+    async def test_row_key_merge_survives_delete_insert_reorder(
+            self, client):
+        """r6 二.1:按行号并回会在删/插/重排后串号(bob 拿到 alice 的
+        密码)—— 行键并回后:删行值随行走、插行不并回、重排不串号。"""
+        h_a = await register_and_login(client, "r6_da", "pw123456")
+        h_b = await register_and_login(client, "r6_db", "pw123456")
+        pid = await _mk_project("r6-ds", members={"r6_da": "admin",
+                                                  "r6_db": "member"})
+        draft = make_draft("sc-r6-ds", vars_map={
+            "user": "u0", "password": "p0", "remark": "r0"})
+        r = await client.post(f"/api/scenarios?projectId={pid}",
+                              headers=h_a, json=draft)
+        assert r.status_code in (200, 201), r.text
+        r = await client.post("/api/scenarios/sc-r6-ds/data-sets",
+                              headers=h_a, json={
+                                  "name": "参数表", "rows": [
+                                      {"user": "alice", "password": "PW-ALICE",
+                                       "remark": "a"},
+                                      {"user": "bob", "password": "PW-BOB",
+                                       "remark": "b"}]})
+        assert r.status_code == 201, r.text
+        ds = r.json()["datasetId"]
+        view = (await client.get(f"/api/data-sets/{ds}",
+                                 headers=h_b)).json()["rows"]
+        alice, bob = view
+        # ① 重排(bob 在前)+ 删 alice 行 → bob 不得拿到 PW-ALICE
+        rows = [{"user": bob["user"], "remark": "b2",
+                 "__rowKey": bob["__rowKey"]}]
+        r = await client.put(f"/api/data-sets/{ds}", headers=h_b,
+                             json={"name": "参数表", "rows": rows})
+        assert r.status_code == 200, r.text
+        got = (await client.get(f"/api/data-sets/{ds}",
+                                headers=h_a)).json()["rows"]
+        assert len(got) == 1 and got[0]["user"] == "bob", got
+        assert got[0]["password"] == "PW-BOB", got
+        # ② 重新做两行,插行(新行无键不并回)+ 顶插重排不串号
+        view = (await client.get(f"/api/data-sets/{ds}",
+                                 headers=h_a)).json()["rows"]
+        assert (await client.put(f"/api/data-sets/{ds}", headers=h_a,
+                                 json={"name": "参数表", "rows": [
+                                     {"user": "alice", "password": "PW-ALICE",
+                                      "remark": "a"},
+                                     {"user": "bob", "password": "PW-BOB",
+                                      "remark": "b"}]})
+                ).status_code == 200
+        view = (await client.get(f"/api/data-sets/{ds}",
+                                 headers=h_b)).json()["rows"]
+        alice, bob = view
+        rows = [{"user": "carol", "remark": "c"},               # 新行无键
+                {"user": bob["user"], "remark": "b3",
+                 "__rowKey": bob["__rowKey"]},
+                {"user": alice["user"], "remark": "a3",
+                 "__rowKey": alice["__rowKey"]}]
+        r = await client.put(f"/api/data-sets/{ds}", headers=h_b,
+                             json={"name": "参数表", "rows": rows})
+        assert r.status_code == 200, r.text
+        got = (await client.get(f"/api/data-sets/{ds}",
+                                headers=h_a)).json()["rows"]
+        assert got[0]["user"] == "carol" and "password" not in got[0], got
+        assert got[1]["password"] == "PW-BOB", got      # 键随行,不串号
+        assert got[2]["password"] == "PW-ALICE", got
+        # ③ 未知键 = 新行(不并回);键值被成员改掉同此
+        rows = [{"user": "mallory", "remark": "m",
+                 "__rowKey": "deadbeefdeadbeef"}]
+        r = await client.put(f"/api/data-sets/{ds}", headers=h_b,
+                             json={"name": "参数表", "rows": rows})
+        assert r.status_code == 200
+        got = (await client.get(f"/api/data-sets/{ds}",
+                                headers=h_a)).json()["rows"]
+        assert got[0]["user"] == "mallory" and "password" not in got[0]
 
 
 # ── r3二.2 carry scope=project 读面须成员 ────────────────────────

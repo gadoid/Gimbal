@@ -390,22 +390,76 @@ def strip_sensitive_columns(rows: list) -> list:
     ]
 
 
-def merge_sensitive_columns(stored: list, submitted: list) -> list:
-    """非属主保存数据集(r3二.1):提交行是脱敏视图(敏感列看不到),
-    按行位把存量敏感列值并回 —— 成员整表保存不再覆盖丢列。存量值
-    权威:提交里的同键值(读者本看不到真值)不覆盖存量;新增行
-    (超出存量行数)没有可并的敏感值,保持提交形态。"""
+# r6 二.1:行的敏感部分 HMAC 短键 —— 读面随脱敏行下发(``__rowKey``),
+# 写面按它把存量敏感值并回**正确的行**。按行号并会在成员删/插/重排
+# 后串号(删掉 alice 行 → bob 拿到 alice 的密码),比丢列更隐蔽。
+ROW_KEY_FIELD = "__rowKey"
+
+
+def sensitive_row_key(row: dict) -> str | None:
+    """行敏感部分的 HMAC-SHA256 短键(r6 二.1)。HMAC + 应用密钥
+    (FERNET_KEY,与凭证加密同保护类):成员拿到的键不能离线爆破
+    敏感值。无敏感列的行无键(无可并回的内容)。"""
+    import hashlib
+    import hmac as _hmac
+    import json as _json
+
+    part = {str(k): v for k, v in (row or {}).items()
+            if SENSITIVE_COLUMN_RE.search(str(k))}
+    if not part:
+        return None
+    from ..core.config import settings
+
+    return _hmac.new(
+        (settings.FERNET_KEY or "gimbal-rowkey").encode("utf-8"),
+        _json.dumps(part, sort_keys=True, ensure_ascii=False,
+                    default=str).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
+def attach_row_keys(stored: list, redacted: list) -> list:
+    """读面:脱敏行按下标附 ``__rowKey``(stored/redacted 同源数组,
+    位置安全);无敏感列的行原样。"""
     out = []
-    for i, sub in enumerate(submitted):
-        if i < len(stored):
-            keep = {k: v for k, v in (stored[i] or {}).items()
-                    if SENSITIVE_COLUMN_RE.search(str(k))}
-            if keep:
-                merged = dict(sub or {})
-                merged.update(keep)
-                out.append(merged)
-                continue
-        out.append(sub)
+    for i, r in enumerate(redacted):
+        key = sensitive_row_key(stored[i]) if i < len(stored) else None
+        if key:
+            r = dict(r or {})
+            r[ROW_KEY_FIELD] = key
+        out.append(r)
+    return out
+
+
+def strip_row_keys(rows: list) -> list:
+    """剥离 ``__rowKey``(落库/校验前 —— 它不是调色板列,也不持久化)。"""
+    return [{k: v for k, v in (r or {}).items() if k != ROW_KEY_FIELD}
+            for r in rows or []]
+
+
+def merge_sensitive_columns(stored: list, submitted: list) -> list:
+    """非属主保存数据集(r6 二.1 修订):按 ``__rowKey`` 并回存量敏感
+    值 —— 删行(键缺席)→ 值随行删;插行(无键/未知键)→ 新行不并回
+    任何值;重排 → 键随行走,不串号。同键多行按序消费(同键即同敏感
+    值);成员提交里的敏感键值(看不到真值)不生效,存量权威。
+    ``__rowKey`` 已剥,不落库。"""
+    from collections import defaultdict, deque
+
+    pool: "dict[str, deque]" = defaultdict(deque)
+    for s in stored or []:
+        key = sensitive_row_key(s)
+        if key:
+            pool[key].append(
+                {k: v for k, v in (s or {}).items()
+                 if SENSITIVE_COLUMN_RE.search(str(k))})
+    out = []
+    for sub in submitted or []:
+        row = dict(sub or {})
+        key = row.pop(ROW_KEY_FIELD, None)
+        src = pool.get(key) if key else None
+        if src:
+            row.update(src.popleft())
+        out.append(row)
     return out
 
 

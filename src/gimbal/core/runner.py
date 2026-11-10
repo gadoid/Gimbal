@@ -604,19 +604,12 @@ class Engine:
     def _redact_outputs(value: Any) -> Any:
         """G2:outputs 过脱敏键表(与 CallResult.to_evidence 同键表口径;
         深拷贝 —— outputs 是调度器喂下游的共享引用,不就地改)。
-        游标键豁免见 _CURSOR_KEYS(D3)。"""
-        from gimbal.protocols.result import is_sensitive_path
-        if isinstance(value, dict):
-            return {
-                k: ("***redacted***"
-                    if (is_sensitive_path(k)
-                        and str(k).lower() not in Engine._CURSOR_KEYS)
-                    else Engine._redact_outputs(v))
-                for k, v in value.items()
-            }
-        if isinstance(value, list):
-            return [Engine._redact_outputs(v) for v in value]
-        return value
+        游标键豁免见 _CURSOR_KEYS(D3;r6 起判定收口 result.key_is_
+        sensitive,键表唯一)。"""
+        from gimbal.protocols.result import _redact_tree
+
+        out, _changed = _redact_tree(value)
+        return out
 
     @staticmethod
     def _detail_row(result: Any) -> dict[str, Any]:

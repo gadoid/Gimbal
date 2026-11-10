@@ -48,6 +48,62 @@ def is_sensitive_path(path: Any) -> bool:
     return any(pat in lowered for pat in _DEFAULT_REDACT_KEYS)
 
 
+# D3(2026-10-13,自 core/runner 迁入统一):跨次游标键豁免 ——
+# nextToken/pageToken 这类分页游标按子串表会被 "token" 命中脱敏,集成
+# 任务(Y4 state_mapping)跨次注入的就是 ***redacted***,游标失效。仅
+# **精确键名**(大小写不敏感)豁免;authToken/access_token 等真实
+# 凭证键仍脱敏。
+CURSOR_KEYS = frozenset({"nexttoken", "pagetoken", "cursor", "next_cursor"})
+
+
+def key_is_sensitive(path: Any) -> bool:
+    """键名脱敏判定(带 D3 游标豁免;供 redact_mapping_cursors_exempt /
+    runner._redact_outputs 共用,键表唯一)。"""
+    lowered = str(path).lower()
+    return any(pat in lowered for pat in _DEFAULT_REDACT_KEYS) \
+        and lowered not in CURSOR_KEYS
+
+
+def _redact_tree(node: Any) -> "tuple[Any, bool]":
+    """递归键名脱敏;返回 (结果, 是否有改动) —— 无改动时原对象直通
+    (热路径零拷贝)。"""
+    if isinstance(node, dict):
+        out: dict = {}
+        changed = False
+        for k, v in node.items():
+            if key_is_sensitive(k):
+                out[k] = redact_value(v)
+                changed = True
+            else:
+                m, c = _redact_tree(v)
+                out[k] = m
+                changed = changed or c
+        return (out if changed else node), changed
+    if isinstance(node, list):
+        out_l: list = []
+        changed = False
+        for v in node:
+            m, c = _redact_tree(v)
+            out_l.append(m)
+            changed = changed or c
+        return (out_l if changed else node), changed
+    return node, False
+
+
+def egress_mask(node: Any) -> Any:
+    """事件/日志证据出口统一掩码(r6 二.2):键名脱敏(游标键豁免,
+    D3 口径)→ 按值掩(:func:`gimbal.protocols.secrets.scrub`)。
+
+    此前逐出口接线漏了 ``step.start.strategy_spec``(连键名脱敏都没
+    接过)、``call.exchange`` 的 endpoint / message、``step.end`` 的
+    call_summary;统一收口在 EventBus.publish 与 loguru patcher 之后,
+    新增事件字段不会再漏。返回新结构;无可掩内容时原对象直通。"""
+    from gimbal.protocols.secrets import scrub
+
+    out, _ = _redact_tree(node)
+    return scrub(out)
+
+
 def redact_mapping(data: dict, keys: tuple[str, ...] = _DEFAULT_REDACT_KEYS) -> dict:
     """按键名子串匹配递归脱敏 dict（含嵌套 dict/list），返回新 dict。
 

@@ -162,3 +162,94 @@ def test_detail_row_no_registry_passthrough():
     # 空册时行为与旧完全一致(未登记 = 不掩,不引入新脱敏噪声)
     row = Engine._detail_row(_detail_result())
     assert row["outputs"]["cursor"] == SECRET
+
+
+# ── r6 二.2:出口统一收口(EventBus.publish 逐字段 egress_mask)────
+
+def _publish_and_capture(event):
+    from gimbal.events.bus import InMemoryEventBus
+
+    got = []
+    bus = InMemoryEventBus()
+    bus.subscribe(lambda e: got.append(e))
+    bus.publish(event)
+    return got[0]
+
+
+def test_publish_masks_step_start_strategy_spec():
+    """step.start.strategy_spec:r5 漏网出口 —— 连键名脱敏都没有;
+    publish 收口后:敏感键名脱敏(册空也脱)+ 普通键名值掩。"""
+    from gimbal.events.types import StepStartEvent
+
+    secrets.register_secret(SECRET, TOKEN)
+    ev = _publish_and_capture(StepStartEvent(
+        step_id="s1", step_name="探针", strategy_kind="call",
+        strategy_spec={"request": {"body": {
+            "password": "plain-even-not-registered",   # 键名 → 脱敏
+            "note": SECRET,                            # 值 → 掩
+            "keep": "ok"}},
+            "path": "/q?memo=" + TOKEN}))
+    body = ev.strategy_spec["request"]["body"]
+    assert body["password"] == secrets.REDACTED
+    assert body["note"] == secrets.REDACTED
+    assert body["keep"] == "ok"
+    assert TOKEN not in ev.strategy_spec["path"]
+
+
+def test_publish_masks_exchange_strings_and_call_summary():
+    """call.exchange 的 endpoint/message 与 step.end 的 call_summary:
+    字符串字段只值掩(秘密随查询串/摘要出境的路径)。"""
+    from gimbal.events.types import StepEndEvent
+
+    secrets.register_secret(SECRET)
+    ev = _publish_and_capture(StepEndEvent(
+        step_id="s1", status="failed", duration_ms=1.0,
+        call_summary=f"POST http://127.0.0.1:9/x/q?memo={SECRET}",
+        error_brief=None))
+    assert SECRET not in ev.call_summary
+    assert secrets.REDACTED in ev.call_summary
+
+
+def test_publish_cursor_keys_exempt_from_key_redaction():
+    """D3 游标豁免在统一收口里保持:nextToken 键不按键名脱敏;但登记
+    值照掩(值掩不看键名)。"""
+    from gimbal.events.types import StepEndEvent
+
+    cursor_val = "cursor-payload-987654"
+    secrets.register_secret(cursor_val)
+    ev = _publish_and_capture(StepEndEvent(
+        step_id="s1", status="passed", duration_ms=1.0,
+        extracts=[{"target": "nextToken", "value": cursor_val}]))
+    assert ev.extracts[0]["value"] == secrets.REDACTED
+    # 未登记的游标值不被键名脱敏误伤(跨次注入仍可用)
+    secrets.reset_for_tests()
+    ev2 = _publish_and_capture(StepEndEvent(
+        step_id="s1", status="passed", duration_ms=1.0,
+        extracts=[{"target": "nextToken", "value": cursor_val}]))
+    assert ev2.extracts[0]["value"] == cursor_val
+
+
+def test_loguru_patcher_masks_message_args_extra():
+    """日志出口:patcher 对 message/args(loguru 惰性格式化,秘密常在
+    args 里)/extra 按值掩 —— stderr JSON sink → 平台日志表这条路收口。"""
+    import io
+
+    from gimbal.log.setup import setup_logging
+
+    secrets.register_secret(SECRET)
+    setup_logging()          # 幂等;内部挂 patcher
+    from gimbal.log import get_logger
+
+    sink = io.StringIO()
+    test_logger = get_logger("r6-mask-probe")
+    import loguru
+
+    handle_id = loguru.logger.add(
+        sink, format="{message} | {extra[ctx]}", level="DEBUG")
+    try:
+        test_logger.info("login {} failed", SECRET, ctx=f"ctx-{SECRET}")
+        line = sink.getvalue()
+    finally:
+        loguru.logger.remove(handle_id)
+    assert SECRET not in line
+    assert secrets.REDACTED in line

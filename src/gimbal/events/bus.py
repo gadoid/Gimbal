@@ -142,6 +142,28 @@ class InMemoryEventBus:
             return list(self._subscriptions)
 
     # ── 发布 ──────────────────────────────────────
+    @staticmethod
+    def _egress_event_mask(event: Any) -> None:
+        """r6 二.2:事件离开发行点前逐字段统一掩 —— pydantic 事件对
+        str/dict/list/tuple 字段替换为 egress_mask 结果(object.__
+        setattr__,frozen 模型与 seq 盖章同款通道;标量不动)。订阅者
+        (stdout jsonl → 平台 / 归档 / 报告 / 平台 on_event)全部拿已掩
+        事件,新增字段不会再漏。"""
+        from gimbal.protocols.result import egress_mask
+
+        fields = getattr(type(event), "model_fields", None)
+        if not fields:
+            return
+        for name in fields:
+            try:
+                v = getattr(event, name)
+            except Exception:  # noqa: BLE001 — 字段缺失/校验态跳过
+                continue
+            if isinstance(v, (str, dict, list, tuple)):
+                m = egress_mask(v)
+                if m is not v:
+                    object.__setattr__(event, name, m)
+
     def publish(self, event: Any) -> None:
         """发布一个事件到总线，按订阅的 mode 派发（SYNC 同步调用、ASYNC 提交到线程池、BATCH 入队并在达到 batch_size 时刷新）。
 
@@ -172,6 +194,12 @@ class InMemoryEventBus:
                     object.__setattr__(event, "run_id", event.run)
             except Exception:  # noqa: BLE001  # 盖章失败不影响派发
                 pass
+            # r6 二.2:出口统一收口 —— 掩码失败不阻断派发(best-effort,
+            # 与盖章同口径;漏掩的兜底是值册为空 = 本无秘密在局)
+            try:
+                self._egress_event_mask(event)
+            except Exception:  # noqa: BLE001
+                logger.debug("[EventBus] egress mask failed: {}", et)
             for sub in self._subscriptions:
                 if not sub.event_filter.matches(event):
                     continue

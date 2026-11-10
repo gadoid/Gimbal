@@ -107,8 +107,14 @@ M2 需求清单就此收口,不再悬空。
 - 三.2 原 5 落库面:列 **M3** 小切片 —— 进项目/公共区(新建带 projectId / 提升 / 发布)
   即剥 `config.users` 与 `config.services` 存储 + 一次性清洗存量行(与发布副本
   strip="always" 同口径,「共享区不落明文」闭环);
-- 三.3 公共模板指纹按属主个人池:**保持**(换绑改变实际执行凭证,暂停-重新确认是知情
-  机制而非缺陷;属主侧规范「少折腾换绑」)。
+- 三.3 公共模板指纹按属主个人池:**保持(r6 事实更正后待重新裁定)**。r5 记录的理由
+  (「换绑改变实际执行凭证」)**与事实不符**:订阅实例执行用的是订阅人自己的个人池
+  (integration_runner:`owner_id=holder`)或项目池,从不取模板属主的绑定 —— 指纹记的
+  却是属主池绑定 id,属主换绑 → 全体订阅者暂停,而暂停对订阅人没有任何可知情的内容
+  (他们的执行凭证并未变化)。选项:(i) 保持(统一「模板级不变量:同模板同指纹」语义,
+  代价 = 属主换绑造成无信息量的全员暂停);(ii) 公共模板指纹改记槽名声明集(换绑不再
+  暂停,弱化「订阅确认的是具体绑定」语义);(iii) 按各订阅人自己的池记(打破「同模板
+  同指纹」)。**待拍板,未改代码**。
 
 ## 门禁
 
@@ -119,3 +125,63 @@ M2 需求清单就此收口,不再悬空。
   test_execution_refactor)为已知全量 teardown 串扰类(前序泄漏的后台任务打到已删
   schema;单独跑、两文件同跑 18/18 均绿;受害者逐次不同,评审分块跑 0 error),非本批
   引擎改动所致。
+
+## 评审第六轮修复(2026-11-11,对照 r6 review)
+
+### 二.1 数据集「按行号并回」跨行串号 → **HMAC 行键并回**(采纳评审改法 (a))
+
+按行号并回在成员删/插/重排后会串号(删掉 alice 行 → bob 拿到 alice 的密码),比丢列更
+隐蔽。(b) 行数锁在同数重排下不可判定,故选 (a):
+
+- **读面**(`_to_full_shape(redact=True)`):脱敏行附 `__rowKey` = 行**敏感部分**的
+  HMAC-SHA256 短键(密钥 = FERNET_KEY,成员拿到的键不能离线爆破敏感值;无敏感列的行
+  无键)。
+- **写面**(`merge_sensitive_columns` 重写):按 `__rowKey` 并回 —— 删行(键缺席)→
+  值随行删;插行(无键/未知键)→ 新行不并回;重排 → 键随行走到**正确的行**。同键多行
+  按序消费;存量值权威(成员提交的猜测值不生效);`__rowKey` 剥离不落库、不进调色板
+  校验。
+- 前端数据集编辑器是 JSON/TSV/CSV 文本编辑:JSON 路径键天然存活;TSV/CSV 粘贴整表替换
+  时键丢失 → 那些行按新行处理(不并回),降级为**可见失败**(执行认证报错),不会静默
+  串号。
+- 用例:`test_member_lists_and_save_keeps_sensitive` 更新(读面带键/不落库)+
+  `test_row_key_merge_survives_delete_insert_reorder`(重排+删 / 插行+重排 / 未知键)。
+
+### 二.2 按值掩码 4 个漏网出口 → **出口统一收口**(引擎)
+
+- **`EventBus.publish` 逐字段 `egress_mask`**:pydantic 事件的 str/dict/list/tuple 字段
+  在发行点统一过「键名脱敏(D3 游标键豁免,`key_is_sensitive` 键表唯一)→ 按值掩」。
+  stdout jsonl(→ 平台 on_event)、归档、报告全部在总线下游,一处收口全覆盖 —— 此前
+  漏网的 `step.start.strategy_spec`(**连键名脱敏都没有**,常规登录写法即泄漏)、
+  `call.exchange` 的 endpoint/message、`step.end` 的 call_summary 全部覆盖;新增事件
+  字段不会再漏。
+- **loguru patcher**(`log/setup.py`):message / args(loguru 惰性格式化,秘密常在
+  args 里)/ extra 按值掩 —— ExtractExecutor 提取值、AssertionExecutor actual、
+  CallExecutor 请求 URL 日志收口。
+- **JSON formatter 标签**(`log/formatters.py`):contextvar 标签(endpoint =
+  "SVC METHOD path?query" 会带凭证查询串)在 sink 序列化时注入、patcher 看不到 ——
+  注入点补值掩。
+- `runner._redact_outputs` 收编 `result._redact_tree`(键表唯一,行为不变)。
+- **平台守卫(r6 要求的端到端)**:`test_authz_r6_review_fixes.py::
+  TestValueMaskingEndToEnd` —— **真实引擎子进程**(`gimbal run launch -o jsonl`,
+  不 mock)跑死端口步骤,模板放进普通键名字段/查询参数;断言 execution_events(事件+
+  kind=log)、execution_steps.call_summary 全部搜不到明文,且 `***redacted***` 在场
+  (防空转通过)。r5 记录「平台侧零改动、天然继承」的前提已由本守卫坐实(出口全在
+  引擎侧收口后,平台入库面天然干净)。
+
+### 小项
+
+- 项目凭证密码 **≥6 位**(创建/修改 422 `password_too_short_for_masking` —— 引擎按值
+  掩码登记阈值即 6,短密码在证据面不受保护);前端表单提示 + 前置拦截。S8/r5 既有用例
+  的短密码测试值同步加长。
+- 掩码防直接展示、不防布尔推断(多断言逐段试探)—— 协作面固有余余风险,建议随上线
+  公告明示「项目成员可间接使用项目凭证;掩码只防直接展示」(未落公告文案,上线物料
+  时带上)。
+- `test_reconcile_cancel_shape` 偶发(取消时序):本轮未触;下轮全量若复现,按评审
+  建议加大首行完成等待窗口。
+
+### r6 门禁
+
+root `1437 passed / 3 skipped`(r6 新增 4:publish 收口 / 交换串 / 游标豁免 / loguru
+patcher);后端全量 `1974 passed / 2 skipped + 1 error`(test_p35_rollout_fixes 取消
+时序偶发 —— 评审§四已点名的既有类,单跑 9/9 绿);前端 vitest 1350 / vue-tsc 0 /
+eslint 0 / build ✓(ProjectCredentialsPanel 密码 ≥6 提示 + 前置拦截)。

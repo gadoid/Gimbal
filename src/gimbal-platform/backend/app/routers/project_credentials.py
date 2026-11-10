@@ -10,7 +10,8 @@ Endpoints(前缀 ``/projects/{project_id}/credentials``):
                       成员视图不含用户名(``username=''``),密码恒掩码
 - POST                新建 —— 项目管理员(``_manage_gate``;r5-2.2 起
                       Admin+ 不旁路,与选用门同口径:凭证是项目的,
-                      不是平台的)
+                      不是平台的);密码 ≥6 位(r6:短密码不受引擎按值
+                      掩码保护)
 - PATCH  /{cid}       修改 —— 同上;改 ``url`` 须同时重录 ``password``
                       (r5-2.2:拨测把解密凭据发往该地址,单改地址 =
                       把存量密码重定向到任意收集端)
@@ -100,6 +101,17 @@ async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
                 "message": "只有项目管理员能维护项目凭证"})
 
 
+def _require_maskable_password(password: str | None) -> None:
+    """r6 小项:项目凭证密码 ≥6 位 —— 引擎按值掩码的登记阈值就是 6,
+    短密码在 events/rows/日志证据面不受掩码保护(共享凭证必须护住)。"""
+    if password is not None and len(password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "password_too_short_for_masking",
+                    "message": "密码至少 6 位 —— 短于 6 位的凭证不受"
+                               "执行记录按值掩码保护(项目成员可见)"})
+
+
 async def _get_cred(db: AsyncSession, project_id: int, cid: int) -> AuthSession:
     a = await db.get(AuthSession, cid)
     if a is None or a.project_id != project_id:
@@ -159,6 +171,7 @@ async def create_project_credential(
     project_id: int,
 ) -> AuthSessionOut:
     proj = await _manage_gate(db, user, project_id)
+    _require_maskable_password(payload.password)
     slot = payload.slot or payload.alias
     # 应用层 (project, alias) 名字唯一(与个人面 (owner, alias) 同口径)
     dup = (await db.execute(select(AuthSession.id).where(
@@ -241,6 +254,7 @@ async def patch_project_credential(
 ) -> AuthSessionOut:
     proj = await _manage_gate(db, user, project_id)
     a = await _get_cred(db, proj.id, cid)
+    _require_maskable_password(payload.password)
     if payload.url is not None and payload.url != a.url and \
             payload.password is None:
         # r5-2.2:改登录地址必须同时重录密码 —— 拨测/执行会把解密

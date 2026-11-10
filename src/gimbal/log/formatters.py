@@ -171,8 +171,12 @@ class JsonSink:
                 payload[key] = extra[key]
 
         # P1-03：执行上下文标签（contextvar 在记录线程内读取 = 所属单元/步骤）
+        # r6 二.2:标签在 sink 序列化时注入(patcher 看不到),这里过值掩
+        # —— endpoint 标签 = "SVC METHOD path?query" 会带凭证查询串。
         from gimbal.log.exec_context import exec_labels
-        payload.update(exec_labels())
+        from gimbal.protocols.secrets import scrub
+
+        payload.update(scrub(exec_labels()))
 
         exc = record.get("exception")
         if exc is not None:

@@ -30,6 +30,24 @@ def setup_logging(config: Optional[LoggingConfig] = None) -> None:
 
     logger.remove()
 
+    # r6 二.2:日志出口统一按值掩 —— patcher 在 sink 前对 message /
+    # args(loguru 惰性格式化,秘密常在 args 里)/ extra 就地掩。
+    # 此前 ExtractExecutor「提取: x = '<明文>'」、AssertionExecutor
+    # actual、CallExecutor 请求 URL 都经 stderr JSON sink 流进平台日志表。
+    def _secret_scrub_record(record):  # noqa: ANN001 — loguru record
+        from gimbal.protocols.secrets import scrub
+
+        record["message"] = scrub(record.get("message"))
+        args = record.get("args")
+        if args:
+            record["args"] = tuple(
+                scrub(a) for a in args) if isinstance(args, tuple) \
+                else scrub(args)
+        if record.get("extra"):
+            record["extra"] = scrub(record["extra"])
+
+    logger.configure(patcher=_secret_scrub_record)
+
     # ── Console sink ─────────────────────────────────────
     console_kwargs = make_console_sink(
         stream=sys.stderr,

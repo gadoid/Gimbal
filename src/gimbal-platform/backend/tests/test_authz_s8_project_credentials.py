@@ -125,7 +125,7 @@ class TestCredentialCrudGates:
         base = f"/api/projects/{pid}/credentials"
         # 普通成员不能建(403);非成员 404;建成功(管理员)
         body = {"alias": "qa1", "url": "http://a", "username": "u1",
-                "password": "p1", "system": "fin", "accountFields": {"orgNo": "1"}}
+                "password": "p1x2y3z", "system": "fin", "accountFields": {"orgNo": "1"}}
         assert (await client.post(base, headers=h_member, json=body)
                 ).status_code == 403
         assert (await client.post(base, headers=h_out, json=body)
@@ -149,7 +149,7 @@ class TestCredentialCrudGates:
         assert (await client.get(base, headers=h_out)).status_code == 404
         # patch(换密)+ 换默认 + 删除走管理员
         r = await client.patch(f"{base}/{cid}", headers=h_admin,
-                               json={"password": "p2"})
+                               json={"password": "p2x3y4z"})
         assert r.status_code == 200 and r.json()["password_masked"] == "<REDACTED>"
         r = await client.post(f"{base}/{cid}/default", headers=h_admin)
         assert r.status_code == 200
@@ -173,7 +173,7 @@ class TestCredentialCrudGates:
         ppid = await _public_project_id()
         r = await client.post(
             f"/api/projects/{ppid}/credentials", headers=h_admin,
-            json={"alias": "x", "url": "", "username": "u", "password": "p"})
+            json={"alias": "x", "url": "", "username": "u", "password": "p12345"})
         assert r.status_code == 409 and r.json()["detail"]["code"] == \
             "public_project_no_credentials"
         # 项目删除(内容为空)连带删除项目凭证
@@ -404,7 +404,7 @@ class TestIntegrationProjectSource:
         r = await client.post(
             f"/api/projects/{pid}/credentials", headers=h_admin,
             json={"alias": "qa1b", "slot": "qa1", "url": "",
-                  "username": "u", "password": "p"})
+                  "username": "u", "password": "p12345"})
         assert r.status_code == 201, r.text
         async with db_module.SessionLocal() as db:
             inst2 = await db.get(IntegrationTask, inst.id)

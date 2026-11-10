@@ -23,6 +23,7 @@ from .scenario_store import (
     get_row as get_scenario_row,
     is_foreign_viewer,
     merge_sensitive_columns,
+    strip_row_keys,
 )
 
 
@@ -126,9 +127,10 @@ async def create(
     ).scalar_one_or_none()
     if scenario is None:
         raise ValueError(f"scenario_not_found: {scenario_id}")
-    _validate_rows(scenario.payload, list(draft.rows or []),
-                   await _known_slots(db, scenario.payload,
-                                      list(draft.rows or [])))
+    # r6 二.1:__rowKey 是读面伴生键,不是数据 —— 创建即剥
+    rows0 = strip_row_keys(list(draft.rows or []))
+    _validate_rows(scenario.payload, rows0,
+                   await _known_slots(db, scenario.payload, rows0))
 
     dataset_id = await _next_dataset_id(db)
     row = ComposerDataSet(
@@ -136,7 +138,7 @@ async def create(
         scenario_id=scenario_id,
         name=draft.name,
         description=draft.description or "",
-        rows=list(draft.rows or []),
+        rows=rows0,
         var_unlocks=list(draft.var_unlocks or []),
     )
     db.add(row)
@@ -163,16 +165,20 @@ async def update(
     *,
     viewer_id: int | None = None,
 ) -> DataSet:
-    """``viewer_id``(r3二.1):非属主(项目同事 / 公共维护者)的提交
-    是脱敏视图 —— 按行位把存量敏感列值并回再落库,整表替换不再丢
-    列;属主 / 内部调用(缺省 None)原样保存。"""
+    """``viewer_id``(r3二.1/r6二.1):非属主(项目同事 / 公共维护者)
+    的提交是脱敏视图 —— 按 ``__rowKey`` 把存量敏感列值并回**正确的
+    行**再落库(删/插/重排不丢列也不串号;无键行 = 新行不并回);
+    属主 / 内部调用(缺省 None)原样保存。"""
     row = await _get_row(db, dataset_id)
     scenario = await get_scenario_row(db, row.scenario_id)
     if scenario is None:  # 理论不可达(FK 在);防御孤儿行
         raise KeyError(f"data_set_not_found: {dataset_id}")
     rows = list(draft.rows or [])
     if is_foreign_viewer(viewer_id, scenario.owner_id):
+        # 非属主:带键进 merge(内部按键消费并 pop;无键行 = 新行)
         rows = merge_sensitive_columns(row.rows or [], rows)
+    else:
+        rows = strip_row_keys(rows)
     _validate_rows(scenario.payload, rows,
                    await _known_slots(db, scenario.payload, rows))
     row.name = draft.name
@@ -269,13 +275,22 @@ def _rows_for(rows: list | None, redact: bool) -> list:
 
 
 def _to_full_shape(row: ComposerDataSet, *, redact: bool = False) -> DataSet:
+    from .scenario_store import attach_row_keys, strip_sensitive_columns
+
+    if redact:
+        # r6 二.1:非属主读 = 脱敏行 + __rowKey(写面按键并回存量敏感
+        # 值;按行号并会在删/插/重排后串号)
+        rows = attach_row_keys(row.rows or [],
+                               strip_sensitive_columns(row.rows or []))
+    else:
+        rows = list(row.rows or [])
     return DataSet(
         datasetId=row.dataset_id,
         scenarioId=row.scenario_id,
         name=row.name,
         description=row.description,
         rowCount=row.row_count,
-        rows=_rows_for(row.rows, redact),
+        rows=rows,
         varUnlocks=list(row.var_unlocks or []),
     )
 

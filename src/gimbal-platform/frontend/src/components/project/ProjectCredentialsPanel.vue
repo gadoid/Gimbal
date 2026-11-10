@@ -55,6 +55,7 @@
           </p>
           <label>账号<input v-model="form.username" data-testid="prj-cred-username" /></label>
           <label>密码 / 令牌<input v-model="form.password" type="password" data-testid="prj-cred-password" /></label>
+          <p class="hint">至少 6 位 —— 短密码不受执行记录按值掩码保护(项目成员可见)</p>
         </div>
         <p v-if="formError" class="err">{{ formError }}</p>
         <div class="modal-actions">
@@ -140,6 +141,10 @@ async function save(): Promise<void> {
   formError.value = ''
   if (urlChanged.value && !form.value.password) {
     formError.value = '修改登录地址须重新录入密码(凭据会发往该地址)'
+    return
+  }
+  if (form.value.password && form.value.password.length < 6) {
+    formError.value = '密码至少 6 位(短密码不受执行记录按值掩码保护)'
     return
   }
   saving.value = true

@@ -53,11 +53,11 @@ describe('r5-2.2 · 项目凭证改地址须重录密码', () => {
   it('改 url 并录密码:patch 正常发出', async () => {
     const w = await openEdit()
     await w.find('[data-testid="prj-cred-url"]').setValue('http://new-auth')
-    await w.find('[data-testid="prj-cred-password"]').setValue('p2')
+    await w.find('[data-testid="prj-cred-password"]').setValue('p2x3y4z')
     await w.find('[data-testid="prj-cred-save"]').trigger('click')
     await flushPromises()
     expect(credApi.patchProjectCredential).toHaveBeenCalledWith(
-      5, 11, expect.objectContaining({ url: 'http://new-auth', password: 'p2' }))
+      5, 11, expect.objectContaining({ url: 'http://new-auth', password: 'p2x3y4z' }))
     w.unmount()
   })
 })
