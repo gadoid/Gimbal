@@ -81,15 +81,14 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       '/suites',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
       '/projects',
-      // 服务组(S7.3:默认值页退役 → 全局默认在公共项目「配置」页签)
-      '/services', '/service-admin', '/auths', '/adaptations',
+      // 服务组(⑦ 服务信息管理更名服务配置;IA P1 环境与地址挪入)
+      '/services', '/service-admin', '/admin/deployments', '/auths',
+      '/adaptations',
       // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页);
       // 集成组:集成(从执行组迁出)
       '/run', '/executions', '/analytics',
       '/integrations',
       '/admin/users',
-      // M2a S2.3:部署地址(Admin+);项目管理已收编 /projects
-      '/admin/deployments',
     ])
     w.unmount()
   })

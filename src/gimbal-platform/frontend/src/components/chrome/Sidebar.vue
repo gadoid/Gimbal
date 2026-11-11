@@ -209,10 +209,15 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, cap: 'ops.write' },
+      // ⑦:服务信息管理重定位「服务配置」(术语降位,数据模型零改动)
+      { path: '/service-admin', label: '服务配置', icon: LayersIcon, cap: 'ops.write' },
+      // IA P1(2026-11-11):部署地址更名「环境与地址」并挪入服务组 ——
+      // 与服务配置同属治理面(名词层:身份面注册表 + 环境地址矩阵);
+      // 读全员/写 Admin+
+      { path: '/admin/deployments', label: '环境与地址', icon: GearIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
-      // S7.3:「默认值」页退役 —— 全局默认迁公共项目「配置」页签
-      // (工作台注册卡「默认值」仍为入口),个人层在个人设置「我的配置」
+      // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
+      // 页签,个人默认在执行配置 /exec-configs)
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
     ],
   },
@@ -233,10 +238,8 @@ const groups: SidebarGroup[] = [
   ] },
   { label: '平台', entries: [
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
-    // M2a S7.1:项目管理收编进「项目」组(/projects,Admin+ 有新建);
-    // 部署表维护仍在平台组
-    // M2a S2.3:部署表((基础服务, 环境) → 地址)与默认环境
-    { path: '/admin/deployments', label: '部署地址', icon: GearIcon, cap: 'ops.write' },
+    // M2a S7.1:项目管理收编进「项目」组;IA P1 起部署表维护(环境与
+    // 地址)挪入「服务」组(治理面与身份面注册表相邻)
   ] },
 ]
 

@@ -1,7 +1,7 @@
 <template>
   <section class="page">
     <header class="head">
-      <h1>部署地址</h1>
+      <h1>环境与地址</h1>
       <p class="sub">
         每个环境里各基础服务的地址 —— 地址的唯一来源(authz M2a S6 起别名
         不再自带地址,运行按执行环境链到这里取址)。
@@ -110,7 +110,8 @@
 </template>
 
 <script setup lang="ts">
-/** DeploymentsAdmin.vue — authz M2a S2.3:部署表维护页(Admin+)。
+/** DeploymentsAdmin.vue — 环境与地址(authz M2a S2.3 部署表维护页,
+ * Admin+;IA P1 更名自「部署地址」并挪入服务组治理面)。
  * 环境 chip 切换 → 该环境的 (基础服务 → 地址) 行内编辑;默认环境切换。
  * M2a S6 起部署表是地址唯一来源(别名地址退役),旧「迁移遗留冲突裁定」
  * 区随 /deployments/conflicts 端点一并移除。错误内联展示。
