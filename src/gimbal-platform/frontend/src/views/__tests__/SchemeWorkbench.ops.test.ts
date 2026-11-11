@@ -34,7 +34,10 @@ vi.mock('@/api/service-aliases', () => ({
 
 const SCHEME_DEFAULT = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,
-  dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+  // 分层⑤:存量绑定在场(alias 空 = 用服务键本身)→ 绑定区按方案
+  // 遗留口径渲染;空方案则指到执行配置(pointer 卡)
+  dataSetSelection: [], injectionEntryIds: [],
+  serviceBindings: { 'svc-decl': { alias: '' } },
   options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_A = {

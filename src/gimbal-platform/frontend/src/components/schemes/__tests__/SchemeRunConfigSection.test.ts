@@ -30,6 +30,8 @@ const BASE = {
   ],
   stepTo: null as number | null, nRuns: 1, parallel: 1,
   stepCount: 3,
+  environmentId: null as number | null,
+  environments: [] as Array<{ id: number; name: string; is_default: boolean }>,
 }
 
 function mountSection(
@@ -49,13 +51,44 @@ describe('SchemeRunConfigSection', () => {
       aliasRow('svc-b', 'svc-b'),
       aliasRow('svc-b-ro', 'svc-b', 'ro'),
     ])
-    const w = mountSection()
+    // 分层⑤:存量绑定在场才出选择器(空方案指到执行配置)
+    const w = mountSection({
+      serviceBindings: { 'svc-a': { alias: 'svc-a' } } })
     await flushPromises()
     const sel = w.findAll('[data-testid="binding-alias"]')[0]   // svc-a 行
     await sel.setValue('svc-a-uat')
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
       'svc-a': { alias: 'svc-a-uat' },
     })
+  })
+
+  it('分层⑤:空方案(无绑定)→ 指引卡指到执行配置,不出选择器', async () => {
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
+    const w = mountSection()
+    await flushPromises()
+    expect(w.find('[data-testid="binding-pointer"]').exists()).toBe(true)
+    expect(w.find('[data-testid="binding-pointer-link"]').attributes('href'))
+      .toBe('/exec-configs')
+    expect(w.findAll('[data-testid="binding-alias"]').length).toBe(0)
+    // 环境同款:无环境 → 指引(不出 param-env select)
+    expect(w.find('[data-testid="env-pointer"]').exists()).toBe(true)
+    expect(w.find('[data-testid="param-env"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('分层⑤:存量环境在场 → select 可改可清空(清空=改由执行配置承载)', async () => {
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection({
+      environmentId: 2,
+      environments: [{ id: 2, name: 'UAT', is_default: false }],
+    })
+    await flushPromises()
+    const sel = w.find('[data-testid="param-env"]')
+    expect((sel.element as HTMLSelectElement).value).toBe('2')
+    expect(w.find('[data-testid="env-pointer"]').exists()).toBe(false)
+    await sel.setValue('')
+    expect(w.emitted('update:environmentId')!.at(-1)![0]).toBe(null)
+    w.unmount()
   })
 
   it('清空别名 → 移除该服务键', async () => {
@@ -68,7 +101,9 @@ describe('SchemeRunConfigSection', () => {
 
   it('binding-url 输入已退役(M2a S6);无同基候选行显示静默说明代替下拉', async () => {
     listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
-    const w = mountSection()
+    // 分层⑤:存量绑定在场(svc-a 已绑非降级别名)→ bind-list 渲染全部服务行
+    const w = mountSection({
+      serviceBindings: { 'svc-a': { alias: 'svc-a-uat' } } })
     await flushPromises()
     expect(w.find('[data-testid="binding-url"]').exists()).toBe(false)
     expect(w.findAll('input.bind-url').length).toBe(0)
@@ -84,7 +119,9 @@ describe('SchemeRunConfigSection', () => {
       aliasRow('svc-a-maker', 'svc-a', 'maker'),
       aliasRow('other', 'other-sys'),
     ])
-    const w = mountSection()
+    // 分层⑤:存量绑定在场驱动(空方案不出选择器)
+    const w = mountSection({
+      serviceBindings: { 'svc-a': { alias: 'svc-a' } } })
     await flushPromises()
     const sel = w.findAll('[data-testid="binding-alias"]')[0]
     const opts = sel.findAll('option').map((o) => o.text())

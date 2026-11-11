@@ -52,6 +52,8 @@ const emit = defineEmits<{
  *  降级不误报(注册表读全员)。 */
 const aliasRows = ref<ServiceAliasRow[]>([])
 const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
+/** 分层⑤:方案是否还带着存量绑定(在场 → 照常编辑;空 → 指到执行配置) */
+const hasBindings = computed(() => Object.keys(props.serviceBindings).length > 0)
 onMounted(() => {
   // 同步抛兜底:http 层在无适配器/被 mock 环境可能同步炸(拿不到 Promise,
   // .catch 挂不上)— 包 try 后注册表不可达只是候选为空,不阻塞编辑。
@@ -131,14 +133,27 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 
 <template>
   <div class="run-config">
-    <!-- ① 用户与服务(authz M2a S6:一行一个别名选择;地址由执行环境的部署地址给出) -->
+    <!-- ① 用户与服务(authz M2a S6;分层⑤:方案不再承载新绑定) -->
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">用户与服务</span>
         <span class="zone-spacer"></span>
-        <span class="zone-hint">地址由执行环境的部署地址给出;此处只选每个服务用哪个别名</span>
+        <span class="zone-hint">地址由执行环境的部署地址给出;身份选择由「执行配置」承载</span>
       </header>
-      <div v-if="serviceRows.length" class="bind-list">
+      <!-- 分层⑤:空方案(新建)指到执行配置 —— 方案字段保留兼容,存量
+           绑定照常编辑(方案遗留链位),清空后回到指引态 -->
+      <div v-if="!hasBindings" class="exec-pointer" data-testid="binding-pointer">
+        <p class="hint">
+          绑定已改由「执行配置」承载:在那里按系统维护 身份面 → 槽位 与
+          carry 业务参数,执行时选定配置即注入。方案只管内容侧(数据/步段/强度)。
+        </p>
+        <a class="pointer-link" href="/exec-configs" data-testid="binding-pointer-link">去执行配置 ↗</a>
+      </div>
+      <template v-else>
+        <p class="hint legacy-note">
+          存量方案绑定 —— 按方案遗留链位生效;新增绑定请改在「执行配置」维护。
+        </p>
+        <div v-if="serviceRows.length" class="bind-list">
         <div v-for="r in serviceRows" :key="r.service" class="bind-row"
           :class="{ 'is-degraded': degraded(r.service) }">
           <div class="bind-svc">
@@ -164,6 +179,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
         </div>
       </div>
       <p v-else class="hint">场景内暂无声明/引用的服务。</p>
+      </template>
     </section>
 
     <!-- ② 运行参数 -->
@@ -206,17 +222,28 @@ const previewEnvNames = computed<Record<number, string>>(() =>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
       <div class="param-row">
         <label>执行环境</label>
-        <select class="bind-alias" data-testid="param-env"
-                :value="environmentId === null || environmentId === undefined ? '' : String(environmentId)"
-                @change="emit('update:environmentId',
-                  ($event.target as HTMLSelectElement).value === ''
-                    ? null : Number(($event.target as HTMLSelectElement).value))">
-          <option value="">按链路解析(方案无环境)</option>
-          <option v-for="e in environments" :key="e.id" :value="String(e.id)">
-            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
-          </option>
-        </select>
-        <span class="param-hint">执行时 > 方案此处的选择 > 项目默认 > 我的偏好 > 默认环境</span>
+        <!-- 分层⑤:空方案(无环境)指到执行配置;存量环境照常改(清空后
+             由执行配置承载,字段保留兼容) -->
+        <template v-if="environmentId === null || environmentId === undefined">
+          <span class="hint" data-testid="env-pointer">
+            已由「执行配置」承载(执行链:本次 &gt; 选定配置 &gt; 项目默认
+            &gt; 默认配置 &gt; 平台默认)
+          </span>
+          <a class="pointer-link" href="/exec-configs" data-testid="env-pointer-link">去执行配置 ↗</a>
+        </template>
+        <template v-else>
+          <select class="bind-alias" data-testid="param-env"
+                  :value="String(environmentId)"
+                  @change="emit('update:environmentId',
+                    ($event.target as HTMLSelectElement).value === ''
+                      ? null : Number(($event.target as HTMLSelectElement).value))">
+            <option value="">改由执行配置承载(清除方案环境)</option>
+            <option v-for="e in environments" :key="e.id" :value="String(e.id)">
+              {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
+            </option>
+          </select>
+          <span class="param-hint">存量方案环境 —— 按方案遗留链位生效</span>
+        </template>
       </div>
     </section>
 
@@ -306,5 +333,15 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .total-warn { margin: 0; color: #b91c1c; font-size: 12px; }
 
 .hint { color: var(--color-text-secondary); }
+/* 分层⑤:改指执行配置的指引卡(空方案)与存量提示 */
+.exec-pointer {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; border: 1px dashed var(--color-border-tertiary);
+  border-radius: 8px; background: #F6F8FC;
+}
+.exec-pointer .hint { margin: 0; }
+.pointer-link { color: #2F6FED; font-size: 12px; text-decoration: none; width: fit-content; }
+.pointer-link:hover { text-decoration: underline; }
+.legacy-note { margin: 0; font-size: 11.5px; }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }
 </style>
