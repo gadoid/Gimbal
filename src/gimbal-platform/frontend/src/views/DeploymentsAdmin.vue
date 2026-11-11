@@ -14,7 +14,42 @@
               :data-testid="`dep-env-${e.id}`" @click="pickEnv(e.id)">
         {{ e.name }}<span v-if="e.is_default" class="tag">默认</span>
       </button>
-      <p v-if="!envs.length" class="empty">暂无环境(先在服务信息管理里建环境)</p>
+      <button type="button" class="btn sm" data-testid="dep-env-new"
+              @click="openCreateEnv">+ 新建环境</button>
+      <p v-if="!envs.length" class="empty">暂无环境 —— 点「+ 新建环境」创建</p>
+    </div>
+
+    <!-- 环境管理表单(2026-11-11 补齐:新建/编辑,含 lines 版本线行编辑) -->
+    <div v-if="envFormOpen" class="env-form" :data-testid="`dep-env-form-${envFormMode}`">
+      <h2>{{ envFormMode === 'create' ? '新建环境' : `编辑环境:${current?.name}` }}</h2>
+      <div class="frow">
+        <template v-if="envFormMode === 'create'">
+          <label class="lb">名称</label>
+          <input v-model="envForm.name" placeholder="如 SIT / UAT"
+                 data-testid="dep-env-name" />
+        </template>
+        <label class="lb">描述</label>
+        <input v-model="envForm.description" placeholder="可选"
+               data-testid="dep-env-desc" />
+      </div>
+      <p class="sub">
+        版本线 lines = 每个系统部署的版本(执行期按此解析版本;第三方
+        integration 系统不可声明)
+      </p>
+      <div v-for="(r, i) in lineRows" :key="i" class="frow">
+        <input v-model="r.sys" placeholder="系统名" :data-testid="`dep-env-sys-${i}`" />
+        <input v-model="r.line" placeholder="版本线,如 1.0"
+               :data-testid="`dep-env-line-${i}`" />
+        <button type="button" class="btn sm" :data-testid="`dep-env-rm-${i}`"
+                @click="lineRows.splice(i, 1)">移除</button>
+      </div>
+      <div class="frow">
+        <button type="button" class="btn sm" data-testid="dep-env-add-line"
+                @click="lineRows.push({ sys: '', line: '' })">+ 添加版本线</button>
+        <button type="button" class="btn sm primary" data-testid="dep-env-save"
+                @click="saveEnv">保存</button>
+        <button type="button" class="btn sm" @click="envFormOpen = false">取消</button>
+      </div>
     </div>
 
     <template v-if="current">
@@ -23,6 +58,16 @@
                 data-testid="dep-set-default" @click="makeDefault">设为默认环境</button>
         <button v-else type="button" class="btn sm" data-testid="dep-unset-default"
                 @click="clearDefault">取消默认</button>
+        <button type="button" class="btn sm" data-testid="dep-env-edit"
+                @click="openEditEnv">编辑环境</button>
+        <button v-if="!envDelArmed" type="button" class="btn sm danger"
+                data-testid="dep-env-del" @click="envDelArmed = true">删除环境</button>
+        <template v-else>
+          <span class="warn">该环境的全部部署地址将一并删除</span>
+          <button type="button" class="btn sm danger" data-testid="dep-env-del-ok"
+                  @click="delEnv">确认删除</button>
+          <button type="button" class="btn sm" @click="envDelArmed = false">取消</button>
+        </template>
       </div>
 
       <table class="tbl" data-testid="dep-table">
@@ -68,10 +113,13 @@
 /** DeploymentsAdmin.vue — authz M2a S2.3:部署表维护页(Admin+)。
  * 环境 chip 切换 → 该环境的 (基础服务 → 地址) 行内编辑;默认环境切换。
  * M2a S6 起部署表是地址唯一来源(别名地址退役),旧「迁移遗留冲突裁定」
- * 区随 /deployments/conflicts 端点一并移除。错误内联展示。 */
+ * 区随 /deployments/conflicts 端点一并移除。错误内联展示。
+ * 2026-11-11 补齐环境管理面:新建/编辑(含 lines 版本线行编辑)/删除
+ * —— 后端 CRUD 早已存在,此前一直没有 UI 入口(写面统一 ops.write)。 */
 import { computed, onMounted, ref } from 'vue'
 import {
   listEnvironments, setDefaultEnvironment, unsetDefaultEnvironment,
+  createEnvironment, updateEnvironment, deleteEnvironment,
   type EnvironmentRow,
 } from '@/api/environments'
 import {
@@ -86,6 +134,13 @@ const form = ref({ baseService: '', baseUrl: '' })
 const editing = ref<number | null>(null)
 const editUrl = ref('')
 const error = ref('')
+
+// ── 环境管理(create / edit 共用一份表单;lines 按行编辑)────────────
+const envFormOpen = ref(false)
+const envFormMode = ref<'create' | 'edit'>('create')
+const envForm = ref({ name: '', description: '' })
+const lineRows = ref<Array<{ sys: string; line: string }>>([])
+const envDelArmed = ref(false)
 
 const current = computed(() => envs.value.find((e) => e.id === envId.value) ?? null)
 
@@ -143,6 +198,77 @@ async function clearDefault(): Promise<void> {
   envs.value = await listEnvironments()
 }
 
+// ── 环境管理 ────────────────────────────────────────────────────
+function openCreateEnv(): void {
+  envFormMode.value = 'create'
+  envForm.value = { name: '', description: '' }
+  lineRows.value = []
+  envDelArmed.value = false
+  envFormOpen.value = true
+}
+function openEditEnv(): void {
+  const cur = current.value
+  if (!cur) return
+  envFormMode.value = 'edit'
+  envForm.value = { name: cur.name, description: cur.description }
+  lineRows.value = Object.entries(cur.lines ?? {})
+    .map(([sys, line]) => ({ sys, line }))
+  envDelArmed.value = false
+  envFormOpen.value = true
+}
+function linesOf(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const r of lineRows.value) {
+    const sys = r.sys.trim()
+    if (sys) out[sys] = r.line.trim()
+  }
+  return out
+}
+async function saveEnv(): Promise<void> {
+  error.value = ''
+  const sysList = lineRows.value.map((r) => r.sys.trim()).filter(Boolean)
+  if (new Set(sysList).size !== sysList.length) {
+    error.value = '版本线里系统名重复'
+    return
+  }
+  try {
+    if (envFormMode.value === 'create') {
+      if (!envForm.value.name.trim()) {
+        error.value = '环境名不能为空'
+        return
+      }
+      const created = await createEnvironment({
+        name: envForm.value.name.trim(),
+        description: envForm.value.description.trim(),
+        lines: linesOf(),
+      })
+      envFormOpen.value = false
+      envs.value = await listEnvironments()
+      await pickEnv(created.id)
+    } else {
+      if (envId.value == null) return
+      await updateEnvironment(envId.value, {
+        description: envForm.value.description.trim(),
+        lines: linesOf(),
+      })
+      envFormOpen.value = false
+      envs.value = await listEnvironments()
+    }
+  } catch (e) { error.value = msg(e) }
+}
+async function delEnv(): Promise<void> {
+  if (!current.value) return
+  error.value = ''
+  try {
+    await deleteEnvironment(current.value.id)
+    envDelArmed.value = false
+    envs.value = await listEnvironments()
+    const first = envs.value.find((e) => e.is_default) ?? envs.value[0]
+    if (first) await pickEnv(first.id)
+    else { envId.value = null; rows.value = [] }
+  } catch (e) { error.value = msg(e) }
+}
+
 onMounted(async () => {
   envs.value = await listEnvironments()
   const first = envs.value.find((e) => e.is_default) ?? envs.value[0]
@@ -168,4 +294,11 @@ onMounted(async () => {
 .btn.danger { color: #dc2626; border-color: #fca5a5; }
 .err { color: #dc2626; font-size: 0.8rem; }
 .empty { color: #94a3b8; }
+.env-form { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem;
+           display: flex; flex-direction: column; gap: 0.5rem; }
+.env-form h2 { font-size: 0.95rem; margin: 0; }
+.frow { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.frow input { flex: 1; min-width: 8rem; }
+.lb { font-size: 0.8rem; color: #64748b; }
+.warn { color: #dc2626; font-size: 0.8rem; }
 </style>

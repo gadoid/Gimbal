@@ -4,8 +4,9 @@
 'project'``):区锁到本项目、执行恒用项目凭证;负责人(holder)是指定的
 一位项目管理员,承担问责 / 通知,执行记录属主 = 调用时的负责人。
 
-Endpoints(前缀 ``/projects/{project_id}/tokens``;门 = 项目管理员 ∨
-Admin+,与 S8 项目凭证同门;公共项目 409):
+Endpoints(前缀 ``/projects/{project_id}/tokens``;门 = 项目管理员,
+与 S8 项目凭证同门:r5-2.2 口径 Admin+ 不旁路 —— 令牌是项目的,
+不是平台的;非成员 404、成员非管理员 403;公共项目 409):
 
 - GET  ``""``                    列表(含负责人 / 待确认 / 负责人是否合格)
 - GET  ``/scope-candidates``     范围候选 = 全部服务别名 + 本项目凭证
@@ -41,7 +42,7 @@ from ..models.user import User
 from ..services import access_token as at
 from ..services import audit as audit_svc
 from . import access_tokens as pt
-from .projects import _audit, _require_manage
+from .projects import _audit, _my_role
 
 router = APIRouter(prefix="/projects/{project_id}/tokens",
                    tags=["project-tokens"])
@@ -66,9 +67,17 @@ async def _load_normal_project(db: AsyncSession, project_id: int) -> Project:
 
 
 async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
+    # r5-2.2 同口径(S8 项目凭证 _manage_gate):管理门 = 项目管理员,
+    # Admin+ 不旁路 —— 令牌是项目的,不是平台的(2026-11-11 收口,此前
+    # 走 _require_manage 的 Admin+ 旁路与凭证面自相矛盾);非成员 404,
+    # 成员非管理员 403
     proj = await _load_normal_project(db, project_id)
-    await _require_manage(db, user, proj)
-    return proj
+    my_role = await _my_role(db, user, proj.id)
+    if my_role == "admin":
+        return proj
+    if my_role is None:
+        raise _bad("not_found", f"project not found: {project_id}", 404)
+    raise _bad("not_project_admin", "只有项目管理员能维护项目令牌", 403)
 
 
 async def _get_ptoken(db: AsyncSession, proj: Project, tid: int) -> AccessToken:

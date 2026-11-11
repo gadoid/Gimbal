@@ -134,7 +134,7 @@
       <ProjectTokensPanel
         v-else-if="tab === 'tokens' && project"
         :project="project"
-        :can-manage="!!project.canManage"
+        :can-manage="project.myRole === 'admin'"
       />
       <ProjectConfigPanel
         v-else-if="tab === 'config' && project"
@@ -182,7 +182,8 @@ const TABS = [
   // S7.3:配置(普通项目 = 默认环境/项目层 carry/槽位状态/生效预览;
   // 公共项目 = 全局默认,原 /carry-config 落位)
   { key: 'config', label: '配置' },
-  // M2b Q2:项目令牌(普通项目 ∧ canManage)
+  // M2b Q2:项目令牌(普通项目 ∧ 项目管理员 —— r5-2.2 同口径,
+  // Admin+ 非成员不旁路,与后端 /tokens 门一致)
   { key: 'tokens', label: '项目令牌' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
@@ -198,7 +199,8 @@ const roleLabel = projectRoleLabel
 const visibleTabs = computed(() =>
   TABS.filter((t) => {
     if (t.key === 'members') return !!project.value?.canManage
-    if (t.key === 'tokens') return !!project.value?.canManage && !isPublic.value
+    if (t.key === 'tokens')
+      return project.value?.myRole === 'admin' && !isPublic.value
     return true
   }))
 

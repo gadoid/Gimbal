@@ -5,8 +5,9 @@
 
 * :func:`public_project_id` —— 公共项目 id(0040 种子,恰一行);
 * :func:`my_project_roles` —— 主体在普通项目的角色表 ``{project_id:
-  "admin"|"member"}``(公共项目不落成员行,天然不在表里 —— member /
-  padmin 谓词因此不会把公共项目误当普通项目);
+  "admin"|"member"|"user"}``(M2b Q1:项目用户只读 + 执行;公共项目
+  不落成员行,天然不在表里 —— member / padmin 谓词因此不会把公共
+  项目误当普通项目);
 * :func:`apply_public` / :func:`apply_private` —— **影子写**(S1.1–
   S1.8):``visibility`` 与 ``project_id`` 必须同步翻转(public ⇔
   project_id=公共项目)。0040 迁入 + 0041 回填保证存量一致,新写入

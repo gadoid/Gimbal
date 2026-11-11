@@ -1,8 +1,9 @@
 """authz M2b Q2:项目令牌(``kind='project'``)。
 
 钉子:
-* 管理面 ``/projects/{pid}/tokens``:项目管理员 ∨ Admin+;成员 403 / 非成员
-  404 / 公共项目 409;负责人须是项目管理员;个人令牌面看不到项目令牌;
+* 管理面 ``/projects/{pid}/tokens``:仅项目管理员(r5-2.2 同口径,
+  Admin+ 非成员不旁路);成员 403 / 非成员 404 / 公共项目 409;
+  负责人须是项目管理员;个人令牌面看不到项目令牌;
 * 调用:区锁(私有 / 他项目 404)+ 恒用项目凭证 + 范围按项目池;执行
   ``owner_id`` = 负责人、``project_id`` / ``token_id`` 落库;
 * 负责人失格 → 401 ``token_holder_invalid``;换绑:本人立即 / 他人待确认
@@ -89,9 +90,10 @@ class TestManagement:
         assert all(it["id"] != tid for it in mine["items"])
         assert (await client.get(f"/api/access-tokens/{tid}", headers=h_a)
                 ).status_code == 404
-        # Admin+ 可管(与 S8 同门)
+        # Admin+ 非成员不旁路(2026-11-11 与 S8 凭证同口径收口:
+        # 令牌是项目的,不是平台的;404 不泄露存在性)
         h_ops = await role_headers(client, "q2_ops", role="admin")
-        assert (await client.get(base, headers=h_ops)).status_code == 200
+        assert (await client.get(base, headers=h_ops)).status_code == 404
         # 公共项目 409
         from .test_authz_s8_project_credentials import _public_project_id
         ppid = await _public_project_id()

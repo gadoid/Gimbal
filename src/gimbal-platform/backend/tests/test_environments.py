@@ -1,7 +1,7 @@
 """环境组 CRUD 测试（Release v4.4 §11 V5-B；RS3 落地面）。
 
 environments = 团队共享配置（lines 影响执行语义）——读全员，写
-owner/admin；被服务别名引用的环境不可删除。
+Admin+（ops.write，2026-11-11 统一，不再认属主）。
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ async def test_environment_crud_roundtrip(client, fresh_db):
     r = await client.get(f"/api/environments/{env_id}", headers=member)
     assert r.status_code == 200 and r.json()["name"] == "SIT"
 
-    # 写：member 非 owner → 403
+    # 写：平台 user（无 ops.write）→ 403
     r = await client.put(f"/api/environments/{env_id}", headers=member,
                          json={"lines": {"fin": "2.0"}})
     assert r.status_code == 403

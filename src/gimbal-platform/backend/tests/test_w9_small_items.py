@@ -111,25 +111,26 @@ class TestEnvironmentsAudit:
         assert sorted(row.detail.get("op") for row in rows) == [
             "create", "delete", "update"]
 
-    async def test_write_gate_owner_or_users_manage(self, client: AsyncClient):
-        """admin(ops.write 无 users.manage)不能改他人环境;属主可。"""
+    async def test_write_gate_ops_write_only(self, client: AsyncClient):
+        """环境是团队共享配置(0044 删 visibility 的同一裁决):写面统一
+        ops.write —— 另一 admin(非属主)可改;平台 user 仍 403。
+        (2026-11-11 统一:原 PUT/DELETE 收 owner∨users.manage,与
+        「建/设默认 = Admin+」同对象宽窄不一,且「能建不能改」不可用。)"""
         h_owner = await role_headers(client, "env_own", role="user")
         r = await client.post("/api/environments", headers=h_owner, json={
             "name": "w9-env2", "description": "", "lines": {}})
         # 创建面 = ops.write(MemberUser):user 被 403
         assert r.status_code == 403, r.text
 
-        # 用 admin 建一个,再把属主改成 user 直插方式复杂 —— 直接验证
-        # 判定:admin 建的环境,另一个 admin(同能力)可改(users.manage?
-        # admin 无 users.manage → 403),super_admin 可改
         h_a1 = await role_headers(client, "env_a1", role="admin")
         r = await client.post("/api/environments", headers=h_a1, json={
             "name": "w9-env3", "description": "", "lines": {}})
         env_id = r.json()["id"]
+        # 另一 admin(非属主)可改 —— 共享配置不认属主
         h_a2 = await role_headers(client, "env_a2", role="admin")
         r = await client.put(f"/api/environments/{env_id}", headers=h_a2,
                              json={"description": "x"})
-        assert r.status_code == 403, r.text
+        assert r.status_code == 200, r.text
         h_sup = await role_headers(client, "env_sup", role="super_admin")
         r = await client.put(f"/api/environments/{env_id}", headers=h_sup,
                              json={"description": "ok"})

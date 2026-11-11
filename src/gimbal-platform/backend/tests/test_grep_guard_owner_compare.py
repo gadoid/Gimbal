@@ -45,7 +45,6 @@ _ALLOWLIST: dict[str, int] = {
     "routers/auth_sessions.py:if a is None or a.owner_id != owner_id:": 1,
     "routers/constants.py:base = select(ConstantEntry).where(ConstantEntry.owner_id == user.id)": 1,
     "routers/constants.py:if entry is None or entry.owner_id != owner_id:": 1,
-    "routers/environments.py:if env.owner_id != user.id and not has_capability(user, \"users.manage\"):": 1,
     "routers/executions.py:Execution.owner_id == user.id,": 2,
     "routers/executions.py:base = select(Execution).where(Execution.owner_id == user.id)": 1,
     "routers/integration.py:\"canManage\": db_tpl.owner_id == current.id,": 1,

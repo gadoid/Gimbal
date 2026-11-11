@@ -1,8 +1,9 @@
 <!-- ProjectTokensPanel.vue — M2b Q2 项目令牌(项目详情「项目令牌」页签)。
      项目令牌 = 以「项目用户」权限访问单个项目的外部调用身份,执行恒用
      项目凭证;负责人 = 指定的一位项目管理员(问责 / 通知)。页签只对
-     canManage(项目管理员 ∨ Admin+)可见;待确认的新负责人在本页确认 /
-     拒绝接任(深链 ?tab=tokens)。 -->
+     项目管理员可见(r5-2.2 同口径:Admin+ 非成员不旁路,令牌是项目的
+     不是平台的);待确认的新负责人在本页确认 / 拒绝接任(深链
+     ?tab=tokens)。 -->
 <template>
   <div class="ptp" data-testid="project-tokens">
     <div class="head">

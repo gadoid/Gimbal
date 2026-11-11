@@ -2,8 +2,11 @@
 
 CRUD + lines 管理。环境声明「每个系统部署的是哪条版本线」——
 版本线只能从 plate 已有的版本线中选择（平台不做 scheme 校验）。
-写面收在 owner/admin（迁移产生的无主行 → admin）：lines 影响所有
-引用该环境的执行语义，是团队共享配置。
+写面统一 ops.write（Admin+，经 MemberUser）：lines 影响所有引用该
+环境的执行语义，是团队共享配置（0044 删 visibility 的同一裁决）；
+owner_id 仅作创建溯源展示，不构成写门（2026-11-11 统一：此前
+PUT/DELETE 收 owner∨super_admin 而建/默认收 Admin+，同对象动词
+宽窄不一，且「能建不能改」不可用）。
 """
 from __future__ import annotations
 
@@ -46,14 +49,6 @@ class EnvironmentView(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-def _require_env_write(env: Environment, user: Any) -> None:
-    # authz W9-3:super_admin 判定收编表 A(users.manage;守卫白名单销项)
-    from ._ownership import has_capability
-
-    if env.owner_id != user.id and not has_capability(user, "users.manage"):
-        raise HTTPException(403, "environment writes are owner/admin only")
 
 
 @router.get("", response_model=list[EnvironmentView])
@@ -114,7 +109,6 @@ async def update_environment(
     env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
-    _require_env_write(env, user)
     if body.description is not None:
         env.description = body.description
     if body.lines is not None:
@@ -213,7 +207,6 @@ async def delete_environment(
     env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
-    _require_env_write(env, user)
     # S6:别名不再挂环境(0047 删列);部署行随环境级联删除(FK CASCADE)
     name = env.name
     await db.delete(env)
