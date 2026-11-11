@@ -128,6 +128,7 @@ import {
   PieChartIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
+  MixerHorizontalIcon,
   PlayIcon,
   Share2Icon,
   StackIcon,
@@ -180,6 +181,9 @@ const groups: SidebarGroup[] = [
       { path: '/home', label: '工作台', icon: HomeIcon },
       // F5(2026-09-23):通知(全员;审计 tab 在页内按 admin 显隐)
       { path: '/notifications', label: '通知', icon: BellIcon },
+      // 执行配置分层①(2026-11-11):全员 —— 置顶组语义 = 高频个人入口;
+      // 不放「服务」组避免与 Admin+ 管理面混层(设计方案 §4 入口裁定)
+      { path: '/exec-configs', label: '执行配置', icon: MixerHorizontalIcon },
     ],
   },
   {

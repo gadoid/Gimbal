@@ -33,6 +33,8 @@ from .webhook_delivery import WebhookDelivery
 # 项目区(M2a S1.0:只建表不上码;授权面随 S1.1+)
 from .project import Project, ProjectMember
 from .project_promotion import ProjectPromotion
+# 执行配置(执行配置分层①:场景外部支撑的跨场景载体,scope user|project)
+from .exec_config import ExecConfig
 
 __all__ = [
     "User",
@@ -66,6 +68,7 @@ __all__ = [
     "Project",
     "ProjectMember",
     "Deployment",
+    "ExecConfig",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

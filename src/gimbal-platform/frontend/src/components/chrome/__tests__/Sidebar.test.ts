@@ -69,13 +69,13 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
     // 常量池不占侧边栏坑位;M2a S7.1 IA 修正:公共场景/公共用例集并入
-    // 公共项目,「项目管理」收编进「项目」一级入口(−3 +1 = 17 条)。
+    // 公共项目,「项目管理」收编进「项目」一级入口。
     // 字段来源分析(E2a 未建)是 span 不是 a;数据分析延后但有自己的
-    // 说明页,置灰可点(§4.4)
-    expect(links.length).toBe(16)  // S7.3:−默认值
+    // 说明页,置灰可点(§4.4)。执行配置分层①:+执行配置(全员置顶组)
+    expect(links.length).toBe(17)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
-      '/home', '/notifications',
+      '/home', '/notifications', '/exec-configs',
       '/scenarios/follows', '/scenarios/mine',
       // 2026-11-10 IA:场景集并入「我的」组(原「用例集」组退役)
       '/suites',
@@ -146,7 +146,8 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     expect(hrefs).not.toContain('/carry-config')  // S7.3:默认值页退役
     expect(hrefs).not.toContain('/service-admin')
     expect(hrefs).toContain('/projects')  // S7.1:项目入口全员可见
-    expect(hrefs.length).toBe(13)  // S7.3:默认值本就 cap-gated 不在,计数不变  // S7.3:−默认值(全局默认迁公共项目配置)
+    expect(hrefs).toContain('/exec-configs')  // 执行配置:全员个人面
+    expect(hrefs.length).toBe(14)  // 执行配置分层①:+1
     w.unmount()
   })
 })
@@ -216,8 +217,8 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    // 17 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4)
-    expect(w.findAll('.nav-text').length).toBe(17)  // S7.3:−默认值
+    // 18 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4)
+    expect(w.findAll('.nav-text').length).toBe(18)
     w.unmount()
   })
 
@@ -233,7 +234,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(17)   // 16 可点 + 1 置灰 span(S7.3 −默认值)
+    expect(rows.length).toBe(18)   // 17 可点 + 1 置灰 span(执行配置分层① +1)
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -258,11 +259,12 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(16)  // S7.3:−默认值
-    // 场景集随「我的」组第三位(F5 通知占 0/1 位):suites=4 / 项目=5 / services=6
-    expect(links[4].attributes('href')).toBe('/suites')
-    expect(links[5].attributes('href')).toBe('/projects')
-    expect(links[6].attributes('href')).toBe('/services')
+    expect(links.length).toBe(17)  // 执行配置分层①:+1
+    // 场景集随「我的」组第三位(置顶组 0/1/2 位=工作台/通知/执行配置):
+    // suites=5 / 项目=6 / services=7
+    expect(links[5].attributes('href')).toBe('/suites')
+    expect(links[6].attributes('href')).toBe('/projects')
+    expect(links[7].attributes('href')).toBe('/services')
     expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
     w.unmount()
   })

@@ -120,6 +120,14 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // 执行配置(执行配置分层①,2026-11-11):个人面·全员 —— 环境/槽位
+    // 绑定/carry 覆盖的跨场景载体,唯一入口(决策 8 终局;「我的配置」
+    // 页随批次⑥退役后由本页承接)
+    path: '/exec-configs',
+    component: () => import('@/views/ExecConfigsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // 个人设置(P2-1;原型 Main/Tokens/CardSettings = 子页面而非同页
     // 锚点):Profile.vue 只做布局(头 + 分区导航 + RouterView),内容
     // 在三个子页;'' 重定向吞掉旧 #tokens/#card 深链(书签兼容)。

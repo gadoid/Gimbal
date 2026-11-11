@@ -43,6 +43,7 @@ from .routers import (
     scenarios,
     environments,
     deployments,
+    exec_configs,
     service_aliases,
     service_profile,
     shares,
@@ -267,6 +268,8 @@ def create_app() -> FastAPI:
     from .routers import me
     app.include_router(me.router, prefix="/api")
     app.include_router(environments.router, prefix="/api")
+    # 执行配置(执行配置分层①:个人面,user scope 行)
+    app.include_router(exec_configs.router, prefix="/api")
     # authz M2a S2.2:部署表((基础服务, 环境) → 地址)
     app.include_router(deployments.router, prefix="/api")
     # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
