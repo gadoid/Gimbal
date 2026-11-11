@@ -85,3 +85,18 @@ export function copyExecConfig(
 export function deleteExecConfig(id: number): Promise<void> {
   return http.delete(`/exec-configs/${id}`).then(() => undefined)
 }
+
+/** ③ 关联枢纽:配置 carryOverrides vs plate 面的 diff(orphaned = 覆盖了
+ * 但面已没有;uncovered = 面有而未覆盖=按层序合成的部分)。 */
+export interface ExecConfigDriftService {
+  service: string
+  orphaned: string[]
+  uncovered: string[]
+}
+
+export function execConfigDrift(id: number): Promise<{
+  services: ExecConfigDriftService[]
+  plateReachable: boolean
+}> {
+  return http.get(`/exec-configs/${id}/drift`).then(({ data }) => data)
+}

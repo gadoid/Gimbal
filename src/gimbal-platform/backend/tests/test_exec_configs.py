@@ -218,3 +218,36 @@ async def test_exec_config_payload_shape_validation(client, fresh_db):
     # 合法最小载荷:省缺 systems = 空配置(纯环境偏好形态)
     r = await client.post("/api/exec-configs", headers=u, json={"name": "空"})
     assert r.status_code == 201 and r.json()["systems"] == []
+
+
+async def test_exec_config_drift(client, fresh_db, plate):
+    """③ 关联枢纽:覆盖字段 vs plate 面 diff —— orphaned(覆盖了但面
+    没有)/ uncovered(面有而未覆盖,按层序合成的部分)。"""
+    from tests.test_authz_s76_drift_layers import _EP, _FACE
+
+    plate.items = [_EP]
+    plate.fulls = {"fin.ep1": _FACE}
+    await register_and_login(client, "cfgdr", "pw123456")
+    h = await register_and_login(client, "cfgdr", "pw123456")
+
+    cid = (await client.post("/api/exec-configs", headers=h, json={
+        "name": "漂移套",
+        "systems": [{"service": "fin-service", "bindings": {},
+                     "carryOverrides": {"$.remark": "r", "$.old": "x"}}]
+        })).json()["id"]
+
+    r = await client.get(f"/api/exec-configs/{cid}/drift", headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["plateReachable"] is True
+    assert body["services"] == [{
+        "service": "fin-service",
+        "orphaned": ["$.old"],        # 面只有 $.remark
+        "uncovered": [],              # $.remark 已被覆盖
+    }]
+
+    # 跨人 404
+    await register_and_login(client, "cfgdr2", "pw123456")
+    h2 = await register_and_login(client, "cfgdr2", "pw123456")
+    r = await client.get(f"/api/exec-configs/{cid}/drift", headers=h2)
+    assert r.status_code == 404

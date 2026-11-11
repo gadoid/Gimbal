@@ -657,13 +657,14 @@ function accountFieldsToObject(): Record<string, string> {
   return out
 }
 
-/** ``slot``:预填槽位(S7.5 导入结果「去绑定」深链 ?newSlot=)。 */
-function openCreate(slot = '') {
+/** ``slot``:预填槽位(S7.5 导入结果「去绑定」深链 ?newSlot=);
+ *  ``system``/``envId``:执行配置枢纽「缺失深链预填直达」(分层③)。 */
+function openCreate(slot = '', system = '', envId = '') {
   editingId.value = null
   accountFields.value = []
   resetForm({
     values: {
-      alias: slot, slot, system: '', envId: 'none',
+      alias: slot, slot, system, envId: envId || 'none',
       url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200,
     },
   })
@@ -870,9 +871,13 @@ async function submitDelete() {
 
 // ── init ───────────────────────────────────────────────────────
 onMounted(async () => {
-  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填槽位
-  const newSlot = route?.query?.newSlot
-  if (typeof newSlot === 'string' && newSlot) openCreate(newSlot)
+  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填槽位;分层③:执行配置
+  // 枢纽的缺失深链补 system/envId 预填(?newSlot=&system=&envId=)
+  const q = route?.query ?? {}
+  const newSlot = typeof q.newSlot === 'string' ? q.newSlot : ''
+  const qSystem = typeof q.system === 'string' ? q.system : ''
+  const qEnv = typeof q.envId === 'string' ? q.envId : ''
+  if (newSlot || qSystem || qEnv) openCreate(newSlot, qSystem, qEnv)
   // S7.3:分组视图默认 → 首拉全量分组;环境选项给表单下拉
   void loadGrouped().catch(() => { /* 同 useServerList onError 语义 */ })
   listEnvironments()

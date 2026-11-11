@@ -1,12 +1,16 @@
-/** 执行配置管理页测试(执行配置分层①) — API 全走 mock,载荷与
+/** 执行配置管理页测试(执行配置分层①/③) — API 全走 mock,载荷与
  * 交互流钉住:选中回填 / 新建(空行剔除+envId 置空)/ PATCH 保存 /
- * 默认切换 / 复制 / 两步删除 / 409 内联。 */
+ * 默认切换 / 复制 / 两步删除 / 409 内联;③ 枢纽(地址/槽位就绪 + 漂移
+ * + 预览按钮)。 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import ExecConfigsView from '@/views/ExecConfigsView.vue'
 import * as ecApi from '@/api/execConfigs'
 import * as envApi from '@/api/environments'
+import * as depApi from '@/api/deployments'
+import * as driftApi from '@/api/execConfigs'
 
 vi.mock('@/api/execConfigs', () => ({
   listExecConfigs: vi.fn(),
@@ -15,13 +19,32 @@ vi.mock('@/api/execConfigs', () => ({
   setDefaultExecConfig: vi.fn(),
   copyExecConfig: vi.fn(),
   deleteExecConfig: vi.fn(),
+  execConfigDrift: vi.fn(),
 }))
 vi.mock('@/api/environments', () => ({
   listEnvironments: vi.fn(),
 }))
+vi.mock('@/api/deployments', () => ({
+  listDeployments: vi.fn(),
+}))
+vi.mock('@/api/auth_sessions', () => ({
+  listAll: vi.fn().mockResolvedValue([]),
+}))
+vi.mock('@/api/service-aliases', () => ({
+  listAllAliases: vi.fn().mockResolvedValue([]),
+}))
+vi.mock('@/api/scenario-composer', () => ({
+  listScenarioOptions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}))
+vi.mock('@/components/runs/EffectivePreviewDialog.vue', () => ({
+  default: { name: 'EffectivePreviewDialog', props: ['open', 'scenarios',
+    'execConfigId', 'envNames'], template: '<div data-testid="ec-preview-dialog" v-if="open"/>' },
+}))
 
 const ec = vi.mocked(ecApi)
 const envs = vi.mocked(envApi)
+const deps = vi.mocked(depApi)
+const drift = vi.mocked(driftApi.execConfigDrift)
 
 const ROW = {
   id: 7, name: '商户B视角@UAT', isDefault: true, environmentId: 2,
@@ -38,10 +61,24 @@ function setup(list = [ROW]) {
     { id: 1, name: 'SIT', description: '', lines: {}, owner_id: null, is_default: false },
     { id: 2, name: 'UAT', description: '', lines: {}, owner_id: null, is_default: true },
   ])
+  deps.listDeployments.mockResolvedValue([
+    { id: 1, baseService: 'fin-service', envId: 2, baseUrl: 'http://uat-fin' },
+  ])
+  drift.mockResolvedValue({ services: [], plateReachable: true })
 }
 
 async function mountPage() {
-  const w = mount(ExecConfigsView, { global: { plugins: [createPinia()] } })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { template: '<div/>' } },
+      { path: '/admin/deployments', component: { template: '<div/>' } },
+      { path: '/service-admin', component: { template: '<div/>' } },
+      { path: '/auths', component: { template: '<div/>' } },
+      { path: '/carry-config', component: { template: '<div/>' } },
+    ],
+  })
+  const w = mount(ExecConfigsView, { global: { plugins: [createPinia(), router] } })
   await flushPromises()
   return w
 }
@@ -197,6 +234,35 @@ describe('ExecConfigsView', () => {
     expect(w.find('[data-testid="ec-form-create"]').exists()).toBe(false)
     expect(w.find('[data-testid="ec-form-edit"]').exists()).toBe(false)
     expect(w.find('[data-testid="ec-set-default"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('③ 枢纽:地址就绪 + 槽位缺失预填深链 + 漂移拉取 + pickable 预览', async () => {
+    const w = await mountPage()
+    // 地址就绪:fin-service 在所选环境(UAT=2)有部署行
+    expect(w.get('[data-testid="ec-dep-fin-service"]').text())
+      .toContain('http://uat-fin')
+    expect(w.get('[data-testid="ec-dep-fin-service"]').text()).toContain('就绪')
+    // 槽位缺失:merchant-b 无池行 → 缺绑定 + /auths 预填直达
+    expect(w.get('[data-testid="ec-slot-miss-merchant-b"]').text()).toContain('缺绑定')
+    expect(w.get('[data-testid="ec-goto-auth-merchant-b"]').attributes('href'))
+      .toBe('/auths?newSlot=merchant-b&system=fin-service')
+    // 漂移读面随选择拉取
+    expect(ec.execConfigDrift).toHaveBeenCalledWith(7)
+    // 预览:打开 pickable dialog(execConfigId = 选定配置)
+    await w.get('[data-testid="ec-preview-open"]').trigger('click')
+    expect(w.find('[data-testid="ec-preview-dialog"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('③ 枢纽:槽位池内已绑定 → 显示就绪不出深链缺口', async () => {
+    const { listAll } = await import('@/api/auth_sessions')
+    vi.mocked(listAll).mockResolvedValue([
+      { alias: 'b-merchant-b', slot: 'merchant-b', system: 'fin-service' },
+    ] as never)
+    const w = await mountPage()
+    expect(w.find('[data-testid="ec-slot-miss-merchant-b"]').exists()).toBe(false)
+    expect(w.text()).toContain('已绑定')
     w.unmount()
   })
 })
