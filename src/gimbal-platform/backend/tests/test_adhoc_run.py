@@ -637,7 +637,9 @@ class TestDispatchSplitEquivalence:
         assert set(c1) - {"counterDrift"} == {
             "scenarioId", "dataSetIds", "dataSetSelection", "injectedAuths",
             "serviceBindings", "runOptions", "injectionEntryIds", "schemeId",
-            "schemeName", "batchId", "reportDefinitionId", "chain"}
+            "schemeName", "batchId", "reportDefinitionId", "chain",
+            # 分层④:执行配置终值快照(重跑回放依据;空 = 当时无覆盖)
+            "execSlotMap", "execCarryOverrides"}
         assert c1["scenarioId"] == "sc-eq" and c1["chain"] == "legacy"
         assert c1["dataSetIds"] == [] and c1["serviceBindings"] == {}
         ds = cap[0]["datasets"]
