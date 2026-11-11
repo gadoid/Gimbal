@@ -31,14 +31,14 @@ async def _scoped(db, scope: "tuple[str, int] | None") -> "tuple[str, int]":
 
 
 async def visible_scopes(db, user) -> "list[tuple[str, int]]":
-    """读面可见作用域(10.5):公共项目 + 我所在项目 + 我的个人层。"""
+    """读面可见作用域(10.5):公共项目 + 我所在项目。个人层随执行配置
+    分层⑥收编为默认执行配置(决策 8)—— 不再是 carry 值层。"""
     from ..models.project import ProjectMember
 
     scopes = [await public_scope(db)]
     pids = (await db.execute(select(ProjectMember.project_id).where(
         ProjectMember.user_id == user.id))).scalars().all()
     scopes += [("project", p) for p in pids if ("project", p) not in scopes]
-    scopes.append(("user", user.id))
     return scopes
 
 

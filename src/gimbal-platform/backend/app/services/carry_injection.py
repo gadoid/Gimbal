@@ -74,9 +74,10 @@ async def build_carry_context(
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
     authz M2a S4 作用域分层(D3 + 区模型收敛):tier 序 = 公共项目层 <
-    (项目层 ∨ 执行人个人层;普通项目区不吃个人层),层内沿用键层级
-    (别名键 > 基础服务键 > 层默认)。旧库行全在公共层 → 不带上下文时
-    行为与旧链逐行相同。
+    项目层,层内沿用键层级(别名键 > 基础服务键 > 层默认)。执行配置
+    分层⑥(决策 8):**个人层不再存在** —— 个人缺省 carry 的家是默认
+    执行配置(``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名兼容,
+    不再构成 tier。
 
     分层②(执行配置):``exec_overrides``({目录服务: {字段: 值}})是
     配置覆盖层,合区位次 = **场景显式之下、层序之上**(值 null = 显式
@@ -126,12 +127,11 @@ async def build_carry_context(
 
     # ② 服务引用 → derive_base 解析 → 绑定值(None = 解析失败,整步跳过)
     catalog = await service_names.catalog_service_names()
-    # S4:tier 序(公共项目层恒在;项目区不吃个人层)
+    # S4:tier 序(公共项目层恒在 < 项目层);分层⑥:个人层已收编为默认
+    # 执行配置(决策 8),user_id 不再构成 tier
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
     if project_id is not None:
         tiers.append(("project", project_id))
-    elif user_id is not None:
-        tiers.append(("user", user_id))
     defaults: dict[str, str | None] = {}
     for t in tiers:
         defaults = {**defaults,

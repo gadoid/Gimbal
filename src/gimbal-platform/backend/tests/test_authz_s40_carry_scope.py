@@ -57,14 +57,10 @@ async def test_tiers_public_then_personal(client, fresh_db):
         await s.commit()
 
     definition = {"steps": [_STEP]}
-    # 私有区(无项目):公共层 < 个人层(字段级覆盖)
+    # 分层⑥(决策 8):个人层已收编为默认执行配置 —— 残留/直插的
+    # 个人层行不再构成 tier(私有区也只吃公共层)
     async with db_module.SessionLocal() as s:
         ctx = await build_carry_context(s, definition, user_id=uid)
-    assert ctx.service_bindings["fin-service"] == {
-        "$.a": "mine", "$.b": "mine"}
-    # 无身份:只吃公共层(旧行为)
-    async with db_module.SessionLocal() as s:
-        ctx = await build_carry_context(s, definition)
     assert ctx.service_bindings["fin-service"] == {"$.a": "pub"}
 
 
@@ -187,11 +183,12 @@ async def test_api_scope_read_filter_and_write_gates(client):
                          params={"scope": "global"},
                          json={"bindings": {"$.a": "pub"}})
     assert r.status_code == 200, r.text
-    # user 层:普通用户可写自己的层
+    # user 层:分层⑥已收编(422 指路 /exec-configs)
     r = await client.put("/api/carry/bindings/fin-service", headers=usr,
                          params={"scope": "user"},
                          json={"bindings": {"$.a": "mine"}})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "carry_user_scope_retired"
     # project 层:普通成员 403;缺 projectId 422;项目不存在 404;
     # Admin+(ops.write)可写
     r = await client.put("/api/carry/bindings/fin-service", headers=usr,
@@ -211,15 +208,15 @@ async def test_api_scope_read_filter_and_write_gates(client):
                          json={"bindings": {"$.a": "proj"}})
     assert r.status_code == 200, r.text
 
-    # 列表读:可见层并集(公共 + 我所在项目 + 我的个人层)+ 层标签
+    # 列表读:可见层并集(公共 + 我所在项目;个人层不再是值层)
     r = await client.get("/api/carry/bindings", headers=usr)
     assert r.status_code == 200, r.text
     out = r.json()
     pub_id = await _pub_id()
     scopes = {(row["scope"], row["scopeId"]) for row in out["rows"]}
-    assert scopes == {("project", pub_id), ("project", pid), ("user", uid)}
-    # flat 合并视图:个人层覆盖公共层同键(运行时 tier 同序)
-    assert out["bindings"]["fin-service"]["$.a"] == "mine"
+    assert scopes == {("project", pub_id), ("project", pid)}
+    # flat 合并视图:项目层覆盖公共层同键(运行时 tier 同序)
+    assert out["bindings"]["fin-service"]["$.a"] == "proj"
     # 单服务读按层:project 层读回
     r = await client.get("/api/carry/bindings/fin-service", headers=usr,
                          params={"scope": "project", "projectId": pid})

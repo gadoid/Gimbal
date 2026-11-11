@@ -153,8 +153,10 @@ const routes = [
       { path: 'tokens', component: () => import('@/views/ProfileTokens.vue') },
       // CardSettings.html:工作台身份卡
       { path: 'card', component: () => import('@/views/ProfileCard.vue') },
-      // S7.3:我的配置(默认环境偏好 + 个人层 carry 默认)
-      { path: 'config', component: () => import('@/views/ProfileConfig.vue') },
+      // 分层⑥(决策 8):「我的配置」页退役 —— 三卡全迁执行配置
+      // (/exec-configs):env 偏好收编 + 个人 carry 层收编 + 漂移面板
+      // 迁配置详情;旧深链重定向(书签兼容)。
+      { path: 'config', redirect: '/exec-configs' },
     ],
   },
   {

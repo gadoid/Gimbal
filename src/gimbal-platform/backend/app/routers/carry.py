@@ -98,7 +98,12 @@ async def _resolve_scope(
                 "message": "项目层 carry 由项目管理员维护"})
         return ("project", project_id)
     if scope == "user":
-        return ("user", user.id)
+        # 决策 8(执行配置分层⑥):个人层已收编为默认执行配置 —— 迁后
+        # 停读、不做双源回落;本面 422 指路,不再接受读写
+        raise HTTPException(422, detail={
+            "code": "carry_user_scope_retired",
+            "message": "个人 carry 层已收编为默认执行配置 —— 请在"
+                       "/exec-configs 的默认配置里维护覆盖值"})
     raise HTTPException(422, detail={
         "code": "bad_scope",
         "message": "scope ∈ global | project | user"})

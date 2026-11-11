@@ -95,17 +95,13 @@ class TestDriftLayers:
         assert isinstance(body["scopeId"], int)
 
     async def test_user_layer_own_drift(self, client, plate):
-        plate.items = [_EP]
-        plate.fulls = {"fin.ep1": _FACE}
+        """分层⑥(决策 8):个人层已收编为默认执行配置 —— drift 的
+        scope=user 读写面一律 422 指路(/exec-configs)。"""
         h = await role_headers(client, "s76_um", role="user")
-        await _put_carry(client, h, {"$.old": "x"}, scope="user")
         r = await client.get("/api/carry/drift", headers=h,
                              params={"scope": "user"})
-        assert r.status_code == 200, r.text
-        fin = next(s for s in r.json()["services"]
-                   if s["service"] == "fin-service")
-        assert fin["orphaned"] == ["$.old"]   # 个人层绑定参与 diff
-        assert r.json()["scope"] == "user"
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"]["code"] == "carry_user_scope_retired"
 
     async def test_project_layer_gate_matrix(self, client, plate):
         plate.items = [_EP]
@@ -200,28 +196,18 @@ class TestScopedCarryBatch:
                 db, "fin-service", ("project", pid)) == {"$.old": "proj"}
 
     async def test_user_batch_and_mine_listing(self, client):
-        """个人层批:member 自开自用;?scope=mine 镜头可见(值表批不寻址
-        场景,原口径会漏)。"""
-        from app.services import carry_store as cs
-        from app.core import db as db_module
-
+        """分层⑥(决策 8):个人层批随个人层退役 —— 开批 422 指路;
+        ?scope=mine 镜头仍在(公共/项目层批的属主视图)。"""
         h = await role_headers(client, "s76_bum", role="user")
-        uid = await _uid("s76_bum")
-        detail = await _open_batch(client, h, "fin-service", scope="user")
-        assert (detail["carryScope"], detail["carryScopeId"]) == ("user", uid)
-        op = await _add_op(client, h, detail["batchId"], "addCarryBinding",
-                           {"service": "fin-service", "path": "$.u",
-                            "value": "mine"})
-        r = await client.post(f"/api/adaptations/ops/{op}/apply", headers=h)
-        assert r.status_code == 200, r.text
-        async with db_module.SessionLocal() as db:
-            assert await cs.get_bindings(
-                db, "fin-service", ("user", uid)) == {"$.u": "mine"}
+        r = await client.post("/api/adaptations/carry-batches", headers=h,
+                              json={"service": "fin-service",
+                                    "scope": "user"})
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"]["code"] == "carry_user_scope_retired"
 
         r = await client.get("/api/adaptations/batches", headers=h,
                              params={"scope": "mine"})
-        ids = [b["batchId"] for b in r.json()["items"]]
-        assert detail["batchId"] in ids
+        assert r.status_code == 200, r.text
 
     async def test_access_gates(self, client):
         h_member = await role_headers(client, "s76_gm", role="user")
@@ -243,16 +229,19 @@ class TestScopedCarryBatch:
                               json={"service": None, "scope": "project",
                                     "projectId": 999999})
         assert r.status_code == 404, r.text
-        # member 触碰他人个人层批的 op → 403
-        h_other = await role_headers(client, "s76_go", role="user")
-        detail = await _open_batch(client, h_other, None, scope="user")
+        # member 触碰他人批的 op → 403(分层⑥起个人层批退役,用
+        # h_other 的管理员身份开项目层批当「他人批」载体)
+        h_other = await role_headers(client, "s76_go", role="admin")
+        _pid2 = await _mk_project("s76-gate2", members={"s76_go": "admin"})
+        detail = await _open_batch(client, h_other, None, scope="project",
+                                   project_id=_pid2)
         r = await client.post(
             f"/api/adaptations/batches/{detail['batchId']}/ops",
             headers=h_member,
             json={"opType": "addCarryBinding",
                   "payload": {"path": "$.x", "value": "1"}})
         assert r.status_code == 403, r.text
-        # 个人层批的属主可加 op;Admin+ 旁路一切(公共层批照开)
+        # 批的属主可加 op;Admin+ 旁路一切(公共层批照开)
         r = await client.post(
             f"/api/adaptations/batches/{detail['batchId']}/ops",
             headers=h_other,

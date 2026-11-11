@@ -765,13 +765,12 @@ async def resolve_effective_config(
         missing = sorted(injection)
 
     # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级);
-    # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行)
+    # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行);
+    # 分层⑥:个人层已收编为默认执行配置(决策 8),user_id 不再构成 tier
     from .service_names import resolve_base_with_aliases
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
     if project_id is not None:
         tiers.append(("project", project_id))
-    elif user_id is not None:
-        tiers.append(("user", user_id))
     raw_svcs: list[str] = []
     for st in steps:
         svc = _step_service(st) if isinstance(st, dict) else None

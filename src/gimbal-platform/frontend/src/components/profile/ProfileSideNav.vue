@@ -40,9 +40,6 @@ const items = computed(() => [
     badge: pendingCount.value ? `${pendingCount.value} 待处理` : '' },
   { id: 'card', label: '工作台身份卡', to: '/profile/card',
     active: route.path === '/profile/card' },
-  // S7.3:我的配置(默认环境偏好 + 个人层 carry 默认)
-  { id: 'config', label: '我的配置', to: '/profile/config',
-    active: route.path === '/profile/config' },
   { id: 'notify', label: '通知', to: '/profile/account#notify', active: onNotify.value },
 ])
 
