@@ -25,6 +25,7 @@ export interface ExecConfigRow {
   isDefault: boolean
   environmentId: number | null
   systems: SystemSubConfig[]
+  scope?: 'user' | 'project'
 }
 
 export interface ExecConfigCreateInput {
@@ -32,6 +33,10 @@ export interface ExecConfigCreateInput {
   environmentId?: number | null
   systems?: SystemSubConfig[]
   isDefault?: boolean
+  /** ⑧ 组级批次:project scope(项目变体;与 projectId 成对)。
+   *  读=项目成员,写=项目管理员;v1 链路只消费 carry 覆盖 */
+  scope?: 'user' | 'project'
+  projectId?: number
 }
 
 export interface ExecConfigUpdateInput {
@@ -41,9 +46,14 @@ export interface ExecConfigUpdateInput {
   systems?: SystemSubConfig[]
 }
 
-/** 本人的配置列表(默认在前);重名 409(exec_config_name_exists) */
-export function listExecConfigs(): Promise<ExecConfigRow[]> {
-  return http.get<ExecConfigRow[]>('/exec-configs').then(({ data }) => data)
+/** 配置列表(默认在前);重名 409(exec_config_name_exists)。
+ *  缺省 = 本人配置;projectId 给定 = 该项目的项目变体(读=成员) */
+export function listExecConfigs(
+  projectId?: number,
+): Promise<ExecConfigRow[]> {
+  return http.get<ExecConfigRow[]>('/exec-configs', {
+    params: projectId != null ? { projectId } : {},
+  }).then(({ data }) => data)
 }
 
 export function createExecConfig(

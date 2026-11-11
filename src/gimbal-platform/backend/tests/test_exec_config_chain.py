@@ -366,6 +366,128 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
     assert body["auths"]["qa1"].get("slotSource") is None
 
 
+# ── ⑨ project scope(组级批次):维护门 + 项目区 carry 链位 ─────────
+
+async def _mk_project(name: str, *, members: dict[str, str]) -> int:
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_module.SessionLocal() as db:
+        proj = Project(name=name, kind="normal", description="")
+        db.add(proj)
+        await db.flush()
+        for uname, role in members.items():
+            uid = (await db.execute(sa.select(User.id).where(
+                User.username == uname))).scalar_one()
+            db.add(ProjectMember(project_id=proj.id, user_id=uid, role=role))
+        await db.commit()
+        return proj.id
+
+
+async def test_project_scope_crud_gates(client, fresh_db):
+    await register_and_login(client, "ec_pa", "pw123456")   # 项目管理员
+    await register_and_login(client, "ec_pm", "pw123456")   # 成员
+    await register_and_login(client, "ec_px", "pw123456")   # 局外人
+    pid = await _mk_project("ec-proj", members={"ec_pa": "admin",
+                                                "ec_pm": "member"})
+    h_pa = await register_and_login(client, "ec_pa", "pw123456")
+    h_pm = await register_and_login(client, "ec_pm", "pw123456")
+    h_px = await register_and_login(client, "ec_px", "pw123456")
+
+    # 管理员建项目变体(默认)
+    r = await client.post("/api/exec-configs", headers=h_pa, json={
+        "name": "项目变体", "scope": "project", "projectId": pid,
+        "isDefault": True,
+        "systems": [{"service": _BASE, "bindings": {},
+                     "carryOverrides": {"$.pv": "proj"}}]})
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["scope"] == "project" and row["isDefault"] is True
+
+    # 成员可读;局外人 404(不泄露存在性);成员写 403
+    r = await client.get("/api/exec-configs", headers=h_pm,
+                         params={"projectId": pid})
+    assert r.status_code == 200 and len(r.json()) == 1
+    r = await client.get("/api/exec-configs", headers=h_px,
+                         params={"projectId": pid})
+    assert r.status_code == 404
+    r = await client.delete(f"/api/exec-configs/{row['id']}", headers=h_pm)
+    assert r.status_code == 403
+
+    # scope=project 缺 projectId → 422;公共项目 → 409
+    r = await client.post("/api/exec-configs", headers=h_pa, json={
+        "name": "无项目", "scope": "project"})
+    assert r.status_code == 422
+    async with db_module.SessionLocal() as s:
+        pub = (await s.execute(sa.select(sa.text("id")).select_from(
+            sa.text("projects")).where(sa.text("kind = 'public'"))
+        )).scalar()
+    r = await client.post("/api/exec-configs", headers=h_pa, json={
+        "name": "公共", "scope": "project", "projectId": pub})
+    assert r.status_code == 409
+
+    # 个人面不受影响:本人列表仍空(不含项目行)
+    r = await client.get("/api/exec-configs", headers=h_pm)
+    assert r.status_code == 200 and r.json() == []
+
+
+async def test_project_zone_carry_chain_with_project_config(
+        client, plate_mock: PlateMock, monkeypatch):
+    """⑧ 项目区链:场景显式 > 显式选定个人 > 项目默认配置 > 项目层 >
+    公共项目层 —— 项目配置覆盖默认生效;显式个人配置压其上。"""
+    plate_mock.behaviour = "echo"
+    await register_and_login(client, "ec_pc", "pw123456")
+    h = await register_and_login(client, "ec_pc", "pw123456")
+    uid = await _uid("ec_pc")
+    await _seed_scene(client, h, "sc-ec-pc")
+    # 场景挂进普通项目(成员本人 = 管理员,便于建项目变体)
+    pid = await _mk_project("ec-pc-proj", members={"ec_pc": "admin"})
+    async with db_module.SessionLocal() as s:
+        from app.models.composer_scenario import ComposerScenario
+        await s.execute(sa.update(ComposerScenario).where(
+            ComposerScenario.scenario_id == "sc-ec-pc"
+        ).values(project_id=pid))
+        pub = await carry_store.public_scope(s)
+        await carry_store.put_bindings(
+            s, _BASE, {"$.pv": "pub", "$.layer": "pub"},
+            updated_by_id=None, updated_by_name="t", scope=pub)
+        await carry_store.put_bindings(
+            s, _BASE, {"$.pv": "proj-layer"},
+            updated_by_id=None, updated_by_name="t",
+            scope=("project", pid))
+        await s.commit()
+    await _seed_auth(uid, "qa1", "default-u")
+    # 项目默认配置:覆盖 $.pv;个人显式配置:覆盖 $.mine
+    await client.post("/api/exec-configs", headers=h, json={
+        "name": "项目变体", "scope": "project", "projectId": pid,
+        "isDefault": True,
+        "systems": [{"service": _BASE, "bindings": {},
+                     "carryOverrides": {"$.pv": "proj-cfg"}}]})
+    personal = await _mk_config(
+        uid, "个人显式", bindings={_ALIAS: "merchant-b"},
+        carry={"mine": "personal"})
+    await _seed_auth(uid, "merchant-b", "merchant-u")
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    # ① 默认链(无显式个人):项目配置覆盖生效(压项目层/公共层)
+    r = await client.post("/api/runs", headers=h, json=_run_payload(
+        scenarioId="sc-ec-pc", dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+    cfg = await _last_cfg()
+    assert cfg["execCarryOverrides"] == {_BASE: {"$.pv": "proj-cfg"}}
+
+    # ② 显式选定个人配置:个人覆盖压项目配置之上(字段级合并)
+    r = await client.post("/api/runs", headers=h, json=_run_payload(
+        scenarioId="sc-ec-pc", dataSetIds=[], execConfigId=personal))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 2)
+    cfg = await _last_cfg()
+    assert cfg["execCarryOverrides"] == {_BASE: {"$.pv": "proj-cfg",
+                                                 "mine": "personal"}}
+
+
 # ── ⑦ 重跑回放终值(§7:配置后改不影响历史执行)──────────────────
 
 async def test_rerun_replays_terminal_values(

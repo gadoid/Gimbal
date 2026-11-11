@@ -14,6 +14,7 @@ import * as carryApi from '@/api/carry'
 import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
 import * as credApi from '@/api/project_credentials'
+import * as execApi from '@/api/execConfigs'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -35,6 +36,7 @@ beforeEach(() => {
     { id: 7, name: 'dev', description: '', lines: {}, owner_id: null, is_default: true },
     { id: 8, name: 'sit', description: '', lines: {}, owner_id: null, is_default: false },
   ] as never)
+  vi.spyOn(execApi, 'listExecConfigs').mockResolvedValue([])
   vi.spyOn(carryApi, 'getDefaults').mockResolvedValue({ '$.a': 'v' })
   vi.spyOn(carryApi, 'putDefaults').mockResolvedValue({})
   vi.spyOn(carryApi, 'getBindings').mockResolvedValue({ 'fin-service': { '$.a': '1' } })
@@ -203,5 +205,70 @@ describe('ProjectConfigPanel — S8 项目凭证/槽位项目覆盖', () => {
     const w = mountPanel(projPublic)
     await flushPromises()
     expect(w.find('[data-testid="project-credentials"]').exists()).toBe(false)
+  })
+})
+
+describe('ProjectConfigPanel — ⑧ 项目执行配置(项目变体)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([])
+    vi.spyOn(carryApi, 'getDefaults').mockResolvedValue({})
+    vi.spyOn(carryApi, 'putDefaults').mockResolvedValue({})
+    vi.spyOn(carryApi, 'getBindings').mockResolvedValue({})
+    vi.spyOn(carryApi, 'getDrift').mockResolvedValue(
+      { services: [], plateReachable: true, scope: 'project', scopeId: 3 })
+    vi.spyOn(projectsApi, 'getSlotStatus').mockResolvedValue({ slots: [] })
+    vi.spyOn(scenApi, 'listScenarios').mockResolvedValue(
+      { items: [], total: 0, page: 1, page_size: 100 } as never)
+    vi.spyOn(credApi, 'listProjectCredentials').mockResolvedValue(
+      { items: [], total: 0, page: 1, page_size: 100 } as never)
+  })
+
+  it('管理员:列表渲染 + 新建发 scope=project/projectId + 设默认', async () => {
+    const row = { id: 11, name: '大促模式', isDefault: true,
+                  environmentId: null, scope: 'project',
+                  systems: [{ service: 'fin', bindings: {},
+                              carryOverrides: { '$.pv': 'x' } }] }
+    const list = vi.spyOn(execApi, 'listExecConfigs')
+      .mockResolvedValue([row])
+    const create = vi.spyOn(execApi, 'createExecConfig')
+      .mockResolvedValue(row)
+    const router = createRouter({ history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div/>' } }] })
+    const w = mount(ProjectConfigPanel, {
+      props: { project: proj },
+      global: { plugins: [createPinia(), router] },
+    })
+    await flushPromises()
+    expect(list).toHaveBeenCalledWith(3)
+    expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('大促模式')
+    expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('fin:1')
+    // 新建:scope=project + projectId + isDefault
+    await w.get('[data-testid="prj-ec-name"]').setValue('新变体')
+    await w.get('[data-testid="prj-ec-service"]').setValue('fin')
+    await w.get('[data-testid="prj-ec-field"]').setValue('$.pv')
+    await w.get('[data-testid="prj-ec-value"]').setValue('v2')
+    await w.get('[data-testid="prj-ec-add"]').trigger('click')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith({
+      name: '新变体', scope: 'project', projectId: 3, isDefault: true,
+      systems: [{ service: 'fin', bindings: {},
+                  carryOverrides: { '$.pv': 'v2' } }],
+    })
+    w.unmount()
+  })
+
+  it('公共项目:不出项目执行配置节', async () => {
+    vi.spyOn(execApi, 'listExecConfigs').mockResolvedValue([])
+    const router = createRouter({ history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div/>' } }] })
+    const w = mount(ProjectConfigPanel, {
+      props: { project: projPublic },
+      global: { plugins: [createPinia(), router] },
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="prj-exec-configs"]').exists()).toBe(false)
+    w.unmount()
   })
 })

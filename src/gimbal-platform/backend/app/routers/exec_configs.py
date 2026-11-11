@@ -1,25 +1,28 @@
-"""执行配置 API(执行配置与运行方案分层-设计方案 §4/§10 步①)。
+"""执行配置 API(执行配置与运行方案分层-设计方案 §4/§10 步①⑧)。
 
-个人数据(决策 8 终局):全员可建、owner 隔离 —— 跨 owner 一律 404
-(常量池同款口径)。v1 只落 ``user`` scope 行(project 随组级批次 ⑧,
-模型已同构);列表/详情/写面均以 ``(scope='user', scope_id=本人)``
-为界。零凭证值零地址值(§4):载荷只存引用键 —— bindings(身份面→
-槽位)与 carryOverrides(业务参数值内联,null=显式注入 JSON null,
-与 carry_store 语义同型)。
+两个 scope 同构:
+* ``user`` —— 个人面:全员可建、owner 隔离(跨 owner 一律 404,常量池
+  同款口径);
+* ``project``(⑧ 组级批次)—— 项目变体:读 = 项目成员,写 = 项目管理
+  员 ∨ Admin+(与 carry 项目层同门,复用 ``carry._resolve_scope``);
+  公共项目不可建(409,同项目凭证裁定)。项目 scope 在 v1 链路里只
+  携带 **carry 覆盖**(项目区链位:场景显式 > 显式选定个人 > 项目默认
+  配置 > 项目层 > 公共项目层);env/bindings 字段在模型上保留但链路
+  无位,暂不消费(§5 环境链/绑定链无项目配置位)。
 
-链路消费(步②接入,本步只立数据面与管理面):envId 占环境链位
-②/④;bindings 覆盖槽位解析序的配置层;carry 覆盖在私有区生效、
-项目区默认不吃显式吃(决策 9)。
+零凭证值零地址值(§4):载荷只存引用键 —— bindings(身份面→槽位)与
+carryOverrides(业务参数值内联,null=显式注入 JSON null,与 carry_store
+语义同型)。
 
-默认配置:每 scope 至多一行(部分唯一索引),POST /{id}/default
-原子切换;删除默认行不级联转移(链回落旧偏好/平台默认,§7)。
+默认配置:每 (scope, scope_id) 至多一行(部分唯一索引),POST
+/{id}/default 原子切换;删除默认行不级联转移(链回落下一位)。
 """
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -28,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..models import Environment, ExecConfig
+from ..models.project import Project
 
 router = APIRouter(prefix="/exec-configs", tags=["exec-configs"])
 
@@ -60,6 +64,10 @@ class ExecConfigCreate(BaseModel):
     systems: list[SystemSubConfig] = Field(default_factory=list,
                                            max_length=64)
     isDefault: bool = False
+    # ⑧:project scope(项目变体);projectId 与 scope=project 成对
+    scope: Literal["user", "project"] = "user"
+    projectId: int | None = Field(default=None, ge=1,
+                                  alias="projectId")
 
 
 class ExecConfigUpdate(BaseModel):
@@ -78,22 +86,49 @@ class ExecConfigView(BaseModel):
     isDefault: bool
     environmentId: int | None
     systems: list[SystemSubConfig]
+    scope: str = "user"
 
 
 def _view(row: ExecConfig) -> ExecConfigView:
     systems = (row.payload or {}).get("systems") or []
     return ExecConfigView(
         id=row.id, name=row.name, isDefault=row.is_default,
-        environmentId=row.environment_id, systems=systems)
+        environmentId=row.environment_id, systems=systems,
+        scope=row.scope)
 
 
-async def _get_owned(
-    db: AsyncSession, config_id: int, user_id: int
-) -> ExecConfig:
+async def _project_gate(db: AsyncSession, user, project_id: int | None,
+                        *, write: bool) -> int:
+    """project scope 门:读 = 成员,写 = 项目管理员 ∨ Admin+(复用 carry
+    的 ``_resolve_scope`` 同一口径);公共项目拒建(同项目凭证裁定)。"""
+    from .carry import _resolve_scope
+
+    if project_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "project_id_required",
+                    "message": "scope=project 需要 projectId"})
+    kind = (await db.execute(select(Project.kind).where(
+        Project.id == project_id))).scalar()
+    if kind == "public":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "public_project_no_exec_configs",
+                    "message": "公共项目不设项目执行配置(carry 全局默认"
+                               "已在公共项目「配置」页签)"})
+    sc = await _resolve_scope(db, user, "project", project_id, write=write)
+    return sc[1]
+
+
+async def _access(db: AsyncSession, config_id: int, user,
+                  *, write: bool) -> ExecConfig:
+    """读 = 本人 ∨ 项目成员;写 = 本人(own row)∨ 项目管理员。"""
     row = await db.get(ExecConfig, config_id)
-    if row is None or row.scope != "user" or row.scope_id != user_id:
+    if row is None or row.scope == "user" and row.scope_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"exec config not found: {config_id}")
+    if row.scope == "project":
+        await _project_gate(db, user, row.scope_id, write=write)
     return row
 
 
@@ -112,19 +147,29 @@ def _name_conflict(name: str) -> HTTPException:
                 "message": f"执行配置名 '{name}' 已存在"})
 
 
-async def _clear_default(db: AsyncSession, user_id: int) -> None:
+async def _clear_default(db: AsyncSession,
+                         scope: str, scope_id: int) -> None:
     await db.execute(update(ExecConfig).where(
-        ExecConfig.scope == "user", ExecConfig.scope_id == user_id,
+        ExecConfig.scope == scope, ExecConfig.scope_id == scope_id,
         ExecConfig.is_default.is_(True),
     ).values(is_default=False))
 
 
 @router.get("", response_model=list[ExecConfigView])
-async def list_exec_configs(user: CurrentUser, db: DbSession) -> Any:
-    """本人的执行配置(默认在前,其余按名序)。"""
+async def list_exec_configs(
+    user: CurrentUser, db: DbSession,
+    projectId: Annotated[int | None, Query(ge=1)] = None,
+) -> Any:
+    """本人的执行配置(缺省);``?projectId=`` → 该项目的项目变体
+    (读 = 项目成员;默认在前,其余按名序)。"""
+    if projectId is not None:
+        pid = await _project_gate(db, user, projectId, write=False)
+        where = (ExecConfig.scope == "project",
+                 ExecConfig.scope_id == pid)
+    else:
+        where = (ExecConfig.scope == "user", ExecConfig.scope_id == user.id)
     rows = (await db.execute(
-        select(ExecConfig).where(
-            ExecConfig.scope == "user", ExecConfig.scope_id == user.id)
+        select(ExecConfig).where(*where)
         .order_by(ExecConfig.is_default.desc(), ExecConfig.name.asc())
     )).scalars().all()
     return [_view(r) for r in rows]
@@ -134,11 +179,16 @@ async def list_exec_configs(user: CurrentUser, db: DbSession) -> Any:
 async def create_exec_config(
     body: ExecConfigCreate, user: CurrentUser, db: DbSession
 ) -> ExecConfigView:
+    if body.scope == "project":
+        pid = await _project_gate(db, user, body.projectId, write=True)
+        scope, scope_id = "project", pid
+    else:
+        scope, scope_id = "user", user.id
     await _check_env(db, body.environmentId)
     if body.isDefault:
-        await _clear_default(db, user.id)
+        await _clear_default(db, scope, scope_id)
     row = ExecConfig(
-        scope="user", scope_id=user.id,
+        scope=scope, scope_id=scope_id,
         name=body.name, is_default=body.isDefault,
         environment_id=body.environmentId,
         payload={"systems": [s.model_dump() for s in body.systems]},
@@ -157,7 +207,7 @@ async def create_exec_config(
 async def get_exec_config(
     config_id: int, user: CurrentUser, db: DbSession
 ) -> ExecConfigView:
-    return _view(await _get_owned(db, config_id, user.id))
+    return _view(await _access(db, config_id, user, write=False))
 
 
 @router.patch("/{config_id}", response_model=ExecConfigView)
@@ -170,7 +220,7 @@ async def patch_exec_config(
     """整体替换式 PATCH;``environmentId`` 用 model_fields_set 区分
     「未提供」与「显式置空(不设置环境)」(projects 同款)。默认切换
     不在此面 —— POST /{id}/default 原子切换。"""
-    row = await _get_owned(db, config_id, user.id)
+    row = await _access(db, config_id, user, write=True)
     if "environmentId" in body.model_fields_set:
         await _check_env(db, body.environmentId)
         row.environment_id = body.environmentId
@@ -191,10 +241,11 @@ async def patch_exec_config(
 async def set_default_exec_config(
     config_id: int, user: CurrentUser, db: DbSession
 ) -> ExecConfigView:
-    """置为默认(环境链位④载体 + carry 个人默认)。原子切换:同一事务
-    先清旧默认再置新;部分唯一索引兜并发(撞索引 → 409)。"""
-    row = await _get_owned(db, config_id, user.id)
-    await _clear_default(db, user.id)
+    """置为默认(user scope = 环境链位④载体 + carry 个人默认;project
+    scope = 项目区 carry 链的项目配置层)。原子切换:同一事务先清旧默认
+    再置新;部分唯一索引兜并发(撞索引 → 409)。"""
+    row = await _access(db, config_id, user, write=True)
+    await _clear_default(db, row.scope, row.scope_id)
     row.is_default = True
     try:
         await db.commit()
@@ -216,10 +267,10 @@ async def copy_exec_config(
     db: DbSession,
 ) -> ExecConfigView:
     """复制为新命名配置(§4「新建可自现有配置复制」—— 跨配置字段
-    复用的通道,决策 7 代价的补偿)。副本恒非默认。"""
-    src = await _get_owned(db, config_id, user.id)
+    复用的通道,决策 7 代价的补偿)。副本恒非默认、同 scope。"""
+    src = await _access(db, config_id, user, write=True)
     row = ExecConfig(
-        scope="user", scope_id=user.id,
+        scope=src.scope, scope_id=src.scope_id,
         name=body.name, is_default=False,
         environment_id=src.environment_id,
         # 深拷贝:JSON 列不共享可变对象(改源不牵连副本)
@@ -239,7 +290,7 @@ async def copy_exec_config(
 async def delete_exec_config(
     config_id: int, user: CurrentUser, db: DbSession
 ) -> None:
-    row = await _get_owned(db, config_id, user.id)
+    row = await _access(db, config_id, user, write=True)
     await db.delete(row)
     await db.commit()
 
@@ -260,7 +311,7 @@ async def exec_config_drift(
     from ..services.field_state_resolution import carry_face
     from ..services.plate_client import PlateUnavailableError
 
-    row = await _get_owned(db, config_id, user.id)
+    row = await _access(db, config_id, user, write=False)
     face_by_service: dict[str, set[str]] = {}
     reachable = True
     try:

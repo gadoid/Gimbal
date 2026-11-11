@@ -406,6 +406,11 @@ async def preview_effective_config(
         else:
             _default_exec_env = _exec_cfg.env_id
     _exec_carry = carry_overrides_for(_exec_cfg, scen.project_id)
+    # ⑧ 项目区链:项目默认配置覆盖压显式个人之下(与 dispatch 同款)
+    from ..services.exec_config import (merge_carry_overrides,
+                                        project_carry_overrides)
+    _exec_carry = merge_carry_overrides(
+        await project_carry_overrides(db, scen.project_id), _exec_carry)
     try:
         env = await env_chain.resolve_for_scenario(
             db, sid, user_id=user.id,

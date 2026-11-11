@@ -111,3 +111,35 @@ def carry_overrides_for(
     if project_id is None or choice.explicit:
         return choice.carry_overrides
     return None
+
+
+async def project_carry_overrides(
+    db: AsyncSession, project_id: int | None,
+) -> dict[str, dict[str, str | None]] | None:
+    """⑧ 项目 scope 默认配置的 carry 覆盖 —— 项目区链位(§5):场景
+    显式 > 显式选定个人覆盖 > **项目默认配置覆盖** > 项目层 > 公共
+    项目层。确定性取默认行(项目管理员维护;无默认行 = 无本层)。"""
+    if project_id is None:
+        return None
+    row = (await db.execute(
+        select(ExecConfig).where(
+            ExecConfig.scope == "project", ExecConfig.scope_id == project_id,
+            ExecConfig.is_default.is_(True)))).scalar()
+    return choice_of_row(row, explicit=False).carry_overrides \
+        if row is not None else None
+
+
+def merge_carry_overrides(
+    lower: dict[str, dict[str, str | None]] | None,
+    upper: dict[str, dict[str, str | None]] | None,
+) -> dict[str, dict[str, str | None]] | None:
+    """两层覆盖的字段级合并(upper 压 lower;⑧ 项目区链:显式个人配置
+    压项目默认配置)。执行与预览共用。"""
+    if not lower:
+        return upper or None
+    if not upper:
+        return lower
+    out = {svc: dict(fields) for svc, fields in lower.items()}
+    for svc, fields in upper.items():
+        out.setdefault(svc, {}).update(fields)
+    return out

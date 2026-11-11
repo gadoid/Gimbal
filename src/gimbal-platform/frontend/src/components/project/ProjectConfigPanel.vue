@@ -1,8 +1,10 @@
-<!-- ProjectConfigPanel.vue — M2a S7.3:项目详情「配置」页签。
+<!-- ProjectConfigPanel.vue — M2a S7.3 项目详情「配置」页签;⑧ 增挂
+     项目执行配置列表。
      普通项目:默认环境(项目管理员可改)+ 项目层 carry(默认值 / 按
-     服务)+ 槽位状态(成员凭证清单)+ 生效预览。公共项目:配置页签 =
+     服务)+ 槽位状态(成员凭证清单)+ 项目执行配置(项目变体;读 =
+     成员,写 = 项目管理员)+ 生效预览。公共项目:配置页签 =
      原 /carry-config 的「全局默认」(Admin+ 可写;公共项目不可 PATCH,
-     无默认环境/槽位状态节)。 -->
+     无默认环境/槽位状态/执行配置节)。 -->
 <template>
   <div class="panel" data-testid="prj-config-panel">
     <!-- ① 默认环境(普通项目):链路 项目默认 > 个人偏好 > 默认环境 -->
@@ -129,6 +131,55 @@
       />
     </section>
 
+    <!-- ⑧ 项目执行配置(项目变体):读 = 成员,写 = 项目管理员;
+         项目区 carry 链位 = 场景显式 > 显式个人 > 项目默认配置 > 项目层 -->
+    <section v-if="!isPublic" data-testid="prj-exec-configs">
+      <h2>项目执行配置</h2>
+      <p class="hint">
+        项目变体(按系统分组的 carry 覆盖)—— 项目内容执行的共用业务
+        参数;链位:场景显式 &gt; 显式选定个人配置 &gt; <b>项目默认配置</b>
+        &gt; 项目层 &gt; 公共项目层。与成员的个人执行配置不冲突(显式个人
+        配置压项目变体之上)。
+      </p>
+      <table v-if="execCfgs.length" class="tbl">
+        <thead><tr><th>名称</th><th>覆盖</th><th style="width:90px">默认</th>
+            <th v-if="canManage" style="width:150px">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="c in execCfgs" :key="c.id" :data-testid="`prj-ec-${c.id}`">
+            <td>{{ c.name }}</td>
+            <td class="mono muted">{{ carrySummary(c) }}</td>
+            <td>
+              <span v-if="c.isDefault" class="ok">默认</span>
+              <button v-else-if="canManage" type="button" class="btn sm"
+                :data-testid="`prj-ec-default-${c.id}`"
+                @click="setDefaultCfg(c)">设为默认</button>
+              <span v-else class="muted">—</span>
+            </td>
+            <td v-if="canManage">
+              <button type="button" class="btn sm danger"
+                :data-testid="`prj-ec-del-${c.id}`"
+                @click="delCfg(c)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="hint">暂无项目执行配置 —— 项目内容按 项目层/公共层 合成 carry。</p>
+      <div v-if="canManage" class="row">
+        <input v-model="newCfgName" placeholder="变体名(如 大促模式)"
+               data-testid="prj-ec-name" />
+        <input v-model="newCfgService" placeholder="目录服务名"
+               data-testid="prj-ec-service" />
+        <input v-model="newCfgField" placeholder="字段(如 $.pv)"
+               data-testid="prj-ec-field" />
+        <input v-model="newCfgValue" placeholder="值"
+               data-testid="prj-ec-value" />
+        <button type="button" class="btn sm primary" data-testid="prj-ec-add"
+                :disabled="creatingCfg || !newCfgName.trim()"
+                @click="addCfg">+ 新建(默认)</button>
+      </div>
+      <p v-if="cfgError" class="err" data-testid="prj-ec-err">{{ cfgError }}</p>
+    </section>
+
     <EffectivePreviewDialog
       :open="previewOpen"
       :scenarios="scenOptions"
@@ -148,6 +199,10 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import {
+  listExecConfigs, createExecConfig, setDefaultExecConfig,
+  deleteExecConfig, type ExecConfigRow,
+} from '@/api/execConfigs'
 import { useAuthStore } from '@/stores/auth'
 import {
   getSlotStatus, patchProject, type ProjectOut, type SlotStatusRow,
@@ -231,12 +286,82 @@ const scenOptions = ref<Array<{ id: string; name: string }>>([])
 const previewScenario = ref('')
 const previewOpen = ref(false)
 
+// ── ⑧ 项目执行配置(项目变体;读=成员,写=项目管理员)─────────────
+const execCfgs = ref<ExecConfigRow[]>([])
+const newCfgName = ref('')
+const newCfgService = ref('')
+const newCfgField = ref('')
+const newCfgValue = ref('')
+const creatingCfg = ref(false)
+const cfgError = ref('')
+
+function carrySummary(c: ExecConfigRow): string {
+  const parts = (c.systems ?? []).map((s) =>
+    `${s.service}:${Object.keys(s.carryOverrides ?? {}).length}`)
+  return parts.length ? parts.join(' · ') : '(空)'
+}
+
+async function loadCfgs(): Promise<void> {
+  if (isPublic.value || props.project.id == null) return
+  try {
+    execCfgs.value = await listExecConfigs(props.project.id)
+  } catch { execCfgs.value = [] }   // 读失败降级空表,不阻塞页签
+}
+
+async function addCfg(): Promise<void> {
+  cfgError.value = ''
+  const name = newCfgName.value.trim()
+  if (!name) return
+  const svc = newCfgService.value.trim()
+  const field = newCfgField.value.trim()
+  if (field && !svc) {
+    cfgError.value = '带覆盖字段时目录服务名必填'
+    return
+  }
+  creatingCfg.value = true
+  try {
+    await createExecConfig({
+      name, scope: 'project', projectId: props.project.id,
+      isDefault: true,
+      systems: svc ? [{ service: svc, bindings: {},
+                        carryOverrides: field ? { [field]: newCfgValue.value } : {} }]
+                   : [],
+    })
+    newCfgName.value = ''
+    newCfgService.value = ''
+    newCfgField.value = ''
+    newCfgValue.value = ''
+    await loadCfgs()
+  } catch (e) {
+    cfgError.value = String((e as Error)?.message ?? e)
+  } finally {
+    creatingCfg.value = false
+  }
+}
+
+async function setDefaultCfg(c: ExecConfigRow): Promise<void> {
+  cfgError.value = ''
+  try {
+    await setDefaultExecConfig(c.id)
+    await loadCfgs()
+  } catch (e) { cfgError.value = String((e as Error)?.message ?? e) }
+}
+
+async function delCfg(c: ExecConfigRow): Promise<void> {
+  cfgError.value = ''
+  try {
+    await deleteExecConfig(c.id)
+    await loadCfgs()
+  } catch (e) { cfgError.value = String((e as Error)?.message ?? e) }
+}
+
 onMounted(async () => {
   const jobs: Promise<void>[] = [
     listEnvironments().then((rows) => { envs.value = rows }),
   ]
   if (!isPublic.value) {
     jobs.push(
+      loadCfgs(),
       getSlotStatus(props.project.id)
         .then((r) => { slots.value = r.slots })
         .catch(() => { slots.value = [] }),
@@ -276,6 +401,11 @@ select, .svc-input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .err { color: #dc2626; font-size: 0.8rem; margin: 0; }
 .muted { color: #94a3b8; font-size: 0.78rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.tbl th, .tbl td { text-align: left; padding: 0.3rem 0.5rem;
+                   border-bottom: 1px solid #eef2f7; }
+.mono { font-family: var(--font-mono, monospace); }
+.ok { color: #16a34a; font-size: 0.8rem; }
 .slot-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .slot-card header { display: flex; align-items: baseline; gap: 0.6rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }

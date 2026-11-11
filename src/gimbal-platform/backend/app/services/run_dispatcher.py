@@ -1056,13 +1056,19 @@ async def dispatch_target(
     # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
     _scen_project_id = _scen.project_id if _scen is not None else None
     # 分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
-    # 单源 exec_config.carry_overrides_for,预览同款);④ 重跑直用
-    # 快照终值(区规则在首发已裁,不二次裁决)
+    # 单源 exec_config.carry_overrides_for,预览同款);⑧ 项目区链的
+    # 项目默认配置覆盖层压在显式个人之下(§5:显式个人 > 项目配置 >
+    # 项目层 > 公共层);④ 重跑直用快照终值(区规则在首发已裁,
+    # 不二次裁决)
     if _exec_replay is not None:
         _exec_carry = _exec_replay.get("carryOverrides") or None
     else:
-        from .exec_config import carry_overrides_for
+        from .exec_config import (carry_overrides_for,
+                                  merge_carry_overrides,
+                                  project_carry_overrides)
         _exec_carry = carry_overrides_for(_exec_cfg, _scen_project_id)
+        _proj_ov = await project_carry_overrides(db, _scen_project_id)
+        _exec_carry = merge_carry_overrides(_proj_ov, _exec_carry)
     # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
     # 普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
     # 须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
