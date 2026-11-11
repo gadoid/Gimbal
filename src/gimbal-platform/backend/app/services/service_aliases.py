@@ -379,6 +379,34 @@ async def credential_aliases_for(
     return {name: slot for name, slot in rows if slot}
 
 
+async def slot_lookup_overrides(
+    db: AsyncSession, steps: list,
+    bindings: dict[str, dict] | None = None,
+    alias_overrides: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """执行配置绑定的取用换槽映射(分层②,§5 注入表):{声明槽位(注入
+    标签,场景引用) → 池取用槽位}。
+
+    槽位解析序:别名声明(缺省)> 执行配置绑定(覆盖)> 池内同槽默认
+    行(最终账号)。覆盖只换**池内命中哪条** —— 注入标签(场景步骤
+    ``call.user``/``${auth.*}`` 引用的声明槽位)不变,场景零改动可跑。
+    ``${auth.X}`` 模板直引槽位的标签不受别名键覆盖影响(无别名关系)。
+    """
+    if not alias_overrides:
+        return {}
+    from .run_materialize import referenced_services
+    eff = {svc: effective_alias(svc, bindings)
+           for svc in referenced_services(steps or [])}
+    hits = await credential_aliases_for(db, sorted(set(eff.values())))
+    out: dict[str, str] = {}
+    for _svc, alias in eff.items():
+        label = hits.get(alias)
+        lookup = alias_overrides.get(alias)
+        if label and lookup and lookup != label and label not in out:
+            out[label] = lookup
+    return out
+
+
 async def base_urls_for(
     db: AsyncSession, raw_names: list[str],
     *, env: "EnvChoice | None" = None,

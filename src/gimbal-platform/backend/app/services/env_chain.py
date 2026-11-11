@@ -1,7 +1,9 @@
-"""环境链 + 地址第 ③ 层(authz M2a S2.1)。
+"""环境链 + 地址第 ③ 层(authz M2a S2.1;执行配置分层②起链位②/④
+由执行配置承载)。
 
-**环境**:本次显式 > 方案 > 项目默认 > 个人偏好 > 默认环境(D2,Admin
-指定)> 无。:func:`resolve_environment` 产出 :class:`EnvChoice`(环境
+**环境**:本次显式 > [选定执行配置 │ 方案] > 项目默认 > [默认执行
+配置 │ 个人偏好] > 默认环境(D2,Admin 指定)> 无。
+:func:`resolve_environment` 产出 :class:`EnvChoice`(环境
 id + 来源),派发时落 ``config_json``(重跑按快照回放)。
 
 **地址 ③**(数据源;优先级裁决仍在 ``run_materialize._apply_services``):
@@ -81,17 +83,28 @@ async def resolve_environment(
     scheme_env=None,
     project_id: int | None = None,
     user_id: int | None = None,
+    exec_env: int | None = None,
+    default_exec_env: int | None = None,
 ) -> EnvChoice:
     """按链路取第一个有效环境。
 
+    执行配置分层②(设计方案 §5):``本次 > [选定执行配置 │ 方案] >
+    项目默认 > [默认执行配置 │ 个人偏好] > 平台默认`` —— ``exec_env``
+    = 显式选定配置的 envId(占②、遮蔽方案),``default_exec_env`` =
+    默认配置的 envId(占④、遮蔽旧偏好;无默认配置时调用方不传,
+    旧偏好即为④,§7 存量回落)。仅当配置**设了** envId 才占位。
+
     显式指定的环境不存在 → :class:`EnvironmentNotFound`(调用方要的是
-    「我选的环境」,静默落到下一位会让用户以为生效了);方案 / 项目 /
+    「我选的环境」,静默落到下一位会让用户以为生效了);方案 / 配置 /
     偏好里悬空的环境(环境被删)视同未设置,落到下一位。
     """
     if explicit is not None:
         if not await _exists(db, explicit):
             raise EnvironmentNotFound(explicit)
         return EnvChoice(explicit, "explicit")
+    cid = _as_env_id(exec_env)
+    if cid is not None and await _exists(db, cid):
+        return EnvChoice(cid, "exec_config")
     sid = _as_env_id(scheme_env)
     if sid is not None and await _exists(db, sid):
         return EnvChoice(sid, "scheme")
@@ -100,6 +113,9 @@ async def resolve_environment(
             Project.id == project_id))).scalar()
         if pid is not None:
             return EnvChoice(pid, "project")   # FK SET NULL:非空即存在
+    did = _as_env_id(default_exec_env)
+    if did is not None and await _exists(db, did):
+        return EnvChoice(did, "exec_config_default")
     if user_id is not None:
         raw = (await db.execute(select(UserPref.value).where(
             UserPref.user_id == user_id,
@@ -123,16 +139,19 @@ async def resolve_for_scenario(
     user_id: int | None,
     explicit: int | None = None,
     scheme_env=None,
+    exec_env: int | None = None,
+    default_exec_env: int | None = None,
 ) -> EnvChoice:
     """场景执行面的便捷入口:项目默认按场景所属项目取。"""
     project_id = None
     if scenario_id:
         project_id = (await db.execute(select(
             ComposerScenario.project_id).where(
-                ComposerScenario.scenario_id == scenario_id))).scalar()
+            ComposerScenario.scenario_id == scenario_id))).scalar()
     return await resolve_environment(
         db, explicit=explicit, scheme_env=scheme_env,
-        project_id=project_id, user_id=user_id)
+        project_id=project_id, user_id=user_id,
+        exec_env=exec_env, default_exec_env=default_exec_env)
 
 
 async def deployment_urls(

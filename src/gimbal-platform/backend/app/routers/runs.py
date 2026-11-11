@@ -59,6 +59,8 @@ _INBOUND_FORBIDDEN_FIELDS = (
     ("graph", "graph"),
     # S8:项目凭证只对 JWT 手动执行开放(令牌范围只覆盖个人池)
     ("credential_source", "credentialSource"),
+    # 分层②:执行配置是个人(JWT)选择面,令牌不吃(同指纹不变量)
+    ("exec_config_id", "execConfigId"),
 )
 # runOptions 只开放 stepTo(截断执行,无地址/凭证语义);其余键任何
 # 非缺省值都拒 —— 尤其 nRuns/parallel(资源面)与 debug(强制 server 链)。
@@ -318,9 +320,11 @@ async def preview_effective_config(
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
     body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?/
-    credentialSource?(S8)}
-    —— 环境链同执行:显式 > 方案 > 项目默认 > 偏好 > 默认。绑定形态
-    同执行请求(服务键 → {alias};url/authAlias 422)。"""
+    credentialSource?(S8)/execConfigId?(分层②)}
+    —— 环境链同执行:显式 > [选定执行配置 │ 方案] > 项目默认 >
+    [默认执行配置 │ 偏好] > 默认。绑定形态同执行请求(服务键 →
+    {alias};url/authAlias 422)。执行配置:显式选定才携带绑定;env/carry
+    与执行同链(项目区 carry 覆盖仅显式,决策 9)。"""
     from pydantic import ValidationError
 
     from ..schemas.scenario_composer import (ServiceBinding,
@@ -373,10 +377,40 @@ async def preview_effective_config(
         raise HTTPException(422, detail={
             "code": e.code, "message": e.message,
             "service": e.service, "alias": e.alias}) from None
+    # 分层②:执行配置(显式选定或默认行;预览与执行同源)。区规则与
+    # dispatch 同款:项目区 carry 覆盖仅显式(决策 9);绑定仅显式。
+    _exec_cfg = None
+    try:
+        from ..services.exec_config import (
+            ExecConfigNotFound, carry_overrides_for, load_choice)
+        _req_exec = body.get("execConfigId")
+        if _req_exec is not None and not isinstance(_req_exec, int):
+            raise HTTPException(422, detail={
+                "code": "exec_config_invalid",
+                "message": "execConfigId 须是整数"})
+        _exec_cfg = await load_choice(db, user.id, _req_exec)
+    except ExecConfigNotFound as e:
+        raise HTTPException(404, detail={
+            "code": "exec_config_not_found",
+            "message": str(e)}) from None
+    _exec_env = _default_exec_env = None
+    _slot_map: dict[str, str] = {}
+    if _exec_cfg is not None:
+        if _exec_cfg.explicit:
+            _exec_env = _exec_cfg.env_id
+            if _exec_cfg.bindings:
+                from ..services.service_aliases import slot_lookup_overrides
+                _slot_map = await slot_lookup_overrides(
+                    db, definition_from_payload(scen.payload or {})
+                    .get("steps") or [], bindings, _exec_cfg.bindings)
+        else:
+            _default_exec_env = _exec_cfg.env_id
+    _exec_carry = carry_overrides_for(_exec_cfg, scen.project_id)
     try:
         env = await env_chain.resolve_for_scenario(
             db, sid, user_id=user.id,
-            explicit=body.get("environmentId"), scheme_env=scheme_env)
+            explicit=body.get("environmentId"), scheme_env=scheme_env,
+            exec_env=_exec_env, default_exec_env=_default_exec_env)
     except env_chain.EnvironmentNotFound as e:
         raise HTTPException(404, detail={
             "code": "environment_not_found",
@@ -402,7 +436,8 @@ async def preview_effective_config(
         db, definition_from_payload(scen.payload or {}),
         bindings=bindings, user_id=user.id,
         project_id=scen.project_id, environment=env,
-        cred_project_id=cred_project_id)
+        cred_project_id=cred_project_id,
+        slot_map=_slot_map or None, exec_carry_overrides=_exec_carry)
     return {
         "env": cfg.env,
         "services": cfg.services,

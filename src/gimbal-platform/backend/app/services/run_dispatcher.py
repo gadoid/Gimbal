@@ -955,10 +955,30 @@ async def dispatch_target(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
-    # S2.1 环境链:本次显式(RunRequest 顶层 > 图级)> 方案 > 项目默认 >
-    # 个人偏好 > 默认环境。方案字段由客户端摊平;请求没带环境但带了
-    # schemeId 时回查方案兜底。解析结果进 config_json(重跑按快照回放)
-    # 与任务配方(worker 不回查请求上下文)。
+    # 执行配置分层②(设计方案 §5):JWT 手动场景执行吃执行配置(显式
+    # 选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
+    # 调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
+    _req_exec_id = getattr(req, "exec_config_id", None)
+    _exec_eligible = (token is None
+                      and getattr(req, "graph", None) is None
+                      and target.kind == "scenario")
+    if _req_exec_id is not None and not _exec_eligible:
+        raise Conflict(
+            "exec_config_unsupported",
+            "执行配置只对个人(JWT)手动场景执行开放(令牌/编排/临时调用不吃)")
+    _exec_cfg = None
+    if _exec_eligible:
+        from .exec_config import ExecConfigNotFound, load_choice
+        try:
+            _exec_cfg = await load_choice(db, user_id, _req_exec_id)
+        except ExecConfigNotFound as e:
+            raise NotFound("exec_config_not_found", str(e)) from None
+
+    # S2.1 环境链(分层②):本次显式(RunRequest 顶层 > 图级)> [选定
+    # 执行配置 │ 方案] > 项目默认 > [默认执行配置 │ 个人偏好] > 默认
+    # 环境。方案字段由客户端摊平;请求没带环境但带了 schemeId 时回查
+    # 方案兜底。解析结果进 config_json(重跑按快照回放)与任务配方
+    # (worker 不回查请求上下文)。配置仅设了 envId 才占位(空值不遮蔽)。
     from .env_chain import EnvironmentNotFound, resolve_for_scenario
     _explicit_env = req.environment_id
     if _explicit_env is None and getattr(req, "graph", None) is not None:
@@ -971,10 +991,18 @@ async def dispatch_target(
             _scheme_env = (_sch.payload or {}).get("environmentId")
         except Exception:  # noqa: BLE001 — 悬空方案不阻塞(溯源字段)
             _scheme_env = None
+    _exec_env = None
+    _default_exec_env = None
+    if _exec_cfg is not None:
+        if _exec_cfg.explicit:
+            _exec_env = _exec_cfg.env_id
+        else:
+            _default_exec_env = _exec_cfg.env_id
     try:
         env_choice = await resolve_for_scenario(
             db, target.scenario_id if target.kind == "scenario" else None,
-            user_id=user_id, explicit=_explicit_env, scheme_env=_scheme_env)
+            user_id=user_id, explicit=_explicit_env, scheme_env=_scheme_env,
+            exec_env=_exec_env, default_exec_env=_default_exec_env)
     except EnvironmentNotFound as e:
         raise NotFound("environment_not_found", str(e)) from None
 
@@ -1014,6 +1042,10 @@ async def dispatch_target(
     _scen_owner_id = _scen.owner_id if _scen is not None else user_id
     # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
     _scen_project_id = _scen.project_id if _scen is not None else None
+    # 分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
+    # 单源 exec_config.carry_overrides_for,预览同款)
+    from .exec_config import carry_overrides_for
+    _exec_carry = carry_overrides_for(_exec_cfg, _scen_project_id)
     # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
     # 普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
     # 须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
@@ -1090,13 +1122,23 @@ async def dispatch_target(
         auth_aliases = []      # 已按全图核对;锚点清单不再重复判
     # S5 失败即中止:注入清单在执行人池解不到槽位 → 整单拒发(此前
     # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
-    # 注入/预览同一份(pick_bindings)。
+    # 注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
+    # 取用槽位换掉(注入标签不变;仅显式选定参与,默认行不自动改槽)。
+    _slot_map: dict[str, str] = {}
+    if _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
+        from .service_aliases import slot_lookup_overrides
+        _slot_map = await slot_lookup_overrides(
+            db, steps, _bindings, _exec_cfg.bindings)
     if auth_aliases:
         from .run_prepare import pick_bindings
         _picked = await pick_bindings(
-            db, user_id, auth_aliases, env_id=env_choice.env_id,
-            cred_project_id=cred_project_id)
-        _missing = sorted(set(auth_aliases) - {r.slot for r in _picked})
+            db, user_id, list(dict.fromkeys(
+                _slot_map.get(a, a) for a in auth_aliases
+                if _slot_map.get(a, a))),
+            env_id=env_choice.env_id, cred_project_id=cred_project_id)
+        _picked_slots = {r.slot for r in _picked}
+        _missing = sorted(a for a in set(auth_aliases)
+                          if _slot_map.get(a, a) not in _picked_slots)
         if _missing:
             raise Conflict(
                 "auth_aliases_missing",
@@ -1236,6 +1278,10 @@ async def dispatch_target(
             "injectionEntryIds": req.injection_entry_ids,
             # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
             "schemeId": req.scheme_id,
+            # 分层②:显式选定的执行配置留痕(重跑回放属批次④的快照
+            # 终值工作;此处先记链路来源)
+            **({"execConfigId": req.exec_config_id}
+               if req.exec_config_id is not None else {}),
             # S2.1 环境选择快照(environmentId/environmentSource;无环境
             # 时键缺席)—— 重跑按此回放
             **env_choice.snapshot(),
@@ -1314,6 +1360,11 @@ async def dispatch_target(
                 "n_runs": req.n_runs,
                 "parallel": req.parallel,
                 "service_bindings": _bindings,
+                # 分层②:槽位取用覆盖(声明槽位 → 池取用槽位)与 carry
+                # 覆盖随任务配方下发(纯值;worker 不回查配置行 —— 快照
+                # 语义与方案引用同款,配置后改不影响已派发执行)
+                "slot_map": _slot_map,
+                "exec_carry_overrides": _exec_carry,
             },
         }
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
@@ -1921,6 +1972,8 @@ async def _fanout(
     env_snapshot: dict | None = None,
     scenario_project_id: int | None = None,
     cred_project_id: int | None = None,
+    slot_map: dict[str, str] | None = None,
+    exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
@@ -2017,7 +2070,7 @@ async def _fanout(
             await resolve_exec_auths(
                 db_factory, owner_id, auth_aliases,
                 env_id=(env_snapshot or {}).get("environmentId"),
-                cred_project_id=cred_project_id)
+                cred_project_id=cred_project_id, slot_map=slot_map)
             if auth_aliases
             else []
         )
@@ -2076,7 +2129,9 @@ async def _fanout(
         project_id=scenario_project_id,
         # S6:绑定选别名 → carry 别名键随之切换
         bindings={k: b.model_dump(by_alias=True)
-                  for k, b in (service_bindings or {}).items()})
+                  for k, b in (service_bindings or {}).items()},
+        # 分层②:显式选定配置的槽位覆盖与 carry 覆盖(纯值随配方)
+        slot_overrides=None, exec_carry_overrides=exec_carry_overrides)
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。

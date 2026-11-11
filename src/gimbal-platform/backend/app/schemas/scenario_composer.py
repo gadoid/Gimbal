@@ -441,6 +441,13 @@ class RunRequest(BaseModel):
     # 默认环境);指定的环境不存在 → 404 environment_not_found
     environment_id: int | None = Field(default=None, ge=1,
                                        alias="environmentId")
+    # 执行配置分层②(设计方案 §5):显式选定执行配置 —— envId 占链位②
+    # (遮蔽方案存量)、槽位绑定换池取用、carry 覆盖区规则生效(项目区
+    # 「默认不吃、显式吃」,决策 9)。缺省 None = 默认链(默认配置只占
+    # env 链位④与私有区 carry;绑定不吃)。令牌/编排/临时调用携带 →
+    # 409(不吃执行配置,同指纹不变量);不属本人 → 404。
+    exec_config_id: int | None = Field(default=None, ge=1,
+                                       alias="execConfigId")
     # authz M2a S8:凭证来源 —— 'personal'(缺省 None 同义)= 执行人个人
     # 槽位绑定;'project' = 场景所属普通项目的项目凭证(须是项目成员;
     # suite 编排暂不支持 → 409)。令牌调用禁止携带(_INBOUND_FORBIDDEN)。

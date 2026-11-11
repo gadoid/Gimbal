@@ -273,19 +273,27 @@ def apply_row_bindings(
 async def binding_ids_for(
     db_factory: Any, owner_id: int | None, slots: list[str],
     *, env_id: int | None = None, cred_project_id: int | None = None,
+    slot_map: dict[str, str] | None = None,
 ) -> dict[str, int]:
-    """槽名 → 取用绑定 id(轻量,不解密;指纹/预览消费)。"""
+    """槽名 → 取用绑定 id(轻量,不解密;指纹/预览消费)。分层②:
+    ``slot_map`` 同 :func:`resolve_exec_auths`(键 = 声明槽位标签)。"""
     if not slots:
         return {}
+    lookup = slot_map or {}
     async with db_factory() as s:
-        rows = await pick_bindings(s, owner_id, slots, env_id=env_id,
-                                   cred_project_id=cred_project_id)
-    return {r.slot: r.id for r in rows}
+        rows = await pick_bindings(
+            s, owner_id, list(dict.fromkeys(
+                lookup.get(x, x) for x in slots if lookup.get(x, x))),
+            env_id=env_id, cred_project_id=cred_project_id)
+    by_slot = {r.slot: r.id for r in rows}
+    return {x: by_slot[lookup.get(x, x)]
+            for x in dict.fromkeys(slots) if lookup.get(x, x) in by_slot}
 
 
 async def resolve_exec_auths(
     db_factory: Any, owner_id: int | None, aliases: list[str],
     *, env_id: int | None = None, cred_project_id: int | None = None,
+    slot_map: dict[str, str] | None = None,
 ) -> list[ResolvedAuth]:
     """Owner 级槽名 → ResolvedAuth(解密后的轻量值对象)。owner 过滤
     防跨 owner 同名 slot 解错凭证。
@@ -293,6 +301,10 @@ async def resolve_exec_auths(
     S3 槽位绑定:按 ``slot`` 解析(注入键/模板名);同槽多绑定时按
     :func:`_slot_tier` 分层取一行(``env_id`` = 本次执行环境,S2.1)。
     存量行 slot=alias 恒一对一 → 行为与旧链逐行相同。
+
+    分层② ``slot_map``(声明槽位 → 池取用槽位):执行配置绑定的
+    「换池内命中」—— 取用按映射后的槽位,注入标签保持声明槽位
+    (场景 ``call.user``/``${auth.*}`` 引用不变)。
 
     * 解密失败 → 抛 :class:`AuthResolveError`(V1 严格语义:
       凭证路径 fail-fast,不静默降级)。
@@ -318,13 +330,21 @@ async def resolve_exec_auths(
         return []
     from ..core.security import fernet_decrypt
 
+    lookup = slot_map or {}
+    pick_slots = list(dict.fromkeys(
+        lookup.get(a, a) for a in aliases if lookup.get(a, a)))
     resolved: list[ResolvedAuth] = []
     async with db_factory() as session:
-        # S5:取用裁决单源(pick_bindings;同槽多绑定分层取一行)
-        rows = await pick_bindings(session, owner_id, aliases,
+        # S5:取用裁决单源(pick_bindings;同槽多绑定分层取一行;
+        # 分层②:按映射后的取用槽位挑行)
+        rows = await pick_bindings(session, owner_id, pick_slots,
                                    env_id=env_id,
                                    cred_project_id=cred_project_id)
-    for a in rows:
+        by_slot = {r.slot: r for r in rows}
+    for label in dict.fromkeys(aliases):
+        a = by_slot.get(lookup.get(label, label))
+        if a is None:
+            continue
         try:
             runtime = RuntimeAuthSession(
                 url=a.url,
@@ -333,14 +353,15 @@ async def resolve_exec_auths(
                 token_type=a.token_type,
                 expires_in=a.expires_in,
             )
-            # frozen dataclass:用 replace 补绑定标识(S5)
+            # frozen dataclass:用 replace 补绑定标识(S5);分层②:
+            # 标签 = 声明槽位(场景引用),取用行可能是覆盖槽位
             resolved.append(dataclasses.replace(
                 ResolvedAuth.from_runtime(
-                    runtime, alias=a.slot, account_fields=a.account_fields),
+                    runtime, alias=label, account_fields=a.account_fields),
                 binding_id=a.id))
         except ValueError as e:
             raise AuthResolveError(
-                f"auth slot '{a.slot}' decrypt failed: {e}"
+                f"auth slot '{label}' decrypt failed: {e}"
             ) from e
     missing = set(aliases) - {a.alias for a in resolved}
     if missing:
@@ -508,6 +529,8 @@ async def prepare_exec(
     environment: Any = None,
     project_id: int | None = None,
     cred_project_id: int | None = None,
+    slot_overrides: dict[str, str] | None = None,
+    exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
@@ -520,11 +543,15 @@ async def prepare_exec(
       ``lenient`` 仅记录(执行期步骤级报错);``with_auth=False``
       供调用方在更早处已用同一函数做过 fail-fast 解析(单场景链的
       认证先行序),跳过重复解密;
+      分层②:``slot_overrides``({别名全名: 槽位},显式选定配置的
+      绑定)→ ``slot_lookup_overrides`` 换池取用,注入标签不变;
     * 别名地址:``base_urls_for``(③层数据源;查表失败降级空表);
       ``environment``(S2.1,``env_chain.EnvChoice``)= 派发时已解析的
       环境选择,并入部署表地址(缺省 = 旧 ③ 行为);
     * carry:``build_carry_context``(独立短会话;任何故障降级 None,
-      carry 是增强不是前置条件);
+      carry 是增强不是前置条件);分层②:``exec_carry_overrides``
+      ({目录服务: {字段: 值}})作为配置覆盖层,位次在场景显式之下、
+      层序之上(区规则由调用方裁:项目区仅显式选定,决策 9);
     * 修订解析 ``resolve_mode``:
       ``single`` = plate resolve + merge_resolve_effective(PIN 写执行
       副本 / INTEGRATION 只写 pins;plate 拒绝/不可用原样上抛
@@ -550,6 +577,20 @@ async def prepare_exec(
             scenario_owner_id=scenario_owner_id, project_id=project_id),
         direct_addresses=zone_allows_direct(project_id))
 
+    # 分层②:显式选定配置的绑定 → {声明槽位: 池取用槽位}(换池内
+    # 命中哪条;注入标签不变)。解析失败不阻塞(缺槽由既有 fail-fast
+    # 判定给出可读错误,覆盖层只是增强)。
+    slot_map: dict[str, str] = {}
+    if slot_overrides:
+        try:
+            async with db_factory() as s:
+                slot_map = await service_aliases.slot_lookup_overrides(
+                    s, steps, bindings, slot_overrides)
+        except Exception:  # noqa: BLE001
+            logger.opt(exception=True).warning(
+                "run_prepare: exec-config slot overrides lookup failed")
+            slot_map = {}
+
     # ①② 凭证清单 + 解析(owner 级短会话);清单扫描源含 config.setup/
     # teardown(webhook v4 §3.2 —— setup 引用的凭证同时进清单与注入)
     if with_auth:
@@ -559,7 +600,7 @@ async def prepare_exec(
         prep.resolved_auths = await resolve_exec_auths(
             db_factory, owner_id, prep.aliases,
             env_id=getattr(environment, "env_id", None),
-            cred_project_id=cred_project_id)
+            cred_project_id=cred_project_id, slot_map=slot_map or None)
         got = {a.alias for a in prep.resolved_auths}
         prep.missing_aliases = sorted(set(prep.aliases) - got)
         if prep.missing_aliases and auth_policy == "strict":
@@ -617,12 +658,14 @@ async def prepare_exec(
     try:
         async with db_factory() as s:
             # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
-            # 项目区不吃个人层 —— 区模型收敛裁定)
+            # 项目区不吃个人层 —— 区模型收敛裁定);分层②:执行配置
+            # 覆盖层压在场景显式之下、层序之上(区规则由调用方裁)
             prep.carry_ctx = await build_carry_context(
                 s, definition, ui_field_states=ui_field_states,
                 project_id=project_id,
                 user_id=(owner_id if project_id is None else None),
-                bindings=bindings)
+                bindings=bindings,
+                exec_overrides=exec_carry_overrides)
     except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
         logger.opt(exception=True).warning(
             "run_prepare: carry context build failed; skipped")
@@ -652,11 +695,18 @@ async def resolve_effective_config(
     project_id: int | None = None,
     environment: Any = None,
     cred_project_id: int | None = None,
+    slot_map: dict[str, str] | None = None,
+    exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
 ) -> EffectiveConfig:
     """组合环境/地址/槽位绑定/carry(预览与执行同源;见类注释)。
 
     S8:``cred_project_id`` 非空 = 本次选用项目凭证 —— 槽位从项目池取用,
-    逐槽来源 ``source='project'``(缺省 ``'personal'``)。"""
+    逐槽来源 ``source='project'``(缺省 ``'personal'``)。
+
+    分层②:``slot_map``({声明槽位: 池取用槽位},执行配置绑定)与
+    ``exec_carry_overrides``({目录服务: {字段: 值}},区规则已由调用方
+    裁)—— 预览逐值带来源:被覆盖槽位标 ``slotSource='exec_config'``,
+    carry 覆盖值标 ``source='exec_config'``(§5 守则「自证每个值的来路」)。"""
     from . import carry_store, service_aliases
     from .carry_injection import _step_service
     from .env_chain import EnvChoice
@@ -682,28 +732,40 @@ async def resolve_effective_config(
             out["source"] = "deployment"
         services_out[svc] = out
 
-    # 槽位绑定:注入清单 + 取用(单源 pick_bindings)
+    # 槽位绑定:注入清单 + 取用(单源 pick_bindings);分层②:取用按
+    # 覆盖槽位,展示键 = 声明槽位(与执行注入标签同形)
     injection = await service_aliases.exec_auth_aliases_of_definition(
         db, definition, bindings or {})
+    lookup = slot_map or {}
     auths_out: dict[str, dict] = {}
     missing: list[str] = []
     if injection and (user_id is not None or cred_project_id is not None):
         rows = await pick_bindings(
-            db, user_id, injection,
+            db, user_id, list(dict.fromkeys(
+                lookup.get(a, a) for a in injection if lookup.get(a, a))),
             env_id=getattr(env, "env_id", None),
             cred_project_id=cred_project_id)
-        got = {r.slot for r in rows}
+        by_slot = {r.slot: r for r in rows}
         src = "project" if cred_project_id is not None else "personal"
-        for r in rows:
-            auths_out[r.slot] = {
+        for label in dict.fromkeys(injection):
+            r = by_slot.get(lookup.get(label, label))
+            if r is None:
+                continue
+            auths_out[label] = {
                 "bindingId": r.id, "system": r.system,
                 "envId": r.env_id, "isDefault": r.is_default,
-                "source": src}
-        missing = sorted(set(injection) - got)
+                "source": src,
+                **({"slotSource": "exec_config",
+                    "configuredSlot": lookup[label]}
+                   if label in lookup else {})}
+        missing = sorted(
+            a for a in set(injection)
+            if lookup.get(a, a) not in by_slot)
     elif injection:
         missing = sorted(injection)
 
-    # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级)
+    # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级);
+    # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行)
     from .service_names import resolve_base_with_aliases
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
     if project_id is not None:
@@ -733,6 +795,10 @@ async def resolve_effective_config(
                 else:
                     merged[path] = {"value": t_base[path],
                                     "source": f"{t[0]}:{t[1]}:base"}
+        ov = (exec_carry_overrides or {}).get(base)
+        if ov:
+            for path, value in ov.items():
+                merged[path] = {"value": value, "source": "exec_config"}
         carry_out[raw] = merged
     defaults_out: dict[str, dict] = {}
     for t in tiers:

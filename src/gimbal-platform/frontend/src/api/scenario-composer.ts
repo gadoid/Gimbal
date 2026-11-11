@@ -272,6 +272,11 @@ export interface RunRequest {
    *  'project' = 场景所属普通项目的项目凭证(须是项目成员;suite
    *  编排与令牌调用不支持) */
   credentialSource?: 'personal' | 'project'
+  /** 执行配置分层②:显式选定的执行配置 —— envId 占环境链位②、槽位
+   *  绑定换池取用、carry 覆盖(项目区「默认不吃、显式吃」)。缺省 =
+   *  默认链(默认配置只占 env 位④与私有区 carry)。仅个人(JWT)手动
+   *  场景执行;令牌/编排携带 → 409;不属本人 → 404 */
+  execConfigId?: number
 }
 
 // ── C5(P3-05):suite 编排执行规格 ──────────────────────────────

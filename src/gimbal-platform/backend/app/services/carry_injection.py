@@ -69,6 +69,7 @@ async def build_carry_context(
     project_id: int | None = None,
     user_id: int | None = None,
     bindings: dict | None = None,
+    exec_overrides: dict[str, dict[str, str | None]] | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
@@ -76,6 +77,11 @@ async def build_carry_context(
     (项目层 ∨ 执行人个人层;普通项目区不吃个人层),层内沿用键层级
     (别名键 > 基础服务键 > 层默认)。旧库行全在公共层 → 不带上下文时
     行为与旧链逐行相同。
+
+    分层②(执行配置):``exec_overrides``({目录服务: {字段: 值}})是
+    配置覆盖层,合区位次 = **场景显式之下、层序之上**(值 null = 显式
+    注入 JSON null,与值表语义同型);区规则(项目区仅显式选定,决策 9)
+    由调用方裁,本函数只做合成。
 
     面解析走 ``field_state_resolution.carry_face``(§3.2 单一实现):
     ``state(path) = ui.fieldStates[stepIndex][path] ?? entry.state ?? 'form'``
@@ -162,6 +168,10 @@ async def build_carry_context(
                     if override:
                         rows_t = {**rows_t, **override}
                 rows = {**rows, **rows_t}
+            # 分层②:执行配置覆盖(目录服务键;null = 显式注入 null)
+            ov = (exec_overrides or {}).get(base)
+            if ov:
+                rows = {**rows, **ov}
             service_bindings[raw] = rows
 
     return CarryContext(step_fields=step_fields,
