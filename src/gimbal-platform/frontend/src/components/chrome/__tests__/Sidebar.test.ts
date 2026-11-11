@@ -81,13 +81,12 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       '/suites',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
       '/projects',
-      // 服务组(⑦ 服务信息管理更名服务配置;IA P1 环境与地址挪入)
+      // 服务组(⑦ 服务信息管理更名服务配置;IA P1 环境与地址挪入;
+      // 2026-11-11 集成不再单列成组,入服务组更名「集成服务」)
       '/services', '/service-admin', '/admin/deployments', '/auths',
-      '/adaptations',
-      // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页);
-      // 集成组:集成(从执行组迁出)
+      '/adaptations', '/integrations',
+      // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页)
       '/run', '/executions', '/analytics',
-      '/integrations',
       '/admin/users',
     ])
     w.unmount()
@@ -106,10 +105,10 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     w.unmount()
   })
 
-  it('组标签为纯文本:我的/项目/服务/执行/集成/平台,不是可点页(S7.1 IA:项目一级入口;2026-11-10:「用例集」并入「我的」)', async () => {
+  it('组标签为纯文本:我的/项目/服务/执行/平台,不是可点页(S7.1 IA:项目一级入口;2026-11-11:集成组退役并入服务组)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['我的', '项目', '服务', '执行', '集成', '平台'])
+    expect(labels).toEqual(['我的', '项目', '服务', '执行', '平台'])
     // 组标签不得是链接
     for (const label of w.findAll('.group-label')) {
       expect(label.element.tagName).toBe('SPAN')
@@ -246,11 +245,11 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     w.unmount()
   })
 
-  it('折叠仍保留一级层次组标签(我的/项目/服务/执行/集成/平台)', async () => {
+  it('折叠仍保留一级层次组标签(我的/项目/服务/执行/平台)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['我的', '项目', '服务', '执行', '集成', '平台'])
+    expect(labels).toEqual(['我的', '项目', '服务', '执行', '平台'])
     w.unmount()
   })
 

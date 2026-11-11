@@ -11,7 +11,7 @@
 <template>
   <section class="page" data-testid="exec-configs">
     <header class="head">
-      <h1>执行配置</h1>
+      <h1>配置</h1>
       <p class="sub">
         场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务
         参数(carry 覆盖)。一套<b>默认</b> + 若干命名变体;执行时选一套注入。

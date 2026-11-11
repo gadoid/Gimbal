@@ -183,7 +183,7 @@ const groups: SidebarGroup[] = [
       { path: '/notifications', label: '通知', icon: BellIcon },
       // 执行配置分层①(2026-11-11):全员 —— 置顶组语义 = 高频个人入口;
       // 不放「服务」组避免与 Admin+ 管理面混层(设计方案 §4 入口裁定)
-      { path: '/exec-configs', label: '执行配置', icon: MixerHorizontalIcon },
+      { path: '/exec-configs', label: '配置', icon: MixerHorizontalIcon },
     ],
   },
   {
@@ -219,22 +219,20 @@ const groups: SidebarGroup[] = [
       // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
       // 页签,个人默认在执行配置 /exec-configs)
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
+      // 集成入服务组(2026-11-11 IA):不再单列成组,更名「集成服务」—
+      // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
+      { path: '/integrations', label: '集成服务', icon: Share2Icon },
     ],
   },
   // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
   // 置灰不可点;数据分析(延后)置灰但可点 — §4.4:延后的东西藏起来会被
   // 遗忘,留灰入口,点进去撞上那条说明;opacity .42,不加角标。
-  // (2026-10-10 IA 调整:Suite 与集成已迁出到各自的组。)
+  // (2026-10-10 IA 调整:Suite 与集成已迁出;2026-11-11 集成再入服务组。)
   { label: '执行', entries: [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
     { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
     { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
-  ] },
-  // 集成组(2026-10-10 IA 调整):集成从「执行」组迁出独立成组。
-  { label: '集成', entries: [
-    // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
-    { path: '/integrations', label: '集成', icon: Share2Icon },
   ] },
   { label: '平台', entries: [
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },

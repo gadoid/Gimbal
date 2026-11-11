@@ -10,7 +10,7 @@
     <header class="idtl-head">
       <div class="flex flex-col gap-1">
         <span class="text-caption text-signal-ink/60">
-          <RouterLink class="idtl-link" to="/integrations">集成</RouterLink>
+          <RouterLink class="idtl-link" to="/integrations">集成服务</RouterLink>
           / {{ task?.name }}
         </span>
         <div class="flex flex-wrap items-center gap-2.5">
