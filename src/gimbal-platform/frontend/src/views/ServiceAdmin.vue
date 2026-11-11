@@ -1,19 +1,24 @@
-<!-- ServiceAdmin.vue — 服务信息管理(服务画像方案 §4;P1 唯一净新增页面)。
+<!-- ServiceAdmin.vue — 服务配置(执行配置分层⑦:服务信息管理重定位
+     为「服务接入治理面」;页面重定位 + 术语降位,数据模型/路由/权限门
+     零改动)。
+     术语映射:别名→身份面(服务·后缀)、无后缀别名→默认面、声明槽位→
+     凭证槽位、基础服务→目录服务;alias_name 仍是数据键与 URL 键。
      定位 = 配置池(与画像的「探索」心智分开,故意不合并):
      * 左栏只到服务级(系统 → 服务两层),服务是配置的最小锚点;
-     * 表内显式画出「服务级默认」行(aliasName === baseService 的真实行),
-       把三层查找顺序摊开:精确命中别名 → 该服务的默认 → 全局共享默认。
-     authz M2a S6「别名瘦身」:baseUrl/环境归属/凭证别名/个人归属全部退役 ——
-     地址维护在「部署地址」页(部署表),凭证经「声明槽位」(slot)指向
-     执行者本人认证池的槽位,别名一律团队共享(个人别名退役)。
+     * 表内显式画出「默认面」行(aliasName === baseService 的真实行),
+       把三层查找顺序摊开:精确命中身份面 → 默认面 → 全局共享默认。
+     * 地址就绪列(治理端就绪度):该目录服务在各环境的部署行覆盖
+       (执行配置枢纽是个人端就绪度,两者成两半)。
+     地址维护在「环境与地址」页(部署表),凭证经「凭证槽位」(slot)指向
+     执行者本人认证池的槽位,身份面一律团队共享(M2a S6 个人别名退役)。
      写面 admin(同传递字段纪律);读面全员——但页面入口收在 admin。 -->
 <template>
   <section class="slib">
     <PageHead
       icon="layers"
-      title="服务信息管理"
-      :count="loading ? '' : `${aliases.length} 个别名`"
-      subtitle="配置池 — 别名登记与声明槽位;地址在部署地址页维护;探索覆盖与告警请用服务画像"
+      title="服务配置"
+      :count="loading ? '' : `${aliases.length} 个身份面`"
+      subtitle="服务接入治理面 — 身份面注册表(名字 → 目录服务 + 凭证槽位声明)与地址就绪度;地址在「环境与地址」维护;探索覆盖与告警请用服务画像"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -72,7 +77,7 @@
         <div class="svc-stats" data-testid="alias-group-chips">
           <span>
             {{ selectedService ? `${selectedService} 下` : '全部服务' }} ·
-            <b>{{ filtered.length }}</b> 条别名
+            <b>{{ filtered.length }}</b> 个身份面
           </span>
           <button v-if="selectedService" type="button" class="svc-link" @click="clearFilters">
             清掉筛选
@@ -80,7 +85,7 @@
           <span class="flex-1" />
           <!-- M2a S6:地址不再挂别名 — 指去部署地址页维护 -->
           <router-link to="/admin/deployments" class="svc-link" data-testid="goto-deployments">
-            地址在「部署地址」维护 ↗
+            地址在「环境与地址」维护 ↗
           </router-link>
         </div>
 
@@ -88,10 +93,11 @@
           <table class="slib-table">
             <thead>
               <tr>
-                <th style="width:28%">别名</th>
-                <th style="width:20%">所属服务</th>
-                <th style="width:20%">声明槽位</th>
-                <th style="width:132px" class="c-center">操作</th>
+                <th style="width:28%">身份面</th>
+                <th style="width:18%">目录服务</th>
+                <th style="width:16%">凭证槽位</th>
+                <th style="width:14%">地址就绪</th>
+                <th style="width:112px" class="c-center">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -107,13 +113,26 @@
                   <span
                     v-else-if="a.aliasName === a.baseService"
                     class="svc-flag blue ml-1"
-                    title="三层查找的中间层:精确命中别名 → 该服务的默认 → 全局共享默认"
-                  >服务级默认</span>
+                    title="无后缀身份面 = 该目录服务的默认面;三层查找:精确命中身份面 → 默认面 → 全局共享默认"
+                  >默认面</span>
                 </td>
                 <td class="mono muted">{{ a.baseService }}</td>
                 <td>
                   <span v-if="a.slot" class="mono">{{ a.slot }}</span>
                   <span v-else class="muted">未声明</span>
+                </td>
+                <td>
+                  <!-- ⑦ 地址就绪列:该目录服务在各环境的部署行覆盖
+                       (0 = 缺口;点跳「环境与地址」) -->
+                  <span v-if="!envCount" class="muted">—</span>
+                  <router-link
+                    v-else-if="readyEnvsOf(a.baseService) < envCount"
+                    to="/admin/deployments" class="svc-link warn-link"
+                    :data-testid="`alias-ready-${a.aliasName}`"
+                    :title="`缺环境部署行:${missingEnvsOf(a.baseService).join('、')}`"
+                  >{{ readyEnvsOf(a.baseService) }}/{{ envCount }} 缺</router-link>
+                  <span v-else class="svc-flag green ml-0" :data-testid="`alias-ready-${a.aliasName}`"
+                    title="各环境部署行齐备">{{ envCount }}/{{ envCount }}</span>
                 </td>
                 <td class="c-center">
                   <div class="row-acts">
@@ -124,9 +143,9 @@
                 </td>
               </tr>
               <tr v-if="filtered.length === 0">
-                <td colspan="4" class="c-center">
+                <td colspan="5" class="c-center">
                   <span class="muted">
-                    {{ selectedService ? '该服务下还没有登记别名' : '还没有登记别名 —— 别名 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
+                    {{ selectedService ? '该服务下还没有登记身份面' : '还没有登记身份面 —— 身份面 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
                   </span>
                 </td>
               </tr>
@@ -148,10 +167,10 @@
         <!-- 新建 / 编辑 -->
         <div class="svc-panel mt-3.5">
           <div class="svc-panel-head">
-            <span class="svc-panel-title">{{ editing ? '编辑别名' : '登记别名' }}</span>
+            <span class="svc-panel-title">{{ editing ? '编辑身份面' : '登记身份面' }}</span>
             <!-- 登记口径说明:原表单下常驻段落,逐页收纳批收进问号弹层 -->
-            <QTip text="登记不需要 URL —— 地址按环境在「部署地址」页维护;别名只声明槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。别名一律团队共享(M2a S6 个人别名退役)。" />
-            <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
+            <QTip text="登记不需要 URL —— 地址按环境在「环境与地址」页维护;身份面只声明凭证槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。身份面一律团队共享(M2a S6 个人面退役)。" />
+            <span v-if="editing" class="svc-panel-desc">身份面是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <!-- 三态接入(P1.0)/b2.5(归一 v1.0 §1.6):plate 受管(目录
@@ -161,7 +180,7 @@
             <Select v-model="draft.kind" :disabled="!!editing" :key="`kind:${draft.kind}:${!!editing}`">
               <SelectTrigger class="w-[128px]" data-testid="alias-kind-trigger"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="plate" title="落在 Plate 目录内的受管服务别名">受管服务</SelectItem>
+                <SelectItem value="plate" title="落在 Plate 目录内的受管服务身份面">受管服务</SelectItem>
                 <SelectItem value="external" title="第三方服务,无版本管理">第三方</SelectItem>
               </SelectContent>
             </Select>
@@ -184,7 +203,7 @@
               <Input
                 v-model="draft.aliasName"
                 class="w-[240px]"
-                placeholder="别名全名(如 jira-x)"
+                placeholder="身份面全名(如 jira-x)"
                 data-testid="alias-name-full-input"
               />
             </template>
@@ -215,7 +234,7 @@
             <Input
               v-model="draft.slot"
               class="w-[200px]"
-              placeholder="声明槽位(可选,如 maker)"
+              placeholder="凭证槽位(可选,如 maker)"
               data-testid="alias-slot-input"
             />
             <Button data-testid="alias-save" :disabled="!draft.aliasName.trim() || aliasIncomplete || !!saving" @click="save">
@@ -248,6 +267,8 @@ import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useClientPager } from '@/composables/useClientPager'
+import { listEnvironments, type EnvironmentRow } from '@/api/environments'
+import { listDeployments, type Deployment } from '@/api/deployments'
 
 const loading = ref(true)
 const router = useRouter()
@@ -318,6 +339,23 @@ const treeServices = computed<{ sut: ServiceGroup[]; integration: ServiceGroup[]
 })
 
 const catalogEntries = ref<{ service: string; system: string; kind?: string }[]>([])
+
+// ⑦ 地址就绪列:目录服务在各环境的部署行覆盖(读面全员;拉不到降级
+// 「—」,不阻塞身份面清单)
+const envs = ref<EnvironmentRow[]>([])
+const deployments = ref<Deployment[]>([])
+const envCount = computed(() => envs.value.length)
+function readyEnvsOf(baseService: string): number {
+  return new Set(deployments.value
+    .filter((d) => d.baseService === baseService)
+    .map((d) => d.envId)).size
+}
+function missingEnvsOf(baseService: string): string[] {
+  const hit = new Set(deployments.value
+    .filter((d) => d.baseService === baseService)
+    .map((d) => d.envId))
+  return envs.value.filter((e) => !hit.has(e.id)).map((e) => e.name)
+}
 
 // b2.5:external 别名的 base_service 下拉选项(plate kind=integration)
 const integrationServices = computed(() =>
@@ -432,6 +470,9 @@ async function reload(): Promise<void> {
   } finally {
     loading.value = false
   }
+  // 就绪列旁路数据(失败静默降级)
+  listEnvironments().then((rows) => { envs.value = rows }).catch(() => {})
+  listDeployments().then((rows) => { deployments.value = rows }).catch(() => {})
 }
 
 onMounted(() => { void reload() })

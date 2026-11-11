@@ -1046,7 +1046,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   const unknownSvcs = unanchoredServices.value.filter(
     (s) => serviceKinds.value[s] === 'unknown')
   if (unknownSvcs.length && manual) {
-    lintWarns.push(`服务 ${unknownSvcs.join('、')} 未接入(未登记别名)——`
+    lintWarns.push(`服务 ${unknownSvcs.join('、')} 未接入(未登记身份面)——`
       + '执行将按外部服务处理、不计入入库标准;可在「服务信息管理」'
       + '登记为第三方(external),或接入 plate 做版本管理')
   }

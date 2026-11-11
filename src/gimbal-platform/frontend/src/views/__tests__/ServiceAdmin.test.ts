@@ -1,7 +1,7 @@
 /**
  * ServiceAdmin.vue — 服务信息管理(P1 唯一净新增页面):
  *   - 左栏系统→服务两层树(只到服务级),右侧数字 = 已登记别名数;
- *   - 「服务级默认」行 = aliasName === baseService 的真实行打 tag;
+ *   - 「默认面」行 = aliasName === baseService 的真实行打 tag;
  *   - 登记/编辑/删除走 api;admin 写面。
  *
  * authz M2a S6「别名瘦身」:baseUrl/环境归属/凭证别名/个人归属退役 —
@@ -83,11 +83,11 @@ it('左栏系统→服务两层;右侧数字 = 已登记别名数', async () => 
   expect(w.findAll('[data-testid^="alias-row-"]')).toHaveLength(3)
 })
 
-it('服务级默认行打 tag;槽位列展示声明值(M2a S6:URL/归属/环境列退役)', async () => {
+it('默认面行打 tag;槽位列展示声明值(M2a S6:URL/归属/环境列退役)', async () => {
   const w = await mountPage()
   const finRow = w.find('[data-testid="alias-row-fin-service"]').text()
-  expect(finRow).toContain('服务级默认')
-  expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).not.toContain('服务级默认')
+  expect(finRow).toContain('默认面')
+  expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).not.toContain('默认面')
   // 槽位列:声明值显示,未声明显示占位
   expect(w.find('[data-testid="alias-row-fin-service-uat"]').text()).toContain('uat-slot')
   expect(w.find('[data-testid="alias-row-fin-service"]').text()).toContain('未声明')

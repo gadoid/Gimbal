@@ -160,7 +160,7 @@
                   :value="stepService(currentStep)"
                 >{{ stepService(currentStep) }}(未挂目录)</option>
                 <option v-for="o in serviceOptions" :key="o.value" :value="o.value" :class="{ dim: o.dim }">{{ o.label }}</option>
-                <option value="__create__">+ 为此服务新建别名…</option>
+                <option value="__create__">+ 为此服务新建身份面…</option>
               </select>
               <span v-if="refWarning" class="svc-ref-warn" :class="refWarning.level">{{ refWarning.text }}</span>
               <div v-if="creatingAlias" class="alias-create">
@@ -1942,9 +1942,9 @@ const serviceOptions = computed(() => {
   for (const key of Object.keys(declared)) {
     if (!anchor || key === anchor) continue
     if (deriveBase(key, catalogNames.value) === anchor)
-      push(key, key)                                           // 本服务别名
+      push(key, `${key}(身份面)`)                              // 本服务身份面
   }
-  // F4 第三来源:服务信息管理注册表(已登记)。本服务的优先展示,
+  // F4 第三来源:服务配置注册表(已登记身份面)。本服务的优先展示,
   // 跨服务的与下方 declared 跨服务键一起置底。
   for (const a of registeredAliases.value) {
     if (!anchor || a.baseService === anchor)
