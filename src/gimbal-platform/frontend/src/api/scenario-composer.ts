@@ -27,8 +27,8 @@ export interface ScenarioListParams {
   tag?: string
   author?: string
   visibility?: 'public' | 'private'
-  /** 浏览镜头(§5.1;S7.0 口径):private = 我名下且未加入任何项目
-   *  (「我的场景」);all = 现行可见性上限(admin 全员视角)。 */
+  /** S7.0 口径:private = 我名下且未加入任何项目(「我的场景」);
+   *  all = 现行可见性上限(三区:自己的私有 + 我的项目 + 公共)。 */
   scope?: 'private' | 'mine' | 'all'
   /** S7.0 项目页签:按项目过滤(与 visibility/scope 可叠加) */
   projectId?: number

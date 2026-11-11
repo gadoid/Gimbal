@@ -69,8 +69,8 @@ function scen(id: string, vis: 'private' | 'public', schemeCount: number): Scena
 }
 
 function mountPage(scenarios: Scenario[] = []) {
-  // 服务端分桶(浏览镜头 §5.1):mock 尊重 scope/visibility 参数——
-  // scope=mine 的入参集合即「自己创建的全部」,mock 原样返回种子集。
+  // 服务端分桶:mock 尊重 scope/visibility 参数——mine 桶恒传
+  // scope=private,入参集合即「我名下未加入项目」,mock 原样返回种子集。
   vi.mocked(composerApi.listScenarios).mockImplementation(async (params) => {
     const items = params?.scope
       ? scenarios
@@ -108,15 +108,11 @@ function mountPage(scenarios: Scenario[] = []) {
 describe('ScenariosMine — 拆分后的我的场景页', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('列出我创建的全部(含已发布带公共徽标);无方案行显示虚线「+ 创建方案」', async () => {
-    const w = mountPage([scen('sc-a', 'private', 5), scen('sc-hello', 'private', 0), scen('sc-p1', 'public', 0)])
+  it('列出我的私有场景;无方案行显示虚线「+ 创建方案」', async () => {
+    const w = mountPage([scen('sc-a', 'private', 5), scen('sc-hello', 'private', 0)])
     await flushPromises()
     expect(w.text()).toContain('sc-a')
     expect(w.text()).toContain('sc-hello')
-    // mine 镜头 = 自己创建的全部(§5.2:修复「发布后从我的页消失」),
-    // 自己的已发布场景在列且带公共徽标
-    expect(w.text()).toContain('sc-p1')
-    expect(w.find('[data-testid="pub-badge-sc-p1"]').exists()).toBe(true)
     expect(w.find('.schemes-chip').text()).toContain('5 个方案')
     expect(w.find('.create-scheme-chip').exists()).toBe(true)
     w.unmount()
@@ -206,26 +202,6 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     await items.find((i) => i.attributes('data-testid') === 'export-scheme-sY')!.trigger('click')
     await flushPromises()
     expect(downloadFile).toHaveBeenCalledTimes(1)
-    w.unmount()
-  })
-
-  it('admin 默认「我的」镜头(视角说明不自称"你的"),显式开关切「全员视角」', async () => {
-    const { useAuthStore } = await import('@/stores/auth')
-    const auth = useAuthStore()
-    auth.currentUser = { id: 1, username: 'root', display_name: 'root', role: 'super_admin' } as never
-    auth.capabilities = ['users.manage', 'ops.write', 'alias.write']
-    const w = mountPage([scen('sc-a', 'private', 1)])
-    await flushPromises()
-    // 默认镜头 = 我的;全员视角是显式动作(§5.1),不再是默认全知。
-    // 视角说明在问号弹层(触发器 data-tip),计数在 count 常驻(2026-11-05 说明统一轮)
-    expect(w.find('.slib-q').attributes('data-tip')).toContain('我的')
-    expect(w.find('.slib-q').attributes('data-tip')).not.toContain('你创建或拥有的')
-    expect(w.find('.slib-count').text()).toBe('共 1 个')
-    expect(w.find('[data-testid="mine-lens-all-off"]').exists()).toBe(true)
-    await w.find('[data-testid="mine-lens-all-off"]').trigger('click')
-    await flushPromises()
-    expect(w.find('[data-testid="mine-lens-all-on"]').exists()).toBe(true)
-    expect(w.find('.slib-q').attributes('data-tip')).toContain('全员视角')
     w.unmount()
   })
 

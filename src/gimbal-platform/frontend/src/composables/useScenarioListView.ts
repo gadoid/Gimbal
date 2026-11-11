@@ -19,7 +19,6 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import { useAuthStore } from '@/stores/auth'
 import { useServerList } from '@/composables/useServerList'
 import { emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
 import { fetchScenarioFacets, type ScenarioFacets } from '@/api/scenario-composer'
@@ -36,37 +35,13 @@ export type ScenarioListRow = ScenarioListItem
 export const LIST_PAGE_SIZE = 10
 
 /** 分桶:mine = 「我的场景」页(S7.0 口径:scope=private——我名下且
- *  未加入任何项目;进项目的场景从项目页进。admin 的「全员视角」仍是
- *  scope=all 显式开关),public = 公共页(visibility=public,兼容别名
- *  = 公共项目)。 */
+ *  未加入任何项目;进项目的场景从项目页进),public = 公共页
+ *  (visibility=public,兼容别名 = 公共项目)。 */
 type Bucket = 'mine' | 'public'
-
-/** 浏览镜头的本地偏好键(仅 admin 的全员视角开关用;镜头不进权限)。 */
-const LENS_KEY = 'scenarios-mine-lens'
 
 export function useScenarioListView(bucket: Bucket) {
   const store = useScenarioComposerStore()
   const route = useRoute()
-  const auth = useAuthStore()
-
-  // ── 浏览镜头(《Suite成员层、引用分享与浏览镜头-设计方案》§5.1)──
-  // 仅 mine 桶、仅 admin:默认「我的」(scope=mine),显式切「全员视角」
-  // (scope=all)。偏好记本地;镜头是查询偏好,不进权限判定——scope=all
-  // 拿到的集合与可见性上限严格一致。
-  const lensAll = ref(
-    bucket === 'mine'
-      && auth.can('users.manage')
-      && window.localStorage.getItem(LENS_KEY) === 'all',
-  )
-
-  function toggleLens(): void {
-    lensAll.value = !lensAll.value
-    window.localStorage.setItem(LENS_KEY, lensAll.value ? 'all' : 'private')
-  }
-
-  function lensScope(): 'private' | 'all' {
-    return lensAll.value ? 'all' : 'private'
-  }
 
   // 初始 q 从地址栏读回(在 useServerList 创建前赋值,不触发首拉)。
   const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
@@ -87,9 +62,9 @@ export function useScenarioListView(bucket: Bucket) {
 
   const params = () => ({
     q: effQ() || undefined,
-    // 分桶下推:mine 桶走 scope(镜头),public 桶维持 visibility=public。
+    // 分桶下推:mine 桶恒 scope=private,public 桶维持 visibility=public。
     ...(bucket === 'mine'
-      ? { scope: lensScope() }
+      ? { scope: 'private' as const }
       : { visibility: 'public' as const }),
     system: filters.value.systems.join(',') || undefined,
     module: filters.value.modules.join(',') || undefined,
@@ -129,14 +104,13 @@ export function useScenarioListView(bucket: Bucket) {
   )
 
   // ── facets(M3):FilterPopover 可选值的服务端数据源 ─────────────
-  // 与列表同口径下推 q + 分桶参数(镜头切换同步刷新);静默失败(置 null
-  // 即回落池)。
+  // 与列表同口径下推 q + 分桶参数;静默失败(置 null 即回落池)。
   const facets = ref<ScenarioFacets | null>(null)
 
   async function loadFacets(): Promise<void> {
     try {
       facets.value = await fetchScenarioFacets(bucket === 'mine'
-        ? { q: effQ() || undefined, scope: lensScope() }
+        ? { q: effQ() || undefined, scope: 'private' as const }
         : { q: effQ() || undefined, visibility: 'public' as const })
     } catch {
       facets.value = null
@@ -144,8 +118,6 @@ export function useScenarioListView(bucket: Bucket) {
   }
 
   watch([q, appliedGroupId], () => void loadFacets())
-  // 镜头切换:params 签名变化已触发列表重拉,这里补 facets。
-  watch(lensAll, () => void loadFacets())
   void loadFacets()
 
   /** 生效口径:分组态下搜索框虽空,列表确实在筛。 */
@@ -266,8 +238,6 @@ export function useScenarioListView(bucket: Bucket) {
   return {
     store,
     q, filters,
-    // 浏览镜头(mine 桶):admin 显式「全员视角」开关。
-    lensAll, lensAvailable: bucket === 'mine' && auth.can('users.manage'), toggleLens,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

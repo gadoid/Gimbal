@@ -22,32 +22,16 @@
         @input="writeSearch(($event.target as HTMLInputElement).value)"
       />
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
-      <!-- 浏览镜头(方案 §5.1):admin 默认「我的」,显式切「全员视角」
-           恢复全量。镜头是查询偏好(记本地),不动权限边界。 -->
-      <button
-        v-if="lensAvailable"
-        type="button"
-        class="slib-lens"
-        :class="{ on: lensAll }"
-        :data-testid="lensAll ? 'mine-lens-all-on' : 'mine-lens-all-off'"
-        :title="lensAll
-          ? '当前:全员视角(全部场景)——点按回「我的」'
-          : '当前:我的——点按切「全员视角」看全部场景'"
-        @click="toggleLens"
-      >{{ lensAll ? '◉ 全员视角' : '○ 全员视角' }}</button>
-      <!-- P1 尾巴①:批量加入 suite。仅「我的」镜头可选行(成员须是
-           suite 属主自己的场景,§6.3);全员视角(admin)含他人场景,
-           勾选禁用以免必 404。 -->
+      <!-- P1 尾巴①:批量加入 suite(成员须是 suite 属主自己的场景,§6.3;
+           本页恒为私有桶,行全部是自己的)。 -->
       <button
         type="button"
         class="slib-addsuite"
         data-testid="mine-add-to-suite"
-        :disabled="!selectable || !selectedCount"
-        :title="!selectable
-          ? '「全员视角」下含他人场景,不能加入自己的 Suite —— 切回「我的」再操作'
-          : selectedCount
-            ? `把勾选的 ${selectedCount} 个场景加入一个 Suite`
-            : '勾选场景后加入 Suite'"
+        :disabled="!selectedCount"
+        :title="selectedCount
+          ? `把勾选的 ${selectedCount} 个场景加入一个 Suite`
+          : '勾选场景后加入 Suite'"
         @click="atsOpen = true"
       >加入 Suite{{ selectedCount ? ` (${selectedCount})` : '' }}</button>
       <!-- 场景导入入口(v2.3 方案 §3.2,W5):member+ 可见(后端 403 为
@@ -99,7 +83,7 @@
       <table class="slib-table">
         <thead>
           <tr>
-            <th v-if="selectable" style="width:30px" class="c-center">
+            <th style="width:30px" class="c-center">
               <input
                 type="checkbox"
                 data-testid="mine-select-page"
@@ -123,7 +107,7 @@
         <tbody>
           <template v-for="row in paged" :key="row.meta.scenarioId">
             <tr class="slib-row" :class="{ 'row-expired': row.meta.expire }" @click="openScenario(row)">
-              <td v-if="selectable" class="c-center" @click.stop>
+              <td class="c-center" @click.stop>
                 <input
                   type="checkbox"
                   :data-testid="`mine-select-${row.meta.scenarioId}`"
@@ -145,25 +129,9 @@
                     :data-testid="`handoff-badge-${row.meta.scenarioId}`"
                     :title="`来自 ${handoffSenders.get(row.meta.scenarioId)} 的分享`"
                   >分享</span>
-                  <!-- 已发布徽标(§5.2):mine 镜头含自己的已发布场景,
-                       徽标替代「发布后从我的页消失」的旧缺陷。 -->
-                  <span
-                    v-if="row.visibility === 'public'"
-                    class="pub-badge"
-                    :data-testid="`pub-badge-${row.meta.scenarioId}`"
-                    :title="row.projectId != null
-                      ? `公共项目成员(所属:${projectNames.nameOf(row.projectId)})`
-                      : '已发布到公共库'"
-                  >公共</span>
-                  <!-- S7.1:普通项目徽标(在项目里的场景从项目页进;
-                       私有页签恒不出现,全员视角可见) -->
-                  <span
-                    v-if="row.projectId != null"
-                    class="proj-badge"
-                    :data-testid="`proj-badge-${row.meta.scenarioId}`"
-                    :title="`所属项目:${projectNames.nameOf(row.projectId)}`"
-                    @click.stop
-                  ><router-link :to="`/projects/${row.projectId}`" class="proj-link">{{ projectNames.nameOf(row.projectId) }}</router-link></span>
+                  <!-- pub/proj 徽标随「全员视角」镜头退役移除:本页恒
+                       scope=private(我名下且未加入项目),visibility 由
+                       project 派生(0043),两分支结构性不可达。 -->
                   <button
                     v-if="row.schemeCount"
                     type="button"
@@ -250,7 +218,7 @@
               </td>
             </tr>
             <tr v-if="expandedId === row.meta.scenarioId" class="scheme-panel-row" @click.stop>
-              <td :colspan="selectable ? 11 : 10">
+              <td :colspan="11">
                 <div v-if="schemesLoadingId === row.meta.scenarioId" class="slib-loading">方案加载中…</div>
                 <div v-else class="scheme-panel">
                   <SchemeCard
@@ -340,7 +308,6 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
-import { useProjectNames } from '@/composables/useProjectNames'
 import PromotionDialog from '@/components/project/PromotionDialog.vue'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
@@ -380,8 +347,6 @@ const PREVIEW_MAX = 3
 const MAX = 3
 
 const auth = useAuthStore()
-// S7.1:项目徽标名映射
-const projectNames = useProjectNames()
 
 // S7.2:加入项目(析出分析 → 直通复制 / 冲突转审批)
 const promoTarget = ref<{ id: string; name: string } | null>(null)
@@ -395,7 +360,6 @@ const runs = useScenarioRuns()
 // 与筛选分组骨架全在 useScenarioListView,与公共页共用。
 const {
   store, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
-  lensAll, lensAvailable, toggleLens,
   searchBox, writeSearch,
   groups, groupsState, savingGroup, activeGroupId, canSaveGroup, loadGroups, applyGroup, saveGroup, removeGroup,
 } = useScenarioListView('mine')
@@ -405,14 +369,12 @@ const schemesLoadingId = ref<string | null>(null)
 const schemesByScenario = reactive(new Map<string, SchemeV2[]>())
 
 // ── P1 尾巴①:批量勾选 + 加入 Suite ────────────────────────────
-// 勾选只在「我的」镜头开放(成员须是 suite 属主自己的场景,§6.3);
-// 全员视角(admin)行内含他人场景,勾选列整个隐藏。
-const selectable = computed(() => !lensAll.value)
+// 本页恒私有桶,行全部是 suite 属主自己的场景(§6.3),勾选常开。
 const selection = ref(new Set<string>())
 const atsOpen = ref(false)
 const selectedCount = computed(() => selection.value.size)
 const pageAllSelected = computed(() =>
-  selectable.value && paged.value.length > 0
+  paged.value.length > 0
   && paged.value.every((r) => selection.value.has(r.meta.scenarioId)))
 /** 弹窗入参:勾选的场景(名称从已加载行找,跨页勾选兜底用 id)。 */
 const selectedScenarios = computed(() =>
@@ -463,19 +425,12 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
   onCleanup(() => window.clearInterval(timer))
 })
 
-/** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
- *  装的是全员的私有场景,视角说明必须说实话,不能对管理员自称"你的"。
+/** 「全员视角」镜头退役(authz W3 后 admin 无越属主读,开关名不副实):
+ *  本页恒 scope=private,所有角色同一句视角说明。
  *  计数走 PageHead count 常驻;视角说明收进问号悬浮(2026-11-05 说明统一轮);
  *  逐页收纳批把页脚徽章/默认方案口径段并入同一弹层,页脚不再常驻长说明。 */
 const BADGE_NOTE = '「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。'
-const pageSubtitle = computed(() => {
-  const lens = auth.can('users.manage')
-    ? (lensAll.value
-      ? '全员视角:非 public 桶装的是全员的私有场景(全量)'
-      : '我的:只看你创建的;切「全员视角」可看全部')
-    : '你创建或拥有的编排'
-  return `${lens}\n\n${BADGE_NOTE}`
-})
+const pageSubtitle = computed(() => `你创建或拥有的编排\n\n${BADGE_NOTE}`)
 
 const formatTime = shortDateTime
 
@@ -841,53 +796,9 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   cursor: help;
 }
 
-/* 已发布徽标(§5.2):mine 镜头里自己的公共场景。 */
-.proj-badge {
-  flex: none;
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 8px;
-  border-radius: 999px;
-  color: #2563eb;
-  background: rgb(37 99 235 / 8%);
-  border: 1px solid rgb(37 99 235 / 30%);
-}
-.proj-link { color: inherit; text-decoration: none; }
-.proj-link:hover { text-decoration: underline; }
-.pub-badge {
-  flex: none;
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 8px;
-  border-radius: 999px;
-  color: #15803d;
-  background: rgb(34 197 94 / 12%);
-  border: 1px solid rgb(34 197 94 / 45%);
-  cursor: help;
-}
+/* pub/proj 徽标样式随「全员视角」镜头退役移除(私有桶两分支恒不可达)。 */
 
-/* 浏览镜头开关(§5.1):admin 的显式「全员视角」。 */
-.slib-lens {
-  flex: none;
-  font-size: 12px;
-  line-height: 1;
-  padding: 7px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--sl-ink-soft, #64748b);
-  background: transparent;
-  border: 1px solid rgb(100 116 139 / 35%);
-  white-space: nowrap;
-}
-.slib-lens:hover { border-color: rgb(100 116 139 / 70%); }
-.slib-lens.on {
-  color: #1d4ed8;
-  border-color: rgb(59 130 246 / 55%);
-  background: rgb(59 130 246 / 10%);
-}
-
-
-/* P1 尾巴①:批量加入 Suite 入口(与镜头/新建同排)。 */
+/* P1 尾巴①:批量加入 Suite 入口(与筛选/导入同排)。 */
 .slib-addsuite {
   flex: none;
   font-size: 12px;

@@ -1,6 +1,6 @@
 <!-- SuiteLibrary.vue — 场景集(原型 02,Suite 层重构第 2 步;2026-10-10
      IA:独立成组;2026-11-10 IA:并入侧栏「我的」组,页面更名场景集)。
-     页头 + 浏览镜头(admin 全员视角)/ 搜索 / 模式筛选 + 表格
+     页头 + 搜索 / 模式筛选 + 表格
      (Suite · 模式 · 成员 · 最近运行 · 操作)。草稿带「草稿」标记;
      「共享给我的」独立分区(§7.11);「公共用例集」链接到独立公共页。
      行点击进 20(本人最近一次发起的运行失败则进 21);行内「运行」
@@ -27,17 +27,6 @@
           @click="modeFilter = m.key"
         >{{ m.label }}</button>
       </div>
-      <button
-        v-if="lensAvailable"
-        type="button"
-        class="slib-lens"
-        :class="{ on: lensAll }"
-        :data-testid="lensAll ? 'suite-lens-all-on' : 'suite-lens-all-off'"
-        :title="lensAll
-          ? '当前:全员视角 —— 点按回「我的」'
-          : '当前:我的 —— 点按切「全员视角」看全部 Suite'"
-        @click="toggleLens"
-      >{{ lensAll ? '◉ 全员视角' : '○ 全员视角' }}</button>
       <router-link class="slib-public-link" to="/suites/public" data-testid="suite-public-link">公共用例集</router-link>
       <button
         type="button"
@@ -64,7 +53,6 @@
             <th>Suite</th>
             <th style="width:100px">模式</th>
             <th style="width:70px">成员</th>
-            <th v-if="lensAll" style="width:80px">归属</th>
             <th style="width:170px">最近运行</th>
             <th style="width:170px">操作</th>
           </tr>
@@ -81,23 +69,13 @@
               <div class="sl-name">
                 <span class="nm">{{ s.name }}</span>
                 <span v-if="s.isDraft" class="draft-chip" title="草稿:不出现在发布 / 分享;空草稿 30 天自动清理">草稿</span>
-                <span v-if="s.visibility === 'public'" class="pub-chip" title="已发布到公共库">公共</span>
-                <!-- S7.1:所属项目徽标(私有页签恒不出现,全员视角可见) -->
-                <router-link
-                  v-if="s.projectId != null"
-                  :to="`/projects/${s.projectId}`"
-                  class="proj-chip"
-                  :title="`所属项目:${projectNames.nameOf(s.projectId)}`"
-                >{{ projectNames.nameOf(s.projectId) }}</router-link>
+                <!-- pub/proj 徽标与「归属」列随「全员视角」镜头退役移除:本页
+                     恒 scope=private(我名下且未加入项目),两分支结构性不可达。 -->
               </div>
               <div class="sl-sid">{{ s.description || '—' }}</div>
             </td>
             <td><span class="mode-chip" :class="s.mode">{{ MODE_LABEL[s.mode] || s.mode }}</span></td>
             <td><span class="num">{{ s.memberCount }}</span></td>
-            <td v-if="lensAll">
-              <span v-if="s.visibility === 'public'" class="pub-chip">公共</span>
-              <span v-else class="muted">—</span>
-            </td>
             <td>
               <span v-if="s.latestRun" class="last-run">
                 <i class="dot" :class="runStatusTone(s.latestRun.status ?? '')"></i>
@@ -218,8 +196,6 @@ import {
   patchSuite, postSuitePublish, runSuite, suiteErrDetail,
   type SuiteLatestRun, type SuiteSummary,
 } from '@/api/suites'
-import { useAuthStore } from '@/stores/auth'
-import { useProjectNames } from '@/composables/useProjectNames'
 import PromotionDialog from '@/components/project/PromotionDialog.vue'
 import { usePagerSize } from '@/composables/usePagerSize'
 import { toast } from '@/utils/toast'
@@ -229,9 +205,6 @@ import { executionsBatchUrl } from '@/utils/links'
 import { MODE_LABEL, runStatusTone } from '@/utils/suiteStructure'
 
 const router = useRouter()
-const auth = useAuthStore()
-// S7.1:项目徽标名映射
-const projectNames = useProjectNames()
 
 // S7.2:加入项目(析出分析 → 直通复制 / 冲突转审批)
 const promoTarget = ref<SuiteSummary | null>(null)
@@ -245,15 +218,6 @@ const total = ref(0)
 const page = ref(1)
 const { pageSize } = usePagerSize('suite-library', 10)
 
-// 浏览镜头(§5.1):默认我的;admin 可切全员视角(记本地)
-const lensAll = ref(false)
-const lensAvailable = computed(() => auth.can('users.manage'))
-function toggleLens(): void {
-  lensAll.value = !lensAll.value
-  page.value = 1
-  void load()
-}
-
 const modeFilters = [
   { key: '', label: '全部' },
   { key: 'aggregate', label: MODE_LABEL.aggregate },
@@ -264,10 +228,9 @@ const modeFilters = [
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-// 计数走 count 常驻;说明收进问号悬浮(2026-11-05 说明统一轮)
-const subtitle = computed(() => lensAll.value
-  ? '一组场景及其运行编排 · 全员视角'
-  : '一组场景及其运行编排 · 你创建的(草稿也在这里,带「草稿」标记)')
+// 计数走 count 常驻;说明收进问号悬浮(2026-11-05 说明统一轮)。
+// 「全员视角」镜头退役:本页恒 scope=private,所有角色同一句说明。
+const subtitle = '一组场景及其运行编排 · 你创建的(草稿也在这里,带「草稿」标记)'
 
 // 搜索(防抖)/模式筛选 → 回第 1 页重拉;翻页直接拉
 let qTimer: ReturnType<typeof setTimeout> | undefined
@@ -293,7 +256,7 @@ async function load(): Promise<void> {
   try {
     const env = await listSuites({
       // S7.0 口径:「我的用例集」= 我名下且未加入任何项目
-      scope: lensAll.value ? 'all' : 'private',
+      scope: 'private' as const,
       q: q.value.trim() || undefined,
       mode: modeFilter.value || undefined,
       page: page.value, page_size: pageSize.value,
@@ -479,15 +442,6 @@ onMounted(() => void load())
 }
 .slib-mode:last-child { border-right: none; }
 .slib-mode.on { background: var(--accent-soft); color: #4338ca; font-weight: 600; }
-.slib-lens {
-  flex: none; font-size: 12px; padding: 7px 12px; border-radius: 8px;
-  cursor: pointer; color: var(--sl-ink-soft, #64748b); background: transparent;
-  border: 1px solid rgb(100 116 139 / 35%); white-space: nowrap;
-}
-.slib-lens.on {
-  color: #1d4ed8; border-color: rgb(59 130 246 / 55%);
-  background: rgb(59 130 246 / 10%);
-}
 .slib-public-link {
   font-size: 12.5px; color: #4338ca; text-decoration: none; white-space: nowrap;
   padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
@@ -519,17 +473,7 @@ onMounted(() => void load())
   color: #b45309; background: rgb(245 158 11 / 10%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
-.proj-chip {
-  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
-  color: #2563eb; background: rgb(37 99 235 / 8%);
-  border: 1px solid rgb(37 99 235 / 30%); text-decoration: none;
-}
-.proj-chip:hover { background: rgb(37 99 235 / 15%); }
-.pub-chip {
-  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
-  color: #15803d; background: rgb(34 197 94 / 10%);
-  border: 1px solid rgb(34 197 94 / 40%);
-}
+/* proj-chip / pub-chip 样式随「全员视角」镜头退役移除(私有桶恒不可达) */
 .mode-chip {
   font-size: 11.5px; padding: 2px 9px; border-radius: 999px;
   white-space: nowrap;
