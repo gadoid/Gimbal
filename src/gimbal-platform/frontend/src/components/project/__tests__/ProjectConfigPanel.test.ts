@@ -227,7 +227,7 @@ describe('ProjectConfigPanel — ⑧ 项目执行配置(项目变体)', () => {
 
   it('管理员:列表渲染 + 新建发 scope=project/projectId + 设默认', async () => {
     const row = { id: 11, name: '大促模式', isDefault: true,
-                  environmentId: null, scope: 'project',
+                  environmentId: null, scope: 'project' as const,
                   systems: [{ service: 'fin', bindings: {},
                               carryOverrides: { '$.pv': 'x' } }] }
     const list = vi.spyOn(execApi, 'listExecConfigs')
