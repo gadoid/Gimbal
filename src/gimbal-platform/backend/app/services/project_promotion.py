@@ -142,14 +142,18 @@ def _referenced(definition: dict) -> set[str]:
 async def _carry_conflicts(
     db: AsyncSession, services: set[str], project_id: int, applicant_id: int,
 ) -> list[dict]:
-    """两区 carry 解析差(冲突清单):eff_priv = 公共层<个人层,
-    eff_proj = 公共层<项目层;「个人层 ∨ 项目层」绑定的路径里两者
+    """两区 carry 解析差(冲突清单):eff_priv = 公共层 < **申请人默认执行
+    配置覆盖**(分层⑥起个人层的新家,决策 8;原个人层行已停读迁移),
+    eff_proj = 公共层 < 项目层;「配置覆盖 ∨ 项目层」绑定的路径里两者
     不同即冲突(projectValue=None = 项目层缺口)。"""
+    from .exec_config import load_choice
+
+    choice = await load_choice(db, applicant_id, None)
+    personal_cfg = (choice.carry_overrides if choice is not None else None) or {}
     out: list[dict] = []
     for svc in sorted(services):
         pub = await carry_store.get_bindings(db, svc)
-        personal = await carry_store.get_bindings(
-            db, svc, scope=("user", applicant_id))
+        personal = personal_cfg.get(svc) or {}
         project = await carry_store.get_bindings(
             db, svc, scope=("project", project_id))
         for path in sorted(set(personal) | set(project)):

@@ -35,7 +35,7 @@ async def _put_carry(
     client: AsyncClient, headers: dict, scope: str, service: str,
     entries: dict, *, project_id: int | None = None,
 ) -> None:
-    """写 carry 层(user=本人个人层;project=项目管理员经 API)。"""
+    """写 carry 层(project=项目管理员经 API;公共层同理)。"""
     params: dict = {"scope": scope, "service": service}
     if project_id is not None:
         params["projectId"] = project_id
@@ -43,6 +43,25 @@ async def _put_carry(
         "/api/carry/bindings/fin", headers=headers,
         params=params, json={"bindings": entries})
     assert r.status_code == 200, r.text
+
+
+async def _put_personal_cfg(
+    client: AsyncClient, headers: dict, service: str, entries: dict,
+) -> None:
+    """个人缺省 carry 写进**默认执行配置**(分层⑥:个人层的新家,
+    决策 8 —— 原 scope=user 写面已 422 退役)。整组替换该服务的覆盖。"""
+    rows = (await client.get("/api/exec-configs", headers=headers)).json()
+    dft = next((c for c in rows if c["isDefault"]), None)
+    entry = {"service": service, "bindings": {}, "carryOverrides": entries}
+    if dft is not None:
+        merged = [s for s in dft["systems"] if s["service"] != service]
+        merged.append(entry)
+        r = await client.patch(f"/api/exec-configs/{dft['id']}",
+                               headers=headers, json={"systems": merged})
+    else:
+        r = await client.post("/api/exec-configs", headers=headers, json={
+            "name": "默认", "isDefault": True, "systems": [entry]})
+    assert r.status_code in (200, 201), r.text
 
 
 def _draft_with_carry(scenario_id: str) -> dict:
@@ -63,9 +82,10 @@ class TestAnalyze:
             "s72-ana", members={"s72_am": "member", "s72_aad": "admin"})
         await client.post("/api/scenarios", headers=h_m,
                           json=_draft_with_carry("sc-s72-ana"))
-        # 个人层 fin.host=prod;项目层 fin.host=prod-proj → 冲突
-        await _put_carry(client, h_m, "user", "fin",
-                         {"host": "prod", "token": "t1"})
+        # 申请人默认执行配置 fin.host=prod(个人层新家);项目层
+        # fin.host=prod-proj → 冲突
+        await _put_personal_cfg(client, h_m, "fin",
+                                {"host": "prod", "token": "t1"})
         await _put_carry(client, h_adm, "project", "fin",
                          {"host": "prod-proj"}, project_id=pid)
         r = await client.post(
@@ -160,8 +180,8 @@ class TestApprovalFlow:
             "s72-flow", members={"s72_fm": "member", "s72_fad": "admin"})
         await client.post("/api/scenarios", headers=h_m,
                           json=_draft_with_carry("sc-s72-f"))
-        await _put_carry(client, h_m, "user", "fin",
-                         {"host": "prod", "token": "t1"})
+        await _put_personal_cfg(client, h_m, "fin",
+                                {"host": "prod", "token": "t1"})
         await _put_carry(client, h_adm, "project", "fin",
                          {"host": "prod-proj"}, project_id=pid)
         r = await client.post(
