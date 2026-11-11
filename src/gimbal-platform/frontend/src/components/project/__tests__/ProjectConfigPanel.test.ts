@@ -134,7 +134,7 @@ describe('ProjectConfigPanel — 普通项目', () => {
     await flushPromises()
     expect(document.body.querySelector('[data-testid="preview-dialog"]')).toBeTruthy()
     expect(document.body.textContent).toContain('项目默认')
-    expect(document.body.textContent).toContain('部署地址')
+    expect(document.body.textContent).toContain('环境与地址')
     w.unmount()
   })
 })
