@@ -921,8 +921,18 @@ async def rerun_execution(
                             "share reference) can run this scenario"),
             })
     try:
+        # 分层④:执行配置终值回放(execSlotMap/execCarryOverrides 缺键
+        # 的旧行 = 回落默认链解析;有键 = 直用首发终值,不回查配置行)
+        _exec_replay = None
+        if "execSlotMap" in cfg or "execCarryOverrides" in cfg:
+            _exec_replay = {
+                "execConfigId": cfg.get("execConfigId"),
+                "slotMap": cfg.get("execSlotMap") or {},
+                "carryOverrides": cfg.get("execCarryOverrides") or None,
+            }
         return await run_dispatcher.dispatch_run(
-            session, user_id=user.id, req=req, preloaded_scenario=scen
+            session, user_id=user.id, req=req, preloaded_scenario=scen,
+            exec_replay=_exec_replay,
         )
     except NotFound as e:
         raise HTTPException(

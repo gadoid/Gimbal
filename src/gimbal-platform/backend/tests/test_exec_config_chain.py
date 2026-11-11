@@ -364,3 +364,106 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
     assert body["env"] is None or body["env"]["environmentSource"] not in \
         ("exec_config", "exec_config_default")
     assert body["auths"]["qa1"].get("slotSource") is None
+
+
+# ── ⑦ 重跑回放终值(§7:配置后改不影响历史执行)──────────────────
+
+async def test_rerun_replays_terminal_values(
+        client, plate_mock: PlateMock, monkeypatch):
+    """首发后改配置(换槽位绑定)→ 重跑仍按首发终值注入;新行再记同一
+    份终值(链式重跑不变量)。"""
+    plate_mock.behaviour = "echo"
+    await register_and_login(client, "ec_rr", "pw123456")
+    h = await register_and_login(client, "ec_rr", "pw123456")
+    await _seed_scene(client, h, "sc-ec-rr")
+    uid = await _uid("ec_rr")
+    await _seed_auth(uid, "qa1", "default-u")
+    await _seed_auth(uid, "merchant-b", "merchant-u")
+    await _seed_auth(uid, "auditor", "auditor-u")
+    cid = await _mk_config(uid, "回放套", bindings={_ALIAS: "merchant-b"})
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    r = await client.post("/api/runs", headers=h, json=_run_payload(
+        scenarioId="sc-ec-rr", dataSetIds=[], execConfigId=cid))
+    assert r.status_code == 201, r.text
+    ex_id = r.json()["executionId"
+                     ] if "executionId" in r.json() else r.json()["execution_id"]
+    await _wait(lambda: len(cases) >= 1)
+    assert cases[0]["config"]["users"]["qa1"]["username"] == "merchant-u"
+    cfg1 = await _last_cfg()
+    assert cfg1["execSlotMap"] == {"qa1": "merchant-b"}
+
+    # 首发后改配置:绑定换 auditor 槽
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=h, json={
+        "systems": [{"service": _BASE, "bindings": {_ALIAS: "auditor"},
+                     "carryOverrides": {}}]})
+    assert r.status_code == 200, r.text
+
+    # 重跑:仍按首发终值(merchant-u),不回查改过的配置行
+    r = await client.post(f"/api/executions/{ex_id}/rerun", headers=h)
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 2)
+    assert cases[1]["config"]["users"]["qa1"]["username"] == "merchant-u"
+    cfg2 = await _last_cfg()
+    assert cfg2["execSlotMap"] == {"qa1": "merchant-b"}
+    assert cfg2["execConfigId"] == cid
+
+
+# ── ⑧ 入口排除:集成/定时不吃执行配置(同指纹不变量)─────────────
+
+async def test_integration_never_resolves_exec_config(
+        client, monkeypatch, plate_mock: PlateMock):
+    """集成链手动执行全过程中,执行配置解析入口(load_choice)不被触达
+    —— 「同一模板全订阅者同一指纹」不变量的结构性守卫。"""
+    from app.services import exec_config as _ec
+    from .test_integration import STEPS_GET, _mk_scenario, _task_body
+
+    calls: list[int] = []
+
+    async def _spy(db, user_id, config_id):
+        calls.append(user_id)
+        return await _load_choice_orig(db, user_id, config_id)
+
+    _load_choice_orig = _ec.load_choice
+    monkeypatch.setattr(_ec, "load_choice", _spy)
+    # run_dispatcher 以 ``from .exec_config import ... load_choice`` 局部
+    # 导入 —— spy 落在模块属性上即可命中(dispatch_target 每次现取)
+    from app.services import integration_runner as ir
+    from app.services import plate_client as pc
+
+    h = await register_and_login(client, "ec_ig", "pw123456")
+    sid = await _mk_scenario(client, h, "sc-ec-ig", STEPS_GET)
+    # 执行人持有默认执行配置(有值可吃也不吃)
+    uid = await _uid("ec_ig")
+    await _mk_config(uid, "集成不吃", is_default=True,
+                     bindings={_ALIAS: "merchant-b"})
+    r = await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body(sid, identityMode="personal"))
+    assert r.status_code in (200, 201), r.text
+    tid = r.json()["id"]
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    class _FakeResult:
+        launch_status = "ok"
+        exit_code = 0
+        error = ""
+        details = [{"scenario_id": "sc-ig", "outputs": {}}]
+
+    class _FakeChannels:
+        async def run_case(self, case_path):
+            return _FakeResult()
+
+        async def reap_idle(self):
+            return 0
+    monkeypatch.setattr(ir, "channels", _FakeChannels())
+    monkeypatch.setattr(
+        ir, "materialize_run_copy",
+        lambda converted, **kw: dict(converted))
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+    assert r.status_code == 200, r.text
+    assert calls == []    # 集成链从未触达执行配置解析

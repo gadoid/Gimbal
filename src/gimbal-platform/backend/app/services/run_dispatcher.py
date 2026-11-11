@@ -849,15 +849,19 @@ async def dispatch_run(
     chain_override: str | None = None,
     token: "object | None" = None,
     trace: "dict | None" = None,
+    exec_replay: dict | None = None,
 ) -> RunResponse:
     """库中场景的派发入口 = 取场景 → :func:`dispatch_target`(P3 §六)。
 
-    对外签名不变(runs 路由 / 重跑 / Suite 成员三处调用零改动);
+    对外签名不变(runs 路由 / Suite 成员三处调用零改动);
     临时调用由路由层自行构造 :class:`RunTarget` 直接走第二段。
+    ``exec_replay``(④ 分层):重跑传入的执行配置**终值**快照
+    (slotMap/carryOverrides/execConfigId)—— 不回查配置行(§7:
+    配置后改不影响历史执行;env 已由快照 environmentId 显式位回放)。
 
     ``preloaded_scenario``: the runs router already loads the scenario
-    row for the ownership check — pass it here to avoid querying the
-    same row twice (and keep a single source for the
+    row for the ownership check — pass it here to avoid querying
+    the same row twice (and keep a single source for the
     scenario_not_found 404).
     """
     # P3:优雅关闭窗口内不再"建行但不 spawn"(那会制造一条 201 返回、
@@ -881,7 +885,8 @@ async def dispatch_run(
         db, user_id, req,
         RunTarget(scenario_id=scen.scenario_id,
                   payload=scen.payload or {}, kind="scenario"),
-        chain_override=chain_override, token=token, trace=trace)
+        chain_override=chain_override, token=token, trace=trace,
+        exec_replay=exec_replay)
 
 
 async def dispatch_target(
@@ -894,6 +899,7 @@ async def dispatch_target(
     chain_override: str | None = None,
     token: "object | None" = None,
     trace: "dict | None" = None,
+    exec_replay: dict | None = None,
 ) -> RunResponse:
     """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
     worker 认领驱动；本函数不再 spawn 进程内 fanout）。
@@ -958,21 +964,28 @@ async def dispatch_target(
     # 执行配置分层②(设计方案 §5):JWT 手动场景执行吃执行配置(显式
     # 选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
     # 调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
+    # ④ 分层:``exec_replay``(重跑)传入终值快照 —— 不回查配置行、
+    # 不走解析(§7:配置后改不影响历史执行;env 由快照显式位回放)。
     _req_exec_id = getattr(req, "exec_config_id", None)
-    _exec_eligible = (token is None
-                      and getattr(req, "graph", None) is None
-                      and target.kind == "scenario")
-    if _req_exec_id is not None and not _exec_eligible:
-        raise Conflict(
-            "exec_config_unsupported",
-            "执行配置只对个人(JWT)手动场景执行开放(令牌/编排/临时调用不吃)")
+    _exec_replay = exec_replay or None
     _exec_cfg = None
-    if _exec_eligible:
-        from .exec_config import ExecConfigNotFound, load_choice
-        try:
-            _exec_cfg = await load_choice(db, user_id, _req_exec_id)
-        except ExecConfigNotFound as e:
-            raise NotFound("exec_config_not_found", str(e)) from None
+    if _exec_replay is not None:
+        _req_exec_id = _exec_replay.get("execConfigId") or None
+    else:
+        _exec_eligible = (token is None
+                          and getattr(req, "graph", None) is None
+                          and target.kind == "scenario")
+        if _req_exec_id is not None and not _exec_eligible:
+            raise Conflict(
+                "exec_config_unsupported",
+                "执行配置只对个人(JWT)手动场景执行开放"
+                "(令牌/编排/临时调用不吃)")
+        if _exec_eligible:
+            from .exec_config import ExecConfigNotFound, load_choice
+            try:
+                _exec_cfg = await load_choice(db, user_id, _req_exec_id)
+            except ExecConfigNotFound as e:
+                raise NotFound("exec_config_not_found", str(e)) from None
 
     # S2.1 环境链(分层②):本次显式(RunRequest 顶层 > 图级)> [选定
     # 执行配置 │ 方案] > 项目默认 > [默认执行配置 │ 个人偏好] > 默认
@@ -1043,9 +1056,13 @@ async def dispatch_target(
     # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
     _scen_project_id = _scen.project_id if _scen is not None else None
     # 分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
-    # 单源 exec_config.carry_overrides_for,预览同款)
-    from .exec_config import carry_overrides_for
-    _exec_carry = carry_overrides_for(_exec_cfg, _scen_project_id)
+    # 单源 exec_config.carry_overrides_for,预览同款);④ 重跑直用
+    # 快照终值(区规则在首发已裁,不二次裁决)
+    if _exec_replay is not None:
+        _exec_carry = _exec_replay.get("carryOverrides") or None
+    else:
+        from .exec_config import carry_overrides_for
+        _exec_carry = carry_overrides_for(_exec_cfg, _scen_project_id)
     # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
     # 普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
     # 须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
@@ -1125,7 +1142,9 @@ async def dispatch_target(
     # 注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
     # 取用槽位换掉(注入标签不变;仅显式选定参与,默认行不自动改槽)。
     _slot_map: dict[str, str] = {}
-    if _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
+    if _exec_replay is not None:
+        _slot_map = dict(_exec_replay.get("slotMap") or {})
+    elif _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
         from .service_aliases import slot_lookup_overrides
         _slot_map = await slot_lookup_overrides(
             db, steps, _bindings, _exec_cfg.bindings)
@@ -1278,10 +1297,13 @@ async def dispatch_target(
             "injectionEntryIds": req.injection_entry_ids,
             # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
             "schemeId": req.scheme_id,
-            # 分层②:显式选定的执行配置留痕(重跑回放属批次④的快照
-            # 终值工作;此处先记链路来源)
-            **({"execConfigId": req.exec_config_id}
-               if req.exec_config_id is not None else {}),
+            # 分层④:执行配置终值快照 —— 重跑回放的依据(空 dict =
+            # 当时无覆盖,与旧行缺键=回落默认链解析可区分);execConfigId
+            # 为链路溯源(回放不回查该行)
+            "execSlotMap": _slot_map,
+            "execCarryOverrides": _exec_carry,
+            **({"execConfigId": _req_exec_id}
+               if _req_exec_id is not None else {}),
             # S2.1 环境选择快照(environmentId/environmentSource;无环境
             # 时键缺席)—— 重跑按此回放
             **env_choice.snapshot(),
