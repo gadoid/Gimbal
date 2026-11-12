@@ -7,252 +7,299 @@
      深链服务注册;绑定槽位→个人池就绪+缺失深链 /auths 预填直达;
      服务→深链服务配置;carry 覆盖→内联展示+漂移检查+层宿主深链;
      生效预览 pickable(选定配置即预览逐值带来源)。全部由现有读 API
-     拼装 + 一个配置漂移读面,零新写面。 -->
+     拼装 + 一个配置漂移读面,零新写面。
+     形制与服务组其余页共用 .slib 基座(scenario-lib.css / service-area.css)。 -->
 <template>
-  <section class="page" data-testid="exec-configs">
-    <header class="head">
-      <h1>配置</h1>
-      <p class="sub">
-        场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务
-        参数(carry 覆盖)。一套<b>默认</b> + 若干命名变体;执行时选一套注入。
-        凭证在「认证管理」按槽位解析、地址随环境取部署表 —— 本页零凭证值
-        零地址值。
-      </p>
-    </header>
+  <section class="slib" data-testid="exec-configs">
+    <PageHead
+      icon="sliders"
+      title="配置"
+      :count="loading ? '' : `${rows.length} 套配置`"
+      :meta="mode === 'edit' && selected ? `当前配置 · ${selected.name}` : undefined"
+      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「认证管理」按槽位解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
+    />
 
-    <div class="chips" data-testid="ec-chips">
-      <button v-for="c in rows" :key="c.id" type="button" class="chip"
-              :class="{ active: mode === 'edit' && c.id === selectedId }"
-              :data-testid="`ec-chip-${c.id}`" @click="pick(c.id)">
-        {{ c.name }}<span v-if="c.isDefault" class="tag">默认</span>
-      </button>
-      <button type="button" class="btn sm" data-testid="ec-new"
-              @click="openCreate">+ 新建配置</button>
-      <p v-if="!rows.length" class="empty">
-        暂无执行配置 —— 新建一套默认配置(或从认证管理/服务注册开始)
-      </p>
-    </div>
+    <div v-if="loading" class="slib-loading">加载中…</div>
 
-    <div v-if="formOpen" class="form" :data-testid="`ec-form-${mode}`">
-      <h2>{{ mode === 'create' ? '新建配置' : `编辑:${form.name || selected?.name}` }}</h2>
-      <div class="frow">
-        <label class="lb">名称</label>
-        <input v-model="form.name" placeholder="如 商户B视角@UAT"
-               data-testid="ec-name" />
-        <label class="lb">环境</label>
-        <select v-model="form.envId" data-testid="ec-env">
-          <option value="">(不设置)</option>
-          <option v-for="e in envs" :key="e.id" :value="String(e.id)">
-            {{ e.name }}<template v-if="e.is_default"> · 默认</template>
-          </option>
-        </select>
-      </div>
-      <p class="sub">
-        子配置按被测系统分组:绑定 = 身份面(别名)→ 槽位,覆盖槽位解析的
-        配置层;carry 覆盖 = 该系统带的业务参数(删行 = 不覆盖、按层序
-        合成;值留空 = 注入空串)
-      </p>
-
-      <div v-for="(s, i) in sysRows" :key="i" class="sys">
-        <div class="frow">
-          <label class="lb">系统</label>
-          <input v-model="s.service" placeholder="目录服务名,如 fin-service"
-                 :data-testid="`ec-sys-${i}`" />
-          <button type="button" class="btn sm danger" :data-testid="`ec-sys-rm-${i}`"
-                  @click="sysRows.splice(i, 1)">移除系统</button>
-        </div>
-        <div v-for="(b, j) in s.binds" :key="`b${j}`" class="frow sub-row">
-          <label class="lb">绑定</label>
-          <input v-model="b.alias" placeholder="身份面(别名全名)"
-                 :data-testid="`ec-bind-${i}-${j}`" />
-          <span class="lb">→</span>
-          <input v-model="b.slot" placeholder="槽位名"
-                 :data-testid="`ec-slot-${i}-${j}`" />
-          <button type="button" class="btn sm" :data-testid="`ec-bind-rm-${i}-${j}`"
-                  @click="s.binds.splice(j, 1)">移除</button>
-        </div>
-        <div class="frow sub-row">
-          <button type="button" class="btn sm" :data-testid="`ec-bind-add-${i}`"
-                  @click="s.binds.push({ alias: '', slot: '' })">+ 添加绑定</button>
-        </div>
-        <div v-for="(c, j) in s.carries" :key="`c${j}`" class="frow sub-row">
-          <label class="lb">carry</label>
-          <input v-model="c.field" placeholder="字段,如 merchant.grade"
-                 :data-testid="`ec-carry-${i}-${j}`" />
-          <span class="lb">=</span>
-          <input v-model="c.value" placeholder="值"
-                 :data-testid="`ec-carryv-${i}-${j}`" />
-          <button type="button" class="btn sm" :data-testid="`ec-carry-rm-${i}-${j}`"
-                  @click="s.carries.splice(j, 1)">移除</button>
-        </div>
-        <div class="frow sub-row">
-          <button type="button" class="btn sm" :data-testid="`ec-carry-add-${i}`"
-                  @click="s.carries.push({ field: '', value: '' })">+ 添加 carry 字段</button>
-        </div>
+    <template v-else>
+      <!-- 配置 chip 行 = 视图切换(单选),与认证管理同族 -->
+      <div class="slib-toolbar" data-testid="ec-chips">
+        <span class="svc-stats tight">
+          <button v-for="c in rows" :key="c.id" type="button" class="svc-chip"
+                  :class="{ on: mode === 'edit' && c.id === selectedId }"
+                  :data-testid="`ec-chip-${c.id}`" @click="pick(c.id)">
+            {{ c.name }}<span v-if="c.isDefault" class="svc-flag green">默认</span>
+          </button>
+        </span>
+        <button type="button" class="slib-create" data-testid="ec-new"
+                @click="openCreate">+ 新建配置</button>
       </div>
 
-      <div class="frow">
-        <button type="button" class="btn sm" data-testid="ec-sys-add"
-                @click="sysRows.push({ service: '', binds: [], carries: [] })">+ 添加系统</button>
-        <button type="button" class="btn sm primary" data-testid="ec-save"
-                @click="save">保存</button>
-        <button type="button" class="btn sm" data-testid="ec-cancel"
-                @click="cancel">取消</button>
+      <div v-if="!rows.length" class="slib-empty">
+        <p>暂无执行配置 —— 新建一套默认配置(或从认证管理/服务注册开始)</p>
       </div>
-    </div>
 
-    <div v-if="mode === 'edit' && selected" class="row">
-      <button v-if="!selected.isDefault" type="button" class="btn sm"
-              data-testid="ec-set-default" @click="makeDefault">设为默认</button>
-      <span v-else class="ok" data-testid="ec-is-default">默认配置</span>
-      <template v-if="!copyArmed">
-        <button type="button" class="btn sm" data-testid="ec-copy"
-                @click="copyArmed = true">复制为新配置</button>
-      </template>
-      <template v-else>
-        <input v-model="copyName" placeholder="新配置名" data-testid="ec-copy-name" />
-        <button type="button" class="btn sm primary" data-testid="ec-copy-ok"
-                @click="doCopy">复制</button>
-        <button type="button" class="btn sm" @click="copyArmed = false">取消</button>
-      </template>
-      <button v-if="!delArmed" type="button" class="btn sm danger"
-              data-testid="ec-del" @click="delArmed = true">删除</button>
-      <template v-else>
-        <span class="warn">确认删除该配置?</span>
-        <button type="button" class="btn sm danger" data-testid="ec-del-ok"
-                @click="del">确认删除</button>
-        <button type="button" class="btn sm" @click="delArmed = false">取消</button>
-      </template>
-    </div>
+      <!-- 新建 / 编辑(整体替换式) -->
+      <div v-if="formOpen" class="svc-panel" :data-testid="`ec-form-${mode}`">
+        <div class="svc-panel-head">
+          <span class="svc-panel-title">
+            {{ mode === 'create' ? '新建配置' : `编辑:${form.name || selected?.name}` }}
+          </span>
+          <span class="svc-panel-desc">
+            子配置按被测系统分组:绑定 = 身份面(别名)→ 槽位,覆盖槽位解析的
+            配置层;carry 覆盖 = 该系统带的业务参数(删行 = 不覆盖、按层序
+            合成;值留空 = 注入空串)
+          </span>
+        </div>
 
-    <!-- ═══ ③ 关联枢纽:就绪度 + 四路深链(关联而非纳入)═══ -->
-    <div v-if="mode === 'edit' && selected" class="hub" data-testid="ec-hub">
-      <h2>关联与就绪度</h2>
+        <div class="form-grid">
+          <label class="lb">名称</label>
+          <Input v-model="form.name" placeholder="如 商户B视角@UAT"
+                 data-testid="ec-name" />
+          <label class="lb">环境</label>
+          <select v-model="form.envId" class="native-select" data-testid="ec-env">
+            <option value="">(不设置)</option>
+            <option v-for="e in envs" :key="e.id" :value="String(e.id)">
+              {{ e.name }}<template v-if="e.is_default"> · 默认</template>
+            </option>
+          </select>
+        </div>
 
-      <!-- ① 环境 → 地址就绪度(部署表读面)+ 深链「服务注册」 -->
-      <div class="hub-sec" data-testid="ec-hub-env">
-        <h3>服务注册</h3>
-        <p v-if="!selected.systems.length" class="muted">
-          本配置还没有系统子配置 —— 地址就绪度按系统展示。
-        </p>
-        <template v-else-if="selected.environmentId == null">
-          <p class="muted">未设置环境(执行按环境链解析:方案 &gt; 项目默认 &gt; 本配置默认 &gt; 偏好)</p>
+        <div v-for="(s, i) in sysRows" :key="i" class="sys">
+          <div class="sys-head">
+            <span class="sys-title">系统 {{ i + 1 }}</span>
+            <button type="button" class="svc-link danger" :data-testid="`ec-sys-rm-${i}`"
+                    @click="sysRows.splice(i, 1)">移除系统</button>
+          </div>
+
+          <div class="line-row">
+            <label class="lb">系统</label>
+            <Input v-model="s.service" class="flex-1"
+                   placeholder="目录服务名,如 fin-service"
+                   :data-testid="`ec-sys-${i}`" />
+          </div>
+
+          <div v-for="(b, j) in s.binds" :key="`b${j}`" class="line-row">
+            <label class="lb">绑定</label>
+            <Input v-model="b.alias" class="flex-1"
+                   placeholder="身份面(别名全名)"
+                   :data-testid="`ec-bind-${i}-${j}`" />
+            <span class="lb">→</span>
+            <Input v-model="b.slot" class="flex-1" placeholder="槽位名"
+                   :data-testid="`ec-slot-${i}-${j}`" />
+            <button type="button" class="svc-link danger" :data-testid="`ec-bind-rm-${i}-${j}`"
+                    @click="s.binds.splice(j, 1)">移除</button>
+          </div>
+          <div class="line-row">
+            <Button variant="outline" size="sm" :data-testid="`ec-bind-add-${i}`"
+                    @click="s.binds.push({ alias: '', slot: '' })">+ 添加绑定</Button>
+          </div>
+
+          <div v-for="(c, j) in s.carries" :key="`c${j}`" class="line-row">
+            <label class="lb">carry</label>
+            <Input v-model="c.field" class="flex-1"
+                   placeholder="字段,如 merchant.grade"
+                   :data-testid="`ec-carry-${i}-${j}`" />
+            <span class="lb">=</span>
+            <Input v-model="c.value" class="flex-1" placeholder="值"
+                   :data-testid="`ec-carryv-${i}-${j}`" />
+            <button type="button" class="svc-link danger" :data-testid="`ec-carry-rm-${i}-${j}`"
+                    @click="s.carries.splice(j, 1)">移除</button>
+          </div>
+          <div class="line-row">
+            <Button variant="outline" size="sm" :data-testid="`ec-carry-add-${i}`"
+                    @click="s.carries.push({ field: '', value: '' })">+ 添加 carry 字段</Button>
+          </div>
+        </div>
+
+        <div class="svc-foot">
+          <Button variant="outline" size="sm" data-testid="ec-sys-add"
+                  @click="sysRows.push({ service: '', binds: [], carries: [] })">+ 添加系统</Button>
+          <span class="svc-foot-right">
+            <Button size="sm" data-testid="ec-save" @click="save">保存</Button>
+            <Button variant="outline" size="sm" data-testid="ec-cancel" @click="cancel">取消</Button>
+          </span>
+        </div>
+      </div>
+
+      <!-- 选中配置的动作条 -->
+      <div v-if="mode === 'edit' && selected" class="svc-stats" data-testid="ec-actions">
+        <span>配置</span>
+        <b>{{ selected.name }}</b>
+        <span v-if="selected.isDefault" class="svc-flag green" data-testid="ec-is-default">默认配置</span>
+        <span class="flex-1" />
+        <Button v-if="!selected.isDefault" variant="outline" size="sm"
+                data-testid="ec-set-default" @click="makeDefault">设为默认</Button>
+        <template v-if="!copyArmed">
+          <Button variant="outline" size="sm" data-testid="ec-copy"
+                  @click="copyArmed = true">复制为新配置</Button>
         </template>
         <template v-else>
-          <p class="sub">「{{ envName(selected.environmentId) }}」下各系统地址:</p>
-          <table class="tbl" data-testid="ec-hub-deps">
-            <thead><tr><th>系统</th><th>地址</th><th style="width:70px">就绪</th></tr></thead>
-            <tbody>
-              <tr v-for="s in selected.systems" :key="`dep-${s.service}`"
-                  :data-testid="`ec-dep-${s.service}`">
-                <td>{{ s.service }}</td>
-                <td class="mono">{{ deployUrl(s.service) || '—' }}</td>
-                <td>
-                  <span :class="deployUrl(s.service) ? 'ok' : 'warn'">
-                    {{ deployUrl(s.service) ? '就绪' : '缺地址' }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <Input v-model="copyName" class="w-[180px]" placeholder="新配置名"
+                 data-testid="ec-copy-name" />
+          <Button size="sm" data-testid="ec-copy-ok" @click="doCopy">复制</Button>
+          <Button variant="outline" size="sm" @click="copyArmed = false">取消</Button>
         </template>
-        <p class="sub">
-          <router-link v-if="auth.can('ops.write')" to="/admin/deployments">
-            维护在「服务注册」↗</router-link>
-          <span v-else class="muted">地址由平台管理员在「服务注册」维护</span>
-        </p>
+        <template v-if="!delArmed">
+          <Button variant="outline" size="sm" class="text-signal-failed"
+                  data-testid="ec-del" @click="delArmed = true">删除</Button>
+        </template>
+        <template v-else>
+          <span class="svc-flag red">确认删除该配置?</span>
+          <Button variant="destructive" size="sm" data-testid="ec-del-ok"
+                  @click="del">确认删除</Button>
+          <Button variant="outline" size="sm" @click="delArmed = false">取消</Button>
+        </template>
       </div>
 
-      <!-- ② 绑定槽位 → 个人池就绪 + 缺失深链 /auths 预填直达 -->
-      <div class="hub-sec" data-testid="ec-hub-slots">
-        <h3>槽位绑定就绪</h3>
-        <p v-if="!hasBindings" class="muted">
-          未配置绑定 —— 注入按别名声明槽位解析(配置层不覆盖)。
-        </p>
-        <table v-else class="tbl" data-testid="ec-hub-bindings">
-          <thead>
-            <tr><th>身份面</th><th>配置槽位</th><th>声明槽位</th>
-                <th style="width:90px">个人池</th><th></th></tr>
-          </thead>
-          <tbody>
-            <template v-for="s in selected.systems">
-              <tr v-for="(slot, alias) in s.bindings" :key="`${alias}=${slot}`">
-                <td>{{ alias }}<span v-if="aliasRows.length && !aliasExists(String(alias))"
-                    class="warn" title="别名注册表中不存在"> ✕未登记</span></td>
-                <td class="mono">{{ slot }}</td>
-                <td class="mono">{{ declaredSlot(String(alias)) ?? '—' }}</td>
-                <td>
-                  <span v-if="slotBound(String(slot))" class="ok">已绑定</span>
-                  <span v-else class="warn" :data-testid="`ec-slot-miss-${slot}`">缺绑定</span>
-                </td>
-                <td>
-                  <a class="lk" :data-testid="`ec-goto-auth-${slot}`"
-                     :href="authHref(String(slot), s.service)">去认证管理补 ↗</a>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
+      <!-- ═══ ③ 关联枢纽:就绪度 + 四路深链(关联而非纳入)═══ -->
+      <div v-if="mode === 'edit' && selected" class="hub" data-testid="ec-hub">
+        <div class="svc-sec">
+          <span class="t">关联与就绪度</span>
+          <span class="n">只关联不纳入 —— 维护面留在各自页面</span>
+        </div>
 
-      <!-- ③ 服务 → 深链服务配置(Admin+ 写面 / 普通用户只读指引) -->
-      <div class="hub-sec" data-testid="ec-hub-svc">
-        <h3>服务接入</h3>
-        <p class="sub">
-          身份面(别名)与凭证槽位声明在「服务配置」注册表维护 ——
-          <router-link v-if="auth.can('ops.write')" to="/service-admin">去服务配置 ↗</router-link>
-          <span v-else>由平台管理员维护(本页只读引用)。</span>
-        </p>
-      </div>
-
-      <!-- ④ carry 覆盖 → 内联展示 + 漂移检查 + 层宿主深链 -->
-      <div class="hub-sec" data-testid="ec-hub-carry">
-        <h3>carry 覆盖</h3>
-        <p v-if="!hasCarries" class="muted">
-          未配置覆盖 —— 全部字段按层序合成(公共项目层 &lt; 项目层;执行配置
-          覆盖层位其上)。
-        </p>
-        <div v-for="s in selected.systems" :key="`carry-${s.service}`" class="carry-sys">
-          <template v-if="Object.keys(s.carryOverrides).length">
-            <p class="sub">
-              <b>{{ s.service }}</b>
-              <span v-if="driftOf(s.service)?.orphaned.length" class="warn">
-                漂移:{{ driftOf(s.service)!.orphaned.join('、') }} 已不在 plate 面</span>
-              <span v-else-if="drift?.plateReachable" class="ok">无漂移</span>
-            </p>
-            <table class="tbl">
+        <!-- ① 环境 → 地址就绪度(部署表读面)+ 深链「服务注册」 -->
+        <div class="svc-panel" data-testid="ec-hub-env">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">服务注册</span>
+            <span class="svc-panel-desc">本配置所选环境下各系统的地址就绪度</span>
+            <span class="svc-panel-right">
+              <router-link v-if="auth.can('ops.write')" to="/admin/deployments"
+                class="svc-link">维护在「服务注册」↗</router-link>
+              <span v-else class="svc-panel-desc">地址由平台管理员在「服务注册」维护</span>
+            </span>
+          </div>
+          <p v-if="!selected.systems.length" class="hub-note">
+            本配置还没有系统子配置 —— 地址就绪度按系统展示。
+          </p>
+          <p v-else-if="selected.environmentId == null" class="hub-note">
+            未设置环境(执行按环境链解析:方案 &gt; 项目默认 &gt; 本配置默认 &gt; 偏好)
+          </p>
+          <template v-else>
+            <p class="hub-note">「{{ envName(selected.environmentId) }}」下各系统地址:</p>
+            <table class="slib-table" data-testid="ec-hub-deps">
+              <thead><tr><th>系统</th><th>地址</th><th style="width:70px">就绪</th></tr></thead>
               <tbody>
-                <tr v-for="(v, k) in s.carryOverrides" :key="k">
-                  <td class="mono">{{ k }}</td>
-                  <td class="mono">{{ v == null ? 'null(显式)' : String(v) }}</td>
-                  <td class="src">执行配置覆盖</td>
+                <tr v-for="s in selected.systems" :key="`dep-${s.service}`"
+                    :data-testid="`ec-dep-${s.service}`">
+                  <td><span class="mono">{{ s.service }}</span></td>
+                  <td><span class="mono">{{ deployUrl(s.service) || '—' }}</span></td>
+                  <td>
+                    <span v-if="deployUrl(s.service)" class="svc-flag green">就绪</span>
+                    <span v-else class="svc-flag amber">缺地址</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
-            <p v-if="driftOf(s.service)?.uncovered.length" class="muted">
-              面上还有 {{ driftOf(s.service)!.uncovered.length }} 个字段未被本配置覆盖
-              (按层序合成,层宿主:
-              <router-link to="/carry-config">公共项目 · 配置 ↗</router-link>)
-            </p>
           </template>
         </div>
-        <p v-if="drift && !drift.plateReachable" class="warn">
-          plate 不可达 —— 漂移检查暂不可用(不可达 ≠ 全漂移)。
-        </p>
+
+        <!-- ② 绑定槽位 → 个人池就绪 + 缺失深链 /auths 预填直达 -->
+        <div class="svc-panel" data-testid="ec-hub-slots">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">槽位绑定就绪</span>
+            <span class="svc-panel-desc">配置槽位 → 个人认证池同名槽;缺失点直达认证管理</span>
+          </div>
+          <p v-if="!hasBindings" class="hub-note">
+            未配置绑定 —— 注入按别名声明槽位解析(配置层不覆盖)。
+          </p>
+          <table v-else class="slib-table" data-testid="ec-hub-bindings">
+            <thead>
+              <tr><th>身份面</th><th>配置槽位</th><th>声明槽位</th>
+                  <th style="width:90px">个人池</th><th style="width:130px">操作</th></tr>
+            </thead>
+            <tbody>
+              <template v-for="s in selected.systems">
+                <tr v-for="(slot, alias) in s.bindings" :key="`${alias}=${slot}`">
+                  <td>
+                    <span class="mono">{{ alias }}</span>
+                    <span v-if="aliasRows.length && !aliasExists(String(alias))"
+                          class="svc-flag red ml-1" title="别名注册表中不存在">✕ 未登记</span>
+                  </td>
+                  <td><span class="mono">{{ slot }}</span></td>
+                  <td><span class="mono">{{ declaredSlot(String(alias)) ?? '—' }}</span></td>
+                  <td>
+                    <span v-if="slotBound(String(slot))" class="svc-flag green">已绑定</span>
+                    <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${slot}`">缺绑定</span>
+                  </td>
+                  <td>
+                    <a class="svc-link" :data-testid="`ec-goto-auth-${slot}`"
+                       :href="authHref(String(slot), s.service)">去认证管理补 ↗</a>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ③ 服务 → 深链服务配置(Admin+ 写面 / 普通用户只读指引) -->
+        <div class="svc-panel" data-testid="ec-hub-svc">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">服务接入</span>
+            <span class="svc-panel-desc">身份面(别名)与凭证槽位声明在「服务配置」注册表维护</span>
+            <span class="svc-panel-right">
+              <router-link v-if="auth.can('ops.write')" to="/service-admin"
+                class="svc-link">去服务配置 ↗</router-link>
+              <span v-else class="svc-panel-desc">由平台管理员维护(本页只读引用)</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- ④ carry 覆盖 → 内联展示 + 漂移检查 + 层宿主深链 -->
+        <div class="svc-panel" data-testid="ec-hub-carry">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">carry 覆盖</span>
+            <span class="svc-panel-desc">本配置覆盖的字段与漂移检查;未覆盖字段按层序合成</span>
+          </div>
+          <p v-if="!hasCarries" class="hub-note">
+            未配置覆盖 —— 全部字段按层序合成(公共项目层 &lt; 项目层;执行配置
+            覆盖层位其上)。
+          </p>
+          <div v-for="s in selected.systems" :key="`carry-${s.service}`" class="carry-sys">
+            <template v-if="Object.keys(s.carryOverrides).length">
+              <p class="carry-head">
+                <b>{{ s.service }}</b>
+                <span v-if="driftOf(s.service)?.orphaned.length" class="svc-flag red">
+                  漂移:{{ driftOf(s.service)!.orphaned.join('、') }} 已不在 plate 面</span>
+                <span v-else-if="drift?.plateReachable" class="svc-flag green">无漂移</span>
+              </p>
+              <table class="slib-table">
+                <tbody>
+                  <tr v-for="(v, k) in s.carryOverrides" :key="k">
+                    <td><span class="mono">{{ k }}</span></td>
+                    <td><span class="mono">{{ v == null ? 'null(显式)' : String(v) }}</span></td>
+                    <td><span class="svc-panel-desc">执行配置覆盖</span></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="driftOf(s.service)?.uncovered.length" class="hub-note">
+                面上还有 {{ driftOf(s.service)!.uncovered.length }} 个字段未被本配置覆盖
+                (按层序合成,层宿主:
+                <router-link to="/carry-config" class="svc-link">公共项目 · 配置 ↗</router-link>)
+              </p>
+            </template>
+          </div>
+          <p v-if="drift && !drift.plateReachable" class="svc-flag amber">
+            plate 不可达 —— 漂移检查暂不可用(不可达 ≠ 全漂移)。
+          </p>
+        </div>
+
+        <!-- ⑤ 生效预览:pickable(选定配置 + 任一场景 → 逐值带来源) -->
+        <div class="svc-panel" data-testid="ec-hub-preview">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">生效预览</span>
+            <span class="svc-panel-desc">
+              选定本配置 + 任一你的场景 → 预览将生效的 地址/槽位/carry(逐值带来源,与执行同源)
+            </span>
+          </div>
+          <Button variant="outline" size="sm" data-testid="ec-preview-open"
+                  @click="previewOpen = true">打开预览</Button>
+        </div>
       </div>
 
-      <!-- ⑤ 生效预览:pickable(选定配置 + 任一场景 → 逐值带来源) -->
-      <div class="hub-sec" data-testid="ec-hub-preview">
-        <h3>生效预览</h3>
-        <p class="sub">
-          选定本配置 + 任一你的场景 → 预览将生效的 地址/槽位/carry(逐值带
-          来源,与执行同源)。
-        </p>
-        <button type="button" class="btn sm" data-testid="ec-preview-open"
-                @click="previewOpen = true">打开预览</button>
-      </div>
-    </div>
-
-    <p v-if="error" class="err" data-testid="ec-err">{{ error }}</p>
+      <div v-if="error" class="svc-banner bad mt-3.5" data-testid="ec-err">{{ error }}</div>
+    </template>
 
     <EffectivePreviewDialog :open="previewOpen" :scenarios="scenOptions"
       :exec-config-id="selected?.id" :env-names="envNames"
@@ -264,8 +311,13 @@
 /** ExecConfigsView.vue — 执行配置管理页 + ③ 关联枢纽(设计方案 §4/§8)。
  * 列表(chip)/编辑(整体替换式 PATCH)/默认切换/复制/两步删除;错误内联。
  * 枢纽数据全部来自现有读面:部署表(listDeployments)/个人池(listAll)/
- * 别名注册表(listAllAliases)/场景 options + 一个配置漂移读面。 */
+ * 别名注册表(listAllAliases)/场景 options + 一个配置漂移读面。
+ * 2026-11-12 形制对齐:旧 .page 壳迁到 .slib + PageHead + svc-panel 分段,
+ * chip/表单/错误条复用 scenario-lib.css / service-area.css 构件。 */
 import { computed, onMounted, ref } from 'vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   listExecConfigs, createExecConfig, updateExecConfig,
   setDefaultExecConfig, copyExecConfig, deleteExecConfig, execConfigDrift,
@@ -284,6 +336,7 @@ interface CarryRow { field: string; value: string }
 interface SysRow { service: string; binds: BindRow[]; carries: CarryRow[] }
 
 const auth = useAuthStore()
+const loading = ref(true)
 const rows = ref<ExecConfigRow[]>([])
 const envs = ref<EnvironmentRow[]>([])
 const selectedId = ref<number | null>(null)
@@ -504,6 +557,8 @@ onMounted(async () => {
     if (cfgs.length) pick(cfgs[0].id)
   } catch (e) {
     error.value = msg(e)
+  } finally {
+    loading.value = false
   }
   // ③ 枢纽旁路数据(一次性;失败静默降级 —— 深链区退化为无提示)
   listAllAliases().then((r) => { aliasRows.value = r }).catch(() => {})
@@ -517,50 +572,69 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
-.head { display: flex; flex-direction: column; gap: 0.25rem; }
-.sub { color: #64748b; font-size: 0.85rem; }
-.chips { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-.chip { border: 1px solid #cbd5e1; border-radius: 999px; padding: 0.2rem 0.8rem;
-        background: #fff; cursor: pointer; font-size: 0.85rem; }
-.chip.active { border-color: #2563eb; color: #2563eb; }
-.tag { margin-left: 0.35rem; font-size: 0.7rem; color: #16a34a; }
-.row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.row input { padding: 0.3rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 6px; }
-.form { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem;
-        display: flex; flex-direction: column; gap: 0.5rem; }
-.form h2 { font-size: 0.95rem; margin: 0; }
-.frow { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.frow input, .frow select { flex: 1; min-width: 8rem; }
-.sub-row { padding-left: 1.5rem; }
-.sub-row input { min-width: 6rem; }
-.sys { border: 1px solid #eef2f7; border-radius: 8px; padding: 0.5rem 0.75rem;
-       display: flex; flex-direction: column; gap: 0.4rem; }
-.lb { font-size: 0.8rem; color: #64748b; }
-.btn { border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.3rem 0.8rem;
-       background: #fff; cursor: pointer; }
-.btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
-.btn.danger { color: #dc2626; border-color: #fca5a5; }
-.err { color: #dc2626; font-size: 0.8rem; }
-.warn { color: #dc2626; font-size: 0.8rem; }
-.ok { color: #16a34a; font-size: 0.8rem; }
-.muted { color: #94a3b8; font-size: 0.8rem; }
-.empty { color: #94a3b8; }
+.form-grid {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+  max-width: 720px;
+  margin-bottom: 12px;
+}
+.form-grid .lb { font-size: 11.5px; color: var(--sl-ink-3); }
+/* 原生 select 保持表单语义(测试/键盘),外观与 shadcn Input 同档 */
+.native-select {
+  height: 36px;
+  width: 100%;
+  max-width: 320px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--sl-ink);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  outline: none;
+}
+.native-select:focus { border-color: var(--sl-accent); }
 
-/* ③ 关联枢纽 */
-.hub { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem;
-       display: flex; flex-direction: column; gap: 0.9rem; }
-.hub h2 { font-size: 0.95rem; margin: 0; }
-.hub-sec { display: flex; flex-direction: column; gap: 0.35rem;
-           padding-left: 0.75rem; border-left: 3px solid #e2e8f0; }
-.hub-sec h3 { font-size: 0.85rem; margin: 0; color: #1e293b; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.tbl th, .tbl td { text-align: left; padding: 0.3rem 0.5rem;
-                   border-bottom: 1px solid #eef2f7; }
-.src { color: #94a3b8; font-size: 0.75rem; }
-.lk { color: #2563eb; font-size: 0.78rem; text-decoration: none; }
-.lk:hover { text-decoration: underline; }
-.carry-sys { display: flex; flex-direction: column; gap: 0.25rem; }
-.mono { font-family: var(--font-mono, monospace); font-size: 0.78rem; }
+.sys {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--sl-canvas);
+  border: 1px solid var(--sl-line);
+  border-radius: 8px;
+}
+.sys + .sys { margin-top: 10px; }
+.sys-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sl-divider);
+}
+.sys-title { font-size: 11.5px; font-weight: 700; color: var(--sl-ink-2); }
+
+.line-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 820px;
+}
+.line-row .lb { flex: none; min-width: 36px; font-size: 11.5px; color: var(--sl-ink-3); }
+
+.hub { display: flex; flex-direction: column; }
+.hub-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--sl-ink-3);
+}
+.carry-sys + .carry-sys { margin-top: 10px; }
+.carry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 12px;
+}
 </style>

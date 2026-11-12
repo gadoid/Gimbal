@@ -92,7 +92,7 @@ describe('ExecConfigsView', () => {
 
   it('首载:默认配置选中 → 编辑表单回填(env/绑定/carry 行)', async () => {
     const w = await mountPage()
-    expect(w.get('[data-testid="ec-chip-7"]').classes()).toContain('active')
+    expect(w.get('[data-testid="ec-chip-7"]').classes()).toContain('on')
     expect((w.get('[data-testid="ec-name"]').element as HTMLInputElement).value)
       .toBe('商户B视角@UAT')
     expect((w.get('[data-testid="ec-env"]').element as HTMLSelectElement).value).toBe('2')
@@ -141,7 +141,7 @@ describe('ExecConfigsView', () => {
       ],
     })
     // 建完自动选中新副本
-    expect(w.get('[data-testid="ec-chip-8"]').classes()).toContain('active')
+    expect(w.get('[data-testid="ec-chip-8"]').classes()).toContain('on')
     w.unmount()
   })
 
@@ -190,7 +190,7 @@ describe('ExecConfigsView', () => {
     await w.get('[data-testid="ec-copy-ok"]').trigger('click')
     await flushPromises()
     expect(ec.copyExecConfig).toHaveBeenCalledWith(7, '副本')
-    expect(w.get('[data-testid="ec-chip-10"]').classes()).toContain('active')
+    expect(w.get('[data-testid="ec-chip-10"]').classes()).toContain('on')
     w.unmount()
   })
 
@@ -208,7 +208,7 @@ describe('ExecConfigsView', () => {
     await flushPromises()
     expect(ec.deleteExecConfig).toHaveBeenCalledWith(9)
     // 回落:刷新后的首行(默认在前)
-    expect(w.get('[data-testid="ec-chip-7"]').classes()).toContain('active')
+    expect(w.get('[data-testid="ec-chip-7"]').classes()).toContain('on')
     w.unmount()
   })
 
