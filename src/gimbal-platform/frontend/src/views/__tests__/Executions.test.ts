@@ -161,6 +161,16 @@ describe('Executions.vue — V3 detail page', () => {
     vi.unstubAllGlobals()
   })
 
+  it('#report 深链直达报告(实时日志非默认时的直达路径)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
+    const w = await mountPage(1, '#report')
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(true)
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('手动刷新已退役:顶部不再渲染(恢复语义由 pollError 横幅「重新加载」承载)', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...fakeDetail }
@@ -876,22 +886,30 @@ describe('Executions.vue — B4 报告 tab', () => {
     setActivePinia(createPinia())
   })
 
-  it('默认视图是「报告」;切到「执行明细」才渲染执行信息', async () => {
+  it('默认视图是「实时日志」(挂载即打印);「报告」「执行明细」按需挂载', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...fakeDetail }
     execStore.fetchDetail = vi.fn().mockResolvedValue(execStore.detail)
+    // 默认落地即挂日志面板(自连流)—— 拦截 fetch 免出网
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     const router = makeRouter()
     router.push('/executions/1')
     await router.isReady()
     const w = mount(Executions, { global: { plugins: [router] }, attachTo: document.body })
     await flushPromises()
-    expect(w.find('[data-testid="exec-report"]').exists()).toBe(true)
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(false)
     expect(w.text()).not.toContain('执行信息')
     // reka Tabs 在 mousedown 上切换
     await w.get('[data-testid="tab-detail"]').trigger('mousedown', { button: 0 })
     await flushPromises()
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
     expect(w.text()).toContain('执行信息')
+    await w.get('[data-testid="tab-report"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(true)
     w.unmount()
+    vi.unstubAllGlobals()
   })
 
   it('?rows=failed 深链直达「执行明细」', async () => {

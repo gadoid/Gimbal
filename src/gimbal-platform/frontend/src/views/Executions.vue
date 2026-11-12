@@ -102,12 +102,13 @@
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
 
-    <!-- B4(2026-11-06 日志报告整理):报告为首选视图;原执行信息 / 修订台账 /
+    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 修订台账 /
          行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
          内容与行为不变,保留排障用途 -->
-    <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役)—— 激活即
-         挂载面板、默认直接打印(挂载即 tail),离开即卸载断流(§8 连接
-         预算由 tab 生命周期结构化保证,无展开/收起态) -->
+    <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役;三改:
+         默认落地 tab = 实时日志,打开详情页即打印)—— 激活即挂载面板、
+         挂载即 tail,离开即卸载断流(§8 连接预算由 tab 生命周期结构化
+         保证,无展开/收起态);报告/明细按需切换(#report/#detail 深链) -->
     <Tabs v-model="detailTab" class="detail-tabs">
       <TabsList>
         <TabsTrigger value="logs" data-testid="tab-logs">实时日志</TabsTrigger>
@@ -625,13 +626,14 @@ function refreshRowsIfExpanded(): void {
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
-// B4:详情页视图(报告首选;深链 #logs/#detail / 行级操作切到明细)。
-// 实时日志是独立 tab 域 —— 面板挂 TabsContent 内,激活即挂载(挂载即
-// tail,默认打印)、切走即卸载断流(§8),无展开/收起旁路状态。
+// B4→2026-11-12 三改:默认落地 tab = 实时日志(打开详情页即打印);
+// #report / #detail 深链与 ?rows=failed 覆盖默认。实时日志是独立 tab
+// 域 —— 面板挂 TabsContent 内,激活即挂载(挂载即 tail)、切走即卸载
+// 断流(§8),无展开/收起旁路状态。
 const detailTab = ref<'logs' | 'report' | 'detail'>(
   route.hash === '#detail' || route.query.rows === 'failed'
     ? 'detail'
-    : route.hash === '#logs' ? 'logs' : 'report')
+    : route.hash === '#report' ? 'report' : 'logs')
 const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.detail?.status ?? ''))
 
 function gotoEvents(): void {
