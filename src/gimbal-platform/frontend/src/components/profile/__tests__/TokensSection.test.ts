@@ -1,6 +1,7 @@
-/** TokensSection — 平台令牌「签发人」列(评审 2026-11-05 P2;原型
- * Tokens--platform 第二列):variant=platform 显示 created_by 签发人,
- * 缺省(签发人已删)显「—」;个人令牌视图不出该列。 */
+/** TokensSection — admin 变体(定属主模式,用户管理 → 该用户的访问
+ * 令牌子页):ownerId 钉死取数 ?all=1&owner=,kind 恒 personal(原
+ * kind/属主筛选已随全局平铺视图退役);仅状态筛选;无创建入口;
+ * 缺 ownerId 防呆不发请求。 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -22,24 +23,21 @@ const baseRow: api.AccessTokenListItem = {
   issuerName: '王同学',
 }
 
-async function mountVariant(variant: 'personal' | 'admin') {
+async function mountVariant(props: Record<string, unknown>) {
   const errors: unknown[] = []
   const w = mount(TokensSection, {
     global: {
       plugins: [createPinia()],
       config: { errorHandler: (e) => { errors.push(e) } },
     },
-    props: { variant },
+    props,
   })
   await flushPromises()
   return Object.assign(w, { errors })
 }
 
 
-/** admin 视图(2026-11-05 修复轮评审 N1):「全部」曾用空串 value,
- * reka-ui SelectItem 挂载即抛错;改哨兵 'all' 后挂载干净,且 'all'
- * 映射为 kind 不收窄 / status 不传。 */
-describe('TokensSection — admin 视图筛选', () => {
+describe('TokensSection — admin 定属主视图', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
@@ -49,35 +47,42 @@ describe('TokensSection — admin 视图筛选', () => {
     } as never)
   })
 
-  it('挂载不抛错,首屏按个人令牌 + 不带状态筛选取数', async () => {
-    const w = await mountVariant('admin')
+  it('首屏按 personal + all=1&owner= 取数;标题/配额带属主口径,无属主列与创建钮', async () => {
+    const w = await mountVariant({ variant: 'admin', ownerId: 7, ownerName: 'alice' })
     expect(w.errors).toEqual([])
-    expect(w.find('[data-testid="token-list"]').text()).toContain('alice')
-    expect(api.listAccessTokens).toHaveBeenLastCalledWith('personal', expect.objectContaining({
-      all: true, status: undefined,
-    }))
+    expect(api.listAccessTokens).toHaveBeenCalledTimes(1)
+    expect(api.listAccessTokens).toHaveBeenCalledWith('personal', {
+      all: true, owner: 7, status: undefined,
+    })
+    const text = w.find('[data-testid="tokens-section"]').text()
+    expect(text).toContain('alice 的访问令牌')
+    expect(text).toContain('该用户已用 1 · 上限 5')
+    expect(text).not.toContain('属主')
+    expect(w.find('[data-testid="token-create-toggle"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('类型/状态选「全部」→ listKind=all、status 不传;选具体状态则透传', async () => {
-    const w = await mountVariant('admin')
-    const vm = w.vm as unknown as { adminKind: string; adminStatus: string }
-    vm.adminKind = 'all'
-    await flushPromises()
-    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
-      status: undefined,
-    }))
+  it('状态筛选透传;「全部」不传 status', async () => {
+    const w = await mountVariant({ variant: 'admin', ownerId: 7 })
+    const vm = w.vm as unknown as { adminStatus: string }
     vm.adminStatus = 'revoked'
     await flushPromises()
-    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
-      status: 'revoked',
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('personal', expect.objectContaining({
+      owner: 7, status: 'revoked',
     }))
     vm.adminStatus = 'all'
     await flushPromises()
-    expect(api.listAccessTokens).toHaveBeenLastCalledWith('all', expect.objectContaining({
+    expect(api.listAccessTokens).toHaveBeenLastCalledWith('personal', expect.objectContaining({
       status: undefined,
     }))
     expect(w.errors).toEqual([])
+    w.unmount()
+  })
+
+  it('缺 ownerId 防呆:不发请求(不退化为全平台平铺)', async () => {
+    const w = await mountVariant({ variant: 'admin' })
+    expect(w.errors).toEqual([])
+    expect(api.listAccessTokens).not.toHaveBeenCalled()
     w.unmount()
   })
 })

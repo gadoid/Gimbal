@@ -249,9 +249,19 @@ async def list_tokens(
                    include_owner=include_owner)
         for r in rows
     ]
-    # 额度提示(不含已吊销,D3)
-    active_n = sum(1 for r in rows if r.revoked_at is None
-                   and r.kind == kind)
+    # 额度提示(不含已吊销,D3)。定属主视图(用户管理 → 该用户的
+    # 访问令牌子页):按该属主 personal 未吊销全量计数,与创建闸同
+    # 口径 —— 不随 status/kind 筛选缩水,否则「状态=有效」下配额会数错。
+    if all_view and owner is not None:
+        active_n = (await db.execute(
+            select(func.count()).select_from(AccessToken).where(
+                AccessToken.user_id == owner,
+                AccessToken.kind == at.PERSONAL_KIND,
+                AccessToken.revoked_at.is_(None)))
+        ).scalar_one()
+    else:
+        active_n = sum(1 for r in rows if r.revoked_at is None
+                       and r.kind == kind)
     return {"items": items,
             "quota": {"used": active_n, "limit": at.TOKEN_LIMIT}}
 

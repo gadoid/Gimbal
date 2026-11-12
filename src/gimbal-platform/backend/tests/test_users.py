@@ -305,3 +305,29 @@ async def test_member_cannot_adopt_another_users_display_name(
         json={"display_name": "alice"},
     )
     assert r2.status_code == 409, r2.text
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_id_manage_gate(client: AsyncClient) -> None:
+    """管理面按 id 取单个用户(用户管理 → 该用户的访问令牌子页标题):
+    users.manage 200;user 级 403;不存在/系统口径 404。读操作不写审计。"""
+    admin = await _register_and_login(client, "getu_admin")  # 首注 super_admin
+    member = await _register_and_login(client, "getu_member")
+    from app.core import db as db_module
+    from sqlalchemy import select as sa_select
+    from app.models.user import User
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa_select(User.id).where(
+            User.username == "getu_member"))).scalar_one()
+
+    r = await client.get(f"/api/users/{uid}", headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["username"] == "getu_member"
+
+    # user 级无 users.manage → 403
+    r = await client.get(f"/api/users/{uid}", headers=member)
+    assert r.status_code == 403, r.text
+
+    # 不存在 → 404
+    r = await client.get("/api/users/99999", headers=admin)
+    assert r.status_code == 404, r.text

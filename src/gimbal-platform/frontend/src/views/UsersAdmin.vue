@@ -2,7 +2,11 @@
      ListPage 骨架 + shadcn Table/Select/DropdownMenu/Dialog/RadioGroup;
      创建表单 = 定稿范式(useForm + zod + FormField);角色/状态用 Signal
      状态色 chip。功能面与迁移前逐条对齐:搜索/角色筛选/创建/编辑昵称/
-     升降级(末位 admin 保护)/重置密码/启停/删除(输入用户名确认)。 -->
+     升降级(末位 admin 保护)/重置密码/启停/删除(输入用户名确认)。
+     审计 tab 已退役(与通知中心纯重复,通知中心为唯一入口);
+     行/用户名可点 → 用户页 /admin/users/:id(概览 + 访问令牌…可扩展
+     的按用户钻取面;原全局平铺令牌 tab 已退役),列表开 syncUrl 保证
+     钻取返回不丢搜索/页码。 -->
 <template>
   <ListPage title="用户管理" icon="gear" width="wide" :meta="metaText">
     <template #actions>
@@ -27,14 +31,7 @@
       <Button data-testid="open-create" @click="openCreate">+ 创建用户</Button>
     </template>
 
-    <Tabs v-model="mainTab" class="mt-1" data-testid="users-tabs">
-    <TabsList>
-      <TabsTrigger value="users" data-testid="tab-users">用户</TabsTrigger>
-      <TabsTrigger value="audit" data-testid="tab-audit">审计</TabsTrigger>
-      <TabsTrigger value="tokens" data-testid="tab-tokens">访问令牌</TabsTrigger>
-    </TabsList>
-    <TabsContent value="users">
-    <div v-if="visibleUsers.length" class="lib-card">
+    <div v-if="visibleUsers.length" class="lib-card mt-1">
       <Table>
         <TableHeader>
           <TableRow>
@@ -52,12 +49,15 @@
           :key="row.id"
           :data-testid="`user-row-${row.id}`"
           :class="rowClass(row)"
+          class="cursor-pointer"
+          :title="`查看 ${row.username} 的用户页`"
+          @click="onCommand('detail', row)"
         >
           <TableCell>
             <span class="avatar" :style="{ background: avatarColor(row.id) }">
               {{ row.username.charAt(0).toUpperCase() }}
             </span>
-            <span class="username" :class="{ self: isSelf(row) }">{{ row.username }}</span>
+            <span class="username drill" :class="{ self: isSelf(row) }">{{ row.username }}</span>
             <span v-if="isSelf(row)" class="you-mark">你</span>
           </TableCell>
           <TableCell>
@@ -80,7 +80,7 @@
           <TableCell class="font-mono text-caption text-muted-foreground">
             {{ formatDate(row.created_at) }}
           </TableCell>
-          <TableCell class="text-center">
+          <TableCell class="text-center" @click.stop>
             <span v-if="isSelf(row)" class="text-caption text-muted-foreground">— 自助 —</span>
             <DropdownMenu v-else>
               <DropdownMenuTrigger
@@ -139,20 +139,6 @@
       show-jump
       @update:page-size="list.setPageSize"
     />
-    </TabsContent>
-
-    <TabsContent value="tokens">
-      <!-- webhook v4 §8:admin 令牌视图(按类型/状态/属主筛选,查看 +
-           强制失效并填写处置说明;r10.4)—— 与个人设置/集成页同组件 -->
-      <TokensSection variant="admin" />
-    </TabsContent>
-
-    <TabsContent value="audit">
-      <!-- P2-3 审计面板(2026-09-22 抽组件:懒加载判据/时区/对象列三修) -->
-      <AuditLogPanel />
-    </TabsContent>
-    </Tabs>
-
 
 
     <!-- ── 创建用户:定稿表单范式(useForm + zod)───────────────── -->
@@ -371,7 +357,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { toTypedSchema } from '@/utils/zod-typed-schema'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
@@ -384,9 +371,6 @@ import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
 import { useServerList } from '@/composables/useServerList'
 import { mediumDateTime } from '@/utils/datetime'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import TokensSection from '@/components/profile/TokensSection.vue'
-import AuditLogPanel from '@/components/admin/AuditLogPanel.vue'
 import type { UserOut, ResetPasswordOut } from '@/api/users'
 import ListPage from '@/layouts/ListPage.vue'
 import { Button } from '@/components/ui/button'
@@ -404,8 +388,21 @@ const authStore = useAuthStore()
 
 // ── filters & visible rows(M4:q/角色下推服务端,Page 信封)──────
 // useServerList 观察 params 签名:搜索词/角色任一变化 → 防抖重拉 + 回页 1。
-const searchQuery = ref('')
-const roleFilter = ref<'all' | 'super_admin' | 'admin' | 'user'>('all')
+// syncUrl:钻取进「该用户的访问令牌」子页再返回时,q/page 由 URL 恢复
+// (role 本页自持并入 query,syncUrl 的「其余既有 query 原样保留」会带它走)。
+const route = useRoute()
+const router = useRouter()
+const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const roleFilter = ref<'all' | 'super_admin' | 'admin' | 'user'>(
+  ['super_admin', 'admin', 'user'].includes(String(route.query.role))
+    ? String(route.query.role) as 'super_admin' | 'admin' | 'user'
+    : 'all')
+const initialPage = Number.parseInt(String(route.query.page ?? '1'), 10)
+
+watch(roleFilter, (r) => {
+  void router.replace({ query: {
+    ...route.query, role: r === 'all' ? undefined : r } })
+})
 
 const list = useServerList<UserOut, Record<string, string | number | boolean | undefined>>({
   fetch: (params) => usersApi.list(params),
@@ -415,6 +412,8 @@ const list = useServerList<UserOut, Record<string, string | number | boolean | u
   }),
   pageSize: 50,
   pagerKey: 'users',
+  syncUrl: true,
+  initialPage: Number.isFinite(initialPage) && initialPage >= 1 ? initialPage : 1,
 })
 const visibleUsers = computed(() => list.items.value)
 const usersTotal = computed(() => list.total.value)
@@ -478,6 +477,8 @@ async function onCommand(cmd: string, row: UserOut, arg?: string): Promise<void>
     case 'edit':       openEdit(row); return
     case 'set-role':   await setRole(row, arg as Role); return
     case 'reset-pw':   await resetPassword(row); return
+    // 点行/用户名进用户页(概览 + 访问令牌…,可扩展的按用户钻取面)
+    case 'detail':     void router.push(`/admin/users/${row.id}`); return
     case 'activate':   await setActive(row, true); return
     case 'deactivate': await setActive(row, false); return
     case 'delete':     openDelete(row); return
@@ -696,10 +697,6 @@ async function submitDelete() {
   }
 }
 
-// ── 审计 tab(P2-3)─ 面板已抽 components/admin/AuditLogPanel.vue:
-// 挂载即拉 + 刷新钮 + 本地时区,本页只留 tab 切换状态。
-const mainTab = ref('users')
-
 // ── init ────────────────────────────────────────────────
 onMounted(async () => {
   try {
@@ -717,6 +714,15 @@ onMounted(async () => {
 
 .username {
   @apply font-medium text-signal-ink;
+}
+
+/* 钻取入口:整行可点进用户页,用户名再给一道链接暗示 */
+:deep(tr[data-testid^="user-row-"]:hover) td {
+  background: color-mix(in srgb, var(--color-signal, #2f6fed) 4%, transparent);
+}
+
+.username.drill:hover {
+  text-decoration: underline;
 }
 
 .username.self {

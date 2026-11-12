@@ -496,6 +496,45 @@ class TestLifecycle:
         assert await names("_") == ["tok-b"]            # 字面 _
         assert await names("nobody") == []
 
+    async def test_admin_owner_id_filter_and_quota(self, client):
+        """定属主视图(用户管理 → 该用户的访问令牌子页):all=1&owner=
+        <id> 数值精确过滤;quota.used 按该属主 personal 未吊销全量计
+        (与创建闸同口径),不随 status 筛选缩水。"""
+        ha = await _register_role(client, "ownid1", "admin")
+        hb = await _register_role(client, "ownid2", "admin")
+        for h, name in ((ha, "tok-1"), (ha, "tok-2"), (hb, "tok-3")):
+            await _api_token(client, h, {
+                "kind": "personal", "name": name, "ttlDays": 30,
+                "scope": {"aliases": [], "authIds": []}})
+        # 属主 a 吊销一张:不占额度,但列表仍可见(status=revoked)
+        tid = (await client.get("/api/access-tokens",
+                                headers=ha)).json()["items"][0]["id"]
+        assert (await client.delete(
+            f"/api/access-tokens/{tid}", headers=ha)).status_code == 200
+        h_admin = await _admin_headers(client)
+        uid_a = await _user_id("ownid1")
+
+        r = await client.get("/api/access-tokens", headers=h_admin,
+                             params={"all": "1", "owner": uid_a})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert sorted(i["name"] for i in body["items"]) == ["tok-1", "tok-2"]
+        assert body["quota"] == {"used": 1, "limit": 5}   # 吊销的不占额度
+
+        # status=revoked 只回被吊销那张(id 倒序 items[0]=tok-2),但
+        # used 仍是属主未吊销全量(2-1=1),不随筛选缩水
+        r = await client.get("/api/access-tokens", headers=h_admin,
+                             params={"all": "1", "owner": uid_a,
+                                     "status": "revoked"})
+        body = r.json()
+        assert [i["name"] for i in body["items"]] == ["tok-2"]
+        assert body["quota"]["used"] == 1
+
+        # 无 users.manage 不得用 owner 视图
+        r = await client.get("/api/access-tokens", headers=hb,
+                             params={"all": "1", "owner": uid_a})
+        assert r.status_code == 403
+
 async def _admin_headers(client: AsyncClient) -> dict:
     """直插 admin(mk_user 口令 = x;首注 admin 规则不可依赖 —— 各测试
     注册顺序不同)。"""

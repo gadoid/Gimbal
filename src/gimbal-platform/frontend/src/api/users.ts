@@ -51,6 +51,11 @@ export function create(payload: UserCreateIn) {
   return http.post<UserOut>('/users', payload).then((r) => r.data)
 }
 
+/** 管理面按 id 取单个用户(users.manage;钻取子页标题等)。 */
+export function get(userId: number) {
+  return http.get<UserOut>(`/users/${userId}`).then((r) => r.data)
+}
+
 export function patch(userId: number, payload: UserPatchIn) {
   return http.patch<UserOut>(`/users/${userId}`, payload).then((r) => r.data)
 }

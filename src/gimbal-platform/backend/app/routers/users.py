@@ -142,6 +142,30 @@ async def list_users(
     )
 
 
+# ── GET /{user_id} ─────────────────────────────────────────────────────
+@router.get("/{user_id}", response_model=UserOut)
+async def get_user(
+    user_id: int,
+    user: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserOut:
+    """管理面按 id 取单个用户(用户管理 → 该用户的访问令牌子页标题等)。
+
+    users.manage 闸;系统用户与列表面同口径不可见。读操作不写审计
+    (口径同 roster/list)。
+    """
+    target = (
+        await db.execute(select(User).where(
+            User.id == user_id, User.is_system.is_(False)))
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=code_detail(USER_NOT_FOUND, "用户不存在"),
+        )
+    return _user_out(target)
+
+
 # ── POST / ─────────────────────────────────────────────────────────────
 @router.post(
     "",

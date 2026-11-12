@@ -6,7 +6,7 @@
  * (via the Pinia auth store) and redirects; token validity is verified by
  * fetchMe() on first protected visit.
  */
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteLocationGeneric } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 /** D1 退役路由兜底:旧数据集深链/书签 → 方案工作台(能力承接处),不白屏 */
@@ -92,6 +92,18 @@ const routes = [
     component: () => import('@/views/UsersAdmin.vue'),
     // authz W8:用户管理 = users.manage(表 A:super_admin)
     meta: { requiresAuth: true, requiresCap: 'users.manage' },
+  },
+  {
+    // 用户管理 → 用户页(钻取子页,点行进入):概览 + 访问令牌起步,
+    // 后续按用户维度的板块在此扩 tab;替代原全局平铺令牌 tab
+    path: '/admin/users/:id(\\d+)',
+    component: () => import('@/views/UserDetailAdmin.vue'),
+    meta: { requiresAuth: true, requiresCap: 'users.manage' },
+  },
+  {
+    // 旧令牌直达路径 → 用户页(改版前的短期兼容)
+    path: '/admin/users/:id(\\d+)/tokens',
+    redirect: (to: RouteLocationGeneric) => `/admin/users/${to.params.id}`,
   },
   {
     // S7.1 IA 修正:项目管理页退役 —— Admin+ 建项目/管成员收编进

@@ -1,17 +1,21 @@
 <!-- TokensSection.vue — 访问令牌区块(webhook v4;原型 Tokens)。
-     两处复用:个人设置(kind=personal)、用户管理页 admin 视图
-     (mode=admin,?all=1 + 强制失效)。authz C1:平台令牌变体退役。
+     两处复用:个人设置(kind=personal)、用户管理 → 该用户的访问令牌
+     子页(mode=admin:定属主 ownerId,?all=1&owner= + 强制失效;全局
+     平铺视图已退役,令牌与用户强关联按用户钻取)。authz C1:平台令牌
+     变体退役,kind 恒 personal。
      列表/创建(范围 chip 全选)/展开详情(范围·任务预检·最近调用)/
      续期·重新生成·吊销(确认对话框列受影响任务)/admin 强制失效(带
      处置说明,r10.4)。 -->
 <template>
   <section id="tokens" class="flex flex-col gap-4" data-testid="tokens-section">
-    <!-- 分区头(说明按 kind 收进问号悬浮,2026-11-05 归集轮) -->
+    <!-- 分区头(说明收进问号悬浮,2026-11-05 归集轮) -->
     <div class="flex flex-wrap items-center gap-2">
-      <h2 class="m-0 text-[16px] leading-[22px] font-semibold">访问令牌</h2>
+      <h2 class="m-0 text-[16px] leading-[22px] font-semibold">
+        {{ mode === 'admin' ? `${props.ownerName ?? '该用户'} 的访问令牌` : '访问令牌' }}
+      </h2>
       <QTip :text="sectionTip" />
       <span class="text-caption text-signal-ink/60">
-        已用 {{ quota.used }} · 上限 {{ quota.limit }}（不含已吊销）
+        {{ mode === 'admin' ? '该用户' : '' }}已用 {{ quota.used }} · 上限 {{ quota.limit }}（不含已吊销）
       </span>
       <div class="flex-grow" />
       <template v-if="mode !== 'admin'">
@@ -22,15 +26,8 @@
       </template>
     </div>
 
-    <!-- admin 筛选 -->
+    <!-- admin 状态筛选(属主由子页钉死,kind 恒 personal) -->
     <div v-if="mode === 'admin'" class="flex flex-wrap items-center gap-2">
-      <Select v-model="adminKind" class="w-32">
-        <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="personal">个人令牌</SelectItem>
-          <SelectItem value="all">全部</SelectItem>
-        </SelectContent>
-      </Select>
       <Select v-model="adminStatus" class="w-32">
         <SelectTrigger class="h-8"><SelectValue placeholder="全部状态" /></SelectTrigger>
         <SelectContent>
@@ -41,10 +38,6 @@
           <SelectItem value="revoked">已吊销</SelectItem>
         </SelectContent>
       </Select>
-      <Input
-        v-model="adminOwner" placeholder="按属主筛选(id / 用户名 / 昵称)"
-        class="h-8 w-52"
-      />
     </div>
 
     <!-- 创建表单(展开态) -->
@@ -125,14 +118,13 @@
       装载中…
     </div>
     <div v-else-if="!items.length" class="rounded-card border border-signal-line bg-signal-card p-6 text-center text-caption text-signal-ink/60">
-      还没有{{ kindLabel }}；{{ canCreate ? '点右上角「创建访问令牌」签发第一张。' : '' }}
+      {{ mode === 'admin' ? '该用户还没有访问令牌。' : `还没有${kindLabel}；点右上角「创建访问令牌」签发第一张。` }}
     </div>
     <div v-else class="overflow-x-auto rounded-card border border-signal-line bg-signal-card" data-testid="token-list">
       <table class="w-full min-w-[900px] border-collapse text-body">
         <thead>
           <tr class="bg-signal-soft text-left text-caption text-signal-ink/60">
             <th class="px-4 py-2.5 font-medium">名称</th>
-            <th v-if="mode === 'admin'" class="px-3 py-2.5 font-medium">属主</th>
             <th class="px-3 py-2.5 font-medium">状态</th>
             <th class="px-3 py-2.5 font-medium">授权范围</th>
             <th class="px-3 py-2.5 font-medium">到期</th>
@@ -155,7 +147,6 @@
                   <span v-if="hintOf(t)" class="text-caption" :class="hintClass(t)">{{ hintOf(t) }}</span>
                 </div>
               </td>
-              <td v-if="mode === 'admin'" class="px-3 py-3 text-signal-ink/60">{{ t.ownerName ?? t.ownerId }}</td>
               <td class="px-3 py-3">
                 <span class="status-pill" :class="`st-${statusLabel(t).key}`">
                   {{ statusLabel(t).text }}
@@ -191,7 +182,7 @@
             </tr>
             <!-- 展开详情 -->
             <tr v-if="expanded === t.id" class="border-t border-signal-line">
-              <td colspan="8" class="bg-signal-soft p-4">
+              <td colspan="7" class="bg-signal-soft p-4">
                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
                   <div class="flex flex-col gap-3">
                     <dl class="m-0 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-2 text-caption">
@@ -413,19 +404,18 @@ import TokenSecretDialog from '@/components/profile/TokenSecretDialog.vue'
 import ScopeEditDialog from '@/components/profile/ScopeEditDialog.vue'
 
 const props = withDefaults(defineProps<{
-  /** personal = 个人设置;admin = 用户管理页(authz C1:platform 变体退役) */
+  /** personal = 个人设置;admin = 用户管理 → 该用户的访问令牌子页
+   *  (定属主视图:必传 ownerId;authz C1:platform 变体退役) */
   variant?: 'personal' | 'admin'
+  /** admin 变体:钉死的属主 id(取数 ?all=1&owner=) */
+  ownerId?: number
+  /** admin 变体:属主展示名(标题) */
+  ownerName?: string
 }>(), { variant: 'personal' })
 
 const mode = computed(() => props.variant)
-// kind = 语义面(标签/说明/创建);listKind = 取数面 —— admin 视图选
-// 「全部」时传 'all'(后端 ?all=1 视图不按类型收窄,2026-11-05 评审 P2-6)。
-const kind = computed<TokenKind>(() =>
-  props.variant === 'admin'
-    ? (adminKind.value === 'all' ? 'personal' : adminKind.value)
-    : props.variant)
-const listKind = computed<TokenKind | 'all'>(() =>
-  props.variant === 'admin' ? adminKind.value : props.variant)
+// authz C1 后仅存 personal 一种 kind —— 语义面/取数面合一,不再有筛选。
+const kind = computed<TokenKind>(() => 'personal')
 
 // authz W5:个人令牌签发开放至全体用户 —— 非 admin 视图均可创建。
 const canCreate = computed(() => props.variant !== 'admin')
@@ -443,27 +433,12 @@ const sectionTip = computed(() =>
 
 const kindLabel = computed(() => '访问令牌')
 
-// ── admin 筛选(2026-11-05 评审 P2-6)──────────────────────────
-// kind/status 补「全部」(此前选了就退不回去);属主筛选支持用户名/昵称
-// (管理员通常不知道数字 id),输入防抖 300ms(此前每敲一字发一次请求)。
-// 「全部」用哨兵 'all':reka-ui SelectItem 禁空串 value(空串保留给
-// 「清空选择」),挂载即抛错(2026-11-05 修复轮评审 N1)。
-const adminKind = ref<TokenKind | 'all'>('personal')
+// ── admin 筛选 ─────────────────────────────────────────────────
+// 仅状态筛选(属主由子页 ownerId 钉死)。「全部」用哨兵 'all':reka-ui
+// SelectItem 禁空串 value(空串保留给「清空选择」),挂载即抛错
+// (2026-11-05 修复轮评审 N1)。
 const adminStatus = ref<TokenStatus | 'all'>('all')
-const adminOwner = ref('')
-watch([adminKind, adminStatus], () => void reload())
-watch(adminOwner, () => {
-  clearTimeout(ownerDebounce)
-  ownerDebounce = window.setTimeout(() => void reload(), 300)
-})
-let ownerDebounce = 0
-
-/** 纯数字按属主 id 精确筛,其余按用户名/昵称模糊筛 */
-const ownerFilter = computed(() => {
-  const v = adminOwner.value.trim()
-  if (!v) return {}
-  return /^\d+$/.test(v) ? { owner: Number(v) } : { ownerName: v }
-})
+watch(adminStatus, () => void reload())
 
 // ── 创建表单 ──────────────────────────────────────────────────
 const creating = ref(false)
@@ -532,12 +507,13 @@ async function submitCreate() {
 
 // ── 列表 / 详情 ───────────────────────────────────────────────
 async function reload() {
+  // admin 变体必传 ownerId(缺省属防呆:不至退化为全平台平铺)
+  if (props.variant === 'admin' && props.ownerId == null) return
   loading.value = true
   try {
-    const env = await listAccessTokens(listKind.value, {
+    const env = await listAccessTokens(kind.value, {
       all: props.variant === 'admin' || undefined,
-      owner: props.variant === 'admin' ? ownerFilter.value.owner : undefined,
-      ownerName: props.variant === 'admin' ? ownerFilter.value.ownerName : undefined,
+      owner: props.variant === 'admin' ? props.ownerId : undefined,
       status: props.variant === 'admin' && adminStatus.value !== 'all'
         ? adminStatus.value : undefined,
     })

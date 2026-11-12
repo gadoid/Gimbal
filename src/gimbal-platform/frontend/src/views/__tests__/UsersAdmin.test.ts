@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import UsersAdmin from '@/views/UsersAdmin.vue'
 import * as usersApi from '@/api/users'
 import { useAuthStore } from '@/stores/auth'
@@ -46,14 +47,24 @@ function qAll(sel: string): Element[] {
   return [...document.body.querySelectorAll(sel)]
 }
 
-/** 挂载到 beforeEach 设置的同一 pinia(loginAs 写的就是它) */
+/** 挂载到 beforeEach 设置的同一 pinia(loginAs 写的就是它)。
+ *  页面 useRoute/useRouter(syncUrl + 令牌钻取跳转)→ 装内存路由。 */
 async function mountPage() {
+  const router: Router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/admin/users', component: { template: '<div />' } },
+      { path: '/admin/users/:id(\\d+)', component: { template: '<div />' } },
+      { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+    ],
+  })
+  await router.push('/admin/users')
   const w = mount(UsersAdmin, {
-    global: { plugins: [getActivePinia()!] },
+    global: { plugins: [getActivePinia()!, router] },
     attachTo: document.body,
   })
   await flushPromises()
-  return w
+  return Object.assign(w, { router })
 }
 
 /** authz W8:用户管理页 = users.manage 面(super_admin 全能力注入)。 */
@@ -232,6 +243,19 @@ describe('UsersAdmin — 行操作(DropdownMenu 经 Portal 渲染)', () => {
     await clickMenuItem('重置密码')
     await vi.waitFor(() =>
       expect(q('[data-testid="reset-pw"]').text()).toBe('Tmp-Pw-987654'))
+    w.unmount()
+  })
+
+  it('点击行/用户名 → 用户页 /admin/users/2(按用户钻取,平铺 tab 与菜单项已退役)', async () => {
+    loginAs(1)
+    const w = await mountPage()
+    // 旧 tab 结构与菜单项已退役
+    expect(w.find('[data-testid="tab-tokens"]').exists()).toBe(false)
+    expect(w.find('[data-testid="tab-audit"]').exists()).toBe(false)
+    // 点行 → 用户页
+    await w.find('[data-testid="user-row-2"]').trigger('click')
+    await vi.waitFor(() =>
+      expect(w.router.currentRoute.value.path).toBe('/admin/users/2'))
     w.unmount()
   })
 
